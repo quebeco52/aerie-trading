@@ -6,6 +6,7 @@ namespace App\Tests\Service\Corporate;
 
 use App\Service\Event\EarningsReportedEvent;
 use Symfony\Component\EventDispatcher\EventDispatcher;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\TestCase;
 use App\Data\LifecycleStage;
 use App\Entity\Stock;
@@ -1060,6 +1061,7 @@ class EarningsEngineTest extends TestCase
         $stock = $this->buildProfitableIndustrial('SLOA');
         $engine->calculate($stock, new MacroStateDTO(corporateTaxRate: 0.21, policyRateEma: 0.04, yield5yEma: 0.04), EarningsEngine::resolveReportingTick('SLOA', 252), 252);
 
+        $this->assertNotNull($captured);
         $lease = (new CorporateMetrics())->calculateLeaseLiability((float) $stock->getTotalRevenue(), $captured->strategy->getLeaseIntensity());
         $expected = (($captured->actualQuarterlyNetIncome - $captured->operatingCashFlow) * 4.0) / $stock->getTotalAssets($lease);
 
@@ -1465,8 +1467,26 @@ class EarningsEngineTest extends TestCase
         });
         $engine = $this->buildEngine($dispatcher);
 
+        $stock = $this->buildCardLender('CARD');
+
+        $strategy = \App\Data\Sectors::getBusinessModelStrategy('credit_services');
+        $lifetimeRate = $strategy->getThroughTheCycleCreditLossRate() * $strategy->getCreditLossHorizonYears();
+
+        mt_srand(20260909);
+        for ($quarter = 1; $quarter <= 4; $quarter++) {
+            $engine->calculate($stock, $macroState, (($quarter - 1) * 63) + EarningsEngine::resolveReportingTick('CARD', 252));
+            $this->assertNotNull($captured);
+            $book = (float) $stock->getEarningAssets();
+            $this->assertEqualsWithDelta($lifetimeRate, (float) $stock->getCreditLossAllowance() / $book, $lifetimeRate * 0.10, "allowance drifted from target in Q{$quarter}");
+            $this->assertEqualsWithDelta($captured->netChargeOffs, $strategy->getThroughTheCycleCreditLossRate() / 4.0 * ($book + $captured->netChargeOffs), $captured->netChargeOffs * 0.05, 'realized losses run at the through-the-cycle rate');
+        }
+        $this->assertGreaterThan(0.04, $lifetimeRate, 'a card book reserves several percent of receivables');
+    }
+
+    private function buildCardLender(string $ticker): Stock
+    {
         $stock = new Stock();
-        $stock->setTicker('CARD');
+        $stock->setTicker($ticker);
         $stock->setIndustry('Credit Services');
         $stock->setEarningsPerShare('2.50');
         $stock->setSharesOutstanding('1000000000');
@@ -1486,17 +1506,251 @@ class EarningsEngineTest extends TestCase
         $stock->setDividendSpeed('0.20');
         $stock->setDepreciationRate('0.05');
 
-        $strategy = \App\Data\Sectors::getBusinessModelStrategy('credit_services');
-        $lifetimeRate = $strategy->getThroughTheCycleCreditLossRate() * $strategy->getCreditLossHorizonYears();
+        return $stock;
+    }
 
-        mt_srand(20260909);
-        for ($quarter = 1; $quarter <= 4; $quarter++) {
-            $engine->calculate($stock, $macroState, (($quarter - 1) * 63) + EarningsEngine::resolveReportingTick('CARD', 252));
-            $this->assertNotNull($captured);
-            $book = (float) $stock->getEarningAssets();
-            $this->assertEqualsWithDelta($lifetimeRate, (float) $stock->getCreditLossAllowance() / $book, $lifetimeRate * 0.10, "allowance drifted from target in Q{$quarter}");
-            $this->assertEqualsWithDelta($captured->netChargeOffs, $strategy->getThroughTheCycleCreditLossRate() / 4.0 * ($book + $captured->netChargeOffs), $captured->netChargeOffs * 0.05, 'realized losses run at the through-the-cycle rate');
+    /**
+     * The credit provision a lender reports has to be the provision it actually charged.
+     *
+     * The roll-forward used to carry a third term — a through-the-cycle charge on the gross book, on the
+     * grounds that the stable cost base already contained it. It did not: the cost base is the
+     * operating-margin complement of revenue and has no term that scales with the loan book, so no
+     * earnings figure moved with it. The full sum was nonetheless added back to operating cash flow as a
+     * non-cash charge, which converted roughly 20bps of the book into cash every quarter out of nothing —
+     * measured at up to 12.8x quarterly net income. The balance sheet stayed square through it, because
+     * cash rose by exactly what the book lost, which is why nothing caught it.
+     *
+     * The invariant that does catch it: the provision added back to cash equals the fall in EBIT it caused.
+     */
+    public function testReportedCreditProvisionEqualsTheChargeThatActuallyReachedEbit(): void
+    {
+        $macroState = new MacroStateDTO(
+            corporateTaxRate: 0.21, policyRate: 0.04, policyRateEma: 0.04, yield2yEma: 0.04, yield5yEma: 0.042,
+            yield10yEma: 0.045, equityRiskPremium: 0.05, nominalGdpIndex: 1.0, macroCreditSpreadEma: 0.015
+        );
+        $captured = [];
+        $dispatcher = new EventDispatcher();
+        $dispatcher->addListener(EarningsReportedEvent::class, function (EarningsReportedEvent $event) use (&$captured): void {
+            $captured[] = $event->getContext();
+        });
+        $engine = $this->buildEngine($dispatcher);
+        $stock = $this->buildCardLender('PROV');
+
+        mt_srand(20260910);
+        for ($quarter = 1; $quarter <= 8; $quarter++) {
+            $openingBook = (float) $stock->getEarningAssets();
+            $openingAllowance = (float) $stock->getCreditLossAllowance();
+
+            $engine->calculate($stock, $macroState, (($quarter - 1) * 63) + EarningsEngine::resolveReportingTick('PROV', 252));
+            $ctx = end($captured);
+            $this->assertNotNull($ctx);
+
+            // The ledger identity: net earning assets fall by exactly the provision recognised. Charge-offs
+            // move gross book and allowance together and cost earnings nothing, so they cancel out here.
+            if ($openingBook > 0.0) {
+                $closingNetBook = (float) $stock->getEarningAssets() - (float) $stock->getCreditLossAllowance();
+                $openingNetBook = $openingBook - $openingAllowance;
+                $this->assertEqualsWithDelta(
+                    -$ctx->creditLossProvision + $ctx->netLoanOriginations,
+                    $closingNetBook - $openingNetBook,
+                    max(1.0, abs($ctx->creditLossProvision) * 1e-6),
+                    "Q{$quarter}: the net book must move by originations less the provision, and nothing else."
+                );
+            }
+
+            // The one that catches the phantom charge. A card lender's credit physics is a loss RATE, not a
+            // margin shock, so it emits no explicit provision of its own: every dollar it reports must
+            // therefore be the level charge that was struck against EBIT, and it keeps no trade cycle, so
+            // nothing else contributes to the impairment total. Any excess is a charge added back to cash
+            // that no earnings figure ever paid for.
+            $this->assertGreaterThan(0.0, $ctx->creditLossProvision, "Q{$quarter}: a live loan book provisions something.");
+            $this->assertEqualsWithDelta(
+                $ctx->impairmentCharges,
+                $ctx->creditLossProvision,
+                max(1.0, abs($ctx->creditLossProvision) * 1e-9),
+                "Q{$quarter}: the provision added back to cash must be the provision charged to EBIT."
+            );
         }
-        $this->assertGreaterThan(0.04, $lifetimeRate, 'a card book reserves several percent of receivables');
+    }
+
+    /**
+     * A quarter that writes inventory down to net realizable value or provisions against its receivables
+     * has to report the margin it actually earned.
+     *
+     * The seasonally adjusted run-rate is rebuilt from revenue and cost ratios rather than deseasonalized
+     * from EBIT, and it used to start and stop at the operating cost base — so every impairment struck
+     * against EBIT afterwards was invisible to it. That figure is persisted as reportedOperatingMargin and
+     * handed to the spread and solvency tests, so a firm eating a ten-point margin hit still borrowed at an
+     * unimpaired firm's rate: exactly the "collapse priced quarters late" the field exists to prevent.
+     */
+    public function testImpairmentsReachThePersistedStructuralMargin(): void
+    {
+        $captured = null;
+        $dispatcher = new EventDispatcher();
+        $dispatcher->addListener(EarningsReportedEvent::class, function (EarningsReportedEvent $event) use (&$captured): void {
+            $captured = $event->getContext();
+        });
+        $engine = $this->buildEngine($dispatcher);
+
+        // A deep demand shortfall: utilization well under the NRV trigger, and a default outlook that
+        // forces a receivable provision.
+        $macroState = new MacroStateDTO(
+            corporateTaxRate: 0.21, outputGapEma: -0.08, policyRate: 0.01, policyRateEma: 0.01,
+            yield2yEma: 0.04, yield5yEma: 0.02, yield10yEma: 0.01, nominalGdpIndex: 0.90,
+            marketVolatilityEma: 0.45, macroCreditSpreadEma: 0.07, corporateDefaultRateEma: 0.08
+        );
+
+        $stock = $this->buildMatureIndustrial('IMPR');
+
+        mt_srand(20260910);
+        $sawACharge = false;
+        for ($quarter = 1; $quarter <= 8; $quarter++) {
+            $engine->calculate($stock, $macroState, (($quarter - 1) * 63) + EarningsEngine::resolveReportingTick('IMPR', 252));
+            $this->assertNotNull($captured);
+
+            if ($captured->impairmentCharges <= 1.0) {
+                continue;
+            }
+            $sawACharge = true;
+
+            // Rebuild the run-rate the way the engine does — from the deseasonalized revenue and the
+            // realized cost ratio — and assert the impairments came off it. Drop the subtraction and this
+            // is the figure the solvency tests would read instead.
+            $costRatio = $captured->actualRevenue > 0.0
+                ? $captured->actualVariableCosts / $captured->actualRevenue
+                : $captured->realizedVariableMargin;
+            $beforeCharges = ($captured->seasonallyAdjustedRevenue * (1.0 - $costRatio))
+                - $captured->fixedCosts
+                - $captured->quarterlyDepreciation;
+
+            $this->assertEqualsWithDelta(
+                $beforeCharges - $captured->impairmentCharges,
+                $captured->seasonallyAdjustedEbit,
+                max(1.0, abs($beforeCharges) * 1e-9),
+                "Q{$quarter}: the seasonally adjusted run-rate must be struck after impairments."
+            );
+            $this->assertEqualsWithDelta(
+                $captured->seasonallyAdjustedEbit / max(1.0, $captured->seasonallyAdjustedRevenue),
+                (float) $stock->getReportedOperatingMargin(),
+                1e-9,
+                "Q{$quarter}: and that impaired run-rate is what gets persisted for the spread and solvency tests."
+            );
+            $this->assertEqualsWithDelta(
+                $captured->inventoryWriteDown + $captured->receivablesProvision,
+                $captured->impairmentCharges,
+                1.0,
+                "Q{$quarter}: an operating company's impairments are the write-down and the receivable provision."
+            );
+        }
+
+        $this->assertTrue($sawACharge, 'The scenario must actually trigger an impairment for this to test anything.');
+    }
+
+    /**
+     * ASC 330: a write-down lowers the carrying value of the stock and moves no cash. It used to cut the
+     * gross balance, which the trade-cycle rebuild restored the same quarter, so the restoration was booked
+     * as a working capital build the firm paid cash for and the sheet showed no impairment at all. Held as
+     * an allowance, the carrying value stays lower until the impaired stock turns; the replacement cash
+     * leaves then, through the working capital build, with no second pass through earnings.
+     */
+    public function testInventoryWriteDownIsHeldAsAnAllowanceAndReplacedOnlyAsTheStockTurns(): void
+    {
+        $captured = null;
+        $dispatcher = new EventDispatcher();
+        $dispatcher->addListener(EarningsReportedEvent::class, function (EarningsReportedEvent $event) use (&$captured): void {
+            $captured = $event->getContext();
+        });
+        $engine = $this->buildEngine($dispatcher);
+
+        mt_srand(1122);
+        $stock = $this->buildMatureIndustrial('NRVA');
+        $stock->setGrossPpe('40000000000');
+        $stock->setAccumulatedDepreciation('20000000000');
+        $stock->setReceivables('5000000000');
+        $stock->setInventory('4000000000');
+        $stock->setPayables('2000000000');
+        $reportingTick = EarningsEngine::resolveReportingTick('NRVA', 252);
+
+        $grossNwc = static fn (Stock $s): float => (float) $s->getReceivables() + (float) $s->getInventory() - (float) $s->getPayables();
+
+        // Quarter 1: a depression collapses volumes below the NRV trigger.
+        $depression = new MacroStateDTO(outputGapEma: -0.12, corporateTaxRate: 0.21, policyRateEma: 0.04, yield5yEma: 0.04);
+        $grossBefore = $grossNwc($stock);
+        $engine->calculate($stock, $depression, $reportingTick, 252);
+
+        $writeDown = $captured->inventoryWriteDown;
+        $this->assertGreaterThan(0.0, $writeDown, 'fixture must trigger a write-down for this test to mean anything');
+
+        $allowance = (float) $stock->getInventoryAllowance();
+        $this->assertEqualsWithDelta($writeDown, $allowance, 1.0, 'the whole charge is still held against the stock: nothing impaired this quarter has turned yet');
+        $this->assertEqualsWithDelta((float) $stock->getInventory() - $allowance, $stock->getNetInventory(), 0.01, 'the carrying value is cost less the write-down');
+        $this->assertEqualsWithDelta(
+            $grossNwc($stock) - $grossBefore,
+            $captured->deltaWorkingCapital,
+            1.0,
+            'the write-down is non-cash: the working capital build is the change in the gross trade balances alone'
+        );
+
+        // Quarter 2: demand recovers, the impaired stock turns, and its replacement is what costs cash.
+        $recovery = new MacroStateDTO(outputGapEma: 0.02, corporateTaxRate: 0.21, policyRateEma: 0.04, yield5yEma: 0.04);
+        $allowanceOpening = (float) $stock->getInventoryAllowance();
+        $grossBefore = $grossNwc($stock);
+        $engine->calculate($stock, $recovery, 63 + $reportingTick, 252);
+
+        $allowanceClosing = (float) $stock->getInventoryAllowance();
+        $this->assertLessThan($allowanceOpening, $allowanceClosing, 'the allowance unwinds as the written-down stock turns');
+        $released = $allowanceOpening + $captured->inventoryWriteDown - $allowanceClosing;
+        $this->assertEqualsWithDelta(
+            ($grossNwc($stock) - $grossBefore) + $released,
+            $captured->deltaWorkingCapital,
+            1.0,
+            'replacing the cleared stock is a working capital build: the cash the write-down foretold leaves now'
+        );
+    }
+
+    /**
+     * Overtime is what a firm pays when demand runs past the capacity it keeps for the calendar's own peak.
+     * Measured against raw utilization, which carries the seasonal factor, every fourth quarter of a retailer
+     * running at 1.35x paid a twelve-point convex penalty at exactly structural demand.
+     */
+    #[AllowMockObjectsWithoutExpectations]
+    public function testOvertimePenaltyIsMeasuredAgainstDeseasonalizedUtilization(): void
+    {
+        $shocks = [];
+        $mathUtility = $this->getMockBuilder(MathUtility::class)->onlyMethods(['calculateConvexPenalty'])->getMock();
+        $mathUtility->method('calculateConvexPenalty')->willReturnCallback(
+            function (float $shock, float $convexity = 1.5, float $scalar = 1.0) use (&$shocks): float {
+                $shocks[] = $shock;
+
+                return $shock <= 0.0 ? 0.0 : pow($shock, $convexity) * $scalar;
+            }
+        );
+        $this->mathUtility = $mathUtility;
+
+        $captured = null;
+        $dispatcher = new EventDispatcher();
+        $dispatcher->addListener(EarningsReportedEvent::class, function (EarningsReportedEvent $event) use (&$captured): void {
+            $captured = $event->getContext();
+        });
+        $engine = $this->buildEngine($dispatcher);
+
+        mt_srand(7);
+        $stock = $this->buildMatureIndustrial('XMAS');
+        $stock->setIndustry('Internet Retail'); // Q4 seasonal factor 1.35
+        $macroState = new MacroStateDTO(corporateTaxRate: 0.21, policyRateEma: 0.04, yield5yEma: 0.04);
+
+        $engine->calculate($stock, $macroState, (3 * 63) + EarningsEngine::resolveReportingTick('XMAS', 252), 252);
+
+        $this->assertNotNull($captured);
+        $this->assertGreaterThan(1.2, $captured->seasonalFactor, 'the report has to land in the holiday quarter for this to test anything');
+        $this->assertNotEmpty($shocks);
+        // The engine's overtime call is the first convex penalty struck in a report (the margin process runs
+        // before the sector physics), and it must see the run rate with the calendar taken out.
+        $this->assertEqualsWithDelta(
+            ($captured->capacityUtilization / $captured->seasonalFactor) - EarningsEngine::CAPACITY_OVERTIME_THRESHOLD,
+            $shocks[0],
+            1e-9,
+            'overtime is the overshoot of the deseasonalized run rate, not of the seasonal peak'
+        );
     }
 }

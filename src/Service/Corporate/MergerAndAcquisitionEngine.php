@@ -491,6 +491,7 @@ class MergerAndAcquisitionEngine
         $stock->setReceivables((string) ((float) $stock->getReceivables() * $scale));
         $stock->setReceivablesAllowance((string) ((float) $stock->getReceivablesAllowance() * $scale));
         $stock->setInventory((string) ((float) $stock->getInventory() * $scale));
+        $stock->setInventoryAllowance((string) ((float) $stock->getInventoryAllowance() * $scale));
         $stock->setPayables((string) ((float) $stock->getPayables() * $scale));
     }
 
@@ -714,7 +715,7 @@ class MergerAndAcquisitionEngine
             + (float) $stock->getCipBalance()
             + (float) $stock->getGoodwill()
             + $stock->getNetReceivables()
-            + (float) ($stock->getInventory() ?? 0.0)
+            + $stock->getNetInventory()
             + $stock->getNetEarningAssets();
         $liabilities = (float) ($stock->getPayables() ?? 0.0) + (float) $stock->getDeferredTaxLiability();
 
@@ -758,6 +759,7 @@ class MergerAndAcquisitionEngine
             $stock->setReceivables((string) ((float) $stock->getReceivables() * $retained));
             $stock->setReceivablesAllowance((string) ((float) $stock->getReceivablesAllowance() * $retained));
             $stock->setInventory((string) ((float) $stock->getInventory() * $retained));
+            $stock->setInventoryAllowance((string) ((float) $stock->getInventoryAllowance() * $retained));
             $stock->setPayables((string) ((float) $stock->getPayables() * $retained));
         }
     }

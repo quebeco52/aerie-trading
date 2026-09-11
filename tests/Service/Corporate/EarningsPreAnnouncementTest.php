@@ -67,7 +67,8 @@ final class EarningsPreAnnouncementTest extends TestCase
         $stock->setIndustry('Conglomerates');
         $stock->setPrice('100.00');
         $stock->setTotalRevenue('4000000000');   // $1bn a quarter
-        $stock->setTotalNetIncome('400000000');  // $100m of structural quarterly earnings
+        $stock->setOperatingMargin('0.10');      // $100m of structural quarterly earnings power
+        $stock->setTotalNetIncome('400000000');
         $stock->setStructuralVariableMargin(self::VARIABLE_COST_RATIO);
         $stock->setManagedAccrualBank($accrualBank);
         $stock->setEarningsMomentumZ([
@@ -82,6 +83,33 @@ final class EarningsPreAnnouncementTest extends TestCase
     private function warningTick(Stock $stock): int
     {
         return EarningsEngine::resolvePreAnnouncementTick($stock->getTicker(), self::TICKS_PER_YEAR);
+    }
+
+    /**
+     * The shortfall is sized against structural earnings power, not the trailing print. Scaled by trailing
+     * net income, a firm that had just broken even warned on a trivial reversal and took the full price
+     * reaction, and a firm running a larger loss warned less because the absolute value grew.
+     */
+    public function testWarningIsScaledByStructuralEarningsPowerNotTheTrailingPrint(): void
+    {
+        // A $5m reversal due: 5% of the $100m the business structurally earns in a quarter, so no warning,
+        // even though the trailing figure is a rounding error away from zero.
+        $breakEven = $this->makeStock(accrualBank: 5_000_000.0 / FinancialConstants::EARNINGS_MANAGEMENT_REVERSAL_RATE);
+        $breakEven->setTotalNetIncome('1000');
+
+        $this->assertSame([], $this->engine->evaluatePreAnnouncement($breakEven, $this->warningTick($breakEven), self::TICKS_PER_YEAR));
+        $this->assertSame(0.0, $breakEven->getPreAnnouncedShortfall());
+
+        // The same $60m reversal is a 60% miss against the same earnings power whether the firm is deep in
+        // loss or not: a bigger loss does not make the warning smaller.
+        $shallowLoss = $this->makeStock(accrualBank: 60_000_000.0 / FinancialConstants::EARNINGS_MANAGEMENT_REVERSAL_RATE);
+        $shallowLoss->setTotalNetIncome('-100000000');
+        $deepLoss = $this->makeStock(accrualBank: 60_000_000.0 / FinancialConstants::EARNINGS_MANAGEMENT_REVERSAL_RATE);
+        $deepLoss->setTotalNetIncome('-4000000000');
+
+        $this->assertNotEmpty($this->engine->evaluatePreAnnouncement($shallowLoss, $this->warningTick($shallowLoss), self::TICKS_PER_YEAR));
+        $this->assertNotEmpty($this->engine->evaluatePreAnnouncement($deepLoss, $this->warningTick($deepLoss), self::TICKS_PER_YEAR));
+        $this->assertEqualsWithDelta($this->published[0][1], $this->published[1][1], 1e-9, 'identical shortfall, identical earnings power, identical reaction');
     }
 
     /** A cost squeeze that opened up THIS quarter is news, and gets warned. */
@@ -250,7 +278,7 @@ final class EarningsPreAnnouncementTest extends TestCase
      */
     public function testFallbackCostRatioIsVariableRatherThanTotal(): void
     {
-        $stock = $this->makeStock(costLevel: 0.20);
+        $stock = $this->makeStock(costLevel: 0.30);
         $stock->setStructuralVariableMargin(null);   // no report has opened the margin process yet
         $stock->setOperatingMargin('0.15');
         $stock->setFixedCostRatio(0.35);
@@ -258,13 +286,13 @@ final class EarningsPreAnnouncementTest extends TestCase
         $this->engine->evaluatePreAnnouncement($stock, $this->warningTick($stock), self::TICKS_PER_YEAR);
 
         $variableCostRatio = (1.0 - 0.15) * (1.0 - 0.35);   // MarketResetCommand's construction
-        $expected = 0.20 * $variableCostRatio * 1_000_000_000.0
+        $expected = 0.30 * $variableCostRatio * 1_000_000_000.0
             * (1.0 - FinancialConstants::ANALYST_COST_BASE_VISIBILITY)
             * FinancialConstants::PREANNOUNCEMENT_CONSENSUS_ABSORPTION;
 
         $this->assertEqualsWithDelta($expected, $stock->getPreAnnouncedShortfall(), 1.0);
         $this->assertLessThan(
-            0.20 * (1.0 - 0.15) * 1_000_000_000.0
+            0.30 * (1.0 - 0.15) * 1_000_000_000.0
                 * (1.0 - FinancialConstants::ANALYST_COST_BASE_VISIBILITY)
                 * FinancialConstants::PREANNOUNCEMENT_CONSENSUS_ABSORPTION,
             $stock->getPreAnnouncedShortfall(),

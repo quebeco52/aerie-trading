@@ -248,6 +248,8 @@ class FinancialConstants
     public const PREANNOUNCEMENT_PRICE_REACTION = 0.35;
     /** Ceiling on the single-tick repricing a warning may cause. One disclosure moves less than a whole quarter, so it sits inside the 40% MAX_QUARTERLY_PRICE_CIRCUIT_BREAKER that bounds the report around it. */
     public const MAX_PREANNOUNCEMENT_PRICE_REACTION = 0.25;
+    /** Floor on the operating margin that sizes structural earnings for a warning, so a break-even firm is scaled by its revenue rather than by a near-zero print. */
+    public const PREANNOUNCEMENT_MIN_MARGIN_SCALE = 0.05;
 
     // --- Own-Price Demand Response ---
     /** Default own-price elasticity of demand for a producing firm (volume lost per unit of real price increase); mid-range of empirical estimates for differentiated goods. */

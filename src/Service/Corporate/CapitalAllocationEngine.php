@@ -125,7 +125,11 @@ class CapitalAllocationEngine
         $ctx->isFinancial = \App\Data\Sectors::isFinancial($ctx->businessModel);
         $ctx->strategy = \App\Data\Sectors::getBusinessModelStrategy($ctx->businessModel);
         
-        $ctx->health = $this->debtEngine->analyzeDebtHealth($stock, $ctx->macroState);
+        // Coverage, cost of capital and the hurdle that gate distributions are read off the margin the firm
+        // actually reported, the same figure the earnings engine and the solvency tests use. The structural
+        // margin only moves through reinvestment decay, so on it a firm in a margin collapse kept paying a
+        // dividend on coverage it no longer had. Null before the first report, which falls back to structural.
+        $ctx->health = $this->debtEngine->analyzeDebtHealth($stock, $ctx->macroState, null, $stock->getReportedOperatingMargin());
         
         $ebit = $ctx->health->rawMetrics->ebit ?? 0.0;
         $nopat = $ebit > 0 ? $ebit * (1.0 - $ctx->macroState->corporateTaxRate) : $ebit;

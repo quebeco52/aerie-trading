@@ -236,7 +236,14 @@ class EarningsEngine
             return [];
         }
 
-        $structuralQuarterlyEarnings = max(1.0, abs((float) $stock->getTotalNetIncome()) / 4.0);
+        // Sized against STRUCTURAL earnings power, revenue at the operating margin, not against the trailing
+        // print. Kasznik & Lev scale the surprise by price for the same reason: a firm that just broke even
+        // has a trailing figure near zero, and dividing by it turned a trivial accrual reversal into a
+        // hundred-percent miss with the full price reaction behind it, while a firm running a larger loss
+        // warned less because the absolute value grew. The margin is floored so a structurally unprofitable
+        // firm is still measured against its revenue base rather than a near-zero margin.
+        $structuralMargin = max(FinancialConstants::PREANNOUNCEMENT_MIN_MARGIN_SCALE, (float) $stock->getOperatingMargin());
+        $structuralQuarterlyEarnings = max(1.0, $quarterlyRevenue * $structuralMargin);
         $shortfallRatio = $knownShortfall / $structuralQuarterlyEarnings;
 
         if ($shortfallRatio < FinancialConstants::PREANNOUNCEMENT_WARNING_THRESHOLD) {
@@ -446,9 +453,13 @@ class EarningsEngine
 
         $rawUtilization = $ctx->seasonalFactor * (1.0 + $secularDrift + $macroDemandShift + $idiosyncraticDemandShock + $jumpMagnitude);
         $ctx->capacityUtilization = max(self::MIN_CAPACITY_UTILIZATION, min(self::MAX_CAPACITY_UTILIZATION, $rawUtilization));
+        // Capital tied up in construction earns nothing yet, but only so much of the base may be excluded:
+        // a firm mid-megaproject still runs the plant it already has. Capping the deduction is what bounds
+        // the result — the floor that used to be written alongside it could never bind, since the deduction
+        // is already at most that same fraction of the base.
         $maxCipDeduction = abs($ctx->investedCapital) * FinancialConstants::MAX_CIP_CAPITAL_DEDUCTION_RATIO;
         $effectiveCip = min($maxCipDeduction, $stock->getTotalCipAmount());
-        $revenueGeneratingCapital = max(abs($ctx->investedCapital) * (1.0 - FinancialConstants::MAX_CIP_CAPITAL_DEDUCTION_RATIO), abs($ctx->investedCapital) - $effectiveCip);
+        $revenueGeneratingCapital = abs($ctx->investedCapital) - $effectiveCip;
 
         $dynamicSam = FinancialConstants::BASELINE_SECTOR_TAM * $macroState->nominalGdpIndex * (float) ($stock->getSamRatio() ?? 1.0);
         $maxSectorCapacity = $dynamicSam * FinancialConstants::MAX_SECTOR_TAM_CAPACITY_RATIO;
@@ -602,8 +613,15 @@ class EarningsEngine
         $revenueLogChange = max(-0.50, min(0.50, log(max(0.01, $currentDeseasonalized / max(1.0, $priorDeseasonalized)))));
         $stickyVariableMargin = $this->mathUtility->calculateAsymmetricCostStickiness($realizedVariableMargin, $revenueLogChange);
 
+        // Overtime is measured against the DESEASONALIZED run rate, the same way the inventory trigger and the
+        // working capital cycle read utilization. The raw figure carries the seasonal factor, so a retailer
+        // whose fourth quarter runs at 1.35x paid a twelve-point convex penalty on its cost ratio every
+        // holiday season at exactly structural demand, and a scripted miss followed every year because the
+        // consensus anchor only sees three quarters of a cost-ratio change. Capacity is sized for the peak
+        // the calendar brings every year; overtime is what a firm pays when demand runs past that.
+        $deseasonalizedUtilization = $ctx->capacityUtilization / max(0.01, $ctx->seasonalFactor);
         $overtimePremium = $this->mathUtility->calculateConvexPenalty(
-            $ctx->capacityUtilization - self::CAPACITY_OVERTIME_THRESHOLD,
+            $deseasonalizedUtilization - self::CAPACITY_OVERTIME_THRESHOLD,
             self::CAPACITY_OVERTIME_CONVEXITY,
             self::CAPACITY_OVERTIME_SCALAR
         );
@@ -658,7 +676,6 @@ class EarningsEngine
         $ctx->ebitda = $ctx->actualRevenue - $ctx->operatingCosts;
         $ctx->ebit = $ctx->ebitda - $ctx->quarterlyDepreciation;
 
-        $ctx->primaryShockZ = $actuals->primaryShockZ;
         $ctx->eventType = $actuals->eventType;
         $ctx->eventContext = $actuals->eventContext;
         // Guidance warns on the CHANGE in the cost squeeze, so the level the firm entered this quarter
@@ -706,7 +723,15 @@ class EarningsEngine
         $realizedCostRatio = $ctx->actualRevenue > 0.0
             ? ($ctx->actualVariableCosts / $ctx->actualRevenue)
             : $ctx->realizedVariableMargin;
-        $ctx->seasonallyAdjustedEbit = ($ctx->seasonallyAdjustedRevenue * (1.0 - $realizedCostRatio)) - $ctx->fixedCosts - $ctx->quarterlyDepreciation;
+        // The run-rate is REBUILT from the revenue and cost ratios rather than deseasonalized from EBIT,
+        // because fixed costs and depreciation do not swing with the quarter. That rebuild starts from the
+        // operating cost base, so every charge struck against EBIT after that base — inventory written down
+        // to net realizable value, the receivable allowance, the credit-loss level correction — has to be
+        // taken out again here. Leaving them out let a firm eating a ten-point margin hit from write-downs
+        // report an unimpaired structural margin to the solvency and spread tests below, which is exactly
+        // the "collapse priced quarters late" this figure exists to prevent. Impairments are not seasonal,
+        // so they come off at face value rather than being scaled by the seasonal factor.
+        $ctx->seasonallyAdjustedEbit = ($ctx->seasonallyAdjustedRevenue * (1.0 - $realizedCostRatio)) - $ctx->fixedCosts - $ctx->quarterlyDepreciation - $ctx->impairmentCharges;
         $ctx->structuralOperatingMargin = $ctx->seasonallyAdjustedEbit / max(1.0, $ctx->seasonallyAdjustedRevenue);
 
         // Persist the margin the firm actually earned. The stock's operatingMargin is the slow structural
@@ -884,12 +909,19 @@ class EarningsEngine
             // too large to unwind, so the quarter is reported as it happened.
             $reachableGap = abs($consensus) * FinancialConstants::EARNINGS_MANAGEMENT_MAX_GAP;
 
-            if ($shortfall <= $reachableGap) {
+            // Propensity is the PROBABILITY this board reaches for the accrual, not a haircut on the entry
+            // it books. Scaling the entry instead meant a firm short by S booked half of S and printed the
+            // miss anyway: measured over twelve quarters across every industry, only 3 of 103 reachable
+            // near-misses ever crossed the line, so the spike just above consensus that this whole method
+            // exists to produce (Burgstahler & Dichev 1997) never formed. An accrual that does not close
+            // the gap buys management nothing and still owes the reversal, which no reporting incentive
+            // would rationalize.
+            if ($shortfall <= $reachableGap && $this->mathUtility->checkProbability($propensity)) {
                 // Land just above the line rather than exactly on it: an exact match is the one outcome
                 // that never occurs in real reported distributions.
                 $target = $shortfall + (abs($consensus) * FinancialConstants::EARNINGS_MANAGEMENT_BEAT_CUSHION);
                 $headroom = max(0.0, ($this->resolveTotalAssets($ctx) * FinancialConstants::EARNINGS_MANAGEMENT_MAX_BANK_RATIO) - $bank);
-                $borrowed = min($target * $propensity, $headroom);
+                $borrowed = min($target, $headroom);
 
                 $ctx->managedAccrual += $borrowed;
                 $bank += $borrowed;
@@ -1099,7 +1131,6 @@ class EarningsEngine
         $ctx->investingCashFlow += $assetSaleProceeds;
         $ctx->netLoanOriginations += (float) ($ctx->allocation['loan_originations'] ?? 0.0) - $assetSaleProceeds;
         $ctx->assetSaleLoss = (float) ($ctx->allocation['asset_sale_loss'] ?? 0.0);
-        $sharesDelta = ((float) $ctx->allocation['new_shares']) - $ctx->sharesOutstanding;
         // Every financing flow is booked at the cash that actually moved. Valuing the share count change at
         // the screen price overstated an emergency raise by its discount (shares go out at 90 cents on the
         // dollar) and would have left the cash flow statement failing to reconcile in exactly the quarters
@@ -1171,12 +1202,17 @@ class EarningsEngine
         // The deferred half is bounded by the total expense so cash tax can never turn negative (the firm
         // does not receive money from the tax authority for buying equipment) and the reversal can never
         // charge more than double.
+        // A reversal is also bounded by the balance there is to reverse: the firm can only hand back tax it
+        // actually postponed. Without that bound the liability had to be floored at zero AFTER the cash
+        // figure had already been struck against the full reversal, so the extra cash left the company with
+        // no liability released behind it and the sheet stopped balancing by the difference.
+        $openingDeferred = max(0.0, (float) $stock->getDeferredTaxLiability());
         $rawDeferred = $timingDifference * $ctx->corporateTaxRate;
-        $deferredTax = max(-$bookTaxExpense, min($bookTaxExpense, $rawDeferred));
+        $deferredTax = max(-min($bookTaxExpense, $openingDeferred), min($bookTaxExpense, $rawDeferred));
 
         $ctx->deferredTaxExpense = $deferredTax;
         $ctx->cashTaxPaid = $bookTaxExpense - $deferredTax;
-        $stock->setDeferredTaxLiability((string) max(0.0, (float) $stock->getDeferredTaxLiability() + $deferredTax));
+        $stock->setDeferredTaxLiability((string) ($openingDeferred + $deferredTax));
     }
 
     /**
@@ -1243,6 +1279,21 @@ class EarningsEngine
 
         $annualizedCosts = max(0.0, ($ctx->actualVariableCosts + $ctx->fixedCosts) / max(0.001, $ctx->dt));
 
+        // Written-down stock leaves the books as it turns: the goods are cleared below cost and replaced at
+        // cost, and the replacement is the cash the write-down foretold. Releasing the allowance lifts the
+        // carrying value back toward the cycle's level, and that rise reaches cash through the working
+        // capital build below, with no second pass through earnings. The write-down itself moved no cash;
+        // charging the replacement in the quarter the goods were impaired, as cutting the gross balance did,
+        // paid for stock the firm had not yet cleared and left the sheet showing none of the impairment.
+        // Only stock impaired in EARLIER quarters has had time to turn: this quarter's charge stays in full,
+        // or it would be replaced in the quarter it was written down, which is the timing this exists to fix.
+        $allowance = (float) $stock->getInventoryAllowance();
+        $openingAllowance = max(0.0, $allowance - max(0.0, $ctx->inventoryWriteDown));
+        if ($openingAllowance > 0.0) {
+            $turnover = $dio > 0.0 ? min(1.0, ($ctx->dt * FinancialConstants::DAYS_PER_YEAR) / $dio) : 1.0;
+            $stock->setInventoryAllowance((string) max(0.0, $allowance - ($openingAllowance * $turnover)));
+        }
+
         return $this->corporateMetrics->buildWorkingCapitalBalances(
             $stock,
             ['dso' => $dso, 'dio' => $dio, 'dpo' => $dpo],
@@ -1263,7 +1314,9 @@ class EarningsEngine
      * would charge a firm every quarter of a downturn rather than at the point the outlook deteriorates.
      *
      * Both are non-cash and neither is in the analyst forecast, so they land as negative surprises. They
-     * are deducted after consensus is formed for exactly that reason.
+     * are deducted after consensus is formed for exactly that reason. The cash a write-down foretells, the
+     * replacement of the impaired stock, leaves later through the working capital roll-forward as the
+     * allowance unwinds.
      */
     private function applyWorkingCapitalCharges(EarningsSimulationContext $ctx): void
     {
@@ -1284,20 +1337,31 @@ class EarningsEngine
         // forecast them, so expectedEbit is deliberately left untouched.
         $ctx->ebitda -= $totalCharge;
         $ctx->ebit -= $totalCharge;
+        $ctx->impairmentCharges += $totalCharge;
     }
 
     /**
      * Rolls the allowance for credit losses on the earning-asset book (ASC 326).
      *
-     * Provision less charge-offs is the roll-forward. The provision recognised this quarter has three parts:
-     * the through-the-cycle loss the stable cost base already carries (the sector physics only ever charged
-     * the EXCESS over it, so the base must be provisioned here or the allowance would drain to nothing at
-     * steady state), the excess the physics did charge to the margin (stress builds, capped releases), and a
-     * level correction that walks the allowance a quarter-step toward its lifetime target. Only the last
-     * part still has to reach earnings here; the first two are already in EBIT.
+     * Charge-offs are the loans that actually went bad: they leave the gross book and consume the allowance,
+     * which is what the allowance was built for, so they hit no one's earnings on the way out. The provision
+     * then puts back what they consumed and walks whatever gap is left a quarter-step toward the lifetime
+     * expected loss on the book that remains. Both halves reach EBIT here; the excess the sector physics
+     * already charged to the margin is carried alongside them and is not charged twice.
      *
-     * Charge-offs are the loans that actually went bad: they leave the gross book and consume the allowance.
-     * A shortfall the allowance cannot cover is an unreserved loss and is charged in full.
+     * The replenishment term is what makes the level correction a controller with no steady-state error. A
+     * bare proportional step cannot close a gap that charge-offs reopen every quarter, so the allowance
+     * settles permanently below target and the provision permanently below realized losses. Feeding the
+     * charge-offs forward fixes the point exactly on target, and at steady state the provision equals the
+     * losses — which is the whole content of "a bank earns its credit spread and pays it back out".
+     *
+     * There used to be a third term: a through-the-cycle charge on the gross book, justified as already
+     * sitting inside the stable cost base. It was not. The cost base is the operating-margin complement of
+     * revenue and contains no term that scales with the loan book, so nothing in earnings moved with it —
+     * yet the full sum was added back to operating cash flow as non-cash. The result was a bank converting
+     * roughly 20bps of its book into cash every quarter with no charge against profit anywhere, measured at
+     * up to 12.8x quarterly net income. It is gone; the replenishment term does the job it was reaching for,
+     * and does it inside EBIT.
      *
      * Every part is non-cash. The full provision is added back to operating cash flow below, which is what
      * keeps cash out of the picture: the book falls by the provision and equity falls by the same amount.
@@ -1314,21 +1378,29 @@ class EarningsEngine
 
         $grossBook = (float) $stock->getEarningAssets();
         $allowance = (float) $stock->getCreditLossAllowance();
-        $throughTheCycleCharge = max(0.0, $ctx->strategy->getThroughTheCycleCreditLossRate()) / 4.0 * $grossBook;
         $explicitProvision = $ctx->creditLossProvision;
         // A model whose credit physics is expressed only as a margin shock reports no dollar charge-offs;
         // its realized losses then run at the through-the-cycle rate, or the allowance would be built every
         // quarter by a charge nothing ever consumed and released back as income that was never earned.
+        $throughTheCycleCharge = max(0.0, $ctx->strategy->getThroughTheCycleCreditLossRate()) / 4.0 * $grossBook;
         $chargeOffs = min($grossBook, $ctx->netChargeOffs > 0.0 ? $ctx->netChargeOffs : $throughTheCycleCharge);
 
-        $allowance += $throughTheCycleCharge + $explicitProvision - $chargeOffs;
+        // Loans that went bad leave the book and consume the reserve held against them. No earnings effect:
+        // the loss was recognised when the reserve was built.
+        $allowance += $explicitProvision - $chargeOffs;
         $grossBook -= $chargeOffs;
 
-        // Level correction toward the lifetime target, a quarter-step at a time in either direction, so a
-        // recovery releases reserves gradually and a depleted allowance is rebuilt rather than left empty.
+        // Put back what the charge-offs consumed, then walk a quarter-step of whatever gap to the lifetime
+        // target is left, in either direction — so a recovery releases reserves gradually and a depleted
+        // allowance is rebuilt rather than left empty.
+        $replenishment = $chargeOffs;
+        $allowance += $replenishment;
+
         $target = $grossBook * $this->resolveLifetimeCreditLossRate($ctx);
-        $levelCharge = ($target - max(0.0, $allowance)) * FinancialConstants::CREDIT_ALLOWANCE_CONVERGENCE_RATIO;
-        $allowance += $levelCharge;
+        $convergence = ($target - max(0.0, $allowance)) * FinancialConstants::CREDIT_ALLOWANCE_CONVERGENCE_RATIO;
+        $allowance += $convergence;
+
+        $levelCharge = $replenishment + $convergence;
 
         if ($allowance < 0.0) {
             // Losses ran past the reserve: the uncovered part is charged now, not carried as a negative asset.
@@ -1341,14 +1413,23 @@ class EarningsEngine
 
         $ctx->ebitda -= $levelCharge;
         $ctx->ebit -= $levelCharge;
-        $ctx->creditLossProvision = $throughTheCycleCharge + $explicitProvision + $levelCharge;
+        $ctx->impairmentCharges += $levelCharge;
+        $ctx->creditLossProvision = $explicitProvision + $levelCharge;
         $ctx->netChargeOffs = $chargeOffs;
     }
 
-    /** Lower-of-cost-or-net-realizable-value writedown on inventory the firm cannot move (ASC 330). */
+    /**
+     * Lower-of-cost-or-net-realizable-value writedown on inventory the firm cannot move (ASC 330).
+     *
+     * Charged against the carrying value, so stock already written down is not written down again, and held
+     * as an allowance against the gross balance rather than cut from it: the gross figure is rebuilt from
+     * the trade cycle every quarter, so a cut was restored in the same quarter and the restoration booked as
+     * a working capital build the firm paid cash for. The allowance unwinds in the roll-forward as the
+     * impaired stock turns, which is when the replacement cash actually leaves.
+     */
     private function resolveInventoryWriteDown(EarningsSimulationContext $ctx): float
     {
-        $inventory = (float) ($ctx->stock->getInventory() ?? 0.0);
+        $inventory = $ctx->stock->getNetInventory();
         if ($inventory <= 0.0) {
             return 0.0;
         }
@@ -1362,7 +1443,7 @@ class EarningsEngine
         $severity = min(1.0, ($trigger - $utilization) / $trigger);
         $charge = $inventory * FinancialConstants::INVENTORY_NRV_LOSS_RATE * $severity;
 
-        $ctx->stock->setInventory((string) max(0.0, $inventory - $charge));
+        $ctx->stock->setInventoryAllowance((string) ((float) $ctx->stock->getInventoryAllowance() + $charge));
 
         return $charge;
     }
@@ -1581,7 +1662,9 @@ class EarningsEngine
 
         $ctx->totalShockPct = max(-FinancialConstants::MAX_QUARTERLY_PRICE_CIRCUIT_BREAKER, min(FinancialConstants::MAX_QUARTERLY_PRICE_CIRCUIT_BREAKER, $ctx->totalShockPct));
 
-        $exDivPrice = ($currentPrice * (1.0 + $ctx->totalShockPct)) - $ctx->allocation['dividend_paid'];
+        // A firm with no shares outstanding never reaches the capital allocator, so the allocation array can
+        // legitimately be empty here — every other read of it is already guarded, and this one was not.
+        $exDivPrice = ($currentPrice * (1.0 + $ctx->totalShockPct)) - (float) ($ctx->allocation['dividend_paid'] ?? 0.0);
         $newPrice = max(0.01, $exDivPrice);
         $stock->setPrice(number_format($newPrice, 8, '.', ''));
     }
@@ -1678,7 +1761,11 @@ class EarningsEngine
                 ? FinancialConstants::VOLATILITY_SHOCK_FACTOR * FinancialConstants::NEGATIVE_SURPRISE_VOL_MULTIPLIER
                 : FinancialConstants::VOLATILITY_SHOCK_FACTOR;
 
-            $shockMultiplier = 1.0 + (($zScore - 1.0) * $shockFactor);
+            // Measured from the threshold that opened the shock, so volatility rises continuously from the
+            // moment a surprise becomes material. Against a bare 1.0 the multiplier jumped straight to 1.10
+            // the instant the 1.5-sigma line was crossed, which put a step in the volatility path with
+            // nothing behind it.
+            $shockMultiplier = 1.0 + (($zScore - FinancialConstants::SURPRISE_Z_SCORE_THRESHOLD) * $shockFactor);
             $newVol = min($currentVol * $shockMultiplier, $baselineVol * FinancialConstants::MAX_VOLATILITY_MULTIPLIER);
             $stock->setCurrentVolatility((string) $newVol);
         } elseif ($zScore < FinancialConstants::BORING_Z_SCORE_THRESHOLD && $currentVol > $baselineVol) {

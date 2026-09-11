@@ -205,4 +205,105 @@ class CorporateLedgerServiceTest extends TestCase
 
         $this->service->processStockSplit($stock, 2.0, false);
     }
+
+    /**
+     * A reverse split has to settle a SHORT position's fraction too, and round it toward zero.
+     *
+     * Shorts are held as a negative quantity in the same table as longs. The rewrite rescaled them with
+     * FLOOR, which rounds toward NEGATIVE infinity, so a 105-share short at a 1-for-10 came out eleven
+     * shares short rather than ten — half a share of extra exposure the borrower never sold and was never
+     * paid for. The cashout loop beside it only looked at quantity > 0, so nothing compensated them either.
+     */
+    public function testReverseSplitSettlesShortFractionsAndRoundsThemTowardZero(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('SHORTY');
+
+        $statements = [];
+        $this->connectionMock->method('executeStatement')
+            ->willReturnCallback(function (string $sql, array $params = []) use (&$statements): int {
+                $statements[] = ['sql' => $sql, 'params' => $params];
+
+                return 1;
+            });
+
+        $fetched = null;
+        $this->connectionMock->method('fetchAllAssociative')
+            ->willReturnCallback(function (string $sql, array $params = []) use (&$fetched): array {
+                $fetched = $sql;
+
+                return [
+                    ['id' => 1, 'user_id' => 101, 'quantity' => 105],   // long: 10 new shares, 5 old over
+                    ['id' => 2, 'user_id' => 102, 'quantity' => -105],  // short: owes 10 new shares, 5 old over
+                ];
+            });
+
+        $this->service->processStockSplit($stock, 10.0, true, 2.50);
+
+        // Short positions must be in the settlement population at all.
+        $this->assertNotNull($fetched);
+        $this->assertStringContainsString('quantity <> 0', $fetched, 'A reverse split must settle short positions, not just long ones.');
+
+        $cashouts = [];
+        foreach ($statements as $s) {
+            if (str_contains($s['sql'], 'cash_balance = cash_balance + :cashout')) {
+                $cashouts[(int) $s['params']['user_id']] = (float) $s['params']['cashout'];
+            }
+        }
+
+        // The long is bought out of its five leftover shares; the short buys its five back. Same price,
+        // opposite direction.
+        $this->assertEqualsWithDelta(12.50, $cashouts[101] ?? null, 0.0001, 'A long is credited for the fraction bought out of it.');
+        $this->assertEqualsWithDelta(-12.50, $cashouts[102] ?? null, 0.0001, 'A short is debited for the fraction it has to buy in.');
+
+        // And the rewrite rounds toward zero, so the debit above matches the position that survives.
+        $rewrites = array_values(array_filter(
+            $statements,
+            static fn (array $s): bool => str_contains($s['sql'], 'UPDATE user_stocks SET quantity')
+        ));
+        $this->assertCount(1, $rewrites);
+        $this->assertStringContainsString('TRUNCATE(quantity / :factor, 0)', $rewrites[0]['sql']);
+        $this->assertStringNotContainsString('FLOOR(quantity / :factor)', $rewrites[0]['sql'], 'FLOOR rounds a short away from zero.');
+    }
+
+    /**
+     * A reverse split may only refund escrow to the sides that posted some.
+     *
+     * A resting SHORT locates its borrow and posts margin at the fill; a resting COVER is the closing leg
+     * of an already-collateralized position. Neither commits a dollar or a share when it is placed, so
+     * neither has anything to refund. Falling through to a share valuation on ELSE paid both of them the
+     * fractional remnant at the pre-split price — cash from nothing, and parkable by leaving a resting
+     * short on a name heading for a reverse split.
+     */
+    public function testReverseSplitRefundsEscrowOnlyToSidesThatPostedIt(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('ESCROW');
+
+        $statements = [];
+        $this->connectionMock->method('fetchAllAssociative')->willReturn([]);
+        $this->connectionMock->method('executeStatement')
+            ->willReturnCallback(function (string $sql, array $params = []) use (&$statements): int {
+                $statements[] = ['sql' => $sql, 'params' => $params];
+
+                return 1;
+            });
+
+        $this->service->processStockSplit($stock, 10.0, true, 2.50);
+
+        $refunds = array_values(array_filter(
+            $statements,
+            static fn (array $s): bool => str_contains($s['sql'], 'remnant_value')
+        ));
+        $this->assertCount(1, $refunds, 'A reverse split refunds escrow remnants exactly once.');
+        $sql = $refunds[0]['sql'];
+
+        $this->assertStringContainsString("WHEN o.action = 'BUY'", $sql, 'A resting BUY holds committed cash.');
+        $this->assertStringContainsString("WHEN o.action = 'SELL'", $sql, 'A resting SELL holds shares taken out of user_stocks.');
+        $this->assertMatchesRegularExpression(
+            '/ELSE\s+0\b/',
+            $sql,
+            'Every other side — SHORT and COVER — escrows nothing and must be refunded nothing.'
+        );
+    }
 }

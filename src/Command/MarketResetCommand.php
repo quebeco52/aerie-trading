@@ -281,6 +281,7 @@ class MarketResetCommand extends Command
                     inventory = NULL,
                     payables = NULL,
                     receivables_allowance = 0.0000,
+                    inventory_allowance = 0.0000,
                     gross_ppe = NULL,
                     accumulated_depreciation = 0.0000,
                     ppe_vintage_deflator = NULL,

@@ -576,11 +576,22 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
         // leaving Non-Interest custodial / wealth / transaction fee income completely insulated.
         $minVariableMargin = max(0.01, self::MIN_EFFICIENCY_RATIO - ($fixedCosts / max(1.0, $actualRevenue)));
         $niiCostAddon = ($lossProvisionShock + $nimSqueeze + $ceclDrag) * $niiWeight;
-        // The credit part of that addon in dollars, so the allowance ledger can be rolled with the same
-        // charge the income statement carried. The curve squeeze is a funding cost, not a credit one.
-        $explicitCreditProvision = ($lossProvisionShock + $ceclDrag) * $niiWeight * $actualRevenue;
         $rawMargin = $realizedVariableMargin + $niiCostAddon;
         $clampedMargin = $this->clampMargin($rawMargin, $minVariableMargin);
+
+        // The credit part of that addon in dollars, so the allowance ledger can be rolled with the same
+        // charge the income statement carried. The curve squeeze is a funding cost, not a credit one.
+        //
+        // Measured against the CLAMPED margin, because the clamp is what the income statement actually got.
+        // In the crisis quarters where the efficiency floor or the cost ceiling binds — the only quarters
+        // where a credit charge is large enough to matter — the raw addon overstates what reached earnings,
+        // and the engine then added the difference back to operating cash flow as a non-cash charge that
+        // never happened.
+        $realizedAddon = $clampedMargin - $realizedVariableMargin;
+        $addonRealizedShare = abs($niiCostAddon) > 1e-12
+            ? max(0.0, min(1.0, $realizedAddon / $niiCostAddon))
+            : 0.0;
+        $explicitCreditProvision = ($lossProvisionShock + $ceclDrag) * $niiWeight * $actualRevenue * $addonRealizedShare;
 
         $cet1Ratio = $this->calculateCet1Ratio($stock);
 
@@ -633,8 +644,9 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
         $operatingBase = $this->getOperatingBase($stock);
         $excessCash = max(0.0, (float) $stock->getCorporateTreasury() - ($operatingBase * self::INTEREST_INCOME_CASH_BUFFER));
 
-        $policyRate = $macroState->policyRateEma;
-
+        // Interest EARNED here is treasury income only: the spread on the loan book is already inside
+        // net_interest_income on the revenue side, so the realized wholesale funding rate is deliberately
+        // not read — reading it would price the same book twice.
         return $excessCash * $this->calculateCashYield($macroState);
     }
 

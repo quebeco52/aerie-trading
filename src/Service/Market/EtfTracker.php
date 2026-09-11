@@ -209,14 +209,21 @@ class EtfTracker
     ): void {
         if ($isReverse) {
             // Escrowed value that will not survive the FLOOR below, refunded before it is lost: a BUY holds
-            // cash at the limit it committed at, a SELL holds shares valued at the pre-split price.
+            // cash at the limit it committed at, a SELL holds shares valued at the pre-split price. Those
+            // are the only two sides that escrow anything, so they are named rather than left to an ELSE.
+            // An ETF cannot currently be shorted — TradeExecutionService rejects a SHORT on anything but an
+            // equity — so nothing else reaches this statement today, and that is exactly why it should not
+            // depend on staying true: the equivalent ELSE in CorporateLedgerService, where shorting IS
+            // allowed, was paying resting SHORT and COVER orders a refund for escrow they never posted.
             $conn->executeStatement(
                 "UPDATE users u
                  INNER JOIN (
                      SELECT o.user_id,
                             SUM(CASE WHEN o.action = 'BUY'
                                      THEN COALESCE(o.limit_price, 0) * (o.quantity % :factor)
-                                     ELSE (o.quantity % :factor) * :pre_split_price
+                                     WHEN o.action = 'SELL'
+                                     THEN (o.quantity % :factor) * :pre_split_price
+                                     ELSE 0
                                 END) AS remnant_value
                      FROM trade_orders o
                      WHERE o.ticker = :ticker AND o.status = 'OPEN'

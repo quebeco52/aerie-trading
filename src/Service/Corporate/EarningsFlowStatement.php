@@ -30,6 +30,7 @@ final readonly class EarningsFlowStatement
         public float $interestExpense,
         public float $preTaxIncome,
         public float $taxes,
+        public float $goodwillImpairment,
         public float $netIncome,
         public float $internalCash,
         public float $externalFunding,
@@ -46,31 +47,52 @@ final readonly class EarningsFlowStatement
     {
         $totalRevenue = (float) ($report['revenue'] ?? 0) + (float) ($report['interest_income'] ?? 0);
 
-        $operatingCostsRaw  = max(0.0, (float) ($report['operating_costs'] ?? 0));
-        $depreciationRaw    = max(0.0, (float) ($report['depreciation'] ?? 0));
         $capex              = max(0.0, (float) ($report['capital_expenditures'] ?? 0));
-        $interestExpenseRaw = max(0.0, (float) ($report['interest_expense'] ?? 0));
         $taxPaidRaw         = max(0.0, (float) ($report['tax_paid'] ?? 0));
+        $goodwillRaw        = max(0.0, (float) ($report['goodwill_impairment'] ?? 0));
         $dividends          = max(0.0, (float) ($report['dividend_paid'] ?? 0));
         $buybacks           = max(0.0, (float) ($report['stock_buybacks'] ?? 0));
 
+        // The spine is the statement the report actually published — its own EBITDA, EBIT and pre-tax
+        // income — and each charge is the DIFFERENCE between two of those lines rather than an independently
+        // stored figure. That matters because `operating_costs` holds the cash cost base alone: the
+        // inventory written down to net realizable value, the trade receivable allowance and the credit-loss
+        // level correction are all struck against EBITDA afterwards and appear in none of it. Rebuilding the
+        // waterfall from the cost base therefore drew an EBITDA the firm never earned and walked a different
+        // number down to the bottom of the diagram than the one printed beside it. Deriving each charge from
+        // the spine puts those impairments back where they belong — inside operating costs, which is where
+        // the engine charges them — and guarantees every link conserves by construction.
+        // Each line falls back to the one above it less its own charge, so a report written before these
+        // columns existed still draws the waterfall it always drew.
+        $ebitdaStored = (float) ($report['ebitda'] ?? ($totalRevenue - (float) ($report['operating_costs'] ?? 0)));
+        $ebitStored   = (float) ($report['ebit'] ?? ($ebitdaStored - (float) ($report['depreciation'] ?? 0)));
+        $preTaxStored = (float) ($report['pre_tax_income'] ?? ($ebitStored - (float) ($report['interest_expense'] ?? 0)));
+
         // The income statement narrows. Each charge is bounded by what is left to charge it against, so no
         // link ever runs negative — a Sankey cannot draw one.
-        $operatingCosts = min($totalRevenue, $operatingCostsRaw);
-        $ebitda = $totalRevenue - $operatingCosts;
+        $ebitda = max(0.0, min($totalRevenue, $ebitdaStored));
+        $operatingCosts = $totalRevenue - $ebitda;
 
-        $depreciation = min($ebitda, $depreciationRaw);
+        $depreciation = max(0.0, min($ebitda, $ebitdaStored - $ebitStored));
         $operatingProfit = $ebitda - $depreciation;
 
-        $interestExpense = min($operatingProfit, $interestExpenseRaw);
+        // Interest expense net of whatever interest income joined revenue at the top, which is how the two
+        // stored lines already differ.
+        $interestExpense = max(0.0, min($operatingProfit, $ebitStored - $preTaxStored));
         $preTaxIncome = $operatingProfit - $interestExpense;
 
         $taxes = min($preTaxIncome, $taxPaidRaw);
-        $netIncome = $preTaxIncome - $taxes;
+        $afterTax = $preTaxIncome - $taxes;
 
-        // Then the cash side widens: earnings plus the depreciation added straight back, topped up from
-        // outside when the quarter's spending exceeds it.
-        $internalCash = max(0.0, $netIncome) + $depreciation;
+        // Goodwill written off under the annual impairment test is a real charge below the tax line, and the
+        // one a reader most wants to see named rather than folded silently into the bottom line.
+        $goodwillImpairment = min($afterTax, $goodwillRaw);
+        $netIncome = $afterTax - $goodwillImpairment;
+
+        // Then the cash side widens: earnings plus the non-cash charges added straight back — depreciation,
+        // and the goodwill just written off, which never cost the firm a dollar — topped up from outside
+        // when the quarter's spending exceeds it.
+        $internalCash = max(0.0, $netIncome) + $depreciation + $goodwillImpairment;
         $uses = $capex + $dividends + $buybacks;
         $externalFunding = max(0.0, $uses - $internalCash);
         $retainedCash = max(0.0, ($internalCash + $externalFunding) - $uses);
@@ -84,6 +106,7 @@ final readonly class EarningsFlowStatement
             interestExpense: $interestExpense,
             preTaxIncome: $preTaxIncome,
             taxes: $taxes,
+            goodwillImpairment: $goodwillImpairment,
             netIncome: $netIncome,
             internalCash: $internalCash,
             externalFunding: $externalFunding,

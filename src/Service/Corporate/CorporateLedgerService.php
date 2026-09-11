@@ -161,19 +161,33 @@ class CorporateLedgerService
 
         try {
             if ($isReverse) {
-                // 1. Fetch all user stock holdings for this ticker before mutating
+                // 1. Fetch every position in this ticker before mutating, SHORT ONES INCLUDED. A short is a
+                // holding with a negative quantity, and it has the same fractional remnant a long does: the
+                // borrower owes 105 old shares, which is ten and a half new ones. Restricting this to
+                // quantity > 0 left the short's fraction unsettled while the rewrite below still rescaled it.
                 $holdings = $conn->fetchAllAssociative(
-                    'SELECT id, user_id, quantity FROM user_stocks WHERE stock_id = :stock_id AND quantity > 0',
+                    'SELECT id, user_id, quantity FROM user_stocks WHERE stock_id = :stock_id AND quantity <> 0',
                     ['stock_id' => $stock->getId()]
                 );
 
-                // 2. Process cashouts for fractional remnants
+                // 2. Settle the fractional remnant in cash, in whichever direction the position runs.
+                //
+                // The share count rounds TOWARD ZERO for both signs, which is what the TRUNCATE below does
+                // and what FLOOR did not: floor rounds toward negative infinity, so a 105-share short at a
+                // 1-for-10 became eleven shares short rather than ten, and the borrower was handed half a
+                // share of extra exposure they never asked for and were never paid for.
+                //
+                // The remnant carries the position's sign, so a long is CREDITED for the fraction bought out
+                // of them and a short is DEBITED for the fraction they have to buy in. Both settle at the
+                // pre-split price, which is the same price the escrow leg below uses.
                 foreach ($holdings as $holding) {
                     $qty = (float) $holding['quantity'];
-                    $newQty = floor($qty / $splitFactor);
+                    $newQty = $qty < 0.0
+                        ? -floor(abs($qty) / $splitFactor)
+                        : floor($qty / $splitFactor);
                     $remnant = $qty - ($newQty * $splitFactor);
 
-                    if ($remnant > 0 && $oldPrice !== null) {
+                    if ($remnant != 0.0 && $oldPrice !== null) {
                         $cashoutValue = round($remnant * $oldPrice, 4);
 
                         $conn->executeStatement(
@@ -193,13 +207,23 @@ class CorporateLedgerService
                 // and lost the whole escrow, because that sweep is raw SQL and refunds nothing. Refunding
                 // limit x (quantity MOD factor) leaves the surviving order holding exactly what it still
                 // needs, so escrow value is conserved across the split and across a later cancel.
+                //
+                // Only those two sides are refunded, because only those two escrow anything. A resting SHORT
+                // locates its borrow and posts its margin at the fill, and a resting COVER is the closing leg
+                // of a position that is already collateralized (TradeExecutionService): neither has committed
+                // a dollar or a share to refund. Falling through to a share valuation on ELSE paid both of
+                // them the remnant at the pre-split price, which is cash created from nothing and parkable —
+                // leave a resting short on a name heading for a reverse split and collect. The dividend
+                // statement at the top of this class already filters to SELL for the same reason.
                 $conn->executeStatement(
                     "UPDATE users u
                      INNER JOIN (
                          SELECT o.user_id,
                                 SUM(CASE WHEN o.action = 'BUY'
                                          THEN COALESCE(o.limit_price, 0) * (o.quantity % :factor)
-                                         ELSE (o.quantity % :factor) * :old_price
+                                         WHEN o.action = 'SELL'
+                                         THEN (o.quantity % :factor) * :old_price
+                                         ELSE 0
                                     END) AS remnant_value
                          FROM trade_orders o
                          WHERE o.ticker = :ticker AND o.status = 'OPEN'
@@ -215,8 +239,11 @@ class CorporateLedgerService
                     ['factor' => $splitFactor, 'ticker' => $stock->getTicker()]
                 );
 
+                // TRUNCATE, not FLOOR: it rounds toward zero for both signs, so a long keeps the behaviour it
+                // always had and a short is no longer rounded AWAY from zero into exposure it was never sold.
+                // The cash settlement of the fraction happened above, against exactly this arithmetic.
                 $conn->executeStatement(
-                    'UPDATE user_stocks SET quantity = FLOOR(quantity / :factor), version = version + 1 WHERE stock_id = :stock_id',
+                    'UPDATE user_stocks SET quantity = TRUNCATE(quantity / :factor, 0), version = version + 1 WHERE stock_id = :stock_id',
                     ['factor' => $splitFactor, 'stock_id' => $stock->getId()]
                 );
 

@@ -130,44 +130,64 @@ class RevenueDrainSimulationTest extends TestCase
      */
     public function testConstructionRevenueCapacityHoldsThroughRateHikingCycle(): void
     {
-        mt_srand(42);
-        $earningsEngine = $this->createEngine();
-        $stock = $this->createStockFromInitialMarket('IBHI', 'Engineering & Construction');
-
         $ticksPerYear = 252;
         $ticksPerQuarter = (int) ($ticksPerYear / 4);
         $reportingTick = EarningsEngine::resolveReportingTick('IBHI', $ticksPerYear);
 
-        $revenues = [];
-        for ($q = 1; $q <= 16; $q++) {
-            // Policy rate ramps from 2.5% to 5.0% over eight quarters while bank lending standards tighten.
-            $ramp = min(1.0, max(0.0, ($q - 1) / 8.0));
-            $policy = 0.025 + 0.025 * $ramp;
-            $macro = new MacroStateDTO(
-                outputGapEma: -0.015 * $ramp,
-                policyRate: $policy,
-                policyRateEma: $policy,
-                yield2yEma: $policy + 0.005,
-                yield5yEma: $policy + 0.008,
-                yield10yEma: $policy + 0.010,
-                sloosTighteningIndexEma: 0.4 * $ramp,
-                macroCreditSpreadEma: 0.02 + 0.01 * $ramp,
-                inflationEma: 0.03,
-                producerPriceInflation: 0.03,
-                producerPriceInflationEma: 0.03,
-            );
+        // The same firm under two rate paths. Trailing ROIC over sixteen quarters of a single seed lands
+        // anywhere within a few points of the ten-percent line, and the two paths consume the random stream
+        // differently, so the squeeze is asserted as the mean over several seeds against a control left at
+        // the starting rate rather than against a fixed level on one draw path.
+        $simulate = function (bool $hiking, int $seed) use ($ticksPerYear, $ticksPerQuarter, $reportingTick): array {
+            mt_srand($seed);
+            $earningsEngine = $this->createEngine();
+            $stock = $this->createStockFromInitialMarket('IBHI', 'Engineering & Construction');
 
-            $earningsEngine->calculate($stock, $macro, (($q - 1) * $ticksPerQuarter) + $reportingTick, $ticksPerYear);
-            $revenues[$q] = (float) $stock->getTotalRevenue();
-        }
+            $revenues = [];
+            $macro = null;
+            for ($q = 1; $q <= 16; $q++) {
+                // Policy rate ramps from 2.5% to 5.0% over eight quarters while bank lending standards tighten.
+                $ramp = $hiking ? min(1.0, max(0.0, ($q - 1) / 8.0)) : 0.0;
+                $policy = 0.025 + 0.025 * $ramp;
+                $macro = new MacroStateDTO(
+                    outputGapEma: -0.015 * $ramp,
+                    policyRate: $policy,
+                    policyRateEma: $policy,
+                    yield2yEma: $policy + 0.005,
+                    yield5yEma: $policy + 0.008,
+                    yield10yEma: $policy + 0.010,
+                    sloosTighteningIndexEma: 0.4 * $ramp,
+                    macroCreditSpreadEma: 0.02 + 0.01 * $ramp,
+                    inflationEma: 0.03,
+                    producerPriceInflation: 0.03,
+                    producerPriceInflationEma: 0.03,
+                );
 
-        $seededTurnover = 0.13 / (0.09 * (1.0 - $macro->corporateTaxRate));
-        $this->assertEqualsWithDelta($seededTurnover, (float) $stock->getAssetTurnover(), 0.001, 'turnover is seeded once by the DuPont identity and held');
+                $earningsEngine->calculate($stock, $macro, (($q - 1) * $ticksPerQuarter) + $reportingTick, $ticksPerYear);
+                $revenues[$q] = (float) $stock->getTotalRevenue();
+            }
 
-        $peak = max(array_slice($revenues, 0, 4, true));
-        $troughAfterHikes = min(array_slice($revenues, 4, null, true));
+            return [
+                'revenues' => $revenues,
+                'roic' => (float) $stock->getRoicTtm(),
+                'turnover' => (float) $stock->getAssetTurnover(),
+                'tax_rate' => $macro->corporateTaxRate,
+            ];
+        };
+
+        $hiked = $simulate(true, 42);
+
+        $seededTurnover = 0.13 / (0.09 * (1.0 - $hiked['tax_rate']));
+        $this->assertEqualsWithDelta($seededTurnover, $hiked['turnover'], 0.001, 'turnover is seeded once by the DuPont identity and held');
+
+        $peak = max(array_slice($hiked['revenues'], 0, 4, true));
+        $troughAfterHikes = min(array_slice($hiked['revenues'], 4, null, true));
         $this->assertGreaterThan($peak * 0.60, $troughAfterHikes, 'a margin squeeze must not collapse physical revenue capacity');
-        $this->assertLessThan(0.10, (float) $stock->getRoicTtm(), 'the squeeze itself still shows up in trailing ROIC');
+
+        $seeds = [1, 2, 3, 4, 5, 6, 7, 8];
+        $hikedRoic = array_sum(array_map(fn (int $seed): float => $simulate(true, $seed)['roic'], $seeds)) / count($seeds);
+        $controlRoic = array_sum(array_map(fn (int $seed): float => $simulate(false, $seed)['roic'], $seeds)) / count($seeds);
+        $this->assertLessThan($controlRoic, $hikedRoic, 'the squeeze itself still shows up in trailing ROIC, below the same firm left at the starting rate');
     }
 
     /**

@@ -544,6 +544,7 @@ class StockController extends AbstractController
             ['name' => 'Interest Expense', 'itemStyle' => ['color' => '#f97316']], // orange
             ['name' => 'Pre-Tax Income', 'itemStyle' => ['color' => '#14b8a6']], // teal
             ['name' => 'Taxes', 'itemStyle' => ['color' => '#f43f5e']], // rose
+            ['name' => 'Goodwill Impairment', 'itemStyle' => ['color' => '#94a3b8']], // slate (non-cash)
             ['name' => 'Net Income', 'itemStyle' => ['color' => '#22c55e']], // green
             ['name' => 'Cash Generated', 'itemStyle' => ['color' => '#34d399']], // mint
             ['name' => 'External Funding', 'itemStyle' => ['color' => '#fb923c']], // amber (debt raised or shares issued)
@@ -602,12 +603,15 @@ class StockController extends AbstractController
         $addLink('Operating Profit', 'Pre-Tax Income', $flow->preTaxIncome);
 
         $addLink('Pre-Tax Income', 'Taxes', $flow->taxes);
+        $addLink('Pre-Tax Income', 'Goodwill Impairment', $flow->goodwillImpairment);
         $addLink('Pre-Tax Income', 'Net Income', $flow->netIncome);
 
         // Sources of cash, then what it was spent on. Depreciation appears on both sides on purpose: it is
         // struck against EBITDA and added straight back, which is exactly how a cash flow statement reads.
+        // The goodwill write-off comes back for the same reason — no money left the company.
         $addLink('Net Income', 'Cash Generated', max(0.0, $flow->netIncome));
         $addLink('Depreciation', 'Cash Generated', $flow->depreciation);
+        $addLink('Goodwill Impairment', 'Cash Generated', $flow->goodwillImpairment);
         $addLink('External Funding', 'Cash Generated', $flow->externalFunding);
 
         $addLink('Cash Generated', 'Capital Expenditures', $flow->capitalExpenditures);

@@ -330,6 +330,102 @@ class CapitalAllocationEngineTest extends TestCase
         $this->assertEquals(0.0, $result['dividend_paid'], 'Bank in CCB buffer zone (CET1 < 6.5%) must have its dividend halted to $0.00');
     }
 
+    /**
+     * Coverage, cost of capital and the hurdle that gate dividends and buybacks have to be read off the
+     * margin the firm actually reported, the same figure the earnings engine and the solvency tests use.
+     * On the structural margin, which only reinvestment decay moves, a firm in a margin collapse kept
+     * paying a dividend on coverage it no longer had.
+     */
+    public function testDistributionsAreGatedOnTheReportedMarginNotTheStructuralOne(): void
+    {
+        $health = $this->buildHealth();
+        $macroState = new MacroStateDTO(corporateTaxRate: 0.21);
+
+        $reported = $this->buildDistributor('RPTD');
+        $reported->setOperatingMargin('0.30');
+        $reported->setReportedOperatingMargin(0.03);
+
+        $debtEngine = $this->createMock(DebtEngine::class);
+        $debtEngine->expects($this->once())
+            ->method('analyzeDebtHealth')
+            ->with($this->identicalTo($reported), $this->identicalTo($macroState), $this->isNull(), $this->identicalTo(0.03))
+            ->willReturn($health);
+        $this->buildEngineWith($debtEngine)->allocateCapital($reported, 4.00, 2.00, 10.00, 1000000.0, $macroState);
+
+        // Before a first report there is nothing reported, and the debt engine falls back to structural itself.
+        $unreported = $this->buildDistributor('UNRP');
+        $debtEngine = $this->createMock(DebtEngine::class);
+        $debtEngine->expects($this->once())
+            ->method('analyzeDebtHealth')
+            ->with($this->identicalTo($unreported), $this->identicalTo($macroState), $this->isNull(), $this->isNull())
+            ->willReturn($health);
+        $this->buildEngineWith($debtEngine)->allocateCapital($unreported, 4.00, 2.00, 10.00, 1000000.0, $macroState);
+    }
+
+    private function buildEngineWith(DebtEngine $debtEngine): CapitalAllocationEngine
+    {
+        return new CapitalAllocationEngine(
+            $this->corporateLedgerServiceMock,
+            $this->corporateMetricsMock,
+            $debtEngine,
+            $this->mathUtilityMock,
+            $this->treasuryEngineMock
+        );
+    }
+
+    private function buildDistributor(string $ticker): Stock
+    {
+        $stock = new Stock();
+        $stock->setTicker($ticker);
+        $stock->setIndustry('Software - Infrastructure');
+        $stock->setSharesOutstanding('1000000');
+        $stock->setPrice('10.00');
+        $stock->setTotalEquity('100000000');
+        $stock->setCorporateTreasury('50000000');
+        $stock->setTargetPayoutRatio('0.00');
+        $stock->setDividendSpeed('0.00');
+        $stock->setLastDividend('0.00');
+        $stock->setTotalRevenue('50000000.00');
+        $stock->setRoicTtm('0.15');
+        $stock->setWholesaleDebt('0.00');
+        $stock->setCustomerDeposits('0.00');
+
+        return $stock;
+    }
+
+    private function buildHealth(): DebtHealthDTO
+    {
+        return new DebtHealthDTO(
+            grossCost: 0.05,
+            effectiveCost: 0.05,
+            cashYield: 0.04,
+            isNegativeCarry: false,
+            isSevereNegativeCarry: false,
+            interestCoverage: 5.0,
+            wantsToPaydownDebt: false,
+            canIssueDebt: true,
+            debtTolerance: 1.5,
+            wacc: 0.06,
+            costOfEquity: 0.08,
+            leveredBeta: 1.0,
+            rawMetrics: new DebtMetricsDTO(
+                interestExpense: 500000.0,
+                blendedRate: 0.05,
+                historicalFixedRate: 0.05,
+                dynamicSpread: 0.02,
+                currentMarketRate: 0.05,
+                wholesaleRate: 0.05,
+                ebit: 2000000.0,
+                revenue: 10000000.0,
+                depreciation: 500000.0,
+                ebitda: 2500000.0
+            ),
+            isLiquidityCrisis: false,
+            isLiquidityWarning: false,
+            isUnderLeveraged: false
+        );
+    }
+
     public function testBuybackPercentageCalculatesFromOriginalSharesOutstanding(): void
     {
         $engine = new CapitalAllocationEngine(

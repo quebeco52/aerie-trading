@@ -26,7 +26,6 @@ class EarningsSimulationContext
     public float $baselineVol = 0.0;
     public float $sharesOutstanding = 0.0;
     public float $stableMargin = 0.0;
-    public bool $isFinancial = false;
     public float $estimateDispersion = 0.06;
     public float $seasonalFactor = 1.0;
     public float $priorSeasonalFactor = 1.0;
@@ -58,6 +57,14 @@ class EarningsSimulationContext
     public float $receivablesProvision = 0.0;
     /** Change in net working capital this quarter; a build consumes cash, a release frees it. */
     public float $deltaWorkingCapital = 0.0;
+    /**
+     * Every impairment charged against EBIT after the operating cost base was struck: inventory written to
+     * net realizable value, the trade receivable allowance, and the credit-loss level correction. Negative
+     * when releases outweigh charges. Tracked as one figure because the seasonally adjusted run-rate is
+     * rebuilt from revenue and cost ratios rather than deseasonalized from EBIT, so it has to be told what
+     * else came out of EBIT or the solvency tests read a margin the firm did not earn.
+     */
+    public float $impairmentCharges = 0.0;
     /** Portion of the quarter's tax expense postponed by accelerated tax depreciation (ASC 740), non-cash. */
     public float $deferredTaxExpense = 0.0;
     /** Tax that actually left the company this quarter; total expense less the deferred portion. */
@@ -77,7 +84,6 @@ class EarningsSimulationContext
     public float $actualVariableCosts = 0.0;
     public float $ebitda = 0.0;
     public float $ebit = 0.0;
-    public float $primaryShockZ = 0.0;
     public ?string $eventType = null;
     public array $eventContext = [];
     public array $streamRevenue = [];

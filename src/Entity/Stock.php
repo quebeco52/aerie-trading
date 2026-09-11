@@ -103,6 +103,15 @@ class Stock
     private ?string $inventory = null;
 
     /**
+     * @var string Lower-of-cost-or-net-realizable-value write-downs carried against inventory (ASC 330).
+     *             A contra balance rather than a cut to the gross figure, because the gross figure is
+     *             rebuilt from the trade cycle every quarter and a cut would be restored at once, with the
+     *             restoration booked as a cash outflow the same quarter. Unwinds as the impaired stock turns.
+     */
+    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, options: ['default' => '0.0000'])]
+    private string $inventoryAllowance = '0.0000';
+
+    /**
      * @var string|null Trade payables: input costs incurred and not yet paid, a source of funding.
      */
     #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, nullable: true)]
@@ -1423,6 +1432,25 @@ class Stock
         return $this;
     }
 
+    public function getInventoryAllowance(): string
+    {
+        return $this->inventoryAllowance;
+    }
+
+    public function setInventoryAllowance(string $inventoryAllowance): static
+    {
+        $this->inventoryAllowance = self::cleanBcStr($inventoryAllowance, 4);
+        return $this;
+    }
+
+    /**
+     * Inventory at the lower of cost and net realizable value: the carrying amount the balance sheet shows.
+     */
+    public function getNetInventory(): float
+    {
+        return max(0.0, (float) ($this->inventory ?? 0.0) - (float) $this->inventoryAllowance);
+    }
+
     public function getPayables(): ?string
     {
         return $this->payables;
@@ -1463,7 +1491,7 @@ class Stock
     {
         return max(0.0, (float) $this->corporateTreasury)
             + $this->getNetReceivables()
-            + (float) ($this->inventory ?? 0.0)
+            + $this->getNetInventory()
             + $this->getNetPpe()
             + $this->getNetEarningAssets()
             + (float) $this->cipBalance
@@ -1509,7 +1537,7 @@ class Stock
             return null;
         }
 
-        return (string) ($this->getNetReceivables() + (float) ($this->inventory ?? 0.0) - (float) ($this->payables ?? 0.0));
+        return (string) ($this->getNetReceivables() + $this->getNetInventory() - (float) ($this->payables ?? 0.0));
     }
 
     /**

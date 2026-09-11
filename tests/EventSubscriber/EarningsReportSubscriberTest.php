@@ -70,7 +70,6 @@ class EarningsReportSubscriberTest extends TestCase
             strategy: $strategy,
             businessModel: 'security_protection'
         );
-        $ctx->isFinancial = false;
 
         $ctx->actualRevenue = 10000000.0;
         $ctx->streamRevenue = [
@@ -421,7 +420,6 @@ class EarningsReportSubscriberTest extends TestCase
             strategy: $strategy,
             businessModel: 'commercial_bank'
         );
-        $ctx->isFinancial = true;
 
         $ctx->actualRevenue = 300000000.0;
         $ctx->streamRevenue = [
@@ -520,7 +518,6 @@ class EarningsReportSubscriberTest extends TestCase
             strategy: $strategy,
             businessModel: 'internet_retail'
         );
-        $ctx->isFinancial = false;
 
         $ctx->actualRevenue = 12000000.0;
         $ctx->streamRevenue = [

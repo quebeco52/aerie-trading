@@ -146,6 +146,13 @@ class Portfolio
         // Same three components as the bulk sweep, but filtered to one user rather than grouped over all
         // of them: this runs on every trade, so the escrow leg is an indexed aggregate rather than a
         // derived table built for the whole roster and then thrown away.
+        //
+        // The escrow CASE has to enumerate the two sides that actually hold something, exactly as
+        // OPEN_ORDER_ESCROW_DETAIL_SQL does, rather than falling through to a share valuation on ELSE.
+        // A resting SHORT and a resting COVER escrow nothing, so valuing them here added an asset the
+        // account does not have — and because this is the path that runs on every trade, placing a short
+        // spiked the account's recorded net worth by the full notional until the next bulk sweep quietly
+        // disagreed with it.
         $sql = "
             SELECT (
                 COALESCE((SELECT SUM(us.quantity * s.price) FROM user_stocks us JOIN stocks s ON us.stock_id = s.id WHERE us.user_id = :user_id), 0) +
@@ -154,7 +161,9 @@ class Portfolio
                 COALESCE((
                     SELECT SUM(CASE WHEN o.action = 'BUY'
                                     THEN COALESCE(o.limit_price, 0) * o.quantity
-                                    ELSE o.quantity * COALESCE(s2.price, e2.price, b2.price, 0)
+                                    WHEN o.action = 'SELL'
+                                    THEN o.quantity * COALESCE(s2.price, e2.price, b2.price, 0)
+                                    ELSE 0
                                END)
                     FROM trade_orders o
                     LEFT JOIN stocks s2 ON s2.ticker = o.ticker AND o.asset_type = 'STOCK'

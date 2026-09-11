@@ -66,7 +66,8 @@ class EarningsReportSubscriber implements EventSubscriberInterface
         $report->setGrossPpe($stock->getGrossPpe());
         $report->setNetPpe(\App\Service\Math\MathUtility::formatDecimal($stock->getNetPpe(), 4));
         $report->setReceivables(\App\Service\Math\MathUtility::formatDecimal($stock->getNetReceivables(), 4));
-        $report->setInventory($stock->getInventory());
+        // Carrying value: cost less the write-downs still held against it, the figure a balance sheet shows.
+        $report->setInventory($stock->getInventory() === null ? null : \App\Service\Math\MathUtility::formatDecimal($stock->getNetInventory(), 4));
         $report->setPayables($stock->getPayables());
         $report->setInventoryWriteDown(\App\Service\Math\MathUtility::formatDecimal($ctx->inventoryWriteDown, 4));
         $report->setReceivablesProvision(\App\Service\Math\MathUtility::formatDecimal($ctx->receivablesProvision, 4));

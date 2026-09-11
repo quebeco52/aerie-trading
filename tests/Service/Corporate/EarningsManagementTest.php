@@ -11,8 +11,10 @@ use App\Service\Corporate\EarningsEngine;
 use App\Service\Math\FinancialConstants;
 use App\Service\Model\Sector\StandardCorporateBusinessModel;
 use PHPUnit\Framework\TestCase;
+use App\Service\Math\MathUtility;
 use ReflectionClass;
 use ReflectionMethod;
+use ReflectionProperty;
 
 /**
  * Accrual-based earnings management (Burgstahler & Dichev 1997, Degeorge/Patel/Zeckhauser 1999).
@@ -29,10 +31,28 @@ final class EarningsManagementTest extends TestCase
 
     protected function setUp(): void
     {
-        // manageReportedEarnings touches only the context's stock and strategy; the collaborators are
-        // reached solely through resolveTotalAssets, and only once a balance-sheet ledger is open.
+        mt_srand(20260910);
+
+        // manageReportedEarnings touches only the context's stock and strategy, plus the propensity draw;
+        // the rest of the collaborators are reached solely through resolveTotalAssets, and only once a
+        // balance-sheet ledger is open. MathUtility is the one that has to be real.
         $this->engine = (new ReflectionClass(EarningsEngine::class))->newInstanceWithoutConstructor();
+        $mathUtility = new ReflectionProperty(EarningsEngine::class, 'mathUtility');
+        $mathUtility->setValue($this->engine, new MathUtility());
+
         $this->manage = new ReflectionMethod(EarningsEngine::class, 'manageReportedEarnings');
+    }
+
+    /**
+     * Propensity is the probability management acts, so every test of the ENTRY pins it at certainty and
+     * the two tests of the gate pin it at 0 and 1. Leaving it at the sector default would make each of
+     * these a coin flip on the draw rather than an assertion about the rule.
+     */
+    private function certainManager(): StandardCorporateBusinessModel
+    {
+        return new class extends StandardCorporateBusinessModel {
+            public const EARNINGS_MANAGEMENT_PROPENSITY = 1.00;
+        };
     }
 
     private function makeContext(float $consensus, float $actual, float $bank = 0.0): EarningsSimulationContext
@@ -43,7 +63,7 @@ final class EarningsManagementTest extends TestCase
         $stock->setWholesaleDebt('1000000000');
         $stock->setManagedAccrualBank($bank);
 
-        $ctx = new EarningsSimulationContext($stock, new MacroStateDTO(), new StandardCorporateBusinessModel(), 'none');
+        $ctx = new EarningsSimulationContext($stock, new MacroStateDTO(), $this->certainManager(), 'none');
         $ctx->reportedExpectedNetIncome = $consensus;
         $ctx->reportedActualNetIncome = $actual;
 
@@ -76,6 +96,29 @@ final class EarningsManagementTest extends TestCase
             $ctx->stock->getManagedAccrualBank(),
             'Everything borrowed has to be owed back.'
         );
+    }
+
+    /**
+     * The regression. Propensity used to scale the SIZE of the entry rather than the odds of booking one,
+     * so a firm short by S booked half of S and printed the miss anyway: measured across every industry
+     * over twelve quarters, only 3 of 103 reachable near-misses ever crossed the line. The spike just above
+     * consensus is the entire finding this method models, so a managed quarter has to actually beat.
+     */
+    public function testAManagedQuarterActuallyClearsConsensus(): void
+    {
+        $consensus = 100_000_000.0;
+
+        foreach ([0.995, 0.99, 0.98, 0.97, 0.96] as $shortfallFraction) {
+            $ctx = $this->makeContext($consensus, $consensus * $shortfallFraction);
+
+            $this->manage->invoke($this->engine, $ctx);
+
+            $this->assertGreaterThan(
+                $consensus,
+                $ctx->reportedActualNetIncome,
+                sprintf('A quarter %.1f%% short is inside the reachable gap and must print a beat, not a smaller miss.', (1.0 - $shortfallFraction) * 100)
+            );
+        }
     }
 
     /** A collapse is reported, not papered over: accruals are a timing entry with a hard ceiling. */

@@ -489,6 +489,38 @@ class TreasuryEngineTest extends TestCase
     }
 
     /**
+     * The earnings engine writes the allocation's share count back to the stock after the treasury has run.
+     * An offering that diluted the stock but left that count untouched was undone on the way out: the cash
+     * and the equity stayed, the shares reverted, and every secondary was free money.
+     */
+    public function testEquityIssuanceReachesTheShareCountTheEngineWritesBack(): void
+    {
+        // A firm at fifty times earnings and twenty times book with returns well over its hurdle: the bubble
+        // condition, and the draw is pinned so the offering is certain to execute.
+        $mathUtility = $this->getMockBuilder(MathUtility::class)->onlyMethods(['generateUniform'])->getMock();
+        $mathUtility->method('generateUniform')->willReturn(0.0);
+        $engine = new TreasuryEngine($this->corporateMetrics, $this->debtEngine, $this->capExEngine, $mathUtility);
+
+        $stock = $this->createSolventCorporate();
+        $stock->setSharesOutstanding('100000000');
+        $stock->setRoicTtm('0.30');
+        $ctx = $this->createAllocationContext($stock, stockCompensation: 0.0, currentPrice: 200.0);
+        $ctx->newShares = 100_000_000.0; // what the buyback step leaves when nothing is repurchased
+
+        $engine->finalizeLiquidity($ctx);
+
+        $this->assertGreaterThan(0.0, $ctx->equityRaised, 'the bubble offering must execute for this to test anything');
+        $sharesIssued = $ctx->equityRaised / (200.0 * 0.90); // shares go out at the offering discount
+        $this->assertEqualsWithDelta(100_000_000.0 + $sharesIssued, (float) $stock->getSharesOutstanding(), 1.0);
+        $this->assertEqualsWithDelta(
+            (float) $stock->getSharesOutstanding(),
+            $ctx->newShares,
+            1e-6,
+            'the share count the engine writes back has to carry the dilution, or the raise is booked with no shares behind it'
+        );
+    }
+
+    /**
      * A firm shut out of the bond market repays maturing principal out of cash. The principal genuinely
      * leaves the balance sheet, which is the whole difference between a maturity ladder and a coupon reset.
      */

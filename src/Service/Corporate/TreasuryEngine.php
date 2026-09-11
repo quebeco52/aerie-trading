@@ -563,6 +563,9 @@ class TreasuryEngine
                 $sharesIssued = $targetRaise / max(0.01, $offeringPrice);
 
                 $stock->setSharesOutstanding((string) ($ctx->sharesOutstanding + $sharesIssued));
+                // The engine writes the context's share count back to the stock after allocation, so the
+                // dilution has to reach the context too or the raise lands as cash with no shares behind it.
+                $ctx->newShares = (float) $stock->getSharesOutstanding();
                 $ctx->newTreasury += $targetRaise;
                 $ctx->equityRaised += $targetRaise;
 

@@ -355,9 +355,11 @@ trait StandardOperatingPhysicsTrait
     }
 
     /**
-     * How hard this management team leans on accruals to land the quarter on consensus. Reporting
-     * incentives are a management property, so the sector constant is a starting point and the ticker
-     * override (ModelParam::EarningsManagementPropensity) is where a specific board's culture lives.
+     * The PROBABILITY this management team reaches for accruals to land a reachable quarter on consensus,
+     * not a scale factor on the entry it books — an accrual sized to less than the gap prints the miss
+     * anyway and still owes the reversal, which is the one thing no reporting incentive would choose.
+     * Reporting incentives are a management property, so the sector constant is a starting point and the
+     * ticker override (ModelParam::EarningsManagementPropensity) is where a specific board's culture lives.
      */
     public function getEarningsManagementPropensity(Stock $stock): float
     {

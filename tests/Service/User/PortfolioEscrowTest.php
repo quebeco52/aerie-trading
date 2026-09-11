@@ -162,4 +162,50 @@ final class PortfolioEscrowTest extends TestCase
             );
         }
     }
+
+    /**
+     * Every place that values an open order by its side must name the two sides that hold something.
+     *
+     * This is the guard the constant already had and the copies did not. PortfolioEscrowTest checked
+     * OPEN_ORDER_ESCROW_DETAIL_SQL, but Portfolio::recordUserSnapshot() inlines its own aggregate (it
+     * filters to one user rather than grouping over the roster) and that copy still fell through to a
+     * share valuation on ELSE — so the path that runs after EVERY trade credited a resting SHORT or COVER
+     * with the full notional, and the bulk sweep silently disagreed a minute later. The same ELSE in the
+     * split routines refunded escrow those sides never posted, which is cash from nothing.
+     *
+     * The rule is structural, so it is checked structurally: any CASE that branches on o.action settles
+     * everything it does not name at ZERO. Naming one side or both is a matter of how the query is
+     * shaped — the escrow fragment deliberately splits cash and shares into two single-sided blocks — but
+     * a non-zero ELSE always means some unnamed side is being valued, and the only unnamed sides are the
+     * two that reserve nothing.
+     */
+    public function testNoOpenOrderValuationFallsThroughOnElse(): void
+    {
+        $sources = [
+            'src/Service/User/Portfolio.php',
+            'src/Service/Corporate/CorporateLedgerService.php',
+            'src/Service/Market/EtfTracker.php',
+        ];
+
+        $checked = 0;
+        foreach ($sources as $relativePath) {
+            $source = $this->read($relativePath);
+
+            // Every CASE block that switches on the order side, from the WHEN to its END.
+            preg_match_all('/CASE\s+WHEN\s+o\.action.*?END/s', $source, $matches);
+
+            foreach ($matches[0] as $case) {
+                $checked++;
+                $flat = preg_replace('/\s+/', ' ', $case);
+
+                $this->assertMatchesRegularExpression(
+                    '/ELSE 0 END$/',
+                    $flat,
+                    "{$relativePath}: SHORT and COVER reserve nothing, so the fall-through must be zero — {$flat}"
+                );
+            }
+        }
+
+        $this->assertGreaterThanOrEqual(4, $checked, 'The open-order valuations have moved; this guard is no longer reaching them.');
+    }
 }
