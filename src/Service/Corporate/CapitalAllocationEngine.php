@@ -317,7 +317,7 @@ class CapitalAllocationEngine
         $saturationPenalty = $this->corporateMetrics->calculateMarketSaturationPenalty($stock, $evaluationCapital, $ctx->macroState);
         $saturationSeverity = $this->corporateMetrics->calculateSaturationSeverity($saturationPenalty, $trueReturn);
 
-        $fairValuePE = $this->mathUtility->calculateIntrinsicFairValuePE($hurdleRate, $trueReturn, 0.02);
+        $fairValuePE = $this->mathUtility->calculateIntrinsicFairValuePE($hurdleRate, $trueReturn, 0.02, \App\Data\Sectors::baselineIndustryPe($stock->getIndustry()));
 
         $ctx->newShares = $ctx->sharesOutstanding;
 

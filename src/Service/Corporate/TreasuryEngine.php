@@ -517,7 +517,7 @@ class TreasuryEngine
         $hurdleRate = $ctx->strategy->getHurdleRate($ctx->health);
         $economicSpread = $trueReturn - $hurdleRate;
 
-        $fairValuePE = $this->mathUtility->calculateIntrinsicFairValuePE($hurdleRate, $trueReturn, 0.02);
+        $fairValuePE = $this->mathUtility->calculateIntrinsicFairValuePE($hurdleRate, $trueReturn, 0.02, \App\Data\Sectors::baselineIndustryPe($stock->getIndustry()));
 
         $bookValuePerShare = max(0.01, (float) $stock->getTotalEquity() / max(1, $ctx->sharesOutstanding));
         $priceToBook = $ctx->currentPrice / $bookValuePerShare;

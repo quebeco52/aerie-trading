@@ -237,7 +237,7 @@ class MergerAndAcquisitionEngine
         $ctx->hurdleRate = $ctx->strategy->getHurdleRate($ctx->health);
         $ctx->economicSpread = $ctx->trueReturn - $ctx->hurdleRate;
         
-        $ctx->fairValuePE = $this->mathUtility->calculateIntrinsicFairValuePE($ctx->hurdleRate, $ctx->trueReturn, 0.02);
+        $ctx->fairValuePE = $this->mathUtility->calculateIntrinsicFairValuePE($ctx->hurdleRate, $ctx->trueReturn, 0.02, \App\Data\Sectors::baselineIndustryPe($stock->getIndustry()));
         $ctx->bookValuePerShare = max(0.01, $ctx->equity / max(1.0, $ctx->shares));
         $ctx->priceToBook = $ctx->price / $ctx->bookValuePerShare;
         $ctx->isOvervalued = $ctx->economicSpread > 0.0 && $ctx->currentPE > ($ctx->fairValuePE * 1.5) && $ctx->currentPE > 25.0 && $ctx->priceToBook > 2.0;

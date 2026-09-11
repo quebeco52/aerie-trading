@@ -142,6 +142,95 @@ class MathUtilityTest extends TestCase
         $this->assertEqualsWithDelta(FinancialConstants::MAX_INTRINSIC_PE, $pe, 0.0001, 'Growth >= COE must constrain growth and clamp to MAX_INTRINSIC_PE.');
     }
 
+    /**
+     * With a sector prior supplied, a well-conditioned firm keeps most of its own Gordon multiple. At a 7%
+     * spread the firm's precision (spread^2) dominates the prior's, so it carries ~84% of the weight and the
+     * result sits close to the raw 11.43x rather than the 20x sector.
+     */
+    public function testIntrinsicFairValuePEKeepsFirmEstimateWhenWellConditioned(): void
+    {
+        $raw = $this->mathUtility->calculateIntrinsicFairValuePE(0.10, 0.15, 0.03);
+        $shrunk = $this->mathUtility->calculateIntrinsicFairValuePE(0.10, 0.15, 0.03, 20.0);
+
+        $this->assertEqualsWithDelta(11.42857, $raw, 0.001);
+        $this->assertEqualsWithDelta(12.75862, $shrunk, 0.001, 'A 7% spread must leave the firm estimate dominant.');
+        $this->assertLessThan(abs(20.0 - $raw), abs(20.0 - $shrunk), 'Shrinkage must move the estimate toward its sector.');
+    }
+
+    /**
+     * The case the shrinkage exists for. A 4.5% cost of equity against 6% growth leaves the denominator on
+     * its 50bp floor and a raw multiple of 160x, which previously pinned to the 35x ceiling and stayed there
+     * for every such firm. The firm's weight falls as spread^2, so its contribution collapses and the
+     * estimate lands near its sector instead of on a shared ceiling.
+     */
+    public function testIntrinsicFairValuePEFallsBackToSectorWhenDenominatorCollapses(): void
+    {
+        $raw = $this->mathUtility->calculateIntrinsicFairValuePE(0.045, 0.20, 0.06);
+        $shrunk = $this->mathUtility->calculateIntrinsicFairValuePE(0.045, 0.20, 0.06, 16.0);
+
+        $this->assertEqualsWithDelta(FinancialConstants::MAX_INTRINSIC_PE, $raw, 0.0001, 'Unshrunk, this diverges to the ceiling.');
+        $this->assertEqualsWithDelta(19.89189, $shrunk, 0.001);
+        $this->assertLessThan(FinancialConstants::MAX_INTRINSIC_PE, $shrunk, 'The ceiling must stop being what sets the multiple.');
+
+        // Two firms that both pinned to the ceiling must now separate by their own spreads rather than
+        // sharing a single capped multiple.
+        $wider = $this->mathUtility->calculateIntrinsicFairValuePE(0.08, 0.20, 0.15, 16.0);
+        $this->assertEqualsWithDelta(FinancialConstants::MAX_INTRINSIC_PE, $this->mathUtility->calculateIntrinsicFairValuePE(0.08, 0.20, 0.15), 0.0001);
+        $this->assertGreaterThan($shrunk, $wider, 'The better-conditioned of two ceiling-pinned firms must now price higher.');
+    }
+
+    /**
+     * The firm keeps more of its own multiple the wider its spread. Asserted on the implied weight rather
+     * than on distance from the prior: the raw multiple falls as the spread widens and crosses the sector on
+     * the way, so distance is not monotonic even though the weight is.
+     */
+    public function testIntrinsicFairValuePEShrinksHarderAsTheSpreadNarrows(): void
+    {
+        $sector = 12.0;
+        $previousWeight = null;
+
+        // Spreads of 2.5%, 4%, 6% and 10%, all clear of the 4% cost-of-equity floor that would collapse them.
+        foreach ([0.045, 0.06, 0.08, 0.12] as $costOfEquity) {
+            $raw = $this->mathUtility->calculateIntrinsicFairValuePE($costOfEquity, 0.20, 0.02);
+            $shrunk = $this->mathUtility->calculateIntrinsicFairValuePE($costOfEquity, 0.20, 0.02, $sector);
+
+            $this->assertNotEqualsWithDelta($sector, $raw, 0.01, 'Test inputs must keep the raw multiple off the prior.');
+            $impliedWeight = ($shrunk - $sector) / ($raw - $sector);
+
+            $this->assertGreaterThanOrEqual(0.0, $impliedWeight);
+            $this->assertLessThanOrEqual(1.0, $impliedWeight, 'The result must lie between the firm estimate and its sector.');
+
+            if ($previousWeight !== null) {
+                $this->assertGreaterThan(
+                    $previousWeight,
+                    $impliedWeight,
+                    'A wider spread is a more reliable estimate and must keep more of the firm-level multiple.'
+                );
+            }
+            $previousWeight = $impliedWeight;
+        }
+    }
+
+    /** Omitting the prior must reproduce the unshrunk Gordon multiple exactly, for callers without a sector. */
+    public function testIntrinsicFairValuePEIsUnchangedWithoutASectorPrior(): void
+    {
+        foreach ([[0.10, 0.15, 0.03], [0.12, 0.25, 0.05], [0.06, 0.08, 0.01]] as [$coe, $roic, $growth]) {
+            $this->assertSame(
+                $this->mathUtility->calculateIntrinsicFairValuePE($coe, $roic, $growth),
+                $this->mathUtility->calculateIntrinsicFairValuePE($coe, $roic, $growth, null)
+            );
+        }
+    }
+
+    /** A non-positive sector multiple is not a usable prior and must be ignored rather than dragging the estimate to zero. */
+    public function testIntrinsicFairValuePEIgnoresAnUnusableSectorPrior(): void
+    {
+        $raw = $this->mathUtility->calculateIntrinsicFairValuePE(0.10, 0.15, 0.03);
+
+        $this->assertSame($raw, $this->mathUtility->calculateIntrinsicFairValuePE(0.10, 0.15, 0.03, 0.0));
+        $this->assertSame($raw, $this->mathUtility->calculateIntrinsicFairValuePE(0.10, 0.15, 0.03, -5.0));
+    }
+
     public function testCalculateDcfMultiplier(): void
     {
         // WACC = 8%, Growth = 2% -> Spread = 6% -> Multiplier = 1.02 / 0.06 = 17.0

@@ -413,7 +413,7 @@ class MarketEngine
         // Nominal expected growth used for valuation (capped at 5% to prevent Gordon Growth divergence)
         $expectedGrowth = max(0.0, min(0.05, $realGrowth + ($inflation * 0.5)));
 
-        $fairValuePE = $this->mathUtility->calculateIntrinsicFairValuePE($hurdleRate, $structuralRoic, $expectedGrowth);
+        $fairValuePE = $this->mathUtility->calculateIntrinsicFairValuePE($hurdleRate, $structuralRoic, $expectedGrowth, $baselineIndustryPE);
 
         // Sloan (1996) Accruals Anomaly: Discount P/E multiple for firms with bloated non-cash accounting accruals
         $accrualsPenalty = max(0.0, $accrualsRatio * FinancialConstants::ACCRUALS_ANOMALY_PE_PENALTY_SCALE);

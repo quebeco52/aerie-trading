@@ -115,6 +115,10 @@ class FinancialConstants
     public const MIN_INTRINSIC_PE = 4.0;
     /** Absolute ceiling on intrinsic fundamental P/E multiple. */
     public const MAX_INTRINSIC_PE = 35.0;
+
+    // --- Relative Valuation Shrinkage (Vasicek 1973) ---
+    /** Spread (cost of equity less growth) at which a firm's own Gordon multiple and its sector's carry equal weight. */
+    public const INTRINSIC_PE_SHRINKAGE_SPREAD = 0.03;
     /** Maximum fallback capitalization multiple when DCF denominator approaches zero. */
     public const DCF_FALLBACK_MULTIPLIER = 60.0;
     /** Fundamental cap on free cash flow capitalization multiple (~33.3x or 3% FCF yield). */

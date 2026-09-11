@@ -538,15 +538,31 @@ class MathUtility
      * P/E = (1 - Reinvestment Rate) / (Cost of Equity - Growth Rate)
      * Where Reinvestment Rate = Growth Rate / ROIC.
      *
-     * @param float $costOfEquity The required rate of return for equity investors (Hurdle Rate).
-     * @param float $roic         The Return on Invested Capital.
-     * @param float $growthRate   The expected perpetual growth rate.
+     * The Gordon multiple is a ratio whose denominator is a small difference of two estimated rates, so its
+     * sampling error explodes as that spread narrows: by the delta method the standard error of the multiple
+     * scales with 1/spread^2, and the estimate is near worthless once the spread approaches zero. Vasicek
+     * (1973), "A Note on Using Cross-Sectional Information in Bayesian Estimation of Security Betas", is the
+     * standard remedy for exactly this shape of problem: shrink the noisy firm-level estimate toward a stable
+     * cross-sectional prior, weighting each by its precision. Vasicek shrinks a regression beta toward the
+     * market; here the firm's Gordon multiple is shrunk toward its sector's observed trading multiple, whose
+     * precision is fixed by INTRINSIC_PE_SHRINKAGE_SPREAD.
+     *
+     * This also removes the divergence by construction rather than by a hard cap. The firm's contribution is
+     * weight x multiple = spread x payout / (spread^2 + tau^2), which tends to zero as the spread does, so a
+     * firm whose cost of equity approaches its growth rate lands on its sector multiple instead of infinity.
+     *
+     * @param float      $costOfEquity   The required rate of return for equity investors (Hurdle Rate).
+     * @param float      $roic           The Return on Invested Capital.
+     * @param float      $growthRate     The expected perpetual growth rate.
+     * @param float|null $sectorMultiple The sector's baseline trading multiple used as the cross-sectional
+     *                                   prior. Null skips shrinkage and returns the raw Gordon multiple.
      * @return float The intrinsic fair value P/E multiple.
      */
     public function calculateIntrinsicFairValuePE(
         float $costOfEquity,
         float $roic,
-        float $growthRate = FinancialConstants::DEFAULT_PERPETUAL_GROWTH_RATE
+        float $growthRate = FinancialConstants::DEFAULT_PERPETUAL_GROWTH_RATE,
+        ?float $sectorMultiple = null
     ): float {
         // 1. Enforce absolute structural floor on Cost of Equity to prevent divergence under extreme distress
         $effectiveCostOfEquity = max(FinancialConstants::MIN_COST_OF_EQUITY, $costOfEquity);
@@ -570,7 +586,19 @@ class MathUtility
         $spread = max(0.005, $effectiveCostOfEquity - $effectiveGrowth);
         $pe = $payoutRatio / $spread;
 
-        // 7. Enforce structural market boundaries for distressed (4x) and superstar (35x) equities
+        // 7. Vasicek shrinkage toward the sector's multiple, weighted by the precision of each estimate.
+        // Firm precision goes as spread^2 (delta method on a 1/spread ratio); the prior's is the fixed
+        // tau^2. A well-conditioned firm keeps its own multiple; an ill-conditioned one inherits its sector's.
+        if ($sectorMultiple !== null && $sectorMultiple > 0.0) {
+            $tau = FinancialConstants::INTRINSIC_PE_SHRINKAGE_SPREAD;
+            $firmPrecision = $spread * $spread;
+            $priorPrecision = $tau * $tau;
+
+            $firmWeight = $firmPrecision / ($firmPrecision + $priorPrecision);
+            $pe = ($firmWeight * $pe) + ((1.0 - $firmWeight) * $sectorMultiple);
+        }
+
+        // 8. Enforce structural market boundaries for distressed (4x) and superstar (35x) equities
         return max(FinancialConstants::MIN_INTRINSIC_PE, min(FinancialConstants::MAX_INTRINSIC_PE, $pe));
     }
 

@@ -210,6 +210,19 @@ class Sectors
      * @param string $businessModel
      * @return bool
      */
+    /**
+     * The sector's baseline trading multiple, used as the cross-sectional prior when a firm's own Gordon
+     * multiple is shrunk toward its peers. Every engine that forms a fair-value multiple must read it from
+     * here: the market, buyback, issuance and M&A engines all compare a live P/E against a fair one, so if
+     * they anchored differently a firm could look cheap to its own board and expensive to the market.
+     */
+    public static function baselineIndustryPe(?string $industry): float
+    {
+        $metrics = self::INDUSTRY_METRICS[$industry ?: 'General'] ?? self::INDUSTRY_METRICS['General'];
+
+        return (float) $metrics['pe'];
+    }
+
     public static function isFinancial(string $businessModel): bool
     {
         return in_array($businessModel, ['commercial_bank', 'insurance', 'retail_insurance', 'reinsurance', 'brokerage', 'asset_manager', 'credit_services', 'shadow_bank', 'private_equity', 'hedge_fund', 'clearing_house', 'investment_bank', 'distressed_debt']);
