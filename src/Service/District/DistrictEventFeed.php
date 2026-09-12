@@ -70,11 +70,13 @@ class DistrictEventFeed
         // (stock_id, recorded_at) index (see its class attributes), so this stays a single
         // efficient index scan as history accumulates. Grouped in PHP rather than with a
         // per-stock SQL LIMIT, which Doctrine has no portable way to express in one query.
+        // Capped at 20 rows per tenant so accumulated history never causes unbounded hydration.
         $rows = $this->entityManager->getRepository(StockEvent::class)->createQueryBuilder('e')
             ->andWhere('e.stock IN (:stocks)')
             ->setParameter('stocks', $stocks)
             ->orderBy('e.stock', 'ASC')
             ->addOrderBy('e.recordedAt', 'DESC')
+            ->setMaxResults(count($stocks) * 20)
             ->getQuery()
             ->getResult();
 
@@ -97,6 +99,7 @@ class DistrictEventFeed
      * plain-JSON-serialisable for the client (a raw DateTimeInterface does not encode usefully).
      * The epoch timestamp rides along too, with the badge verdict the server reached from it, so
      * the client can re-reach the same verdict later without parsing the display string.
+     * Only fields actually rendered by district_controller.js are retained.
      *
      * @return array<string, mixed>
      */
@@ -104,10 +107,19 @@ class DistrictEventFeed
     {
         $presented = $this->eventPresenter->present($event);
         $recordedAt = $event->getRecordedAt();
-        $presented['recordedAt'] = $recordedAt->format('Y-m-d H:i');
-        $presented['recordedAtTs'] = $recordedAt->getTimestamp();
-        $presented['recent'] = $recordedAt->getTimestamp() >= $windowOpensAt;
 
-        return $presented;
+        return [
+            'type' => $presented['type'] ?? $event->getEventType(),
+            'category' => $presented['category'] ?? 'general',
+            'badge' => $presented['badge'] ?? $event->getEventType(),
+            'badgeClass' => $presented['badgeClass'] ?? null,
+            'icon' => $presented['icon'] ?? 'campaign',
+            'iconClass' => $presented['iconClass'] ?? null,
+            'headline' => $presented['headline'] ?? $event->getDescription(),
+            'changePercent' => $presented['changePercent'] ?? null,
+            'recordedAt' => $recordedAt->format('Y-m-d H:i'),
+            'recordedAtTs' => $recordedAt->getTimestamp(),
+            'recent' => $recordedAt->getTimestamp() >= $windowOpensAt,
+        ];
     }
 }

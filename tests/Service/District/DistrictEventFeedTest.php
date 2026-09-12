@@ -54,6 +54,7 @@ class DistrictEventFeedTest extends TestCase
         $this->queryBuilder->method('setParameter')->willReturn($this->queryBuilder);
         $this->queryBuilder->method('orderBy')->willReturn($this->queryBuilder);
         $this->queryBuilder->method('addOrderBy')->willReturn($this->queryBuilder);
+        $this->queryBuilder->method('setMaxResults')->willReturn($this->queryBuilder);
 
         $this->query = $this->createMock(Query::class);
         $this->queryBuilder->method('getQuery')->willReturn($this->query);

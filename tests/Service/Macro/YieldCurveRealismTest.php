@@ -97,9 +97,9 @@ class YieldCurveRealismTest extends TestCase
                 return $this->store[(string) $key] ?? false;
             }
 
-            public function set(mixed $key, mixed $val): bool
+            public function set(string $key, mixed $value, mixed $options = null): \Redis|string|bool
             {
-                $this->store[(string) $key] = (string) $val;
+                $this->store[$key] = (string) $value;
 
                 return true;
             }

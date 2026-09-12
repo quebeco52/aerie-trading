@@ -309,9 +309,11 @@ export default class extends Controller {
         this.activeSector = null;
 
         // Recent-history backfill from App\Service\District\DistrictEventFeed, newest first —
-        // the same App\Service\Event\EventPresenter output the stock page's own event feed uses.
-        // Live events (see applyEvent()) are unshifted onto the same per-ticker arrays.
-        this.eventsByTicker = new Map(Object.entries(this.eventsValue || {}));
+        // read from <script type="application/json"> if present to avoid HTML-attribute bloat,
+        // falling back to Stimulus values.
+        const eventsDataEl = document.getElementById('district-events-data');
+        const initialEvents = eventsDataEl ? JSON.parse(eventsDataEl.textContent || '{}') : (this.eventsValue || {});
+        this.eventsByTicker = new Map(Object.entries(initialEvents));
 
         // Latest-quarter revenue mix from App\Service\District\DistrictRevenueFeed. This is a
         // snapshot, not a stream — it only changes once a simulated quarter, so unlike prices and
@@ -404,6 +406,9 @@ export default class extends Controller {
         this.flushPending = this.flushPending.bind(this);
         document.addEventListener('market:update', this.onMarketUpdate);
 
+        this.onVisibilityChange = this.onVisibilityChange.bind(this);
+        document.addEventListener('visibilitychange', this.onVisibilityChange);
+
         this.reconstituting = false;
         this.settleReconstitution();
 
@@ -421,6 +426,7 @@ export default class extends Controller {
     }
 
     disconnect() {
+        document.removeEventListener('visibilitychange', this.onVisibilityChange);
         document.removeEventListener('market:update', this.onMarketUpdate);
         document.removeEventListener('turbo:submit-end', this.onSubmitEnd);
         Object.values(this.tickTimers).forEach(clearTimeout);
@@ -433,6 +439,15 @@ export default class extends Controller {
         if (this.frameHandle !== null) {
             cancelAnimationFrame(this.frameHandle);
             this.frameHandle = null;
+        }
+    }
+
+    /** Flushes any queued market ticks when the user switches back to this tab. */
+    onVisibilityChange() {
+        if (!document.hidden && this.frameHandle === null) {
+            if (this.pendingStockUpdates.size > 0 || this.pendingMacro || this.pendingEvents.length > 0) {
+                this.frameHandle = requestAnimationFrame(this.flushPending);
+            }
         }
     }
 
@@ -1487,7 +1502,7 @@ export default class extends Controller {
             });
         }
 
-        if (this.frameHandle === null) {
+        if (!document.hidden && this.frameHandle === null) {
             this.frameHandle = requestAnimationFrame(this.flushPending);
         }
     }
@@ -1778,15 +1793,22 @@ export default class extends Controller {
         const y = parseFloat(plot.dataset.groundLine) - height;
 
         const facade = plot.querySelector('.facade');
+        if (!facade) return;
+
+        const currentHeight = parseFloat(facade.getAttribute('height')) || 0;
+        const currentY = parseFloat(facade.getAttribute('y')) || 0;
+        // Sub-pixel threshold: skip rewriting SVG attributes if the height change is negligible (< 0.5 units)
+        if (Math.abs(height - currentHeight) < 0.5 && Math.abs(y - currentY) < 0.5) {
+            return;
+        }
+
         const roofline = plot.querySelector('.roofline');
         const windows = plot.querySelector('.plot-windows');
 
-        if (facade) {
-            facade.setAttribute('y', y);
-            facade.setAttribute('height', height);
-            if (windows) {
-                windows.setAttribute('transform', `translate(${facade.getAttribute('x')} ${y})`);
-            }
+        facade.setAttribute('y', y);
+        facade.setAttribute('height', height);
+        if (windows) {
+            windows.setAttribute('transform', `translate(${facade.getAttribute('x')} ${y})`);
         }
         if (roofline) {
             roofline.setAttribute('y', y - 7);
