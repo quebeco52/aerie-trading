@@ -306,4 +306,88 @@ class DistrictControllerTest extends WebTestCase
         $this->assertSelectorExists('[data-district-target="tooltip"]');
         $this->assertSelectorExists('[data-district-target="institutionDetail"]');
     }
+
+    public function testTerraceEmbankmentRendersAndTheWaterReflectionDoesNot(): void
+    {
+        $client = static::createClient();
+        $client->request('GET', '/district/glasswater-row');
+
+        $this->assertResponseIsSuccessful();
+        $this->assertSelectorExists('svg #terrace-embankment', 'Terrace embankment wall should render');
+        // The mirrored-water effect was removed at the user's request and must not creep back.
+        $this->assertSelectorNotExists('svg #glasswater-reflections');
+        $this->assertSelectorNotExists('svg .facade-reflection');
+        $this->assertSelectorNotExists('svg .water-shimmer');
+    }
+
+    public function testConduitFilterModeToolbarRendersWithAllOptions(): void
+    {
+        $client = static::createClient();
+        $crawler = $client->request('GET', '/district/glasswater-row');
+
+        $this->assertResponseIsSuccessful();
+        $buttons = $crawler->filter('[data-district-target="conduitModeBtn"]');
+        $this->assertCount(4, $buttons, 'Toolbar should contain 4 conduit filter mode buttons');
+
+        $modes = $buttons->each(fn ($node) => $node->attr('data-mode'));
+        $this->assertSame(['all', 'stressed', 'focused', 'muted'], $modes);
+    }
+
+    public function testPositionAndQuickTradeElementsRenderForGuest(): void
+    {
+        $client = static::createClient();
+        $crawler = $client->request('GET', '/district/glasswater-row');
+
+        $this->assertResponseIsSuccessful();
+        $this->assertSelectorExists('[data-district-target="detailPositionWrap"]');
+        $this->assertSelectorExists('[data-district-target="detailPosition"]');
+        $this->assertSelectorExists('[data-district-target="tooltipPosition"]');
+
+        $container = $crawler->filter('[data-controller="district"]');
+        $this->assertNotEmpty($container->attr('data-district-user-holdings-value'));
+        $this->assertIsNumeric($container->attr('data-district-user-cash-value'));
+        $this->assertContains($container->attr('data-district-margin-enabled-value'), ['true', 'false']);
+    }
+
+    public function testQuickTradeFormRendersForAuthenticatedUser(): void
+    {
+        $client = static::createClient();
+        $userRepo = static::getContainer()->get(\App\Repository\UserRepository::class);
+        $testUser = $userRepo->findOneBy(['email' => 'test.test@test.se']);
+
+        if (!$testUser) {
+            $this->markTestSkipped('Test user not found in test database.');
+        }
+
+        $client->loginUser($testUser);
+        $crawler = $client->request('GET', '/district/glasswater-row');
+
+        $this->assertResponseIsSuccessful();
+        $this->assertSelectorExists('[data-district-target="quickTradeForm"]');
+        $this->assertSelectorExists('[data-district-target="quickTradeTickerInput"]');
+        $this->assertSelectorExists('[data-district-target="quickTradeHolding"]');
+        $this->assertSelectorExists('[data-district-target="quickTradeEstimate"]');
+        $this->assertSelectorExists('[data-district-target="quickTradeQuantity"]');
+        $this->assertSelectorExists('[data-district-target="quickTradeSubmit"]');
+    }
+
+    public function testTheStreetIsAReloadableFrameWithAReconstitutionCountdown(): void
+    {
+        $client = static::createClient();
+        $crawler = $client->request('GET', '/district/glasswater-row');
+
+        $this->assertResponseIsSuccessful();
+        $this->assertSelectorExists('turbo-frame#district-ward [data-controller="district"]');
+        $this->assertSelectorExists('[data-district-target="summaryReconstitution"]');
+        $this->assertSelectorExists('[data-district-target="reconstitutionNotice"]');
+        $this->assertMatchesRegularExpression(
+            '/^(in \d+d|now)$/',
+            trim($crawler->filter('[data-district-target="summaryReconstitution"]')->text())
+        );
+
+        $schedule = json_decode($crawler->filter('[data-controller="district"]')->attr('data-district-reconstitution-value'), true);
+        $this->assertIsArray($schedule);
+        $this->assertGreaterThan(0, $schedule['nextTick']);
+        $this->assertGreaterThan(0, $schedule['ticksPerYear']);
+    }
 }

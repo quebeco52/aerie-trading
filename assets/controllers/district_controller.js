@@ -193,6 +193,10 @@ function categorizeEvent(type, changePercent) {
     if (t === 'BANKRUPTCY') {
         return { category: 'bankruptcy', color: EVENT_COLORS.red500, icon: 'gavel', badge: 'BANKRUPTCY' };
     }
+    if (t === 'DISTRICT') {
+        // Roster change at the quarterly reconstitution — see App\Service\Event\EventPresenter::presentDistrict().
+        return { category: 'district', color: EVENT_COLORS.primary, icon: 'location_city', badge: 'RECONSTITUTION' };
+    }
     return { category: 'general', color: EVENT_COLORS.primary, icon: 'campaign', badge: t || 'EVENT' };
 }
 
@@ -212,6 +216,7 @@ export default class extends Controller {
     static targets = [
         'plot', 'label', 'rank', 'kerbPrice', 'kerbChange',
         'institution', 'conduit', 'institutionReadout', 'readoutSpark', 'svg', 'summaryStress',
+        'summaryReconstitution', 'reconstitutionNotice',
         'flare', 'badge', 'badgeCount', 'kerbLight',
         'tooltip', 'tooltipTicker', 'tooltipRank', 'tooltipName', 'tooltipMeta',
         'tooltipPrice', 'tooltipChange', 'tooltipCap',
@@ -224,6 +229,8 @@ export default class extends Controller {
         'institutionDetail', 'institutionName', 'institutionStatus', 'institutionReadings',
         'institutionFeeds', 'institutionFeedCount',
         'sectorChip', 'sectorRun',
+        'conduitModeBtn', 'pennant', 'detailPositionWrap', 'detailPosition', 'tooltipPosition',
+        'quickTradeForm', 'quickTradeTickerInput', 'quickTradeHolding', 'quickTradeEstimate', 'quickTradeQuantity', 'quickTradeSubmit',
     ];
 
     static values = {
@@ -234,6 +241,20 @@ export default class extends Controller {
         condition: Object,
         /** Wall-clock seconds one simulated month lasts — App\Service\District\DistrictEventFeed::badgeWindowSeconds(). */
         eventBadgeWindowSeconds: Number,
+        /**
+         * Open positions keyed by ticker — App\Service\District\DistrictHoldingsFeed. `quantity` is
+         * ALWAYS the unsigned size; `isShort` carries the direction. `averageCost` is the weighted
+         * average from CostBasisCalculator (average proceeds for a short), or null.
+         */
+        userHoldings: Object,
+        /** Cash balance, for the quick-trade ticket's "Max" and estimate. */
+        userCash: Number,
+        /** Whether the account may short and cover — decides which ticket actions are rendered. */
+        marginEnabled: Boolean,
+        /** Roof pennant geometry — App\Data\DistrictMap::POSITION_PENNANT_*; the Twig draws from the same figures. */
+        positionPennant: Object,
+        /** Reconstitution calendar — App\Service\District\DistrictRoster::schedule(): nextTick, ticksPerYear… */
+        reconstitution: Object,
     };
 
     /** Maximum recent events kept per ticker client-side, oldest dropped first. */
@@ -261,6 +282,17 @@ export default class extends Controller {
     static MIN_ZOOM = 1;
     static MAX_ZOOM = 4;
     static ZOOM_STEP = 1.25;
+
+    /** sessionStorage key carrying selection and plot positions across a reconstitution reload. */
+    static RECONSTITUTION_STORAGE_KEY = 'district:reconstitution';
+    /** How long the evicted facades fade before the frame is reloaded. */
+    static EVICTION_FADE_MS = 700;
+    /** Slide duration for survivors settling into their new plots after the reload. */
+    static RECONSTITUTION_SLIDE_MS = 900;
+    /** How long the "street reconstituted" notice stays up. */
+    static RECONSTITUTION_NOTICE_MS = 12000;
+    /** A carried-over reconstitution older than this is stale (a reload that was not ours) and is ignored. */
+    static RECONSTITUTION_CARRY_MAX_MS = 15000;
 
     connect() {
         this.previousPrices = {};
@@ -350,10 +382,30 @@ export default class extends Controller {
         this.institutionsById = new Map((this.institutionsValue || []).map(i => [i.id, i]));
 
         this.zoomFactor = 1;
+        this.conduitMode = 'all';
+
+        this.userHoldings = this.userHoldingsValue || {};
+        this.userCash = Number(this.userCashValue) || 0;
+
+        this.pennantsByTicker = new Map();
+        this.pennantTargets.forEach(pen => this.pennantsByTicker.set(pen.dataset.pennantFor, pen));
+
+        this.onSubmitEnd = () => {
+            if (this.hasQuickTradeSubmitTarget) {
+                this.quickTradeSubmitTarget.disabled = false;
+                this.quickTradeSubmitTarget.classList.remove('opacity-50', 'pointer-events-none');
+                const span = this.quickTradeSubmitTarget.querySelector('span:last-child');
+                if (span) span.textContent = 'Execute Order';
+            }
+        };
+        document.addEventListener('turbo:submit-end', this.onSubmitEnd);
 
         this.onMarketUpdate = this.onMarketUpdate.bind(this);
         this.flushPending = this.flushPending.bind(this);
         document.addEventListener('market:update', this.onMarketUpdate);
+
+        this.reconstituting = false;
+        this.settleReconstitution();
 
         // The server counted each badge at render time; from here on the client owns the count,
         // so events fall out of the window on schedule rather than only on the next page load.
@@ -370,11 +422,13 @@ export default class extends Controller {
 
     disconnect() {
         document.removeEventListener('market:update', this.onMarketUpdate);
+        document.removeEventListener('turbo:submit-end', this.onSubmitEnd);
         Object.values(this.tickTimers).forEach(clearTimeout);
         Object.values(this.rankMoveTimers).forEach(clearTimeout);
         Object.values(this.flareTimers).forEach(clearTimeout);
         Object.values(this.badgeTimers).forEach(clearTimeout);
         clearInterval(this.badgeRefreshHandle);
+        clearTimeout(this.reconstitutionNoticeTimer);
 
         if (this.frameHandle !== null) {
             cancelAnimationFrame(this.frameHandle);
@@ -415,6 +469,10 @@ export default class extends Controller {
         this.currentSelectedTicker = plot.dataset.ticker;
         this.renderEventsList(plot.dataset.ticker);
         this.renderRevenueMix(plot.dataset.ticker);
+
+        const holding = this.userHoldings[plot.dataset.ticker];
+        this.renderPositionDetail(plot.dataset.ticker, holding, parseFloat(plot.dataset.price) || 0);
+        this.setupQuickTrade(plot.dataset.ticker, holding, parseFloat(plot.dataset.price) || 0);
     }
 
     /** Drops any current selection (and sector filter) and returns the panel to its resting copy. */
@@ -427,6 +485,10 @@ export default class extends Controller {
         this.detailTarget.classList.add('hidden');
         this.institutionDetailTarget.classList.add('hidden');
         this.emptyTarget.classList.remove('hidden');
+
+        if (this.hasQuickTradeTickerInputTarget) {
+            this.quickTradeTickerInputTarget.value = '';
+        }
     }
 
     clearSelection() {
@@ -469,6 +531,19 @@ export default class extends Controller {
         );
 
         this.positionTooltip(plot);
+
+        if (this.hasTooltipPositionTarget) {
+            const holding = this.userHoldings[plot.dataset.ticker];
+            if (holding) {
+                const type = holding.isShort ? 'SHORT' : 'LONG';
+                const shares = Number(holding.quantity).toLocaleString();
+                this.tooltipPositionTarget.textContent = `YOU HOLD: ${type} ${shares} SHS`;
+                this.tooltipPositionTarget.setAttribute('fill', holding.isShort ? '#ffd9a0' : '#4edea3');
+            } else {
+                this.tooltipPositionTarget.textContent = '';
+            }
+        }
+
         tooltip.setAttribute('data-visible', 'true');
 
         this.hoverConduits(this.conduitsByBuilding.get(plot.dataset.ticker) || []);
@@ -476,6 +551,9 @@ export default class extends Controller {
 
     hideTooltip() {
         this.tooltipTarget.setAttribute('data-visible', 'false');
+        if (this.hasTooltipPositionTarget) {
+            this.tooltipPositionTarget.textContent = '';
+        }
         this.hoverConduits([]);
     }
 
@@ -646,6 +724,291 @@ export default class extends Controller {
     highlightConduits(conduits) {
         this.conduitTargets.forEach(c => c.removeAttribute('data-highlighted'));
         conduits.forEach(c => c.setAttribute('data-highlighted', 'true'));
+    }
+
+    /**
+     * Segmented toolbar: 'all', 'stressed', 'focused' or 'muted'. The mode is one attribute on the
+     * canvas and the rest is CSS — "focused" reads the same `data-highlighted` (selection) and
+     * `data-hover` marks the conduits already carry, so it needs no state of its own to keep in step.
+     */
+    setConduitMode(event) {
+        const mode = event.currentTarget.dataset.mode;
+        if (!mode || !this.hasSvgTarget) return;
+
+        this.conduitMode = mode;
+        this.conduitModeBtnTargets.forEach(btn => {
+            btn.setAttribute('data-active', btn.dataset.mode === mode ? 'true' : 'false');
+        });
+
+        if (mode === 'all') {
+            this.svgTarget.removeAttribute('data-conduit-mode');
+        } else {
+            this.svgTarget.setAttribute('data-conduit-mode', mode);
+        }
+    }
+
+    /** Formats and displays position details (shares, avg cost, unrealised P&L) in the sidebar. */
+    renderPositionDetail(ticker, holding, currentPrice) {
+        if (!this.hasDetailPositionTarget) return;
+
+        if (!holding) {
+            this.detailPositionTarget.textContent = 'None';
+            this.detailPositionTarget.className = 'text-on-surface-variant/50 tabular-nums font-normal';
+            return;
+        }
+
+        const qty = holding.quantity;
+        const avgCost = Number(holding.averageCost) || 0;
+        const isShort = Boolean(holding.isShort);
+        const positionType = isShort ? 'Short' : 'Long';
+
+        let costText = '';
+        let pnlText = '';
+        let pnlClass = 'text-on-surface';
+
+        // A short's basis is its average proceeds, so its gain runs the other way: down from the basis.
+        if (avgCost > 0) {
+            costText = ` @ ${formatCurrency(avgCost)}`;
+            if (currentPrice > 0) {
+                const pnlPerShare = isShort ? (avgCost - currentPrice) : (currentPrice - avgCost);
+                const totalPnl = pnlPerShare * qty;
+                const pnlPct = (pnlPerShare / avgCost) * 100;
+                const sign = totalPnl >= 0 ? '+' : '';
+                pnlText = ` (${sign}${formatCurrency(totalPnl)}, ${sign}${pnlPct.toFixed(1)}%)`;
+                pnlClass = totalPnl >= 0 ? 'text-secondary' : 'text-tertiary';
+            }
+        }
+
+        this.detailPositionTarget.textContent = `${positionType} ${qty.toLocaleString()} shs${costText}${pnlText}`;
+        this.detailPositionTarget.className = `tabular-nums font-bold ${pnlClass}`;
+    }
+
+    /** Initialises the quick-trade ticket for the selected constituent. */
+    setupQuickTrade(ticker, holding, currentPrice) {
+        if (!this.hasQuickTradeFormTarget) return;
+
+        if (this.hasQuickTradeTickerInputTarget) {
+            this.quickTradeTickerInputTarget.value = ticker;
+        }
+
+        if (this.hasQuickTradeHoldingTarget) {
+            if (holding) {
+                const isShort = Boolean(holding.isShort);
+                this.quickTradeHoldingTarget.textContent = `${isShort ? 'Short' : 'Long'} ${holding.quantity.toLocaleString()} shs`;
+                this.quickTradeHoldingTarget.className = `text-3xs font-mono font-semibold ${isShort ? 'text-amber-400' : 'text-secondary'}`;
+            } else {
+                this.quickTradeHoldingTarget.textContent = '0 shs';
+                this.quickTradeHoldingTarget.className = 'text-3xs font-mono font-semibold text-on-surface-variant/50';
+            }
+        }
+
+        this.updateQuickTradeEstimate();
+    }
+
+    onTradeActionChange() {
+        this.updateQuickTradeEstimate();
+    }
+
+    onQuantityInput() {
+        this.updateQuickTradeEstimate();
+    }
+
+    setQuickQuantity(event) {
+        const qty = parseInt(event.currentTarget.dataset.quantity, 10);
+        if (this.hasQuickTradeQuantityTarget && qty > 0) {
+            this.quickTradeQuantityTarget.value = qty;
+            this.updateQuickTradeEstimate();
+        }
+    }
+
+    setQuickQuantityMax() {
+        if (!this.hasQuickTradeQuantityTarget || !this.currentSelectedTicker) return;
+        const plot = this.plotsByTicker.get(this.currentSelectedTicker);
+        const price = plot ? (parseFloat(plot.dataset.price) || 0) : 0;
+        const holding = this.userHoldings[this.currentSelectedTicker];
+
+        const form = this.hasQuickTradeFormTarget ? this.quickTradeFormTarget : null;
+        const actionInput = form ? form.querySelector('input[name="action"]:checked') : null;
+        const action = actionInput ? actionInput.value : 'BUY';
+
+        let maxQty = 1;
+        if (action === 'BUY' || action === 'SHORT') {
+            maxQty = price > 0 ? Math.floor(this.userCash / price) : 0;
+        } else if (action === 'SELL') {
+            maxQty = (holding && !holding.isShort) ? holding.quantity : 0;
+        } else if (action === 'COVER') {
+            maxQty = (holding && holding.isShort) ? holding.quantity : 0;
+        }
+
+        this.quickTradeQuantityTarget.value = Math.max(1, maxQty);
+        this.updateQuickTradeEstimate();
+    }
+
+    onQuickTradeSubmit() {
+        if (this.hasQuickTradeSubmitTarget) {
+            this.quickTradeSubmitTarget.disabled = true;
+            this.quickTradeSubmitTarget.classList.add('opacity-50', 'pointer-events-none');
+            const span = this.quickTradeSubmitTarget.querySelector('span:last-child');
+            if (span) span.textContent = 'Executing...';
+        }
+    }
+
+    updateQuickTradeEstimate() {
+        if (!this.hasQuickTradeEstimateTarget || !this.currentSelectedTicker) return;
+        const plot = this.plotsByTicker.get(this.currentSelectedTicker);
+        const price = plot ? (parseFloat(plot.dataset.price) || 0) : 0;
+        const qty = this.hasQuickTradeQuantityTarget ? (parseInt(this.quickTradeQuantityTarget.value, 10) || 0) : 0;
+        const total = price * qty;
+        this.quickTradeEstimateTarget.textContent = `Est: ${formatCurrency(total)}`;
+    }
+
+    /** Rewrites the countdown tile from the live tick count: simulated days to the next reconstitution. */
+    renderReconstitutionCountdown(tick) {
+        if (!this.hasSummaryReconstitutionTarget) return;
+        const schedule = this.reconstitutionValue || {};
+        const ticksPerYear = Number(schedule.ticksPerYear) || 0;
+        const nextTick = Number(schedule.nextTick) || 0;
+        if (ticksPerYear <= 0) return;
+
+        const days = Math.max(0, Math.ceil((nextTick - tick) / ticksPerYear * 365));
+        this.summaryReconstitutionTarget.textContent = days === 0 ? 'now' : `in ${days}d`;
+
+        // The boundary has passed but no announcement reached us — the announcement is one
+        // 20ms message, and the market stream drops its socket while the tab is hidden. The
+        // roster on the server has changed regardless, so reload anyway; without the names
+        // the notice just says the street was reconstituted and the slide still works.
+        if (tick >= nextTick && !this.reconstituting) {
+            this.reconstitute({ promoted: [], evicted: [] });
+        }
+    }
+
+    /**
+     * The feed announced a reconstitution. Evicted facades fade out first; then the selection and
+     * every plot's position are stashed for settleReconstitution() and the frame reloads itself
+     * from the server, which is the only party that knows what a newcomer looks like.
+     */
+    reconstitute(district) {
+        if (this.reconstituting) return;
+        const frame = this.element.closest('turbo-frame');
+        if (!frame) return;
+        this.reconstituting = true;
+
+        const evicted = Array.isArray(district.evicted) ? district.evicted : [];
+        const promoted = Array.isArray(district.promoted) ? district.promoted : [];
+
+        const positions = {};
+        this.plotsByTicker.forEach((plot, ticker) => {
+            const facade = plot.querySelector('.facade');
+            if (!facade) return;
+            positions[ticker] = {
+                x: parseFloat(facade.getAttribute('x')) || 0,
+                y: parseFloat(facade.getAttribute('y')) || 0,
+            };
+        });
+
+        try {
+            sessionStorage.setItem(this.constructor.RECONSTITUTION_STORAGE_KEY, JSON.stringify({
+                at: Date.now(),
+                selected: this.currentSelectedTicker,
+                positions,
+                promoted,
+                evicted,
+            }));
+        } catch {
+            // Storage unavailable: the reload still happens, it just cannot animate or reselect.
+        }
+
+        evicted.forEach(ticker => {
+            const plot = this.plotsByTicker.get(ticker);
+            if (!plot) return;
+            plot.style.transition = `opacity ${this.constructor.EVICTION_FADE_MS}ms ease-out`;
+            plot.style.opacity = '0';
+        });
+
+        // Turbo 7's FrameElement.reload() re-assigns the frame's own `src`, and a frame rendered
+        // inline with the page has none — reload() would set null to null and do nothing. The
+        // first reconstitution therefore points the frame at this page's URL, which triggers the
+        // fetch; the attribute survives the render, so every later one can plain reload().
+        const delay = evicted.some(t => this.plotsByTicker.has(t)) ? this.constructor.EVICTION_FADE_MS : 0;
+        setTimeout(() => {
+            if (frame.src) {
+                frame.reload();
+            } else {
+                frame.src = window.location.href;
+            }
+        }, delay);
+    }
+
+    /**
+     * Runs on connect(). If this render is the far side of a reconstitution reload, survivors
+     * slide from where they stood to where they stand now (FLIP: start at the old offset, then
+     * transition to none), newcomers fade in, the previous selection is restored, and the notice
+     * says who moved. A stale or absent stash means an ordinary page load and nothing happens.
+     */
+    settleReconstitution() {
+        let carried = null;
+        try {
+            const raw = sessionStorage.getItem(this.constructor.RECONSTITUTION_STORAGE_KEY);
+            sessionStorage.removeItem(this.constructor.RECONSTITUTION_STORAGE_KEY);
+            carried = raw ? JSON.parse(raw) : null;
+        } catch {
+            carried = null;
+        }
+        if (!carried || !Number.isFinite(carried.at)) return;
+        if (Date.now() - carried.at > this.constructor.RECONSTITUTION_CARRY_MAX_MS) return;
+
+        const reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        const slideMs = this.constructor.RECONSTITUTION_SLIDE_MS;
+        const positions = carried.positions || {};
+        const promoted = new Set(Array.isArray(carried.promoted) ? carried.promoted : []);
+
+        if (!reduceMotion) {
+            const movers = [];
+            this.plotsByTicker.forEach((plot, ticker) => {
+                const facade = plot.querySelector('.facade');
+                if (!facade) return;
+
+                if (promoted.has(ticker) || !positions[ticker]) {
+                    plot.style.opacity = '0';
+                    movers.push({ plot, dx: 0, dy: 0, fadeIn: true });
+                    return;
+                }
+
+                const dx = positions[ticker].x - (parseFloat(facade.getAttribute('x')) || 0);
+                const dy = positions[ticker].y - (parseFloat(facade.getAttribute('y')) || 0);
+                if (dx === 0 && dy === 0) return;
+                plot.style.transform = `translate(${dx}px, ${dy}px)`;
+                movers.push({ plot, dx, dy, fadeIn: false });
+            });
+
+            // Two frames apart so the browser paints the "first" state before transitioning to the "last".
+            requestAnimationFrame(() => requestAnimationFrame(() => {
+                movers.forEach(({ plot, fadeIn }) => {
+                    plot.style.transition = `transform ${slideMs}ms cubic-bezier(0.22, 1, 0.36, 1), opacity ${slideMs}ms ease-out`;
+                    plot.style.transform = '';
+                    if (fadeIn) plot.style.opacity = '';
+                });
+                setTimeout(() => movers.forEach(({ plot }) => { plot.style.transition = ''; }), slideMs + 50);
+            }));
+        }
+
+        if (carried.selected && this.plotsByTicker.has(carried.selected)) {
+            const plot = this.plotsByTicker.get(carried.selected);
+            this.select({ currentTarget: plot, stopPropagation() {} });
+        }
+
+        if (this.hasReconstitutionNoticeTarget) {
+            const evicted = Array.isArray(carried.evicted) ? carried.evicted : [];
+            const parts = ['Street reconstituted'];
+            if (promoted.size > 0) parts.push(`promoted ${Array.from(promoted).join(', ')}`);
+            if (evicted.length > 0) parts.push(`evicted ${evicted.join(', ')}`);
+            if (promoted.size === 0 && evicted.length === 0) parts.push('no change to the roster');
+            this.reconstitutionNoticeTarget.textContent = parts.join(' · ');
+            this.reconstitutionNoticeTarget.hidden = false;
+            this.reconstitutionNoticeTimer = setTimeout(() => {
+                if (this.hasReconstitutionNoticeTarget) this.reconstitutionNoticeTarget.hidden = true;
+            }, this.constructor.RECONSTITUTION_NOTICE_MS);
+        }
     }
 
     zoomIn() {
@@ -1105,6 +1468,16 @@ export default class extends Controller {
             this.pendingMacro = payload.macro;
         }
 
+        if (Number.isFinite(payload.tick)) {
+            this.renderReconstitutionCountdown(payload.tick);
+        }
+
+        // A new roster was taken on this tick. The street is server-rendered, so the frame is
+        // reloaded rather than re-laid-out here; everything up to the reload is choreography.
+        if (payload.district && typeof payload.district === 'object') {
+            this.reconstitute(payload.district);
+        }
+
         // Unlike stock ticks, events are discrete occurrences rather than a replaceable state —
         // several can land on different buildings in the same frame and all of them must fire,
         // so they are appended rather than coalesced by ticker.
@@ -1339,6 +1712,9 @@ export default class extends Controller {
         if (plot.getAttribute('data-selected') === 'true') {
             this.renderFigures(plot);
             this.detailRatingTarget.innerText = plot.dataset.rating || '—';
+            const holding = this.userHoldings[ticker];
+            this.renderPositionDetail(ticker, holding, newPrice);
+            this.updateQuickTradeEstimate();
         }
     }
 
@@ -1451,6 +1827,43 @@ export default class extends Controller {
             if (count) count.setAttribute('y', y - 18);
         }
 
+        if (facade) {
+            this.movePennant(plot.dataset.ticker, parseFloat(facade.getAttribute('x')) || 0, y);
+        }
+    }
+
+    /**
+     * Rides the position pennant along with its roofline. Mirrors the Twig: pole at
+     * `inset` from the west edge, foot on the rank plate (roof − 14), flag `height` tall with
+     * a 6-unit clearance above the plate, flying `width` eastward.
+     */
+    movePennant(ticker, roofX, roofY) {
+        const pennant = this.pennantsByTicker.get(ticker);
+        if (!pennant) return;
+
+        const geometry = this.positionPennantValue || {};
+        const width = Number(geometry.width) || 0;
+        const height = Number(geometry.height) || 0;
+        const poleX = roofX + (Number(geometry.inset) || 0);
+        const poleFoot = roofY - 14;
+        const poleTop = poleFoot - height - 6;
+
+        const line = pennant.querySelector('line');
+        const poly = pennant.querySelector('polygon');
+        const circle = pennant.querySelector('circle');
+        if (line) {
+            line.setAttribute('x1', String(poleX));
+            line.setAttribute('x2', String(poleX));
+            line.setAttribute('y1', String(poleFoot));
+            line.setAttribute('y2', String(poleTop));
+        }
+        if (poly) {
+            poly.setAttribute('points', `${poleX},${poleTop} ${poleX + width},${poleTop + height / 2} ${poleX},${poleTop + height}`);
+        }
+        if (circle) {
+            circle.setAttribute('cx', String(poleX));
+            circle.setAttribute('cy', String(poleTop));
+        }
     }
 
     /** Lights the roofline green or red for a moment on a price change. */

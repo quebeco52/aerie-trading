@@ -201,6 +201,18 @@ class DistrictMapTest extends TestCase
         $this->assertLessThanOrEqual(1.0, DistrictMap::KERB_LIGHT_OPACITY);
     }
 
+    public function testTerraceWallAndPositionPennantParametersAreWellFormed(): void
+    {
+        $this->assertGreaterThan(0, DistrictMap::TERRACE_WALL_HEIGHT);
+        $this->assertLessThan(DistrictMap::ROW_GAP, DistrictMap::TERRACE_WALL_HEIGHT);
+
+        $this->assertGreaterThan(0, DistrictMap::POSITION_PENNANT_WIDTH);
+        $this->assertGreaterThan(0, DistrictMap::POSITION_PENNANT_HEIGHT);
+        $this->assertGreaterThan(0, DistrictMap::POSITION_PENNANT_INSET);
+        // The flag must stay inside the narrowest plot so it never overhangs the neighbour.
+        $this->assertLessThan(min(DistrictMap::PLOT_WIDTH_BY_IMPORTANCE), DistrictMap::POSITION_PENNANT_INSET + DistrictMap::POSITION_PENNANT_WIDTH);
+    }
+
     public function testEveryMacroSectorHasAPaletteEntry(): void
     {
         foreach (array_keys(Sectors::MACRO_SECTORS) as $sector) {

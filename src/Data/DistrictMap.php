@@ -26,10 +26,19 @@ class DistrictMap
     /** Sub-headline shown under the street name. */
     public const WARD_TAGLINE = 'The capital spine of the District — frontage held by the District\'s largest houses by market capitalisation, reshuffled as fortunes rise and fall.';
     /**
-     * How many of the District's largest listed companies (by live market cap) hold frontage.
-     * See DistrictWardComposer::composeFrontage() — this is a live ranking, not a fixed roster.
+     * How many of the District's largest listed companies (by market cap) hold frontage. Ranked
+     * by DistrictWardComposer::composeFrontage() at each reconstitution and frozen in between —
+     * see DistrictRoster. No company is ever authored on or off the street.
      */
     public const STREET_ROSTER_SIZE = 30;
+
+    // --- Reconstitution ---
+    /**
+     * How many times a simulated year the roster is re-ranked; four is the quarterly cadence most
+     * equity indices reconstitute on. Between reconstitutions the street is fixed: a company that
+     * goes bankrupt keeps its plot as a defunct shell, and a riser waits its turn below the cut.
+     */
+    public const RECONSTITUTIONS_PER_YEAR = 4;
 
     /**
      * West-to-east ordering: a business model identifier's position here decides where a
@@ -287,6 +296,18 @@ class DistrictMap
     public const KERB_LIGHT_DEPTH = 46;
     /** Peak opacity of a kerb light at the ground line; it fades to nothing at KERB_LIGHT_DEPTH. */
     public const KERB_LIGHT_OPACITY = 0.16;
+
+    // --- Terrace Embankment ---
+    /** Height in user units of the retaining wall drawn under the upper row's kerb, inside ROW_GAP. */
+    public const TERRACE_WALL_HEIGHT = 14;
+
+    // --- Portfolio Position Pennant ---
+    /** Flag length in user units, from the pole eastward; the pole stands POSITION_PENNANT_INSET in from the west edge. */
+    public const POSITION_PENNANT_WIDTH = 18;
+    /** Flag height in user units; the pole rises this far again above the rank plate so the flag clears it. */
+    public const POSITION_PENNANT_HEIGHT = 12;
+    /** Pole x offset in user units from the plot's west edge. */
+    public const POSITION_PENNANT_INSET = 6;
 
     // --- Market Capitalisation Gridlines ---
     /**

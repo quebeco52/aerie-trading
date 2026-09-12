@@ -12,19 +12,25 @@ use App\Entity\Stock;
  * Derives Glasswater Row's street frontage — which of the District's listed companies currently
  * qualify, where each one stands, and which row it stands on — from live company fundamentals.
  *
- * Three independent decisions, easy to conflate: *qualification* is a live ranking (top
- * DistrictMap::STREET_ROSTER_SIZE by market cap, recomputed on every request — no company is ever
- * authored onto or off of the row), *position* is authored (DistrictMap::FRONTAGE_ORDER groups
- * same-model tenants together so conduit fans read as bundles, then breaks ties by market cap),
- * and *row* is pure legibility (the frontage wraps like text so the canvas stays narrow enough to
- * render at a readable scale). See DistrictMap's class docblock for why geometry itself is
- * display-only and never feeds the simulation.
+ * Three independent decisions, easy to conflate: *qualification* is a ranking (top
+ * DistrictMap::STREET_ROSTER_SIZE by market cap — no company is ever authored onto or off of the
+ * row), *position* is authored (DistrictMap::FRONTAGE_ORDER groups same-model tenants together so
+ * conduit fans read as bundles, then breaks ties by market cap), and *row* is pure legibility
+ * (the frontage wraps like text so the canvas stays narrow enough to render at a readable scale).
+ * See DistrictMap's class docblock for why geometry itself is display-only and never feeds the
+ * simulation.
+ *
+ * Qualification is taken once per reconstitution (composeFrontage(), called by DistrictRoster on
+ * the quarter tick) and the resulting street order is frozen; every page render in between goes
+ * through composeFrontageForRoster() with that stored order, so two players see the same street
+ * and a reload never moves a building. Only the street RANK plates are live.
  */
 class DistrictWardComposer
 {
     /**
-     * Selects the District's current top tenants by market cap, lays out plot geometry across
-     * them in authored frontage order, and wraps that frontage into rows.
+     * Ranks the listed universe and lays out the top DistrictMap::STREET_ROSTER_SIZE — the
+     * reconstitution step. Bankrupt companies never qualify: a defunct shell only stands on the
+     * street because it was solvent when the roster was last taken.
      *
      * @param  Stock[] $stocks Candidate stocks; entries whose business model is not in
      *                         DistrictMap::FRONTAGE_ORDER are ignored (defensive — every model
@@ -33,72 +39,150 @@ class DistrictWardComposer
      *     slots: list<array{ticker: string, x: int, width: int, row: int, rank: int}>,
      *     viewboxWidth: int,
      *     rowCount: int,
-     *     nextInLine: array{ticker: string, name: string, marketCap: float}|null,
      * }
      */
     public function composeFrontage(array $stocks): array
     {
-        $orderIndex = array_flip(DistrictMap::FRONTAGE_ORDER);
-
         $ranked = [];
         foreach ($stocks as $stock) {
-            $businessModel = Sectors::INDUSTRY_METRICS[$stock->getIndustry() ?? 'General']['business_model'] ?? 'none';
-            if (!isset($orderIndex[$businessModel])) {
+            if ($stock->isBankrupt()) {
                 continue;
             }
-
-            $ranked[] = [
-                'stock' => $stock,
-                'rank' => $orderIndex[$businessModel],
-                'marketCap' => (float) $stock->getPrice() * (float) $stock->getSharesOutstanding(),
-            ];
+            $entry = $this->describe($stock);
+            if ($entry !== null) {
+                $ranked[] = $entry;
+            }
         }
 
         // Qualification: the DistrictMap::STREET_ROSTER_SIZE largest by market cap alone.
         usort($ranked, static fn (array $a, array $b) => $b['marketCap'] <=> $a['marketCap']);
         $qualified = array_slice($ranked, 0, DistrictMap::STREET_ROSTER_SIZE);
 
-        // The first company that missed the cut, shown in the summary bar as next in line — the
-        // clearest way to make "the roster changes over time" visible rather than theoretical.
-        $nextInLine = $this->describeNextInLine($ranked);
+        // Position: re-sort the qualifying tenants into authored frontage order, market cap
+        // breaking ties inside a business-model run.
+        usort($qualified, static function (array $a, array $b): int {
+            return $a['order'] <=> $b['order'] ?: $b['marketCap'] <=> $a['marketCap'];
+        });
 
-        // Street rank is the market-cap position, captured before the re-sort below reorders the
-        // list for display. Rank 1 is the largest company on the street.
-        foreach ($qualified as $position => $entry) {
-            $qualified[$position]['streetRank'] = $position + 1;
+        return $this->layout($qualified);
+    }
+
+    /**
+     * Lays out a street whose membership AND order were fixed at the last reconstitution. The
+     * stored order is honoured exactly — a tenant that has since outgrown its neighbour keeps its
+     * plot until the next reconstitution — while the street rank on each plate is recomputed from
+     * live market caps, because that is the figure the client re-ranks on every tick anyway. A
+     * stored ticker no longer listed is skipped and the street closes up around it.
+     *
+     * @param  Stock[]      $stocks  The listed universe (only roster members are used).
+     * @param  list<string> $tickers Street order as stored by DistrictRoster.
+     * @return array{
+     *     slots: list<array{ticker: string, x: int, width: int, row: int, rank: int}>,
+     *     viewboxWidth: int,
+     *     rowCount: int,
+     * }
+     */
+    public function composeFrontageForRoster(array $stocks, array $tickers): array
+    {
+        $byTicker = [];
+        foreach ($stocks as $stock) {
+            $byTicker[$stock->getTicker()] = $stock;
         }
 
-        // Position: re-sort the qualifying tenants into authored frontage order.
-        usort($qualified, static function (array $a, array $b): int {
-            return $a['rank'] <=> $b['rank'] ?: $b['marketCap'] <=> $a['marketCap'];
-        });
+        $roster = [];
+        foreach ($tickers as $ticker) {
+            $stock = $byTicker[$ticker] ?? null;
+            if ($stock === null) {
+                continue;
+            }
+            $entry = $this->describe($stock);
+            if ($entry !== null) {
+                $roster[] = $entry;
+            }
+        }
+
+        return $this->layout($roster);
+    }
+
+    /**
+     * The street order as composeFrontage() would lay it out, without the geometry — what
+     * DistrictRoster stores at a reconstitution.
+     *
+     * @param  Stock[] $stocks
+     * @return list<string>
+     */
+    public function rosterOrder(array $stocks): array
+    {
+        return array_map(static fn (array $slot) => $slot['ticker'], $this->composeFrontage($stocks)['slots']);
+    }
+
+    /**
+     * @return array{stock: Stock, order: int, marketCap: float}|null null when the business model has no authored place on the street
+     */
+    private function describe(Stock $stock): ?array
+    {
+        $orderIndex = array_flip(DistrictMap::FRONTAGE_ORDER);
+        $businessModel = Sectors::INDUSTRY_METRICS[$stock->getIndustry() ?? 'General']['business_model'] ?? 'none';
+        if (!isset($orderIndex[$businessModel])) {
+            return null;
+        }
+
+        return [
+            'stock' => $stock,
+            'order' => $orderIndex[$businessModel],
+            'marketCap' => (float) $stock->getPrice() * (float) $stock->getSharesOutstanding(),
+        ];
+    }
+
+    /**
+     * Geometry for tenants already in street order: street rank from market cap, plot widths from
+     * systemic importance, then the balanced two-row wrap.
+     *
+     * @param  list<array{stock: Stock, order: int, marketCap: float}> $tenants in street order
+     * @return array{
+     *     slots: list<array{ticker: string, x: int, width: int, row: int, rank: int}>,
+     *     viewboxWidth: int,
+     *     rowCount: int,
+     * }
+     */
+    private function layout(array $tenants): array
+    {
+        // Street rank is the live market-cap position among the tenants; rank 1 is the largest.
+        // A bankrupt shell's cap is whatever its last print says, which is the honest reading.
+        $byCap = $tenants;
+        usort($byCap, static fn (array $a, array $b) => $b['marketCap'] <=> $a['marketCap']);
+        $streetRank = [];
+        foreach ($byCap as $position => $entry) {
+            $streetRank[$entry['stock']->getTicker()] = $position + 1;
+        }
 
         $widths = array_map(
             static fn (array $entry): int => DistrictMap::plotWidthForImportance($entry['stock']->getSystemicImportance()),
-            $qualified,
+            $tenants,
         );
 
-        $rowCount = count($qualified) >= DistrictMap::ROW_SPLIT_THRESHOLD ? DistrictMap::ROW_COUNT : 1;
-        $splitIndex = $rowCount > 1 ? $this->balancedSplitIndex($widths) : count($qualified);
+        $rowCount = count($tenants) >= DistrictMap::ROW_SPLIT_THRESHOLD ? DistrictMap::ROW_COUNT : 1;
+        $splitIndex = $rowCount > 1 ? $this->balancedSplitIndex($widths) : count($tenants);
 
         $slots = [];
         $rowWidths = [];
         $x = DistrictMap::FRONTAGE_GUTTER;
         $row = 0;
 
-        foreach ($qualified as $i => $entry) {
+        foreach ($tenants as $i => $entry) {
             if ($i === $splitIndex) {
                 $rowWidths[] = $x - DistrictMap::FRONTAGE_GUTTER - DistrictMap::FRONTAGE_GAP;
                 $x = DistrictMap::FRONTAGE_GUTTER;
                 $row++;
             }
 
+            $ticker = $entry['stock']->getTicker();
             $slots[] = [
-                'ticker' => $entry['stock']->getTicker(),
+                'ticker' => $ticker,
                 'x' => $x,
                 'width' => $widths[$i],
                 'row' => $row,
-                'rank' => $entry['streetRank'],
+                'rank' => $streetRank[$ticker],
             ];
 
             $x += $widths[$i] + DistrictMap::FRONTAGE_GAP;
@@ -110,7 +194,6 @@ class DistrictWardComposer
             'slots' => $slots,
             'viewboxWidth' => DistrictMap::FRONTAGE_GUTTER + max($rowWidths) + DistrictMap::FRONTAGE_MARGIN,
             'rowCount' => $rowCount,
-            'nextInLine' => $nextInLine,
         ];
     }
 
@@ -159,23 +242,5 @@ class DistrictWardComposer
         }
 
         return $total + max(0, $to - $from - 1) * DistrictMap::FRONTAGE_GAP;
-    }
-
-    /**
-     * @param  list<array{stock: Stock, rank: int, marketCap: float}> $ranked full market-cap ranking
-     * @return array{ticker: string, name: string, marketCap: float}|null
-     */
-    private function describeNextInLine(array $ranked): ?array
-    {
-        $next = $ranked[DistrictMap::STREET_ROSTER_SIZE] ?? null;
-        if ($next === null) {
-            return null;
-        }
-
-        return [
-            'ticker' => $next['stock']->getTicker(),
-            'name' => (string) $next['stock']->getName(),
-            'marketCap' => $next['marketCap'],
-        ];
     }
 }

@@ -26,12 +26,10 @@ class WebSocketTicketExtension extends AbstractExtension
     public function getWsTicket(): string
     {
         $user = $this->security->getUser();
-        if (!$user instanceof User) {
-            return '';
-        }
+        $userId = $user instanceof User ? (string) $user->getId() : 'guest';
 
         $payload = [
-            'uid' => $user->getId(),
+            'uid' => $userId,
             'exp' => time() + (3600 * 4) // 4 hours
         ];
 

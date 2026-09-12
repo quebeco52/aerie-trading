@@ -697,7 +697,15 @@ class DistrictMapBuilderTest extends TestCase
 
     public function testBankruptTenantsRenderAsRuins(): void
     {
-        $plot = $this->findPlot('LAKE', [$this->makeStock('LAKE', price: 0.0, rating: 'D', bankrupt: true)]);
+        // A bankrupt company never qualifies at a reconstitution; it stands on the street only
+        // because the roster was frozen while it was solvent, so it is composed via that path.
+        $stocks = [$this->makeStock('LAKE', price: 0.0, rating: 'D', bankrupt: true)];
+        $frontage = $this->composer->composeFrontageForRoster($stocks, ['LAKE']);
+        $envelope = $this->builder->resolveEnvelope($frontage['slots'], $stocks);
+        $canvas = $this->builder->resolveCanvas($frontage['slots'], $stocks, $envelope, $frontage['rowCount']);
+        $plots = $this->builder->buildWard($frontage['slots'], $stocks, $envelope, $canvas);
+        $this->assertCount(1, $plots);
+        $plot = $plots[0];
 
         $this->assertSame('ruin', $plot->condition);
         $this->assertEqualsWithDelta(DistrictMap::MIN_FACADE_HEIGHT, $plot->height, 1.0e-6);

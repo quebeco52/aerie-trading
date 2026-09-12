@@ -13,6 +13,7 @@ use App\Service\Market\MarketOperator;
 use App\Service\User\Portfolio;
 use App\Service\Event\NarrativeEngine;
 use App\Service\Event\MarketEventPublisher;
+use App\Service\District\DistrictRoster;
 use App\Entity\Etf;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\Console\Attribute\AsCommand;
@@ -76,6 +77,7 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
         private \Redis $redis,
         private NarrativeEngine $narrativeEngine,
         private MarketEventPublisher $marketEvent,
+        private DistrictRoster $districtRoster,
         private \Symfony\Component\Messenger\MessageBusInterface $messageBus,
 
         private int $tickIntervalUs,
@@ -358,11 +360,41 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
 
                 $pipeline->exec();
 
+                // Glasswater Row reconstitution: once a simulated quarter the street's roster is
+                // re-ranked and frozen (DistrictRoster). Promotions and evictions are ordinary stock
+                // events, so they reach the stock page, the district's event cards and the live
+                // feed through the one channel everything else uses. The district page reloads its
+                // frame when it sees the `district` key. Flushed here because the publisher only
+                // persists and this tick may not otherwise flush.
+                $districtReconstitution = null;
+                if (DistrictRoster::isReconstitutionTick($tickCount, $this->ticksPerYear)) {
+                    $districtReconstitution = $this->districtRoster->reconstitute($stocks, $tickCount);
+                    $stocksByTicker = [];
+                    foreach ($stocks as $stock) {
+                        $stocksByTicker[$stock->getTicker()] = $stock;
+                    }
+                    foreach ($districtReconstitution['promoted'] as $ticker) {
+                        if (isset($stocksByTicker[$ticker])) {
+                            $events[] = $this->marketEvent->publish($stocksByTicker[$ticker], 'DISTRICT', 'Promoted to Glasswater Row at the quarterly reconstitution.', 0.0);
+                        }
+                    }
+                    foreach ($districtReconstitution['evicted'] as $ticker) {
+                        if (isset($stocksByTicker[$ticker])) {
+                            $events[] = $this->marketEvent->publish($stocksByTicker[$ticker], 'DISTRICT', 'Lost its frontage on Glasswater Row at the quarterly reconstitution.', 0.0);
+                        }
+                    }
+                    if ($districtReconstitution['promoted'] !== [] || $districtReconstitution['evicted'] !== []) {
+                        $this->entityManager->flush();
+                    }
+                }
+
                 // Publish pub/sub updates
                 $this->redis->publish('market_updates', json_encode([
                     'timestamp' => time(),
+                    'tick' => $tickCount,
                     'stocks' => $allUpdates,
                     'events' => $events,
+                    'district' => $districtReconstitution,
                     'market_vol' => $marketVol,
                     'economic_cycle' => $macroState->economicCycleLabel(),
                     'council_rate' => $macroState->policyRate,

@@ -8,12 +8,13 @@ use App\Data\DistrictMap;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\District\DistrictEventFeed;
+use App\Service\District\DistrictHoldingsFeed;
 use App\Service\District\DistrictMapBuilder;
 use App\Service\Market\CreditRatingAgency;
 use App\Service\Market\PriceChangeFeed;
 use App\Service\District\DistrictRevenueFeed;
+use App\Service\District\DistrictRoster;
 use App\Service\District\DistrictStressEvaluator;
-use App\Service\District\DistrictWardComposer;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\RedirectResponse;
@@ -38,11 +39,12 @@ class DistrictController extends AbstractController
     public function ward(
         string $ward,
         EntityManagerInterface $entityManager,
-        DistrictWardComposer $wardComposer,
+        DistrictRoster $districtRoster,
         DistrictMapBuilder $mapBuilder,
         DistrictStressEvaluator $stressEvaluator,
         DistrictEventFeed $eventFeed,
         DistrictRevenueFeed $revenueFeed,
+        DistrictHoldingsFeed $holdingsFeed,
         PriceChangeFeed $priceChangeFeed,
         \Redis $redis,
     ): Response {
@@ -52,11 +54,14 @@ class DistrictController extends AbstractController
 
         $stocks = $entityManager->getRepository(Stock::class)->findAll();
 
-        $frontage = $wardComposer->composeFrontage($stocks);
+        // The street as frozen at the last reconstitution, laid out against today's universe —
+        // see DistrictRoster. findAll() casts wider than the roster because the register only
+        // holds tickers, and because a fresh market takes its first roster right here.
+        $tickCount = (int) ($redis->get('simulation_tick_count') ?: 0);
+        $frontage = $districtRoster->frontageFor($stocks, $tickCount);
+        $reconstitution = $districtRoster->schedule($tickCount);
 
-        // Only the tenants that actually took frontage need their change/events/revenue mix
-        // fetched — findAll() above deliberately casts wider than the roster so the composer can
-        // rank the whole listed universe by market cap.
+        // Only the tenants that actually took frontage need their change/events/revenue mix fetched.
         $rosterTickers = array_column($frontage['slots'], 'ticker');
         $onStreet = array_filter($stocks, static fn (Stock $s) => in_array($s->getTicker(), $rosterTickers, true));
 
@@ -79,6 +84,11 @@ class DistrictController extends AbstractController
         $macroState = $this->readMacroState($redis);
         $institutionStress = $stressEvaluator->evaluate($macroState);
 
+        $user = $this->getUser();
+        $userHoldings = $user instanceof \App\Entity\User ? $holdingsFeed->holdingsForUser($user) : [];
+        $userCash = $user instanceof \App\Entity\User ? (float) $user->getCashBalance() : 0.0;
+        $marginEnabled = $user instanceof \App\Entity\User && $user->isMarginEnabled();
+
         return $this->render('district/index.html.twig', [
             'wardName' => DistrictMap::WARD_NAME,
             'wardTagline' => DistrictMap::WARD_TAGLINE,
@@ -87,6 +97,15 @@ class DistrictController extends AbstractController
             'viewboxHeight' => $canvas->viewboxHeight,
             'rowGroundLines' => $canvas->rowGroundLines,
             'kerbDepth' => DistrictMap::KERB_DEPTH,
+            'terraceWallHeight' => DistrictMap::TERRACE_WALL_HEIGHT,
+            'positionPennant' => [
+                'width' => DistrictMap::POSITION_PENNANT_WIDTH,
+                'height' => DistrictMap::POSITION_PENNANT_HEIGHT,
+                'inset' => DistrictMap::POSITION_PENNANT_INSET,
+            ],
+            'userHoldings' => $userHoldings,
+            'userCash' => $userCash,
+            'marginEnabled' => $marginEnabled,
             'gutterWidth' => DistrictMap::FRONTAGE_GUTTER,
             'frontageMargin' => DistrictMap::FRONTAGE_MARGIN,
             'floorHeight' => DistrictMap::FLOOR_HEIGHT,
@@ -147,7 +166,10 @@ class DistrictController extends AbstractController
             // let a building's event badge age out while the page stays open.
             'eventBadgeWindowSeconds' => $eventFeed->badgeWindowSeconds(),
             'revenueMix' => $revenueFeed->latestRevenueMixByTicker($onStreet),
-            'summary' => $this->buildSummary($plots, $institutionStress, $frontage['nextInLine']),
+            'summary' => $this->buildSummary($plots, $institutionStress),
+            'reconstitution' => $reconstitution + [
+                'simDaysUntilNext' => ($reconstitution['nextTick'] - $tickCount) / $reconstitution['ticksPerYear'] * 365,
+            ],
             'envelope' => $envelope->toArray() + [
                 'minHeight' => DistrictMap::MIN_FACADE_HEIGHT,
                 'maxHeight' => DistrictMap::MAX_FACADE_HEIGHT,
@@ -161,10 +183,9 @@ class DistrictController extends AbstractController
      *
      * @param  list<\App\DTO\DistrictPlotDTO>                        $plots
      * @param  array<string, bool>                                   $institutionStress
-     * @param  array{ticker: string, name: string, marketCap: float}|null $nextInLine
      * @return array<string, mixed>
      */
-    private function buildSummary(array $plots, array $institutionStress, ?array $nextInLine): array
+    private function buildSummary(array $plots, array $institutionStress): array
     {
         $totalMarketCap = 0.0;
         $changeWeightedCap = 0.0;
@@ -194,7 +215,6 @@ class DistrictController extends AbstractController
             'biggestMover' => $biggestMover,
             'stressedInstitutions' => count(array_filter($institutionStress)),
             'totalInstitutions' => count($institutionStress),
-            'nextInLine' => $nextInLine,
         ];
     }
 

@@ -55,6 +55,10 @@ class EventPresenter
             return $this->presentBankruptcy($rawType, $rawDesc, $changePct, $recordedAt);
         }
 
+        if ($rawType === 'DISTRICT') {
+            return $this->presentDistrict($rawType, $rawDesc, $changePct, $recordedAt);
+        }
+
         return $this->presentGeneral($rawType, $rawDesc, $changePct, $recordedAt);
     }
 
@@ -260,6 +264,34 @@ class EventPresenter
     /**
      * @return array<string, mixed>
      */
+    /**
+     * A Glasswater Row roster change — promotion onto or eviction from the street at the quarterly
+     * reconstitution (MarketTickerCommand via DistrictRoster). Not a price event: the change is
+     * whatever the description says, and no move is implied.
+     */
+    private function presentDistrict(string $type, string $rawDesc, ?float $changePct, \DateTimeInterface $recordedAt): array
+    {
+        $evicted = str_contains(strtolower($rawDesc), 'lost');
+
+        return [
+            'type' => $type,
+            'category' => 'district',
+            'badge' => $evicted ? 'STREET EVICTION' : 'STREET PROMOTION',
+            'badgeClass' => $evicted
+                ? 'bg-amber-500/15 text-amber-300 border-amber-500/40'
+                : 'bg-primary/15 text-primary border-primary/40',
+            'borderClass' => $evicted ? 'border-l-amber-500' : 'border-l-primary',
+            'icon' => 'location_city',
+            'iconClass' => $evicted ? 'bg-amber-500/20 text-amber-300' : 'bg-primary/20 text-primary',
+            'isEarnings' => false,
+            'headline' => !empty($rawDesc) ? $rawDesc : 'Glasswater Row roster reconstituted.',
+            'pills' => [],
+            'changePercent' => $changePct,
+            'recordedAt' => $recordedAt,
+            'rawDescription' => $rawDesc,
+        ];
+    }
+
     private function presentBankruptcy(string $type, string $rawDesc, ?float $changePct, \DateTimeInterface $recordedAt): array
     {
         return [
