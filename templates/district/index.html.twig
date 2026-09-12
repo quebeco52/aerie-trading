@@ -9,9 +9,8 @@
 	.plot { cursor: pointer; }
 	.facade {
 		stroke-width: 2.5;
-		transition: y 200ms ease-out, height 200ms ease-out, fill 200ms ease-out;
+		transition: y 150ms ease-out, height 150ms ease-out;
 	}
-	.plot-windows { transition: transform 200ms ease-out; }
 	/* Lit share tracks return on capital against baseline — see DistrictMap::WINDOW_LIT_SHARE_AT_BASELINE.
 	   Dark windows stay faintly visible so the facade keeps its texture. */
 	.window { opacity: 0.08; shape-rendering: crispEdges; }
@@ -19,7 +18,7 @@
 	/* A few lit windows carry subtle ambient texture — see DistrictMap::WINDOW_TWINKLE_SHARE.
 	   Styled statically with crisp edges to prevent continuous 60-144fps GPU/CPU rasterization. */
 	.window[data-lit="true"][data-twinkle="true"] { opacity: 0.72; }
-	.roofline { transition: y 200ms ease-out, fill 200ms ease-out; fill: #4a5266; }
+	.roofline { transition: y 150ms ease-out; fill: #4a5266; }
 
 	/* Condition outranks the sector hue — solvency is the more urgent fact. */
 	/* Condition recolours the windows but leaves the lit pattern alone — a distressed tenant
@@ -34,7 +33,7 @@
 	.plot[data-condition="ruin"] .window[data-lit="true"] { opacity: 0.10; }
 	.plot[data-condition="ruin"] .roofline { fill: #5c3030; }
 
-	.plot:hover .facade { fill: #2c3854 !important; }
+	.plot:hover .facade { fill: #2c3854 !important; transition: fill 150ms ease-out; }
 	.plot:hover .window[data-lit="true"] { opacity: 0.85; }
 	.plot:hover .window:not([data-lit="true"]) { opacity: 0.18; }
 	.plot[data-selected="true"] .facade { stroke: #adc6ff !important; stroke-width: 5; }
@@ -47,13 +46,10 @@
 		transition: opacity 200ms;
 	}
 
-	.plot[data-tick="up"] .roofline { fill: #4edea3; }
-	.plot[data-tick="down"] .roofline { fill: #ffb3ad; }
-
 	/* Sized against the narrowest plot (100 units): a 5-character ticker at 30 is 90 units, a
 	   price at 22 is 92, a change at 22 is 79. Each fits alone on a centred line; no two fit
 	   side by side, so they are never paired. */
-	.plot-rank { fill: #7a8398; font-size: 24px; letter-spacing: 0.5px; transition: fill 300ms; }
+	.plot-rank { fill: #7a8398; font-size: 24px; letter-spacing: 0.5px; }
 	/* Street rank is re-ranked from live caps; a plate that just moved shows its direction for a moment. */
 	.plot-rank[data-rank-move="up"] { fill: #4edea3; }
 	.plot-rank[data-rank-move="down"] { fill: #ffb3ad; }
@@ -75,15 +71,13 @@
 	/* Roof furniture: one pictogram per trade (DistrictMap::ROOF_FURNITURE_BY_INDUSTRY), in the
 	   sector's window colour so it is legible at the street's scale; condition recolours it the
 	   way it recolours the windows. */
-	.roof-furniture { transition: y 600ms ease-out, color 300ms; opacity: 0.85; }
+	.roof-furniture { opacity: 0.85; transition: y 150ms ease-out; }
 	.plot[data-condition="distressed"] .roof-furniture { color: #ffd9a0 !important; }
 	.plot[data-condition="ruin"] .roof-furniture { color: #ffb3ad !important; opacity: 0.3; }
 
-	/* Titan marker. Scoped to .plot so it cannot leak onto the institution beacons — an earlier
-	   version shared one .beacon rule, and a running animation outranks a plain opacity:0, so
-	   every institution pulsed an alarm-coloured dot permanently whether stressed or not. */
-	.plot .beacon { fill: #ffd9a0; animation: beacon-pulse 2.4s ease-in-out infinite; }
-	@keyframes beacon-pulse { 0%, 100% { opacity: 0.3; } 50% { opacity: 1; } }
+	/* Titan marker: rendered with static illumination rather than continuous animation loop
+	   to avoid continuous 60fps CPU SVG rasterization. */
+	.plot .beacon { fill: #ffd9a0; opacity: 0.9; }
 
 	/* Kerb lights: a pool in the sector colour under each plate — see DistrictMap::KERB_LIGHT_DEPTH. */
 	.kerb-light { pointer-events: none; }
@@ -127,7 +121,7 @@
 		fill: #3a2a2e;
 		stroke: #a35c5c;
 	}
-	.institution[data-stressed="true"] .institution-beacon { opacity: 1; animation: beacon-pulse 2.4s ease-in-out infinite; }
+	.institution[data-stressed="true"] .institution-beacon { opacity: 1; }
 	.institution[data-stressed="true"] .institution-label { opacity: 1; fill: #ffb3ad; }
 	.institution[data-stressed="true"] .readout-value { fill: #ffb3ad; }
 

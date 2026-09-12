@@ -47,6 +47,8 @@ export function formatLarge(num, prefix = '') {
     return isNegative ? `-${prefix}${formatted}` : `${prefix}${formatted}`;
 }
 
+const currencyFormatters = new Map();
+
 /**
  * Formats a number as currency ($1,234.56).
  * @param {number|string|null|undefined} num
@@ -57,11 +59,17 @@ export function formatCurrency(num, decimals = 2) {
     const value = toFiniteNumber(num);
     if (value === null) return NOT_AVAILABLE;
 
+    let formatter = currencyFormatters.get(decimals);
+    if (!formatter) {
+        formatter = new Intl.NumberFormat(undefined, {
+            minimumFractionDigits: decimals,
+            maximumFractionDigits: decimals,
+        });
+        currencyFormatters.set(decimals, formatter);
+    }
+
     const isNegative = value < 0;
-    const formatted = Math.abs(value).toLocaleString(undefined, {
-        minimumFractionDigits: decimals,
-        maximumFractionDigits: decimals
-    });
+    const formatted = formatter.format(Math.abs(value));
     return isNegative ? `-$${formatted}` : `$${formatted}`;
 }
 

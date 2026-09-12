@@ -270,6 +270,16 @@ export default class extends Controller {
     /** How long a rank plate shows the direction it just moved in. */
     static RANK_MOVE_MS = 1600;
 
+    /** Throttle street re-ranking to at most once per second under continuous market ticks. */
+    static RERANK_THROTTLE_MS = 1000;
+
+    /**
+     * Perceptual jitter deadband in viewBox units (~1.1px). Microscopic sub-cent price noise
+     * below this threshold is skipped to keep quiescent buildings from continuous 60 FPS
+     * rasterization loops while allowing genuine price moves to glide smoothly.
+     */
+    static HEIGHT_DEADBAND = 2.5;
+
     /**
      * How often an institution's readings are sampled for its sparklines, and how many samples
      * each keeps. Macro arrives on every tick; sampling once a second keeps a minute of history
@@ -295,8 +305,6 @@ export default class extends Controller {
     static RECONSTITUTION_CARRY_MAX_MS = 15000;
 
     connect() {
-        this.previousPrices = {};
-        this.tickTimers = {};
         this.flareTimers = {};
         this.badgeTimers = {};
         this.plotsByTicker = new Map();
@@ -332,11 +340,28 @@ export default class extends Controller {
         // Each window's lighting priority, parsed once — a live tick compares ~50 of them per
         // facade against the new lit share (see relightWindows()).
         this.windowsByTicker = new Map();
+        this.facadesByTicker = new Map();
+        this.rooflinesByTicker = new Map();
+        this.plotWindowsByTicker = new Map();
+        this.rankPlatesByTicker = new Map();
+        this.beaconsByTicker = new Map();
+        this.furnituresByTicker = new Map();
         this.plotTargets.forEach(plot => {
             const ticker = plot.dataset.ticker;
             if (ticker) {
                 this.plotsByTicker.set(ticker, plot);
-                this.previousPrices[ticker] = parseFloat(plot.dataset.price) || 0;
+                this.facadesByTicker.set(ticker, plot.querySelector('.facade'));
+                this.rooflinesByTicker.set(ticker, plot.querySelector('.roofline'));
+                this.plotWindowsByTicker.set(ticker, plot.querySelector('.plot-windows'));
+                this.rankPlatesByTicker.set(ticker, plot.querySelector('.plot-rank'));
+                this.beaconsByTicker.set(ticker, plot.querySelector('.beacon'));
+                const furniture = plot.querySelector('.roof-furniture');
+                if (furniture) {
+                    this.furnituresByTicker.set(ticker, {
+                        el: furniture,
+                        height: parseFloat(furniture.getAttribute('height')) || 0,
+                    });
+                }
                 this.windowsByTicker.set(ticker, Array.from(plot.querySelectorAll('.window')).map(el => ({
                     el,
                     key: parseFloat(el.dataset.key),
@@ -359,7 +384,14 @@ export default class extends Controller {
         });
 
         this.flareTargets.forEach(flare => this.flaresByTicker.set(flare.dataset.flareFor, flare));
-        this.badgeTargets.forEach(badge => this.badgesByTicker.set(badge.dataset.badgeFor, badge));
+        this.badgeCirclesByTicker = new Map();
+        this.badgeTextsByTicker = new Map();
+        this.badgeTargets.forEach(badge => {
+            const ticker = badge.dataset.badgeFor;
+            this.badgesByTicker.set(ticker, badge);
+            this.badgeCirclesByTicker.set(ticker, badge.querySelector('circle'));
+            this.badgeTextsByTicker.set(ticker, badge.querySelector('text'));
+        });
 
         // Kerb plates are rewritten on every tick, so index them once rather than searching the
         // DOM 30 times per animation frame.
@@ -411,6 +443,7 @@ export default class extends Controller {
 
         this.reconstituting = false;
         this.settleReconstitution();
+        this.lastRerankAt = 0;
 
         // The server counted each badge at render time; from here on the client owns the count,
         // so events fall out of the window on schedule rather than only on the next page load.
@@ -429,7 +462,6 @@ export default class extends Controller {
         document.removeEventListener('visibilitychange', this.onVisibilityChange);
         document.removeEventListener('market:update', this.onMarketUpdate);
         document.removeEventListener('turbo:submit-end', this.onSubmitEnd);
-        Object.values(this.tickTimers).forEach(clearTimeout);
         Object.values(this.rankMoveTimers).forEach(clearTimeout);
         Object.values(this.flareTimers).forEach(clearTimeout);
         Object.values(this.badgeTimers).forEach(clearTimeout);
@@ -886,7 +918,10 @@ export default class extends Controller {
         if (ticksPerYear <= 0) return;
 
         const days = Math.max(0, Math.ceil((nextTick - tick) / ticksPerYear * 365));
-        this.summaryReconstitutionTarget.textContent = days === 0 ? 'now' : `in ${days}d`;
+        const countdownText = days === 0 ? 'now' : `in ${days}d`;
+        if (this.summaryReconstitutionTarget.textContent !== countdownText) {
+            this.summaryReconstitutionTarget.textContent = countdownText;
+        }
 
         // The boundary has passed but no announcement reached us — the announcement is one
         // 20ms message, and the market stream drops its socket while the tab is hidden. The
@@ -1515,7 +1550,9 @@ export default class extends Controller {
             const plot = this.plotsByTicker.get(ticker);
             if (plot) this.applyUpdate(plot, update);
         });
-        if (this.pendingStockUpdates.size > 0) {
+        const now = Date.now();
+        if (this.pendingStockUpdates.size > 0 && (now - this.lastRerankAt >= this.constructor.RERANK_THROTTLE_MS)) {
+            this.lastRerankAt = now;
             this.rerank();
         }
         this.pendingStockUpdates.clear();
@@ -1618,12 +1655,16 @@ export default class extends Controller {
 
             plot.dataset.rank = String(rank);
             const ticker = plot.dataset.ticker;
-            const plate = plot.querySelector('.plot-rank');
+            const plate = this.rankPlatesByTicker.get(ticker) || plot.querySelector('.plot-rank');
             if (plate) {
                 plate.textContent = `#${rank}`;
                 plate.setAttribute('data-rank-move', rank < previous ? 'up' : 'down');
                 clearTimeout(this.rankMoveTimers[ticker]);
-                this.rankMoveTimers[ticker] = setTimeout(() => plate.removeAttribute('data-rank-move'), this.constructor.RANK_MOVE_MS);
+                this.rankMoveTimers[ticker] = setTimeout(() => {
+                    if (plate.hasAttribute('data-rank-move')) {
+                        plate.removeAttribute('data-rank-move');
+                    }
+                }, this.constructor.RANK_MOVE_MS);
             }
 
             if (this.currentSelectedTicker === ticker) {
@@ -1645,10 +1686,14 @@ export default class extends Controller {
                 if (isStressed) stressedCount++;
 
                 const stressed = isStressed ? 'true' : 'false';
-                institution.setAttribute('data-stressed', stressed);
+                if (institution.getAttribute('data-stressed') !== stressed) {
+                    institution.setAttribute('data-stressed', stressed);
+                }
 
                 (this.conduitsByInstitution.get(institutionId) || []).forEach(conduit => {
-                    conduit.setAttribute('data-stressed', stressed);
+                    if (conduit.getAttribute('data-stressed') !== stressed) {
+                        conduit.setAttribute('data-stressed', stressed);
+                    }
                 });
             }
 
@@ -1657,9 +1702,12 @@ export default class extends Controller {
 
         // Keep the summary tile honest — it is a server-rendered count of the same verdict.
         if (this.hasSummaryStressTarget) {
-            this.summaryStressTarget.textContent = `${stressedCount}/${this.institutionTargets.length} stressed`;
-            this.summaryStressTarget.className = 'text-sm font-bold font-mono tabular-nums mt-1 '
-                + (stressedCount > 0 ? 'text-tertiary' : 'text-on-surface');
+            const stressText = `${stressedCount}/${this.institutionTargets.length} stressed`;
+            if (this.summaryStressTarget.textContent !== stressText) {
+                this.summaryStressTarget.textContent = stressText;
+                this.summaryStressTarget.className = 'text-sm font-bold font-mono tabular-nums mt-1 '
+                    + (stressedCount > 0 ? 'text-tertiary' : 'text-on-surface');
+            }
         }
     }
 
@@ -1702,7 +1750,12 @@ export default class extends Controller {
 
         config.readouts.forEach(readout => {
             const node = Array.from(valueNodes).find(n => n.dataset.readoutField === readout.field);
-            if (node) node.textContent = formatReadoutValue(macro[readout.field], readout.unit);
+            if (node) {
+                const formatted = formatReadoutValue(macro[readout.field], readout.unit);
+                if (node.textContent !== formatted) {
+                    node.textContent = formatted;
+                }
+            }
         });
     }
 
@@ -1715,13 +1768,18 @@ export default class extends Controller {
         const shares = this.sharesValue[ticker] || 0;
         const marketCap = update.market_cap !== undefined ? update.market_cap : newPrice * shares;
 
-        plot.dataset.price = newPrice;
-        plot.dataset.mcap = marketCap;
+        const priceStr = String(newPrice);
+        if (plot.dataset.price !== priceStr) {
+            plot.dataset.price = priceStr;
+        }
+        const mcapStr = String(marketCap);
+        if (plot.dataset.mcap !== mcapStr) {
+            plot.dataset.mcap = mcapStr;
+        }
 
         this.applyCondition(plot, update);
         this.relightWindows(plot, update);
         this.resizeFacade(plot, update.is_bankrupt ? 0 : marketCap);
-        this.flashTick(plot, ticker, newPrice);
         this.updateKerbPlate(ticker, newPrice);
 
         if (plot.getAttribute('data-selected') === 'true') {
@@ -1739,9 +1797,14 @@ export default class extends Controller {
      */
     applyCondition(plot, update) {
         if (typeof update.credit_rating === 'string' && update.credit_rating !== '') {
-            plot.dataset.rating = update.credit_rating;
+            if (plot.dataset.rating !== update.credit_rating) {
+                plot.dataset.rating = update.credit_rating;
+            }
         }
-        plot.dataset.condition = conditionFor(Boolean(update.is_bankrupt), plot.dataset.rating, this.conditionValue || {});
+        const newCondition = conditionFor(Boolean(update.is_bankrupt), plot.dataset.rating, this.conditionValue || {});
+        if (plot.dataset.condition !== newCondition) {
+            plot.dataset.condition = newCondition;
+        }
     }
 
     /**
@@ -1756,9 +1819,12 @@ export default class extends Controller {
 
         const baseline = parseFloat(plot.dataset.baselineRoc);
         const share = litShareFor(current, Number.isFinite(baseline) ? baseline : 0, this.lightingValue || {});
-        plot.dataset.roc = current;
+        const currentStr = String(current);
+        if (plot.dataset.roc !== currentStr) {
+            plot.dataset.roc = currentStr;
+        }
         if (share === parseFloat(plot.dataset.litShare)) return;
-        plot.dataset.litShare = share;
+        plot.dataset.litShare = String(share);
 
         (this.windowsByTicker.get(plot.dataset.ticker) || []).forEach(({ el, key }) => {
             const lit = key < share ? 'true' : 'false';
@@ -1774,7 +1840,12 @@ export default class extends Controller {
      */
     updateKerbPlate(ticker, price) {
         const priceNode = this.kerbPriceByTicker.get(ticker);
-        if (priceNode) priceNode.textContent = formatCurrency(price);
+        if (priceNode) {
+            const formatted = formatCurrency(price);
+            if (priceNode.textContent !== formatted) {
+                priceNode.textContent = formatted;
+            }
+        }
     }
 
     /**
@@ -1792,32 +1863,33 @@ export default class extends Controller {
         // here would drop every lower-row facade onto the upper row on the first live tick.
         const y = parseFloat(plot.dataset.groundLine) - height;
 
-        const facade = plot.querySelector('.facade');
+        const ticker = plot.dataset.ticker;
+        const facade = this.facadesByTicker.get(ticker) || plot.querySelector('.facade');
         if (!facade) return;
 
         const currentHeight = parseFloat(facade.getAttribute('height')) || 0;
         const currentY = parseFloat(facade.getAttribute('y')) || 0;
-        // Sub-pixel threshold: skip rewriting SVG attributes if the height change is negligible (< 0.5 units)
-        if (Math.abs(height - currentHeight) < 0.5 && Math.abs(y - currentY) < 0.5) {
+        // Perceptual jitter deadband: skip rewriting SVG attributes if the height change is negligible (< 1.5 units = ~0.7px)
+        if (Math.abs(height - currentHeight) < this.constructor.HEIGHT_DEADBAND && Math.abs(y - currentY) < this.constructor.HEIGHT_DEADBAND) {
             return;
         }
 
-        const roofline = plot.querySelector('.roofline');
-        const windows = plot.querySelector('.plot-windows');
+        const roofline = this.rooflinesByTicker.get(ticker);
+        const windows = this.plotWindowsByTicker.get(ticker);
 
-        facade.setAttribute('y', y);
-        facade.setAttribute('height', height);
+        facade.setAttribute('y', String(y));
+        facade.setAttribute('height', String(height));
         if (windows) {
             windows.setAttribute('transform', `translate(${facade.getAttribute('x')} ${y})`);
         }
         if (roofline) {
-            roofline.setAttribute('y', y - 7);
+            roofline.setAttribute('y', String(y - 7));
         }
 
         // Conduits terminate at the roofline, so they must be redrawn every time it moves —
         // outlet, lane and drop x are fixed by the canvas, only ty changes.
         const ty = y - 7;
-        (this.conduitsByBuilding.get(plot.dataset.ticker) || []).forEach(conduit => {
+        (this.conduitsByBuilding.get(ticker) || []).forEach(conduit => {
             conduit.setAttribute('d', conduitPath(
                 parseFloat(conduit.dataset.sx),
                 parseFloat(conduit.dataset.sy),
@@ -1829,29 +1901,24 @@ export default class extends Controller {
 
         // The rank, badge, flare, beacon and roof furniture all ride the roofline, so they move
         // with it.
-        const flare = this.flaresByTicker.get(plot.dataset.ticker);
+        const flare = this.flaresByTicker.get(ticker);
         if (flare) flare.setAttribute('cy', y - 34);
 
-        const beacon = plot.querySelector('.beacon');
+        const beacon = this.beaconsByTicker.get(ticker);
         if (beacon) beacon.setAttribute('cy', y - 20);
 
-        const furniture = plot.querySelector('.roof-furniture');
-        if (furniture) furniture.setAttribute('y', y - 7 - parseFloat(furniture.getAttribute('height')));
+        const furniture = this.furnituresByTicker.get(ticker);
+        if (furniture) furniture.el.setAttribute('y', y - 7 - furniture.height);
 
-        const rank = plot.querySelector('.plot-rank');
+        const rank = this.rankPlatesByTicker.get(ticker);
         if (rank) rank.setAttribute('y', y - 14);
 
-        const badge = this.badgesByTicker.get(plot.dataset.ticker);
-        if (badge) {
-            const circle = badge.querySelector('circle');
-            const count = badge.querySelector('text');
-            if (circle) circle.setAttribute('cy', y - 18);
-            if (count) count.setAttribute('y', y - 18);
-        }
+        const circle = this.badgeCirclesByTicker.get(ticker);
+        if (circle) circle.setAttribute('cy', y - 18);
+        const count = this.badgeTextsByTicker.get(ticker);
+        if (count) count.setAttribute('y', y - 18);
 
-        if (facade) {
-            this.movePennant(plot.dataset.ticker, parseFloat(facade.getAttribute('x')) || 0, y);
-        }
+        this.movePennant(ticker, parseFloat(facade.getAttribute('x')) || 0, y);
     }
 
     /**
@@ -1886,17 +1953,5 @@ export default class extends Controller {
             circle.setAttribute('cx', String(poleX));
             circle.setAttribute('cy', String(poleTop));
         }
-    }
-
-    /** Lights the roofline green or red for a moment on a price change. */
-    flashTick(plot, ticker, newPrice) {
-        const oldPrice = this.previousPrices[ticker];
-        this.previousPrices[ticker] = newPrice;
-        if (oldPrice === undefined || newPrice === oldPrice) return;
-
-        plot.setAttribute('data-tick', newPrice > oldPrice ? 'up' : 'down');
-
-        clearTimeout(this.tickTimers[ticker]);
-        this.tickTimers[ticker] = setTimeout(() => plot.removeAttribute('data-tick'), 700);
     }
 }
