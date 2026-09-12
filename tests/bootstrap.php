@@ -21,7 +21,11 @@ if (!class_exists('Redis')) {
 
         public function connect($host, $port = 6379, $timeout = 0.0, $reserved = null, $retry_interval = 0, $read_timeout = 0.0) {}
         public function get($key) {}
+        public function mGet(array $keys) { return array_fill(0, count($keys), false); }
         public function set($key, $val) {}
+        public function hGet($key, $field) { return false; }
+        public function hSet($key, $field, $value) { return 1; }
+        public function hGetAll($key) { return []; }
         public function setex($key, $ttl, $val) {}
         public function del($key) {}
         public function lPush($key, $value) {}
@@ -30,6 +34,7 @@ if (!class_exists('Redis')) {
         public function lIndex($key, $index) {}
         public function multi($mode = self::MULTI) { return $this; }
         public function exec() { return []; }
+        public function publish($channel, $message) { return 0; }
     }
 }
 

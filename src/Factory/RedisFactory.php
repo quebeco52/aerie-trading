@@ -24,6 +24,29 @@ if (!class_exists('Redis')) {
             return true;
         }
 
+        /** @param list<string> $keys */
+        public function mGet(array $keys): array
+        {
+            return array_map(fn (string $key): mixed => $this->storage[$key] ?? false, $keys);
+        }
+
+        public function hGet(string $key, string $field): mixed
+        {
+            return $this->storage[$key][$field] ?? false;
+        }
+
+        public function hSet(string $key, string $field, mixed $value): int
+        {
+            $isNew = !isset($this->storage[$key][$field]);
+            $this->storage[$key][$field] = $value;
+            return $isNew ? 1 : 0;
+        }
+
+        public function hGetAll(string $key): array
+        {
+            return is_array($this->storage[$key] ?? null) ? $this->storage[$key] : [];
+        }
+
         public function setex(string $key, int $ttl, mixed $val): bool
         {
             $this->storage[$key] = $val;

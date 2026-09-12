@@ -13,10 +13,22 @@ use Psr\Log\LoggerInterface;
  * tick. The cost of that is real but bounded — the population restarts even and the positions restart at
  * zero, so the market loses its agent memory and rebuilds it over the following ticks. Holding the tick
  * instead would stop the whole market because an auxiliary cache was unavailable.
+ *
+ * Inside a batch the whole hash comes over in one HGETALL and the tick's writes go back in one pipeline.
+ * Per-name HGET/HSET pairs were two synchronous round trips for every stock on every tick, which at sixty-odd
+ * names was more wall time than the entire tick budget before a single price had been computed.
  */
 final class RedisAgentStateStore implements AgentStateStoreInterface
 {
     private const KEY = 'agent_state';
+
+    private bool $batching = false;
+
+    /** @var array<string, string> Raw JSON per ticker, as loaded when the batch opened. */
+    private array $loaded = [];
+
+    /** @var array<string, string> Encoded books waiting for commitBatch(), latest write per ticker. */
+    private array $pending = [];
 
     public function __construct(
         private readonly \Redis $redis,
@@ -25,6 +37,11 @@ final class RedisAgentStateStore implements AgentStateStoreInterface
 
     public function read(string $ticker): ?array
     {
+        if ($this->batching) {
+            // A write earlier in the same batch is the current book, not what the hash held when it opened.
+            return $this->decode($this->pending[$ticker] ?? $this->loaded[$ticker] ?? null);
+        }
+
         try {
             /** @phpstan-ignore method.notFound (phpredis hash commands are absent from the analysis stub) */
             $raw = $this->redis->hGet(self::KEY, $ticker);
@@ -34,6 +51,90 @@ final class RedisAgentStateStore implements AgentStateStoreInterface
             return null;
         }
 
+        return $this->decode($raw);
+    }
+
+    public function write(string $ticker, array $state): void
+    {
+        try {
+            $encoded = json_encode($state, JSON_THROW_ON_ERROR);
+        } catch (\Throwable $e) {
+            $this->logger?->warning('Agent state write failed: ' . $e->getMessage());
+
+            return;
+        }
+
+        if ($this->batching) {
+            $this->pending[$ticker] = $encoded;
+
+            return;
+        }
+
+        try {
+            /** @phpstan-ignore method.notFound (phpredis hash commands are absent from the analysis stub) */
+            $this->redis->hSet(self::KEY, $ticker, $encoded);
+        } catch (\Throwable $e) {
+            $this->logger?->warning('Agent state write failed: ' . $e->getMessage());
+        }
+    }
+
+    public function beginBatch(): void
+    {
+        $this->batching = true;
+        $this->pending = [];
+        $this->loaded = [];
+
+        try {
+            /** @phpstan-ignore method.notFound (phpredis hash commands are absent from the analysis stub) */
+            $all = $this->redis->hGetAll(self::KEY);
+        } catch (\Throwable $e) {
+            $this->logger?->warning('Agent state bulk read failed: ' . $e->getMessage());
+
+            return;
+        }
+
+        if (!is_array($all)) {
+            return;
+        }
+
+        foreach ($all as $ticker => $raw) {
+            if (is_string($raw)) {
+                $this->loaded[(string) $ticker] = $raw;
+            }
+        }
+    }
+
+    public function commitBatch(): void
+    {
+        $pending = $this->pending;
+
+        $this->batching = false;
+        $this->pending = [];
+        $this->loaded = [];
+
+        if ($pending === []) {
+            return;
+        }
+
+        try {
+            $pipeline = $this->redis->multi(\Redis::PIPELINE);
+
+            foreach ($pending as $ticker => $encoded) {
+                /** @phpstan-ignore method.notFound (phpredis hash commands are absent from the analysis stub) */
+                $pipeline->hSet(self::KEY, $ticker, $encoded);
+            }
+
+            $pipeline->exec();
+        } catch (\Throwable $e) {
+            $this->logger?->warning('Agent state bulk write failed: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * @return array{positions: array<string, float>, fitness: array<string, float>, last_price: float}|null
+     */
+    private function decode(mixed $raw): ?array
+    {
         if (!is_string($raw) || $raw === '') {
             return null;
         }
@@ -48,15 +149,5 @@ final class RedisAgentStateStore implements AgentStateStoreInterface
             'fitness' => array_map('floatval', (array) $decoded['fitness']),
             'last_price' => (float) ($decoded['last_price'] ?? 0.0),
         ];
-    }
-
-    public function write(string $ticker, array $state): void
-    {
-        try {
-            /** @phpstan-ignore method.notFound (phpredis hash commands are absent from the analysis stub) */
-            $this->redis->hSet(self::KEY, $ticker, json_encode($state, JSON_THROW_ON_ERROR));
-        } catch (\Throwable $e) {
-            $this->logger?->warning('Agent state write failed: ' . $e->getMessage());
-        }
     }
 }

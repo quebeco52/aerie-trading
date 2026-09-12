@@ -248,18 +248,22 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                     $bars[$ticker]['volume'] += (float) ($update['volume'] ?? 0.0);
                 }
 
-                // Limit Order Check
-                foreach ($allUpdates as $update) {
-                    if (!empty($update['is_bankrupt'])) {
-                        continue;
-                    }
+                // Limit Order Check. The whole book's bounds come over in one MGET: a GET per instrument
+                // was a synchronous round trip for every stock, the index and every bond, every tick.
+                $tradable = array_values(array_filter(
+                    $allUpdates,
+                    static fn (array $update): bool => empty($update['is_bankrupt'])
+                ));
+                $boundsKeys = array_map(static fn (array $update): string => "limit_bounds:{$update['ticker']}", $tradable);
+                $boundsRows = $boundsKeys === [] ? [] : $this->redis->mGet($boundsKeys);
 
+                foreach ($tradable as $i => $update) {
                     $ticker = $update['ticker'];
                     $price = $update['price'];
 
-                    $boundsJson = $this->redis->get("limit_bounds:$ticker");
+                    $boundsJson = $boundsRows[$i] ?? false;
 
-                    if (!$boundsJson) {
+                    if (!is_string($boundsJson) || $boundsJson === '') {
                         // No cached book for this ticker. That is either genuinely no orders or a Redis that
                         // has been flushed since they were placed, and the two are indistinguishable from
                         // here — so check once. The handler rewrites the bounds either way, which means the

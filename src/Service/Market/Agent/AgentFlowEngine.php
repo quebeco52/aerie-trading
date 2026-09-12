@@ -45,6 +45,22 @@ final class AgentFlowEngine
     }
 
     /**
+     * Marks the start of a tick so the book store can load every name at once rather than per trade().
+     */
+    public function beginTick(): void
+    {
+        $this->stateStore->beginBatch();
+    }
+
+    /**
+     * Marks the end of a tick: whatever the population wrote since beginTick() is sent in one go.
+     */
+    public function endTick(): void
+    {
+        $this->stateStore->commitBatch();
+    }
+
+    /**
      * Runs the population over one name and records whatever it wants to trade.
      *
      * @return array{flow: float, shares: array<string, float>, positions: array<string, float>}

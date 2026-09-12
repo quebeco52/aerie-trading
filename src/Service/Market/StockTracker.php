@@ -90,6 +90,10 @@ class StockTracker
         // not be able to move it again on the next tick.
         $netOrderFlow = $this->orderFlow->drain();
 
+        // The agent books are loaded once for the whole tick and written back once at the end, for the
+        // same reason the order flow is drained once: a round trip per name is the cost that scales.
+        $this->agentFlow->beginTick();
+
         foreach ($stocks as $stock) {
             $sectorName = $stock->getSector();
 
@@ -381,6 +385,8 @@ class StockTracker
                 ];
             }
         }
+
+        $this->agentFlow->endTick();
 
         return [
             'updates' => $stockUpdates,

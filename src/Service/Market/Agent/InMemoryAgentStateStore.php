@@ -21,4 +21,14 @@ final class InMemoryAgentStateStore implements AgentStateStoreInterface
     {
         $this->state[$ticker] = $state;
     }
+
+    /** Nothing to bulk-load: the array is already local. */
+    public function beginBatch(): void
+    {
+    }
+
+    /** Nothing to bulk-send: writes landed as they were made. */
+    public function commitBatch(): void
+    {
+    }
 }

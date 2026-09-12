@@ -24,5 +24,7 @@ framework:
             Symfony\Component\Notifier\Message\ChatMessage: async
             Symfony\Component\Notifier\Message\SmsMessage: async
 
-            # Route your messages to the transports
-            # 'App\Message\YourMessage': async
+            # Limit-order fills belong on the worker. Without this entry the bus handles the message
+            # synchronously in whichever process dispatched it, which put every resting-order check,
+            # its row locks and its flushes inside the market ticker's per-tick transaction.
+            App\Message\ProcessLimitOrdersMessage: async

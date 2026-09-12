@@ -470,7 +470,8 @@ class TradeExecutionService
 
     public function processLimitOrders(string $ticker, float $currentPrice): void
     {
-        // This is called by the background worker
+        // Runs on the messenger worker: ProcessLimitOrdersMessage is routed to the async transport, so the
+        // ticker only enqueues and never carries these queries or row locks inside its tick transaction.
         $openOrders = $this->em->getRepository(TradeOrder::class)->findBy(['ticker' => $ticker, 'status' => 'OPEN']);
 
         foreach ($openOrders as $order) {

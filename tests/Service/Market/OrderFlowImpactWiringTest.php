@@ -80,8 +80,10 @@ class OrderFlowImpactWiringTest extends TestCase
         );
     }
 
-    private function tracker(?MarketPricingContext &$captured = null): StockTracker
-    {
+    private function tracker(
+        ?MarketPricingContext &$captured = null,
+        ?\App\Service\Market\Agent\AgentStateStoreInterface $agentStateStore = null
+    ): StockTracker {
         $marketEngine = $this->createStub(MarketEngine::class);
         $marketEngine->method('calculateNextPrice')->willReturnCallback(
             static function (MarketPricingContext $context) use (&$captured): array {
@@ -133,11 +135,25 @@ class OrderFlowImpactWiringTest extends TestCase
             $this->orderFlow,
             new \App\Service\Market\Agent\AgentFlowEngine(
                 new \App\Service\Market\Agent\AgentPopulation(),
-                new \App\Service\Market\Agent\InMemoryAgentStateStore(),
+                $agentStateStore ?? new \App\Service\Market\Agent\InMemoryAgentStateStore(),
                 new \App\Service\Market\Flow\InMemoryOrderFlowStore(),
                 []
             )
         );
+    }
+
+    public function testOneTickOpensAndCommitsTheAgentBookExactlyOnceHoweverManyNamesItCovers(): void
+    {
+        // The agent store is told where a tick starts and ends so it can serve the whole tick from one
+        // bulk read and one bulk write. Per name, the two round trips were most of the tick budget.
+        $store = $this->createMock(\App\Service\Market\Agent\AgentStateStoreInterface::class);
+        $store->expects($this->once())->method('beginBatch');
+        $store->expects($this->once())->method('commitBatch');
+
+        $second = $this->stock()->setTicker('BETA');
+
+        $this->tracker(agentStateStore: $store)
+            ->updateStocks([$this->stock(), $second], 1.0 / 14400.0, false, new MacroStateDTO());
     }
 
     private function stock(): Stock
