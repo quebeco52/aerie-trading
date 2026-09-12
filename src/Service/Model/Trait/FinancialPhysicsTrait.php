@@ -193,6 +193,18 @@ trait FinancialPhysicsTrait
 
         return max($effectiveEquity, $effectiveEquity + (float) $stock->getTotalDebt() - $treasury);
     }
+
+    /**
+     * The annual credit provision a lender pays through the cycle on a book of this size: the through-the-
+     * cycle loss rate the allowance roll-forward charges against EBIT every quarter, struck on the same
+     * gross book. A lender's return target is earned AFTER this charge, so any target that reverse-engineers
+     * revenue from an ROE has to fund it, or the firm reports its ROE minus its loss rate forever.
+     */
+    public function resolveThroughTheCycleCreditProvision(?Stock $stock, float $earningAssets): float
+    {
+        return max(0.0, $this->getThroughTheCycleCreditLossRate($stock)) * max(0.0, $earningAssets);
+    }
+
     public function getMinIcr(): float { return 1.05; }
     public function getBankruptEquityThreshold(): float { return 2.0; }
     public function getDistressEquityThreshold(): float { return 4.0; }

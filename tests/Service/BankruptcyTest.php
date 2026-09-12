@@ -158,6 +158,48 @@ class BankruptcyTest extends TestCase
         $this->assertEmpty($events);
     }
 
+    /**
+     * Altman's X3 is EBIT over the trailing year. Annualizing the latest quarter's margin turned one
+     * catastrophic print into a liquidation: a firm that earned $150M in each of three quarters and then
+     * lost $80M in a fire-sale quarter must be judged on the year, not on the quarter times four.
+     */
+    public function testSolvencyTestReadsTheTrailingYearOnceFourQuartersHaveBeenReported(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('YEAR');
+        $stock->setName('Trailing Year Industries');
+        $stock->setPrice('10.00');
+        $stock->setSharesOutstanding('1000000');
+        $stock->setTotalRevenue('1000000000');
+        $stock->setOperatingMargin('0.15');
+        $stock->setReportedOperatingMargin(-0.08);
+        // Three sound quarters and one loss, reported as net income.
+        $stock->setQuarterlyNetIncomeHistory([118_500_000.0, 118_500_000.0, 118_500_000.0, -80_000_000.0]);
+
+        $capturedEbit = null;
+        $this->debtEngineMock->method('calculateAltmanZScore')
+            ->willReturnCallback(function (Stock $s, float $ebit) use (&$capturedEbit): array {
+                $capturedEbit = $ebit;
+
+                return ['z_score' => 5.0, 'zone' => 'Safe', 'is_bankrupt' => false];
+            });
+
+        $operator = new MarketOperator(
+            $this->entityManagerMock,
+            $this->loggerMock,
+            $this->marketEventMock,
+            $this->debtEngineMock,
+            $this->mathUtilityMock
+        );
+
+        $operator->enforceMarketStability([$stock], new MacroStateDTO(corporateTaxRate: 0.21));
+
+        // Trailing net income $275.5M grossed up for tax at 21% is $348.7M of pre-tax income (no interest
+        // on the stub), not the -$80M x 4 the last quarter alone would have said.
+        $this->assertNotNull($capturedEbit);
+        $this->assertEqualsWithDelta(275_500_000.0 / 0.79, $capturedEbit, 1.0);
+    }
+
     public function testSolvencyTestUsesTheMarginTheFirmActuallyReported(): void
     {
         $stock = new Stock();

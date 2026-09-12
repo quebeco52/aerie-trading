@@ -19,7 +19,8 @@ interface OperatingStrategyInterface
     /**
      * MacroStateDTO field names (snake_case, matching MacroStateDTO::toArray()) this model's own
      * operating code reads: calculateSectorPhysics(), getMacroPhysics(), calculateInterestIncome(),
-     * processPassiveLiabilityGrowth() and the helpers they call, following parent:: delegation.
+     * processPassiveLiabilityGrowth(), getForwardCreditLossMultiplier() and the helpers they call,
+     * following parent:: delegation.
      * Generic trait physics is not model-specific coupling and does not count. Valuation-only reads
      * feeding WACC alone (equityRiskPremium, corporateTaxRate, policyRate) are excluded, so this
      * stays a genuine operating-coupling declaration rather than everything a model touches.
@@ -122,6 +123,14 @@ interface OperatingStrategyInterface
     public function getThroughTheCycleCreditLossRate(?Stock $stock = null): float;
     /** Years of expected loss the credit-loss allowance covers (ASC 326 lifetime horizon). */
     public function getCreditLossHorizonYears(): float;
+    /**
+     * Multiplier on the lifetime expected-loss estimate for the macro outlook the lender reserves against
+     * (ASC 326 reasonable-and-supportable forecast). 1.0 at the through-the-cycle outlook; above it the
+     * allowance target rises and the roll-forward books a BUILD once, then nothing more while the outlook
+     * stays there; below it reserves are released. A balance, not a flow: this is what makes a forward
+     * reserve news when the outlook changes rather than a cost charged every quarter it stays bad.
+     */
+    public function getForwardCreditLossMultiplier(?Stock $stock, MacroStateDTO $macroState): float;
     /**
      * Fraction of an idiosyncratic revenue gain that is market share taken from same-industry rivals (and,
      * symmetrically, the fraction of a rival's gain this firm loses). 1.0 is a fixed pie fought over by

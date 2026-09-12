@@ -655,12 +655,18 @@ class MergerAndAcquisitionEngine
             ? $this->calculateBookValueDisposed($ctx->seller, $ctx->divestedFraction) - $ctx->lostDebt
             : $ctx->strategy->calculateDivestedEquity($ctx->seller, $ctx->divestedFraction, $ctx->currentEquity, $ctx->currentDebt, $ctx->treasury, $ctx->investedCapital, $ctx->lostDebt);
 
-        if ($ctx->normalizedNetIncome > 0) {
-            $ctx->salePrice = $ctx->lostNetIncome * $ctx->saleMultiple;
-        } else {
-            $ctx->baseDistressValue = max($ctx->currentEquity, $ctx->investedCapital * 0.25);
-            $ctx->salePrice = ($ctx->baseDistressValue * $ctx->divestedFraction) * $this->mathUtility->generateUniformBetween(self::DIV_FIRE_SALE_MIN_CENTS, self::DIV_FIRE_SALE_MAX_CENTS);
-        }
+        // What the assets fetch on their own. A buyer of a plant pays at least its distressed liquidation
+        // value whatever the seller's trailing earnings say, so the earnings-based price is floored at the
+        // fire-sale value of the book that leaves. Without the floor a firm whose net income had collapsed
+        // sold a division at 3-5x that collapsed figure against a book carried at cost, booked the gap as a
+        // loss on sale, and destroyed more equity in one disposal than the downturn that forced it.
+        $ctx->baseDistressValue = max($ctx->currentEquity, $ctx->investedCapital * 0.25);
+        $bookDisposed = $ctx->lostEquity > 0.0 ? $ctx->lostEquity : $ctx->baseDistressValue * $ctx->divestedFraction;
+        $fireSaleValue = $bookDisposed * $this->mathUtility->generateUniformBetween(self::DIV_FIRE_SALE_MIN_CENTS, self::DIV_FIRE_SALE_MAX_CENTS);
+
+        $ctx->salePrice = $ctx->normalizedNetIncome > 0
+            ? max($ctx->lostNetIncome * $ctx->saleMultiple, $fireSaleValue)
+            : $fireSaleValue;
 
         $currentTreasury = (float) $ctx->seller->getCorporateTreasury();
         $ctx->newTreasury = $currentTreasury + $ctx->salePrice;

@@ -14,12 +14,21 @@ use App\Entity\Stock;
  * (realized over expected, after macro) and its size; every later report of a peer in the same industry
  * reads the gains booked since its own last report and absorbs them in proportion to its share of the
  * remaining industry revenue. Summed over the peers, the drain equals the rival's gain, so idiosyncratic
- * share moves net to zero within the industry. The strategy's substitutability scales how much of a gain
+ * share moves net to zero within the industry, up to the per-report bound below. The strategy's substitutability scales how much of a gain
  * is share taken from peers rather than a larger market (a branded good is mostly share; an oil producer's
  * extra barrels are sold into a global pool and barely touch a domestic peer).
  */
 class IndustryShareLedger
 {
+    // --- Share Drain Bounds ---
+    /**
+     * Largest fraction of its own revenue a firm can lose to (or win from) rivals between two of its reports.
+     * Proportional absorption is exact only while a rival's gain is small next to the rest of the industry;
+     * in a concentrated one a leader's ordinary beat can exceed everything its peers sell, and unbounded it
+     * would zero out a healthy firm in one report. Past the bound the excess is treated as market growth.
+     */
+    public const MAX_SHARE_DRAIN_PER_REPORT = 0.25;
+
     public function __construct(
         private readonly IndustryShareStoreInterface $store,
     ) {}
@@ -67,7 +76,7 @@ class IndustryShareLedger
             'consumed_tick' => $tick,
         ]);
 
-        return $drain;
+        return max(-self::MAX_SHARE_DRAIN_PER_REPORT, min(self::MAX_SHARE_DRAIN_PER_REPORT, $drain));
     }
 
     /**

@@ -212,6 +212,39 @@ class MarketEngineTest extends TestCase
         $this->assertGreaterThan(0.0, $unsustainableResult['analyst_targets']['income_analyst']);
     }
 
+    /**
+     * The EPS on the pricing context is trailing twelve months, so the payout ratio is dividend over that
+     * figure with no further annualization. A dividend at three times earnings is a 300% payout and takes the
+     * floor haircut (20%); read as 75% it would have grown instead, and the income target would have risen
+     * with the size of the unfunded dividend.
+     */
+    public function testPayoutRatioReadsTrailingEpsWithoutAnnualizingItAgain(): void
+    {
+        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
+        $this->mathUtilityMock->method('checkProbability')->willReturn(false);
+
+        $context = static fn (float $quarterlyDividend): MarketPricingContext => new MarketPricingContext(
+            currentPrice: 100.0,
+            currentVolatility: 0.2,
+            longTermVolatility: 0.2,
+            earningsPerShare: 4.0, // trailing twelve months
+            dt: 1.0,
+            lambda: 0.0,
+            dividendPerShare: $quarterlyDividend,
+            currentRoic: 0.12,
+            roicTtm: 0.12,
+            liveCostOfEquity: 0.08
+        );
+
+        // $1.00 a quarter is $4.00 a year on $4.00 of trailing EPS: a 100% payout, no growth and no haircut.
+        $fullPayout = $this->engine->calculateNextPrice($context(1.0))['analyst_targets']['income_analyst'];
+        // $3.00 a quarter is a 300% payout: same zero growth, haircut floored at 20%, so 3 x 0.2 = 0.6 of the above.
+        $triplePayout = $this->engine->calculateNextPrice($context(3.0))['analyst_targets']['income_analyst'];
+
+        $this->assertGreaterThan(0.0, $fullPayout);
+        $this->assertEqualsWithDelta(0.6, $triplePayout / $fullPayout, 1e-9);
+    }
+
     public function testTechSectorIgnoresBookValueInValuation()
     {
         $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);

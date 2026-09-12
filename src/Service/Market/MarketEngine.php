@@ -467,8 +467,12 @@ class MarketEngine
             $sustainableDividend = $dividendPerShare * 4.0;
             $requiredYield = max(0.02, $liveCostOfEquity);
 
-            // Calculate Payout Ratio to derive sustainable fundamental growth
-            $annualizedEps = max(0.0, $earningsPerShare * 4.0);
+            // Calculate Payout Ratio to derive sustainable fundamental growth. The EPS on the context is
+            // already trailing twelve months (net income is the SUM of the last four reported quarters),
+            // so it is not annualized again: doing so read every payout at a quarter of its true size, which
+            // handed mature dividend payers a reinvestment rate they did not have and let a debt-funded
+            // dividend escape the sustainability haircut until it passed four times earnings.
+            $annualizedEps = max(0.0, $earningsPerShare);
             $payoutRatio = $annualizedEps > 0.0 ? ($sustainableDividend / $annualizedEps) : 1.5;
 
             // Fundamental Growth = ROIC * Reinvestment Rate (1 - Payout Ratio)

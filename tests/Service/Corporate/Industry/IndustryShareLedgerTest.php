@@ -42,6 +42,30 @@ class IndustryShareLedgerTest extends TestCase
         $this->assertEqualsWithDelta(-100.0, ($bigDrain * 3_000.0) + ($smallDrain * 1_000.0), 1e-9);
     }
 
+    /**
+     * In a concentrated industry a leader's ordinary beat can exceed everything its peers sell, and proportional
+     * absorption would then take more than 100% of a peer's revenue. The drain is bounded per report, in both
+     * directions, and the excess is left as market growth rather than share.
+     */
+    public function testDrainIsBoundedWhenALeaderOutweighsItsPeers(): void
+    {
+        $ledger = new IndustryShareLedger(new InMemoryIndustryShareStore());
+        $leader = $this->stock('BIG', 100_000.0);
+        $peer = $this->stock('SML', 2_000.0);
+        $otherPeer = $this->stock('SML2', 2_000.0);
+
+        $ledger->recordIdiosyncraticGain($peer, 2_000.0, 0.0, 10);
+        $ledger->recordIdiosyncraticGain($otherPeer, 2_000.0, 0.0, 10);
+        // A 5% beat on 100,000 is 5,000 of "share" against a 4,000 pool of others: unbounded that is -125%.
+        $ledger->recordIdiosyncraticGain($leader, 100_000.0, 0.05, 20);
+
+        $this->assertEqualsWithDelta(-IndustryShareLedger::MAX_SHARE_DRAIN_PER_REPORT, $ledger->resolveRivalShareDrain($peer, 30, 252), 1e-9);
+
+        // And symmetrically when the leader collapses: a peer cannot win more than the bound either.
+        $ledger->recordIdiosyncraticGain($leader, 100_000.0, -0.05, 40);
+        $this->assertEqualsWithDelta(IndustryShareLedger::MAX_SHARE_DRAIN_PER_REPORT, $ledger->resolveRivalShareDrain($otherPeer, 50, 252), 1e-9);
+    }
+
     public function testEachRivalRecordIsAbsorbedOnlyOnce(): void
     {
         $ledger = new IndustryShareLedger(new InMemoryIndustryShareStore());

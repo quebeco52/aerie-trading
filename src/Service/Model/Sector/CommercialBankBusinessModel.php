@@ -116,15 +116,17 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
     /** Appetite ceiling (~3% PD): the edge of a viable commercial book before it is subprime lending. */
     public const MAX_CREDIT_RISK_APPETITE      = 1.00;
 
-    // --- CECL Forward Provisioning (Credit Spread Channel) ---
-    /** Baseline investment-grade corporate credit spread (macro through-the-cycle IG). Widening above this triggers proactive reserve builds. */
+    // --- CECL Forward Reserve (ASC 326 lifetime allowance conditioned on the macro forecast) ---
+    /** Baseline investment-grade corporate credit spread (macro through-the-cycle IG); the lifetime loss estimate is struck at 1.0x here. */
     public const CECL_BASELINE_CREDIT_SPREAD   = MacroEngine::BASE_CREDIT_SPREAD;
-    /** Variable cost add-on per unit of spread widening above baseline. +100bps widening = +8% cost add-on. */
-    public const CECL_SPREAD_SENSITIVITY       = 0.80;
-    /** Baseline 12-month forward recession probability (~15%). Increases above this trigger CECL lifetime reserve builds. */
+    /** Lifetime-loss multiplier per unit of IG spread widening: +300bps lifts the reserve target ~0.36x. */
+    public const CECL_RESERVE_SPREAD_SENSITIVITY = 12.0;
+    /** Baseline 12-month forward recession probability (~15%); the lifetime loss estimate is struck at 1.0x here. */
     public const CECL_BASELINE_RECESSION_PROB  = 0.15;
-    /** Sensitivity of CECL lifetime loss provisioning to 12-month forward recession probability. */
-    public const CECL_RECESSION_PROB_SENSITIVITY = 0.12;
+    /** Lifetime-loss multiplier per unit of recession probability above baseline: a near-certain recession lifts the target ~0.85x (large-bank allowances went 1.4% -> 3.3% of loans in 2020 with spreads). */
+    public const CECL_RESERVE_RECESSION_SENSITIVITY = 1.00;
+    /** Floor on the forecast multiplier: a benign outlook releases part of the through-the-cycle reserve, never most of it. */
+    public const CECL_RESERVE_MULTIPLIER_FLOOR = 0.75;
 
     // --- C&I Corporate Default & SLOOS Lending Standards ---
     /** Weight of speculative-grade corporate default rate shift on commercial & industrial loan loss provisions. */
@@ -410,8 +412,11 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
         $optimalNetIncome = $effectiveEquity * $baselineRoe;
         $optimalEbt = $optimalNetIncome / (1.0 - $taxRate);
 
-        // At optimal leverage, there is no idle cash generating a treasury yield, only fully deployed earning assets
-        $optimalEbit = $optimalEbt + $optimalInterestExpense;
+        // At optimal leverage, there is no idle cash generating a treasury yield, only fully deployed earning assets.
+        // The target is PRE-provision operating profit: the ROE is earned after the through-the-cycle credit
+        // charge the allowance roll-forward books against EBIT, so the target has to carry that charge too.
+        $optimalCreditProvision = $this->resolveThroughTheCycleCreditProvision($stock, $optimalEarningAssets);
+        $optimalEbit = $optimalEbt + $optimalInterestExpense + $optimalCreditProvision;
         $structuralAssetYield = $optimalEbit / max(1.0, $optimalEarningAssets);
 
         // Apply the mathematically pure structural yield to the ACTUAL physical loan book
@@ -557,13 +562,10 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
         // Clamp reserve release to MAX_PROVISION_REVERSAL to avoid unbounded write-backs
         $lossProvisionShock = max(-self::MAX_PROVISION_REVERSAL, $provisionCostAddon) + $macroDefaultDrag;
 
-        // CECL Forward Provisioning (Credit Spread & Recession Forecast Channels):
-        // Under CECL accounting, banks must provision against EXPECTED future lifetime losses.
-        // When corporate credit spreads widen or forward recession probability rises, banks build reserves proactively.
-        $creditSpread = $macroState->macroCreditSpreadEma;
-        $spreadCeclDrag = max(0.0, ($creditSpread - self::CECL_BASELINE_CREDIT_SPREAD) * self::CECL_SPREAD_SENSITIVITY);
-        $recessionCeclDrag = max(0.0, ($macroState->recessionProbabilityEma - self::CECL_BASELINE_RECESSION_PROB) * self::CECL_RECESSION_PROB_SENSITIVITY);
-        $ceclDrag = $spreadCeclDrag + $recessionCeclDrag;
+        // The forward-looking CECL reserve (credit spreads, recession forecast) is NOT a margin term: it moves
+        // the allowance TARGET through getForwardCreditLossMultiplier(), and the ledger roll-forward books the
+        // build once and releases it when the outlook clears. Charging it here every quarter the outlook
+        // stayed bad priced a level as news and cost a lender its reserve build several times over.
 
         // Macaulay Duration Gap & IRRBB NIM Physics:
         // Bank assets (long-term loans/mortgages) have higher duration than liabilities (short-term deposits/repo).
@@ -581,10 +583,10 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
         $nimSqueeze = - ($curveDeviation * $effectiveDurationGap);
 
         // Physics-grounded Efficiency Floor: Total Operating Costs (Fixed + Variable) / Revenue >= MIN_EFFICIENCY_RATIO.
-        // Crucially, NIM squeeze and CECL provision charges apply proportionally to the NII revenue share ($niiWeight),
+        // Crucially, NIM squeeze and provision charges apply proportionally to the NII revenue share ($niiWeight),
         // leaving Non-Interest custodial / wealth / transaction fee income completely insulated.
         $minVariableMargin = max(0.01, self::MIN_EFFICIENCY_RATIO - ($fixedCosts / max(1.0, $actualRevenue)));
-        $niiCostAddon = ($lossProvisionShock + $nimSqueeze + $ceclDrag) * $niiWeight;
+        $niiCostAddon = ($lossProvisionShock + $nimSqueeze) * $niiWeight;
         $rawMargin = $realizedVariableMargin + $niiCostAddon;
         $clampedMargin = $this->clampMargin($rawMargin, $minVariableMargin);
 
@@ -600,7 +602,7 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
         $addonRealizedShare = abs($niiCostAddon) > 1e-12
             ? max(0.0, min(1.0, $realizedAddon / $niiCostAddon))
             : 0.0;
-        $explicitCreditProvision = ($lossProvisionShock + $ceclDrag) * $niiWeight * $actualRevenue * $addonRealizedShare;
+        $explicitCreditProvision = $lossProvisionShock * $niiWeight * $actualRevenue * $addonRealizedShare;
 
         $cet1Ratio = $this->calculateCet1Ratio($stock);
 
@@ -626,6 +628,30 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
             creditLossProvision: $explicitCreditProvision,
             netChargeOffs: $netChargeOffs,
         );
+    }
+
+    /**
+     * ASC 326 reasonable-and-supportable forecast: the lifetime loss estimate scales with how much worse than
+     * through-the-cycle the outlook is, read off the two forward indicators a reserving committee watches,
+     * IG credit spreads and the 12-month recession probability. Widening and rising risk lift the target
+     * (a build, booked once by the roll-forward); a benign outlook releases down to the floor.
+     */
+    public function getForwardCreditLossMultiplier(?Stock $stock, MacroStateDTO $macroState): float
+    {
+        $spreadGap = $macroState->macroCreditSpreadEma - static::CECL_BASELINE_CREDIT_SPREAD;
+        $recessionGap = max(0.0, $macroState->recessionProbabilityEma - static::CECL_BASELINE_RECESSION_PROB);
+
+        $multiplier = 1.0
+            + ($spreadGap * static::CECL_RESERVE_SPREAD_SENSITIVITY * $this->resolveSpreadReserveBeta($stock))
+            + ($recessionGap * static::CECL_RESERVE_RECESSION_SENSITIVITY);
+
+        return max(static::CECL_RESERVE_MULTIPLIER_FLOOR, $multiplier);
+    }
+
+    /** How much more than the sector a given lender's reserve moves with credit spreads (1.0 = the sector). */
+    protected function resolveSpreadReserveBeta(?Stock $stock): float
+    {
+        return 1.0;
     }
 
     /**

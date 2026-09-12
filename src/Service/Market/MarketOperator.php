@@ -80,6 +80,27 @@ class MarketOperator
     }
 
     /**
+     * Trailing-year EBIT rebuilt from the four reported quarters: net income grossed back up for tax when
+     * positive (a loss pays none), plus the year's interest. Null until a full year has been reported, when
+     * the caller falls back to the latest margin.
+     */
+    private function resolveTrailingEbit(Stock $stock, MacroStateDTO $macroState): ?float
+    {
+        $history = $stock->getQuarterlyNetIncomeHistory() ?? [];
+        if (count($history) < \App\Service\Corporate\EarningsEngine::TTM_QUARTERS) {
+            return null;
+        }
+
+        $trailingNetIncome = array_sum(array_map('floatval', $history));
+        $preTaxIncome = $trailingNetIncome > 0.0
+            ? $trailingNetIncome / max(0.01, 1.0 - $macroState->corporateTaxRate)
+            : $trailingNetIncome;
+        $interestExpense = $this->debtEngine->analyzeDebtHealth($stock, $macroState)?->rawMetrics?->interestExpense ?? 0.0;
+
+        return $preTaxIncome + max(0.0, $interestExpense);
+    }
+
+    /**
      * Industry consolidation: a failed rival's demand does not vanish with it. Surviving peers in the same
      * industry absorb most of its addressable market in proportion to their own, which is how exits leave
      * survivors with more share and pricing headroom (airline, steel and retail consolidations). The
@@ -146,7 +167,11 @@ class MarketOperator
         // had collapsed kept passing the Altman test on the strength of a plant it could no longer run
         // profitably. Falls back to the structural margin only before the first earnings report.
         $margin = $stock->getReportedOperatingMargin() ?? (float) $stock->getOperatingMargin();
-        $ebit = $revenue * $margin;
+        // Altman's X3 is EBIT over the trailing YEAR. Annualizing the latest quarter's margin let one
+        // catastrophic print (the fire-sale quarter after a distressed divestiture) liquidate a firm whose
+        // three preceding quarters were sound, with positive equity and a going business. Once four
+        // quarters have been reported the ratio is struck on them, as it was built to be.
+        $ebit = $this->resolveTrailingEbit($stock, $macroState) ?? $revenue * $margin;
 
         // Two independent ways to fail. Insolvency is the balance sheet no longer covering the claims on it;
         // a payment default is principal coming due that nobody would refinance and the firm could not pay.

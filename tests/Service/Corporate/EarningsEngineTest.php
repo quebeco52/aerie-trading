@@ -1483,6 +1483,133 @@ class EarningsEngineTest extends TestCase
         $this->assertGreaterThan(0.04, $lifetimeRate, 'a card book reserves several percent of receivables');
     }
 
+    /**
+     * A lender's provision is a forecast line, not a surprise. The through-the-cycle charge on a disclosed
+     * book is exactly the replenishment the allowance roll-forward books at steady state, so analysts carry
+     * it in the estimate and only the cyclical excess the sector physics adds on top can surprise. An
+     * operating company keeps no loan book and carries nothing.
+     */
+    public function testAnalystsCarryTheThroughTheCycleProvisionOfALender(): void
+    {
+        $macroState = new MacroStateDTO(
+            corporateTaxRate: 0.21, policyRate: 0.04, policyRateEma: 0.04, yield2yEma: 0.04, yield5yEma: 0.042,
+            yield10yEma: 0.045, equityRiskPremium: 0.05, nominalGdpIndex: 1.0, macroCreditSpreadEma: 0.015
+        );
+        $captured = null;
+        $dispatcher = new EventDispatcher();
+        $dispatcher->addListener(EarningsReportedEvent::class, function (EarningsReportedEvent $event) use (&$captured): void {
+            $captured = $event->getContext();
+        });
+        $engine = $this->buildEngine($dispatcher);
+
+        $lender = $this->buildCardLender('CARD');
+        $strategy = \App\Data\Sectors::getBusinessModelStrategy('credit_services');
+
+        mt_srand(20260912);
+        $engine->calculate($lender, $macroState, EarningsEngine::resolveReportingTick('CARD', 252));
+        $this->assertNotNull($captured);
+
+        $openingBook = (float) $lender->getEarningAssets() + $captured->netChargeOffs;
+        $this->assertEqualsWithDelta(
+            $strategy->getThroughTheCycleCreditLossRate() / 4.0 * $openingBook,
+            $captured->expectedCreditLossProvision,
+            $captured->expectedCreditLossProvision * 0.05,
+            'the estimate carries one quarter of the through-the-cycle charge on the opening book'
+        );
+        $this->assertGreaterThan(0.0, $captured->expectedCreditLossProvision);
+
+        $industrial = $this->buildProfitableIndustrial('PLNT');
+        $engine->calculate($industrial, $macroState, EarningsEngine::resolveReportingTick('PLNT', 252));
+        $this->assertSame('PLNT', $captured->stock->getTicker());
+        $this->assertSame(0.0, $captured->expectedCreditLossProvision, 'no loan book, no provision in the estimate');
+    }
+
+    /**
+     * The regression that matters: a card issuer in a calm macro used to miss consensus every quarter and
+     * report a fraction of its target ROE, because neither the revenue target nor the estimate funded the
+     * charge-offs the ledger books. With both carrying it, the surprises are noise around zero and the
+     * trailing ROE stays near the target.
+     */
+    public function testCardLenderEarnsItsTargetRoeAndDoesNotMissEveryQuarterInACalmMacro(): void
+    {
+        $macroState = new MacroStateDTO(
+            corporateTaxRate: 0.21, policyRate: 0.04, policyRateEma: 0.04, yield2yEma: 0.04, yield5yEma: 0.042,
+            yield10yEma: 0.045, equityRiskPremium: 0.05, nominalGdpIndex: 1.0, macroCreditSpreadEma: 0.015
+        );
+        $engine = $this->buildEngine(new EventDispatcher());
+        $stock = $this->buildCardLender('CARD');
+        $targetRoe = (float) $stock->getBaselineRoe();
+
+        mt_srand(20260912);
+        for ($quarter = 1; $quarter <= 8; $quarter++) {
+            $engine->calculate($stock, $macroState, (($quarter - 1) * 63) + EarningsEngine::resolveReportingTick('CARD', 252));
+        }
+
+        $surprises = $stock->getEarningsSurpriseHistory() ?? [];
+        $this->assertCount(8, $surprises);
+        $meanSurprise = array_sum($surprises) / count($surprises);
+        $this->assertGreaterThan(-0.10, $meanSurprise, 'a lender in a calm macro must not miss consensus chronically');
+        $this->assertLessThan(0.15, $meanSurprise);
+
+        $this->assertGreaterThan($targetRoe * 0.60, (float) $stock->getRoeTtm(), 'trailing ROE must land near the target, not the target minus the loss rate');
+    }
+
+    /**
+     * A forward reserve build is booked once and released once (ASC 326). The forecast multiplier moves the
+     * lifetime loss target the allowance converges to: the first stressed quarter carries a build on top of
+     * the through-the-cycle charge, later stressed quarters converge back to that charge alone, and the
+     * quarter the outlook clears carries a release. Charging the level every quarter, as the margin used
+     * to, kept a card issuer loss-making for as long as the recession probability stayed elevated.
+     */
+    public function testForwardReserveIsBuiltOnceAndReleasedOnceRatherThanChargedEveryQuarter(): void
+    {
+        $calm = new MacroStateDTO(
+            corporateTaxRate: 0.21, policyRate: 0.04, policyRateEma: 0.04, yield2yEma: 0.04, yield5yEma: 0.042,
+            yield10yEma: 0.045, equityRiskPremium: 0.05, nominalGdpIndex: 1.0, macroCreditSpreadEma: 0.013,
+            recessionProbabilityEma: 0.15
+        );
+        $stressed = new MacroStateDTO(
+            corporateTaxRate: 0.21, policyRate: 0.04, policyRateEma: 0.04, yield2yEma: 0.04, yield5yEma: 0.042,
+            yield10yEma: 0.045, equityRiskPremium: 0.05, nominalGdpIndex: 1.0, macroCreditSpreadEma: 0.013,
+            recessionProbabilityEma: 0.65
+        );
+
+        $captured = null;
+        $dispatcher = new EventDispatcher();
+        $dispatcher->addListener(EarningsReportedEvent::class, function (EarningsReportedEvent $event) use (&$captured): void {
+            $captured = $event->getContext();
+        });
+        $engine = $this->buildEngine($dispatcher);
+        $stock = $this->buildCardLender('CARD');
+        $strategy = \App\Data\Sectors::getBusinessModelStrategy('credit_services');
+
+        $excessProvision = [];
+        $regimes = [$calm, $calm, $stressed, $stressed, $stressed, $stressed, $calm, $calm];
+        mt_srand(20260912);
+        foreach ($regimes as $i => $macro) {
+            $engine->calculate($stock, $macro, ($i * 63) + EarningsEngine::resolveReportingTick('CARD', 252));
+            $this->assertNotNull($captured);
+            // Provision over and above the through-the-cycle charge on the opening book: the build or release.
+            $ttcCharge = $strategy->getThroughTheCycleCreditLossRate() / 4.0 * ((float) $stock->getEarningAssets() + $captured->netChargeOffs);
+            $excessProvision[$i] = $captured->creditLossProvision - $ttcCharge;
+        }
+
+        $book = (float) $stock->getEarningAssets();
+        $this->assertEqualsWithDelta(0.0, $excessProvision[1], $book * 0.001, 'calm and converged: provision is the through-the-cycle charge');
+        $this->assertGreaterThan($book * 0.002, $excessProvision[2], 'the first stressed quarter books a reserve build');
+        // The build walks the gap closed at CREDIT_ALLOWANCE_CONVERGENCE_RATIO a quarter, so each stressed
+        // quarter charges less than the one before and the fourth is well under the first.
+        $this->assertGreaterThan($excessProvision[3], $excessProvision[2]);
+        $this->assertGreaterThan($excessProvision[4], $excessProvision[3]);
+        $this->assertGreaterThan($excessProvision[5], $excessProvision[4]);
+        $this->assertLessThan($excessProvision[2] * 0.60, $excessProvision[5], 'a persistent outlook is not charged again once the reserve is built');
+        $this->assertLessThan(-$book * 0.002, $excessProvision[6], 'the quarter the outlook clears books a release');
+
+        $lifetimeRate = $strategy->getThroughTheCycleCreditLossRate() * $strategy->getCreditLossHorizonYears();
+        $stressedTarget = $lifetimeRate * $strategy->getForwardCreditLossMultiplier($stock, $stressed);
+        $this->assertGreaterThan($lifetimeRate * 1.2, $stressedTarget, 'a 65% recession probability materially raises the lifetime loss estimate');
+    }
+
     private function buildCardLender(string $ticker): Stock
     {
         $stock = new Stock();

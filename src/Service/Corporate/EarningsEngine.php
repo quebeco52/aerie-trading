@@ -334,10 +334,33 @@ class EarningsEngine
         $this->corporateMetrics->seedEarningAssetLedger($stock, $this->resolveLifetimeCreditLossRate($ctx));
     }
 
-    /** Lifetime expected loss rate on gross earning assets: the annual through-the-cycle rate over the CECL horizon. */
+    /**
+     * The quarterly provision analysts already have in the estimate for a lender: the through-the-cycle
+     * charge on the gross book the firm discloses, which is exactly the replenishment the allowance
+     * roll-forward books at steady state. Nothing for a firm that keeps no loan book.
+     */
+    private function resolveExpectedCreditLossProvision(EarningsSimulationContext $ctx): float
+    {
+        if (!$ctx->stock->hasEarningAssetLedger()) {
+            return 0.0;
+        }
+
+        $grossBook = max(0.0, (float) $ctx->stock->getEarningAssets());
+
+        return max(0.0, $ctx->strategy->getThroughTheCycleCreditLossRate($ctx->stock)) * $grossBook / self::TTM_QUARTERS;
+    }
+
+    /**
+     * Lifetime expected loss rate on gross earning assets: the annual through-the-cycle rate over the CECL
+     * horizon, conditioned on the macro outlook the lender reserves against. The outlook moves the TARGET
+     * the allowance converges to, so a deteriorating forecast is booked as a build once and released when
+     * it clears, rather than charged again every quarter it persists.
+     */
     private function resolveLifetimeCreditLossRate(EarningsSimulationContext $ctx): float
     {
-        return max(0.0, $ctx->strategy->getThroughTheCycleCreditLossRate($ctx->stock)) * max(0.0, $ctx->strategy->getCreditLossHorizonYears());
+        return max(0.0, $ctx->strategy->getThroughTheCycleCreditLossRate($ctx->stock))
+            * max(0.0, $ctx->strategy->getCreditLossHorizonYears())
+            * max(0.0, $ctx->strategy->getForwardCreditLossMultiplier($ctx->stock, $ctx->macroState));
     }
 
     /**
@@ -667,8 +690,12 @@ class EarningsEngine
         $ctx->estimateDispersion = $consensus->estimateDispersion;
 
         // Depreciation is the most forecastable line on the income statement — it follows a schedule the
-        // firm has already disclosed — so analysts get it right and it is not a source of surprise.
-        $expectedEbit = $ctx->analystExpectedRevenue - $ctx->fixedCosts - $ctx->analystExpectedVariableCosts - $ctx->quarterlyDepreciation;
+        // firm has already disclosed — so analysts get it right and it is not a source of surprise. A lender's
+        // provision is the same kind of line: the through-the-cycle charge on a disclosed book is forecast,
+        // and only the cyclical excess the sector physics adds on top of it can surprise.
+        $ctx->expectedCreditLossProvision = $this->resolveExpectedCreditLossProvision($ctx);
+        $expectedEbit = $ctx->analystExpectedRevenue - $ctx->fixedCosts - $ctx->analystExpectedVariableCosts
+            - $ctx->quarterlyDepreciation - $ctx->expectedCreditLossProvision;
         $ctx->expectedEbit = max(-$ctx->structuralRevenue * self::MAX_EBIT_LOSS_RATIO, $expectedEbit);
 
         // Operating costs are the cash cost base; EBITDA sits above the depreciation line and EBIT below it.
@@ -743,7 +770,7 @@ class EarningsEngine
         $stock->setTotalRevenue((string) $annualSaarRevenue);
 
         $saExpectedRevenue = $ctx->expectedRevenue / max(0.01, $ctx->seasonalFactor);
-        $saExpectedEbit = ($saExpectedRevenue * (1.0 - $ctx->baselineVariableMargin)) - $ctx->fixedCosts - $ctx->quarterlyDepreciation;
+        $saExpectedEbit = ($saExpectedRevenue * (1.0 - $ctx->baselineVariableMargin)) - $ctx->fixedCosts - $ctx->quarterlyDepreciation - $ctx->expectedCreditLossProvision;
         $saExpectedMargin = $saExpectedEbit / max(1.0, $saExpectedRevenue);
         $expectedDebtMetrics = $this->debtEngine->calculateInterestExpense($stock, $ctx->macroState, false, $saExpectedRevenue * 4.0, $saExpectedMargin);
         $ctx->expectedInterestExpense = $expectedDebtMetrics->interestExpense / 4.0;

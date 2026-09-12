@@ -183,6 +183,15 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
         $policyRate = $macroState->policyRateEma;
         $beta = $this->getOperatingCyclicality($stock);
 
+        // A vehicle is a consumer durable, not industrial capex. The heavy-manufacturing parent reads the cycle
+        // twice (an amplified output gap plus the manufacturing PMI, which leads the same industrial cycle)
+        // and this model then adds household sentiment and financing rates on top, so a mild slowdown
+        // (gap -1%, sentiment -15) produced a -25% volume drop, which is the 2008-09 collapse, not 1991
+        // (-12%) or 2001 (-2%). Demand here is the output gap at the sector's own cyclicality plus the two
+        // household channels; the PMI belongs to the firms that sell machinery, not to their customers.
+        $physics['macro_demand_shift'] = ($this->resolveLaggedOutputGap($stock, $macroState) * $beta)
+            + $this->resolveFxDemandShift($macroState);
+
         // High policy rates destroy debt-financed consumer auto purchases
         $ratePenalty = 0.0;
         if ($policyRate > self::NEUTRAL_POLICY_RATE) {

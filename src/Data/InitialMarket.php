@@ -1375,7 +1375,9 @@ class InitialMarket
             'capex_ratio' => 0.45,
             'target_payout_ratio' => 0.00,
             'dividendSpeed' => 0.15,
-            'fixed_cost_ratio' => 0.58,
+            // An OEM's plant, tooling and contracted line labour are roughly two fifths of its cost base; at
+            // 0.58 the fleet broke even on a 15% volume drop and any ordinary slowdown put it in the red.
+            'fixed_cost_ratio' => 0.45,
             'operating_margin' => 0.09,
             'public_float' => 0.75,
             'sam_ratio' => 1.25,

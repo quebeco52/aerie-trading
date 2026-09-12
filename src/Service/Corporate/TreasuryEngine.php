@@ -613,22 +613,31 @@ class TreasuryEngine
      * even for an issuer the bond market has refused, and it is the reason a cash balance cannot simply go
      * negative. The commitment is sized to the business, though: past it the bank is no longer bound, the
      * money prices at distress rates, and the firm is flagged into the death-spiral financing path.
+     *
+     * The facility also takes out a maturity the primary market refused to roll. That is the other thing a
+     * revolver is for: a solvent issuer whose notes come due in a closed market draws the line and repays the
+     * bondholders, which is why a refused refinancing is a funding problem and not, by itself, a default.
+     * The maturity wall only repays principal down to the operating cash floor, so the balance is never
+     * negative on that account and the overdraft test alone never saw it. An overdraft is cash already spent
+     * and is funded first; the maturity takes whatever commitment is left, and only the part no committed
+     * line will cover goes forward to the default test.
      */
     private function processRevolverDraw(CapitalAllocationContext $ctx): void
     {
-        if ($ctx->newTreasury >= 0.0) {
+        $overdraft = max(0.0, -$ctx->newTreasury);
+        $need = $overdraft + max(0.0, $ctx->unfundedMaturity);
+        if ($need <= 0.0) {
             return;
         }
 
         $stock = $ctx->stock;
-        $overdraft = -$ctx->newTreasury;
 
         $commitment = max(
             FinancialConstants::MIN_OPERATING_BASE_CASH,
             $ctx->strategy->calculateMinOperatingCash($ctx->operatingBase, $ctx->customerDeposits, $ctx->wholesaleDebt)
                 * self::REVOLVER_COMMITMENT_OPERATING_CASH_MULTIPLE
         );
-        $drawn = min($overdraft, $commitment);
+        $drawn = min($need, $commitment);
         if ($drawn <= 0.0) {
             return;
         }
@@ -641,10 +650,24 @@ class TreasuryEngine
         $ctx->newTreasury += $drawn;
         $ctx->debtActionTaken = true;
 
+        // The maturity is repaid out of the draw the moment it lands: the notes leave the ladder and the
+        // revolver balance takes their place, which is a refinancing onto the committed line, not new
+        // leverage. The cash passes straight through, so the treasury ends where it started.
+        $maturityFunded = min(max(0.0, $ctx->unfundedMaturity), max(0.0, $drawn - $overdraft));
+        if ($maturityFunded > 0.0) {
+            $ctx->newTreasury -= $maturityFunded;
+            $ctx->wholesaleDebt = max(0.0, $ctx->wholesaleDebt - $maturityFunded);
+            $stock->setWholesaleDebt((string) $ctx->wholesaleDebt);
+            $ctx->principalRepaid += $maturityFunded;
+            $ctx->unfundedMaturity -= $maturityFunded;
+        }
+
         // Past the commitment the bank is no longer contractually bound and the money costs what distress
-        // costs. It is still funded - the cash was already spent, and booking it anywhere but the liability
-        // side would balance the sheet by inventing money - but the firm is now visibly out of liquidity, so
-        // it is flagged into the death-spiral path the equity issuance step already runs on.
+        // costs. An overdraft is still funded - the cash was already spent, and booking it anywhere but the
+        // liability side would balance the sheet by inventing money - but the firm is now visibly out of
+        // liquidity, so it is flagged into the death-spiral path the equity issuance step already runs on.
+        // A maturity is different: nothing has been spent yet, so past the commitment it stays unfunded and
+        // the default test decides.
         $overCommitment = max(0.0, $overdraft - $drawn);
         if ($overCommitment > 0.0) {
             $this->debtEngine->issueDebt(

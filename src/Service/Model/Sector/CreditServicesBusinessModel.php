@@ -111,15 +111,17 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
     /** Upper clamp for realized variable margin. */
     public const MAX_VARIABLE_MARGIN_CLAMP = 0.95;
 
-    // --- CECL Forward Provisioning (Credit Spread Channel) ---
-    /** Baseline investment-grade credit spread (macro through-the-cycle IG). Widening above this triggers proactive reserve builds. */
+    // --- CECL Forward Reserve (ASC 326 lifetime allowance conditioned on the macro forecast) ---
+    /** Baseline investment-grade credit spread (macro through-the-cycle IG); the lifetime loss estimate is struck at 1.0x here. */
     public const CECL_BASELINE_CREDIT_SPREAD = MacroEngine::BASE_CREDIT_SPREAD;
-    /** Variable cost add-on per unit of spread widening. Unsecured credit is 1.5x more sensitive than collateralized bank loans. */
+    /** Sector reserve sensitivity to spreads a per-ticker CeclSpreadSensitivity is expressed against (a 2.2 issuer moves 2.2/1.5 = 1.47x the sector). */
     public const CECL_SPREAD_SENSITIVITY     = 1.50;
-    /** Baseline 12-month forward recession probability threshold before proactive CECL reserve builds begin. */
+    /** Lifetime-loss multiplier per unit of IG spread widening: unsecured books reprice faster than collateralized bank loans, +300bps lifts the target ~0.45x. */
+    public const CECL_RESERVE_SPREAD_SENSITIVITY = 15.0;
+    /** Baseline 12-month forward recession probability; the lifetime loss estimate is struck at 1.0x here. */
     public const CECL_BASELINE_RECESSION_PROB   = 0.15;
-    /** Sensitivity of unsecured credit CECL forward reserves to elevated 12-month recession risk. */
-    public const CECL_RECESSION_SENSITIVITY     = 0.35;
+    /** Lifetime-loss multiplier per unit of recession probability above baseline: card allowances went ~4.9% -> 7.9% of receivables in 2020 (~0.6x) on a near-certain recession. */
+    public const CECL_RESERVE_RECESSION_SENSITIVITY = 0.75;
     /** Sensitivity of revolving credit loan origination volume drag to commercial bank credit tightening (SLOOS). */
     public const SLOOS_LENDING_DRAG_SENSITIVITY = 0.15;
 
@@ -169,7 +171,6 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
 
         $lendingWeight   = $params[ModelParam::LendingRevenueWeight];
         $networkWeight   = $params[ModelParam::NetworkRevenueWeight];
-        $ceclSensitivity = $params[ModelParam::CeclSpreadSensitivity];
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
         $streams  = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
@@ -231,18 +232,9 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
         }
         $lossProvisionShock = $provisionShock + $macroDefaultDrag;
 
-        // CECL Forward Provisioning (Credit Spread & Forward Recession Channels):
-        // Unsecured credit companies are far more sensitive to spread widening than banks.
-        // Subprime Spread Beta: lenders taking on higher credit spread risk earn a higher spread
-        // yield margin in benign credit environments, eliminating low-sensitivity free-money exploits.
-        $creditSpread = $macroState->macroCreditSpreadEma;
-        $spreadBeta = $ceclSensitivity / self::CECL_SPREAD_SENSITIVITY;
-        $spreadGap = $creditSpread - self::CECL_BASELINE_CREDIT_SPREAD;
-        $spreadCeclDrag = $spreadGap > 0.0
-            ? $spreadGap * $ceclSensitivity
-            : max(-0.03, $spreadGap * ($spreadBeta - 1.0));
-        $recessionCeclDrag = max(0.0, ($macroState->recessionProbabilityEma - self::CECL_BASELINE_RECESSION_PROB) * self::CECL_RECESSION_SENSITIVITY);
-        $ceclDrag = $spreadCeclDrag + $recessionCeclDrag;
+        // The forward-looking CECL reserve (spreads, recession forecast) moves the allowance TARGET through
+        // getForwardCreditLossMultiplier(), where the per-ticker CeclSpreadSensitivity sets how far this issuer's
+        // reserve travels with spreads. The roll-forward books the build once; it is not a margin cost here.
 
         // Net Interest Margin (NIM) Squeeze (1.5x more sensitive than banks due to wholesale funding dependency)
         $yield10y = $macroState->yield10yEma;
@@ -258,10 +250,10 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
         }
 
         // Structural efficiency floor: Total Operating Costs (Fixed + Variable) / Revenue >= MIN_EFFICIENCY_RATIO.
-        // Crucially, unsecured default provisions, CECL reserve builds, and NIM squeeze apply proportionally
-        // to the Revolving Lending share ($lendingWeight), leaving Payment Network Swipe Interchange completely insulated.
+        // Crucially, unsecured default provisions and NIM squeeze apply proportionally to the Revolving
+        // Lending share ($lendingWeight), leaving Payment Network Swipe Interchange completely insulated.
         $minVariableMargin = max(0.01, self::MIN_EFFICIENCY_RATIO - ($fixedCosts / max(1.0, $actualRevenue)));
-        $lendingCostAddon = ($lossProvisionShock + $nimSqueeze + $ceclDrag) * $lendingWeight;
+        $lendingCostAddon = ($lossProvisionShock + $nimSqueeze) * $lendingWeight;
         $rawMargin = $realizedVariableMargin + $lendingCostAddon;
         $clampedMargin = $this->clampMargin($rawMargin, $minVariableMargin);
 
@@ -343,9 +335,14 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
         $optimalNetIncome = $effectiveEquity * $baselineRoe;
         $optimalEbt = $optimalNetIncome / (1.0 - $taxRate);
 
-        $optimalEbit = $optimalEbt + $optimalInterestExpense;
         $targetCash = $this->calculateTargetOperatingCash($effectiveEquity, $optimalDeposits, $optimalWholesaleDebt);
         $optimalEarningAssets = $effectiveEquity + $optimalDebt - $targetCash;
+
+        // Pre-provision operating profit: unsecured card receivables charge off at CARD_CHARGE_OFF_RATE through
+        // the cycle and the allowance roll-forward books that against EBIT every quarter, so the ROE target
+        // has to be earned on top of it or the reported return is the target minus the loss rate.
+        $optimalCreditProvision = $this->resolveThroughTheCycleCreditProvision($stock, $optimalEarningAssets);
+        $optimalEbit = $optimalEbt + $optimalInterestExpense + $optimalCreditProvision;
         $structuralAssetYield = $optimalEbit / max(1.0, $optimalEarningAssets);
 
         $targetEbit = $earningAssets * $structuralAssetYield;
@@ -403,6 +400,20 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
     public function getThroughTheCycleCreditLossRate(?Stock $stock = null): float
     {
         return self::CARD_CHARGE_OFF_RATE;
+    }
+
+    /** A subprime originator's reserve travels further with credit spreads than a prime card network's. */
+    protected function resolveSpreadReserveBeta(?Stock $stock): float
+    {
+        if (!$stock instanceof Stock) {
+            return 1.0;
+        }
+
+        $params = $this->resolveModelParameters($stock, [
+            ModelParam::CeclSpreadSensitivity->value => self::CECL_SPREAD_SENSITIVITY,
+        ]);
+
+        return $params[ModelParam::CeclSpreadSensitivity] / self::CECL_SPREAD_SENSITIVITY;
     }
 
     public function getCreditLossHorizonYears(): float

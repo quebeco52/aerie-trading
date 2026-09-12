@@ -253,13 +253,18 @@ class ShadowBankBusinessModelTest extends TestCase
         $neutralResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.50, 20_000_000.0, 0.0, $neutralMacro, $mathMock);
         $widenedResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.50, 20_000_000.0, 0.0, $widenedMacro, $mathMock);
 
-        // At baseline credit spread, CECL forward provision is 0.0 (spreadGap is 0.0).
-        // Widened credit spread must produce a strictly higher variable cost ratio.
+        // The forward reserve is a balance, not a flow: a widened spread raises the lifetime loss target the
+        // allowance converges to (booked once by the ledger) and leaves the running margin alone.
+        $this->assertEqualsWithDelta($neutralResult->clampedMargin, $widenedResult->clampedMargin, 1e-12, 'the forecast reserve is not a running cost');
         $this->assertGreaterThan(
-            $neutralResult->clampedMargin,
-            $widenedResult->clampedMargin,
-            'Widened credit spread must increase forward CECL provisions above baseline.'
+            $this->model->getForwardCreditLossMultiplier($stock, $neutralMacro),
+            $this->model->getForwardCreditLossMultiplier($stock, $widenedMacro),
+            'Widened credit spread must raise the forward lifetime loss estimate above baseline.'
         );
-        $this->assertEqualsWithDelta(0.030, $widenedResult->clampedMargin - $neutralResult->clampedMargin, 0.001);
+        $this->assertEqualsWithDelta(
+            0.020 * ShadowBankBusinessModel::CECL_RESERVE_SPREAD_SENSITIVITY,
+            $this->model->getForwardCreditLossMultiplier($stock, $widenedMacro) - $this->model->getForwardCreditLossMultiplier($stock, $neutralMacro),
+            1e-9
+        );
     }
 }

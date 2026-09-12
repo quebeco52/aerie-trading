@@ -198,7 +198,9 @@ class MarketSeedCommand extends Command
                     // the lifetime loss it expects so the first report books no phantom provision.
                     \App\Service\Math\CorporateMetrics::getInstance()->seedEarningAssetLedger(
                         $stock,
-                        $strategy->getThroughTheCycleCreditLossRate($stock) * $strategy->getCreditLossHorizonYears()
+                        $strategy->getThroughTheCycleCreditLossRate($stock)
+                            * $strategy->getCreditLossHorizonYears()
+                            * $strategy->getForwardCreditLossMultiplier($stock, $dummyMacro)
                     );
                 }
 

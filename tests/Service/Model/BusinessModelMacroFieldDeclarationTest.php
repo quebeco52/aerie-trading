@@ -17,14 +17,15 @@ use ReflectionMethod;
  * stale list silently draws (or hides) institution-to-model edges on the map.
  *
  * The rule mirrors OperatingStrategyInterface: fields read by the model's own operating code
- * (calculateSectorPhysics, getMacroPhysics, calculateInterestIncome, processPassiveLiabilityGrowth and the
- * helpers they call), following parent:: delegation, minus the WACC-only reads. Generic trait code is not
+ * (calculateSectorPhysics, getMacroPhysics, calculateInterestIncome, processPassiveLiabilityGrowth,
+ * getForwardCreditLossMultiplier and the helpers they call), following parent:: delegation, minus the
+ * WACC-only reads. Generic trait code is not
  * model-specific coupling and is skipped.
  */
 final class BusinessModelMacroFieldDeclarationTest extends TestCase
 {
     /** @var list<string> */
-    private const OPERATING_METHODS = ['calculateSectorPhysics', 'getMacroPhysics', 'calculateInterestIncome', 'processPassiveLiabilityGrowth'];
+    private const OPERATING_METHODS = ['calculateSectorPhysics', 'getMacroPhysics', 'calculateInterestIncome', 'processPassiveLiabilityGrowth', 'getForwardCreditLossMultiplier'];
 
     /** Valuation-only reads feeding WACC alone, excluded by the interface contract. */
     private const VALUATION_ONLY_FIELDS = ['equity_risk_premium', 'corporate_tax_rate', 'policy_rate'];

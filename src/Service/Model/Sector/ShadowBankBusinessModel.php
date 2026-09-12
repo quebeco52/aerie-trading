@@ -75,8 +75,8 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
     public const HEALTHY_CREDIT_Z_FLOOR    = 1.00;
     /** Sensitivity scale for loan provision write-backs during exceptionally healthy credit environments. */
     public const PROVISION_REVERSAL_SCALE  = 0.020;
-    /** Sensitivity of forward loan default provisioning to widening macroeconomic credit spreads. */
-    public const CECL_FORWARD_SENSITIVITY  = 1.50;
+    /** Lifetime-loss multiplier per unit of IG spread widening on a leveraged private-credit book: +300bps lifts the reserve target ~0.30x. */
+    public const CECL_RESERVE_SPREAD_SENSITIVITY = 10.0;
     /** Structural minimum operating cost-to-revenue ratio for non-bank lending operations. */
     public const MIN_EFFICIENCY_RATIO      = 0.45;
     /** Upper clamp for realized variable margin. */
@@ -91,10 +91,10 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
     public const SLOOS_PRIVATE_CREDIT_EXPANSION = 0.30;
     /** Weight of corporate speculative default rate surges applied to direct lending portfolio provisions. */
     public const SHOCK_WEIGHT_CORPORATE_DEFAULT = 0.12;
-    /** Baseline 12-month forward recession probability threshold before proactive CECL reserve builds begin. */
+    /** Baseline 12-month forward recession probability; the lifetime loss estimate is struck at 1.0x here. */
     public const CECL_BASELINE_RECESSION_PROB   = 0.15;
-    /** Sensitivity of shadow bank CECL forward credit reserves to elevated 12-month recession risk. */
-    public const CECL_RECESSION_SENSITIVITY     = 0.25;
+    /** Lifetime-loss multiplier per unit of recession probability above baseline: a near-certain recession lifts the reserve target ~0.85x. */
+    public const CECL_RESERVE_RECESSION_SENSITIVITY = 1.00;
 
     // --- Housing Starts & M2 Liquidity Transmission ---
     /** Sensitivity of non-bank purchase mortgage originations to residential housing starts. */
@@ -228,7 +228,10 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
             + ($wholesaleDebt * $lendingWeight * $directLendingYield)
             + $expectedTreasuryIncome;
 
-        $optimalEbit = $optimalEbt + $optimalInterestExpense - $optimalInterestIncome;
+        // Pre-provision: the portfolio charge-off rate is booked against EBIT by the allowance roll-forward,
+        // so the ROE target is earned after it and the operating target has to fund it.
+        $optimalCreditProvision = $this->resolveThroughTheCycleCreditProvision($stock, $earningAssets);
+        $optimalEbit = $optimalEbt + $optimalInterestExpense - $optimalInterestIncome + $optimalCreditProvision;
         $minOperatingEbit = $earningAssets * self::MIN_OPERATING_EBIT_YIELD;
         $targetEbit = max($minOperatingEbit, $optimalEbit);
 
@@ -306,16 +309,13 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
         $corporateLendingDrag = $corporateDefaultShift * self::SHOCK_WEIGHT_CORPORATE_DEFAULT * $lendingWeight;
         $macroDefaultDrag = ($outputGap < 0.0 ? abs($outputGap) * self::MACRO_DEFAULT_SCALAR : 0.0) + ($retailDefaultShift * 0.10) + $propertyDrag + $corporateLendingDrag;
 
-        $creditSpread = $macroState->macroCreditSpreadEma;
-        $spreadGap = max(0.0, $creditSpread - self::CECL_BASELINE_CREDIT_SPREAD);
-        $recessionCeclDrag = max(0.0, ($macroState->recessionProbabilityEma - self::CECL_BASELINE_RECESSION_PROB) * self::CECL_RECESSION_SENSITIVITY);
-        $ceclForwardProvision = ($spreadGap * self::CECL_FORWARD_SENSITIVITY) + $recessionCeclDrag;
-
+        // The forward-looking CECL reserve (spreads, recession forecast) moves the allowance TARGET through
+        // getForwardCreditLossMultiplier(); the ledger roll-forward books the build once. Not a margin term.
         $lossProvisionShock = ($creditZ < self::CREDIT_STRESS_Z_THRESHOLD
             ? abs($creditZ) * self::LOSS_PROVISION_SCALAR
             : ($creditZ > self::HEALTHY_CREDIT_Z_FLOOR
                 ? - ($creditZ - self::HEALTHY_CREDIT_Z_FLOOR) * self::PROVISION_REVERSAL_SCALE
-                : 0.0)) + $macroDefaultDrag + $ceclForwardProvision;
+                : 0.0)) + $macroDefaultDrag;
 
         // Shadow Bank NIM Squeeze (high VULNERABILITY):
         $mortgageSpread = $yield30y - ($policyRate + $macroState->interbankLiquiditySpreadEma);
