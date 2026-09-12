@@ -306,4 +306,14 @@ class StandardCorporateBusinessModel implements BusinessModelInterface
             'wage_growth_ema',
         ];
     }
+
+    public function getFirmFactorLoading(): float
+    {
+        return static::FIRM_FACTOR_LOADING;
+    }
+
+    public function getSectorFactorLoading(): float
+    {
+        return static::SECTOR_FACTOR_LOADING;
+    }
 }

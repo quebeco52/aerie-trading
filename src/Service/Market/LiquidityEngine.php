@@ -23,8 +23,10 @@ use App\Service\Math\MathUtility;
  *  - The spread follows Wyart, Bouchaud, Kockelkoren, Potters & Vettorazzo (2008): S = c * sigma / sqrt(N).
  *    It hangs off the volatility the engine already simulates per name per tick, so a crash widens spreads
  *    on its own rather than through a second calibration.
- *  - Impact follows the Almgren-Chriss (2005) square-root law, split into a permanent part that stays in
- *    the price and a temporary part the taker pays and nobody keeps.
+ *  - Impact follows Almgren-Chriss (Almgren, Thum, Hauptmann & Li 2005), split into a permanent part that
+ *    stays in the price and a temporary part the taker pays and nobody keeps. The permanent part is LINEAR
+ *    in participation, which is not a simplification: Huberman & Stanzl (2004) show any other shape lets a
+ *    round trip move the price for free, and it is the only form that is additive across ticks.
  *
  * The split is the whole point. A single blended impact term that permanently moved the price by the full
  * execution cost would both overcharge the trader and inflate realized volatility.
@@ -128,9 +130,17 @@ final class LiquidityEngine
     /**
      * The log return a net signed quantity leaves permanently in the price.
      *
-     * Square-root in participation, signed by direction. Concave on purpose: splitting an order across
-     * ticks costs less total impact than sending it at once, which is precisely why real desks work orders
-     * rather than firing them.
+     * Linear in participation, signed by direction. This used to be the square-root law, which is the
+     * right shape for the TOTAL cost of a metaorder but the wrong one for a mark that is applied every
+     * tick and kept: a square root is concave, so the same daily flow sliced into N ticks left sqrt(N)
+     * times the mark of the same flow in one tick. At forty ticks a day the NPC agents' steady buying
+     * moved a name six times further than the calibration said, out-muscled fair-value reversion, and
+     * blew momentum bubbles to nearly twice fair value that the tick rate alone had manufactured.
+     *
+     * Linear is what the literature has for the permanent leg (Almgren, Thum, Hauptmann & Li 2005 estimate
+     * an exponent indistinguishable from one; Huberman & Stanzl 2004 prove it must be linear or a round
+     * trip manipulates the price). Its practical property here is additivity: a flow leaves the same mark
+     * whether it arrives in one tick or a thousand, so the result no longer depends on SIM_TICKS_PER_YEAR.
      *
      * @param Stock $stock          The name traded.
      * @param float $signedQuantity Positive for net buying, negative for net selling.
@@ -141,18 +151,17 @@ final class LiquidityEngine
             return 0.0;
         }
 
-        $participation = abs($signedQuantity) / $this->averageDailyVolume($stock);
-        $magnitude = FinancialConstants::PERMANENT_IMPACT_GAMMA * $this->dailyVolatility($stock) * sqrt($participation);
+        $participation = $signedQuantity / $this->averageDailyVolume($stock);
 
-        return $signedQuantity > 0.0 ? $magnitude : -$magnitude;
+        return FinancialConstants::PERMANENT_IMPACT_GAMMA * $this->dailyVolatility($stock) * $participation;
     }
 
     /**
      * Largest order the desk will take in one go, in shares.
      *
-     * Beyond this the square-root law is extrapolation rather than measurement. Refusing is the honest
-     * answer: capping the impact instead would make size free again above the cap, which is exactly the
-     * hole this engine exists to close.
+     * Beyond this the impact law is extrapolation rather than measurement. Refusing is the honest answer:
+     * capping the impact instead would make size free again above the cap, which is exactly the hole this
+     * engine exists to close.
      */
     public function maximumOrderSize(Stock $stock): float
     {

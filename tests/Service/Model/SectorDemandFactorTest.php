@@ -8,6 +8,9 @@ use App\DTO\MacroStateDTO;
 use App\DTO\StreamContext;
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
+use App\Service\Model\Sector\BaseFinancialBusinessModel;
+use App\Service\Model\Sector\BiotechBusinessModel;
+use App\Service\Model\Sector\CommercialBankBusinessModel;
 use App\Service\Model\Sector\HeavyManufacturingBusinessModel;
 use App\Service\Model\Sector\StandardCorporateBusinessModel;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
@@ -91,7 +94,23 @@ class SectorDemandFactorTest extends TestCase
 
     public function testRootLoadingsLeaveIdiosyncraticVariance(): void
     {
-        $corporate = (StandardCorporateBusinessModel::FIRM_FACTOR_LOADING ** 2) + (StandardCorporateBusinessModel::SECTOR_FACTOR_LOADING ** 2);
-        $this->assertLessThan(1.0, $corporate);
+        $corporate = new StandardCorporateBusinessModel();
+        $this->assertLessThan(1.0, $corporate->getFirmFactorLoading() ** 2 + $corporate->getSectorFactorLoading() ** 2);
+
+        $financial = new CommercialBankBusinessModel();
+        $this->assertLessThan(1.0, $financial->getFirmFactorLoading() ** 2 + $financial->getSectorFactorLoading() ** 2);
+        $this->assertSame(BaseFinancialBusinessModel::FIRM_FACTOR_LOADING, $financial->getFirmFactorLoading(), 'A financial model that declares no loading of its own inherits the financial root.');
+    }
+
+    /**
+     * The roots return their loadings late-bound, so a sector model that overrides only the constant must
+     * see its own value in the draw — the whole point of declaring the loading as a constant.
+     */
+    public function testASectorModelOverridesTheLoadingThroughTheConstantAlone(): void
+    {
+        $biotech = new BiotechBusinessModel();
+        $this->assertSame(BiotechBusinessModel::FIRM_FACTOR_LOADING, $biotech->getFirmFactorLoading());
+        $this->assertSame(BiotechBusinessModel::SECTOR_FACTOR_LOADING, $biotech->getSectorFactorLoading());
+        $this->assertNotSame(StandardCorporateBusinessModel::FIRM_FACTOR_LOADING, $biotech->getFirmFactorLoading());
     }
 }

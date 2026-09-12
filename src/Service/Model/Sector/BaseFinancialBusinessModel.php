@@ -53,4 +53,14 @@ abstract class BaseFinancialBusinessModel implements BusinessModelInterface
     public const FIRM_FACTOR_LOADING = 0.40;
     /** Two-factor loading of fee and spread streams on the persistent macro-sector demand factor (rho_s^2 = 12% variance shared with sector peers). */
     public const SECTOR_FACTOR_LOADING = 0.35;
+
+    public function getFirmFactorLoading(): float
+    {
+        return static::FIRM_FACTOR_LOADING;
+    }
+
+    public function getSectorFactorLoading(): float
+    {
+        return static::SECTOR_FACTOR_LOADING;
+    }
 }

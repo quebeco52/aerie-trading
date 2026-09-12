@@ -57,6 +57,8 @@ class AdvertisingAgencyBusinessModel extends StandardCorporateBusinessModel
     }
 
     // --- Balance Sheet Realism ---
+    /** Capitalized operating lease liabilities as a fraction of annual revenue (IFRS 16 / ASC 842). Agency networks lease their studio and office footprint in every market they serve. */
+    public const LEASE_LIABILITY_INTENSITY = 0.12;
     /** Stock-based compensation as a fraction of revenue (ASC 718): non-cash, added back to FCF, settled in new shares. Creative leadership retention grants. */
     public const STOCK_COMPENSATION_INTENSITY = 0.03;
 
@@ -100,6 +102,9 @@ class AdvertisingAgencyBusinessModel extends StandardCorporateBusinessModel
     {
         $physics = parent::getMacroPhysics($stock, $macroState);
 
+        // Nullify the generic demand shift: ad budgets follow the cycle and household confidence per stream in
+        // calculateSectorPhysics, so leaving the parent's shift in place would count the output gap twice.
+        $physics['macro_demand_shift'] = 0.0;
 
         return $physics;
     }

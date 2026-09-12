@@ -59,6 +59,10 @@ class LawFirmBusinessModel extends StandardCorporateBusinessModel
         return [0.95, 1.00, 0.95, 1.10];
     }
 
+    // --- Balance Sheet Realism ---
+    /** Capitalized operating lease liabilities as a fraction of annual revenue (IFRS 16 / ASC 842). Prime office space on ten-year terms is the one large non-payroll commitment a law firm carries. */
+    public const LEASE_LIABILITY_INTENSITY = 0.20;
+
     // --- Labor Intensity ---
     /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze. Partner and associate compensation is nearly the entire overhead of a law firm. */
     public const FIXED_COST_LABOR_SHARE = 0.85;

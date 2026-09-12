@@ -467,4 +467,19 @@ class CommodityBusinessModelTest extends TestCase
         $this->assertGreaterThan(0.0, $math->calculateConvenienceYield(70.0));
     }
 
+
+    /**
+     * Output is sold into a world market, so a strong domestic currency must reach expected demand through the
+     * declared FX exposure rather than being discarded by this model's own macro physics.
+     */
+    public function testAStrongCurrencyLowersExpectedDemandThroughTheDeclaredFxExposure(): void
+    {
+        $shift = fn (float $fxIndex): float => $this->model->getMacroPhysics((new Stock())->setTicker('CNDR_FX'), new MacroStateDTO(outputGapEma: 0.0, exchangeRateIndexEma: $fxIndex))['macro_demand_shift'];
+
+        $strong = $shift(110.0);
+        $flat = $shift(100.0);
+
+        $this->assertEqualsWithDelta(-0.10 * CommodityBusinessModel::FX_REVENUE_EXPOSURE, $strong - $flat, 1e-9);
+        $this->assertLessThan(0.0, $strong - $flat, 'A stronger domestic currency prices exports out of foreign markets.');
+    }
 }

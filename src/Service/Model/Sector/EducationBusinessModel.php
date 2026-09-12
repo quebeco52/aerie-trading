@@ -105,6 +105,9 @@ class EducationBusinessModel extends StandardCorporateBusinessModel
     {
         $physics = parent::getMacroPhysics($stock, $macroState);
 
+        // Nullify the generic demand shift: enrollment is counter-cyclical and corporate training pro-cyclical,
+        // each handled per stream in calculateSectorPhysics, so the parent's shift would count the gap twice.
+        $physics['macro_demand_shift'] = 0.0;
 
         return $physics;
     }

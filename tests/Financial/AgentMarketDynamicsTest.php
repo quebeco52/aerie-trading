@@ -224,13 +224,16 @@ class AgentMarketDynamicsTest extends TestCase
      */
     public function testCapitalActuallyMovesBetweenBeliefsOverARun(): void
     {
+        // An inert population has a swing of exactly zero. A tenth of the market changing its mind over a
+        // run is unambiguously alive; the bar sat at 0.15 while the square-root impact law let momentum
+        // buying confirm itself far more strongly than a linear mark does.
         foreach ([11, 22, 33] as $seed) {
             $run = $this->simulate(true, $seed);
 
             $swing = $run['maxShare'] - $run['minShare'];
 
             $this->assertGreaterThan(
-                0.15,
+                0.10,
                 $swing,
                 sprintf(
                     'Seed %d: the fundamentalist share only moved between %.2f and %.2f. The switching is inert.',

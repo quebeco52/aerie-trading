@@ -63,6 +63,10 @@ class MedicalCareFacilityBusinessModel extends StandardCorporateBusinessModel
     /** Capitalized operating lease liabilities as a fraction of annual revenue (IFRS 16 / ASC 842). Hospital campuses and clinics under long-term leases. */
     public const LEASE_LIABILITY_INTENSITY = 0.30;
 
+    // --- Coverage Sensitivity ---
+    /** Elective outpatient volume lost per unit of unemployment above the natural rate (2.0 = -2% volume per point): job loss ends employer coverage and elective procedures are deferred. */
+    public const UNEMPLOYMENT_ELECTIVE_SENSITIVITY = 2.0;
+
     // --- Labor Intensity ---
     /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze. Nursing and clinical staff payroll dominates hospital overhead. */
     public const FIXED_COST_LABOR_SHARE = 0.70;
@@ -197,8 +201,10 @@ class MedicalCareFacilityBusinessModel extends StandardCorporateBusinessModel
         $inflation = $macroState->inflationEma;
 
         // Inpatient care is completely inelastic (0.0 output gap sensitivity)
-        // Elective outpatient procedures are pro-cyclical with consumer wealth
-        $outpatientMacroBoost = ($outputGap * 1.2 * $beta);
+        // Elective outpatient procedures are pro-cyclical with consumer wealth, and are deferred outright when
+        // job losses strip employer coverage: the uninsured postpone the knee, not the heart attack.
+        $unemploymentGap = max(0.0, $macroState->unemploymentRateEma - MacroEngine::NATURAL_UNEMPLOYMENT);
+        $outpatientMacroBoost = ($outputGap * 1.2 * $beta) - ($unemploymentGap * self::UNEMPLOYMENT_ELECTIVE_SENSITIVITY);
 
         // Insurance arbitrage expands when general & medical inflation accelerates
         $inflationExcess = max(0.0, $inflation - MacroEngine::TARGET_INFLATION);
@@ -284,6 +290,7 @@ class MedicalCareFacilityBusinessModel extends StandardCorporateBusinessModel
             'producer_price_inflation_ema',
             'supercore_inflation_ema',
             'tips_breakeven_ema',
+            'unemployment_rate_ema',
             'wage_growth_ema',
         ];
     }

@@ -41,6 +41,10 @@ class InternetRetailBusinessModel extends StandardCorporateBusinessModel
     /** Shares of the variable cost base bought in tracked input markets (energy, metals, agri, freight, wholesale goods, variable payroll). */
     public const INPUT_COST_EXPOSURES = ['ppi' => 0.45, 'freight' => 0.08, 'labor' => 0.25, 'energy' => 0.03];
 
+    // --- Consumer Demand ---
+    /** Elasticity of first-party retail volume to the consumer sentiment gap (index points above baseline / 100). Discretionary baskets follow household confidence ahead of the output gap. */
+    public const CONSUMER_SENTIMENT_SCALAR = 0.60;
+
     // --- Labor Intensity ---
     /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze. Technology and corporate payroll are fixed while fulfilment labor flexes with order volume. */
     public const FIXED_COST_LABOR_SHARE = 0.55;
@@ -163,9 +167,11 @@ class InternetRetailBusinessModel extends StandardCorporateBusinessModel
 
         // --- Macro Sensitivities ---
         $outputGap = $macroState->outputGapEma;
+        $sentimentShift = ($macroState->consumerSentimentIndexEma - MacroEngine::SENTIMENT_BASELINE) / 100.0;
 
-        // 1P Retail bears the absolute brunt of consumer recessions
-        $fpMacroShift = $outputGap * 2.0 * $beta;
+        // 1P Retail bears the absolute brunt of consumer recessions, and household confidence moves the basket
+        // before the output gap does: a shopper who fears for their job trades down while GDP is still growing.
+        $fpMacroShift = (($outputGap * 2.0) + ($sentimentShift * self::CONSUMER_SENTIMENT_SCALAR)) * $beta;
 
         // 3P and Ads are partially insulated, acting as a structural tollbooth
         $tpMacroShift = $outputGap * 0.5 * $beta;
@@ -260,6 +266,7 @@ class InternetRetailBusinessModel extends StandardCorporateBusinessModel
     public function getOperatingMacroFields(): array
     {
         return [
+            'consumer_sentiment_index_ema',
             'energy_cost_push_lag',
             'exchange_rate_index_ema',
             'freight_rate_index_ema',

@@ -137,17 +137,38 @@ class LiquidityEngineTest extends TestCase
         }
     }
 
-    public function testImpactGrowsWithTheSquareRootOfSizeNotLinearly(): void
+    public function testPermanentImpactIsLinearInSize(): void
     {
-        // Concave on purpose. It is why working an order in pieces costs less than firing it at once, and
-        // why a linear impact model would make every large trade impossible instead of merely expensive.
+        // Linear, not concave. The permanent leg is kept in the price and applied every tick, so it has to
+        // be additive: a concave law would let the same flow leave a bigger mark simply by arriving in
+        // more, smaller pieces (Huberman & Stanzl 2004).
         $stock = $this->stock();
         $adv = $this->engine->averageDailyVolume($stock);
 
         $single = $this->engine->permanentImpact($stock, $adv * 0.04);
         $quadruple = $this->engine->permanentImpact($stock, $adv * 0.16);
 
-        $this->assertEqualsWithDelta(2.0, $quadruple / $single, 1e-9);
+        $this->assertEqualsWithDelta(4.0, $quadruple / $single, 1e-9);
+    }
+
+    /**
+     * The defect this guards against: at 14,400 ticks a year a day is forty ticks, and a square-root law
+     * applied per tick charged the NPC agents' steady buying sqrt(40) times the mark the calibration
+     * promised, which is what blew momentum bubbles to twice fair value.
+     */
+    public function testADaysFlowLeavesTheSameMarkWhetherItArrivesInOneTickOrForty(): void
+    {
+        $stock = $this->stock();
+        $dailyFlow = $this->engine->averageDailyVolume($stock) * 0.30;
+
+        $oneBlock = $this->engine->permanentImpact($stock, $dailyFlow);
+
+        $sliced = 0.0;
+        for ($tick = 0; $tick < 40; $tick++) {
+            $sliced += $this->engine->permanentImpact($stock, $dailyFlow / 40.0);
+        }
+
+        $this->assertEqualsWithDelta($oneBlock, $sliced, 1e-12);
     }
 
     public function testImpactIsSignedByDirectionAndZeroWhenFlowNets(): void

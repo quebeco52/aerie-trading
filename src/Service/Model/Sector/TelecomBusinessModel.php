@@ -102,6 +102,8 @@ class TelecomBusinessModel extends StandardCorporateBusinessModel
     public const BASE_QUARTERLY_CHURN = 0.03;
     /** Volatility multiplier on gross adds relative to the replacement rate (one sigma ~ +-0.9% of the base at 20% vol). */
     public const GROSS_ADDS_VARIANCE_SCALAR = 1.50;
+    /** Extra quarterly churn per unit of unemployment above the natural rate (0.10 = +10bps of churn per point of excess unemployment): involuntary disconnects and non-payment rise with job losses. */
+    public const UNEMPLOYMENT_CHURN_SENSITIVITY = 0.10;
     /** Floor on the subscriber index after sustained churn wars. */
     public const MIN_SUBSCRIBER_INDEX = 0.50;
     /** Ceiling on the subscriber index within a saturated market. */
@@ -208,7 +210,10 @@ class TelecomBusinessModel extends StandardCorporateBusinessModel
         // quarter's net adds forward. Demand shocks move gross adds; the cycle moves ARPU (plan downgrades,
         // not cancellations); a price war lifts churn, forces promotional gross adds and discounts ARPU.
         $openingSubscribers = $streams->getPersistedState(self::STATE_SUBSCRIBER_INDEX, 1.0);
-        $churnRate = self::BASE_QUARTERLY_CHURN + ($inPriceWar ? self::PRICE_WAR_CHURN_UPLIFT : 0.0);
+        $unemploymentGap = max(0.0, $macroState->unemploymentRateEma - MacroEngine::NATURAL_UNEMPLOYMENT);
+        $churnRate = self::BASE_QUARTERLY_CHURN
+            + ($inPriceWar ? self::PRICE_WAR_CHURN_UPLIFT : 0.0)
+            + ($unemploymentGap * self::UNEMPLOYMENT_CHURN_SENSITIVITY);
         $grossAddsRate = max(0.0, self::BASE_QUARTERLY_CHURN
             * (1.0 + ($subscriptionZ * $baselineVol * self::GROSS_ADDS_VARIANCE_SCALAR))
             * ($inPriceWar ? (1.0 + self::PRICE_WAR_GROSS_ADDS_RESPONSE) : 1.0));
@@ -305,6 +310,7 @@ class TelecomBusinessModel extends StandardCorporateBusinessModel
             'output_gap_ema',
             'producer_price_inflation_ema',
             'tips_breakeven_ema',
+            'unemployment_rate_ema',
             'wage_growth_ema',
         ];
     }

@@ -34,7 +34,6 @@ enum ModelParam: string
     case FloatEquityWeight = 'float_equity_weight';
     case EquityPortfolioVol = 'equity_portfolio_vol';
     case PncWeight = 'pnc_weight';
-    case LifeAnnuityWeight = 'life_annuity_weight';
     case PropertyCasualtyWeight = 'property_casualty_weight';
     case LifeAndAnnuityWeight = 'life_and_annuity_weight';
     case TreatyReinsuranceWeight = 'treaty_reinsurance_weight';

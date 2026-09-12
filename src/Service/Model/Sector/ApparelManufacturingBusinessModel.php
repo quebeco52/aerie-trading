@@ -55,6 +55,10 @@ class ApparelManufacturingBusinessModel extends StandardCorporateBusinessModel
     /** Years for a move in the output gap to reach the order book. Wholesale orders are placed two seasons ahead against a buying calendar, not against current demand. */
     public const DEMAND_LAG_YEARS = 0.50;
 
+    // --- FX Exposure ---
+    /** Share of revenue whose competitiveness moves with the trade-weighted exchange rate. Wholesale and DTC exports translate home, and the domestic shelf meets importers who reprice when the currency does. */
+    public const FX_REVENUE_EXPOSURE = 0.15;
+
     // --- Inventory Cycle ---
     /** Order sensitivity to the economy-wide inventory-to-sales gap (Metzler cycle): overhangs trigger destocking, shortfalls restocking. Retailer inventory-to-sales ratios gate wholesale reorders. */
     public const INVENTORY_CYCLE_SENSITIVITY = 0.50;
@@ -239,7 +243,7 @@ class ApparelManufacturingBusinessModel extends StandardCorporateBusinessModel
         $tradeDownScalar = self::TRADE_DOWN_SCALAR * (1.5 - $pricingPower);
         $tradeDownBonus = $outputGap < 0.0 ? abs($outputGap) * $tradeDownScalar : 0.0;
         $proCyclicalDemand = ($outputGap * self::OUTPUT_GAP_SCALAR) + ($sentimentShift * self::CONSUMER_SENTIMENT_SCALAR);
-        $blendedDemandShift = ($proCyclicalDemand * $beta) + $tradeDownBonus;
+        $blendedDemandShift = ($proCyclicalDemand * $beta) + $tradeDownBonus + $this->resolveFxDemandShift($macroState);
 
         return [
             'macro_demand_shift' => $blendedDemandShift,

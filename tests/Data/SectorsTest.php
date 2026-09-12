@@ -75,4 +75,28 @@ class SectorsTest extends TestCase
             $this->assertInstanceOf(BusinessModelInterface::class, $strategy, "Model {$key} in descriptions must resolve to a valid strategy");
         }
     }
+
+
+    /**
+     * Catalog industries with no model of their own are aliased to the nearest real model rather than falling
+     * through to the generic corporate physics, so a future ticker in one of them inherits sector behaviour.
+     */
+    #[DataProvider('aliasedIndustryProvider')]
+    public function testCatalogIndustriesAliasToTheNearestRealModel(string $industry, string $model): void
+    {
+        $this->assertSame($model, Sectors::INDUSTRY_METRICS[$industry]['business_model']);
+    }
+
+    /** @return iterable<string, array{string, string}> */
+    public static function aliasedIndustryProvider(): iterable
+    {
+        yield 'trucking runs the logistics book' => ['Trucking', 'logistics'];
+        yield 'footwear shares the apparel channel mix' => ['Footwear & Accessories', 'apparel_manufacturing'];
+        yield 'lodging is hospitality' => ['Lodging', 'resorts_casinos'];
+        yield 'hotel REITs carry the variable hospitality lease' => ['REIT - Hotel & Motel', 'reit'];
+        yield 'homebuilders are construction' => ['Residential Construction', 'construction'];
+        yield 'components ride the hardware cycle' => ['Electronic Components', 'computer_hardware'];
+        yield 'pollution controls are waste management' => ['Pollution & Treatment Controls', 'waste_management'];
+        yield 'consulting is a professional-services partnership' => ['Consulting Services', 'law_firm'];
+    }
 }

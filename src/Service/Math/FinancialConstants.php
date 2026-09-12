@@ -462,12 +462,12 @@ class FinancialConstants
     /** Ceiling on the quoted half-spread (2%), so even a distressed name stays tradable at a price. */
     public const MAX_HALF_SPREAD = 0.02;
 
-    // --- Market Microstructure: Impact (Almgren & Chriss 2005) ---
-    /** Square-root law coefficient. At 1.0 the canonical statement holds: trading one full day's volume moves the price by about one daily standard deviation. */
+    // --- Market Microstructure: Impact (Almgren, Thum, Hauptmann & Li 2005) ---
+    /** Linear permanent impact coefficient. At 1.0 trading one full day's volume moves the price by one daily standard deviation; linear so the mark is additive across ticks and independent of the tick rate (Huberman & Stanzl 2004). */
     public const PERMANENT_IMPACT_GAMMA = 1.00;
     /** Temporary impact as a share of the permanent move. The price walks to its new level while the order fills, so the taker's average fill is the midpoint of that walk: exactly one half. */
     public const TEMPORARY_IMPACT_ETA = 0.50;
-    /** Largest multiple of average daily volume a single order may consume. Past it the square-root law is extrapolation, and a capped impact would be a free lunch for size. */
+    /** Largest multiple of average daily volume a single order may consume. Past it the impact law is extrapolation, and a capped impact would be a free lunch for size. */
     public const MAX_ORDER_ADV_MULTIPLE = 2.00;
     /** Flat half-spread on a broad index ETF. Creation and redemption keep it pinned to the basket, so it quotes tighter than any single constituent. */
     public const ETF_HALF_SPREAD = 0.0001;

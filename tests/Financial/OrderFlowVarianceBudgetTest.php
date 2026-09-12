@@ -232,11 +232,16 @@ class OrderFlowVarianceBudgetTest extends TestCase
      * than its entire daily volume genuinely IS more volatile than one where they do not, and the cap is
      * what stops heavy flow from suppressing the diffusion — and with it the fundamental anchoring — to
      * nothing. The threshold is asserted so the trade-off stays visible if the cap is ever retuned.
+     *
+     * The churn needed to get there is several times daily volume because permanent impact is linear:
+     * randomly signed slices add variance in proportion to the sum of their SQUARES, so fine-grained
+     * two-way churn nets out almost entirely and only the net flow leaves a mark. Under the square-root
+     * law this test once used 1.2x daily volume, which was the concavity charging every slice in full.
      */
     public function testTheCapBindsOnlyUnderImplausiblyHeavyChurn(): void
     {
         $baseline = $this->realizedVolatility(0.0, true);
-        $churned = $this->realizedVolatility($this->perTickFraction(1.20), true);
+        $churned = $this->realizedVolatility($this->perTickFraction(6.00), true);
 
         $this->assertGreaterThan(
             $baseline + 0.02,

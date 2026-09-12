@@ -55,6 +55,14 @@ class TechBusinessModel extends StandardCorporateBusinessModel
     /** Stock-based compensation as a fraction of revenue (ASC 718): non-cash, added back to FCF, settled in new shares. Engineering talent is paid heavily in equity; FCF runs well above GAAP earnings. */
     public const STOCK_COMPENSATION_INTENSITY = 0.10;
 
+    // --- FX Exposure ---
+    /** Share of revenue whose competitiveness moves with the trade-weighted exchange rate. Software and cloud are sold worldwide from a home cost base, so a strong domestic currency translates foreign ARR down. */
+    public const FX_REVENUE_EXPOSURE = 0.15;
+
+    // --- Demand Transmission Lag ---
+    /** Years for a move in the output gap to reach bookings. Enterprise IT budgets are set annually, so a downturn cuts renewals and seats at the next budget round, not this quarter. */
+    public const DEMAND_LAG_YEARS = 0.50;
+
     // --- Labor Intensity ---
     /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze. Engineering and go-to-market payroll dominates software overhead; talent inflation bites hardest here. */
     public const FIXED_COST_LABOR_SHARE = 0.75;

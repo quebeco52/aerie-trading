@@ -19,12 +19,12 @@ use App\Service\Model\Trait\StandardValuationTrait;
 /**
  * The standard trait stack composed with nothing configured on top of it.
  *
- * Almost every default in these traits sits behind a `defined('static::CONST')` gate, so the fallback
+ * Every default in these traits sits behind a `defined('static::CONST')` gate, so the fallback
  * branch runs only for a model that declines to declare the constant. Every shipped sector model declares
  * most of them, which means those fallbacks are the least-exercised code in the operating physics despite
- * being the behaviour a new sector model inherits on the day it is written. This composer declares only
- * FIRM_FACTOR_LOADING (the one constant the stack reads ungated) so a test can address the defaults
- * directly instead of hoping some sector happens to leave one unset.
+ * being the behaviour a new sector model inherits on the day it is written. This composer declares only the
+ * two factor loadings, which the stack requires of every root rather than defaulting, so a test can address
+ * the gated defaults directly instead of hoping some sector happens to leave one unset.
  */
 class BareStandardModel
 {
@@ -36,11 +36,24 @@ class BareStandardModel
     use StandardMaTrait;
     use StandardValuationTrait;
 
-    /** The only constant the standard stack reads without a `defined()` gate. */
+    // --- Firm-Level Common Factor ---
+    /** One-factor loading on the firm-wide demand innovation, matching the corporate root. */
     public const FIRM_FACTOR_LOADING = 0.60;
+    /** Loading on the persistent sector demand factor; zero keeps the bare stack on the one-factor model. */
+    public const SECTOR_FACTOR_LOADING = 0.0;
 
     /** Dollars of the stub's revenue that are pure price, so a test can drive the price/volume cost split. */
     public float $stubPriceRevenue = 0.0;
+
+    public function getFirmFactorLoading(): float
+    {
+        return static::FIRM_FACTOR_LOADING;
+    }
+
+    public function getSectorFactorLoading(): float
+    {
+        return static::SECTOR_FACTOR_LOADING;
+    }
 
     /**
      * The one member of the stack with no default: the template method requires each sector to say how its

@@ -12,6 +12,7 @@ use App\Service\Model\Sector\StandardCorporateBusinessModel;
 use App\Service\Model\Sector\TelecomBusinessModel;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use App\DTO\StreamContext;
+use App\Service\Macro\MacroEngine;
 use PHPUnit\Framework\TestCase;
 
 #[AllowMockObjectsWithoutExpectations]
@@ -211,4 +212,27 @@ class TelecomBusinessModelTest extends TestCase
         $this->assertLessThan(1.0, $after->kpis['subscriber_index']);
     }
 
+
+    /**
+     * Involuntary disconnects rise with job losses, so unemployment above the natural rate must lift churn
+     * above the gross adds that replace it and erode the subscriber base even with no price war running.
+     */
+    public function testUnemploymentAboveTheNaturalRateLiftsChurnAndErodesTheSubscriberBase(): void
+    {
+        $math = $this->createStub(MathUtility::class);
+        $math->method('generatePersistentZ')->willReturn(0.0);
+
+        $run = function (float $unemployment) use ($math): float {
+            $stock = (new Stock())->setTicker('LOON_JOBS')->setBeta('0.8');
+
+            return $this->model->computeActualFinancials($stock, 100_000_000.0, 0.45, 20_000_000.0, 0.0, new MacroStateDTO(outputGapEma: 0.0, unemploymentRateEma: $unemployment), $math)->kpis['subscriber_index'];
+        };
+
+        $this->assertEqualsWithDelta(1.0, $run(MacroEngine::NATURAL_UNEMPLOYMENT), 1e-9, 'At the natural rate gross adds exactly replace churn.');
+
+        $excess = 0.04;
+        $expectedIndex = 1.0 - ($excess * TelecomBusinessModel::UNEMPLOYMENT_CHURN_SENSITIVITY);
+        $this->assertEqualsWithDelta($expectedIndex, $run(MacroEngine::NATURAL_UNEMPLOYMENT + $excess), 1e-9);
+        $this->assertEqualsWithDelta(1.0, $run(MacroEngine::NATURAL_UNEMPLOYMENT - 0.01), 1e-9, 'A tight labor market does not create subscribers who already have a phone.');
+    }
 }

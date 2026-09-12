@@ -59,6 +59,10 @@ class ChemicalBusinessModel extends StandardCorporateBusinessModel
     /** Years for a move in the output gap to reach the order book. Offtake contracts and plant scheduling hold volumes steady for a couple of quarters after the cycle turns. */
     public const DEMAND_LAG_YEARS = 0.50;
 
+    // --- FX Exposure ---
+    /** Share of revenue whose competitiveness moves with the trade-weighted exchange rate. Base chemicals trade on delivered price against foreign crackers; specialties and agrochemicals are largely sold abroad. */
+    public const FX_REVENUE_EXPOSURE = 0.15;
+
     // --- Analyst Visibility & Error ---
     /** Base coverage visibility for chemical sector analysts tracking feedstock crack spreads. */
     public const BASE_COVERAGE_VISIBILITY = 0.40;
@@ -232,7 +236,8 @@ class ChemicalBusinessModel extends StandardCorporateBusinessModel
         // and agricultural commodities for agrochemicals.
         $pmiShift = MathUtility::calculatePmiDemandShift($macroState->manufacturingPmi, sensitivity: self::PMI_DEMAND_SENSITIVITY);
         $industrialDemand = ($outputGap * self::BASE_PETRO_OUTPUT_GAP_SCALAR) + ($metalsShift * self::BASE_PETRO_METALS_SCALAR) + $pmiShift;
-        $blendedDemandShift = ($industrialDemand * $beta * self::INDUSTRIAL_DEMAND_WEIGHT) + ($agriShift * self::AGRI_DEMAND_WEIGHT);
+        $blendedDemandShift = ($industrialDemand * $beta * self::INDUSTRIAL_DEMAND_WEIGHT) + ($agriShift * self::AGRI_DEMAND_WEIGHT)
+            + $this->resolveFxDemandShift($macroState);
 
         return [
             'macro_demand_shift' => $blendedDemandShift,
@@ -386,6 +391,7 @@ class ChemicalBusinessModel extends StandardCorporateBusinessModel
         return [
             'agricultural_commodity_index_ema',
             'energy_cost_push_lag',
+            'exchange_rate_index_ema',
             'freight_rate_index_ema',
             'industrial_metals_index_ema',
             'manufacturing_pmi',

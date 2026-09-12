@@ -16,9 +16,11 @@ namespace App\Tests\Support\Model;
 final class ConfiguredStandardModel extends BareStandardModel
 {
     // --- Base Model ---
+    /** Loading on the firm-wide demand factor; distinct from the bare composer's 0.60. */
+    public const FIRM_FACTOR_LOADING = 0.70;
     /** Elasticity of volumes to the macro cycle; distinct from the trait's unit fallback. */
     public const OPERATING_CYCLICALITY = 1.80;
-    /** Loading on the sector demand factor; the trait falls back to zero (one-factor firm model). */
+    /** Loading on the sector demand factor; the bare composer sits at zero (one-factor firm model). */
     public const SECTOR_FACTOR_LOADING = 0.30;
 
     // --- Debt Physics ---

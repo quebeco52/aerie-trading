@@ -57,6 +57,10 @@ class CommodityBusinessModel extends StandardCorporateBusinessModel
         return [1.03, 0.98, 0.97, 1.02];
     }
 
+    // --- FX Exposure ---
+    /** Share of revenue whose competitiveness moves with the trade-weighted exchange rate. Output is priced in the world market, so a strong domestic currency shrinks every tonne's home-currency realization. */
+    public const FX_REVENUE_EXPOSURE = 0.30;
+
     // --- Labor Intensity ---
     /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze. Extraction overhead is dominated by rigs, mines and royalties, not payroll. */
     public const FIXED_COST_LABOR_SHARE = 0.30;
@@ -170,7 +174,8 @@ class CommodityBusinessModel extends StandardCorporateBusinessModel
         $physics['pricing_power_multiplier'] = 1.0;
         // Inflation is carried inside this model's own stream physics: neither price nor cost base inflates at the engine level.
         $physics['input_cost_multiplier'] = 1.0;
-        $physics['macro_demand_shift'] = $this->resolveLaggedOutputGap($stock, $macroState) * self::MACRO_DEMAND_BETA_SCALAR * $this->getOperatingCyclicality($stock);
+        $physics['macro_demand_shift'] = ($this->resolveLaggedOutputGap($stock, $macroState) * self::MACRO_DEMAND_BETA_SCALAR * $this->getOperatingCyclicality($stock))
+            + $this->resolveFxDemandShift($macroState);
 
         return $physics;
     }

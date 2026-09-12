@@ -37,14 +37,15 @@ final class StandardBaseModelTraitTest extends TestCase
     }
 
     /**
-     * The sector factor is the optional half of the two-factor demand model: a model that declares no
-     * loading falls back to the one-factor firm model rather than to some default correlation with peers.
+     * Both loadings are read late-bound from the class constant, so a sector model that overrides only the
+     * constant changes the draw without touching the getter. A zero sector loading is the one-factor model.
      */
-    public function testSectorFactorLoadingFallsBackToTheOneFactorModel(): void
+    public function testFactorLoadingsAreReadLateBoundFromTheClassConstant(): void
     {
-        $this->assertSame(0.0, $this->model->getSectorFactorLoading(), 'An undeclared sector loading means no peer correlation at all.');
-        $this->assertSame(0.30, (new ConfiguredStandardModel())->getSectorFactorLoading(), 'A declared loading must reach the draw.');
-        $this->assertSame(0.60, $this->model->getFirmFactorLoading(), 'The firm loading is read ungated from the class.');
+        $this->assertSame(0.0, $this->model->getSectorFactorLoading(), 'A zero sector loading means no peer correlation at all.');
+        $this->assertSame(0.30, (new ConfiguredStandardModel())->getSectorFactorLoading(), 'An overridden sector constant must reach the draw.');
+        $this->assertSame(0.60, $this->model->getFirmFactorLoading());
+        $this->assertSame(0.70, (new ConfiguredStandardModel())->getFirmFactorLoading(), 'An overridden firm constant must reach the draw.');
 
         // The two loadings must leave idiosyncratic variance behind, or a stream is fully explained by factors.
         $configured = new ConfiguredStandardModel();

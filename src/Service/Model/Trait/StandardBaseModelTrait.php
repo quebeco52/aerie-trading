@@ -42,24 +42,19 @@ trait StandardBaseModelTrait
 
     /**
      * One-factor loading that every revenue stream drawn through createStreamContext() places on the
-     * firm-wide demand innovation. Both model roots define FIRM_FACTOR_LOADING; sector models override
-     * the constant (conglomerates lower, single-product firms higher).
+     * firm-wide demand innovation. Each model root (StandardCorporateBusinessModel, BaseFinancialBusinessModel)
+     * declares FIRM_FACTOR_LOADING and returns it late-bound, so a sector model changes the loading by
+     * overriding the constant alone.
      */
-    public function getFirmFactorLoading(): float
-    {
-        return static::FIRM_FACTOR_LOADING;
-    }
+    abstract public function getFirmFactorLoading(): float;
 
     /**
      * Loading every revenue stream places on the persistent demand factor of the firm's macro sector
      * (MacroStateDTO::$sectorDemandZ). Peers in one sector share customers and input markets, so a slump
      * in industrial orders reaches every machinery maker's book together; the firm factor above carries the
-     * remainder. Both roots define SECTOR_FACTOR_LOADING and rho_f^2 + rho_s^2 stays below one.
+     * remainder. Declared on each root as SECTOR_FACTOR_LOADING; rho_f^2 + rho_s^2 must stay below one.
      */
-    public function getSectorFactorLoading(): float
-    {
-        return defined('static::SECTOR_FACTOR_LOADING') ? (float) static::SECTOR_FACTOR_LOADING : 0.0;
-    }
+    abstract public function getSectorFactorLoading(): float;
 
     /**
      * Builds the quarterly stream context with this model's firm-factor and sector-factor loadings applied.
