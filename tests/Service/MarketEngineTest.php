@@ -26,7 +26,7 @@ class MarketEngineTest extends TestCase
         $this->engine = new MarketEngine($this->mathUtilityMock);
     }
 
-    public function testCalculateNextPriceWithoutJump()
+    public function testCalculateNextPriceWithoutJump(): void
     {
         $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
         $this->mathUtilityMock->method('checkProbability')->willReturn(false);
@@ -37,8 +37,7 @@ class MarketEngineTest extends TestCase
             longTermVolatility: 0.2,
             earningsPerShare: 5.0,
             dt: 1.0,
-            lambda: 0.0, // lambda = 0 means NO jump
-            drift: 0.1
+            lambda: 0.0 // lambda = 0 means NO jump
         );
 
         $result = $this->engine->calculateNextPrice($ctx);
@@ -46,16 +45,21 @@ class MarketEngineTest extends TestCase
         $this->assertIsArray($result);
         $this->assertNull($result['shock'], 'Shock should be null when no jump occurs.');
 
-        // The variance anchor sits below the 20% long-run input because the market-wide jump budget reclaims
-        // part of it: at unit beta the district jump delivers more variance than the 25% ceiling allows, so
-        // the drag binds at a quarter of long-run variance and the diffusion settles at sqrt(0.03).
-        $this->assertEqualsWithDelta(0.1723, $result['next_volatility'], 0.001);
+        // The figure returned is the name's TOTAL volatility, and every source is accounted for: the
+        // systematic loading (beta * marketVol)^2 = 0.0225, the market-wide jump's 0.004375 — its 25%
+        // ceiling against a long-run idiosyncratic target of 0.04 - 0.0225 = 0.0175 — and the 0.013125 of
+        // idiosyncratic diffusion left over. Those sum back to exactly the 0.04 configured, so the answer
+        // sits just under the 20% input, short only by where the variance step itself landed this draw.
+        $this->assertEqualsWithDelta(0.1949, $result['next_volatility'], 0.001);
+
+        // Whatever the variance process is doing, a name can never be quieter than its own market loading.
+        $this->assertGreaterThan(0.15, $result['next_volatility'], 'Total volatility must cover beta * marketVol.');
 
         $this->assertIsFloat($result['price']);
         $this->assertGreaterThan(0, $result['price']);
     }
 
-    public function testCalculateNextPriceWithGuaranteedJump()
+    public function testCalculateNextPriceWithGuaranteedJump(): void
     {
         $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
         $this->mathUtilityMock->method('checkProbability')->willReturn(true);
@@ -67,8 +71,7 @@ class MarketEngineTest extends TestCase
             earningsPerShare: 5.0,
             dt: 1.0,
             lambda: 1000.0, // massive lambda guarantees checkProbability triggers
-            jumpVol: 0.05,
-            drift: 0.1
+            jumpVol: 0.05
         );
 
         $result = $this->engine->calculateNextPrice($ctx);
@@ -81,7 +84,7 @@ class MarketEngineTest extends TestCase
         $this->assertGreaterThan(0, $result['next_volatility']);
     }
 
-    public function testReversionToFairValue()
+    public function testReversionToFairValue(): void
     {
         $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
         $this->mathUtilityMock->method('checkProbability')->willReturn(false);
@@ -92,9 +95,7 @@ class MarketEngineTest extends TestCase
             longTermVolatility: 0.2,
             earningsPerShare: 5.0,
             dt: 1.0,
-            lambda: 0.0,
-            drift: 0.0,
-            reversionSpeed: 0.5,
+            lambda: 0.0,            reversionSpeed: 0.5,
             bookValuePerShare: 50.0,
             currentRoic: 0.10,
             roicTtm: 0.10,
@@ -106,7 +107,7 @@ class MarketEngineTest extends TestCase
         $this->assertGreaterThan(50.0, $result['price'], 'Undervalued price should drift upwards towards fair value.');
     }
 
-    public function testEvaluateFundamentalStateLowMarginHighRevenueNotInflated()
+    public function testEvaluateFundamentalStateLowMarginHighRevenueNotInflated(): void
     {
         $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
         $this->mathUtilityMock->method('checkProbability')->willReturn(false);
@@ -117,9 +118,7 @@ class MarketEngineTest extends TestCase
             longTermVolatility: 0.2,
             earningsPerShare: 0.50, // low margin
             dt: 1.0,
-            lambda: 0.0,
-            drift: 0.0,
-            reversionSpeed: 0.25,
+            lambda: 0.0,            reversionSpeed: 0.25,
             bookValuePerShare: 25.0,
             currentRoic: 0.08,
             roicTtm: 0.08,
@@ -134,7 +133,7 @@ class MarketEngineTest extends TestCase
         $this->assertLessThan(35.0, $result['perceived_fair_value'], 'Low-margin firm should not receive bubble fair value.');
     }
 
-    public function testEstarReversionAndFundingLiquidityDampening()
+    public function testEstarReversionAndFundingLiquidityDampening(): void
     {
         $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
         $this->mathUtilityMock->method('checkProbability')->willReturn(false);
@@ -172,7 +171,7 @@ class MarketEngineTest extends TestCase
         );
     }
 
-    public function testDynamicDdmHaircutOnUnsustainableDividend()
+    public function testDynamicDdmHaircutOnUnsustainableDividend(): void
     {
         $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
         $this->mathUtilityMock->method('checkProbability')->willReturn(false);
@@ -245,7 +244,7 @@ class MarketEngineTest extends TestCase
         $this->assertEqualsWithDelta(0.6, $triplePayout / $fullPayout, 1e-9);
     }
 
-    public function testTechSectorIgnoresBookValueInValuation()
+    public function testTechSectorIgnoresBookValueInValuation(): void
     {
         $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
         $this->mathUtilityMock->method('checkProbability')->willReturn(false);
@@ -283,8 +282,7 @@ class MarketEngineTest extends TestCase
                 earningsPerShare: 5.0,
                 dt: 1.0 / 252.0,
                 lambda: 2.0,
-                jumpVol: 0.10,
-                drift: 0.08
+                jumpVol: 0.10
             );
 
             $result = $this->engine->calculateNextPrice($ctx);

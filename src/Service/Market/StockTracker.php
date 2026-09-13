@@ -104,7 +104,9 @@ class StockTracker
                     'industry' => $stock->getIndustry() ?: 'General',
                     'price' => (float) $stock->getPrice(),
                     'market_cap' => (float) $stock->getPrice() * (float) $stock->getSharesOutstanding(),
-                    'current_volatility' => (float) ($stock->getCurrentVolatility() ?? $stock->getVolatility()),
+                    // Reported as a percentage, matching the live branch below; a bankrupt shell is pinned at zero
+                    // either way, but the two rows feed the same field on the same UI.
+                    'current_volatility' => round((float) ($stock->getCurrentVolatility() ?? $stock->getVolatility()) * 100, 2),
                     'current_roic' => (float) $stock->getCurrentRoic(),
                     'current_roe' => (float) $stock->getCurrentRoe(),
                     'shares' => (float) $stock->getSharesOutstanding(),
@@ -242,7 +244,18 @@ class StockTracker
             $impactLogReturn = 0.0;
 
             if ($tickFlow !== 0.0) {
-                $impactLogReturn = $this->liquidityEngine->permanentImpact($stock, $tickFlow);
+                // Bounded because this is the one price move that answers to nothing else: it is applied
+                // after the diffusion's own circuit breaker, and the per-order size cap the trade desk
+                // enforces says nothing about what a tick's NET flow adds up to — many orders, the players'
+                // and the agents' together, land in the same tick. The same per-move bound every jump in the
+                // system obeys applies here, so a pathological tick cannot dislocate a name without limit.
+                $impactLogReturn = max(
+                    -FinancialConstants::MAX_TICK_IMPACT_LOG_RETURN,
+                    min(
+                        FinancialConstants::MAX_TICK_IMPACT_LOG_RETURN,
+                        $this->liquidityEngine->permanentImpact($stock, $tickFlow)
+                    )
+                );
                 $newPrice = max(0.01, $newPrice * exp($impactLogReturn));
             }
 
@@ -316,6 +329,27 @@ class StockTracker
             $newShares = $splitResult['shares'];
             $splitEvent = $splitResult['event'] ?? null;
 
+            // A split restates every per-share figure, and fair value is one of them. It was struck at the
+            // top of this tick, on the share count the quarter was reported against, so publishing it
+            // alongside a post-split price compared two different units: a 4-for-1 made the name look 75%
+            // cheap and a 1-for-10 reverse split made it look ten times dear. The fundamentalist and
+            // relative-value agents both saturate at a log gap of 0.4, so either one put a full-commitment
+            // order into the market on a corporate action that moved no money — and the reverse split is
+            // the dangerous direction, because it only ever fires on a name already close to failing.
+            $splitRatio = $preSplitShares > 0.0 ? $newShares / $preSplitShares : 1.0;
+            $restateForSplit = $splitRatio > 0.0 && $splitRatio !== 1.0 && is_finite($splitRatio);
+
+            $perceivedFairValue = (float) $calculation['perceived_fair_value'];
+            $analystTargets = $calculation['analyst_targets'];
+
+            if ($restateForSplit) {
+                $perceivedFairValue /= $splitRatio;
+                $analystTargets = array_map(
+                    static fn (float $target): float => $target / $splitRatio,
+                    $analystTargets
+                );
+            }
+
             // Always update the price
             $stock->setPrice((string) $finalPrice);
 
@@ -357,11 +391,11 @@ class StockTracker
                 'invested_capital' => $stock->getInvestedCapital(),
                 'debt_ratio' => (float) $stock->getDebtToEquityRatio(),
                 'credit_rating' => $stock->getCreditRating(),
-                'analyst_targets' => $calculation['analyst_targets'],
-                'perceived_fair_value' => $calculation['perceived_fair_value'],
+                'analyst_targets' => $analystTargets,
+                'perceived_fair_value' => $perceivedFairValue,
                 'volume' => $tickVolume,
                 'adv_shares' => $this->liquidityEngine->averageDailyVolume($stock),
-                'half_spread_bps' => round($this->liquidityEngine->halfSpreadFraction($stock) * 20000.0, 2),
+                'spread_bps' => round($this->liquidityEngine->halfSpreadFraction($stock) * 20000.0, 2),
                 'is_bankrupt' => false,
             ];
 
@@ -393,7 +427,7 @@ class StockTracker
             $this->agentFlow->trade(new \App\DTO\AgentMarketViewDTO(
                 ticker: $stock->getTicker(),
                 price: $finalPrice,
-                perceivedFairValue: (float) $calculation['perceived_fair_value'],
+                perceivedFairValue: $perceivedFairValue,
                 momentumTrend: (float) ($stock->getPriceMomentumTrend() ?? 0.0),
                 averageDailyVolume: $this->liquidityEngine->structuralDailyVolume($stock),
                 logReturn: $tickLogReturn,
@@ -401,7 +435,7 @@ class StockTracker
                 dt: $dt,
                 riskFreeRate: $macroDTO->policyRate,
                 annualizedVolatility: (float) $nextVolatility,
-                splitRatio: $preSplitShares > 0.0 ? $newShares / $preSplitShares : 1.0
+                splitRatio: $splitRatio
             ));
 
             $stockUpdates[] = $stockUpdate;

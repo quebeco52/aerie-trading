@@ -155,8 +155,10 @@ class FinancialConstants
     public const CUSTODY_CLEARING_SPREAD = 0.0015;
     /** Penalty credit spread (+200 bps) incurred when issuing emergency liquidity debt. */
     public const EMERGENCY_DEBT_SPREAD_PENALTY = 0.02;
-    /** Circuit breaker limiting quarterly stock price movements to +/-40%. */
+    /** Circuit breaker limiting the price move of a single quarterly earnings report to +/-40%. */
     public const MAX_QUARTERLY_PRICE_CIRCUIT_BREAKER = 0.40;
+    /** Circuit breaker on the continuous diffusion, as the largest move of a single trading DAY; scaled by the square root of the step actually taken. */
+    public const MAX_DAILY_PRICE_CIRCUIT_BREAKER = 0.40;
     /** Duration sensitivity scalar converting yield curve inversion into NIM compression. */
     public const YIELD_CURVE_INVERSION_SENSITIVITY = 15.0;
 
@@ -471,6 +473,8 @@ class FinancialConstants
     public const TEMPORARY_IMPACT_ETA = 0.50;
     /** Largest multiple of average daily volume a single order may consume. Past it the impact law is extrapolation, and a capped impact would be a free lunch for size. */
     public const MAX_ORDER_ADV_MULTIPLE = 2.00;
+    /** Ceiling on the price move one tick's net order flow may leave behind, as a log return; the impact law is a per-order measurement and a tick's aggregate is not bounded by the per-order size cap. */
+    public const MAX_TICK_IMPACT_LOG_RETURN = 0.2624;
     /** Flat half-spread on a broad index ETF. Creation and redemption keep it pinned to the basket, so it quotes tighter than any single constituent. */
     public const ETF_HALF_SPREAD = 0.0001;
     /** Flat half-spread on a sovereign bond, the deepest instrument on the desk. */

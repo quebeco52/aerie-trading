@@ -22,7 +22,9 @@ if (!class_exists('Redis')) {
         public function connect($host, $port = 6379, $timeout = 0.0, $reserved = null, $retry_interval = 0, $read_timeout = 0.0) {}
         public function get($key) {}
         public function mGet(array $keys) { return array_fill(0, count($keys), false); }
-        public function set($key, $val) {}
+        // Declared with phpredis' real signature: a test that stubs Redis with the extension's own types
+        // is only compatible with a parent that has them, and a narrower parameter type here is a fatal.
+        public function set(string $key, mixed $value, mixed $options = null): \Redis|string|bool { return true; }
         public function hGet($key, $field) { return false; }
         public function hSet($key, $field, $value) { return 1; }
         public function hGetAll($key) { return []; }

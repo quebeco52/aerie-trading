@@ -16,16 +16,124 @@ class MathUtilityTest extends TestCase
         $this->mathUtility = new MathUtility();
     }
 
+    public function testKouTruncatedSecondMomentMatchesTheUncappedMomentWhenTheCapIsFarOut(): void
+    {
+        // With the cap many mean jump sizes away, virtually no mass is truncated and the closed form must
+        // collapse to the plain exponential second moment, 2 / eta^2.
+        $etaUp = 400.0;
+        $etaDown = 280.0;
+
+        $moment = $this->mathUtility->kouTruncatedSecondMoment(0.35, $etaUp, $etaDown, 0.2624, 0.3567);
+        $uncapped = (0.35 * 2.0 / ($etaUp * $etaUp)) + (0.65 * 2.0 / ($etaDown * $etaDown));
+
+        $this->assertEqualsWithDelta($uncapped, $moment, $uncapped * 1.0e-6);
+    }
+
+    public function testKouTruncatedSecondMomentIsStrictlyBelowTheUncappedMomentWhenTheCapBites(): void
+    {
+        // A jump scale of 0.13 puts the +/-30% caps only about two mean sizes out, so a material share of
+        // the distribution is truncated. Budgeting against the uncapped figure would reclaim variance the
+        // jump never delivered and leave the diffusion too quiet.
+        $etaUp = 1.0 / 0.13;
+        $etaDown = 1.0 / (0.13 * 1.25);
+
+        $moment = $this->mathUtility->kouTruncatedSecondMoment(0.40, $etaUp, $etaDown, 0.2624, 0.3567);
+        $uncapped = (0.40 * 2.0 / ($etaUp * $etaUp)) + (0.60 * 2.0 / ($etaDown * $etaDown));
+
+        $this->assertLessThan($uncapped, $moment);
+        $this->assertGreaterThan($uncapped * 0.5, $moment);
+    }
+
+    public function testKouTruncatedSecondMomentMatchesASimulatedDraw(): void
+    {
+        mt_srand(4242);
+
+        $pUp = 0.40;
+        $scale = 0.10;
+        $etaUp = 1.0 / $scale;
+        $etaDown = 1.0 / ($scale * 1.25);
+
+        $draws = 400000;
+        $sum = 0.0;
+        for ($i = 0; $i < $draws; $i++) {
+            $jump = $this->mathUtility->generateUniform() < $pUp
+                ? min($this->mathUtility->generateExponential($etaUp), 0.2624)
+                : max(-$this->mathUtility->generateExponential($etaDown), -0.3567);
+            $sum += $jump * $jump;
+        }
+
+        $this->assertEqualsWithDelta(
+            $this->mathUtility->kouTruncatedSecondMoment($pUp, $etaUp, $etaDown, 0.2624, 0.3567),
+            $sum / $draws,
+            0.0005,
+            'The closed form must agree with the draws the engine actually takes.'
+        );
+    }
+
+    public function testKouTruncatedCompensatorIsNegativeForADownSkewedJump(): void
+    {
+        // Kou's jump here is skewed down: more likely to fall, and further when it does. E[e^J - 1] is
+        // therefore negative, which is exactly the drift the engine has to give back.
+        $compensator = $this->mathUtility->kouTruncatedCompensator(0.40, 1.0 / 0.10, 1.0 / 0.125, 0.2624, 0.3567);
+
+        $this->assertLessThan(0.0, $compensator);
+    }
+
+    public function testKouTruncatedCompensatorMatchesASimulatedDraw(): void
+    {
+        mt_srand(909);
+
+        $pUp = 0.40;
+        $scale = 0.10;
+        $etaUp = 1.0 / $scale;
+        $etaDown = 1.0 / ($scale * 1.25);
+
+        $draws = 400000;
+        $sum = 0.0;
+        for ($i = 0; $i < $draws; $i++) {
+            $jump = $this->mathUtility->generateUniform() < $pUp
+                ? min($this->mathUtility->generateExponential($etaUp), 0.2624)
+                : max(-$this->mathUtility->generateExponential($etaDown), -0.3567);
+            $sum += exp($jump) - 1.0;
+        }
+
+        $this->assertEqualsWithDelta(
+            $this->mathUtility->kouTruncatedCompensator($pUp, $etaUp, $etaDown, 0.2624, 0.3567),
+            $sum / $draws,
+            0.001,
+            'The compensator must be the mean of exactly the draws the engine takes.'
+        );
+    }
+
+    public function testCalculateSVJJJumpsSurvivesAZeroVarianceJumpMean(): void
+    {
+        // The per-name variance jump mean is derived from the stock's own volatility state, which a
+        // bankrupt or freshly zeroed name legitimately carries at zero. This used to divide by it.
+        $jump = $this->mathUtility->calculateSVJJJumps(
+            lambda: 1000.0,
+            pUp: 0.4,
+            etaUp: 10.0,
+            etaDown: 8.0,
+            muV: 0.0,
+            dt: 1.0
+        );
+
+        $this->assertSame(0.0, $jump['var_jump']);
+        $this->assertGreaterThan(0.0, $jump['price_multiplier']);
+    }
+
     public function testCalculateCorrelatedGBMWithNoMovement(): void
     {
         // If there is no drift, no volatility, and no shocks, the price should remain exactly the same.
+        // Beta is zero as well: a name with a beta carries the market's volatility through it, and would
+        // owe the Ito correction on it even with no idiosyncratic volatility of its own.
         $price = $this->mathUtility->calculateCorrelatedGBM(
             currentPrice: 100.0,
-            currentVolatility: 0.0,
+            idiosyncraticVolatility: 0.0,
             drift: 0.0,
             gravityDrift: 0.0,
             dt: 1.0,
-            beta: 1.0,
+            beta: 0.0,
             marketVol: 0.15,
             marketZ: 0.0,
             w1: 0.0
@@ -41,11 +149,11 @@ class MathUtilityTest extends TestCase
         // 100 * exp(0.10) ≈ 110.517
         $price = $this->mathUtility->calculateCorrelatedGBM(
             currentPrice: 100.0,
-            currentVolatility: 0.0,
+            idiosyncraticVolatility: 0.0,
             drift: 0.10,
             gravityDrift: 0.0,
             dt: 1.0,
-            beta: 1.0,
+            beta: 0.0,
             marketVol: 0.15,
             marketZ: 0.0,
             w1: 0.0
@@ -59,7 +167,7 @@ class MathUtilityTest extends TestCase
         // A positive market shock (marketZ = 1.0) with a 1.0 beta should push the price up.
         $price = $this->mathUtility->calculateCorrelatedGBM(
             currentPrice: 100.0,
-            currentVolatility: 0.20,
+            idiosyncraticVolatility: 0.20,
             drift: 0.0,
             gravityDrift: 0.0,
             dt: 1.0,
@@ -78,7 +186,7 @@ class MathUtilityTest extends TestCase
         // independently of the broader market.
         $price = $this->mathUtility->calculateCorrelatedGBM(
             currentPrice: 100.0,
-            currentVolatility: 0.20,
+            idiosyncraticVolatility: 0.20,
             drift: 0.0,
             gravityDrift: 0.0,
             dt: 1.0,
@@ -91,26 +199,89 @@ class MathUtilityTest extends TestCase
         $this->assertLessThan(100.0, $price, 'Negative idiosyncratic shock should decrease the price.');
     }
 
-    public function testCalculateCorrelatedGBMCorrelationCappingPreventsNaN(): void
+    public function testCalculateCorrelatedGBMDeliversFullBetaRegardlessOfIdiosyncraticVolatility(): void
     {
-        // Without the `max(-0.99, min(0.99, ...))` logic, an extreme beta and market vol
-        // would cause $impliedRho to exceed 1.0. 
-        // This would cause `sqrt(1 - (rho * rho))` to attempt to calculate the square root 
-        // of a negative number, returning `NAN` and breaking the engine.
-        $price = $this->mathUtility->calculateCorrelatedGBM(
+        // The market loading is beta * marketVol outright. The earlier form derived it from an implied
+        // correlation beta * marketVol / sigma clamped below one, so a name whose volatility was small
+        // against what its beta demanded silently stopped being that beta — here it would have realized
+        // 0.99 * 0.05 / 0.80 = 0.062 of its configured 5.0.
+        $beta = 5.0;
+        $marketVol = 0.80;
+
+        $up = $this->mathUtility->calculateCorrelatedGBM(
             currentPrice: 100.0,
-            currentVolatility: 0.05,
-            drift: 0.05,
+            idiosyncraticVolatility: 0.05,
+            drift: 0.0,
             gravityDrift: 0.0,
             dt: 1.0,
-            beta: 5.0,        // Massive Beta
-            marketVol: 0.80,  // Massive Market Volatility -> Uncapped Rho would be 80.0!
-            marketZ: 0.0,
-            w1: 1.0
+            beta: $beta,
+            marketVol: $marketVol,
+            marketZ: 1.0,
+            w1: 0.0
         );
 
-        $this->assertFalse(is_nan($price), 'Price returned NAN! The correlation cap failed.');
-        $this->assertGreaterThan(0, $price, 'Price should be a valid positive float.');
+        $flat = $this->mathUtility->calculateCorrelatedGBM(
+            currentPrice: 100.0,
+            idiosyncraticVolatility: 0.05,
+            drift: 0.0,
+            gravityDrift: 0.0,
+            dt: 1.0,
+            beta: $beta,
+            marketVol: $marketVol,
+            marketZ: 0.0,
+            w1: 0.0
+        );
+
+        $this->assertFalse(is_nan($up), 'Price returned NAN.');
+        $this->assertEqualsWithDelta(
+            $beta * $marketVol,
+            log($up / $flat),
+            1.0e-9,
+            'A one-sigma market move must move the log price by exactly beta * marketVol.'
+        );
+    }
+
+    public function testCalculateCorrelatedGBMSplitsResidualVarianceWithTheSectorFactor(): void
+    {
+        // Loadings are square roots of shares that sum to one, so moving variance onto the sector factor
+        // must leave the residual's total variance untouched.
+        $share = 0.20;
+        $idiosyncraticVol = 0.30;
+
+        $sectorOnly = log($this->mathUtility->calculateCorrelatedGBM(
+            currentPrice: 100.0,
+            idiosyncraticVolatility: $idiosyncraticVol,
+            drift: 0.0,
+            gravityDrift: 0.0,
+            dt: 1.0,
+            beta: 0.0,
+            marketVol: 0.15,
+            marketZ: 0.0,
+            w1: 0.0,
+            sectorZ: 1.0,
+            sectorVarianceShare: $share
+        ) / 100.0) + (0.5 * $idiosyncraticVol * $idiosyncraticVol);
+
+        $idioOnly = log($this->mathUtility->calculateCorrelatedGBM(
+            currentPrice: 100.0,
+            idiosyncraticVolatility: $idiosyncraticVol,
+            drift: 0.0,
+            gravityDrift: 0.0,
+            dt: 1.0,
+            beta: 0.0,
+            marketVol: 0.15,
+            marketZ: 0.0,
+            w1: 1.0,
+            sectorZ: 0.0,
+            sectorVarianceShare: $share
+        ) / 100.0) + (0.5 * $idiosyncraticVol * $idiosyncraticVol);
+
+        $this->assertEqualsWithDelta(
+            $idiosyncraticVol * $idiosyncraticVol,
+            ($sectorOnly * $sectorOnly) + ($idioOnly * $idioOnly),
+            1.0e-12,
+            'Sector and idiosyncratic loadings must carry the residual variance between them.'
+        );
     }
 
     public function testCalculateIntrinsicFairValuePEStandardValuation(): void

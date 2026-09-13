@@ -64,9 +64,14 @@ final class LiquidityEngine
     /**
      * Shares that trade in an average day.
      *
-     * Structural float turnover, scaled by how active the tape currently is. The activity term is bounded
-     * on both sides: liquidity genuinely dries up in a panic, but not to zero, and a rally does not
-     * manufacture unlimited depth.
+     * Structural float turnover, scaled by how active the tape currently is. The activity term runs off
+     * volatility, so it RISES in a panic — volume and volatility are driven by the same information
+     * arrivals (Karpoff 1987), and a crash is the busiest tape a name ever sees, not the quietest. Impact
+     * still grows with stress, because volatility enters the impact law faster than depth does; what does
+     * not happen is a name becoming untradable exactly when everyone wants to trade it.
+     *
+     * The multiplier is bounded on both sides: a rally does not manufacture unlimited depth, and the floor
+     * catches the opposite case, a name gone so quiet that its structural turnover flatters it.
      */
     public function averageDailyVolume(Stock $stock): float
     {

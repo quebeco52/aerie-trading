@@ -120,18 +120,16 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
     // --- Rate Case Cycle (regulatory lag and earnings attrition) ---
     /** Regime key for a general rate case filed with the commission and awaiting an order. */
     public const REGIME_RATE_CASE = 'rate_case';
-    /** Persisted state key: cumulative authorized tariff uplift granted by past rate orders, as a fraction above the baseline tariff. */
-    public const STATE_AUTHORIZED_TARIFF = 'state:authorized_tariff';
-    /** Persisted state key: non-fuel cost escalation accumulated since the last order, which is what the next filing asks to recover. */
+    /** Persisted state key: how far the authorized tariff lags the non-fuel cost base it is chasing, as a fraction of the tariff. */
     public const STATE_TARIFF_SHORTFALL = 'state:tariff_shortfall';
     /** Unrecovered non-fuel cost at which management files a general rate case rather than absorb further attrition. */
     public const RATE_CASE_FILING_THRESHOLD = 0.02;
     /** Quarterly probability a pending case is decided (~5 quarters, the 12 to 18 month regulatory lag). */
     public const RATE_CASE_EXIT_HAZARD = 0.20;
-    /** Share of the requested increase a commission typically grants; the remainder is disallowed and never recovered. */
+    /** Share of the request a commission grants; the disallowed remainder is still a real cost, so it rolls into the next filing. */
     public const RATE_CASE_GRANTED_SHARE = 0.70;
-    /** Ceiling on cumulative authorized uplift, where affordability and political limits bind. */
-    public const MAX_AUTHORIZED_TARIFF_UPLIFT = 0.40;
+    /** Lag at which interim relief is granted rather than leave the utility earning below its cost of service. */
+    public const MAX_TARIFF_SHORTFALL = 0.10;
 
     // --- Bond Proxy Capital Structure ---
     /** Quarterly share of the fixed-rate bond stock that matures and reprices (~12-year average tenor of first mortgage bonds). */
@@ -162,9 +160,16 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
         $physics['macro_demand_shift'] = $outputGap * $beta * self::MACRO_DEMAND_SCALAR;
 
         // Tariffs are set by regulatory order, not by a smooth pass-through: frozen between cases while
-        // costs inflate, then stepped when the commission rules. The input-cost multiplier from the parent
-        // is left alone — the cost base still inflates, which is exactly what creates the attrition.
-        $physics['pricing_power_multiplier'] = 1.0 + $this->resolveAuthorizedTariff($stock);
+        // costs inflate, then stepped when the commission rules. Both the authorized tariff and the cost
+        // base it chases are CUMULATIVE levels, so what reaches price is the gap between them — the
+        // regulatory lag — taken off the same input inflation every other firm passes through.
+        //
+        // Substituting the cumulative tariff level for the parent's quarterly pass-through RATE compared a
+        // level against a rate, and the engine deflates the structural cost base by this very multiplier
+        // (EarningsEngine::generateCapacityAndRevenue): the tariff cancelled out of costs and stayed in
+        // revenue, so a granted order was pure margin. The intended squeeze inverted into a one-way
+        // ratchet that carried a regulated utility's operating margin from 20% past 45%.
+        $physics['pricing_power_multiplier'] = $physics['input_cost_multiplier'] * (1.0 - $this->resolveTariffShortfall($stock));
 
         return $physics;
     }
@@ -309,34 +314,37 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
      */
     private function advanceRateCase(StreamContext $streams, MacroStateDTO $macroState): void
     {
-        $authorized = $streams->getPersistedState(self::STATE_AUTHORIZED_TARIFF, 0.0);
-        $shortfall  = $streams->getPersistedState(self::STATE_TARIFF_SHORTFALL, 0.0);
+        $shortfall = $streams->getPersistedState(self::STATE_TARIFF_SHORTFALL, 0.0);
 
-        // Non-fuel costs escalate with general inflation while the tariff sits still.
+        // Non-fuel costs escalate with general inflation while the tariff sits still, so the tariff falls
+        // that much further behind the cost base every quarter it is frozen.
         $shortfall = max(0.0, $shortfall + max(0.0, $macroState->inflationEma * EarningsEngine::QUARTERLY_TIME_STEP));
 
         $pendingBefore = (int) round($streams->getPersistedState(StreamContext::REGIME_STATE_PREFIX . self::REGIME_RATE_CASE, 0.0));
         $pending = $streams->evolveRegime(self::REGIME_RATE_CASE, 0.0, self::RATE_CASE_EXIT_HAZARD);
 
         if ($pendingBefore > 0 && $pending === 0) {
-            // The order lands. Commissions grant part of the request and disallow the rest, which is why a
-            // utility never fully catches up and files again a few years later.
-            $authorized = min(self::MAX_AUTHORIZED_TARIFF_UPLIFT, $authorized + ($shortfall * self::RATE_CASE_GRANTED_SHARE));
-            $shortfall = 0.0;
+            // The order lands and closes part of the gap. The disallowed remainder is a cost the utility is
+            // still incurring, so it stays in the books and is in the next filing's ask — what regulatory lag
+            // permanently costs a utility is the revenue it went without while the case ran, not the price
+            // level forever. Clearing the whole request on every order instead let the tariff catch its cost
+            // base completely, which is the one thing a lagging regulated tariff never does.
+            $shortfall -= $shortfall * self::RATE_CASE_GRANTED_SHARE;
         } elseif ($pending === 0 && $shortfall >= self::RATE_CASE_FILING_THRESHOLD) {
             $streams->startRegime(self::REGIME_RATE_CASE);
         }
 
-        $streams->registerState(self::STATE_AUTHORIZED_TARIFF, $authorized);
-        $streams->registerState(self::STATE_TARIFF_SHORTFALL, $shortfall);
+        // A commission that would otherwise leave the utility earning below its cost of service grants
+        // interim rates rather than push a monopoly with a mandatory service obligation into distress.
+        $streams->registerState(self::STATE_TARIFF_SHORTFALL, min(self::MAX_TARIFF_SHORTFALL, $shortfall));
     }
 
-    /** Cumulative uplift granted by past rate orders, read from the persisted state the physics advances. */
-    private function resolveAuthorizedTariff(Stock $stock): float
+    /** How far the authorized tariff lags its cost base, read from the persisted state the physics advances. */
+    private function resolveTariffShortfall(Stock $stock): float
     {
         $momentum = $stock->getEarningsMomentumZ() ?? [];
 
-        return max(0.0, min(self::MAX_AUTHORIZED_TARIFF_UPLIFT, (float) ($momentum[self::STATE_AUTHORIZED_TARIFF] ?? 0.0)));
+        return max(0.0, min(self::MAX_TARIFF_SHORTFALL, (float) ($momentum[self::STATE_TARIFF_SHORTFALL] ?? 0.0)));
     }
 
     public function getOperatingMacroFields(): array

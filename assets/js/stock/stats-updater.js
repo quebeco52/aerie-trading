@@ -38,8 +38,8 @@ export function updatePriceUI(newPrice, stockUpdate, config = {}) {
         // The spread moves with volatility, so it has to be repriced with everything else. Left static it
         // would keep quoting a calm-market cost through a crash.
         const spreadEl = document.getElementById('stat-spread');
-        if (spreadEl && stockUpdate.half_spread_bps !== undefined) {
-            spreadEl.textContent = `${Number(stockUpdate.half_spread_bps).toFixed(1)} bps`;
+        if (spreadEl && stockUpdate.spread_bps !== undefined) {
+            spreadEl.textContent = `${Number(stockUpdate.spread_bps).toFixed(1)} bps`;
         }
 
         const mktCapEl = document.getElementById('stat-mkt-cap');

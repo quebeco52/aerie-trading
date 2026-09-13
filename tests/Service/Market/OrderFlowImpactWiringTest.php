@@ -285,7 +285,14 @@ class OrderFlowImpactWiringTest extends TestCase
         $this->assertArrayHasKey('volume', $update);
         $this->assertGreaterThan(0.0, $update['volume'], 'A tick with no player flow still prints background volume.');
         $this->assertEqualsWithDelta($this->liquidity->averageDailyVolume($stock), $update['adv_shares'], 1.0);
-        $this->assertGreaterThan(0.0, $update['half_spread_bps']);
+        // The field carries the FULL quoted spread, which is what the UI labels it as; it was named for the
+        // half spread while being published at twice it.
+        $this->assertGreaterThan(0.0, $update['spread_bps']);
+        $this->assertEqualsWithDelta(
+            $this->liquidity->halfSpreadFraction($stock) * 20000.0,
+            $update['spread_bps'],
+            0.01
+        );
     }
 
     public function testPlayerFillsAreCountedInTheTicksPrintedVolume(): void
