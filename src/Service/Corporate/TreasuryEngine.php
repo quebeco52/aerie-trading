@@ -345,8 +345,14 @@ class TreasuryEngine
         $isHoarder = $hoardStatus['is_hoarder'];
         $isMegaHoarder = $hoardStatus['is_mega_hoarder'];
 
-        if ((($trueReturn > $hurdleRate || $isHoarder) && $excessCash > 0 && !$ctx->health->wantsToPaydownDebt) || $forcedExpansion) {
-            $spreadMultiplier = $isHoarder ? 1.0 : min(1.0, max(0.0, ($trueReturn - $hurdleRate) * 10.0));
+        // The NPV test is on the MARGINAL return — what the next dollar of plant earns at this scale — the
+        // same figure processDebtExpansion already borrows against. Testing the average return instead let
+        // a firm whose marginal return had fallen below its hurdle keep deploying cash for as long as its
+        // existing plant still earned above it, which for a saturated firm is forever. The hoarder path is
+        // deliberately left on the average: that is Jensen's agency cost of free cash flow, management
+        // spending what it will not return, and it is bounded below by the marginal-return zero check.
+        if ((($marginalReturn > $hurdleRate || $isHoarder) && $excessCash > 0 && !$ctx->health->wantsToPaydownDebt) || $forcedExpansion) {
+            $spreadMultiplier = $isHoarder ? 1.0 : min(1.0, max(0.0, ($marginalReturn - $hurdleRate) * 10.0));
 
             $baseExcessCash = max(0.0, $excessCash - $ctx->debtIssued);
             $organicSpend = $baseExcessCash * (self::BASE_ORGANIC_SPEND_RATE + (self::VARIABLE_ORGANIC_SPEND_RATE * $spreadMultiplier));

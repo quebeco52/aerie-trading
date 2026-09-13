@@ -48,6 +48,38 @@ class StandardCorporateBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta(140000000.0, $metrics['invested_capital'], 1.0);
     }
 
+    /**
+     * The target return is what EarningsEngine::calculateGrowthCapEx tests against the hurdle, so
+     * saturation has to be able to push it BELOW the hurdle — that is the NPV rule doing its job. It used
+     * to be floored at policy rate + ERP, which pinned it at the cost of equity from the first saturated
+     * quarter on and left the growth gate reading a constant while capital ran past the whole market.
+     */
+    public function testSaturationCanPushTheTargetReturnBelowTheHurdle(): void
+    {
+        $macroState = new MacroStateDTO(policyRate: 0.04, equityRiskPremium: 0.05, nominalGdpIndex: 1.0);
+        $costOfEquity = 0.09;
+
+        $unsaturated = new Stock();
+        $unsaturated->setTicker('CORP');
+        $unsaturated->setSamRatio('1.00');
+        $unsaturated->setBaselineRoic('0.12');
+        $unsaturated->setRoicTtm('0.12');
+        $unsaturated->setTotalEquity('100000000000.0'); // 10% of a $1T market: no diseconomy yet
+
+        $saturated = new Stock();
+        $saturated->setTicker('CORP');
+        $saturated->setSamRatio('1.00');
+        $saturated->setBaselineRoic('0.12');
+        $saturated->setRoicTtm('0.12');
+        $saturated->setTotalEquity('1500000000000.0'); // 150% of the market it serves
+
+        $this->assertEqualsWithDelta(0.12, $this->model->getTargetMetrics($unsaturated, $macroState, $this->mathUtility)['baseline_roic'], 1e-9, 'Below optimal scale the structural return is untouched.');
+
+        $saturatedReturn = $this->model->getTargetMetrics($saturated, $macroState, $this->mathUtility)['baseline_roic'];
+        $this->assertLessThan($costOfEquity, $saturatedReturn, 'A firm whose capital exceeds its market must see a marginal return below its cost of capital, or growth never stops.');
+        $this->assertGreaterThanOrEqual(0.0, $saturatedReturn, 'A marginal return is a rate on the next dollar; below zero it is simply not invested.');
+    }
+
     public function testMacroPhysicsDemandShiftAndPricingPower(): void
     {
         $stock = new Stock();
