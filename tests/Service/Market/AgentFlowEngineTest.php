@@ -12,6 +12,8 @@ use App\Service\Market\Agent\IndexFundStrategy;
 use App\Service\Market\Agent\InMemoryAgentStateStore;
 use App\Service\Market\Agent\MarketMakerStrategy;
 use App\Service\Market\Agent\MomentumStrategy;
+use App\Service\Market\Agent\RelativeValueStrategy;
+use App\Service\Market\Agent\VolatilityTargetStrategy;
 use App\Service\Market\Flow\InMemoryOrderFlowStore;
 use PHPUnit\Framework\TestCase;
 
@@ -48,6 +50,8 @@ class AgentFlowEngineTest extends TestCase
                 new FundamentalistStrategy(),
                 new MomentumStrategy(),
                 new IndexFundStrategy(),
+                new VolatilityTargetStrategy(),
+                new RelativeValueStrategy(),
             ],
             $providers ?? [new MarketMakerStrategy()]
         );
@@ -60,10 +64,12 @@ class AgentFlowEngineTest extends TestCase
         float $logReturn = 0.0,
         float $adv = 1000000.0,
         float $dt = 1.0 / 14400.0,
-        float $splitRatio = 1.0
+        float $splitRatio = 1.0,
+        float $volatility = 0.0,
+        string $ticker = 'TEST'
     ): AgentMarketViewDTO {
         return new AgentMarketViewDTO(
-            ticker: 'TEST',
+            ticker: $ticker,
             price: $price,
             perceivedFairValue: $fairValue,
             momentumTrend: $momentum,
@@ -71,6 +77,7 @@ class AgentFlowEngineTest extends TestCase
             logReturn: $logReturn,
             financialConditions: 0.0,
             dt: $dt,
+            annualizedVolatility: $volatility,
             splitRatio: $splitRatio,
         );
     }
@@ -375,5 +382,105 @@ class AgentFlowEngineTest extends TestCase
         $this->assertArrayHasKey('momentum', $stored['fitness']);
         $this->assertArrayNotHasKey('index_fund', $stored['fitness']);
         $this->assertArrayNotHasKey('market_maker', $stored['fitness']);
+    }
+    // --- Volatility targeting through the engine ---
+
+    public function testAVolatilitySpikeMakesTheVolTargetingBookSellAndACalmerTapeBringsItBack(): void
+    {
+        // The book opens at its calm size without an order, sells when volatility jumps, then buys back
+        // as it subsides. None of that depends on the price, which is flat throughout.
+        $engine = $this->engine([new VolatilityTargetStrategy()], []);
+
+        $opened = $engine->trade($this->view(volatility: 0.25));
+        $this->assertSame(0.0, $opened['flow'], 'Opening at the holding is not a trade.');
+        $held = $opened['positions']['vol_target'];
+        $this->assertGreaterThan(0.0, $held);
+
+        $spike = $engine->trade($this->view(volatility: 0.75, dt: 1.0 / 240.0));
+        $this->assertLessThan(0.0, $spike['flow'], 'A vol spike is met with selling.');
+        $this->assertLessThan($held, $spike['positions']['vol_target']);
+
+        $calm = $engine->trade($this->view(volatility: 0.25, dt: 1.0 / 240.0));
+        $this->assertGreaterThan(0.0, $calm['flow'], 'The tape calming is met with buying.');
+    }
+
+    // --- The cross-section ---
+
+    public function testClosingATickRecordsTheMarketsAverageMispricing(): void
+    {
+        $engine = $this->engine([new FundamentalistStrategy()], []);
+
+        $engine->beginTick();
+        $engine->trade($this->view(price: 80.0, fairValue: 100.0, ticker: 'AAA'));
+        $engine->trade($this->view(price: 125.0, fairValue: 100.0, ticker: 'BBB'));
+        $engine->endTick();
+
+        $expected = (log(100.0 / 80.0) + log(100.0 / 125.0)) / 2.0;
+
+        $this->assertEqualsWithDelta($expected, $this->stateStore->readCrossSection()['log_mispricing'], 1e-12);
+    }
+
+    public function testRelativeValueSeesTheCrossSectionAsItStoodAtTheOpenAndOpensAtItsHolding(): void
+    {
+        // Two names at the same discount in a market that is, on average, at that discount: nothing is
+        // cheap relative to anything and the book holds nothing. Then the cross-section moves to fair and
+        // the same two names are cheap relative to it — but only from the next tick, because what is read
+        // at the open is what every name is judged against.
+        $engine = $this->engine([new RelativeValueStrategy()], []);
+        $discount = log(100.0 / 90.0);
+        $this->stateStore->writeCrossSection(['log_mispricing' => $discount]);
+
+        $engine->beginTick();
+        $first = $engine->trade($this->view(price: 90.0, fairValue: 100.0, ticker: 'AAA'));
+        $engine->trade($this->view(price: 90.0, fairValue: 100.0, ticker: 'BBB'));
+        $engine->endTick();
+
+        $this->assertEqualsWithDelta(0.0, $first['positions']['relative_value'], 1e-9, 'Cheap in a cheap market is not cheap.');
+        $this->assertSame(0.0, $first['flow']);
+
+        // BBB re-rates to fair. The cross-section read at this open is still the old discount, so AAA is
+        // judged flat against it and BBB, now dear against a cheap market, is sold: what changed this tick
+        // is not seen until the next one.
+        $engine->beginTick();
+        $second = $engine->trade($this->view(price: 90.0, fairValue: 100.0, ticker: 'AAA'));
+        $dear = $engine->trade($this->view(price: 100.0, fairValue: 100.0, ticker: 'BBB'));
+        $engine->endTick();
+        $this->assertEqualsWithDelta(0.0, $second['positions']['relative_value'], 1e-9);
+        $this->assertLessThan(0.0, $dear['flow']);
+
+        // From here the average sits between the two. Worked in over a few days, the book settles long
+        // AAA and short BBB by the same amount: the long is funded by the short.
+        for ($day = 0; $day < 20; $day++) {
+            $engine->beginTick();
+            $cheap = $engine->trade($this->view(price: 90.0, fairValue: 100.0, ticker: 'AAA', dt: 1.0 / 240.0));
+            $dear = $engine->trade($this->view(price: 100.0, fairValue: 100.0, ticker: 'BBB', dt: 1.0 / 240.0));
+            $engine->endTick();
+        }
+
+        $this->assertGreaterThan(0.0, $cheap['positions']['relative_value']);
+        $this->assertLessThan(0.0, $dear['positions']['relative_value']);
+        $this->assertEqualsWithDelta(0.0, $cheap['positions']['relative_value'] + $dear['positions']['relative_value'], 1e-3);
+    }
+
+    public function testANameFirstSeenOnceTheCrossSectionExistsOpensAtItsRelativeHoldingWithoutAnOrder(): void
+    {
+        $this->stateStore->writeCrossSection(['log_mispricing' => 0.0]);
+        $engine = $this->engine([new RelativeValueStrategy()], []);
+
+        $result = $engine->trade($this->view(price: 80.0, fairValue: 100.0));
+
+        $this->assertGreaterThan(0.0, $result['positions']['relative_value']);
+        $this->assertSame(0.0, $result['flow']);
+        $this->assertSame([], $this->orderFlow->drain());
+    }
+
+    public function testWithoutACrossSectionRelativeValueHoldsNothing(): void
+    {
+        $engine = $this->engine([new RelativeValueStrategy()], []);
+
+        $result = $engine->trade($this->view(price: 50.0, fairValue: 100.0));
+
+        $this->assertSame(0.0, $result['positions']['relative_value']);
+        $this->assertSame(0.0, $result['flow']);
     }
 }

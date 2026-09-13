@@ -15,6 +15,8 @@ use App\Service\Market\Agent\IndexFundStrategy;
 use App\Service\Market\Agent\InMemoryAgentStateStore;
 use App\Service\Market\Agent\MarketMakerStrategy;
 use App\Service\Market\Agent\MomentumStrategy;
+use App\Service\Market\Agent\RelativeValueStrategy;
+use App\Service\Market\Agent\VolatilityTargetStrategy;
 use App\Service\Market\Flow\InMemoryOrderFlowStore;
 use App\Service\Market\LiquidityEngine;
 use App\Service\Market\MarketEngine;
@@ -90,7 +92,7 @@ class AgentMarketDynamicsTest extends TestCase
             new AgentPopulation(),
             new InMemoryAgentStateStore(),
             $orderFlow,
-            [new FundamentalistStrategy(), new MomentumStrategy(), new IndexFundStrategy()],
+            [new FundamentalistStrategy(), new MomentumStrategy(), new IndexFundStrategy(), new VolatilityTargetStrategy(), new RelativeValueStrategy()],
             [new MarketMakerStrategy()]
         );
 

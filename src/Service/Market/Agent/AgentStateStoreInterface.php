@@ -57,4 +57,19 @@ interface AgentStateStoreInterface
      * @param array<string, float> $fitness
      */
     public function writeStyle(array $fitness): void;
+
+    /**
+     * The market's cross-section: what the average name looked like when the last tick closed.
+     *
+     * One record for the whole market, like the style, and for the same reason — a strategy whose view is
+     * relative (cheaper than the average name, not cheap) needs the same average in every name.
+     *
+     * @return array<string, float> Empty when the market has no cross-section yet.
+     */
+    public function readCrossSection(): array;
+
+    /**
+     * @param array<string, float> $crossSection
+     */
+    public function writeCrossSection(array $crossSection): void;
 }

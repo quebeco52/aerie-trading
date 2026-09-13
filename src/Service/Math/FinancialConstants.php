@@ -541,4 +541,18 @@ class FinancialConstants
     public const AGENT_INDEX_FLOW_SENSITIVITY = 0.50;
     /** Baseline share of agent capital that indexes rather than picking. */
     public const AGENT_INDEX_BASE_SHARE = 0.30;
+
+    // --- Volatility-Targeting Funds (Moreira & Muir 2017; Harvey et al. 2018) ---
+    /** Annualized volatility a vol-control book is run to. Exposure scales as target / realized, so a name at this volatility is held at the base share; set at the market's reference name so an ordinary name sits near 1x. */
+    public const AGENT_VOL_TARGET_VOLATILITY = 0.25;
+    /** Share of agent capital the vol-targeting books hold in a name running at target volatility. */
+    public const AGENT_VOL_TARGET_BASE_SHARE = 0.15;
+    /** Most a vol-targeting book levers up when realized volatility falls below target. Harvey et al. cap leverage at 2x; without a cap a quiet tape would be bought without limit. */
+    public const AGENT_VOL_TARGET_MAX_LEVERAGE = 2.00;
+
+    // --- Relative-Value Funds (Barberis & Shleifer 2003 cross-sectional style) ---
+    /** Share of agent capital a market-neutral book can put long or short in one name against the rest of the market. */
+    public const AGENT_RELATIVE_VALUE_SHARE = 0.15;
+    /** Conviction per unit of log mispricing RELATIVE to the market's average mispricing; on the fundamentalist's scale, fully committed at roughly a 40% gap to the average name. */
+    public const AGENT_RELATIVE_VALUE_GAIN = 2.50;
 }

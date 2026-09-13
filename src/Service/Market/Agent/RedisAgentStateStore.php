@@ -28,6 +28,9 @@ final class RedisAgentStateStore implements AgentStateStoreInterface
      */
     private const STYLE_FIELD = '__style__';
 
+    /** The market's cross-section, same hash and same reasoning as the style record. */
+    private const CROSS_SECTION_FIELD = '__cross_section__';
+
     private bool $batching = false;
 
     /** @var array<string, string> Raw JSON per ticker, as loaded when the batch opened. */
@@ -61,7 +64,7 @@ final class RedisAgentStateStore implements AgentStateStoreInterface
     }
 
     /**
-     * @param array<string, mixed> $state A book, or the style record under its reserved field.
+     * @param array<string, mixed> $state A book, or a market-wide record under its reserved field.
      */
     public function write(string $ticker, array $state): void
     {
@@ -141,20 +144,7 @@ final class RedisAgentStateStore implements AgentStateStoreInterface
 
     public function readStyle(): array
     {
-        if ($this->batching) {
-            return $this->decodeStyle($this->pending[self::STYLE_FIELD] ?? $this->loaded[self::STYLE_FIELD] ?? null);
-        }
-
-        try {
-            /** @phpstan-ignore method.notFound (phpredis hash commands are absent from the analysis stub) */
-            $raw = $this->redis->hGet(self::KEY, self::STYLE_FIELD);
-        } catch (\Throwable $e) {
-            $this->logger?->warning('Agent style read failed: ' . $e->getMessage());
-
-            return [];
-        }
-
-        return $this->decodeStyle($raw);
+        return $this->readRecord(self::STYLE_FIELD);
     }
 
     public function writeStyle(array $fitness): void
@@ -163,10 +153,43 @@ final class RedisAgentStateStore implements AgentStateStoreInterface
         $this->write(self::STYLE_FIELD, $fitness);
     }
 
+    public function readCrossSection(): array
+    {
+        return $this->readRecord(self::CROSS_SECTION_FIELD);
+    }
+
+    public function writeCrossSection(array $crossSection): void
+    {
+        $this->write(self::CROSS_SECTION_FIELD, $crossSection);
+    }
+
+    /**
+     * A market-wide record: a flat map of floats under one reserved field.
+     *
+     * @return array<string, float>
+     */
+    private function readRecord(string $field): array
+    {
+        if ($this->batching) {
+            return $this->decodeRecord($this->pending[$field] ?? $this->loaded[$field] ?? null);
+        }
+
+        try {
+            /** @phpstan-ignore method.notFound (phpredis hash commands are absent from the analysis stub) */
+            $raw = $this->redis->hGet(self::KEY, $field);
+        } catch (\Throwable $e) {
+            $this->logger?->warning('Agent market record read failed: ' . $e->getMessage());
+
+            return [];
+        }
+
+        return $this->decodeRecord($raw);
+    }
+
     /**
      * @return array<string, float>
      */
-    private function decodeStyle(mixed $raw): array
+    private function decodeRecord(mixed $raw): array
     {
         if (!is_string($raw) || $raw === '') {
             return [];
@@ -177,14 +200,14 @@ final class RedisAgentStateStore implements AgentStateStoreInterface
             return [];
         }
 
-        $style = [];
-        foreach ($decoded as $identifier => $score) {
-            if (is_int($score) || is_float($score)) {
-                $style[(string) $identifier] = (float) $score;
+        $record = [];
+        foreach ($decoded as $key => $value) {
+            if (is_int($value) || is_float($value)) {
+                $record[(string) $key] = (float) $value;
             }
         }
 
-        return $style;
+        return $record;
     }
 
     /**

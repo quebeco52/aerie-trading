@@ -119,6 +119,40 @@ class RedisAgentStateStoreTest extends TestCase
         $store->beginBatch();
 
         $this->assertSame([], $store->readStyle());
+        $this->assertSame([], $store->readCrossSection());
+    }
+
+    public function testTheCrossSectionRidesInTheSameBatchAsTheBooksAndTheStyle(): void
+    {
+        $this->redis->expects($this->once())
+            ->method('hGetAll')
+            ->willReturn(['AAA' => json_encode(self::BOOK_A), '__cross_section__' => json_encode(['log_mispricing' => 0.05])]);
+        $this->redis->expects($this->never())->method('hGet');
+        $this->redis->expects($this->once())->method('multi')->willReturnSelf();
+
+        $sent = [];
+        $this->redis->expects($this->once())
+            ->method('hSet')
+            ->willReturnCallback(function (string $key, string $field, string $value) use (&$sent): int {
+                $sent[$field] = json_decode($value, true);
+
+                return 1;
+            });
+        $this->redis->expects($this->once())->method('exec')->willReturn([]);
+
+        $store = new RedisAgentStateStore($this->redis);
+        $store->beginBatch();
+
+        $this->assertSame(['log_mispricing' => 0.05], $store->readCrossSection());
+        $this->assertNull($store->read('__cross_section__'), 'The cross-section is not a book.');
+        $this->assertSame([], $store->readStyle(), 'One record does not stand in for the other.');
+
+        $store->writeCrossSection(['log_mispricing' => -0.02]);
+        $this->assertSame(['log_mispricing' => -0.02], $store->readCrossSection());
+
+        $store->commitBatch();
+
+        $this->assertEquals(['__cross_section__' => ['log_mispricing' => -0.02]], $sent);
     }
 
     public function testAReadAfterAWriteInTheSameBatchSeesTheWrite(): void

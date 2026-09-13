@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Tests\Service;
 
 use App\Entity\Stock;
+use App\Entity\StockEvent;
+use App\Service\Event\EventPresenter;
 use App\Service\Corporate\CorporateLedgerService;
 use Doctrine\DBAL\Connection;
 use Doctrine\ORM\EntityManagerInterface;
@@ -172,10 +174,11 @@ class CorporateLedgerServiceTest extends TestCase
         $this->connectionMock->expects($this->once())->method('beginTransaction');
         $this->connectionMock->expects($this->once())->method('commit');
 
-        // Mock 2 users: user 1 has 15 shares (15 / 10 = 1 share, 5 remnant -> cashout), user 2 has 20 shares (0 remnant)
-        $this->connectionMock->expects($this->once())
+        // Mock 2 users: user 1 has 15 shares (15 / 10 = 1 share, 5 remnant -> cashout), user 2 has 20 shares (0 remnant).
+        // The second fetch is the event feed, which is empty here.
+        $this->connectionMock->expects($this->exactly(2))
             ->method('fetchAllAssociative')
-            ->willReturn([
+            ->willReturnCallback(static fn (string $sql): array => str_contains($sql, 'stock_events') ? [] : [
                 ['id' => 1, 'user_id' => 101, 'quantity' => 15],
                 ['id' => 2, 'user_id' => 102, 'quantity' => 20],
             ]);
@@ -230,6 +233,9 @@ class CorporateLedgerServiceTest extends TestCase
         $fetched = null;
         $this->connectionMock->method('fetchAllAssociative')
             ->willReturnCallback(function (string $sql, array $params = []) use (&$fetched): array {
+                if (str_contains($sql, 'stock_events')) {
+                    return [];
+                }
                 $fetched = $sql;
 
                 return [
@@ -305,5 +311,116 @@ class CorporateLedgerServiceTest extends TestCase
             $sql,
             'Every other side — SHORT and COVER — escrows nothing and must be refunded nothing.'
         );
+    }
+
+    /**
+     * A split restates the event feed with the ledger.
+     *
+     * Event text carries the quarter's EPS, the surprise against consensus, the dividend rate and the
+     * buyback count in the units of its day. Every price and share count in the tables has just moved
+     * to the new basis, so left alone the feed read "Q-Earnings: $11.75" one quarter and "$3.56" the
+     * next across a 4-for-1 that changed nothing. Dollar totals (EVA, total paid) are not per-share and
+     * must be left exactly as written.
+     */
+    public function testForwardSplitRestatesPerShareFiguresInTheEventFeed(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('FEED');
+
+        $this->connectionMock->method('fetchAllAssociative')
+            ->willReturnCallback(static fn (string $sql): array => str_contains($sql, 'stock_events') ? [
+                ['id' => 7, 'description' => "Q-Earnings: $11.75 (Beat expectations by $0.32 | +$80.92B EVA).\n• Paid $0.60/share div ($27.64B total, 1.97% yield).\n• Bought back 410,288,930 shares."],
+                ['id' => 8, 'description' => "Q-Earnings: $1.00 (Met expectations exactly | +$5.00M EVA).\n• Launched next-gen AI platform."],
+            ] : []);
+
+        $rewrites = [];
+        $this->connectionMock->method('executeStatement')
+            ->willReturnCallback(function (string $sql, array $params = []) use (&$rewrites): int {
+                if (str_contains($sql, 'UPDATE stock_events')) {
+                    $rewrites[(int) $params['id']] = $params['description'];
+                }
+
+                return 1;
+            });
+
+        $this->service->processStockSplit($stock, 4.0, false);
+
+        $this->assertSame(
+            "Q-Earnings: $2.94 (Beat expectations by $0.08 | +$80.92B EVA).\n• Paid $0.15/share div ($27.64B total, 1.97% yield).\n• Bought back 1,641,155,720 shares.",
+            $rewrites[7] ?? null,
+            'EPS, surprise and dividend divide by the factor, the buyback count multiplies, EVA and totals are untouched.'
+        );
+        $this->assertSame(
+            "Q-Earnings: $0.25 (Met expectations exactly | +$5.00M EVA).\n• Launched next-gen AI platform.",
+            $rewrites[8] ?? null
+        );
+
+        // The restated text must still be readable by the feed's parser, or the restatement has traded a
+        // wrong number for a blank card.
+        $event = new StockEvent();
+        $event->setEventType('EARNINGS');
+        $event->setDescription($rewrites[7]);
+        $presented = (new EventPresenter())->present($event);
+        $this->assertSame('$2.94', $presented['eps']);
+        $this->assertSame('beat', $presented['surpriseType']);
+        $this->assertSame('$0.08', $presented['surpriseAmount']);
+        $this->assertSame('+$80.92B EVA', $presented['eva']);
+        $this->assertStringContainsString('$0.15/sh', $presented['pills'][0]['text']);
+        $this->assertStringContainsString('1.64B shares', $presented['pills'][1]['text']);
+    }
+
+    /** A reverse split moves the same figures the other way, and keeps a negative EPS negative. */
+    public function testReverseSplitRestatesTheEventFeedTheOtherWay(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('REVFEED');
+
+        $this->connectionMock->method('fetchAllAssociative')
+            ->willReturnCallback(static fn (string $sql): array => str_contains($sql, 'stock_events') ? [
+                ['id' => 3, 'description' => "Q-Earnings: -$0.45 (Missed expectations by $0.10 | -$15.00M EVA).\n• Bought back 1,000 shares."],
+            ] : []);
+
+        $rewrites = [];
+        $this->connectionMock->method('executeStatement')
+            ->willReturnCallback(function (string $sql, array $params = []) use (&$rewrites): int {
+                if (str_contains($sql, 'UPDATE stock_events')) {
+                    $rewrites[(int) $params['id']] = $params['description'];
+                }
+
+                return 1;
+            });
+
+        $this->service->processStockSplit($stock, 10.0, true, 2.50);
+
+        $this->assertSame(
+            "Q-Earnings: -$4.50 (Missed expectations by $1.00 | -$15.00M EVA).\n• Bought back 100 shares.",
+            $rewrites[3] ?? null
+        );
+    }
+
+    /** A row with nothing per-share in it is not rewritten at all. */
+    public function testEventFeedRestatementLeavesRowsWithoutPerShareFiguresAlone(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('QUIET');
+
+        $this->connectionMock->method('fetchAllAssociative')
+            ->willReturnCallback(static fn (string $sql): array => str_contains($sql, 'stock_events') ? [
+                ['id' => 1, 'description' => 'Issued $18.31B in bonds for expansion.'],
+            ] : []);
+
+        $eventRewrites = 0;
+        $this->connectionMock->method('executeStatement')
+            ->willReturnCallback(function (string $sql) use (&$eventRewrites): int {
+                if (str_contains($sql, 'UPDATE stock_events')) {
+                    $eventRewrites++;
+                }
+
+                return 1;
+            });
+
+        $this->service->processStockSplit($stock, 4.0, false);
+
+        $this->assertSame(0, $eventRewrites);
     }
 }

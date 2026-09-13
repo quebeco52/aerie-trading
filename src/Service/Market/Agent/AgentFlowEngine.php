@@ -31,6 +31,9 @@ use Symfony\Component\DependencyInjection\Attribute\AutowireIterator;
  * tick opens and rebuilt from every name's own score when it closes. So a style that has been working
  * everywhere attracts capital in every name, and when the market turns it loses it everywhere at once —
  * which is what a momentum crash is, and what sixty unrelated populations could never produce.
+ *
+ * The market's cross-section travels the same way: the average mispricing of every name traded last
+ * tick is handed to each name this tick, so a strategy can hold a view on one name RELATIVE to the rest.
  */
 final class AgentFlowEngine
 {
@@ -49,6 +52,15 @@ final class AgentFlowEngine
     private array $styleSums = [];
 
     private int $styleCount = 0;
+
+    /** @var array<string, float> The market's cross-section as it stood when the tick opened. */
+    private array $crossSection = [];
+
+    /** Running total of every traded name's log mispricing this tick. */
+    private float $mispricingSum = 0.0;
+
+    /** Key of the average log mispricing in the cross-section record. */
+    private const CROSS_SECTION_MISPRICING = 'log_mispricing';
 
     /**
      * @param iterable<AgentStrategyInterface>     $strategies
@@ -73,7 +85,7 @@ final class AgentFlowEngine
     public function beginTick(): void
     {
         $this->stateStore->beginBatch();
-        $this->loadStyle();
+        $this->loadMarket();
     }
 
     /**
@@ -94,25 +106,31 @@ final class AgentFlowEngine
             }
 
             $this->stateStore->writeStyle($style);
+            $this->stateStore->writeCrossSection([
+                self::CROSS_SECTION_MISPRICING => $this->mispricingSum / $this->styleCount,
+            ]);
         }
 
         $this->styleLoaded = false;
         $this->styleSums = [];
         $this->styleCount = 0;
+        $this->mispricingSum = 0.0;
 
         $this->stateStore->commitBatch();
     }
 
     /**
-     * Reads the style score once per tick. Also called lazily by trade(), so an engine driven without tick
-     * boundaries still sees whatever the store holds.
+     * Reads the market-wide records once per tick. Also called lazily by trade(), so an engine driven
+     * without tick boundaries still sees whatever the store holds.
      */
-    private function loadStyle(): void
+    private function loadMarket(): void
     {
         $this->style = $this->stateStore->readStyle();
+        $this->crossSection = $this->stateStore->readCrossSection();
         $this->styleLoaded = true;
         $this->styleSums = [];
         $this->styleCount = 0;
+        $this->mispricingSum = 0.0;
     }
 
     /**
@@ -130,7 +148,14 @@ final class AgentFlowEngine
         }
 
         if (!$this->styleLoaded) {
-            $this->loadStyle();
+            $this->loadMarket();
+        }
+
+        // What the average name looked like at the open. Filled in before the book is opened so a relative
+        // holder opens at the holding the cross-section implies, like any other structural holder.
+        $marketMispricing = $this->crossSection[self::CROSS_SECTION_MISPRICING] ?? null;
+        if ($marketMispricing !== null) {
+            $view = $view->withMarketLogMispricing($marketMispricing);
         }
 
         $capacity = $view->averageDailyVolume * FinancialConstants::AGENT_CAPITAL_ADV_MULTIPLE;
@@ -162,6 +187,7 @@ final class AgentFlowEngine
             $this->styleSums[$identifier] = ($this->styleSums[$identifier] ?? 0.0) + $score;
         }
         $this->styleCount++;
+        $this->mispricingSum += $view->logMispricing();
 
         $shares = $this->population->shares($this->population->crowdedFitness($fitness, $this->style));
 

@@ -9,6 +9,8 @@ use App\Service\Market\Agent\FundamentalistStrategy;
 use App\Service\Market\Agent\IndexFundStrategy;
 use App\Service\Market\Agent\MarketMakerStrategy;
 use App\Service\Market\Agent\MomentumStrategy;
+use App\Service\Market\Agent\RelativeValueStrategy;
+use App\Service\Market\Agent\VolatilityTargetStrategy;
 use App\Service\Math\FinancialConstants;
 use PHPUnit\Framework\TestCase;
 
@@ -26,7 +28,9 @@ class AgentStrategyTest extends TestCase
         float $fairValue = 100.0,
         float $momentum = 0.0,
         float $conditions = 0.0,
-        float $adv = 1000000.0
+        float $adv = 1000000.0,
+        float $volatility = 0.0,
+        ?float $marketMispricing = null
     ): AgentMarketViewDTO {
         return new AgentMarketViewDTO(
             ticker: 'TEST',
@@ -37,6 +41,8 @@ class AgentStrategyTest extends TestCase
             logReturn: 0.0,
             financialConditions: $conditions,
             dt: 1.0 / 14400.0,
+            annualizedVolatility: $volatility,
+            marketLogMispricing: $marketMispricing,
         );
     }
 
@@ -246,5 +252,101 @@ class AgentStrategyTest extends TestCase
         );
 
         $this->assertSame($identifiers, array_unique($identifiers));
+    }
+    // --- Volatility targeting ---
+
+    public function testTheVolTargetingBookIsSizedAsTargetOverRealizedVolatility(): void
+    {
+        // Moreira & Muir: exposure = target / realized. At target, the base share; at twice target, half
+        // of it; at half target, twice it.
+        $strategy = new VolatilityTargetStrategy();
+        $target = FinancialConstants::AGENT_VOL_TARGET_VOLATILITY;
+        $base = FinancialConstants::AGENT_VOL_TARGET_BASE_SHARE;
+
+        $this->assertEqualsWithDelta($base, $strategy->signal($this->view(volatility: $target), []), 1e-12);
+        $this->assertEqualsWithDelta($base / 2.0, $strategy->signal($this->view(volatility: 2.0 * $target), []), 1e-12);
+        $this->assertEqualsWithDelta($base * 2.0, $strategy->signal($this->view(volatility: $target / 2.0), []), 1e-12);
+    }
+
+    public function testTheVolTargetingBookSellsIntoAVolatilitySpikeWhateverThePriceDid(): void
+    {
+        // No opinion on the price: a name that has just rallied and one that has just crashed are sized
+        // the same if they now show the same volatility.
+        $strategy = new VolatilityTargetStrategy();
+
+        $calm = $strategy->signal($this->view(volatility: 0.20), []);
+        $stressed = $strategy->signal($this->view(volatility: 0.60), []);
+        $stressedAfterRally = $strategy->signal($this->view(price: 150.0, fairValue: 100.0, momentum: 0.3, volatility: 0.60), []);
+
+        $this->assertLessThan($calm, $stressed);
+        $this->assertSame($stressed, $stressedAfterRally);
+    }
+
+    public function testTheVolTargetingBookCannotLeverUpWithoutLimitOnAQuietTape(): void
+    {
+        $strategy = new VolatilityTargetStrategy();
+        $capped = FinancialConstants::AGENT_VOL_TARGET_BASE_SHARE * FinancialConstants::AGENT_VOL_TARGET_MAX_LEVERAGE;
+
+        $this->assertEqualsWithDelta($capped, $strategy->signal($this->view(volatility: 0.01), []), 1e-12);
+        $this->assertEqualsWithDelta($capped, $strategy->signal($this->view(volatility: 0.001), []), 1e-12);
+    }
+
+    public function testWithoutARealizedVolatilityTheVolTargetingBookHoldsItsSizeAtTarget(): void
+    {
+        $strategy = new VolatilityTargetStrategy();
+
+        $this->assertSame(FinancialConstants::AGENT_VOL_TARGET_BASE_SHARE, $strategy->signal($this->view(volatility: 0.0), []));
+        $this->assertSame(FinancialConstants::AGENT_VOL_TARGET_BASE_SHARE, $strategy->signal($this->view(volatility: -1.0), []));
+        $this->assertFalse($strategy->competesForCapital());
+    }
+
+    // --- Relative value ---
+
+    public function testRelativeValueBuysWhatIsCheapAgainstTheMarketNotWhatIsCheap(): void
+    {
+        // A name 10% below fair value in a market that is 10% below fair value is not cheap to a
+        // relative-value book; the same name in a fairly priced market is.
+        $strategy = new RelativeValueStrategy();
+        $ownMispricing = $this->view(price: 90.0, fairValue: 100.0)->logMispricing();
+
+        $this->assertEqualsWithDelta(0.0, $strategy->signal($this->view(price: 90.0, fairValue: 100.0, marketMispricing: $ownMispricing), []), 1e-12);
+        $this->assertGreaterThan(0.0, $strategy->signal($this->view(price: 90.0, fairValue: 100.0, marketMispricing: 0.0), []));
+        $this->assertLessThan(0.0, $strategy->signal($this->view(price: 100.0, fairValue: 100.0, marketMispricing: $ownMispricing), []), 'Fairly priced in a cheap market is dear relative to it.');
+    }
+
+    public function testRelativeValueIsMarketNeutralAcrossTheNamesItSees(): void
+    {
+        // The signals across a cross-section sum to zero whenever none of them is at its bound: the longs
+        // are funded by the shorts, and a market-wide re-rating leaves the book flat.
+        $strategy = new RelativeValueStrategy();
+        $prices = [92.0, 97.0, 103.0, 108.0];
+
+        $mispricings = array_map(fn (float $price): float => $this->view(price: $price, fairValue: 100.0)->logMispricing(), $prices);
+        $average = array_sum($mispricings) / count($mispricings);
+
+        $total = 0.0;
+        foreach ($prices as $price) {
+            $total += $strategy->signal($this->view(price: $price, fairValue: 100.0, marketMispricing: $average), []);
+        }
+
+        $this->assertEqualsWithDelta(0.0, $total, 1e-12);
+    }
+
+    public function testRelativeValueHoldsNothingUntilTheCrossSectionIsKnown(): void
+    {
+        // Falling back to the absolute mispricing would make it a second fundamentalist on the first tick.
+        $strategy = new RelativeValueStrategy();
+
+        $this->assertSame(0.0, $strategy->signal($this->view(price: 50.0, fairValue: 100.0), []));
+        $this->assertFalse($strategy->competesForCapital());
+    }
+
+    public function testRelativeValueConvictionIsBoundedByItsShareOfCapital(): void
+    {
+        $strategy = new RelativeValueStrategy();
+        $share = FinancialConstants::AGENT_RELATIVE_VALUE_SHARE;
+
+        $this->assertEqualsWithDelta($share, $strategy->signal($this->view(price: 10.0, fairValue: 100.0, marketMispricing: 0.0), []), 1e-12);
+        $this->assertEqualsWithDelta(-$share, $strategy->signal($this->view(price: 1000.0, fairValue: 100.0, marketMispricing: 0.0), []), 1e-12);
     }
 }

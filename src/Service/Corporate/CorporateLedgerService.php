@@ -340,10 +340,80 @@ class CorporateLedgerService
                 );
             }
 
+            // The feed is restated with the ledger. Event text carries per-share figures — the quarter's
+            // EPS, the surprise against consensus, the dividend paid — and a share count for buybacks, all
+            // written in the units of their day. Every price and share count above has just been moved to
+            // the new basis, so left alone the feed reads "Q-Earnings: $11.75" one quarter and "$3.56" the
+            // next across a 4-for-1 that changed nothing about the business. EVA and totals are dollar
+            // amounts, not per-share, and are left as they are.
+            $this->restateEventDescriptions($conn, $stock, $isReverse ? $splitFactor : 1.0 / $splitFactor);
+
             $conn->commit();
         } catch (\Exception $e) {
             $conn->rollBack();
             throw $e;
+        }
+    }
+
+    /**
+     * Rewrites the per-share figures in this stock's event feed onto the post-split basis.
+     *
+     * The feed is text, so the restatement is done by pattern against exactly the phrasings the engines
+     * write and EventPresenter parses: the EPS that opens "Q-Earnings: $11.75", the "Beat/Missed
+     * expectations by $0.30" surprise, the "Paid $0.61/share div" rate, and the "Bought back N shares"
+     * count, which moves the opposite way to price. Formatting is kept as written (two decimals, thousands
+     * separators) so the presenter's regexes still match. Dollar totals (EVA, bond issues, total paid)
+     * are unchanged by a split and are not touched; rows that carry none of these are not rewritten.
+     *
+     * @param float $priceRatio Factor a per-share dollar figure is multiplied by: 1/factor for a forward
+     *                          split, factor for a reverse split. Share counts divide by it.
+     */
+    private function restateEventDescriptions(\Doctrine\DBAL\Connection $conn, Stock $stock, float $priceRatio): void
+    {
+        $rows = $conn->fetchAllAssociative(
+            "SELECT id, description FROM stock_events
+             WHERE stock_id = :stock_id
+               AND (description LIKE 'Q-Earnings:%' OR description LIKE '%/share div%' OR description LIKE '%Bought back%')",
+            ['stock_id' => $stock->getId()]
+        );
+
+        $money = static fn (string $amount): string => number_format(((float) str_replace(',', '', $amount)) * $priceRatio, 2);
+
+        foreach ($rows as $row) {
+            $original = (string) $row['description'];
+            $restated = $original;
+
+            // "Q-Earnings: $11.75" / "Q-Earnings: -$3.56": the sign sits outside the dollar sign.
+            $restated = preg_replace_callback(
+                '/^(Q-Earnings:\s*-?\$)([\d,]+\.\d{2})/',
+                static fn (array $m): string => $m[1] . $money($m[2]),
+                $restated
+            ) ?? $restated;
+
+            $restated = preg_replace_callback(
+                '/((?:Beat|Missed) expectations by\s*\$)([\d,]+\.\d{2})/',
+                static fn (array $m): string => $m[1] . $money($m[2]),
+                $restated
+            ) ?? $restated;
+
+            $restated = preg_replace_callback(
+                '/(Paid\s+\$)([\d,]+\.\d{2})(\/share\s+div)/',
+                static fn (array $m): string => $m[1] . $money($m[2]) . $m[3],
+                $restated
+            ) ?? $restated;
+
+            $restated = preg_replace_callback(
+                '/(Bought\s+back\s+)([\d,]+)(\s+shares)/',
+                static fn (array $m): string => $m[1] . number_format(round(((float) str_replace(',', '', $m[2])) / $priceRatio)) . $m[3],
+                $restated
+            ) ?? $restated;
+
+            if ($restated !== $original) {
+                $conn->executeStatement(
+                    'UPDATE stock_events SET description = :description WHERE id = :id',
+                    ['description' => $restated, 'id' => $row['id']]
+                );
+            }
         }
     }
 }

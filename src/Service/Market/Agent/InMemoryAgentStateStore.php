@@ -15,6 +15,9 @@ final class InMemoryAgentStateStore implements AgentStateStoreInterface
     /** @var array<string, float> */
     private array $style = [];
 
+    /** @var array<string, float> */
+    private array $crossSection = [];
+
     public function read(string $ticker): ?array
     {
         return $this->state[$ticker] ?? null;
@@ -43,5 +46,15 @@ final class InMemoryAgentStateStore implements AgentStateStoreInterface
     public function writeStyle(array $fitness): void
     {
         $this->style = $fitness;
+    }
+
+    public function readCrossSection(): array
+    {
+        return $this->crossSection;
+    }
+
+    public function writeCrossSection(array $crossSection): void
+    {
+        $this->crossSection = $crossSection;
     }
 }

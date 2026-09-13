@@ -31,6 +31,7 @@ final readonly class AgentMarketViewDTO
      * @param float  $riskFreeRate       Annual rate cash earns; a belief is scored on what it made over it.
      * @param float  $annualizedVolatility Realized volatility as a decimal, the risk a belief is charged for its exposure.
      * @param float  $splitRatio         New shares per old share this tick; 1.0 when nothing happened. Agent books are in shares and must be restated.
+     * @param ?float $marketLogMispricing Average log mispricing across the market as it stood when the tick opened; null until the market has one. A relative view has nothing to compare against without it.
      */
     public function __construct(
         public string $ticker,
@@ -44,7 +45,30 @@ final readonly class AgentMarketViewDTO
         public float $riskFreeRate = 0.0,
         public float $annualizedVolatility = 0.0,
         public float $splitRatio = 1.0,
+        public ?float $marketLogMispricing = null,
     ) {}
+
+    /**
+     * The same view with the market's cross-section filled in. The engine, not the tracker, knows the
+     * cross-section, because it is built from every name the engine traded last tick.
+     */
+    public function withMarketLogMispricing(float $marketLogMispricing): self
+    {
+        return new self(
+            $this->ticker,
+            $this->price,
+            $this->perceivedFairValue,
+            $this->momentumTrend,
+            $this->averageDailyVolume,
+            $this->logReturn,
+            $this->financialConditions,
+            $this->dt,
+            $this->riskFreeRate,
+            $this->annualizedVolatility,
+            $this->splitRatio,
+            $marketLogMispricing,
+        );
+    }
 
     /**
      * Log mispricing: positive when the name trades below what it is thought to be worth.
@@ -59,5 +83,20 @@ final readonly class AgentMarketViewDTO
         }
 
         return log($this->perceivedFairValue / $this->price);
+    }
+
+    /**
+     * Log mispricing against the average name: positive when this name is cheaper than the market is.
+     *
+     * Zero, not the absolute mispricing, when the market's cross-section is not known yet. A relative view
+     * that fell back to the absolute one would be a second fundamentalist on the first tick.
+     */
+    public function relativeLogMispricing(): float
+    {
+        if ($this->marketLogMispricing === null || !is_finite($this->marketLogMispricing)) {
+            return 0.0;
+        }
+
+        return $this->logMispricing() - $this->marketLogMispricing;
     }
 }

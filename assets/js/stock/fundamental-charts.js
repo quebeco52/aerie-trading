@@ -20,6 +20,40 @@ let reitCoverageChartInstance = null;
 let reinvestmentIntensityChartInstance = null;
 let cyclicalDynamicsChartInstance = null;
 
+// A lender's interest income is the spread on its book, which the models report as a revenue stream
+// (net_interest_income for a bank, lending for credit services, direct_lending for a shadow bank; the
+// shadow bank's origination_fees are fee income, not interest). The report's interest_income column is
+// treasury yield on excess cash only, by design of the bank model, so read on its own it made a healthy
+// bank print a negative NII once the full funding cost was taken off it.
+const LENDER_INTEREST_STREAMS = ['net_interest_income', 'lending', 'direct_lending'];
+
+function parseStreams(report) {
+    try {
+        return typeof report.revenue_streams === 'string' ? JSON.parse(report.revenue_streams) : (report.revenue_streams || {});
+    } catch (e) {
+        return {};
+    }
+}
+
+function lenderInterestIncome(report) {
+    const streams = parseStreams(report);
+    let income = parseFloat(report.interest_income || 0);
+    for (const key of LENDER_INTEREST_STREAMS) {
+        if (streams[key] !== undefined) income += parseFloat(streams[key] || 0);
+    }
+    return income;
+}
+
+// The report carries the NIM the engine computed (net interest over the earning assets that produced
+// it, annualized). Reports without one (no earning-asset ledger, or written before the column existed)
+// fall back to the blended lending rate less the deposit rate, the gross spread the card showed before.
+function netInterestMargin(report, fallbackSpread) {
+    const nim = report.net_interest_margin;
+    if (nim === undefined || nim === null || nim === '') return fallbackSpread;
+    const parsed = parseFloat(nim);
+    return Number.isFinite(parsed) ? parsed * 100 : fallbackSpread;
+}
+
 export function updateFundamentalCharts(timeframe, rawReports, context = {}) {
     if (!rawReports || rawReports.length === 0 || typeof Chart === 'undefined') return;
 
@@ -170,7 +204,7 @@ export function updateFundamentalCharts(timeframe, rawReports, context = {}) {
             capitalRatioData.push(parseFloat(report.capital_ratio || 0) * 100);
             customerDepositRatioData.push(parseFloat(report.customer_deposit_ratio || 0) * 100);
 
-            let intInc = parseFloat(report.interest_income || 0);
+            let intInc = lenderInterestIncome(report);
             let capExVal = parseFloat(report.capital_expenditures || 0);
             let eqVal = parseFloat(report.equity || 0);
             let totDebtVal = parseFloat(report.total_debt || 0);
@@ -200,7 +234,7 @@ export function updateFundamentalCharts(timeframe, rawReports, context = {}) {
             interestExpenseData.push(intExp);
             let bRateVal = parseFloat(report.blended_rate || 0) * 100;
             let depOrCashVal = parseFloat(report.deposit_apy || report.depositApy || report.cash_yield || report.cashYield || 0) * 100;
-            netInterestSpreadData.push(bRateVal - depOrCashVal);
+            netInterestSpreadData.push(netInterestMargin(report, bRateVal - depOrCashVal));
 
             let combRatioVal = (1.0 - opMarginVal);
             underwritingProfitData.push(rev * combRatioVal);
@@ -329,13 +363,13 @@ export function updateFundamentalCharts(timeframe, rawReports, context = {}) {
 
             let sumIntInc = 0;
             for (let j = 0; j < 4; j++) {
-                if (i - j >= 0) sumIntInc += parseFloat(rawReports[i - j].interest_income || 0);
+                if (i - j >= 0) sumIntInc += lenderInterestIncome(rawReports[i - j]);
             }
             interestIncomeData.unshift(sumIntInc);
             interestExpenseData.unshift(sumIntExp);
             let bRateVal = parseFloat(report.blended_rate || 0) * 100;
             let depOrCashVal = parseFloat(report.deposit_apy || report.depositApy || report.cash_yield || report.cashYield || 0) * 100;
-            netInterestSpreadData.unshift(bRateVal - depOrCashVal);
+            netInterestSpreadData.unshift(netInterestMargin(report, bRateVal - depOrCashVal));
 
             let combRatioVal = (1.0 - opMarginVal);
             underwritingProfitData.unshift(sumRev * combRatioVal);
@@ -1403,7 +1437,7 @@ function renderNetInterestEngineChart(labels, interestIncomeData, interestExpens
                 },
                 {
                     type: 'line',
-                    label: 'Net Interest Spread',
+                    label: 'Net Interest Margin',
                     data: netInterestSpreadData,
                     borderColor: '#facc15',
                     backgroundColor: '#facc15',
@@ -1424,7 +1458,7 @@ function renderNetInterestEngineChart(labels, interestIncomeData, interestExpens
                 tooltip: {
                     callbacks: {
                         label: (ctx) => {
-                            if (ctx.dataset.label === 'Net Interest Spread') {
+                            if (ctx.dataset.label === 'Net Interest Margin') {
                                 return `${ctx.dataset.label}: ${ctx.raw.toFixed(2)}%`;
                             }
                             return `${ctx.dataset.label}: ${formatLarge(ctx.raw, '$')}`;
