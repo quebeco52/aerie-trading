@@ -139,6 +139,26 @@ class AgentStrategyTest extends TestCase
         $this->assertLessThan($neutral, $tight);
     }
 
+    public function testPassiveMoneyIsSlowMoneyInBothDirections(): void
+    {
+        // A z-score index reads two in a crisis and minus two in a boom. The passive book moves a bounded
+        // fraction from its base at either extreme: it is never liquidated and never tripled.
+        $strategy = new IndexFundStrategy();
+        $base = FinancialConstants::AGENT_INDEX_BASE_SHARE;
+        $bound = FinancialConstants::AGENT_INDEX_MAX_FLOW_TILT;
+
+        $this->assertEqualsWithDelta($base * (1.0 - $bound), $strategy->signal($this->view(conditions: 5.0), []), 1e-12);
+        $this->assertEqualsWithDelta($base * (1.0 + $bound), $strategy->signal($this->view(conditions: -5.0), []), 1e-12);
+        $this->assertGreaterThan(0.0, $strategy->signal($this->view(conditions: 5.0), []), 'A tight regime does not empty the passive book.');
+
+        // Inside the bound the tilt is a fraction of the base, not an absolute share.
+        $this->assertEqualsWithDelta(
+            $base * (1.0 - FinancialConstants::AGENT_INDEX_FLOW_SENSITIVITY),
+            $strategy->signal($this->view(conditions: 1.0), []),
+            1e-12
+        );
+    }
+
     public function testTheIndexFundIsNeverShortTheMarketItTracks(): void
     {
         $strategy = new IndexFundStrategy();

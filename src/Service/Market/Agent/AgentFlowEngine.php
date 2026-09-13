@@ -34,6 +34,11 @@ use Symfony\Component\DependencyInjection\Attribute\AutowireIterator;
  *
  * The market's cross-section travels the same way: the average mispricing of every name traded last
  * tick is handed to each name this tick, so a strategy can hold a view on one name RELATIVE to the rest.
+ *
+ * The volatility the agents see is their own: a realized measure built from the returns they have
+ * observed, carried in the book. The value handed in with the view only seeds a book that has no history
+ * yet. Reading the price process's instantaneous variance instead let the vol-control books and the maker
+ * react to a shock in the tick it happened, ahead of anyone who could only watch the tape.
  */
 final class AgentFlowEngine
 {
@@ -140,9 +145,6 @@ final class AgentFlowEngine
      */
     public function trade(AgentMarketViewDTO $view): array
     {
-        // The intensity dial is not checked here on purpose: it multiplies every step below, so turning it
-        // to zero already leaves the population holding what it held and recording nothing. An early
-        // return would say the same thing twice and hide the dial's actual mechanism.
         if ($this->strategies === [] || $view->averageDailyVolume <= 0.0) {
             return ['flow' => 0.0, 'shares' => [], 'positions' => []];
         }
@@ -158,7 +160,14 @@ final class AgentFlowEngine
             $view = $view->withMarketLogMispricing($marketMispricing);
         }
 
-        $capacity = $view->averageDailyVolume * FinancialConstants::AGENT_CAPITAL_ADV_MULTIPLE;
+        // The intensity dial scales the book, not the speed it is worked at. Agent flow is proportional
+        // to the book and the variance it supplies to the price goes as its square, so this is the one
+        // number that hands variance from the diffusion to the agents. Multiplying the step instead, as
+        // the first version did, changed only how fast the same book was reached — and past 1/adjustment
+        // it overshot the target, at a threshold that moved with the tick rate.
+        $capacity = $view->averageDailyVolume
+            * FinancialConstants::AGENT_CAPITAL_ADV_MULTIPLE
+            * FinancialConstants::AGENT_FLOW_INTENSITY;
 
         $state = $this->stateStore->read($view->ticker);
         // A book opened this tick is built on today's capacity, which is already in post-split shares, so
@@ -168,19 +177,28 @@ final class AgentFlowEngine
         $state ??= $this->openBook($view, $capacity);
         $positions = $state['positions'];
         $fitness = $state['fitness'];
+        $exposures = $state['exposures'] ?? [];
+        $variance = $state['variance'] ?? 0.0;
 
-        // Score the beliefs on what they were actually carrying into the move that just happened. The
-        // positions here are still in pre-split shares and the return is measured pre-split, so the two
-        // agree; the book is restated only once it has been scored.
-        $fitness = $this->population->updateFitness(
-            $fitness,
-            $positions,
-            $view->logReturn,
-            $capacity,
-            $view->dt,
-            $view->riskFreeRate,
-            $view->annualizedVolatility * $view->annualizedVolatility
-        );
+        if ($carried) {
+            // Score the beliefs on what one of their agents was carrying into the move that just happened,
+            // charged at the volatility that was known when the exposure was taken. The unit exposure is
+            // dimensionless and the return is measured pre-split, so neither needs restating.
+            $fitness = $this->population->updateFitness(
+                $fitness,
+                $exposures,
+                $view->logReturn,
+                $view->dt,
+                $view->riskFreeRate,
+                $variance
+            );
+
+            // The return the agents just watched is now part of the volatility they can see.
+            $variance = $this->population->realizedVariance($variance, $view->logReturn, $view->dt);
+        }
+
+        $view = $view->withAnnualizedVolatility(sqrt(max(0.0, $variance)));
+
         // This name's score feeds the style score the NEXT tick reads. The one read at the open is what
         // every name is judged against this tick, so the order names are visited in cannot matter.
         foreach ($fitness as $identifier => $score) {
@@ -201,20 +219,29 @@ final class AgentFlowEngine
 
         $flow = 0.0;
         $updatedPositions = $positions;
+        $updatedExposures = [];
 
         foreach ($this->strategies as $strategy) {
             $identifier = $strategy->identifier();
             $current = $positions[$identifier] ?? 0.0;
+            $signal = $strategy->signal($view, $positions);
 
-            // Competing beliefs are sized by how much capital currently holds them; the others carry their
-            // own structural weight, which does not depend on who has been winning.
-            $allocation = $strategy->competesForCapital()
-                ? ($shares[$identifier] ?? 0.0) * $capacity
-                : $capacity;
+            if ($strategy->competesForCapital()) {
+                // What one agent of this belief holds, worked in at the same pace as the book itself, so
+                // the belief is scored on the exposure its money actually had rather than on the signal
+                // it would have liked to be at.
+                $unit = $exposures[$identifier] ?? 0.0;
+                $updatedExposures[$identifier] = $unit + (($signal - $unit) * $adjustment);
 
-            $target = $strategy->signal($view, $positions) * $allocation;
+                // Competing beliefs are sized by how much capital currently holds them; the others carry
+                // their own structural weight, which does not depend on who has been winning.
+                $allocation = ($shares[$identifier] ?? 0.0) * $capacity;
+            } else {
+                $allocation = $capacity;
+            }
 
-            $step = ($target - $current) * $adjustment * FinancialConstants::AGENT_FLOW_INTENSITY;
+            $target = $signal * $allocation;
+            $step = ($target - $current) * $adjustment;
 
             $updatedPositions[$identifier] = $current + $step;
             $flow += $step;
@@ -228,9 +255,6 @@ final class AgentFlowEngine
             $identifier = $provider->identifier();
             $current = $positions[$identifier] ?? 0.0;
 
-            // Not scaled by the intensity dial again: the flow handed in already carries it, and the
-            // inventory being unwound was built from that scaled flow. A second factor made absorption
-            // quadratic in a dial everything else is linear in.
             $step = $provider->trade($view, $current, $othersFlow, $capacity);
 
             $updatedPositions[$identifier] = $current + $step;
@@ -244,6 +268,8 @@ final class AgentFlowEngine
         $this->stateStore->write($view->ticker, [
             'positions' => $updatedPositions,
             'fitness' => $fitness,
+            'exposures' => $updatedExposures,
+            'variance' => $variance,
         ]);
 
         return ['flow' => $flow, 'shares' => $shares, 'positions' => $updatedPositions];
@@ -278,12 +304,17 @@ final class AgentFlowEngine
      * day's volume on every name, every time the engine or its cache restarted. Neither opening records
      * any flow; the book is what was already true, not a trade.
      *
-     * @return array{positions: array<string, float>, fitness: array<string, float>}
+     * The realized variance is seeded from the volatility handed in with the view. It is the one time that
+     * figure is read: a book seeded at zero would open every vol-control holder at its maximum leverage
+     * and have it sell down over the following month, on every name at once whenever the cache is lost.
+     *
+     * @return array{positions: array<string, float>, fitness: array<string, float>, exposures: array<string, float>, variance: float}
      */
     private function openBook(AgentMarketViewDTO $view, float $capacity): array
     {
         $positions = [];
         $fitness = [];
+        $exposures = [];
 
         foreach ($this->strategies as $strategy) {
             $identifier = $strategy->identifier();
@@ -291,6 +322,7 @@ final class AgentFlowEngine
             if ($strategy->competesForCapital()) {
                 $positions[$identifier] = 0.0;
                 $fitness[$identifier] = 0.0;
+                $exposures[$identifier] = 0.0;
             } else {
                 $positions[$identifier] = $strategy->signal($view, []) * $capacity;
             }
@@ -300,6 +332,13 @@ final class AgentFlowEngine
             $positions[$provider->identifier()] = 0.0;
         }
 
-        return ['positions' => $positions, 'fitness' => $fitness];
+        $seed = $view->annualizedVolatility;
+
+        return [
+            'positions' => $positions,
+            'fitness' => $fitness,
+            'exposures' => $exposures,
+            'variance' => is_finite($seed) && $seed > 0.0 ? $seed * $seed : 0.0,
+        ];
     }
 }

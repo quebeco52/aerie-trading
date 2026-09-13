@@ -33,6 +33,14 @@ final class RedisAgentStateStore implements AgentStateStoreInterface
 
     private bool $batching = false;
 
+    /**
+     * Set when the batch's bulk load failed. Every name then opens a fresh book for the tick, and sending
+     * those back at the close would overwrite every real book in the hash with an empty one — a transient
+     * read failure turning into the permanent loss of the market's agent memory. A degraded batch is
+     * served from nothing and commits nothing.
+     */
+    private bool $degraded = false;
+
     /** @var array<string, string> Raw JSON per ticker, as loaded when the batch opened. */
     private array $loaded = [];
 
@@ -93,6 +101,7 @@ final class RedisAgentStateStore implements AgentStateStoreInterface
     public function beginBatch(): void
     {
         $this->batching = true;
+        $this->degraded = false;
         $this->pending = [];
         $this->loaded = [];
 
@@ -100,7 +109,8 @@ final class RedisAgentStateStore implements AgentStateStoreInterface
             /** @phpstan-ignore method.notFound (phpredis hash commands are absent from the analysis stub) */
             $all = $this->redis->hGetAll(self::KEY);
         } catch (\Throwable $e) {
-            $this->logger?->warning('Agent state bulk read failed: ' . $e->getMessage());
+            $this->logger?->warning('Agent state bulk read failed; this tick\'s books will not be saved: ' . $e->getMessage());
+            $this->degraded = true;
 
             return;
         }
@@ -118,9 +128,10 @@ final class RedisAgentStateStore implements AgentStateStoreInterface
 
     public function commitBatch(): void
     {
-        $pending = $this->pending;
+        $pending = $this->degraded ? [] : $this->pending;
 
         $this->batching = false;
+        $this->degraded = false;
         $this->pending = [];
         $this->loaded = [];
 
@@ -211,7 +222,10 @@ final class RedisAgentStateStore implements AgentStateStoreInterface
     }
 
     /**
-     * @return array{positions: array<string, float>, fitness: array<string, float>}|null
+     * The optional fields are passed through only when the stored book has them, so a book written before
+     * they existed reads back exactly as it was written.
+     *
+     * @return array{positions: array<string, float>, fitness: array<string, float>, exposures?: array<string, float>, variance?: float}|null
      */
     private function decode(mixed $raw): ?array
     {
@@ -224,9 +238,19 @@ final class RedisAgentStateStore implements AgentStateStoreInterface
             return null;
         }
 
-        return [
+        $book = [
             'positions' => array_map('floatval', (array) $decoded['positions']),
             'fitness' => array_map('floatval', (array) $decoded['fitness']),
         ];
+
+        if (isset($decoded['exposures']) && is_array($decoded['exposures'])) {
+            $book['exposures'] = array_map('floatval', $decoded['exposures']);
+        }
+
+        if (isset($decoded['variance']) && (is_int($decoded['variance']) || is_float($decoded['variance']))) {
+            $book['variance'] = (float) $decoded['variance'];
+        }
+
+        return $book;
     }
 }

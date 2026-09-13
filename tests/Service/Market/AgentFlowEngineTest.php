@@ -387,8 +387,8 @@ class AgentFlowEngineTest extends TestCase
 
     public function testAVolatilitySpikeMakesTheVolTargetingBookSellAndACalmerTapeBringsItBack(): void
     {
-        // The book opens at its calm size without an order, sells when volatility jumps, then buys back
-        // as it subsides. None of that depends on the price, which is flat throughout.
+        // The book opens at its calm size without an order, sells when a large print raises the volatility
+        // it has observed, then buys back as the tape calms. None of that depends on the price level.
         $engine = $this->engine([new VolatilityTargetStrategy()], []);
 
         $opened = $engine->trade($this->view(volatility: 0.25));
@@ -396,12 +396,85 @@ class AgentFlowEngineTest extends TestCase
         $held = $opened['positions']['vol_target'];
         $this->assertGreaterThan(0.0, $held);
 
-        $spike = $engine->trade($this->view(volatility: 0.75, dt: 1.0 / 240.0));
+        $spike = $engine->trade($this->view(logReturn: -0.10, dt: 1.0 / 240.0));
         $this->assertLessThan(0.0, $spike['flow'], 'A vol spike is met with selling.');
         $this->assertLessThan($held, $spike['positions']['vol_target']);
 
-        $calm = $engine->trade($this->view(volatility: 0.25, dt: 1.0 / 240.0));
+        $sold = $spike['positions']['vol_target'];
+        for ($day = 0; $day < 10; $day++) {
+            $calm = $engine->trade($this->view(logReturn: 0.0, dt: 1.0 / 240.0));
+        }
         $this->assertGreaterThan(0.0, $calm['flow'], 'The tape calming is met with buying.');
+        $this->assertGreaterThan($sold, $calm['positions']['vol_target']);
+    }
+
+    public function testTheAgentsSeeTheVolatilityTheyObservedNotTheOneHandedIn(): void
+    {
+        // The value in the view seeds a fresh book and is never read again: once the book has a history,
+        // a tracker handing in the process's own instantaneous variance changes nothing. That is the
+        // difference between watching the tape and reading the engine's random-number generator.
+        $engine = $this->engine([new VolatilityTargetStrategy()], []);
+        $engine->trade($this->view(volatility: 0.25));
+
+        $ignored = $engine->trade($this->view(volatility: 0.90, logReturn: 0.0, dt: 1.0 / 240.0));
+
+        $this->assertGreaterThanOrEqual(0.0, $ignored['flow'], 'A volatility the agents never observed cannot make them sell.');
+        $this->assertEqualsWithDelta(0.25 ** 2, $this->stateStore->read('TEST')['variance'], 0.25 ** 2 * 0.05);
+    }
+
+    public function testABeliefIsScoredOnItsOwnConvictionNotOnTheCapitalThatHoldsIt(): void
+    {
+        // Two beliefs, both fully long into the same rise, one holding ten times the other's book because
+        // the population has tilted its way. Brock & Hommes score one agent of each type: the two score
+        // the same. Scored on the aggregate book, the majority would pull further ahead for being large.
+        $engine = $this->engine([new FundamentalistStrategy(), new MomentumStrategy()], []);
+        $this->stateStore->write('TEST', [
+            'positions' => ['fundamentalist' => 100000.0, 'momentum' => 1000000.0],
+            'fitness' => ['fundamentalist' => 0.0, 'momentum' => 0.0],
+            'exposures' => ['fundamentalist' => 1.0, 'momentum' => 1.0],
+            'variance' => 0.09,
+        ]);
+
+        $engine->trade($this->view(price: 101.0, fairValue: 200.0, momentum: 0.4, logReturn: 0.01));
+
+        $fitness = $this->stateStore->read('TEST')['fitness'];
+
+        $this->assertGreaterThan(0.0, $fitness['momentum']);
+        $this->assertEqualsWithDelta($fitness['momentum'], $fitness['fundamentalist'], 1e-12);
+    }
+
+    public function testAUnitExposureIsWorkedTowardTheSignalLikeTheBookItself(): void
+    {
+        // What one agent holds lags its conviction by the same horizon the book is worked over, so a belief
+        // is scored on the exposure its money actually had rather than on the signal it would have liked.
+        $engine = $this->engine([new FundamentalistStrategy()], []);
+        $adjustment = 1.0 - exp(-(1.0 / 14400.0) / \App\Service\Math\FinancialConstants::AGENT_POSITION_HORIZON_YEARS);
+
+        $engine->trade($this->view(price: 50.0, fairValue: 100.0));
+        $first = $this->stateStore->read('TEST')['exposures']['fundamentalist'];
+        $engine->trade($this->view(price: 50.0, fairValue: 100.0));
+        $second = $this->stateStore->read('TEST')['exposures']['fundamentalist'];
+
+        $this->assertEqualsWithDelta($adjustment, $first, 1e-12, 'Fully convinced, one step in.');
+        $this->assertEqualsWithDelta($first + ((1.0 - $first) * $adjustment), $second, 1e-12);
+    }
+
+    public function testABookWrittenBeforeExposuresExistedIsScoredFlatRatherThanRejected(): void
+    {
+        $this->stateStore->write('TEST', [
+            'positions' => ['fundamentalist' => 500000.0],
+            'fitness' => ['fundamentalist' => 0.3],
+        ]);
+        $engine = $this->engine([new FundamentalistStrategy()], []);
+
+        $engine->trade($this->view(price: 50.0, fairValue: 100.0, logReturn: 0.02));
+
+        $book = $this->stateStore->read('TEST');
+        $decay = exp(-(1.0 / 14400.0) / \App\Service\Math\FinancialConstants::AGENT_FITNESS_HORIZON_YEARS);
+
+        $this->assertEqualsWithDelta(0.3 * $decay, $book['fitness']['fundamentalist'], 1e-12, 'No exposure on record, nothing to score.');
+        $this->assertArrayHasKey('exposures', $book);
+        $this->assertGreaterThan(0.0, $book['positions']['fundamentalist']);
     }
 
     // --- The cross-section ---

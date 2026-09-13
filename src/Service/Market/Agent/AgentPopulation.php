@@ -104,10 +104,11 @@ final class AgentPopulation
     /**
      * Keeps a losing belief from being extinguished entirely.
      *
-     * Without a floor, a long enough run in one direction drives the other side's share to numerically
-     * zero and it can never recover, because a strategy holding nothing earns nothing and so never scores
-     * again. The market would then be permanently one-sided — which is not what happens, and would remove
-     * the very switching the model exists to produce.
+     * A safety net rather than the mechanism. A belief is scored on what one of its agents holds, so a
+     * belief that has been starved of capital still scores on its conviction and can win it back — but a
+     * long enough run drives the loser's share to numerically zero all the same, and a share that has
+     * underflowed cannot be multiplied back into existence. The market would then be permanently
+     * one-sided, which is not what happens and would remove the very switching the model exists to produce.
      *
      * @param array<string, float> $shares
      * @return array<string, float>
@@ -133,12 +134,19 @@ final class AgentPopulation
     }
 
     /**
-     * Scores each belief on the risk-adjusted excess return its previous position actually earned, as an
+     * Scores each belief on the risk-adjusted excess return one of its agents actually earned, as an
      * annualized rate.
      *
-     * Brock & Hommes (1998) mean-variance fitness, U_h = pi_h - (a/2) sigma^2 z_h^2, where pi_h is the
-     * profit on the exposure z_h the belief was carrying into the return that followed. Two things about
-     * the profit term matter:
+     * Brock & Hommes (1998) mean-variance fitness, U_h = pi_h - (a/2) sigma^2 z_h^2, where z_h is the
+     * exposure ONE agent of type h was carrying into the return that followed, as a fraction of a full
+     * commitment. The population share n_h does not enter: in BH it only appears in market clearing, and
+     * the switching is on what an agent of each type made, not on what the type made in aggregate.
+     * Scoring the aggregate book instead — which is what this did at first — handed every belief a
+     * score proportional to its own share: the minority's fitness was compressed toward zero whatever it
+     * believed, the majority gained share when both were right and lost it when both were wrong, and the
+     * floor on the population share became the only thing keeping a starved belief alive.
+     *
+     * Two things about the profit term matter:
      *
      *   - It is an EXCESS return. Cash earns the risk-free rate, so a long book that made the policy rate
      *     made nothing, and a short book sitting on its proceeds earns it. Scoring raw returns would hand
@@ -155,19 +163,17 @@ final class AgentPopulation
      * simulation is stepping at.
      *
      * @param array<string, float> $fitness      Accumulated scores.
-     * @param array<string, float> $positions    Positions held into the return, in shares.
-     * @param float                $logReturn    The return that followed, measured before any split.
-     * @param float                $capacity     Position size that counts as fully committed, for scaling.
+     * @param array<string, float> $exposures    Exposure one agent of each belief held into the return, in [-1, 1].
+     * @param float                $logReturn    The total return that followed, dividends included, measured before any split.
      * @param float                $dt           Elapsed simulated time in years.
      * @param float                $riskFreeRate Annual rate cash earns.
-     * @param float                $variance     Annualized return variance the exposure is charged for.
+     * @param float                $variance     Annualized return variance the exposure is charged for, as it was known when the exposure was taken.
      * @return array<string, float> Updated scores.
      */
     public function updateFitness(
         array $fitness,
-        array $positions,
+        array $exposures,
         float $logReturn,
-        float $capacity,
         float $dt,
         float $riskFreeRate,
         float $variance
@@ -179,12 +185,11 @@ final class AgentPopulation
         // Continuous-time exponential weighting, so the memory is a length of simulated time rather than a
         // number of ticks. Capital chases performance, but over months, not over the last print.
         $phi = exp(-$dt / FinancialConstants::AGENT_FITNESS_HORIZON_YEARS);
-        $scale = max(1.0, $capacity);
         $riskCharge = 0.5 * FinancialConstants::AGENT_RISK_AVERSION * max(0.0, $variance);
 
         $updated = [];
         foreach ($fitness as $identifier => $score) {
-            $exposure = ($positions[$identifier] ?? 0.0) / $scale;
+            $exposure = $exposures[$identifier] ?? 0.0;
             $excessRate = $exposure * (($logReturn / $dt) - $riskFreeRate);
             $utility = $excessRate - ($riskCharge * $exposure * $exposure);
 
@@ -192,5 +197,30 @@ final class AgentPopulation
         }
 
         return $updated;
+    }
+
+    /**
+     * Realized variance of a name's returns, annualized, as an exponentially weighted mean.
+     *
+     * RiskMetrics-style: sigma^2_t = phi sigma^2_{t-1} + (1 - phi) r_t^2 / dt, with the memory set as a
+     * length of simulated time so the same window means the same thing at any tick rate. This is the
+     * volatility the agents are allowed to see. It is built from the returns they have already observed,
+     * so a jump raises it in the tick it prints and it decays over the window afterwards — which is how a
+     * vol-control book or a maker's risk desk actually experiences a shock, rather than by reading the
+     * process's own instantaneous variance the way an earlier version did.
+     *
+     * @param float $variance  Last estimate.
+     * @param float $logReturn The return just observed, measured before any split.
+     * @param float $dt        Elapsed simulated time in years.
+     */
+    public function realizedVariance(float $variance, float $logReturn, float $dt): float
+    {
+        if ($dt <= 0.0) {
+            return $variance;
+        }
+
+        $phi = exp(-$dt / FinancialConstants::AGENT_REALIZED_VOLATILITY_HORIZON_YEARS);
+
+        return (max(0.0, $variance) * $phi) + ((1.0 - $phi) * (($logReturn * $logReturn) / $dt));
     }
 }

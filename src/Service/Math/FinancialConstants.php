@@ -517,13 +517,15 @@ class FinancialConstants
     public const AGENT_RISK_AVERSION = 2.00;
     /** Share of switching capital that chooses at the STYLE level, on how a belief has paid across the whole market, rather than name by name (Barberis & Shleifer 2003). Zero is a market of unrelated single-name populations; one is a single market-wide population. */
     public const AGENT_STYLE_CROWDING_WEIGHT = 0.50;
+    /** Memory of the realized-variance estimate the agents see, in years (~1 month). RiskMetrics-style EWMA of observed returns; vol-control mandates (Harvey et al. 2018) and maker risk desks size on a window of that order. */
+    public const AGENT_REALIZED_VOLATILITY_HORIZON_YEARS = 0.083;
 
     // --- Agent Capital & Positioning ---
-    /** Total agent capital per name, as a multiple of its average daily volume. Sets how large the simulated institutional book is relative to the market it trades in. */
+    /** Unit of agent capital per name, as a multiple of its STRUCTURAL average daily volume. A fully committed belief or structural holder is sized against it; the competing beliefs share one unit between them and each structural holder carries its own share of one. */
     public const AGENT_CAPITAL_ADV_MULTIPLE = 3.00;
     /** Time an agent takes to work its book 63% of the way to target, in years (~1 trading day; ~95% done in three). In time rather than per tick so the same book is worked the same way at any tick rate. */
     public const AGENT_POSITION_HORIZON_YEARS = 0.004;
-    /** Overall dial on agent activity. The single number to turn when handing more of the market's variance from the diffusion to the agents. */
+    /** Overall scale on the agent books. Multiplies the capital unit, so flow scales with it and the variance the agents supply to the price with its square: the single number to turn when handing more of the market's variance from the diffusion to the agents. Zero winds every book down over the position horizon and leaves no agents. */
     public const AGENT_FLOW_INTENSITY = 1.00;
 
     // --- Agent Signals ---
@@ -537,8 +539,10 @@ class FinancialConstants
     public const AGENT_MAKER_INVENTORY_HORIZON_YEARS = 0.004;
     /** Volatility at which the base absorption applies. Above it, absorption falls with 1/variance (Ho & Stoll 1981: the cost of immediacy is proportional to variance), so makers step back in a stressed market. */
     public const AGENT_MAKER_REFERENCE_VOLATILITY = 0.25;
-    /** Sensitivity of index fund flows to financial conditions: money leaves passive vehicles when conditions tighten. */
-    public const AGENT_INDEX_FLOW_SENSITIVITY = 0.50;
+    /** Fractional change in the passive book per unit of the financial conditions index (a z-score composite): money leaves passive vehicles when conditions tighten. A two-sigma tightening takes 30% of the book, the order of a bad year of equity fund outflows. */
+    public const AGENT_INDEX_FLOW_SENSITIVITY = 0.15;
+    /** Most the passive book moves from its base in either direction, as a fraction. Passive flows are slow money even in a crisis; a tilt that could empty the book turned an index fund into a macro trader. */
+    public const AGENT_INDEX_MAX_FLOW_TILT = 0.30;
     /** Baseline share of agent capital that indexes rather than picking. */
     public const AGENT_INDEX_BASE_SHARE = 0.30;
 

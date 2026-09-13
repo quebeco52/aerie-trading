@@ -9,8 +9,8 @@ namespace App\Service\Market\Agent;
  * accumulated fitness.
  *
  * Kept out of the Stock entity on purpose. This is written for every name on every tick and read back
- * immediately, which is a cache access rather than a durable fact about a company, and putting seven
- * floats per strategy on the row would churn the table for state nobody queries.
+ * immediately, which is a cache access rather than a durable fact about a company, and putting a
+ * handful of floats per strategy on the row would churn the table for state nobody queries.
  *
  * A tick touches every book once, so the store can be told when one starts and ends. Between
  * beginBatch() and commitBatch() a backing store is free to serve reads from a single bulk load and to
@@ -20,13 +20,17 @@ namespace App\Service\Market\Agent;
 interface AgentStateStoreInterface
 {
     /**
-     * @return array{positions: array<string, float>, fitness: array<string, float>}|null
+     * A book: every participant's position in shares, every competing belief's accumulated fitness and
+     * the exposure one of its agents holds, and the realized variance the name's agents have observed.
+     * The last two are absent from a book written before they existed and are treated as empty and zero.
+     *
+     * @return array{positions: array<string, float>, fitness: array<string, float>, exposures?: array<string, float>, variance?: float}|null
      *         Null when this name has no book yet.
      */
     public function read(string $ticker): ?array;
 
     /**
-     * @param array{positions: array<string, float>, fitness: array<string, float>} $state
+     * @param array{positions: array<string, float>, fitness: array<string, float>, exposures?: array<string, float>, variance?: float} $state
      */
     public function write(string $ticker, array $state): void;
 

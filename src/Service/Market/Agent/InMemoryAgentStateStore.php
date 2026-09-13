@@ -9,7 +9,7 @@ namespace App\Service\Market\Agent;
  */
 final class InMemoryAgentStateStore implements AgentStateStoreInterface
 {
-    /** @var array<string, array{positions: array<string, float>, fitness: array<string, float>}> */
+    /** @var array<string, array{positions: array<string, float>, fitness: array<string, float>, exposures?: array<string, float>, variance?: float}> */
     private array $state = [];
 
     /** @var array<string, float> */

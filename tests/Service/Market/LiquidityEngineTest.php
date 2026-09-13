@@ -86,6 +86,23 @@ class LiquidityEngineTest extends TestCase
         $this->assertGreaterThan($calm, $stressed);
     }
 
+    public function testTheStructuralVolumeDoesNotCareHowBusyTheTapeIs(): void
+    {
+        // What standing capital is sized against. A stressed tape carries more volume today, but nobody's
+        // mandate grew because of it.
+        $calm = $this->stock(volatility: 0.28, currentVolatility: 0.28);
+        $stressed = $this->stock(volatility: 0.28, currentVolatility: 0.70);
+
+        $this->assertSame($this->engine->structuralDailyVolume($calm), $this->engine->structuralDailyVolume($stressed));
+        $this->assertEqualsWithDelta($this->engine->averageDailyVolume($calm), $this->engine->structuralDailyVolume($calm), 1e-9);
+        $this->assertGreaterThan($this->engine->structuralDailyVolume($stressed), $this->engine->averageDailyVolume($stressed));
+    }
+
+    public function testTheStructuralVolumeHasTheSameFloorAsTheTradedOne(): void
+    {
+        $this->assertSame(FinancialConstants::MIN_ADV_SHARES, $this->engine->structuralDailyVolume($this->stock(shares: 10.0)));
+    }
+
     public function testTheActivityMultiplierIsBoundedInBothDirections(): void
     {
         // Liquidity genuinely dries up in a panic, but not to zero; and a rally does not manufacture

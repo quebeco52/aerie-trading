@@ -75,7 +75,9 @@ final class StockTrackerFactorWiringTest extends TestCase
         float $leveredBeta,
         array $pricePath,
         ?MarketPricingContext &$captured,
-        ?float $postSplitPrice = null
+        ?float $postSplitPrice = null,
+        ?\App\Service\Market\Agent\AgentStrategyInterface $agentStrategy = null,
+        ?\Closure $earningsReport = null
     ): StockTracker {
         $marketEngine = $this->createStub(MarketEngine::class);
         $marketEngine->method('calculateNextPrice')->willReturnCallback(
@@ -105,7 +107,11 @@ final class StockTrackerFactorWiringTest extends TestCase
         $debtEngine->method('analyzeDebtHealth')->willReturn($this->debtHealth($leveredBeta));
 
         $earnings = $this->createStub(EarningsEngine::class);
-        $earnings->method('calculate')->willReturn(null);
+        if ($earningsReport === null) {
+            $earnings->method('calculate')->willReturn(null);
+        } else {
+            $earnings->method('calculate')->willReturnCallback($earningsReport);
+        }
 
         $ma = $this->createStub(MergerAndAcquisitionEngine::class);
         $ma->method('evaluatePrivateAcquisition')->willReturn(null);
@@ -127,9 +133,39 @@ final class StockTrackerFactorWiringTest extends TestCase
                 new \App\Service\Market\Agent\AgentPopulation(),
                 new \App\Service\Market\Agent\InMemoryAgentStateStore(),
                 new \App\Service\Market\Flow\InMemoryOrderFlowStore(),
-                []
+                $agentStrategy === null ? [] : [$agentStrategy]
             )
         );
+    }
+
+    /**
+     * A strategy that only records what the tracker let it see.
+     *
+     * @param-out \App\DTO\AgentMarketViewDTO|null $seen
+     */
+    private function observingStrategy(?\App\DTO\AgentMarketViewDTO &$seen): \App\Service\Market\Agent\AgentStrategyInterface
+    {
+        return new class($seen) implements \App\Service\Market\Agent\AgentStrategyInterface {
+            /** @param \App\DTO\AgentMarketViewDTO|null $seen */
+            public function __construct(private ?\App\DTO\AgentMarketViewDTO &$seen) {}
+
+            public function identifier(): string
+            {
+                return 'observer';
+            }
+
+            public function signal(\App\DTO\AgentMarketViewDTO $view, array $positions): float
+            {
+                $this->seen = $view;
+
+                return 0.0;
+            }
+
+            public function competesForCapital(): bool
+            {
+                return false;
+            }
+        };
     }
 
     private function stock(string $sector = 'Financials', string $beta = '1.00'): Stock
@@ -248,5 +284,67 @@ final class StockTrackerFactorWiringTest extends TestCase
         // Measuring the return across the split would book log(27.50 / 100) = -1.29, a catastrophic phantom
         // crash that would pin the stock's momentum negative for its whole formation window.
         $this->assertEqualsWithDelta(log(1.10), (float) $stock->getPriceMomentumTrend(), 1e-9);
+    }
+    public function testADividendPaidOnTheReportTickIsCreditedToTheReturnTheTrendAndTheAgentsSee(): void
+    {
+        // The engine prints 110; the report pays $2 a share and the ex-dividend price is 108. A holder
+        // made 10%, not 8%: the momentum trend and the agents' return both add the cash back.
+        $captured = null;
+        $seen = null;
+        $tracker = $this->buildTracker(
+            1.0,
+            [110.0],
+            $captured,
+            agentStrategy: $this->observingStrategy($seen),
+            earningsReport: static function (Stock $stock): array {
+                $stock->setPrice('108.00');
+
+                return [['type' => 'EARNINGS', 'ticker' => 'TEST', 'description' => 'Q', 'change_percent' => 0.0, 'dividend_per_share' => 2.0]];
+            }
+        );
+
+        $stock = $this->stock();
+        $tracker->updateStocks([$stock], 1.0 / 252.0, false, new MacroStateDTO());
+
+        $this->assertEqualsWithDelta(log(1.10), $seen->logReturn, 1e-9);
+        $this->assertEqualsWithDelta(log(1.10), (float) $stock->getPriceMomentumTrend(), 1e-9);
+        $this->assertEqualsWithDelta(log(1.10), $seen->momentumTrend, 1e-9);
+    }
+
+    public function testWithoutAReportTheReturnIsThePriceAlone(): void
+    {
+        $captured = null;
+        $seen = null;
+        $tracker = $this->buildTracker(1.0, [110.0], $captured, agentStrategy: $this->observingStrategy($seen));
+
+        $tracker->updateStocks([$this->stock()], 1.0 / 252.0, false, new MacroStateDTO());
+
+        $this->assertEqualsWithDelta(log(1.10), $seen->logReturn, 1e-9);
+    }
+
+    public function testTheAgentsAreSizedOnTheStructuralVolumeNotTodaysActivity(): void
+    {
+        // A stressed tape carries more volume today. The agent books are standing capital and do not grow
+        // because of it: the tracker hands them the structural figure.
+        $captured = null;
+        $seen = null;
+        $tracker = $this->buildTracker(1.0, [100.0], $captured, agentStrategy: $this->observingStrategy($seen));
+        $liquidity = new \App\Service\Market\LiquidityEngine(new MathUtility());
+
+        $stock = $this->stock();
+        $stock->setSharesOutstanding('500000000');
+        $stock->setPublicFloatPercentage('0.90');
+        $stock->setTurnoverRatio(1.2);
+        $stock->setVolatility('0.20');
+        $stock->setCurrentVolatility('0.60');
+
+        // The depth an order would meet on this stressed tape, read before the tick writes the engine's
+        // next volatility back onto the stock.
+        $stressedDepth = $liquidity->averageDailyVolume($stock);
+
+        $tracker->updateStocks([$stock], 1.0 / 252.0, false, new MacroStateDTO());
+
+        $this->assertEqualsWithDelta($liquidity->structuralDailyVolume($stock), $seen->averageDailyVolume, 1e-6);
+        $this->assertLessThan($stressedDepth, $seen->averageDailyVolume);
     }
 }

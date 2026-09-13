@@ -252,4 +252,59 @@ class RedisAgentStateStoreTest extends TestCase
 
         $this->assertNull($store->read('AAA'));
     }
+    public function testABulkReadFailureCommitsNothingRatherThanOverwritingEveryBookWithAFreshOne(): void
+    {
+        // Served from nothing, every name opens a fresh book for the tick. Sending those back would replace
+        // the market's whole agent memory with empty books because a read failed once.
+        $this->redis->method('hGetAll')->willThrowException(new \RuntimeException('gone'));
+        $this->redis->expects($this->never())->method('multi');
+        $this->redis->expects($this->never())->method('hSet');
+
+        $store = new RedisAgentStateStore($this->redis);
+        $store->beginBatch();
+        $store->write('AAA', self::BOOK_A);
+        $store->writeStyle(['momentum' => 0.1]);
+        $store->commitBatch();
+    }
+
+    public function testTheNextBatchAfterADegradedOneIsServedAndCommittedNormally(): void
+    {
+        $loads = 0;
+        $this->redis->method('hGetAll')->willReturnCallback(static function () use (&$loads): array {
+            if ($loads++ === 0) {
+                throw new \RuntimeException('gone');
+            }
+
+            return ['AAA' => json_encode(self::BOOK_A)];
+        });
+        $this->redis->method('multi')->willReturnSelf();
+        $this->redis->expects($this->once())->method('hSet')->willReturn(1);
+        $this->redis->method('exec')->willReturn([]);
+
+        $store = new RedisAgentStateStore($this->redis);
+        $store->beginBatch();
+        $store->write('AAA', self::BOOK_B);
+        $store->commitBatch();
+
+        $store->beginBatch();
+        $this->assertSame(self::BOOK_A, $store->read('AAA'), 'The real book survived the degraded tick.');
+        $store->write('AAA', self::BOOK_B);
+        $store->commitBatch();
+    }
+
+    public function testExposuresAndVarianceRideWithTheBookAndAnOlderBookReadsBackAsWritten(): void
+    {
+        $full = ['positions' => ['momentum' => 10.0], 'fitness' => ['momentum' => 0.5], 'exposures' => ['momentum' => 0.8], 'variance' => 0.0625];
+
+        $this->redis->method('hGetAll')->willReturn([
+            'NEW' => json_encode($full),
+            'OLD' => json_encode(self::BOOK_A),
+        ]);
+
+        $store = new RedisAgentStateStore($this->redis);
+        $store->beginBatch();
+
+        $this->assertSame($full, $store->read('NEW'));
+        $this->assertSame(self::BOOK_A, $store->read('OLD'), 'No keys invented for a book written before they existed.');
+    }
 }

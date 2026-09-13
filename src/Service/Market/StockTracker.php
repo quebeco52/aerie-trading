@@ -275,6 +275,19 @@ class StockTracker
 
             $currentPriceAfterEarnings = (float) $stock->getPrice();
 
+            // TOTAL RETURN OF THE TICK
+            // The report pays the dividend and takes it off the price in the same step. A holder was paid
+            // that cash, so the return the trend and the agents are scored on adds it back; measured on the
+            // price alone, every payment read as a loss for whoever was long and a gain for whoever was short.
+            $dividendPaidPerShare = 0.0;
+            foreach ($generatedEvents ?? [] as $generatedEvent) {
+                $dividendPaidPerShare += (float) ($generatedEvent['dividend_per_share'] ?? 0.0);
+            }
+
+            $tickLogReturn = $priceAtTickStart > 0.0 && $currentPriceAfterEarnings > 0.0
+                ? log(($currentPriceAfterEarnings + $dividendPaidPerShare) / $priceAtTickStart)
+                : 0.0;
+
             // PRICE MOMENTUM (Jegadeesh & Titman 1993)
             // An exponentially weighted sum of log returns: trend_t = phi * trend_{t-1} + r_t, where phi is a
             // decay set by a horizon in YEARS, so the formation window stays a half-year of simulated time at
@@ -282,7 +295,6 @@ class StockTracker
             // economic return and would otherwise register as a violent crash.
             if ($priceAtTickStart > 0.0 && $currentPriceAfterEarnings > 0.0) {
                 $momentumPhi = exp(-$dt / self::MOMENTUM_FORMATION_YEARS);
-                $tickLogReturn = log($currentPriceAfterEarnings / $priceAtTickStart);
                 $updatedTrend = (($stock->getPriceMomentumTrend() ?? 0.0) * $momentumPhi) + $tickLogReturn;
                 $stock->setPriceMomentumTrend(
                     max(-self::MAX_MOMENTUM_TREND, min(self::MAX_MOMENTUM_TREND, $updatedTrend))
@@ -373,17 +385,18 @@ class StockTracker
             // orders land on the next tick, through the same impact channel and the same variance budget a
             // player's fill goes through. The one-tick lag is the causality, not a shortcut: a participant
             // observes a price and then trades.
-            // The return the agents are scored on is measured BEFORE the split, like the momentum trend
-            // above, and the split reaches them as a share ratio: a 4-for-1 is not a 75% loss.
+            // The return the agents are scored on is the tick's total return, measured BEFORE the split
+            // like the momentum trend above, and the split reaches them as a share ratio: a 4-for-1 is not
+            // a 75% loss. Their books are sized on the structural volume, not today's activity-scaled
+            // depth, so a stressed tape does not grow every book. The volatility handed in only seeds a
+            // book with no history; after that the agents see the realized measure their engine keeps.
             $this->agentFlow->trade(new \App\DTO\AgentMarketViewDTO(
                 ticker: $stock->getTicker(),
                 price: $finalPrice,
                 perceivedFairValue: (float) $calculation['perceived_fair_value'],
                 momentumTrend: (float) ($stock->getPriceMomentumTrend() ?? 0.0),
-                averageDailyVolume: $this->liquidityEngine->averageDailyVolume($stock),
-                logReturn: $priceAtTickStart > 0.0 && $currentPriceAfterEarnings > 0.0
-                    ? log($currentPriceAfterEarnings / $priceAtTickStart)
-                    : 0.0,
+                averageDailyVolume: $this->liquidityEngine->structuralDailyVolume($stock),
+                logReturn: $tickLogReturn,
                 financialConditions: $macroDTO->financialConditionsIndexEma,
                 dt: $dt,
                 riskFreeRate: $macroDTO->policyRate,

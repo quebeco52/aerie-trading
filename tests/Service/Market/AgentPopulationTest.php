@@ -94,14 +94,13 @@ class AgentPopulationTest extends TestCase
 
     // --- Fitness ---
 
-    public function testABeliefIsOnlyRewardedForHavingHadMoneyOnIt(): void
+    public function testABeliefWithNoConvictionScoresNothing(): void
     {
-        // Being right in the abstract earns nothing: a strategy flat into a rally scores zero.
+        // Being right in the abstract earns nothing: a belief whose agents were flat into a rally scores zero.
         $fitness = $this->population->updateFitness(
             ['fundamentalist' => 0.0, 'momentum' => 0.0],
-            ['fundamentalist' => 1000.0, 'momentum' => 0.0],
+            ['fundamentalist' => 1.0, 'momentum' => 0.0],
             0.01,
-            1000.0,
             1.0 / 14400.0,
             0.0,
             0.0
@@ -111,13 +110,30 @@ class AgentPopulationTest extends TestCase
         $this->assertSame(0.0, $fitness['momentum']);
     }
 
+    public function testABeliefIsScoredOnWhatOneOfItsAgentsHeldNotOnHowManyAgentsItHas(): void
+    {
+        // Brock & Hommes score the profit of ONE agent of each type; the population share only enters
+        // market clearing. Two beliefs at the same conviction into the same return score the same, however
+        // much capital each happens to hold. Scored on the aggregate book, the minority's fitness was
+        // compressed toward zero whatever it believed and the majority gained share whenever both were right.
+        $fitness = $this->population->updateFitness(
+            ['majority' => 0.0, 'minority' => 0.0],
+            ['majority' => 0.8, 'minority' => 0.8],
+            0.01,
+            1.0 / 14400.0,
+            0.0,
+            0.09
+        );
+
+        $this->assertEqualsWithDelta($fitness['majority'], $fitness['minority'], 1e-15);
+    }
+
     public function testBeingLongIntoAFallScoresNegatively(): void
     {
         $fitness = $this->population->updateFitness(
             ['momentum' => 0.0],
-            ['momentum' => 1000.0],
+            ['momentum' => 1.0],
             -0.01,
-            1000.0,
             1.0 / 14400.0,
             0.0,
             0.0
@@ -130,9 +146,8 @@ class AgentPopulationTest extends TestCase
     {
         $fitness = $this->population->updateFitness(
             ['fundamentalist' => 0.0],
-            ['fundamentalist' => -1000.0],
+            ['fundamentalist' => -1.0],
             -0.01,
-            1000.0,
             1.0 / 14400.0,
             0.0,
             0.0
@@ -152,9 +167,8 @@ class AgentPopulationTest extends TestCase
     {
         $fitness = $this->population->updateFitness(
             ['fundamentalist' => 0.0],
-            ['fundamentalist' => 1000.0],
+            ['fundamentalist' => 1.0],
             0.002,
-            1000.0,
             1.0 / 14400.0,
             0.0,
             0.0
@@ -172,12 +186,12 @@ class AgentPopulationTest extends TestCase
         // to agree on where they converge.
         $fine = ['f' => 0.0];
         for ($tick = 0; $tick < 14400; $tick++) {
-            $fine = $this->population->updateFitness($fine, ['f' => 1000.0], 0.002, 1000.0, 1.0 / 14400.0, 0.0, 0.0);
+            $fine = $this->population->updateFitness($fine, ['f' => 1.0], 0.002, 1.0 / 14400.0, 0.0, 0.0);
         }
 
         $coarse = ['f' => 0.0];
         for ($tick = 0; $tick < 7200; $tick++) {
-            $coarse = $this->population->updateFitness($coarse, ['f' => 1000.0], 0.004, 1000.0, 2.0 / 14400.0, 0.0, 0.0);
+            $coarse = $this->population->updateFitness($coarse, ['f' => 1.0], 0.004, 2.0 / 14400.0, 0.0, 0.0);
         }
 
         $this->assertEqualsWithDelta($fine['f'], $coarse['f'], abs($fine['f']) * 0.02);
@@ -185,11 +199,11 @@ class AgentPopulationTest extends TestCase
 
     public function testTheScoreIsSmoothedSoOneGoodTickCannotEmptyTheOtherSide(): void
     {
-        $once = $this->population->updateFitness(['f' => 0.0], ['f' => 1000.0], 0.01, 1000.0, 1.0 / 14400.0, 0.0, 0.0);
+        $once = $this->population->updateFitness(['f' => 0.0], ['f' => 1.0], 0.01, 1.0 / 14400.0, 0.0, 0.0);
 
         $sustained = ['f' => 0.0];
         for ($tick = 0; $tick < 2000; $tick++) {
-            $sustained = $this->population->updateFitness($sustained, ['f' => 1000.0], 0.01, 1000.0, 1.0 / 14400.0, 0.0, 0.0);
+            $sustained = $this->population->updateFitness($sustained, ['f' => 1.0], 0.01, 1.0 / 14400.0, 0.0, 0.0);
         }
 
         $this->assertGreaterThan($once['f'] * 10.0, $sustained['f'], 'A persistent edge must accumulate.');
@@ -200,7 +214,7 @@ class AgentPopulationTest extends TestCase
         $fitness = ['f' => 5.0];
 
         for ($tick = 0; $tick < 14400; $tick++) {
-            $fitness = $this->population->updateFitness($fitness, ['f' => 0.0], 0.0, 1000.0, 1.0 / 14400.0, 0.0, 0.0);
+            $fitness = $this->population->updateFitness($fitness, ['f' => 0.0], 0.0, 1.0 / 14400.0, 0.0, 0.0);
         }
 
         $this->assertLessThan(1.0, $fitness['f'], 'A belief cannot coast on a year-old edge.');
@@ -215,7 +229,7 @@ class AgentPopulationTest extends TestCase
         $dt = 1.0 / 14400.0;
         $riskFree = 0.04;
 
-        $fitness = $this->population->updateFitness(['f' => 0.0], ['f' => 1000.0], $riskFree * $dt, 1000.0, $dt, $riskFree, 0.0);
+        $fitness = $this->population->updateFitness(['f' => 0.0], ['f' => 1.0], $riskFree * $dt, $dt, $riskFree, 0.0);
 
         $this->assertEqualsWithDelta(0.0, $fitness['f'], 1e-12);
     }
@@ -226,8 +240,8 @@ class AgentPopulationTest extends TestCase
         // pays it the rate — and a market rising exactly at the rate pays it nothing.
         $dt = 1.0 / 14400.0;
 
-        $flat = $this->population->updateFitness(['f' => 0.0], ['f' => -1000.0], 0.0, 1000.0, $dt, 0.04, 0.0);
-        $atRate = $this->population->updateFitness(['f' => 0.0], ['f' => -1000.0], 0.04 * $dt, 1000.0, $dt, 0.04, 0.0);
+        $flat = $this->population->updateFitness(['f' => 0.0], ['f' => -1.0], 0.0, $dt, 0.04, 0.0);
+        $atRate = $this->population->updateFitness(['f' => 0.0], ['f' => -1.0], 0.04 * $dt, $dt, 0.04, 0.0);
 
         $this->assertGreaterThan(0.0, $flat['f']);
         $this->assertEqualsWithDelta(0.0, $atRate['f'], 1e-12);
@@ -243,9 +257,8 @@ class AgentPopulationTest extends TestCase
 
         $fitness = $this->population->updateFitness(
             ['small' => 0.0, 'large' => 0.0],
-            ['small' => 250.0, 'large' => 1000.0],
+            ['small' => 0.25, 'large' => 1.0],
             0.0,
-            1000.0,
             $dt,
             0.0,
             $variance
@@ -262,9 +275,8 @@ class AgentPopulationTest extends TestCase
 
         $fitness = $this->population->updateFitness(
             ['half' => 0.0, 'full' => 0.0, 'short' => 0.0],
-            ['half' => 500.0, 'full' => 1000.0, 'short' => -1000.0],
+            ['half' => 0.5, 'full' => 1.0, 'short' => -1.0],
             0.0,
-            1000.0,
             $dt,
             0.0,
             0.09
@@ -326,7 +338,7 @@ class AgentPopulationTest extends TestCase
         // and a 4% rate is still rewarded, so the penalty tempers exposure rather than forbidding it.
         $dt = 1.0 / 14400.0;
 
-        $fitness = $this->population->updateFitness(['f' => 0.0], ['f' => 1000.0], 0.30 * $dt, 1000.0, $dt, 0.04, 0.09);
+        $fitness = $this->population->updateFitness(['f' => 0.0], ['f' => 1.0], 0.30 * $dt, $dt, 0.04, 0.09);
 
         $this->assertGreaterThan(0.0, $fitness['f']);
     }
@@ -335,6 +347,62 @@ class AgentPopulationTest extends TestCase
     {
         $fitness = ['f' => 0.25];
 
-        $this->assertSame($fitness, $this->population->updateFitness($fitness, ['f' => 1000.0], 0.01, 1000.0, 0.0, 0.0, 0.0));
+        $this->assertSame($fitness, $this->population->updateFitness($fitness, ['f' => 1.0], 0.01, 0.0, 0.0, 0.0));
+    }
+    // --- The volatility the agents see ---
+
+    public function testAJumpRaisesTheRealizedVarianceInTheTickItPrints(): void
+    {
+        $dt = 1.0 / 14400.0;
+
+        $calm = $this->population->realizedVariance(0.25 ** 2, 0.0, $dt);
+        $jumped = $this->population->realizedVariance(0.25 ** 2, -0.10, $dt);
+
+        $this->assertLessThan(0.25 ** 2, $calm, 'A flat tick lets the estimate decay.');
+        $this->assertGreaterThan(0.25 ** 2, $jumped, 'A ten percent print raises it.');
+    }
+
+    public function testTheSameJumpMovesTheEstimateTheSameAtAnyTickRate(): void
+    {
+        // An annualized r^2/dt weighted over a horizon in time: a jump is worth the same whatever the
+        // simulation is stepping at, and the estimate settles at the same level under the same volatility.
+        $fineJump = $this->population->realizedVariance(0.04, -0.10, 1.0 / 14400.0);
+        $coarseJump = $this->population->realizedVariance(0.04, -0.10, 1.0 / 720.0);
+
+        // (1 - exp(-dt/H)) / dt is 1/H to first order; the coarser step is short of it by dt/2H, about 1%.
+        $this->assertEqualsWithDelta($fineJump - 0.04, $coarseJump - 0.04, 0.03 * abs($fineJump - 0.04));
+
+        // Steady returns of the same annualized size converge on the same variance.
+        $fine = 0.0;
+        for ($tick = 0; $tick < 14400; $tick++) {
+            $fine = $this->population->realizedVariance($fine, 0.30 * sqrt(1.0 / 14400.0), 1.0 / 14400.0);
+        }
+
+        $coarse = 0.0;
+        for ($tick = 0; $tick < 720; $tick++) {
+            $coarse = $this->population->realizedVariance($coarse, 0.30 * sqrt(1.0 / 720.0), 1.0 / 720.0);
+        }
+
+        $this->assertEqualsWithDelta(0.09, $fine, 0.09 * 0.02);
+        $this->assertEqualsWithDelta($fine, $coarse, $fine * 0.02);
+    }
+
+    public function testTheRealizedVarianceForgetsAShockOverItsWindow(): void
+    {
+        $dt = 1.0 / 14400.0;
+        $variance = $this->population->realizedVariance(0.04, -0.10, $dt);
+        $spiked = $variance;
+
+        // Six months of flat tape: the window is about a month, so the spike is long gone.
+        for ($tick = 0; $tick < 7200; $tick++) {
+            $variance = $this->population->realizedVariance($variance, 0.0, $dt);
+        }
+
+        $this->assertLessThan($spiked * 0.01, $variance);
+    }
+
+    public function testZeroElapsedTimeLeavesTheVarianceAlone(): void
+    {
+        $this->assertSame(0.04, $this->population->realizedVariance(0.04, 0.10, 0.0));
     }
 }

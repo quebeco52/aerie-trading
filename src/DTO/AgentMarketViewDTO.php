@@ -24,12 +24,12 @@ final readonly class AgentMarketViewDTO
      * @param float  $price              Last published price.
      * @param float  $perceivedFairValue What analysts currently think it is worth.
      * @param float  $momentumTrend      Exponentially weighted sum of recent log returns.
-     * @param float  $averageDailyVolume Depth, which sets how large an agent book can plausibly be.
-     * @param float  $logReturn          The return since the agents last acted, for scoring their beliefs.
+     * @param float  $averageDailyVolume Structural depth — shares, float and turnover, WITHOUT the volume-volatility activity multiplier — which sets how large an agent book can plausibly be. Sized on the activity-scaled figure, every book grew into a stressed tape and the passive money bought the spike.
+     * @param float  $logReturn          The TOTAL return since the agents last acted, dividends included, for scoring their beliefs. An ex-dividend drop with the cash left out scored every payment as a loss for the long side.
      * @param float  $financialConditions Macro conditions index; passive flows respond to it.
      * @param float  $dt                 Elapsed simulated time in years.
      * @param float  $riskFreeRate       Annual rate cash earns; a belief is scored on what it made over it.
-     * @param float  $annualizedVolatility Realized volatility as a decimal, the risk a belief is charged for its exposure.
+     * @param float  $annualizedVolatility Volatility as a decimal, the risk a belief is charged for its exposure and what the vol-sensitive holders size on. The engine replaces it with the realized measure it keeps in the name's book; the value handed in only seeds a book with no history.
      * @param float  $splitRatio         New shares per old share this tick; 1.0 when nothing happened. Agent books are in shares and must be restated.
      * @param ?float $marketLogMispricing Average log mispricing across the market as it stood when the tick opened; null until the market has one. A relative view has nothing to compare against without it.
      */
@@ -67,6 +67,27 @@ final readonly class AgentMarketViewDTO
             $this->annualizedVolatility,
             $this->splitRatio,
             $marketLogMispricing,
+        );
+    }
+
+    /**
+     * The same view with the volatility the agents have themselves observed, from the engine's book.
+     */
+    public function withAnnualizedVolatility(float $annualizedVolatility): self
+    {
+        return new self(
+            $this->ticker,
+            $this->price,
+            $this->perceivedFairValue,
+            $this->momentumTrend,
+            $this->averageDailyVolume,
+            $this->logReturn,
+            $this->financialConditions,
+            $this->dt,
+            $this->riskFreeRate,
+            $annualizedVolatility,
+            $this->splitRatio,
+            $this->marketLogMispricing,
         );
     }
 

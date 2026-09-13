@@ -70,13 +70,29 @@ final class LiquidityEngine
      */
     public function averageDailyVolume(Stock $stock): float
     {
+        return max(FinancialConstants::MIN_ADV_SHARES, $this->rawStructuralDailyVolume($stock) * $this->activityMultiplier($stock));
+    }
+
+    /**
+     * The name's structural daily volume: shares, float and turnover, with no regard to how busy the tape
+     * is right now.
+     *
+     * This is what a book should be sized against. The activity-scaled figure above is the depth an order
+     * meets today; sizing standing capital on it made every agent book grow into a stressed tape — the
+     * passive money bought a volatility spike — and shrink out of a quiet one.
+     */
+    public function structuralDailyVolume(Stock $stock): float
+    {
+        return max(FinancialConstants::MIN_ADV_SHARES, $this->rawStructuralDailyVolume($stock));
+    }
+
+    private function rawStructuralDailyVolume(Stock $stock): float
+    {
         $shares = (float) $stock->getSharesOutstanding();
         $float = max(0.0, min(1.0, (float) $stock->getPublicFloatPercentage()));
         $turnover = $stock->getTurnoverRatio() ?? FinancialConstants::BASELINE_ANNUAL_TURNOVER;
 
-        $structural = ($shares * $float * max(0.0, $turnover)) / FinancialConstants::TRADING_DAYS_PER_YEAR;
-
-        return max(FinancialConstants::MIN_ADV_SHARES, $structural * $this->activityMultiplier($stock));
+        return ($shares * $float * max(0.0, $turnover)) / FinancialConstants::TRADING_DAYS_PER_YEAR;
     }
 
     /**
