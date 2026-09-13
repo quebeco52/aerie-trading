@@ -714,6 +714,27 @@ class EarningsReportSubscriber implements EventSubscriberInterface
                 }
                 break;
 
+            case 'communication_equipment':
+                if ($streamKey === 'carrier_networks') {
+                    $overhangDrag = $macro->capitalStockOverhangEma * \App\Service\Model\Sector\CommunicationEquipmentBusinessModel::CAPITAL_OVERHANG_SCALAR;
+                    $drivers[] = [
+                        'label'  => 'Carrier Network CapEx Cycle',
+                        'impact' => round(($macro->outputGapEma * \App\Service\Model\Sector\CommunicationEquipmentBusinessModel::CARRIER_CAPEX_GDP_SENSITIVITY * $beta) - $overhangDrag, 4),
+                        'type'   => 'macro',
+                        'fields' => ['output_gap_ema', 'capital_stock_overhang_ema'],
+                    ];
+                } else {
+                    $sentShift = ($macro->consumerSentimentIndexEma - 100.0) / 100.0;
+                    $isRoyalty = $streamKey === 'sep_licensing';
+                    $drivers[] = [
+                        'label'  => $isRoyalty ? 'Royalty-Bearing Device Shipments' : 'Consumer Terminal Demand',
+                        'impact' => round($sentShift * ($isRoyalty ? \App\Service\Model\Sector\CommunicationEquipmentBusinessModel::DEVICE_SHIPMENT_SENTIMENT_SENSITIVITY : $beta), 4),
+                        'type'   => 'macro',
+                        'fields' => ['consumer_sentiment_index_ema'],
+                    ];
+                }
+                break;
+
             case 'semiconductor':
             case 'computer_hardware':
             case 'tech':

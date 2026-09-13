@@ -242,6 +242,25 @@ class StockModelTuningTest extends TestCase
         $this->assertSame(0.25, StockModelTuning::get('FALC', ModelParam::ApexLuxuryWeight, 0.0));
         $this->assertSame(0.20, StockModelTuning::get('FALC', ModelParam::SoftwareServicesWeight, 0.0));
 
+        // Eider Motor Group (EIDR)
+        $this->assertSame(0.70, StockModelTuning::get('EIDR', ModelParam::AutoSalesWeight, 0.0));
+        $this->assertSame(0.15, StockModelTuning::get('EIDR', ModelParam::ApexLuxuryWeight, 0.0));
+        $this->assertSame(0.15, StockModelTuning::get('EIDR', ModelParam::SoftwareServicesWeight, 0.0));
+        $this->assertSame(0.75, StockModelTuning::get('EIDR', ModelParam::PricingPowerIndex, 0.0));
+        $this->assertSame(0.85, StockModelTuning::get('EIDR', ModelParam::RateSensitivityScalar, 0.0));
+
+        // Erne Network Systems (ERNE)
+        $this->assertSame(0.75, StockModelTuning::get('ERNE', ModelParam::EnterpriseWeight, 0.0));
+        $this->assertSame(0.15, StockModelTuning::get('ERNE', ModelParam::PatentLicensingWeight, 0.0));
+        $this->assertSame(0.10, StockModelTuning::get('ERNE', ModelParam::ConsumerWeight, 0.0));
+        $this->assertSame(0.75, StockModelTuning::get('ERNE', ModelParam::PricingPowerIndex, 0.0));
+
+        // Sanderling Rock Dynamics (SNDR)
+        $this->assertSame(0.55, StockModelTuning::get('SNDR', ModelParam::EquipmentWeight, 0.0));
+        $this->assertSame(0.45, StockModelTuning::get('SNDR', ModelParam::ServicesWeight, 0.0));
+        $this->assertSame(0.80, StockModelTuning::get('SNDR', ModelParam::PricingPowerIndex, 0.0));
+        $this->assertSame(1.15, StockModelTuning::get('SNDR', ModelParam::OperatingCyclicality, 0.0));
+
         // Sinking Shore Extraction (SINK)
         $this->assertSame(0.50, StockModelTuning::get('SINK', ModelParam::ExtractionRevenueWeight, 0.0));
         $this->assertSame(0.50, StockModelTuning::get('SINK', ModelParam::SpotPriceWeight, 0.0));
@@ -353,6 +372,7 @@ class StockModelTuningTest extends TestCase
             new \App\Service\Model\Sector\CommercialBankBusinessModel(),
             new \App\Service\Model\Sector\CommodityBusinessModel(),
             new \App\Service\Model\Sector\ComputerHardwareBusinessModel(),
+            new \App\Service\Model\Sector\CommunicationEquipmentBusinessModel(),
             new \App\Service\Model\Sector\ConglomerateBusinessModel(),
             new \App\Service\Model\Sector\ConstructionBusinessModel(),
             new \App\Service\Model\Sector\ConsumerStaplesBusinessModel(),

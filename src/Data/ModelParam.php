@@ -120,6 +120,7 @@ enum ModelParam: string
     case ConsumerWeight = 'consumer_weight';
     case SubscriptionWeight = 'subscription_weight';
     case EquipmentWeight = 'equipment_weight';
+    case PatentLicensingWeight = 'patent_licensing_weight';
 
     // --- Semiconductor ---
     case FoundryRevenueWeight = 'foundry_revenue_weight';

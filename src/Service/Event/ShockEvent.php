@@ -102,6 +102,13 @@ class ShockEvent
     public const TELECOM_PRICE_WAR = 'telecom_price_war';
     public const SPECTRUM_AUCTION = 'spectrum_auction';
 
+    /** Carriers began a generational wireless rollout; network equipment order intake steps up for the build. */
+    public const NETWORK_ROLLOUT_WAVE = 'network_rollout_wave';
+    /** A flagship licensee stopped paying standard-essential patent royalties and litigated the licence terms. */
+    public const SEP_ROYALTY_DISPUTE = 'sep_royalty_dispute';
+    /** A royalty dispute settled; most of the withheld arrears arrived as a catch-up payment. */
+    public const SEP_ROYALTY_SETTLEMENT = 'sep_royalty_settlement';
+
     public const SECURITY_BREACH = 'security_breach';
     public const GEOPOLITICAL_CONFLICT = 'geopolitical_conflict';
     public const LABOR_STRIKE = 'labor_strike';

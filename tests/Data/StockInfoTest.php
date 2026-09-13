@@ -47,4 +47,43 @@ class StockInfoTest extends TestCase
         $this->assertStringContainsString('District', $starDesc);
         $this->assertGreaterThan(500, strlen($starDesc));
     }
+
+    public function testEiderDescriptionQuality(): void
+    {
+        $this->assertArrayHasKey('EIDR', StockInfo::DESCRIPTIONS);
+        $eiderDesc = StockInfo::DESCRIPTIONS['EIDR'];
+
+        $this->assertStringContainsString('Eider Motor Group', $eiderDesc);
+        $this->assertStringContainsString('Granite Fleet', $eiderDesc);
+        $this->assertGreaterThan(500, strlen($eiderDesc));
+
+        $this->assertArrayHasKey('EIDR', StockInfo::QUOTES);
+        $this->assertNotEmpty(StockInfo::QUOTES['EIDR']);
+    }
+
+    public function testErneDescriptionQuality(): void
+    {
+        $this->assertArrayHasKey('ERNE', StockInfo::DESCRIPTIONS);
+        $erneDesc = StockInfo::DESCRIPTIONS['ERNE'];
+
+        $this->assertStringContainsString('Erne Network Systems', $erneDesc);
+        $this->assertStringContainsString('Masthead', $erneDesc);
+        $this->assertGreaterThan(500, strlen($erneDesc));
+
+        $this->assertArrayHasKey('ERNE', StockInfo::QUOTES);
+        $this->assertNotEmpty(StockInfo::QUOTES['ERNE']);
+    }
+
+    public function testSanderlingDescriptionQuality(): void
+    {
+        $this->assertArrayHasKey('SNDR', StockInfo::DESCRIPTIONS);
+        $sanderlingDesc = StockInfo::DESCRIPTIONS['SNDR'];
+
+        $this->assertStringContainsString('Sanderling Rock Dynamics', $sanderlingDesc);
+        $this->assertStringContainsString('cemented carbide', $sanderlingDesc);
+        $this->assertGreaterThan(500, strlen($sanderlingDesc));
+
+        $this->assertArrayHasKey('SNDR', StockInfo::QUOTES);
+        $this->assertNotEmpty(StockInfo::QUOTES['SNDR']);
+    }
 }
