@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Service\Model\Sector;
 
+use App\Service\Math\FinancialConstants;
+
 use App\Service\Model\BusinessModelInterface;
 
 use App\Data\ModelParam;
@@ -27,6 +29,36 @@ use App\Service\Macro\MacroEngine;
  */
 class InternetRetailBusinessModel extends StandardCorporateBusinessModel
 {
+    // --- Operating Cyclicality & Demand Structure ---
+    /** Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Discretionary baskets with near-perfect price comparison. */
+    public const OPERATING_CYCLICALITY = 1.30;
+    /** Own-price elasticity of demand: volume lost per unit of real price increase. */
+    public const PRICE_ELASTICITY_OF_DEMAND = 1.20;
+    /** Share of an idiosyncratic revenue gain taken from same-industry peers rather than won from a larger market. */
+    public const INDUSTRY_SUBSTITUTABILITY = 0.70;
+
+    // --- Input Cost Basket ---
+    /** Shares of the variable cost base bought in tracked input markets (energy, metals, agri, freight, wholesale goods, variable payroll). */
+    public const INPUT_COST_EXPOSURES = ['ppi' => 0.45, 'freight' => 0.08, 'labor' => 0.25, 'energy' => 0.03];
+
+    // --- Consumer Demand ---
+    /** Elasticity of first-party retail volume to the consumer sentiment gap (index points above baseline / 100). Discretionary baskets follow household confidence ahead of the output gap. */
+    public const CONSUMER_SENTIMENT_SCALAR = 0.60;
+
+    // --- Labor Intensity ---
+    /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze. Technology and corporate payroll are fixed while fulfilment labor flexes with order volume. */
+    public const FIXED_COST_LABOR_SHARE = 0.55;
+
+    // --- FX Exposure ---
+    /** Merchandise is bought abroad and sold at home, so the exchange rate reaches this model through landed cost, not demand: a strong domestic currency cheapens the first-party cost of goods. */
+    public const IMPORT_SOURCING_FX_SCALAR = 0.15;
+
+    // --- Balance Sheet Realism ---
+    /** Capitalized operating lease liabilities as a fraction of annual revenue (IFRS 16 / ASC 842). Fulfilment and data-centre footprints are largely leased. */
+    public const LEASE_LIABILITY_INTENSITY = 0.35;
+    /** Stock-based compensation as a fraction of revenue (ASC 718): non-cash, added back to FCF, settled in new shares. Technology and fulfilment leadership paid partly in equity. */
+    public const STOCK_COMPENSATION_INTENSITY = 0.06;
+
     // --- Analyst Visibility & Error ---
     public const BASE_COVERAGE_VISIBILITY = 0.40; // 1P sales are visible, but 3P/Ads are a black box
     public const BASE_COVERAGE_ERROR = 0.08;
@@ -73,10 +105,8 @@ class InternetRetailBusinessModel extends StandardCorporateBusinessModel
     public const DIGITAL_ADS_COST_RATIO = 0.10; // Pure profit (algorithmic placement)
 
     // --- Supply Chain & Labor Physics ---
-    public const INFLATION_PENALTY_SCALAR = 1.20; // 1P Retail eats the cost of physical goods inflation
-    public const WAGE_INFLATION_SCALAR    = 0.80; // Massive warehouse workforce makes them vulnerable to labor shortages
-    /** Sensitivity of 1P physical merchandise procurement costs to Producer Price Inflation (PPI). */
-    public const PPI_PROCUREMENT_SENSITIVITY = 0.30;
+    /** Internet retailers compete on the lowest price: merchandise, freight and warehouse wage moves are barely recovered. */
+    public const PRICING_POWER_INDEX = 0.10;
 
     // --- Tail Risk Events ---
     public const WAREHOUSE_STRIKE_Z_SCORE = -2.20;
@@ -96,6 +126,8 @@ class InternetRetailBusinessModel extends StandardCorporateBusinessModel
         $physics['macro_demand_shift'] = 0.0;
         // Inflation is absorbed as a cost penalty, not passed on (Internet Retailers compete on lowest price).
         $physics['pricing_power_multiplier'] = 1.0;
+        // Inflation is carried inside this model's own stream physics: neither price nor cost base inflates at the engine level.
+        $physics['input_cost_multiplier'] = 1.0;
 
         return $physics;
     }
@@ -113,8 +145,8 @@ class InternetRetailBusinessModel extends StandardCorporateBusinessModel
         $adsWeight = $params[ModelParam::DigitalAdsWeight];
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
-        $streams = new \App\DTO\StreamContext($momentum, $mathUtility);
-        $beta = abs((float) $stock->getBeta());
+        $streams = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
+        $beta = $this->getOperatingCyclicality($stock);
 
         // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
         $activeWeights = $streams->resolveActiveStreamWeights([
@@ -131,13 +163,15 @@ class InternetRetailBusinessModel extends StandardCorporateBusinessModel
         $fpZ  = $streams->generateZ('first_party_retail', 0.25);
         $tpZ  = $streams->generateZ('third_party_seller', 0.40); // High persistence tollbooth
         $adsZ = $streams->generateZ('digital_ads_cloud', 0.20);
-        $eventZ = $streams->generateZ('event', 0.10);
+        $eventZ = $streams->generateExogenousZ('event', 0.10);
 
         // --- Macro Sensitivities ---
         $outputGap = $macroState->outputGapEma;
+        $sentimentShift = ($macroState->consumerSentimentIndexEma - MacroEngine::SENTIMENT_BASELINE) / 100.0;
 
-        // 1P Retail bears the absolute brunt of consumer recessions
-        $fpMacroShift = $outputGap * 2.0 * $beta;
+        // 1P Retail bears the absolute brunt of consumer recessions, and household confidence moves the basket
+        // before the output gap does: a shopper who fears for their job trades down while GDP is still growing.
+        $fpMacroShift = (($outputGap * 2.0) + ($sentimentShift * self::CONSUMER_SENTIMENT_SCALAR)) * $beta;
 
         // 3P and Ads are partially insulated, acting as a structural tollbooth
         $tpMacroShift = $outputGap * 0.5 * $beta;
@@ -185,44 +219,21 @@ class InternetRetailBusinessModel extends StandardCorporateBusinessModel
         $fpBaselineCosts = max(0.0, $targetTotalCosts - $tpCosts - $adsCosts);
         $fpVariableMargin = $expectedRevenue * $fpWeight > 0 ? $fpBaselineCosts / ($expectedRevenue * $fpWeight) : $realizedVariableMargin;
         
-        $fxShift = ($macroState->exchangeRateIndexEma - 100.0) / 100.0;
-        $fpCostSavings = $fpRevenue * $fxShift * 0.15;
+        $fxShift = ($macroState->exchangeRateIndexEma - FinancialConstants::FX_INDEX_BASE) / FinancialConstants::FX_INDEX_BASE;
+        $fpCostSavings = $fpRevenue * $fxShift * self::IMPORT_SOURCING_FX_SCALAR;
 
         // Re-blend actual costs based on shocked revenue
         $actualVariableCosts = $tpCosts + $adsCosts + ($fpRevenue * $fpVariableMargin) - $fpCostSavings;
 
-        // --- Inflation & Labor Penalties ---
-        $inflation = $macroState->inflationEma;
-
-        // Physical goods inflation crushes 1P retail
-        $goodsInflationDrag = $inflation > MacroEngine::TARGET_INFLATION
-            ? ($inflation - MacroEngine::TARGET_INFLATION) * $beta * self::INFLATION_PENALTY_SCALAR
-            : 0.0;
-
-        // Wage inflation crushes the warehouse network (applies to both 1P and 3P fulfillment)
-        $unemployment = $macroState->unemploymentRateEma;
-        $wageInflationDrag = $unemployment < 0.04
-            ? (0.04 - $unemployment) * self::WAGE_INFLATION_SCALAR // Tight labor market forces wage hikes
-            : 0.0;
-
-        // Global ocean & logistics freight spikes increase 1P import and 3P fulfillment delivery costs
-        $freightShift = max(0.0, ($macroState->freightRateIndexEma - 100.0) / 100.0);
-        $freightCostDrag = $freightShift * 0.05 * ($fpWeight + $tpWeight);
-
-        // Wholesale PPI merchandise cost drag on 1P inventory
-        $ppiCostDrag = MathUtility::calculatePpiCostDrag(
-            $macroState->producerPriceInflationEma,
-            MacroEngine::TARGET_INFLATION,
-            0.10,
-            self::PPI_PROCUREMENT_SENSITIVITY
-        ) * $fpWeight;
-
-        $totalMacroCostDrag = ($goodsInflationDrag * $fpWeight) + ($wageInflationDrag * ($fpWeight + $tpWeight)) + $freightCostDrag + $ppiCostDrag;
+        // --- Input Cost Basket ---
+        // Merchandise (wholesale goods), ocean and last-mile freight and warehouse payroll reach the cost base at
+        // spot; a lowest-price retailer recovers almost none of it in its own prices.
+        $inputCostDrag = $this->resolveInputCostDrag($stock, $macroState, $streams, $this->resolvePricingPower($stock), $realizedVariableMargin);
 
         $effectiveMargin = $actualRevenue > 0 ? ($actualVariableCosts / $actualRevenue) : $realizedVariableMargin;
 
         // Apply penalties directly to the baseline margin
-        $rawMargin = $effectiveMargin + $totalMacroCostDrag + $strikePenalty;
+        $rawMargin = $effectiveMargin + $inputCostDrag + $strikePenalty;
         $clampedMargin = $this->clampMargin($rawMargin);
 
         // Primary shock
@@ -254,13 +265,15 @@ class InternetRetailBusinessModel extends StandardCorporateBusinessModel
      */
     public function getOperatingMacroFields(): array
     {
-        return array_unique(array_merge(parent::getOperatingMacroFields(), [
+        return [
+            'consumer_sentiment_index_ema',
+            'energy_cost_push_lag',
             'exchange_rate_index_ema',
             'freight_rate_index_ema',
-            'inflation_ema',
             'output_gap_ema',
             'producer_price_inflation_ema',
-            'unemployment_rate_ema',
-        ]));
+            'tips_breakeven_ema',
+            'wage_growth_ema',
+        ];
     }
 }

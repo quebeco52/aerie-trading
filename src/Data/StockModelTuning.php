@@ -51,7 +51,6 @@ class StockModelTuning
         'ROOK' => [
             ModelParam::AdvisoryRevenueWeight->value => 0.15,
             ModelParam::TradingRevenueWeight->value  => 0.85,
-            ModelParam::VixArbitrageScalar->value    => 1.80,
         ],
 
         // --- Corvid Strategic Arbitrage (CORV) ---
@@ -111,8 +110,6 @@ class StockModelTuning
         'POOL' => [
             ModelParam::MortgageOriginationWeight->value => 0.60,
             ModelParam::DirectLendingWeight->value       => 0.40,
-            ModelParam::RateSensitivityScalar->value     => 2.50,
-            ModelParam::PricingPowerIndex->value         => 0.40,
         ],
 
         // =====================================================================
@@ -128,7 +125,6 @@ class StockModelTuning
             ModelParam::CatastropheZThreshold->value     => -1.55,
             ModelParam::CatastropheLossScalar->value     => 0.20,
             ModelParam::FloatEquityWeight->value         => 0.05,
-            ModelParam::EquityPortfolioVol->value        => 0.08,
         ],
 
         // --- White Dove Insurance (DOVE) ---
@@ -139,7 +135,6 @@ class StockModelTuning
             ModelParam::CatastropheZThreshold->value     => -1.80,
             ModelParam::CatastropheLossScalar->value     => 0.08,
             ModelParam::FloatEquityWeight->value         => 0.10,
-            ModelParam::EquityPortfolioVol->value        => 0.10,
         ],
 
         // =====================================================================
@@ -185,13 +180,14 @@ class StockModelTuning
         // =====================================================================
 
         // --- Owl Capital Partners (OWLS) ---
-        // Disciplined value-investing conglomerate with sticky recurring management fees.
+        // Permanent-capital value holding company. Earns the operating cash flow of wholly-owned
+        // subsidiaries, not a management fee on third-party assets, so it runs the conglomerate physics
+        // alongside BRKW and TRIV rather than the asset-manager fee model it used to be priced on.
         'OWLS' => [
-            ModelParam::BaseFeeWeight->value         => 0.85,
-            ModelParam::PerformanceFeeWeight->value  => 0.15,
-            ModelParam::AumMarketBetaScalar->value  => 0.20,
-            ModelParam::PerformanceFeeZFloor->value => 1.60,
-            ModelParam::PerformanceFeeScalar->value  => 0.06,
+            ModelParam::IndustrialConglomerateWeight->value => 0.45, // Heavy rail and industrial manufacturing
+            ModelParam::DefensiveStaplesWeight->value       => 0.35, // Utility infrastructure and consumer goods
+            ModelParam::ContrarianFloatWeight->value        => 0.20, // Cash and short-term sovereign paper awaiting a panic
+            ModelParam::PricingPowerIndex->value            => 0.80, // Buys structural moats by mandate, never price takers
         ],
 
         // --- Crowfall Capital (CROW) ---
@@ -243,6 +239,7 @@ class StockModelTuning
             ModelParam::CloudInfrastructureWeight->value => 0.40,
             ModelParam::AdvertisingCyclicality->value    => 0.22,
             ModelParam::MonopolyAggression->value        => 0.90, // Ruthless data monopoly, high margins, existential regulatory risk
+            ModelParam::PricingPowerIndex->value         => 0.60, // Auction-cleared ad inventory prices itself; only the subscription and cloud books are set by the seller
         ],
 
         // --- Silicon Creek Foundries (SILC) ---
@@ -284,6 +281,11 @@ class StockModelTuning
         'TICK' => [
             ModelParam::SubscriptionRevenueWeight->value => 0.90,
             ModelParam::TransactionRevenueWeight->value  => 0.10,
+            // Two different sensitivities, deliberately split. The EARNINGS are near-immune to the cycle:
+            // a trading desk cancels its terminals last, whether the market is crashing or soaring. The
+            // PRICE is not, because a 26x multiple de-rates hard in any technology selloff. Equity beta
+            // stays at 1.45 to carry the second; this dial carries the first.
+            ModelParam::OperatingCyclicality->value      => 0.35,
         ],
 
         // =====================================================================
@@ -298,6 +300,9 @@ class StockModelTuning
             ModelParam::SpotPriceWeight->value         => 0.50, // Heavy unhedged spot oil & gas price exposure
             ModelParam::RefiningSpreadWeight->value    => 0.00,
             ModelParam::SpotPriceSensitivity->value    => 0.85, // Aggressive unhedged price-taker
+            ModelParam::EnergyPriceExposure->value     => 1.00, // Pure crude & gas price exposure
+            ModelParam::IndustrialMetalsExposure->value => 0.00,
+            ModelParam::AgriculturalExposure->value    => 0.00,
         ],
 
         // --- Cascade Refining & Marketing (CASC) ---
@@ -307,6 +312,9 @@ class StockModelTuning
             ModelParam::SpotPriceWeight->value         => 0.15, // Strategic physical crude storage inventory
             ModelParam::RefiningSpreadWeight->value    => 0.60, // Algorithmic crack spread arbitrage (gasoline/diesel/jet fuel)
             ModelParam::SpotPriceSensitivity->value    => 0.30, // Heavily hedged physical inventory
+            ModelParam::EnergyPriceExposure->value     => 1.00, // Crude storage inventory marked to the energy complex
+            ModelParam::IndustrialMetalsExposure->value => 0.00,
+            ModelParam::AgriculturalExposure->value    => 0.00,
         ],
 
         // --- Condor Extraction (CNDR) ---
@@ -316,6 +324,9 @@ class StockModelTuning
             ModelParam::SpotPriceWeight->value         => 0.40, // Base metal / rare earth spot price super-cycle exposure
             ModelParam::RefiningSpreadWeight->value    => 0.00,
             ModelParam::SpotPriceSensitivity->value    => 0.70, // Semi-hedged sovereign concessions
+            ModelParam::EnergyPriceExposure->value     => 0.00,
+            ModelParam::IndustrialMetalsExposure->value => 1.00, // Base metals & rare earths priced off the metals complex
+            ModelParam::AgriculturalExposure->value    => 0.00,
         ],
 
         // =====================================================================
@@ -353,6 +364,10 @@ class StockModelTuning
         'CBIL' => [
             ModelParam::ConsumerWeight->value   => 0.10, // Retail secondary market liquidations (volatile)
             ModelParam::CommercialWeight->value => 0.90, // Unbreakable industrial fortress / premium tooling (sticky)
+            // A shattered drill bit halts an assembly line, so the tooling spend survives the downturn that
+            // cancels the line's expansion. Volumes track maintenance, not the capital cycle the sector
+            // default (1.00) assumes.
+            ModelParam::OperatingCyclicality->value => 0.55,
         ],
 
         // --- Three Rivers Manufacturing (TRIV) ---
@@ -383,7 +398,6 @@ class StockModelTuning
             ModelParam::CostPlusWeight->value             => 0.60,
             ModelParam::FixedPriceDevWeight->value        => 0.20,
             ModelParam::ForeignMilitarySalesWeight->value => 0.20,
-            ModelParam::DomesticProcurementWeight->value  => 0.80,
         ],
 
         // --- Bird Watch Security (WATCH) ---
@@ -424,11 +438,16 @@ class StockModelTuning
 
         // --- Kestrel Civic Lines (KSTL) ---
         // Class 1 freight & municipal rail transit operator. Preemptive track monopoly with intermodal & industrial carload focus.
+        // Half the network is the commuter monopoly its description is actually about: punitive single
+        // fares herding millions onto auto-renewing 'Kestrel Link' subscriptions. The other half is the
+        // freight that shares the same preemptively laid track. It was tuned 100% freight, so none of the
+        // inescapable baseline tax reached the physics.
         'KSTL' => [
-            ModelParam::IntermodalFreightWeight->value => 0.50,
-            ModelParam::IndustrialCarloadsWeight->value => 0.30,
-            ModelParam::BulkCommoditiesWeight->value   => 0.20,
-            ModelParam::PricingPowerIndex->value       => 0.80,
+            ModelParam::SubscriptionWeight->value       => 0.50, // Kestrel Link commuter subscriptions
+            ModelParam::IntermodalFreightWeight->value  => 0.25,
+            ModelParam::IndustrialCarloadsWeight->value => 0.15,
+            ModelParam::BulkCommoditiesWeight->value    => 0.10,
+            ModelParam::PricingPowerIndex->value        => 0.80,
         ],
 
         // =====================================================================
@@ -436,10 +455,17 @@ class StockModelTuning
         // =====================================================================
 
         // --- Ibis Pharmaceuticals (IBIS) ---
-        // Global biopharma giant. Skewed toward established commercial blockbuster portfolio (85%).
+        // Global biopharma giant (big pharma archetype). Skewed toward the established commercial
+        // blockbuster portfolio (85%), with a biologic-heavy book facing a scheduled patent cliff on
+        // roughly a third of marketed revenue.
         'IBIS' => [
-            ModelParam::CommercialTherapeuticsWeight->value => 0.85,
-            ModelParam::PipelineMilestonesWeight->value     => 0.15,
+            ModelParam::EstablishedDrugWeight->value       => 0.85,
+            ModelParam::PipelineDrugWeight->value          => 0.15,
+            ModelParam::PatentProtectedRevenueShare->value => 0.88, // Marketed book still under exclusivity
+            ModelParam::LoeExposureShare->value            => 0.35, // Share of revenue exposed to the next cliff
+            ModelParam::ExclusivityQuarters->value         => 26.0, // ~6.5 years until lead franchise LOE
+            ModelParam::BiologicRevenueShare->value        => 0.55, // Biologics erode slowly under biosimilars
+            ModelParam::PatentedMarginCeiling->value       => 0.50,
         ],
 
         // --- Crane Medical Network (CRAN) ---
@@ -467,6 +493,7 @@ class StockModelTuning
         'PHIL' => [
             ModelParam::BrandedStaplesWeight->value  => 0.85,
             ModelParam::VolumeCommodityWeight->value => 0.15,
+            ModelParam::PricingPowerIndex->value     => 0.90, // Addictive, habit-formed demand: decades of above-inflation list price increases with minimal volume response
         ],
 
         // --- Lark & Crest Brands (LARK) ---
@@ -493,6 +520,7 @@ class StockModelTuning
             ModelParam::VolumeCommodityWeight->value  => 0.50,
             ModelParam::CommodityTradingWeight->value => 0.15,
             ModelParam::LandSpeculationWeight->value  => 0.15,
+            ModelParam::PricingPowerIndex->value      => 0.30, // Bulk agricultural output clears at the exchange price, not a list price
         ],
 
         // --- Pintail Beverage Group (PINT) ---

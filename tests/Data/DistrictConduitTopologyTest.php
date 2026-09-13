@@ -98,14 +98,25 @@ class DistrictConduitTopologyTest extends TestCase
             return;
         }
 
-        foreach ($conduits as $institutionId) {
-            $institutionFields = DistrictMap::INSTITUTIONS[$institutionId]['fields'];
-
-            $this->assertNotEmpty(
-                array_intersect($ownFields, $institutionFields),
-                sprintf('"%s" is wired to "%s" but shares none of its non-ubiquitous fields', $businessModel, $institutionId)
-            );
+        // Assert the whole derived set, not just each derived edge: a model may read non-ubiquitous
+        // fields that no institution publishes at all (wage_growth_ema), which leaves it correctly
+        // wired to nothing. Checking only the edges that exist asserts nothing in that case, and
+        // never catches an institution the model should be wired to but is not.
+        $expected = [];
+        foreach (DistrictMap::INSTITUTIONS as $institutionId => $institution) {
+            if (array_intersect($ownFields, $institution['fields']) !== []) {
+                $expected[] = $institutionId;
+            }
         }
+
+        sort($expected);
+        sort($conduits);
+
+        $this->assertSame($expected, $conduits, sprintf(
+            '"%s" derives conduits that drift from its non-ubiquitous fields [%s].',
+            $businessModel,
+            implode(', ', $ownFields)
+        ));
     }
 
     public function testEveryInstitutionFieldExistsOnMacroStateDTO(): void
@@ -158,7 +169,7 @@ class DistrictConduitTopologyTest extends TestCase
     public function testEveryStressRuleReferencesARealFieldAndOperator(): void
     {
         $dtoFields = array_keys((new MacroStateDTO())->toArray());
-        $validOps = [DistrictMap::OP_GTE, DistrictMap::OP_LTE, DistrictMap::OP_LT, DistrictMap::OP_INDEX_DEVIATION];
+        $validOps = [DistrictMap::OP_GTE, DistrictMap::OP_LTE, DistrictMap::OP_LT, DistrictMap::OP_INDEX_DROP];
 
         foreach (DistrictMap::INSTITUTIONS as $institutionId => $institution) {
             foreach ($institution['stress_rules'] ?? [] as $rule) {
@@ -244,24 +255,29 @@ class DistrictConduitTopologyTest extends TestCase
      * Regression guard for Glasswater Row: the 14 financial models' derived conduits, captured at
      * the moment CONDUITS (the old hand-maintained table) was replaced by this derivation, so any
      * future change to a financial model's declared fields that shifts its topology is visible in
-     * a failing assertion rather than a silent diff.
+     * a failing assertion rather than a silent diff. Re-baselined when declarations were synced to
+     * the fields each model's own operating code reads (BusinessModelMacroFieldDeclarationTest):
+     * distressed debt gained the rate and exchange edges its float income reads, and the two
+     * insurers lost a land-registry edge their physics never read. Re-baselined again when inflation_ema left
+     * UBIQUITOUS_MACRO_FIELDS (the input cost basket moved most producers off headline CPI): the five
+     * balance-sheet financials whose float and pool growth still read CPI now draw a statistical-office edge.
      */
     public static function financialModelConduitProvider(): array
     {
         return [
             'commercial_bank' => ['commercial_bank', ['rate-council', 'credit-registry', 'statistical-office', 'land-registry']],
             'credit_services' => ['credit_services', ['rate-council', 'credit-registry', 'statistical-office']],
-            'shadow_bank' => ['shadow_bank', ['rate-council', 'credit-registry', 'land-registry']],
+            'shadow_bank' => ['shadow_bank', ['rate-council', 'credit-registry', 'land-registry', 'statistical-office']],
             'investment_bank' => ['investment_bank', ['rate-council', 'credit-registry', 'exchange-floor']],
             'brokerage' => ['brokerage', ['rate-council', 'credit-registry', 'exchange-floor']],
-            'clearing_house' => ['clearing_house', ['rate-council', 'credit-registry', 'exchange-floor']],
+            'clearing_house' => ['clearing_house', ['rate-council', 'credit-registry', 'exchange-floor', 'statistical-office']],
             'asset_manager' => ['asset_manager', ['rate-council', 'exchange-floor']],
             'private_equity' => ['private_equity', ['rate-council', 'credit-registry', 'exchange-floor']],
             'hedge_fund' => ['hedge_fund', ['rate-council', 'credit-registry', 'exchange-floor']],
-            'distressed_debt' => ['distressed_debt', ['credit-registry']],
-            'insurance' => ['insurance', ['rate-council', 'exchange-floor', 'land-registry']],
-            'reinsurance' => ['reinsurance', ['rate-council', 'exchange-floor', 'land-registry']],
-            'retail_insurance' => ['retail_insurance', ['rate-council', 'exchange-floor', 'land-registry']],
+            'distressed_debt' => ['distressed_debt', ['rate-council', 'credit-registry', 'exchange-floor']],
+            'insurance' => ['insurance', ['rate-council', 'exchange-floor', 'land-registry', 'statistical-office']],
+            'reinsurance' => ['reinsurance', ['rate-council', 'exchange-floor', 'statistical-office']],
+            'retail_insurance' => ['retail_insurance', ['rate-council', 'exchange-floor', 'statistical-office']],
             'financial_data' => ['financial_data', ['credit-registry', 'exchange-floor']],
         ];
     }

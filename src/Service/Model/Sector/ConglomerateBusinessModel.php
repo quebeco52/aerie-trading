@@ -32,6 +32,40 @@ use App\Service\Math\MathUtility;
  */
 class ConglomerateBusinessModel extends StandardCorporateBusinessModel
 {
+    // --- Firm-Level Common Factor ---
+    /** One-factor loading of each stream on the firm-wide demand innovation (rho^2 = 12%). Unrelated subsidiaries share management and brand but not customers, so a segment's quarter says little about its siblings. */
+    public const FIRM_FACTOR_LOADING = 0.35;
+    /** Two-factor loading on the persistent demand factor of the holding company's reported sector (rho_s^2 = 6%). A conglomerate spans sectors, so its own sector's cycle explains less of any one segment than it would for a focused peer. */
+    public const SECTOR_FACTOR_LOADING = 0.25;
+
+    // --- Operating Cyclicality & Demand Structure ---
+    /** Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Diversified subsidiaries dampen the cycle. */
+    public const OPERATING_CYCLICALITY = 0.90;
+    /** Own-price elasticity of demand: volume lost per unit of real price increase. */
+    public const PRICE_ELASTICITY_OF_DEMAND = 0.50;
+    /** Share of an idiosyncratic revenue gain taken from same-industry peers rather than won from a larger market. */
+    public const INDUSTRY_SUBSTITUTABILITY = 0.40;
+
+    // --- Input Cost Basket ---
+    /** Shares of the variable cost base bought in tracked input markets (energy, metals, agri, freight, wholesale goods, variable payroll). */
+    public const INPUT_COST_EXPOSURES = ['ppi' => 0.20, 'energy' => 0.06, 'metals' => 0.08, 'labor' => 0.25];
+
+    // --- Labor Intensity ---
+    /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze. A blend across unrelated subsidiaries lands near the all-industry middle by construction. */
+    public const FIXED_COST_LABOR_SHARE = 0.55;
+    /** Regulated tollbooth escalators and staples list-price resets reprice about once a year. */
+    public const PRICE_PASS_THROUGH_LAG_YEARS = 1.00;
+
+    /**
+     * Calendar-quarter revenue seasonality [Q1, Q2, Q3, Q4] summing to 4.0: industrial spring deliveries and year-end shipments.
+     *
+     * @return array<int, float>
+     */
+    public function getSeasonalityFactors(): array
+    {
+        return [0.96, 1.02, 1.00, 1.02];
+    }
+
     // --- Analyst Visibility & Error ---
     /** Base coverage visibility for multi-industry conglomerates with complex multi-segment reporting. */
     public const BASE_COVERAGE_VISIBILITY = 0.35;
@@ -72,8 +106,6 @@ class ConglomerateBusinessModel extends StandardCorporateBusinessModel
     /** Residual output gap sensitivity of staples volume and tollbooth throughput (defensive, but not macro-immune). */
     public const DEFENSIVE_MACRO_SCALAR = 0.15;
 
-    /** Pass-through lag scalar for regulated tollbooth escalators and staples list-price resets. */
-    public const PRICING_POWER_LAG_SCALAR = 0.70;
 
     // --- Contrarian Float Deployment & Credit Book Physics ---
     /** Sensitivity multiplier translating economic contraction into contrarian buyout alpha. */
@@ -110,10 +142,6 @@ class ConglomerateBusinessModel extends StandardCorporateBusinessModel
     // --- Industrial & Deal Activity Sensitivities ---
     /** Sensitivity of industrial conglomerate subsidiary demand to manufacturing PMI. */
     public const PMI_INDUSTRIAL_SENSITIVITY = 0.40;
-    /** Sensitivity of conglomerate wholesale production costs to Producer Price Inflation (PPI). */
-    public const PPI_COST_SENSITIVITY = 0.25;
-    /** Share of industrial input cost exposure carried by staples subsidiaries (packaging, resins, commodities). */
-    public const DEFENSIVE_PPI_EXPOSURE_RATIO = 0.50;
     /** Sensitivity of subsidiary divestiture proceeds and advisory alpha to capital markets deal activity. */
     public const DEAL_ACTIVITY_DIVESTITURE_SCALAR = 0.15;
 
@@ -159,9 +187,7 @@ class ConglomerateBusinessModel extends StandardCorporateBusinessModel
         $physics['macro_demand_shift'] = 0.0;
 
         // Conglomerate pricing power is real but lagged: regulated tollbooth escalators and staples list-price
-        // resets pass inflation into the nominal revenue base with a delay. Without this the model would absorb
-        // PPI cost inflation on the margin while never repricing its output.
-        $physics['pricing_power_multiplier'] = 1.0 + ($macroState->tipsBreakevenEma * $pricingPower * self::PRICING_POWER_LAG_SCALAR);
+        // resets reprice about once a year (PRICE_PASS_THROUGH_LAG_YEARS), which the parent's pass-through carries.
 
         return $physics;
     }
@@ -185,8 +211,8 @@ class ConglomerateBusinessModel extends StandardCorporateBusinessModel
         $pricingPower = max(0.0, min(1.0, $params[ModelParam::PricingPowerIndex]));
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
-        $streams = new StreamContext($momentum, $mathUtility);
-        $beta = max(self::MIN_CYCLICAL_BETA_FLOOR, abs((float) $stock->getBeta()));
+        $streams = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
+        $beta = max(self::MIN_CYCLICAL_BETA_FLOOR, $this->getOperatingCyclicality($stock));
 
         // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
         $activeWeights = $streams->resolveActiveStreamWeights([
@@ -203,7 +229,7 @@ class ConglomerateBusinessModel extends StandardCorporateBusinessModel
         $industrialZ = $streams->generateZ('industrial_manufacturing', 0.25);
         $defensiveZ  = $streams->generateZ('defensive_staples', 0.45);
         $floatZ      = $streams->generateZ('financial_investments', 0.15);
-        $eventZ      = $streams->generateZ('event', 0.10);
+        $eventZ      = $streams->generateExogenousZ('event', 0.10);
 
         // --- Macro Sensitivities ---
         $outputGap = $macroState->outputGapEma;
@@ -283,13 +309,9 @@ class ConglomerateBusinessModel extends StandardCorporateBusinessModel
         $actualRevenue = array_sum($streamRevenues);
         $streams->recordStreamShares($streamRevenues);
 
-        // Wholesale cost inflation (PPI) across industrial operations and the input-exposed share of staples
-        $ppiCostDrag = MathUtility::calculatePpiCostDrag(
-            $macroState->producerPriceInflationEma,
-            MacroEngine::TARGET_INFLATION,
-            $pricingPower,
-            self::PPI_COST_SENSITIVITY
-        ) * ($industrialWeight + ($defensiveWeight * self::DEFENSIVE_PPI_EXPOSURE_RATIO));
+        // Input costs across the industrial and staples subsidiaries (the float stream buys no inputs), recovered
+        // in list prices and escalators at the group's pricing power.
+        $ppiCostDrag = $this->resolveInputCostDrag($stock, $macroState, $streams, $pricingPower, $realizedVariableMargin) * (1.0 - $floatWeight);
 
         // Realized variable margin scaling
         $rawMargin = $realizedVariableMargin + $restructuringPenalty + $ppiCostDrag;
@@ -325,15 +347,19 @@ class ConglomerateBusinessModel extends StandardCorporateBusinessModel
      */
     public function getOperatingMacroFields(): array
     {
-        return array_unique(array_merge(parent::getOperatingMacroFields(), [
+        return [
             'corporate_default_rate_ema',
             'deal_activity_index_ema',
+            'energy_cost_push_lag',
+            'exchange_rate_index_ema',
+            'industrial_metals_index_ema',
             'macro_credit_spread',
             'macro_credit_spread_ema',
             'manufacturing_pmi_ema',
             'output_gap_ema',
             'producer_price_inflation_ema',
             'tips_breakeven_ema',
-        ]));
+            'wage_growth_ema',
+        ];
     }
 }

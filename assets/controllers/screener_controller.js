@@ -14,12 +14,12 @@ export default class extends Controller {
         const sector = btn.dataset.sector || 'ALL';
 
         this.sectorBtnTargets.forEach(b => {
-            b.classList.remove('bg-primary', 'text-[#001a42]', 'shadow-md', 'shadow-primary/20');
+            b.classList.remove('bg-primary', 'text-on-primary', 'shadow-md', 'shadow-primary/20');
             b.classList.add('bg-surface-container', 'text-on-surface-variant');
         });
 
         btn.classList.remove('bg-surface-container', 'text-on-surface-variant');
-        btn.classList.add('bg-primary', 'text-[#001a42]', 'shadow-md', 'shadow-primary/20');
+        btn.classList.add('bg-primary', 'text-on-primary', 'shadow-md', 'shadow-primary/20');
 
         this.selectedSector = sector;
         this.applyFilters();

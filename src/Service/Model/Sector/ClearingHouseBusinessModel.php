@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Service\Model\Sector;
 
+use App\DTO\InterestExpenseDTO;
+
 use App\Service\Model\BusinessModelInterface;
 
 use App\Data\ModelParam;
@@ -26,6 +28,14 @@ use App\Service\Math\FinancialConstants;
  */
 class ClearingHouseBusinessModel extends BaseFinancialBusinessModel
 {
+    // --- Operating Cyclicality & Demand Structure ---
+    /** Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Clearing volumes rise in stress; only pool growth follows the cycle. */
+    public const OPERATING_CYCLICALITY = 0.80;
+
+    // --- Labor Intensity ---
+    /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze. A matching engine is capital, not payroll, but risk, compliance and member-services staff carry the rest of the overhead. */
+    public const FIXED_COST_LABOR_SHARE = 0.55;
+
         public function getMinIcr(): float { return 1.05; }
     public function getBankruptEquityThreshold(): float { return 0.5; }
     public function getDistressEquityThreshold(): float { return 1.25; }
@@ -48,6 +58,8 @@ class ClearingHouseBusinessModel extends BaseFinancialBusinessModel
     public const MARGIN_POOL_YIELD_RETENTION_SHARE = 0.15;
 
     // --- VIX & Transaction Volume Bonus ---
+    /** Absolute 2s10s slope at which rates-clearing volumes are normal (~70bps, the neutral curve); a curve steepening or inverting past it brings swap hedging flow. */
+    public const RATES_VOL_NEUTRAL_SLOPE = 0.007;
     /** Baseline VIX threshold above which volatility expands clearing transaction volume. */
     public const VIX_BASELINE_THRESHOLD = 0.20;
     /** Sensitivity scalar translating excess VIX points into direct top-line clearing fee bonuses. */
@@ -183,7 +195,7 @@ class ClearingHouseBusinessModel extends BaseFinancialBusinessModel
     protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
     {
         $momentum = $stock->getEarningsMomentumZ() ?? [];
-        $streams  = new \App\DTO\StreamContext($momentum, $mathUtility);
+        $streams  = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
 
         $params = $this->resolveModelParameters($stock, [
             ModelParam::ClearingFeeWeight->value      => 0.50,
@@ -215,7 +227,7 @@ class ClearingHouseBusinessModel extends BaseFinancialBusinessModel
 
         // Interest Rate Volatility Bonus. If the yield curve is violently steepening or inverting, IRS clearing volumes spike.
         $yieldCurveSlope = abs($macroState->yield10yEma - $macroState->yield2yEma);
-        $ratesVolBonus = $yieldCurveSlope > 0.005 ? ($yieldCurveSlope - 0.005) * 2.0 : 0.0;
+        $ratesVolBonus = $yieldCurveSlope > self::RATES_VOL_NEUTRAL_SLOPE ? ($yieldCurveSlope - self::RATES_VOL_NEUTRAL_SLOPE) * 2.0 : 0.0;
 
         $totalMacroBonus = $volatilityBonus + $ratesVolBonus;
 
@@ -240,7 +252,7 @@ class ClearingHouseBusinessModel extends BaseFinancialBusinessModel
         $streams->recordStreamShares($streamRevenues);
 
         // The CCP Default Waterfall (Catastrophic Tail Risk)
-        $defaultZ = $streams->generateZ('default', 0.05);
+        $defaultZ = $streams->generateExogenousZ('default', 0.05);
 
         // Under the Default Waterfall, routine member defaults ($defaultZ >= CATASTROPHE_Z_THRESHOLD) are fully absorbed
         // by the defaulting member's posted Initial Margin and Guaranty Fund contribution ($0 loss to CCP equity).
@@ -302,7 +314,7 @@ class ClearingHouseBusinessModel extends BaseFinancialBusinessModel
         return $ownCash * $cashYield;
     }
 
-    public function calculateInterestExpenseAndWholesaleRate(Stock $stock, float $blendedFixedRate, float $floatingInterestRate, float $currentMarketFixedRate, float $policyRate, float $equityLimit, float $totalEquity, float $debt): array
+    public function calculateInterestExpenseAndWholesaleRate(Stock $stock, float $blendedFixedRate, float $floatingInterestRate, float $currentMarketFixedRate, float $policyRate, float $equityLimit, float $totalEquity, float $debt): InterestExpenseDTO
     {
         $corporateDebt = (float) $stock->getWholesaleDebt();
         $floatingRatio = (float) $stock->getFloatingDebtRatio();
@@ -313,10 +325,7 @@ class ClearingHouseBusinessModel extends BaseFinancialBusinessModel
 
         // Note: Margin pool custody rebates are pass-through distributions netted against custody yield in calculateInterestIncome.
         // Returning only corporate debt interest ensures ICR and solvency metrics measure true corporate debt servicing capacity.
-        return [
-            'interest_expense' => $corporateInterest,
-            'wholesale_rate' => $wholesaleRate
-        ];
+        return new InterestExpenseDTO(interestExpense: $corporateInterest, wholesaleRate: $wholesaleRate);
     }
 
     public function calculateCashYield(\App\DTO\MacroStateDTO $macroState): float
@@ -335,6 +344,12 @@ class ClearingHouseBusinessModel extends BaseFinancialBusinessModel
     public function calculateOrganicCapexSpend(float $organicSpend, float $debtIssued): float
     {
         return 0.0;
+    }
+
+    /** Only what sits above the fully backed margin pool is invested; the pool itself stays liquid. */
+    public function deploysFundingIntoEarningAssets(): bool
+    {
+        return true;
     }
 
     public function calculateTargetOperatingCash(float $operatingBase, float $currentLiability, float $wholesaleDebt): float
@@ -471,7 +486,6 @@ class ClearingHouseBusinessModel extends BaseFinancialBusinessModel
             'policy_rate_ema',
             'yield_10y_ema',
             'yield_2y_ema',
-            'yield_5y_ema',
         ];
     }
 }

@@ -1,8 +1,22 @@
 import { THEME_COLORS } from '../utils/colors.js';
 import { formatCurrency } from '../utils/formatters.js';
+import { CHART_FONT_MONO } from '../utils/fonts.js';
+import { readPageData } from '../utils/page-data.js';
+import { flashTick } from '../utils/tick-flash.js';
 
 const previousPrices = {};
 let previousPortfolioValue = null;
+
+/**
+ * Server-rendered portfolio state: `holdings` maps ticker to { quantity, avgCost, price }, and
+ * `cash` is the settled balance. Re-read on every page init, since Turbo keeps this module
+ * loaded across navigations while the payload underneath it changes.
+ */
+let holdings = {};
+let cash = 0;
+
+/** Latest quote per ticker — seeded from the server's holdings, then advanced by the stream. */
+let livePrices = {};
 let portfolioChart = null;
 let areaSeries = null;
 let currentRange = '1m';
@@ -13,6 +27,15 @@ function initDashboard() {
     if (!totalValEl) return;
     if (totalValEl.dataset.initialized) return;
     totalValEl.dataset.initialized = 'true';
+
+    const pageData = readPageData('portfolio-data');
+    // An empty holdings map serialises as a JSON array, so normalise before use.
+    holdings = (pageData.holdings && !Array.isArray(pageData.holdings)) ? pageData.holdings : {};
+    cash = Number(pageData.cash) || 0;
+    livePrices = {};
+    for (const [ticker, holding] of Object.entries(holdings)) {
+        livePrices[ticker] = Number(holding.price) || 0;
+    }
 
     function initPortfolioChart() {
         const chartContainer = document.getElementById('portfolioChartContainer');
@@ -33,7 +56,7 @@ function initDashboard() {
             layout: {
                 background: { color: 'transparent' },
                 textColor: THEME_COLORS.textMuted,
-                fontFamily: '"Courier Prime", monospace',
+                fontFamily: CHART_FONT_MONO,
             },
             grid: {
                 vertLines: { color: 'rgba(66, 71, 84, 0.2)' },
@@ -86,11 +109,11 @@ function initDashboard() {
         rangeButtons.forEach(btn => {
             btn.onclick = () => {
                 rangeButtons.forEach(b => {
-                    b.classList.remove('bg-primary', 'text-[#001a42]', 'shadow-md', 'shadow-primary/20');
+                    b.classList.remove('bg-primary', 'text-on-primary', 'shadow-md', 'shadow-primary/20');
                     b.classList.add('bg-surface-container', 'text-on-surface-variant');
                 });
                 btn.classList.remove('bg-surface-container', 'text-on-surface-variant');
-                btn.classList.add('bg-primary', 'text-[#001a42]', 'shadow-md', 'shadow-primary/20');
+                btn.classList.add('bg-primary', 'text-on-primary', 'shadow-md', 'shadow-primary/20');
 
                 currentRange = btn.dataset.range;
                 loadPortfolioData(currentRange);
@@ -147,36 +170,29 @@ function initDashboard() {
         let hasHoldingsUpdates = false;
 
         payload.stocks.forEach(stock => {
-            if (window.LIVE_PRICES) {
-                window.LIVE_PRICES[stock.ticker] = parseFloat(stock.price);
-            }
+            livePrices[stock.ticker] = parseFloat(stock.price);
 
-            const quantity = window.PORTFOLIO_HOLDINGS ? window.PORTFOLIO_HOLDINGS[stock.ticker] : null;
+            const quantity = holdings[stock.ticker]?.quantity ?? null;
 
             if (quantity && quantity > 0) {
                 hasHoldingsUpdates = true;
                 const newPrice = parseFloat(stock.price);
                 const oldPrice = previousPrices[stock.ticker] || newPrice;
                 const holdingValue = newPrice * quantity;
-                const avgCost = window.HOLDING_AVG_COSTS ? (window.HOLDING_AVG_COSTS[stock.ticker] || newPrice) : newPrice;
+                const avgCost = Number(holdings[stock.ticker]?.avgCost) || newPrice;
                 const totalCost = avgCost * quantity;
                 const unrealizedPnL = holdingValue - totalCost;
                 const unrealizedPnLPct = totalCost > 0 ? (unrealizedPnL / totalCost) * 100 : 0.0;
 
                 const priceEl = document.getElementById(`price-${stock.ticker}`);
                 if (priceEl) {
-                    priceEl.innerText = '$' + newPrice.toFixed(2);
-                    if (newPrice > oldPrice) {
-                        priceEl.style.color = THEME_COLORS.secondary;
-                    } else if (newPrice < oldPrice) {
-                        priceEl.style.color = THEME_COLORS.tertiary;
-                    }
-                    setTimeout(() => { if (priceEl) priceEl.style.color = ''; }, 500);
+                    priceEl.textContent = '$' + newPrice.toFixed(2);
+                    flashTick(priceEl, newPrice - oldPrice);
                 }
 
                 const valueEl = document.getElementById(`value-${stock.ticker}`);
                 if (valueEl) {
-                    valueEl.innerText = formatCurrency(holdingValue);
+                    valueEl.textContent = formatCurrency(holdingValue);
                 }
 
                 const pnlEl = document.getElementById(`pnl-${stock.ticker}`);
@@ -185,7 +201,7 @@ function initDashboard() {
                     pnlEl.className = `px-6 py-4 font-mono text-right font-bold ${unrealizedPnL >= 0 ? 'text-secondary' : 'text-tertiary'}`;
                     pnlEl.innerHTML = `
                         <div>${sign}${formatCurrency(unrealizedPnL)}</div>
-                        <div class="text-[10px] font-normal opacity-80">${sign}${unrealizedPnLPct.toFixed(2)}%</div>
+                        <div class="text-3xs font-normal opacity-80">${sign}${unrealizedPnLPct.toFixed(2)}%</div>
                     `;
                 }
 
@@ -193,39 +209,35 @@ function initDashboard() {
             }
         });
 
-        if (hasHoldingsUpdates && window.PORTFOLIO_HOLDINGS) {
+        if (hasHoldingsUpdates) {
             let totalInvested = 0;
             let totalInvestedCost = 0;
 
-            for (const [ticker, quantity] of Object.entries(window.PORTFOLIO_HOLDINGS)) {
-                const currentPrice = window.LIVE_PRICES ? (window.LIVE_PRICES[ticker] || 0) : 0;
-                const avgCost = window.HOLDING_AVG_COSTS ? (window.HOLDING_AVG_COSTS[ticker] || currentPrice) : currentPrice;
+            for (const [ticker, holding] of Object.entries(holdings)) {
+                const quantity = holding.quantity;
+                const currentPrice = livePrices[ticker] || 0;
+                const avgCost = Number(holding.avgCost) || currentPrice;
 
                 totalInvested += (currentPrice * quantity);
                 totalInvestedCost += (avgCost * quantity);
             }
 
-            const totalPortfolioValue = totalInvested + (window.USER_CASH || 0);
+            const totalPortfolioValue = totalInvested + cash;
             const totalPnL = totalInvested - totalInvestedCost;
             const totalPnLPct = totalInvestedCost > 0 ? (totalPnL / totalInvestedCost) * 100 : 0.0;
 
             const investedEl = document.getElementById('total-invested');
             if (investedEl) {
-                investedEl.innerText = formatCurrency(totalInvested);
+                investedEl.textContent = formatCurrency(totalInvested);
             }
 
             const portfolioValEl = document.getElementById('portfolio-total-value');
             if (portfolioValEl) {
                 const oldVal = previousPortfolioValue || totalPortfolioValue;
-                portfolioValEl.innerText = formatCurrency(totalPortfolioValue);
+                portfolioValEl.textContent = formatCurrency(totalPortfolioValue);
 
-                if (totalPortfolioValue > oldVal) {
-                    portfolioValEl.style.color = THEME_COLORS.secondary;
-                } else if (totalPortfolioValue < oldVal) {
-                    portfolioValEl.style.color = THEME_COLORS.tertiary;
-                }
+                flashTick(portfolioValEl, totalPortfolioValue - oldVal);
                 previousPortfolioValue = totalPortfolioValue;
-                setTimeout(() => { if (portfolioValEl) portfolioValEl.style.color = ''; }, 500);
             }
 
             const pnlValEl = document.getElementById('portfolio-pnl-val');
@@ -234,8 +246,8 @@ function initDashboard() {
 
             if (pnlValEl && pnlPctEl && pnlBadge) {
                 const sign = totalPnL >= 0 ? '+' : '';
-                pnlValEl.innerText = `${sign}${formatCurrency(totalPnL)}`;
-                pnlPctEl.innerText = `(${sign}${totalPnLPct.toFixed(2)}%)`;
+                pnlValEl.textContent = `${sign}${formatCurrency(totalPnL)}`;
+                pnlPctEl.textContent = `(${sign}${totalPnLPct.toFixed(2)}%)`;
 
                 if (totalPnL >= 0) {
                     pnlBadge.className = 'inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold font-mono bg-secondary/10 text-secondary border border-secondary/20';
@@ -262,5 +274,9 @@ function initDashboard() {
     }, { once: true });
 }
 
+
+/* Bound to `turbo:load` only. It fires on first load as well as on every Turbo navigation,
+   and it is the load-bearing path: on a repeat visit this module is already in the module
+   registry and its top level never runs again, so a direct call here would fire only on
+   the very first evaluation and be pure duplication on that one. */
 document.addEventListener('turbo:load', initDashboard);
-initDashboard();

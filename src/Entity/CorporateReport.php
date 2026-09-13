@@ -43,6 +43,10 @@ class CorporateReport
     #[ORM\Column(type: 'json', nullable: true)]
     private ?array $streamDetails = null;
 
+    /** @var array<string, float>|null Operating KPIs the firm disclosed alongside the financials (book-to-bill, backlog quarters, subscriber index). */
+    #[ORM\Column(type: 'json', nullable: true)]
+    private ?array $reportedKpis = null;
+
     #[ORM\Column(type: Types::BIGINT, nullable: true)]
     private ?string $shares = null;
 
@@ -114,6 +118,138 @@ class CorporateReport
 
     #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, nullable: true)]
     private ?string $freeCashFlow = null;
+
+    /** Depreciation expensed this quarter, the line separating EBITDA from EBIT. */
+    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, nullable: true)]
+    private ?string $depreciation = null;
+
+    /** Earnings before interest, tax, depreciation and amortization. */
+    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, nullable: true)]
+    private ?string $ebitda = null;
+
+    /** Historical cost of property, plant and equipment placed in service. */
+    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, nullable: true)]
+    private ?string $grossPpe = null;
+
+    /** Gross loans, securities and other earning assets of a balance-sheet business at quarter end. */
+    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, nullable: true)]
+    private ?string $earningAssets = null;
+
+    /** Allowance for credit losses carried against the earning assets (ASC 326). */
+    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, nullable: true)]
+    private ?string $creditLossAllowance = null;
+
+    /** Provision for credit losses charged to earnings this quarter, net of any reserve release. */
+    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, nullable: true)]
+    private ?string $creditLossProvision = null;
+
+    /** Loans written off against the allowance this quarter. */
+    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, nullable: true)]
+    private ?string $netChargeOffs = null;
+
+    /** Cash deployed into new earning assets, net of assets sold: the investing flow of a lender. */
+    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, nullable: true)]
+    private ?string $netLoanOriginations = null;
+
+    /** Loss realized on earning assets sold below carrying value to meet withdrawals or maturities. */
+    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, nullable: true)]
+    private ?string $assetSaleLoss = null;
+
+    /** Customer deposits (or policyholder float) at quarter end, the part of total debt that is not wholesale. */
+    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, nullable: true)]
+    private ?string $customerDeposits = null;
+
+    /** Common equity tier 1 ratio, equity over risk-weighted assets, for a regulated bank. */
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $cet1Ratio = null;
+
+    /** Annualized net interest margin: interest earned less interest paid, over net earning assets. */
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $netInterestMargin = null;
+
+    /** Net book value of property, plant and equipment. */
+    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, nullable: true)]
+    private ?string $netPpe = null;
+
+    /** Trade receivables net of the expected credit loss allowance. */
+    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, nullable: true)]
+    private ?string $receivables = null;
+
+    /** Inventory carried at cost after any writedown. */
+    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, nullable: true)]
+    private ?string $inventory = null;
+
+    /** Trade payables outstanding. */
+    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, nullable: true)]
+    private ?string $payables = null;
+
+    /** Lower-of-cost-or-NRV writedown charged against inventory this quarter (ASC 330). */
+    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, nullable: true)]
+    private ?string $inventoryWriteDown = null;
+
+    /** Expected credit loss provision charged against receivables this quarter (ASC 326). */
+    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, nullable: true)]
+    private ?string $receivablesProvision = null;
+
+    /** Portion of the tax expense postponed by accelerated tax depreciation (ASC 740). */
+    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, nullable: true)]
+    private ?string $deferredTaxExpense = null;
+
+    /** Accumulated deferred tax liability at the end of the quarter. */
+    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, nullable: true)]
+    private ?string $deferredTaxLiability = null;
+
+    /** Tax that actually left the company this quarter. */
+    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, nullable: true)]
+    private ?string $cashTaxPaid = null;
+
+    /** Construction in progress: capital committed but not yet earning. */
+    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, nullable: true)]
+    private ?string $cip = null;
+
+    /** Goodwill carried from past acquisitions. */
+    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, nullable: true)]
+    private ?string $goodwill = null;
+
+    /** Capitalized operating lease obligation (IFRS 16 / ASC 842). */
+    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, nullable: true)]
+    private ?string $leaseLiability = null;
+
+    /** Total assets at the end of the quarter. */
+    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, nullable: true)]
+    private ?string $totalAssets = null;
+
+    /** Total liabilities at the end of the quarter. */
+    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, nullable: true)]
+    private ?string $totalLiabilities = null;
+
+    /** Net cash generated by operations. */
+    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, nullable: true)]
+    private ?string $operatingCashFlow = null;
+
+    /** Net cash used in investing; negative means the firm is a net investor. */
+    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, nullable: true)]
+    private ?string $investingCashFlow = null;
+
+    /** Net cash from financing; negative means capital was returned rather than raised. */
+    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, nullable: true)]
+    private ?string $financingCashFlow = null;
+
+    /** Non-cash equity compensation expensed this quarter (ASC 718). */
+    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, nullable: true)]
+    private ?string $stockCompensation = null;
+
+    /** Goodwill written off in the annual impairment test (ASC 350). */
+    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, nullable: true)]
+    private ?string $goodwillImpairment = null;
+
+    /** Dickinson (2011) life-cycle stage implied by this quarter's three cash-flow signs. */
+    #[ORM\Column(length: 16, nullable: true)]
+    private ?string $lifecycleStage = null;
+
+    /** Accumulated depreciation over gross PP&E: the average age of the plant, 0 new to 1 fully written off. */
+    #[ORM\Column(type: Types::DECIMAL, precision: 6, scale: 4, nullable: true)]
+    private ?string $assetAge = null;
 
     public function __construct()
     {
@@ -282,6 +418,20 @@ class CorporateReport
     public function setStreamDetails(?array $streamDetails): static
     {
         $this->streamDetails = $streamDetails;
+
+        return $this;
+    }
+
+    /** @return array<string, float>|null */
+    public function getReportedKpis(): ?array
+    {
+        return $this->reportedKpis;
+    }
+
+    /** @param array<string, float>|null $reportedKpis */
+    public function setReportedKpis(?array $reportedKpis): static
+    {
+        $this->reportedKpis = $reportedKpis;
 
         return $this;
     }
@@ -493,6 +643,369 @@ class CorporateReport
     public function setTaxPaid(string $taxPaid): static
     {
         $this->taxPaid = $taxPaid;
+        return $this;
+    }
+
+    public function getDepreciation(): ?string
+    {
+        return $this->depreciation;
+    }
+
+    public function setDepreciation(?string $depreciation): static
+    {
+        $this->depreciation = $depreciation;
+        return $this;
+    }
+
+    public function getEbitda(): ?string
+    {
+        return $this->ebitda;
+    }
+
+    public function setEbitda(?string $ebitda): static
+    {
+        $this->ebitda = $ebitda;
+        return $this;
+    }
+
+    public function getGrossPpe(): ?string
+    {
+        return $this->grossPpe;
+    }
+
+    public function setGrossPpe(?string $grossPpe): static
+    {
+        $this->grossPpe = $grossPpe;
+        return $this;
+    }
+
+    public function getNetPpe(): ?string
+    {
+        return $this->netPpe;
+    }
+
+    public function setNetPpe(?string $netPpe): static
+    {
+        $this->netPpe = $netPpe;
+        return $this;
+    }
+
+    public function getReceivables(): ?string
+    {
+        return $this->receivables;
+    }
+
+    public function setReceivables(?string $receivables): static
+    {
+        $this->receivables = $receivables;
+        return $this;
+    }
+
+    public function getInventory(): ?string
+    {
+        return $this->inventory;
+    }
+
+    public function setInventory(?string $inventory): static
+    {
+        $this->inventory = $inventory;
+        return $this;
+    }
+
+    public function getPayables(): ?string
+    {
+        return $this->payables;
+    }
+
+    public function setPayables(?string $payables): static
+    {
+        $this->payables = $payables;
+        return $this;
+    }
+
+    public function getInventoryWriteDown(): ?string
+    {
+        return $this->inventoryWriteDown;
+    }
+
+    public function setInventoryWriteDown(?string $inventoryWriteDown): static
+    {
+        $this->inventoryWriteDown = $inventoryWriteDown;
+        return $this;
+    }
+
+    public function getReceivablesProvision(): ?string
+    {
+        return $this->receivablesProvision;
+    }
+
+    public function setReceivablesProvision(?string $receivablesProvision): static
+    {
+        $this->receivablesProvision = $receivablesProvision;
+        return $this;
+    }
+
+    public function getDeferredTaxExpense(): ?string
+    {
+        return $this->deferredTaxExpense;
+    }
+
+    public function setDeferredTaxExpense(?string $deferredTaxExpense): static
+    {
+        $this->deferredTaxExpense = $deferredTaxExpense;
+        return $this;
+    }
+
+    public function getDeferredTaxLiability(): ?string
+    {
+        return $this->deferredTaxLiability;
+    }
+
+    public function setDeferredTaxLiability(?string $deferredTaxLiability): static
+    {
+        $this->deferredTaxLiability = $deferredTaxLiability;
+        return $this;
+    }
+
+    public function getCashTaxPaid(): ?string
+    {
+        return $this->cashTaxPaid;
+    }
+
+    public function setCashTaxPaid(?string $cashTaxPaid): static
+    {
+        $this->cashTaxPaid = $cashTaxPaid;
+        return $this;
+    }
+
+    public function getCip(): ?string
+    {
+        return $this->cip;
+    }
+
+    public function setCip(?string $cip): static
+    {
+        $this->cip = $cip;
+        return $this;
+    }
+
+    public function getGoodwill(): ?string
+    {
+        return $this->goodwill;
+    }
+
+    public function setGoodwill(?string $goodwill): static
+    {
+        $this->goodwill = $goodwill;
+        return $this;
+    }
+
+    public function getLeaseLiability(): ?string
+    {
+        return $this->leaseLiability;
+    }
+
+    public function setLeaseLiability(?string $leaseLiability): static
+    {
+        $this->leaseLiability = $leaseLiability;
+        return $this;
+    }
+
+    public function getTotalAssets(): ?string
+    {
+        return $this->totalAssets;
+    }
+
+    public function setTotalAssets(?string $totalAssets): static
+    {
+        $this->totalAssets = $totalAssets;
+        return $this;
+    }
+
+    public function getTotalLiabilities(): ?string
+    {
+        return $this->totalLiabilities;
+    }
+
+    public function setTotalLiabilities(?string $totalLiabilities): static
+    {
+        $this->totalLiabilities = $totalLiabilities;
+        return $this;
+    }
+
+    public function getOperatingCashFlow(): ?string
+    {
+        return $this->operatingCashFlow;
+    }
+
+    public function setOperatingCashFlow(?string $operatingCashFlow): static
+    {
+        $this->operatingCashFlow = $operatingCashFlow;
+        return $this;
+    }
+
+    public function getInvestingCashFlow(): ?string
+    {
+        return $this->investingCashFlow;
+    }
+
+    public function setInvestingCashFlow(?string $investingCashFlow): static
+    {
+        $this->investingCashFlow = $investingCashFlow;
+        return $this;
+    }
+
+    public function getFinancingCashFlow(): ?string
+    {
+        return $this->financingCashFlow;
+    }
+
+    public function setFinancingCashFlow(?string $financingCashFlow): static
+    {
+        $this->financingCashFlow = $financingCashFlow;
+        return $this;
+    }
+
+    public function getStockCompensation(): ?string
+    {
+        return $this->stockCompensation;
+    }
+
+    public function setStockCompensation(?string $stockCompensation): static
+    {
+        $this->stockCompensation = $stockCompensation;
+        return $this;
+    }
+
+    public function getGoodwillImpairment(): ?string
+    {
+        return $this->goodwillImpairment;
+    }
+
+    public function setGoodwillImpairment(?string $goodwillImpairment): static
+    {
+        $this->goodwillImpairment = $goodwillImpairment;
+        return $this;
+    }
+
+    public function getLifecycleStage(): ?string
+    {
+        return $this->lifecycleStage;
+    }
+
+    public function setLifecycleStage(?string $lifecycleStage): static
+    {
+        $this->lifecycleStage = $lifecycleStage;
+        return $this;
+    }
+
+    public function getAssetAge(): ?string
+    {
+        return $this->assetAge;
+    }
+
+    public function setAssetAge(?string $assetAge): static
+    {
+        $this->assetAge = $assetAge;
+        return $this;
+    }
+
+    public function getEarningAssets(): ?string
+    {
+        return $this->earningAssets;
+    }
+
+    public function setEarningAssets(?string $earningAssets): static
+    {
+        $this->earningAssets = $earningAssets;
+        return $this;
+    }
+
+    public function getCreditLossAllowance(): ?string
+    {
+        return $this->creditLossAllowance;
+    }
+
+    public function setCreditLossAllowance(?string $creditLossAllowance): static
+    {
+        $this->creditLossAllowance = $creditLossAllowance;
+        return $this;
+    }
+
+    public function getCreditLossProvision(): ?string
+    {
+        return $this->creditLossProvision;
+    }
+
+    public function setCreditLossProvision(?string $creditLossProvision): static
+    {
+        $this->creditLossProvision = $creditLossProvision;
+        return $this;
+    }
+
+    public function getNetChargeOffs(): ?string
+    {
+        return $this->netChargeOffs;
+    }
+
+    public function setNetChargeOffs(?string $netChargeOffs): static
+    {
+        $this->netChargeOffs = $netChargeOffs;
+        return $this;
+    }
+
+    public function getNetLoanOriginations(): ?string
+    {
+        return $this->netLoanOriginations;
+    }
+
+    public function setNetLoanOriginations(?string $netLoanOriginations): static
+    {
+        $this->netLoanOriginations = $netLoanOriginations;
+        return $this;
+    }
+
+    public function getAssetSaleLoss(): ?string
+    {
+        return $this->assetSaleLoss;
+    }
+
+    public function setAssetSaleLoss(?string $assetSaleLoss): static
+    {
+        $this->assetSaleLoss = $assetSaleLoss;
+        return $this;
+    }
+
+    public function getCustomerDeposits(): ?string
+    {
+        return $this->customerDeposits;
+    }
+
+    public function setCustomerDeposits(?string $customerDeposits): static
+    {
+        $this->customerDeposits = $customerDeposits;
+        return $this;
+    }
+
+    public function getCet1Ratio(): ?string
+    {
+        return $this->cet1Ratio;
+    }
+
+    public function setCet1Ratio(?string $cet1Ratio): static
+    {
+        $this->cet1Ratio = $cet1Ratio;
+        return $this;
+    }
+
+    public function getNetInterestMargin(): ?string
+    {
+        return $this->netInterestMargin;
+    }
+
+    public function setNetInterestMargin(?string $netInterestMargin): static
+    {
+        $this->netInterestMargin = $netInterestMargin;
         return $this;
     }
 }

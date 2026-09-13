@@ -121,15 +121,19 @@ class ChemicalBusinessModelTest extends TestCase
             inflationEma: 0.02
         );
 
-        $neutralPhysics = $this->model->getMacroPhysics($stock, $neutralMacro);
-        $boomPhysics = $this->model->getMacroPhysics($stock, $boomMacro);
-        $recessionPhysics = $this->model->getMacroPhysics($stock, $recessionMacro);
+        // Each scenario gets its own firm. Chemical declares a demand transmission lag, so a firm carries
+        // its position in the cycle between calls: running boom and recession through one stock would
+        // measure the lag converging, not the demand shift each macro state implies.
+        $neutralPhysics = $this->model->getMacroPhysics(clone $stock, $neutralMacro);
+        $boomPhysics = $this->model->getMacroPhysics(clone $stock, $boomMacro);
+        $recessionPhysics = $this->model->getMacroPhysics(clone $stock, $recessionMacro);
 
-        // Boom demand shift = ((0.05 * 1.60) + (0.30 * 0.60)) * 1.0 * 0.70 = (0.08 + 0.18) * 0.70 = +0.182
-        $this->assertEqualsWithDelta(0.182, $boomPhysics['macro_demand_shift'], 0.001);
+        // Boom demand shift = ((0.05 * 1.60) + (0.30 * 0.60)) * cyclicality * 0.70 = 0.182 * cyclicality
+        $cyclicality = ChemicalBusinessModel::OPERATING_CYCLICALITY;
+        $this->assertEqualsWithDelta(0.182 * $cyclicality, $boomPhysics['macro_demand_shift'], 0.001);
 
         // Recession demand shift = ((-0.05 * 1.60) + (-0.30 * 0.60)) * 1.0 * 0.70 = (-0.08 - 0.18) * 0.70 = -0.182
-        $this->assertEqualsWithDelta(-0.182, $recessionPhysics['macro_demand_shift'], 0.001);
+        $this->assertEqualsWithDelta(-0.182 * $cyclicality, $recessionPhysics['macro_demand_shift'], 0.001);
     }
 
     public function testAgrochemicalsDrivenByWeatherJumps(): void
@@ -303,5 +307,21 @@ class ChemicalBusinessModelTest extends TestCase
 
         $this->assertEquals(ShockEvent::CHEMICAL_AGRI_BOOM, $result->eventType);
         $this->assertTrue($result->isPublicEvent);
+    }
+
+
+    /**
+     * Output is sold into a world market, so a strong domestic currency must reach expected demand through the
+     * declared FX exposure rather than being discarded by this model's own macro physics.
+     */
+    public function testAStrongCurrencyLowersExpectedDemandThroughTheDeclaredFxExposure(): void
+    {
+        $shift = fn (float $fxIndex): float => $this->model->getMacroPhysics((new Stock())->setTicker('FULM_FX'), new MacroStateDTO(outputGapEma: 0.0, exchangeRateIndexEma: $fxIndex))['macro_demand_shift'];
+
+        $strong = $shift(110.0);
+        $flat = $shift(100.0);
+
+        $this->assertEqualsWithDelta(-0.10 * ChemicalBusinessModel::FX_REVENUE_EXPOSURE, $strong - $flat, 1e-9);
+        $this->assertLessThan(0.0, $strong - $flat, 'A stronger domestic currency prices exports out of foreign markets.');
     }
 }

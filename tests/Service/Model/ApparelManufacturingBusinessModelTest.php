@@ -13,6 +13,7 @@ use App\Service\Math\MathUtility;
 use App\Service\Model\BusinessModelInterface;
 use App\Service\Model\Sector\ApparelManufacturingBusinessModel;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
+use App\Service\Math\FinancialConstants;
 use PHPUnit\Framework\TestCase;
 
 #[AllowMockObjectsWithoutExpectations]
@@ -108,11 +109,11 @@ class ApparelManufacturingBusinessModelTest extends TestCase
 
         $genericPhysics = $this->model->getMacroPhysics($genericStock, $recessionMacro);
 
-        // Pro-cyclical drag = (-0.05 * 0.70) + (-0.20 * 0.40) = -0.035 - 0.08 = -0.115
+        // Pro-cyclical drag = ((-0.05 * 0.70) + (-0.20 * 0.40)) * cyclicality = -0.115 * cyclicality
         // Generic trade-down bonus = 0.05 * 0.60 * (1.5 - 0.5) = +0.030
-        // Blended demand shift = -0.115 + 0.030 = -0.085
-        $this->assertEqualsWithDelta(-0.085, $genericPhysics['macro_demand_shift'], 0.0001);
-        $this->assertGreaterThan(-0.115, $genericPhysics['macro_demand_shift'], 'Trade-down effect must soften the recessionary drop.');
+        $cyclicality = ApparelManufacturingBusinessModel::OPERATING_CYCLICALITY;
+        $this->assertEqualsWithDelta((-0.115 * $cyclicality) + 0.030, $genericPhysics['macro_demand_shift'], 0.0001);
+        $this->assertGreaterThan(-0.115 * $cyclicality, $genericPhysics['macro_demand_shift'], 'Trade-down effect must soften the recessionary drop.');
 
         // 2. SHER stock (tuned pricing power = 0.60)
         $sherStock = new Stock();
@@ -121,8 +122,8 @@ class ApparelManufacturingBusinessModelTest extends TestCase
 
         $sherPhysics = $this->model->getMacroPhysics($sherStock, $recessionMacro);
         // SHER trade-down bonus = 0.05 * 0.60 * (1.5 - 0.60) = 0.05 * 0.54 = +0.027
-        // Blended demand shift = -0.115 + 0.027 = -0.088
-        $this->assertEqualsWithDelta(-0.088, $sherPhysics['macro_demand_shift'], 0.0001);
+        // Blended demand shift = (-0.115 * cyclicality) + 0.027
+        $this->assertEqualsWithDelta((-0.115 * $cyclicality) + 0.027, $sherPhysics['macro_demand_shift'], 0.0001);
     }
 
     public function testContractStreamFxExportCompetitiveness(): void
@@ -411,7 +412,7 @@ class ApparelManufacturingBusinessModelTest extends TestCase
             agriculturalCommodityIndexEma: 150.0, // +50% raw cotton
             freightRateIndexEma: 150.0,            // +50% shipping
             energyPriceIndexEma: 150.0,            // +50% energy
-            energyCostPushLag: 0.0050              // +50% energy shock lagged transmission (0.50 * 0.0100)
+            energyCostPushLag: 0.50 * MacroEngine::ENERGY_COST_PUSH_TRANSMISSION // +50% energy shock, fully transmitted
         );
 
         $mathUtility = new MathUtility();
@@ -436,12 +437,18 @@ class ApparelManufacturingBusinessModelTest extends TestCase
             mathUtility: $mathUtility
         );
 
-        // Spot input drag = (0.50 * 0.15) + (0.50 * 0.06) + (0.50 * 0.04) = 0.075 + 0.030 + 0.020 = 0.125
-        // Hedged input drag = 0.125 * 0.33 = 0.04125
-        // Beta = 1.0, Inflation penalty scalar = 0.50, Inflation multiplier (SHER pricing power 0.60) = 2.0 - (0.60 * 2.0) = 0.80
-        // Total inflation penalty = 0.04125 * 1.0 * 0.50 * 0.80 = 0.0165
+        // Basket deviation = (0.50 * agri 0.15) + (0.50 * freight 0.06) + (0.50 * energy 0.04) = 0.125 of the variable cost base.
+        // Forward hedging: only 1 - exp(-0.25 / INPUT_COST_LAG_YEARS) of the spot move reaches COGS in the first quarter,
+        // and SHER (pricing power 0.60) starts recovering 0.60 x 0.80 of it at retail with the repricing lag.
+        $spotDeviation = 0.125;
+        $hedgedShare = 1.0 - exp(-0.25 / ApparelManufacturingBusinessModel::INPUT_COST_LAG_YEARS);
+        $recoveryShare = 1.0 - exp(-0.25 / FinancialConstants::DEFAULT_INPUT_PASS_THROUGH_LAG_YEARS);
+        $costLevel = $spotDeviation * $hedgedShare;
+        $recovered = $costLevel * 0.60 * ApparelManufacturingBusinessModel::MAX_INPUT_COST_PASS_THROUGH * $recoveryShare;
+        $expectedIncrease = 0.20 * ($costLevel - $recovered);
         $marginIncrease = $shockResult->clampedMargin - $neutralResult->clampedMargin;
-        $this->assertEqualsWithDelta(0.0165, $marginIncrease, 0.0001, 'Forward hedging must dampen spot input inflation passthrough by forward hedge ratio.');
+        $this->assertEqualsWithDelta($expectedIncrease, $marginIncrease, 0.0001, 'Forward hedging must dampen spot input inflation passthrough by the buying lag.');
+        $this->assertLessThan(0.20 * $spotDeviation * (1.0 - 0.60 * 0.80), $marginIncrease, 'The first-quarter hit must be smaller than the unhedged steady-state squeeze.');
     }
 
     public function testAgriculturalCommodityDeflationMarginRelief(): void
@@ -516,5 +523,21 @@ class ApparelManufacturingBusinessModelTest extends TestCase
         // Wholesale weight = 0.40
         // Observable shock must reflect -$0.02 * 0.40 = -0.008
         $this->assertEqualsWithDelta(-0.008, $result->observableShockZ, 0.0001);
+    }
+
+
+    /**
+     * Output is sold into a world market, so a strong domestic currency must reach expected demand through the
+     * declared FX exposure rather than being discarded by this model's own macro physics.
+     */
+    public function testAStrongCurrencyLowersExpectedDemandThroughTheDeclaredFxExposure(): void
+    {
+        $shift = fn (float $fxIndex): float => $this->model->getMacroPhysics((new Stock())->setTicker('SHER_FX'), new MacroStateDTO(outputGapEma: 0.0, exchangeRateIndexEma: $fxIndex))['macro_demand_shift'];
+
+        $strong = $shift(110.0);
+        $flat = $shift(100.0);
+
+        $this->assertEqualsWithDelta(-0.10 * ApparelManufacturingBusinessModel::FX_REVENUE_EXPOSURE, $strong - $flat, 1e-9);
+        $this->assertLessThan(0.0, $strong - $flat, 'A stronger domestic currency prices exports out of foreign markets.');
     }
 }

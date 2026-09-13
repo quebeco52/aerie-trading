@@ -79,6 +79,10 @@ readonly class MacroStateDTO
         public float $termPremium10yEma = 0.0125,
         public float $riskNeutral10y = 0.0250,
         public float $riskNeutral10yEma = 0.0250,
+        public float $termPremiumShock = 0.0,
+        public float $termPremiumRegime = MacroEngine::NS_BASE_TERM_PREMIUM,
+        public float $perceivedNeutralRate = MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION,
+        public float $restrictiveDuration = 0.0,
         public float $marketVolatility = 0.15,
         public float $marketVolatilityEma = 0.15,
         public float $marketZ = 0.0,
@@ -86,12 +90,14 @@ readonly class MacroStateDTO
         public float $marketJumpMultiplier = 1.0,
         /** @var array<string, float> Per-macro-sector shock, keyed by Sectors::MACRO_SECTORS. */
         public array $sectorZ = [],
+        /** @var array<string, float> Persistent per-macro-sector demand factor shared by every firm's earnings physics in the sector. */
+        public array $sectorDemandZ = [],
         public float $corporateTaxRate = MacroEngine::BASE_CORPORATE_TAX_RATE,
         public float $sovereignDebtToGdp = MacroEngine::INITIAL_DEBT_TO_GDP,
         public float $sovereignDebtToGdpEma = MacroEngine::INITIAL_DEBT_TO_GDP,
         public float $equityRiskPremium = MacroEngine::BASE_EQUITY_RISK_PREMIUM,
-        public float $macroCreditSpread = 0.02,
-        public float $macroCreditSpreadEma = 0.02,
+        public float $macroCreditSpread = MacroEngine::BASE_CREDIT_SPREAD,
+        public float $macroCreditSpreadEma = MacroEngine::BASE_CREDIT_SPREAD,
         public float $interbankLiquiditySpread = MacroEngine::INTERBANK_BASELINE_SPREAD,
         public float $interbankLiquiditySpreadEma = MacroEngine::INTERBANK_BASELINE_SPREAD,
         public float $totalFactorProductivityIndex = MacroEngine::TFP_BASELINE,
@@ -111,6 +117,9 @@ readonly class MacroStateDTO
         public float $structuralSlope = 0.0,
         public float $nsCurvature = 0.0,
         public float $nsCurvature2 = 0.0,
+        public float $nsBeta1 = 0.0,
+        public float $nsBaseTermPremium = MacroEngine::NS_BASE_TERM_PREMIUM,
+        public float $nsLongEndPremium = MacroEngine::NS_BASE_TERM_PREMIUM,
         public float $potentialGdpIndex = 1.0,
         public float $nominalGdpIndex = 1.0,
         public float $gdpDeflator = 1.0,
@@ -122,8 +131,8 @@ readonly class MacroStateDTO
         public float $coreGoodsInflationEma = MacroEngine::TARGET_INFLATION,
         public float $cumulativeInflationGap = 0.0,
         public float $cumulativeInflationGapEma = 0.0,
-        public float $highYieldCreditSpread = 0.048,
-        public float $highYieldCreditSpreadEma = 0.048,
+        public float $highYieldCreditSpread = MacroEngine::BASE_CREDIT_SPREAD * MacroEngine::HY_BASE_SPREAD_MULTIPLIER,
+        public float $highYieldCreditSpreadEma = MacroEngine::BASE_CREDIT_SPREAD * MacroEngine::HY_BASE_SPREAD_MULTIPLIER,
         public float $inventoryStockGap = 0.0,
         public float $inventoryStockGapEma = 0.0,
         public float $energyInventoryIndex = MacroEngine::COMMODITY_INVENTORY_BASELINE,
@@ -231,6 +240,10 @@ readonly class MacroStateDTO
         $termPremium10yEma = (float) ($data['term_premium_10y_ema'] ?? $termPremium10y);
         $riskNeutral10y = (float) ($data['risk_neutral_10y'] ?? 0.0250);
         $riskNeutral10yEma = (float) ($data['risk_neutral_10y_ema'] ?? $riskNeutral10y);
+        $termPremiumShock = (float) ($data['term_premium_shock'] ?? 0.0);
+        $termPremiumRegime = (float) ($data['term_premium_regime'] ?? MacroEngine::NS_BASE_TERM_PREMIUM);
+        $perceivedNeutralRate = (float) ($data['perceived_neutral_rate'] ?? (MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION));
+        $restrictiveDuration = (float) ($data['restrictive_duration'] ?? 0.0);
 
         $marketVolatility = (float) ($data['market_volatility'] ?? 0.15);
         $marketVolatilityEma = (float) ($data['market_volatility_ema'] ?? $marketVolatility);
@@ -238,12 +251,13 @@ readonly class MacroStateDTO
         $marketZLatent = (float) ($data['market_z_latent'] ?? 0.0);
         $marketJumpMultiplier = (float) ($data['market_jump_multiplier'] ?? 1.0);
         $sectorZ = is_array($data['sector_z'] ?? null) ? array_map('floatval', $data['sector_z']) : [];
+        $sectorDemandZ = is_array($data['sector_demand_z'] ?? null) ? array_map('floatval', $data['sector_demand_z']) : [];
 
         $corporateTaxRate = (float) ($data['corporate_tax_rate'] ?? MacroEngine::BASE_CORPORATE_TAX_RATE);
         $sovereignDebtToGdp = (float) ($data['sovereign_debt_to_gdp'] ?? MacroEngine::INITIAL_DEBT_TO_GDP);
         $sovereignDebtToGdpEma = (float) ($data['sovereign_debt_to_gdp_ema'] ?? $sovereignDebtToGdp);
         $equityRiskPremium = (float) ($data['equity_risk_premium'] ?? MacroEngine::BASE_EQUITY_RISK_PREMIUM);
-        $macroCreditSpread = (float) ($data['macro_credit_spread'] ?? 0.02);
+        $macroCreditSpread = (float) ($data['macro_credit_spread'] ?? MacroEngine::BASE_CREDIT_SPREAD);
         $macroCreditSpreadEma = (float) ($data['macro_credit_spread_ema'] ?? $macroCreditSpread);
         $interbankLiquiditySpread = (float) ($data['interbank_liquidity_spread'] ?? MacroEngine::INTERBANK_BASELINE_SPREAD);
         $interbankLiquiditySpreadEma = (float) ($data['interbank_liquidity_spread_ema'] ?? $interbankLiquiditySpread);
@@ -266,6 +280,9 @@ readonly class MacroStateDTO
         $structuralSlope = (float) ($data['structural_slope'] ?? $nsSlope);
         $nsCurvature = (float) ($data['ns_curvature'] ?? 0.0);
         $nsCurvature2 = (float) ($data['ns_curvature2'] ?? 0.0);
+        $nsBeta1 = (float) ($data['ns_beta1'] ?? ($policyRate - $nsLevel));
+        $nsBaseTermPremium = (float) ($data['ns_base_term_premium'] ?? MacroEngine::NS_BASE_TERM_PREMIUM);
+        $nsLongEndPremium = (float) ($data['ns_long_end_premium'] ?? MacroEngine::NS_BASE_TERM_PREMIUM);
 
         $nominalGdpIndex = (float) ($data['nominal_gdp_index'] ?? 1.0);
         $potentialGdpIndex = (float) ($data['potential_gdp_index'] ?? ($nominalGdpIndex / (1.0 + $outputGap)));
@@ -339,12 +356,17 @@ readonly class MacroStateDTO
             termPremium10yEma: $termPremium10yEma,
             riskNeutral10y: $riskNeutral10y,
             riskNeutral10yEma: $riskNeutral10yEma,
+            termPremiumShock: $termPremiumShock,
+            termPremiumRegime: $termPremiumRegime,
+            perceivedNeutralRate: $perceivedNeutralRate,
+            restrictiveDuration: $restrictiveDuration,
             marketVolatility: $marketVolatility,
             marketVolatilityEma: $marketVolatilityEma,
             marketZ: $marketZ,
             marketZLatent: $marketZLatent,
             marketJumpMultiplier: $marketJumpMultiplier,
             sectorZ: $sectorZ,
+            sectorDemandZ: $sectorDemandZ,
             corporateTaxRate: $corporateTaxRate,
             sovereignDebtToGdp: $sovereignDebtToGdp,
             sovereignDebtToGdpEma: $sovereignDebtToGdpEma,
@@ -370,6 +392,9 @@ readonly class MacroStateDTO
             structuralSlope: $structuralSlope,
             nsCurvature: $nsCurvature,
             nsCurvature2: $nsCurvature2,
+            nsBeta1: $nsBeta1,
+            nsBaseTermPremium: $nsBaseTermPremium,
+            nsLongEndPremium: $nsLongEndPremium,
             potentialGdpIndex: $potentialGdpIndex,
             nominalGdpIndex: $nominalGdpIndex,
             gdpDeflator: $gdpDeflator,
@@ -417,6 +442,59 @@ readonly class MacroStateDTO
     /**
      * Creates a MacroStateDTO from a MacroState entity/model object.
      */
+    /**
+     * The fitted term structure, ready for the bond desk to discount an arbitrary maturity against.
+     *
+     * Assembled rather than stored so there is one authority on which slope belongs in the curve function:
+     * $nsSlope on this DTO is the 10y-minus-policy reporting metric and would produce a curve that reprices
+     * nothing, while $nsBeta1 is the beta1 the macro engine actually fitted with.
+     */
+    public function sovereignCurve(): SovereignCurveDTO
+    {
+        return new SovereignCurveDTO(
+            level: $this->nsLevel,
+            slope: $this->nsBeta1,
+            curvature1: $this->nsCurvature,
+            curvature2: $this->nsCurvature2,
+            baseTermPremium: $this->nsBaseTermPremium,
+            longEndPremium: $this->nsLongEndPremium,
+            balanceSheetIntensity: $this->balanceSheetIntensity,
+        );
+    }
+
+    /**
+     * Calendar quarter index [0..3] implied by elapsed simulation time. Derived rather than published:
+     * it is not a macro series any institution reports, so it draws no district conduit. Matches the
+     * quarter EarningsEngine derives from the tick counter, both being elapsed time over a quarter.
+     */
+    public function calendarQuarter(): int
+    {
+        return ((int) floor($this->totalTime * 4.0) % 4 + 4) % 4;
+    }
+
+    // --- Economic Cycle Label ---
+    /** Output gap above which the cycle reads as a boom to a player. */
+    public const CYCLE_BOOM_GAP = 0.01;
+    /** Output gap below which the cycle reads as a bust to a player. */
+    public const CYCLE_BUST_GAP = -0.01;
+
+    /**
+     * The economy's phase as the interface names it.
+     *
+     * Defined once because it is read in two places that must agree: the ticker publishes it on every
+     * live update, and the stock page renders it on load. The page used to read a Redis key
+     * (`economy_state`) that nothing has ever written, so it fell back to a hardcoded "Expansion" — a
+     * label the live feed does not even use — until the first WebSocket tick replaced it.
+     */
+    public function economicCycleLabel(): string
+    {
+        return match (true) {
+            $this->outputGap > self::CYCLE_BOOM_GAP => 'Boom',
+            $this->outputGap < self::CYCLE_BUST_GAP => 'Bust',
+            default => 'Neutral',
+        };
+    }
+
     public static function fromMacroState(MacroState $state): self
     {
         return new self(
@@ -485,12 +563,17 @@ readonly class MacroStateDTO
             termPremium10yEma: $state->termPremium10yEma,
             riskNeutral10y: $state->riskNeutral10y,
             riskNeutral10yEma: $state->riskNeutral10yEma,
+            termPremiumShock: $state->termPremiumShock,
+            termPremiumRegime: $state->termPremiumRegime,
+            perceivedNeutralRate: $state->perceivedNeutralRate,
+            restrictiveDuration: $state->restrictiveDuration,
             marketVolatility: $state->marketVolatility,
             marketVolatilityEma: $state->marketVolatilityEma,
             marketZ: $state->marketZ,
             marketZLatent: $state->marketZLatent,
             marketJumpMultiplier: $state->marketJumpMultiplier,
             sectorZ: $state->sectorZ,
+            sectorDemandZ: $state->sectorDemandZ,
             corporateTaxRate: $state->corporateTaxRate,
             sovereignDebtToGdp: $state->sovereignDebtToGdp,
             sovereignDebtToGdpEma: $state->sovereignDebtToGdpEma,
@@ -516,6 +599,9 @@ readonly class MacroStateDTO
             structuralSlope: $state->structuralSlope,
             nsCurvature: $state->nsCurvature,
             nsCurvature2: $state->nsCurvature2,
+            nsBeta1: $state->nsBeta1,
+            nsBaseTermPremium: $state->nsBaseTermPremium,
+            nsLongEndPremium: $state->nsLongEndPremium,
             potentialGdpIndex: $state->potentialGdpIndex,
             nominalGdpIndex: $state->nominalGdpIndex,
             gdpDeflator: $state->gdpDeflator,
@@ -631,12 +717,17 @@ readonly class MacroStateDTO
             'term_premium_10y_ema' => $this->termPremium10yEma,
             'risk_neutral_10y' => $this->riskNeutral10y,
             'risk_neutral_10y_ema' => $this->riskNeutral10yEma,
+            'term_premium_shock' => $this->termPremiumShock,
+            'term_premium_regime' => $this->termPremiumRegime,
+            'perceived_neutral_rate' => $this->perceivedNeutralRate,
+            'restrictive_duration' => $this->restrictiveDuration,
             'market_volatility' => $this->marketVolatility,
             'market_volatility_ema' => $this->marketVolatilityEma,
             'market_z' => $this->marketZ,
             'market_z_latent' => $this->marketZLatent,
             'market_jump_multiplier' => $this->marketJumpMultiplier,
             'sector_z' => $this->sectorZ,
+            'sector_demand_z' => $this->sectorDemandZ,
             'corporate_tax_rate' => $this->corporateTaxRate,
             'sovereign_debt_to_gdp' => $this->sovereignDebtToGdp,
             'sovereign_debt_to_gdp_ema' => $this->sovereignDebtToGdpEma,
@@ -662,6 +753,9 @@ readonly class MacroStateDTO
             'structural_slope' => $this->structuralSlope,
             'ns_curvature' => $this->nsCurvature,
             'ns_curvature2' => $this->nsCurvature2,
+            'ns_beta1' => $this->nsBeta1,
+            'ns_base_term_premium' => $this->nsBaseTermPremium,
+            'ns_long_end_premium' => $this->nsLongEndPremium,
             'potential_gdp_index' => $this->potentialGdpIndex,
             'nominal_gdp_index' => $this->nominalGdpIndex,
             'gdp_deflator' => $this->gdpDeflator,

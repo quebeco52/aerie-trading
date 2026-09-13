@@ -42,8 +42,14 @@
 
 		<link rel="preconnect" href="https://fonts.googleapis.com">
 		<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-		<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
-		<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+		<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Serif:wght@400&display=swap" rel="stylesheet">
+		{# Imported into `vendor` rather than linked: Google's sheet pins `font-size: 24px` on
+		   `.material-symbols-outlined`, and unlayered rules outrank every cascade layer, so the
+		   `text-*` utilities on icon spans would lose. `display=block` keeps an unloaded icon
+		   font from painting its ligature names ("monitoring", "account_circle") first. #}
+		<style>
+			@import url("https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=block") layer(vendor);
+		</style>
 		<link rel="stylesheet" href="{{ asset('styles/app.css') }}">
 
 		{% block importmap %}
@@ -55,34 +61,36 @@
 	<body
 		class="bg-surface text-on-surface font-body selection:bg-primary/30 antialiased min-h-screen flex flex-col">
 
+		{# Skips the nav, which is otherwise a fixed preamble in front of every page. #}
+		<a href="#main-content" class="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-100 focus:px-4 focus:py-2 focus:rounded focus:bg-primary focus:text-on-primary focus:font-bold focus:text-sm">Skip to main content</a>
+
 		{# Inject the Site-Wide Navbar #}
 		{% include 'partials/_navbar.html.twig' %}
 
-		{# Flash Messages #}
-		<div class="fixed top-20 right-4 z-50 space-y-2">
+		{# The container is the live region, so appended notices are announced. Successes retire
+		   on their own; warnings and errors wait to be dismissed. #}
+		<div class="fixed top-20 right-4 z-50 space-y-2 max-w-[calc(100vw-2rem)] sm:max-w-sm" aria-live="polite" aria-atomic="false">
 			{% for label, messages in app.flashes %}
 				{% for message in messages %}
-					<div class="p-4 rounded-lg flex items-center gap-3 shadow-lg shadow-black/40 {{ label == 'success' ? 'bg-secondary/10 text-secondary border border-secondary/20' : 'bg-tertiary/10 text-tertiary border border-tertiary/20' }}">
-						<span class="material-symbols-outlined">{{ label == 'success' ? 'check_circle' : 'warning' }}</span>
-						<span class="text-sm font-bold">{{ message }}</span>
+					<div
+						data-controller="flash"
+						data-flash-auto-dismiss-value="{{ label == 'success' ? 8000 : 0 }}"
+						role="{{ label == 'success' ? 'status' : 'alert' }}"
+						class="p-4 rounded-lg flex items-start gap-3 shadow-lg shadow-black/40 {{ label == 'success' ? 'bg-secondary/10 text-secondary border border-secondary/20' : 'bg-tertiary/10 text-tertiary border border-tertiary/20' }}">
+						<span class="material-symbols-outlined shrink-0" aria-hidden="true">{{ label == 'success' ? 'check_circle' : 'warning' }}</span>
+						<span class="text-sm font-bold grow">{{ message }}</span>
+						<button type="button" data-action="flash#dismiss" class="material-symbols-outlined text-base shrink-0 opacity-60 hover:opacity-100 transition-opacity cursor-pointer" aria-label="Dismiss notification">close</button>
 					</div>
 				{% endfor %}
 			{% endfor %}
 		</div>
 
 		{# The Page Content #}
-		<main class="grow"> {% block body %}{% endblock %}
-			</main>
+		<main id="main-content" tabindex="-1" class="grow">{% block body %}{% endblock %}</main>
 
-			{% include 'partials/_footer.html.twig' %}
+		{% include 'partials/_footer.html.twig' %}
 
-			<script src="https://cdn.jsdelivr.net/npm/lightweight-charts@5.1.0/dist/lightweight-charts.standalone.production.js" integrity="sha256-dWsLqfWJMCJta4udR60xBEirhdeZ6h98LAIwR3fBC1I=" crossorigin="anonymous"></script>
-
-			<script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.1/dist/chart.umd.min.js" integrity="sha256-SERKgtTty1vsDxll+qzd4Y2cF9swY9BCq62i9wXJ9Uo=" crossorigin="anonymous"></script>
-
-			<script src="https://cdn.jsdelivr.net/npm/echarts@6.1.0/dist/echarts.min.js" integrity="sha256-tmslrrTfhOMxmdwhaUAU0zbSIsvZ3rDlp8FL1qoND9A=" crossorigin="anonymous"></script>
-
-			{% block javascripts %}{% endblock %}
-
-		</body>
-	</html>
+		{# Charting libraries are pulled in per page — see partials/_chart_libraries.html.twig. #}
+		{% block javascripts %}{% endblock %}
+	</body>
+</html>

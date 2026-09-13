@@ -583,7 +583,7 @@ class FinancialInvariantTest extends TestCase
 
         // Expansion / Normal regime: moderate spreads, normal slope, low vol
         $stateNormal = new MacroState();
-        $stateNormal->macroCreditSpreadEma = 0.019; // 190 bps
+        $stateNormal->macroCreditSpreadEma = 0.010; // 100 bps, an expansion-tight IG spread against the 130 bps through-the-cycle baseline
         $stateNormal->equityRiskPremium = 0.042;
         $stateNormal->marketVolatilityEma = 0.14;
         $stateNormal->nsSlopeEma = 0.012; // Normal upward slope (+120 bps)

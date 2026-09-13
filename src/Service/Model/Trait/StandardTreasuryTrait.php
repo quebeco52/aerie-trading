@@ -52,4 +52,10 @@ trait StandardTreasuryTrait
     {
         return max(0.0, $macroState->policyRateEma - MacroEngine::CASH_YIELD_SPREAD);
     }
+
+    /** Cash is deployed on the firm's own judgement of returns, never automatically. */
+    public function deploysFundingIntoEarningAssets(): bool
+    {
+        return false;
+    }
 }

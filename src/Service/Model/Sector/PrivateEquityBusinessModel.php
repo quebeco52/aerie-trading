@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Service\Model\Sector;
 
+use App\DTO\DebtExpansionAppetiteDTO;
+
 use App\Service\Model\BusinessModelInterface;
 
 use App\Data\ModelParam;
@@ -25,6 +27,18 @@ use App\Service\Macro\MacroEngine;
  */
 class PrivateEquityBusinessModel extends AssetManagementBusinessModel
 {
+    // --- Operating Cyclicality & Demand Structure ---
+    /** Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Exit windows and LBO financing open and shut with the cycle. */
+    public const OPERATING_CYCLICALITY = 1.40;
+
+    // --- Balance Sheet Realism ---
+    /** Stock-based compensation as a fraction of revenue (ASC 718): non-cash, added back to FCF, settled in new shares. Deal team deferrals settle in manager equity. */
+    public const STOCK_COMPENSATION_INTENSITY = 0.05;
+
+    // --- Labor Intensity ---
+    /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze. Deal team compensation dominates private equity overhead. */
+    public const FIXED_COST_LABOR_SHARE = 0.70;
+
         public function getWholesaleLeverageLimit(): float { return 2.5; }
 
     // --- Leverage & Aggression Physics ---
@@ -36,8 +50,8 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
     public const CARRY_LEVERAGE_AMPLIFIER_SCALAR = 0.80;
 
     // --- Cost of Debt & LBO Elasticity ---
-    /** Baseline macro credit spread (~200bps) for normal LBO conditions. */
-    public const LBO_CREDIT_SPREAD_BASELINE = 0.020;
+    /** Baseline macro credit spread for normal LBO conditions, the macro through-the-cycle IG spread. */
+    public const LBO_CREDIT_SPREAD_BASELINE = MacroEngine::BASE_CREDIT_SPREAD;
     /** Baseline policy rate (~4.5%) threshold above which LBO financing becomes distressed. */
     public const LBO_RATE_FREEZE_THRESHOLD  = 0.045;
     /** Elasticity scalar: How LBO multiples compress and exits freeze as total Cost of Debt rises. */
@@ -263,7 +277,7 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
         $rawPrincipalWeight = $params[ModelParam::PrincipalInvestmentsWeight];
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
-        $streams  = new \App\DTO\StreamContext($momentum, $mathUtility);
+        $streams  = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
 
         $targetWeights = [
             'management_fees'  => $params[ModelParam::ManagementFeeWeight],
@@ -414,12 +428,9 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
         return max($organicSpend, $debtIssued * self::DEBT_CAPEX_DEPLOYMENT);
     }
 
-    public function getDebtExpansionAggressiveness(float $spreadMultiplier, float $totalDebt = 0.0, float $customerDeposits = 0.0, float $targetOperatingCash = 0.0, float $currentTreasury = 0.0): array
+    public function getDebtExpansionAggressiveness(float $spreadMultiplier, float $totalDebt = 0.0, float $customerDeposits = 0.0, float $targetOperatingCash = 0.0, float $currentTreasury = 0.0): DebtExpansionAppetiteDTO
     {
-        return [
-            'probability' => self::DEBT_EXPANSION_BASE_PROB + ($spreadMultiplier * self::DEBT_EXPANSION_PROB_MULT),
-            'aggressiveness' => self::DEBT_EXPANSION_BASE_AGGR + (self::DEBT_EXPANSION_AGGR_MULT * $spreadMultiplier)
-        ];
+        return new DebtExpansionAppetiteDTO(probability: self::DEBT_EXPANSION_BASE_PROB + ($spreadMultiplier * self::DEBT_EXPANSION_PROB_MULT), aggressiveness: self::DEBT_EXPANSION_BASE_AGGR + (self::DEBT_EXPANSION_AGGR_MULT * $spreadMultiplier));
     }
 
     public function evaluateHoardingStatus(float $treasury, float $targetCashReserves, float $operatingBase, float $totalDebt): array
@@ -442,7 +453,7 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
         return max($operatingBase * self::MIN_OPERATING_BUFFER, $wholesaleDebt * self::MIN_OPERATING_BUFFER);
     }
 
-    public function updateDynamicRoic(Stock $stock, float $actualTotalNetIncome, float $investedCapital, float $ebit, float $corporateTaxRate, float $wacc = 0.08, float $costOfEquity = 0.10, ?\App\DTO\MacroStateDTO $macroState = null): float
+    public function updateDynamicRoic(Stock $stock, float $actualTotalNetIncome, float $investedCapital, float $ebit, float $corporateTaxRate, float $wacc = 0.08, float $costOfEquity = 0.10, ?\App\DTO\MacroStateDTO $macroState = null, float $depreciation = 0.0): float
     {
         $kappa = $this->getReversionSpeed();
         $moatSpread = $this->getMoatSpread();
@@ -549,7 +560,6 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
             'policy_rate_ema',
             'sloos_tightening_index_ema',
             'yield_10y_ema',
-            'yield_5y_ema',
         ];
     }
 }

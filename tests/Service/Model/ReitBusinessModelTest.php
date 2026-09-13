@@ -13,6 +13,7 @@ use App\Service\Event\ShockEvent;
 use App\Service\Macro\MacroEngine;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\ReitBusinessModel;
+use App\Service\Model\Sector\StandardCorporateBusinessModel;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\TestCase;
 
@@ -93,17 +94,21 @@ class ReitBusinessModelTest extends TestCase
     {
         $model = new ReitBusinessModel();
 
-        // Standard FFO ICR: (EBIT + Interest Income) / Interest Expense
-        // (EBIT already represents NOI without depreciation deducted in this system)
-        // ebit = 100, interest income = 10, interest expense = 80 => (100 + 10) / 80 = 1.375
+        // FFO ICR (NAREIT): (EBIT + Depreciation + Interest Income) / Interest Expense. EBIT is struck
+        // after depreciation like every other model, so property depreciation is added back to recover FFO.
+        // ebit = 100, depreciation = 50, interest income = 10, interest expense = 80 => 160 / 80 = 2.0
         $icr = $model->getInterestCoverage(ebit: 100.0, interestExpense: 80.0, depreciation: 50.0, interestIncome: 10.0);
-        $this->assertEqualsWithDelta(1.375, $icr, 0.0001);
+        $this->assertEqualsWithDelta(2.0, $icr, 0.0001);
+
+        // The add-back is what distinguishes FFO coverage from ordinary EBIT coverage.
+        $withoutAddBack = $model->getInterestCoverage(ebit: 100.0, interestExpense: 80.0, depreciation: 0.0, interestIncome: 10.0);
+        $this->assertEqualsWithDelta(1.375, $withoutAddBack, 0.0001);
 
         // Zero interest expense with positive FFO -> Infinite positive fallback
         $posIcr = $model->getInterestCoverage(ebit: 100.0, interestExpense: 0.0, depreciation: 50.0);
         $this->assertEquals(ReitBusinessModel::INFINITE_ICR_POS_FALLBACK, $posIcr);
 
-        // Zero interest expense with negative FFO -> Infinite negative fallback
+        // Zero interest expense with negative FFO -> Infinite negative fallback (the add-back cannot save it)
         $negIcr = $model->getInterestCoverage(ebit: -200.0, interestExpense: 0.0, depreciation: 50.0);
         $this->assertEquals(ReitBusinessModel::INFINITE_ICR_NEG_FALLBACK, $negIcr);
     }
@@ -310,28 +315,42 @@ class ReitBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta(0.285, $leasingBonusResult->clampedMargin, 0.001);
     }
 
-    public function testRefinancingWallDrag(): void
+    public function testTenYearYieldDoesNotTouchPropertyOperatingMargin(): void
     {
         $model = new ReitBusinessModel();
         $stock = new Stock();
         $stock->setTicker('REIT_REFI');
 
-        // 10y Yield = 6.0% (200bps above 4.0% fallback)
-        // Refinancing drag = (0.06 - 0.04) * 0.25 = +0.005 margin drag
-        $macroState = $this->createMacroState(yield10y: 0.06);
+        // A 200bps 10Y move reprices the mortgage book through DebtEngine's maturity wall (below NOI).
+        // The property-level operating cost ratio must be identical in both regimes.
+        $lowYield  = $this->createMacroState(yield10y: 0.04);
+        $highYield = $this->createMacroState(yield10y: 0.06);
 
-        $mathMock = $this->createMathUtilityMock([0.0, 0.0, 0.0]);
-        $result = $model->computeActualFinancials(
+        $resultLow = $model->computeActualFinancials(
             $stock,
             expectedRevenue: 1000000.0,
             realizedVariableMargin: 0.30,
             fixedCosts: 100000.0,
             baselineVol: 0.10,
-            macroState: $macroState,
-            mathUtility: $mathMock
+            macroState: $lowYield,
+            mathUtility: $this->createMathUtilityMock([0.0, 0.0, 0.0])
+        );
+        $resultHigh = $model->computeActualFinancials(
+            $stock,
+            expectedRevenue: 1000000.0,
+            realizedVariableMargin: 0.30,
+            fixedCosts: 100000.0,
+            baselineVol: 0.10,
+            macroState: $highYield,
+            mathUtility: $this->createMathUtilityMock([0.0, 0.0, 0.0])
         );
 
-        $this->assertEqualsWithDelta(0.305, $result->clampedMargin, 0.001);
+        $this->assertEqualsWithDelta(0.30, $resultLow->clampedMargin, 0.001);
+        $this->assertEqualsWithDelta($resultLow->clampedMargin, $resultHigh->clampedMargin, 1e-9);
+        $this->assertLessThan(
+            (new StandardCorporateBusinessModel())->getDebtMaturityRolloverRate(),
+            $model->getDebtMaturityRolloverRate()
+        );
     }
 
     public function testAssetDepreciationDecayAndModernization(): void
@@ -517,8 +536,8 @@ class ReitBusinessModelTest extends TestCase
         // Pricing power multiplier is fixed at 1.0
         $this->assertEquals(1.0, $physics['pricing_power_multiplier']);
 
-        // Macro demand shift = outputGap * 0.25 * beta = 0.02 * 0.25 * 1.2 = 0.006 (no FX drag)
-        $this->assertEqualsWithDelta(0.006, $physics['macro_demand_shift'], 0.0001);
+        // Macro demand shift = outputGap * 0.25 * cyclicality (no FX drag)
+        $this->assertEqualsWithDelta(0.02 * 0.25 * ReitBusinessModel::OPERATING_CYCLICALITY, $physics['macro_demand_shift'], 0.0001);
     }
 
     private function createDebtHealth(float $debtTolerance, float $interestExpense = 0.0): DebtHealthDTO

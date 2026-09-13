@@ -6,9 +6,13 @@ namespace App\Tests\Service\Model;
 
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
+use App\Service\Macro\MacroEngine;
 use App\Service\Event\ShockEvent;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\ResortsCasinosBusinessModel;
+use App\Service\Model\Sector\StandardCorporateBusinessModel;
+use App\Service\Math\FinancialConstants;
+use App\Service\Corporate\EarningsEngine;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\TestCase;
 
@@ -92,15 +96,15 @@ class ResortsCasinosBusinessModelTest extends TestCase
         $macroBoom = $this->createMacroState(consumerSentimentIndexEma: 120.0);
         $physicsBoom = $model->getMacroPhysics($stock, $macroBoom);
 
-        // Expected shift: outputGap (0) + 0.20 * 1.4 * 0.25 = 0.07
-        $this->assertEqualsWithDelta(0.07, $physicsBoom['macro_demand_shift'], 0.001);
+        // Expected shift: outputGap (0) + 0.20 * cyclicality * 0.25
+        $this->assertEqualsWithDelta(0.20 * ResortsCasinosBusinessModel::OPERATING_CYCLICALITY * 0.25, $physicsBoom['macro_demand_shift'], 0.001);
 
         // Sentiment slump (80 vs 100 baseline -> -0.20 shift)
         $macroSlump = $this->createMacroState(consumerSentimentIndexEma: 80.0);
         $physicsSlump = $model->getMacroPhysics($stock, $macroSlump);
 
-        // Expected shift: -0.07
-        $this->assertEqualsWithDelta(-0.07, $physicsSlump['macro_demand_shift'], 0.001);
+        // Expected shift: -0.20 * cyclicality * 0.25
+        $this->assertEqualsWithDelta(-0.20 * ResortsCasinosBusinessModel::OPERATING_CYCLICALITY * 0.25, $physicsSlump['macro_demand_shift'], 0.001);
     }
 
     public function testSymmetricWhaleHoldLuckSurgeAndCrash(): void
@@ -160,56 +164,65 @@ class ResortsCasinosBusinessModelTest extends TestCase
         $mathMock = $this->createMathUtilityMock([0.0, 0.0, 0.0]);
 
         // Sentiment slump of 20 points (sentimentIndex = 80.0 vs 100.0 baseline) -> -0.20 shift
-        // promotionalDrag = 0.20 * 1.0 * 0.15 = 0.03
+        // promotionalDrag = 0.20 * cyclicality * 0.15
+        $promotionalDrag = 0.20 * ResortsCasinosBusinessModel::OPERATING_CYCLICALITY * 0.15;
         $macroState = $this->createMacroState(consumerSentimentIndexEma: 80.0);
 
         // Gaming weight = 0.55, Non-gaming weight = 0.45.
         // baseGamingMargin = 0.58 / (0.55 + 2.0 * 0.45) = 0.58 / 1.45 = 0.40.
         // gamingVariableMargin = 0.40 (unaffected by promotional comps)
-        // nonGamingVariableMargin = 0.80 + 0.03 = 0.83 (diluted by comp rooms & F&B)
+        // nonGamingVariableMargin = 0.80 + promotionalDrag (diluted by comp rooms & F&B)
         $result = $model->computeActualFinancials($stock, 10_000.0, 0.58, 2000.0, 0.15, $macroState, $mathMock);
 
-        // Total variable costs: (5500 * 0.40) + (4500 * 0.83) = 2200 + 3735 = 5935
-        // Raw margin = 5935 / 10000 = 0.5935
-        $this->assertEqualsWithDelta(0.5935, $result->clampedMargin, 0.001);
+        // Total variable costs: (5500 * 0.40) + (4500 * (0.80 + promotionalDrag))
+        $expectedMargin = ((5500.0 * 0.40) + (4500.0 * (0.80 + $promotionalDrag))) / 10_000.0;
+        $this->assertEqualsWithDelta($expectedMargin, $result->clampedMargin, 0.001);
     }
 
     public function testEnergyUtilityDragScalesByOperationalFootprint(): void
     {
         $model = new ResortsCasinosBusinessModel();
 
-        // 1. Pure-Play Casino Resort (100% operational footprint)
+        // Energy index spikes by 20 points (120 vs 100 baseline -> 0.20 relative deviation). The basket buys at
+        // spot, so the full move lands in the cost base this quarter; room and menu pricing recovers
+        // pricingPower x MAX_INPUT_COST_PASS_THROUGH of it with the pass-through lag.
+        $energyDeviation = 0.20 * ResortsCasinosBusinessModel::INPUT_COST_EXPOSURES['energy'];
+        $recoveryWeight = 1.0 - exp(-EarningsEngine::QUARTERLY_TIME_STEP / FinancialConstants::DEFAULT_INPUT_PASS_THROUGH_LAG_YEARS);
+        $macroBase = $this->createMacroState();
+        $macroEnergy = $this->createMacroState(energyPriceIndexEma: 120.0, energyCostPushLag: 0.20 * MacroEngine::ENERGY_COST_PUSH_TRANSMISSION);
+
+        // 1. Pure-Play Casino Resort (100% operational footprint, median pricing power 0.50)
         $stockPure = new Stock();
         $stockPure->setTicker('CASINO');
         $stockPure->setBeta('1.0');
+        $resPureBase = $model->computeActualFinancials($stockPure, 10_000.0, 0.58, 2000.0, 0.15, $macroBase, $this->createMathUtilityMock([0.0, 0.0, 0.0]));
 
-        $mathMock1 = $this->createMathUtilityMock([0.0, 0.0, 0.0]);
+        $stockPureSpike = new Stock();
+        $stockPureSpike->setTicker('CASINO');
+        $stockPureSpike->setBeta('1.0');
+        $resPure = $model->computeActualFinancials($stockPureSpike, 10_000.0, 0.58, 2000.0, 0.15, $macroEnergy, $this->createMathUtilityMock([0.0, 0.0, 0.0]));
 
-        // Energy index spikes by 20 points (120 vs 100 baseline -> 0.20 shift)
-        // energyDrag = 0.20 * 0.20 = 0.04
-        $macroEnergy = $this->createMacroState(energyPriceIndexEma: 120.0, energyCostPushLag: 0.0020);
-
-        $resPure = $model->computeActualFinancials($stockPure, 10_000.0, 0.58, 2000.0, 0.15, $macroEnergy, $mathMock1);
-        // Absorbs full 0.04 energy drag: 0.58 + 0.04 = 0.62
-        $this->assertEqualsWithDelta(0.62, $resPure->clampedMargin, 0.001);
+        $pureRecovered = StandardCorporateBusinessModel::MIN_BETA_PRICING_POWER_FLOOR * ResortsCasinosBusinessModel::MAX_INPUT_COST_PASS_THROUGH * $recoveryWeight;
+        $expectedPureDrag = 0.58 * $energyDeviation * (1.0 - $pureRecovered);
+        $this->assertEqualsWithDelta($expectedPureDrag, $resPure->clampedMargin - $resPureBase->clampedMargin, 0.0005);
 
         // 2. Landlord Empire (Silver Gull Resorts 'GULL': 20% gaming, 10% non-gaming, 70% CRE -> footprint = 0.30)
+        // GULL has PricingPowerIndex = 1.00 (from StockModelTuning), so it recovers the full pass-through share,
+        // and only the physical resort footprint carries the utility bill; NNN tenants pay their own.
+        $stockGullBase = new Stock();
+        $stockGullBase->setTicker('GULL');
+        $stockGullBase->setBeta('1.0');
+        $resGullBase = $model->computeActualFinancials($stockGullBase, 10_000.0, 0.33, 2000.0, 0.15, $macroBase, $this->createMathUtilityMock([0.0, 0.0, 0.0, 0.0]));
+
         $stockGull = new Stock();
         $stockGull->setTicker('GULL');
         $stockGull->setBeta('1.0');
+        $resGull = $model->computeActualFinancials($stockGull, 10_000.0, 0.33, 2000.0, 0.15, $macroEnergy, $this->createMathUtilityMock([0.0, 0.0, 0.0, 0.0]));
 
-        // gamingZ = 0.0, nonGamingZ = 0.0, eventZ = 0.0, creZ = 0.0
-        $mathMock2 = $this->createMathUtilityMock([0.0, 0.0, 0.0, 0.0]);
-
-        // GULL has PricingPowerIndex = 1.00 (from StockModelTuning), so inflation penalty is 0
-        // Denominator for baseGamingMargin: 0.20 + (2.0 * 0.10) + 0.70 = 1.10
-        // If realizedVariableMargin = 0.33: baseGamingMargin = 0.30
-        // gamingMargin = 0.30, nonGamingMargin = 0.60, creMargin = 0.30
-        // actualVariableCosts = (2000 * 0.30) + (1000 * 0.60) + (7000 * 0.30) = 600 + 600 + 2100 = 3300 (0.33 margin)
-        // Effective energy drag = 0.04 * 0.30 (footprint) = 0.012
-        // Clamped margin = 0.33 + 0.012 = 0.342
-        $resGull = $model->computeActualFinancials($stockGull, 10_000.0, 0.33, 2000.0, 0.15, $macroEnergy, $mathMock2);
-        $this->assertEqualsWithDelta(0.342, $resGull->clampedMargin, 0.001);
+        $gullRecovered = 1.00 * ResortsCasinosBusinessModel::MAX_INPUT_COST_PASS_THROUGH * $recoveryWeight;
+        $expectedGullDrag = 0.33 * $energyDeviation * (1.0 - $gullRecovered) * 0.30;
+        $this->assertEqualsWithDelta($expectedGullDrag, $resGull->clampedMargin - $resGullBase->clampedMargin, 0.0005);
+        $this->assertLessThan($expectedPureDrag, $expectedGullDrag);
     }
 
     public function testCommercialRealEstateHybridLandlordPhysics(): void

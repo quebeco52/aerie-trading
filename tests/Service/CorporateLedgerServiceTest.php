@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Tests\Service;
 
 use App\Entity\Stock;
+use App\Entity\StockEvent;
+use App\Service\Event\EventPresenter;
 use App\Service\Corporate\CorporateLedgerService;
 use Doctrine\DBAL\Connection;
 use Doctrine\ORM\EntityManagerInterface;
@@ -29,26 +31,118 @@ class CorporateLedgerServiceTest extends TestCase
         $this->service = new CorporateLedgerService($this->entityManagerMock);
     }
 
-    public function testProcessDividendPaymentExecutesCombinedHoldingsQuery(): void
+    public function testProcessDividendPaymentWritesLedgerThenCreditsCashFromIt(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('DIV_CORP');
+        $paidAt = new \DateTimeImmutable('2026-09-10 14:30:00');
+
+        // Four statements: the holder ledger, the holder credit, then the short ledger and the short debit.
+        $captured = [];
+        $this->connectionMock->expects($this->exactly(4))
+            ->method('executeStatement')
+            ->willReturnCallback(function (string $sql, array $params) use (&$captured): int {
+                $captured[] = ['sql' => $sql, 'params' => $params];
+
+                return 1;
+            });
+
+        $this->service->processDividendPayment($stock, 1.25, $paidAt);
+
+        [$insert, $update, $shortInsert, $shortUpdate] = $captured;
+
+        // The ledger is written first, from the holdings snapshot.
+        $this->assertStringContainsString('INSERT INTO dividend_payment', $insert['sql']);
+        $this->assertStringContainsString('user_stocks', $insert['sql']);
+        $this->assertStringContainsString("trade_orders", $insert['sql']);
+        $this->assertSame(1.25, $insert['params']['dividend']);
+        $this->assertSame('DIV_CORP', $insert['params']['ticker']);
+        $this->assertSame('2026-09-10 14:30:00', $insert['params']['paid_at']);
+
+        // Cash is then credited FROM those rows, not from a second copy of the subquery. If this join ever
+        // becomes an independent recomputation the ledger stops reconciling to the cash it explains.
+        $this->assertStringContainsString('UPDATE users u', $update['sql']);
+        $this->assertStringContainsString('INNER JOIN dividend_payment d', $update['sql']);
+        $this->assertStringContainsString('u.cash_balance + d.amount', $update['sql']);
+        $this->assertSame($insert['params']['paid_at'], $update['params']['paid_at']);
+        $this->assertSame($insert['params']['ticker'], $update['params']['ticker']);
+    }
+
+    /**
+     * An open BUY has escrowed cash, not shares. Paying a dividend on it would let anyone park a limit buy
+     * far below market and collect income indefinitely on stock they never bought, with the escrow still
+     * refundable on cancel. Only the SELL leg belongs in the union, because a SELL has already had its
+     * shares removed from user_stocks and would otherwise go unpaid.
+     */
+    public function testProcessDividendPaymentPaysOpenSellEscrowButNotOpenBuyOrders(): void
     {
         $stock = new Stock();
         $stock->setTicker('DIV_CORP');
 
-        $this->connectionMock->expects($this->once())
-            ->method('executeStatement')
-            ->with(
-                $this->callback(function (string $sql) {
-                    return str_contains($sql, 'UPDATE users u')
-                        && str_contains($sql, 'user_stocks WHERE stock_id = :stock_id')
-                        && str_contains($sql, "trade_orders WHERE ticker = :ticker AND status = 'OPEN' AND action = 'SELL'");
-                }),
-                $this->callback(function (array $params) {
-                    return $params['dividend'] === 1.25
-                        && $params['ticker'] === 'DIV_CORP';
-                })
-            );
+        // Two inserts now: the holder ledger, then the short ledger. The escrow rule belongs to the first.
+        $inserts = [];
+        $this->connectionMock->method('executeStatement')
+            ->willReturnCallback(function (string $sql) use (&$inserts): int {
+                if (str_contains($sql, 'INSERT INTO dividend_payment')) {
+                    $inserts[] = $sql;
+                }
 
-        $this->service->processDividendPayment($stock, 1.25);
+                return 1;
+            });
+
+        $this->service->processDividendPayment($stock, 1.25, new \DateTimeImmutable());
+
+        $this->assertCount(2, $inserts);
+
+        [$holders, $shorts] = $inserts;
+
+        $this->assertStringContainsString("status = 'OPEN' AND action = 'SELL'", $holders);
+        $this->assertStringNotContainsString("action = 'BUY'", $holders);
+
+        // A short borrowed the shares from someone still entitled to the distribution, so it pays rather
+        // than receives. Anything else makes a high-yield name free to be short.
+        $this->assertStringContainsString('us.quantity < 0', $shorts);
+    }
+
+    public function testProcessDividendPaymentSkipsHoldingsRoundingToZero(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('DIV_CORP');
+
+        // The holder ledger is the first of the two inserts; the short ledger has its own zero guard.
+        $insertSql = null;
+        $this->connectionMock->method('executeStatement')
+            ->willReturnCallback(function (string $sql) use (&$insertSql): int {
+                if ($insertSql === null && str_contains($sql, 'INSERT INTO dividend_payment')) {
+                    $insertSql = $sql;
+                }
+
+                return 1;
+            });
+
+        $this->service->processDividendPayment($stock, 0.0001, new \DateTimeImmutable());
+
+        // WHERE, not HAVING: total_shares is a plain column of the derived table by that point, and HAVING
+        // without a GROUP BY in the outer query would collapse every holder into one group.
+        $this->assertNotNull($insertSql);
+        $this->assertStringContainsString('WHERE ROUND(holdings.total_shares * :dividend, 2) > 0', $insertSql);
+        $this->assertStringNotContainsString('HAVING', $insertSql);
+    }
+
+    /**
+     * The tick transaction in MarketTickerCommand already spans both statements. Opening another one here
+     * would only nest, and a nested rollBack would mark the whole tick rollback-only.
+     */
+    public function testProcessDividendPaymentDoesNotOpenItsOwnTransaction(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('DIV_CORP');
+
+        $this->connectionMock->expects($this->never())->method('beginTransaction');
+        $this->connectionMock->expects($this->never())->method('commit');
+        $this->connectionMock->method('executeStatement')->willReturn(1);
+
+        $this->service->processDividendPayment($stock, 1.25, new \DateTimeImmutable());
     }
 
     public function testProcessForwardStockSplitExecutesUpdatesAndCommits(): void
@@ -60,8 +154,9 @@ class CorporateLedgerServiceTest extends TestCase
         $this->connectionMock->expects($this->once())->method('commit');
         $this->connectionMock->expects($this->never())->method('rollBack');
 
-        // Forward split executes 4 SQL statements (user_stocks, stock_history, corporate_report, trade_orders)
-        $this->connectionMock->expects($this->exactly(4))
+        // Forward split executes 5 SQL statements: user_stocks, stock_history, corporate_report, open
+        // trade_orders, and the filled trade_orders the cost basis is derived from.
+        $this->connectionMock->expects($this->exactly(5))
             ->method('executeStatement')
             ->with(
                 $this->stringContains('UPDATE'),
@@ -79,16 +174,18 @@ class CorporateLedgerServiceTest extends TestCase
         $this->connectionMock->expects($this->once())->method('beginTransaction');
         $this->connectionMock->expects($this->once())->method('commit');
 
-        // Mock 2 users: user 1 has 15 shares (15 / 10 = 1 share, 5 remnant -> cashout), user 2 has 20 shares (0 remnant)
-        $this->connectionMock->expects($this->once())
+        // Mock 2 users: user 1 has 15 shares (15 / 10 = 1 share, 5 remnant -> cashout), user 2 has 20 shares (0 remnant).
+        // The second fetch is the event feed, which is empty here.
+        $this->connectionMock->expects($this->exactly(2))
             ->method('fetchAllAssociative')
-            ->willReturn([
+            ->willReturnCallback(static fn (string $sql): array => str_contains($sql, 'stock_events') ? [] : [
                 ['id' => 1, 'user_id' => 101, 'quantity' => 15],
                 ['id' => 2, 'user_id' => 102, 'quantity' => 20],
             ]);
 
-        // 1 cashout update + 7 bulk updates = 8 executeStatement calls
-        $this->connectionMock->expects($this->exactly(8))
+        // 1 holdings cashout + 9 bulk updates (escrow remnant refund, then the eight rewrites, the last
+        // of which restates filled trade_orders) = 10 calls
+        $this->connectionMock->expects($this->exactly(10))
             ->method('executeStatement');
 
         $this->service->processStockSplit($stock, 10.0, true, 2.50);
@@ -110,5 +207,220 @@ class CorporateLedgerServiceTest extends TestCase
         $this->expectExceptionMessage('DB Connection Lost');
 
         $this->service->processStockSplit($stock, 2.0, false);
+    }
+
+    /**
+     * A reverse split has to settle a SHORT position's fraction too, and round it toward zero.
+     *
+     * Shorts are held as a negative quantity in the same table as longs. The rewrite rescaled them with
+     * FLOOR, which rounds toward NEGATIVE infinity, so a 105-share short at a 1-for-10 came out eleven
+     * shares short rather than ten — half a share of extra exposure the borrower never sold and was never
+     * paid for. The cashout loop beside it only looked at quantity > 0, so nothing compensated them either.
+     */
+    public function testReverseSplitSettlesShortFractionsAndRoundsThemTowardZero(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('SHORTY');
+
+        $statements = [];
+        $this->connectionMock->method('executeStatement')
+            ->willReturnCallback(function (string $sql, array $params = []) use (&$statements): int {
+                $statements[] = ['sql' => $sql, 'params' => $params];
+
+                return 1;
+            });
+
+        $fetched = null;
+        $this->connectionMock->method('fetchAllAssociative')
+            ->willReturnCallback(function (string $sql, array $params = []) use (&$fetched): array {
+                if (str_contains($sql, 'stock_events')) {
+                    return [];
+                }
+                $fetched = $sql;
+
+                return [
+                    ['id' => 1, 'user_id' => 101, 'quantity' => 105],   // long: 10 new shares, 5 old over
+                    ['id' => 2, 'user_id' => 102, 'quantity' => -105],  // short: owes 10 new shares, 5 old over
+                ];
+            });
+
+        $this->service->processStockSplit($stock, 10.0, true, 2.50);
+
+        // Short positions must be in the settlement population at all.
+        $this->assertNotNull($fetched);
+        $this->assertStringContainsString('quantity <> 0', $fetched, 'A reverse split must settle short positions, not just long ones.');
+
+        $cashouts = [];
+        foreach ($statements as $s) {
+            if (str_contains($s['sql'], 'cash_balance = cash_balance + :cashout')) {
+                $cashouts[(int) $s['params']['user_id']] = (float) $s['params']['cashout'];
+            }
+        }
+
+        // The long is bought out of its five leftover shares; the short buys its five back. Same price,
+        // opposite direction.
+        $this->assertEqualsWithDelta(12.50, $cashouts[101] ?? null, 0.0001, 'A long is credited for the fraction bought out of it.');
+        $this->assertEqualsWithDelta(-12.50, $cashouts[102] ?? null, 0.0001, 'A short is debited for the fraction it has to buy in.');
+
+        // And the rewrite rounds toward zero, so the debit above matches the position that survives.
+        $rewrites = array_values(array_filter(
+            $statements,
+            static fn (array $s): bool => str_contains($s['sql'], 'UPDATE user_stocks SET quantity')
+        ));
+        $this->assertCount(1, $rewrites);
+        $this->assertStringContainsString('TRUNCATE(quantity / :factor, 0)', $rewrites[0]['sql']);
+        $this->assertStringNotContainsString('FLOOR(quantity / :factor)', $rewrites[0]['sql'], 'FLOOR rounds a short away from zero.');
+    }
+
+    /**
+     * A reverse split may only refund escrow to the sides that posted some.
+     *
+     * A resting SHORT locates its borrow and posts margin at the fill; a resting COVER is the closing leg
+     * of an already-collateralized position. Neither commits a dollar or a share when it is placed, so
+     * neither has anything to refund. Falling through to a share valuation on ELSE paid both of them the
+     * fractional remnant at the pre-split price — cash from nothing, and parkable by leaving a resting
+     * short on a name heading for a reverse split.
+     */
+    public function testReverseSplitRefundsEscrowOnlyToSidesThatPostedIt(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('ESCROW');
+
+        $statements = [];
+        $this->connectionMock->method('fetchAllAssociative')->willReturn([]);
+        $this->connectionMock->method('executeStatement')
+            ->willReturnCallback(function (string $sql, array $params = []) use (&$statements): int {
+                $statements[] = ['sql' => $sql, 'params' => $params];
+
+                return 1;
+            });
+
+        $this->service->processStockSplit($stock, 10.0, true, 2.50);
+
+        $refunds = array_values(array_filter(
+            $statements,
+            static fn (array $s): bool => str_contains($s['sql'], 'remnant_value')
+        ));
+        $this->assertCount(1, $refunds, 'A reverse split refunds escrow remnants exactly once.');
+        $sql = $refunds[0]['sql'];
+
+        $this->assertStringContainsString("WHEN o.action = 'BUY'", $sql, 'A resting BUY holds committed cash.');
+        $this->assertStringContainsString("WHEN o.action = 'SELL'", $sql, 'A resting SELL holds shares taken out of user_stocks.');
+        $this->assertMatchesRegularExpression(
+            '/ELSE\s+0\b/',
+            $sql,
+            'Every other side — SHORT and COVER — escrows nothing and must be refunded nothing.'
+        );
+    }
+
+    /**
+     * A split restates the event feed with the ledger.
+     *
+     * Event text carries the quarter's EPS, the surprise against consensus, the dividend rate and the
+     * buyback count in the units of its day. Every price and share count in the tables has just moved
+     * to the new basis, so left alone the feed read "Q-Earnings: $11.75" one quarter and "$3.56" the
+     * next across a 4-for-1 that changed nothing. Dollar totals (EVA, total paid) are not per-share and
+     * must be left exactly as written.
+     */
+    public function testForwardSplitRestatesPerShareFiguresInTheEventFeed(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('FEED');
+
+        $this->connectionMock->method('fetchAllAssociative')
+            ->willReturnCallback(static fn (string $sql): array => str_contains($sql, 'stock_events') ? [
+                ['id' => 7, 'description' => "Q-Earnings: $11.75 (Beat expectations by $0.32 | +$80.92B EVA).\n• Paid $0.60/share div ($27.64B total, 1.97% yield).\n• Bought back 410,288,930 shares."],
+                ['id' => 8, 'description' => "Q-Earnings: $1.00 (Met expectations exactly | +$5.00M EVA).\n• Launched next-gen AI platform."],
+            ] : []);
+
+        $rewrites = [];
+        $this->connectionMock->method('executeStatement')
+            ->willReturnCallback(function (string $sql, array $params = []) use (&$rewrites): int {
+                if (str_contains($sql, 'UPDATE stock_events')) {
+                    $rewrites[(int) $params['id']] = $params['description'];
+                }
+
+                return 1;
+            });
+
+        $this->service->processStockSplit($stock, 4.0, false);
+
+        $this->assertSame(
+            "Q-Earnings: $2.94 (Beat expectations by $0.08 | +$80.92B EVA).\n• Paid $0.15/share div ($27.64B total, 1.97% yield).\n• Bought back 1,641,155,720 shares.",
+            $rewrites[7] ?? null,
+            'EPS, surprise and dividend divide by the factor, the buyback count multiplies, EVA and totals are untouched.'
+        );
+        $this->assertSame(
+            "Q-Earnings: $0.25 (Met expectations exactly | +$5.00M EVA).\n• Launched next-gen AI platform.",
+            $rewrites[8] ?? null
+        );
+
+        // The restated text must still be readable by the feed's parser, or the restatement has traded a
+        // wrong number for a blank card.
+        $event = new StockEvent();
+        $event->setEventType('EARNINGS');
+        $event->setDescription($rewrites[7]);
+        $presented = (new EventPresenter())->present($event);
+        $this->assertSame('$2.94', $presented['eps']);
+        $this->assertSame('beat', $presented['surpriseType']);
+        $this->assertSame('$0.08', $presented['surpriseAmount']);
+        $this->assertSame('+$80.92B EVA', $presented['eva']);
+        $this->assertStringContainsString('$0.15/sh', $presented['pills'][0]['text']);
+        $this->assertStringContainsString('1.64B shares', $presented['pills'][1]['text']);
+    }
+
+    /** A reverse split moves the same figures the other way, and keeps a negative EPS negative. */
+    public function testReverseSplitRestatesTheEventFeedTheOtherWay(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('REVFEED');
+
+        $this->connectionMock->method('fetchAllAssociative')
+            ->willReturnCallback(static fn (string $sql): array => str_contains($sql, 'stock_events') ? [
+                ['id' => 3, 'description' => "Q-Earnings: -$0.45 (Missed expectations by $0.10 | -$15.00M EVA).\n• Bought back 1,000 shares."],
+            ] : []);
+
+        $rewrites = [];
+        $this->connectionMock->method('executeStatement')
+            ->willReturnCallback(function (string $sql, array $params = []) use (&$rewrites): int {
+                if (str_contains($sql, 'UPDATE stock_events')) {
+                    $rewrites[(int) $params['id']] = $params['description'];
+                }
+
+                return 1;
+            });
+
+        $this->service->processStockSplit($stock, 10.0, true, 2.50);
+
+        $this->assertSame(
+            "Q-Earnings: -$4.50 (Missed expectations by $1.00 | -$15.00M EVA).\n• Bought back 100 shares.",
+            $rewrites[3] ?? null
+        );
+    }
+
+    /** A row with nothing per-share in it is not rewritten at all. */
+    public function testEventFeedRestatementLeavesRowsWithoutPerShareFiguresAlone(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('QUIET');
+
+        $this->connectionMock->method('fetchAllAssociative')
+            ->willReturnCallback(static fn (string $sql): array => str_contains($sql, 'stock_events') ? [
+                ['id' => 1, 'description' => 'Issued $18.31B in bonds for expansion.'],
+            ] : []);
+
+        $eventRewrites = 0;
+        $this->connectionMock->method('executeStatement')
+            ->willReturnCallback(function (string $sql) use (&$eventRewrites): int {
+                if (str_contains($sql, 'UPDATE stock_events')) {
+                    $eventRewrites++;
+                }
+
+                return 1;
+            });
+
+        $this->service->processStockSplit($stock, 4.0, false);
+
+        $this->assertSame(0, $eventRewrites);
     }
 }

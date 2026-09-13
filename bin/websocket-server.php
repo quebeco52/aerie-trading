@@ -51,7 +51,8 @@ $worker->onWebSocketConnect = function ($connection, $http_buffer) use ($appSecr
         // Attach the User ID to this specific connection object for future reference
         $connection->uid = $userId;
 
-        echo " [+] Authenticated User ID {$userId} connected! (IP: {$connection->getRemoteIp()})\n";
+        $userLabel = $userId === 'guest' ? 'Guest' : "Authenticated User ID {$userId}";
+        echo " [+] {$userLabel} connected! (IP: {$connection->getRemoteIp()})\n";
     } catch (\Exception $e) {
         echo " [!] Rejected connection: " . $e->getMessage() . "\n";
         $connection->close();

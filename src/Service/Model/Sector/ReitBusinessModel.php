@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Service\Model\Sector;
 
+use App\DTO\DebtExpansionAppetiteDTO;
+
 use App\Service\Model\BusinessModelInterface;
 
 use App\Data\ModelParam;
@@ -18,6 +20,38 @@ use App\Service\Macro\MacroEngine;
  */
 class ReitBusinessModel extends StandardCorporateBusinessModel
 {
+    // --- Operating Cyclicality & Demand Structure ---
+    /** Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Contracted leases lag the cycle. */
+    public const OPERATING_CYCLICALITY = 0.80;
+    /** Own-price elasticity of demand: volume lost per unit of real price increase. */
+    public const PRICE_ELASTICITY_OF_DEMAND = 0.30;
+    /** Share of an idiosyncratic revenue gain taken from same-industry peers rather than won from a larger market. */
+    public const INDUSTRY_SUBSTITUTABILITY = 0.40;
+
+    // --- Input Cost Basket ---
+    /** Shares of the variable cost base bought in tracked input markets (energy, metals, agri, freight, wholesale goods, variable payroll). Property operating expense is utilities, on-site staff and repairs; the share a landlord bears net of tenant recoveries. */
+    public const INPUT_COST_EXPOSURES = ['energy' => 0.20, 'labor' => 0.25, 'ppi' => 0.15];
+    /** Utility contracts and service agreements reprice annually, so a spot move reaches property opex over about a year. */
+    public const INPUT_COST_LAG_YEARS = 0.75;
+    /** Operating-expense recoveries and CAM reconciliations bill tenants in arrears, a year or more behind the cost. */
+    public const INPUT_PASS_THROUGH_LAG_YEARS = 1.00;
+
+    // --- Pricing Power ---
+    /** In-place leases carry contractual escalators the landlord collects regardless of the market, but re-leasing spreads are set by the submarket, so recovery is high on the stock and weak at the margin. */
+    public const PRICING_POWER_INDEX = 0.60;
+
+    // --- Balance Sheet Realism ---
+    /** Capitalized operating lease liabilities as a fraction of annual revenue (IFRS 16 / ASC 842). The REIT is the lessor, not the lessee. */
+    public const LEASE_LIABILITY_INTENSITY = 0.00;
+
+    // --- Labor Intensity ---
+    /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze. Property operating costs, taxes and depreciation dominate; leasing staff is a small overhead line. */
+    public const FIXED_COST_LABOR_SHARE = 0.25;
+
+    // --- Demand Transmission Lag ---
+    /** Years for a move in the output gap to reach the order book. Rent rolls turn over on multi-year leases: a downturn reaches a landlord only as space comes up for renewal. */
+    public const DEMAND_LAG_YEARS = 1.50;
+
     // --- Analyst Visibility & Error ---
     /** Base analyst visibility into predictable contracted commercial real estate cash flows. */
     public const BASE_COVERAGE_VISIBILITY = 0.70;
@@ -38,8 +72,14 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
     // --- Cap Rate & Portfolio Turnover Rails ---
     /** Fraction of property portfolio acquired/divested per quarter adjusting baseline cap rate. */
     public const PORTFOLIO_TURNOVER_RATE    = 0.025;
-    /** Fallback benchmark 10-year Treasury yield when macro state yield is unavailable. */
-    public const DEFAULT_10Y_YIELD_FALLBACK = 0.04;
+
+    // --- Lease Ladder ---
+    /** Weighted average lease term of the rent roll in years. Only the slice expiring each quarter reprices; the rest is contractually fixed. */
+    public const LEASE_WALT_YEARS = 6.0;
+    /** Persisted state key: level of in-place rents relative to the market baseline, carried across quarters as the roll turns over. */
+    public const STATE_IN_PLACE_RENT = 'state:in_place_rent';
+    /** Bound on the mark-to-market gap between in-place and market rents, past which tenants renegotiate or hand back space. */
+    public const MAX_RELEASING_SPREAD = 0.50;
     /** Absolute maximum cap rate clamp floor to prevent unrealistically high property yields. */
     public const MAX_CAP_RATE_CLAMP         = 0.15;
     /** Maximum spread buffer above 10-year Treasury yield allowed for market cap rates. */
@@ -93,8 +133,8 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
     public const LEASING_BONUS_SCALE            = 0.015;
     /** Sensitivity of market cap rates to macroeconomic credit spread fluctuations. */
     public const CAP_RATE_SPREAD_SENSITIVITY    = 1.20;
-    /** Operating margin drag per 100bps of 10-year Treasury yield above default fallback. */
-    public const REFINANCING_WALL_DRAG          = 0.25;
+    /** Quarterly share of the fixed-rate bond stock that matures and reprices (~7-year average unsecured tenor). */
+    public const DEBT_MATURITY_ROLLOVER_RATE    = 0.035;
     /** Minimum operating efficiency ratio (operating revenue / fixed costs) floor. */
     public const MIN_EFFICIENCY_RATIO           = 0.35;
     /** Upper clamp for realized variable margin. */
@@ -193,8 +233,10 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
     {
         $physics = parent::getMacroPhysics($stock, $macroState);
         $physics['pricing_power_multiplier'] = 1.0;
-        $outputGap = $macroState->outputGapEma;
-        $beta = (float) $stock->getBeta();
+        // Inflation is carried inside this model's own stream physics: neither price nor cost base inflates at the engine level.
+        $physics['input_cost_multiplier'] = 1.0;
+        $outputGap = $this->resolveLaggedOutputGap($stock, $macroState);
+        $beta = $this->getOperatingCyclicality($stock);
         // REITs hold domestic real estate with sticky contracted leases; scale output gap demand shift appropriately
         $physics['macro_demand_shift'] = $outputGap * self::MACRO_DEMAND_SCALAR * $beta;
         return $physics;
@@ -213,7 +255,7 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
         $rawLongevityWeight      = $params[ModelParam::LongevityBondYieldWeight];
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
-        $streams  = new \App\DTO\StreamContext($momentum, $mathUtility);
+        $streams  = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
 
         $targetWeights = [
             'lease'       => $params[ModelParam::StickyLeaseWeight],
@@ -249,10 +291,28 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
         $resShift = ($macroState->residentialPropertyIndexEma - 100.0) / 100.0;
         $blendedPropertyShift = ($creShift * self::CRE_INDEX_WEIGHT) + ($resShift * self::RES_INDEX_WEIGHT);
         $housingSupplyShift = MathUtility::calculateHousingStartsShift($macroState->housingStartsIndexEma, sensitivity: self::HOUSING_SUPPLY_COMPETITION_SENSITIVITY);
-        $marketLeaseReversion = ($blendedPropertyShift * self::PORTFOLIO_TURNOVER_RATE) - ($housingSupplyShift * 0.03);
+        // --- Lease Ladder ---
+        // A landlord cannot reprice its book. Only the leases expiring this quarter reset to market; the
+        // rest are contractually fixed until their own expiry, which is why a REIT lags the property cycle
+        // in both directions. The in-place level persists, so after a boom rents keep catching up for
+        // years, and after a bust in-place rents sit ABOVE market and grind down as space rolls — the
+        // negative re-leasing spread that does the real damage to a landlord.
+        //
+        // The previous term applied market level x turnover, which never converged: in-place rents could
+        // not catch up to a market that had moved, and never carried where they had got to.
+        $inPlaceRent = $streams->getPersistedState(self::STATE_IN_PLACE_RENT, $blendedPropertyShift);
+        $quarterlyRollover = 1.0 / max(1.0, self::LEASE_WALT_YEARS * 4.0);
+        $releasingSpread = max(-self::MAX_RELEASING_SPREAD, min(self::MAX_RELEASING_SPREAD, $blendedPropertyShift - $inPlaceRent));
+        $rolledInPlaceRent = $inPlaceRent + ($releasingSpread * $quarterlyRollover);
+        $streams->registerState(self::STATE_IN_PLACE_RENT, $rolledInPlaceRent);
+
+        // Only the mark-to-market captured on the expiring slice reaches revenue this quarter.
+        $marketLeaseReversion = ($rolledInPlaceRent - $inPlaceRent) - ($housingSupplyShift * 0.03);
 
         // --- Clamped Revenue Streams ---
         $leaseRevenue       = max(0.0, $expectedRevenue * $leaseWeight * (1.0 + $leaseShock + $rentEscalator + $marketLeaseReversion));
+        // Contractual escalators and market rent reversion reprice the same square footage: pure price, no operating cost.
+        $priceRevenue       = max(0.0, $expectedRevenue * $leaseWeight * ($rentEscalator + $marketLeaseReversion));
         $hospitalityRevenue = max(0.0, $expectedRevenue * $hospitalityWeight * (1.0 + $hospitalityShock + ($creShift * 0.25)));
 
         $streamRevenues = [
@@ -284,7 +344,7 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
         $streams->recordStreamShares($streamRevenues);
 
         // --- Margin Penalties ---
-        $tenantDefaultZ = $streams->generateZ('tenant_default', 0.20);
+        $tenantDefaultZ = $streams->generateExogenousZ('tenant_default', 0.20);
         $vacancyShock = $tenantDefaultZ < self::VACANCY_Z_THRESHOLD
             ? abs($tenantDefaultZ) * self::VACANCY_LOSS_SCALAR
             : ($tenantDefaultZ > self::BENIGN_LEASING_Z_FLOOR
@@ -295,11 +355,14 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
         $retailDefaultShift = max(0.0, ($macroState->retailDefaultRateEma - MacroEngine::RETAIL_DEFAULT_BASELINE) / MacroEngine::RETAIL_DEFAULT_BASELINE);
         $macroTenantDefaultDrag = ($corpDefaultShift * self::CORP_DEFAULT_VACANCY_SCALAR) + ($retailDefaultShift * self::RETAIL_DEFAULT_VACANCY_SCALAR);
 
-        $yield10y = $macroState->yield10yEma;
-        $refinancingDrag = max(0.0, ($yield10y - self::DEFAULT_10Y_YIELD_FALLBACK) * self::REFINANCING_WALL_DRAG);
-
+        // Mortgage and unsecured note costs reach FFO through DebtEngine's maturity wall
+        // (getDebtMaturityRolloverRate), below NOI. They are not a property operating cost.
         $minVariableMargin = max(0.01, self::MIN_EFFICIENCY_RATIO - ($fixedCosts / max(1.0, $actualRevenue)));
-        $clampedMargin = $this->clampMargin($realizedVariableMargin + $vacancyShock + $macroTenantDefaultDrag + $refinancingDrag, $minVariableMargin);
+        // Property operating expense: utilities, on-site payroll and repairs, recovered from tenants through
+        // CAM and opex reconciliations that bill a year in arrears.
+        $inputCostDrag = $this->resolveInputCostDrag($stock, $macroState, $streams, $this->resolvePricingPower($stock), $realizedVariableMargin);
+
+        $clampedMargin = $this->clampMargin($realizedVariableMargin + $vacancyShock + $macroTenantDefaultDrag + $inputCostDrag, $minVariableMargin);
 
         $eventType = null;
         if ($tenantDefaultZ < self::LORE_ANCHOR_BANKRUPTCY_Z) {
@@ -332,18 +395,27 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
             isPublicEvent: $eventType !== null ? true : null,
             streamZ: $streams->getStreamZ(),
             streamRevenue: $streamRevenues,
+            priceRevenue: $priceRevenue,
+            // The two numbers a real estate analyst reads first: how long the roll is contracted for, and
+            // what the space coming up is worth against what it currently earns.
+            kpis: [
+                'walt_years' => self::LEASE_WALT_YEARS,
+                'releasing_spread' => $releasingSpread,
+                'in_place_rent_index' => $rolledInPlaceRent,
+            ],
         );
     }
 
-    public function updateDynamicRoic(Stock $stock, float $actualTotalNetIncome, float $investedCapital, float $ebit, float $corporateTaxRate, float $wacc = 0.08, float $costOfEquity = 0.10, ?\App\DTO\MacroStateDTO $macroState = null): float
+    public function updateDynamicRoic(Stock $stock, float $actualTotalNetIncome, float $investedCapital, float $ebit, float $corporateTaxRate, float $wacc = 0.08, float $costOfEquity = 0.10, ?\App\DTO\MacroStateDTO $macroState = null, float $depreciation = 0.0): float
     {
         $kappa = $this->getReversionSpeed();
         $moatSpread = $this->getMoatSpread();
 
-        // In EarningsEngine, $ebit is calculated as actualRevenue - (variableCosts + fixedCosts) without deducting depreciation.
-        // Therefore, $ebit already represents Net Operating Income (NOI).
+        // Net Operating Income is property income before depreciation, and it is the numerator of the cap
+        // rate this return reverts toward below. EBIT is now struck after depreciation like every other
+        // model, so the charge is added back here to recover NOI.
         $effectiveCapital = max(1.0, abs($investedCapital));
-        $truePostTaxReturn = ($ebit / $effectiveCapital) * self::ROIC_ANNUALIZATION_MULT;
+        $truePostTaxReturn = (($ebit + $depreciation) / $effectiveCapital) * self::ROIC_ANNUALIZATION_MULT;
 
         $stock->setCurrentRoic((string) max(self::MIN_ROIC_CLAMP, min(self::MAX_ROIC_CLAMP, $truePostTaxReturn)));
 
@@ -380,18 +452,16 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
 
     public function getInterestCoverage(float $ebit, float $interestExpense, float $depreciation = 0.0, float $interestIncome = 0.0): float
     {
-        // In EarningsEngine, $ebit already represents Net Operating Income (NOI) without depreciation deducted.
-        // Therefore, we do not add depreciation back to prevent double-counting.
-        $ffo = $ebit + $interestIncome;
+        // Funds From Operations (NAREIT): EBIT now sits below the depreciation line like every other model,
+        // so real estate depreciation is added back here. A building's book depreciation is famously
+        // disconnected from its economic wear, which is exactly why the industry covenants on FFO.
+        $ffo = $ebit + $depreciation + $interestIncome;
         return $interestExpense > 0 ? ($ffo / $interestExpense) : ($ffo > 0 ? self::INFINITE_ICR_POS_FALLBACK : self::INFINITE_ICR_NEG_FALLBACK);
     }
 
-    public function getDebtExpansionAggressiveness(float $spreadMultiplier, float $totalDebt = 0.0, float $customerDeposits = 0.0, float $targetOperatingCash = 0.0, float $currentTreasury = 0.0): array
+    public function getDebtExpansionAggressiveness(float $spreadMultiplier, float $totalDebt = 0.0, float $customerDeposits = 0.0, float $targetOperatingCash = 0.0, float $currentTreasury = 0.0): DebtExpansionAppetiteDTO
     {
-        return [
-            'probability' => self::DEBT_EXPANSION_BASE_PROB + ($spreadMultiplier * self::DEBT_EXPANSION_PROB_MULT),
-            'aggressiveness' => self::DEBT_EXPANSION_BASE_AGGR + (self::DEBT_EXPANSION_AGGR_MULT * $spreadMultiplier)
-        ];
+        return new DebtExpansionAppetiteDTO(probability: self::DEBT_EXPANSION_BASE_PROB + ($spreadMultiplier * self::DEBT_EXPANSION_PROB_MULT), aggressiveness: self::DEBT_EXPANSION_BASE_AGGR + (self::DEBT_EXPANSION_AGGR_MULT * $spreadMultiplier));
     }
 
     public function calculateDebtExpansionCapacity(float $equity, float $totalDebt, float $wholesaleDebt, \App\DTO\DebtHealthDTO $health, float $newBorrowingRate, float $ebit, float $depreciation): float
@@ -436,24 +506,6 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
         return self::LEASE_REVERSION_SPEED;
     }
 
-    public function applyAssetDepreciationDecay(Stock $stock, float $reinvestmentRatio, float $dt): void
-    {
-        $timeScale = $dt / 0.25;
-        $currentMargin = (float) $stock->getOperatingMargin();
-
-        if ($reinvestmentRatio < 1.0) {
-            $decayRate = self::DEPRECIATION_DECAY_RATE * (1.0 - $reinvestmentRatio) * $timeScale;
-            $updatedMargin = max(self::MIN_OPERATING_MARGIN_FLOOR, $currentMargin - ($currentMargin * $decayRate));
-            $stock->setOperatingMargin((string) $updatedMargin);
-        } elseif ($reinvestmentRatio > 1.0) {
-            $modGain = self::MODERNIZATION_GAIN_RATE * log($reinvestmentRatio) * $timeScale;
-            $updatedMargin = min(
-                self::MAX_OPERATING_MARGIN_CEILING,
-                $currentMargin + ((self::MAX_OPERATING_MARGIN_CEILING - $currentMargin) * $modGain)
-            );
-            $stock->setOperatingMargin((string) $updatedMargin);
-        }
-    }
     public function requiresAlternativeZScore(): bool
     {
         return true;
@@ -465,6 +517,15 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
     }
 
     /**
+     * Bond proxy: REITs ladder unsecured notes and mortgages over roughly seven years, so only a small
+     * slice of the fixed-rate book reprices each quarter and rate shocks reach FFO with a lag.
+     */
+    public function getDebtMaturityRolloverRate(): float
+    {
+        return self::DEBT_MATURITY_ROLLOVER_RATE;
+    }
+
+    /**
      * MacroStateDTO fields (snake_case) this model's operating physics genuinely reads in
      * calculateSectorPhysics()/getMacroPhysics() — see OperatingStrategyInterface for the full rule.
      *
@@ -472,15 +533,19 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
      */
     public function getOperatingMacroFields(): array
     {
-        return array_unique(array_merge(parent::getOperatingMacroFields(), [
+        return [
             'commercial_property_index_ema',
             'corporate_default_rate_ema',
+            'energy_cost_push_lag',
+            'exchange_rate_index_ema',
             'housing_starts_index_ema',
             'inflation_ema',
             'output_gap_ema',
+            'producer_price_inflation_ema',
             'residential_property_index_ema',
             'retail_default_rate_ema',
-            'yield_10y_ema',
-        ]));
+            'tips_breakeven_ema',
+            'wage_growth_ema',
+        ];
     }
 }

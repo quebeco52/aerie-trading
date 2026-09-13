@@ -9,6 +9,7 @@ use App\Entity\User;
 use App\Entity\UserStock;
 use App\Entity\StockEvent;
 use App\Entity\EtfEvent;
+use App\Service\Market\PriceBarAggregator;
 use Doctrine\ORM\EntityManagerInterface;
 use Redis;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -38,7 +39,11 @@ class StockController extends AbstractController
         \App\Service\Math\CorporateMetrics $corporateMetrics,
         \App\Service\Market\MarketEngine $marketEngine,
         \App\Service\Corporate\DebtEngine $debtEngine,
-        \App\Service\Market\PriceChangeFeed $priceChangeFeed
+        \App\Service\Market\PriceChangeFeed $priceChangeFeed,
+        \App\Service\User\CostBasisCalculator $costBasis,
+        \App\Service\User\DividendIncomeCalculator $dividendIncome,
+        \App\Service\Market\LiquidityEngine $liquidityEngine,
+        \App\Service\Market\SecuritiesLendingDesk $lendingDesk
     ): Response
     {
         $isEtf = false;
@@ -84,6 +89,8 @@ class StockController extends AbstractController
         $businessModel = 'none';
         $investedCapital = 0.0;
         $analystTargets = null;
+        $lifecycleStage = null;
+        $dividendYield = 0.0;
 
         if (!$isEtf) {
             $isBankrupt = $asset->isBankrupt();
@@ -100,6 +107,16 @@ class StockController extends AbstractController
             $investedCapital = $isBankrupt ? 0.0 : (float) $asset->getInvestedCapital();
 
             $marketShare = $isBankrupt ? 0.0 : min(0.9999, $corporateMetrics->calculateMarketShare($evaluationCapital, $nominalGdpIndex, $samRatio));
+
+            // Dickinson (2011) stage stored by the last quarterly report; null until the first report lands.
+            $lifecycleStage = $asset->getLifecycleStage();
+
+            // lastDividend is the quarterly per-share payment (Lintner step each report), so the yield annualises it.
+            $lastDividend = (float) $asset->getLastDividend();
+            $priceForYield = (float) $asset->getPrice();
+            $dividendYield = (!$isBankrupt && $priceForYield > 0.0 && $lastDividend > 0.0)
+                ? ($lastDividend * 4.0) / $priceForYield
+                : 0.0;
 
             if (!$isBankrupt) {
                 $currentPrice = (float) $asset->getPrice();
@@ -135,7 +152,8 @@ class StockController extends AbstractController
                     netDebtPerShare: $netDebt / $shares,
                     secularGrowth: $secularGrowth,
                     baselineRoic: (float) ($asset->getBaselineRoic() ?? 0.10),
-                    baselineMargin: (float) ($asset->getOperatingMargin() ?? 0.20)
+                    baselineMargin: (float) ($asset->getOperatingMargin() ?? 0.20),
+                    investedCapitalPerShare: $asset->getInvestedCapital() / max(1.0, (float) $asset->getSharesOutstanding())
                 );
 
                 $pricingResult = $marketEngine->calculateNextPrice($pricingCtx);
@@ -210,15 +228,21 @@ class StockController extends AbstractController
             );
         }
 
-        $economicCycle = $redis->get('economy_state') ?: 'Expansion';
+        $economicCycle = $macroState->economicCycleLabel();
 
         $openOrders = [];
         $userTrades = [];
         $userAvgCost = (float) $asset->getPrice();
         $userUnrealizedPnL = 0.0;
         $userUnrealizedPnLPercent = 0.0;
+        $userDividendIncome = 0.0;
 
         if ($currentUser) {
+            // Lifetime dividend cash this ticker has paid the viewer. Read outside the userQuantity > 0
+            // branch below: income already received survives selling out of the position, and zeroing it
+            // for a closed position would hide cash the user actually holds.
+            $userDividendIncome = $dividendIncome->totalsByTicker($currentUser)[$ticker] ?? 0.0;
+
             $openOrders = $entityManager->getRepository(\App\Entity\TradeOrder::class)->findBy([
                 'user' => $currentUser,
                 'ticker' => $ticker,
@@ -232,21 +256,13 @@ class StockController extends AbstractController
             ], ['createdAt' => 'DESC'], 20);
 
             if ($userQuantity > 0) {
-                $filledBuys = $entityManager->createQuery(
-                    'SELECT o FROM App\Entity\TradeOrder o WHERE o.user = :user AND o.ticker = :ticker AND o.action = :action AND o.status = :status ORDER BY o.createdAt ASC'
-                )->setParameter('user', $currentUser)->setParameter('ticker', $ticker)->setParameter('action', 'BUY')->setParameter('status', 'FILLED')->getResult();
+                // Same weighted-average basis the dashboard reports. Averaging BUYs alone and ignoring SELLs
+                // gave this page a different cost, and a different P&L, for the very same position.
+                $filledOrders = $entityManager->createQuery(
+                    'SELECT o FROM App\Entity\TradeOrder o WHERE o.user = :user AND o.ticker = :ticker AND o.status = :status ORDER BY o.createdAt ASC'
+                )->setParameter('user', $currentUser)->setParameter('ticker', $ticker)->setParameter('status', 'FILLED')->getResult();
 
-                $totalCost = 0.0;
-                $totalQty = 0;
-                foreach ($filledBuys as $fOrder) {
-                    $qty = $fOrder->getFilledQuantity() > 0 ? $fOrder->getFilledQuantity() : $fOrder->getQuantity();
-                    $execPrice = (float) ($fOrder->getExecutionPrice() ?? $fOrder->getLimitPrice() ?? $asset->getPrice());
-                    $totalCost += ($qty * $execPrice);
-                    $totalQty += $qty;
-                }
-                if ($totalQty > 0) {
-                    $userAvgCost = $totalCost / $totalQty;
-                }
+                $userAvgCost = $costBasis->calculateForTicker($filledOrders, $ticker) ?? $userAvgCost;
                 $userPositionCost = $userAvgCost * $userQuantity;
                 $currentVal = (float)$asset->getPrice() * $userQuantity;
                 $userUnrealizedPnL = $currentVal - $userPositionCost;
@@ -302,6 +318,7 @@ class StockController extends AbstractController
             'userAvgCost' => $userAvgCost,
             'userUnrealizedPnL' => $userUnrealizedPnL,
             'userUnrealizedPnLPercent' => $userUnrealizedPnLPercent,
+            'userDividendIncome' => $userDividendIncome,
             'marketCap' => $marketCap,
             'peRatio' => $peRatio,
             'targetPE' => $targetPE,
@@ -321,6 +338,19 @@ class StockController extends AbstractController
             'sharesMap' => $sharesMap,
             'components' => $components,
             'analystTargets' => $analystTargets,
+            'lifecycleStage' => $lifecycleStage,
+            'lifecycleStages' => \App\Data\LifecycleStage::cases(),
+            'dividendYield' => $dividendYield,
+            // Depth and the cost of crossing it. Shown because a page that quotes a price without saying
+            // what size costs is only telling half of what a trade is going to do.
+            'advShares' => $isEtf ? 0.0 : $liquidityEngine->averageDailyVolume($asset),
+            'halfSpread' => $isEtf
+                ? \App\Service\Math\FinancialConstants::ETF_HALF_SPREAD
+                : $liquidityEngine->halfSpreadFraction($asset),
+            // What it costs to be short this name, and how much of it is left to borrow.
+            'borrowFee' => $isEtf ? 0.0 : $lendingDesk->borrowFee($asset),
+            'availableToBorrow' => $isEtf ? 0.0 : $lendingDesk->availableToBorrow($asset),
+            'shortUtilization' => $isEtf ? 0.0 : $lendingDesk->utilization($asset),
         ]);
     }
 
@@ -334,7 +364,7 @@ class StockController extends AbstractController
      * @return JsonResponse Returns a JSON array of historical data points.
      */
     #[Route('/api/history', name: 'api_history')]
-    public function history(Request $request, EntityManagerInterface $entityManager, \Redis $redis): JsonResponse
+    public function history(Request $request, EntityManagerInterface $entityManager, \Redis $redis, PriceBarAggregator $barAggregator): JsonResponse
     {
         $ticker = $request->query->get('ticker');
         $range = $request->query->get('range', '1y');
@@ -354,22 +384,23 @@ class StockController extends AbstractController
             foreach ($redisData as $jsonStr) {
                 $results[] = json_decode($jsonStr, true);
             }
-            return $this->json(array_reverse($results));
+
+            // Buffered points are single ticks, so the bar has to be built here or every candle is a doji.
+            return $this->json($barAggregator->aggregate($results, count($results)));
         }
 
-        $ranges = [
-            '3m'  => 1200,
-            '6m'  => 2400,
-            '1y'  => 4800,
-            '3y'  => 14400,
-            '5y'  => 24000,
-            '10y' => 48000,
-            'max' => 999999
-        ];
-        $limit = $ranges[$range] ?? 14400;
+        // A range button names a span of SIMULATED TIME, so the row limit behind it has to be derived from
+        // the configured tick rate and the rate history is actually sampled at. The counts here were
+        // hardcoded to a 4,800-row year, a figure the sampler never produces: it caps at 2,400 rows per
+        // year, so every span was off by whatever ratio the configured rate happened to differ by.
+        $pointsPerYear = \App\Command\MarketTickerCommand::historyPointsPerYear($ticksPerYear);
+        $rangeYears = ['3m' => 0.25, '6m' => 0.5, '1y' => 1.0, '3y' => 3.0, '5y' => 5.0, '10y' => 10.0];
+
+        $limit = $range === 'max'
+            ? 999999
+            : (int) ceil(($rangeYears[$range] ?? 1.0) * $pointsPerYear);
 
         $dbLimit = min($limit, 500000);
-        $maxChartPoints = 5000;
         $conn = $entityManager->getConnection();
 
         // Fetch the target asset ID
@@ -378,18 +409,32 @@ class StockController extends AbstractController
             $targetId = $stock->getId();
             $tableName = 'stock_history';
             $foreignKey = 'stock_id';
+            $priceColumn = 'price';
         } else {
             $etf = $entityManager->getRepository(Etf::class)->findOneBy(['ticker' => $ticker]);
-            if (!$etf) return $this->json([]);
+            if ($etf) {
+                $targetId = $etf->getId();
+                $tableName = 'etf_history';
+                $foreignKey = 'etf_id';
+                $priceColumn = 'price';
+            } else {
+                $bond = $entityManager->getRepository(\App\Entity\Bond::class)->findOneBy(['ticker' => $ticker]);
+                if (!$bond) return $this->json([]);
 
-            $targetId = $etf->getId();
-            $tableName = 'etf_history';
-            $foreignKey = 'etf_id';
+                $targetId = $bond->getId();
+                $tableName = 'bond_history';
+                $foreignKey = 'bond_id';
+
+                // Bonds chart CLEAN, matching what the ticker buffers into Redis for the short ranges.
+                // Charting the dirty price would draw the coupon accrual sawtooth as if it were price
+                // movement, and the series would jump at the join between the buffer and the table.
+                $priceColumn = 'clean_price';
+            }
         }
 
-        // Count rows to determine step size
+        // Row count sets the bucket width the aggregator folds into bars.
         $countSql = sprintf(
-            'SELECT COUNT(id) FROM (SELECT id FROM %s WHERE %s = :id ORDER BY id DESC LIMIT %d) as sub',
+            'SELECT COUNT(id) FROM (SELECT id FROM %s WHERE %s = :id ORDER BY recorded_at DESC, id DESC LIMIT %d) as sub',
             $tableName,
             $foreignKey,
             (int)$dbLimit
@@ -398,14 +443,20 @@ class StockController extends AbstractController
 
         if ($actualCount === 0) return $this->json([]);
 
-        $step = 1;
-        if ($actualCount > $maxChartPoints) {
-            $step = (int) ceil($actualCount / $maxChartPoints);
-        }
+        // Stocks carry a full bar; ETFs and bonds are a single series and select the close alone. Asking
+        // for open_price on etf_history would be a SQL error rather than a null.
+        $barColumns = $tableName === 'stock_history'
+            ? ', open_price, high_price, low_price, volume'
+            : '';
 
-        // simple query
         $sql = sprintf(
-            'SELECT id, price, recorded_at FROM %s WHERE %s = :id ORDER BY recorded_at DESC LIMIT %d',
+            // The id tie-break is not decoration: at a 100ms tick the timestamp has ten rows to a second
+            // and their order within it is undefined, which scrambles the open and close inside every bar.
+            // Leading with recorded_at keeps the idx_stock_recorded backward scan — ordering by id alone
+            // cannot use that index and filesorts the name's whole history on every chart load.
+            'SELECT id, %s AS price%s, recorded_at FROM %s WHERE %s = :id ORDER BY recorded_at DESC, id DESC LIMIT %d',
+            $priceColumn,
+            $barColumns,
             $tableName,
             $foreignKey,
             (int)$dbLimit
@@ -413,19 +464,10 @@ class StockController extends AbstractController
 
         $stmt = $conn->executeQuery($sql, ['id' => $targetId]);
 
-        $results = [];
-        $rowIndex = 0;
-
-        // Stream the rows one by one.
-        foreach ($stmt->iterateAssociative() as $row) {
-            // Keep the very first row (newest price), then every Nth row
-            if ($rowIndex === 0 || $rowIndex % $step === 0) {
-                $results[] = $row;
-            }
-            $rowIndex++;
-        }
-
-        return $this->json(array_reverse($results));
+        // Bucketed rather than decimated. Keeping every Nth row and discarding the rest is right for a line
+        // — it is a subsample of closes — but it throws away the extremes of every dropped bar and leaves
+        // each surviving candle opening nowhere near the previous close. The stream is consumed once.
+        return $this->json($barAggregator->aggregate($stmt->iterateAssociative(), $actualCount));
     }
 
     /**
@@ -483,52 +525,32 @@ class StockController extends AbstractController
 
         if (!$latestReport) return $this->json([]);
 
-        // Ensure everything is numeric
-        $revenue = (float)$latestReport['revenue'];
-        $interestIncome = (float)$latestReport['interest_income'];
-        $totalRevenue = $revenue + $interestIncome;
+        $flow = \App\Service\Corporate\EarningsFlowStatement::fromReport($latestReport);
 
-        if ($totalRevenue <= 0) {
+        if ($flow->totalRevenue <= 0) {
             // Can't draw a meaningful Sankey if there's no revenue
             return $this->json(['nodes' => [], 'links' => []]);
         }
 
-        // Fetch granular fields (fallback to 0 if migration hasn't run yet)
-        $operatingCostsRaw = max(0, (float)($latestReport['operating_costs'] ?? 0));
-        $capexRaw = max(0, (float)$latestReport['capital_expenditures']);
-        $interestExpenseRaw = max(0, (float)$latestReport['interest_expense']);
-        $taxPaidRaw = max(0, (float)($latestReport['tax_paid'] ?? 0));
-        $divPaidRaw = max(0, (float)$latestReport['dividend_paid']);
-        $buybacksRaw = max(0, (float)$latestReport['stock_buybacks']);
-
-        // Balance the flows so the Sankey diagram is perfectly aligned. 
-        // Sankey diagrams require flow in = flow out.
-        $actualOperatingCosts = min($totalRevenue, $operatingCostsRaw);
-        $opProfit = $totalRevenue - $actualOperatingCosts;
-        
-        $actualInterest = min($opProfit, $interestExpenseRaw);
-        $preTax = $opProfit - $actualInterest;
-        
-        $actualTax = min($preTax, $taxPaidRaw);
-        $netIncomeFlow = $preTax - $actualTax;
-        
-        $actualCapex = min($netIncomeFlow, $capexRaw);
-        $actualDiv = min($netIncomeFlow - $actualCapex, $divPaidRaw);
-        $actualBuybacks = min($netIncomeFlow - $actualCapex - $actualDiv, $buybacksRaw);
-        $retained = $netIncomeFlow - $actualCapex - $actualDiv - $actualBuybacks;
+        $totalRevenue = $flow->totalRevenue;
 
         $nodes = [
             ['name' => 'Total Revenue', 'itemStyle' => ['color' => '#3b82f6']], // blue
             ['name' => 'Operating Costs', 'itemStyle' => ['color' => '#ef4444']], // red
+            ['name' => 'EBITDA', 'itemStyle' => ['color' => '#a78bfa']], // violet
+            ['name' => 'Depreciation', 'itemStyle' => ['color' => '#94a3b8']], // slate (non-cash)
             ['name' => 'Operating Profit', 'itemStyle' => ['color' => '#8b5cf6']], // purple
             ['name' => 'Capital Expenditures', 'itemStyle' => ['color' => '#eab308']], // yellow
             ['name' => 'Interest Expense', 'itemStyle' => ['color' => '#f97316']], // orange
             ['name' => 'Pre-Tax Income', 'itemStyle' => ['color' => '#14b8a6']], // teal
             ['name' => 'Taxes', 'itemStyle' => ['color' => '#f43f5e']], // rose
+            ['name' => 'Goodwill Impairment', 'itemStyle' => ['color' => '#94a3b8']], // slate (non-cash)
             ['name' => 'Net Income', 'itemStyle' => ['color' => '#22c55e']], // green
+            ['name' => 'Cash Generated', 'itemStyle' => ['color' => '#34d399']], // mint
+            ['name' => 'External Funding', 'itemStyle' => ['color' => '#fb923c']], // amber (debt raised or shares issued)
             ['name' => 'Dividends', 'itemStyle' => ['color' => '#0ea5e9']], // light blue
             ['name' => 'Stock Buybacks', 'itemStyle' => ['color' => '#d946ef']], // fuchsia
-            ['name' => 'Retained Earnings', 'itemStyle' => ['color' => '#10b981']], // emerald
+            ['name' => 'Retained Cash', 'itemStyle' => ['color' => '#10b981']], // emerald
         ];
 
         $links = [];
@@ -572,19 +594,30 @@ class StockController extends AbstractController
         }
 
 
-        $addLink('Total Revenue', 'Operating Costs', $actualOperatingCosts);
-        $addLink('Total Revenue', 'Operating Profit', $opProfit);
-        
-        $addLink('Operating Profit', 'Interest Expense', $actualInterest);
-        $addLink('Operating Profit', 'Pre-Tax Income', $preTax);
-        
-        $addLink('Pre-Tax Income', 'Taxes', $actualTax);
-        $addLink('Pre-Tax Income', 'Net Income', $netIncomeFlow);
-        
-        $addLink('Net Income', 'Capital Expenditures', $actualCapex);
-        $addLink('Net Income', 'Dividends', $actualDiv);
-        $addLink('Net Income', 'Stock Buybacks', $actualBuybacks);
-        $addLink('Net Income', 'Retained Earnings', $retained);
+        $addLink('Total Revenue', 'Operating Costs', $flow->operatingCosts);
+        $addLink('Total Revenue', 'EBITDA', $flow->ebitda);
+        $addLink('EBITDA', 'Depreciation', $flow->depreciation);
+        $addLink('EBITDA', 'Operating Profit', $flow->operatingProfit);
+
+        $addLink('Operating Profit', 'Interest Expense', $flow->interestExpense);
+        $addLink('Operating Profit', 'Pre-Tax Income', $flow->preTaxIncome);
+
+        $addLink('Pre-Tax Income', 'Taxes', $flow->taxes);
+        $addLink('Pre-Tax Income', 'Goodwill Impairment', $flow->goodwillImpairment);
+        $addLink('Pre-Tax Income', 'Net Income', $flow->netIncome);
+
+        // Sources of cash, then what it was spent on. Depreciation appears on both sides on purpose: it is
+        // struck against EBITDA and added straight back, which is exactly how a cash flow statement reads.
+        // The goodwill write-off comes back for the same reason — no money left the company.
+        $addLink('Net Income', 'Cash Generated', max(0.0, $flow->netIncome));
+        $addLink('Depreciation', 'Cash Generated', $flow->depreciation);
+        $addLink('Goodwill Impairment', 'Cash Generated', $flow->goodwillImpairment);
+        $addLink('External Funding', 'Cash Generated', $flow->externalFunding);
+
+        $addLink('Cash Generated', 'Capital Expenditures', $flow->capitalExpenditures);
+        $addLink('Cash Generated', 'Dividends', $flow->dividends);
+        $addLink('Cash Generated', 'Stock Buybacks', $flow->buybacks);
+        $addLink('Cash Generated', 'Retained Cash', $flow->retainedCash);
 
         return $this->json(['nodes' => $nodes, 'links' => $links]);
     }

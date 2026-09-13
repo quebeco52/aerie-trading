@@ -12,10 +12,6 @@ use App\Service\Math\MathUtility;
 
 class DebtEngine
 {
-    // --- Maturity Wall ---
-    /** 5% of old debt expires every quarter (5-year average maturity). */
-    private const QUARTERLY_DEBT_TURNOVER = 0.05;
-
     // --- Debt Analysis ---
     /** 300 bps spread is severe threshold for arbitrage hurdle. */
     private const ARBITRAGE_HURDLE = 0.030;
@@ -43,6 +39,24 @@ class DebtEngine
     private const RATE_REFINANCE_THRESHOLD = 0.015;
     /** 15% of debt retired per quarter if early refinancing is triggered. */
     private const ACCELERATED_DEBT_TURNOVER = 0.15;
+
+    // --- Merton Default Horizon ---
+    /** Horizon the structural default model is struck on; 5 years is the standard tenor for corporate credit spreads. */
+    private const MERTON_HORIZON_YEARS = 5.0;
+    /**
+     * Mean-reversion speed of idiosyncratic equity volatility, in reversions per year. Derived from the rate
+     * the earnings engine itself cools a shock, -ln(1 - VOLATILITY_COOLING_FACTOR) * 4 quarters, so the credit
+     * model and the volatility process agree on how long a surprise is expected to last.
+     */
+    private const EQUITY_VOL_REVERSION_SPEED = 1.1507;
+
+    // --- Maturity Wall & Primary Market Access ---
+    /** Dynamic credit spread above which the primary market is shut to the issuer; high-yield spreads reached this in 2008 and 2020. */
+    private const PRIMARY_MARKET_CLOSURE_SPREAD = 0.10;
+    /** Lowest credit rating that can still refinance a maturity at any price. */
+    private const REFINANCING_RATING_FLOOR = 'CCC';
+    /** Interest coverage below which lenders will not roll a maturity: the firm cannot service what it already owes. */
+    private const REFINANCING_MIN_COVERAGE = 1.0;
 
     public function __construct(
         private MathUtility $mathUtility,
@@ -119,8 +133,10 @@ class DebtEngine
         $customDepreciation = (float) $stock->getDepreciationRate();
         $depreciationRate = $customDepreciation > 0.0 ? $customDepreciation : $this->corporateMetrics->getIndustryDepreciationRate($industry);
 
-        $physicalCapital = $strategy->getEvaluationCapital((float) $stock->getTotalEquity(), $stock->getInvestedCapital());
-        $depreciation = $physicalCapital * $depreciationRate;
+        // Depreciation runs on the same base the earnings engine charges it against (net PP&E for physical
+        // businesses, the capital proxy for financial ones), so coverage and EBITDA here agree with the
+        // income statement instead of depreciating goodwill and working capital.
+        $depreciation = max(0.0, $strategy->getDepreciableBase($stock)) * $depreciationRate;
         $ebitda = $ebit + $depreciation;
 
         if ($debt <= 0.0) {
@@ -166,7 +182,22 @@ class DebtEngine
 
         // MERTON'S STRUCTURAL MODEL OF DEFAULT
         // Prices corporate credit spreads dynamically based on Default Probability
-        $equityVolatility = (float) ($stock->getCurrentVolatility() ?? $stock->getVolatility());
+        // The default probability runs to MERTON_HORIZON_YEARS, so the volatility it is struck on has to be
+        // the volatility expected to prevail over that horizon, not today's. Spot volatility here is ratcheted
+        // by every material earnings surprise and capped at MAX_VOLATILITY_MULTIPLIER times baseline, so a
+        // cyclical firm whose earnings routinely surprise sat permanently at 3x its structural volatility.
+        // Carried undiminished through a five-year d2, that alone drove an issuer with a Safe Altman score,
+        // 6x interest coverage and compounding equity to a D rating, which shut it out of the primary market
+        // and defaulted it on the next maturity. Averaging the mean-reverting process over the horizon prices
+        // the shock for as long as it is actually expected to last.
+        $spotVolatility = max(0.05, (float) ($stock->getCurrentVolatility() ?? $stock->getVolatility()));
+        $structuralVolatility = max(0.05, (float) ($stock->getVolatility() ?: $spotVolatility));
+        $equityVolatility = $this->mathUtility->averageMeanRevertingVolatility(
+            $spotVolatility,
+            $structuralVolatility,
+            self::EQUITY_VOL_REVERSION_SPEED,
+            self::MERTON_HORIZON_YEARS
+        );
         $equityVolatility = max(0.05, $equityVolatility); // Minimum vol failsafe
 
         $marketCap = max(1.0, (float) $stock->getPrice() * max(1.0, (float) $stock->getSharesOutstanding()));
@@ -185,7 +216,7 @@ class DebtEngine
         $policyRate = $macroState->policyRateEma;
 
         // Debt maturity is approximated at 5 years for standard corporate credit spreads
-        $timeToMaturity = 5.0;
+        $timeToMaturity = self::MERTON_HORIZON_YEARS;
 
         $lossGivenDefault = $strategy->getLossGivenDefault();
 
@@ -233,7 +264,8 @@ class DebtEngine
         $historicalRate = (float) $stock->getHistoricalFixedRate();
 
         if ($advanceMaturity) {
-            $turnover = self::QUARTERLY_DEBT_TURNOVER;
+            // Maturity wall: the business model sets how fast the fixed-rate book rolls to market.
+            $turnover = $strategy->getDebtMaturityRolloverRate();
             if ($currentMarketFixedRate < ($historicalRate - self::RATE_REFINANCE_THRESHOLD)) {
                 $turnover = self::ACCELERATED_DEBT_TURNOVER;
             }
@@ -247,8 +279,8 @@ class DebtEngine
         // Customer Deposits & Leverage Physics
         $strategy = \App\Data\Sectors::getBusinessModelStrategy($businessModel);
         $expenseMetrics = $strategy->calculateInterestExpenseAndWholesaleRate($stock, $blendedFixedRate, $floatingInterestRate, $currentMarketFixedRate, $policyRate, $equityLimit, $totalEquity, $debt);
-        $interestExpense = $expenseMetrics['interest_expense'];
-        $wholesaleRate = $expenseMetrics['wholesale_rate'];
+        $interestExpense = $expenseMetrics->interestExpense;
+        $wholesaleRate = $expenseMetrics->wholesaleRate;
 
         $trueBlendedRate = $debt > 1.0 ? ($interestExpense / $debt) : 0.0;
 
@@ -299,8 +331,8 @@ class DebtEngine
         $interestExpense = $debtMetrics->interestExpense;
 
         $costMetrics = $strategy->getDebtCostMetrics($debtMetrics, $currentDebt, $wholesaleDebt, $interestExpense);
-        $grossCostOfDebt = $costMetrics['gross_cost_of_debt'];
-        $totalInterestCost = $costMetrics['total_interest_cost'];
+        $grossCostOfDebt = $costMetrics->grossCostOfDebt;
+        $totalInterestCost = $costMetrics->totalInterestCost;
         $evalDebt = max(1.0, $strategy->getDeleveragingEvaluationDebt($currentDebt, $wholesaleDebt));
 
         // 1. DYNAMIC TAX SHIELD (Phantom Tax Shield Fix)
@@ -323,8 +355,13 @@ class DebtEngine
         $netDebtCapital = $strategy->getNetDebtCapital($currentDebt, $wholesaleDebt, $treasury);
 
         // Levered Beta (The Penalty for Greed)
-        // Use abs() to capture high inverse volatility, floored at 0.5 for baseline risk
-        $baseBeta = max(0.5, abs((float) $stock->getBeta()));
+        // The firm's own signed beta goes into Hamada. Leverage multiplies systematic exposure, so it
+        // amplifies the magnitude and can never flip the sign: a levered hedge is a bigger hedge, not a
+        // market-following asset. The previous max(0.5, abs(beta)) did two ad-hoc jobs at once and did both
+        // badly. abs() erased the very sign that makes an inverse-beta name a hedge, and the 0.5 floor
+        // handed every firm below it an identical cost of equity, so a water utility at 0.15 and an
+        // industrial REIT at 0.50 were discounted at exactly the same rate.
+        $baseBeta = (float) $stock->getBeta();
 
         // For Beta Levering and WACC weights, we MUST use Market Value of Equity, not Book Value!
         // Use Net Debt Capital so Cash Hoarders aren't penalized with fake risk.
@@ -338,6 +375,19 @@ class DebtEngine
         // Cost of Equity (CAPM) - Unified to Policy Rate to perfectly match MarketEngine valuation physics
         $equityRiskPremium = $macroState->equityRiskPremium;
         $costOfEquity = $this->mathUtility->calculateCAPM($policyRate, $leveredBeta, $equityRiskPremium);
+
+        // Absolute priority. CAPM on its own is happy to hand a negative-beta hedge a required return below
+        // the risk-free rate, which is defensible as portfolio theory and indefensible as a hurdle rate: no
+        // board funds projects below what its own lenders charge. Equity is the junior claim on the same
+        // cash flows, so it cannot require less than the debt ranking above it.
+        //
+        // The floor is the MARGINAL rate the firm would borrow at today, not its blended book cost. A firm
+        // carrying cheap legacy fixed-rate debt has a funding advantage, not less risk, and discounting its
+        // equity at that stale rate would capitalise the advantage twice. Using the current market rate also
+        // makes the floor carry the firm's own credit risk, so a distressed fund is floored at its junk
+        // yield while a fortress utility is floored just over the policy rate. The distress premium below is
+        // added on top of this structural minimum.
+        $costOfEquity = max($debtMetrics->currentMarketRate, $costOfEquity);
 
         // Weighted Average Cost of Capital (WACC)
         $totalCapital = $netDebtCapital + $marketCap;
@@ -414,7 +464,10 @@ class DebtEngine
         // Macro-Economic Leverage Tolerance
         $macroDebtTolerance = $equityLimit;
 
-        $currentDebtRatio = $currentDebt / max(1.0, $equity);
+        // Capitalized operating leases (IFRS 16 / ASC 842) are debt-like obligations for leverage purposes;
+        // their rent is already inside fixed costs, so they add no interest here.
+        $leaseLiability = $this->corporateMetrics->calculateLeaseLiability($debtMetrics->revenue, $strategy->getLeaseIntensity());
+        $currentDebtRatio = ($currentDebt + $leaseLiability) / max(1.0, $equity);
         $isUnderLeveraged = $strategy->isUnderLeveraged(
             $currentDebtRatio,
             $macroDebtTolerance,
@@ -462,20 +515,28 @@ class DebtEngine
     public function calculateAltmanZScore(Stock $stock, float $ebit, float $revenue, float $currentPrice): array
     {
         $equity = (float) $stock->getTotalEquity();
-        $debt = (float) $stock->getTotalDebt();
         $treasury = (float) $stock->getCorporateTreasury();
         $retainedEarnings = (float) $stock->getRetainedEarnings();
         $shares = max(1.0, (float) $stock->getSharesOutstanding());
-
-        // Accounting Proxy: Assets = Liabilities + Equity
-        $totalAssets = max(1.0, $equity + $debt);
-        $marketCap = $currentPrice * $shares;
 
         $industry = $stock->getIndustry() ?: 'General';
         $businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['business_model'] ?? 'none';
         $strategy = \App\Data\Sectors::getBusinessModelStrategy($businessModel);
 
+        // IFRS 16 / ASC 842: the capitalized lease liability sits with debt and the right-of-use asset with assets.
+        $leaseLiability = $this->corporateMetrics->calculateLeaseLiability($revenue, $strategy->getLeaseIntensity());
+        $debt = (float) $stock->getTotalDebt() + $leaseLiability;
+
+        // Accounting Proxy: Assets = Liabilities + Equity
+        $totalAssets = max(1.0, $equity + $debt);
+        $marketCap = $currentPrice * $shares;
+
         if ($strategy->requiresAlternativeZScore()) {
+            // A bank's capital ratio is struck on the balance sheet it actually carries once the earning-asset
+            // ledger is open: loans net of expected losses, not the funding proxy.
+            if ($stock->hasBalanceSheetLedger()) {
+                $totalAssets = max(1.0, $stock->getTotalAssets($leaseLiability));
+            }
             $capitalRatio = $equity / $totalAssets;
             $zScore = max(-100.0, min(100.0, $capitalRatio * 100.0)); // Convert to percentage points (e.g., 8% capital = 8.0 score)
 
@@ -497,9 +558,22 @@ class DebtEngine
             ];
         }
 
-        // Estimate Working Capital
-        $currentLiabilities = $debt * 0.20;
-        $workingCapital = $treasury - $currentLiabilities;
+        if ($stock->hasWorkingCapitalLedger()) {
+            // The real current balances. Debt due within a year is what the maturity ladder says comes
+            // due in the next four quarters; the rest is long-term and is not a current claim.
+            $currentAssets = $treasury + $stock->getNetReceivables() + $stock->getNetInventory();
+            $currentDebt = (float) $stock->getWholesaleDebt() * min(1.0, $strategy->getDebtMaturityRolloverRate() * 4.0);
+            $currentLiabilities = (float) ($stock->getPayables() ?? 0.0) + $currentDebt;
+            $workingCapital = $currentAssets - $currentLiabilities;
+
+            if ($stock->getGrossPpe() !== null) {
+                $totalAssets = max(1.0, $stock->getTotalAssets($leaseLiability));
+            }
+        } else {
+            // No trade ledger yet: fall back to the proxies the model started with.
+            $currentLiabilities = $debt * 0.20;
+            $workingCapital = $treasury - $currentLiabilities;
+        }
 
         // The 4 Z''-Score Ratios (X5 Revenue/Assets is removed for non-manufacturing)
         $x1 = $workingCapital / $totalAssets;
@@ -525,6 +599,84 @@ class DebtEngine
             // A negative Z'' score is a near-mathematical certainty of insolvency
             'is_bankrupt' => $zScore < 0.00,
         ];
+    }
+
+    /**
+     * Rolls the quarter's maturing principal down the maturity ladder.
+     *
+     * The rollover rate a business model declares already implies an average tenor of 1 / (4 x rate) years,
+     * so the same fraction of the debt stock comes due each quarter. Until now that only ever repriced the
+     * coupon: principal was immortal and no firm could ever be refused a refinancing. That removed the most
+     * common way real companies actually fail — not a slow slide into insolvency, but a maturity landing in
+     * a quarter when nobody will lend (commercial paper in 2008, high yield in March 2020).
+     *
+     * Market access is deliberately looser than the test for taking on NEW leverage: an investment-grade
+     * issuer refinances straight through a recession. It closes only when spreads have blown out to crisis
+     * levels, the rating is below the market's floor, or the firm cannot cover the interest it already owes.
+     * When it closes the principal must be repaid in cash, and whatever cash cannot cover is a shortfall the
+     * treasury has to fund with emergency financing or default on.
+     *
+     * Only cash above the operating floor can be handed to a bondholder. A firm does not pay its last dollar
+     * of working capital against principal and then fail to make payroll; it defaults on the bond with cash
+     * still in the bank, and that cash is what funds the restructuring. Sweeping the treasury to zero instead
+     * both destroyed the going concern and removed the means to cure the default.
+     *
+     * @param float $availableCash Cash on hand before the repayment.
+     * @param float $cashFloor     Operating cash that cannot be spent on principal.
+     */
+    public function rollMaturities(
+        Stock $stock,
+        \App\DTO\DebtHealthDTO $health,
+        float $availableCash,
+        float $cashFloor = 0.0
+    ): \App\DTO\MaturityRollDTO
+    {
+        $wholesaleDebt = (float) $stock->getWholesaleDebt();
+        if ($wholesaleDebt <= 0.0) {
+            return new \App\DTO\MaturityRollDTO(0.0, true, 0.0, 0.0);
+        }
+
+        $industry = $stock->getIndustry() ?: 'General';
+        $businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['business_model'] ?? 'none';
+        $strategy = \App\Data\Sectors::getBusinessModelStrategy($businessModel);
+
+        $maturing = $wholesaleDebt * max(0.0, $strategy->getDebtMaturityRolloverRate());
+        if ($maturing <= 0.0) {
+            return new \App\DTO\MaturityRollDTO(0.0, true, 0.0, 0.0);
+        }
+
+        if ($this->hasPrimaryMarketAccess($stock, $health)) {
+            // Refinanced in the primary market: the principal survives and only its coupon reprices, which
+            // calculateInterestExpense() has already done through the blended fixed rate.
+            return new \App\DTO\MaturityRollDTO($maturing, true, 0.0, 0.0);
+        }
+
+        $repaid = min($maturing, max(0.0, $availableCash - max(0.0, $cashFloor)));
+        $shortfall = $maturing - $repaid;
+
+        $stock->setWholesaleDebt((string) max(0.0, $wholesaleDebt - $repaid));
+
+        return new \App\DTO\MaturityRollDTO($maturing, false, $repaid, $shortfall);
+    }
+
+    /**
+     * Whether the primary market will roll this issuer's maturity at any price.
+     */
+    private function hasPrimaryMarketAccess(Stock $stock, \App\DTO\DebtHealthDTO $health): bool
+    {
+        $dynamicSpread = $health->rawMetrics->dynamicSpread ?? (float) $stock->getCreditSpread();
+        if ($dynamicSpread >= self::PRIMARY_MARKET_CLOSURE_SPREAD) {
+            return false;
+        }
+
+        if ($health->interestCoverage < self::REFINANCING_MIN_COVERAGE) {
+            return false;
+        }
+
+        $ranks = \App\Service\Market\CreditRatingAgency::RATING_RANKS;
+
+        return ($ranks[$stock->getCreditRating()] ?? $ranks['BBB'])
+            >= ($ranks[self::REFINANCING_RATING_FLOOR] ?? 1);
     }
 
     /**

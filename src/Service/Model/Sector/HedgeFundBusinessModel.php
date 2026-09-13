@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Service\Model\Sector;
 
+use App\DTO\DebtExpansionAppetiteDTO;
+
 use App\Data\ModelParam;
 use App\DTO\DebtHealthDTO;
 use App\DTO\MacroStateDTO;
@@ -28,6 +30,18 @@ use App\Service\Math\MathUtility;
  */
 class HedgeFundBusinessModel extends AssetManagementBusinessModel
 {
+    // --- Operating Cyclicality & Demand Structure ---
+    /** Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Levered directional books. */
+    public const OPERATING_CYCLICALITY = 1.50;
+
+    // --- Balance Sheet Realism ---
+    /** Stock-based compensation as a fraction of revenue (ASC 718): non-cash, added back to FCF, settled in new shares. Investment team deferrals settle in fund and manager equity. */
+    public const STOCK_COMPENSATION_INTENSITY = 0.05;
+
+    // --- Labor Intensity ---
+    /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze. Investment team compensation dominates hedge fund overhead. */
+    public const FIXED_COST_LABOR_SHARE = 0.70;
+
     // --- Analyst Visibility & Error ---
     /** Base coverage visibility for hedge funds is extremely low due to black-box opacity. */
     public const BASE_COVERAGE_VISIBILITY = 0.15;
@@ -112,8 +126,8 @@ class HedgeFundBusinessModel extends AssetManagementBusinessModel
     public const LIQUIDITY_FRICTION_LAMBDA = 0.80;
 
     // --- Prime Broker Debt Gating ---
-    /** Baseline normal macro credit spread (~200bps) for prime brokerage borrowing. */
-    public const BASELINE_PRIME_CREDIT_SPREAD = 0.020;
+    /** Baseline normal macro credit spread for prime brokerage borrowing, the macro through-the-cycle IG spread. */
+    public const BASELINE_PRIME_CREDIT_SPREAD = MacroEngine::BASE_CREDIT_SPREAD;
     /** Scalar multiplying credit spread blowout to determine prime debt gating capacity. */
     public const DEBT_GATE_SPREAD_SCALAR = 10.0;
     /** Multiple compression threshold triggering a freeze on new prime leverage expansion. */
@@ -246,12 +260,48 @@ class HedgeFundBusinessModel extends AssetManagementBusinessModel
 
     public function getMacroPhysics(Stock $stock, MacroStateDTO $macroState): array
     {
-        // Nullify generic demand shift to handle multi-stream AUM market beta, VIX alpha expansion,
-        // and macro directional shifts discretely per stream in calculateSectorPhysics.
+        // The root shift is what analysts SEE: the engine folds it into expected revenue, and consensus is
+        // built on expected revenue. This model used to zero it and apply every macro term stream by
+        // stream inside calculateSectorPhysics, where consensus could not see any of it — so through a
+        // whole boom the fund beat its number every quarter by the AUM and directional uplift, each beat
+        // popped the price, and the chart drew a quarterly sawtooth. The uplift is built from published
+        // macro series (output gap, M2, VIX) that every analyst has, so it belongs in the estimate.
+        //
+        // calculateSectorPhysics divides the same shift back out before applying its own per-stream terms,
+        // so the physics is unchanged and nothing is counted twice.
         return [
-            'macro_demand_shift'       => 0.0,
+            'macro_demand_shift'       => $this->resolveAnalystVisibleMacroShift($stock, $macroState),
             'pricing_power_multiplier' => 1.0,
         ];
+    }
+
+    /**
+     * Revenue-weighted macro uplift analysts can forecast from published series, with the baseline stream
+     * weights: the AUM market beta and broad-money shift on management fees, the output-gap tilt on
+     * directional books, and the VIX regime on quant alpha. Everything driven by the fund's own alpha draws
+     * (redemption shocks, incentive fees, blowups) stays inside the physics, since nobody outside can see it.
+     */
+    private function resolveAnalystVisibleMacroShift(Stock $stock, MacroStateDTO $macroState): float
+    {
+        $params = $this->resolveModelParameters($stock, [
+            ModelParam::HfManagementFeeWeight->value   => self::DEFAULT_MGMT_FEE_WEIGHT,
+            ModelParam::HfDirectionalBetsWeight->value => self::DEFAULT_DIRECTIONAL_BETS_WEIGHT,
+            ModelParam::HfQuantAlphaWeight->value      => self::DEFAULT_QUANT_ALPHA_WEIGHT,
+        ]);
+
+        $outputGap = $macroState->outputGapEma;
+        $beta = $this->getOperatingCyclicality($stock);
+        $vixEma = $macroState->marketVolatilityEma;
+
+        $managementShift = ($outputGap * abs($beta) * self::AUM_MARKET_BETA_SCALAR)
+            + MathUtility::calculateBroadMoneyLiquidityShift($macroState->moneySupplyGrowthEma, sensitivity: self::M2_HEDGE_FUND_LIQUIDITY_SENSITIVITY);
+        $directionalShift = $outputGap * $beta * self::DIRECTIONAL_MACRO_SCALAR;
+        $quantShift = ((1.0 + max(0.0, ($vixEma - self::VIX_ALPHA_BASELINE) * self::VIX_ALPHA_SCALAR))
+            * (1.0 + min(0.0, ($vixEma - self::VIX_ALPHA_BASELINE) * self::VIX_CALM_DRAG_SCALAR))) - 1.0;
+
+        return ($params[ModelParam::HfManagementFeeWeight] * $managementShift)
+            + ($params[ModelParam::HfDirectionalBetsWeight] * $directionalShift)
+            + ($params[ModelParam::HfQuantAlphaWeight] * $quantShift);
     }
 
     protected function calculateSectorPhysics(
@@ -263,6 +313,11 @@ class HedgeFundBusinessModel extends AssetManagementBusinessModel
         MacroStateDTO $macroState,
         MathUtility $mathUtility
     ): SectorPhysicsResult {
+        // Expected revenue arrives with the analyst-visible macro shift already inside it (see
+        // getMacroPhysics). The streams apply their own macro terms in full below, so that shift is divided
+        // back out first: the physics runs on the structural base exactly as it always did.
+        $structuralRevenue = $expectedRevenue / max(0.25, 1.0 + $this->resolveAnalystVisibleMacroShift($stock, $macroState));
+
         $params = $this->resolveModelParameters($stock, [
             ModelParam::HfManagementFeeWeight->value   => self::DEFAULT_MGMT_FEE_WEIGHT,
             ModelParam::HfDirectionalBetsWeight->value => self::DEFAULT_DIRECTIONAL_BETS_WEIGHT,
@@ -270,7 +325,7 @@ class HedgeFundBusinessModel extends AssetManagementBusinessModel
         ]);
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
-        $streams  = new StreamContext($momentum, $mathUtility);
+        $streams  = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
 
         // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
         $activeWeights = $streams->resolveActiveStreamWeights([
@@ -290,7 +345,7 @@ class HedgeFundBusinessModel extends AssetManagementBusinessModel
         $outputGap      = $macroState->outputGapEma;
         $vixEma         = $macroState->marketVolatilityEma;
         $creditSpread   = $macroState->macroCreditSpreadEma;
-        $beta           = (float) $stock->getBeta();
+        $beta           = $this->getOperatingCyclicality($stock);
         $equity         = (float) $stock->getTotalEquity();
         $wholesaleDebt  = (float) $stock->getWholesaleDebt();
         $actualLeverage = $equity > 0 ? ($wholesaleDebt / $equity) : 0.0;
@@ -305,7 +360,7 @@ class HedgeFundBusinessModel extends AssetManagementBusinessModel
 
         $aumMarketBeta = $outputGap * abs($beta) * self::AUM_MARKET_BETA_SCALAR;
         $m2Shift = MathUtility::calculateBroadMoneyLiquidityShift($macroState->moneySupplyGrowthEma, sensitivity: self::M2_HEDGE_FUND_LIQUIDITY_SENSITIVITY);
-        $mgmtExpectedRevenue = $expectedRevenue * $mgmtWeight * (1.0 - $redemptionDrag);
+        $mgmtExpectedRevenue = $structuralRevenue * $mgmtWeight * (1.0 - $redemptionDrag);
 
         $mgmtRevenue = max(0.0, $mgmtExpectedRevenue
             * (1.0 + ($mgmtZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR * self::MGMT_BASE_VOLATILITY_SCALAR)) + $aumMarketBeta + $m2Shift));
@@ -320,7 +375,7 @@ class HedgeFundBusinessModel extends AssetManagementBusinessModel
         $dirBaseDrift = $dirZ * $baselineVol * self::REVENUE_VARIANCE_SCALAR * self::DIRECTIONAL_BASE_VOLATILITY_SCALAR * $leverageMultiplier;
         $dirIncentiveBonus = max(0.0, ($dirZ - self::PERFORMANCE_FEE_HURDLE_Z) * self::INCENTIVE_FEE_RATE * 3.0 * $leverageMultiplier);
 
-        $dirRevenue = max(0.0, $expectedRevenue * $dirWeight
+        $dirRevenue = max(0.0, $structuralRevenue * $dirWeight
             * (1.0 + $dirBaseDrift + $dirIncentiveBonus + $macroDirectionalShift));
 
         // --- 3. Quantitative Alpha Engine (Volatility Spread Expansion & Market Making) ---
@@ -330,7 +385,7 @@ class HedgeFundBusinessModel extends AssetManagementBusinessModel
         $quantBaseDrift = $quantZ * $baselineVol * self::REVENUE_VARIANCE_SCALAR * self::QUANT_ALPHA_VOLATILITY_SCALAR;
         $quantIncentiveBonus = max(0.0, ($quantZ - self::PERFORMANCE_FEE_HURDLE_Z) * self::INCENTIVE_FEE_RATE * 2.0);
 
-        $quantRevenue = max(0.0, ($expectedRevenue * $quantWeight
+        $quantRevenue = max(0.0, ($structuralRevenue * $quantWeight
             * (1.0 + $quantBaseDrift + $quantIncentiveBonus + $vixCalmDrag)
             * $vixAlphaMultiplier));
 
@@ -345,8 +400,8 @@ class HedgeFundBusinessModel extends AssetManagementBusinessModel
 
         // --- 4. Compensation Pool Flex & Variable Cost Scaling ---
         // Performance fee crystallization expands portfolio manager & quant incentive bonus pools.
-        $dirBaseline = $expectedRevenue * $dirWeight;
-        $quantBaseline = $expectedRevenue * $quantWeight;
+        $dirBaseline = $structuralRevenue * $dirWeight;
+        $quantBaseline = $structuralRevenue * $quantWeight;
         $perfExcess = max(0.0, $dirRevenue - $dirBaseline) + max(0.0, $quantRevenue - $quantBaseline);
         $bonusPoolExpense = $perfExcess * self::PERF_BONUS_POOL_PAYOUT;
         $effectiveVariableCosts = ($actualRevenue * $realizedVariableMargin) + $bonusPoolExpense;
@@ -457,11 +512,8 @@ class HedgeFundBusinessModel extends AssetManagementBusinessModel
         float $customerDeposits = 0.0,
         float $targetOperatingCash = 0.0,
         float $currentTreasury = 0.0
-    ): array {
-        return [
-            'probability'    => self::DEBT_EXPANSION_BASE_PROB + ($spreadMultiplier * self::DEBT_EXPANSION_PROB_MULT),
-            'aggressiveness' => self::DEBT_EXPANSION_BASE_AGGR + (self::DEBT_EXPANSION_AGGR_MULT * $spreadMultiplier),
-        ];
+    ): DebtExpansionAppetiteDTO {
+        return new DebtExpansionAppetiteDTO(probability: self::DEBT_EXPANSION_BASE_PROB + ($spreadMultiplier * self::DEBT_EXPANSION_PROB_MULT), aggressiveness: self::DEBT_EXPANSION_BASE_AGGR + (self::DEBT_EXPANSION_AGGR_MULT * $spreadMultiplier));
     }
 
     public function isUnderLeveraged(
@@ -499,9 +551,7 @@ class HedgeFundBusinessModel extends AssetManagementBusinessModel
             'market_volatility_ema',
             'money_supply_growth_ema',
             'output_gap_ema',
-            'policy_rate_ema',
             'yield_10y_ema',
-            'yield_5y_ema',
         ];
     }
 }

@@ -7,9 +7,11 @@ namespace App\Tests\Service\Model;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
+use App\Service\Macro\MacroEngine;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\DefenseContractorBusinessModel;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
+use App\DTO\StreamContext;
 use PHPUnit\Framework\TestCase;
 
 #[AllowMockObjectsWithoutExpectations]
@@ -155,11 +157,15 @@ class DefenseContractorBusinessModelTest extends TestCase
             $mathUtilityMock
         );
 
-        // Excess inflation (0.04 - 0.02) = 0.02 * 1.50 = 0.03 costPlusBonus
-        // Cost-Plus weight is 0.60 for GRIP (from StockModelTuning)
-        // Expected bonus = 0.03 * 0.60 = 0.018 (+1.8% -> $10,180)
-        $this->assertEqualsWithDelta(10_180.0, $result->actualRevenue, 1.0);
-        $this->assertEqualsWithDelta(0.018, $result->observableShockZ, 0.001);
+        // Excess inflation (0.04 - 0.02) = 0.02 * 1.50 = 0.03 costPlusBonus on cost-plus ORDERS.
+        // Cost-Plus weight is 0.60 for GRIP (from StockModelTuning): +1.8% of orders this quarter.
+        // Percentage-of-completion recognition burns the cost-plus backlog at 15% a quarter, so revenue
+        // rises by 1.8% x 0.15 = 0.27% now ($10,027) and the remainder sits in the backlog (book-to-bill > 1).
+        $burn = DefenseContractorBusinessModel::COST_PLUS_BACKLOG_BURN_RATE;
+        $this->assertEqualsWithDelta(10_000.0 * (1.0 + (0.018 * $burn)), $result->actualRevenue, 1.0);
+        $this->assertEqualsWithDelta(0.018 * $burn, $result->observableShockZ, 0.001);
+        $this->assertGreaterThan(1.0, $result->kpis['book_to_bill']);
+        $this->assertGreaterThan((1.0 - $burn) / $burn * 0.6, $result->kpis['backlog_quarters']);
     }
 
     public function testSovereignFiscalStressAndContinuingResolutionDrag(): void
@@ -184,10 +190,12 @@ class DefenseContractorBusinessModelTest extends TestCase
             $mathUtilityMock
         );
 
-        // CR drag = (0.05 - 0.03) * 2.50 = 0.05 drag on cost-plus lot multiplier (multiplier = 0.95)
-        // Cost-plus revenue = 10_000 * 0.60 * 0.95 = 5,700 (down from 6,000)
-        // Total revenue = 5,700 + 2,000 + 2,000 = 9,700
-        $this->assertEqualsWithDelta(9_700.0, $result->actualRevenue, 1.0);
+        // CR drag = (0.05 - 0.03) * 2.50 = 0.05 drag on cost-plus ORDERS (multiplier = 0.95).
+        // Orders fund a backlog burned at 15% a quarter, so recognized cost-plus revenue only slips by
+        // 5% x 0.15 = 0.75%: 6,000 -> 5,955, total 9,955. The unfunded gap shows up as book-to-bill < 1.
+        $burn = DefenseContractorBusinessModel::COST_PLUS_BACKLOG_BURN_RATE;
+        $this->assertEqualsWithDelta(10_000.0 - (6_000.0 * 0.05 * $burn), $result->actualRevenue, 1.0);
+        $this->assertLessThan(1.0, $result->kpis['book_to_bill']);
     }
 
     public function testFixedPriceForwardLossAndInflationSqueeze(): void
@@ -199,8 +207,9 @@ class DefenseContractorBusinessModelTest extends TestCase
         // fixedPriceZ = -2.0 (< -1.50 FORWARD_LOSS_Z_SCORE)
         $mathUtilityMock = $this->createMathUtilityMock([0.0, -2.0, 0.0, 0.0]);
 
-        // Inflation running at 4% (2% in excess of 2% target) -> 0.02 * 0.50 = 0.01 fixed-price inflation drag
+        // Engineering wages running 2pts above trend: the fixed-price EMD share cannot recover it, cost-plus can.
         $macroState = $this->createMacroState(inflation: 0.04);
+        $macroState = MacroStateDTO::fromArray(array_merge($macroState->toArray(), ['wage_growth_ema' => 0.055]));
 
         $result = $model->computeActualFinancials(
             $stock,
@@ -213,10 +222,16 @@ class DefenseContractorBusinessModelTest extends TestCase
         );
 
         $this->assertSame(ShockEvent::PROJECT_DELAY, $result->eventType);
-        // Fixed price weight is 0.20 for GRIP.
-        // Expected penalty = (FORWARD_LOSS_PENALTY 0.08 + fixedPriceInflationDrag 0.01) * 0.20 = 0.018
-        // Clamped margin = 0.30 + 0.018 = 0.318
-        $this->assertEqualsWithDelta(0.318, $result->clampedMargin, 0.001);
+        // Fixed price weight is 0.20 for GRIP: forward loss = FORWARD_LOSS_PENALTY 0.08 * 0.20 = 0.016.
+        // Wage basket: labor share 0.35 x 2pts excess = 0.7% of the cost base; 80% of contracts (cost-plus, FMS)
+        // recover 0.80 of it with the repricing lag, so the first-quarter drag is
+        // margin x deviation x (1 - recoveredShare x firstQuarterRecoveryWeight).
+        $deviation = 0.35 * (0.055 - (MacroEngine::TFP_DRIFT + MacroEngine::TARGET_INFLATION));
+        $recoveredShare = 0.80 * DefenseContractorBusinessModel::MAX_INPUT_COST_PASS_THROUGH;
+        $recoveryWeight = 1.0 - exp(-0.25 / DefenseContractorBusinessModel::INPUT_PASS_THROUGH_LAG_YEARS);
+        $wageDrag = 0.30 * $deviation * (1.0 - ($recoveredShare * $recoveryWeight));
+        $this->assertEqualsWithDelta(0.316 + $wageDrag, $result->clampedMargin, 0.001);
+        $this->assertGreaterThan(0.316, $result->clampedMargin);
     }
 
     public function testGeopoliticalConflictSurge(): void
@@ -271,8 +286,12 @@ class DefenseContractorBusinessModelTest extends TestCase
         );
 
         $this->assertSame(ShockEvent::GEOPOLITICAL_EXPORT_BAN, $result->eventType);
-        // FMS revenue halved (0.50 multiplier) -> 2000 * 0.50 = 1000
-        $this->assertEqualsWithDelta(1000.0, $result->streamRevenue['foreign_military_sales'], 1.0);
+        // FMS ORDERS halved (0.50 multiplier); deliveries keep flowing from the export backlog at 25% a
+        // quarter, so recognized FMS revenue falls by 50% x 0.25 = 12.5% now (2000 -> 1750) and the
+        // backlog drains toward the lower run-rate in the quarters that follow.
+        $burn = DefenseContractorBusinessModel::FMS_BACKLOG_BURN_RATE;
+        $this->assertEqualsWithDelta(2000.0 * (1.0 - (0.50 * $burn)), $result->streamRevenue['foreign_military_sales'], 1.0);
+        $this->assertLessThan(1.0, $result->kpis['book_to_bill']);
     }
 
     public function testFlagshipWeaponPlatformFailureAndMegaContractWin(): void
@@ -439,4 +458,43 @@ class DefenseContractorBusinessModelTest extends TestCase
         $this->assertGreaterThan($baseResult->streamRevenue['cost_plus_procurement'], $shockResult->streamRevenue['cost_plus_procurement']);
         $this->assertLessThan($baseResult->streamRevenue['foreign_military_sales'], $shockResult->streamRevenue['foreign_military_sales']);
     }
+    public function testTailEventPersistsAsAMarkovRegimeWithRandomExit(): void
+    {
+        $model = new DefenseContractorBusinessModel();
+        $regimeKey = StreamContext::REGIME_STATE_PREFIX . DefenseContractorBusinessModel::REGIME_PROGRAM_OVERRUN;
+        $macro = new MacroStateDTO();
+
+        $run = function (array $momentum, bool $exits, float $onsetZ = 0.0) use ($model, $macro) {
+            $stock = new Stock();
+            $stock->setTicker('DEF');
+            $stock->setBeta('1.0');
+            $stock->setEarningsMomentumZ($momentum);
+            // Partial mock: stream draws and regime dice are scripted, the mix-drift weight math stays real.
+            $math = $this->getMockBuilder(MathUtility::class)->onlyMethods(['generatePersistentZ', 'checkProbability'])->getMock();
+            // The onset stream is recognised by its sentinel previous value; every other draw is flat.
+            $math->method('generatePersistentZ')->willReturnCallback(fn (float $prev): float => $prev === -9.9 ? $onsetZ : 0.0);
+            $math->method('checkProbability')->willReturn($exits);
+            return $model->computeActualFinancials($stock, 100_000_000.0, 0.40, 20_000_000.0, 0.10, $macro, $math);
+        };
+
+        $clean = $run([], false);
+        $this->assertNull($clean->eventType);
+
+        // Quarter 1: the trigger fires and the regime starts.
+        $onset = $run(['fixed_price_development' => -9.9], false, -3.0);
+        $this->assertSame(ShockEvent::PROJECT_DELAY, $onset->eventType);
+        $this->assertSame(1.0, $onset->streamZ[$regimeKey]);
+
+        // Quarter 2: no new trigger, no exit -> the regime is still active and its cost persists silently.
+        $ongoing = $run($onset->streamZ, false);
+        $this->assertNull($ongoing->eventType, 'a continuing regime is not re-announced');
+        $this->assertSame(2.0, $ongoing->streamZ[$regimeKey]);
+        $this->assertGreaterThan($clean->clampedMargin, $ongoing->clampedMargin, 'ongoing regime cost must persist after the onset quarter');
+
+        // Quarter 3: the exit hazard fires -> back to baseline.
+        $after = $run($ongoing->streamZ, true);
+        $this->assertSame(0.0, $after->streamZ[$regimeKey]);
+        $this->assertEqualsWithDelta($clean->clampedMargin, $after->clampedMargin, 1e-9, 'costs return to baseline once the regime exits');
+    }
+
 }

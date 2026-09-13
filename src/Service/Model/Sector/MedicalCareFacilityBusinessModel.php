@@ -31,6 +31,46 @@ use App\Service\Math\MathUtility;
  */
 class MedicalCareFacilityBusinessModel extends StandardCorporateBusinessModel
 {
+    // --- Operating Cyclicality & Demand Structure ---
+    /** Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Acute care is inelastic; elective procedures carry the cyclicality. */
+    public const OPERATING_CYCLICALITY = 0.60;
+    /** Own-price elasticity of demand: volume lost per unit of real price increase. */
+    public const PRICE_ELASTICITY_OF_DEMAND = 0.10;
+    /** Share of an idiosyncratic revenue gain taken from same-industry peers rather than won from a larger market. */
+    public const INDUSTRY_SUBSTITUTABILITY = 0.40;
+
+    // --- Input Cost Basket ---
+    /** Shares of the variable cost base bought in tracked input markets (energy, metals, agri, freight, wholesale goods, variable payroll). */
+    public const INPUT_COST_EXPOSURES = ['labor' => 0.60, 'ppi' => 0.15, 'energy' => 0.03];
+
+    // --- Services Pricing ---
+    /** Elasticity of fee and rate pricing to services (supercore) inflation. Reimbursement follows medical services inflation, capped by payer contracts. */
+    public const PRICING_ELASTICITY = 0.60;
+    /** Services price off core services inflation ex-housing, not goods breakevens. */
+    public const PRICING_INFLATION_BASIS = 'supercore_inflation_ema';
+
+    /**
+     * Calendar-quarter revenue seasonality [Q1, Q2, Q3, Q4] summing to 4.0: Q1 flu season admissions.
+     *
+     * @return array<int, float>
+     */
+    public function getSeasonalityFactors(): array
+    {
+        return [1.06, 0.98, 0.96, 1.00];
+    }
+
+    // --- Balance Sheet Realism ---
+    /** Capitalized operating lease liabilities as a fraction of annual revenue (IFRS 16 / ASC 842). Hospital campuses and clinics under long-term leases. */
+    public const LEASE_LIABILITY_INTENSITY = 0.30;
+
+    // --- Coverage Sensitivity ---
+    /** Elective outpatient volume lost per unit of unemployment above the natural rate (2.0 = -2% volume per point): job loss ends employer coverage and elective procedures are deferred. */
+    public const UNEMPLOYMENT_ELECTIVE_SENSITIVITY = 2.0;
+
+    // --- Labor Intensity ---
+    /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze. Nursing and clinical staff payroll dominates hospital overhead. */
+    public const FIXED_COST_LABOR_SHARE = 0.70;
+
     // --- Analyst Visibility & Error ---
     /** Base coverage visibility for hospital networks with steady public reporting. */
     public const BASE_COVERAGE_VISIBILITY = 0.35;
@@ -62,14 +102,11 @@ class MedicalCareFacilityBusinessModel extends StandardCorporateBusinessModel
     public const ARBITRAGE_VARIANCE_SCALAR = 0.20;
 
     // --- Clinical Labor & Inflation Squeeze ---
-    /** Sensitivity of hospital variable cost margin to clinical wage inflation (nursing/physician overtime). */
-    public const WAGE_INFLATION_PENALTY_SCALAR = 1.00;
+    /** Payer contracts reprice on multi-year cycles, so clinical wage moves take longer to reach reimbursement rates. */
+    public const INPUT_PASS_THROUGH_LAG_YEARS = 1.25;
 
     /** Multiplier for insurance arbitrage revenue expansion during high healthcare inflation regimes. */
     public const MEDICAL_CPI_EXPANSION_SCALAR = 1.50;
-
-    /** Maximum percentage of clinical wage inflation mitigated by pristine pricing power. */
-    public const MAX_PRICING_POWER_MITIGATION = 0.60;
 
     // --- Tail Risk & Shock Events ---
     /** Positive Z-score threshold for mandatory government healthcare spending expansion. */
@@ -113,7 +150,6 @@ class MedicalCareFacilityBusinessModel extends StandardCorporateBusinessModel
 
         // Nullify generic demand shifts to calculate healthcare macro physics discretely per stream.
         $physics['macro_demand_shift'] = 0.0;
-        $physics['pricing_power_multiplier'] = 1.0;
 
         return $physics;
     }
@@ -140,8 +176,8 @@ class MedicalCareFacilityBusinessModel extends StandardCorporateBusinessModel
         $pricingPower     = $params[ModelParam::PricingPowerIndex];
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
-        $streams = new StreamContext($momentum, $mathUtility);
-        $beta = abs((float) $stock->getBeta());
+        $streams = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
+        $beta = $this->getOperatingCyclicality($stock);
 
         // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
         $activeWeights = $streams->resolveActiveStreamWeights([
@@ -158,15 +194,17 @@ class MedicalCareFacilityBusinessModel extends StandardCorporateBusinessModel
         $inpatientZ  = $streams->generateZ('inpatient_care', 0.35);
         $outpatientZ = $streams->generateZ('elective_outpatient', 0.25);
         $arbitrageZ  = $streams->generateZ('insurance_arbitrage', 0.40);
-        $eventZ      = $streams->generateZ('event', 0.10);
+        $eventZ      = $streams->generateExogenousZ('event', 0.10);
 
         // --- Macro Demand Sensitivities ---
         $outputGap = $macroState->outputGapEma;
         $inflation = $macroState->inflationEma;
 
         // Inpatient care is completely inelastic (0.0 output gap sensitivity)
-        // Elective outpatient procedures are pro-cyclical with consumer wealth
-        $outpatientMacroBoost = ($outputGap * 1.2 * $beta);
+        // Elective outpatient procedures are pro-cyclical with consumer wealth, and are deferred outright when
+        // job losses strip employer coverage: the uninsured postpone the knee, not the heart attack.
+        $unemploymentGap = max(0.0, $macroState->unemploymentRateEma - MacroEngine::NATURAL_UNEMPLOYMENT);
+        $outpatientMacroBoost = ($outputGap * 1.2 * $beta) - ($unemploymentGap * self::UNEMPLOYMENT_ELECTIVE_SENSITIVITY);
 
         // Insurance arbitrage expands when general & medical inflation accelerates
         $inflationExcess = max(0.0, $inflation - MacroEngine::TARGET_INFLATION);
@@ -194,6 +232,8 @@ class MedicalCareFacilityBusinessModel extends StandardCorporateBusinessModel
         $inpatientRevenue  = max(0.0, $expectedRevenue * $inpatientWeight * (1.0 + $inpatientShock + ($govShift * 0.30)) * $spendingMultiplier);
         $outpatientRevenue = max(0.0, $expectedRevenue * $outpatientWeight * (1.0 + $outpatientShock + $outpatientMacroBoost));
         $arbitrageRevenue  = max(0.0, $expectedRevenue * $arbitrageWeight * (1.0 + $arbitrageShock + $arbitrageInflationBoost));
+        // Coding and reimbursement uplift bills the same procedures at higher rates: price, not care delivered.
+        $priceRevenue      = max(0.0, $expectedRevenue * $arbitrageWeight * $arbitrageInflationBoost);
 
         $streamRevenues = [
             'inpatient_care'      => $inpatientRevenue,
@@ -205,10 +245,11 @@ class MedicalCareFacilityBusinessModel extends StandardCorporateBusinessModel
         $streams->recordStreamShares($streamRevenues);
 
         // --- Clinical Wage Inflation Squeeze & Pricing Power Mitigation ---
-        $baseWageInflationPenalty = $inflationExcess * $beta * self::WAGE_INFLATION_PENALTY_SCALAR;
-        $effectiveWageDrag = $baseWageInflationPenalty * (1.0 - ($pricingPower * self::MAX_PRICING_POWER_MITIGATION));
+        // Nursing and physician payroll follows wage growth above trend; regional network leverage over
+        // commercial payers recovers part of it through contract repricing.
+        $inputCostDrag = $this->resolveInputCostDrag($stock, $macroState, $streams, $pricingPower, $realizedVariableMargin);
 
-        $rawMargin = $realizedVariableMargin + $effectiveWageDrag + $auditPenalty;
+        $rawMargin = $realizedVariableMargin + $inputCostDrag + $auditPenalty;
         $clampedMargin = $this->clampMargin($rawMargin);
 
         $primaryShockZ = $streams->resolveDominantShockZ([$inpatientZ, $outpatientZ, $arbitrageZ], $eventZ);
@@ -228,6 +269,7 @@ class MedicalCareFacilityBusinessModel extends StandardCorporateBusinessModel
             isPublicEvent: $eventType !== null ? true : null,
             streamZ: $streams->getStreamZ(),
             streamRevenue: $streamRevenues,
+            priceRevenue: $priceRevenue,
         );
     }
 
@@ -239,10 +281,17 @@ class MedicalCareFacilityBusinessModel extends StandardCorporateBusinessModel
      */
     public function getOperatingMacroFields(): array
     {
-        return array_unique(array_merge(parent::getOperatingMacroFields(), [
+        return [
+            'energy_cost_push_lag',
+            'exchange_rate_index_ema',
             'government_spending_index_ema',
             'inflation_ema',
             'output_gap_ema',
-        ]));
+            'producer_price_inflation_ema',
+            'supercore_inflation_ema',
+            'tips_breakeven_ema',
+            'unemployment_rate_ema',
+            'wage_growth_ema',
+        ];
     }
 }

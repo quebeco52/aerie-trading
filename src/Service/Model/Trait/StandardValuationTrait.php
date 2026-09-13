@@ -20,8 +20,10 @@ trait StandardValuationTrait
             $dcfFairValue = min(max(0.01, $annualFcf * $multiplier), $peFairValue * $maxDcfCap);
             return ($peFairValue + $dcfFairValue) / 2.0;
         }
-        $discount = defined('static::NEGATIVE_FCF_VAL_DISCOUNT') ? static::NEGATIVE_FCF_VAL_DISCOUNT : 0.75;
-        return $fcfPerShare !== null ? max($revenueFloorValue, $peFairValue) * $discount : max($revenueFloorValue, $peFairValue);
+        // Negative FCF (capex burn, R&D burn) discounts the earnings multiple, never the revenue floor:
+        // the floor is the liquidation-style value a buyer pays for the top line regardless of current cash burn.
+        $discount = defined('static::NEGATIVE_FCF_VAL_DISCOUNT') ? (float) static::NEGATIVE_FCF_VAL_DISCOUNT : 0.75;
+        return $fcfPerShare !== null ? max($revenueFloorValue, $peFairValue * $discount) : max($revenueFloorValue, $peFairValue);
     }
 
     public function calculateFairValue(float $earningsValue, float $pbFairValue, float $normalizedEps, float $dividendSupportValue = 0.0): float
@@ -32,10 +34,14 @@ trait StandardValuationTrait
             : $baseConsensus;
     }
 
-    public function calculateStructuralEps(float $bookValuePerShare, float $structuralRoic, float $revenuePerShare, float $riskFreeRate): float
+    public function calculateStructuralEps(float $bookValuePerShare, float $structuralRoic, float $revenuePerShare, float $riskFreeRate, ?float $investedCapitalPerShare = null): float
     {
-        // For non-financials, Structural ROIC applies to Invested Capital, not Equity (Book Value).
-        $investedCapitalPerShare = max($revenuePerShare * 0.5, $bookValuePerShare * 1.5);
+        // For non-financials, Structural ROIC applies to Invested Capital, not Equity (Book Value). The real
+        // figure is used when the caller has one; the revenue-and-book approximation remains only for
+        // callers without a balance sheet in hand. With real capital the implied debt below becomes the
+        // firm's actual net debt, so the interest drag is charged on what it genuinely owes.
+        $investedCapitalPerShare ??= max($revenuePerShare * 0.5, $bookValuePerShare * 1.5);
+        $investedCapitalPerShare = max(0.01, $investedCapitalPerShare);
 
         // NOPAT = Invested Capital * ROIC
         $structuralNopat = $investedCapitalPerShare * $structuralRoic;

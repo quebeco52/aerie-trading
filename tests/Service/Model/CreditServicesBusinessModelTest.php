@@ -21,6 +21,50 @@ class CreditServicesBusinessModelTest extends TestCase
         $this->mathUtility = new MathUtility();
     }
 
+    /**
+     * The ROE target is earned AFTER the through-the-cycle charge-offs the allowance roll-forward books
+     * against EBIT every quarter, so the operating target has to fund them. It did not: revenue was
+     * reverse-engineered from ROE with no provision term, so a card issuer reported its target ROE minus
+     * its loss rate forever, missed consensus every quarter, and its trailing ROE then fed back into a
+     * lower target. The pre-tax return target must rise by exactly the loss rate.
+     */
+    public function testTargetOperatingProfitFundsTheThroughTheCycleChargeOffs(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('TALN');
+        $stock->setIndustry('Credit Services');
+        $stock->setTotalEquity('120000000000');
+        $stock->setWholesaleDebt('48000000000');
+        $stock->setCustomerDeposits('850000000000');
+        $stock->setCorporateTreasury('90000000000');
+        $stock->setBaselineRoe('0.25');
+        $stock->setOperatingMargin('0.45');
+        $stock->setCreditSpread('0.017');
+        $stock->setFloatingDebtRatio('0.60');
+
+        $macro = new MacroStateDTO(
+            policyRate: 0.04, policyRateEma: 0.04, yield5yEma: 0.045, corporateTaxRate: 0.21, equityRiskPremium: 0.045
+        );
+
+        $lossFree = new class extends CreditServicesBusinessModel {
+            public function getThroughTheCycleCreditLossRate(?Stock $stock = null): float
+            {
+                return 0.0;
+            }
+        };
+
+        $withLosses = $this->model->getTargetMetrics($stock, $macro, $this->mathUtility);
+        $without = $lossFree->getTargetMetrics($stock, $macro, $this->mathUtility);
+
+        $this->assertSame($without['invested_capital'], $withLosses['invested_capital']);
+        $this->assertEqualsWithDelta(
+            CreditServicesBusinessModel::CARD_CHARGE_OFF_RATE * (1.0 - $macro->corporateTaxRate),
+            $withLosses['baseline_roic'] - $without['baseline_roic'],
+            1e-9,
+            'the after-tax return target must rise by exactly the through-the-cycle loss rate the ledger charges'
+        );
+    }
+
     public function testDualStreamLendingAndSwipeInterchange(): void
     {
         $stock = new Stock();
@@ -101,7 +145,13 @@ class CreditServicesBusinessModelTest extends TestCase
         $this->assertLessThan($baseResult->ebit, $surgeResult->ebit);
     }
 
-    public function testRecessionRiskExpandsForwardCeclReserves(): void
+    /**
+     * A forward reserve is a balance, not a flow (ASC 326): elevated recession risk raises the lifetime
+     * loss TARGET the allowance converges to and the ledger books the build once. It must not reach the
+     * running margin, where it used to be charged every quarter the outlook stayed elevated, which kept a
+     * card issuer loss-making for years through a mild slowdown.
+     */
+    public function testRecessionRiskRaisesTheReserveTargetNotTheRunningMargin(): void
     {
         $stock = new Stock();
         $stock->setTicker('DFS');
@@ -116,11 +166,29 @@ class CreditServicesBusinessModelTest extends TestCase
         $lowResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.55, 20_000_000.0, 0.0, $lowRecessionMacro, $mathMock);
         $highResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.55, 20_000_000.0, 0.0, $highRecessionMacro, $mathMock);
 
+        $this->assertEqualsWithDelta($lowResult->clampedMargin, $highResult->clampedMargin, 1e-12, 'the forecast reserve is not a running cost');
         $this->assertGreaterThan(
-            $lowResult->clampedMargin,
-            $highResult->clampedMargin,
-            'Elevated forward recession risk must trigger proactive CECL reserve builds on revolving loan portfolios.'
+            $this->model->getForwardCreditLossMultiplier($stock, $lowRecessionMacro),
+            $this->model->getForwardCreditLossMultiplier($stock, $highRecessionMacro),
+            'Elevated forward recession risk must raise the lifetime loss estimate on revolving loan portfolios.'
         );
+    }
+
+    /** The per-ticker CeclSpreadSensitivity scales how far an issuer's reserve travels with credit spreads. */
+    public function testSubprimeOriginatorReserveTravelsFurtherWithSpreadsThanAPrimeNetwork(): void
+    {
+        $subprime = new Stock();
+        $subprime->setTicker('STRK'); // CeclSpreadSensitivity 2.20
+        $prime = new Stock();
+        $prime->setTicker('TALN'); // CeclSpreadSensitivity 1.40
+
+        $widened = new MacroStateDTO(macroCreditSpreadEma: CreditServicesBusinessModel::CECL_BASELINE_CREDIT_SPREAD + 0.02);
+
+        $subprimeBuild = $this->model->getForwardCreditLossMultiplier($subprime, $widened) - 1.0;
+        $primeBuild = $this->model->getForwardCreditLossMultiplier($prime, $widened) - 1.0;
+
+        $this->assertGreaterThan(0.0, $primeBuild);
+        $this->assertEqualsWithDelta(2.20 / 1.40, $subprimeBuild / $primeBuild, 1e-9);
     }
 
     public function testSloosCreditTighteningDampsRevolvingLendingVolume(): void

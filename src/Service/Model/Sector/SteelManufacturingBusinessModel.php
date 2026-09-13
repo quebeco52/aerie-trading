@@ -26,6 +26,28 @@ use App\Service\Event\ShockEvent;
  */
 class SteelManufacturingBusinessModel extends StandardCorporateBusinessModel
 {
+    // --- Operating Cyclicality & Demand Structure ---
+    /** Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Construction and auto steel demand swings with the cycle. */
+    public const OPERATING_CYCLICALITY = 1.50;
+    /** Own-price elasticity of demand: volume lost per unit of real price increase. */
+    public const PRICE_ELASTICITY_OF_DEMAND = 0.40;
+    /** Share of an idiosyncratic revenue gain taken from same-industry peers rather than won from a larger market. */
+    public const INDUSTRY_SUBSTITUTABILITY = 0.60;
+
+    // --- Input Cost Basket ---
+    /** Shares of the variable cost base bought in tracked input markets (energy, metals, agri, freight, wholesale goods, variable payroll). */
+    public const INPUT_COST_EXPOSURES = ['energy' => 0.30, 'metals' => 0.35, 'freight' => 0.05, 'ppi' => 0.05, 'labor' => 0.15];
+    /** Blast furnaces and electric arc furnaces are price takers on ore, scrap and power: raw inputs reprice at spot. */
+    public const PRICING_POWER_INDEX = 0.40;
+
+    // --- Labor Intensity ---
+    /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze. Mill labor shares overhead with furnace energy, refractories and maintenance. */
+    public const FIXED_COST_LABOR_SHARE = 0.40;
+
+    // --- Demand Transmission Lag ---
+    /** Years for a move in the output gap to reach the order book. Contracted tonnage and mill scheduling carry the order book well past a turn in demand. */
+    public const DEMAND_LAG_YEARS = 0.75;
+
     // --- Analyst Visibility & Error ---
     /** Base coverage visibility for industrial steel analysts. */
     public const BASE_COVERAGE_VISIBILITY = 0.50;
@@ -43,14 +65,10 @@ class SteelManufacturingBusinessModel extends StandardCorporateBusinessModel
     public const CONTRACT_VARIANCE_SCALAR = 0.20;
     /** Idiosyncratic revenue variance scalar for volatile spot hot-rolled coil market. */
     public const SPOT_VARIANCE_SCALAR     = 0.60;
-    /** Energy and metallurgical coal input cost drag scalar for blast furnaces and EAFs. */
-    public const ENERGY_INPUT_DRAG_SCALAR = 0.80;
     /** Sensitivity of steel mill order demand to manufacturing PMI survey shifts. */
     public const PMI_DEMAND_SENSITIVITY   = 0.50;
     /** Sensitivity of blast furnace fixed cost absorption to industrial capacity utilization. */
     public const CU_MARGIN_ABSORPTION_SENSITIVITY = 0.12;
-    /** Sensitivity of steel production margins to wholesale producer price index (PPI) inflation. */
-    public const PPI_COST_DRAG_SENSITIVITY = 0.40;
 
     // --- Blast Furnace Aging & EAF Reinvestment Physics ---
     /** Quarterly margin decay rate per unit of underinvestment below blast furnace relining replacement CapEx. */
@@ -91,8 +109,8 @@ class SteelManufacturingBusinessModel extends StandardCorporateBusinessModel
     public function getMacroPhysics(Stock $stock, \App\DTO\MacroStateDTO $macroState): array
     {
         $physics = parent::getMacroPhysics($stock, $macroState);
-        $outputGap = $macroState->outputGapEma;
-        $beta = (float) $stock->getBeta();
+        $outputGap = $this->resolveLaggedOutputGap($stock, $macroState);
+        $beta = $this->getOperatingCyclicality($stock);
         $pmiShift = MathUtility::calculatePmiDemandShift($macroState->manufacturingPmiEma, MacroEngine::PMI_BASELINE, self::PMI_DEMAND_SENSITIVITY);
 
         $physics['macro_demand_shift'] = ($outputGap * $beta * 1.50) + ($pmiShift * $beta);
@@ -112,8 +130,8 @@ class SteelManufacturingBusinessModel extends StandardCorporateBusinessModel
         $pricingPower   = max(0.0, min(1.0, $params[ModelParam::PricingPowerIndex]));
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
-        $streams  = new \App\DTO\StreamContext($momentum, $mathUtility);
-        $beta     = abs((float) $stock->getBeta());
+        $streams  = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
+        $beta     = $this->getOperatingCyclicality($stock);
 
         // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
         $activeWeights = $streams->resolveActiveStreamWeights([
@@ -127,7 +145,6 @@ class SteelManufacturingBusinessModel extends StandardCorporateBusinessModel
         // Strongly tied to macro output gap, manufacturing PMI, and energy prices
         $pmiShift = MathUtility::calculatePmiDemandShift($macroState->manufacturingPmiEma, MacroEngine::PMI_BASELINE, self::PMI_DEMAND_SENSITIVITY);
         $macroBoost = ($macroState->outputGapEma * 1.2 * $beta) + ($pmiShift * $beta);
-        $energyDrag = max(0.0, $macroState->energyCostPushLag / MacroEngine::ENERGY_COST_PUSH_TRANSMISSION) * self::ENERGY_INPUT_DRAG_SCALAR;
         $metalsShift = ($macroState->industrialMetalsIndexEma - 100.0) / 100.0;
 
         $contractZ = $streams->generateZ('contracted_oem_steel', 0.35);
@@ -135,6 +152,8 @@ class SteelManufacturingBusinessModel extends StandardCorporateBusinessModel
 
         $contractRevenue = max(0.0, $expectedRevenue * $contractWeight * (1.0 + ($contractZ * ($baselineVol * self::CONTRACT_VARIANCE_SCALAR)) + ($macroBoost * 0.5)));
         $spotRevenue     = max(0.0, $expectedRevenue * $spotWeight     * (1.0 + ($spotZ     * ($baselineVol * self::SPOT_VARIANCE_SCALAR)) + ($metalsShift * 0.50) + ($macroBoost * 0.5)));
+        // Hot-rolled coil repricing on the same tonnage is price: the mill's variable cost per tonne does not follow the spot quote.
+        $priceRevenue    = $expectedRevenue * $spotWeight * ($metalsShift * 0.50);
 
         $streamRevenues = [
             'contracted_oem_steel' => $contractRevenue,
@@ -144,23 +163,15 @@ class SteelManufacturingBusinessModel extends StandardCorporateBusinessModel
         $actualRevenue = max(0.0, array_sum($streamRevenues));
         $streams->recordStreamShares($streamRevenues);
 
-        // Cyclical Metal Spread, Energy & Freight Logistics Compression
-        $freightShift = max(0.0, ($macroState->freightRateIndexEma - 100.0) / 100.0);
-        $freightDrag = $freightShift * 0.05;
+        // Metal spread: ore, scrap, metallurgical coal and power reach the furnace at spot; the spread is what is left
+        // after the mill has recovered what its contract and spot pricing allow.
+        $inputCostDrag = $this->resolveInputCostDrag($stock, $macroState, $streams, $pricingPower, $realizedVariableMargin);
 
         // Blast furnace fixed overhead absorption via capacity utilization
         $cuShift = MathUtility::calculateCapacityUtilizationShift($macroState->capacityUtilizationRateEma, MacroEngine::CU_BASELINE, self::CU_MARGIN_ABSORPTION_SENSITIVITY);
         $cuMarginAdjustment = -$cuShift; // Higher CU improves margin
 
-        // Wholesale raw input inflation (PPI)
-        $ppiCostDrag = MathUtility::calculatePpiCostDrag(
-            $macroState->producerPriceInflationEma,
-            MacroEngine::TARGET_INFLATION,
-            $pricingPower,
-            self::PPI_COST_DRAG_SENSITIVITY
-        );
-
-        $clampedMargin = $this->clampMargin($realizedVariableMargin + ($energyDrag * 0.40) + $freightDrag + $cuMarginAdjustment + $ppiCostDrag);
+        $clampedMargin = $this->clampMargin($realizedVariableMargin + $inputCostDrag + $cuMarginAdjustment);
 
         $primaryShockZ = $streams->resolveDominantShockZ([$spotZ, $contractZ]);
         $observableShockZ = ($contractZ * $contractWeight * self::CONTRACT_VARIANCE_SCALAR * $baselineVol)
@@ -176,6 +187,7 @@ class SteelManufacturingBusinessModel extends StandardCorporateBusinessModel
             isPublicEvent: null,
             streamZ: $streams->getStreamZ(),
             streamRevenue: $streamRevenues,
+            priceRevenue: $priceRevenue,
         );
     }
 
@@ -191,25 +203,16 @@ class SteelManufacturingBusinessModel extends StandardCorporateBusinessModel
             : $baseConsensus;
     }
 
-    public function applyAssetDepreciationDecay(Stock $stock, float $reinvestmentRatio, float $dt): void
+    /** Blast furnace wear & refractory thermal degradation toward floor */
+    public function getDepreciationDecayRate(): float
     {
-        $timeScale = $dt / 0.25;
-        $currentMargin = (float) $stock->getOperatingMargin();
+        return self::BLAST_FURNACE_DECAY_RATE;
+    }
 
-        if ($reinvestmentRatio < 1.0) {
-            // Blast furnace wear & refractory thermal degradation toward floor
-            $decayRate = self::BLAST_FURNACE_DECAY_RATE * (1.0 - $reinvestmentRatio) * $timeScale;
-            $updatedMargin = max(self::MIN_OPERATING_MARGIN_FLOOR, $currentMargin - ($currentMargin * $decayRate));
-            $stock->setOperatingMargin((string) $updatedMargin);
-        } elseif ($reinvestmentRatio > 1.0) {
-            // EAF efficiency & automated rolling mill modernization expands margin ceiling
-            $modGain = self::EAF_MODERNIZATION_GAIN_RATE * log($reinvestmentRatio) * $timeScale;
-            $updatedMargin = min(
-                self::MAX_OPERATING_MARGIN_CEILING,
-                $currentMargin + ((self::MAX_OPERATING_MARGIN_CEILING - $currentMargin) * $modGain)
-            );
-            $stock->setOperatingMargin((string) $updatedMargin);
-        }
+    /** EAF efficiency & automated rolling mill modernization expands margin ceiling */
+    public function getModernizationGainRate(): float
+    {
+        return self::EAF_MODERNIZATION_GAIN_RATE;
     }
 
     /**
@@ -220,14 +223,17 @@ class SteelManufacturingBusinessModel extends StandardCorporateBusinessModel
      */
     public function getOperatingMacroFields(): array
     {
-        return array_unique(array_merge(parent::getOperatingMacroFields(), [
+        return [
             'capacity_utilization_rate_ema',
             'energy_cost_push_lag',
+            'exchange_rate_index_ema',
             'freight_rate_index_ema',
             'industrial_metals_index_ema',
             'manufacturing_pmi_ema',
             'output_gap_ema',
             'producer_price_inflation_ema',
-        ]));
+            'tips_breakeven_ema',
+            'wage_growth_ema',
+        ];
     }
 }

@@ -33,6 +33,34 @@ use App\Service\Math\MathUtility;
  */
 class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
 {
+    // --- Operating Cyclicality & Demand Structure ---
+    /** Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Big-ticket, credit-financed purchases with model-to-model substitution. */
+    public const OPERATING_CYCLICALITY = 1.50;
+    /** Own-price elasticity of demand: volume lost per unit of real price increase. */
+    public const PRICE_ELASTICITY_OF_DEMAND = 1.20;
+    /** Share of an idiosyncratic revenue gain taken from same-industry peers rather than won from a larger market. */
+    public const INDUSTRY_SUBSTITUTABILITY = 0.70;
+
+    // --- FX Exposure ---
+    /** Share of revenue whose competitiveness moves with the trade-weighted exchange rate. Vehicles are the archetypal traded good: half the book is exported or meets a landed import on the same forecourt. */
+    public const FX_REVENUE_EXPOSURE = 0.50;
+
+    // --- Input Cost Basket ---
+    /** Shares of the variable cost base bought in tracked input markets (energy, metals, agri, freight, wholesale goods, variable payroll). */
+    public const INPUT_COST_EXPOSURES = ['energy' => 0.05, 'metals' => 0.15, 'freight' => 0.05, 'ppi' => 0.35, 'labor' => 0.20];
+    /** Tier-one supplier contracts fix component prices for about a quarter before spot moves reach the line. */
+    public const INPUT_COST_LAG_YEARS = 0.25;
+
+    /**
+     * Calendar-quarter revenue seasonality [Q1, Q2, Q3, Q4] summing to 4.0: spring selling season and model-year launches; weak Q1.
+     *
+     * @return array<int, float>
+     */
+    public function getSeasonalityFactors(): array
+    {
+        return [0.95, 1.03, 1.00, 1.02];
+    }
+
     // --- Analyst Visibility & Error ---
     /** Base coverage visibility for automakers via monthly dealership channel registration data. */
     public const BASE_COVERAGE_VISIBILITY = 0.40;
@@ -66,8 +94,6 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
 
     /** Baseline pricing power across OEM vehicle model lines. */
     public const PRICING_POWER_INDEX = 0.65;
-    /** Variable margin cost drag per unit of ocean shipping and maritime freight rate inflation. */
-    public const FREIGHT_COST_DRAG_SCALAR = 0.05;
 
     // --- Global Supply Chain Pressure (GSCPI) & Capacity Utilization ---
     /** Variable margin cost drag per unit of supply chain bottleneck pressure (NY Fed GSCPI). */
@@ -75,9 +101,6 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
     /** Sensitivity of mass-market manufacturing throughput to aggregate industrial capacity utilization (Fed G.17). */
     public const CAPACITY_UTILIZATION_THROUGHPUT_SCALAR = 0.40;
 
-    // --- Manufacturing PPI Transmission ---
-    /** Sensitivity of mass-market OEM input component and raw material costs to wholesale PPI inflation. */
-    public const PPI_COST_SENSITIVITY = 0.35;
 
     // --- Stream Volatility Scalars ---
     /** Volatility multiplier for mass-market fleet volume. */
@@ -90,8 +113,8 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
     public const SOFTWARE_VARIANCE_SCALAR = 0.12;
 
     // --- Financing Arm & Credit Physics ---
-    /** Break-even Net Interest Margin floor (~50bps). */
-    public const NIM_SPREAD_BUFFER = 0.005;
+    /** Break-even Net Interest Margin floor for the captive finance arm (~70bps, the neutral 2s10s slope). */
+    public const NIM_SPREAD_BUFFER = 0.007;
 
     /** Linear sensitivity to yield curve spread. */
     public const NIM_LINEAR_SENSITIVITY = 1.00;
@@ -102,8 +125,8 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
     /** Drag on auto loans during negative consumer sentiment regimes. */
     public const MACRO_DEFAULT_SCALAR = 0.25;
 
-    /** Baseline credit spread above which CECL forward provisioning accelerates. */
-    public const CECL_BASELINE_CREDIT_SPREAD = 0.02;
+    /** Baseline credit spread above which CECL forward provisioning accelerates, the macro through-the-cycle IG spread. */
+    public const CECL_BASELINE_CREDIT_SPREAD = MacroEngine::BASE_CREDIT_SPREAD;
 
     // --- Interest Rate & Sentiment Sensitivity ---
     /** Neutral policy rate (~3.0%). Rates above this destroy consumer auto financing demand. */
@@ -158,7 +181,16 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
         $rateScalar = $params[ModelParam::RateSensitivityScalar->value];
 
         $policyRate = $macroState->policyRateEma;
-        $beta = (float) $stock->getBeta();
+        $beta = $this->getOperatingCyclicality($stock);
+
+        // A vehicle is a consumer durable, not industrial capex. The heavy-manufacturing parent reads the cycle
+        // twice (an amplified output gap plus the manufacturing PMI, which leads the same industrial cycle)
+        // and this model then adds household sentiment and financing rates on top, so a mild slowdown
+        // (gap -1%, sentiment -15) produced a -25% volume drop, which is the 2008-09 collapse, not 1991
+        // (-12%) or 2001 (-2%). Demand here is the output gap at the sector's own cyclicality plus the two
+        // household channels; the PMI belongs to the firms that sell machinery, not to their customers.
+        $physics['macro_demand_shift'] = ($this->resolveLaggedOutputGap($stock, $macroState) * $beta)
+            + $this->resolveFxDemandShift($macroState);
 
         // High policy rates destroy debt-financed consumer auto purchases
         $ratePenalty = 0.0;
@@ -201,8 +233,8 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
         $pricingPower   = $params[ModelParam::PricingPowerIndex];
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
-        $streams = new StreamContext($momentum, $mathUtility);
-        $beta = abs((float) $stock->getBeta());
+        $streams = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
+        $beta = $this->getOperatingCyclicality($stock);
 
         // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
         $activeWeights = $streams->resolveActiveStreamWeights([
@@ -219,7 +251,7 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
         $salesZ    = $streams->generateZ('mass_market_sales', 0.25);
         $apexZ     = $streams->generateZ('apex_luxury', 0.35);
         $softwareZ = $streams->generateZ('software_telematics', 0.40);
-        $eventZ    = $streams->generateZ('event', 0.10);
+        $eventZ    = $streams->generateExogenousZ('event', 0.10);
 
         // --- Tail Risk & Labor Events ---
         $eventType = null;
@@ -245,15 +277,12 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
 
         $apexMacroBoost = $wealthEffect + $qeLiquidityBoost + $veblenInflationPower;
 
-        // Supply chain inflation & energy cost penalty on physical manufacturing
-        $inflation = $macroState->inflationEma;
-        $energyShift = max(0.0, $macroState->energyCostPushLag / MacroEngine::ENERGY_COST_PUSH_TRANSMISSION);
-        $metalsShift = ($macroState->industrialMetalsIndexEma - 100.0) / 100.0;
-        $freightShift = max(0.0, ($macroState->freightRateIndexEma - 100.0) / 100.0);
+        // Input cost basket on physical manufacturing: energy, metals, ocean freight, components and line payroll,
+        // recovered in transaction prices at the OEM's pricing power. The drag is struck on the blended cost base
+        // and lands entirely on the mass-market fleet, so it is regrossed by that stream's weight below.
+        $inputCostDrag = $this->resolveInputCostDrag($stock, $macroState, $streams, $pricingPower, $realizedVariableMargin);
         $gscpiShift = max(0.0, $macroState->supplyChainPressureIndexEma - MacroEngine::GSCPI_BASELINE);
-        $baseInflationPenalty = max(0.0, $inflation - MacroEngine::TARGET_INFLATION) * $beta * self::INFLATION_PENALTY_SCALAR;
-        $ppiCostDrag = MathUtility::calculatePpiCostDrag($macroState->producerPriceInflation, MacroEngine::TARGET_INFLATION, $pricingPower, self::PPI_COST_SENSITIVITY);
-        $inflationCostPenalty = ($baseInflationPenalty + ($energyShift * 0.05) + ($metalsShift * 0.15) + ($freightShift * self::FREIGHT_COST_DRAG_SCALAR) + ($gscpiShift * self::SUPPLY_CHAIN_PRESSURE_COST_SCALAR) + $ppiCostDrag) * (1.0 - ($pricingPower * 0.50));
+        $inflationCostPenalty = ($inputCostDrag / max(0.05, $salesWeight)) + ($gscpiShift * self::SUPPLY_CHAIN_PRESSURE_COST_SCALAR * (1.0 - ($pricingPower * 0.50)));
 
         // Captive Finance NIM Squeeze & Subprime Provisioning
         $sentimentShift = ($macroState->consumerSentimentIndexEma - MacroEngine::SENTIMENT_BASELINE) / 100.0;
@@ -281,10 +310,9 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
         $salesShock    = $salesZ    * ($baselineVol * self::SALES_VARIANCE_SCALAR);
         $apexShock     = $apexZ     * ($baselineVol * self::APEX_VARIANCE_SCALAR);
         $softwareShock = $softwareZ * ($baselineVol * self::SOFTWARE_VARIANCE_SCALAR);
-        $fxShift = ($macroState->exchangeRateIndexEma - 100.0) / 100.0;
         $cuShift = MathUtility::calculateCapacityUtilizationShift($macroState->capacityUtilizationRateEma, MacroEngine::CU_BASELINE, self::CAPACITY_UTILIZATION_THROUGHPUT_SCALAR);
 
-        $salesRevenue    = max(0.0, $expectedRevenue * $salesWeight    * (1.0 + $salesShock - ($fxShift * 0.5) + $cuShift) * $salesMultiplier);
+        $salesRevenue    = max(0.0, $expectedRevenue * $salesWeight    * (1.0 + $salesShock + $this->resolveFxDemandShift($macroState) + $cuShift) * $salesMultiplier);
         $apexRevenue     = max(0.0, $expectedRevenue * $apexWeight     * (1.0 + $apexShock + $apexMacroBoost));
         $softwareRevenue = max(0.0, $expectedRevenue * $softwareWeight * (1.0 + $softwareShock));
 
@@ -308,11 +336,15 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
         $softwareBaseMargin = $realizedVariableMargin * (self::SOFTWARE_SERVICES_COST_INTENSITY / $blendedIntensity);
 
         $salesCosts    = $salesRevenue    * ($salesBaseMargin + $inflationCostPenalty + $recallPenalty);
-        $apexCosts     = $apexRevenue     * $apexBaseMargin;
+        // Veblen price hikes reprice the same hypercar deliveries: no incremental build cost on that slice.
+        $apexPriceRevenue = max(0.0, $expectedRevenue * $apexWeight * $veblenInflationPower);
+        $apexCosts     = max(0.0, $apexRevenue - $apexPriceRevenue) * $apexBaseMargin;
         $softwareCosts = $softwareRevenue * ($softwareBaseMargin + $macroDefaultDrag + $nimSqueeze + $ceclDrag);
 
         $totalVariableCosts = $salesCosts + $apexCosts + $softwareCosts;
-        $effectiveMargin = $actualRevenue > 0 ? ($totalVariableCosts / $actualRevenue) : $realizedVariableMargin;
+        // The blended ratio is struck on volume revenue so the template method reproduces these dollar costs exactly.
+        $volumeRevenue = max(1.0, $actualRevenue - $apexPriceRevenue);
+        $effectiveMargin = $actualRevenue > 0 ? ($totalVariableCosts / $volumeRevenue) : $realizedVariableMargin;
         $clampedMargin = $this->clampMargin($effectiveMargin);
 
         $primaryShockZ = $streams->resolveDominantShockZ([$salesZ, $apexZ, $softwareZ], $eventZ);
@@ -336,6 +368,7 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
             isPublicEvent: $eventType !== null ? true : null,
             streamZ: $streams->getStreamZ(),
             streamRevenue: $streamRevenues,
+            priceRevenue: $apexPriceRevenue,
         );
     }
 
@@ -347,25 +380,28 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
      */
     public function getOperatingMacroFields(): array
     {
-        return array_unique(array_merge(parent::getOperatingMacroFields(), [
+        return [
             'capacity_utilization_rate_ema',
             'consumer_sentiment_index_ema',
             'corporate_default_rate_ema',
             'energy_cost_push_lag',
-            'equity_risk_premium',
             'exchange_rate_index_ema',
             'freight_rate_index_ema',
             'industrial_metals_index_ema',
             'inflation_ema',
             'macro_credit_spread',
+            'manufacturing_pmi_ema',
+            'output_gap_ema',
             'policy_rate_ema',
-            'producer_price_inflation',
+            'producer_price_inflation_ema',
             'qe_active',
             'qe_intensity',
             'retail_default_rate_ema',
             'supply_chain_pressure_index_ema',
+            'tips_breakeven_ema',
+            'wage_growth_ema',
             'yield_10y_ema',
             'yield_2y_ema',
-        ]));
+        ];
     }
 }

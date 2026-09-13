@@ -67,6 +67,74 @@ class StandardCorporateBusinessModelTest extends TestCase
         $this->assertGreaterThan(1.0, $physics['pricing_power_multiplier']);
     }
 
+    public function testInflationPassThroughIsKeyedOnPricingPowerNotBeta(): void
+    {
+        $macro = new MacroStateDTO(tipsBreakevenEma: 0.04);
+
+        // Same firm, same pricing power, wildly different systematic risk.
+        $defensive = new Stock();
+        $defensive->setTicker('IBHI');
+        $defensive->setBeta('0.50');
+
+        $cyclical = new Stock();
+        $cyclical->setTicker('IBHI');
+        $cyclical->setBeta('2.50');
+
+        $defensiveMultiplier = $this->model->getMacroPhysics($defensive, $macro)['pricing_power_multiplier'];
+        $cyclicalMultiplier = $this->model->getMacroPhysics($cyclical, $macro)['pricing_power_multiplier'];
+
+        // Keying pass-through off beta gave these 1.02 and 1.10: a five-fold difference in the price a firm
+        // can charge, driven by a measure of market risk that already scales the demand shift separately.
+        $this->assertEqualsWithDelta(
+            $defensiveMultiplier,
+            $cyclicalMultiplier,
+            1e-9,
+            'Beta must not change how much inflation a firm recovers in price.'
+        );
+
+        // Pricing power does drive it: a price taker recovers less than a price setter.
+        $priceSetter = new Stock();
+        $priceSetter->setTicker('RIVE'); // Pricing power 0.85 against IBHI's 0.35
+        $priceSetter->setBeta('0.50');
+
+        $this->assertGreaterThan(
+            $defensiveMultiplier,
+            $this->model->getMacroPhysics($priceSetter, $macro)['pricing_power_multiplier']
+        );
+
+        // Elasticity is centred so the median firm recovers expected inflation exactly.
+        $this->assertEqualsWithDelta(1.0 + (0.04 * (0.50 + 0.35)), $defensiveMultiplier, 1e-9);
+    }
+
+    public function testInflationPassThroughReachesNewExpectationsGraduallyNotInOneQuarter(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('RIVE'); // Pricing power 0.85, so elasticity 1.35
+        $stock->setBeta('1.00');
+
+        // First report seeds at the target: with no repricing history the firm is assumed at equilibrium.
+        $settled = $this->model->getMacroPhysics($stock, new MacroStateDTO(tipsBreakevenEma: 0.02));
+        $this->assertEqualsWithDelta(1.0 + (0.02 * 1.35), $settled['pricing_power_multiplier'], 1e-9);
+
+        // Expectations triple. Menu costs and contract terms mean posted prices cannot follow at once.
+        $shocked = $this->model->getMacroPhysics($stock, new MacroStateDTO(tipsBreakevenEma: 0.06));
+        $shockedPassThrough = $shocked['pricing_power_multiplier'] - 1.0;
+
+        $this->assertGreaterThan(0.02 * 1.35, $shockedPassThrough, 'Prices must start moving toward the new level.');
+        $this->assertLessThan(0.06 * 1.35, $shockedPassThrough, 'Prices must not reprice fully within one quarter.');
+
+        // One quarterly step of an exponential lag on a three-quarter time constant.
+        $weight = 1.0 - exp(-0.25 / StandardCorporateBusinessModel::PRICE_PASS_THROUGH_LAG_YEARS);
+        $expected = (0.02 * 1.35) + $weight * ((0.06 * 1.35) - (0.02 * 1.35));
+        $this->assertEqualsWithDelta($expected, $shockedPassThrough, 1e-9);
+
+        // Held there, the firm converges on full pass-through rather than stalling part way.
+        for ($quarter = 0; $quarter < 20; $quarter++) {
+            $converged = $this->model->getMacroPhysics($stock, new MacroStateDTO(tipsBreakevenEma: 0.06));
+        }
+        $this->assertEqualsWithDelta(1.0 + (0.06 * 1.35), $converged['pricing_power_multiplier'], 1e-4);
+    }
+
     public function testHighInflationCompressesMarginsForLowPricingPower(): void
     {
         $stockLow = new Stock();

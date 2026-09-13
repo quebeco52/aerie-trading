@@ -26,6 +26,10 @@ use App\Service\Math\FinancialConstants;
  */
 class ShadowBankBusinessModel extends CommercialBankBusinessModel
 {
+    // --- Operating Cyclicality & Demand Structure ---
+    /** Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Wholesale-funded lending expands and contracts with credit conditions. */
+    public const OPERATING_CYCLICALITY = 1.30;
+
     // --- Analyst Visibility & Error ---
     public const BASE_COVERAGE_VISIBILITY = 0.50;
     public const BASE_COVERAGE_ERROR = 0.10;
@@ -52,6 +56,12 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
     /** Hard ceiling on gross asset yield to prevent reverse-engineered revenue hyperinflation. */
     public const MAX_GROSS_ASSET_YIELD    = 0.50;
 
+    // --- Credit Losses (ASC 326) ---
+    /** Through-the-cycle annual loss on the blended book: mortgages lose a few tens of basis points, direct lending about a point. */
+    public const PORTFOLIO_CHARGE_OFF_RATE = 0.005;
+    /** Years of expected loss the allowance covers: mortgages prepay and middle-market loans mature well inside their contractual terms. */
+    public const CECL_LIFETIME_HORIZON_YEARS = 3.0;
+
     // --- Revenue & Default Shock Physics ---
     /** Volatility multiplier for top-line revenue shocks in non-bank lending markets. */
     public const REVENUE_VARIANCE_SCALAR = 0.20;
@@ -65,8 +75,8 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
     public const HEALTHY_CREDIT_Z_FLOOR    = 1.00;
     /** Sensitivity scale for loan provision write-backs during exceptionally healthy credit environments. */
     public const PROVISION_REVERSAL_SCALE  = 0.020;
-    /** Sensitivity of forward loan default provisioning to widening macroeconomic credit spreads. */
-    public const CECL_FORWARD_SENSITIVITY  = 1.50;
+    /** Lifetime-loss multiplier per unit of IG spread widening on a leveraged private-credit book: +300bps lifts the reserve target ~0.30x. */
+    public const CECL_RESERVE_SPREAD_SENSITIVITY = 10.0;
     /** Structural minimum operating cost-to-revenue ratio for non-bank lending operations. */
     public const MIN_EFFICIENCY_RATIO      = 0.45;
     /** Upper clamp for realized variable margin. */
@@ -75,16 +85,16 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
     public const MIN_VARIABLE_MARGIN_CLAMP = 0.01;
 
     // --- Private Credit & Corporate Default Physics ---
-    /** Baseline investment-grade credit spread (~200bps) for normal shadow bank portfolio lending. */
-    public const CECL_BASELINE_CREDIT_SPREAD    = 0.020;
+    /** Baseline investment-grade credit spread for normal shadow bank portfolio lending, the macro through-the-cycle IG spread. */
+    public const CECL_BASELINE_CREDIT_SPREAD    = MacroEngine::BASE_CREDIT_SPREAD;
     /** Expansion sensitivity of direct lending origination when commercial banks tighten credit standards (SLOOS). */
     public const SLOOS_PRIVATE_CREDIT_EXPANSION = 0.30;
     /** Weight of corporate speculative default rate surges applied to direct lending portfolio provisions. */
     public const SHOCK_WEIGHT_CORPORATE_DEFAULT = 0.12;
-    /** Baseline 12-month forward recession probability threshold before proactive CECL reserve builds begin. */
+    /** Baseline 12-month forward recession probability; the lifetime loss estimate is struck at 1.0x here. */
     public const CECL_BASELINE_RECESSION_PROB   = 0.15;
-    /** Sensitivity of shadow bank CECL forward credit reserves to elevated 12-month recession risk. */
-    public const CECL_RECESSION_SENSITIVITY     = 0.25;
+    /** Lifetime-loss multiplier per unit of recession probability above baseline: a near-certain recession lifts the reserve target ~0.85x. */
+    public const CECL_RESERVE_RECESSION_SENSITIVITY = 1.00;
 
     // --- Housing Starts & M2 Liquidity Transmission ---
     /** Sensitivity of non-bank purchase mortgage originations to residential housing starts. */
@@ -112,6 +122,16 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
 
     // --- Analyst Visibility & Error ---
     // Moved to getCoverageProfile() — see MarketConsensusEngine.
+
+    public function getThroughTheCycleCreditLossRate(?Stock $stock = null): float
+    {
+        return self::PORTFOLIO_CHARGE_OFF_RATE;
+    }
+
+    public function getCreditLossHorizonYears(): float
+    {
+        return self::CECL_LIFETIME_HORIZON_YEARS;
+    }
 
     public function calculateInterestIncome(Stock $stock, MacroStateDTO $macroState, MathUtility $mathUtility, ?float $realizedWholesaleRate = null): float
     {
@@ -208,7 +228,10 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
             + ($wholesaleDebt * $lendingWeight * $directLendingYield)
             + $expectedTreasuryIncome;
 
-        $optimalEbit = $optimalEbt + $optimalInterestExpense - $optimalInterestIncome;
+        // Pre-provision: the portfolio charge-off rate is booked against EBIT by the allowance roll-forward,
+        // so the ROE target is earned after it and the operating target has to fund it.
+        $optimalCreditProvision = $this->resolveThroughTheCycleCreditProvision($stock, $earningAssets);
+        $optimalEbit = $optimalEbt + $optimalInterestExpense - $optimalInterestIncome + $optimalCreditProvision;
         $minOperatingEbit = $earningAssets * self::MIN_OPERATING_EBIT_YIELD;
         $targetEbit = max($minOperatingEbit, $optimalEbit);
 
@@ -226,7 +249,7 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
     protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
     {
         $momentum = $stock->getEarningsMomentumZ() ?? [];
-        $streams  = new \App\DTO\StreamContext($momentum, $mathUtility);
+        $streams  = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
 
         $params = $this->resolveModelParameters($stock, [
             ModelParam::MortgageOriginationWeight->value => 0.60,
@@ -245,7 +268,7 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
         // Independent stream Z-scores
         $originationZ = $streams->generateZ('origination_fees', 0.20);
         $lendingZ     = $streams->generateZ('direct_lending', 0.45);
-        $creditZ      = $streams->generateZ('credit', 0.25);
+        $creditZ      = $streams->generateExogenousZ('credit', 0.25);
 
         // 1. Mortgage Origination Volume Channel:
         // Spiking 30Y mortgage rates destroy refinancing demand and freeze home purchases.
@@ -286,16 +309,13 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
         $corporateLendingDrag = $corporateDefaultShift * self::SHOCK_WEIGHT_CORPORATE_DEFAULT * $lendingWeight;
         $macroDefaultDrag = ($outputGap < 0.0 ? abs($outputGap) * self::MACRO_DEFAULT_SCALAR : 0.0) + ($retailDefaultShift * 0.10) + $propertyDrag + $corporateLendingDrag;
 
-        $creditSpread = $macroState->macroCreditSpreadEma;
-        $spreadGap = max(0.0, $creditSpread - self::CECL_BASELINE_CREDIT_SPREAD);
-        $recessionCeclDrag = max(0.0, ($macroState->recessionProbabilityEma - self::CECL_BASELINE_RECESSION_PROB) * self::CECL_RECESSION_SENSITIVITY);
-        $ceclForwardProvision = ($spreadGap * self::CECL_FORWARD_SENSITIVITY) + $recessionCeclDrag;
-
+        // The forward-looking CECL reserve (spreads, recession forecast) moves the allowance TARGET through
+        // getForwardCreditLossMultiplier(); the ledger roll-forward books the build once. Not a margin term.
         $lossProvisionShock = ($creditZ < self::CREDIT_STRESS_Z_THRESHOLD
             ? abs($creditZ) * self::LOSS_PROVISION_SCALAR
             : ($creditZ > self::HEALTHY_CREDIT_Z_FLOOR
                 ? - ($creditZ - self::HEALTHY_CREDIT_Z_FLOOR) * self::PROVISION_REVERSAL_SCALE
-                : 0.0)) + $macroDefaultDrag + $ceclForwardProvision;
+                : 0.0)) + $macroDefaultDrag;
 
         // Shadow Bank NIM Squeeze (high VULNERABILITY):
         $mortgageSpread = $yield30y - ($policyRate + $macroState->interbankLiquiditySpreadEma);
@@ -357,6 +377,7 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
             'commercial_property_index_ema',
             'corporate_default_rate_ema',
             'housing_starts_index_ema',
+            'inflation_ema',
             'interbank_liquidity_spread_ema',
             'macro_credit_spread_ema',
             'money_supply_growth_ema',
@@ -367,7 +388,6 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
             'retail_default_rate_ema',
             'sloos_tightening_index_ema',
             'yield_30y_ema',
-            'yield_5y_ema',
         ];
     }
 }

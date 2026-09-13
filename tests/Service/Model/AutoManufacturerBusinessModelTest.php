@@ -249,6 +249,30 @@ class AutoManufacturerBusinessModelTest extends TestCase
         $this->assertLessThan($calmResult->ebit, $spikeResult->ebit);
     }
 
+    /**
+     * A vehicle is a consumer durable: demand follows the output gap at the sector's cyclicality, household
+     * sentiment and financing rates. The heavy-manufacturing parent's amplified gap and manufacturing PMI
+     * used to stack on top of those, so a mild slowdown (gap -1.5%, sentiment 85) cut volume by a quarter,
+     * which is the 2008-09 collapse and not 1991 (-12%). A 2008-scale shock must still be a collapse.
+     */
+    public function testMildSlowdownCutsVolumeByAnEleventhNotAQuarterAndPmiDoesNotStack(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('AUTO');
+        $stock->setBeta('1.35');
+
+        $mild = new MacroStateDTO(outputGapEma: -0.015, consumerSentimentIndexEma: 85.0, policyRateEma: 0.043, manufacturingPmiEma: 43.0);
+        $mildShift = $this->model->getMacroPhysics($stock, $mild)['macro_demand_shift'];
+        $this->assertLessThan(-0.08, $mildShift);
+        $this->assertGreaterThan(-0.18, $mildShift, 'a mild recession is not the 2008 auto collapse');
+
+        $mildStrongPmi = new MacroStateDTO(outputGapEma: -0.015, consumerSentimentIndexEma: 85.0, policyRateEma: 0.043, manufacturingPmiEma: 56.0);
+        $this->assertEqualsWithDelta($mildShift, $this->model->getMacroPhysics($stock, $mildStrongPmi)['macro_demand_shift'], 1e-12, 'the industrial PMI is the machinery makers\' signal, not the car buyer\'s');
+
+        $severe = new MacroStateDTO(outputGapEma: -0.06, consumerSentimentIndexEma: 55.0, policyRateEma: 0.01);
+        $this->assertLessThan(-0.30, $this->model->getMacroPhysics($stock, $severe)['macro_demand_shift'], 'a 2008-scale shock still collapses volume');
+    }
+
     public function testFalcCalibratedFinancialsUnderMacroShifts(): void
     {
         $stock = new Stock();

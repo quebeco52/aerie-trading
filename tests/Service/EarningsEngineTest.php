@@ -101,6 +101,9 @@ class EarningsEngineTest extends TestCase
         $this->mathUtilityMock->method('calculateDynamicWorkingCapitalIntensity')->willReturnCallback(
             fn($base, $cs, $cu, $ib) => $realMath->calculateDynamicWorkingCapitalIntensity($base, $cs, $cu, $ib)
         );
+        $this->mathUtilityMock->method('calculateWorkingCapitalDayShifts')->willReturnCallback(
+            fn($cs, $cu, $ib) => $realMath->calculateWorkingCapitalDayShifts($cs, $cu, $ib)
+        );
         $this->mathUtilityMock->method('calculateBayesianAnalystUpdate')->willReturnCallback(
             fn($pEst, $pVar, $sEst, $sVar) => $realMath->calculateBayesianAnalystUpdate($pEst, $pVar, $sEst, $sVar)
         );
@@ -125,6 +128,25 @@ class EarningsEngineTest extends TestCase
 
         $this->corporateMetricsMock = $this->createStub(CorporateMetrics::class);
         $this->corporateMetricsMock->method('calculateOperatingBase')->willReturn(10000000.0);
+        // The ledger builders are pure arithmetic that writes balances onto the stock. A stub that returns
+        // nothing would leave every firm here with no working capital, no plant and no lease, and the
+        // tests below that measure working capital strain would be measuring an empty ledger.
+        $realMetrics = new CorporateMetrics();
+        $this->corporateMetricsMock->method('buildWorkingCapitalBalances')->willReturnCallback(
+            fn($stock, $days, $rev, $costs) => $realMetrics->buildWorkingCapitalBalances($stock, $days, $rev, $costs)
+        );
+        $this->corporateMetricsMock->method('seedFixedAssetLedger')->willReturnCallback(
+            fn($stock, $ic, $nwc, $gw, $cip, $age = \App\Service\Math\FinancialConstants::SEED_ASSET_AGE_RATIO) => $realMetrics->seedFixedAssetLedger($stock, $ic, $nwc, $gw, $cip, $age)
+        );
+        $this->corporateMetricsMock->method('seedReceivablesAllowance')->willReturnCallback(
+            fn($stock, $rate) => $realMetrics->seedReceivablesAllowance($stock, $rate)
+        );
+        $this->corporateMetricsMock->method('calculateLeaseLiability')->willReturnCallback(
+            fn($rev, $intensity) => $realMetrics->calculateLeaseLiability($rev, $intensity)
+        );
+        $this->corporateMetricsMock->method('getIndustryDepreciationRate')->willReturnCallback(
+            fn($industry) => $realMetrics->getIndustryDepreciationRate($industry)
+        );
 
         $this->narrativeEngineMock = $this->createStub(NarrativeEngine::class);
         $this->eventDispatcherMock = $this->createMock(EventDispatcherInterface::class);
@@ -246,6 +268,12 @@ class EarningsEngineTest extends TestCase
         $this->assertNotEquals(-10.00, (float) $stock->getEarningsPerShare(), 'A company with negative EPS should still see EPS changes.');
     }
 
+    /**
+     * The income statement bridge: cash operating costs give EBITDA, and depreciation is a real expense
+     * line struck below it to give EBIT. Depreciation used to be added back on top of EBIT instead, so a
+     * heavier charge moved EBITDA and left EBIT — the line every coverage and solvency test reads —
+     * completely untouched.
+     */
     public function testEbitAndEbitdaAccountingBridge(): void
     {
         $stock = new Stock();
@@ -283,15 +311,20 @@ class EarningsEngineTest extends TestCase
         $this->assertGreaterThan(0.0, $capturedContext->quarterlyDepreciation, 'Quarterly depreciation must be positive.');
         $this->assertEqualsWithDelta(
             $capturedContext->actualRevenue - $capturedContext->operatingCosts,
-            $capturedContext->ebit,
-            0.0001,
-            'EBIT must equal revenue minus operating costs (no double-deduction).'
-        );
-        $this->assertEqualsWithDelta(
-            $capturedContext->ebit + $capturedContext->quarterlyDepreciation,
             $capturedContext->ebitda,
             0.0001,
-            'EBITDA must equal EBIT plus quarterly depreciation.'
+            'EBITDA must equal revenue minus the cash operating cost base.'
+        );
+        $this->assertEqualsWithDelta(
+            $capturedContext->ebitda - $capturedContext->quarterlyDepreciation,
+            $capturedContext->ebit,
+            0.0001,
+            'EBIT must be struck after depreciation (no double-deduction).'
+        );
+        $this->assertLessThan(
+            $capturedContext->ebitda,
+            $capturedContext->ebit,
+            'A firm that charges depreciation must report EBIT below EBITDA.'
         );
     }
 
@@ -546,7 +579,9 @@ class EarningsEngineTest extends TestCase
         for ($q = 0; $q < 4; $q++) {
             $tick = ($q * $ticksPerQuarter) + $reportingTick;
             $this->engine->calculate($stock, $positiveMacro, $tick, 252);
-            $consensusRevenues[] = (float) $stock->getLastAnalystRevenue();
+            // The stored anchor is the posterior BEFORE the walkdown, so it cannot compound through the
+            // next estimate; the number analysts PUBLISH is the anchor shaded by the walkdown.
+            $consensusRevenues[] = (float) $stock->getLastAnalystRevenue() * (1.0 - \App\Service\Market\MarketConsensusEngine::ANALYST_WALKDOWN_BIAS);
             $actualRevenues[] = (float) $stock->getTotalRevenue() / 4.0;
         }
 
@@ -641,19 +676,25 @@ class EarningsEngineTest extends TestCase
         // Q1 (fiscal quarter 0, seasonal factor 0.85)
         $q1Tick = $reportingTick;
         $this->engine->calculate($stock, $macro, $q1Tick, 252);
-        $q1Revenue = (float) $stock->getTotalRevenue();
+        $q1Revenue = (float) $stock->getPreviousRevenue(); // reported quarterly revenue, annualized
+        $q1RunRate = (float) $stock->getTotalRevenue();    // seasonally adjusted annual rate
 
         // Q4 (fiscal quarter 3, seasonal factor 1.35)
         $q4Tick = (3 * $ticksPerQuarter) + $reportingTick;
         $this->engine->calculate($stock, $macro, $q4Tick, 252);
-        $q4Revenue = (float) $stock->getTotalRevenue();
+        $q4Revenue = (float) $stock->getPreviousRevenue();
+        $q4RunRate = (float) $stock->getTotalRevenue();
 
-        // Peak holiday Q4 revenue must significantly exceed trough Q1 revenue
+        // Peak holiday Q4 reported revenue must significantly exceed trough Q1 reported revenue
         $this->assertGreaterThan(
-            $q1Revenue,
+            $q1Revenue * 1.30,
             $q4Revenue,
             'Seasonal holiday quarter (Q4) revenue must exceed off-peak quarter (Q1) for Internet Retail.'
         );
+
+        // ...while the seasonally adjusted run-rate is the same structural capacity in both quarters: the
+        // season is not mistaken for a change in the business.
+        $this->assertEqualsWithDelta($q1RunRate, $q4RunRate, $q1RunRate * 0.01, 'SAAR must not carry seasonal swings');
     }
 
     public function testCapacityUtilizationOvertimeConvexityAndClamping(): void

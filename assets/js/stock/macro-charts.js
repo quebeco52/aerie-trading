@@ -1,5 +1,6 @@
 import { THEME_COLORS } from '../utils/colors.js';
 import { destroyChartInstance } from '../utils/chart-config.js';
+import { renderWhenVisible, resetLazyCharts } from '../utils/lazy-chart.js';
 
 let macroEconomyChartInstance = null;
 let macroRatesChartInstance = null;
@@ -44,10 +45,11 @@ function updateMacroHud(d) {
 
     setHud('hud-macroEconomyChart', `CPI: ${last(d.inflationData).toFixed(1)}% | Gap: ${last(d.outputGapData) >= 0 ? '+' : ''}${last(d.outputGapData).toFixed(1)}%`);
     setHud('hud-macroRatesChart', `PR: ${last(d.policyRateData).toFixed(2)}% | 10Y: ${last(d.yield10yData).toFixed(2)}%`);
-    setHud('hud-macroMortgageChart', `30Y: ${last(d.mortgageYieldData).toFixed(2)}% | Spr: ${last(d.spread30yData).toFixed(2)}%`);
+    setHud('hud-macroMortgageChart', `30Y: ${last(d.mortgageYieldData).toFixed(2)}% | vs PR: ${last(d.spread30yData).toFixed(2)}%`);
     setHud('hud-macroRiskChart', `VIX: ${last(d.volData).toFixed(1)}% | ERP: ${last(d.erpData).toFixed(1)}%`);
     setHud('hud-macroLaborCreditChart', `Unemp: ${last(d.unemploymentData).toFixed(1)}% | Wage: ${last(d.wageGrowthData).toFixed(1)}%`);
-    setHud('hud-macroInterbankLiquidityChart', `TED: ${last(d.interbankSpreadBpsData).toFixed(0)} bps`);
+    const lastTed = [...d.interbankSpreadBpsData].reverse().find(v => v !== null);
+    setHud('hud-macroInterbankLiquidityChart', lastTed !== undefined ? `TED: ${lastTed.toFixed(0)} bps` : 'TED: -');
     setHud('hud-macroPropertyChart', `CRE: ${last(d.creEmaData).toFixed(1)} | Resi: ${last(d.residentialEmaData).toFixed(1)} | Starts: ${last(d.housingStartsData).toFixed(1)}`);
     setHud('hud-macroSentimentChart', `Sent: ${last(d.sentimentData).toFixed(0)} | M&A: ${last(d.dealActivityData).toFixed(0)}`);
     setHud('hud-macroCommoditiesChart', `Energy: ${last(d.energyPriceData).toFixed(1)} | Crack: $${last(d.crackSpreadData).toFixed(1)}`);
@@ -145,7 +147,8 @@ export function updateMacroCharts(reports, timeframe = currentMacroTimeframe) {
 
         let rawY30 = report.yield30y_ema || report.yield30yEma;
         let y30 = rawY30 ? parseFloat(rawY30) * 100 : null;
-        let mortgageRate = y30 !== null ? y30 + 1.80 : null; // 180 bps prime residential lending spread
+        // Mirrors MacroEngine::RESIDENTIAL_MORTGAGE_SPREAD: 30Y fixed mortgages price off the 10Y (prepayment duration) + 170 bps
+        let mortgageRate = y10 !== null && !isNaN(y10) ? y10 + 1.70 : null;
         mortgageYieldData.push(mortgageRate);
 
         let creditSpread = report.macro_credit_spread_ema || report.macroCreditSpreadEma;
@@ -163,7 +166,7 @@ export function updateMacroCharts(reports, timeframe = currentMacroTimeframe) {
         yield30yData.push(y30);
 
         spread2s10sData.push((y10 !== null && y2 !== null) ? y10 - y2 : null);
-        spread30yData.push((mortgageRate !== null && pr !== null) ? mortgageRate - pr : null);
+        spread30yData.push((mortgageRate !== null && pr !== null && !isNaN(pr)) ? mortgageRate - pr : null);
 
         erpData.push(parseFloat(report.equity_risk_premium) * 100);
         volData.push(parseFloat(report.market_volatility) * 100);
@@ -188,8 +191,11 @@ export function updateMacroCharts(reports, timeframe = currentMacroTimeframe) {
         freightEmaData.push(parseFloat(report.freight_rate_index_ema || report.freight_rate_index || 100.0));
         residentialEmaData.push(parseFloat(report.residential_property_index_ema || report.residential_property_index || 100.0));
 
-        let rawInterbank = report.interbank_liquidity_spread_ema ?? report.interbank_liquidity_spread ?? report.interbankLiquiditySpreadEma ?? report.interbankLiquiditySpread ?? 0.0015;
-        interbankSpreadBpsData.push(parseFloat(rawInterbank) * 10000);
+        // The interbank columns were added to macro_report in Aug 2026 as NOT NULL, so every report written
+        // before that reads 0.0000. The CIR process never drops below INTERBANK_MIN_SPREAD (1 bp), so a
+        // non-positive value is "not recorded", not a reading: plot a gap rather than a fake zero.
+        const rawInterbank = parseFloat(report.interbank_liquidity_spread_ema ?? report.interbank_liquidity_spread ?? report.interbankLiquiditySpreadEma ?? report.interbankLiquiditySpread ?? NaN);
+        interbankSpreadBpsData.push(rawInterbank > 0 ? rawInterbank * 10000 : null);
 
         let rawCreditSpread = report.macro_credit_spread_ema ?? report.macro_credit_spread ?? report.macroCreditSpreadEma ?? report.macroCreditSpread ?? 0.020;
         creditSpreadBpsData.push(parseFloat(rawCreditSpread) * 10000);
@@ -229,11 +235,13 @@ export function updateMacroCharts(reports, timeframe = currentMacroTimeframe) {
         foodLagPctData.push(parseFloat(rawAgriLag) * 100);
 
         let rawEnergy = parseFloat(report.energy_price_index_ema || report.energy_price_index || 100.0);
-        let energyDragBps = ((rawEnergy - 100.0) / 100.0) * 0.03 * 10000;
+        // Mirrors MacroEngine::ENERGY_COST_PUSH_TRANSMISSION (headline inflation per unit energy shock)
+        let energyDragBps = ((rawEnergy - 100.0) / 100.0) * 0.025 * 10000;
         energySupplyDragData.push(energyDragBps);
 
         let rawFreight = parseFloat(report.freight_rate_index_ema || report.freight_rate_index || 100.0);
-        let freightDragBps = ((rawFreight - 100.0) / 100.0) * 0.01 * 10000;
+        // Mirrors MacroEngine::CORE_GOODS_FREIGHT_SENSITIVITY x INFLATION_WEIGHT_GOODS (headline share of the core-goods freight push)
+        let freightDragBps = ((rawFreight - 100.0) / 100.0) * 0.015 * 0.25 * 10000;
         freightSupplyDragData.push(freightDragBps);
 
         // Economic Growth Momentum & Solow-Swan Productivity Decomposition
@@ -241,15 +249,19 @@ export function updateMacroCharts(reports, timeframe = currentMacroTimeframe) {
         let currentTfp = parseFloat(report.total_factor_productivity_index_ema ?? report.total_factor_productivity_index ?? report.totalFactorProductivityIndexEma ?? report.totalFactorProductivityIndex ?? 100.0);
         let currentGap = parseFloat(report.output_gap_ema ?? report.output_gap ?? 0.0) * 100;
 
-        let prevTfp = index > 0
-            ? parseFloat(slicedReports[index - 1].total_factor_productivity_index_ema ?? slicedReports[index - 1].total_factor_productivity_index ?? slicedReports[index - 1].totalFactorProductivityIndexEma ?? slicedReports[index - 1].totalFactorProductivityIndex ?? currentTfp)
-            : currentTfp / Math.exp(0.015 * 0.25);
+        // TFP trend growth is measured over a trailing year: annualizing a single quarter's log-difference of a
+        // diffusion with 2.2%/sqrt(yr) volatility prints +/-4% noise every tick and swamps the business cycle.
+        const tfpLookback = Math.min(4, index);
+        let prevTfp = tfpLookback > 0
+            ? parseFloat(slicedReports[index - tfpLookback].total_factor_productivity_index_ema ?? slicedReports[index - tfpLookback].total_factor_productivity_index ?? slicedReports[index - tfpLookback].totalFactorProductivityIndexEma ?? slicedReports[index - tfpLookback].totalFactorProductivityIndex ?? currentTfp)
+            : currentTfp / Math.exp(0.015);
+        const tfpSpanYears = tfpLookback > 0 ? tfpLookback * 0.25 : 1.0;
         let prevGap = index > 0
             ? parseFloat(slicedReports[index - 1].output_gap_ema ?? slicedReports[index - 1].output_gap ?? currentGap) * 100
             : currentGap;
 
-        // Annualized TFP productivity growth rate (%) - allowing negative values during recessions
-        let tfpGrowth = Math.max(-6.0, Math.min(8.0, (Math.log(Math.max(1.0, currentTfp) / Math.max(1.0, prevTfp)) / 0.25) * 100));
+        // Trailing-year TFP productivity growth rate (%) - allowing negative values during recessions
+        let tfpGrowth = Math.max(-6.0, Math.min(8.0, (Math.log(Math.max(1.0, currentTfp) / Math.max(1.0, prevTfp)) / tfpSpanYears) * 100));
 
         // Solow-Swan Real Potential GDP Growth (%): Structural Labor (0.5%) + TFP Growth
         let potentialGrowth = 0.50 + tfpGrowth;
@@ -354,34 +366,34 @@ export function updateMacroCharts(reports, timeframe = currentMacroTimeframe) {
         const btn = document.getElementById(`btn-macro-${tf}`);
         if (btn) {
             if (tf === currentMacroTimeframe) {
-                btn.className = 'macro-range-btn px-3 py-1 text-xs font-bold rounded-lg bg-primary text-[#001a42] shadow-md shadow-primary/20 transition-all cursor-pointer';
+                btn.className = 'macro-range-btn px-3 py-1 text-xs font-bold rounded-lg bg-primary text-on-primary shadow-md shadow-primary/20 transition-all cursor-pointer';
             } else {
                 btn.className = 'macro-range-btn px-3 py-1 text-xs font-bold rounded-lg bg-surface-container text-on-surface-variant hover:bg-surface-container-high transition-all cursor-pointer';
             }
         }
     });
 
-    renderMacroEconomyChart(labels, inflationData, outputGapData, capitalOverhangData, tipsBreakevenData);
-    renderMacroRatesChart(labels, policyRateData, yield2yData, yield5yData, yield10yData, spread2s10sData, targetRateData);
-    renderMacroMortgageChart(labels, policyRateData, mortgageYieldData, spread30yData);
-    renderMacroRiskChart(labels, erpData, volData, creditSpreadBpsData, corpBorrowingData);
-    renderMacroLaborCreditChart(labels, unemploymentData, jobVacanciesData, wageGrowthData, nairuData);
-    renderMacroCommoditiesChart(labels, energyPriceData, metalsEmaData, agriEmaData, crackSpreadData);
-    renderMacroPropertyChart(labels, creEmaData, residentialEmaData, housingStartsData);
-    renderMacroTradeLogisticsChart(labels, fxEmaData, freightEmaData, gscpiData);
-    renderMacroSentimentChart(labels, sentimentData, retailDefaultData, dealActivityData, corporateDefaultPctData);
-    renderMacroGovtSpendingChart(labels, govtSpendingEmaData, sovereignDebtData);
-    renderMacroInterbankLiquidityChart(labels, interbankSpreadBpsData, creditSpreadBpsData);
-    renderMacroTermPremiumChart(labels, yield10yData, riskNeutralData, termPremiumData, naturalRateData);
-    renderMacroGdpGrowthChart(labels, nominalGdpGrowthData, realGdpGrowthData, potentialGdpGrowthData, tfpGrowthData, recessionProbData);
-    renderMacroBalanceSheetChart(labels, balanceSheetAssetsData, balanceSheetData);
-    renderMacroFciChart(labels, fciData, fciEmaData, sloosData);
-    renderMacroCostPushChart(labels, agriLagData, energySupplyDragData, freightSupplyDragData);
-    renderMacroSectoralInflationChart(labels, inflationData, supercoreInflationData, coreGoodsInflationData, foodLagPctData, ppiData);
-    renderMacroCreditCliffChart(labels, creditSpreadBpsData, highYieldSpreadBpsData, creditCliffRatioData, corporateDefaultBpsData);
-    renderMacroInventoryCycleChart(labels, inventoryStockGapData, outputGapData, energyBufferData, capacityUtilizationData);
-    renderMacroFaitChart(labels, faitCumulativeGapData, faitOffsetBpsData, policyRateData, targetRateData);
-    renderMacroLeadingIndicatorsChart(labels, pmiData, housingStartsData, moneySupplyGrowthData, tradeBalanceData, ppiData);
+    renderWhenVisible('macroEconomyChart', () => renderMacroEconomyChart(labels, inflationData, outputGapData, capitalOverhangData, tipsBreakevenData));
+    renderWhenVisible('macroRatesChart', () => renderMacroRatesChart(labels, policyRateData, yield2yData, yield5yData, yield10yData, spread2s10sData, targetRateData));
+    renderWhenVisible('macroMortgageChart', () => renderMacroMortgageChart(labels, policyRateData, mortgageYieldData, spread30yData));
+    renderWhenVisible('macroRiskChart', () => renderMacroRiskChart(labels, erpData, volData, creditSpreadBpsData, corpBorrowingData));
+    renderWhenVisible('macroLaborCreditChart', () => renderMacroLaborCreditChart(labels, unemploymentData, jobVacanciesData, wageGrowthData, nairuData));
+    renderWhenVisible('macroCommoditiesChart', () => renderMacroCommoditiesChart(labels, energyPriceData, metalsEmaData, agriEmaData, crackSpreadData));
+    renderWhenVisible('macroPropertyChart', () => renderMacroPropertyChart(labels, creEmaData, residentialEmaData, housingStartsData));
+    renderWhenVisible('macroTradeLogisticsChart', () => renderMacroTradeLogisticsChart(labels, fxEmaData, freightEmaData, gscpiData));
+    renderWhenVisible('macroSentimentChart', () => renderMacroSentimentChart(labels, sentimentData, retailDefaultData, dealActivityData, corporateDefaultPctData));
+    renderWhenVisible('macroGovtSpendingChart', () => renderMacroGovtSpendingChart(labels, govtSpendingEmaData, sovereignDebtData));
+    renderWhenVisible('macroInterbankLiquidityChart', () => renderMacroInterbankLiquidityChart(labels, interbankSpreadBpsData, creditSpreadBpsData));
+    renderWhenVisible('macroTermPremiumChart', () => renderMacroTermPremiumChart(labels, yield10yData, riskNeutralData, termPremiumData, naturalRateData));
+    renderWhenVisible('macroGdpGrowthChart', () => renderMacroGdpGrowthChart(labels, nominalGdpGrowthData, realGdpGrowthData, potentialGdpGrowthData, tfpGrowthData, recessionProbData));
+    renderWhenVisible('macroBalanceSheetChart', () => renderMacroBalanceSheetChart(labels, balanceSheetAssetsData, balanceSheetData));
+    renderWhenVisible('macroFciChart', () => renderMacroFciChart(labels, fciData, fciEmaData, sloosData));
+    renderWhenVisible('macroCostPushChart', () => renderMacroCostPushChart(labels, agriLagData, energySupplyDragData, freightSupplyDragData));
+    renderWhenVisible('macroSectoralInflationChart', () => renderMacroSectoralInflationChart(labels, inflationData, supercoreInflationData, coreGoodsInflationData, foodLagPctData, ppiData));
+    renderWhenVisible('macroCreditCliffChart', () => renderMacroCreditCliffChart(labels, creditSpreadBpsData, highYieldSpreadBpsData, creditCliffRatioData, corporateDefaultBpsData));
+    renderWhenVisible('macroInventoryCycleChart', () => renderMacroInventoryCycleChart(labels, inventoryStockGapData, outputGapData, energyBufferData, capacityUtilizationData));
+    renderWhenVisible('macroFaitChart', () => renderMacroFaitChart(labels, faitCumulativeGapData, faitOffsetBpsData, policyRateData, targetRateData));
+    renderWhenVisible('macroLeadingIndicatorsChart', () => renderMacroLeadingIndicatorsChart(labels, pmiData, housingStartsData, moneySupplyGrowthData, tradeBalanceData, ppiData));
 }
 
 function renderMacroEconomyChart(labels, inflationData, outputGapData, capitalOverhangData, tipsBreakevenData) {
@@ -614,7 +626,7 @@ function renderMacroMortgageChart(labels, policyRateData, yield30yData, spread30
                 },
                 {
                     type: 'bar',
-                    label: 'Mortgage Spread (30Y-PR)',
+                    label: 'Mortgage Spread (30Y Mtg - PR)',
                     data: spread30yData,
                     backgroundColor: spread30yData.map(val => val !== null && val < 0 ? 'rgba(255, 179, 173, 0.4)' : 'rgba(251, 113, 133, 0.4)'),
                     borderRadius: 3,
@@ -2294,6 +2306,8 @@ export function resizeMacroCharts() {
 }
 
 export function destroyMacroCharts() {
+    // Charts that were never scrolled into view must not build themselves after teardown.
+    resetLazyCharts();
     macroEconomyChartInstance = destroyChartInstance(macroEconomyChartInstance);
     macroRatesChartInstance = destroyChartInstance(macroRatesChartInstance);
     macroMortgageChartInstance = destroyChartInstance(macroMortgageChartInstance);

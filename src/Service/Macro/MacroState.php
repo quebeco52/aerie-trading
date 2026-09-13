@@ -77,6 +77,9 @@ class MacroState
     public float $structuralSlope = -0.0150;
     public float $nsCurvature = 0.0;
     public float $nsCurvature2 = 0.0;
+    public float $nsBeta1 = -0.0175;
+    public float $nsBaseTermPremium = MacroEngine::NS_BASE_TERM_PREMIUM;
+    public float $nsLongEndPremium = MacroEngine::NS_BASE_TERM_PREMIUM;
 
     public float $yield2y = 0.0275;
     public float $yield2yEma = 0.0275;
@@ -91,6 +94,10 @@ class MacroState
     public float $termPremium10yEma = 0.0125;
     public float $riskNeutral10y = 0.0250;
     public float $riskNeutral10yEma = 0.0250;
+    public float $termPremiumShock = 0.0;
+    public float $termPremiumRegime = MacroEngine::NS_BASE_TERM_PREMIUM;
+    public float $perceivedNeutralRate = MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION;
+    public float $restrictiveDuration = 0.0;
 
     public bool $qeActive = false;
     public float $qeIntensity = 0.0;
@@ -118,6 +125,8 @@ class MacroState
     public float $marketJumpMultiplier = 1.0;
     /** @var array<string, float> Per-macro-sector shock, keyed by Sectors::MACRO_SECTORS. */
     public array $sectorZ = [];
+    /** @var array<string, float> Persistent per-macro-sector demand factor (OU process, unit variance), keyed by Sectors::MACRO_SECTORS. */
+    public array $sectorDemandZ = [];
     public float $financialConditionsIndex = 0.0;
     public float $financialConditionsIndexEma = 0.0;
 
@@ -263,6 +272,9 @@ class MacroState
         $state->structuralSlope = $data['structural_slope'] ?? -0.0150;
         $state->nsCurvature = $data['ns_curvature'] ?? 0.0;
         $state->nsCurvature2 = (float) ($data['ns_curvature2'] ?? 0.0);
+        $state->nsBeta1 = (float) ($data['ns_beta1'] ?? ($state->policyRate - $state->nsLevel));
+        $state->nsBaseTermPremium = (float) ($data['ns_base_term_premium'] ?? MacroEngine::NS_BASE_TERM_PREMIUM);
+        $state->nsLongEndPremium = (float) ($data['ns_long_end_premium'] ?? MacroEngine::NS_BASE_TERM_PREMIUM);
 
         $state->yield2y = $data['yield_2y'] ?? 0.0275;
         $state->yield2yEma = $data['yield_2y_ema'] ?? $state->yield2y;
@@ -277,6 +289,10 @@ class MacroState
         $state->termPremium10yEma = (float) ($data['term_premium_10y_ema'] ?? $state->termPremium10y);
         $state->riskNeutral10y = (float) ($data['risk_neutral_10y'] ?? 0.0250);
         $state->riskNeutral10yEma = (float) ($data['risk_neutral_10y_ema'] ?? $state->riskNeutral10y);
+        $state->termPremiumShock = (float) ($data['term_premium_shock'] ?? 0.0);
+        $state->termPremiumRegime = (float) ($data['term_premium_regime'] ?? MacroEngine::NS_BASE_TERM_PREMIUM);
+        $state->perceivedNeutralRate = (float) ($data['perceived_neutral_rate'] ?? (MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION));
+        $state->restrictiveDuration = (float) ($data['restrictive_duration'] ?? 0.0);
 
         $state->balanceSheetIntensity = (float) ($data['balance_sheet_intensity'] ?? ($data['qe_intensity'] ?? 0.0));
         $state->balanceSheetHoldTimer = (float) ($data['balance_sheet_hold_timer'] ?? 0.0);
@@ -303,6 +319,7 @@ class MacroState
         $state->marketZLatent = (float) ($data['market_z_latent'] ?? 0.0);
         $state->marketJumpMultiplier = (float) ($data['market_jump_multiplier'] ?? 1.0);
         $state->sectorZ = is_array($data['sector_z'] ?? null) ? array_map('floatval', $data['sector_z']) : [];
+        $state->sectorDemandZ = is_array($data['sector_demand_z'] ?? null) ? array_map('floatval', $data['sector_demand_z']) : [];
         $state->financialConditionsIndex = (float) ($data['financial_conditions_index'] ?? 0.0);
         $state->financialConditionsIndexEma = (float) ($data['financial_conditions_index_ema'] ?? $state->financialConditionsIndex);
 
@@ -437,6 +454,9 @@ class MacroState
             'structural_slope' => $this->structuralSlope,
             'ns_curvature' => $this->nsCurvature,
             'ns_curvature2' => $this->nsCurvature2,
+            'ns_beta1' => $this->nsBeta1,
+            'ns_base_term_premium' => $this->nsBaseTermPremium,
+            'ns_long_end_premium' => $this->nsLongEndPremium,
             'yield_2y' => $this->yield2y,
             'yield_2y_ema' => $this->yield2yEma,
             'yield_5y' => $this->yield5y,
@@ -449,6 +469,10 @@ class MacroState
             'term_premium_10y_ema' => $this->termPremium10yEma,
             'risk_neutral_10y' => $this->riskNeutral10y,
             'risk_neutral_10y_ema' => $this->riskNeutral10yEma,
+            'term_premium_shock' => $this->termPremiumShock,
+            'term_premium_regime' => $this->termPremiumRegime,
+            'perceived_neutral_rate' => $this->perceivedNeutralRate,
+            'restrictive_duration' => $this->restrictiveDuration,
             'balance_sheet_intensity' => $this->balanceSheetIntensity,
             'balance_sheet_hold_timer' => $this->balanceSheetHoldTimer,
             'qe_active' => $this->qeActive,
@@ -471,6 +495,7 @@ class MacroState
             'market_z_latent' => $this->marketZLatent,
             'market_jump_multiplier' => $this->marketJumpMultiplier,
             'sector_z' => $this->sectorZ,
+            'sector_demand_z' => $this->sectorDemandZ,
             'financial_conditions_index' => $this->financialConditionsIndex,
             'financial_conditions_index_ema' => $this->financialConditionsIndexEma,
             'macro_credit_spread' => $this->macroCreditSpread,

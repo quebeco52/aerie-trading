@@ -207,6 +207,45 @@ class MacroAggregateSubsystemTest extends TestCase
         $this->assertLessThan(50.0, $stateBust->manufacturingPmi, 'Contractionary signals must depress PMI below neutral 50');
     }
 
+    /**
+     * A diffusion index measures change, not level. Two quarters into a V-shaped recovery the output gap is
+     * still negative and capacity utilization still slack, yet firms report improvement, so the index reads in
+     * the high 50s (1983, 2009-2010). The CU-level weighting that came before held it in the mid-40s for a year
+     * after the trough, lagging the cycle it is meant to lead.
+     */
+    public function testPmiLeadsTheRecoveryWhileTheLevelIsStillBelowTrend(): void
+    {
+        $recovery = new MacroState();
+        $recovery->capacityUtilizationRate = 0.77;
+        $recovery->outputGap = -0.009;
+        $recovery->outputGapEma = -0.018; // 3.6% annualized real growth over potential at the quarter EMA horizon
+        $recovery->inventoryStockGap = 0.0;
+        $recovery->sloosTighteningIndexEma = 0.10;
+        $recovery->manufacturingPmi = 44.0;
+
+        $this->subsystem->calculateManufacturingPmi($recovery, 0.25);
+        $this->assertGreaterThan(48.0, $recovery->manufacturingPmi, 'one quarter into a fast recovery the index is already off its lows');
+
+        for ($i = 0; $i < 8; $i++) {
+            $this->subsystem->calculateManufacturingPmi($recovery, 0.25);
+        }
+        $this->assertGreaterThan(55.0, $recovery->manufacturingPmi, 'a sustained 3.6% growth surplus reads in the high 50s despite slack capacity');
+        $this->assertLessThan(MacroEngine::MAX_PMI, $recovery->manufacturingPmi);
+
+        $slowdown = new MacroState();
+        $slowdown->capacityUtilizationRate = 0.81; // tight capacity, but growth has stalled
+        $slowdown->outputGap = 0.015;
+        $slowdown->outputGapEma = 0.020; // -2% annualized growth shortfall
+        $slowdown->inventoryStockGap = 0.0;
+        $slowdown->sloosTighteningIndexEma = 0.0;
+        $slowdown->manufacturingPmi = 50.0;
+
+        for ($i = 0; $i < 8; $i++) {
+            $this->subsystem->calculateManufacturingPmi($slowdown, 0.25);
+        }
+        $this->assertLessThan(48.0, $slowdown->manufacturingPmi, 'a stalling boom reads contractionary while the level of activity is still high (2022)');
+    }
+
     public function testCalculateProducerPriceInflation(): void
     {
         $dt = 0.25;
@@ -223,5 +262,66 @@ class MacroAggregateSubsystemTest extends TestCase
         $this->subsystem->calculateProducerPriceInflation($state, $tfp, $dt);
         $this->assertGreaterThan(MacroEngine::TARGET_INFLATION, $state->producerPriceInflation, 'Upstream commodity surges and supply frictions must drive PPI above CPI target');
     }
-}
 
+    public function testAHighTermPremiumEraTightensBusinessBorrowingAgainstAStructuralNeutral(): void
+    {
+        $baseline = new MacroState();
+        $baseline->outputGap = 0.0;
+        $baseline->outputGapEma = 0.0;
+        $baseline->policyRate = MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION;
+        $baseline->inflation = MacroEngine::TARGET_INFLATION;
+        $scale5y = \App\Service\Math\MathUtility::calculateTermPremiumDurationScale(5.0, MacroEngine::TERM_PREMIUM_DURATION_HORIZON_YEARS);
+        $neutral5y = $baseline->policyRate + MacroEngine::NS_BASE_TERM_PREMIUM * $scale5y;
+
+        $highEra = clone $baseline;
+        $highEra->termPremiumRegime = 0.020;
+        $fiveYearInHighEra = $baseline->policyRate + 0.020 * $scale5y;
+
+        $gapBaseline = $this->subsystem->calculateOutputGap($baseline, $neutral5y, MacroEngine::BASE_NATURAL_RATE, 0.25, 1.0);
+        $gapHighEra = $this->subsystem->calculateOutputGap($highEra, $fiveYearInHighEra, MacroEngine::BASE_NATURAL_RATE, 0.25, 1.0);
+
+        $this->assertLessThan($gapBaseline, $gapHighEra, 'The neutral is structural: a premium era that lifts the five-year is a real tightening of business borrowing, which the Taylor rule long-rate offset, not the IS curve, is there to lean against.');
+    }
+
+
+    public function testGovernmentSpendingAboveBaselineLiftsOutputGapDrift(): void
+    {
+        $baseline = new MacroState();
+        $baseline->outputGap = 0.0;
+        $baseline->outputGapEma = 0.0;
+        $baseline->governmentSpendingIndexEma = MacroEngine::GOVT_SPENDING_BASELINE;
+
+        $stimulus = clone $baseline;
+        $stimulus->governmentSpendingIndexEma = MacroEngine::GOVT_SPENDING_BASELINE * 1.10;
+
+        $gapBaseline = $this->subsystem->calculateOutputGap($baseline, 0.035, MacroEngine::BASE_NATURAL_RATE, 0.25, 1.0);
+        $gapStimulus = $this->subsystem->calculateOutputGap($stimulus, 0.035, MacroEngine::BASE_NATURAL_RATE, 0.25, 1.0);
+
+        $expectedImpulse = MacroEngine::KALDOR_GOVT_SPENDING_MULTIPLIER * 0.10 * 0.25;
+        $this->assertEqualsWithDelta(
+            $expectedImpulse,
+            $gapStimulus - $gapBaseline,
+            1e-9,
+            'A 10% public spending increase must add the calibrated demand impulse to the output gap drift.'
+        );
+    }
+
+    public function testFarmPriceCollapseLowersFoodCostPushBelowZero(): void
+    {
+        $state = new MacroState();
+        $state->agriculturalCommodityIndex = MacroEngine::AGRI_BASELINE * 0.80;
+        $state->agriCostPushLag = 0.0;
+
+        for ($i = 0; $i < 8; $i++) {
+            $this->subsystem->calculateInflation($state, MacroEngine::TARGET_INFLATION, 1.0, 0.25);
+        }
+
+        $this->assertLessThan(0.0, $state->agriCostPushLag, 'Falling farm prices must pass through as a food-CPI dividend, symmetric to a spike.');
+        $this->assertEqualsWithDelta(
+            -0.20 * MacroEngine::AGRI_COST_PUSH_TRANSMISSION,
+            $state->agriCostPushLag,
+            0.0005,
+            'After two years the distributed lag must have converged to the full symmetric pass-through.'
+        );
+    }
+}

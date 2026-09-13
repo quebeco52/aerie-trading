@@ -59,7 +59,7 @@ class InsuranceBusinessModelTest extends TestCase
             ->onlyMethods(['generateStandardNormal'])
             ->getMock();
         $mathUtilityMock->method('generateStandardNormal')
-            ->willReturnOnConsecutiveCalls(0.0, -2.5); // Revenue Z = 0.0, Claim Z = -2.5 (Severe catastrophe)
+            ->willReturnOnConsecutiveCalls(0.0, 0.0, -2.5); // Firm factor = 0.0, Revenue Z = 0.0, Claim Z = -2.5 (Severe catastrophe)
 
         $macroState = \App\DTO\MacroStateDTO::fromArray([
             'inflation_ema' => 0.02,
@@ -141,7 +141,7 @@ class InsuranceBusinessModelTest extends TestCase
             ->getMock();
         // Revenue Z = 0.0 (no revenue shock), Claim Z = 2.0 (benign environment)
         $mathUtilityMock->method('generateStandardNormal')
-            ->willReturnOnConsecutiveCalls(0.0, 2.0);
+            ->willReturnOnConsecutiveCalls(0.0, 0.0, 2.0); // Firm factor = 0.0, Revenue Z = 0.0, Claim Z = 2.0
 
         $macroState = \App\DTO\MacroStateDTO::fromArray([
             'inflation_ema' => 0.02,
@@ -200,7 +200,7 @@ class InsuranceBusinessModelTest extends TestCase
             ->onlyMethods(['generateStandardNormal'])
             ->getMock();
         $mockNegRevenue->method('generateStandardNormal')
-            ->willReturnOnConsecutiveCalls(-2.0, 0.0); // Revenue Z = -2.0, Claim Z = 0.0 (neutral claims)
+            ->willReturnOnConsecutiveCalls(0.0, -2.0 / sqrt(1.0 - 0.16), 0.0); // Firm factor = 0.0, composite Revenue Z = -2.0 (financial loading 0.40), Claim Z = 0.0
 
         $resultNeg = $model->computeActualFinancials(
             $stock,
@@ -217,7 +217,7 @@ class InsuranceBusinessModelTest extends TestCase
             ->onlyMethods(['generateStandardNormal'])
             ->getMock();
         $mockPosRevenue->method('generateStandardNormal')
-            ->willReturnOnConsecutiveCalls(2.0, 0.0); // Revenue Z = 2.0, Claim Z = 0.0 (neutral claims)
+            ->willReturnOnConsecutiveCalls(0.0, 2.0 / sqrt(1.0 - 0.16), 0.0); // Firm factor = 0.0, composite Revenue Z = 2.0 (financial loading 0.40), Claim Z = 0.0
 
         $resultPos = $model->computeActualFinancials(
             $stock,

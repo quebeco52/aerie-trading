@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Service\Model\Sector;
 
+use App\DTO\DebtExpansionAppetiteDTO;
+
 use App\Service\Model\BusinessModelInterface;
 
 use App\Data\ModelParam;
@@ -25,6 +27,18 @@ use App\Service\Math\FinancialConstants;
  */
 class AssetManagementBusinessModel extends BaseFinancialBusinessModel
 {
+    // --- Operating Cyclicality & Demand Structure ---
+    /** Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). AUM and flows amplify the market cycle. */
+    public const OPERATING_CYCLICALITY = 1.20;
+
+    // --- Balance Sheet Realism ---
+    /** Stock-based compensation as a fraction of revenue (ASC 718): non-cash, added back to FCF, settled in new shares. Portfolio manager retention grants settle in stock. */
+    public const STOCK_COMPENSATION_INTENSITY = 0.05;
+
+    // --- Labor Intensity ---
+    /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze. Portfolio manager and distribution compensation dominates asset manager overhead. */
+    public const FIXED_COST_LABOR_SHARE = 0.70;
+
     // --- Analyst Visibility & Error ---
     /** Base coverage visibility for asset managers with quarterly public AUM disclosures. */
     public const BASE_COVERAGE_VISIBILITY = 0.45;
@@ -307,7 +321,7 @@ class AssetManagementBusinessModel extends BaseFinancialBusinessModel
         $perfScalar      = $params[ModelParam::PerformanceFeeScalar];
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
-        $streams  = new \App\DTO\StreamContext($momentum, $mathUtility);
+        $streams  = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
 
         // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
         $activeWeights = $streams->resolveActiveStreamWeights([
@@ -325,7 +339,7 @@ class AssetManagementBusinessModel extends BaseFinancialBusinessModel
         // 1. AUM Mark-to-Market Beta & M2 Liquidity Inflows (Base Management Fee Stream):
         // When equity/credit markets rise or fall, or systemic broad money (M2) expands, base AUM fee revenue expands or contracts.
         $outputGap = $macroState->outputGapEma;
-        $aumMarketBeta = $outputGap * abs((float) $stock->getBeta()) * $aumBetaScalar;
+        $aumMarketBeta = $outputGap * $this->getOperatingCyclicality($stock) * $aumBetaScalar;
         $m2InflowBoost = MathUtility::calculateBroadMoneyLiquidityShift($macroState->moneySupplyGrowthEma, sensitivity: self::M2_AUM_INFLOW_SENSITIVITY);
 
         // 2. Asymmetric Performance Fees & Institutional Redemptions (Incentive Fee Stream):
@@ -452,9 +466,9 @@ class AssetManagementBusinessModel extends BaseFinancialBusinessModel
         return max(0.0, (self::TREASURY_BOND_WEIGHT * $bondReturn) + (self::TREASURY_EQUITY_WEIGHT * $equityReturn));
     }
 
-    public function getDebtExpansionAggressiveness(float $spreadMultiplier, float $totalDebt = 0.0, float $customerDeposits = 0.0, float $targetOperatingCash = 0.0, float $currentTreasury = 0.0): array
+    public function getDebtExpansionAggressiveness(float $spreadMultiplier, float $totalDebt = 0.0, float $customerDeposits = 0.0, float $targetOperatingCash = 0.0, float $currentTreasury = 0.0): DebtExpansionAppetiteDTO
     {
-        return ['probability' => self::DEBT_EXPANSION_BASE_PROB + ($spreadMultiplier * self::DEBT_EXPANSION_PROB_MULT), 'aggressiveness' => self::DEBT_EXPANSION_BASE_AGGR + (self::DEBT_EXPANSION_AGGR_MULT * $spreadMultiplier)];
+        return new DebtExpansionAppetiteDTO(probability: self::DEBT_EXPANSION_BASE_PROB + ($spreadMultiplier * self::DEBT_EXPANSION_PROB_MULT), aggressiveness: self::DEBT_EXPANSION_BASE_AGGR + (self::DEBT_EXPANSION_AGGR_MULT * $spreadMultiplier));
     }
 
     public function calculateOrganicCapexSpend(float $organicSpend, float $debtIssued): float
@@ -496,7 +510,6 @@ class AssetManagementBusinessModel extends BaseFinancialBusinessModel
             'output_gap_ema',
             'policy_rate_ema',
             'yield_10y_ema',
-            'yield_5y_ema',
         ];
     }
 }

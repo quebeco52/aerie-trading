@@ -25,6 +25,50 @@ class CommercialBankBusinessModelTest extends TestCase
         $this->mathUtility = new MathUtility();
     }
 
+    /**
+     * The ROE target is earned after the through-the-cycle credit charge the allowance roll-forward books
+     * against EBIT, so the operating target must fund it: the after-tax return target rises by exactly the
+     * loss rate (the firm's own, CreditRiskAppetite-scaled) over a loss-free control.
+     */
+    public function testTargetOperatingProfitFundsTheThroughTheCycleCreditCharge(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('LAKE');
+        $stock->setIndustry('Banks - Diversified');
+        $stock->setTotalEquity('200000000000');
+        $stock->setCustomerDeposits('1600000000000');
+        $stock->setWholesaleDebt('200000000000');
+        $stock->setCorporateTreasury('150000000000');
+        $stock->setBaselineRoe('0.14');
+        $stock->setOperatingMargin('0.40');
+        $stock->setCreditSpread('0.012');
+        $stock->setFloatingDebtRatio('0.40');
+
+        $macro = new MacroStateDTO(
+            policyRate: 0.04, policyRateEma: 0.04, yield5yEma: 0.045, corporateTaxRate: 0.21, equityRiskPremium: 0.045
+        );
+
+        $lossFree = new class extends CommercialBankBusinessModel {
+            public function getThroughTheCycleCreditLossRate(?Stock $stock = null): float
+            {
+                return 0.0;
+            }
+        };
+
+        $lossRate = $this->model->getThroughTheCycleCreditLossRate($stock);
+        $this->assertGreaterThan(0.0, $lossRate);
+
+        $withLosses = $this->model->getTargetMetrics($stock, $macro, $this->mathUtility);
+        $without = $lossFree->getTargetMetrics($stock, $macro, $this->mathUtility);
+
+        $this->assertSame($without['invested_capital'], $withLosses['invested_capital']);
+        $this->assertEqualsWithDelta(
+            $lossRate * (1.0 - $macro->corporateTaxRate),
+            $withLosses['baseline_roic'] - $without['baseline_roic'],
+            1e-9
+        );
+    }
+
     public function testDualStreamsAndRevenueAccounting(): void
     {
         $stock = new Stock();
@@ -498,7 +542,12 @@ class CommercialBankBusinessModelTest extends TestCase
         $this->assertLessThan($resultEasy->streamRevenue['net_interest_income'], $resultTight->streamRevenue['net_interest_income'], 'SLOOS tightening must dampen NII loan origination revenue.');
     }
 
-    public function testRecessionProbabilitySpikeIncreasesCeclProvisioning(): void
+    /**
+     * A forward reserve is a balance, not a flow (ASC 326): a worse outlook raises the lifetime loss
+     * TARGET the allowance converges to, and the ledger roll-forward books that build once. It must not
+     * reach the variable margin, where it used to be charged again every quarter the outlook stayed bad.
+     */
+    public function testRecessionProbabilitySpikeRaisesTheReserveTargetNotTheRunningMargin(): void
     {
         $bank = new Stock();
         $bank->setTicker('CECL_BANK');
@@ -506,37 +555,29 @@ class CommercialBankBusinessModelTest extends TestCase
         $bank->setCustomerDeposits('40000000000');
 
         $mathMock = $this->createMathUtilityMock([0.0, 0.0, 0.0]);
-        $macroLowRisk = new MacroStateDTO(
-            outputGapEma: 0.0,
-            recessionProbabilityEma: 0.10
+        $macroLowRisk = new MacroStateDTO(outputGapEma: 0.0, recessionProbabilityEma: 0.10);
+        $macroHighRisk = new MacroStateDTO(outputGapEma: 0.0, recessionProbabilityEma: 0.70);
+
+        $resultLowRisk = $this->model->computeActualFinancials($bank, 1_000_000_000.0, 0.50, 200_000_000.0, 0.0, $macroLowRisk, $mathMock);
+        $resultHighRisk = $this->model->computeActualFinancials($bank, 1_000_000_000.0, 0.50, 200_000_000.0, 0.0, $macroHighRisk, $mathMock);
+
+        $this->assertEqualsWithDelta($resultLowRisk->clampedMargin, $resultHighRisk->clampedMargin, 1e-12, 'the forecast reserve is not a running cost');
+
+        $calm = $this->model->getForwardCreditLossMultiplier($bank, $macroLowRisk);
+        $stressed = $this->model->getForwardCreditLossMultiplier($bank, $macroHighRisk);
+        $this->assertEqualsWithDelta(1.0, $calm, 1e-9, 'at or below the baseline outlook the estimate is the through-the-cycle one');
+        $this->assertEqualsWithDelta(
+            1.0 + (0.70 - CommercialBankBusinessModel::CECL_BASELINE_RECESSION_PROB) * CommercialBankBusinessModel::CECL_RESERVE_RECESSION_SENSITIVITY,
+            $stressed,
+            1e-9
         );
 
-        $resultLowRisk = $this->model->computeActualFinancials(
-            $bank,
-            expectedRevenue: 1_000_000_000.0,
-            realizedVariableMargin: 0.50,
-            fixedCosts: 200_000_000.0,
-            baselineVol: 0.0,
-            macroState: $macroLowRisk,
-            mathUtility: $mathMock
-        );
-
-        $macroHighRisk = new MacroStateDTO(
-            outputGapEma: 0.0,
-            recessionProbabilityEma: 0.70 // High forward recession probability
-        );
-
-        $resultHighRisk = $this->model->computeActualFinancials(
-            $bank,
-            expectedRevenue: 1_000_000_000.0,
-            realizedVariableMargin: 0.50,
-            fixedCosts: 200_000_000.0,
-            baselineVol: 0.0,
-            macroState: $macroHighRisk,
-            mathUtility: $mathMock
-        );
-
-        $this->assertGreaterThan($resultLowRisk->clampedMargin, $resultHighRisk->clampedMargin, 'High 12M forward recession probability must build forward CECL reserves.');
+        // Spreads: widening lifts the target, a benign market releases part of it, never past the floor.
+        $wide = $this->model->getForwardCreditLossMultiplier($bank, new MacroStateDTO(macroCreditSpreadEma: CommercialBankBusinessModel::CECL_BASELINE_CREDIT_SPREAD + 0.03));
+        $this->assertEqualsWithDelta(1.0 + 0.03 * CommercialBankBusinessModel::CECL_RESERVE_SPREAD_SENSITIVITY, $wide, 1e-9);
+        $benign = $this->model->getForwardCreditLossMultiplier($bank, new MacroStateDTO(macroCreditSpreadEma: 0.0));
+        $this->assertEqualsWithDelta(1.0 - CommercialBankBusinessModel::CECL_BASELINE_CREDIT_SPREAD * CommercialBankBusinessModel::CECL_RESERVE_SPREAD_SENSITIVITY, $benign, 1e-9);
+        $this->assertGreaterThanOrEqual(CommercialBankBusinessModel::CECL_RESERVE_MULTIPLIER_FLOOR, $benign);
     }
 
     public function testDepositThrottleSuppressesWholesaleDebtExpansionWhenAdequatelyFunded(): void
@@ -555,8 +596,8 @@ class CommercialBankBusinessModelTest extends TestCase
             currentTreasury: $currentTreasury
         );
 
-        $this->assertSame(0.0, $result['probability'], 'Deposit-funded bank with adequate cash must not borrow wholesale debt.');
-        $this->assertSame(0.0, $result['aggressiveness'], 'Aggressiveness must be 0 for deposit-funded bank.');
+        $this->assertSame(0.0, $result->probability, 'Deposit-funded bank with adequate cash must not borrow wholesale debt.');
+        $this->assertSame(0.0, $result->aggressiveness, 'Aggressiveness must be 0 for deposit-funded bank.');
     }
 
     public function testLiquidityShortfallTriggersUrgentWholesaleBorrowing(): void
@@ -575,8 +616,8 @@ class CommercialBankBusinessModelTest extends TestCase
             currentTreasury: $currentTreasury
         );
 
-        $this->assertGreaterThan(0.50, $result['probability'], 'Liquidity shortfall must boost borrowing probability.');
-        $this->assertGreaterThan(0.20, $result['aggressiveness'], 'Liquidity shortfall must boost borrowing aggressiveness.');
+        $this->assertGreaterThan(0.50, $result->probability, 'Liquidity shortfall must boost borrowing probability.');
+        $this->assertGreaterThan(0.20, $result->aggressiveness, 'Liquidity shortfall must boost borrowing aggressiveness.');
     }
 
     public function testUnfundedExpansionCapacityDeductsExcessCash(): void
@@ -627,5 +668,99 @@ class CommercialBankBusinessModelTest extends TestCase
         $this->assertLessThanOrEqual(CommercialBankBusinessModel::ROE_CLAMP_MAX, $roic);
         $this->assertGreaterThanOrEqual(CommercialBankBusinessModel::ROE_CLAMP_MIN, $roic);
         $this->assertEqualsWithDelta(CommercialBankBusinessModel::ROE_CLAMP_MAX, (float) $stock->getCurrentRoe(), 0.0001);
+    }
+
+    /**
+     * Underwriting posture has to reach the loss physics, or two banks funded identically are priced as
+     * though they lend identically. CreditRiskAppetite scales the Vasicek long-run default probability
+     * around a neutral 0.50, so the tuned regional lender carries a materially heavier through-the-cycle
+     * charge and a heavier lifetime allowance than the tuned universal bank.
+     */
+    public function testCreditRiskAppetiteScalesTheThroughTheCycleLossRate(): void
+    {
+        $conservative = (new Stock())->setTicker('LAKE'); // appetite 0.40
+        $aggressive   = (new Stock())->setTicker('RIVR'); // appetite 0.60
+        $untuned      = (new Stock())->setTicker('NO_OVERRIDES_FOR_THIS_TICKER');
+
+        $conservativeLoss = $this->model->getThroughTheCycleCreditLossRate($conservative);
+        $aggressiveLoss   = $this->model->getThroughTheCycleCreditLossRate($aggressive);
+        $neutralLoss      = $this->model->getThroughTheCycleCreditLossRate($untuned);
+
+        $this->assertGreaterThan($conservativeLoss, $neutralLoss, 'A 0.40 appetite must underwrite below the sector rate.');
+        $this->assertGreaterThan($neutralLoss, $aggressiveLoss, 'A 0.60 appetite must underwrite above the sector rate.');
+
+        // Expected loss is convex in the default probability, so a 1.5x appetite gap widens in loss terms.
+        $this->assertGreaterThan(1.5, $aggressiveLoss / $conservativeLoss);
+
+        // An absent firm falls back to the sector rate rather than silently resolving to zero.
+        $sectorLoss = $this->mathUtility->calculateVasicekExpectedLoss(
+            0.0,
+            CommercialBankBusinessModel::LRA_DEFAULT_RATE,
+            CommercialBankBusinessModel::ASSET_CORRELATION_RHO,
+            CommercialBankBusinessModel::LGD_BASELINE
+        );
+        $this->assertEqualsWithDelta($sectorLoss, $this->model->getThroughTheCycleCreditLossRate(), 1e-9);
+        $this->assertEqualsWithDelta($sectorLoss, $neutralLoss, 1e-9);
+    }
+
+    /** An appetite outside the viable commercial envelope is clamped, not passed through to the loss model. */
+    public function testCreditRiskAppetiteIsClampedToTheViableUnderwritingEnvelope(): void
+    {
+        $stock = (new Stock())->setTicker('CLAMP_TEST');
+
+        $floorLoss = $this->mathUtility->calculateVasicekExpectedLoss(
+            0.0,
+            CommercialBankBusinessModel::LRA_DEFAULT_RATE
+                * (CommercialBankBusinessModel::MIN_CREDIT_RISK_APPETITE / CommercialBankBusinessModel::NEUTRAL_CREDIT_RISK_APPETITE),
+            CommercialBankBusinessModel::ASSET_CORRELATION_RHO,
+            CommercialBankBusinessModel::LGD_BASELINE
+        );
+        $ceilingLoss = $this->mathUtility->calculateVasicekExpectedLoss(
+            0.0,
+            CommercialBankBusinessModel::LRA_DEFAULT_RATE
+                * (CommercialBankBusinessModel::MAX_CREDIT_RISK_APPETITE / CommercialBankBusinessModel::NEUTRAL_CREDIT_RISK_APPETITE),
+            CommercialBankBusinessModel::ASSET_CORRELATION_RHO,
+            CommercialBankBusinessModel::LGD_BASELINE
+        );
+
+        $this->assertGreaterThan(0.0, $floorLoss);
+        $this->assertGreaterThan($floorLoss, $ceilingLoss);
+        $this->assertGreaterThanOrEqual($floorLoss, $this->model->getThroughTheCycleCreditLossRate($stock));
+        $this->assertLessThanOrEqual($ceilingLoss, $this->model->getThroughTheCycleCreditLossRate($stock));
+    }
+
+    /**
+     * Once the earning-asset ledger is open the physics is struck on the book it carries, net of the losses
+     * already reserved, and the quarter's credit entries come back in dollars: what went bad, and what was
+     * charged beyond the through-the-cycle loss the cost base already holds.
+     */
+    public function testCreditLossHooksAndLedgerFeedThePhysics(): void
+    {
+        $expectedTtc = $this->mathUtility->calculateVasicekExpectedLoss(0.0, CommercialBankBusinessModel::LRA_DEFAULT_RATE, CommercialBankBusinessModel::ASSET_CORRELATION_RHO, CommercialBankBusinessModel::LGD_BASELINE);
+        $this->assertEqualsWithDelta($expectedTtc, $this->model->getThroughTheCycleCreditLossRate(), 1e-9);
+        $this->assertGreaterThan(0.0, $expectedTtc);
+        $this->assertEqualsWithDelta(CommercialBankBusinessModel::CECL_LIFETIME_HORIZON_YEARS, $this->model->getCreditLossHorizonYears(), 1e-9);
+
+        $stock = new Stock();
+        $stock->setTicker('LDGR');
+        $stock->setBeta('1.0');
+        $stock->setTotalEquity('5000000000');
+        $stock->setCustomerDeposits('40000000000');
+        $stock->setWholesaleDebt('5000000000');
+        $stock->setCorporateTreasury('2000000000');
+
+        // Before the ledger: the funding proxy. After: the book net of its allowance, whatever cash does.
+        $this->assertEqualsWithDelta(48_000_000_000.0, $this->model->resolveEarningAssets($stock), 1.0);
+        $stock->setEarningAssets('45000000000');
+        $stock->setCreditLossAllowance('900000000');
+        $this->assertEqualsWithDelta(44_100_000_000.0, $this->model->resolveEarningAssets($stock), 1.0);
+        $this->assertEqualsWithDelta(44_100_000_000.0, $this->model->calculateRiskWeightedAssets($stock), 1.0, 'risk weights apply to the book, not the proxy');
+
+        $macro = new MacroStateDTO(outputGapEma: 0.0, policyRateEma: 0.04, yield2yEma: 0.04, yield10yEma: 0.045, macroCreditSpreadEma: 0.02);
+        $result = $this->model->computeActualFinancials($stock, expectedRevenue: 1_000_000_000.0, realizedVariableMargin: 0.50, fixedCosts: 200_000_000.0, baselineVol: 0.10, macroState: $macro, mathUtility: $this->mathUtility);
+
+        $this->assertGreaterThanOrEqual(0.0, $result->netChargeOffs);
+        $this->assertLessThan(44_100_000_000.0 * 0.05, $result->netChargeOffs, 'a quarter of charge-offs is a small fraction of the book');
+        $this->assertTrue(is_finite($result->creditLossProvision));
     }
 }

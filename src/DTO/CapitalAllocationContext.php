@@ -19,7 +19,12 @@ class CapitalAllocationContext
         public readonly float $quarterlyFcfPerShare,
         public readonly float $currentPrice,
         public readonly float $sharesOutstanding,
-        public readonly float $actualTotalNetIncome = 0.0
+        public readonly float $actualTotalNetIncome = 0.0,
+        /**
+         * Quarterly stock-based compensation (ASC 718). The expense is already inside net income; its
+         * credit side is additional paid-in capital, so it must be added back when equity rolls forward.
+         */
+        public readonly float $stockCompensation = 0.0
     ) {}
 
     // Core Business Traits
@@ -34,7 +39,6 @@ class CapitalAllocationContext
     public float $currentTreasury = 0.0;
     public float $operatingBase = 0.0;
     public float $investedCapital = 0.0;
-    public float $physicalAssetAppreciation = 0.0;
     
     // Profit & Health
     public ?DebtHealthDTO $health = null;
@@ -50,6 +54,12 @@ class CapitalAllocationContext
     public float $wholesaleDebt = 0.0;
     public float $customerDeposits = 0.0;
     public float $debtIssued = 0.0;
+    /** Principal that came due this quarter and had to be repaid in cash because it could not be refinanced. */
+    public float $principalRepaid = 0.0;
+    /** True when the primary market refused to roll this quarter's maturity. */
+    public bool $refinancingRefused = false;
+    /** Maturing principal the firm could not repay out of cash, before emergency financing is attempted. */
+    public float $unfundedMaturity = 0.0;
     public bool $recapActionTaken = false;
     public bool $failedEmergencyBorrow = false;
 
@@ -62,10 +72,18 @@ class CapitalAllocationContext
 
     // Strategy & Buybacks
     public float $organicCapex = 0.0;
+    /** Expansion cash a balance-sheet business deployed into its earning-asset ledger this quarter. */
+    public float $loanOriginations = 0.0;
+    /** Cash raised by selling earning assets to cover withdrawals or a maturity. */
+    public float $assetSaleProceeds = 0.0;
+    /** Carrying value given up below par on those sales: an other-comprehensive loss charged to equity. */
+    public float $assetSaleLoss = 0.0;
     public ?float $bankApy = null;
     public bool $debtActionTaken = false;
     
     public float $totalCashSpent = 0.0; // buybacks
+    /** Cash actually received from shares issued this quarter, net of any offering discount. */
+    public float $equityRaised = 0.0;
     public float $newShares = 0.0;
     
     // Market Events

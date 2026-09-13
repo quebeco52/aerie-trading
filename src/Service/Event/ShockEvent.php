@@ -44,6 +44,7 @@ class ShockEvent
     public const ADVISORY_CRASH = 'advisory_crash';
     public const BIOTECH_DRUG_APPROVAL = 'biotech_drug_approval';
     public const BIOTECH_TRIAL_SETBACK = 'biotech_trial_setback';
+    public const BIOTECH_PATENT_CLIFF = 'biotech_patent_cliff';
     public const CLEARING_SYSTEMIC_DEFAULT = 'clearing_systemic_default';
     public const CLEARING_PANIC_FEES = 'clearing_panic_fees';
     public const LUXURY_BRAND_DILUTION = 'luxury_brand_dilution';
@@ -114,6 +115,9 @@ class ShockEvent
     public const CHEMICAL_CRACK_SPREAD_SQUEEZE = 'chemical_crack_spread_squeeze';
     public const CHEMICAL_PLANT_TURNAROUND = 'chemical_plant_turnaround';
     public const CHEMICAL_AGRI_BOOM = 'chemical_agri_boom';
+
+    /** Annual ASC 350 test wrote acquired goodwill down to its value in use (non-cash GAAP charge). */
+    public const GOODWILL_IMPAIRMENT = 'goodwill_impairment';
 
     public const CONGLOMERATE_PORTFOLIO_REALIGNMENT = 'conglomerate_portfolio_realignment';
     public const CONGLOMERATE_SUBSIDIARY_WRITEDOWN = 'conglomerate_subsidiary_writedown';

@@ -1,0 +1,17 @@
+{# Charting libraries, included per page rather than site-wide. Include from a page's
+   `javascripts` block ahead of its module import, naming only what the page draws with:
+
+       {% include 'partials/_chart_libraries.html.twig' with { lightweight: true, chartjs: true } %}
+
+   Classic scripts, so their globals are defined before the deferred module below runs. #}
+{% if lightweight|default(false) %}
+	<script src="https://cdn.jsdelivr.net/npm/lightweight-charts@5.1.0/dist/lightweight-charts.standalone.production.js" integrity="sha256-dWsLqfWJMCJta4udR60xBEirhdeZ6h98LAIwR3fBC1I=" crossorigin="anonymous"></script>
+{% endif %}
+
+{% if chartjs|default(false) %}
+	<script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.1/dist/chart.umd.min.js" integrity="sha256-SERKgtTty1vsDxll+qzd4Y2cF9swY9BCq62i9wXJ9Uo=" crossorigin="anonymous"></script>
+{% endif %}
+
+{% if echarts|default(false) %}
+	<script src="https://cdn.jsdelivr.net/npm/echarts@6.1.0/dist/echarts.min.js" integrity="sha256-tmslrrTfhOMxmdwhaUAU0zbSIsvZ3rDlp8FL1qoND9A=" crossorigin="anonymous"></script>
+{% endif %}

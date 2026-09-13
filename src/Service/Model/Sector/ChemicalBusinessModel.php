@@ -27,6 +27,42 @@ use App\Service\Math\MathUtility;
  */
 class ChemicalBusinessModel extends StandardCorporateBusinessModel
 {
+    // --- Operating Cyclicality & Demand Structure ---
+    /** Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Volume follows industrial production; grades substitute within limits. */
+    public const OPERATING_CYCLICALITY = 1.20;
+    /** Own-price elasticity of demand: volume lost per unit of real price increase. */
+    public const PRICE_ELASTICITY_OF_DEMAND = 0.60;
+    /** Share of an idiosyncratic revenue gain taken from same-industry peers rather than won from a larger market. */
+    public const INDUSTRY_SUBSTITUTABILITY = 0.50;
+
+    // --- Input Cost Basket ---
+    /** Shares of the variable cost base bought in tracked input markets (energy, metals, agri, freight, wholesale goods, variable payroll). */
+    public const INPUT_COST_EXPOSURES = ['ppi' => 0.15, 'labor' => 0.15, 'freight' => 0.05];
+    /** Base petrochemicals clear at the marginal cracker's cost and take the price they are given; the specialty and agrochemical books carry the formulation power. */
+    public const PRICING_POWER_INDEX = 0.40;
+
+    /**
+     * Calendar-quarter revenue seasonality [Q1, Q2, Q3, Q4] summing to 4.0: Q2 planting season for agrochemicals.
+     *
+     * @return array<int, float>
+     */
+    public function getSeasonalityFactors(): array
+    {
+        return [1.00, 1.08, 0.95, 0.97];
+    }
+
+    // --- Labor Intensity ---
+    /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze. Plant operations are capital and feedstock intensive; payroll is a minority of overhead. */
+    public const FIXED_COST_LABOR_SHARE = 0.35;
+
+    // --- Demand Transmission Lag ---
+    /** Years for a move in the output gap to reach the order book. Offtake contracts and plant scheduling hold volumes steady for a couple of quarters after the cycle turns. */
+    public const DEMAND_LAG_YEARS = 0.50;
+
+    // --- FX Exposure ---
+    /** Share of revenue whose competitiveness moves with the trade-weighted exchange rate. Base chemicals trade on delivered price against foreign crackers; specialties and agrochemicals are largely sold abroad. */
+    public const FX_REVENUE_EXPOSURE = 0.15;
+
     // --- Analyst Visibility & Error ---
     /** Base coverage visibility for chemical sector analysts tracking feedstock crack spreads. */
     public const BASE_COVERAGE_VISIBILITY = 0.40;
@@ -90,8 +126,6 @@ class ChemicalBusinessModel extends StandardCorporateBusinessModel
     public const AGRI_PASS_THROUGH_SCALAR = 0.60;
     /** Volatility scalar for unhedged spot feedstock crack spread shocks on variable margins. */
     public const FEEDSTOCK_DRAG_SCALAR = 0.30;
-    /** Sensitivity of chemical feedstock and energy processing cost drag to PPI inflation. */
-    public const PPI_FEEDSTOCK_SENSITIVITY = 0.40;
     /** Sensitivity of petrochemical and specialty margins to downstream refining crack spreads. */
     public const CRACK_SPREAD_MARGIN_SENSITIVITY = 0.30;
 
@@ -193,26 +227,21 @@ class ChemicalBusinessModel extends StandardCorporateBusinessModel
 
     public function getMacroPhysics(Stock $stock, MacroStateDTO $macroState): array
     {
-        $params = $this->resolveModelParameters($stock, [
-            ModelParam::PricingPowerIndex->value => 0.50,
-        ]);
-        $pricingPower = max(0.0, min(1.0, $params[ModelParam::PricingPowerIndex]));
-
-        $outputGap = $macroState->outputGapEma;
+        $outputGap = $this->resolveLaggedOutputGap($stock, $macroState);
         $metalsShift = ($macroState->industrialMetalsIndexEma - 100.0) / 100.0;
         $agriShift = ($macroState->agriculturalCommodityIndexEma - 100.0) / 100.0;
-        $inflation = $macroState->tipsBreakevenEma;
-        $beta = (float) $stock->getBeta();
+        $beta = $this->getOperatingCyclicality($stock);
 
         // Macro demand shift: Driven by industrial demand (output gap + metals + manufacturing PMI) for base chemicals,
         // and agricultural commodities for agrochemicals.
         $pmiShift = MathUtility::calculatePmiDemandShift($macroState->manufacturingPmi, sensitivity: self::PMI_DEMAND_SENSITIVITY);
         $industrialDemand = ($outputGap * self::BASE_PETRO_OUTPUT_GAP_SCALAR) + ($metalsShift * self::BASE_PETRO_METALS_SCALAR) + $pmiShift;
-        $blendedDemandShift = ($industrialDemand * $beta * self::INDUSTRIAL_DEMAND_WEIGHT) + ($agriShift * self::AGRI_DEMAND_WEIGHT);
+        $blendedDemandShift = ($industrialDemand * $beta * self::INDUSTRIAL_DEMAND_WEIGHT) + ($agriShift * self::AGRI_DEMAND_WEIGHT)
+            + $this->resolveFxDemandShift($macroState);
 
         return [
             'macro_demand_shift' => $blendedDemandShift,
-            'pricing_power_multiplier' => 1.0 + ($inflation * max(self::MIN_BETA_PRICING_POWER_FLOOR, $beta) * $pricingPower),
+            ...$this->resolvePricingMultipliers($stock, $macroState),
         ];
     }
 
@@ -222,12 +251,11 @@ class ChemicalBusinessModel extends StandardCorporateBusinessModel
             ModelParam::BasePetrochemicalsWeight->value => self::BASE_PETROCHEMICALS_WEIGHT,
             ModelParam::SpecialtyChemicalsWeight->value => self::SPECIALTY_CHEMICALS_WEIGHT,
             ModelParam::AgrochemicalsWeight->value      => self::AGROCHEMICALS_WEIGHT,
-            ModelParam::PricingPowerIndex->value        => 0.50,
         ]);
 
-        $pricingPower = max(0.0, min(1.0, $params[ModelParam::PricingPowerIndex]));
+        $pricingPower = $this->resolvePricingPower($stock);
         $momentum = $stock->getEarningsMomentumZ() ?? [];
-        $streams = new StreamContext($momentum, $mathUtility);
+        $streams = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
 
         // Active stream weights with dynamic drift
         $activeWeights = $streams->resolveActiveStreamWeights([
@@ -306,7 +334,9 @@ class ChemicalBusinessModel extends StandardCorporateBusinessModel
 
         // Feedstock crack volatility shock & macro transmission
         $feedstockDrag = max(0.0, -$feedstockZ * (self::FEEDSTOCK_DRAG_SCALAR / 10.0) * $baselineVol);
-        $ppiCostDrag = MathUtility::calculatePpiCostDrag($macroState->producerPriceInflation, MacroEngine::TARGET_INFLATION, $pricingPower, self::PPI_FEEDSTOCK_SENSITIVITY);
+        // Non-feedstock inputs (catalysts, packaging, logistics, plant payroll) come through the shared basket;
+        // hydrocarbon feedstock keeps its own asymmetric pass-through above.
+        $ppiCostDrag = $this->resolveInputCostDrag($stock, $macroState, $streams, $pricingPower, $realizedVariableMargin);
         $crackSpreadShift = ($macroState->refiningCrackSpread - MacroEngine::CRACK_SPREAD_BASELINE) / MacroEngine::CRACK_SPREAD_BASELINE;
         $crackSpreadPenalty = max(-0.03, min(0.03, -$crackSpreadShift * self::CRACK_SPREAD_MARGIN_SENSITIVITY * 0.02));
 
@@ -338,26 +368,16 @@ class ChemicalBusinessModel extends StandardCorporateBusinessModel
         );
     }
 
-    public function applyAssetDepreciationDecay(Stock $stock, float $reinvestmentRatio, float $dt): void
+    /** Physical corrosion and deferred maintenance downtime create margin decay */
+    public function getDepreciationDecayRate(): float
     {
-        $timeScale = $dt / 0.25;
-        $currentMargin = (float) $stock->getOperatingMargin();
+        return self::PLANT_DECAY_RATE;
+    }
 
-        if ($reinvestmentRatio < 1.0) {
-            // Physical corrosion and deferred maintenance downtime create margin decay
-            $underinvestment = 1.0 - $reinvestmentRatio;
-            $decay = self::PLANT_DECAY_RATE * $underinvestment * $timeScale;
-            $updatedMargin = max(self::MIN_OPERATING_MARGIN_FLOOR, $currentMargin - ($currentMargin * $decay));
-            $stock->setOperatingMargin((string) $updatedMargin);
-        } elseif ($reinvestmentRatio > 1.0) {
-            // Modernization and continuous flow chemical synthesis expansion
-            $modGain = self::PLANT_MODERNIZATION_GAIN * log($reinvestmentRatio) * $timeScale;
-            $updatedMargin = min(
-                self::MAX_OPERATING_MARGIN_CEILING,
-                $currentMargin + ((self::MAX_OPERATING_MARGIN_CEILING - $currentMargin) * $modGain)
-            );
-            $stock->setOperatingMargin((string) $updatedMargin);
-        }
+    /** Modernization and continuous flow chemical synthesis expansion */
+    public function getModernizationGainRate(): float
+    {
+        return self::PLANT_MODERNIZATION_GAIN;
     }
 
     /**
@@ -371,12 +391,15 @@ class ChemicalBusinessModel extends StandardCorporateBusinessModel
         return [
             'agricultural_commodity_index_ema',
             'energy_cost_push_lag',
+            'exchange_rate_index_ema',
+            'freight_rate_index_ema',
             'industrial_metals_index_ema',
             'manufacturing_pmi',
             'output_gap_ema',
-            'producer_price_inflation',
+            'producer_price_inflation_ema',
             'refining_crack_spread',
             'tips_breakeven_ema',
+            'wage_growth_ema',
         ];
     }
 }

@@ -20,11 +20,49 @@ use App\Service\Macro\MacroEngine;
  * Financial Physics:
  * - High Barrier to Entry / Oligopoly: Revenue is dominated by ultra-sticky recurring subscriptions.
  * - The Churn Wars: Because the market is saturated, growth only comes from stealing competitors' customers via margin-crushing promotions.
- * - Bond Proxies: Astronomical debt loads make their net margins highly sensitive to the 10-year Treasury yield.
- * - Generational CapEx: Every ~10 years, they are forced to participate in massive government spectrum auctions (e.g., 5G), draining free cash flow.
+ * - Subscriber Stock-Flow: service revenue is subscribers x ARPU; the base carries every quarter's net adds
+ *   forward, churn wars erode it and promotional gross adds defend it at a subscriber acquisition cost.
+ * - Bond Proxies: long-dated network bonds roll slowly, so rate shocks reach interest expense with a lag (DebtEngine).
+ * - Generational CapEx: spectrum auctions commit a licence outlay of a quarter of annual revenue, queued as CIP.
  */
 class TelecomBusinessModel extends StandardCorporateBusinessModel
 {
+    // --- Operating Cyclicality & Demand Structure ---
+    /** Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Subscriptions are defensive; every net add is a rival's loss in a saturated market. */
+    public const OPERATING_CYCLICALITY = 0.60;
+    /** Own-price elasticity of demand: volume lost per unit of real price increase. */
+    public const PRICE_ELASTICITY_OF_DEMAND = 0.30;
+    /** Share of an idiosyncratic revenue gain taken from same-industry peers rather than won from a larger market. */
+    public const INDUSTRY_SUBSTITUTABILITY = 0.85;
+
+    // --- Input Cost Basket ---
+    /** Shares of the variable cost base bought in tracked input markets (energy, metals, agri, freight, wholesale goods, variable payroll). */
+    public const INPUT_COST_EXPOSURES = ['labor' => 0.30, 'energy' => 0.08, 'ppi' => 0.15];
+    /** Annual CPI-linked plan hikes with regulatory and churn pushback: about half of expected inflation reaches ARPU. */
+    public const PRICING_ELASTICITY = 0.50;
+    /** Plans reprice once a year. */
+    public const PRICE_PASS_THROUGH_LAG_YEARS = 1.00;
+    /** Wireless carriers hold real pricing power on a captive base; network power and handset costs are partly recovered. */
+    public const PRICING_POWER_INDEX = 0.30;
+
+    /**
+     * Calendar-quarter revenue seasonality [Q1, Q2, Q3, Q4] summing to 4.0: Q4 holiday device upgrades and equipment sales.
+     *
+     * @return array<int, float>
+     */
+    public function getSeasonalityFactors(): array
+    {
+        return [0.97, 0.98, 1.00, 1.05];
+    }
+
+    // --- Balance Sheet Realism ---
+    /** Capitalized operating lease liabilities as a fraction of annual revenue (IFRS 16 / ASC 842). Tower, rooftop and retail store leases. */
+    public const LEASE_LIABILITY_INTENSITY = 0.30;
+
+    // --- Labor Intensity ---
+    /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze. Network engineering and retail staff share overhead with towers, spectrum amortization and rents. */
+    public const FIXED_COST_LABOR_SHARE = 0.45;
+
     // --- Analyst Visibility & Error ---
     public const BASE_COVERAGE_VISIBILITY = 0.50; // Subscription metrics are reported quarterly
     public const BASE_COVERAGE_ERROR = 0.05;
@@ -55,26 +93,49 @@ class TelecomBusinessModel extends StandardCorporateBusinessModel
     public const EQUIPMENT_WEIGHT    = 0.15;
 
     // --- Physics & Variances ---
-    public const SUBSCRIPTION_VARIANCE_SCALAR = 0.05; // Highly defensive, sticky contracts
     public const EQUIPMENT_VARIANCE_SCALAR    = 0.30; // Highly cyclical (hardware upgrades get delayed in recessions)
 
+    // --- Subscriber Base (stock-flow) ---
+    /** Persisted subscriber index; 1.0 is the base implied by expected service revenue. */
+    public const STATE_SUBSCRIBER_INDEX = 'state:subscriber_index';
+    /** Baseline quarterly postpaid churn (~1% a month); steady-state gross adds replace exactly this. */
+    public const BASE_QUARTERLY_CHURN = 0.03;
+    /** Volatility multiplier on gross adds relative to the replacement rate (one sigma ~ +-0.9% of the base at 20% vol). */
+    public const GROSS_ADDS_VARIANCE_SCALAR = 1.50;
+    /** Extra quarterly churn per unit of unemployment above the natural rate (0.10 = +10bps of churn per point of excess unemployment): involuntary disconnects and non-payment rise with job losses. */
+    public const UNEMPLOYMENT_CHURN_SENSITIVITY = 0.10;
+    /** Floor on the subscriber index after sustained churn wars. */
+    public const MIN_SUBSCRIBER_INDEX = 0.50;
+    /** Ceiling on the subscriber index within a saturated market. */
+    public const MAX_SUBSCRIBER_INDEX = 1.50;
+
     // --- The Churn & Price War Physics ---
-    /** Continuous margin elasticity: High churn/customer acquisition costs directly erode variable margins. */
+    /** Margin cost per unit of gross adds above the replacement rate (device subsidies, marketing, dealer commissions). */
     public const SUBSCRIBER_ACQUISITION_COST_ELASTICITY = 0.025;
     /** Z-score threshold indicating a brutal sector-wide price war to steal market share. */
     public const PRICE_WAR_Z_SCORE   = -2.00;
     /** Fat-tail margin penalty when intense promotional pricing (e.g., "Free iPhones") destroys profitability. */
     public const PRICE_WAR_PENALTY   = 0.08;
+    /** Regime key for a sector-wide price war (two-state Markov). */
+    public const REGIME_PRICE_WAR = 'price_war';
+    /** Quarterly probability the price war ends (~4 quarter expected duration). */
+    public const PRICE_WAR_EXIT_HAZARD = 0.25;
+    /** Extra quarterly churn while rivals run switching promotions. */
+    public const PRICE_WAR_CHURN_UPLIFT = 0.02;
+    /** ARPU discount from matching rival plan pricing during a price war. */
+    public const PRICE_WAR_ARPU_DISCOUNT = 0.05;
+    /** Promotional gross adds response (relative) that carriers mount to defend the base in a price war. */
+    public const PRICE_WAR_GROSS_ADDS_RESPONSE = 0.50;
 
     // --- Generational CapEx / Spectrum Tail Risks ---
     /** Z-score threshold indicating a massive government spectrum auction or generational infrastructure leap. */
     public const SPECTRUM_AUCTION_Z_SCORE = 2.20;
+    /** Spectrum licence outlay as a fraction of annual revenue (C-band scale), queued as construction-in-progress. */
+    public const SPECTRUM_AUCTION_CAPEX_RATIO = 0.25;
 
-    // --- The Refinancing Wall (Bond Proxy) ---
-    /** Sensitivity of telecom margins to 10Y Treasury yields (debt refinancing friction). */
-    public const REFINANCING_WALL_DRAG      = 0.20;
-    /** Fallback safe 10Y yield before refinancing drag kicks in. */
-    public const DEFAULT_10Y_YIELD_FALLBACK = 0.04;
+    // --- Bond Proxy Capital Structure ---
+    /** Quarterly share of the fixed-rate bond stock that matures and reprices (~8-year average tenor). */
+    public const DEBT_MATURITY_ROLLOVER_RATE = 0.03;
 
     // --- Asset Depreciation & Reinvestment ---
     public const NETWORK_DECAY_RATE           = 0.025; // 3G/4G becomes obsolete without continuous fiber/5G upgrades
@@ -90,10 +151,6 @@ class TelecomBusinessModel extends StandardCorporateBusinessModel
         // People don't cancel their phone plans during a recession, but they do stop buying $1,200 iPhones.
         $physics['macro_demand_shift'] = 0.0;
 
-        // Telecoms generally pass inflation through via annual bill hikes, 
-        // but face mild regulatory/consumer pushback.
-        $inflation = $macroState->tipsBreakevenEma;
-        $physics['pricing_power_multiplier'] = 1.0 + ($inflation * 0.50);
 
         return $physics;
     }
@@ -109,8 +166,8 @@ class TelecomBusinessModel extends StandardCorporateBusinessModel
         $equipmentWeight    = $params[ModelParam::EquipmentWeight];
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
-        $streams = new \App\DTO\StreamContext($momentum, $mathUtility);
-        $beta = abs((float) $stock->getBeta());
+        $streams = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
+        $beta = $this->getOperatingCyclicality($stock);
 
         // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
         $activeWeights = $streams->resolveActiveStreamWeights([
@@ -124,7 +181,7 @@ class TelecomBusinessModel extends StandardCorporateBusinessModel
         // Independent stream Z-scores
         $subscriptionZ = $streams->generateZ('wireless_subscriptions', 0.40); // High persistence
         $equipmentZ    = $streams->generateZ('equipment_sales', 0.15); // Low persistence, driven by hardware cycles
-        $eventZ        = $streams->generateZ('event', 0.10);
+        $eventZ        = $streams->generateExogenousZ('event', 0.10);
 
         // --- Macro Demand Sensitivities ---
         // Subscriptions are highly defensive (0.2x multiplier). Equipment is highly cyclical (1.5x multiplier).
@@ -132,20 +189,41 @@ class TelecomBusinessModel extends StandardCorporateBusinessModel
         $macroCyclicalShift  = $macroState->outputGapEma * 1.5 * $beta;
 
         // --- Event Tail Risks ---
+        // A price war is a regime: rival promotions lift churn and cut ARPU for several quarters. A spectrum
+        // auction is a CapEx event: the licence outlay is committed here and queued as construction-in-progress.
+        $priceWarElapsed = $streams->evolveRegime(self::REGIME_PRICE_WAR, 0.0, self::PRICE_WAR_EXIT_HAZARD);
         $eventType = null;
-        $priceWarPenalty = 0.0;
+        $scheduledCapex = 0.0;
 
-        if ($eventZ < self::PRICE_WAR_Z_SCORE) {
-            $eventType = ShockEvent::TELECOM_PRICE_WAR ?? 'price_war';
-            $priceWarPenalty = self::PRICE_WAR_PENALTY;
+        if ($eventZ < self::PRICE_WAR_Z_SCORE && $priceWarElapsed === 0) {
+            $priceWarElapsed = $streams->startRegime(self::REGIME_PRICE_WAR);
+            $eventType = ShockEvent::TELECOM_PRICE_WAR;
         } elseif ($eventZ > self::SPECTRUM_AUCTION_Z_SCORE) {
-            $eventType = ShockEvent::SPECTRUM_AUCTION ?? 'spectrum_auction';
-            // Note: A spectrum auction is a CapEx event, not a revenue event. 
-            // It will naturally trigger massive FCF burn via the Engine's CapEx logic later.
+            $eventType = ShockEvent::SPECTRUM_AUCTION;
+            $scheduledCapex = $expectedRevenue * 4.0 * self::SPECTRUM_AUCTION_CAPEX_RATIO;
         }
+        $inPriceWar = $priceWarElapsed > 0;
+
+        // --- Subscriber Base (stock-flow) ---
+        // Service revenue is subscribers x ARPU. The base evolves as s_t = s_{t-1} (1 - churn) + gross adds,
+        // where steady-state gross adds exactly replace baseline churn, so the base carries every past
+        // quarter's net adds forward. Demand shocks move gross adds; the cycle moves ARPU (plan downgrades,
+        // not cancellations); a price war lifts churn, forces promotional gross adds and discounts ARPU.
+        $openingSubscribers = $streams->getPersistedState(self::STATE_SUBSCRIBER_INDEX, 1.0);
+        $unemploymentGap = max(0.0, $macroState->unemploymentRateEma - MacroEngine::NATURAL_UNEMPLOYMENT);
+        $churnRate = self::BASE_QUARTERLY_CHURN
+            + ($inPriceWar ? self::PRICE_WAR_CHURN_UPLIFT : 0.0)
+            + ($unemploymentGap * self::UNEMPLOYMENT_CHURN_SENSITIVITY);
+        $grossAddsRate = max(0.0, self::BASE_QUARTERLY_CHURN
+            * (1.0 + ($subscriptionZ * $baselineVol * self::GROSS_ADDS_VARIANCE_SCALAR))
+            * ($inPriceWar ? (1.0 + self::PRICE_WAR_GROSS_ADDS_RESPONSE) : 1.0));
+        $subscribers = max(self::MIN_SUBSCRIBER_INDEX, min(self::MAX_SUBSCRIBER_INDEX, ($openingSubscribers * (1.0 - $churnRate)) + $grossAddsRate));
+        $streams->registerState(self::STATE_SUBSCRIBER_INDEX, $subscribers);
+
+        $arpuMultiplier = (1.0 + $macroDefensiveShift) * ($inPriceWar ? (1.0 - self::PRICE_WAR_ARPU_DISCOUNT) : 1.0);
 
         // --- Clamped Dual-Stream Revenue Calculation ---
-        $subscriptionRevenue = max(0.0, $expectedRevenue * $subscriptionWeight * (1.0 + ($subscriptionZ * $baselineVol * self::SUBSCRIPTION_VARIANCE_SCALAR) + $macroDefensiveShift));
+        $subscriptionRevenue = max(0.0, $expectedRevenue * $subscriptionWeight * $subscribers * $arpuMultiplier);
         $equipmentRevenue    = max(0.0, $expectedRevenue * $equipmentWeight * (1.0 + ($equipmentZ * $baselineVol * self::EQUIPMENT_VARIANCE_SCALAR) + $macroCyclicalShift));
 
         $streamRevenues = [
@@ -158,27 +236,25 @@ class TelecomBusinessModel extends StandardCorporateBusinessModel
 
         // --- Cost & Margin Physics ---
 
-        // 1. Subscriber Acquisition Cost (SAC) Elasticity
-        // If $subscriptionZ is negative, the telecom is experiencing churn. To stop the bleeding, 
-        // they must spend heavily on marketing and subsidized phones, structurally compressing margins.
-        $sacDrag = -self::SUBSCRIBER_ACQUISITION_COST_ELASTICITY * $subscriptionZ * $subscriptionWeight;
+        // 1. Subscriber Acquisition Cost: every gross add costs subsidy, marketing and dealer commission
+        //    dollars, so growth and churn replacement alike compress margin relative to the replacement rate.
+        $sacDrag = self::SUBSCRIBER_ACQUISITION_COST_ELASTICITY * (($grossAddsRate / self::BASE_QUARTERLY_CHURN) - 1.0) * $subscriptionWeight;
+        $priceWarPenalty = $inPriceWar ? self::PRICE_WAR_PENALTY : 0.0;
 
-        // 2. The Refinancing Wall (Bond Proxy)
-        // Telecoms carry massive debt to fund network infrastructure. Rising 10Y yields erode their profitability.
-        $yield10y = $macroState->yield10yEma;
-        $refinancingDrag = max(0.0, ($yield10y - self::DEFAULT_10Y_YIELD_FALLBACK) * self::REFINANCING_WALL_DRAG);
-
-        // Apply structurally driven penalties directly to the baseline margin
-        $rawMargin = $realizedVariableMargin + $priceWarPenalty + $sacDrag + $refinancingDrag;
+        // Note: the network debt load reaches earnings through DebtEngine's maturity wall (see
+        // getDebtMaturityRolloverRate), never as an operating margin drag. Interest sits below EBIT.
+        // Network power, handset procurement and field payroll reach the cost base at spot; annual plan hikes recover part of it.
+        $inputCostDrag = $this->resolveInputCostDrag($stock, $macroState, $streams, $this->resolvePricingPower($stock), $realizedVariableMargin);
+        $rawMargin = $realizedVariableMargin + $priceWarPenalty + $sacDrag + $inputCostDrag;
         $clampedMargin = $this->clampMargin($rawMargin);
 
         // Primary shock is whichever stream deviated the most, overridden by tail events
         $primaryShockZ = $streams->resolveDominantShockZ([$equipmentZ, $subscriptionZ], $eventZ);
 
-        // Subscriber additions/churn are heavily tracked by analysts, equipment sales are standard retail visibility.
-        $observableShockZ = ($subscriptionZ * $subscriptionWeight * self::SUBSCRIPTION_VARIANCE_SCALAR * 0.90) +
-            ($equipmentZ * $equipmentWeight * self::EQUIPMENT_VARIANCE_SCALAR * 0.40);
-        $observableShockZ *= $baselineVol;
+        // Net adds are reported every quarter and tracked closely; equipment sales carry standard retail visibility.
+        $subscriberMove = ($subscribers / max(0.01, $openingSubscribers)) - 1.0;
+        $observableShockZ = ($subscriberMove * $subscriptionWeight * 0.90) +
+            ($equipmentZ * $equipmentWeight * self::EQUIPMENT_VARIANCE_SCALAR * 0.40 * $baselineVol);
 
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
@@ -189,28 +265,35 @@ class TelecomBusinessModel extends StandardCorporateBusinessModel
             isPublicEvent: $eventType !== null ? true : null,
             streamZ: $streams->getStreamZ(),
             streamRevenue: $streamRevenues,
+            scheduledCapex: $scheduledCapex,
+            kpis: [
+                'subscriber_index' => $subscribers,
+                'quarterly_churn'  => $churnRate,
+                'net_adds'         => $subscribers - $openingSubscribers,
+                'arpu_index'       => $arpuMultiplier,
+            ],
         );
     }
 
-    public function applyAssetDepreciationDecay(Stock $stock, float $reinvestmentRatio, float $dt): void
+    /**
+     * Bond proxy: telecoms fund networks with long-dated fixed-rate bonds, so only a small slice of the
+     * book reprices each quarter. Rate shocks therefore reach interest expense slowly and persist for years.
+     */
+    public function getDebtMaturityRolloverRate(): float
     {
-        $timeScale = $dt / 0.25;
-        $currentMargin = (float) $stock->getOperatingMargin();
+        return self::DEBT_MATURITY_ROLLOVER_RATE;
+    }
 
-        if ($reinvestmentRatio < 1.0) {
-            // Network aging (e.g., failing to keep up with 5G/fiber deployment) leads to higher churn and margin decay
-            $decayRate = self::NETWORK_DECAY_RATE * (1.0 - $reinvestmentRatio) * $timeScale;
-            $updatedMargin = max(self::MIN_OPERATING_MARGIN_FLOOR, $currentMargin - ($currentMargin * $decayRate));
-            $stock->setOperatingMargin((string) $updatedMargin);
-        } elseif ($reinvestmentRatio > 1.0) {
-            // Fiber-to-the-home and 5G modernization expands pricing power and capacity ceilings
-            $modGain = self::NETWORK_MODERNIZATION_RATE * log($reinvestmentRatio) * $timeScale;
-            $updatedMargin = min(
-                self::MAX_OPERATING_MARGIN_CEILING,
-                $currentMargin + ((self::MAX_OPERATING_MARGIN_CEILING - $currentMargin) * $modGain)
-            );
-            $stock->setOperatingMargin((string) $updatedMargin);
-        }
+    /** Network aging (e.g., failing to keep up with 5G/fiber deployment) leads to higher churn and margin decay */
+    public function getDepreciationDecayRate(): float
+    {
+        return self::NETWORK_DECAY_RATE;
+    }
+
+    /** Fiber-to-the-home and 5G modernization expands pricing power and capacity ceilings */
+    public function getModernizationGainRate(): float
+    {
+        return self::NETWORK_MODERNIZATION_RATE;
     }
 
     /**
@@ -221,10 +304,14 @@ class TelecomBusinessModel extends StandardCorporateBusinessModel
      */
     public function getOperatingMacroFields(): array
     {
-        return array_unique(array_merge(parent::getOperatingMacroFields(), [
+        return [
+            'energy_cost_push_lag',
+            'exchange_rate_index_ema',
             'output_gap_ema',
+            'producer_price_inflation_ema',
             'tips_breakeven_ema',
-            'yield_10y_ema',
-        ]));
+            'unemployment_rate_ema',
+            'wage_growth_ema',
+        ];
     }
 }

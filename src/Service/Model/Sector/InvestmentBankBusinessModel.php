@@ -25,6 +25,28 @@ use App\Service\Event\ShockEvent;
  */
 class InvestmentBankBusinessModel extends BrokerageBusinessModel
 {
+    // --- Operating Cyclicality & Demand Structure ---
+    /** Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Deal flow is among the most cyclical fee pools. */
+    public const OPERATING_CYCLICALITY = 1.40;
+
+    /**
+     * Calendar-quarter revenue seasonality [Q1, Q2, Q3, Q4] summing to 4.0: Q4 deal-closing surge before year end; summer lull.
+     *
+     * @return array<int, float>
+     */
+    public function getSeasonalityFactors(): array
+    {
+        return [0.95, 1.00, 0.95, 1.10];
+    }
+
+    // --- Balance Sheet Realism ---
+    /** Stock-based compensation as a fraction of revenue (ASC 718): non-cash, added back to FCF, settled in new shares. Deferred banker compensation is settled in restricted stock. */
+    public const STOCK_COMPENSATION_INTENSITY = 0.06;
+
+    // --- Labor Intensity ---
+    /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze. Banker and trader compensation is the dominant overhead line of an investment bank. */
+    public const FIXED_COST_LABOR_SHARE = 0.70;
+
     // --- Dual-Desk Revenue Architecture ---
     /** Baseline revenue share allocated to advisory, M&A mandates, and capital markets underwriting. */
     public const ADVISORY_REVENUE_WEIGHT    = 0.40;
@@ -34,10 +56,10 @@ class InvestmentBankBusinessModel extends BrokerageBusinessModel
     public const TRADING_VARIANCE_SCALAR    = 0.35;
 
     // --- Deal Flow Cost of Capital & Macro Elasticity ---
-    /** Baseline macro credit spread (~200bps). Spreads below this stimulate DCM debt syndication. */
-    public const DEAL_BASELINE_CREDIT_SPREAD = 0.020;
-    /** Neutral 5Y-over-policy term structure slope (~250bps). DCM stimulus is measured as deviation from this. */
-    public const DCM_NEUTRAL_CURVE_SLOPE     = 0.025;
+    /** Baseline macro credit spread (through-the-cycle IG). Spreads below this stimulate DCM debt syndication. */
+    public const DEAL_BASELINE_CREDIT_SPREAD = MacroEngine::BASE_CREDIT_SPREAD;
+    /** Neutral 5Y-over-policy term structure slope (~80bps: the five-year share of the term premium plus the usual policy discount). DCM stimulus is measured as deviation from this. */
+    public const DCM_NEUTRAL_CURVE_SLOPE     = 0.008;
     /** Sensitivity of M&A deal flow to corporate expansion (output gap). */
     public const MNA_OUTPUT_GAP_ELASTICITY   = 3.00;
     /** Sensitivity of M&A deal flow to Equity Risk Premium (ERP) cost of capital changes. */
@@ -64,8 +86,8 @@ class InvestmentBankBusinessModel extends BrokerageBusinessModel
     public const IPO_FREEZE_PENALTY             = 2.00;
 
     // --- Leveraged Finance (LevFin) & Hung Bridge Loan Write-Downs ---
-    /** Baseline high-yield credit spread (~480bps) above which underwriting bridge loans risk hung syndication. */
-    public const HY_BRIDGE_SPREAD_BASELINE      = 0.048;
+    /** Baseline high-yield credit spread (macro IG baseline x HY multiple) above which underwriting bridge loans risk hung syndication. */
+    public const HY_BRIDGE_SPREAD_BASELINE      = MacroEngine::BASE_CREDIT_SPREAD * MacroEngine::HY_BASE_SPREAD_MULTIPLIER;
     /** Variable cost margin penalty scalar per unit of high-yield spread widening from hung debt markdowns. */
     public const HUNG_DEBT_WRITEDOWN_SCALAR     = 1.50;
 
@@ -289,7 +311,7 @@ class InvestmentBankBusinessModel extends BrokerageBusinessModel
         $vixScalar        = $params[ModelParam::VixArbitrageScalar];
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
-        $streams  = new \App\DTO\StreamContext($momentum, $mathUtility);
+        $streams  = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
 
         $targetWeights = [
             'advisory' => $params[ModelParam::AdvisoryRevenueWeight],
@@ -309,7 +331,7 @@ class InvestmentBankBusinessModel extends BrokerageBusinessModel
         // Independent stream Z-scores with AR(1) persistence
         $advisoryZ = $streams->generateZ('advisory', 0.40);
         $tradingZ  = $streams->generateZ('trading', 0.15);
-        $eventZ    = $streams->generateZ('event', 0.05);
+        $eventZ    = $streams->generateExogenousZ('event', 0.05);
 
         // --- M&A, DCM, and ECM Elasticity (Cost of Capital & Macro Channel) ---
         $erpGap = MacroEngine::BASE_EQUITY_RISK_PREMIUM - $macroState->equityRiskPremium;
@@ -498,6 +520,7 @@ class InvestmentBankBusinessModel extends BrokerageBusinessModel
             'corporate_default_rate_ema',
             'deal_activity_index_ema',
             'high_yield_credit_spread_ema',
+            'interbank_liquidity_spread_ema',
             'macro_credit_spread_ema',
             'market_volatility_ema',
             'money_supply_growth_ema',

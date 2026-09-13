@@ -1,0 +1,338 @@
+{% extends 'base.html.twig' %}
+
+{% set isMatured = bond.status != 'ACTIVE' %}
+
+{% block title %}{{ bond.ticker }} Bond Price & Yield | {{ bond.name }} - Aerie Exchange{% endblock %}
+
+{% block meta %}
+	<meta name="description" content="Live clean price, yield to maturity, duration and cash flow schedule for {{ bond.ticker }} ({{ bond.name }}).">
+	<meta property="og:title" content="{{ bond.ticker }} Bond Price & Yield | Aerie Exchange">
+	<meta property="og:description" content="Sovereign bond {{ bond.ticker }}: {{ (bond.couponRate * 100)|number_format(3) }}% coupon, {{ yearsToMaturity|number_format(2) }} years to maturity.">
+	<meta property="og:type" content="website">
+{% endblock %}
+
+{% block body %}
+	<div class="max-w-400 mx-auto px-4 sm:px-6 lg:px-8 py-5 w-full space-y-5">
+
+		{# --- HERO --- #}
+		<div class="bg-surface-container-low rounded-lg p-6 lg:p-7 border border-outline-variant/15">
+			<div class="flex flex-col md:flex-row md:justify-between md:items-center gap-6">
+				<div class="min-w-0">
+					<div class="flex items-center gap-2 mb-1.5">
+						<a href="{{ path('app_bond_ladder') }}" class="text-2xs font-bold uppercase tracking-wider text-primary hover:underline underline-offset-4">Bond Desk</a>
+						<span class="text-2xs text-on-surface-variant/50">/</span>
+						<span class="text-2xs font-semibold uppercase tracking-wider text-on-surface-variant">{{ bond.tenorYears|number_format(0) }}Y Sovereign</span>
+					</div>
+
+					<h1 class="text-xl sm:text-2xl md:text-3xl font-bold text-on-surface tracking-tight leading-tight wrap-break-word">{{ bond.name }}</h1>
+
+					<div class="flex flex-wrap items-center gap-2 md:gap-3 mt-1.5">
+						<span class="text-sm font-bold text-primary font-mono tracking-wider">{{ bond.ticker }}</span>
+						{% if bond.isOnTheRun %}
+							<span class="inline-flex items-center rounded bg-primary/10 px-2 py-0.5 text-xs font-bold uppercase tracking-wide text-primary border border-primary/25">On the run</span>
+						{% endif %}
+						{% if isMatured %}
+							<span class="inline-flex items-center rounded bg-tertiary/10 px-2 py-0.5 text-xs font-bold uppercase tracking-wide text-tertiary border border-tertiary/25">Redeemed</span>
+						{% endif %}
+					</div>
+				</div>
+
+				<div class="md:text-right shrink-0 flex flex-col md:items-end">
+					<div class="flex items-center md:justify-end gap-2 mb-1">
+						<span class="w-2 h-2 rounded-full {{ isMatured ? 'bg-tertiary' : 'bg-secondary' }}"></span>
+						<span class="text-2xs font-semibold tracking-wide uppercase {{ isMatured ? 'text-tertiary' : 'text-secondary' }}" id="live-indicator">{{ isMatured ? 'Redeemed at par' : 'Live Market' }}</span>
+					</div>
+
+					{# The clean price is the quote. The dirty price sits beneath it, because that is what
+					   an order actually costs: a buyer pays the holder for the accrued coupon. #}
+					<span class="block text-3xl sm:text-4xl md:text-5xl font-bold font-mono tabular-nums text-on-surface tracking-tight transition-colors duration-300" id="big-price">
+						{{ bond.cleanPrice|number_format(2) }}
+					</span>
+
+					<div class="flex items-center md:justify-end gap-2 mt-1.5">
+						{% if changePercent is not null %}
+							<span id="big-change" class="inline-flex items-center gap-1 text-sm sm:text-base font-semibold font-mono tabular-nums {{ changePercent >= 0 ? 'text-secondary' : 'text-tertiary' }}">
+								<span class="material-symbols-outlined text-base leading-none" aria-hidden="true">{{ changePercent >= 0 ? 'trending_up' : 'trending_down' }}</span>
+								{{ changePercent >= 0 ? '+' : '' }}{{ (changePercent * 100)|number_format(2) }}%
+							</span>
+						{% else %}
+							<span id="big-change" class="text-sm sm:text-base font-semibold font-mono tabular-nums text-on-surface-variant/50">&mdash;</span>
+						{% endif %}
+						<span class="text-2xs font-semibold uppercase tracking-wide text-on-surface-variant/70">1M clean</span>
+					</div>
+
+					<div class="text-2xs text-on-surface-variant mt-1 font-mono tabular-nums">
+						Dirty <span id="stat-dirty">{{ bond.price|number_format(2) }}</span>
+						· accrued <span id="stat-accrued">{{ bond.accruedInterest|number_format(2) }}</span>
+					</div>
+				</div>
+			</div>
+		</div>
+
+		<div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
+
+			{# --- LEFT: CHART + CASH FLOWS --- #}
+			<div class="lg:col-span-2 space-y-5">
+
+				<div class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/15">
+					<div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+						<h2 class="text-sm font-semibold text-on-surface">Clean price history</h2>
+						<div class="flex flex-wrap items-center gap-1.5">
+							{# A bond's bar has no intraday range recorded, so the candle view is not offered here. #}
+							{% for range in ['1w', '1m', '3m', '6m', '1y', '3y', 'max'] %}
+								<button type="button" data-range="{{ range }}" class="range-btn px-4 py-1.5 text-xs font-bold rounded-md {{ range == '1y' ? 'bg-primary text-on-primary shadow-lg shadow-primary/20' : 'bg-surface-container text-on-surface-variant hover:bg-surface-container-high' }} transition-colors">{{ range|upper }}</button>
+							{% endfor %}
+						</div>
+					</div>
+
+					<div class="relative h-80 w-full">
+						<div id="mainChartContainer" class="absolute inset-0"></div>
+						<div id="chart-spinner" class="absolute inset-0 hidden items-center justify-center bg-surface-container-low/60">
+							<span class="text-xs text-on-surface-variant">Loading…</span>
+						</div>
+					</div>
+
+					<p class="text-2xs text-on-surface-variant mt-3 leading-relaxed">
+						Clean, so the coupon accrual sawtooth is not drawn as price movement. An issue trading above
+						par carries a coupon above the market yield; it converges to par regardless as it ages.
+					</p>
+				</div>
+
+				{# --- REMAINING CASH FLOWS --- #}
+				<div class="bg-surface-container-low rounded-lg border border-outline-variant/15 overflow-hidden">
+					<div class="px-5 py-3 border-b border-outline-variant/15">
+						<h2 class="text-sm font-bold text-on-surface">Remaining cash flows</h2>
+						<p class="text-2xs text-on-surface-variant mt-0.5">Per bond of {{ bond.faceValue|number_format(0) }} face. Contractual, not forecast.</p>
+					</div>
+
+					{% if cashFlows is empty %}
+						<div class="px-5 py-8 text-center text-sm text-on-surface-variant">This issue has redeemed. No cash flows remain.</div>
+					{% else %}
+						<div class="overflow-x-auto max-h-96 overflow-y-auto">
+							<table class="w-full text-left">
+								<thead class="text-2xs uppercase tracking-wider text-on-surface-variant bg-surface-container-lowest/60 sticky top-0">
+									<tr>
+										<th scope="col" class="px-5 py-2 font-bold">Due in</th>
+										<th scope="col" class="px-4 py-2 font-bold">Type</th>
+										<th scope="col" class="px-5 py-2 font-bold text-right">Amount</th>
+									</tr>
+								</thead>
+								<tbody class="divide-y divide-outline-variant/10 text-xs sm:text-sm">
+									{% for flow in cashFlows %}
+										<tr class="hover:bg-surface-container-high/30 transition-colors">
+											<td class="px-5 py-2.5 font-mono tabular-nums text-on-surface-variant">{{ flow.yearsAway|number_format(2) }}y</td>
+											<td class="px-4 py-2.5">
+												{% if flow.isRedemption %}
+													<span class="inline-flex items-center rounded bg-primary/10 px-1.5 py-0.5 text-4xs font-bold uppercase tracking-wide text-primary border border-primary/25">Final coupon + face</span>
+												{% else %}
+													<span class="text-on-surface-variant">Coupon</span>
+												{% endif %}
+											</td>
+											<td class="px-5 py-2.5 font-mono tabular-nums text-right font-bold text-on-surface">{{ flow.amount|number_format(2) }}</td>
+										</tr>
+									{% endfor %}
+								</tbody>
+							</table>
+						</div>
+					{% endif %}
+				</div>
+			</div>
+
+			{# --- RIGHT: TICKET + STATS --- #}
+			<div class="space-y-5">
+
+				<div class="bg-surface-container-low rounded-lg p-6 border border-outline-variant/15">
+					<h2 class="text-sm font-semibold text-on-surface mb-3">Order Ticket</h2>
+
+					{% if not app.user %}
+						<p class="text-xs text-on-surface-variant">
+							<a href="{{ path('app_login') }}" class="text-primary font-semibold hover:underline underline-offset-4">Sign in</a>
+							to trade this issue.
+						</p>
+					{% elseif isMatured %}
+						<p class="text-xs text-on-surface-variant">This issue has redeemed at par and no longer trades.</p>
+					{% else %}
+						{% if userQuantity > 0 or userCouponIncome > 0 %}
+							<div class="mb-4 p-3 rounded bg-surface-container-lowest/80 border border-outline-variant/20 space-y-1.5">
+								{% if userQuantity > 0 %}
+									<div class="flex justify-between items-center text-xs">
+										<span class="text-on-surface-variant uppercase tracking-wide text-2xs font-semibold">Position</span>
+										<span class="font-mono tabular-nums font-bold text-on-surface">{{ userQuantity|number_format }} bonds</span>
+									</div>
+									<div class="flex justify-between items-center text-xs">
+										<span class="text-on-surface-variant uppercase tracking-wide text-2xs font-semibold">Market Value</span>
+										<span class="font-mono tabular-nums font-bold text-on-surface" id="user-holding-value">${{ (bond.price * userQuantity)|number_format(2) }}</span>
+									</div>
+									{% if userAvgCost > 0 %}
+										<div class="flex justify-between items-center text-xs">
+											<span class="text-on-surface-variant uppercase tracking-wide text-2xs font-semibold">Avg Cost</span>
+											<span class="font-mono tabular-nums font-bold text-on-surface">${{ userAvgCost|number_format(2) }}</span>
+										</div>
+									{% endif %}
+								{% endif %}
+								{% if userCouponIncome > 0 %}
+									<div class="flex justify-between items-center text-xs {{ userQuantity > 0 ? 'pt-1.5 border-t border-outline-variant/15' : '' }}">
+										<span class="text-on-surface-variant uppercase tracking-wide text-2xs font-semibold">Coupons Received</span>
+										<span class="font-mono tabular-nums font-bold text-secondary">+${{ userCouponIncome|number_format(2) }}</span>
+									</div>
+								{% endif %}
+							</div>
+						{% endif %}
+
+						<form action="/trade/execute" method="POST" class="space-y-3"
+									  data-controller="trade-form"
+									  data-trade-form-ticker-value="{{ bond.ticker }}"
+									  data-trade-form-price-value="{{ bond.price }}"
+									  data-action="submit->trade-form#onSubmit">
+							<input type="hidden" name="ticker" value="{{ bond.ticker }}">
+							<input type="hidden" name="_token" value="{{ csrf_token('execute_trade') }}">
+
+							<div class="flex gap-2 bg-surface-container-lowest p-1 rounded border border-outline-variant/20">
+								<label class="flex-1 cursor-pointer">
+									<input type="radio" name="action" value="BUY" class="peer sr-only" checked>
+									<div class="py-1.5 text-center text-xs font-bold uppercase tracking-wider rounded text-on-surface-variant peer-checked:bg-secondary peer-checked:text-on-secondary transition-all">Buy</div>
+								</label>
+								<label class="flex-1 cursor-pointer">
+									<input type="radio" name="action" value="SELL" class="peer sr-only">
+									<div class="py-1.5 text-center text-xs font-bold uppercase tracking-wider rounded text-on-surface-variant peer-checked:bg-tertiary peer-checked:text-on-tertiary transition-all">Sell</div>
+								</label>
+							</div>
+
+							<div class="flex gap-2 bg-surface-container-lowest p-1 rounded border border-outline-variant/20">
+								<label class="flex-1 cursor-pointer">
+									<input type="radio" name="orderType" value="MARKET" class="peer sr-only" checked data-action="change->trade-form#onOrderTypeChange">
+									<div class="py-1 text-center text-xs font-bold uppercase tracking-wider rounded text-on-surface-variant peer-checked:bg-surface-container-high peer-checked:text-primary transition-all">Market</div>
+								</label>
+								<label class="flex-1 cursor-pointer">
+									<input type="radio" name="orderType" value="LIMIT" class="peer sr-only" data-action="change->trade-form#onOrderTypeChange">
+									<div class="py-1 text-center text-xs font-bold uppercase tracking-wider rounded text-on-surface-variant peer-checked:bg-surface-container-high peer-checked:text-primary transition-all">Limit</div>
+								</label>
+							</div>
+
+							<div id="limit-price-group" class="hidden space-y-1" data-trade-form-target="limitGroup">
+								<label for="limitPrice" class="text-sm font-semibold text-on-surface-variant">Limit Price ($, dirty)</label>
+								<input type="number" step="0.01" min="0.01" id="limitPrice" name="limitPrice" placeholder="{{ bond.price|number_format(2, '.', '') }}" class="w-full bg-surface-container-lowest border border-outline-variant/25 rounded px-3 py-1.5 text-sm font-mono tabular-nums text-on-surface focus:ring-1 focus:ring-primary outline-none" data-trade-form-target="limitPrice" data-action="input->trade-form#render">
+							</div>
+
+							<div class="space-y-1">
+								<label for="quantity" class="text-sm font-semibold text-on-surface-variant">Quantity (Bonds)</label>
+								<input type="number" id="quantity" name="quantity" min="1" max="1000000" value="1" required class="w-full bg-surface-container-lowest border border-outline-variant/25 rounded px-3 py-1.5 text-sm font-mono tabular-nums text-on-surface focus:ring-1 focus:ring-primary outline-none" data-trade-form-target="quantity" data-action="input->trade-form#render">
+							</div>
+
+							<div class="p-3 rounded bg-surface-container-lowest/80 border border-outline-variant/20 flex justify-between items-center text-xs">
+								<span class="text-on-surface-variant uppercase tracking-wider font-bold">Estimated Cost</span>
+								<span class="font-bold text-on-surface font-mono tabular-nums text-sm" id="estimated-total" data-trade-form-target="estimate" aria-live="polite">${{ bond.price|number_format(2) }}</span>
+							</div>
+
+							<p class="text-2xs text-on-surface-variant leading-relaxed">
+								Settled at the dirty price: the buyer reimburses the seller for the
+								{{ bond.accruedInterest|number_format(2) }} of coupon accrued since the last payment.
+							</p>
+
+							<button type="submit" data-trade-form-target="submit" class="w-full py-2 px-4 rounded bg-primary text-on-primary font-bold text-xs uppercase tracking-wider hover:brightness-110 active:scale-98 transition-all cursor-pointer disabled:hover:brightness-100 disabled:active:scale-100">Submit Order</button>
+						</form>
+
+						{% if openOrders is not empty %}
+							<div class="mt-4 pt-4 border-t border-outline-variant/15 space-y-2">
+								<h3 class="text-2xs font-bold uppercase tracking-wider text-on-surface-variant">Working Orders</h3>
+								{% for order in openOrders %}
+									<div class="flex items-center justify-between gap-2 text-xs">
+										<span class="font-mono tabular-nums text-on-surface">
+											<span class="{{ order.action == 'BUY' ? 'text-secondary' : 'text-tertiary' }} font-bold">{{ order.action }}</span>
+											{{ order.quantity|number_format }} @ ${{ order.limitPrice|number_format(2) }}
+										</span>
+										<form action="{{ path('app_trade_cancel', { id: order.id }) }}" method="POST">
+											<input type="hidden" name="_token" value="{{ csrf_token('cancel_trade_' ~ order.id) }}">
+											<button type="submit" class="cursor-pointer px-2.5 py-1 rounded bg-tertiary/10 text-tertiary hover:bg-tertiary/20 text-xs font-bold transition-colors">Cancel</button>
+										</form>
+									</div>
+								{% endfor %}
+							</div>
+						{% endif %}
+					{% endif %}
+				</div>
+
+				{# --- KEY STATISTICS --- #}
+				<div class="bg-surface-container-low rounded-lg p-6 border border-outline-variant/15">
+					<h2 class="text-sm font-semibold text-on-surface mb-3">Key Statistics</h2>
+
+					<dl class="divide-y divide-outline-variant/15 text-xs">
+						<div class="py-2 flex justify-between items-center">
+							<dt class="text-sm font-semibold text-on-surface-variant">Yield to Maturity</dt>
+							<dd class="font-bold text-on-surface font-mono tabular-nums" id="stat-ytm">{{ (bond.yieldToMaturity * 100)|number_format(2) }}%</dd>
+						</div>
+						<div class="py-2 flex justify-between items-center">
+							<dt class="text-sm font-semibold text-on-surface-variant">Coupon</dt>
+							<dd class="font-bold text-on-surface font-mono tabular-nums">{{ (bond.couponRate * 100)|number_format(3) }}%</dd>
+						</div>
+						<div class="py-2 flex justify-between items-center">
+							<dt class="text-sm font-semibold text-on-surface-variant">Annual Income</dt>
+							<dd class="font-bold text-on-surface font-mono tabular-nums">${{ annualCouponIncome|number_format(2) }}</dd>
+						</div>
+						<div class="py-2 flex justify-between items-center">
+							<dt class="text-sm font-semibold text-on-surface-variant">Time to Maturity</dt>
+							<dd class="font-bold text-on-surface font-mono tabular-nums" id="stat-ttm">{{ yearsToMaturity|number_format(2) }}y</dd>
+						</div>
+						<div class="py-2 flex justify-between items-center">
+							<dt class="text-sm font-semibold text-on-surface-variant">Modified Duration</dt>
+							<dd class="font-bold text-on-surface font-mono tabular-nums" id="stat-duration">{{ bond.modifiedDuration|number_format(2) }}</dd>
+						</div>
+						<div class="py-2 flex justify-between items-center">
+							<dt class="text-sm font-semibold text-on-surface-variant">Convexity</dt>
+							<dd class="font-bold text-on-surface font-mono tabular-nums" id="stat-convexity">{{ bond.convexity|number_format(1) }}</dd>
+						</div>
+						<div class="py-2 flex justify-between items-center">
+							<dt class="text-sm font-semibold text-on-surface-variant">Face Value</dt>
+							<dd class="font-bold text-on-surface font-mono tabular-nums">${{ bond.faceValue|number_format(0) }}</dd>
+						</div>
+						<div class="py-2 flex justify-between items-center">
+							<dt class="text-sm font-semibold text-on-surface-variant">Amount Outstanding</dt>
+							<dd class="font-bold text-on-surface font-mono tabular-nums">${{ bond.outstandingFace|format_large }}</dd>
+						</div>
+					</dl>
+				</div>
+
+				{# --- RATE RISK --- #}
+				<div class="bg-surface-container-low rounded-lg p-6 border border-outline-variant/15">
+					<h2 class="text-sm font-semibold text-on-surface mb-1">Rate Sensitivity</h2>
+					<p class="text-2xs text-on-surface-variant mb-3 leading-relaxed">
+						Estimated price move per parallel shift in yields, from this issue's own duration and
+						convexity: &minus;D&times;&Delta;y + &frac12;&times;C&times;&Delta;y&sup2;.
+					</p>
+
+					<dl class="divide-y divide-outline-variant/15 text-xs">
+						{% for shiftBps in [-100, -50, 50, 100] %}
+							{% set dy = shiftBps / 10000 %}
+							{% set move = (-bond.modifiedDuration * dy) + (0.5 * bond.convexity * dy * dy) %}
+							<div class="py-2 flex justify-between items-center">
+								<dt class="text-sm font-semibold text-on-surface-variant">{{ shiftBps > 0 ? '+' : '' }}{{ shiftBps }} bps</dt>
+								<dd class="font-bold font-mono tabular-nums {{ move >= 0 ? 'text-secondary' : 'text-tertiary' }}">
+									{{ move >= 0 ? '+' : '' }}{{ (move * 100)|number_format(2) }}%
+								</dd>
+							</div>
+						{% endfor %}
+					</dl>
+				</div>
+			</div>
+		</div>
+	</div>
+{% endblock %}
+
+{% block javascripts %}
+	{{ parent() }}
+
+	{% include 'partials/_chart_libraries.html.twig' with { lightweight: true } %}
+
+	<script type="application/json" id="aerie-data">
+		{{ {
+			ticker: bond.ticker,
+			ticksPerYear: ticksPerYear|default(14400),
+			userQuantity: userQuantity|default(0),
+			faceValue: bond.faceValue|default(1000)
+		}|json_encode|raw }}
+	</script>
+
+	<script type="module">
+		import 'pages/bond';
+	</script>
+{% endblock %}

@@ -16,7 +16,7 @@ const DRIVER_STRENGTH_PIPS = 3;
 
 /**
  * What kind of driver a row is, as a text tag. Emoji were unreadable here: the panel is set in
- * Courier Prime, which has no colour-emoji fallback in this stack, so they rendered as tofu.
+ * IBM Plex Mono, which has no colour-emoji fallback in this stack, so they rendered as tofu.
  */
 const DRIVER_TYPE_TAGS = { macro: 'macro', momentum: 'ops', company: 'co' };
 
@@ -67,7 +67,7 @@ function ruleTriggered(rule, macro) {
         case 'gte': return value >= rule.value;
         case 'lte': return value <= rule.value;
         case 'lt': return value < rule.value;
-        case 'index_deviation': return Math.abs(value - 100.0) / 100.0 >= rule.value;
+        case 'index_drop': return (100.0 - value) / 100.0 >= rule.value;
         default: return false;
     }
 }
@@ -87,28 +87,57 @@ function truncate(text, maxLength) {
 }
 
 /**
- * The `d` for one conduit, from an institution's outlet down to a tenant's roofline. Mirrors the
- * two forms the Twig template renders on first paint — keep the two in step, the way the logistic
- * facade curve already is.
- *
- * The upper row takes a symmetric S. The lower row cannot: that curve's horizontal traverse sits
- * at the midpoint between outlet and target, which for a lower-row tenant lands in the middle of
- * the upper row's buildings and would show only through the few clear units between them. So it
- * traverses a corridor above every possible upper-row roofline first, then drops straight down.
+ * The `d` for one conduit: from an institution's outlet down to its lane, along the lane, and
+ * down onto the tenant's roofline. Mirrors the path the Twig template renders on first paint —
+ * keep the two in step, the way the facade height mapping already is. Only the last drop's end
+ * (ty) ever changes on a live tick; the outlet, lane and drop x are fixed by the canvas.
  */
-function conduitPath(sx, sy, tx, ty, row, corridorY) {
-    if (row === 0) {
-        const mid = sy + (ty - sy) / 2;
-        return `M ${sx} ${sy} C ${sx} ${mid}, ${tx} ${mid}, ${tx} ${ty}`;
-    }
-
-    return `M ${sx} ${sy} C ${sx} ${sy + 20}, ${tx} ${corridorY - 20}, ${tx} ${corridorY} L ${tx} ${ty}`;
+function conduitPath(sx, sy, tx, ty, laneY) {
+    return `M ${sx} ${sy} V ${laneY} H ${tx} V ${ty}`;
 }
 
 /** Formats one readout value to match the server-rendered `number_format` precision exactly. */
 function formatReadoutValue(rawValue, unit) {
     const value = Number.isFinite(rawValue) ? rawValue : 0;
     return unit === 'pct' ? (value * 100).toFixed(2) + '%' : value.toFixed(1);
+}
+
+/**
+ * Share of a facade's windows to light for a return against its baseline. Mirrors
+ * App\Service\District\DistrictMapBuilder::calculateLitShare() exactly — floor + (atBaseline −
+ * floor) × ratio, clamped to [floor, 1], a non-positive baseline read as earning it exactly —
+ * with the two figures shipped as the `lighting` value rather than restated here.
+ */
+function litShareFor(returnOnCapital, baselineReturn, lighting) {
+    const ratio = baselineReturn > 0 ? returnOnCapital / baselineReturn : 1;
+    const share = lighting.floor + (lighting.atBaseline - lighting.floor) * ratio;
+    return Math.max(lighting.floor, Math.min(1, share));
+}
+
+/**
+ * A facade's condition from solvency and credit standing. Mirrors
+ * App\Service\District\DistrictMapBuilder::determineCondition(): the rating ladder and the
+ * investment-grade cut both ship as the `condition` value, so no rank is written down here.
+ */
+function conditionFor(isBankrupt, rating, condition) {
+    if (isBankrupt) return 'ruin';
+    const ranks = condition.ratingRanks || {};
+    const rank = ranks[rating] !== undefined ? ranks[rating] : ranks.BBB;
+    return rank < condition.investmentGradeRank ? 'distressed' : 'sound';
+}
+
+/** The `points` of a sparkline for a series, scaled into a box; a flat series runs along its middle. */
+function sparklinePoints(series, left, top, width, height) {
+    if (series.length < 2) return '';
+    const min = Math.min(...series);
+    const max = Math.max(...series);
+    const range = max - min;
+    const stepX = width / (series.length - 1);
+    return series.map((value, i) => {
+        const x = left + i * stepX;
+        const y = range > 0 ? top + height - ((value - min) / range) * height : top + height / 2;
+        return `${x.toFixed(1)},${y.toFixed(1)}`;
+    }).join(' ');
 }
 
 const EVENT_COLORS = {
@@ -164,6 +193,10 @@ function categorizeEvent(type, changePercent) {
     if (t === 'BANKRUPTCY') {
         return { category: 'bankruptcy', color: EVENT_COLORS.red500, icon: 'gavel', badge: 'BANKRUPTCY' };
     }
+    if (t === 'DISTRICT') {
+        // Roster change at the quarterly reconstitution — see App\Service\Event\EventPresenter::presentDistrict().
+        return { category: 'district', color: EVENT_COLORS.primary, icon: 'location_city', badge: 'RECONSTITUTION' };
+    }
     return { category: 'general', color: EVENT_COLORS.primary, icon: 'campaign', badge: t || 'EVENT' };
 }
 
@@ -182,8 +215,9 @@ function nowStamp() {
 export default class extends Controller {
     static targets = [
         'plot', 'label', 'rank', 'kerbPrice', 'kerbChange',
-        'institution', 'conduit', 'institutionReadout', 'svg', 'summaryStress',
-        'flare', 'badge', 'badgeCount',
+        'institution', 'conduit', 'institutionReadout', 'readoutSpark', 'svg', 'summaryStress',
+        'summaryReconstitution', 'reconstitutionNotice',
+        'flare', 'badge', 'badgeCount', 'kerbLight',
         'tooltip', 'tooltipTicker', 'tooltipRank', 'tooltipName', 'tooltipMeta',
         'tooltipPrice', 'tooltipChange', 'tooltipCap',
         'empty', 'detail', 'detailTicker', 'detailPlot', 'detailName', 'detailIndustry',
@@ -194,21 +228,83 @@ export default class extends Controller {
         'detailRevenueMixBar', 'detailRevenueFootnote',
         'institutionDetail', 'institutionName', 'institutionStatus', 'institutionReadings',
         'institutionFeeds', 'institutionFeedCount',
+        'sectorChip', 'sectorRun',
+        'conduitModeBtn', 'pennant', 'detailPositionWrap', 'detailPosition', 'tooltipPosition',
+        'quickTradeForm', 'quickTradeTickerInput', 'quickTradeHolding', 'quickTradeEstimate', 'quickTradeQuantity', 'quickTradeSubmit',
     ];
 
-    static values = { shares: Object, envelope: Object, events: Object, revenueMix: Object, institutions: Array };
+    static values = {
+        shares: Object, envelope: Object, events: Object, revenueMix: Object, institutions: Array,
+        /** Lit-share floor and at-baseline share — DistrictMap::WINDOW_LIT_SHARE_FLOOR / _AT_BASELINE. */
+        lighting: Object,
+        /** Credit rating ladder and the investment-grade cut — CreditRatingAgency::RATING_RANKS, DistrictMap::INVESTMENT_GRADE_RANK. */
+        condition: Object,
+        /** Wall-clock seconds one simulated month lasts — App\Service\District\DistrictEventFeed::badgeWindowSeconds(). */
+        eventBadgeWindowSeconds: Number,
+        /**
+         * Open positions keyed by ticker — App\Service\District\DistrictHoldingsFeed. `quantity` is
+         * ALWAYS the unsigned size; `isShort` carries the direction. `averageCost` is the weighted
+         * average from CostBasisCalculator (average proceeds for a short), or null.
+         */
+        userHoldings: Object,
+        /** Cash balance, for the quick-trade ticket's "Max" and estimate. */
+        userCash: Number,
+        /** Whether the account may short and cover — decides which ticket actions are rendered. */
+        marginEnabled: Boolean,
+        /** Roof pennant geometry — App\Data\DistrictMap::POSITION_PENNANT_*; the Twig draws from the same figures. */
+        positionPennant: Object,
+        /** Reconstitution calendar — App\Service\District\DistrictRoster::schedule(): nextTick, ticksPerYear… */
+        reconstitution: Object,
+    };
 
     /** Maximum recent events kept per ticker client-side, oldest dropped first. */
     static MAX_EVENTS_PER_TICKER = 8;
+
+    /**
+     * How often the badges are re-counted so an event ages out of its window while the page
+     * stays open. Coarse on purpose: a badge is a "something happened here lately" cue, and
+     * nothing else on the street changes on this clock.
+     */
+    static BADGE_REFRESH_MS = 5000;
+
+    /** How long a rank plate shows the direction it just moved in. */
+    static RANK_MOVE_MS = 1600;
+
+    /** Throttle street re-ranking to at most once per second under continuous market ticks. */
+    static RERANK_THROTTLE_MS = 1000;
+
+    /**
+     * Perceptual jitter deadband in viewBox units (~1.1px). Microscopic sub-cent price noise
+     * below this threshold is skipped to keep quiescent buildings from continuous 60 FPS
+     * rasterization loops while allowing genuine price moves to glide smoothly.
+     */
+    static HEIGHT_DEADBAND = 2.5;
+
+    /**
+     * How often an institution's readings are sampled for its sparklines, and how many samples
+     * each keeps. Macro arrives on every tick; sampling once a second keeps a minute of history
+     * per strip, which is enough to see a reading's direction without the strip becoming noise.
+     */
+    static READOUT_SAMPLE_MS = 1000;
+    static READOUT_HISTORY_LENGTH = 60;
 
     /** Zoom multiplier bounds — 1 is the fit-to-width state (natural container width). */
     static MIN_ZOOM = 1;
     static MAX_ZOOM = 4;
     static ZOOM_STEP = 1.25;
 
+    /** sessionStorage key carrying selection and plot positions across a reconstitution reload. */
+    static RECONSTITUTION_STORAGE_KEY = 'district:reconstitution';
+    /** How long the evicted facades fade before the frame is reloaded. */
+    static EVICTION_FADE_MS = 700;
+    /** Slide duration for survivors settling into their new plots after the reload. */
+    static RECONSTITUTION_SLIDE_MS = 900;
+    /** How long the "street reconstituted" notice stays up. */
+    static RECONSTITUTION_NOTICE_MS = 12000;
+    /** A carried-over reconstitution older than this is stale (a reload that was not ours) and is ignored. */
+    static RECONSTITUTION_CARRY_MAX_MS = 15000;
+
     connect() {
-        this.previousPrices = {};
-        this.tickTimers = {};
         this.flareTimers = {};
         this.badgeTimers = {};
         this.plotsByTicker = new Map();
@@ -218,11 +314,14 @@ export default class extends Controller {
         this.badgesByTicker = new Map();
         this.badgeCountsByTicker = new Map();
         this.currentSelectedTicker = null;
+        this.activeSector = null;
 
         // Recent-history backfill from App\Service\District\DistrictEventFeed, newest first —
-        // the same App\Service\Event\EventPresenter output the stock page's own event feed uses.
-        // Live events (see applyEvent()) are unshifted onto the same per-ticker arrays.
-        this.eventsByTicker = new Map(Object.entries(this.eventsValue || {}));
+        // read from <script type="application/json"> if present to avoid HTML-attribute bloat,
+        // falling back to Stimulus values.
+        const eventsDataEl = document.getElementById('district-events-data');
+        const initialEvents = eventsDataEl ? JSON.parse(eventsDataEl.textContent || '{}') : (this.eventsValue || {});
+        this.eventsByTicker = new Map(Object.entries(initialEvents));
 
         // Latest-quarter revenue mix from App\Service\District\DistrictRevenueFeed. This is a
         // snapshot, not a stream — it only changes once a simulated quarter, so unlike prices and
@@ -237,13 +336,47 @@ export default class extends Controller {
         this.pendingEvents = [];
         this.frameHandle = null;
 
+        this.rankMoveTimers = {};
+        // Each window's lighting priority, parsed once — a live tick compares ~50 of them per
+        // facade against the new lit share (see relightWindows()).
+        this.windowsByTicker = new Map();
+        this.facadesByTicker = new Map();
+        this.rooflinesByTicker = new Map();
+        this.plotWindowsByTicker = new Map();
+        this.rankPlatesByTicker = new Map();
+        this.beaconsByTicker = new Map();
+        this.furnituresByTicker = new Map();
         this.plotTargets.forEach(plot => {
             const ticker = plot.dataset.ticker;
             if (ticker) {
                 this.plotsByTicker.set(ticker, plot);
-                this.previousPrices[ticker] = parseFloat(plot.dataset.price) || 0;
+                this.facadesByTicker.set(ticker, plot.querySelector('.facade'));
+                this.rooflinesByTicker.set(ticker, plot.querySelector('.roofline'));
+                this.plotWindowsByTicker.set(ticker, plot.querySelector('.plot-windows'));
+                this.rankPlatesByTicker.set(ticker, plot.querySelector('.plot-rank'));
+                this.beaconsByTicker.set(ticker, plot.querySelector('.beacon'));
+                const furniture = plot.querySelector('.roof-furniture');
+                if (furniture) {
+                    this.furnituresByTicker.set(ticker, {
+                        el: furniture,
+                        height: parseFloat(furniture.getAttribute('height')) || 0,
+                    });
+                }
+                this.windowsByTicker.set(ticker, Array.from(plot.querySelectorAll('.window')).map(el => ({
+                    el,
+                    key: parseFloat(el.dataset.key),
+                })));
             }
         });
+
+        this.kerbLightByTicker = new Map();
+        this.kerbLightTargets.forEach(light => this.kerbLightByTicker.set(light.dataset.lightFor, light));
+
+        // Sparkline strips keyed by macro field, and the sampled history behind each.
+        this.sparksByField = new Map();
+        this.readoutSparkTargets.forEach(spark => this.indexBy(this.sparksByField, spark.dataset.sparkField, spark));
+        this.readingHistory = new Map();
+        this.lastReadingSampleAt = 0;
 
         this.conduitTargets.forEach(conduit => {
             this.indexBy(this.conduitsByBuilding, conduit.dataset.conduitBuilding, conduit);
@@ -251,7 +384,14 @@ export default class extends Controller {
         });
 
         this.flareTargets.forEach(flare => this.flaresByTicker.set(flare.dataset.flareFor, flare));
-        this.badgeTargets.forEach(badge => this.badgesByTicker.set(badge.dataset.badgeFor, badge));
+        this.badgeCirclesByTicker = new Map();
+        this.badgeTextsByTicker = new Map();
+        this.badgeTargets.forEach(badge => {
+            const ticker = badge.dataset.badgeFor;
+            this.badgesByTicker.set(ticker, badge);
+            this.badgeCirclesByTicker.set(ticker, badge.querySelector('circle'));
+            this.badgeTextsByTicker.set(ticker, badge.querySelector('text'));
+        });
 
         // Kerb plates are rewritten on every tick, so index them once rather than searching the
         // DOM 30 times per animation frame.
@@ -276,10 +416,39 @@ export default class extends Controller {
         this.institutionsById = new Map((this.institutionsValue || []).map(i => [i.id, i]));
 
         this.zoomFactor = 1;
+        this.conduitMode = 'all';
+
+        this.userHoldings = this.userHoldingsValue || {};
+        this.userCash = Number(this.userCashValue) || 0;
+
+        this.pennantsByTicker = new Map();
+        this.pennantTargets.forEach(pen => this.pennantsByTicker.set(pen.dataset.pennantFor, pen));
+
+        this.onSubmitEnd = () => {
+            if (this.hasQuickTradeSubmitTarget) {
+                this.quickTradeSubmitTarget.disabled = false;
+                this.quickTradeSubmitTarget.classList.remove('opacity-50', 'pointer-events-none');
+                const span = this.quickTradeSubmitTarget.querySelector('span:last-child');
+                if (span) span.textContent = 'Execute Order';
+            }
+        };
+        document.addEventListener('turbo:submit-end', this.onSubmitEnd);
 
         this.onMarketUpdate = this.onMarketUpdate.bind(this);
         this.flushPending = this.flushPending.bind(this);
         document.addEventListener('market:update', this.onMarketUpdate);
+
+        this.onVisibilityChange = this.onVisibilityChange.bind(this);
+        document.addEventListener('visibilitychange', this.onVisibilityChange);
+
+        this.reconstituting = false;
+        this.settleReconstitution();
+        this.lastRerankAt = 0;
+
+        // The server counted each badge at render time; from here on the client owns the count,
+        // so events fall out of the window on schedule rather than only on the next page load.
+        this.refreshBadges = this.refreshBadges.bind(this);
+        this.badgeRefreshHandle = setInterval(this.refreshBadges, this.constructor.BADGE_REFRESH_MS);
     }
 
     /** Appends `value` to the array at `map[key]`, creating it on first use. */
@@ -290,14 +459,27 @@ export default class extends Controller {
     }
 
     disconnect() {
+        document.removeEventListener('visibilitychange', this.onVisibilityChange);
         document.removeEventListener('market:update', this.onMarketUpdate);
-        Object.values(this.tickTimers).forEach(clearTimeout);
+        document.removeEventListener('turbo:submit-end', this.onSubmitEnd);
+        Object.values(this.rankMoveTimers).forEach(clearTimeout);
         Object.values(this.flareTimers).forEach(clearTimeout);
         Object.values(this.badgeTimers).forEach(clearTimeout);
+        clearInterval(this.badgeRefreshHandle);
+        clearTimeout(this.reconstitutionNoticeTimer);
 
         if (this.frameHandle !== null) {
             cancelAnimationFrame(this.frameHandle);
             this.frameHandle = null;
+        }
+    }
+
+    /** Flushes any queued market ticks when the user switches back to this tab. */
+    onVisibilityChange() {
+        if (!document.hidden && this.frameHandle === null) {
+            if (this.pendingStockUpdates.size > 0 || this.pendingMacro || this.pendingEvents.length > 0) {
+                this.frameHandle = requestAnimationFrame(this.flushPending);
+            }
         }
     }
 
@@ -334,17 +516,26 @@ export default class extends Controller {
         this.currentSelectedTicker = plot.dataset.ticker;
         this.renderEventsList(plot.dataset.ticker);
         this.renderRevenueMix(plot.dataset.ticker);
+
+        const holding = this.userHoldings[plot.dataset.ticker];
+        this.renderPositionDetail(plot.dataset.ticker, holding, parseFloat(plot.dataset.price) || 0);
+        this.setupQuickTrade(plot.dataset.ticker, holding, parseFloat(plot.dataset.price) || 0);
     }
 
-    /** Drops any current selection and returns the panel to its resting copy. */
+    /** Drops any current selection (and sector filter) and returns the panel to its resting copy. */
     deselect() {
         this.clearSelection();
         this.highlightConduits([]);
+        this.applySectorFilter(null);
         this.currentSelectedTicker = null;
 
         this.detailTarget.classList.add('hidden');
         this.institutionDetailTarget.classList.add('hidden');
         this.emptyTarget.classList.remove('hidden');
+
+        if (this.hasQuickTradeTickerInputTarget) {
+            this.quickTradeTickerInputTarget.value = '';
+        }
     }
 
     clearSelection() {
@@ -378,7 +569,7 @@ export default class extends Controller {
         this.tooltipNameTarget.textContent = truncate(plot.dataset.name || '', 30);
         this.tooltipMetaTarget.textContent = `${plot.dataset.sector || ''} · ${plot.dataset.rating || '—'}`;
         this.tooltipPriceTarget.textContent = formatCurrency(parseFloat(plot.dataset.price) || 0);
-        this.tooltipCapTarget.textContent = 'CAP $' + formatLarge(parseFloat(plot.dataset.mcap) || 0);
+        this.tooltipCapTarget.textContent = 'CAP ' + formatLarge(parseFloat(plot.dataset.mcap) || 0, '$');
 
         this.tooltipChangeTarget.textContent = hasChange ? formatPercent(change, 2, false, true) : '—';
         this.tooltipChangeTarget.setAttribute(
@@ -387,11 +578,89 @@ export default class extends Controller {
         );
 
         this.positionTooltip(plot);
+
+        if (this.hasTooltipPositionTarget) {
+            const holding = this.userHoldings[plot.dataset.ticker];
+            if (holding) {
+                const type = holding.isShort ? 'SHORT' : 'LONG';
+                const shares = Number(holding.quantity).toLocaleString();
+                this.tooltipPositionTarget.textContent = `YOU HOLD: ${type} ${shares} SHS`;
+                this.tooltipPositionTarget.setAttribute('fill', holding.isShort ? '#ffd9a0' : '#4edea3');
+            } else {
+                this.tooltipPositionTarget.textContent = '';
+            }
+        }
+
         tooltip.setAttribute('data-visible', 'true');
+
+        this.hoverConduits(this.conduitsByBuilding.get(plot.dataset.ticker) || []);
     }
 
     hideTooltip() {
         this.tooltipTarget.setAttribute('data-visible', 'false');
+        if (this.hasTooltipPositionTarget) {
+            this.tooltipPositionTarget.textContent = '';
+        }
+        this.hoverConduits([]);
+    }
+
+    /** Lights every conduit an institution feeds while the pointer rests on it. */
+    hoverInstitution(event) {
+        this.hoverConduits(this.conduitsByInstitution.get(event.currentTarget.dataset.institution) || []);
+    }
+
+    unhoverInstitution() {
+        this.hoverConduits([]);
+    }
+
+    /**
+     * Marks exactly the given conduits as hovered. Separate from the click highlight so moving
+     * the pointer away never clears a selection.
+     */
+    hoverConduits(conduits) {
+        this.conduitTargets.forEach(c => c.removeAttribute('data-hover'));
+        conduits.forEach(c => c.setAttribute('data-hover', 'true'));
+    }
+
+    /** A legend chip toggles its sector as the street's filter; the same chip again clears it. */
+    toggleSector(event) {
+        const sector = event.currentTarget.dataset.sector || null;
+        this.applySectorFilter(this.activeSector === sector ? null : sector);
+    }
+
+    /**
+     * Dims every tenant outside the given sector — facade, kerb plate and bracket alike — or
+     * clears the dimming when given null. Pure presentation: nothing is hidden, so hover, click
+     * and live ticks keep working on a dimmed building.
+     */
+    applySectorFilter(sector) {
+        this.activeSector = sector;
+
+        const mark = (node, nodeSector) => {
+            if (sector !== null && nodeSector !== sector) {
+                node.setAttribute('data-dimmed', 'true');
+            } else {
+                node.removeAttribute('data-dimmed');
+            }
+        };
+
+        this.plotTargets.forEach(plot => mark(plot, plot.dataset.sector));
+        this.sectorRunTargets.forEach(run => mark(run, run.dataset.sector));
+
+        const sectorByTicker = new Map();
+        this.plotTargets.forEach(plot => sectorByTicker.set(plot.dataset.ticker, plot.dataset.sector));
+        this.labelTargets.forEach(node => mark(node, sectorByTicker.get(node.dataset.labelFor)));
+        this.rankTargets.forEach(node => mark(node, sectorByTicker.get(node.dataset.rankFor)));
+        this.kerbPriceTargets.forEach(node => mark(node, sectorByTicker.get(node.dataset.priceFor)));
+        this.kerbChangeTargets.forEach(node => mark(node, sectorByTicker.get(node.dataset.changeFor)));
+        this.kerbLightTargets.forEach(node => mark(node, sectorByTicker.get(node.dataset.lightFor)));
+
+        this.sectorChipTargets.forEach(chip => {
+            const active = chip.dataset.sector === sector;
+            chip.setAttribute('aria-pressed', active ? 'true' : 'false');
+            chip.setAttribute('data-active', active ? 'true' : 'false');
+            chip.setAttribute('data-muted', sector !== null && !active ? 'true' : 'false');
+        });
     }
 
     /**
@@ -444,7 +713,7 @@ export default class extends Controller {
 
         this.institutionNameTarget.textContent = config ? config.label : institutionId;
         this.institutionStatusTarget.textContent = stressed ? 'Stressed' : 'Calm';
-        this.institutionStatusTarget.className = 'text-[10px] font-mono uppercase tracking-wider px-1.5 py-0.5 rounded border '
+        this.institutionStatusTarget.className = 'text-3xs font-mono uppercase tracking-wider px-1.5 py-0.5 rounded border '
             + (stressed
                 ? 'bg-tertiary/10 text-tertiary border-tertiary/30'
                 : 'bg-secondary/10 text-secondary border-secondary/30');
@@ -467,7 +736,7 @@ export default class extends Controller {
             const wrap = document.createElement('div');
 
             const label = document.createElement('dt');
-            label.className = 'text-on-surface-variant/60 uppercase tracking-wider text-[10px]';
+            label.className = 'text-on-surface-variant/60 uppercase tracking-wider text-3xs';
             label.textContent = readout.label;
 
             const value = document.createElement('dd');
@@ -492,7 +761,7 @@ export default class extends Controller {
 
         tickers.forEach(ticker => {
             const chip = document.createElement('span');
-            chip.className = 'px-1.5 py-0.5 rounded bg-surface-container text-on-surface-variant text-[10px] font-mono border border-outline-variant/15';
+            chip.className = 'px-1.5 py-0.5 rounded bg-surface-container text-on-surface-variant text-3xs font-mono border border-outline-variant/15';
             chip.textContent = ticker;
             container.appendChild(chip);
         });
@@ -502,6 +771,294 @@ export default class extends Controller {
     highlightConduits(conduits) {
         this.conduitTargets.forEach(c => c.removeAttribute('data-highlighted'));
         conduits.forEach(c => c.setAttribute('data-highlighted', 'true'));
+    }
+
+    /**
+     * Segmented toolbar: 'all', 'stressed', 'focused' or 'muted'. The mode is one attribute on the
+     * canvas and the rest is CSS — "focused" reads the same `data-highlighted` (selection) and
+     * `data-hover` marks the conduits already carry, so it needs no state of its own to keep in step.
+     */
+    setConduitMode(event) {
+        const mode = event.currentTarget.dataset.mode;
+        if (!mode || !this.hasSvgTarget) return;
+
+        this.conduitMode = mode;
+        this.conduitModeBtnTargets.forEach(btn => {
+            btn.setAttribute('data-active', btn.dataset.mode === mode ? 'true' : 'false');
+        });
+
+        if (mode === 'all') {
+            this.svgTarget.removeAttribute('data-conduit-mode');
+        } else {
+            this.svgTarget.setAttribute('data-conduit-mode', mode);
+        }
+    }
+
+    /** Formats and displays position details (shares, avg cost, unrealised P&L) in the sidebar. */
+    renderPositionDetail(ticker, holding, currentPrice) {
+        if (!this.hasDetailPositionTarget) return;
+
+        if (!holding) {
+            this.detailPositionTarget.textContent = 'None';
+            this.detailPositionTarget.className = 'text-on-surface-variant/50 tabular-nums font-normal';
+            return;
+        }
+
+        const qty = holding.quantity;
+        const avgCost = Number(holding.averageCost) || 0;
+        const isShort = Boolean(holding.isShort);
+        const positionType = isShort ? 'Short' : 'Long';
+
+        let costText = '';
+        let pnlText = '';
+        let pnlClass = 'text-on-surface';
+
+        // A short's basis is its average proceeds, so its gain runs the other way: down from the basis.
+        if (avgCost > 0) {
+            costText = ` @ ${formatCurrency(avgCost)}`;
+            if (currentPrice > 0) {
+                const pnlPerShare = isShort ? (avgCost - currentPrice) : (currentPrice - avgCost);
+                const totalPnl = pnlPerShare * qty;
+                const pnlPct = (pnlPerShare / avgCost) * 100;
+                const sign = totalPnl >= 0 ? '+' : '';
+                pnlText = ` (${sign}${formatCurrency(totalPnl)}, ${sign}${pnlPct.toFixed(1)}%)`;
+                pnlClass = totalPnl >= 0 ? 'text-secondary' : 'text-tertiary';
+            }
+        }
+
+        this.detailPositionTarget.textContent = `${positionType} ${qty.toLocaleString()} shs${costText}${pnlText}`;
+        this.detailPositionTarget.className = `tabular-nums font-bold ${pnlClass}`;
+    }
+
+    /** Initialises the quick-trade ticket for the selected constituent. */
+    setupQuickTrade(ticker, holding, currentPrice) {
+        if (!this.hasQuickTradeFormTarget) return;
+
+        if (this.hasQuickTradeTickerInputTarget) {
+            this.quickTradeTickerInputTarget.value = ticker;
+        }
+
+        if (this.hasQuickTradeHoldingTarget) {
+            if (holding) {
+                const isShort = Boolean(holding.isShort);
+                this.quickTradeHoldingTarget.textContent = `${isShort ? 'Short' : 'Long'} ${holding.quantity.toLocaleString()} shs`;
+                this.quickTradeHoldingTarget.className = `text-3xs font-mono font-semibold ${isShort ? 'text-amber-400' : 'text-secondary'}`;
+            } else {
+                this.quickTradeHoldingTarget.textContent = '0 shs';
+                this.quickTradeHoldingTarget.className = 'text-3xs font-mono font-semibold text-on-surface-variant/50';
+            }
+        }
+
+        this.updateQuickTradeEstimate();
+    }
+
+    onTradeActionChange() {
+        this.updateQuickTradeEstimate();
+    }
+
+    onQuantityInput() {
+        this.updateQuickTradeEstimate();
+    }
+
+    setQuickQuantity(event) {
+        const qty = parseInt(event.currentTarget.dataset.quantity, 10);
+        if (this.hasQuickTradeQuantityTarget && qty > 0) {
+            this.quickTradeQuantityTarget.value = qty;
+            this.updateQuickTradeEstimate();
+        }
+    }
+
+    setQuickQuantityMax() {
+        if (!this.hasQuickTradeQuantityTarget || !this.currentSelectedTicker) return;
+        const plot = this.plotsByTicker.get(this.currentSelectedTicker);
+        const price = plot ? (parseFloat(plot.dataset.price) || 0) : 0;
+        const holding = this.userHoldings[this.currentSelectedTicker];
+
+        const form = this.hasQuickTradeFormTarget ? this.quickTradeFormTarget : null;
+        const actionInput = form ? form.querySelector('input[name="action"]:checked') : null;
+        const action = actionInput ? actionInput.value : 'BUY';
+
+        let maxQty = 1;
+        if (action === 'BUY' || action === 'SHORT') {
+            maxQty = price > 0 ? Math.floor(this.userCash / price) : 0;
+        } else if (action === 'SELL') {
+            maxQty = (holding && !holding.isShort) ? holding.quantity : 0;
+        } else if (action === 'COVER') {
+            maxQty = (holding && holding.isShort) ? holding.quantity : 0;
+        }
+
+        this.quickTradeQuantityTarget.value = Math.max(1, maxQty);
+        this.updateQuickTradeEstimate();
+    }
+
+    onQuickTradeSubmit() {
+        if (this.hasQuickTradeSubmitTarget) {
+            this.quickTradeSubmitTarget.disabled = true;
+            this.quickTradeSubmitTarget.classList.add('opacity-50', 'pointer-events-none');
+            const span = this.quickTradeSubmitTarget.querySelector('span:last-child');
+            if (span) span.textContent = 'Executing...';
+        }
+    }
+
+    updateQuickTradeEstimate() {
+        if (!this.hasQuickTradeEstimateTarget || !this.currentSelectedTicker) return;
+        const plot = this.plotsByTicker.get(this.currentSelectedTicker);
+        const price = plot ? (parseFloat(plot.dataset.price) || 0) : 0;
+        const qty = this.hasQuickTradeQuantityTarget ? (parseInt(this.quickTradeQuantityTarget.value, 10) || 0) : 0;
+        const total = price * qty;
+        this.quickTradeEstimateTarget.textContent = `Est: ${formatCurrency(total)}`;
+    }
+
+    /** Rewrites the countdown tile from the live tick count: simulated days to the next reconstitution. */
+    renderReconstitutionCountdown(tick) {
+        if (!this.hasSummaryReconstitutionTarget) return;
+        const schedule = this.reconstitutionValue || {};
+        const ticksPerYear = Number(schedule.ticksPerYear) || 0;
+        const nextTick = Number(schedule.nextTick) || 0;
+        if (ticksPerYear <= 0) return;
+
+        const days = Math.max(0, Math.ceil((nextTick - tick) / ticksPerYear * 365));
+        const countdownText = days === 0 ? 'now' : `in ${days}d`;
+        if (this.summaryReconstitutionTarget.textContent !== countdownText) {
+            this.summaryReconstitutionTarget.textContent = countdownText;
+        }
+
+        // The boundary has passed but no announcement reached us — the announcement is one
+        // 20ms message, and the market stream drops its socket while the tab is hidden. The
+        // roster on the server has changed regardless, so reload anyway; without the names
+        // the notice just says the street was reconstituted and the slide still works.
+        if (tick >= nextTick && !this.reconstituting) {
+            this.reconstitute({ promoted: [], evicted: [] });
+        }
+    }
+
+    /**
+     * The feed announced a reconstitution. Evicted facades fade out first; then the selection and
+     * every plot's position are stashed for settleReconstitution() and the frame reloads itself
+     * from the server, which is the only party that knows what a newcomer looks like.
+     */
+    reconstitute(district) {
+        if (this.reconstituting) return;
+        const frame = this.element.closest('turbo-frame');
+        if (!frame) return;
+        this.reconstituting = true;
+
+        const evicted = Array.isArray(district.evicted) ? district.evicted : [];
+        const promoted = Array.isArray(district.promoted) ? district.promoted : [];
+
+        const positions = {};
+        this.plotsByTicker.forEach((plot, ticker) => {
+            const facade = plot.querySelector('.facade');
+            if (!facade) return;
+            positions[ticker] = {
+                x: parseFloat(facade.getAttribute('x')) || 0,
+                y: parseFloat(facade.getAttribute('y')) || 0,
+            };
+        });
+
+        try {
+            sessionStorage.setItem(this.constructor.RECONSTITUTION_STORAGE_KEY, JSON.stringify({
+                at: Date.now(),
+                selected: this.currentSelectedTicker,
+                positions,
+                promoted,
+                evicted,
+            }));
+        } catch {
+            // Storage unavailable: the reload still happens, it just cannot animate or reselect.
+        }
+
+        evicted.forEach(ticker => {
+            const plot = this.plotsByTicker.get(ticker);
+            if (!plot) return;
+            plot.style.transition = `opacity ${this.constructor.EVICTION_FADE_MS}ms ease-out`;
+            plot.style.opacity = '0';
+        });
+
+        // Turbo 7's FrameElement.reload() re-assigns the frame's own `src`, and a frame rendered
+        // inline with the page has none — reload() would set null to null and do nothing. The
+        // first reconstitution therefore points the frame at this page's URL, which triggers the
+        // fetch; the attribute survives the render, so every later one can plain reload().
+        const delay = evicted.some(t => this.plotsByTicker.has(t)) ? this.constructor.EVICTION_FADE_MS : 0;
+        setTimeout(() => {
+            if (frame.src) {
+                frame.reload();
+            } else {
+                frame.src = window.location.href;
+            }
+        }, delay);
+    }
+
+    /**
+     * Runs on connect(). If this render is the far side of a reconstitution reload, survivors
+     * slide from where they stood to where they stand now (FLIP: start at the old offset, then
+     * transition to none), newcomers fade in, the previous selection is restored, and the notice
+     * says who moved. A stale or absent stash means an ordinary page load and nothing happens.
+     */
+    settleReconstitution() {
+        let carried = null;
+        try {
+            const raw = sessionStorage.getItem(this.constructor.RECONSTITUTION_STORAGE_KEY);
+            sessionStorage.removeItem(this.constructor.RECONSTITUTION_STORAGE_KEY);
+            carried = raw ? JSON.parse(raw) : null;
+        } catch {
+            carried = null;
+        }
+        if (!carried || !Number.isFinite(carried.at)) return;
+        if (Date.now() - carried.at > this.constructor.RECONSTITUTION_CARRY_MAX_MS) return;
+
+        const reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        const slideMs = this.constructor.RECONSTITUTION_SLIDE_MS;
+        const positions = carried.positions || {};
+        const promoted = new Set(Array.isArray(carried.promoted) ? carried.promoted : []);
+
+        if (!reduceMotion) {
+            const movers = [];
+            this.plotsByTicker.forEach((plot, ticker) => {
+                const facade = plot.querySelector('.facade');
+                if (!facade) return;
+
+                if (promoted.has(ticker) || !positions[ticker]) {
+                    plot.style.opacity = '0';
+                    movers.push({ plot, dx: 0, dy: 0, fadeIn: true });
+                    return;
+                }
+
+                const dx = positions[ticker].x - (parseFloat(facade.getAttribute('x')) || 0);
+                const dy = positions[ticker].y - (parseFloat(facade.getAttribute('y')) || 0);
+                if (dx === 0 && dy === 0) return;
+                plot.style.transform = `translate(${dx}px, ${dy}px)`;
+                movers.push({ plot, dx, dy, fadeIn: false });
+            });
+
+            // Two frames apart so the browser paints the "first" state before transitioning to the "last".
+            requestAnimationFrame(() => requestAnimationFrame(() => {
+                movers.forEach(({ plot, fadeIn }) => {
+                    plot.style.transition = `transform ${slideMs}ms cubic-bezier(0.22, 1, 0.36, 1), opacity ${slideMs}ms ease-out`;
+                    plot.style.transform = '';
+                    if (fadeIn) plot.style.opacity = '';
+                });
+                setTimeout(() => movers.forEach(({ plot }) => { plot.style.transition = ''; }), slideMs + 50);
+            }));
+        }
+
+        if (carried.selected && this.plotsByTicker.has(carried.selected)) {
+            const plot = this.plotsByTicker.get(carried.selected);
+            this.select({ currentTarget: plot, stopPropagation() {} });
+        }
+
+        if (this.hasReconstitutionNoticeTarget) {
+            const evicted = Array.isArray(carried.evicted) ? carried.evicted : [];
+            const parts = ['Street reconstituted'];
+            if (promoted.size > 0) parts.push(`promoted ${Array.from(promoted).join(', ')}`);
+            if (evicted.length > 0) parts.push(`evicted ${evicted.join(', ')}`);
+            if (promoted.size === 0 && evicted.length === 0) parts.push('no change to the roster');
+            this.reconstitutionNoticeTarget.textContent = parts.join(' · ');
+            this.reconstitutionNoticeTarget.hidden = false;
+            this.reconstitutionNoticeTimer = setTimeout(() => {
+                if (this.hasReconstitutionNoticeTarget) this.reconstitutionNoticeTarget.hidden = true;
+            }, this.constructor.RECONSTITUTION_NOTICE_MS);
+        }
     }
 
     zoomIn() {
@@ -543,10 +1100,14 @@ export default class extends Controller {
         const price = parseFloat(plot.dataset.price) || 0;
         const mcap = parseFloat(plot.dataset.mcap) || 0;
         const roc = parseFloat(plot.dataset.roc) || 0;
+        const baselineRoc = parseFloat(plot.dataset.baselineRoc);
 
         this.detailPriceTarget.innerText = formatCurrency(price);
-        this.detailMcapTarget.innerText = '$' + formatLarge(mcap);
-        this.detailRocTarget.innerText = formatPercent(roc);
+        this.detailMcapTarget.innerText = formatLarge(mcap, '$');
+        // The same ratio that lights the windows, printed as the two figures behind it.
+        this.detailRocTarget.innerText = Number.isFinite(baselineRoc) && baselineRoc > 0
+            ? `${formatPercent(roc)} vs ${formatPercent(baselineRoc)}`
+            : formatPercent(roc);
 
         const change = parseFloat(plot.dataset.change);
         if (Number.isFinite(change)) {
@@ -601,7 +1162,7 @@ export default class extends Controller {
         header.className = 'flex items-center justify-between gap-2';
 
         const badge = document.createElement('span');
-        badge.className = 'inline-flex items-center rounded px-1.5 py-0.5 text-[9px] font-bold font-mono uppercase tracking-wider border';
+        badge.className = 'inline-flex items-center rounded px-1.5 py-0.5 text-4xs font-bold font-mono uppercase tracking-wider border';
         badge.textContent = evt.badge || evt.type || 'EVENT';
         if (evt.badgeClass) {
             badge.className += ' ' + evt.badgeClass;
@@ -613,13 +1174,13 @@ export default class extends Controller {
         header.appendChild(badge);
 
         const time = document.createElement('span');
-        time.className = 'text-[9px] font-mono text-on-surface-variant/50 shrink-0';
+        time.className = 'text-4xs font-mono text-on-surface-variant/50 shrink-0';
         time.textContent = evt.recordedAt || '';
         header.appendChild(time);
         body.appendChild(header);
 
         const headline = document.createElement('p');
-        headline.className = 'text-[11px] text-on-surface leading-snug';
+        headline.className = 'text-2xs text-on-surface leading-snug';
         headline.textContent = evt.headline || '';
         body.appendChild(headline);
 
@@ -682,7 +1243,7 @@ export default class extends Controller {
     applyGrowth(node, label, value) {
         const isMeaningful = value !== null && value !== undefined;
         node.textContent = `${label} ${formatGrowth(value)}`;
-        node.className = 'text-[11px] font-mono tabular-nums ' + (
+        node.className = 'text-2xs font-mono tabular-nums ' + (
             !isMeaningful ? 'text-on-surface-variant/40' : (value >= 0 ? 'text-secondary' : 'text-tertiary')
         );
     }
@@ -719,7 +1280,7 @@ export default class extends Controller {
         row.className = 'district-stream-row';
 
         const header = document.createElement('div');
-        header.className = 'flex items-baseline justify-between gap-2 text-[11px] mb-1';
+        header.className = 'flex items-baseline justify-between gap-2 text-2xs mb-1';
 
         const name = document.createElement('span');
         name.className = 'flex items-center gap-1.5 min-w-0';
@@ -745,14 +1306,14 @@ export default class extends Controller {
         // Letting all five figures share a wrapping flex row orphaned whichever one ran out of
         // width onto a line of its own, which read as though it belonged to the next segment.
         const growth = document.createElement('div');
-        growth.className = 'flex items-center gap-2 text-[10px] font-mono mb-0.5 pl-3';
+        growth.className = 'flex items-center gap-2 text-3xs font-mono mb-0.5 pl-3';
         growth.appendChild(this.buildSparkline(stream.history));
         growth.appendChild(this.buildMetric('QoQ', formatGrowth(stream.qoqDelta), stream.qoqDelta));
         growth.appendChild(this.buildMetric('YoY', formatGrowth(stream.yoyDelta), stream.yoyDelta));
         row.appendChild(growth);
 
         const attribution = document.createElement('div');
-        attribution.className = 'flex items-center gap-2 text-[10px] font-mono mb-1.5 pl-3';
+        attribution.className = 'flex items-center gap-2 text-3xs font-mono mb-1.5 pl-3';
 
         if (stream.contribution !== null && stream.contribution !== undefined) {
             const contribution = stream.contribution;
@@ -780,7 +1341,7 @@ export default class extends Controller {
             const eventLine = document.createElement('div');
             eventLine.className = 'pl-3 mb-1';
             const eventBadge = document.createElement('span');
-            eventBadge.className = 'text-[10px] font-bold uppercase tracking-wider text-amber-400 bg-amber-950/40 px-1.5 py-0.5 rounded border border-amber-500/30';
+            eventBadge.className = 'text-3xs font-bold uppercase tracking-wider text-amber-400 bg-amber-950/40 px-1.5 py-0.5 rounded border border-amber-500/30';
             eventBadge.textContent = stream.event;
             eventLine.appendChild(eventBadge);
             row.appendChild(eventLine);
@@ -797,7 +1358,7 @@ export default class extends Controller {
      * A driver's direction and strength, drawn rather than typed.
      *
      * The pips are elements with an explicit size, not box-drawing characters: the panel is set in
-     * Courier Prime, which carries no glyph for them, so a typed meter rendered as tofu boxes.
+     * IBM Plex Mono, which carries no glyph for them, so a typed meter rendered as tofu boxes.
      */
     buildStrengthMeter(strength, isPositive) {
         const meter = document.createElement('span');
@@ -807,7 +1368,7 @@ export default class extends Controller {
         meter.title = (isPositive ? 'Tailwind' : 'Headwind') + ` (${pips}/${DRIVER_STRENGTH_PIPS})`;
 
         const arrow = document.createElement('span');
-        arrow.className = 'text-[8px] leading-none mr-0.5';
+        arrow.className = 'text-4xs leading-none mr-0.5';
         arrow.textContent = isPositive ? '\u25B2' : '\u25BC';
         meter.appendChild(arrow);
 
@@ -899,12 +1460,12 @@ export default class extends Controller {
             entry.className = 'pl-2';
 
             const head = document.createElement('div');
-            head.className = 'flex items-baseline justify-between gap-2 text-[10px]';
+            head.className = 'flex items-baseline justify-between gap-2 text-3xs';
 
             const driverLabel = document.createElement('span');
             driverLabel.className = 'min-w-0 flex items-baseline gap-1.5';
             const typeTag = document.createElement('span');
-            typeTag.className = 'text-[9px] uppercase tracking-wider text-on-surface-variant/35 shrink-0';
+            typeTag.className = 'text-4xs uppercase tracking-wider text-on-surface-variant/35 shrink-0';
             typeTag.textContent = DRIVER_TYPE_TAGS[driver.type] || DRIVER_TYPE_TAGS.company;
             const driverName = document.createElement('span');
             driverName.className = 'text-on-surface-variant/70';
@@ -918,13 +1479,13 @@ export default class extends Controller {
             const readings = Array.isArray(driver.readings) ? driver.readings : [];
             if (readings.length > 0) {
                 const readingLine = document.createElement('div');
-                readingLine.className = 'text-[10px] font-mono tabular-nums text-on-surface-variant/45';
+                readingLine.className = 'text-3xs font-mono tabular-nums text-on-surface-variant/45';
                 readingLine.textContent = readings.map(r => `${r.label} ${formatReading(r)}`).join('  ·  ');
                 entry.appendChild(readingLine);
             } else if (driver.type === 'momentum' && driver.z !== undefined) {
                 // Sigma is how a standardised deviation is quoted; a bare "Z=" is model notation.
                 const momentumLine = document.createElement('div');
-                momentumLine.className = 'text-[10px] font-mono tabular-nums text-on-surface-variant/45';
+                momentumLine.className = 'text-3xs font-mono tabular-nums text-on-surface-variant/45';
                 const z = Number(driver.z);
                 momentumLine.textContent = `Operating momentum ${z >= 0 ? '+' : '−'}${Math.abs(z).toFixed(1)}σ `
                     + (z >= 0 ? 'above trend' : 'below trend');
@@ -957,6 +1518,16 @@ export default class extends Controller {
             this.pendingMacro = payload.macro;
         }
 
+        if (Number.isFinite(payload.tick)) {
+            this.renderReconstitutionCountdown(payload.tick);
+        }
+
+        // A new roster was taken on this tick. The street is server-rendered, so the frame is
+        // reloaded rather than re-laid-out here; everything up to the reload is choreography.
+        if (payload.district && typeof payload.district === 'object') {
+            this.reconstitute(payload.district);
+        }
+
         // Unlike stock ticks, events are discrete occurrences rather than a replaceable state —
         // several can land on different buildings in the same frame and all of them must fire,
         // so they are appended rather than coalesced by ticker.
@@ -966,7 +1537,7 @@ export default class extends Controller {
             });
         }
 
-        if (this.frameHandle === null) {
+        if (!document.hidden && this.frameHandle === null) {
             this.frameHandle = requestAnimationFrame(this.flushPending);
         }
     }
@@ -979,6 +1550,11 @@ export default class extends Controller {
             const plot = this.plotsByTicker.get(ticker);
             if (plot) this.applyUpdate(plot, update);
         });
+        const now = Date.now();
+        if (this.pendingStockUpdates.size > 0 && (now - this.lastRerankAt >= this.constructor.RERANK_THROTTLE_MS)) {
+            this.lastRerankAt = now;
+            this.rerank();
+        }
         this.pendingStockUpdates.clear();
 
         if (this.pendingMacro) {
@@ -1005,17 +1581,6 @@ export default class extends Controller {
             this.flareTimers[ticker] = setTimeout(() => flare.removeAttribute('data-flash'), 900);
         }
 
-        const badge = this.badgesByTicker.get(ticker);
-        const badgeCount = this.badgeCountsByTicker.get(ticker);
-        if (badge && badgeCount) {
-            const count = (parseInt(badge.dataset.count, 10) || 0) + 1;
-            badge.dataset.count = String(count);
-            badgeCount.textContent = String(count);
-            badge.setAttribute('data-flash', 'true');
-            clearTimeout(this.badgeTimers[ticker]);
-            this.badgeTimers[ticker] = setTimeout(() => badge.removeAttribute('data-flash'), 500);
-        }
-
         const entry = {
             type: evt.type,
             category: style.category,
@@ -1025,6 +1590,7 @@ export default class extends Controller {
             headline: evt.description || '',
             changePercent: Number.isFinite(parseFloat(evt.change_percent)) ? parseFloat(evt.change_percent) : null,
             recordedAt: nowStamp(),
+            recordedAtTs: Date.now() / 1000,
         };
 
         const history = this.eventsByTicker.get(ticker) || [];
@@ -1032,13 +1598,84 @@ export default class extends Controller {
         history.length = Math.min(history.length, this.constructor.MAX_EVENTS_PER_TICKER);
         this.eventsByTicker.set(ticker, history);
 
+        this.updateBadge(ticker);
+
+        const badge = this.badgesByTicker.get(ticker);
+        if (badge) {
+            badge.setAttribute('data-flash', 'true');
+            clearTimeout(this.badgeTimers[ticker]);
+            this.badgeTimers[ticker] = setTimeout(() => badge.removeAttribute('data-flash'), 500);
+        }
+
         if (this.currentSelectedTicker === ticker) {
             this.renderEventsList(ticker);
         }
     }
 
+    /** Events for a ticker that still fall inside the badge window, oldest already dropped. */
+    countRecentEvents(ticker) {
+        const windowOpensAt = Date.now() / 1000 - (this.eventBadgeWindowSecondsValue || 0);
+        const events = this.eventsByTicker.get(ticker) || [];
+
+        return events.filter(evt => Number.isFinite(evt.recordedAtTs) && evt.recordedAtTs >= windowOpensAt).length;
+    }
+
+    /** Rewrites one building's badge from its current in-window count. */
+    updateBadge(ticker) {
+        const badge = this.badgesByTicker.get(ticker);
+        const badgeCount = this.badgeCountsByTicker.get(ticker);
+        if (!badge || !badgeCount) return;
+
+        const count = this.countRecentEvents(ticker);
+        badge.dataset.count = String(count);
+        badgeCount.textContent = String(count);
+    }
+
+    /** Re-counts every badge so events age out of the window while the page stays open. */
+    refreshBadges() {
+        this.badgesByTicker.forEach((badge, ticker) => this.updateBadge(ticker));
+    }
+
+    /**
+     * Re-ranks the street from live caps and rewrites the plates that moved. The server's rank
+     * is the tenant's position in the whole listed universe; on the client only the roster is
+     * known, so this is a ranking among the tenants on the street — the same figures at load,
+     * since the roster is exactly the top of that universe, and only ever off by a company that
+     * overtook one from below the cut, which the next page load corrects.
+     */
+    rerank() {
+        const order = Array.from(this.plotsByTicker.values())
+            .map(plot => ({ plot, cap: parseFloat(plot.dataset.mcap) || 0 }))
+            .sort((a, b) => b.cap - a.cap);
+
+        order.forEach(({ plot }, index) => {
+            const rank = index + 1;
+            const previous = parseInt(plot.dataset.rank, 10);
+            if (rank === previous) return;
+
+            plot.dataset.rank = String(rank);
+            const ticker = plot.dataset.ticker;
+            const plate = this.rankPlatesByTicker.get(ticker) || plot.querySelector('.plot-rank');
+            if (plate) {
+                plate.textContent = `#${rank}`;
+                plate.setAttribute('data-rank-move', rank < previous ? 'up' : 'down');
+                clearTimeout(this.rankMoveTimers[ticker]);
+                this.rankMoveTimers[ticker] = setTimeout(() => {
+                    if (plate.hasAttribute('data-rank-move')) {
+                        plate.removeAttribute('data-rank-move');
+                    }
+                }, this.constructor.RANK_MOVE_MS);
+            }
+
+            if (this.currentSelectedTicker === ticker) {
+                this.detailRankTarget.innerText = `#${rank}`;
+            }
+        });
+    }
+
     /** Recomputes institution stress from a live macro snapshot and toggles matching conduits. */
     applyStress(macro) {
+        this.sampleReadings(macro);
         let stressedCount = 0;
 
         this.institutionTargets.forEach(institution => {
@@ -1049,10 +1686,14 @@ export default class extends Controller {
                 if (isStressed) stressedCount++;
 
                 const stressed = isStressed ? 'true' : 'false';
-                institution.setAttribute('data-stressed', stressed);
+                if (institution.getAttribute('data-stressed') !== stressed) {
+                    institution.setAttribute('data-stressed', stressed);
+                }
 
                 (this.conduitsByInstitution.get(institutionId) || []).forEach(conduit => {
-                    conduit.setAttribute('data-stressed', stressed);
+                    if (conduit.getAttribute('data-stressed') !== stressed) {
+                        conduit.setAttribute('data-stressed', stressed);
+                    }
                 });
             }
 
@@ -1061,10 +1702,44 @@ export default class extends Controller {
 
         // Keep the summary tile honest — it is a server-rendered count of the same verdict.
         if (this.hasSummaryStressTarget) {
-            this.summaryStressTarget.textContent = `${stressedCount}/${this.institutionTargets.length} stressed`;
-            this.summaryStressTarget.className = 'text-sm font-bold font-mono tabular-nums mt-1 '
-                + (stressedCount > 0 ? 'text-tertiary' : 'text-on-surface');
+            const stressText = `${stressedCount}/${this.institutionTargets.length} stressed`;
+            if (this.summaryStressTarget.textContent !== stressText) {
+                this.summaryStressTarget.textContent = stressText;
+                this.summaryStressTarget.className = 'text-sm font-bold font-mono tabular-nums mt-1 '
+                    + (stressedCount > 0 ? 'text-tertiary' : 'text-on-surface');
+            }
         }
+    }
+
+    /**
+     * Appends one sample per sparkline field, at most every READOUT_SAMPLE_MS, and redraws the
+     * strips. Only the fields an institution actually prints are kept — the snapshot carries
+     * far more than that.
+     */
+    sampleReadings(macro) {
+        const now = Date.now();
+        if (now - this.lastReadingSampleAt < this.constructor.READOUT_SAMPLE_MS) return;
+        this.lastReadingSampleAt = now;
+
+        this.sparksByField.forEach((sparks, field) => {
+            const value = macro[field];
+            if (typeof value !== 'number' || !Number.isFinite(value)) return;
+
+            const history = this.readingHistory.get(field) || [];
+            history.push(value);
+            if (history.length > this.constructor.READOUT_HISTORY_LENGTH) history.shift();
+            this.readingHistory.set(field, history);
+
+            sparks.forEach(spark => {
+                spark.setAttribute('points', sparklinePoints(
+                    history,
+                    parseFloat(spark.dataset.sparkLeft),
+                    parseFloat(spark.dataset.sparkTop),
+                    parseFloat(spark.dataset.sparkWidth),
+                    parseFloat(spark.dataset.sparkHeight),
+                ));
+            });
+        });
     }
 
     /** Rewrites an institution's printed values from a live macro snapshot, matched by field name. */
@@ -1075,7 +1750,12 @@ export default class extends Controller {
 
         config.readouts.forEach(readout => {
             const node = Array.from(valueNodes).find(n => n.dataset.readoutField === readout.field);
-            if (node) node.textContent = formatReadoutValue(macro[readout.field], readout.unit);
+            if (node) {
+                const formatted = formatReadoutValue(macro[readout.field], readout.unit);
+                if (node.textContent !== formatted) {
+                    node.textContent = formatted;
+                }
+            }
         });
     }
 
@@ -1088,20 +1768,68 @@ export default class extends Controller {
         const shares = this.sharesValue[ticker] || 0;
         const marketCap = update.market_cap !== undefined ? update.market_cap : newPrice * shares;
 
-        plot.dataset.price = newPrice;
-        plot.dataset.mcap = marketCap;
-
-        if (update.is_bankrupt) {
-            plot.dataset.condition = 'ruin';
+        const priceStr = String(newPrice);
+        if (plot.dataset.price !== priceStr) {
+            plot.dataset.price = priceStr;
+        }
+        const mcapStr = String(marketCap);
+        if (plot.dataset.mcap !== mcapStr) {
+            plot.dataset.mcap = mcapStr;
         }
 
+        this.applyCondition(plot, update);
+        this.relightWindows(plot, update);
         this.resizeFacade(plot, update.is_bankrupt ? 0 : marketCap);
-        this.flashTick(plot, ticker, newPrice);
         this.updateKerbPlate(ticker, newPrice);
 
         if (plot.getAttribute('data-selected') === 'true') {
             this.renderFigures(plot);
+            this.detailRatingTarget.innerText = plot.dataset.rating || '—';
+            const holding = this.userHoldings[ticker];
+            this.renderPositionDetail(ticker, holding, newPrice);
+            this.updateQuickTradeEstimate();
         }
+    }
+
+    /**
+     * Recolours the masonry from a live tick's solvency and rating — the same verdict the server
+     * drew on first paint (see conditionFor()). A downgrade to junk used to wait for a reload.
+     */
+    applyCondition(plot, update) {
+        if (typeof update.credit_rating === 'string' && update.credit_rating !== '') {
+            if (plot.dataset.rating !== update.credit_rating) {
+                plot.dataset.rating = update.credit_rating;
+            }
+        }
+        const newCondition = conditionFor(Boolean(update.is_bankrupt), plot.dataset.rating, this.conditionValue || {});
+        if (plot.dataset.condition !== newCondition) {
+            plot.dataset.condition = newCondition;
+        }
+    }
+
+    /**
+     * Relights a facade from a live tick's return on capital. The tick carries both ROIC and ROE;
+     * which one lights this tenant was decided server-side (data-return-field), and each window's
+     * priority came down with the markup, so this is only the comparison the server made —
+     * see DistrictMapBuilder::lightWindows(). Touches only the windows whose state flips.
+     */
+    relightWindows(plot, update) {
+        const current = parseFloat(update[plot.dataset.returnField]);
+        if (!Number.isFinite(current)) return;
+
+        const baseline = parseFloat(plot.dataset.baselineRoc);
+        const share = litShareFor(current, Number.isFinite(baseline) ? baseline : 0, this.lightingValue || {});
+        const currentStr = String(current);
+        if (plot.dataset.roc !== currentStr) {
+            plot.dataset.roc = currentStr;
+        }
+        if (share === parseFloat(plot.dataset.litShare)) return;
+        plot.dataset.litShare = String(share);
+
+        (this.windowsByTicker.get(plot.dataset.ticker) || []).forEach(({ el, key }) => {
+            const lit = key < share ? 'true' : 'false';
+            if (el.dataset.lit !== lit) el.dataset.lit = lit;
+        });
     }
 
     /**
@@ -1112,82 +1840,118 @@ export default class extends Controller {
      */
     updateKerbPlate(ticker, price) {
         const priceNode = this.kerbPriceByTicker.get(ticker);
-        if (priceNode) priceNode.textContent = formatCurrency(price);
+        if (priceNode) {
+            const formatted = formatCurrency(price);
+            if (priceNode.textContent !== formatted) {
+                priceNode.textContent = formatted;
+            }
+        }
     }
 
     /**
-     * Applies the log-scale height envelope to a facade. Mirrors
-     * DistrictMapBuilder::calculateFacadeHeight()'s logistic curve exactly — the two used to
-     * disagree (this was a plain clamped linear map), so a facade would visibly jump in height
-     * on the very first live tick after page load; see MathUtility::logisticUnitInterval().
+     * Applies the height envelope to a facade: linear in log10 across the window the server
+     * fitted to this roster, clamped at both ends. Must mirror
+     * DistrictMapBuilder::calculateFacadeHeight() and App\DTO\DistrictHeightEnvelope::normalise()
+     * exactly or a facade jumps on the first live tick after load.
      */
     resizeFacade(plot, marketCap) {
         const env = this.envelopeValue;
         const logCap = Math.log10(Math.max(marketCap, 1));
-        const midpoint = (env.logCeiling + env.logFloor) / 2;
-        const halfSpan = (env.logCeiling - env.logFloor) / 2;
-        const steepness = Math.log((1 - env.edgeTolerance) / env.edgeTolerance) / halfSpan;
-        const normalised = 1 / (1 + Math.exp(-steepness * (logCap - midpoint)));
+        const normalised = Math.max(0, Math.min(1, (logCap - env.logFloor) / (env.logCeiling - env.logFloor)));
         const height = env.minHeight + normalised * (env.maxHeight - env.minHeight);
         // Each row stands on its own ground line, carried per plot — reading one shared value
         // here would drop every lower-row facade onto the upper row on the first live tick.
         const y = parseFloat(plot.dataset.groundLine) - height;
 
-        const facade = plot.querySelector('.facade');
-        const roofline = plot.querySelector('.roofline');
-        const windows = plot.querySelector('.plot-windows');
+        const ticker = plot.dataset.ticker;
+        const facade = this.facadesByTicker.get(ticker) || plot.querySelector('.facade');
+        if (!facade) return;
 
-        if (facade) {
-            facade.setAttribute('y', y);
-            facade.setAttribute('height', height);
-            if (windows) {
-                windows.setAttribute('transform', `translate(${facade.getAttribute('x')} ${y})`);
-            }
+        const currentHeight = parseFloat(facade.getAttribute('height')) || 0;
+        const currentY = parseFloat(facade.getAttribute('y')) || 0;
+        // Perceptual jitter deadband: skip rewriting SVG attributes if the height change is negligible (< 1.5 units = ~0.7px)
+        if (Math.abs(height - currentHeight) < this.constructor.HEIGHT_DEADBAND && Math.abs(y - currentY) < this.constructor.HEIGHT_DEADBAND) {
+            return;
+        }
+
+        const roofline = this.rooflinesByTicker.get(ticker);
+        const windows = this.plotWindowsByTicker.get(ticker);
+
+        facade.setAttribute('y', String(y));
+        facade.setAttribute('height', String(height));
+        if (windows) {
+            windows.setAttribute('transform', `translate(${facade.getAttribute('x')} ${y})`);
         }
         if (roofline) {
-            roofline.setAttribute('y', y - 7);
+            roofline.setAttribute('y', String(y - 7));
         }
 
         // Conduits terminate at the roofline, so they must be redrawn every time it moves —
-        // their source end (sx, sy) is fixed (institutions don't move), only ty changes.
+        // outlet, lane and drop x are fixed by the canvas, only ty changes.
         const ty = y - 7;
-        (this.conduitsByBuilding.get(plot.dataset.ticker) || []).forEach(conduit => {
+        (this.conduitsByBuilding.get(ticker) || []).forEach(conduit => {
             conduit.setAttribute('d', conduitPath(
                 parseFloat(conduit.dataset.sx),
                 parseFloat(conduit.dataset.sy),
                 parseFloat(conduit.dataset.tx),
                 ty,
-                parseInt(conduit.dataset.conduitRow, 10) || 0,
-                env.corridorY,
+                parseFloat(conduit.dataset.laneY),
             ));
         });
 
-        // The rank, badge and flare all ride the roofline, so they move with it.
-        const flare = this.flaresByTicker.get(plot.dataset.ticker);
+        // The rank, badge, flare, beacon and roof furniture all ride the roofline, so they move
+        // with it.
+        const flare = this.flaresByTicker.get(ticker);
         if (flare) flare.setAttribute('cy', y - 34);
 
-        const rank = plot.querySelector('.plot-rank');
+        const beacon = this.beaconsByTicker.get(ticker);
+        if (beacon) beacon.setAttribute('cy', y - 20);
+
+        const furniture = this.furnituresByTicker.get(ticker);
+        if (furniture) furniture.el.setAttribute('y', y - 7 - furniture.height);
+
+        const rank = this.rankPlatesByTicker.get(ticker);
         if (rank) rank.setAttribute('y', y - 14);
 
-        const badge = this.badgesByTicker.get(plot.dataset.ticker);
-        if (badge) {
-            const circle = badge.querySelector('circle');
-            const count = badge.querySelector('text');
-            if (circle) circle.setAttribute('cy', y - 18);
-            if (count) count.setAttribute('y', y - 18);
-        }
+        const circle = this.badgeCirclesByTicker.get(ticker);
+        if (circle) circle.setAttribute('cy', y - 18);
+        const count = this.badgeTextsByTicker.get(ticker);
+        if (count) count.setAttribute('y', y - 18);
 
+        this.movePennant(ticker, parseFloat(facade.getAttribute('x')) || 0, y);
     }
 
-    /** Lights the roofline green or red for a moment on a price change. */
-    flashTick(plot, ticker, newPrice) {
-        const oldPrice = this.previousPrices[ticker];
-        this.previousPrices[ticker] = newPrice;
-        if (oldPrice === undefined || newPrice === oldPrice) return;
+    /**
+     * Rides the position pennant along with its roofline. Mirrors the Twig: pole at
+     * `inset` from the west edge, foot on the rank plate (roof − 14), flag `height` tall with
+     * a 6-unit clearance above the plate, flying `width` eastward.
+     */
+    movePennant(ticker, roofX, roofY) {
+        const pennant = this.pennantsByTicker.get(ticker);
+        if (!pennant) return;
 
-        plot.setAttribute('data-tick', newPrice > oldPrice ? 'up' : 'down');
+        const geometry = this.positionPennantValue || {};
+        const width = Number(geometry.width) || 0;
+        const height = Number(geometry.height) || 0;
+        const poleX = roofX + (Number(geometry.inset) || 0);
+        const poleFoot = roofY - 14;
+        const poleTop = poleFoot - height - 6;
 
-        clearTimeout(this.tickTimers[ticker]);
-        this.tickTimers[ticker] = setTimeout(() => plot.removeAttribute('data-tick'), 700);
+        const line = pennant.querySelector('line');
+        const poly = pennant.querySelector('polygon');
+        const circle = pennant.querySelector('circle');
+        if (line) {
+            line.setAttribute('x1', String(poleX));
+            line.setAttribute('x2', String(poleX));
+            line.setAttribute('y1', String(poleFoot));
+            line.setAttribute('y2', String(poleTop));
+        }
+        if (poly) {
+            poly.setAttribute('points', `${poleX},${poleTop} ${poleX + width},${poleTop + height / 2} ${poleX},${poleTop + height}`);
+        }
+        if (circle) {
+            circle.setAttribute('cx', String(poleX));
+            circle.setAttribute('cy', String(poleTop));
+        }
     }
 }

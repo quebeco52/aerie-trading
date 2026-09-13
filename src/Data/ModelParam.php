@@ -12,11 +12,15 @@ enum ModelParam: string
 {
     // --- Pricing Power & Macro Scalars ---
     case PricingPowerIndex = 'pricing_power_index';
+    /** Operating cyclicality: elasticity of the firm's volumes and costs to the macro cycle (replaces equity beta inside operating physics). */
+    case OperatingCyclicality = 'operating_cyclicality';
     case RateSensitivityScalar = 'rate_sensitivity_scalar';
     case VixArbitrageScalar = 'vix_arbitrage_scalar';
     case SpotPriceSensitivity = 'spot_price_sensitivity';
     case AdvertisingCyclicality = 'advertising_cyclicality';
     case MonopolyAggression = 'monopoly_aggression';
+    /** Propensity of this management team to steer reported earnings toward consensus with accruals. */
+    case EarningsManagementPropensity = 'earnings_management_propensity';
     case CeclSpreadSensitivity = 'cecl_spread_sensitivity';
     case NimInversionSensitivity = 'nim_inversion_sensitivity';
     case CreditRiskAppetite = 'credit_risk_appetite';
@@ -30,11 +34,14 @@ enum ModelParam: string
     case FloatEquityWeight = 'float_equity_weight';
     case EquityPortfolioVol = 'equity_portfolio_vol';
     case PncWeight = 'pnc_weight';
-    case LifeAnnuityWeight = 'life_annuity_weight';
     case PropertyCasualtyWeight = 'property_casualty_weight';
     case LifeAndAnnuityWeight = 'life_and_annuity_weight';
     case TreatyReinsuranceWeight = 'treaty_reinsurance_weight';
     case CatBondSpreadWeight = 'cat_bond_spread_weight';
+
+    // --- Reporting Calendar ---
+    /** Calendar quarter index (0-3) in which the fiscal year begins; 0 = calendar year. */
+    case FiscalYearStartQuarter = 'fiscal_year_start_quarter';
 
     // --- Analyst Coverage Visibility ---
     case BaseVisibility = 'base_visibility';
@@ -91,6 +98,9 @@ enum ModelParam: string
     case ExtractionRevenueWeight = 'extraction_revenue_weight';
     case SpotPriceWeight = 'spot_price_weight';
     case RefiningSpreadWeight = 'refining_spread_weight';
+    case EnergyPriceExposure = 'energy_price_exposure';
+    case IndustrialMetalsExposure = 'industrial_metals_exposure';
+    case AgriculturalExposure = 'agricultural_exposure';
     case OemEquipmentWeight = 'oem_equipment_weight';
     case AftermarketMroWeight = 'aftermarket_mro_weight';
     case ContractOemWeight = 'contract_oem_weight';
@@ -139,6 +149,11 @@ enum ModelParam: string
     case PipelineDrugWeight = 'pipeline_drug_weight';
     case CommercialTherapeuticsWeight = 'commercial_therapeutics_weight';
     case PipelineMilestonesWeight = 'pipeline_milestones_weight';
+    case PatentProtectedRevenueShare = 'patent_protected_revenue_share';
+    case LoeExposureShare = 'loe_exposure_share';
+    case ExclusivityQuarters = 'exclusivity_quarters';
+    case BiologicRevenueShare = 'biologic_revenue_share';
+    case PatentedMarginCeiling = 'patented_margin_ceiling';
     case InpatientCareWeight = 'inpatient_care_weight';
     case ElectiveOutpatientWeight = 'elective_outpatient_weight';
     case InsuranceArbitrageWeight = 'insurance_arbitrage_weight';

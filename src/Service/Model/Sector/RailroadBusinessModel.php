@@ -28,6 +28,40 @@ use App\Service\Event\ShockEvent;
  */
 class RailroadBusinessModel extends StandardCorporateBusinessModel
 {
+    // --- Operating Cyclicality & Demand Structure ---
+    /** Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Carloads track industrial output; captive track networks limit switching. */
+    public const OPERATING_CYCLICALITY = 1.00;
+    /** Own-price elasticity of demand: volume lost per unit of real price increase. */
+    public const PRICE_ELASTICITY_OF_DEMAND = 0.40;
+    /** Share of an idiosyncratic revenue gain taken from same-industry peers rather than won from a larger market. */
+    public const INDUSTRY_SUBSTITUTABILITY = 0.20;
+
+    // --- Input Cost Basket ---
+    /** Shares of the variable cost base bought in tracked input markets (energy, metals, agri, freight, wholesale goods, variable payroll). */
+    public const INPUT_COST_EXPOSURES = ['energy' => 0.20, 'labor' => 0.30, 'ppi' => 0.05, 'metals' => 0.03];
+    /** Fuel surcharge programs reprice within a quarter or two of the diesel move. */
+    public const INPUT_PASS_THROUGH_LAG_YEARS = 0.25;
+    /** Captive track networks: nearly all fuel and wage moves are surcharged through. */
+    public const PRICING_POWER_INDEX = 0.80;
+
+    /**
+     * Calendar-quarter revenue seasonality [Q1, Q2, Q3, Q4] summing to 4.0: harvest grain carloads in the second half, winter weather in Q1.
+     *
+     * @return array<int, float>
+     */
+    public function getSeasonalityFactors(): array
+    {
+        return [0.95, 1.00, 1.02, 1.03];
+    }
+
+    // --- Balance Sheet Realism ---
+    /** Capitalized operating lease liabilities as a fraction of annual revenue (IFRS 16 / ASC 842). Leased locomotives and rolling stock. */
+    public const LEASE_LIABILITY_INTENSITY = 0.10;
+
+    // --- Labor Intensity ---
+    /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze. Crew and maintenance-of-way payroll shares overhead with track, locomotive and fuel costs. */
+    public const FIXED_COST_LABOR_SHARE = 0.45;
+
     // --- Analyst Visibility & Error ---
     /** Base coverage visibility for Class 1 railroad analysts. */
     public const BASE_COVERAGE_VISIBILITY = 0.60;
@@ -41,6 +75,8 @@ class RailroadBusinessModel extends StandardCorporateBusinessModel
     public const BULK_COMMODITIES_WEIGHT = 0.40;
     /** Baseline fraction of revenue derived from heavy industrial and automotive carloads. */
     public const INDUSTRIAL_CARLOAD_WEIGHT = 0.20;
+    /** Baseline fraction of revenue from commuter transit subscriptions; zero for a pure freight hauler. */
+    public const TRANSIT_SUBSCRIPTION_WEIGHT = 0.00;
 
     // --- Physics & Variances ---
     /** Idiosyncratic revenue variance scalar for cyclical intermodal container shipping. */
@@ -49,10 +85,15 @@ class RailroadBusinessModel extends StandardCorporateBusinessModel
     public const BULK_VARIANCE_SCALAR       = 0.15;
     /** Idiosyncratic revenue variance scalar for industrial and automotive carloads. */
     public const INDUSTRIAL_VARIANCE_SCALAR = 0.25;
+    /** Idiosyncratic revenue variance scalar for commuter subscriptions: the steadiest line on the network. */
+    public const TRANSIT_VARIANCE_SCALAR    = 0.08;
+    /**
+     * Elasticity of commuter ridership to the output gap. Employment drives journeys, so a recession thins
+     * the carriages, but an auto-renewing season ticket is cancelled long after the commute stops, which is
+     * why this is a fraction of the freight betas rather than a peer of them.
+     */
+    public const TRANSIT_EMPLOYMENT_ELASTICITY = 0.25;
 
-    // --- Fuel Surcharge & Operating Ratio ---
-    /** Variable margin cost drag scalar from diesel fuel price spikes before fuel surcharges take effect. */
-    public const FUEL_SURCHARGE_LAG_PENALTY = 0.06;
 
     // --- Manufacturing PMI & Trade Transmission ---
     /** Sensitivity of industrial carload volumes to manufacturing PMI shifts. */
@@ -88,26 +129,35 @@ class RailroadBusinessModel extends StandardCorporateBusinessModel
             ModelParam::IntermodalFreightWeight->value  => self::INTERMODAL_WEIGHT,
             ModelParam::BulkCommoditiesWeight->value    => self::BULK_COMMODITIES_WEIGHT,
             ModelParam::IndustrialCarloadsWeight->value => self::INDUSTRIAL_CARLOAD_WEIGHT,
+            ModelParam::SubscriptionWeight->value       => self::TRANSIT_SUBSCRIPTION_WEIGHT,
         ]);
 
-        $intermodalWeight = $params[ModelParam::IntermodalFreightWeight];
-        $bulkWeight       = $params[ModelParam::BulkCommoditiesWeight];
-        $industrialWeight = $params[ModelParam::IndustrialCarloadsWeight];
-
         $momentum = $stock->getEarningsMomentumZ() ?? [];
-        $streams  = new \App\DTO\StreamContext($momentum, $mathUtility);
-        $beta     = abs((float) $stock->getBeta());
+        $streams  = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
+        $beta     = $this->getOperatingCyclicality($stock);
+
+        // A passenger operator is a different business wearing the same track. Freight sells capacity to
+        // shippers and rises and falls with trade and manufacturing; a commuter network sells an
+        // auto-renewing season ticket to people who have to get to work. The stream only exists for
+        // operators that carry passengers, so a pure freight hauler never sees it.
+        $rawTransitWeight = $params[ModelParam::SubscriptionWeight];
 
         // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
-        $activeWeights = $streams->resolveActiveStreamWeights([
+        $targetWeights = [
             'intermodal_freight'  => $params[ModelParam::IntermodalFreightWeight],
             'bulk_commodities'    => $params[ModelParam::BulkCommoditiesWeight],
             'industrial_carloads' => $params[ModelParam::IndustrialCarloadsWeight],
-        ]);
+        ];
+        if ($rawTransitWeight > 0.0) {
+            $targetWeights['transit_subscriptions'] = $rawTransitWeight;
+        }
+
+        $activeWeights = $streams->resolveActiveStreamWeights($targetWeights);
 
         $intermodalWeight = $activeWeights['intermodal_freight'];
         $bulkWeight       = $activeWeights['bulk_commodities'];
         $industrialWeight = $activeWeights['industrial_carloads'];
+        $transitWeight    = $activeWeights['transit_subscriptions'] ?? 0.0;
 
         // Independent stream Z-scores
         $intermodalZ = $streams->generateZ('intermodal_freight', 0.20);
@@ -134,15 +184,24 @@ class RailroadBusinessModel extends StandardCorporateBusinessModel
             'industrial_carloads' => $industrialRevenue,
         ];
 
+        if ($transitWeight > 0.0) {
+            // Ridership follows employment rather than trade, and a subscription lags the decision to stop
+            // commuting, so the output gap reaches this stream at a fraction of the freight elasticity.
+            $transitZ = $streams->generateZ('transit_subscriptions', 0.55);
+            $transitMacroShift = $macroState->outputGapEma * self::TRANSIT_EMPLOYMENT_ELASTICITY * $beta;
+
+            $streamRevenues['transit_subscriptions'] = max(0.0, $expectedRevenue * $transitWeight
+                * (1.0 + ($transitZ * ($baselineVol * self::TRANSIT_VARIANCE_SCALAR)) + $transitMacroShift));
+        }
+
         $actualRevenue = array_sum($streamRevenues);
         $streams->recordStreamShares($streamRevenues);
 
-        // Diesel fuel surcharge lag: Railroads consume massive quantities of diesel.
-        // Spikes in energy price index create temporary margin compression before fuel surcharges adjust.
-        $energyShift = $macroState->energyCostPushLag / MacroEngine::ENERGY_COST_PUSH_TRANSMISSION;
-        $fuelLagDrag = $energyShift > 0 ? $energyShift * self::FUEL_SURCHARGE_LAG_PENALTY : 0.0;
+        // Diesel fuel surcharge lag: locomotive diesel and crew payroll reach the cost base at spot and are
+        // surcharged through with a lag, so a spike compresses the operating ratio for a quarter or two.
+        $inputCostDrag = $this->resolveInputCostDrag($stock, $macroState, $streams, $this->resolvePricingPower($stock), $realizedVariableMargin);
 
-        $clampedMargin = $this->clampMargin($realizedVariableMargin + $fuelLagDrag);
+        $clampedMargin = $this->clampMargin($realizedVariableMargin + $inputCostDrag);
 
         // Max magnitude shock
         $primaryShockZ = $streams->resolveDominantShockZ([$intermodalZ, $bulkZ, $industrialZ]);
@@ -164,25 +223,16 @@ class RailroadBusinessModel extends StandardCorporateBusinessModel
         );
     }
 
-    public function applyAssetDepreciationDecay(Stock $stock, float $reinvestmentRatio, float $dt): void
+    /** Track slow orders & locomotive breakdown drag toward floor */
+    public function getDepreciationDecayRate(): float
     {
-        $timeScale = $dt / 0.25;
-        $currentMargin = (float) $stock->getOperatingMargin();
+        return self::TRACK_AGING_DECAY_RATE;
+    }
 
-        if ($reinvestmentRatio < 1.0) {
-            // Track slow orders & locomotive breakdown drag toward floor
-            $decayRate = self::TRACK_AGING_DECAY_RATE * (1.0 - $reinvestmentRatio) * $timeScale;
-            $updatedMargin = max(self::MIN_OPERATING_MARGIN_FLOOR, $currentMargin - ($currentMargin * $decayRate));
-            $stock->setOperatingMargin((string) $updatedMargin);
-        } elseif ($reinvestmentRatio > 1.0) {
-            // Precision Scheduled Railroading (PSR) efficiency expands margin ceiling
-            $modGain = self::PSR_EFFICIENCY_GAIN_RATE * log($reinvestmentRatio) * $timeScale;
-            $updatedMargin = min(
-                self::MAX_OPERATING_MARGIN_CEILING,
-                $currentMargin + ((self::MAX_OPERATING_MARGIN_CEILING - $currentMargin) * $modGain)
-            );
-            $stock->setOperatingMargin((string) $updatedMargin);
-        }
+    /** Precision Scheduled Railroading (PSR) efficiency expands margin ceiling */
+    public function getModernizationGainRate(): float
+    {
+        return self::PSR_EFFICIENCY_GAIN_RATE;
     }
 
     /**
@@ -193,13 +243,18 @@ class RailroadBusinessModel extends StandardCorporateBusinessModel
      */
     public function getOperatingMacroFields(): array
     {
-        return array_unique(array_merge(parent::getOperatingMacroFields(), [
+        return [
             'agricultural_commodity_index_ema',
             'energy_cost_push_lag',
+            'exchange_rate_index_ema',
             'freight_rate_index_ema',
+            'industrial_metals_index_ema',
             'manufacturing_pmi_ema',
             'output_gap_ema',
+            'producer_price_inflation_ema',
+            'tips_breakeven_ema',
             'trade_balance_to_gdp_ema',
-        ]));
+            'wage_growth_ema',
+        ];
     }
 }

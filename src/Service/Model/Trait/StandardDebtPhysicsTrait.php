@@ -3,6 +3,9 @@ declare(strict_types=1);
 
 namespace App\Service\Model\Trait;
 
+use App\DTO\DebtExpansionAppetiteDTO;
+use App\DTO\DebtCostDTO;
+
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
@@ -19,26 +22,39 @@ trait StandardDebtPhysicsTrait
         return $interestExpense > 0 ? ($ebit / $interestExpense) : ($ebit > 0 ? 999.0 : -999.0);
     }
     
-    public function getDebtExpansionAggressiveness(float $spreadMultiplier, float $totalDebt = 0.0, float $customerDeposits = 0.0, float $targetOperatingCash = 0.0, float $currentTreasury = 0.0): array {
-        return [
-            'probability' => 0.40 + ($spreadMultiplier * 0.50),
-            'aggressiveness' => 0.05 + (0.35 * $spreadMultiplier)
-        ];
+    public function getDebtExpansionAggressiveness(float $spreadMultiplier, float $totalDebt = 0.0, float $customerDeposits = 0.0, float $targetOperatingCash = 0.0, float $currentTreasury = 0.0): DebtExpansionAppetiteDTO {
+        return new DebtExpansionAppetiteDTO(probability: 0.40 + ($spreadMultiplier * 0.50), aggressiveness: 0.05 + (0.35 * $spreadMultiplier));
     }
     
     public function getUnfundedExpansionCapacity(float $baseCapacity, float $excessCash): float {
         return $baseCapacity;
     }
     
+    /**
+     * Trade-off theory recapitalization test: a firm is under-leveraged only when equity is clearly more
+     * expensive than debt, coverage leaves ample headroom, and leverage sits well below tolerance. Sector
+     * models tune the three rails through class constants: intangible-heavy software and biotech (high
+     * distress costs, near-zero optimal debt) demand a 300bps arbitrage and 15x coverage, while regulated
+     * utilities with rate-base backed cash flows accept far less.
+     */
     public function isUnderLeveraged(float $currentDebtRatio, float $targetDebtTolerance, float $interestCoverage, float $minIcr, float $costOfEquity, float $effectiveCostOfDebt): bool {
-        if ($costOfEquity <= ($effectiveCostOfDebt + 0.01)) {
+        $arbitrageThreshold = defined('static::WACC_ARBITRAGE_THRESHOLD')
+            ? (float) static::WACC_ARBITRAGE_THRESHOLD
+            : \App\Service\Math\FinancialConstants::WACC_ARBITRAGE_BUFFER;
+        $icrFloor = defined('static::MIN_RECAP_ICR_FLOOR')
+            ? (float) static::MIN_RECAP_ICR_FLOOR
+            : max(\App\Service\Math\FinancialConstants::MIN_ABSOLUTE_ICR_BUFFER, $minIcr * \App\Service\Math\FinancialConstants::REQUIRED_ICR_SAFETY_MULT);
+        $debtRatioTolerance = defined('static::UNDERLEVERAGED_DEBT_RATIO')
+            ? (float) static::UNDERLEVERAGED_DEBT_RATIO
+            : \App\Service\Math\FinancialConstants::CORPORATE_UNDERLEVERAGED_RATIO;
+
+        if ($costOfEquity <= ($effectiveCostOfDebt + $arbitrageThreshold)) {
             return false;
         }
-        $requiredIcrBuffer = max(2.00, $minIcr * 1.50);
-        if ($interestCoverage < $requiredIcrBuffer) {
+        if ($interestCoverage < $icrFloor) {
             return false;
         }
-        return $currentDebtRatio < ($targetDebtTolerance * 0.75);
+        return $currentDebtRatio < ($targetDebtTolerance * $debtRatioTolerance);
     }
     
     public function supportsUnderleveragedDebtExpansion(): bool {
@@ -79,6 +95,10 @@ trait StandardDebtPhysicsTrait
     public function getMaxFloatingDebtRatio(): float {
         return 0.30;
     }
+
+    public function getDebtMaturityRolloverRate(): float {
+        return \App\Service\Math\FinancialConstants::DEFAULT_QUARTERLY_DEBT_ROLLOVER;
+    }
     
     public function getDeleveragingEvaluationDebt(float $totalDebt, float $wholesaleDebt): float {
         return $totalDebt;
@@ -88,12 +108,9 @@ trait StandardDebtPhysicsTrait
         return $macroDebtTolerance;
     }
     
-    public function getDebtCostMetrics(DebtMetricsDTO $debtMetrics, float $currentDebt, float $wholesaleDebt, float $interestExpense): array {
+    public function getDebtCostMetrics(DebtMetricsDTO $debtMetrics, float $currentDebt, float $wholesaleDebt, float $interestExpense): DebtCostDTO {
         $grossCostOfDebt = $currentDebt > 0 ? ($interestExpense / $currentDebt) : $debtMetrics->currentMarketRate;
-        return [
-            'gross_cost_of_debt' => $grossCostOfDebt,
-            'total_interest_cost' => $interestExpense
-        ];
+        return new DebtCostDTO(grossCostOfDebt: $grossCostOfDebt, totalInterestCost: $interestExpense);
     }
     
     public function getNetDebtCapital(float $currentDebt, float $wholesaleDebt, float $treasury): float {

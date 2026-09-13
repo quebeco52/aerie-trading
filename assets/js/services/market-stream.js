@@ -5,8 +5,10 @@ let intentionalClose = false;
 let visibilityListenerAdded = false;
 
 export function initMarketStream() {
+    // ws_ticket() signs a ticket for guests too (uid "guest"), so an empty ticket means the
+    // base layout did not run, not an anonymous visitor. The feed is a public broadcast.
     if (!window.WS_TICKET || window.WS_TICKET === "") {
-        console.log("Guest mode: Live WebSocket updates disabled.");
+        console.log("No WebSocket ticket on this page: live updates disabled.");
         return;
     }
     

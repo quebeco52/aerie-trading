@@ -26,6 +26,30 @@ use App\Service\Event\ShockEvent;
  */
 class LogisticsBusinessModel extends StandardCorporateBusinessModel
 {
+    // --- Operating Cyclicality & Demand Structure ---
+    /** Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Freight volumes lead the industrial cycle. */
+    public const OPERATING_CYCLICALITY = 1.30;
+    /** Own-price elasticity of demand: volume lost per unit of real price increase. */
+    public const PRICE_ELASTICITY_OF_DEMAND = 0.80;
+    /** Share of an idiosyncratic revenue gain taken from same-industry peers rather than won from a larger market. */
+    public const INDUSTRY_SUBSTITUTABILITY = 0.50;
+
+    // --- Input Cost Basket ---
+    /** Shares of the variable cost base bought in tracked input markets (energy, metals, agri, freight, wholesale goods, variable payroll). */
+    public const INPUT_COST_EXPOSURES = ['energy' => 0.25, 'labor' => 0.35, 'ppi' => 0.05];
+    /** Fuel surcharges on dedicated contracts reprice within a quarter or two. */
+    public const INPUT_PASS_THROUGH_LAG_YEARS = 0.25;
+
+    // --- Labor Intensity ---
+    /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze. Terminal management, dispatch and network staff are fixed; line-haul drivers and fuel move with freight volume. */
+    public const FIXED_COST_LABOR_SHARE = 0.55;
+    /** Dedicated contracts carry surcharges; spot brokerage does not. */
+    public const PRICING_POWER_INDEX = 0.60;
+
+    // --- Balance Sheet Realism ---
+    /** Capitalized operating lease liabilities as a fraction of annual revenue (IFRS 16 / ASC 842). Fulfilment centres, cross-docks and truck fleets are largely leased. */
+    public const LEASE_LIABILITY_INTENSITY = 0.40;
+
     // --- Analyst Visibility & Error ---
     public const BASE_COVERAGE_VISIBILITY = 0.50;
     public const BASE_COVERAGE_ERROR = 0.08;
@@ -61,8 +85,6 @@ class LogisticsBusinessModel extends StandardCorporateBusinessModel
     // --- Macroeconomic & Pricing Rails ---
     /** Macroeconomic demand shift sensitivity to global trade and domestic GDP output gap. */
     public const MACRO_DEMAND_SCALAR = 1.40;
-    /** Minimum beta floor applied when calculating fuel surcharge inflation pass-through. */
-    public const MIN_PRICING_BETA_FLOOR = 0.50;
 
     // --- Stream Physics & Spot Freight Sensitivity ---
     /** Sensitivity of spot freight brokerage revenue to market-clearing ocean and overland spot freight rates. */
@@ -79,8 +101,6 @@ class LogisticsBusinessModel extends StandardCorporateBusinessModel
     public const SPOT_SURGE_MULT = 1.40;
 
     // --- Fuel Surcharge & Energy Physics ---
-    /** Margin penalty scalar applied to fleet operations when energy/diesel prices spike faster than fuel surcharges adjust. */
-    public const FUEL_SURCHARGE_LAG_PENALTY = 0.35;
     /** Weight of variable margin drag attributed to energy/diesel fuel lag in observable shock Z. */
     public const OBSERVABLE_FUEL_DRAG_WEIGHT = 0.50;
 
@@ -94,15 +114,14 @@ class LogisticsBusinessModel extends StandardCorporateBusinessModel
 
     public function getMacroPhysics(Stock $stock, \App\DTO\MacroStateDTO $macroState): array
     {
-        $outputGap = $macroState->outputGapEma;
-        $inflation = $macroState->tipsBreakevenEma;
+        $outputGap = $this->resolveLaggedOutputGap($stock, $macroState);
         $pmiShift = MathUtility::calculatePmiDemandShift($macroState->manufacturingPmiEma, sensitivity: self::PMI_FREIGHT_SENSITIVITY);
         $tradeShift = MathUtility::calculateTradeBalanceShift($macroState->tradeBalanceToGdpEma, sensitivity: self::TRADE_BALANCE_SENSITIVITY);
-        $beta = (float) $stock->getBeta();
+        $beta = $this->getOperatingCyclicality($stock);
 
         return [
             'macro_demand_shift' => ($outputGap * $beta * self::MACRO_DEMAND_SCALAR) + $pmiShift + $tradeShift,
-            'pricing_power_multiplier' => 1.0 + ($inflation * max(self::MIN_PRICING_BETA_FLOOR, $beta)),
+            ...$this->resolvePricingMultipliers($stock, $macroState),
         ];
     }
 
@@ -119,7 +138,7 @@ class LogisticsBusinessModel extends StandardCorporateBusinessModel
         $whWeight    = $params[ModelParam::Warehousing3plWeight];
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
-        $streams  = new \App\DTO\StreamContext($momentum, $mathUtility);
+        $streams  = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
 
         // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
         $activeWeights = $streams->resolveActiveStreamWeights([
@@ -161,10 +180,9 @@ class LogisticsBusinessModel extends StandardCorporateBusinessModel
         $actualRevenue = array_sum($streamRevenues);
         $streams->recordStreamShares($streamRevenues);
 
-        // Fuel Surcharge Lag Penalty: Fleet transport operations consume substantial diesel.
-        // When energy prices spike (> 0), margins compress temporarily before customer surcharges adjust.
-        $energyShift = max(0.0, $macroState->energyCostPushLag / MacroEngine::ENERGY_COST_PUSH_TRANSMISSION);
-        $fuelLagDrag = $energyShift * self::FUEL_SURCHARGE_LAG_PENALTY * ($fleetWeight + $spotWeight);
+        // Fuel Surcharge Lag: diesel and driver payroll reach fleet operations at spot and are surcharged
+        // through to shippers with a lag; warehousing carries no fuel.
+        $fuelLagDrag = $this->resolveInputCostDrag($stock, $macroState, $streams, $this->resolvePricingPower($stock), $realizedVariableMargin);
 
         $clampedMargin = $this->clampMargin($realizedVariableMargin + $fuelLagDrag);
 
@@ -200,9 +218,11 @@ class LogisticsBusinessModel extends StandardCorporateBusinessModel
             'freight_rate_index_ema',
             'manufacturing_pmi_ema',
             'output_gap_ema',
+            'producer_price_inflation_ema',
             'supply_chain_pressure_index_ema',
             'tips_breakeven_ema',
             'trade_balance_to_gdp_ema',
+            'wage_growth_ema',
         ];
     }
 }

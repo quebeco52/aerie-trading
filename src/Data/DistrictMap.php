@@ -26,10 +26,19 @@ class DistrictMap
     /** Sub-headline shown under the street name. */
     public const WARD_TAGLINE = 'The capital spine of the District — frontage held by the District\'s largest houses by market capitalisation, reshuffled as fortunes rise and fall.';
     /**
-     * How many of the District's largest listed companies (by live market cap) hold frontage.
-     * See DistrictWardComposer::composeFrontage() — this is a live ranking, not a fixed roster.
+     * How many of the District's largest listed companies (by market cap) hold frontage. Ranked
+     * by DistrictWardComposer::composeFrontage() at each reconstitution and frozen in between —
+     * see DistrictRoster. No company is ever authored on or off the street.
      */
     public const STREET_ROSTER_SIZE = 30;
+
+    // --- Reconstitution ---
+    /**
+     * How many times a simulated year the roster is re-ranked; four is the quarterly cadence most
+     * equity indices reconstitute on. Between reconstitutions the street is fixed: a company that
+     * goes bankrupt keeps its plot as a defunct shell, and a riser waits its turn below the cut.
+     */
+    public const RECONSTITUTIONS_PER_YEAR = 4;
 
     /**
      * West-to-east ordering: a business model identifier's position here decides where a
@@ -42,7 +51,7 @@ class DistrictMap
      */
     public const FRONTAGE_ORDER = [
         // Financials — the historical core of the row.
-        'credit_services', 'commercial_bank', 'insurance', 'reinsurance', 'shadow_bank',
+        'credit_services', 'commercial_bank', 'insurance', 'retail_insurance', 'reinsurance', 'shadow_bank',
         'investment_bank', 'clearing_house', 'financial_data', 'asset_manager', 'hedge_fund',
         'brokerage', 'distressed_debt',
         // Industrials & Materials.
@@ -77,24 +86,32 @@ class DistrictMap
     /** Tenant count below which a single row is already legible and wrapping would only make the canvas tall and thin. */
     public const ROW_SPLIT_THRESHOLD = 8;
     /**
-     * Baseline y-coordinate each row's facades stand on, upper row first. Spaced by
-     * KERB_DEPTH + ROW_GAP + MAX_FACADE_HEIGHT so the tallest possible facade on the lower row
-     * still clears the upper row's kerb — asserted in DistrictMapTest.
+     * Clear sky in user units between one row's kerb (or the conduit lane band) and the tallest
+     * facade of the row below, allowing for everything that rides above a roofline: the rank
+     * label, the titan beacon, the event badge and the roof furniture (ROOF_FURNITURE_HEIGHT) —
+     * see DistrictMapTest::testRowSpacingLeavesRoomForTheRoofFurniture.
+     *
+     * Every row's ground line, and with it the viewBox height, is derived per request by
+     * App\Service\District\DistrictMapBuilder::resolveCanvas(): each row is given exactly the
+     * sky its own tallest facade needs plus the height a headroom-sized cap move
+     * (MARKET_CAP_LOG_HEADROOM) would add, capped at MAX_FACADE_HEIGHT. Spacing every row for the
+     * theoretical maximum instead left the lower row's sky mostly empty on any real roster. A
+     * facade can only outgrow its row's clearance if its cap climbs past the envelope's headroom
+     * within one page session, and even then it clamps at MAX_FACADE_HEIGHT.
      */
-    public const ROW_GROUND_LINES = [960.0, 1740.0];
-    /** Clear sky in user units between one row's kerb and the tallest possible facade of the row below. */
     public const ROW_GAP = 60;
-    /** Height in user units of the street's SVG viewBox. */
-    public const VIEWBOX_HEIGHT = 1990;
     /**
      * Depth in user units of the kerb band below a ground line.
      *
-     * Deep enough for three *stacked, centred* lines — ticker, price, change. They cannot share
-     * lines: the narrowest plot is 100 units, and at a legible size "$326.91 -59.2%" alone runs
-     * to ~218 units. Anything paired left-and-right on one line collides on every base-tier plot.
+     * Deep enough for three *stacked, centred* lines — ticker, price, change — plus the sector
+     * bracket beneath them (SECTOR_BRACKET_RULE_OFFSET / SECTOR_BRACKET_LABEL_OFFSET). The three
+     * cannot share lines: the narrowest plot is 100 units, and at a legible size "$326.91 -59.2%"
+     * alone runs to ~218 units. Anything paired left-and-right on one line collides on every
+     * base-tier plot.
      */
-    public const KERB_DEPTH = 100;
-
+    public const KERB_DEPTH = 130;
+    /** Air in user units below the lowest kerb, so its bottom rule is not clipped by the canvas edge. */
+    public const CANVAS_BOTTOM_MARGIN = 8;
     // --- Frontage Layout ---
     /**
      * West gutter before the first plot on every row. Wider than the east margin because the
@@ -131,27 +148,28 @@ class DistrictMap
     /** Facade height in user units for a plot at or below the market capitalisation floor. */
     public const MIN_FACADE_HEIGHT = 90.0;
     /**
-     * Facade height in user units for a plot at or above the market capitalisation ceiling.
-     * Sized so two rows share the canvas: a facade of this height on the upper row must still
-     * clear CONDUIT_CORRIDOR_Y above it, and one on the lower row must clear the upper row's
-     * kerb. Lower than the single-row value it replaces, but *taller on screen* — the canvas
-     * narrowed by more than this shrank.
+     * Facade height in user units for a plot at or above the market capitalisation ceiling, and
+     * the most sky any row is ever given (see resolveCanvas()). Lower than the single-row value
+     * it replaced, but *taller on screen* — the two-row canvas narrowed by more than this shrank.
      */
     public const MAX_FACADE_HEIGHT = 620.0;
-    /** Log10 market capitalisation floor (~$63B) mapped to MIN_FACADE_HEIGHT. */
-    public const MARKET_CAP_LOG_FLOOR = 10.8;
     /**
-     * Log10 market capitalisation ceiling (~$32T) mapped to MAX_FACADE_HEIGHT.
-     *
-     * Floor and ceiling are not a clamp — they anchor a logistic, so they must bracket the listed
-     * universe *wider* than it actually spans or the roster lands in the curve's flat tail and
-     * stops differentiating. The pair below centres the steep region on ~$4.5T: with a top-30
-     * street whose largest tenants run to $10T-$15T, that keeps ~40 units between them rather
-     * than the ~13 the previous $32B-$32T window left.
+     * Log10 padding added on both sides of the roster's own capitalisation range to form the
+     * height window (0.15 ≈ ×1.4). The window is derived from the tenants actually on the street
+     * on every request — a fixed window centred on one figure squashed whichever end of the
+     * roster it was not centred on (ranks 12, 22 and 24 once rendered at the same height) — and
+     * the padding keeps the largest tenant off the ceiling and the smallest off the floor, so a
+     * live tick in either direction still has somewhere to go before the clamp.
      */
-    public const MARKET_CAP_LOG_CEILING = 14.5;
-    /** Normalised facade value the log floor/ceiling map to (edges approach but never hit the envelope ends). */
-    public const MARKET_CAP_LOG_EDGE_TOLERANCE = 0.02;
+    public const MARKET_CAP_LOG_HEADROOM = 0.15;
+    /**
+     * Narrowest height window in log10 units (one decade). A street whose tenants all share one
+     * cap, or a single-tenant street, would otherwise blow a fractional difference up to the full
+     * envelope; the window is centred on the roster's midpoint and widened to this instead.
+     */
+    public const MARKET_CAP_LOG_MIN_SPAN = 1.0;
+    /** Log10 floor of the window drawn for an empty street (~$100B), so the gutter still carries a scale. */
+    public const MARKET_CAP_LOG_EMPTY_FLOOR = 11.0;
     /**
      * Vertical spacing in user units between rendered window bands on a facade. The template lays
      * window rows out at exactly this pitch — they previously disagreed (52 here, 46 there),
@@ -161,34 +179,173 @@ class DistrictMap
     /** Inset from a facade's top edge to its first window band. */
     public const FIRST_FLOOR_INSET = 22.0;
 
+    // --- Windows ---
+    /** Horizontal distance in user units between adjacent window columns. */
+    public const WINDOW_PITCH = 34;
+    /** Width in user units of one window. */
+    public const WINDOW_WIDTH = 20;
+    /** Height in user units of one window. */
+    public const WINDOW_HEIGHT = 22;
+    /** Facade width reserved for the outer walls; the columns that fit in the remainder are centred. */
+    public const WINDOW_WALL_ALLOWANCE = 20;
+    /**
+     * Share of a facade's windows lit when the tenant earns exactly its baseline return on
+     * capital (ROIC, or ROE for financials). Lit share is linear in the ratio of current to
+     * baseline return — floor + (this − floor) × ratio, clamped to [floor, 1] — so a tenant at
+     * twice its baseline is fully lit and one at half is between. Presentation only: the ratio
+     * is already what the info panel prints, this just makes it legible from the street.
+     */
+    public const WINDOW_LIT_SHARE_AT_BASELINE = 0.6;
+    /** Fewest windows lit however poor the return — a dark facade still has to read as occupied, and a ruin is styled separately. */
+    public const WINDOW_LIT_SHARE_FLOOR = 0.2;
+    /**
+     * Decimal places a window's lighting priority is rounded to before it is compared with the
+     * lit share. The priority ships to the client on every window so a live tick can relight the
+     * facade without the client owning a hash function; rounding on both sides to the same
+     * precision is what guarantees the two runtimes light exactly the same windows.
+     */
+    public const WINDOW_KEY_PRECISION = 4;
+    /**
+     * Share of a facade's windows that flicker slowly while lit. A static grid of lit windows
+     * reads as a diagram; a few drifting ones read as a city. Which windows flicker, and where
+     * in the cycle each one starts, is a second stable hash of the window's address, so the
+     * street never changes its mind between renders.
+     */
+    public const WINDOW_TWINKLE_SHARE = 0.12;
+    /** Seconds one flicker cycle lasts. Slow, so it never competes with the roofline tick flashes. */
+    public const WINDOW_TWINKLE_PERIOD_SECONDS = 5.5;
+
+    // --- Roof Furniture ---
+    /**
+     * One rooftop glyph per tenant, so a row of same-height facades still tells a bank from a
+     * refinery at a glance. Resolved by industry first (ROOF_FURNITURE_BY_INDUSTRY) and then by
+     * business model (ROOF_FURNITURE), so an oil explorer and a refiner — one accounting model,
+     * two trades — dress differently while every model still has a glyph. Both are authored,
+     * like FRONTAGE_ORDER; DistrictMapTest keeps them complete. Each value names a
+     * `<symbol id="roof-…">` the street template defines (ROOF_FURNITURE_SYMBOLS).
+     *
+     * The glyphs are drawn to survive the street's rendered scale (~0.45px per unit, so a
+     * ROOF_FURNITURE_WIDTH box is ~14px): filled silhouettes with one bold feature each,
+     * chosen from the pictograms people already read on signage.
+     */
+    public const ROOF_FURNITURE_BY_INDUSTRY = [
+        'Oil & Gas E&P' => 'derrick', 'Oil & Gas Equipment & Services' => 'derrick', 'Oil & Gas Integrated' => 'derrick',
+        'Oil & Gas Midstream' => 'flare_stack', 'Oil & Gas Refining & Marketing' => 'flare_stack',
+        'Aluminum' => 'ingot', 'Copper' => 'ingot', 'Gold' => 'ingot',
+        'Utilities - Regulated Water' => 'drop', 'Utilities - Regulated Gas' => 'flare_stack',
+        'Beverages - Brewers' => 'bottle', 'Beverages - Non-Alcoholic' => 'bottle', 'Beverages - Wineries & Distilleries' => 'bottle',
+        'Insurance Brokers' => 'umbrella',
+    ];
+    /** Business-model fallback for any industry ROOF_FURNITURE_BY_INDUSTRY does not single out. */
+    public const ROOF_FURNITURE = [
+        // Capital houses: a coin.
+        'credit_services' => 'coin', 'commercial_bank' => 'coin', 'shadow_bank' => 'coin',
+        'investment_bank' => 'coin', 'clearing_house' => 'coin', 'asset_manager' => 'coin',
+        'hedge_fund' => 'coin', 'brokerage' => 'coin', 'distressed_debt' => 'coin', 'private_equity' => 'coin',
+        // Underwriters: an umbrella. Market data: a bar chart.
+        'insurance' => 'umbrella', 'reinsurance' => 'umbrella', 'retail_insurance' => 'umbrella',
+        'financial_data' => 'chart',
+        // Process industry: a factory; commodities: a derrick; chemistry: a flask.
+        'steel_manufacturing' => 'factory', 'specialty_industrial_machinery' => 'factory',
+        'tools_and_accessories' => 'factory', 'heavy_manufacturing' => 'factory',
+        'commodity' => 'derrick', 'chemical' => 'flask',
+        // Movers and builders.
+        'construction' => 'crane', 'shipping' => 'anchor', 'logistics' => 'truck',
+        'railroad' => 'train', 'waste_management' => 'bin',
+        // Guardians and the professions.
+        'defense_contractor' => 'shield', 'security_protection' => 'lock',
+        'law_firm' => 'scales', 'education' => 'cap', 'advertising_agency' => 'megaphone',
+        // Consumer houses.
+        'consumer_staples' => 'cart', 'restaurant' => 'fork', 'apparel_manufacturing' => 'shirt',
+        'auto_manufacturer' => 'car', 'internet_retail' => 'bag', 'resorts_casinos' => 'dice',
+        'luxury' => 'gem',
+        // Power, silicon and signal.
+        'utility' => 'bolt', 'tech' => 'cloud', 'computer_hardware' => 'chip',
+        'semiconductor' => 'chip', 'telecom' => 'signal',
+        // Care, cures, property and the conglomerates.
+        'medical_care_facility' => 'cross', 'biotech' => 'pill', 'reit' => 'house',
+        'conglomerate' => 'blocks',
+    ];
+    /** Every symbol the template must define; every furniture value must be one of these. */
+    public const ROOF_FURNITURE_SYMBOLS = [
+        'coin', 'umbrella', 'chart', 'derrick', 'flare_stack', 'ingot', 'factory', 'flask', 'bolt', 'drop',
+        'crane', 'anchor', 'truck', 'train', 'bin', 'shield', 'lock', 'cart', 'bottle', 'fork', 'shirt',
+        'car', 'bag', 'gem', 'dice', 'megaphone', 'cap', 'scales', 'chip', 'cloud', 'signal', 'cross',
+        'pill', 'house', 'blocks',
+    ];
+    /** Symbol for a tenant neither map dressed — defensive only, the tests forbid the case for listed companies. */
+    public const ROOF_FURNITURE_DEFAULT = 'blocks';
+    /** Width in user units of a furniture symbol's box. As wide as the band between the rank plate and the badge on the narrowest roof allows. */
+    public const ROOF_FURNITURE_WIDTH = 30;
+    /** Height in user units of a furniture symbol's box; its base sits on the roofline. */
+    public const ROOF_FURNITURE_HEIGHT = 36;
+    /**
+     * Distance from a plot's east edge to the furniture's east edge. Right-anchored rather than
+     * centred: the rank plate rides the roof's west end (~47 units for "#30") and the badge its
+     * east end (r=15, 6 in from the edge), and on a 100-unit roof only the band between them is
+     * free. 22 clears the badge on every tier and leaves 48 units for the rank on the narrowest.
+     */
+    public const ROOF_FURNITURE_EAST_MARGIN = 22;
+
+    // --- Kerb Lights ---
+    /**
+     * A pool of light on the pavement under each frontage plate, in the tenant's sector colour,
+     * as if cast by a street lamp on the kerb. Ties the plate to the building above it and
+     * softens the hard kerb band. Depth in user units the pool reaches below the ground line.
+     */
+    public const KERB_LIGHT_DEPTH = 46;
+    /** Peak opacity of a kerb light at the ground line; it fades to nothing at KERB_LIGHT_DEPTH. */
+    public const KERB_LIGHT_OPACITY = 0.16;
+
+    // --- Terrace Embankment ---
+    /** Height in user units of the retaining wall drawn under the upper row's kerb, inside ROW_GAP. */
+    public const TERRACE_WALL_HEIGHT = 14;
+
+    // --- Portfolio Position Pennant ---
+    /** Flag length in user units, from the pole eastward; the pole stands POSITION_PENNANT_INSET in from the west edge. */
+    public const POSITION_PENNANT_WIDTH = 18;
+    /** Flag height in user units; the pole rises this far again above the rank plate so the flag clears it. */
+    public const POSITION_PENNANT_HEIGHT = 12;
+    /** Pole x offset in user units from the plot's west edge. */
+    public const POSITION_PENNANT_INSET = 6;
+
     // --- Market Capitalisation Gridlines ---
     /**
-     * Reference capitalisations drawn as horizontal rules behind each row, so facade height reads
-     * as a scale rather than only a relative impression. Keyed by printed label because a float
-     * is not a safe array key. Each line's y is
-     * `groundLine - DistrictMapBuilder::calculateFacadeHeight($cap)`, reusing the very logistic
+     * Mantissas of the reference capitalisations drawn as horizontal rules behind each row, so
+     * facade height reads as a scale rather than only a relative impression. The rules are
+     * generated per request as every 1-2-5 step of a decade that falls inside the derived height
+     * window (see MARKET_CAP_LOG_HEADROOM), then thinned to GRIDLINE_MIN_SPACING. Each line's y is
+     * `groundLine - DistrictMapBuilder::calculateFacadeHeight($cap)`, reusing the very mapping
      * the facades use, so a rule can never disagree with the buildings beside it — and because a
      * cap maps to a *height*, every row carries its own set at its own y.
-     *
-     * Six lines spanning $100B to $10T: every consecutive pair sits at least ~44 units apart on
-     * the current envelope, so none of them crowd, and the top of the skyline stays referenced.
-     * Ending at $2T (as this did while the envelope was centred on $1T) left the tallest rules
-     * two thirds of the way down a $10T facade, with the whole upper half unlabelled.
-     *
-     * Every entry must sit strictly inside MARKET_CAP_LOG_FLOOR..MARKET_CAP_LOG_CEILING, or the
-     * rule pins to an envelope bound and stops agreeing with the facades beside it — see
-     * DistrictMapTest::testGridlineCapsFallInsideTheFacadeEnvelope().
      */
-    public const MARKET_CAP_GRIDLINES = [
-        '$100B' => 1.0e11,
-        '$500B' => 5.0e11,
-        '$1T' => 1.0e12,
-        '$2T' => 2.0e12,
-        '$5T' => 5.0e12,
-        '$10T' => 1.0e13,
-    ];
+    public const GRIDLINE_MANTISSAS = [1.0, 2.0, 5.0];
+    /**
+     * Least vertical distance in user units between two rules on the same row. A rule crowded
+     * against its neighbour informs less than no rule at all: labels are printed at
+     * GRIDLINE_LABEL_SIZE, so consecutive rules must clear that with some air.
+     */
+    public const GRIDLINE_MIN_SPACING = 44.0;
     /** Font size in user units of a gridline's gutter label — see FRONTAGE_GUTTER for the width this implies. */
     public const GRIDLINE_LABEL_SIZE = 32;
+
+    // --- Sector Brackets ---
+    /**
+     * A rule in the sector's window colour drawn along the kerb under every run of adjacent
+     * same-sector plots, with the sector's name beneath it where the run is wide enough to carry
+     * it. FRONTAGE_ORDER already seats same-model tenants together; the bracket makes that
+     * composition legible from the street rather than only from the legend.
+     */
+    /** Distance below a ground line of the bracket rule. Below the change line (88) and its descenders. */
+    public const SECTOR_BRACKET_RULE_OFFSET = 104;
+    /** Baseline of the bracket label below a ground line. */
+    public const SECTOR_BRACKET_LABEL_OFFSET = 124;
+    /** Font size in user units of the bracket label. */
+    public const SECTOR_BRACKET_LABEL_SIZE = 20;
+    /** Advance width of the label face as a fraction of its size (Courier Prime is 0.6em), used to decide whether a run can carry its name. */
+    public const SECTOR_BRACKET_LABEL_ADVANCE = 0.6;
+    /** Air on each side of a bracket label within its run. */
+    public const SECTOR_BRACKET_LABEL_PADDING = 8;
 
     // --- Sector Palette ---
     /**
@@ -223,9 +380,18 @@ class DistrictMap
     /** Credit rating rank at or above which a facade renders as sound (BBB and better). */
     public const INVESTMENT_GRADE_RANK = 4;
 
+    // --- Event Badges ---
+    /**
+     * Span of simulated time, in years, a building's event badge counts over (one simulated
+     * month — the same window the kerb's change figure is measured across, see
+     * App\Service\Market\PriceChangeFeed). The badge used to print the whole capped backfill,
+     * so once a tenant had six lifetime events it read "6" for good and carried nothing.
+     */
+    public const EVENT_BADGE_WINDOW_YEARS = 1.0 / 12.0;
+
     // --- Land Registry Stress ---
-    /** Fractional deviation of a property index from its 100.0 baseline that reads as a real-estate shock. */
-    public const LAND_REGISTRY_PROPERTY_STRESS_DEVIATION = 0.15;
+    /** Fractional fall of a property index below its 100.0 baseline that reads as a real-estate shock. */
+    public const LAND_REGISTRY_PROPERTY_STRESS_DROP = 0.15;
 
     // --- Institution Band Geometry ---
     /** Top y-coordinate of the institution structures on the far bank. */
@@ -236,27 +402,53 @@ class DistrictMap
      * a tenant competing with it for visual weight.
      */
     public const INSTITUTION_BAND_HEIGHT = 90;
+    /** Baseline of an institution's name below the bottom of its structure. */
+    public const INSTITUTION_LABEL_OFFSET = 28;
+    /** Baseline of the first readout line below the bottom of the structure. */
+    public const INSTITUTION_READOUT_TOP_OFFSET = 58;
+    /** Vertical distance between readout baselines — a line of text plus the sparkline strip under it. */
+    public const INSTITUTION_READOUT_PITCH = 44;
+    /** Most readouts an institution may print; the outlet below is placed for exactly this many. */
+    public const INSTITUTION_READOUT_LINES = 2;
     /**
-     * Y-coordinate conduits emanate from — below the structure, its name, and its two-line
-     * readout. The street's viewBox is almost always rendered well under 1:1 scale in a browser,
-     * so text throughout this street is sized well above what it would need at 1:1.
+     * Each readout carries a sparkline of its recent readings beneath the printed value, so a
+     * viewer can see whether a variable is heading toward its stress threshold rather than only
+     * that it crossed. Drawn client-side from the ticks the page has seen; empty on first paint.
      */
-    public const INSTITUTION_OUTLET_Y = 250;
+    /** Width in user units of a readout's sparkline strip. */
+    public const INSTITUTION_SPARKLINE_WIDTH = 140;
+    /** Height in user units of a readout's sparkline strip. */
+    public const INSTITUTION_SPARKLINE_HEIGHT = 12;
+    /** Air between a readout's baseline and the top of its sparkline strip. */
+    public const INSTITUTION_SPARKLINE_GAP = 8;
     /**
-     * Floor of the band conduits traverse horizontally in before dropping to their tenant.
-     *
-     * Only the lower row needs it, and it is what makes a two-row street drawable at all: the
-     * single symmetric-S curve the upper row uses puts its horizontal traverse at the midpoint
-     * between outlet and target, which for a lower-row tenant lands in the middle of the upper
-     * row's buildings. It would cross six to ten facades, visible only through the 14-unit gaps
-     * between them — of which the rooflines' 5-unit overhangs leave 4 — and read as speckle
-     * rather than as a line. Traversing above every possible upper-row roofline instead keeps the
-     * run continuous, and the vertical drop that follows is occluded by at most the one building
-     * standing in front of it, which is the depth cue rather than a defect.
-     *
-     * Held clear of the tallest possible upper-row roofline; asserted in DistrictMapTest.
+     * Y-coordinate conduits emanate from — below the structure, its name, and its readouts with
+     * their sparklines (DistrictMapTest pins that arithmetic). The street's viewBox is almost
+     * always rendered well under 1:1 scale in a browser, so text throughout this street is sized
+     * well above what it would need at 1:1.
      */
-    public const CONDUIT_CORRIDOR_Y = 310;
+    public const INSTITUTION_OUTLET_Y = 270;
+
+    // --- Conduit Lanes ---
+    /**
+     * Conduits are routed orthogonally, the way a utility map draws service lines: each
+     * institution owns one horizontal lane in a band below the outlets, drops from its outlet
+     * into that lane, runs along it, and drops again onto each tenant's roofline. The symmetric
+     * S-curves this replaced fanned ~100 crossing curves across the sky; with lanes, a stressed
+     * institution reads as one red bus with drops, and the band is what makes a two-row street
+     * drawable at all — lower-row drops fall through the upper row's gaps and behind its kerb.
+     * Sized for one lane per rendered institution; the band's depth is derived from that count.
+     */
+    /** Vertical distance in user units between adjacent lanes — a 3-unit dashed stroke needs this much to read as separate lines. */
+    public const CONDUIT_LANE_PITCH = 14;
+    /** Distance from INSTITUTION_OUTLET_Y to the first lane. */
+    public const CONDUIT_LANE_TOP_INSET = 14;
+    /**
+     * Inset from a plot's edges within which its drops are spread. A tenant wired to several
+     * institutions takes one drop per conduit, spaced evenly across the roof; without the inset
+     * the outermost drops would land on the roofline's overhang.
+     */
+    public const CONDUIT_DROP_INSET = 18;
 
     // --- Readout Units ---
     /** Field is a decimal fraction (e.g. 0.02) displayed as a percentage. */
@@ -275,26 +467,40 @@ class DistrictMap
      * would misfire at that exact baseline, since "at or below" includes "at".
      */
     public const OP_LT = 'lt';
-    /** Stressed when the field's fractional deviation from a 100.0 baseline is at or above `value`. */
-    public const OP_INDEX_DEVIATION = 'index_deviation';
+    /**
+     * Stressed when the field has fallen at least `value` (a fraction) below its 100.0 baseline.
+     * Downside only: a property index running hot is a boom, and the street's legend promises a
+     * conduit reddens when its variable turns *adverse* for the tenants it feeds. It replaced a
+     * symmetric deviation test that painted a +20% commercial-property rally as distress.
+     */
+    public const OP_INDEX_DROP = 'index_drop';
 
     // --- Conduit Derivation ---
     /**
      * MacroStateDTO fields read by a large majority of business models' operating physics (via
      * App\Service\Model\Strategy\OperatingStrategyInterface::getOperatingMacroFields()) —
-     * output_gap_ema (93%), inflation_ema (72%), tips_breakeven_ema (63%) and
-     * exchange_rate_index_ema (63%) of the 46 concrete models, measured against every model's
-     * fully-inherited declaration. Excluded from conduit derivation only (they remain published
-     * `fields` and printable readouts) so a field nearly every model shares does not wire every
-     * tenant to the same institution — the same principle CONDUITS already applied by hand to
-     * equityRiskPremium/corporateTaxRate/policyRate feeding WACC alone.
+     * output_gap_ema (96%), tips_breakeven_ema (68%), exchange_rate_index_ema (66%),
+     * energy_cost_push_lag (62%) and producer_price_inflation_ema (62%) of the 47 concrete models,
+     * measured against each model's declaration of the fields its own operating code reads
+     * (BusinessModelMacroFieldDeclarationTest keeps those declarations honest). Excluded from
+     * conduit derivation only (they remain published `fields` and printable readouts) so a field
+     * nearly every model shares does not wire every tenant to the same institution — the same
+     * principle CONDUITS already applied by hand to equityRiskPremium/corporateTaxRate/policyRate
+     * feeding WACC alone.
+     *
+     * The last two joined when the input-cost basket reached Biotech and REIT: energy and wholesale
+     * goods are what every producing firm buys, so leaving them in wired 62% of tenants to the
+     * commodity exchange and the manufactory board respectively. What still distinguishes a tenant
+     * there is genuine metals, agricultural or crack-spread exposure, which is what those conduits
+     * now draw on.
      * See App\Service\District\DistrictConduitResolver.
      */
     public const UBIQUITOUS_MACRO_FIELDS = [
         'output_gap_ema',
-        'inflation_ema',
         'exchange_rate_index_ema',
         'tips_breakeven_ema',
+        'energy_cost_push_lag',
+        'producer_price_inflation_ema',
     ];
 
     // --- Institution Registry ---
@@ -317,7 +523,7 @@ class DistrictMap
      * an institution's fields, `stress_rules` is simply omitted: the district may only raise an
      * alarm the simulation itself raises, so that institution's conduits highlight on click but
      * never render as stressed. The one exception predating this rule is the Land Registry's
-     * property-index deviation, defined locally as LAND_REGISTRY_PROPERTY_STRESS_DEVIATION
+     * property-index fall, defined locally as LAND_REGISTRY_PROPERTY_STRESS_DROP
      * because no such constant exists anywhere else in the simulation.
      */
     public const INSTITUTIONS = [
@@ -392,10 +598,10 @@ class DistrictMap
                 ['field' => 'residential_property_index_ema', 'label' => 'RESI', 'unit' => self::UNIT_INDEX],
             ],
             'stress_rules' => [
-                // DistrictMap::LAND_REGISTRY_PROPERTY_STRESS_DEVIATION — the one threshold this district
+                // DistrictMap::LAND_REGISTRY_PROPERTY_STRESS_DROP — the one threshold this district
                 // invents rather than borrows, because no such constant exists anywhere in the simulation.
-                ['field' => 'commercial_property_index_ema', 'op' => self::OP_INDEX_DEVIATION, 'value' => self::LAND_REGISTRY_PROPERTY_STRESS_DEVIATION],
-                ['field' => 'residential_property_index_ema', 'op' => self::OP_INDEX_DEVIATION, 'value' => self::LAND_REGISTRY_PROPERTY_STRESS_DEVIATION],
+                ['field' => 'commercial_property_index_ema', 'op' => self::OP_INDEX_DROP, 'value' => self::LAND_REGISTRY_PROPERTY_STRESS_DROP],
+                ['field' => 'residential_property_index_ema', 'op' => self::OP_INDEX_DROP, 'value' => self::LAND_REGISTRY_PROPERTY_STRESS_DROP],
             ],
         ],
         'commodity-exchange' => [
@@ -466,11 +672,5 @@ class DistrictMap
     public static function paletteForSector(?string $sector): array
     {
         return self::SECTOR_PALETTE[$sector ?? ''] ?? self::SECTOR_PALETTE_FALLBACK;
-    }
-
-    /** Returns the ground line for a row index, clamped to the last row for an out-of-range index. */
-    public static function groundLineForRow(int $row): float
-    {
-        return self::ROW_GROUND_LINES[$row] ?? self::ROW_GROUND_LINES[count(self::ROW_GROUND_LINES) - 1];
     }
 }

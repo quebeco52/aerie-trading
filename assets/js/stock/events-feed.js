@@ -193,19 +193,19 @@ export function renderEvents(events, currentTicker, feedId = 'events-feed') {
         }
         if (cardData.isEarnings && cardData.surpriseType !== 'met' && cardData.surpriseAmount) {
             const colorClass = cardData.surpriseType === 'beat' ? 'text-secondary' : 'text-tertiary';
-            headerMetrics += `<span class="text-[11px] font-bold font-mono ${colorClass}">(${cardData.surpriseText})</span>`;
+            headerMetrics += `<span class="text-2xs font-bold font-mono ${colorClass}">(${cardData.surpriseText})</span>`;
         } else if (cardData.isEarnings && cardData.surpriseType === 'met') {
-            headerMetrics += `<span class="text-[11px] font-bold font-mono text-on-surface-variant/80">(In-Line)</span>`;
+            headerMetrics += `<span class="text-2xs font-bold font-mono text-on-surface-variant/80">(In-Line)</span>`;
         }
         if (cardData.isEarnings && cardData.eva) {
             const evaClass = cardData.evaPositive ? 'bg-secondary/10 text-secondary' : 'bg-tertiary/10 text-tertiary';
-            headerMetrics += `<span class="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-bold font-mono ${evaClass}">${cardData.eva}</span>`;
+            headerMetrics += `<span class="inline-flex items-center rounded px-1.5 py-0.5 text-3xs font-bold font-mono ${evaClass}">${cardData.eva}</span>`;
         }
 
         let changeBadge = '';
         if (changePercent !== null && changePercent !== 0) {
             const changeClass = changePercent > 0 ? 'bg-secondary/10 text-secondary' : 'bg-tertiary/10 text-tertiary';
-            changeBadge = `<span class="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-mono font-bold ${changeClass}">${changePercent > 0 ? '+' : ''}${changePercent.toFixed(2)}%</span>`;
+            changeBadge = `<span class="inline-flex items-center rounded px-1.5 py-0.5 text-3xs font-mono font-bold ${changeClass}">${changePercent > 0 ? '+' : ''}${changePercent.toFixed(2)}%</span>`;
         }
 
         let pillsHtml = '';
@@ -231,14 +231,14 @@ export function renderEvents(events, currentTicker, feedId = 'events-feed') {
                     <div class="w-6 h-6 rounded-lg flex items-center justify-center shrink-0 ${cardData.iconClass}">
                         <span class="material-symbols-outlined text-sm">${cardData.icon}</span>
                     </div>
-                    <span class="inline-flex items-center rounded-md px-2 py-0.5 text-[10px] font-bold font-mono uppercase tracking-wider border ${cardData.badgeClass}">
+                    <span class="inline-flex items-center rounded-md px-2 py-0.5 text-3xs font-bold font-mono uppercase tracking-wider border ${cardData.badgeClass}">
                         ${cardData.badge}
                     </span>
                     ${headerMetrics}
                 </div>
                 <div class="text-right shrink-0 flex items-center gap-2">
                     ${changeBadge}
-                    <span class="text-[10px] text-on-surface-variant font-mono whitespace-nowrap">${timeStr}</span>
+                    <span class="text-3xs text-on-surface-variant font-mono whitespace-nowrap">${timeStr}</span>
                 </div>
             </div>
             ${bodyHtml}

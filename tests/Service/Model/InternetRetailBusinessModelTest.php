@@ -156,4 +156,29 @@ class InternetRetailBusinessModelTest extends TestCase
         $this->assertNotEmpty($lore);
         $this->assertNotSame('Experienced an unexpected market event.', $lore);
     }
+
+
+    /**
+     * Household confidence moves the discretionary basket before the output gap does, so a sentiment slump
+     * must cut first-party retail on its own while the third-party tollbooth, which clips a fee on whatever
+     * sellers move, is untouched by it.
+     */
+    public function testConsumerSentimentSlumpCutsFirstPartyRetailButNotTheThirdPartyTollbooth(): void
+    {
+        $math = $this->createStub(MathUtility::class);
+        $math->method('generatePersistentZ')->willReturn(0.0);
+
+        $run = function (float $sentiment) use ($math): array {
+            $stock = (new Stock())->setTicker('WEAV_SENT')->setBeta('1.0');
+
+            return $this->model->computeActualFinancials($stock, 1000.0, 0.60, 50.0, 0.0, new MacroStateDTO(outputGapEma: 0.0, consumerSentimentIndexEma: $sentiment), $math)->streamRevenue;
+        };
+
+        $calm = $run(100.0);
+        $slump = $run(80.0);
+
+        $expectedDrop = 0.20 * InternetRetailBusinessModel::CONSUMER_SENTIMENT_SCALAR * InternetRetailBusinessModel::OPERATING_CYCLICALITY;
+        $this->assertEqualsWithDelta($calm['first_party_retail'] * (1.0 - $expectedDrop), $slump['first_party_retail'], 1e-6);
+        $this->assertEqualsWithDelta($calm['third_party_seller'], $slump['third_party_seller'], 1e-9, 'Sentiment reaches the shopper, not the marketplace fee.');
+    }
 }

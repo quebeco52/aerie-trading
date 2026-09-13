@@ -64,6 +64,7 @@ class MarketOperator
             $restructureEvents = $this->applyRestructuringRule($stock, $marketCap, $name, $macroState);
             if ($restructureEvents !== null) {
                 $generatedEvents = array_merge($generatedEvents, $restructureEvents);
+                $this->redistributeAddressableMarket($stock, $stocks);
                 continue;
             }
 
@@ -76,6 +77,70 @@ class MarketOperator
         }
 
         return $generatedEvents;
+    }
+
+    /**
+     * Trailing-year EBIT rebuilt from the four reported quarters: net income grossed back up for tax when
+     * positive (a loss pays none), plus the year's interest. Null until a full year has been reported, when
+     * the caller falls back to the latest margin.
+     */
+    private function resolveTrailingEbit(Stock $stock, MacroStateDTO $macroState): ?float
+    {
+        $history = $stock->getQuarterlyNetIncomeHistory() ?? [];
+        if (count($history) < \App\Service\Corporate\EarningsEngine::TTM_QUARTERS) {
+            return null;
+        }
+
+        $trailingNetIncome = array_sum(array_map('floatval', $history));
+        $preTaxIncome = $trailingNetIncome > 0.0
+            ? $trailingNetIncome / max(0.01, 1.0 - $macroState->corporateTaxRate)
+            : $trailingNetIncome;
+        $interestExpense = $this->debtEngine->analyzeDebtHealth($stock, $macroState)?->rawMetrics?->interestExpense ?? 0.0;
+
+        return $preTaxIncome + max(0.0, $interestExpense);
+    }
+
+    /**
+     * Industry consolidation: a failed rival's demand does not vanish with it. Surviving peers in the same
+     * industry absorb most of its addressable market in proportion to their own, which is how exits leave
+     * survivors with more share and pricing headroom (airline, steel and retail consolidations). The
+     * remainder leaks to substitutes or is destroyed.
+     *
+     * @param Stock[] $stocks
+     */
+    private function redistributeAddressableMarket(Stock $failed, array $stocks): void
+    {
+        $industry = $failed->getIndustry();
+        if ($industry === null) {
+            return;
+        }
+
+        $peers = array_values(array_filter(
+            $stocks,
+            static fn (Stock $peer): bool => $peer !== $failed && !$peer->isBankrupt() && $peer->getIndustry() === $industry
+        ));
+        if ($peers === []) {
+            return;
+        }
+
+        $recaptured = ((float) $failed->getSamRatio()) * \App\Service\Math\FinancialConstants::MARKET_EXIT_RECAPTURE_FRACTION;
+        if ($recaptured <= 0.0) {
+            return;
+        }
+
+        $peerAddressableTotal = array_sum(array_map(static fn (Stock $peer): float => (float) $peer->getSamRatio(), $peers));
+        foreach ($peers as $peer) {
+            $weight = $peerAddressableTotal > 0.0 ? ((float) $peer->getSamRatio()) / $peerAddressableTotal : 1.0 / count($peers);
+            $peer->setSamRatio((string) (((float) $peer->getSamRatio()) + ($recaptured * $weight)));
+        }
+
+        $this->logger->info(sprintf(
+            'CONSOLIDATION: %d surviving %s peers absorbed %.0f%% of %s\'s addressable market.',
+            count($peers),
+            $industry,
+            \App\Service\Math\FinancialConstants::MARKET_EXIT_RECAPTURE_FRACTION * 100,
+            $failed->getTicker()
+        ));
     }
 
     /**
@@ -96,15 +161,30 @@ class MarketOperator
     private function applyRestructuringRule(Stock $stock, float $marketCap, string $name, MacroStateDTO $macroState): ?array
     {
         $revenue = (float) $stock->getTotalRevenue();
-        $margin = (float) $stock->getOperatingMargin();
-        $ebit = $revenue * $margin;
 
+        // Solvency is tested on the margin the firm actually reported, not its structural operating margin.
+        // The structural figure only moves through asset reinvestment decay, so a firm whose realized margin
+        // had collapsed kept passing the Altman test on the strength of a plant it could no longer run
+        // profitably. Falls back to the structural margin only before the first earnings report.
+        $margin = $stock->getReportedOperatingMargin() ?? (float) $stock->getOperatingMargin();
+        // Altman's X3 is EBIT over the trailing YEAR. Annualizing the latest quarter's margin let one
+        // catastrophic print (the fire-sale quarter after a distressed divestiture) liquidate a firm whose
+        // three preceding quarters were sound, with positive equity and a going business. Once four
+        // quarters have been reported the ratio is struck on them, as it was built to be.
+        $ebit = $this->resolveTrailingEbit($stock, $macroState) ?? $revenue * $margin;
+
+        // Two independent ways to fail. Insolvency is the balance sheet no longer covering the claims on it;
+        // a payment default is principal coming due that nobody would refinance and the firm could not pay.
+        // A firm can pass the solvency test on paper and still fail the second, which is how most real
+        // defaults happen: the assets were fine, the money just was not there on the day.
+        $isPaymentDefault = $stock->isPaymentDefault();
         $zScoreData = $this->debtEngine->calculateAltmanZScore($stock, $ebit, $revenue, (float) $stock->getPrice());
-        if (!$zScoreData['is_bankrupt']) {
+        if (!$zScoreData['is_bankrupt'] && !$isPaymentDefault) {
             return null; // The company is surviving; abort bankruptcy
         }
 
-        $this->logger->info("BANKRUPTCY DETECTED: {$stock->getName()} ({$stock->getTicker()}) collapsed into insolvency. Company permanently terminated.");
+        $failureMode = $isPaymentDefault ? 'defaulted on maturing debt' : 'collapsed into insolvency';
+        $this->logger->info("BANKRUPTCY DETECTED: {$stock->getName()} ({$stock->getTicker()}) {$failureMode}. Company permanently terminated.");
 
         $stock->setIsBankrupt(true);
         $stock->setPrice('0.00000000');
@@ -142,7 +222,9 @@ class MarketOperator
         // NOTE: We preserve stock_history, corporate_report, and stock_events.
         // Historical quarters, charts, and lore records remain frozen in place.
 
-        $eventDesc = "{$name} ({$stock->getTicker()}) has collapsed into insolvency and filed for Chapter 7 bankruptcy liquidation. Shareholder equity wiped to 0 and trading permanently halted.";
+        $eventDesc = $isPaymentDefault
+            ? "{$name} ({$stock->getTicker()}) missed a principal payment it could not refinance and filed for Chapter 7 bankruptcy liquidation. Shareholder equity wiped to 0 and trading permanently halted."
+            : "{$name} ({$stock->getTicker()}) has collapsed into insolvency and filed for Chapter 7 bankruptcy liquidation. Shareholder equity wiped to 0 and trading permanently halted.";
 
         return [
             $this->marketEvent->publish($stock, 'BANKRUPTCY', $eventDesc, -100.00)

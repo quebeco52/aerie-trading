@@ -61,6 +61,67 @@ class EarningsReportSubscriber implements EventSubscriberInterface
         $report->setDynamicSpread(\App\Service\Math\MathUtility::formatDecimal($ctx->debtMetrics->dynamicSpread, 4));
 
         $report->setCapitalExpenditures(\App\Service\Math\MathUtility::formatDecimal($ctx->totalReportedCapex, 4));
+        $report->setDepreciation(\App\Service\Math\MathUtility::formatDecimal($ctx->quarterlyDepreciation, 4));
+        $report->setEbitda(\App\Service\Math\MathUtility::formatDecimal($ctx->ebitda, 4));
+        $report->setGrossPpe($stock->getGrossPpe());
+        $report->setNetPpe(\App\Service\Math\MathUtility::formatDecimal($stock->getNetPpe(), 4));
+        $report->setReceivables(\App\Service\Math\MathUtility::formatDecimal($stock->getNetReceivables(), 4));
+        // Carrying value: cost less the write-downs still held against it, the figure a balance sheet shows.
+        $report->setInventory($stock->getInventory() === null ? null : \App\Service\Math\MathUtility::formatDecimal($stock->getNetInventory(), 4));
+        $report->setPayables($stock->getPayables());
+        $report->setInventoryWriteDown(\App\Service\Math\MathUtility::formatDecimal($ctx->inventoryWriteDown, 4));
+        $report->setReceivablesProvision(\App\Service\Math\MathUtility::formatDecimal($ctx->receivablesProvision, 4));
+        $report->setDeferredTaxExpense(\App\Service\Math\MathUtility::formatDecimal($ctx->deferredTaxExpense, 4));
+        $report->setDeferredTaxLiability($stock->getDeferredTaxLiability());
+        $report->setCashTaxPaid(\App\Service\Math\MathUtility::formatDecimal($ctx->cashTaxPaid, 4));
+
+        // Balance sheet. The lease is computed the same way the leverage and solvency tests compute it, so
+        // the statement agrees with the ratios rather than quietly using a second definition.
+        $leaseLiability = \App\Service\Math\CorporateMetrics::getInstance()->calculateLeaseLiability(
+            (float) $stock->getTotalRevenue(),
+            $ctx->strategy->getLeaseIntensity()
+        );
+        $report->setCip($stock->getCipBalance());
+        $report->setGoodwill($stock->getGoodwill());
+        $report->setLeaseLiability(\App\Service\Math\MathUtility::formatDecimal($leaseLiability, 4));
+        // The asset side exists once a ledger is open: the plant and trade cycle of an operating company, or
+        // the loans and securities of a balance-sheet business. A firm that has never reported has neither,
+        // and its report leaves the total unstated rather than publishing a proxy.
+        $hasAssetSide = $stock->hasBalanceSheetLedger();
+        $report->setTotalAssets($hasAssetSide ? \App\Service\Math\MathUtility::formatDecimal($stock->getTotalAssets($leaseLiability), 4) : null);
+        $report->setTotalLiabilities(\App\Service\Math\MathUtility::formatDecimal($stock->getTotalLiabilities($leaseLiability), 4));
+        $report->setAssetAge($stock->getGrossPpe() !== null ? \App\Service\Math\MathUtility::formatDecimal($stock->getAssetAge(), 4) : null);
+
+        // The lender's side of the sheet: the book, the losses expected on it, what went bad, what was
+        // written and what was sold, plus the two ratios a bank is actually judged on.
+        $hasEarningAssets = $stock->hasEarningAssetLedger();
+        $report->setEarningAssets($stock->getEarningAssets());
+        $report->setCreditLossAllowance($hasEarningAssets ? $stock->getCreditLossAllowance() : null);
+        $report->setCreditLossProvision($hasEarningAssets ? \App\Service\Math\MathUtility::formatDecimal($ctx->creditLossProvision, 4) : null);
+        $report->setNetChargeOffs($hasEarningAssets ? \App\Service\Math\MathUtility::formatDecimal($ctx->netChargeOffs, 4) : null);
+        $report->setNetLoanOriginations($hasEarningAssets ? \App\Service\Math\MathUtility::formatDecimal($ctx->netLoanOriginations, 4) : null);
+        $report->setAssetSaleLoss($hasEarningAssets ? \App\Service\Math\MathUtility::formatDecimal($ctx->assetSaleLoss, 4) : null);
+        $report->setCustomerDeposits($ctx->strategy->isFinancial() ? $stock->getCustomerDeposits() : null);
+        $report->setCet1Ratio(
+            $ctx->strategy instanceof \App\Service\Model\Sector\CommercialBankBusinessModel
+                ? \App\Service\Math\MathUtility::formatDecimal($ctx->strategy->calculateCet1Ratio($stock), 4)
+                : null
+        );
+        $netInterestMargin = null;
+        if ($hasEarningAssets && isset($ctx->streamRevenue['net_interest_income']) && $stock->getNetEarningAssets() > 0.0) {
+            // Interest earned less interest paid this quarter, annualized over the book that earned it.
+            $quarterlyInterestExpense = $ctx->debtMetrics instanceof \App\DTO\DebtMetricsDTO ? $ctx->debtMetrics->interestExpense / 4.0 : 0.0;
+            $netInterestMargin = (((float) $ctx->streamRevenue['net_interest_income'] - $quarterlyInterestExpense) / $stock->getNetEarningAssets()) * 4.0;
+        }
+        $report->setNetInterestMargin($netInterestMargin === null ? null : \App\Service\Math\MathUtility::formatDecimal($netInterestMargin, 4));
+
+        // Cash flow statement, in the three sections whose signs classify the life-cycle stage.
+        $report->setOperatingCashFlow(\App\Service\Math\MathUtility::formatDecimal($ctx->operatingCashFlow, 4));
+        $report->setInvestingCashFlow(\App\Service\Math\MathUtility::formatDecimal($ctx->investingCashFlow, 4));
+        $report->setFinancingCashFlow(\App\Service\Math\MathUtility::formatDecimal($ctx->financingCashFlow, 4));
+        $report->setStockCompensation(\App\Service\Math\MathUtility::formatDecimal($ctx->stockCompensation, 4));
+        $report->setGoodwillImpairment(\App\Service\Math\MathUtility::formatDecimal($ctx->goodwillImpairment, 4));
+        $report->setLifecycleStage($ctx->lifecycleStage?->value);
         $report->setFreeCashFlow(\App\Service\Math\MathUtility::formatDecimal($ctx->trueQuarterlyFcf, 4));
         $report->setEquity($stock->getTotalEquity());
         $report->setTotalDebt($stock->getTotalDebt());
@@ -97,6 +158,9 @@ class EarningsReportSubscriber implements EventSubscriberInterface
 
         $streamDetails = $this->buildStreamDetails($ctx, $stock);
         $report->setStreamDetails($streamDetails);
+        // Operating KPIs were assembled every quarter and read by nothing. They are what analysts and
+        // players actually track between the revenue line and the EPS line, so they belong on the report.
+        $report->setReportedKpis($ctx->kpis !== [] ? $ctx->kpis : null);
 
         $this->entityManager->persist($report);
     }

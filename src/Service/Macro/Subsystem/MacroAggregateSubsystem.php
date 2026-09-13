@@ -99,7 +99,9 @@ class MacroAggregateSubsystem
             + (MacroEngine::BORROWING_YIELD5Y_WEIGHT * $yield5y);
         $realRate = $borrowingPolicy - $state->inflation;
 
-        $neutral5yDurationScale = (1.0 - exp(-5.0 / 10.0)) / (1.0 - exp(-1.0));
+        $neutral5yDurationScale = MathUtility::calculateTermPremiumDurationScale(5.0, MacroEngine::TERM_PREMIUM_DURATION_HORIZON_YEARS);
+        // The neutral benchmark is structural: a high-premium era really does tighten business borrowing, and it is
+        // the central bank's long-rate offset in the Taylor rule (Bernanke 2006) that leans against it, not the IS curve.
         $neutral5yYield = $naturalRate + MacroEngine::TARGET_INFLATION + (MacroEngine::NS_BASE_TERM_PREMIUM * $neutral5yDurationScale);
 
         $neutralBorrowingPolicy = (MacroEngine::BORROWING_POLICY_WEIGHT * ($naturalRate + MacroEngine::TARGET_INFLATION))
@@ -116,7 +118,11 @@ class MacroAggregateSubsystem
 
         $momentum = MacroEngine::KALDOR_MOMENTUM * $y;
         $cubicConstraint = MacroEngine::KALDOR_CAPACITY * pow($y, 3);
-        $fiscalStimulus = MacroEngine::KALDOR_FISCAL_MULTIPLIER * (MacroEngine::TARGET_CORPORATE_TAX_RATE - $state->corporateTaxRate);
+        // Fiscal impulse: tax-smoothing stabilizer plus discretionary appropriations above the peacetime baseline
+        // (Blanchard-Perotti 2002 spending multiplier scaled by the public share of output).
+        $spendingShift = ($state->governmentSpendingIndexEma / MacroEngine::GOVT_SPENDING_BASELINE) - 1.0;
+        $fiscalStimulus = (MacroEngine::KALDOR_FISCAL_MULTIPLIER * (MacroEngine::TARGET_CORPORATE_TAX_RATE - $state->corporateTaxRate))
+            + (MacroEngine::KALDOR_GOVT_SPENDING_MULTIPLIER * $spendingShift);
         $capitalDrag = MacroEngine::KALDOR_CAPITAL_DRAG * $state->capitalStockOverhang;
 
         $housingWealthEffect = (($state->residentialPropertyIndexEma / MacroEngine::RESIDENTIAL_BASELINE) - 1.0) * MacroEngine::KALDOR_WEALTH_EFFECT_ELASTICITY;
@@ -221,7 +227,8 @@ class MacroAggregateSubsystem
             lagTimeConstant: MacroEngine::ENERGY_COST_PUSH_LAG_YEARS
         );
 
-        $rawAgriCostPush = max(0.0, ($state->agriculturalCommodityIndex / MacroEngine::AGRI_BASELINE) - 1.0) * MacroEngine::AGRI_COST_PUSH_TRANSMISSION;
+        // Symmetric like the energy channel: a farm-price collapse is a food-CPI dividend, not a no-op
+        $rawAgriCostPush = (($state->agriculturalCommodityIndex / MacroEngine::AGRI_BASELINE) - 1.0) * MacroEngine::AGRI_COST_PUSH_TRANSMISSION;
         $state->agriCostPushLag = $this->mathUtility->calculateDistributedLag(
             currentLaggedValue: $state->agriCostPushLag,
             targetValue: $rawAgriCostPush,
@@ -397,9 +404,12 @@ class MacroAggregateSubsystem
     /**
      * ISM / S&P Global Manufacturing Purchasing Managers' Index (PMI).
      *
-     * Evaluates the headline diffusion index centered at 50.0 based on real industrial capacity utilization,
-     * macroeconomic output gap momentum, Metzler inventory restocking demand, and SLOOS bank credit standards:
-     *   Target = 50 + beta_CU * (CU - CU*) + beta_gap * OutputGap + beta_inv * (-InventoryGap) - beta_sloos * SLOOS
+     * Evaluates the headline diffusion index centered at 50.0. A diffusion index counts the share of firms
+     * reporting improvement, so it tracks the rate of change of activity, not its level: ISM maps the headline
+     * to annualized real GDP growth at ~0.3pp per index point. Real growth over potential is the annualized
+     * output gap momentum, read off the gap's distance from its quarter-horizon EMA; capacity utilization,
+     * Metzler inventory restocking demand and SLOOS bank credit standards are secondary level channels:
+     *   Target = 50 + beta_g * (d(OutputGap)/dt) + beta_CU * (CU - CU*) + beta_inv * (-InventoryGap) - beta_sloos * SLOOS
      *
      * @param MacroState $state Current macroeconomic state.
      * @param float      $dt    Time step in years.
@@ -407,13 +417,15 @@ class MacroAggregateSubsystem
     public function calculateManufacturingPmi(MacroState $state, float $dt): void
     {
         $cuDeviation = $state->capacityUtilizationRate - MacroEngine::CU_BASELINE;
-        $gapMomentum = $state->outputGap - $state->outputGapEma;
+        // The gap's distance from its EMA is the EMA horizon times the gap's rate of change (Brown 1963), so
+        // dividing it out gives annualized real growth over potential.
+        $excessGrowth = ($state->outputGap - $state->outputGapEma) / MacroEngine::STANDARD_EMA_HORIZON_YEARS;
         $inventoryDemand = - $state->inventoryStockGap; // Shortfall stimulates orders
         $sloosStress = max(0.0, $state->sloosTighteningIndexEma);
 
         $drivers = [
+            ['deviation' => $excessGrowth, 'sensitivity' => MacroEngine::PMI_GROWTH_SENSITIVITY],
             ['deviation' => $cuDeviation, 'sensitivity' => MacroEngine::PMI_CU_SENSITIVITY],
-            ['deviation' => $gapMomentum + ($state->outputGap * 0.25), 'sensitivity' => MacroEngine::PMI_MOMENTUM_SENSITIVITY],
             ['deviation' => $inventoryDemand, 'sensitivity' => MacroEngine::PMI_INVENTORY_SENSITIVITY],
             ['deviation' => -$sloosStress, 'sensitivity' => MacroEngine::PMI_SLOOS_SENSITIVITY],
         ];
@@ -425,9 +437,12 @@ class MacroAggregateSubsystem
             max: MacroEngine::MAX_PMI
         );
 
+        // Exact Ornstein-Uhlenbeck discretization (Gillespie 1996) so the survey's adjustment is tick-rate
+        // invariant: a quarterly step with a six-week half-life lands near the target instead of overshooting it.
         $dW = $this->mathUtility->generateStandardNormal();
-        $drift = MacroEngine::PMI_KAPPA * ($targetPmi - $state->manufacturingPmi) * $dt;
-        $diffusion = MacroEngine::PMI_SIGMA * sqrt($dt) * $dW;
+        $decay = exp(-MacroEngine::PMI_KAPPA * $dt);
+        $drift = (1.0 - $decay) * ($targetPmi - $state->manufacturingPmi);
+        $diffusion = MacroEngine::PMI_SIGMA * sqrt((1.0 - ($decay ** 2)) / (2.0 * MacroEngine::PMI_KAPPA)) * $dW;
         $newPmi = $state->manufacturingPmi + $drift + $diffusion;
 
         $state->manufacturingPmi = max(MacroEngine::MIN_PMI, min(MacroEngine::MAX_PMI, $newPmi));

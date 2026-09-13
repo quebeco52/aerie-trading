@@ -4,6 +4,10 @@ declare(strict_types=1);
 
 namespace App\Service\Model\Sector;
 
+use App\DTO\StreamContext;
+use App\DTO\InterestExpenseDTO;
+use App\DTO\DebtExpansionAppetiteDTO;
+
 use App\Service\Model\BusinessModelInterface;
 
 use App\Data\ModelParam;
@@ -26,6 +30,22 @@ use App\Service\Math\FinancialConstants;
  */
 class InsuranceBusinessModel extends BaseFinancialBusinessModel
 {
+    // --- Operating Cyclicality & Demand Structure ---
+    /** Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Premium volume is sticky through the cycle. */
+    public const OPERATING_CYCLICALITY = 0.70;
+
+    // --- Labor Intensity ---
+    /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze. Underwriting, claims and distribution payroll is roughly half of an insurer's overhead. */
+    public const FIXED_COST_LABOR_SHARE = 0.50;
+
+    // --- Demand Transmission Lag ---
+    /** Years for a move in the output gap to reach the order book. Policies are annual: exposure only reprices as the book comes up for renewal. */
+    public const DEMAND_LAG_YEARS = 0.50;
+
+    // --- Reporting Incentives ---
+    /** Propensity to steer reported earnings toward consensus with accruals. Loss reserves are an actuarial estimate management sets itself: strengthening or releasing them moves the headline without touching cash. */
+    public const EARNINGS_MANAGEMENT_PROPENSITY = 0.60;
+
         public function getMoatSpread(): float { return 0.01; }
 
     // --- The Kenney Rule & Capacity Limits ---
@@ -77,6 +97,22 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
     public const CATASTROPHE_LOSS_SCALAR  = 0.15;
     /** Benign underwriting environment z-score threshold triggering minor margin bonuses. */
     public const BENIGN_CLAIM_Z_FLOOR     = 1.50;
+
+    // --- Underwriting Cycle (Winter 1994 / Gron 1994 capacity constraint) ---
+    /** Regime key for the hard market: the multi-year stretch of rate increases and tightened terms that follows a capital shock. */
+    public const REGIME_HARD_MARKET = 'hard_market';
+    /** Surplus shortfall against the Kenney target at which capacity withdraws and the market turns hard. */
+    public const HARD_MARKET_ONSET_SURPLUS_DEFICIT = 0.10;
+    /** Quarterly probability the hard market breaks as capital returns and price competition resumes (~10 quarter expected duration). */
+    public const HARD_MARKET_EXIT_HAZARD = 0.10;
+    /** Peak premium rate uplift in the opening quarters of a hard market, before returning capacity erodes it. */
+    public const HARD_MARKET_PRICING_UPLIFT = 0.25;
+    /** Quarters over which the rate uplift decays as capital rebuilds, even while the regime itself persists. */
+    public const HARD_MARKET_UPLIFT_DECAY_QUARTERS = 8.0;
+
+    // --- Catastrophe Seasonality ---
+    /** Relative catastrophe frequency by calendar quarter [Q1..Q4], summing to 4.0: Q3 carries the Atlantic wind season, Q1 the winter freeze and storm peak. */
+    public const CATASTROPHE_SEASONALITY = [0.80, 0.70, 1.90, 0.60];
     /** Minor variable cost reduction during exceptionally benign underwriting environments. */
     public const BENIGN_CLAIM_BONUS       = -0.08;
     /** Cummins & Danzon (1997) soft-market underwriting combined ratio compression sensitivity to high float yields. */
@@ -267,17 +303,44 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
 
     public function getMacroPhysics(Stock $stock, \App\DTO\MacroStateDTO $macroState): array
     {
-        $outputGap = $macroState->outputGapEma;
-        $beta = (float) $stock->getBeta();
+        $outputGap = $this->resolveLaggedOutputGap($stock, $macroState);
+        $beta = $this->getOperatingCyclicality($stock);
 
+        // Cash-flow underwriting (Cummins & Danzon 1997): when float yields are high insurers discount
+        // premium to gather investable money, so a high policy rate softens rates on its own.
         $policyRate = $macroState->policyRateEma;
         $softMarketRateDiscount = max(0.0, ($policyRate - self::DEFAULT_POLICY_RATE_FALLBACK) * self::SOFT_MARKET_CYCLE_BETA);
-        $pricingPower = 1.0 - min(0.50, $softMarketRateDiscount);
+
+        // The capacity cycle sits on top of it and dominates. The regime clock is advanced by this model's
+        // own physics (see calculateSectorPhysics) and read back here a quarter later, which is right:
+        // rates reset at renewal, after the loss that withdrew the capacity.
+        $pricingPower = 1.0 + $this->resolveHardMarketUplift($stock) - min(0.50, $softMarketRateDiscount);
 
         return [
             'macro_demand_shift' => $outputGap * $beta * self::MACRO_DEMAND_SCALAR, // Highly immune to macro demand
             'pricing_power_multiplier' => $pricingPower,
         ];
+    }
+
+    /**
+     * Premium rate uplift from an active hard market, decaying over the quarters the regime has run.
+     *
+     * Read from the persisted regime clock rather than a stream context, because pricing is resolved
+     * before this quarter's physics: what an insurer can charge at renewal is set by the capital position
+     * the market was left in, not by a loss that has not happened yet.
+     */
+    private function resolveHardMarketUplift(Stock $stock): float
+    {
+        $momentum = $stock->getEarningsMomentumZ() ?? [];
+        $quarters = (int) round((float) ($momentum[StreamContext::REGIME_STATE_PREFIX . self::REGIME_HARD_MARKET] ?? 0.0));
+
+        if ($quarters <= 0) {
+            return 0.0;
+        }
+
+        $decay = max(0.0, 1.0 - (($quarters - 1) / self::HARD_MARKET_UPLIFT_DECAY_QUARTERS));
+
+        return self::HARD_MARKET_PRICING_UPLIFT * $decay;
     }
 
     /**
@@ -306,17 +369,11 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
 
         // 1. Premium Revenue Shock
         $momentum = $stock->getEarningsMomentumZ() ?? [];
-        $streams = new \App\DTO\StreamContext($momentum, $mathUtility);
+        $streams = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
 
-        // Independent stream Z-scores with AR(1) persistence (supporting subclass key aliases)
-        $prevRevenueZ = $momentum['revenue'] ?? $momentum['reinsurance_premiums'] ?? $momentum['property_casualty_premiums'] ?? 0.0;
-        $prevClaimZ   = $momentum['claim'] ?? $momentum['catastrophe_bonds'] ?? $momentum['life_insurance_premiums'] ?? 0.0;
-
-        $revenueZ = $mathUtility->generatePersistentZ($prevRevenueZ, 0.25);
-        $claimZ   = $mathUtility->generatePersistentZ($prevClaimZ, 0.05); // Claims are near i.i.d. random
-
-        $streams->registerZ('revenue', $revenueZ);
-        $streams->registerZ('claim', $claimZ);
+        // Premium volume loads on the firm and sector demand factors; claims are exogenous and near i.i.d.
+        $revenueZ = $streams->generateZ('revenue', 0.25);
+        $claimZ   = $streams->generateExogenousZ('claim', 0.05);
 
         $actualRevenue = $expectedRevenue * (1.0 + ($revenueZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)));
 
@@ -343,7 +400,15 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
         $resShift = ($macroState->residentialPropertyIndexEma - 100.0) / 100.0;
         $propertyClaimInflation = max(0.0, ($creShift * 0.50) + ($resShift * 0.50)) * 0.05; // Modest drag on variable margin when property replacement values surge
 
-        $lossRatioShock = ($claimZ < $catThreshold
+        // Catastrophes are seasonal but premiums are not: a hurricane season does not sell more policies,
+        // it makes a loss more likely against premiums already written. The season therefore moves the
+        // frequency threshold, never revenue — the same z-draw clears a shallower bar in Q3 than in Q4.
+        // The firm's structural exposure ($frequencyBeta above) stays on the unseasonalized threshold,
+        // because how exposed a book is does not change with the calendar.
+        $seasonalCatFrequency = self::CATASTROPHE_SEASONALITY[$macroState->calendarQuarter()] ?? 1.0;
+        $seasonalCatThreshold = $catThreshold / max(0.10, $seasonalCatFrequency);
+
+        $lossRatioShock = ($claimZ < $seasonalCatThreshold
             ? abs($claimZ) * $catScalar
             : ($claimZ > self::BENIGN_CLAIM_Z_FLOOR ? $benignBonus : 0.0)) + $propertyClaimInflation;
 
@@ -362,6 +427,16 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
         // Strengthened Hard-Market pricing power scaled by company catastrophe exposure ($catRiskBeta):
         // Reinsurers absorbing higher frequency ($catThreshold) & severity ($catScalar) gain stronger post-disaster pricing power.
         $hardMarketRecoveryDiscount = min(0.30, $surplusDeficitRatio * 0.35 * $catRiskBeta);
+
+        // The underwriting cycle is a CAPACITY cycle, not a rate cycle. A catastrophe destroys surplus,
+        // capacity withdraws from the market, rates harden for years, and the returning capital that the
+        // hard market attracts is what eventually softens them again (Winter 1994, Gron 1994). Modelling
+        // it as a persistent regime rather than a function of this quarter's surplus is the point: rates
+        // stay hard well after the capital is back, which is the discipline lag the cycle is named for.
+        $streams->evolveRegime(self::REGIME_HARD_MARKET, 0.0, self::HARD_MARKET_EXIT_HAZARD);
+        if ($surplusDeficitRatio >= self::HARD_MARKET_ONSET_SURPLUS_DEFICIT || $claimZ < self::REINSURANCE_ATTACHMENT_Z) {
+            $streams->startRegime(self::REGIME_HARD_MARKET);
+        }
 
         $reinsuranceSurcharge = 0.0;
         if ($claimZ < self::REINSURANCE_ATTACHMENT_Z) {
@@ -493,6 +568,12 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
      * @param float $wholesaleDebt    The wholesale debt balance.
      * @return float The target operating cash to maintain.
      */
+    /** Float above the regulatory surplus buffer is invested, not held. */
+    public function deploysFundingIntoEarningAssets(): bool
+    {
+        return true;
+    }
+
     public function calculateTargetOperatingCash(float $operatingBase, float $currentLiability, float $wholesaleDebt): float
     {
         // Target 100% of Customer Deposits to maintain a strict regulatory surplus buffer.
@@ -540,12 +621,12 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
         return $isMegaHoarder ? $excessCash * self::MEGA_BUYBACK_CASH_SHARE : min($excessCash * self::STANDARD_BUYBACK_SHARE, $retainedEarningsThisQuarter * self::MAX_RETAINED_BUYBACK_MULT);
     }
 
-    public function calculateInterestExpenseAndWholesaleRate(Stock $stock, float $blendedFixedRate, float $floatingInterestRate, float $currentMarketFixedRate, float $policyRate, float $equityLimit, float $totalEquity, float $debt): array
+    public function calculateInterestExpenseAndWholesaleRate(Stock $stock, float $blendedFixedRate, float $floatingInterestRate, float $currentMarketFixedRate, float $policyRate, float $equityLimit, float $totalEquity, float $debt): InterestExpenseDTO
     {
         $corporateDebt = (float) $stock->getWholesaleDebt();
         $floatingRatio = (float) $stock->getFloatingDebtRatio();
         $interestExpense = ($corporateDebt * (1.0 - $floatingRatio) * $blendedFixedRate) + ($corporateDebt * $floatingRatio * $floatingInterestRate);
-        return ['interest_expense' => $interestExpense, 'wholesale_rate' => $corporateDebt > 0 ? ($interestExpense / $corporateDebt) : $currentMarketFixedRate];
+        return new InterestExpenseDTO(interestExpense: $interestExpense, wholesaleRate: $corporateDebt > 0 ? ($interestExpense / $corporateDebt) : $currentMarketFixedRate);
     }
 
     public function getInterestCoverage(float $ebit, float $interestExpense, float $depreciation = 0.0): float
@@ -589,9 +670,9 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
         return $fixedIncomeWeight * (($liquidityShare * $liquidityReturn) + ($bondShare * $bondReturn));
     }
 
-    public function getDebtExpansionAggressiveness(float $spreadMultiplier, float $totalDebt = 0.0, float $customerDeposits = 0.0, float $targetOperatingCash = 0.0, float $currentTreasury = 0.0): array
+    public function getDebtExpansionAggressiveness(float $spreadMultiplier, float $totalDebt = 0.0, float $customerDeposits = 0.0, float $targetOperatingCash = 0.0, float $currentTreasury = 0.0): DebtExpansionAppetiteDTO
     {
-        return ['probability' => self::DEBT_EXPANSION_BASE_PROB + ($spreadMultiplier * self::DEBT_EXPANSION_PROB_MULT), 'aggressiveness' => self::DEBT_EXPANSION_BASE_AGGR + (self::DEBT_EXPANSION_AGGR_MULT * $spreadMultiplier)];
+        return new DebtExpansionAppetiteDTO(probability: self::DEBT_EXPANSION_BASE_PROB + ($spreadMultiplier * self::DEBT_EXPANSION_PROB_MULT), aggressiveness: self::DEBT_EXPANSION_BASE_AGGR + (self::DEBT_EXPANSION_AGGR_MULT * $spreadMultiplier));
     }
 
     /**
@@ -660,7 +741,7 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
         
         // Capacity should only boost positive market capture. It should not accelerate shrinkage during recessions.
         $effectiveSystemicGrowth = $systemicGrowthQuarterly > 0.0 ? $systemicGrowthQuarterly * $capacityMultiplier : $systemicGrowthQuarterly;
-        $baseGrowth = $effectiveSystemicGrowth * max(self::MIN_BETA_GROWTH_CLAMP, min(self::MAX_BETA_GROWTH_CLAMP, abs((float) $stock->getBeta())));
+        $baseGrowth = $effectiveSystemicGrowth * max(self::MIN_BETA_GROWTH_CLAMP, min(self::MAX_BETA_GROWTH_CLAMP, $this->getOperatingCyclicality($stock)));
         
         $effectiveNoise = ($mathUtility->generateStandardNormal() * self::FLOAT_GROWTH_NOISE_STD) * min(1.0, $capacityMultiplier);
         $liabilityChange = $currentLiabilities * max(self::MIN_FLOAT_CHANGE_CLAMP, min(self::MAX_FLOAT_CHANGE_CLAMP, $baseGrowth + $effectiveNoise));

@@ -23,6 +23,20 @@ class TreasuryEngine
     /** Additional variable spend rate (35%) scaled by economic spread (ROIC - WACC). */
     private const VARIABLE_ORGANIC_SPEND_RATE = 0.35;
 
+    // --- Lender Funding Deployment ---
+    /** Cash held above the operating target before a lender treats the rest as deployable funding (same buffer the expansion path uses). */
+    private const LIQUIDITY_BUFFER_MULTIPLIER = 1.20;
+
+    // --- Committed Revolving Credit Facility ---
+    /**
+     * Committed revolver sized as a multiple of the firm's minimum operating cash. That base is what each
+     * business model already scales its liquidity needs on, so a lender's facility is struck on its funding
+     * book rather than on net interest income, which is a small number attached to an enormous balance sheet.
+     */
+    private const REVOLVER_COMMITMENT_OPERATING_CASH_MULTIPLE = 5.0;
+    /** Drawn-revolver spread (+100 bps) over the issuer's market rate; a pre-negotiated facility prices inside emergency paper. */
+    private const REVOLVER_DRAW_SPREAD_PENALTY = 0.01;
+
     // --- Physical Capacity Limits (Growth Speed Limits) ---
     private const FIN_MEGA_HOARDER_GROWTH_LIMIT = 0.35;
     private const FIN_HOARDER_GROWTH_LIMIT = 0.20;
@@ -47,6 +61,10 @@ class TreasuryEngine
     {
         // SYSTEMIC M2 MONEY SUPPLY GROWTH
         $this->processPassiveLiabilityGrowth($ctx);
+
+        // A withdrawal the cash could not cover is met by selling earning assets, at a discount, before the
+        // treasury reaches for borrowing: a run is paid out of the book, and the book takes the loss.
+        $this->liquidateEarningAssetsForCash($ctx, 0.0);
 
         // DEBT MANAGEMENT (MACRO TOLERANCE)
         $this->processDebtExpansion($ctx);
@@ -76,18 +94,43 @@ class TreasuryEngine
         $stock->setRetainedEarnings($newRetainedStr);
 
         // TOTAL EQUITY (Clean Surplus Accounting)
-        // physicalAssetAppreciation represents organic macro inflation scaling of physical fixed capital
+        // Equity moves only through earnings, paid-in capital and distributions. It is deliberately NOT
+        // revalued with inflation: US GAAP carries plant at historical cost and never writes it up, so the
+        // old revaluation created book value out of nothing, with no income and no cash behind it. Inflation
+        // now reaches the balance sheet the way it really does, through replacement-cost maintenance CapEx:
+        // the firm spends more cash to replace the same asset, and the plant ledger grows by what it spent.
+        //
+        // Stock-based compensation (ASC 718) is an expense inside net income whose credit side is additional
+        // paid-in capital, not cash: without adding it back here equity fell by a charge that never left the
+        // company, understating book value and invested capital a little more every quarter. It is added to
+        // paid-in capital, not to retained earnings, which is why the retained-earnings roll-forward above
+        // deliberately does not carry it.
         $currentEquityStr = $this->formatBc($stock->getTotalEquity());
-        $reApprecStr = $this->formatBc($ctx->physicalAssetAppreciation);
+        $stockCompStr = $this->formatBc($ctx->stockCompensation);
         $totalCashSpentStr = $this->formatBc($totalCashSpent);
-        $newEquityStr = \bcsub(\bcadd(\bcadd($currentEquityStr, $netIncomeStr, 4), $reApprecStr, 4), $totalCashSpentStr, 4);
+        $newEquityStr = \bcsub(\bcadd(\bcadd($currentEquityStr, $netIncomeStr, 4), $stockCompStr, 4), $totalCashSpentStr, 4);
         $stock->setTotalEquity($newEquityStr);
+
+        // THE MATURITY WALL (principal actually comes due)
+        $this->processDebtMaturities($ctx);
+
+        // A lender short of its operating cash sells from the book before it borrows at penalty rates.
+        $this->liquidateEarningAssetsForCash(
+            $ctx,
+            $ctx->strategy->calculateMinOperatingCash($ctx->operatingBase, $ctx->customerDeposits, $ctx->wholesaleDebt)
+        );
 
         // THE DEBT TRAP (Liquidity Crisis)
         $this->processEmergencyBorrowing($ctx);
 
+        // COMMITTED REVOLVER (the facility a bank contracted to fund whatever the bond market is doing)
+        $this->processRevolverDraw($ctx);
+
         // EQUITY ISSUANCE (Secondary Offerings / Death Spirals)
         $this->processEquityIssuance($ctx);
+
+        // EVENT OF DEFAULT (a maturity nobody would fund)
+        $this->processPaymentDefault($ctx);
 
         // ARBITRAGE PAYDOWN (Escape negative carry)
         $this->processArbitragePaydown($ctx);
@@ -95,8 +138,70 @@ class TreasuryEngine
         // THE DELEVERAGING SWEEP (Macro-Driven Cash Management)
         $this->processDeleveragingSweep($ctx, (float) $newEquityStr);
 
-        // SAVE FINAL TREASURY
+        // Earning assets sold below carrying value this quarter: the discount is a loss the shareholders
+        // bear, taken to equity as other comprehensive loss (the securities were never in earnings) so
+        // the book that shrank and the claims on it move together.
+        if ($ctx->assetSaleLoss > 0.0) {
+            $lossStr = $this->formatBc($ctx->assetSaleLoss);
+            $stock->setTotalEquity(\bcsub($this->formatBc($stock->getTotalEquity()), $lossStr, 4));
+            $stock->setRetainedEarnings(\bcsub($this->formatBc($stock->getRetainedEarnings()), $lossStr, 4));
+        }
+
+        // SAVE FINAL TREASURY. Cash is an asset and cannot be negative; the revolver draw above is what
+        // closes an overdraft, and this is the failsafe behind it. Carrying a negative balance put a
+        // liability in the asset column, where it flowed on into the Altman working-capital term, net asset
+        // value and every screener built on the treasury.
+        $ctx->newTreasury = max(0.0, $ctx->newTreasury);
         $stock->setCorporateTreasury((string) $ctx->newTreasury);
+    }
+
+    /**
+     * Raises cash by selling earning assets when the balance has fallen below a floor.
+     *
+     * Securities go first and go below par; loans nobody bids for on the day cannot go at all, which is
+     * why only a bounded share of the book can be sold in a quarter. The allowance attached to the slice
+     * sold leaves with it, so the net book falls by exactly the carrying value given up: proceeds come in
+     * as cash and the haircut is the loss. This is the mechanism a deposit run actually works through, and
+     * the reason a solvent bank with a long-dated book can still be sunk by short-dated funding.
+     */
+    private function liquidateEarningAssetsForCash(CapitalAllocationContext $ctx, float $cashFloor): void
+    {
+        $stock = $ctx->stock;
+        if (!$ctx->strategy->isFinancial() || !$stock->hasEarningAssetLedger() || $ctx->newTreasury >= $cashFloor) {
+            return;
+        }
+
+        $grossBook = (float) $stock->getEarningAssets();
+        $allowance = (float) $stock->getCreditLossAllowance();
+        $netBook = max(0.0, $grossBook - $allowance);
+        if ($netBook <= 0.0) {
+            return;
+        }
+
+        $haircut = FinancialConstants::EARNING_ASSET_FIRE_SALE_HAIRCUT;
+        $shortfall = $cashFloor - $ctx->newTreasury;
+        $carryingValueSold = min(
+            $netBook * FinancialConstants::MAX_QUARTERLY_ASSET_LIQUIDATION_RATIO,
+            $shortfall / (1.0 - $haircut)
+        );
+        if ($carryingValueSold <= 0.0) {
+            return;
+        }
+
+        $proceeds = $carryingValueSold * (1.0 - $haircut);
+        $retained = 1.0 - ($carryingValueSold / $netBook);
+        $stock->setEarningAssets((string) ($grossBook * $retained));
+        $stock->setCreditLossAllowance((string) ($allowance * $retained));
+
+        $ctx->newTreasury += $proceeds;
+        $ctx->assetSaleProceeds += $proceeds;
+        $ctx->assetSaleLoss += $carryingValueSold - $proceeds;
+
+        if ($proceeds > 500_000_000.0) {
+            $amtB = number_format($proceeds / 1_000_000_000, 2);
+            $lossB = number_format(($carryingValueSold - $proceeds) / 1_000_000_000, 2);
+            $ctx->events[] = ['description' => "Sold \${$amtB}B of securities and loans below carrying value to meet withdrawals, realizing a \${$lossB}B loss.", 'shock' => -3.0];
+        }
     }
 
     private function processDebtExpansion(CapitalAllocationContext $ctx): void
@@ -104,7 +209,7 @@ class TreasuryEngine
         $stock = $ctx->stock;
 
         $currentEquity = (float) $stock->getTotalEquity();
-        $preBuybackEquity = $currentEquity + $ctx->quarterlyNetIncome + $ctx->physicalAssetAppreciation - $ctx->totalPaid;
+        $preBuybackEquity = $currentEquity + $ctx->quarterlyNetIncome + $ctx->stockCompensation - $ctx->totalPaid;
 
         $totalDebt = $ctx->wholesaleDebt + $ctx->customerDeposits;
         $liveInvestedCapital = $this->corporateMetrics->calculateLiveInvestedCapital($preBuybackEquity, $totalDebt, $ctx->newTreasury);
@@ -162,8 +267,8 @@ class TreasuryEngine
                     $ctx->newTreasury
                 );
 
-                $borrowProbability = $aggressionData['probability'];
-                $aggressiveness = $aggressionData['aggressiveness'];
+                $borrowProbability = $aggressionData->probability;
+                $aggressiveness = $aggressionData->aggressiveness;
 
                 if ($isUnderLeveragedForDebt) {
                     $aggressiveness = max($aggressiveness, 0.50);
@@ -195,8 +300,14 @@ class TreasuryEngine
     private function processOrganicCapex(CapitalAllocationContext $ctx): void
     {
         $stock = $ctx->stock;
+        if ($ctx->strategy->isFinancial() && $stock->hasEarningAssetLedger() && $ctx->strategy->deploysFundingIntoEarningAssets()) {
+            $this->deployFundingIntoEarningAssets($ctx);
+
+            return;
+        }
+
         $currentEquity = (float) $stock->getTotalEquity();
-        $preBuybackEquity = $currentEquity + $ctx->quarterlyNetIncome + $ctx->physicalAssetAppreciation - $ctx->totalPaid;
+        $preBuybackEquity = $currentEquity + $ctx->quarterlyNetIncome + $ctx->stockCompensation - $ctx->totalPaid;
 
         $totalDebt = $ctx->wholesaleDebt + $ctx->customerDeposits;
         $liveInvestedCapital = $this->corporateMetrics->calculateLiveInvestedCapital($preBuybackEquity, $totalDebt, $ctx->newTreasury);
@@ -264,7 +375,14 @@ class TreasuryEngine
                 $ctx->organicCapex = $expansionSpend;
                 $ctx->newTreasury -= $expansionSpend;
 
-                $this->capExEngine->allocateGrowthCapEx($stock, $expansionSpend);
+                if ($ctx->strategy->isFinancial() && $stock->hasEarningAssetLedger()) {
+                    // A lender's expansion is loans made, not plant built: the cash goes straight onto the
+                    // earning-asset ledger. Queuing it as construction parked it for a quarter and then dropped it.
+                    $stock->setEarningAssets((string) ((float) $stock->getEarningAssets() + $expansionSpend));
+                    $ctx->loanOriginations += $expansionSpend;
+                } else {
+                    $this->capExEngine->allocateGrowthCapEx($stock, $expansionSpend);
+                }
 
                 if ($expansionSpend > 1_000_000_000.0) {
                     $amtB = number_format($expansionSpend / 1_000_000_000, 2);
@@ -284,6 +402,98 @@ class TreasuryEngine
         }
     }
 
+    /**
+     * Lends out the funding a balance-sheet business holds beyond its liquidity target.
+     *
+     * Deposits are not a cash hoard waiting for a project with a positive spread: they are the raw material,
+     * and a bank that leaves them idle is not a cautious bank but one whose loan book is shrinking against
+     * its funding. So unlike physical expansion, which is probabilistic, rate-limited and gated on the
+     * marginal return, deployment here is deterministic and complete every quarter: whatever sits above the
+     * operating cash target goes into loans and securities, with two exceptions. The earnings retained this
+     * quarter stay in cash, because capital return is funded from earnings and not from the deposit base;
+     * and an institution its regulator has already stopped from distributing (capital ratio below the
+     * conservation buffer, or leverage past its limit) cannot add risk-weighted assets either. Before this
+     * the deposit inflow ran through the physical capex path, fired in about half the quarters and then
+     * lent only half the excess, so cash ratcheted up quarter after quarter while the book stood still.
+     */
+    private function deployFundingIntoEarningAssets(CapitalAllocationContext $ctx): void
+    {
+        $stock = $ctx->stock;
+
+        $targetCashReserves = $ctx->strategy->calculateTargetOperatingCash($ctx->operatingBase, $ctx->customerDeposits, $ctx->wholesaleDebt) * self::LIQUIDITY_BUFFER_MULTIPLIER;
+        $excessCash = max(0.0, $ctx->newTreasury - $targetCashReserves);
+        $deployable = max(0.0, $excessCash - max(0.0, $ctx->retainedEarningsThisQuarter));
+        if ($deployable <= 0.0) {
+            return;
+        }
+
+        $regulatoryCap = $ctx->strategy->getRegulatoryDividendCap($stock, $ctx->newTreasury);
+        if ($regulatoryCap !== null && $regulatoryCap <= 0.0) {
+            return; // Capital-constrained: the regulator has the balance sheet frozen, not just the dividend.
+        }
+
+        $stock->setEarningAssets((string) ((float) $stock->getEarningAssets() + $deployable));
+        $ctx->newTreasury -= $deployable;
+        $ctx->organicCapex = $deployable;
+        $ctx->loanOriginations += $deployable;
+
+        if ($deployable > 1_000_000_000.0) {
+            $amtB = number_format($deployable / 1_000_000_000, 2);
+            $actionText = match ($ctx->businessModel) {
+                'commercial_bank', 'credit_services', 'shadow_bank' => 'loan book expansion',
+                'insurance', 'retail_insurance', 'reinsurance' => 'the investment portfolio backing the float',
+                'brokerage', 'investment_bank' => 'trading desk and market-making capacity',
+                'asset_manager', 'private_equity', 'hedge_fund' => 'fund seeding and AUM deployment',
+                'clearing_house' => 'clearing collateral and exchange margin reserves',
+                'distressed_debt' => 'distressed credit and turnaround equity acquisitions',
+                default => 'earning assets'
+            };
+            $ctx->events[] = ['description' => "Deployed \${$amtB}B in {$actionText}.", 'shock' => 0.5];
+        }
+    }
+
+    /**
+     * Repays or refinances the principal that matured this quarter.
+     *
+     * Runs before emergency borrowing on purpose: a maturity the firm cannot refinance drains cash first,
+     * and only then does the treasury reach for penalty-rate financing to plug the hole it left. That
+     * ordering is what lets a solvent-but-illiquid firm fail the way real ones do.
+     */
+    private function processDebtMaturities(CapitalAllocationContext $ctx): void
+    {
+        if ($ctx->health === null) {
+            return;
+        }
+
+        $roll = $this->debtEngine->rollMaturities(
+            $ctx->stock,
+            $ctx->health,
+            $ctx->newTreasury,
+            $ctx->strategy->calculateMinOperatingCash($ctx->operatingBase, $ctx->customerDeposits, $ctx->wholesaleDebt)
+        );
+        if ($roll->maturingPrincipal <= 0.0) {
+            return;
+        }
+
+        $ctx->refinancingRefused = !$roll->refinanced;
+        if ($roll->refinanced) {
+            return;
+        }
+
+        $ctx->newTreasury -= $roll->principalRepaid;
+        $ctx->principalRepaid = $roll->principalRepaid;
+        $ctx->unfundedMaturity = $roll->unfundedShortfall;
+        $ctx->wholesaleDebt = (float) $ctx->stock->getWholesaleDebt();
+
+        if ($roll->principalRepaid > 500_000_000.0) {
+            $amtB = number_format($roll->principalRepaid / 1_000_000_000, 2);
+            $ctx->events[] = [
+                'description' => "Shut out of the bond market and forced to repay \${$amtB}B of maturing notes in cash.",
+                'shock' => -4.0
+            ];
+        }
+    }
+
     private function processEmergencyBorrowing(CapitalAllocationContext $ctx): void
     {
         $stock = $ctx->stock;
@@ -292,7 +502,9 @@ class TreasuryEngine
         if ($ctx->newTreasury < $minOperatingCash) {
             $cashShortfall = $minOperatingCash - $ctx->newTreasury;
 
-            if ($ctx->health->canIssueDebt) {
+            // A firm the primary market just refused cannot turn around and issue emergency paper into the
+            // same closed market, however willing its own coverage ratios look.
+            if ($ctx->health->canIssueDebt && !$ctx->refinancingRefused) {
                 $currentMarketRate = $ctx->health->rawMetrics->currentMarketRate ?? ($ctx->macroState->yield5yEma + (float) $stock->getCreditSpread());
                 $costOfEmergencyDebt = $currentMarketRate + FinancialConstants::EMERGENCY_DEBT_SPREAD_PENALTY;
 
@@ -327,7 +539,7 @@ class TreasuryEngine
         $hurdleRate = $ctx->strategy->getHurdleRate($ctx->health);
         $economicSpread = $trueReturn - $hurdleRate;
 
-        $fairValuePE = $this->mathUtility->calculateIntrinsicFairValuePE($hurdleRate, $trueReturn, 0.02);
+        $fairValuePE = $this->mathUtility->calculateIntrinsicFairValuePE($hurdleRate, $trueReturn, 0.02, \App\Data\Sectors::baselineIndustryPe($stock->getIndustry()));
 
         $bookValuePerShare = max(0.01, (float) $stock->getTotalEquity() / max(1, $ctx->sharesOutstanding));
         $priceToBook = $ctx->currentPrice / $bookValuePerShare;
@@ -373,7 +585,11 @@ class TreasuryEngine
                 $sharesIssued = $targetRaise / max(0.01, $offeringPrice);
 
                 $stock->setSharesOutstanding((string) ($ctx->sharesOutstanding + $sharesIssued));
+                // The engine writes the context's share count back to the stock after allocation, so the
+                // dilution has to reach the context too or the raise lands as cash with no shares behind it.
+                $ctx->newShares = (float) $stock->getSharesOutstanding();
                 $ctx->newTreasury += $targetRaise;
+                $ctx->equityRaised += $targetRaise;
 
                 $currentEquityStr = $this->formatBc($stock->getTotalEquity());
                 $stock->setTotalEquity(\bcadd($currentEquityStr, $this->formatBc($targetRaise), 4));
@@ -387,6 +603,122 @@ class TreasuryEngine
                 $ctx->failedEmergencyBorrow = false;
             }
         }
+    }
+
+    /**
+     * Draws on the committed revolving credit facility to close a negative cash balance.
+     *
+     * A revolver is contractually committed: the bank must fund a draw whatever the primary market is doing,
+     * which is exactly why firms drew their facilities in March 2020 when commercial paper shut. So this runs
+     * even for an issuer the bond market has refused, and it is the reason a cash balance cannot simply go
+     * negative. The commitment is sized to the business, though: past it the bank is no longer bound, the
+     * money prices at distress rates, and the firm is flagged into the death-spiral financing path.
+     *
+     * The facility also takes out a maturity the primary market refused to roll. That is the other thing a
+     * revolver is for: a solvent issuer whose notes come due in a closed market draws the line and repays the
+     * bondholders, which is why a refused refinancing is a funding problem and not, by itself, a default.
+     * The maturity wall only repays principal down to the operating cash floor, so the balance is never
+     * negative on that account and the overdraft test alone never saw it. An overdraft is cash already spent
+     * and is funded first; the maturity takes whatever commitment is left, and only the part no committed
+     * line will cover goes forward to the default test.
+     */
+    private function processRevolverDraw(CapitalAllocationContext $ctx): void
+    {
+        $overdraft = max(0.0, -$ctx->newTreasury);
+        $need = $overdraft + max(0.0, $ctx->unfundedMaturity);
+        if ($need <= 0.0) {
+            return;
+        }
+
+        $stock = $ctx->stock;
+
+        $commitment = max(
+            FinancialConstants::MIN_OPERATING_BASE_CASH,
+            $ctx->strategy->calculateMinOperatingCash($ctx->operatingBase, $ctx->customerDeposits, $ctx->wholesaleDebt)
+                * self::REVOLVER_COMMITMENT_OPERATING_CASH_MULTIPLE
+        );
+        $drawn = min($need, $commitment);
+        if ($drawn <= 0.0) {
+            return;
+        }
+
+        $currentMarketRate = $ctx->health->rawMetrics->currentMarketRate
+            ?? ($ctx->macroState->yield5yEma + (float) $stock->getCreditSpread());
+
+        $this->debtEngine->issueDebt($stock, $drawn, $currentMarketRate + self::REVOLVER_DRAW_SPREAD_PENALTY);
+        $ctx->wholesaleDebt = (float) $stock->getWholesaleDebt();
+        $ctx->newTreasury += $drawn;
+        $ctx->debtActionTaken = true;
+
+        // The maturity is repaid out of the draw the moment it lands: the notes leave the ladder and the
+        // revolver balance takes their place, which is a refinancing onto the committed line, not new
+        // leverage. The cash passes straight through, so the treasury ends where it started.
+        $maturityFunded = min(max(0.0, $ctx->unfundedMaturity), max(0.0, $drawn - $overdraft));
+        if ($maturityFunded > 0.0) {
+            $ctx->newTreasury -= $maturityFunded;
+            $ctx->wholesaleDebt = max(0.0, $ctx->wholesaleDebt - $maturityFunded);
+            $stock->setWholesaleDebt((string) $ctx->wholesaleDebt);
+            $ctx->principalRepaid += $maturityFunded;
+            $ctx->unfundedMaturity -= $maturityFunded;
+        }
+
+        // Past the commitment the bank is no longer contractually bound and the money costs what distress
+        // costs. An overdraft is still funded - the cash was already spent, and booking it anywhere but the
+        // liability side would balance the sheet by inventing money - but the firm is now visibly out of
+        // liquidity, so it is flagged into the death-spiral path the equity issuance step already runs on.
+        // A maturity is different: nothing has been spent yet, so past the commitment it stays unfunded and
+        // the default test decides.
+        $overCommitment = max(0.0, $overdraft - $drawn);
+        if ($overCommitment > 0.0) {
+            $this->debtEngine->issueDebt(
+                $stock,
+                $overCommitment,
+                $currentMarketRate + FinancialConstants::EMERGENCY_DEBT_SPREAD_PENALTY
+            );
+            $ctx->wholesaleDebt = (float) $stock->getWholesaleDebt();
+            $ctx->newTreasury += $overCommitment;
+            $ctx->failedEmergencyBorrow = true;
+        }
+
+        if ($drawn > 500_000_000.0) {
+            $amtB = number_format($drawn / 1_000_000_000, 2);
+            $ctx->events[] = [
+                'description' => "Drew \${$amtB}B on its committed revolving credit facility to cover a cash shortfall.",
+                'shock' => -3.0
+            ];
+        }
+    }
+
+    /**
+     * Records an event of default when principal came due that the firm could neither refinance, repay from
+     * cash, nor cover with an emergency raise. This is a payment default, which is a separate failure mode
+     * from balance-sheet insolvency: a firm can be worth more than it owes on paper and still fail because
+     * the money was not there on the day. MarketOperator liquidates on either.
+     */
+    private function processPaymentDefault(CapitalAllocationContext $ctx): void
+    {
+        if ($ctx->unfundedMaturity <= 0.0) {
+            return;
+        }
+
+        // The emergency equity raise, if it landed, may have covered the gap after all.
+        $stillUnfunded = $ctx->newTreasury < $ctx->unfundedMaturity;
+        if (!$stillUnfunded) {
+            $ctx->newTreasury -= $ctx->unfundedMaturity;
+            $ctx->wholesaleDebt = max(0.0, $ctx->wholesaleDebt - $ctx->unfundedMaturity);
+            $ctx->stock->setWholesaleDebt((string) $ctx->wholesaleDebt);
+            $ctx->principalRepaid += $ctx->unfundedMaturity;
+            $ctx->unfundedMaturity = 0.0;
+
+            return;
+        }
+
+        $ctx->stock->setPaymentDefault(true);
+        $amtB = number_format($ctx->unfundedMaturity / 1_000_000_000, 2);
+        $ctx->events[] = [
+            'description' => "Failed to repay \${$amtB}B of maturing debt, triggering an event of default.",
+            'shock' => -25.0
+        ];
     }
 
     private function processArbitragePaydown(CapitalAllocationContext $ctx): void

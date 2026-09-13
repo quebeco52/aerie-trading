@@ -1,8 +1,9 @@
 <?php
 
-namespace App\Tests\Service;
+namespace App\Tests\Service\Math;
 
 use App\Service\Math\FinancialConstants;
+use App\Service\Macro\MacroEngine;
 use App\Service\Math\MathUtility;
 use PHPUnit\Framework\TestCase;
 
@@ -139,6 +140,95 @@ class MathUtilityTest extends TestCase
         $pe = $this->mathUtility->calculateIntrinsicFairValuePE(0.08, 0.20, 0.15);
 
         $this->assertEqualsWithDelta(FinancialConstants::MAX_INTRINSIC_PE, $pe, 0.0001, 'Growth >= COE must constrain growth and clamp to MAX_INTRINSIC_PE.');
+    }
+
+    /**
+     * With a sector prior supplied, a well-conditioned firm keeps most of its own Gordon multiple. At a 7%
+     * spread the firm's precision (spread^2) dominates the prior's, so it carries ~84% of the weight and the
+     * result sits close to the raw 11.43x rather than the 20x sector.
+     */
+    public function testIntrinsicFairValuePEKeepsFirmEstimateWhenWellConditioned(): void
+    {
+        $raw = $this->mathUtility->calculateIntrinsicFairValuePE(0.10, 0.15, 0.03);
+        $shrunk = $this->mathUtility->calculateIntrinsicFairValuePE(0.10, 0.15, 0.03, 20.0);
+
+        $this->assertEqualsWithDelta(11.42857, $raw, 0.001);
+        $this->assertEqualsWithDelta(12.75862, $shrunk, 0.001, 'A 7% spread must leave the firm estimate dominant.');
+        $this->assertLessThan(abs(20.0 - $raw), abs(20.0 - $shrunk), 'Shrinkage must move the estimate toward its sector.');
+    }
+
+    /**
+     * The case the shrinkage exists for. A 4.5% cost of equity against 6% growth leaves the denominator on
+     * its 50bp floor and a raw multiple of 160x, which previously pinned to the 35x ceiling and stayed there
+     * for every such firm. The firm's weight falls as spread^2, so its contribution collapses and the
+     * estimate lands near its sector instead of on a shared ceiling.
+     */
+    public function testIntrinsicFairValuePEFallsBackToSectorWhenDenominatorCollapses(): void
+    {
+        $raw = $this->mathUtility->calculateIntrinsicFairValuePE(0.045, 0.20, 0.06);
+        $shrunk = $this->mathUtility->calculateIntrinsicFairValuePE(0.045, 0.20, 0.06, 16.0);
+
+        $this->assertEqualsWithDelta(FinancialConstants::MAX_INTRINSIC_PE, $raw, 0.0001, 'Unshrunk, this diverges to the ceiling.');
+        $this->assertEqualsWithDelta(19.89189, $shrunk, 0.001);
+        $this->assertLessThan(FinancialConstants::MAX_INTRINSIC_PE, $shrunk, 'The ceiling must stop being what sets the multiple.');
+
+        // Two firms that both pinned to the ceiling must now separate by their own spreads rather than
+        // sharing a single capped multiple.
+        $wider = $this->mathUtility->calculateIntrinsicFairValuePE(0.08, 0.20, 0.15, 16.0);
+        $this->assertEqualsWithDelta(FinancialConstants::MAX_INTRINSIC_PE, $this->mathUtility->calculateIntrinsicFairValuePE(0.08, 0.20, 0.15), 0.0001);
+        $this->assertGreaterThan($shrunk, $wider, 'The better-conditioned of two ceiling-pinned firms must now price higher.');
+    }
+
+    /**
+     * The firm keeps more of its own multiple the wider its spread. Asserted on the implied weight rather
+     * than on distance from the prior: the raw multiple falls as the spread widens and crosses the sector on
+     * the way, so distance is not monotonic even though the weight is.
+     */
+    public function testIntrinsicFairValuePEShrinksHarderAsTheSpreadNarrows(): void
+    {
+        $sector = 12.0;
+        $previousWeight = null;
+
+        // Spreads of 2.5%, 4%, 6% and 10%, all clear of the 4% cost-of-equity floor that would collapse them.
+        foreach ([0.045, 0.06, 0.08, 0.12] as $costOfEquity) {
+            $raw = $this->mathUtility->calculateIntrinsicFairValuePE($costOfEquity, 0.20, 0.02);
+            $shrunk = $this->mathUtility->calculateIntrinsicFairValuePE($costOfEquity, 0.20, 0.02, $sector);
+
+            $this->assertNotEqualsWithDelta($sector, $raw, 0.01, 'Test inputs must keep the raw multiple off the prior.');
+            $impliedWeight = ($shrunk - $sector) / ($raw - $sector);
+
+            $this->assertGreaterThanOrEqual(0.0, $impliedWeight);
+            $this->assertLessThanOrEqual(1.0, $impliedWeight, 'The result must lie between the firm estimate and its sector.');
+
+            if ($previousWeight !== null) {
+                $this->assertGreaterThan(
+                    $previousWeight,
+                    $impliedWeight,
+                    'A wider spread is a more reliable estimate and must keep more of the firm-level multiple.'
+                );
+            }
+            $previousWeight = $impliedWeight;
+        }
+    }
+
+    /** Omitting the prior must reproduce the unshrunk Gordon multiple exactly, for callers without a sector. */
+    public function testIntrinsicFairValuePEIsUnchangedWithoutASectorPrior(): void
+    {
+        foreach ([[0.10, 0.15, 0.03], [0.12, 0.25, 0.05], [0.06, 0.08, 0.01]] as [$coe, $roic, $growth]) {
+            $this->assertSame(
+                $this->mathUtility->calculateIntrinsicFairValuePE($coe, $roic, $growth),
+                $this->mathUtility->calculateIntrinsicFairValuePE($coe, $roic, $growth, null)
+            );
+        }
+    }
+
+    /** A non-positive sector multiple is not a usable prior and must be ignored rather than dragging the estimate to zero. */
+    public function testIntrinsicFairValuePEIgnoresAnUnusableSectorPrior(): void
+    {
+        $raw = $this->mathUtility->calculateIntrinsicFairValuePE(0.10, 0.15, 0.03);
+
+        $this->assertSame($raw, $this->mathUtility->calculateIntrinsicFairValuePE(0.10, 0.15, 0.03, 0.0));
+        $this->assertSame($raw, $this->mathUtility->calculateIntrinsicFairValuePE(0.10, 0.15, 0.03, -5.0));
     }
 
     public function testCalculateDcfMultiplier(): void
@@ -534,9 +624,9 @@ class MathUtilityTest extends TestCase
         // Normal neutral baseline conditions
         $neutralIntensity = $this->mathUtility->calculateDynamicWorkingCapitalIntensity(
             baselineIntensity: $baseIntensity,
-            creditSpread: 0.02,
+            creditSpread: MacroEngine::BASE_CREDIT_SPREAD,
             capacityUtilization: 1.0,
-            interbankLiquiditySpread: 0.0015
+            interbankLiquiditySpread: MacroEngine::INTERBANK_BASELINE_SPREAD
         );
         $this->assertEqualsWithDelta($baseIntensity, $neutralIntensity, 0.0001, 'Under neutral conditions, intensity should equal baseline.');
 
@@ -557,7 +647,7 @@ class MathUtilityTest extends TestCase
         // Normal neutral baseline conditions
         $neutralIntensity = $this->mathUtility->calculateDynamicWorkingCapitalIntensity(
             baselineIntensity: $negativeFloat,
-            creditSpread: 0.02,
+            creditSpread: MacroEngine::BASE_CREDIT_SPREAD,
             capacityUtilization: 1.0,
             interbankLiquiditySpread: 0.0015
         );
@@ -579,10 +669,10 @@ class MathUtilityTest extends TestCase
     {
         $baseIntensity = 0.15;
 
-        // Roaring boom: tight credit spreads (-50bps), high interbank liquidity (-50bps), 100% capacity utilization
+        // Roaring boom: credit spreads 50 bps inside baseline, high interbank liquidity (-50bps), 100% capacity utilization
         $boomIntensity = $this->mathUtility->calculateDynamicWorkingCapitalIntensity(
             baselineIntensity: $baseIntensity,
-            creditSpread: 0.015,
+            creditSpread: MacroEngine::BASE_CREDIT_SPREAD - 0.005,
             capacityUtilization: 1.0,
             interbankLiquiditySpread: 0.0010
         );
@@ -1119,6 +1209,20 @@ class MathUtilityTest extends TestCase
         );
         $this->assertLessThan(100.0, $panicIndex, 'Market panic and credit freeze must collapse deal activity index.');
         $this->assertGreaterThanOrEqual(20.0, $panicIndex);
+
+        // The full cycle is bounded at ~2x either way: iterate each regime to its target with no noise.
+        $trough = 100.0;
+        $peak = 100.0;
+        for ($i = 0; $i < 40; $i++) {
+            $trough = $this->mathUtility->calculateCapitalMarketsDealIndexStep($trough, 0.070, 0.150, 0.60, 0.25, 0.0);
+            $peak = $this->mathUtility->calculateCapitalMarketsDealIndexStep($peak, 0.025, 0.020, 0.09, 0.25, 0.0);
+        }
+        $floor = MacroEngine::DEAL_ACTIVITY_BASELINE * exp(-MacroEngine::DEAL_ACTIVITY_LOG_RANGE);
+        $ceiling = MacroEngine::DEAL_ACTIVITY_BASELINE * exp(MacroEngine::DEAL_ACTIVITY_LOG_RANGE);
+        $this->assertEqualsWithDelta($floor, $trough, 0.5, 'A 2008-type freeze bottoms at the capped log range, not at the hard floor.');
+        $this->assertGreaterThan(140.0, $peak, 'A 2007/2021-type boom runs about 1.5x baseline.');
+        $this->assertLessThan($ceiling, $peak, 'and does not need the cap to stay within a recorded cycle.');
+        $this->assertLessThan(2.8, $peak / $trough, 'Peak-to-trough deal volume stays near the 2.2x of the widest recorded cycle.');
     }
 
     public function testCalculateDiffusionIndex(): void
@@ -1383,7 +1487,426 @@ class MathUtilityTest extends TestCase
         // Shift to 80.5 (+2.0 points) -> (2.0 / 100) * 0.40 = 0.008 (+0.8%)
         $this->assertEqualsWithDelta(0.008, $this->mathUtility->calculateCapacityUtilizationShift(80.5, 78.5, 0.40), 0.0001);
     }
+
+    public function testBlissSlopeDecaySeparatesSlopeLoadingFromCurvatureHump(): void
+    {
+        $level = 0.045;
+        $slope = -0.03;
+        $lambda1 = 0.73;
+
+        // With no slope decay given, Bliss collapses to plain Svensson.
+        $plain = $this->mathUtility->calculateSvenssonYield($level, $slope, 0.0, 0.0, 10.0, $lambda1, 0.15);
+        $collapsed = $this->mathUtility->calculateSvenssonYield($level, $slope, 0.0, 0.0, 10.0, $lambda1, 0.15, null);
+        $this->assertEqualsWithDelta($plain, $collapsed, 0.0000001);
+
+        // A slower slope decay keeps more of the short-rate gap alive at ten years: 0.32 versus 0.14 loading.
+        $bliss = $this->mathUtility->calculateSvenssonYield($level, $slope, 0.0, 0.0, 10.0, $lambda1, 0.15, 0.30);
+        $expectedLoad = (1.0 - exp(-3.0)) / 3.0;
+        $this->assertEqualsWithDelta($level + $slope * $expectedLoad, $bliss, 0.0000001, 'Slope must load on its own decay.');
+        $this->assertLessThan($plain, $bliss, 'A negative slope with slower decay pulls the ten-year lower.');
+
+        // The curvature hump is untouched by the slope decay: same yield difference for a curvature shock either way.
+        $humpPlain = $this->mathUtility->calculateSvenssonYield($level, $slope, 0.02, 0.0, 2.5, $lambda1, 0.15)
+            - $this->mathUtility->calculateSvenssonYield($level, $slope, 0.0, 0.0, 2.5, $lambda1, 0.15);
+        $humpBliss = $this->mathUtility->calculateSvenssonYield($level, $slope, 0.02, 0.0, 2.5, $lambda1, 0.15, 0.30)
+            - $this->mathUtility->calculateSvenssonYield($level, $slope, 0.0, 0.0, 2.5, $lambda1, 0.15, 0.30);
+        $this->assertEqualsWithDelta($humpPlain, $humpBliss, 0.0000001, 'Curvature loading must depend only on lambda1.');
+    }
+
+    // --- Contract coverage for formulas whose only other exercise is a higher suite ---
+
+    /**
+     * The Theory of Storage curve: flat in contango, rising asymptotically as inventory nears the buffer floor.
+     */
+    public function testConvenienceYieldIsZeroInContangoAndRisesAsInventoryDepletes(): void
+    {
+        $this->assertSame(0.0, $this->mathUtility->calculateConvenienceYield(100.0), 'At neutral inventory the market is in contango.');
+        $this->assertSame(0.0, $this->mathUtility->calculateConvenienceYield(140.0), 'Ample inventory stays in contango.');
+
+        // Closed form below the neutral point: yieldScale * ((neutralSlack / bufferSlack)^exponent - 1).
+        $this->assertEqualsWithDelta(
+            0.10 * (pow(50.0 / 25.0, 1.8) - 1.0),
+            $this->mathUtility->calculateConvenienceYield(75.0),
+            0.0000001,
+            'Backwardation yield must follow the storage curve exactly.'
+        );
+
+        $previous = -1.0;
+        for ($level = 99.0; $level >= 51.0; $level -= 1.0) {
+            $yield = $this->mathUtility->calculateConvenienceYield($level);
+            $this->assertGreaterThan($previous, $yield, "Convenience yield must rise as inventory falls to {$level}.");
+            $previous = $yield;
+        }
+
+        // The buffer slack floors at 1.0, so the curve saturates rather than diverging to infinity.
+        $this->assertTrue(is_finite($this->mathUtility->calculateConvenienceYield(0.0)), 'A depleted inventory must not produce a non-finite yield.');
+        $this->assertSame(
+            $this->mathUtility->calculateConvenienceYield(51.0),
+            $this->mathUtility->calculateConvenienceYield(10.0),
+            'Below the buffer floor the curve saturates at its clamped value.'
+        );
+    }
+
+    /**
+     * The convex Phillips curve is piecewise: asymptotic in expansion, linearly rigid in contraction.
+     */
+    public function testConvexPhillipsCurvePiecewiseFormAndContinuityAtZero(): void
+    {
+        $this->assertSame(0.0, $this->mathUtility->calculateConvexPhillipsCurve(0.0), 'A closed output gap exerts no demand-pull pressure.');
+
+        // Expansion branch: kappa * (y / (yMax - y)).
+        $this->assertEqualsWithDelta(
+            0.020 * (0.04 / (0.08 - 0.04)),
+            $this->mathUtility->calculateConvexPhillipsCurve(0.04),
+            0.0000001,
+            'The expansion branch must follow the asymptotic form.'
+        );
+
+        // Contraction branch: (kappa / yMax) * rigidity * y — linear, so halving the gap halves the pressure.
+        $this->assertEqualsWithDelta(
+            (0.020 / 0.08) * 0.35 * -0.04,
+            $this->mathUtility->calculateConvexPhillipsCurve(-0.04),
+            0.0000001,
+            'The contraction branch must follow the rigid linear form.'
+        );
+        $this->assertEqualsWithDelta(
+            2.0 * $this->mathUtility->calculateConvexPhillipsCurve(-0.02),
+            $this->mathUtility->calculateConvexPhillipsCurve(-0.04),
+            0.0000001,
+            'Downward rigidity is linear: no curvature below the closed gap.'
+        );
+
+        // The ceiling denominator floors at 0.005, so the gap may exceed capacity without dividing by zero.
+        $this->assertTrue(is_finite($this->mathUtility->calculateConvexPhillipsCurve(0.08)), 'Reaching capacity must not divide by zero.');
+        $this->assertTrue(is_finite($this->mathUtility->calculateConvexPhillipsCurve(0.20)), 'Overheating past capacity must stay finite.');
+
+        // A stiffer rigidity factor deepens disinflation; it has no effect above the closed gap.
+        $this->assertLessThan(
+            $this->mathUtility->calculateConvexPhillipsCurve(-0.04, 0.08, 0.020, 0.35),
+            $this->mathUtility->calculateConvexPhillipsCurve(-0.04, 0.08, 0.020, 0.70),
+            'A weaker rigidity factor must let prices fall further.'
+        );
+        $this->assertSame(
+            $this->mathUtility->calculateConvexPhillipsCurve(0.04, 0.08, 0.020, 0.35),
+            $this->mathUtility->calculateConvexPhillipsCurve(0.04, 0.08, 0.020, 0.70),
+            'Downward rigidity must not touch the expansion branch.'
+        );
+    }
+
+    /**
+     * Mean absolute deviation recovers sigma without letting one outlier dominate, unlike a sum of squares.
+     */
+    public function testMeanAbsoluteScaleRecoversSigmaAndResistsOutliers(): void
+    {
+        $this->assertSame(0.0, $this->mathUtility->calculateMeanAbsoluteScale([]), 'An empty sample has nothing to estimate from.');
+        $this->assertSame(0.0, $this->mathUtility->calculateMeanAbsoluteScale([0.0, 0.0, 0.0]), 'A sample of exact forecasts has zero scale.');
+
+        // E|X| = sigma * sqrt(2/pi), so a constant absolute deviation recovers that deviation over the constant.
+        $this->assertEqualsWithDelta(
+            1.0 / MathUtility::MEAN_ABSOLUTE_DEVIATION_TO_SIGMA,
+            $this->mathUtility->calculateMeanAbsoluteScale([1.0, -1.0, 1.0, -1.0]),
+            0.0000001,
+            'The estimator must invert the normal mean-absolute-deviation constant.'
+        );
+
+        // Sign is discarded: only the magnitude of the surprise carries scale.
+        $this->assertSame(
+            $this->mathUtility->calculateMeanAbsoluteScale([0.4, -0.2, 0.6]),
+            $this->mathUtility->calculateMeanAbsoluteScale([-0.4, 0.2, -0.6]),
+            'The scale of a surprise must not depend on its direction.'
+        );
+
+        // The point of the estimator: one blow-up quarter must not dominate the other nine.
+        $quiet = array_fill(0, 9, 0.02);
+        $withOutlier = $quiet;
+        $withOutlier[] = 2.0;
+
+        $sumOfSquares = sqrt(array_sum(array_map(static fn (float $x): float => $x ** 2, $withOutlier)) / count($withOutlier));
+        $robust = $this->mathUtility->calculateMeanAbsoluteScale($withOutlier);
+
+        $this->assertLessThan($sumOfSquares, $robust, 'A fat tail must move the mean absolute estimate less than a root-mean-square.');
+    }
+
+    /**
+     * Persistence inflates integrated variance; the scale factor must give it back exactly.
+     */
+    public function testPersistenceVarianceScaleRestoresIntegratedVariance(): void
+    {
+        $this->assertSame(1.0, $this->mathUtility->calculatePersistenceVarianceScale(0.0), 'An i.i.d. driver needs no rescaling.');
+
+        // sqrt((1 - phi) / (1 + phi)) inverts the (1 + phi) / (1 - phi) variance inflation of an AR(1) sum.
+        foreach ([0.10, 0.50, 0.90, 0.99] as $phi) {
+            $scale = $this->mathUtility->calculatePersistenceVarianceScale($phi);
+            $inflation = (1.0 + $phi) / (1.0 - $phi);
+            $this->assertEqualsWithDelta(1.0, $scale ** 2 * $inflation, 0.0000001, "Scale must neutralise the variance inflation at phi={$phi}.");
+            $this->assertLessThan(1.0, $scale, "A persistent driver must be damped, not amplified, at phi={$phi}.");
+        }
+
+        // phi is bounded below 1 so the scale never collapses to zero or goes imaginary.
+        $this->assertGreaterThan(0.0, $this->mathUtility->calculatePersistenceVarianceScale(1.0), 'A unit root must clamp rather than annihilate the shock.');
+        $this->assertSame(1.0, $this->mathUtility->calculatePersistenceVarianceScale(-0.5), 'Negative persistence clamps to the i.i.d. case.');
+    }
+
+    /**
+     * Vayanos-Vila duration extraction: the premium shift is linear in tenor and flips sign between QE and QT.
+     */
+    public function testPreferredHabitatShiftScalesWithTenorAndFlipsBetweenQeAndQt(): void
+    {
+        // Delta TP(tau) = -lambda * (tau / 10) * intensity, so the ten-year is the unit of measure.
+        $this->assertEqualsWithDelta(-0.005, $this->mathUtility->calculatePreferredHabitatTermPremiumShift(0.005, 10.0), 0.0000001, 'QE must suppress the ten-year premium one-for-one with intensity.');
+        $this->assertEqualsWithDelta(-0.001, $this->mathUtility->calculatePreferredHabitatTermPremiumShift(0.005, 2.0), 0.0000001, 'The two-year absorbs a fifth of the ten-year shift.');
+        $this->assertEqualsWithDelta(-0.015, $this->mathUtility->calculatePreferredHabitatTermPremiumShift(0.005, 30.0), 0.0000001, 'The thirty-year absorbs three times the ten-year shift.');
+
+        // QT extracts negative duration: the same magnitude steepens instead of compressing.
+        $this->assertEqualsWithDelta(
+            -$this->mathUtility->calculatePreferredHabitatTermPremiumShift(0.005, 10.0),
+            $this->mathUtility->calculatePreferredHabitatTermPremiumShift(-0.005, 10.0),
+            0.0000001,
+            'QT must mirror QE of the same intensity.'
+        );
+
+        $this->assertSame(0.0, $this->mathUtility->calculatePreferredHabitatTermPremiumShift(0.0, 10.0), 'A flat balance sheet shifts nothing.');
+        $this->assertSame(0.0, $this->mathUtility->calculatePreferredHabitatTermPremiumShift(0.005, 0.0), 'Overnight paper carries no duration to extract.');
+
+        // Because the shift grows with tenor, QE always compresses the 2s30s slope.
+        $twos = $this->mathUtility->calculatePreferredHabitatTermPremiumShift(0.004, 2.0);
+        $thirties = $this->mathUtility->calculatePreferredHabitatTermPremiumShift(0.004, 30.0);
+        $this->assertLessThan($twos, $thirties, 'QE must bite hardest at the long end.');
+    }
+
+    /**
+     * The three cash-conversion-cycle legs move on separate drivers and are not interchangeable.
+     */
+    public function testWorkingCapitalDayShiftsRespondToTheirOwnDriverOnly(): void
+    {
+        $neutral = $this->mathUtility->calculateWorkingCapitalDayShifts(
+            MacroEngine::BASE_CREDIT_SPREAD,
+            1.0,
+            MacroEngine::INTERBANK_BASELINE_SPREAD
+        );
+
+        $this->assertEqualsWithDelta(0.0, $neutral['dso'], 0.0000001, 'At the baseline spread receivables do not age.');
+        $this->assertEqualsWithDelta(0.0, $neutral['dio'], 0.0000001, 'At full capacity inventory does not build.');
+        $this->assertEqualsWithDelta(0.0, $neutral['dpo'], 0.0000001, 'At baseline liquidity payables do not contract.');
+
+        // Dear credit stretches customer payment: DSO rises with the spread over baseline.
+        $creditStress = $this->mathUtility->calculateWorkingCapitalDayShifts(
+            MacroEngine::BASE_CREDIT_SPREAD + 0.010,
+            1.0,
+            MacroEngine::INTERBANK_BASELINE_SPREAD
+        );
+        $this->assertEqualsWithDelta(0.010 * FinancialConstants::CCC_DSO_CREDIT_SPREAD_SENSITIVITY, $creditStress['dso'], 0.0000001, 'DSO must track the credit spread.');
+        $this->assertEqualsWithDelta(0.0, $creditStress['dio'], 0.0000001, 'A credit shock must not move inventory days.');
+        $this->assertEqualsWithDelta(0.0, $creditStress['dpo'], 0.0000001, 'A credit shock must not move payable days.');
+
+        // Slack plants pile up unsold goods: DIO rises as utilisation falls.
+        $slack = $this->mathUtility->calculateWorkingCapitalDayShifts(
+            MacroEngine::BASE_CREDIT_SPREAD,
+            0.80,
+            MacroEngine::INTERBANK_BASELINE_SPREAD
+        );
+        $this->assertEqualsWithDelta(0.20 * FinancialConstants::CCC_DIO_CAPACITY_SENSITIVITY, $slack['dio'], 0.0000001, 'DIO must track idle capacity.');
+        $this->assertEqualsWithDelta(0.0, $slack['dso'], 0.0000001, 'Idle capacity must not move receivable days.');
+
+        // Interbank stress makes vendors demand cash sooner, so DPO contracts (negative shift).
+        $liquidityStress = $this->mathUtility->calculateWorkingCapitalDayShifts(
+            MacroEngine::BASE_CREDIT_SPREAD,
+            1.0,
+            MacroEngine::INTERBANK_BASELINE_SPREAD + 0.004
+        );
+        $this->assertEqualsWithDelta(-0.004 * FinancialConstants::CCC_DPO_LIQUIDITY_SENSITIVITY, $liquidityStress['dpo'], 0.0000001, 'DPO must contract under interbank stress.');
+        $this->assertLessThan(0.0, $liquidityStress['dpo'], 'Vendors demanding faster payment shortens the payable cycle.');
+    }
+
+    /**
+     * Jarrow-Lando-Turnbull: the HY tranche gaps away from IG in a contraction rather than tracking it.
+     */
+    public function testDualTrancheCreditSpreadsWidenAsymmetricallyAndRespectTheirClamps(): void
+    {
+        // Neutral cycle, vol exactly at the threshold, no interbank stress: IG is the base spread untouched.
+        $neutral = $this->mathUtility->calculateDualTrancheCreditSpreads(
+            MacroEngine::BASE_CREDIT_SPREAD,
+            0.0,
+            MacroEngine::CREDIT_SPREAD_EXCESS_VOL_THRESHOLD,
+            0.0
+        );
+        $this->assertEqualsWithDelta(MacroEngine::BASE_CREDIT_SPREAD, $neutral['ig'], 0.0000001, 'A closed gap leaves the IG spread at its base.');
+        $this->assertEqualsWithDelta(
+            MacroEngine::BASE_CREDIT_SPREAD * MacroEngine::HY_BASE_SPREAD_MULTIPLIER,
+            $neutral['hy'],
+            0.0000001,
+            'With no contraction the HY tranche is a flat multiple of IG.'
+        );
+
+        // Vol below the threshold contributes nothing: the excess term is one-sided.
+        $lowVol = $this->mathUtility->calculateDualTrancheCreditSpreads(MacroEngine::BASE_CREDIT_SPREAD, 0.0, 0.05, 0.0);
+        $this->assertEqualsWithDelta($neutral['ig'], $lowVol['ig'], 0.0000001, 'Calm markets must not tighten spreads below base.');
+
+        // Excess vol and interbank stress are additive on the IG leg.
+        $stressed = $this->mathUtility->calculateDualTrancheCreditSpreads(
+            MacroEngine::BASE_CREDIT_SPREAD,
+            0.0,
+            MacroEngine::CREDIT_SPREAD_EXCESS_VOL_THRESHOLD + 0.10,
+            0.05
+        );
+        $this->assertEqualsWithDelta(
+            MacroEngine::BASE_CREDIT_SPREAD
+                + 0.10 * MacroEngine::MERTON_VOL_SENSITIVITY
+                + 0.05 * MacroEngine::INTERBANK_CREDIT_CONTAGION_SENSITIVITY,
+            $stressed['ig'],
+            0.0000001,
+            'Vol and contagion must add linearly onto the cycle spread.'
+        );
+
+        // The fallen-angel cliff: in a contraction HY widens by proportionally more than IG.
+        $recession = $this->mathUtility->calculateDualTrancheCreditSpreads(MacroEngine::BASE_CREDIT_SPREAD, -0.04, 0.10, 0.0);
+        $this->assertGreaterThan($neutral['ig'], $recession['ig'], 'A contraction must widen investment grade.');
+        $this->assertGreaterThan(
+            $recession['ig'] / $neutral['ig'],
+            $recession['hy'] / $neutral['hy'],
+            'High yield must gap away from investment grade, not track it.'
+        );
+
+        // Both legs clamp: a depression cannot produce an unbounded spread.
+        $depression = $this->mathUtility->calculateDualTrancheCreditSpreads(MacroEngine::BASE_CREDIT_SPREAD, -1.0, 2.0, 1.0);
+        $this->assertSame(MacroEngine::MAX_CREDIT_SPREAD, $depression['ig'], 'The IG spread must clamp at its ceiling.');
+        $this->assertSame(MacroEngine::MAX_HY_CREDIT_SPREAD, $depression['hy'], 'The HY spread must clamp at its ceiling.');
+
+        // A boom floors IG, and HY never compresses inside its minimum multiple of IG.
+        $boom = $this->mathUtility->calculateDualTrancheCreditSpreads(MacroEngine::BASE_CREDIT_SPREAD, 0.50, 0.0, 0.0);
+        $this->assertSame(MacroEngine::MIN_CREDIT_SPREAD, $boom['ig'], 'The IG spread must floor at its minimum.');
+        $this->assertGreaterThanOrEqual(
+            $boom['ig'] * MacroEngine::HY_MIN_SPREAD_MULTIPLIER,
+            $boom['hy'],
+            'HY must never compress inside its minimum multiple of IG.'
+        );
+    }
+
+    /**
+     * Metzler inventory dynamics: an involuntary build on a demand miss, then correction toward a cyclical target.
+     */
+    public function testInventoryCycleStepBuildsOnDemandMissesAndRevertsToTheCyclicalTarget(): void
+    {
+        // Closed form: (surpriseSens * (ema - gap) + -speed * (current - -cyclicalSens * gap)) * dt, added to current.
+        $this->assertEqualsWithDelta(
+            0.006,
+            $this->mathUtility->calculateInventoryCycleStep(0.0, -0.03, 0.0, 0.5, 0.4, 0.25),
+            0.0000001,
+            'An unexpected demand miss must build inventory by the closed form.'
+        );
+
+        // A demand surprise to the upside draws inventory down instead.
+        $this->assertLessThan(
+            0.0,
+            $this->mathUtility->calculateInventoryCycleStep(0.0, 0.03, 0.0, 0.5, 0.4, 0.25),
+            'Unexpectedly strong demand must deplete inventory.'
+        );
+
+        // With no surprise and a closed gap the target is zero, so any overhang decays toward it.
+        $decayed = $this->mathUtility->calculateInventoryCycleStep(0.10, 0.0, 0.0, 0.5, 0.4, 0.25);
+        $this->assertLessThan(0.10, $decayed, 'An overhang must dissipate when demand is at trend.');
+        $this->assertGreaterThan(0.0, $decayed, 'Dissipation must be gradual, not instant.');
+
+        // The cyclical target is signed against the output gap: contractions raise the desired inventory-to-sales ratio.
+        $contraction = $this->mathUtility->calculateInventoryCycleStep(0.0, -0.05, -0.05, 0.5, 0.4, 0.25);
+        $expansion = $this->mathUtility->calculateInventoryCycleStep(0.0, 0.05, 0.05, 0.5, 0.4, 0.25);
+        $this->assertGreaterThan(0.0, $contraction, 'A contraction must lift the inventory target.');
+        $this->assertLessThan(0.0, $expansion, 'An expansion must lean inventories out.');
+
+        // The gap is hard-clamped so a violent step cannot run away.
+        $this->assertSame(0.15, $this->mathUtility->calculateInventoryCycleStep(0.14, -0.20, 0.20, 0.5, 1.0, 1.0), 'The overhang must clamp at its ceiling.');
+        $this->assertSame(-0.15, $this->mathUtility->calculateInventoryCycleStep(-0.14, 0.20, -0.20, 0.5, 1.0, 1.0), 'The shortage must clamp at its floor.');
+    }
+
+    /**
+     * Over a vanishing horizon there is no time to revert, so the horizon volatility is spot volatility.
+     */
+    public function testHorizonVolatilityCollapsesToSpotOverAVanishingHorizon(): void
+    {
+        $this->assertEqualsWithDelta(
+            1.05,
+            $this->mathUtility->averageMeanRevertingVolatility(1.05, 0.35, 1.1507, 0.0001),
+            0.005
+        );
+    }
+
+    /**
+     * Over a long horizon almost the whole path is spent at the long-run level, so that is what the
+     * average converges to. This is the property that stops a transient shock from being priced as if it
+     * lasted for the entire life of the debt.
+     */
+    public function testHorizonVolatilityConvergesToTheLongRunLevelOverALongHorizon(): void
+    {
+        $this->assertEqualsWithDelta(
+            0.35,
+            $this->mathUtility->averageMeanRevertingVolatility(1.05, 0.35, 1.1507, 400.0),
+            0.01
+        );
+    }
+
+    /**
+     * The closed form for the Heston / GARCH family, sigmaBar^2 = theta + (v0 - theta)(1 - e^-kT)/(kT),
+     * evaluated against a hand-computed case so a regression in the algebra cannot pass silently.
+     */
+    public function testHorizonVolatilityMatchesTheIntegratedVarianceClosedForm(): void
+    {
+        $spot = 1.05;
+        $longRun = 0.35;
+        $kappa = 1.1507;
+        $horizon = 5.0;
+
+        $decay = $kappa * $horizon;
+        $expected = sqrt(($longRun ** 2) + ((($spot ** 2) - ($longRun ** 2)) * ((1.0 - exp(-$decay)) / $decay)));
+
+        $this->assertEqualsWithDelta(
+            $expected,
+            $this->mathUtility->averageMeanRevertingVolatility($spot, $longRun, $kappa, $horizon),
+            1.0e-9
+        );
+        $this->assertEqualsWithDelta(0.5406, $expected, 0.001, 'the closed form itself must not drift');
+    }
+
+    /**
+     * A shock is damped toward the long-run level, never below it and never above the shock itself.
+     */
+    public function testHorizonVolatilityStaysBetweenTheLongRunLevelAndTheShock(): void
+    {
+        $horizonVol = $this->mathUtility->averageMeanRevertingVolatility(1.05, 0.35, 1.1507, 5.0);
+
+        $this->assertGreaterThan(0.35, $horizonVol);
+        $this->assertLessThan(1.05, $horizonVol);
+    }
+
+    /**
+     * A firm sitting at its structural volatility has nothing to revert from, so the horizon average is
+     * that same level whatever the horizon.
+     */
+    public function testHorizonVolatilityIsUnchangedWhenSpotAlreadySitsAtTheLongRunLevel(): void
+    {
+        $this->assertEqualsWithDelta(
+            0.28,
+            $this->mathUtility->averageMeanRevertingVolatility(0.28, 0.28, 1.1507, 5.0),
+            1.0e-9
+        );
+    }
+
+    /**
+     * A volatility below its long-run level reverts upward, which is the same formula read the other way.
+     */
+    public function testHorizonVolatilityPullsAQuietFirmBackUpTowardItsLongRunLevel(): void
+    {
+        $horizonVol = $this->mathUtility->averageMeanRevertingVolatility(0.10, 0.35, 1.1507, 5.0);
+
+        $this->assertGreaterThan(0.10, $horizonVol);
+        $this->assertLessThan(0.35, $horizonVol);
+    }
+
+    /**
+     * A degenerate reversion speed or horizon cannot divide by zero; it falls back to spot.
+     */
+    public function testHorizonVolatilityFallsBackToSpotOnADegenerateProcess(): void
+    {
+        $this->assertEqualsWithDelta(0.42, $this->mathUtility->averageMeanRevertingVolatility(0.42, 0.20, 0.0, 5.0), 1.0e-9);
+        $this->assertEqualsWithDelta(0.42, $this->mathUtility->averageMeanRevertingVolatility(0.42, 0.20, 1.15, 0.0), 1.0e-9);
+    }
 }
-
-
-

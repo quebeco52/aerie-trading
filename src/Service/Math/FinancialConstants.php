@@ -31,6 +31,10 @@ class FinancialConstants
     public const ERC_GROWTH_SENSITIVITY = 0.25;
 
     // --- Bayesian Analyst Consensus ---
+    /** Widest one-quarter change in the structural base the analyst anchor is rolled forward by (x0.5 to x2.0). A capacity cap binding or a collapse is not a growth rate analysts extrapolate. */
+    public const ANALYST_ANCHOR_MAX_ROLL_FORWARD = 2.0;
+    /** Stream-state key: the structural expected revenue the last consensus was formed against, so the analyst anchor can be carried forward with the base rather than frozen at last quarter's size. */
+    public const STATE_LAST_EXPECTED_REVENUE = 'state:last_expected_revenue';
     /** Baseline prior uncertainty variance in market analyst earnings consensus formation (~0.06^2). */
     public const BAYESIAN_BASE_PRIOR_VARIANCE = 0.0036;
     /** Multiplier scaling analyst consensus prior uncertainty as VIX rises. */
@@ -115,6 +119,10 @@ class FinancialConstants
     public const MIN_INTRINSIC_PE = 4.0;
     /** Absolute ceiling on intrinsic fundamental P/E multiple. */
     public const MAX_INTRINSIC_PE = 35.0;
+
+    // --- Relative Valuation Shrinkage (Vasicek 1973) ---
+    /** Spread (cost of equity less growth) at which a firm's own Gordon multiple and its sector's carry equal weight. */
+    public const INTRINSIC_PE_SHRINKAGE_SPREAD = 0.03;
     /** Maximum fallback capitalization multiple when DCF denominator approaches zero. */
     public const DCF_FALLBACK_MULTIPLIER = 60.0;
     /** Fundamental cap on free cash flow capitalization multiple (~33.3x or 3% FCF yield). */
@@ -205,7 +213,83 @@ class FinancialConstants
     /** Maximum market cap percentage (15%) a fully saturated firm can repurchase in a single quarter. */
     public const MAX_REGULATORY_SPEND_SATURATED = 0.15;
 
+    // --- Input Cost Basket ---
+    /** Default shares of the variable cost base bought in tracked input markets for a producing firm; the remainder has no macro index. */
+    public const DEFAULT_INPUT_COST_EXPOSURES = ['energy' => 0.05, 'metals' => 0.05, 'agri' => 0.02, 'freight' => 0.03, 'ppi' => 0.35, 'labor' => 0.30];
+    /** Default years for the recoverable share of an input move to reach selling prices (Nakamura & Steinsson 2008 price durations). */
+    public const DEFAULT_INPUT_PASS_THROUGH_LAG_YEARS = 0.75;
+    /** Stream-state key: lagged relative input cost level of the basket (fraction above baseline). */
+    public const STATE_INPUT_COST_LEVEL = 'state:input_cost_level';
+    /** Stream-state key: lagged share of the input cost level already recovered in selling prices. */
+    public const STATE_INPUT_COST_RECOVERY = 'state:input_cost_recovery';
+    /** Stream-state key: unrecovered input cost ratio as it stood at the PREVIOUS report, so guidance can warn on the change rather than the standing level. */
+    public const STATE_PRIOR_UNRECOVERED_COST = 'state:prior_unrecovered_cost';
+
+    // --- FX Exposure ---
+    /** Base level of the trade-weighted exchange rate index, against which a move is measured as a relative deviation. */
+    public const FX_INDEX_BASE = 100.0;
+    /** Default share of revenue exposed to the exchange rate: a mostly domestic firm meeting a little imported competition. */
+    public const DEFAULT_FX_REVENUE_EXPOSURE = 0.05;
+
+    // --- Demand Transmission Lag ---
+    /** Default years for a move in the output gap to reach a firm's order book: none, for a business that sells at the moment demand appears. */
+    public const DEFAULT_DEMAND_LAG_YEARS = 0.0;
+
+    // --- Reported KPIs in Consensus ---
+    /** Share of a disclosed book-to-bill deviation from parity that analysts carry into the next quarter's revenue estimate. Orders convert to revenue, so a disclosed order book is a forecast the market already holds. */
+    public const BOOK_TO_BILL_CONSENSUS_SENSITIVITY = 0.35;
+    /** Bound on the resulting forward revenue tilt, so a single blowout order quarter cannot run the estimate away. */
+    public const MAX_BOOK_TO_BILL_CONSENSUS_TILT = 0.15;
+
+    // --- Analyst Cost-Base Visibility ---
+    /** Share of the realized variable cost ratio analysts forecast correctly: input prices are published series (commodity indices, PPI, wage prints) and pass-through terms disclosed, so only firm-specific execution is left unseen. */
+    public const ANALYST_COST_BASE_VISIBILITY = 0.75;
+
+    // --- Earnings Pre-Announcements (Kasznik & Lev 1995) ---
+    /** Share of a quarter before the scheduled report at which management closes the books far enough to know it will miss. */
+    public const PREANNOUNCEMENT_LEAD_RATIO = 0.10;
+    /** Known shortfall, as a fraction of structural quarterly earnings, at which management warns rather than let the market find out on the day. */
+    public const PREANNOUNCEMENT_WARNING_THRESHOLD = 0.20;
+    /** Share of the warned shortfall analysts take out of their estimate, so the report itself lands as a smaller surprise. */
+    public const PREANNOUNCEMENT_CONSENSUS_ABSORPTION = 0.80;
+    /** Ceiling on the single-tick repricing a warning may cause. Warning-day abnormal returns average high single digits (Kasznik & Lev 1995; Skinner 1994); the old 25% cap was hit routinely and, with fair value unmoved, produced a V that fully reverted before the report. */
+    public const MAX_PREANNOUNCEMENT_PRICE_REACTION = 0.10;
+    /** Floor on the operating margin that sizes structural earnings for a warning, so a break-even firm is scaled by its revenue rather than by a near-zero print. */
+    public const PREANNOUNCEMENT_MIN_MARGIN_SCALE = 0.05;
+
+    // --- Own-Price Demand Response ---
+    /** Default own-price elasticity of demand for a producing firm (volume lost per unit of real price increase); mid-range of empirical estimates for differentiated goods. */
+    public const DEFAULT_PRICE_ELASTICITY_OF_DEMAND = 0.50;
+
+    // --- Industry Share Dynamics ---
+    /** Default share of a firm's idiosyncratic revenue gain that is taken from same-industry peers rather than won from a larger market (Berry-style substitution). */
+    public const DEFAULT_INDUSTRY_SUBSTITUTABILITY = 0.50;
+    /** Share of a financial institution's idiosyncratic gain taken from peers: deposits, mandates and AUM move between houses, but much of the swing is market volume. */
+    public const DEFAULT_FINANCIAL_INDUSTRY_SUBSTITUTABILITY = 0.35;
+
+    // --- Industry Exit & Consolidation ---
+    /** Share of a failed rival's addressable market that surviving peers in the same industry recapture; the rest leaks to substitutes or is destroyed. */
+    public const MARKET_EXIT_RECAPTURE_FRACTION = 0.70;
+
+    // --- Balance Sheet Realism ---
+    /** Default capitalized operating lease liability (IFRS 16 / ASC 842) as a fraction of annual revenue. */
+    public const DEFAULT_LEASE_LIABILITY_INTENSITY = 0.05;
+    /** Default stock-based compensation (ASC 718) as a fraction of revenue: non-cash expense, real dilution. */
+    public const DEFAULT_STOCK_COMPENSATION_INTENSITY = 0.01;
+    /** Goodwill impairment smaller than this fraction of the goodwill balance is immaterial and not booked. */
+    public const MIN_GOODWILL_IMPAIRMENT_FRACTION = 0.01;
+
+    // --- Labor Intensity ---
+    /** Largest fixed-payroll relief from wage growth running below trend (nominal wages are downward sticky). */
+    public const MAX_WAGE_RELIEF = 0.02;
+    /** Default labor share of the fixed cost base (salaried staff, SG&A payroll) exposed to the Beveridge wage squeeze. */
+    public const DEFAULT_FIXED_COST_LABOR_SHARE = 0.65;
+
     // --- Debt Physics ---
+    /** Fallback weighted average cost of capital used as the investment hurdle when no live debt health exists. */
+    public const DEFAULT_WACC_FALLBACK = 0.08;
+    /** Fraction of fixed-rate debt that matures and reprices at market each quarter (5-year average tenor). */
+    public const DEFAULT_QUARTERLY_DEBT_ROLLOVER = 0.05;
     /** Base quarterly probability of evaluating balance sheet debt expansion. */
     public const DEBT_EXPANSION_BASE_PROB = 0.40;
     /** Sensitivity scaling debt issuance probability when ROIC exceeds WACC. */
@@ -265,11 +349,61 @@ class FinancialConstants
     /** Analyst EPS growth forecast mean-reversion discount for low-quality non-cash earnings. */
     public const ACCRUALS_DECAY_EPS_GROWTH_SENSITIVITY = 0.50;
 
+    // --- Earnings Management (Burgstahler & Dichev 1997) ---
+    /** Largest shortfall against consensus, as a fraction of the consensus figure, that management will close with accruals; a wider miss is taken rather than papered over. */
+    public const EARNINGS_MANAGEMENT_MAX_GAP = 0.05;
+    /** Cap on the accumulated managed-accrual balance as a fraction of total assets: past this the reversal is too large to keep hiding. */
+    public const EARNINGS_MANAGEMENT_MAX_BANK_RATIO = 0.02;
+    /** Quarterly fraction of the borrowed balance that unwinds back into reported earnings (Dechow & Dichev 2002 accrual reversal). */
+    public const EARNINGS_MANAGEMENT_REVERSAL_RATE = 0.25;
+    /** Cushion above consensus a managed quarter aims for, so it prints as a small beat rather than an implausibly exact match. */
+    public const EARNINGS_MANAGEMENT_BEAT_CUSHION = 0.002;
+    /** Default propensity to manage reported earnings toward consensus (0 = never, 1 = closes every gap it can reach). */
+    public const DEFAULT_EARNINGS_MANAGEMENT_PROPENSITY = 0.50;
+
     // --- CapEx & Construction in Progress (CIP) ---
     /** Maximum fraction of physical/invested capital that can be deferred as unplaced Construction in Progress (25%). */
     public const MAX_CIP_CAPITAL_DEDUCTION_RATIO = 0.25;
     /** Maximum CIP balance relative to invested capital allowed before new growth CapEx deployment is paused (25%). */
     public const MAX_CIP_EXPANSION_THRESHOLD_RATIO = 0.25;
+
+    // --- Deferred Taxes (ASC 740) ---
+    /** Declining-balance rate multiple for tax depreciation: the 200% method of the MACRS general depreciation system. */
+    public const TAX_DEPRECIATION_ACCELERATION = 2.0;
+
+    // --- Working Capital Ledger ---
+    /** Share of a positive working capital cycle carried as receivables; the rest is inventory (Compustat medians). */
+    public const WORKING_CAPITAL_RECEIVABLE_SHARE = 0.55;
+    /** Payables carried as a fraction of the gross receivable-plus-inventory cycle, the standard trade-credit offset. */
+    public const WORKING_CAPITAL_PAYABLE_SHARE = 0.35;
+    /** Days in the accounting year used to convert day counts into balances. */
+    public const DAYS_PER_YEAR = 365.0;
+
+    // --- Inventory & Receivable Impairment ---
+    /** Capacity utilization below which unsold inventory starts failing the lower-of-cost-or-net-realizable-value test (ASC 330). Calibrated to this engine's utilization scale, which centres on 1.0 rather than the ~80% of the published manufacturing series. */
+    public const INVENTORY_NRV_UTILIZATION_TRIGGER = 0.95;
+    /** Fraction of inventory written off at total demand collapse; scaled by how far utilization has fallen. */
+    public const INVENTORY_NRV_LOSS_RATE = 0.25;
+    /** Loss given default on a trade receivable: unsecured, but with real recovery in liquidation. */
+    public const TRADE_RECEIVABLE_LGD = 0.60;
+    /** Maximum share of the existing allowance that can be released in one quarter, so a recovery cannot be booked as instant profit. */
+    public const MAX_ALLOWANCE_RELEASE_RATIO = 0.25;
+
+    // --- Fixed Asset Ledger (PP&E) ---
+    /** Accumulated depreciation as a share of gross PP&E at seed; the median US non-financial runs a half-aged plant. */
+    public const SEED_ASSET_AGE_RATIO = 0.50;
+    /** Viability floor on net PP&E as a share of invested capital. Kept minimal on purpose: a distributor's or staffing firm's capital genuinely IS its working capital, and a larger floor would invent plant the balance sheet cannot fund. */
+    public const MIN_PPE_SHARE_OF_CAPITAL = 0.02;
+    /** Floor on the cash share of the structural cost base once depreciation is carved out as its own expense line. */
+    public const MIN_CASH_COST_SHARE = 0.40;
+
+    // --- Earning Asset Ledger (Financials) ---
+    /** Haircut taken when earning assets are sold in a hurry to meet withdrawals or a maturity: securities marked below par, loans sold at a discount. */
+    public const EARNING_ASSET_FIRE_SALE_HAIRCUT = 0.05;
+    /** Largest share of the earning-asset book that can be sold in one quarter; the rest is illiquid loans nobody bids for on the day. */
+    public const MAX_QUARTERLY_ASSET_LIQUIDATION_RATIO = 0.25;
+    /** Share of the gap between the credit-loss allowance and its lifetime target closed each quarter, in either direction, so a build or release is a path and not a cliff. */
+    public const CREDIT_ALLOWANCE_CONVERGENCE_RATIO = 0.25;
 
     // --- Equity Issuance & TAM Scaling Limits ---
     /** Maximum fraction of market capitalization that can be raised in a distressed emergency equity offering (25%). */
@@ -278,6 +412,151 @@ class FinancialConstants
     public const MAX_SECTOR_TAM_CAPACITY_RATIO = 1.50;
     /** Maximum structural capacity and revenue multiplier for financial intermediaries relative to dynamic TAM (250%). */
     public const MAX_FINANCIAL_SECTOR_TAM_CAPACITY_RATIO = 2.50;
+    // --- Sovereign Bond Desk ---
+    /** Face value of a single sovereign bond, redeemed at maturity and the base every coupon is struck against. */
+    public const BOND_FACE_VALUE = 1000.0;
+    /** Coupon payments per year. Sovereign convention is semi-annual. */
+    public const BOND_COUPON_FREQUENCY = 2;
+    /** Auctions per year: each one rotates a fresh on-the-run issue into every tenor and retires the previous one to off-the-run. */
+    public const BOND_AUCTIONS_PER_YEAR = 4;
+    /** Coupons are struck in eighths of a percent, the auction convention, so the issue prices near par rather than exactly at it. */
+    public const BOND_COUPON_RATE_INCREMENT = 0.00125;
+    /** Original maturities offered at auction, in years; the same benchmark points the macro engine publishes. */
+    public const BOND_AUCTION_TENORS = [2.0, 5.0, 10.0, 30.0];
+    /** Floor on a struck coupon. A zero-coupon issue is legitimate at the lower bound; a negative one is not. */
+    public const BOND_MIN_COUPON_RATE = 0.0;
+    /** Face amount issued per tenor per auction, in currency units. Sets the size of the tradable float. */
+    public const BOND_ISSUE_SIZE = 5.0e9;
+    /** Ceiling on years-to-maturity treated as outstanding; past it the issue is redeemed and stops trading. */
+    public const BOND_MATURITY_EPSILON = 1.0e-6;
+    /** Tenors the curve is sampled at for display. Dense at the front, where the curve actually bends. */
+    public const BOND_CURVE_SAMPLE_TENORS = [0.25, 0.5, 1.0, 2.0, 3.0, 5.0, 7.0, 10.0, 15.0, 20.0, 30.0];
+    // --- Market Microstructure: Volume & Liquidity ---
+    /** Trading days a simulated year is divided into when expressing average daily volume. */
+    public const TRADING_DAYS_PER_YEAR = 252.0;
+    /** Baseline annual share turnover as a fraction of the public float; the median large cap turns over a little more than its float each year. */
+    public const BASELINE_ANNUAL_TURNOVER = 1.20;
+    /** Floor on average daily volume in shares. sqrt(Q/ADV) diverges as ADV approaches zero, so a dead name must be illiquid rather than untradable. */
+    public const MIN_ADV_SHARES = 1000.0;
+    /** Shares in a typical print, used to turn daily volume into the trade count the spread relation needs. */
+    public const TYPICAL_TRADE_SIZE_SHARES = 200.0;
+    /** Elasticity of traded volume to volatility (Karpoff 1987): both are driven by the same information arrivals, so a volatile tape is a busy one. */
+    public const VOLUME_VOLATILITY_ELASTICITY = 0.70;
+    /** Lower bound on the volatility-driven activity multiplier applied to structural ADV. */
+    public const MIN_ADV_ACTIVITY_MULTIPLIER = 0.40;
+    /** Upper bound on that multiplier, so a crash does not manufacture unlimited liquidity. */
+    public const MAX_ADV_ACTIVITY_MULTIPLIER = 3.00;
+    /** Lognormal dispersion of realized volume around its conditional mean (Clark 1973 mixture-of-distributions). */
+    public const VOLUME_LOGNORMAL_SIGMA = 0.45;
+    /** Reference single-name annual volatility that BASELINE_ANNUAL_TURNOVER is quoted against. */
+    public const TURNOVER_REFERENCE_VOLATILITY = 0.18;
+    /** Cross-sectional elasticity of turnover to volatility: volatile names change hands more often than quiet ones. */
+    public const TURNOVER_VOLATILITY_ELASTICITY = 0.60;
+    /** Bounds on the structural turnover ratio, keeping even the quietest utility and the wildest speculative name inside a plausible range. */
+    public const MIN_ANNUAL_TURNOVER = 0.35;
+    public const MAX_ANNUAL_TURNOVER = 4.00;
+
+    // --- Market Microstructure: Spread (Wyart, Bouchaud, Kockelkoren, Potters & Vettorazzo 2008) ---
+    /** Coefficient c in S = c * sigma_daily / sqrt(N), the observed relation between spread, volatility and trade count. Near unity in real order-driven markets. */
+    public const SPREAD_VOLATILITY_COEFFICIENT = 1.00;
+    /** Floor on the quoted half-spread as a fraction of price (0.5bp): crossing a mega-cap is cheap, never free. */
+    public const MIN_HALF_SPREAD = 0.00005;
+    /** Ceiling on the quoted half-spread (2%), so even a distressed name stays tradable at a price. */
+    public const MAX_HALF_SPREAD = 0.02;
+
+    // --- Market Microstructure: Impact (Almgren, Thum, Hauptmann & Li 2005) ---
+    /** Linear permanent impact coefficient. At 1.0 trading one full day's volume moves the price by one daily standard deviation; linear so the mark is additive across ticks and independent of the tick rate (Huberman & Stanzl 2004). */
+    public const PERMANENT_IMPACT_GAMMA = 1.00;
+    /** Temporary impact as a share of the permanent move. The price walks to its new level while the order fills, so the taker's average fill is the midpoint of that walk: exactly one half. */
+    public const TEMPORARY_IMPACT_ETA = 0.50;
+    /** Largest multiple of average daily volume a single order may consume. Past it the impact law is extrapolation, and a capped impact would be a free lunch for size. */
+    public const MAX_ORDER_ADV_MULTIPLE = 2.00;
+    /** Flat half-spread on a broad index ETF. Creation and redemption keep it pinned to the basket, so it quotes tighter than any single constituent. */
+    public const ETF_HALF_SPREAD = 0.0001;
+    /** Flat half-spread on a sovereign bond, the deepest instrument on the desk. */
+    public const BOND_HALF_SPREAD = 0.00005;
+
+    // --- Market Microstructure: Order Flow Variance Budget ---
+    /** Ceiling on the share of long-run variance order flow may reclaim from the diffusion. */
+    public const MAX_IMPACT_VARIANCE_DRAG_SHARE = 0.25;
+    /** Half-life in years of the realized impact-variance estimate the budget is drawn from. */
+    public const IMPACT_VARIANCE_EMA_YEARS = 0.25;
+    // --- Margin Accounts (Regulation T) ---
+    /** Equity a new position must be backed by: half of what it is worth, long or short. */
+    public const INITIAL_MARGIN_REQUIREMENT = 0.50;
+    /** Equity a long position must keep behind it before the account is called. */
+    public const MAINTENANCE_MARGIN_LONG = 0.25;
+    /** Higher for a short, because a short's loss is unbounded while a long's stops at zero. */
+    public const MAINTENANCE_MARGIN_SHORT = 0.30;
+    /** Extra equity a forced liquidation restores beyond the bare minimum, so the account is not called again on the next tick. */
+    public const LIQUIDATION_EQUITY_BUFFER = 0.05;
+    /** Ceiling on the fraction of a position that one margin call may liquidate. */
+    public const MAX_LIQUIDATION_FRACTION = 1.00;
+
+    // --- Securities Lending ---
+    /** Share of the public float that is actually lendable; the rest sits with holders who do not lend. */
+    public const DEFAULT_LENDABLE_SUPPLY_RATIO = 0.65;
+    /** General collateral borrow fee: what an easy-to-borrow name costs to short, annualized. */
+    public const GENERAL_COLLATERAL_BORROW_FEE = 0.0030;
+    /** Borrow fee on a name whose lendable supply is fully consumed. Hard-to-borrow specials really do reach these levels. */
+    public const MAX_BORROW_FEE = 1.00;
+    /** Convexity of the fee curve in utilization. Flat while supply is ample, then steepening sharply as the last of it is taken: general collateral holds past half utilization, and a name only turns special above roughly eighty-five percent. */
+    public const BORROW_FEE_CONVEXITY = 8.00;
+    /** Utilization past which lenders begin recalling stock and shorts are bought in. */
+    public const BUY_IN_UTILIZATION_THRESHOLD = 0.97;
+    /** Share of an outstanding short position recalled per buy-in. */
+    public const BUY_IN_FRACTION = 0.20;
+    // --- Agent Population (Brock & Hommes 1997, 1998 Adaptive Belief System) ---
+    /** Intensity of choice: how sharply capital chases whichever belief has been paying. At zero the population never moves; raising it is what tips the market from anchored to trending. */
+    public const AGENT_INTENSITY_OF_CHOICE = 3.00;
+    /** Memory in the fitness estimate, in years. Capital chases performance over months, not over the last print, and a horizon in time rather than in ticks keeps that true at any tick rate. */
+    public const AGENT_FITNESS_HORIZON_YEARS = 0.50;
+    /** Floor on any belief's population share, so a strategy that has been wrong for a long time can still come back when conditions turn. */
+    public const AGENT_MIN_POPULATION_SHARE = 0.05;
+    /** Risk aversion in the mean-variance fitness U = pi - (a/2) sigma^2 z^2 (Brock & Hommes 1998). Standard relative risk aversion; without it raw profit rewards whichever belief simply carries more exposure. */
+    public const AGENT_RISK_AVERSION = 2.00;
+    /** Share of switching capital that chooses at the STYLE level, on how a belief has paid across the whole market, rather than name by name (Barberis & Shleifer 2003). Zero is a market of unrelated single-name populations; one is a single market-wide population. */
+    public const AGENT_STYLE_CROWDING_WEIGHT = 0.50;
+    /** Memory of the realized-variance estimate the agents see, in years (~1 month). RiskMetrics-style EWMA of observed returns; vol-control mandates (Harvey et al. 2018) and maker risk desks size on a window of that order. */
+    public const AGENT_REALIZED_VOLATILITY_HORIZON_YEARS = 0.083;
+
+    // --- Agent Capital & Positioning ---
+    /** Unit of agent capital per name, as a multiple of its STRUCTURAL average daily volume. A fully committed belief or structural holder is sized against it; the competing beliefs share one unit between them and each structural holder carries its own share of one. */
+    public const AGENT_CAPITAL_ADV_MULTIPLE = 3.00;
+    /** Time an agent takes to work its book 63% of the way to target, in years (~1 trading day; ~95% done in three). In time rather than per tick so the same book is worked the same way at any tick rate. */
+    public const AGENT_POSITION_HORIZON_YEARS = 0.004;
+    /** Overall scale on the agent books. Multiplies the capital unit, so flow scales with it and the variance the agents supply to the price with its square: the single number to turn when handing more of the market's variance from the diffusion to the agents. Zero winds every book down over the position horizon and leaves no agents. */
+    public const AGENT_FLOW_INTENSITY = 1.00;
+
+    // --- Agent Signals ---
+    /** Fundamentalist conviction per unit of log mispricing: fully committed at roughly a 40% discount to fair value. */
+    public const AGENT_FUNDAMENTALIST_GAIN = 2.50;
+    /** Chartist conviction per unit of accumulated price trend. */
+    public const AGENT_MOMENTUM_GAIN = 3.00;
+    /** Share of the others' flow a market maker takes the other side of in calm conditions (Grossman & Miller 1988 immediacy). The rest reaches the price at once. */
+    public const AGENT_MAKER_ABSORPTION = 0.35;
+    /** Time a maker takes to work 63% of its inventory back to flat, in years (~1 trading day; Hendershott & Menkveld 2014 find inventories mean-revert on that order). Carrying risk is not what it is paid for. */
+    public const AGENT_MAKER_INVENTORY_HORIZON_YEARS = 0.004;
+    /** Volatility at which the base absorption applies. Above it, absorption falls with 1/variance (Ho & Stoll 1981: the cost of immediacy is proportional to variance), so makers step back in a stressed market. */
+    public const AGENT_MAKER_REFERENCE_VOLATILITY = 0.25;
+    /** Fractional change in the passive book per unit of the financial conditions index (a z-score composite): money leaves passive vehicles when conditions tighten. A two-sigma tightening takes 30% of the book, the order of a bad year of equity fund outflows. */
+    public const AGENT_INDEX_FLOW_SENSITIVITY = 0.15;
+    /** Most the passive book moves from its base in either direction, as a fraction. Passive flows are slow money even in a crisis; a tilt that could empty the book turned an index fund into a macro trader. */
+    public const AGENT_INDEX_MAX_FLOW_TILT = 0.30;
+    /** Baseline share of agent capital that indexes rather than picking. */
+    public const AGENT_INDEX_BASE_SHARE = 0.30;
+
+    // --- Volatility-Targeting Funds (Moreira & Muir 2017; Harvey et al. 2018) ---
+    /** Annualized volatility a vol-control book is run to. Exposure scales as target / realized, so a name at this volatility is held at the base share; set at the market's reference name so an ordinary name sits near 1x. */
+    public const AGENT_VOL_TARGET_VOLATILITY = 0.25;
+    /** Share of agent capital the vol-targeting books hold in a name running at target volatility. */
+    public const AGENT_VOL_TARGET_BASE_SHARE = 0.15;
+    /** Most a vol-targeting book levers up when realized volatility falls below target. Harvey et al. cap leverage at 2x; without a cap a quiet tape would be bought without limit. */
+    public const AGENT_VOL_TARGET_MAX_LEVERAGE = 2.00;
+
+    // --- Relative-Value Funds (Barberis & Shleifer 2003 cross-sectional style) ---
+    /** Share of agent capital a market-neutral book can put long or short in one name against the rest of the market. */
+    public const AGENT_RELATIVE_VALUE_SHARE = 0.15;
+    /** Conviction per unit of log mispricing RELATIVE to the market's average mispricing; on the fundamentalist's scale, fully committed at roughly a 40% gap to the average name. */
+    public const AGENT_RELATIVE_VALUE_GAIN = 2.50;
 }
-
-

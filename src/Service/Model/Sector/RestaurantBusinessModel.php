@@ -27,6 +27,28 @@ use App\Service\Macro\MacroEngine;
  */
 class RestaurantBusinessModel extends StandardCorporateBusinessModel
 {
+    // --- Operating Cyclicality & Demand Structure ---
+    /** Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Dining out is cut in downturns; restaurants substitute freely. */
+    public const OPERATING_CYCLICALITY = 1.00;
+    /** Own-price elasticity of demand: volume lost per unit of real price increase. */
+    public const PRICE_ELASTICITY_OF_DEMAND = 0.80;
+    /** Share of an idiosyncratic revenue gain taken from same-industry peers rather than won from a larger market. */
+    public const INDUSTRY_SUBSTITUTABILITY = 0.70;
+
+    // --- Input Cost Basket ---
+    /** Shares of the variable cost base bought in tracked input markets (energy, metals, agri, freight, wholesale goods, variable payroll). */
+    public const INPUT_COST_EXPOSURES = ['agri' => 0.30, 'labor' => 0.35, 'energy' => 0.05, 'ppi' => 0.10];
+    /** Menu prices move freely but the diner's next-best meal is one storefront away, so a chain recovers only part of a food or wage move before traffic answers. */
+    public const PRICING_POWER_INDEX = 0.45;
+
+    // --- Balance Sheet Realism ---
+    /** Capitalized operating lease liabilities as a fraction of annual revenue (IFRS 16 / ASC 842). Franchisor real estate and store leases are the largest obligation on a restaurant balance sheet. */
+    public const LEASE_LIABILITY_INTENSITY = 0.60;
+
+    // --- Labor Intensity ---
+    /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze. Store-level crew wages sit in variable cost; only management and support payroll is fixed overhead. */
+    public const FIXED_COST_LABOR_SHARE = 0.50;
+
     // --- Tri-Stream Architecture ---
     /** Baseline fraction of revenue derived from company-owned store operations. */
     public const CORPORATE_WEIGHT       = 0.50;
@@ -37,25 +59,29 @@ class RestaurantBusinessModel extends StandardCorporateBusinessModel
 
     // --- Pricing Power & Macro Physics ---
     public const MIN_BETA_PRICING_POWER_FLOOR = 0.40;
-    /** Variable margin cost drag from labor tightness and kitchen wage pressure when unemployment is below natural rate. */
-    public const LABOR_TIGHTNESS_WAGE_SCALAR = 0.50;
-    /** Sensitivity of company-operated kitchen food & paper wholesale costs to Producer Price Inflation (PPI). */
-    public const PPI_COST_SENSITIVITY = 0.35;
+    /** Menu boards reprice within a couple of quarters; franchisors pass food and wage inflation to guests quickly. */
+    public const INPUT_PASS_THROUGH_LAG_YEARS = 0.50;
 
     // --- Revenue & Shock Physics ---
     public const REVENUE_VARIANCE_SCALAR = 0.40;
     public const FRANCHISE_COST_INTENSITY = 0.05;
     public const LEASE_COST_INTENSITY     = 0.02;
-    public const INFLATION_PENALTY_SCALAR = 1.50; // Massively exposed to food & labor inflation
     public const LEASE_INFLATION_CAPTURE  = 0.80; // CPI rent escalation clause
-
-    // --- Energy & Utility Physics ---
-    /** Variable margin penalty scalar applied to company-operated restaurant kitchens during energy/utility price spikes. */
-    public const UTILITY_ENERGY_DRAG_SCALAR = 0.20;
 
     // --- Tail Risk & Shock Events ---
     public const FOOD_SAFETY_SCANDAL_Z_SCORE = -2.20;
+    /** Onset-quarter variable cost hit from inventory write-offs, closures and crisis response. */
     public const FOOD_SAFETY_SCANDAL_PENALTY = 0.08;
+    /** Regime key for the multi-quarter guest-traffic recovery that follows a food-safety scandal. */
+    public const REGIME_FOOD_SAFETY_RECOVERY = 'food_safety_recovery';
+    /** Quarterly probability the scandal drops out of guest memory (~7 quarter expected recovery). */
+    public const FOOD_SAFETY_RECOVERY_EXIT_HAZARD = 0.15;
+    /** Share of company-store traffic lost in the scandal quarter. */
+    public const FOOD_SAFETY_TRAFFIC_LOSS = 0.15;
+    /** Quarterly geometric rate at which lost guests return (half-life ~2 quarters). */
+    public const FOOD_SAFETY_TRAFFIC_RECOVERY_RATE = 0.35;
+    /** Ongoing quarterly cost of food-safety audits and win-back marketing during the recovery. */
+    public const FOOD_SAFETY_REMEDIATION_PENALTY = 0.02;
     public const VIRAL_MENU_ITEM_Z_SCORE     = 2.40;
     public const VIRAL_MENU_ITEM_MULT        = 1.15;
 
@@ -86,7 +112,7 @@ class RestaurantBusinessModel extends StandardCorporateBusinessModel
         $physics = parent::getMacroPhysics($stock, $macroState);
 
         $sentimentShift = ($macroState->consumerSentimentIndexEma - MacroEngine::SENTIMENT_BASELINE) / 100.0;
-        $beta = (float) $stock->getBeta();
+        $beta = $this->getOperatingCyclicality($stock);
 
         $physics['macro_demand_shift'] = $sentimentShift * $beta;
 
@@ -108,7 +134,7 @@ class RestaurantBusinessModel extends StandardCorporateBusinessModel
         $pricingPower    = max(0.0, min(1.0, $params[ModelParam::PricingPowerIndex]));
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
-        $streams  = new \App\DTO\StreamContext($momentum, $mathUtility);
+        $streams  = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
 
         // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
         $activeWeights = $streams->resolveActiveStreamWeights([
@@ -125,20 +151,31 @@ class RestaurantBusinessModel extends StandardCorporateBusinessModel
         $corporateZ = $streams->generateZ('company_operated_stores', 0.10);
         $franchiseZ = $streams->generateZ('franchise_royalties', 0.20);
         $leaseZ     = $streams->generateZ('franchise_real_estate_leases', 0.50);
-        $eventZ     = $streams->generateZ('event', 0.10);
+        $eventZ     = $streams->generateExogenousZ('event', 0.10);
 
         // Tail Risk Events
+        // A food-safety scandal is a one-quarter write-off followed by a multi-quarter traffic recovery:
+        // lost guests return geometrically while audits and win-back marketing keep costs elevated.
+        $recoveryElapsed = $streams->evolveRegime(self::REGIME_FOOD_SAFETY_RECOVERY, 0.0, self::FOOD_SAFETY_RECOVERY_EXIT_HAZARD);
         $viralMultiplier = 1.0;
         $eventType = null;
         $foodSafetyPenalty = 0.0;
 
-        if ($eventZ < self::FOOD_SAFETY_SCANDAL_Z_SCORE) {
+        if ($eventZ < self::FOOD_SAFETY_SCANDAL_Z_SCORE && $recoveryElapsed === 0) {
+            $recoveryElapsed = $streams->startRegime(self::REGIME_FOOD_SAFETY_RECOVERY);
             $foodSafetyPenalty = self::FOOD_SAFETY_SCANDAL_PENALTY;
             $eventType = ShockEvent::PRODUCT_RECALL;
-            $viralMultiplier = 0.85; // Severe traffic drop
         } elseif ($eventZ > self::VIRAL_MENU_ITEM_Z_SCORE) {
             $viralMultiplier = self::VIRAL_MENU_ITEM_MULT;
             $eventType = ShockEvent::VIRAL_GROWTH;
+        }
+
+        if ($recoveryElapsed > 0) {
+            $trafficLoss = self::FOOD_SAFETY_TRAFFIC_LOSS * exp(-self::FOOD_SAFETY_TRAFFIC_RECOVERY_RATE * ($recoveryElapsed - 1));
+            $viralMultiplier *= (1.0 - $trafficLoss);
+            if ($recoveryElapsed > 1) {
+                $foodSafetyPenalty += self::FOOD_SAFETY_REMEDIATION_PENALTY;
+            }
         }
 
         // CPI Escalator on franchise real estate rents
@@ -148,6 +185,8 @@ class RestaurantBusinessModel extends StandardCorporateBusinessModel
         $corporateRevenue = max(0.0, $expectedRevenue * $corporateWeight * (1.0 + ($corporateZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR))) * $viralMultiplier);
         $franchiseRevenue = max(0.0, $expectedRevenue * $franchiseWeight * (1.0 + ($franchiseZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR * 0.15))));
         $leaseRevenue     = max(0.0, $expectedRevenue * $leaseWeight     * (1.0 + ($leaseZ     * ($baselineVol * self::REVENUE_VARIANCE_SCALAR * 0.05)) + $rentEscalator));
+        // CPI escalators reprice existing franchise leases: pure price revenue with no incremental cost.
+        $priceRevenue     = max(0.0, $expectedRevenue * $leaseWeight * $rentEscalator);
 
         $streamRevenues = [
             'company_operated_stores'      => $corporateRevenue,
@@ -168,36 +207,15 @@ class RestaurantBusinessModel extends StandardCorporateBusinessModel
 
         $actualVariableCosts = ($corporateRevenue * $corporateVariableMargin) + ($franchiseRevenue * $franchiseVariableMargin) + ($leaseRevenue * $leaseVariableMargin);
 
-        // Inflation Penalty (food commodities + restaurant wages)
-        $inflation = $macroState->inflationEma;
-        $inflationMultiplier = 2.0 - ($pricingPower * 2.0);
-        $baseInflationPenalty = $inflation > MacroEngine::TARGET_INFLATION ? ($inflation - MacroEngine::TARGET_INFLATION) * abs((float) $stock->getBeta()) * self::INFLATION_PENALTY_SCALAR : 0.0;
-        $inflationPenalty = $baseInflationPenalty * $inflationMultiplier;
-
-        // Energy & Utility Drag: Company-operated stores pay kitchen gas, power, and refrigeration utilities
-        $energyShift = max(0.0, $macroState->energyCostPushLag / MacroEngine::ENERGY_COST_PUSH_TRANSMISSION);
-        $energyDrag = $energyShift * self::UTILITY_ENERGY_DRAG_SCALAR * $corporateWeight;
-
-        // Food Commodity Drag (Agri Index): Company-operated stores pay direct food ingredient costs
-        $agriShift = max(0.0, ($macroState->agriculturalCommodityIndexEma - 100.0) / 100.0);
-        $foodCommodityDrag = $agriShift * 0.20 * (1.0 - ($pricingPower * 0.50)) * $corporateWeight;
-
-        // Labor Market Tightness: Kitchen wage inflation when unemployment drops below natural rate
-        $laborTightness = max(0.0, MacroEngine::NATURAL_UNEMPLOYMENT - $macroState->unemploymentRateEma);
-        $laborTightnessDrag = $laborTightness * self::LABOR_TIGHTNESS_WAGE_SCALAR * $corporateWeight;
-
-        // Producer Price Inflation: Wholesale food and packaging input costs
-        $ppiCostDrag = MathUtility::calculatePpiCostDrag(
-            $macroState->producerPriceInflationEma,
-            MacroEngine::TARGET_INFLATION,
-            $pricingPower,
-            self::PPI_COST_SENSITIVITY
-        ) * $corporateWeight;
+        // Input cost basket: food commodities, kitchen crew wages, utilities and packaging reach company-operated
+        // kitchens at spot and are recovered on the menu board with the repricing lag. Franchise royalties and
+        // rents carry almost no variable cost, which the blended cost ratio above already reflects.
+        $inputCostDrag = $this->resolveInputCostDrag($stock, $macroState, $streams, $pricingPower, $realizedVariableMargin);
 
         // Continuous Elasticity
         $elasticityShift = -self::FRANCHISE_SCALE_ELASTICITY * $franchiseZ * $franchiseWeight;
 
-        $rawMargin = ($actualVariableCosts / max(1.0, $actualRevenue)) + $foodSafetyPenalty + $inflationPenalty + $ppiCostDrag + $energyDrag + $foodCommodityDrag + $laborTightnessDrag + $elasticityShift;
+        $rawMargin = ($actualVariableCosts / max(1.0, $actualRevenue)) + $foodSafetyPenalty + $inputCostDrag + $elasticityShift;
         $clampedMargin = $this->clampMargin($rawMargin);
 
         $primaryShockZ = $streams->resolveDominantShockZ([
@@ -215,6 +233,7 @@ class RestaurantBusinessModel extends StandardCorporateBusinessModel
             isPublicEvent: $eventType !== null ? true : null,
             streamZ: $streams->getStreamZ(),
             streamRevenue: $streamRevenues,
+            priceRevenue: $priceRevenue,
         );
     }
 
@@ -229,23 +248,16 @@ class RestaurantBusinessModel extends StandardCorporateBusinessModel
         );
     }
 
-    public function applyAssetDepreciationDecay(Stock $stock, float $reinvestmentRatio, float $dt): void
+    /** Under-investment below replacement CapEx erodes operating margin toward the sector floor. */
+    public function getDepreciationDecayRate(): float
     {
-        $timeScale = $dt / 0.25;
-        $currentMargin = (float) $stock->getOperatingMargin();
+        return self::STORE_AGING_DECAY_RATE;
+    }
 
-        if ($reinvestmentRatio < 1.0) {
-            $decayRate = self::STORE_AGING_DECAY_RATE * (1.0 - $reinvestmentRatio) * $timeScale;
-            $updatedMargin = max(self::MIN_OPERATING_MARGIN_FLOOR, $currentMargin - ($currentMargin * $decayRate));
-            $stock->setOperatingMargin((string) $updatedMargin);
-        } elseif ($reinvestmentRatio > 1.0) {
-            $modGain = self::DIGITAL_KIOSK_GAIN_RATE * log($reinvestmentRatio) * $timeScale;
-            $updatedMargin = min(
-                self::MAX_OPERATING_MARGIN_CEILING,
-                $currentMargin + ((self::MAX_OPERATING_MARGIN_CEILING - $currentMargin) * $modGain)
-            );
-            $stock->setOperatingMargin((string) $updatedMargin);
-        }
+    /** Over-investment above replacement CapEx compounds margin toward the sector ceiling. */
+    public function getModernizationGainRate(): float
+    {
+        return self::DIGITAL_KIOSK_GAIN_RATE;
     }
 
     /**
@@ -256,13 +268,16 @@ class RestaurantBusinessModel extends StandardCorporateBusinessModel
      */
     public function getOperatingMacroFields(): array
     {
-        return array_unique(array_merge(parent::getOperatingMacroFields(), [
+        return [
             'agricultural_commodity_index_ema',
             'consumer_sentiment_index_ema',
             'energy_cost_push_lag',
+            'exchange_rate_index_ema',
             'inflation_ema',
+            'output_gap_ema',
             'producer_price_inflation_ema',
-            'unemployment_rate_ema',
-        ]));
+            'tips_breakeven_ema',
+            'wage_growth_ema',
+        ];
     }
 }

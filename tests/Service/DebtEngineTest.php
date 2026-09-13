@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Tests\Service;
 
+use App\DTO\DebtHealthDTO;
+use App\DTO\DebtMetricsDTO;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Corporate\DebtEngine;
@@ -178,6 +180,53 @@ class DebtEngineTest extends TestCase
         $this->engine->calculateInterestExpense($stock, $macroState, true);
 
         $this->assertSame('D', $stock->getCreditRating());
+    }
+
+    public function testMaturityWallRollsAtBusinessModelRolloverRate(): void
+    {
+        // Historical coupon 2%, market now 6%: how far the blended rate moves in one quarter is the
+        // business model's rollover rate. A regulated utility (12-year bonds) must reprice far slower
+        // than a standard corporate (5-year bonds), which is the only legitimate bond-proxy channel.
+        $macroState = new MacroStateDTO(
+            policyRateEma: 0.05,
+            corporateTaxRate: 0.21,
+            yield5yEma: 0.06
+        );
+
+        $this->mathUtilityMock->method('calculateDistanceToDefault')->willReturn(6.0);
+        $this->mathUtilityMock->method('calculateMertonCreditSpread')->willReturn(0.0);
+
+        $buildStock = function (string $industry): Stock {
+            $stock = new Stock();
+            $stock->setTicker('ROLL');
+            $stock->setIndustry($industry);
+            $stock->setTotalEquity('1000000000');
+            $stock->setWholesaleDebt('500000000');
+            $stock->setTotalRevenue('800000000');
+            $stock->setOperatingMargin('0.20');
+            $stock->setHistoricalFixedRate('0.02');
+            $stock->setFloatingDebtRatio('0.0');
+            $stock->setCreditSpread('0.0');
+            $stock->setVolatility('0.15');
+            $stock->setSharesOutstanding('10000000');
+            $stock->setPrice('100.00');
+            return $stock;
+        };
+
+        $utility = $buildStock('Utilities - Regulated Electric');
+        $corporate = $buildStock('General');
+
+        $utilityMetrics = $this->engine->calculateInterestExpense($utility, $macroState, true);
+        $corporateMetrics = $this->engine->calculateInterestExpense($corporate, $macroState, true);
+
+        $marketRate = $utilityMetrics->currentMarketRate;
+        $utilityRollover = \App\Data\Sectors::getBusinessModelStrategy('utility')->getDebtMaturityRolloverRate();
+        $corporateRollover = \App\Data\Sectors::getBusinessModelStrategy('none')->getDebtMaturityRolloverRate();
+
+        $this->assertLessThan($corporateRollover, $utilityRollover);
+        $this->assertEqualsWithDelta((0.02 * (1.0 - $utilityRollover)) + ($marketRate * $utilityRollover), $utilityMetrics->historicalFixedRate, 1e-9);
+        $this->assertEqualsWithDelta((0.02 * (1.0 - $corporateRollover)) + ($marketRate * $corporateRollover), $corporateMetrics->historicalFixedRate, 1e-9);
+        $this->assertLessThan($corporateMetrics->historicalFixedRate, $utilityMetrics->historicalFixedRate);
     }
 
     public function testAnalyzeDebtHealthHealthySolventCompany(): void
@@ -409,6 +458,211 @@ class DebtEngineTest extends TestCase
         $this->assertTrue($resultInsolvent['is_bankrupt'], 'Insurer with negative equity is insolvent and bankrupt.');
     }
 
+    /**
+     * With the primary market open, a maturity is refinanced: the principal survives and only its coupon
+     * reprices. This is the ordinary case and must stay the ordinary case, or investment-grade issuers
+     * would be forced to liquidate assets every quarter.
+     */
+    public function testOpenPrimaryMarketRefinancesMaturingPrincipal(): void
+    {
+        $engine = new DebtEngine(new MathUtility(), new CorporateMetrics(), null, null);
+
+        $stock = $this->buildMaturityIssuer('BBB', 0.02);
+        $health = $this->buildHealthForMaturity(interestCoverage: 6.0, dynamicSpread: 0.02);
+
+        $roll = $engine->rollMaturities($stock, $health, 50_000_000_000.0);
+
+        $this->assertTrue($roll->refinanced);
+        $this->assertGreaterThan(0.0, $roll->maturingPrincipal);
+        $this->assertEquals(0.0, $roll->principalRepaid);
+        $this->assertEquals(0.0, $roll->unfundedShortfall);
+        $this->assertEqualsWithDelta(10_000_000_000.0, (float) $stock->getWholesaleDebt(), 1.0, 'refinanced principal must not be repaid');
+    }
+
+    /**
+     * When spreads blow out to crisis levels the primary market shuts and the principal must be repaid in
+     * cash. Before this existed no firm could ever be refused a refinancing, so the most common real-world
+     * failure — a maturity landing in a quarter when nobody will lend — could not happen at all.
+     */
+    public function testClosedPrimaryMarketForcesCashRepaymentOfPrincipal(): void
+    {
+        $engine = new DebtEngine(new MathUtility(), new CorporateMetrics(), null, null);
+
+        $stock = $this->buildMaturityIssuer('B', 0.02);
+        $health = $this->buildHealthForMaturity(interestCoverage: 6.0, dynamicSpread: 0.18);
+
+        $roll = $engine->rollMaturities($stock, $health, 50_000_000_000.0);
+
+        $this->assertFalse($roll->refinanced);
+        $this->assertGreaterThan(0.0, $roll->principalRepaid);
+        $this->assertEquals(0.0, $roll->unfundedShortfall, 'a cash-rich firm repays in full');
+        $this->assertEqualsWithDelta(
+            10_000_000_000.0 - $roll->maturingPrincipal,
+            (float) $stock->getWholesaleDebt(),
+            1.0,
+            'repaid principal must leave the balance sheet'
+        );
+    }
+
+    /**
+     * A firm that can neither refinance nor pay carries the gap forward as an unfunded shortfall, which is
+     * what the treasury then has to cover with emergency financing or default on.
+     */
+    public function testUnfundableMaturityIsReportedAsAShortfall(): void
+    {
+        $engine = new DebtEngine(new MathUtility(), new CorporateMetrics(), null, null);
+
+        $stock = $this->buildMaturityIssuer('CCC', 0.02);
+        $health = $this->buildHealthForMaturity(interestCoverage: 0.4, dynamicSpread: 0.02);
+
+        $roll = $engine->rollMaturities($stock, $health, 100_000_000.0);
+
+        $this->assertFalse($roll->refinanced, 'a firm that cannot cover its interest cannot roll its principal');
+        $this->assertEqualsWithDelta(100_000_000.0, $roll->principalRepaid, 1.0);
+        $this->assertGreaterThan(0.0, $roll->unfundedShortfall);
+        $this->assertEqualsWithDelta(
+            $roll->maturingPrincipal - $roll->principalRepaid,
+            $roll->unfundedShortfall,
+            1.0
+        );
+    }
+
+    /**
+     * Market access is looser than the test for taking on NEW leverage: an investment-grade issuer with
+     * ample coverage rolls its debt straight through a recession, which is what actually happens.
+     */
+    public function testInvestmentGradeIssuerRefinancesThroughAWidenedButFunctioningMarket(): void
+    {
+        $engine = new DebtEngine(new MathUtility(), new CorporateMetrics(), null, null);
+
+        $stock = $this->buildMaturityIssuer('A', 0.02);
+        $health = $this->buildHealthForMaturity(interestCoverage: 3.0, dynamicSpread: 0.06);
+
+        $this->assertTrue($engine->rollMaturities($stock, $health, 0.0)->refinanced);
+    }
+
+    /**
+     * A debt-free firm has no maturity ladder at all.
+     */
+    public function testDebtFreeFirmHasNothingToRoll(): void
+    {
+        $engine = new DebtEngine(new MathUtility(), new CorporateMetrics(), null, null);
+
+        $stock = $this->buildMaturityIssuer('AAA', 0.01);
+        $stock->setWholesaleDebt('0.00');
+
+        $roll = $engine->rollMaturities($stock, $this->buildHealthForMaturity(6.0, 0.01), 0.0);
+
+        $this->assertEquals(0.0, $roll->maturingPrincipal);
+        $this->assertTrue($roll->refinanced);
+    }
+
+    private function buildMaturityIssuer(string $rating, float $creditSpread): Stock
+    {
+        $stock = new Stock();
+        $stock->setTicker('MATR');
+        $stock->setIndustry('Auto Manufacturers');
+        $stock->setWholesaleDebt('10000000000.00');
+        $stock->setTotalEquity('20000000000.00');
+        $stock->setCorporateTreasury('5000000000.00');
+        $stock->setCreditRating($rating);
+        $stock->setCreditSpread((string) $creditSpread);
+
+        return $stock;
+    }
+
+    private function buildHealthForMaturity(float $interestCoverage, float $dynamicSpread): DebtHealthDTO
+    {
+        $metrics = new DebtMetricsDTO(
+            interestExpense: 500_000_000.0,
+            blendedRate: 0.05,
+            historicalFixedRate: 0.05,
+            dynamicSpread: $dynamicSpread,
+            currentMarketRate: 0.05 + $dynamicSpread,
+            wholesaleRate: 0.05,
+            ebit: 3_000_000_000.0,
+            revenue: 20_000_000_000.0,
+            depreciation: 500_000_000.0,
+            ebitda: 3_500_000_000.0
+        );
+
+        return new DebtHealthDTO(
+            grossCost: 0.05,
+            effectiveCost: 0.05,
+            cashYield: 0.03,
+            isNegativeCarry: false,
+            isSevereNegativeCarry: false,
+            interestCoverage: $interestCoverage,
+            wantsToPaydownDebt: false,
+            canIssueDebt: $interestCoverage > 3.5,
+            debtTolerance: 2.0,
+            wacc: 0.08,
+            costOfEquity: 0.10,
+            leveredBeta: 1.0,
+            rawMetrics: $metrics,
+            isLiquidityCrisis: $interestCoverage < 0.0,
+            isLiquidityWarning: $interestCoverage < 2.0,
+            isUnderLeveraged: false
+        );
+    }
+
+    /**
+     * Once a firm carries a real trade ledger, Altman's working capital term reads it: payables are a
+     * current claim that the old cash-minus-a-fifth-of-debt proxy could not see at all.
+     */
+    public function testAltmanWorkingCapitalReadsTheRealTradeLedgerWhenOneExists(): void
+    {
+        $engine = new DebtEngine(new MathUtility(), new CorporateMetrics(), null, null);
+
+        $build = function (string $payables): Stock {
+            $stock = new Stock();
+            $stock->setTicker('ALTM');
+            $stock->setIndustry('Auto Manufacturers');
+            $stock->setTotalEquity('20000000000.00');
+            $stock->setWholesaleDebt('10000000000.00');
+            $stock->setCorporateTreasury('3000000000.00');
+            $stock->setRetainedEarnings('5000000000.00');
+            $stock->setSharesOutstanding('1000000000');
+            $stock->setTotalRevenue('40000000000.00');
+            $stock->setGrossPpe('30000000000.00');
+            $stock->setAccumulatedDepreciation('12000000000.00');
+            $stock->setReceivables('5000000000.00');
+            $stock->setInventory('4000000000.00');
+            $stock->setPayables($payables);
+
+            return $stock;
+        };
+
+        $lean = $engine->calculateAltmanZScore($build('1000000000.00'), 3_000_000_000.0, 40_000_000_000.0, 30.0);
+        $stretched = $engine->calculateAltmanZScore($build('6000000000.00'), 3_000_000_000.0, 40_000_000_000.0, 30.0);
+
+        $this->assertLessThan($lean['z_score'], $stretched['z_score'], 'more payables must mean less working capital and a lower score');
+    }
+
+    /**
+     * Before the ledger exists the score falls back to the proxies it always used, so a freshly seeded
+     * or pre-migration firm is not scored on balances it does not yet carry.
+     */
+    public function testAltmanFallsBackToProxiesWithoutATradeLedger(): void
+    {
+        $engine = new DebtEngine(new MathUtility(), new CorporateMetrics(), null, null);
+
+        $stock = new Stock();
+        $stock->setTicker('NOLG');
+        $stock->setIndustry('Auto Manufacturers');
+        $stock->setTotalEquity('20000000000.00');
+        $stock->setWholesaleDebt('10000000000.00');
+        $stock->setCorporateTreasury('3000000000.00');
+        $stock->setRetainedEarnings('5000000000.00');
+        $stock->setSharesOutstanding('1000000000');
+        $stock->setTotalRevenue('40000000000.00');
+
+        $this->assertFalse($stock->hasWorkingCapitalLedger());
+        $result = $engine->calculateAltmanZScore($stock, 3_000_000_000.0, 40_000_000_000.0, 30.0);
+        $this->assertIsFloat($result['z_score']);
+        $this->assertContains($result['zone'], ['Safe', 'Grey', 'Distress']);
+    }
+
     public function testIssueDebtUpdatesWholesaleBalanceAndWeightedHistoricalRate(): void
     {
         $realMath = new MathUtility();
@@ -506,6 +760,149 @@ class DebtEngineTest extends TestCase
             $neutralResult->dynamicSpread,
             $recessionResult->dynamicSpread,
             'Credit spreads on leveraged corporate debt must widen non-linearly during economic contractions via the BGG Financial Accelerator.'
+        );
+    }
+    public function testCapitalizedLeasesLowerAltmanZForLeaseHeavySectors(): void
+    {
+        // Identical books: the restaurant franchisor carries a store lease book worth 60% of revenue that
+        // IFRS 16 / ASC 842 puts on the balance sheet, so it must screen as more levered than a plain
+        // corporate with the same reported debt.
+        $build = function (string $industry): Stock {
+            $stock = new Stock();
+            $stock->setTicker('LEASE');
+            $stock->setIndustry($industry);
+            $stock->setTotalEquity('1000000000');
+            $stock->setWholesaleDebt('300000000');
+            $stock->setCorporateTreasury('150000000');
+            $stock->setRetainedEarnings('400000000');
+            $stock->setSharesOutstanding('50000000');
+            return $stock;
+        };
+
+        // Real metrics: the lease capitalization must actually run, not the test class's stub.
+        $engine = new DebtEngine($this->mathUtilityMock, new CorporateMetrics(), $this->creditRatingAgency, $this->marketEventPublisherMock);
+        $restaurant = $engine->calculateAltmanZScore($build('Restaurants'), 120_000_000.0, 2_000_000_000.0, 40.0);
+        $plain = $engine->calculateAltmanZScore($build('General'), 120_000_000.0, 2_000_000_000.0, 40.0);
+
+        $this->assertGreaterThan(
+            \App\Data\Sectors::getBusinessModelStrategy('none')->getLeaseIntensity(),
+            \App\Data\Sectors::getBusinessModelStrategy('restaurant')->getLeaseIntensity()
+        );
+        $this->assertLessThan($plain['z_score'], $restaurant['z_score']);
+    }
+
+    /** Cost-of-capital tests need the real CAPM and Hamada arithmetic, not the class stub. */
+    private function costOfCapitalEngine(): DebtEngine
+    {
+        return new DebtEngine(new MathUtility(), new CorporateMetrics(), $this->creditRatingAgency);
+    }
+
+    private function leveredFirm(string $ticker, string $beta, string $creditSpread): Stock
+    {
+        $stock = new Stock();
+        $stock->setTicker($ticker);
+        $stock->setIndustry('General');
+        $stock->setBeta($beta);
+        $stock->setCreditSpread($creditSpread);
+        $stock->setHistoricalFixedRate('0.04');
+        $stock->setFloatingDebtRatio('0.30');
+        $stock->setVolatility('0.20');
+        $stock->setTotalEquity('1000000000');
+        $stock->setWholesaleDebt('500000000');
+        $stock->setCorporateTreasury('50000000');
+        $stock->setSharesOutstanding('100000000');
+        $stock->setPrice('10.00');
+        $stock->setTotalRevenue('800000000');
+        $stock->setOperatingMargin('0.15');
+
+        return $stock;
+    }
+
+    private function neutralMacro(): MacroStateDTO
+    {
+        return new MacroStateDTO(
+            inflationEma: 0.02,
+            policyRateEma: 0.04,
+            yield5yEma: 0.045,
+            macroCreditSpreadEma: 0.02,
+            corporateTaxRate: 0.21,
+            equityRiskPremium: 0.045
+        );
+    }
+
+    /**
+     * Hamada multiplies, so leverage scales the magnitude of systematic exposure and can never flip its
+     * sign. A levered hedge is a bigger hedge. The engine previously levered max(0.5, |beta|), which handed
+     * every inverse-beta name a positive exposure and made it look like a leveraged market bet.
+     */
+    public function testLeverageAmplifiesAnInverseBetaWithoutFlippingIt(): void
+    {
+        $health = $this->costOfCapitalEngine()->analyzeDebtHealth($this->leveredFirm('HEDG', '-0.60', '0.02'), $this->neutralMacro());
+
+        $this->assertLessThan(0.0, $health->leveredBeta, 'A hedge must stay a hedge after re-levering.');
+        $this->assertGreaterThan(0.60, abs($health->leveredBeta), 'Leverage must amplify the magnitude of the exposure.');
+    }
+
+    /**
+     * Absolute priority: equity is the junior claim on the same cash flows, so it cannot require a lower
+     * return than the debt ranking above it. CAPM alone hands a negative-beta name a rate below the
+     * risk-free rate, which is sound portfolio theory and an unusable hurdle rate.
+     */
+    public function testCostOfEquityIsNeverBelowTheFirmsOwnBorrowingRate(): void
+    {
+        $engine = $this->costOfCapitalEngine();
+        $macro = $this->neutralMacro();
+
+        foreach ([['HEDG', '-0.60'], ['FLAT', '0.05'], ['MID', '0.80'], ['HIGH', '2.00']] as [$ticker, $beta]) {
+            $stock = $this->leveredFirm($ticker, $beta, '0.02');
+            $health = $engine->analyzeDebtHealth($stock, $macro);
+            $marketRate = $engine->calculateInterestExpense($stock, $macro)->currentMarketRate;
+
+            $this->assertGreaterThanOrEqual(
+                $marketRate,
+                $health->costOfEquity,
+                sprintf('%s prices its equity below its own debt.', $ticker)
+            );
+            $this->assertGreaterThan(0.0, $health->costOfEquity);
+        }
+    }
+
+    /**
+     * The floor carries the firm's OWN credit risk, so two hedges are not priced alike: a clearinghouse on a
+     * 40bp spread funds far more cheaply than a distressed-debt shop on 320bp, even though CAPM would put
+     * both below the risk-free rate. The old flat beta floor gave them an identical cost of equity.
+     */
+    public function testTheEquityFloorCarriesTheFirmsOwnCreditRisk(): void
+    {
+        $engine = $this->costOfCapitalEngine();
+        $macro = $this->neutralMacro();
+
+        $fortress = $engine->analyzeDebtHealth($this->leveredFirm('SAFE', '-0.10', '0.004'), $macro);
+        $distressed = $engine->analyzeDebtHealth($this->leveredFirm('JUNK', '-0.10', '0.032'), $macro);
+
+        $this->assertGreaterThan(
+            $fortress->costOfEquity,
+            $distressed->costOfEquity,
+            'Two hedges with the same beta must still separate by their own credit risk.'
+        );
+    }
+
+    /**
+     * Below the old 0.5 floor every firm was discounted identically, which is why a water utility and an
+     * industrial REIT carried the same multiple. Betas below it must now produce distinct costs of equity.
+     */
+    public function testLowBetaFirmsNoLongerShareOneCostOfEquity(): void
+    {
+        $engine = $this->costOfCapitalEngine();
+        $macro = $this->neutralMacro();
+
+        $veryDefensive = $engine->analyzeDebtHealth($this->leveredFirm('UTIL', '0.10', '0.006'), $macro);
+        $defensive = $engine->analyzeDebtHealth($this->leveredFirm('REIT', '0.45', '0.006'), $macro);
+
+        $this->assertGreaterThan(
+            $veryDefensive->costOfEquity,
+            $defensive->costOfEquity,
+            'A 0.45 beta must cost more equity capital than a 0.10 beta.'
         );
     }
 }

@@ -16,7 +16,7 @@ use App\DTO\MacroStateDTO;
  * identical rules instead of two hand-mirrored implementations. Every threshold in those rules
  * reuses one the simulation itself already treats as a distress signal — see that constant's
  * docblock — with exactly one documented exception (the Land Registry's property-index
- * deviation). An institution with no `stress_rules` simply never renders stressed; see
+ * fall). An institution with no `stress_rules` simply never renders stressed; see
  * DistrictMap::INSTITUTIONS' docblock for why that is the honest reading of the rule rather than
  * a gap to fill.
  */
@@ -67,7 +67,7 @@ class DistrictStressEvaluator
             DistrictMap::OP_GTE => $value >= $rule['value'],
             DistrictMap::OP_LTE => $value <= $rule['value'],
             DistrictMap::OP_LT => $value < $rule['value'],
-            DistrictMap::OP_INDEX_DEVIATION => abs($value - 100.0) / 100.0 >= $rule['value'],
+            DistrictMap::OP_INDEX_DROP => (100.0 - $value) / 100.0 >= $rule['value'],
             default => false,
         };
     }

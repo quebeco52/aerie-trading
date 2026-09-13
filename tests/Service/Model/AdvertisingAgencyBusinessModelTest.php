@@ -93,4 +93,17 @@ class AdvertisingAgencyBusinessModelTest extends TestCase
             'Consumer sentiment and output gap booms must expand media buying commissions.'
         );
     }
+
+
+    /**
+     * This model applies the cycle per stream in calculateSectorPhysics, so the parent's generic demand shift
+     * must be zeroed or the output gap reaches revenue twice: once in the expectation and again in the streams.
+     */
+    public function testTheGenericDemandShiftIsZeroedSoTheOutputGapIsNotCountedTwice(): void
+    {
+        $physics = $this->model->getMacroPhysics((new Stock())->setTicker('LYRE_GAP'), new MacroStateDTO(outputGapEma: 0.03));
+
+        $this->assertSame(0.0, $physics['macro_demand_shift']);
+        $this->assertArrayHasKey('pricing_power_multiplier', $physics, 'Only the demand shift is nullified; pricing physics still flow from the parent.');
+    }
 }

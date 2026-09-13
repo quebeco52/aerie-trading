@@ -153,6 +153,7 @@ class BrokerageBusinessModelTest extends TestCase
     public function testMacroPhysicsProducesExpectedDemandShift(): void
     {
         $stock = new Stock();
+        $stock->setTicker('BRK');
         $stock->setBeta('1.40');
 
         $macroState = MacroStateDTO::fromArray([
@@ -161,8 +162,8 @@ class BrokerageBusinessModelTest extends TestCase
 
         $macroPhysics = $this->model->getMacroPhysics($stock, $macroState);
 
-        // Demand shift = 0.02 * 1.40 * 0.50 = 0.014
-        $this->assertEqualsWithDelta(0.014, $macroPhysics['macro_demand_shift'], 0.0001);
+        // Demand shift = 0.02 * operating cyclicality * 0.50; equity beta is not an operating input.
+        $this->assertEqualsWithDelta(0.02 * BrokerageBusinessModel::OPERATING_CYCLICALITY * 0.50, $macroPhysics['macro_demand_shift'], 0.0001);
         $this->assertSame(1.0, $macroPhysics['pricing_power_multiplier']);
     }
 

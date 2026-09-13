@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace App\Service\Model\Sector;
 
+use App\DTO\InterestExpenseDTO;
+use App\DTO\DebtExpansionAppetiteDTO;
+
 use App\Service\Model\BusinessModelInterface;
 
 use App\Data\ModelParam;
@@ -25,6 +28,22 @@ use App\Service\Math\FinancialConstants;
  */
 class CommercialBankBusinessModel extends BaseFinancialBusinessModel
 {
+    // --- Operating Cyclicality & Demand Structure ---
+    /** Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Loan demand and deposit growth track nominal activity. */
+    public const OPERATING_CYCLICALITY = 1.00;
+
+    // --- Labor Intensity ---
+    /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze. Branch and back-office payroll is the largest non-interest expense of a bank. */
+    public const FIXED_COST_LABOR_SHARE = 0.60;
+
+    // --- Demand Transmission Lag ---
+    /** Years for a move in the output gap to reach the order book. Credit formation lags activity: loan demand builds after the expansion is underway and drawn balances persist into the downturn. */
+    public const DEMAND_LAG_YEARS = 0.75;
+
+    // --- Reporting Incentives ---
+    /** Propensity to steer reported earnings toward consensus with accruals. The loan loss provision is a judgement call reviewed quarterly, which is why provisioning is the most documented earnings-smoothing lever in banking. */
+    public const EARNINGS_MANAGEMENT_PROPENSITY = 0.65;
+
     // --- Model Thresholds ---
     /** Minimum Interest Coverage Ratio (ICR) required before distress. */
     public const THRESHOLD_MIN_ICR = 1.05;
@@ -89,15 +108,25 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
     /** Baseline Loss Given Default (LGD) for senior secured / collateralized bank credit facilities. */
     public const LGD_BASELINE                  = 0.45;
 
-    // --- CECL Forward Provisioning (Credit Spread Channel) ---
-    /** Baseline investment-grade corporate credit spread (~200bps). Widening above this triggers proactive reserve builds. */
-    public const CECL_BASELINE_CREDIT_SPREAD   = 0.020;
-    /** Variable cost add-on per unit of spread widening above baseline. +100bps widening = +8% cost add-on. */
-    public const CECL_SPREAD_SENSITIVITY       = 0.80;
-    /** Baseline 12-month forward recession probability (~15%). Increases above this trigger CECL lifetime reserve builds. */
+    // --- Underwriting Risk Appetite ---
+    /** Neutral appetite: a bank here books exactly the sector's through-the-cycle default probability. */
+    public const NEUTRAL_CREDIT_RISK_APPETITE  = 0.50;
+    /** Appetite floor (~30bps PD): a book this clean is sovereign paper wearing a loan's clothes. */
+    public const MIN_CREDIT_RISK_APPETITE      = 0.10;
+    /** Appetite ceiling (~3% PD): the edge of a viable commercial book before it is subprime lending. */
+    public const MAX_CREDIT_RISK_APPETITE      = 1.00;
+
+    // --- CECL Forward Reserve (ASC 326 lifetime allowance conditioned on the macro forecast) ---
+    /** Baseline investment-grade corporate credit spread (macro through-the-cycle IG); the lifetime loss estimate is struck at 1.0x here. */
+    public const CECL_BASELINE_CREDIT_SPREAD   = MacroEngine::BASE_CREDIT_SPREAD;
+    /** Lifetime-loss multiplier per unit of IG spread widening: +300bps lifts the reserve target ~0.36x. */
+    public const CECL_RESERVE_SPREAD_SENSITIVITY = 12.0;
+    /** Baseline 12-month forward recession probability (~15%); the lifetime loss estimate is struck at 1.0x here. */
     public const CECL_BASELINE_RECESSION_PROB  = 0.15;
-    /** Sensitivity of CECL lifetime loss provisioning to 12-month forward recession probability. */
-    public const CECL_RECESSION_PROB_SENSITIVITY = 0.12;
+    /** Lifetime-loss multiplier per unit of recession probability above baseline: a near-certain recession lifts the target ~0.85x (large-bank allowances went 1.4% -> 3.3% of loans in 2020 with spreads). */
+    public const CECL_RESERVE_RECESSION_SENSITIVITY = 1.00;
+    /** Floor on the forecast multiplier: a benign outlook releases part of the through-the-cycle reserve, never most of it. */
+    public const CECL_RESERVE_MULTIPLIER_FLOOR = 0.75;
 
     // --- C&I Corporate Default & SLOOS Lending Standards ---
     /** Weight of speculative-grade corporate default rate shift on commercial & industrial loan loss provisions. */
@@ -114,11 +143,13 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
     // --- Macaulay Duration Gap & IRRBB NIM Physics ---
     /** Weighted average Macaulay duration of bank loan and mortgage assets in years. */
     public const ASSET_DURATION_YEARS          = 4.5;
+    /** Years of expected loss the CECL allowance covers. At the through-the-cycle loss rate this puts the reserve near 1.7% of loans, where large US banks have run since CECL adoption. */
+    public const CECL_LIFETIME_HORIZON_YEARS   = 4.0;
     /** Weighted average Macaulay duration of customer deposit and wholesale liabilities in years. */
     public const LIABILITY_DURATION_YEARS      = 1.5;
     /** Floating-rate asset/liability natural hedge effectiveness dampening duration mismatch exposure. */
     public const FLOATING_HEDGE_EFFICIENCY     = 0.50;
-    /** Break-even NIM floor (~50bps). Steep curve = profit; flat or inverted curve = squeeze. */
+    /** Break-even NIM floor (~50bps): the neutral 2s10s slope (~70bps) less the interbank spread the funding side pays. Steeper = profit; flat or inverted = squeeze. */
     public const NIM_BASE_SPREAD_BUFFER        = 0.005;
     /** Calibrated baseline sensitivity for NIM duration gap exposure before company-specific ALM adjustments. */
     public const NIM_INVERSION_SENSITIVITY     = 10.0;
@@ -324,9 +355,9 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
 
         $effectiveEquity = max(1.0, $equity);
 
-        // Earning Assets represent the physical capital deployed into loans.
-        // It is Equity + Total Debt, minus cash sitting idle in the Treasury.
-        $earningAssets = max($effectiveEquity, $effectiveEquity + $totalDebt - $treasury);
+        // Earning assets are the loan book the yield is struck on: the ledger once it is open, and before
+        // that the funding deployed away from idle cash.
+        $earningAssets = $this->resolveEarningAssets($stock, $treasury);
         $baselineRoe = max(0.01, (float) $stock->getBaselineRoe());
 
         $ttmRoe = (float) $stock->getRoeTtm();
@@ -381,8 +412,11 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
         $optimalNetIncome = $effectiveEquity * $baselineRoe;
         $optimalEbt = $optimalNetIncome / (1.0 - $taxRate);
 
-        // At optimal leverage, there is no idle cash generating a treasury yield, only fully deployed earning assets
-        $optimalEbit = $optimalEbt + $optimalInterestExpense;
+        // At optimal leverage, there is no idle cash generating a treasury yield, only fully deployed earning assets.
+        // The target is PRE-provision operating profit: the ROE is earned after the through-the-cycle credit
+        // charge the allowance roll-forward books against EBIT, so the target has to carry that charge too.
+        $optimalCreditProvision = $this->resolveThroughTheCycleCreditProvision($stock, $optimalEarningAssets);
+        $optimalEbit = $optimalEbt + $optimalInterestExpense + $optimalCreditProvision;
         $structuralAssetYield = $optimalEbit / max(1.0, $optimalEarningAssets);
 
         // Apply the mathematically pure structural yield to the ACTUAL physical loan book
@@ -414,8 +448,8 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
 
     public function getMacroPhysics(Stock $stock, MacroStateDTO $macroState): array
     {
-        $outputGap = $macroState->outputGapEma;
-        $beta = (float) $stock->getBeta();
+        $outputGap = $this->resolveLaggedOutputGap($stock, $macroState);
+        $beta = $this->getOperatingCyclicality($stock);
 
         return [
             'macro_demand_shift' => $outputGap * $beta * self::MACRO_DEMAND_BETA_SENSITIVITY, // Less demand destruction than physical goods
@@ -440,7 +474,7 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
         $inversionSensitivity = $params[ModelParam::NimInversionSensitivity];
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
-        $streams  = new \App\DTO\StreamContext($momentum, $mathUtility);
+        $streams  = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
 
         $targetWeights = [
             'net_interest_income' => $params[ModelParam::NiiRevenueWeight],
@@ -460,7 +494,7 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
         // Independent stream Z-scores with AR(1) persistence
         $revenueZ = $streams->generateZ('net_interest_income', self::STREAM_Z_PERSISTENCE_NII); // NII loan origination volume
         $feeZ     = $streams->generateZ('fee_income', self::STREAM_Z_PERSISTENCE_FEE); // Non-interest custodial / payment fee volume
-        $defaultZ = $streams->generateZ('default', self::STREAM_Z_PERSISTENCE_FEE); // Idiosyncratic credit default
+        $defaultZ = $streams->generateExogenousZ('default', self::STREAM_Z_PERSISTENCE_FEE); // Idiosyncratic credit default
 
         $outputGap = $macroState->outputGapEma;
 
@@ -495,21 +529,22 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
         $streams->recordStreamShares($streamRevenues);
 
         // Balance sheet loan book (Earning Assets) deployed into credit
-        $equity = (float) $stock->getTotalEquity();
-        $totalDebt = (float) $stock->getTotalDebt();
-        $treasury = (float) $stock->getCorporateTreasury();
-        $effectiveEquity = max(1.0, $equity);
-        $earningAssets = max($effectiveEquity, $effectiveEquity + $totalDebt - $treasury);
+        $earningAssets = $this->resolveEarningAssets($stock);
 
         // Basel II/III Vasicek ASRF Credit Risk Physics:
         // Expected loss on the loan portfolio under macroeconomic credit shock $defaultZ.
-        $baselineEl = $mathUtility->calculateVasicekExpectedLoss(0.0, self::LRA_DEFAULT_RATE, self::ASSET_CORRELATION_RHO, self::LGD_BASELINE);
-        $conditionalEl = $mathUtility->calculateVasicekExpectedLoss($defaultZ, self::LRA_DEFAULT_RATE, self::ASSET_CORRELATION_RHO, self::LGD_BASELINE);
+        $longRunDefaultRate = $this->resolveLongRunDefaultRate($stock);
+        $baselineEl = $mathUtility->calculateVasicekExpectedLoss(0.0, $longRunDefaultRate, self::ASSET_CORRELATION_RHO, self::LGD_BASELINE);
+        $conditionalEl = $mathUtility->calculateVasicekExpectedLoss($defaultZ, $longRunDefaultRate, self::ASSET_CORRELATION_RHO, self::LGD_BASELINE);
         $annualLossDelta = $conditionalEl - $baselineEl;
 
         // Convert annual loan loss rate delta to quarterly dollar credit provision shock
         $quarterlyDollarLoss = ($annualLossDelta / self::ANNUALIZATION_FACTOR) * $earningAssets;
         $provisionCostAddon = $quarterlyDollarLoss / max(1.0, $actualRevenue);
+
+        // What actually went bad this quarter: the conditional loss rate on the book. The through-the-cycle
+        // part of it is already inside the stable cost base; only the excess reaches the margin below.
+        $netChargeOffs = max(0.0, $conditionalEl / self::ANNUALIZATION_FACTOR) * $earningAssets;
 
         $sentimentShift = ($macroState->consumerSentimentIndexEma - MacroEngine::SENTIMENT_BASELINE) / self::INDEX_NORMALIZATION_BASE;
         $retailDefaultShift = max(0.0, ($macroState->retailDefaultRateEma - MacroEngine::RETAIL_DEFAULT_BASELINE) / MacroEngine::RETAIL_DEFAULT_BASELINE);
@@ -527,13 +562,10 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
         // Clamp reserve release to MAX_PROVISION_REVERSAL to avoid unbounded write-backs
         $lossProvisionShock = max(-self::MAX_PROVISION_REVERSAL, $provisionCostAddon) + $macroDefaultDrag;
 
-        // CECL Forward Provisioning (Credit Spread & Recession Forecast Channels):
-        // Under CECL accounting, banks must provision against EXPECTED future lifetime losses.
-        // When corporate credit spreads widen or forward recession probability rises, banks build reserves proactively.
-        $creditSpread = $macroState->macroCreditSpreadEma;
-        $spreadCeclDrag = max(0.0, ($creditSpread - self::CECL_BASELINE_CREDIT_SPREAD) * self::CECL_SPREAD_SENSITIVITY);
-        $recessionCeclDrag = max(0.0, ($macroState->recessionProbabilityEma - self::CECL_BASELINE_RECESSION_PROB) * self::CECL_RECESSION_PROB_SENSITIVITY);
-        $ceclDrag = $spreadCeclDrag + $recessionCeclDrag;
+        // The forward-looking CECL reserve (credit spreads, recession forecast) is NOT a margin term: it moves
+        // the allowance TARGET through getForwardCreditLossMultiplier(), and the ledger roll-forward books the
+        // build once and releases it when the outlook clears. Charging it here every quarter the outlook
+        // stayed bad priced a level as news and cost a lender its reserve build several times over.
 
         // Macaulay Duration Gap & IRRBB NIM Physics:
         // Bank assets (long-term loans/mortgages) have higher duration than liabilities (short-term deposits/repo).
@@ -551,12 +583,26 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
         $nimSqueeze = - ($curveDeviation * $effectiveDurationGap);
 
         // Physics-grounded Efficiency Floor: Total Operating Costs (Fixed + Variable) / Revenue >= MIN_EFFICIENCY_RATIO.
-        // Crucially, NIM squeeze and CECL provision charges apply proportionally to the NII revenue share ($niiWeight),
+        // Crucially, NIM squeeze and provision charges apply proportionally to the NII revenue share ($niiWeight),
         // leaving Non-Interest custodial / wealth / transaction fee income completely insulated.
         $minVariableMargin = max(0.01, self::MIN_EFFICIENCY_RATIO - ($fixedCosts / max(1.0, $actualRevenue)));
-        $niiCostAddon = ($lossProvisionShock + $nimSqueeze + $ceclDrag) * $niiWeight;
+        $niiCostAddon = ($lossProvisionShock + $nimSqueeze) * $niiWeight;
         $rawMargin = $realizedVariableMargin + $niiCostAddon;
         $clampedMargin = $this->clampMargin($rawMargin, $minVariableMargin);
+
+        // The credit part of that addon in dollars, so the allowance ledger can be rolled with the same
+        // charge the income statement carried. The curve squeeze is a funding cost, not a credit one.
+        //
+        // Measured against the CLAMPED margin, because the clamp is what the income statement actually got.
+        // In the crisis quarters where the efficiency floor or the cost ceiling binds — the only quarters
+        // where a credit charge is large enough to matter — the raw addon overstates what reached earnings,
+        // and the engine then added the difference back to operating cash flow as a non-cash charge that
+        // never happened.
+        $realizedAddon = $clampedMargin - $realizedVariableMargin;
+        $addonRealizedShare = abs($niiCostAddon) > 1e-12
+            ? max(0.0, min(1.0, $realizedAddon / $niiCostAddon))
+            : 0.0;
+        $explicitCreditProvision = $lossProvisionShock * $niiWeight * $actualRevenue * $addonRealizedShare;
 
         $cet1Ratio = $this->calculateCet1Ratio($stock);
 
@@ -579,10 +625,81 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
             eventType: $eventType,
             streamZ: $streams->getStreamZ(),
             streamRevenue: $streamRevenues,
+            creditLossProvision: $explicitCreditProvision,
+            netChargeOffs: $netChargeOffs,
         );
     }
 
+    /**
+     * ASC 326 reasonable-and-supportable forecast: the lifetime loss estimate scales with how much worse than
+     * through-the-cycle the outlook is, read off the two forward indicators a reserving committee watches,
+     * IG credit spreads and the 12-month recession probability. Widening and rising risk lift the target
+     * (a build, booked once by the roll-forward); a benign outlook releases down to the floor.
+     */
+    public function getForwardCreditLossMultiplier(?Stock $stock, MacroStateDTO $macroState): float
+    {
+        $spreadGap = $macroState->macroCreditSpreadEma - static::CECL_BASELINE_CREDIT_SPREAD;
+        $recessionGap = max(0.0, $macroState->recessionProbabilityEma - static::CECL_BASELINE_RECESSION_PROB);
 
+        $multiplier = 1.0
+            + ($spreadGap * static::CECL_RESERVE_SPREAD_SENSITIVITY * $this->resolveSpreadReserveBeta($stock))
+            + ($recessionGap * static::CECL_RESERVE_RECESSION_SENSITIVITY);
+
+        return max(static::CECL_RESERVE_MULTIPLIER_FLOOR, $multiplier);
+    }
+
+    /** How much more than the sector a given lender's reserve moves with credit spreads (1.0 = the sector). */
+    protected function resolveSpreadReserveBeta(?Stock $stock): float
+    {
+        return 1.0;
+    }
+
+    /**
+     * Firm-specific long-run (through-the-cycle) default probability. Two banks funded identically do not
+     * underwrite identically: a universal lender syndicating investment-grade corporate paper runs a cleaner
+     * book than a regional lender competing on speed for contractor and developer credit. CreditRiskAppetite
+     * scales the sector's long-run PD around a neutral 0.50, which is the only place a bank's stated
+     * underwriting posture can reach the Vasicek loss physics.
+     */
+    protected function resolveLongRunDefaultRate(?Stock $stock): float
+    {
+        if (!$stock instanceof Stock) {
+            return self::LRA_DEFAULT_RATE;
+        }
+
+        $params = $this->resolveModelParameters($stock, [
+            ModelParam::CreditRiskAppetite->value => self::NEUTRAL_CREDIT_RISK_APPETITE,
+        ]);
+
+        $appetite = max(
+            self::MIN_CREDIT_RISK_APPETITE,
+            min(self::MAX_CREDIT_RISK_APPETITE, (float) $params[ModelParam::CreditRiskAppetite])
+        );
+
+        return self::LRA_DEFAULT_RATE * ($appetite / self::NEUTRAL_CREDIT_RISK_APPETITE);
+    }
+
+    /** Through-the-cycle loss on this bank's loan book: its long-run default probability at its loss given default. */
+    public function getThroughTheCycleCreditLossRate(?Stock $stock = null): float
+    {
+        return MathUtility::getInstance()->calculateVasicekExpectedLoss(
+            0.0,
+            $this->resolveLongRunDefaultRate($stock),
+            self::ASSET_CORRELATION_RHO,
+            self::LGD_BASELINE
+        );
+    }
+
+    public function getCreditLossHorizonYears(): float
+    {
+        return self::CECL_LIFETIME_HORIZON_YEARS;
+    }
+
+    /** Deposits are the raw material: whatever is not needed as reserves is lent. */
+    public function deploysFundingIntoEarningAssets(): bool
+    {
+        return true;
+    }
 
     /**
      * Banks earn standard money-market yields only on excess liquidity that isn't actively deployed.
@@ -592,15 +709,16 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
         $operatingBase = $this->getOperatingBase($stock);
         $excessCash = max(0.0, (float) $stock->getCorporateTreasury() - ($operatingBase * self::INTEREST_INCOME_CASH_BUFFER));
 
-        $policyRate = $macroState->policyRateEma;
-
+        // Interest EARNED here is treasury income only: the spread on the loan book is already inside
+        // net_interest_income on the revenue side, so the realized wholesale funding rate is deliberately
+        // not read — reading it would price the same book twice.
         return $excessCash * $this->calculateCashYield($macroState);
     }
 
     /**
      * Financial companies are evaluated strictly on Return on Equity (ROE), not ROIC.
      */
-    public function updateDynamicRoic(Stock $stock, float $actualTotalNetIncome, float $investedCapital, float $ebit, float $corporateTaxRate, float $wacc = 0.08, float $costOfEquity = 0.10, ?\App\DTO\MacroStateDTO $macroState = null): float
+    public function updateDynamicRoic(Stock $stock, float $actualTotalNetIncome, float $investedCapital, float $ebit, float $corporateTaxRate, float $wacc = 0.08, float $costOfEquity = 0.10, ?\App\DTO\MacroStateDTO $macroState = null, float $depreciation = 0.0): float
     {
         $kappa = $this->getReversionSpeed();
         $moatSpread = $this->getMoatSpread();
@@ -679,7 +797,7 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
         return max(0.0, min($spendCap, $retainedEarningsThisQuarter));
     }
 
-    public function calculateInterestExpenseAndWholesaleRate(Stock $stock, float $blendedFixedRate, float $floatingInterestRate, float $currentMarketFixedRate, float $policyRate, float $equityLimit, float $totalEquity, float $debt): array
+    public function calculateInterestExpenseAndWholesaleRate(Stock $stock, float $blendedFixedRate, float $floatingInterestRate, float $currentMarketFixedRate, float $policyRate, float $equityLimit, float $totalEquity, float $debt): InterestExpenseDTO
     {
         $floatingRatio = (float) $stock->getFloatingDebtRatio();
         $customerDeposits = (float) $stock->getCustomerDeposits();
@@ -694,7 +812,7 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
         $depositRate = max(0.001, $policyRate * $depositBeta);
         $depositInterest = $customerDeposits * $depositRate;
 
-        return ['interest_expense' => $wholesaleInterest + $depositInterest, 'wholesale_rate' => $wholesaleRate];
+        return new InterestExpenseDTO(interestExpense: $wholesaleInterest + $depositInterest, wholesaleRate: $wholesaleRate);
     }
 
 
@@ -749,7 +867,7 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
         $yieldFlightPenalty = max(0.0, max(0.0, $policyRate - self::YIELD_FLIGHT_POLICY_RATE_OFFSET) - $state['bank_apy']) * 1.0;
         $systemicGrowthQuarterly = ($inflation + $realGdpGrowth - $yieldFlightPenalty) / self::ANNUALIZATION_FACTOR;
 
-        $betaSensitivity = max(self::LIABILITY_BETA_SENSITIVITY_MIN, min(self::LIABILITY_BETA_SENSITIVITY_MAX, abs((float) $stock->getBeta())));
+        $betaSensitivity = max(self::LIABILITY_BETA_SENSITIVITY_MIN, min(self::LIABILITY_BETA_SENSITIVITY_MAX, $this->getOperatingCyclicality($stock)));
 
         // Competitive advantage relative to market-average deposit beta.
         // A bank paying above the normalization baseline retains and attracts more deposits.
@@ -773,7 +891,7 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
         }
     }
 
-    public function getDebtExpansionAggressiveness(float $spreadMultiplier, float $totalDebt = 0.0, float $customerDeposits = 0.0, float $targetOperatingCash = 0.0, float $currentTreasury = 0.0): array
+    public function getDebtExpansionAggressiveness(float $spreadMultiplier, float $totalDebt = 0.0, float $customerDeposits = 0.0, float $targetOperatingCash = 0.0, float $currentTreasury = 0.0): DebtExpansionAppetiteDTO
     {
         $depositRatio = $totalDebt > 0.0 ? ($customerDeposits / $totalDebt) : 0.0;
 
@@ -783,19 +901,13 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
             $probability = self::DEBT_EXPANSION_BASE_PROB + ($spreadMultiplier * self::DEBT_EXPANSION_PROB_MULT) + (self::WHOLESALE_URGENCY_PROB_BOOST * $shortfallRatio);
             $aggressiveness = self::DEBT_EXPANSION_BASE_AGGR + (self::DEBT_EXPANSION_AGGR_MULT * $spreadMultiplier) + (self::WHOLESALE_URGENCY_AGGR_BOOST * $shortfallRatio);
 
-            return [
-                'probability' => min(self::DEBT_EXPANSION_PROB_MAX, max(self::DEBT_EXPANSION_PROB_MIN, $probability)),
-                'aggressiveness' => min(self::DEBT_EXPANSION_AGGR_MAX, max(self::DEBT_EXPANSION_AGGR_MIN, $aggressiveness)),
-            ];
+            return new DebtExpansionAppetiteDTO(probability: min(self::DEBT_EXPANSION_PROB_MAX, max(self::DEBT_EXPANSION_PROB_MIN, $probability)), aggressiveness: min(self::DEBT_EXPANSION_AGGR_MAX, max(self::DEBT_EXPANSION_AGGR_MIN, $aggressiveness)));
         }
 
         // Deposit Throttle: When liquid treasury is sufficient and the bank is well-funded by customer deposits,
         // wholesale debt borrowing is throttled down to zero to prevent balance sheet inflation.
         if ($depositRatio >= self::DEPOSIT_THROTTLE_UPPER_BOUND) {
-            return [
-                'probability' => 0.0,
-                'aggressiveness' => 0.0,
-            ];
+            return new DebtExpansionAppetiteDTO(probability: 0.0, aggressiveness: 0.0);
         }
 
         // For banks with lower deposit coverage, scale borrowing capacity smoothly between UPPER and LOWER bounds
@@ -809,10 +921,7 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
             $baseAggr *= $throttleMultiplier;
         }
 
-        return [
-            'probability' => min(self::DEBT_EXPANSION_PROB_MAX, max(self::DEBT_EXPANSION_PROB_MIN, $baseProb)),
-            'aggressiveness' => min(self::DEBT_EXPANSION_AGGR_MAX, max(self::DEBT_EXPANSION_AGGR_MIN, $baseAggr)),
-        ];
+        return new DebtExpansionAppetiteDTO(probability: min(self::DEBT_EXPANSION_PROB_MAX, max(self::DEBT_EXPANSION_PROB_MIN, $baseProb)), aggressiveness: min(self::DEBT_EXPANSION_AGGR_MAX, max(self::DEBT_EXPANSION_AGGR_MIN, $baseAggr)));
     }
 
     public function isUnderLeveraged(float $currentDebtRatio, float $targetDebtTolerance, float $interestCoverage, float $minIcr, float $costOfEquity, float $effectiveCostOfDebt): bool
@@ -826,9 +935,9 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
     public function calculateRiskWeightedAssets(Stock $stock, ?float $currentTreasury = null): float
     {
         $treasury = $currentTreasury ?? (float) $stock->getCorporateTreasury();
-        $totalEquity = (float) $stock->getTotalEquity();
-        $totalDebt = (float) $stock->getTotalDebt();
-        $earningAssets = max(0.0, $totalEquity + $totalDebt - $treasury);
+        $earningAssets = $stock->hasEarningAssetLedger()
+            ? $stock->getNetEarningAssets()
+            : max(0.0, (float) $stock->getTotalEquity() + (float) $stock->getTotalDebt() - $treasury);
 
         return ($earningAssets * self::BASEL_RISK_WEIGHT_EARNING_ASSETS) + ($treasury * self::BASEL_RISK_WEIGHT_TREASURY);
     }
@@ -890,7 +999,6 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
             'sloos_tightening_index_ema',
             'yield_10y_ema',
             'yield_2y_ema',
-            'yield_5y_ema',
         ];
     }
 }

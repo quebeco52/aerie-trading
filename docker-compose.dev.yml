@@ -30,7 +30,9 @@ services:
     depends_on:
       - aerie-database
       - aerie-redis
-    command: sh -c "php bin/console messenger:setup-transports && exec php bin/console messenger:consume async -vv --memory-limit=128M --time-limit=3600"
+    # No -vv: at that verbosity the worker printed three lines per message, and the limit-order stream
+    # is now dozens of messages a second. Errors still surface at the default verbosity.
+    command: sh -c "php bin/console messenger:setup-transports && exec php bin/console messenger:consume async --memory-limit=128M --time-limit=3600"
     restart: unless-stopped
     env_file:
       - .env.dev

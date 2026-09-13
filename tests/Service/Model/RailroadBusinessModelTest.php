@@ -103,4 +103,61 @@ class RailroadBusinessModelTest extends TestCase
         $this->assertGreaterThan(0.35, $expanded);
         $this->assertLessThanOrEqual(RailroadBusinessModel::MAX_OPERATING_MARGIN_CEILING, $expanded);
     }
+
+    /** A pure freight hauler sets no subscription weight and must not grow a passenger business. */
+    public function testAFreightOnlyOperatorHasNoTransitStream(): void
+    {
+        $result = $this->model->computeActualFinancials(
+            (new Stock())->setTicker('FREIGHT_ONLY')->setBeta('1.1'),
+            expectedRevenue: 5_000_000_000.0,
+            realizedVariableMargin: 0.40,
+            fixedCosts: 1_500_000_000.0,
+            baselineVol: 0.10,
+            macroState: new MacroStateDTO(outputGapEma: 0.02),
+            mathUtility: $this->mathUtility
+        );
+
+        $this->assertArrayNotHasKey('transit_subscriptions', $result->streamRevenue);
+        $this->assertArrayHasKey('intermodal_freight', $result->streamRevenue);
+    }
+
+    /**
+     * KSTL is a commuter monopoly that happens to own track, so half its revenue is season tickets. The
+     * subscription line must exist and must be the steadiest thing on the network: ridership follows
+     * employment rather than trade, and an auto-renewing pass is cancelled long after the commute stops.
+     */
+    public function testACommuterOperatorEarnsASteadierTransitStreamThanItsFreight(): void
+    {
+        $boom = new MacroStateDTO(outputGapEma: 0.03, manufacturingPmiEma: 56.0, freightRateIndexEma: 115.0);
+        $bust = new MacroStateDTO(outputGapEma: -0.03, manufacturingPmiEma: 44.0, freightRateIndexEma: 85.0);
+
+        $run = function (MacroStateDTO $macro): array {
+            // Seeded so the two runs draw the same idiosyncratic shocks and only the macro differs.
+            mt_srand(20260911);
+
+            return $this->model->computeActualFinancials(
+                (new Stock())->setTicker('KSTL')->setBeta('0.20'),
+                expectedRevenue: 5_000_000_000.0,
+                realizedVariableMargin: 0.40,
+                fixedCosts: 1_500_000_000.0,
+                baselineVol: 0.10,
+                macroState: $macro,
+                mathUtility: $this->mathUtility
+            )->streamRevenue;
+        };
+
+        $boomRevenue = $run($boom);
+        $bustRevenue = $run($bust);
+
+        $this->assertArrayHasKey('transit_subscriptions', $boomRevenue, 'KSTL must carry a commuter stream.');
+
+        $transitSwing = abs($bustRevenue['transit_subscriptions'] / $boomRevenue['transit_subscriptions'] - 1.0);
+        $freightSwing = abs($bustRevenue['intermodal_freight'] / $boomRevenue['intermodal_freight'] - 1.0);
+
+        $this->assertLessThan(
+            $freightSwing,
+            $transitSwing,
+            'Season tickets must ride through the cycle more steadily than intermodal containers.'
+        );
+    }
 }

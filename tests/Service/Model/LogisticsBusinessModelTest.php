@@ -9,6 +9,7 @@ use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\LogisticsBusinessModel;
+use App\Service\Model\Sector\StandardCorporateBusinessModel;
 use PHPUnit\Framework\TestCase;
 
 class LogisticsBusinessModelTest extends TestCase
@@ -92,10 +93,14 @@ class LogisticsBusinessModelTest extends TestCase
         $this->assertArrayHasKey('macro_demand_shift', $physics);
         $this->assertArrayHasKey('pricing_power_multiplier', $physics);
 
-        // Expected demand shift: 0.02 * 1.2 * 1.40 = 0.0336
-        $this->assertEqualsWithDelta(0.0336, $physics['macro_demand_shift'], 0.0001);
-        // Expected pricing power: 1.0 + (0.03 * 1.2) = 1.036
-        $this->assertEqualsWithDelta(1.036, $physics['pricing_power_multiplier'], 0.0001);
+        // Expected demand shift: 0.02 * cyclicality * 1.40
+        $cyclicality = LogisticsBusinessModel::OPERATING_CYCLICALITY;
+        $this->assertEqualsWithDelta(0.02 * $cyclicality * 1.40, $physics['macro_demand_shift'], 0.0001);
+        // Expected pricing: breakevens x (price-taker base elasticity + pricing power index); a fresh firm starts at target.
+        $elasticity = StandardCorporateBusinessModel::PASS_THROUGH_BASE_ELASTICITY + LogisticsBusinessModel::PRICING_POWER_INDEX;
+        $this->assertEqualsWithDelta(1.0 + (0.03 * $elasticity), $physics['pricing_power_multiplier'], 0.0001);
+        // Input prices track expected inflation at unit elasticity.
+        $this->assertEqualsWithDelta(1.03, $physics['input_cost_multiplier'], 0.0001);
     }
 
     public function testFuelSurchargeLagCompressesMarginOnEnergySpike(): void

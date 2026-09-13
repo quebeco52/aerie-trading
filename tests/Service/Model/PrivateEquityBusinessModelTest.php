@@ -68,12 +68,12 @@ class PrivateEquityBusinessModelTest extends TestCase
         $normalPhysics = $this->model->getMacroPhysics($stock, $normalMacro);
         $this->assertEqualsWithDelta(1.0, $normalPhysics['pricing_power_multiplier'], 0.001);
 
-        // High cost of debt macro (policy rate 5.5% + spread 3.0% = 8.5% CoD > 6.5% baseline)
+        // High cost of debt macro: policy 100 bps above the freeze threshold, spread 100 bps above baseline -> CoD +200 bps over baseline
         // Delta = 0.02 * 7.50 = 0.15 compression => carried interest multiple = 0.85
         // Blended (35% mgmt + 65% carry) = 0.35*1.0 + 0.65*0.85 = 0.35 + 0.5525 = 0.9025
         $highCoDMacro = MacroStateDTO::fromArray([
-            'policy_rate_ema' => 0.055,
-            'macro_credit_spread_ema' => 0.030,
+            'policy_rate_ema' => PrivateEquityBusinessModel::LBO_RATE_FREEZE_THRESHOLD + 0.010,
+            'macro_credit_spread_ema' => PrivateEquityBusinessModel::LBO_CREDIT_SPREAD_BASELINE + 0.010,
         ]);
         $distressedPhysics = $this->model->getMacroPhysics($stock, $highCoDMacro);
         $this->assertLessThan(1.0, $distressedPhysics['pricing_power_multiplier']);

@@ -190,6 +190,13 @@ class CorporateActionEngine
             } else {
                 $point['price'] = $point['price'] * $factor;
             }
+
+            // Volume moves against price: the same consideration, restated into the new share count.
+            if (isset($point['volume'])) {
+                $point['volume'] = $operation === 'divide'
+                    ? (int) round($point['volume'] * $factor)
+                    : (int) round($point['volume'] / $factor);
+            }
             $this->redis->lPush($cacheKey, json_encode($point));
         }
     }

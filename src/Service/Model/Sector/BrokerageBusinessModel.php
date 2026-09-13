@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Service\Model\Sector;
 
+use App\DTO\InterestExpenseDTO;
+
 use App\Service\Model\BusinessModelInterface;
 
 use App\Data\ModelParam;
@@ -24,6 +26,14 @@ use App\Service\Math\FinancialConstants;
  */
 class BrokerageBusinessModel extends BaseFinancialBusinessModel
 {
+    // --- Operating Cyclicality & Demand Structure ---
+    /** Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Trading volumes and margin balances swing with the cycle. */
+    public const OPERATING_CYCLICALITY = 1.30;
+
+    // --- Labor Intensity ---
+    /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze. Sales and trading compensation is the largest overhead line of a brokerage. */
+    public const FIXED_COST_LABOR_SHARE = 0.60;
+
 
     // --- Loss Provisions & Analyst Coverage ---
     /** Loss provision z-factor for margin credit defaults. */
@@ -101,9 +111,9 @@ class BrokerageBusinessModel extends BaseFinancialBusinessModel
 
     public function getMacroPhysics(Stock $stock, \App\DTO\MacroStateDTO $macroState): array
     {
-        $outputGap = $macroState->outputGapEma;
+        $outputGap = $this->resolveLaggedOutputGap($stock, $macroState);
         $m2Shift = MathUtility::calculateBroadMoneyLiquidityShift($macroState->moneySupplyGrowthEma, sensitivity: self::M2_RETAIL_TRADING_SENSITIVITY);
-        $beta = (float) $stock->getBeta();
+        $beta = $this->getOperatingCyclicality($stock);
 
         return [
             'macro_demand_shift' => ($outputGap * $beta * self::MACRO_DEMAND_SCALAR) + $m2Shift,
@@ -126,7 +136,7 @@ class BrokerageBusinessModel extends BaseFinancialBusinessModel
         $advisoryWeight = $params[ModelParam::AdvisoryRevenueWeight];
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
-        $streams  = new \App\DTO\StreamContext($momentum, $mathUtility);
+        $streams  = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
 
         // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
         $activeWeights = $streams->resolveActiveStreamWeights([
@@ -326,7 +336,7 @@ class BrokerageBusinessModel extends BaseFinancialBusinessModel
         return $marginInterest + $sweepInterest + $cashInterest;
     }
 
-    public function calculateInterestExpenseAndWholesaleRate(Stock $stock, float $blendedFixedRate, float $floatingInterestRate, float $currentMarketFixedRate, float $policyRate, float $equityLimit, float $totalEquity, float $debt): array
+    public function calculateInterestExpenseAndWholesaleRate(Stock $stock, float $blendedFixedRate, float $floatingInterestRate, float $currentMarketFixedRate, float $policyRate, float $equityLimit, float $totalEquity, float $debt): InterestExpenseDTO
     {
         $floatingRatio = (float) $stock->getFloatingDebtRatio();
 
@@ -334,10 +344,7 @@ class BrokerageBusinessModel extends BaseFinancialBusinessModel
         $interestExpense = ($debt * (1.0 - $floatingRatio) * $blendedFixedRate) + ($debt * $floatingRatio * $floatingInterestRate);
         $wholesaleRate = $debt > 0 ? ($interestExpense / $debt) : $currentMarketFixedRate;
 
-        return [
-            'interest_expense' => $interestExpense,
-            'wholesale_rate' => $wholesaleRate
-        ];
+        return new InterestExpenseDTO(interestExpense: $interestExpense, wholesaleRate: $wholesaleRate);
     }
 
     /**

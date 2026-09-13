@@ -261,23 +261,37 @@ class DistrictWardComposerTest extends TestCase
         $this->assertSame(2, $rankByTicker['STRK']);
     }
 
-    public function testNextInLineIsTheFirstCompanyBelowTheCut(): void
+    public function testBankruptCompaniesNeverQualifyAtAReconstitution(): void
     {
-        $stocks = $this->makeDescendingMarketCapStocks(DistrictMap::STREET_ROSTER_SIZE + 1);
-        $frontage = $this->composer->composeFrontage($stocks);
+        $stocks = $this->makeDescendingMarketCapStocks(4);
+        $stocks[0]->setIsBankrupt(true);
 
-        $this->assertNotNull($frontage['nextInLine']);
-        $this->assertSame(
-            sprintf('T%03d', DistrictMap::STREET_ROSTER_SIZE),
-            $frontage['nextInLine']['ticker'],
-            'The smallest company of the 31 should be the one waiting for frontage'
-        );
+        $tickers = array_column($this->composer->composeFrontage($stocks)['slots'], 'ticker');
+
+        $this->assertNotContains('T000', $tickers, 'The largest company is bankrupt and sits the street out');
+        $this->assertCount(3, $tickers);
     }
 
-    public function testNextInLineIsNullWhenEveryCompanyFits(): void
+    public function testRosterFrontageHonoursTheStoredOrderAndSkipsDelistedTickers(): void
     {
-        $frontage = $this->composer->composeFrontage($this->makeDescendingMarketCapStocks(5));
+        $stocks = $this->makeDescendingMarketCapStocks(3);
 
-        $this->assertNull($frontage['nextInLine']);
+        // Stored smallest-first, one ticker no longer listed: the order is kept, the gap closes.
+        $frontage = $this->composer->composeFrontageForRoster($stocks, ['T002', 'GONE', 'T000']);
+
+        $this->assertSame(['T002', 'T000'], array_column($frontage['slots'], 'ticker'));
+        $this->assertSame(DistrictMap::FRONTAGE_GUTTER, $frontage['slots'][0]['x']);
+        $this->assertSame(2, $frontage['slots'][0]['rank'], 'Rank is live market cap, not stored position');
+        $this->assertSame(1, $frontage['slots'][1]['rank']);
+    }
+
+    public function testRosterOrderIsTheFrontageOrderWithoutGeometry(): void
+    {
+        $stocks = $this->makeDescendingMarketCapStocks(5);
+
+        $this->assertSame(
+            array_column($this->composer->composeFrontage($stocks)['slots'], 'ticker'),
+            $this->composer->rosterOrder($stocks),
+        );
     }
 }

@@ -16,7 +16,7 @@
 				<div class="lg:col-span-7">
 					<div class="flex items-center gap-2 mb-4">
 						<span class="w-2 h-2 rounded-full bg-secondary"></span>
-						<span class="text-[11px] font-semibold tracking-wide text-secondary uppercase">Market open</span>
+						<span class="text-2xs font-semibold tracking-wide text-secondary uppercase">Market open</span>
 					</div>
 
 					<h1 class="text-3xl sm:text-4xl md:text-5xl font-bold tracking-tight text-on-surface leading-tight">
@@ -30,7 +30,7 @@
 					</p>
 
 					<div class="mt-8 flex flex-col sm:flex-row gap-3">
-						<a href="{{ path('app_register') }}" class="inline-flex justify-center items-center rounded bg-primary px-5 py-2.5 text-sm font-semibold text-[#001a42] transition-colors hover:bg-primary-container focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">
+						<a href="{{ path('app_register') }}" class="inline-flex justify-center items-center rounded bg-primary px-5 py-2.5 text-sm font-semibold text-on-primary transition-colors hover:bg-primary-container focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">
 							Open an account
 						</a>
 						<a href="{{ path('app_login') }}" class="inline-flex justify-center items-center rounded border border-outline-variant/30 bg-surface-container-low px-5 py-2.5 text-sm font-semibold text-on-surface transition-colors hover:bg-surface-container-high focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">
@@ -45,7 +45,7 @@
 						{% if etf %}
 							<div class="flex items-baseline justify-between gap-3">
 								<div>
-									<p class="text-[11px] font-semibold text-on-surface-variant uppercase tracking-wide">{{ etf.name }}</p>
+									<p class="text-2xs font-semibold text-on-surface-variant uppercase tracking-wide">{{ etf.name }}</p>
 									<p class="text-xs text-on-surface-variant/70 font-mono mt-0.5">{{ etf.ticker }} &middot; Market index</p>
 								</div>
 							</div>
@@ -57,22 +57,22 @@
 						{# Market breadth: how the roster actually moved over the trailing month. #}
 						<dl class="mt-5 pt-4 border-t border-outline-variant/15 grid grid-cols-3 gap-3 text-center">
 							<div>
-								<dt class="text-[11px] font-semibold text-on-surface-variant uppercase tracking-wide">Advancing</dt>
+								<dt class="text-2xs font-semibold text-on-surface-variant uppercase tracking-wide">Advancing</dt>
 								<dd class="mt-1 text-lg font-bold font-mono tabular-nums text-secondary">{{ breadth.advancing }}</dd>
 							</div>
 							<div>
-								<dt class="text-[11px] font-semibold text-on-surface-variant uppercase tracking-wide">Declining</dt>
+								<dt class="text-2xs font-semibold text-on-surface-variant uppercase tracking-wide">Declining</dt>
 								<dd class="mt-1 text-lg font-bold font-mono tabular-nums text-tertiary">{{ breadth.declining }}</dd>
 							</div>
 							<div>
-								<dt class="text-[11px] font-semibold text-on-surface-variant uppercase tracking-wide">Unchanged</dt>
+								<dt class="text-2xs font-semibold text-on-surface-variant uppercase tracking-wide">Unchanged</dt>
 								<dd class="mt-1 text-lg font-bold font-mono tabular-nums text-on-surface-variant">{{ breadth.unchanged }}</dd>
 							</div>
 						</dl>
 
 						{% if breadth.topMover %}
 							<div class="mt-4 pt-4 border-t border-outline-variant/15 flex items-center justify-between">
-								<span class="text-[11px] font-semibold text-on-surface-variant uppercase tracking-wide">Largest move (1M)</span>
+								<span class="text-2xs font-semibold text-on-surface-variant uppercase tracking-wide">Largest move (1M)</span>
 								<span class="text-sm font-bold font-mono tabular-nums {{ breadth.topMover.changePercent >= 0 ? 'text-secondary' : 'text-tertiary' }}">
 									{{ breadth.topMover.ticker }}
 									{{ breadth.topMover.changePercent >= 0 ? '+' : '' }}{{ (breadth.topMover.changePercent * 100)|number_format(2) }}%
@@ -87,22 +87,22 @@
 		{# --- Macro conditions strip --- #}
 		{% if macro is defined %}
 			<section class="py-8 border-b border-outline-variant/15">
-				<h2 class="text-[11px] font-semibold uppercase tracking-wide text-on-surface-variant mb-4">Current conditions</h2>
+				<h2 class="text-2xs font-semibold uppercase tracking-wide text-on-surface-variant mb-4">Current conditions</h2>
 				<dl class="grid grid-cols-2 lg:grid-cols-4 gap-4">
 					<div class="bg-surface-container-low border border-outline-variant/25 rounded-lg p-4">
-						<dt class="text-[11px] font-semibold text-on-surface-variant uppercase tracking-wide">Cycle</dt>
+						<dt class="text-2xs font-semibold text-on-surface-variant uppercase tracking-wide">Cycle</dt>
 						<dd class="mt-1.5 text-xl font-bold text-on-surface tracking-tight">{{ macro.output_gap > 0.01 ? 'Boom' : (macro.output_gap < -0.01 ? 'Bust' : 'Neutral') }}</dd>
 					</div>
 					<div class="bg-surface-container-low border border-outline-variant/25 rounded-lg p-4">
-						<dt class="text-[11px] font-semibold text-on-surface-variant uppercase tracking-wide">Inflation</dt>
+						<dt class="text-2xs font-semibold text-on-surface-variant uppercase tracking-wide">Inflation</dt>
 						<dd class="mt-1.5 text-xl font-bold font-mono tabular-nums text-on-surface">{{ (macro.inflation|default(0) * 100)|number_format(2) }}%</dd>
 					</div>
 					<div class="bg-surface-container-low border border-outline-variant/25 rounded-lg p-4">
-						<dt class="text-[11px] font-semibold text-on-surface-variant uppercase tracking-wide">Policy rate</dt>
+						<dt class="text-2xs font-semibold text-on-surface-variant uppercase tracking-wide">Policy rate</dt>
 						<dd class="mt-1.5 text-xl font-bold font-mono tabular-nums text-on-surface">{{ (macro.policy_rate|default(0) * 100)|number_format(2) }}%</dd>
 					</div>
 					<div class="bg-surface-container-low border border-outline-variant/25 rounded-lg p-4">
-						<dt class="text-[11px] font-semibold text-on-surface-variant uppercase tracking-wide">10Y yield</dt>
+						<dt class="text-2xs font-semibold text-on-surface-variant uppercase tracking-wide">10Y yield</dt>
 						<dd class="mt-1.5 text-xl font-bold font-mono tabular-nums text-on-surface">{{ (macro.yield_10y|default(0) * 100)|number_format(2) }}%</dd>
 					</div>
 				</dl>
@@ -124,18 +124,18 @@
 								<h3 class="text-sm font-bold text-on-surface group-hover:text-primary transition-colors truncate">{{ stock.name }}</h3>
 								<p class="text-xs text-on-surface-variant font-mono mt-0.5">{{ stock.ticker }}</p>
 							</div>
-							<span class="shrink-0 inline-flex items-center rounded bg-surface-container px-2 py-0.5 text-[10px] text-on-surface-variant border border-outline-variant/20">
+							<span class="shrink-0 inline-flex items-center rounded bg-surface-container px-2 py-0.5 text-3xs text-on-surface-variant border border-outline-variant/20">
 								{{ stock.sector }}
 							</span>
 						</div>
 
 						<div class="mt-4 pt-3 border-t border-outline-variant/15 flex items-end justify-between gap-3">
 							<div>
-								<p class="text-[11px] font-semibold text-on-surface-variant uppercase tracking-wide">Last</p>
+								<p class="text-2xs font-semibold text-on-surface-variant uppercase tracking-wide">Last</p>
 								<p class="text-xl font-bold font-mono tabular-nums text-on-surface mt-0.5">${{ stock.price|number_format(2) }}</p>
 							</div>
 							<div class="text-right">
-								<p class="text-[11px] font-semibold text-on-surface-variant uppercase tracking-wide">1M</p>
+								<p class="text-2xs font-semibold text-on-surface-variant uppercase tracking-wide">1M</p>
 								<p class="text-sm font-semibold font-mono tabular-nums mt-0.5 {{ stock.changePercent is null ? 'text-on-surface-variant/50' : (stock.changePercent >= 0 ? 'text-secondary' : 'text-tertiary') }}">
 									{%- if stock.changePercent is null -%}
 										&mdash;

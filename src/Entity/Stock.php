@@ -91,10 +91,37 @@ class Stock
     private string $previousRevenue = '0.0000';
 
     /**
-     * @var string|null Balance sheet net working capital (NWC) stock for calculating cash flow change in NWC (ΔNWC).
+     * @var string|null Trade receivables: revenue billed and not yet collected. Null until first seeded.
      */
     #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, nullable: true)]
-    private ?string $netWorkingCapital = null;
+    private ?string $receivables = null;
+
+    /**
+     * @var string|null Inventory carried at cost. Null until first seeded.
+     */
+    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, nullable: true)]
+    private ?string $inventory = null;
+
+    /**
+     * @var string Lower-of-cost-or-net-realizable-value write-downs carried against inventory (ASC 330).
+     *             A contra balance rather than a cut to the gross figure, because the gross figure is
+     *             rebuilt from the trade cycle every quarter and a cut would be restored at once, with the
+     *             restoration booked as a cash outflow the same quarter. Unwinds as the impaired stock turns.
+     */
+    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, options: ['default' => '0.0000'])]
+    private string $inventoryAllowance = '0.0000';
+
+    /**
+     * @var string|null Trade payables: input costs incurred and not yet paid, a source of funding.
+     */
+    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, nullable: true)]
+    private ?string $payables = null;
+
+    /**
+     * @var string Expected credit loss allowance held against receivables (ASC 326).
+     */
+    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, options: ['default' => '0.0000'])]
+    private string $receivablesAllowance = '0.0000';
 
     /**
      * @var string|null Absolute total free cash flow (FCF). Used to mathematically derive FCF per share.
@@ -155,6 +182,56 @@ class Stock
      */
     #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, options: ['default' => '0.0000'])]
     private string $cipBalance = '0.0000';
+
+    /**
+     * @var string|null Historical cost of property, plant and equipment placed in service; null until the
+     *                  fixed-asset ledger is seeded on the first earnings report.
+     */
+    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, nullable: true)]
+    private ?string $grossPpe = null;
+
+    /**
+     * @var string Depreciation charged against gross PP&E to date; net book value is the difference.
+     */
+    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, options: ['default' => '0.0000'])]
+    private string $accumulatedDepreciation = '0.0000';
+
+    /**
+     * @var string|null Remaining tax basis of PP&E. Tax depreciation runs on its own accelerated schedule,
+     *                  so this diverges from book net PP&E and the gap is what creates deferred tax.
+     */
+    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, nullable: true)]
+    private ?string $ppeTaxBasis = null;
+
+    /**
+     * @var string Deferred tax liability (ASC 740): tax deferred by depreciating faster for the tax
+     *             authority than for shareholders. Payable eventually, interest free until then.
+     */
+    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, options: ['default' => '0.0000'])]
+    private string $deferredTaxLiability = '0.0000';
+
+    /**
+     * @var string|null CapEx-weighted price level at which the current plant was bought. Replacing a worn
+     *                  asset costs today's price, not the vintage one, so the ratio of the two is what a
+     *                  maintenance dollar has to stretch to cover.
+     */
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 6, nullable: true)]
+    private ?string $ppeVintageDeflator = null;
+
+    /**
+     * @var string|null Gross loans, securities and other earning assets a balance-sheet business (bank,
+     *                  insurer, broker, fund) has deployed its funding into. Null until the ledger is seeded
+     *                  on the first earnings report; a non-financial firm never opens it.
+     */
+    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, nullable: true)]
+    private ?string $earningAssets = null;
+
+    /**
+     * @var string Allowance for credit losses on the earning assets (ASC 326): the lifetime loss already
+     *             expected, carried as a contra-asset. Provisions build it and charge-offs consume it.
+     */
+    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, options: ['default' => '0.0000'])]
+    private string $creditLossAllowance = '0.0000';
 
 
     // CORPORATE POLICY & MARKET PHYSICS
@@ -256,6 +333,14 @@ class Stock
     private string $roicTtm = '0.0000';
 
     /**
+     * @var string|null Annual capital turnover (revenue / invested capital), the DuPont component fixing how much
+     *                  revenue a dollar of physical capital can generate. Seeded once from baseline ROIC and margin,
+     *                  then held structural; null until the first earnings report seeds it.
+     */
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $assetTurnover = null;
+
+    /**
      * @var string The dynamic, current Return on Equity.
      */
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, options: ['default' => '0.0000'])]
@@ -285,6 +370,100 @@ class Stock
     #[ORM\Column(type: 'float', nullable: true)]
     private ?float $accrualsRatio = 0.0;
 
+    /**
+     * @var float|null Earnings shortfall management has already warned the market about, awaiting the report that confirms it; cleared once reported.
+     */
+    #[ORM\Column(type: 'float', nullable: true)]
+    private ?float $preAnnouncedShortfall = null;
+
+    /**
+     * @var string|null Persistent management style biasing payout, reinvestment and the hurdle rate applied to growth (Bertrand & Schoar 2003); null is the balanced default.
+     */
+    #[ORM\Column(type: 'string', length: 32, nullable: true)]
+    private ?string $managementStyle = null;
+
+    /**
+     * @var float|null Book-to-bill disclosed in the last report (orders booked over revenue billed); null when the firm discloses no order book.
+     */
+    #[ORM\Column(type: 'float', nullable: true)]
+    private ?float $lastBookToBill = null;
+
+    /**
+     * @var float|null Output gap as it has actually reached this firm's order book, behind the macro series by its own transmission lag; null until the first report.
+     */
+    #[ORM\Column(type: 'float', nullable: true)]
+    private ?float $laggedDemandGap = null;
+
+    /**
+     * @var float|null Accruals borrowed from future quarters to hit consensus and not yet reversed (Burgstahler & Dichev 1997). Positive = earnings pulled forward and still owed back.
+     */
+    #[ORM\Column(type: 'float', nullable: true)]
+    private ?float $managedAccrualBank = 0.0;
+
+    /**
+     * @var float|null Seasonally adjusted operating margin actually realized in the last report; null until the first report.
+     */
+    #[ORM\Column(type: 'float', nullable: true)]
+    private ?float $reportedOperatingMargin = null;
+
+    /**
+     * @var float|null Exponentially weighted sum of log price returns (Jegadeesh-Titman formation trend); null until the first tick.
+     */
+    #[ORM\Column(type: 'float', nullable: true)]
+    private ?float $priceMomentumTrend = 0.0;
+
+    /**
+     * @var float|null Annual share turnover as a fraction of the public float: a structural property of the
+     *                 name, not a draw. Sets how much volume the market carries and therefore how much size
+     *                 costs. Null falls back to the baseline.
+     */
+    #[ORM\Column(type: 'float', nullable: true)]
+    private ?float $turnoverRatio = null;
+
+    /**
+     * @var float|null Exponentially weighted realized variance of permanent order-flow impact, annualized.
+     *
+     * The diffusion gives back exactly what order flow supplies, so the budget has to be drawn from what
+     * flow ACTUALLY did rather than from an assumption about what it might do. Measured, so a name nobody
+     * trades reclaims nothing and a heavily traded one reclaims in proportion.
+     */
+    #[ORM\Column(type: 'float', nullable: true, options: ['default' => 0.0])]
+    private ?float $impactVarianceEma = 0.0;
+
+    /**
+     * @var float|null Share of the public float that is actually available to borrow. The rest is held by
+     *                 owners who do not lend, which is what makes a name hard to borrow long before its
+     *                 whole float is shorted.
+     */
+    #[ORM\Column(type: 'float', nullable: true)]
+    private ?float $lendableSupplyRatio = null;
+
+    /**
+     * @var string Shares currently sold short across every account. Utilization against the lendable
+     *             supply is what prices the borrow, so this has to be a live total rather than derived on
+     *             demand from a scan of every position.
+     */
+    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 2, options: ['default' => '0.00'])]
+    private string $shortInterestShares = '0.00';
+
+    /**
+     * @var float|null Lagged pass-through of expected inflation into selling prices; null until the first report seeds it.
+     */
+    #[ORM\Column(type: 'float', nullable: true)]
+    private ?float $inflationPassThrough = null;
+
+    /**
+     * @var array<int, float>|null Reported net income of the last four quarters, oldest first, summed into the trailing twelve month figure.
+     */
+    #[ORM\Column(type: Types::JSON, nullable: true)]
+    private ?array $quarterlyNetIncomeHistory = [];
+
+    /**
+     * @var array<int, float>|null Blended earnings surprises of recent quarters, the sample the SUE denominator is estimated from.
+     */
+    #[ORM\Column(type: Types::JSON, nullable: true)]
+    private ?array $earningsSurpriseHistory = [];
+
     #[ORM\Column(type: Types::JSON, nullable: true)]
     private ?array $earningsMomentumZ = [];
 
@@ -297,6 +476,10 @@ class Stock
     #[ORM\Column(length: 255, nullable: true)]
     private ?string $industry = null;
 
+    /** Dickinson (2011) life-cycle stage classified from last quarter's cash-flow signs (App\Data\LifecycleStage value). */
+    #[ORM\Column(length: 16, nullable: true)]
+    private ?string $lifecycleStage = null;
+
     #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 2, nullable: true)]
     private ?string $customerDeposits = '0.00';
 
@@ -307,10 +490,25 @@ class Stock
     private ?string $lastAnalystRevenue = null;
 
     /**
+     * @var string|null Variable cost ratio as it was last REPORTED, the anchor analysts forecast the next
+     *                  quarter's cost base from. Null until the first report.
+     */
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 6, nullable: true)]
+    private ?string $lastReportedCostRatio = null;
+
+    /**
      * @var bool Whether the company has collapsed into bankruptcy and is permanently defunct.
      */
     #[ORM\Column(type: Types::BOOLEAN, options: ['default' => false])]
     private bool $isBankrupt = false;
+
+    /**
+     * @var bool True once the firm has failed to repay maturing principal it could neither refinance nor
+     *           fund. A payment default is an event of default in its own right, independent of whether the
+     *           balance sheet is still notionally solvent.
+     */
+    #[ORM\Column(type: Types::BOOLEAN, options: ['default' => false])]
+    private bool $paymentDefault = false;
 
 
 
@@ -532,6 +730,18 @@ class Stock
     {
         return $this->systemicImportance;
     }
+    public function getLifecycleStage(): ?\App\Data\LifecycleStage
+    {
+        return $this->lifecycleStage !== null ? \App\Data\LifecycleStage::tryFrom($this->lifecycleStage) : null;
+    }
+
+    public function setLifecycleStage(?\App\Data\LifecycleStage $stage): static
+    {
+        $this->lifecycleStage = $stage?->value;
+
+        return $this;
+    }
+
     public function setSystemicImportance(string $systemicImportance): static
     {
         $this->systemicImportance = $systemicImportance;
@@ -672,6 +882,138 @@ class Stock
         return $this;
     }
 
+    public function getGrossPpe(): ?string
+    {
+        return $this->grossPpe;
+    }
+
+    public function setGrossPpe(?string $grossPpe): self
+    {
+        $this->grossPpe = $grossPpe === null ? null : self::cleanBcStr($grossPpe, 4);
+        return $this;
+    }
+
+    public function getAccumulatedDepreciation(): string
+    {
+        return $this->accumulatedDepreciation;
+    }
+
+    public function getPpeTaxBasis(): ?string
+    {
+        return $this->ppeTaxBasis;
+    }
+
+    public function setPpeTaxBasis(?string $ppeTaxBasis): self
+    {
+        $this->ppeTaxBasis = $ppeTaxBasis === null ? null : self::cleanBcStr($ppeTaxBasis, 4);
+        return $this;
+    }
+
+    public function getDeferredTaxLiability(): string
+    {
+        return $this->deferredTaxLiability;
+    }
+
+    public function setDeferredTaxLiability(string $deferredTaxLiability): self
+    {
+        $this->deferredTaxLiability = self::cleanBcStr($deferredTaxLiability, 4);
+        return $this;
+    }
+
+    public function getPpeVintageDeflator(): ?string
+    {
+        return $this->ppeVintageDeflator;
+    }
+
+    public function setPpeVintageDeflator(?string $ppeVintageDeflator): self
+    {
+        $this->ppeVintageDeflator = $ppeVintageDeflator;
+        return $this;
+    }
+
+    public function setAccumulatedDepreciation(string $accumulatedDepreciation): self
+    {
+        $this->accumulatedDepreciation = self::cleanBcStr($accumulatedDepreciation, 4);
+        return $this;
+    }
+
+    public function getEarningAssets(): ?string
+    {
+        return $this->earningAssets;
+    }
+
+    public function setEarningAssets(?string $earningAssets): self
+    {
+        $this->earningAssets = $earningAssets === null ? null : self::cleanBcStr($earningAssets, 4);
+        return $this;
+    }
+
+    public function getCreditLossAllowance(): string
+    {
+        return $this->creditLossAllowance;
+    }
+
+    public function setCreditLossAllowance(string $creditLossAllowance): self
+    {
+        $this->creditLossAllowance = self::cleanBcStr($creditLossAllowance, 4);
+        return $this;
+    }
+
+    /** Whether the earning-asset ledger a balance-sheet business carries has been opened. */
+    public function hasEarningAssetLedger(): bool
+    {
+        return $this->earningAssets !== null;
+    }
+
+    /**
+     * Whether any asset ledger exists to draw a balance sheet from: the plant ledger of an operating
+     * company or the earning-asset ledger of a financial one. A firm that has never reported has neither.
+     */
+    public function hasBalanceSheetLedger(): bool
+    {
+        return $this->grossPpe !== null || $this->earningAssets !== null;
+    }
+
+    /**
+     * Earning assets net of the credit-loss allowance: the loans and securities the firm expects to
+     * collect on, which is the base its yield is earned on. Zero until the ledger is seeded.
+     */
+    public function getNetEarningAssets(): float
+    {
+        if ($this->earningAssets === null) {
+            return 0.0;
+        }
+
+        return max(0.0, (float) $this->earningAssets - (float) $this->creditLossAllowance);
+    }
+
+    /**
+     * Net book value of property, plant and equipment: the base depreciation is charged on, and the only
+     * asset account CapEx accumulates into. Zero until the ledger is seeded on the first earnings report.
+     */
+    public function getNetPpe(): float
+    {
+        if ($this->grossPpe === null) {
+            return 0.0;
+        }
+
+        return max(0.0, (float) $this->grossPpe - (float) $this->accumulatedDepreciation);
+    }
+
+    /**
+     * Accumulated depreciation as a share of gross PP&E, the standard proxy for the average age of the
+     * asset base: near 0 is a freshly built plant, near 1 is one running on fully depreciated equipment.
+     */
+    public function getAssetAge(): float
+    {
+        $gross = (float) ($this->grossPpe ?? 0.0);
+        if ($gross <= 0.0) {
+            return 0.0;
+        }
+
+        return min(1.0, max(0.0, (float) $this->accumulatedDepreciation / $gross));
+    }
+
     public function getBuybackAuthorization(): ?string
     {
         return $this->buybackAuthorization;
@@ -751,9 +1093,180 @@ class Stock
         return $this;
     }
 
+    public function getManagedAccrualBank(): float
+    {
+        return (float) ($this->managedAccrualBank ?? 0.0);
+    }
+
+    public function setManagedAccrualBank(float $managedAccrualBank): static
+    {
+        $this->managedAccrualBank = $managedAccrualBank;
+
+        return $this;
+    }
+
+    public function getLaggedDemandGap(): ?float
+    {
+        return $this->laggedDemandGap;
+    }
+
+    public function setLaggedDemandGap(float $laggedDemandGap): static
+    {
+        $this->laggedDemandGap = $laggedDemandGap;
+
+        return $this;
+    }
+
+    public function getLastBookToBill(): ?float
+    {
+        return $this->lastBookToBill;
+    }
+
+    public function setLastBookToBill(?float $lastBookToBill): static
+    {
+        $this->lastBookToBill = $lastBookToBill;
+
+        return $this;
+    }
+
+    public function getManagementStyle(): \App\Data\ManagementStyle
+    {
+        return \App\Data\ManagementStyle::tryFromNullable($this->managementStyle);
+    }
+
+    public function setManagementStyle(?\App\Data\ManagementStyle $style): static
+    {
+        $this->managementStyle = $style?->value;
+
+        return $this;
+    }
+
+    public function getPreAnnouncedShortfall(): float
+    {
+        return (float) ($this->preAnnouncedShortfall ?? 0.0);
+    }
+
+    public function setPreAnnouncedShortfall(float $preAnnouncedShortfall): static
+    {
+        $this->preAnnouncedShortfall = $preAnnouncedShortfall;
+
+        return $this;
+    }
+
     public function getAccrualsRatio(): ?float
     {
         return $this->accrualsRatio;
+    }
+
+    public function setReportedOperatingMargin(?float $reportedOperatingMargin): static
+    {
+        $this->reportedOperatingMargin = $reportedOperatingMargin;
+        return $this;
+    }
+
+    public function getReportedOperatingMargin(): ?float
+    {
+        return $this->reportedOperatingMargin;
+    }
+
+    public function setPriceMomentumTrend(?float $priceMomentumTrend): static
+    {
+        $this->priceMomentumTrend = $priceMomentumTrend;
+        return $this;
+    }
+
+    public function getPriceMomentumTrend(): ?float
+    {
+        return $this->priceMomentumTrend;
+    }
+
+    public function setTurnoverRatio(?float $turnoverRatio): static
+    {
+        $this->turnoverRatio = $turnoverRatio;
+        return $this;
+    }
+
+    public function getTurnoverRatio(): ?float
+    {
+        return $this->turnoverRatio;
+    }
+
+    public function setImpactVarianceEma(?float $impactVarianceEma): static
+    {
+        $this->impactVarianceEma = $impactVarianceEma;
+        return $this;
+    }
+
+    public function getImpactVarianceEma(): ?float
+    {
+        return $this->impactVarianceEma;
+    }
+
+    public function setLendableSupplyRatio(?float $lendableSupplyRatio): static
+    {
+        $this->lendableSupplyRatio = $lendableSupplyRatio;
+        return $this;
+    }
+
+    public function getLendableSupplyRatio(): ?float
+    {
+        return $this->lendableSupplyRatio;
+    }
+
+    public function setShortInterestShares(string $shortInterestShares): static
+    {
+        $this->shortInterestShares = $shortInterestShares;
+        return $this;
+    }
+
+    public function getShortInterestShares(): string
+    {
+        return $this->shortInterestShares;
+    }
+
+    public function setInflationPassThrough(?float $inflationPassThrough): static
+    {
+        $this->inflationPassThrough = $inflationPassThrough;
+        return $this;
+    }
+
+    public function getInflationPassThrough(): ?float
+    {
+        return $this->inflationPassThrough;
+    }
+
+    /**
+     * @param array<int, float>|null $quarterlyNetIncomeHistory
+     */
+    public function setQuarterlyNetIncomeHistory(?array $quarterlyNetIncomeHistory): static
+    {
+        $this->quarterlyNetIncomeHistory = $quarterlyNetIncomeHistory;
+        return $this;
+    }
+
+    /**
+     * @return array<int, float>|null
+     */
+    public function getQuarterlyNetIncomeHistory(): ?array
+    {
+        return $this->quarterlyNetIncomeHistory;
+    }
+
+    /**
+     * @param array<int, float>|null $earningsSurpriseHistory
+     */
+    public function setEarningsSurpriseHistory(?array $earningsSurpriseHistory): static
+    {
+        $this->earningsSurpriseHistory = $earningsSurpriseHistory;
+        return $this;
+    }
+
+    /**
+     * @return array<int, float>|null
+     */
+    public function getEarningsSurpriseHistory(): ?array
+    {
+        return $this->earningsSurpriseHistory;
     }
 
     public function setEarningsMomentumZ(?array $earningsMomentumZ): static
@@ -897,15 +1410,134 @@ class Stock
         return $this;
     }
 
-    public function getNetWorkingCapital(): ?string
+    public function getReceivables(): ?string
     {
-        return $this->netWorkingCapital;
+        return $this->receivables;
     }
 
-    public function setNetWorkingCapital(?string $netWorkingCapital): static
+    public function setReceivables(?string $receivables): static
     {
-        $this->netWorkingCapital = $netWorkingCapital !== null ? self::cleanBcStr($netWorkingCapital, 4) : null;
+        $this->receivables = $receivables === null ? null : self::cleanBcStr($receivables, 4);
         return $this;
+    }
+
+    public function getInventory(): ?string
+    {
+        return $this->inventory;
+    }
+
+    public function setInventory(?string $inventory): static
+    {
+        $this->inventory = $inventory === null ? null : self::cleanBcStr($inventory, 4);
+        return $this;
+    }
+
+    public function getInventoryAllowance(): string
+    {
+        return $this->inventoryAllowance;
+    }
+
+    public function setInventoryAllowance(string $inventoryAllowance): static
+    {
+        $this->inventoryAllowance = self::cleanBcStr($inventoryAllowance, 4);
+        return $this;
+    }
+
+    /**
+     * Inventory at the lower of cost and net realizable value: the carrying amount the balance sheet shows.
+     */
+    public function getNetInventory(): float
+    {
+        return max(0.0, (float) ($this->inventory ?? 0.0) - (float) $this->inventoryAllowance);
+    }
+
+    public function getPayables(): ?string
+    {
+        return $this->payables;
+    }
+
+    public function setPayables(?string $payables): static
+    {
+        $this->payables = $payables === null ? null : self::cleanBcStr($payables, 4);
+        return $this;
+    }
+
+    public function getReceivablesAllowance(): string
+    {
+        return $this->receivablesAllowance;
+    }
+
+    public function setReceivablesAllowance(string $receivablesAllowance): static
+    {
+        $this->receivablesAllowance = self::cleanBcStr($receivablesAllowance, 4);
+        return $this;
+    }
+
+    /**
+     * Receivables net of the expected credit loss allowance: what the firm actually expects to collect.
+     */
+    public function getNetReceivables(): float
+    {
+        return max(0.0, (float) ($this->receivables ?? 0.0) - (float) $this->receivablesAllowance);
+    }
+
+    /**
+     * Total assets, derived from the balance sheet's asset side rather than stored: cash, the trade cycle,
+     * the plant and what is still being built, the loans and securities a balance-sheet business holds
+     * net of the losses it expects on them, plus the intangibles an acquisition left behind and the
+     * right-of-use asset that sits opposite a capitalized lease.
+     */
+    public function getTotalAssets(float $leaseLiability = 0.0): float
+    {
+        return max(0.0, (float) $this->corporateTreasury)
+            + $this->getNetReceivables()
+            + $this->getNetInventory()
+            + $this->getNetPpe()
+            + $this->getNetEarningAssets()
+            + (float) $this->cipBalance
+            + (float) $this->goodwill
+            + max(0.0, $leaseLiability);
+    }
+
+    /**
+     * Total liabilities: borrowings and deposits, the trade credit suppliers have extended, the postponed
+     * tax bill, and the lease obligation that comes with the right-of-use asset.
+     */
+    public function getTotalLiabilities(float $leaseLiability = 0.0): float
+    {
+        return (float) $this->getTotalDebt()
+            + (float) ($this->payables ?? 0.0)
+            + (float) $this->deferredTaxLiability
+            + max(0.0, $leaseLiability);
+    }
+
+    /**
+     * Whether a complete working capital ledger exists.
+     *
+     * All three balances are written together every quarter, so a partial set is not a ledger — it is a
+     * leftover. That distinction matters because the schema migration that introduced these columns was
+     * generated as a RENAME of the old single net-working-capital column onto `receivables`, which leaves
+     * a net figure (negative for float businesses) sitting in a gross balance with no matching inventory
+     * or payables. Requiring the full trio makes such a row read as unseeded, so the engine rebuilds it
+     * from the cash conversion cycle instead of differencing against a number that never meant this.
+     */
+    public function hasWorkingCapitalLedger(): bool
+    {
+        return $this->receivables !== null && $this->inventory !== null && $this->payables !== null;
+    }
+
+    /**
+     * Net working capital, derived from the balances it is made of rather than stored alongside them.
+     * Null until the ledger is seeded, which is what tells the cash-flow pass there is no prior quarter
+     * to difference against.
+     */
+    public function getNetWorkingCapital(): ?string
+    {
+        if (!$this->hasWorkingCapitalLedger()) {
+            return null;
+        }
+
+        return (string) ($this->getNetReceivables() + $this->getNetInventory() - (float) ($this->payables ?? 0.0));
     }
 
     /**
@@ -923,13 +1555,21 @@ class Stock
      * Calculates the True Size of the Operating Business (Invested Capital).
      * Core Business Floor: Assumes at least 50% of Equity is driving operations, even for mega-hoarders.
      */
+    /**
+     * Capital actually at work in the business: equity plus debt, less the cash sitting idle beside it.
+     *
+     * Deferred tax is included as an equity equivalent, the standard economic-profit adjustment. It is tax
+     * the firm has postponed rather than paid, so the money is financing the business interest free, and
+     * leaving it out would understate the capital the return is being earned on.
+     */
     public function getInvestedCapital(): float
     {
         $equity = (float) $this->totalEquity;
         $debt = (float) $this->getTotalDebt();
         $cash = (float) $this->corporateTreasury;
+        $deferredTax = (float) $this->deferredTaxLiability;
 
-        return max(1.0, max($equity * 0.50, ($equity + $debt - $cash)));
+        return max(1.0, max($equity * 0.50, ($equity + $debt + $deferredTax - $cash)));
     }
 
     /**
@@ -1002,6 +1642,17 @@ class Stock
         return $this->roicTtm;
     }
 
+    public function getAssetTurnover(): ?string
+    {
+        return $this->assetTurnover;
+    }
+
+    public function setAssetTurnover(?string $assetTurnover): static
+    {
+        $this->assetTurnover = $assetTurnover !== null ? self::cleanBcStr($assetTurnover, 4) : null;
+        return $this;
+    }
+
     public function setRoicTtm(string $roicTtm): self
     {
         $this->roicTtm = self::cleanBcStr($roicTtm, 4);
@@ -1023,6 +1674,17 @@ class Stock
         return $this->lastAnalystRevenue;
     }
 
+    public function getLastReportedCostRatio(): ?string
+    {
+        return $this->lastReportedCostRatio;
+    }
+
+    public function setLastReportedCostRatio(?string $lastReportedCostRatio): self
+    {
+        $this->lastReportedCostRatio = $lastReportedCostRatio !== null ? self::cleanBcStr($lastReportedCostRatio, 6) : null;
+        return $this;
+    }
+
     public function setLastAnalystRevenue(?string $lastAnalystRevenue): self
     {
         $this->lastAnalystRevenue = $lastAnalystRevenue !== null ? self::cleanBcStr($lastAnalystRevenue, 4) : null;
@@ -1037,6 +1699,17 @@ class Stock
     public function setIsBankrupt(bool $isBankrupt): static
     {
         $this->isBankrupt = $isBankrupt;
+        return $this;
+    }
+
+    public function isPaymentDefault(): bool
+    {
+        return $this->paymentDefault;
+    }
+
+    public function setPaymentDefault(bool $paymentDefault): static
+    {
+        $this->paymentDefault = $paymentDefault;
         return $this;
     }
 }

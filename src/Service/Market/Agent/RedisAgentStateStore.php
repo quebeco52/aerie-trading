@@ -1,0 +1,256 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Service\Market\Agent;
+
+use Psr\Log\LoggerInterface;
+
+/**
+ * One Redis hash, field per ticker, value the JSON book.
+ *
+ * Failures degrade to "this name has no agents yet", which rebuilds the book flat rather than aborting the
+ * tick. The cost of that is real but bounded — the population restarts even and the positions restart at
+ * zero, so the market loses its agent memory and rebuilds it over the following ticks. Holding the tick
+ * instead would stop the whole market because an auxiliary cache was unavailable.
+ *
+ * Inside a batch the whole hash comes over in one HGETALL and the tick's writes go back in one pipeline.
+ * Per-name HGET/HSET pairs were two synchronous round trips for every stock on every tick, which at sixty-odd
+ * names was more wall time than the entire tick budget before a single price had been computed.
+ */
+final class RedisAgentStateStore implements AgentStateStoreInterface
+{
+    private const KEY = 'agent_state';
+
+    /**
+     * The market-wide style record lives in the same hash under a field no ticker can collide with, so a
+     * batch still costs one HGETALL and one pipeline: a second key would be a third round trip per tick.
+     */
+    private const STYLE_FIELD = '__style__';
+
+    /** The market's cross-section, same hash and same reasoning as the style record. */
+    private const CROSS_SECTION_FIELD = '__cross_section__';
+
+    private bool $batching = false;
+
+    /**
+     * Set when the batch's bulk load failed. Every name then opens a fresh book for the tick, and sending
+     * those back at the close would overwrite every real book in the hash with an empty one — a transient
+     * read failure turning into the permanent loss of the market's agent memory. A degraded batch is
+     * served from nothing and commits nothing.
+     */
+    private bool $degraded = false;
+
+    /** @var array<string, string> Raw JSON per ticker, as loaded when the batch opened. */
+    private array $loaded = [];
+
+    /** @var array<string, string> Encoded books waiting for commitBatch(), latest write per ticker. */
+    private array $pending = [];
+
+    public function __construct(
+        private readonly \Redis $redis,
+        private readonly ?LoggerInterface $logger = null,
+    ) {}
+
+    public function read(string $ticker): ?array
+    {
+        if ($this->batching) {
+            // A write earlier in the same batch is the current book, not what the hash held when it opened.
+            return $this->decode($this->pending[$ticker] ?? $this->loaded[$ticker] ?? null);
+        }
+
+        try {
+            /** @phpstan-ignore method.notFound (phpredis hash commands are absent from the analysis stub) */
+            $raw = $this->redis->hGet(self::KEY, $ticker);
+        } catch (\Throwable $e) {
+            $this->logger?->warning('Agent state read failed: ' . $e->getMessage());
+
+            return null;
+        }
+
+        return $this->decode($raw);
+    }
+
+    /**
+     * @param array<string, mixed> $state A book, or a market-wide record under its reserved field.
+     */
+    public function write(string $ticker, array $state): void
+    {
+        try {
+            $encoded = json_encode($state, JSON_THROW_ON_ERROR);
+        } catch (\Throwable $e) {
+            $this->logger?->warning('Agent state write failed: ' . $e->getMessage());
+
+            return;
+        }
+
+        if ($this->batching) {
+            $this->pending[$ticker] = $encoded;
+
+            return;
+        }
+
+        try {
+            /** @phpstan-ignore method.notFound (phpredis hash commands are absent from the analysis stub) */
+            $this->redis->hSet(self::KEY, $ticker, $encoded);
+        } catch (\Throwable $e) {
+            $this->logger?->warning('Agent state write failed: ' . $e->getMessage());
+        }
+    }
+
+    public function beginBatch(): void
+    {
+        $this->batching = true;
+        $this->degraded = false;
+        $this->pending = [];
+        $this->loaded = [];
+
+        try {
+            /** @phpstan-ignore method.notFound (phpredis hash commands are absent from the analysis stub) */
+            $all = $this->redis->hGetAll(self::KEY);
+        } catch (\Throwable $e) {
+            $this->logger?->warning('Agent state bulk read failed; this tick\'s books will not be saved: ' . $e->getMessage());
+            $this->degraded = true;
+
+            return;
+        }
+
+        if (!is_array($all)) {
+            return;
+        }
+
+        foreach ($all as $ticker => $raw) {
+            if (is_string($raw)) {
+                $this->loaded[(string) $ticker] = $raw;
+            }
+        }
+    }
+
+    public function commitBatch(): void
+    {
+        $pending = $this->degraded ? [] : $this->pending;
+
+        $this->batching = false;
+        $this->degraded = false;
+        $this->pending = [];
+        $this->loaded = [];
+
+        if ($pending === []) {
+            return;
+        }
+
+        try {
+            $pipeline = $this->redis->multi(\Redis::PIPELINE);
+
+            foreach ($pending as $ticker => $encoded) {
+                /** @phpstan-ignore method.notFound (phpredis hash commands are absent from the analysis stub) */
+                $pipeline->hSet(self::KEY, $ticker, $encoded);
+            }
+
+            $pipeline->exec();
+        } catch (\Throwable $e) {
+            $this->logger?->warning('Agent state bulk write failed: ' . $e->getMessage());
+        }
+    }
+
+    public function readStyle(): array
+    {
+        return $this->readRecord(self::STYLE_FIELD);
+    }
+
+    public function writeStyle(array $fitness): void
+    {
+        // Same path as a book: held inside a batch, sent at once outside one.
+        $this->write(self::STYLE_FIELD, $fitness);
+    }
+
+    public function readCrossSection(): array
+    {
+        return $this->readRecord(self::CROSS_SECTION_FIELD);
+    }
+
+    public function writeCrossSection(array $crossSection): void
+    {
+        $this->write(self::CROSS_SECTION_FIELD, $crossSection);
+    }
+
+    /**
+     * A market-wide record: a flat map of floats under one reserved field.
+     *
+     * @return array<string, float>
+     */
+    private function readRecord(string $field): array
+    {
+        if ($this->batching) {
+            return $this->decodeRecord($this->pending[$field] ?? $this->loaded[$field] ?? null);
+        }
+
+        try {
+            /** @phpstan-ignore method.notFound (phpredis hash commands are absent from the analysis stub) */
+            $raw = $this->redis->hGet(self::KEY, $field);
+        } catch (\Throwable $e) {
+            $this->logger?->warning('Agent market record read failed: ' . $e->getMessage());
+
+            return [];
+        }
+
+        return $this->decodeRecord($raw);
+    }
+
+    /**
+     * @return array<string, float>
+     */
+    private function decodeRecord(mixed $raw): array
+    {
+        if (!is_string($raw) || $raw === '') {
+            return [];
+        }
+
+        $decoded = json_decode($raw, true);
+        if (!is_array($decoded)) {
+            return [];
+        }
+
+        $record = [];
+        foreach ($decoded as $key => $value) {
+            if (is_int($value) || is_float($value)) {
+                $record[(string) $key] = (float) $value;
+            }
+        }
+
+        return $record;
+    }
+
+    /**
+     * The optional fields are passed through only when the stored book has them, so a book written before
+     * they existed reads back exactly as it was written.
+     *
+     * @return array{positions: array<string, float>, fitness: array<string, float>, exposures?: array<string, float>, variance?: float}|null
+     */
+    private function decode(mixed $raw): ?array
+    {
+        if (!is_string($raw) || $raw === '') {
+            return null;
+        }
+
+        $decoded = json_decode($raw, true);
+        if (!is_array($decoded) || !isset($decoded['positions'], $decoded['fitness'])) {
+            return null;
+        }
+
+        $book = [
+            'positions' => array_map('floatval', (array) $decoded['positions']),
+            'fitness' => array_map('floatval', (array) $decoded['fitness']),
+        ];
+
+        if (isset($decoded['exposures']) && is_array($decoded['exposures'])) {
+            $book['exposures'] = array_map('floatval', $decoded['exposures']);
+        }
+
+        if (isset($decoded['variance']) && (is_int($decoded['variance']) || is_float($decoded['variance']))) {
+            $book['variance'] = (float) $decoded['variance'];
+        }
+
+        return $book;
+    }
+}

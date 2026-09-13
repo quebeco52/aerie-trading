@@ -37,7 +37,7 @@ class AssetMarketSubsystemTest extends TestCase
     {
         $state = new MacroState();
         $state->yield10y = 0.04;
-        $state->yield30yEma = 0.045;
+        $state->yield10yEma = 0.045;
         $state->macroCreditSpread = 0.02;
         $state->unemploymentRateEma = 0.04;
         $state->inflationEma = 0.02;
@@ -110,7 +110,7 @@ class AssetMarketSubsystemTest extends TestCase
         $stateBoom->residentialPropertyIndex = 130.0;
         $stateBoom->industrialMetalsIndex = 100.0;
         $stateBoom->wageGrowth = 0.03;
-        $stateBoom->yield30yEma = 0.035;
+        $stateBoom->yield10yEma = 0.035;
         $stateBoom->macroCreditSpread = 0.015;
         $stateBoom->inflationEma = 0.025;
         $stateBoom->sloosTighteningIndexEma = 0.0;
@@ -119,5 +119,37 @@ class AssetMarketSubsystemTest extends TestCase
         $this->subsystem->calculateHousingStarts($stateBoom, $dt);
         $this->assertGreaterThan(100.0, $stateBoom->housingStartsIndex, 'High Tobin Q and affordable mortgage finance must stimulate housing starts');
     }
-}
 
+
+    public function testResidentialFundamentalPricesOffTheTenYearNotTheThirtyYear(): void
+    {
+        $base = new MacroState();
+        $base->yield10yEma = 0.040;
+        $base->yield30yEma = 0.045;
+        $base->unemploymentRateEma = $base->nairu;
+        $base->inflationEma = MacroEngine::TARGET_INFLATION;
+        $base->outputGapEma = 0.0;
+        $base->residentialPropertyIndex = 100.0;
+
+        $steeperLongEnd = clone $base;
+        $steeperLongEnd->yield30yEma = 0.065;
+
+        $dearerTenYear = clone $base;
+        $dearerTenYear->yield10yEma = 0.060;
+
+        $this->subsystem->calculateResidentialPropertyIndex($base, 0.25);
+        $this->subsystem->calculateResidentialPropertyIndex($steeperLongEnd, 0.25);
+        $this->subsystem->calculateResidentialPropertyIndex($dearerTenYear, 0.25);
+
+        $this->assertEqualsWithDelta($base->residentialPropertyIndex, $steeperLongEnd->residentialPropertyIndex, 1e-9, 'The 30Y yield must not enter the mortgage rate.');
+        $this->assertLessThan($base->residentialPropertyIndex, $dearerTenYear->residentialPropertyIndex, 'A dearer 10Y raises the mortgage user cost and lowers fundamental home prices.');
+    }
+
+    public function testNeutralUserCostMatchesNeutralTenYearPlusMortgageSpread(): void
+    {
+        $neutralTenYear = MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION + MacroEngine::NS_BASE_TERM_PREMIUM;
+        $expected = $neutralTenYear + MacroEngine::RESIDENTIAL_MORTGAGE_SPREAD + MacroEngine::RESIDENTIAL_DEPRECIATION_TAX_RATE - MacroEngine::TARGET_INFLATION;
+
+        $this->assertEqualsWithDelta($expected, MacroEngine::RESIDENTIAL_NEUTRAL_USER_COST, 1e-12);
+    }
+}

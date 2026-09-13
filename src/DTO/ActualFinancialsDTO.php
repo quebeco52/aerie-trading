@@ -22,6 +22,8 @@ readonly class ActualFinancialsDTO
      * @param bool|null            $isPublicEvent         For event-conditional models: true when a binary public event occurred.
      * @param array<string, float> $streamZ               Dictionary of individual AR(1) stream Z-scores to persist.
      * @param array<string, float> $streamRevenue         Dictionary of absolute dollar revenue generated per stream.
+     * @param float                $scheduledCapex        Mandatory quarterly CapEx committed by the sector physics.
+     * @param array<string, float> $kpis                  Reported operating KPIs (book_to_bill, subscriber_index...).
      */
     public function __construct(
         public float $actualRevenue,
@@ -35,5 +37,13 @@ readonly class ActualFinancialsDTO
         public ?bool $isPublicEvent = null,
         public array $streamZ = [],
         public array $streamRevenue = [],
+        public float $scheduledCapex = 0.0,
+        public array $kpis = [],
+        /** Dollar provision for credit losses charged beyond the through-the-cycle loss in the cost base (negative for a release). */
+        public float $creditLossProvision = 0.0,
+        /** Dollar earning assets that went bad this quarter, written off against the allowance. */
+        public float $netChargeOffs = 0.0,
+        /** Dollars of actual revenue that are pure price above the expected level and carried no variable cost. */
+        public float $priceRevenue = 0.0,
     ) {}
 }

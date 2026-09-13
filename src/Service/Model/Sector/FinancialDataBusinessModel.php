@@ -23,6 +23,28 @@ use App\Service\Math\MathUtility;
  */
 class FinancialDataBusinessModel extends StandardCorporateBusinessModel
 {
+    // --- Operating Cyclicality & Demand Structure ---
+    /** Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Subscriptions renew through the cycle; issuance fees are cyclical. */
+    public const OPERATING_CYCLICALITY = 0.90;
+    /** Own-price elasticity of demand: volume lost per unit of real price increase. */
+    public const PRICE_ELASTICITY_OF_DEMAND = 0.20;
+    /** Share of an idiosyncratic revenue gain taken from same-industry peers rather than won from a larger market. */
+    public const INDUSTRY_SUBSTITUTABILITY = 0.30;
+
+    // --- Input Cost Basket ---
+    /** Shares of the variable cost base bought in tracked input markets (energy, metals, agri, freight, wholesale goods, variable payroll). */
+    public const INPUT_COST_EXPOSURES = ['labor' => 0.50];
+
+    // --- Labor Intensity ---
+    /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze. Content collection, analytics and platform engineering payroll is nearly the whole cost base of a data franchise. */
+    public const FIXED_COST_LABOR_SHARE = 0.75;
+    /** Mandatory terminal and ratings subscriptions reprice on renewal with little pushback. */
+    public const PRICING_POWER_INDEX = 0.85;
+
+    // --- Balance Sheet Realism ---
+    /** Stock-based compensation as a fraction of revenue (ASC 718): non-cash, added back to FCF, settled in new shares. Data and platform engineering paid partly in equity. */
+    public const STOCK_COMPENSATION_INTENSITY = 0.04;
+
     // --- Analyst Visibility & Error ---
     public const BASE_COVERAGE_VISIBILITY = 0.80;
     public const BASE_COVERAGE_ERROR = 0.10;
@@ -101,7 +123,7 @@ class FinancialDataBusinessModel extends StandardCorporateBusinessModel
         $transactionWeight  = $params[ModelParam::TransactionRevenueWeight];
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
-        $streams  = new \App\DTO\StreamContext($momentum, $mathUtility);
+        $streams  = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
 
         // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
         $activeWeights = $streams->resolveActiveStreamWeights([
@@ -120,7 +142,7 @@ class FinancialDataBusinessModel extends StandardCorporateBusinessModel
         // Rating issuance mandates (SHRK) surge when corporate debt syndication booms (tight credit spreads + positive output gap).
         // Market data API feeds (TICK) see elevated transaction volume during high-volatility regimes (VIX > 20%).
         $creditSpreadGap = MacroEngine::BASE_CREDIT_SPREAD - $macroState->macroCreditSpreadEma;
-        $dcmIssuanceBoost = ($creditSpreadGap * 2.0) + ($macroState->outputGapEma * 1.5 * abs((float) $stock->getBeta()));
+        $dcmIssuanceBoost = ($creditSpreadGap * 2.0) + ($macroState->outputGapEma * 1.5 * $this->getOperatingCyclicality($stock));
         $vixVolBoost = max(0.0, ($macroState->marketVolatilityEma - 0.20) * 0.50);
         $dealActivityShift = ($macroState->dealActivityIndexEma - MacroEngine::DEAL_ACTIVITY_BASELINE) / MacroEngine::DEAL_ACTIVITY_BASELINE;
         $dealActivityRatingBoost = $dealActivityShift * self::DEAL_ACTIVITY_RATING_SENSITIVITY;
@@ -141,7 +163,9 @@ class FinancialDataBusinessModel extends StandardCorporateBusinessModel
         // High transaction/rating volume ($transactionZ) provides strong positive operating leverage because incremental debt ratings have near-zero marginal cost.
         $operatingLeverageShift = -self::TRANSACTION_LEVERAGE_SENSITIVITY * $transactionZ * $transactionWeight;
 
-        $clampedMargin = $this->clampMargin($realizedVariableMargin + $operatingLeverageShift);
+        // Data and platform engineering payroll follows wage growth; subscription repricing recovers most of it.
+        $inputCostDrag = $this->resolveInputCostDrag($stock, $macroState, $streams, $this->resolvePricingPower($stock), $realizedVariableMargin);
+        $clampedMargin = $this->clampMargin($realizedVariableMargin + $operatingLeverageShift + $inputCostDrag);
 
         $primaryShockZ = $streams->resolveDominantShockZ([$transactionZ, $subscriptionZ]);
         $observableShockZ = (($subscriptionZ * $subscriptionWeight + $transactionZ * $transactionWeight) * ($baselineVol * self::REVENUE_VARIANCE_SCALAR))
@@ -163,36 +187,16 @@ class FinancialDataBusinessModel extends StandardCorporateBusinessModel
         return self::MONOPOLY_REVERSION_SPEED; // High switching costs and data monopoly moat
     }
 
-    public function applyAssetDepreciationDecay(Stock $stock, float $reinvestmentRatio, float $dt): void
+    /** Tech debt & feed latency decay toward software baseline */
+    public function getDepreciationDecayRate(): float
     {
-        $timeScale = $dt / 0.25;
-        $currentMargin = (float) $stock->getOperatingMargin();
-
-        if ($reinvestmentRatio < 1.0) {
-            // Tech debt & feed latency decay toward software baseline
-            $decayRate = self::PLATFORM_DECAY_RATE * (1.0 - $reinvestmentRatio) * $timeScale;
-            $updatedMargin = max(self::MIN_OPERATING_MARGIN_FLOOR, $currentMargin - ($currentMargin * $decayRate));
-            $stock->setOperatingMargin((string) $updatedMargin);
-        } elseif ($reinvestmentRatio > 1.0) {
-            // Platform modernization expands data monopoly margin ceiling
-            $modGain = self::DATA_MONOPOLY_GAIN_RATE * log($reinvestmentRatio) * $timeScale;
-            $updatedMargin = min(
-                self::MAX_OPERATING_MARGIN_CEILING,
-                $currentMargin + ((self::MAX_OPERATING_MARGIN_CEILING - $currentMargin) * $modGain)
-            );
-            $stock->setOperatingMargin((string) $updatedMargin);
-        }
+        return self::PLATFORM_DECAY_RATE;
     }
 
-    public function isUnderLeveraged(float $currentDebtRatio, float $targetDebtTolerance, float $interestCoverage, float $minIcr, float $costOfEquity, float $effectiveCostOfDebt): bool
+    /** Platform modernization expands data monopoly margin ceiling */
+    public function getModernizationGainRate(): float
     {
-        if ($costOfEquity <= ($effectiveCostOfDebt + self::WACC_ARBITRAGE_THRESHOLD)) {
-            return false;
-        }
-        if ($interestCoverage < self::MIN_RECAP_ICR_FLOOR) {
-            return false;
-        }
-        return $currentDebtRatio < ($targetDebtTolerance * self::UNDERLEVERAGED_DEBT_RATIO);
+        return self::DATA_MONOPOLY_GAIN_RATE;
     }
 
     /**
@@ -205,9 +209,12 @@ class FinancialDataBusinessModel extends StandardCorporateBusinessModel
     {
         return [
             'deal_activity_index_ema',
+            'exchange_rate_index_ema',
             'macro_credit_spread_ema',
             'market_volatility_ema',
             'output_gap_ema',
+            'tips_breakeven_ema',
+            'wage_growth_ema',
         ];
     }
 }

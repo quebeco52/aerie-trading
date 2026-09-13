@@ -24,9 +24,10 @@ class LuxuryBusinessModelTest extends TestCase
         $mathUtilityMock = $this->getMockBuilder(MathUtility::class)
             ->onlyMethods(['generateStandardNormal'])
             ->getMock();
-        // sequence: hauteZ=2.0 (strong haute couture desirability), accessibleZ=0, eventZ=0, analystError=0
+        // sequence: firmFactor=0, hauteZ idio=2.5 (composite 2.0 after the 0.8 idiosyncratic weight),
+        // accessibleZ=0, eventZ=0, analystError=0
         $mathUtilityMock->method('generateStandardNormal')
-            ->willReturnOnConsecutiveCalls(2.0, 0.0, 0.0, 0.0);
+            ->willReturnOnConsecutiveCalls(0.0, 2.5, 0.0, 0.0, 0.0);
 
         $macroState = \App\DTO\MacroStateDTO::fromArray(['inflation_ema' => 0.02]);
         $result = $model->computeActualFinancials(
@@ -73,9 +74,9 @@ class LuxuryBusinessModelTest extends TestCase
         $mathUtilityMock = $this->getMockBuilder(MathUtility::class)
             ->onlyMethods(['generateStandardNormal'])
             ->getMock();
-        // sequence: hauteZ=0.0, accessibleZ=0.0, eventZ=2.6 (> BRAND_BOOM_Z_SCORE), analystError=0.0
+        // sequence: firmFactor=0, hauteZ=0.0, accessibleZ=0.0, eventZ=2.6 (> BRAND_BOOM_Z_SCORE), analystError=0.0
         $mathUtilityMock->method('generateStandardNormal')
-            ->willReturnOnConsecutiveCalls(0.0, 0.0, 2.6, 0.0);
+            ->willReturnOnConsecutiveCalls(0.0, 0.0, 0.0, 2.6, 0.0);
 
         $macroState = \App\DTO\MacroStateDTO::fromArray(['inflation_ema' => 0.02]);
         $result = $model->computeActualFinancials(

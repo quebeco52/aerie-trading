@@ -1,5 +1,6 @@
 import { BRAND_COLORS, FALLBACK_PALETTE, THEME_COLORS } from '../utils/colors.js';
 import { destroyChartInstance } from '../utils/chart-config.js';
+import { CHART_FONT_MONO } from '../utils/fonts.js';
 
 let etfPieChart = null;
 let etfComponents = [];
@@ -56,7 +57,7 @@ export function initEtfChart(canvasId = 'etfPieChart', pieLabels = [], pieData =
                         boxWidth: 8,
                         usePointStyle: true,
                         color: THEME_COLORS.textMuted,
-                        font: { family: '"Courier Prime", monospace', size: 10 }
+                        font: { family: CHART_FONT_MONO, size: 10 }
                     }
                 },
                 tooltip: {

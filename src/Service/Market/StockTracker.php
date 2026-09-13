@@ -10,7 +10,9 @@ use App\Service\Corporate\DebtEngine;
 use App\Service\Corporate\EarningsEngine;
 use App\Service\Corporate\MergerAndAcquisitionEngine;
 use App\Service\Event\MarketEventPublisher;
+use App\Service\Market\Flow\OrderFlowStoreInterface;
 use App\Service\Math\CorporateMetrics;
+use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
 
 /**
@@ -22,6 +24,12 @@ use App\Service\Math\MathUtility;
  */
 class StockTracker
 {
+    // --- Price Momentum (Jegadeesh & Titman 1993) ---
+    /** Formation horizon in years of the exponentially weighted price trend, matching the 6-month window where momentum is strongest. */
+    private const MOMENTUM_FORMATION_YEARS = 0.50;
+    /** Absolute cap on the accumulated trend, bounding how far momentum can delay fundamental mean reversion. */
+    private const MAX_MOMENTUM_TREND = 0.50;
+
     /**
      * Constructor.
      *
@@ -41,7 +49,10 @@ class StockTracker
         private MarketEventPublisher $eventService,
         private DebtEngine $debtEngine,
         private MathUtility $mathUtility,
-        private CorporateMetrics $corporateMetrics
+        private CorporateMetrics $corporateMetrics,
+        private LiquidityEngine $liquidityEngine,
+        private OrderFlowStoreInterface $orderFlow,
+        private \App\Service\Market\Agent\AgentFlowEngine $agentFlow
     ) {}
 
     /**
@@ -73,6 +84,15 @@ class StockTracker
         $macroDTO = $macroState ?? new \App\DTO\MacroStateDTO();
         $marketZ = $macroDTO->marketZ;
         $marketVol = $macroDTO->marketVolatility;
+
+        // Everything that traded since the last tick, netted per ticker. Drained once for the whole book
+        // rather than per stock: it is one round trip, and a quantity that has already moved the price must
+        // not be able to move it again on the next tick.
+        $netOrderFlow = $this->orderFlow->drain();
+
+        // The agent books are loaded once for the whole tick and written back once at the end, for the
+        // same reason the order flow is drained once: a round trip per name is the cost that scales.
+        $this->agentFlow->beginTick();
 
         foreach ($stocks as $stock) {
             $sectorName = $stock->getSector();
@@ -148,16 +168,35 @@ class StockTracker
 
             $secularGrowth = $strategy->getSecularGrowthRate($stock);
 
+            // Leverage re-levers the magnitude of a firm's systematic exposure, never its sign. DebtEngine
+            // now levers the firm's own signed beta through Hamada, so its result is already the beta this
+            // diffusion wants and is used directly. This previously had to reconstruct the multiplier and
+            // reapply it, because DebtEngine levered max(0.5, |beta|) and would otherwise have turned an
+            // inverse hedge into a market-following name.
+            $leveredBeta = $health->leveredBeta ?? (float) $stock->getBeta();
+
+            $priceAtTickStart = (float) $stock->getPrice();
+            $sectorZ = (float) ($macroDTO->sectorZ[$sectorName] ?? 0.0);
+
             $pricingCtx = new \App\DTO\MarketPricingContext(
                 currentPrice: (float) $stock->getPrice(),
                 currentVolatility: $currentVol,
                 longTermVolatility: $baselineVol,
-                earningsPerShare: (float) $stock->getEarningsPerShare(),
+                // Analysts cut their number on a guidance warning, and fair value is what analysts think
+                // the name is worth. Until the report puts the quarter into trailing earnings, the guided
+                // shortfall comes off the figure fair value is struck on — otherwise the warning moved the
+                // price and nothing else, and the reversion pulled it straight back before the report.
+                // The report resets the guided figure and puts the actual quarter in, so there is no
+                // double count: the two hand over.
+                earningsPerShare: (float) $stock->getEarningsPerShare()
+                    - ($stock->getPreAnnouncedShortfall() / max(1.0, (float) $stock->getSharesOutstanding())),
                 dt: $dt,
                 lambda: (float) $stock->getJumpIntensity(),
                 jumpVol: (float) $stock->getJumpVol(),
-                beta: (float) $stock->getBeta(),
+                beta: $leveredBeta,
                 marketZ: $marketZ,
+                sectorZ: $sectorZ,
+                marketJumpMultiplier: $macroDTO->marketJumpMultiplier,
                 marketVol: $marketVol,
                 macroState: $macroDTO,
                 fcfPerShare: $stock->getFreeCashFlowPerShare() !== null ? (float) $stock->getFreeCashFlowPerShare() : null,
@@ -172,11 +211,13 @@ class StockTracker
                 businessModel: $businessModel,
                 liveCostOfEquity: $health->costOfEquity ?? 0.10,
                 netDebtPerShare: $netDebtPerShare,
-                recentPriceTrend: 0.0,
+                recentPriceTrend: (float) ($stock->getPriceMomentumTrend() ?? 0.0),
                 secularGrowth: $secularGrowth,
                 baselineRoic: (float) ($stock->getBaselineRoic() ?? 0.10),
                 baselineMargin: (float) ($stock->getOperatingMargin() ?? 0.20),
-                accrualsRatio: (float) ($stock->getAccrualsRatio() ?? 0.0)
+                accrualsRatio: (float) ($stock->getAccrualsRatio() ?? 0.0),
+                investedCapitalPerShare: $stock->getInvestedCapital() / max(1.0, (float) $stock->getSharesOutstanding()),
+                orderFlowVariance: (float) ($stock->getImpactVarianceEma() ?? 0.0)
             );
 
             // Calculate new price (GBM + SVJJ)
@@ -188,8 +229,43 @@ class StockTracker
             if ($calculation['shock'] !== null) {
                 $events[] = $this->eventService->publish($stock, 'SHOCK', "Sudden market shock detected.", $calculation['shock']);
             }
+
+            // ORDER FLOW IMPACT (Almgren & Chriss 2005)
+            // The permanent leg only. The temporary leg was already paid by whoever traded, as slippage on
+            // their own fill, and putting it here would charge it twice and leave it in the quote besides.
+            //
+            // Applied after the diffusion rather than inside it because it is not a random draw: it is a
+            // known quantity of stock that changed hands, and the price it leaves behind is a fact rather
+            // than a distribution. The variance it supplies is handed back through the budget in
+            // MarketEngine, using the EMA maintained below.
+            $tickFlow = $netOrderFlow[$stock->getTicker()] ?? 0.0;
+            $impactLogReturn = 0.0;
+
+            if ($tickFlow !== 0.0) {
+                $impactLogReturn = $this->liquidityEngine->permanentImpact($stock, $tickFlow);
+                $newPrice = max(0.01, $newPrice * exp($impactLogReturn));
+            }
+
+            // Realized impact variance, annualized, as an exponentially weighted mean. This is what the
+            // budget draws on, so it has to decay: a name that was heavily traded a year ago must not keep
+            // reclaiming variance it no longer supplies.
+            if ($dt > 0.0) {
+                $impactPhi = exp(-$dt / FinancialConstants::IMPACT_VARIANCE_EMA_YEARS);
+                $annualizedTickVariance = ($impactLogReturn * $impactLogReturn) / $dt;
+
+                $stock->setImpactVarianceEma(
+                    (($stock->getImpactVarianceEma() ?? 0.0) * $impactPhi) + ($annualizedTickVariance * (1.0 - $impactPhi))
+                );
+            }
+
             $stock->setPrice((string) $newPrice);
             $stock->setCurrentVolatility((string) $nextVolatility);
+
+            // Guidance: management warns ahead of a quarter it already knows has gone wrong.
+            $warning = $this->earningsEngine->evaluatePreAnnouncement($stock, $tickCount, $ticksPerYear);
+            if (!empty($warning)) {
+                $events = array_merge($events, $warning);
+            }
 
             // Earnings Engine
             $generatedEvents = $this->earningsEngine->calculate($stock, $macroDTO, $tickCount, $ticksPerYear);
@@ -199,11 +275,40 @@ class StockTracker
 
             $currentPriceAfterEarnings = (float) $stock->getPrice();
 
+            // TOTAL RETURN OF THE TICK
+            // The report pays the dividend and takes it off the price in the same step. A holder was paid
+            // that cash, so the return the trend and the agents are scored on adds it back; measured on the
+            // price alone, every payment read as a loss for whoever was long and a gain for whoever was short.
+            $dividendPaidPerShare = 0.0;
+            foreach ($generatedEvents ?? [] as $generatedEvent) {
+                $dividendPaidPerShare += (float) ($generatedEvent['dividend_per_share'] ?? 0.0);
+            }
+
+            $tickLogReturn = $priceAtTickStart > 0.0 && $currentPriceAfterEarnings > 0.0
+                ? log(($currentPriceAfterEarnings + $dividendPaidPerShare) / $priceAtTickStart)
+                : 0.0;
+
+            // PRICE MOMENTUM (Jegadeesh & Titman 1993)
+            // An exponentially weighted sum of log returns: trend_t = phi * trend_{t-1} + r_t, where phi is a
+            // decay set by a horizon in YEARS, so the formation window stays a half-year of simulated time at
+            // any tick rate. Measured before splits, since a 4-for-1 split quarters the price without any
+            // economic return and would otherwise register as a violent crash.
+            if ($priceAtTickStart > 0.0 && $currentPriceAfterEarnings > 0.0) {
+                $momentumPhi = exp(-$dt / self::MOMENTUM_FORMATION_YEARS);
+                $updatedTrend = (($stock->getPriceMomentumTrend() ?? 0.0) * $momentumPhi) + $tickLogReturn;
+                $stock->setPriceMomentumTrend(
+                    max(-self::MAX_MOMENTUM_TREND, min(self::MAX_MOMENTUM_TREND, $updatedTrend))
+                );
+            }
+
             // CORPORATE ACTIONS (SPLITS)
+            // Read again here rather than reusing the count from the top of the tick: issuance and buybacks
+            // in the earnings engine change it, and only a split should reach the agents as a share ratio.
+            $preSplitShares = (float) $stock->getSharesOutstanding();
             $splitResult = $this->corporateActionEngine->processSplits(
                 $stock,
                 $currentPriceAfterEarnings,
-                (float) $stock->getSharesOutstanding()
+                $preSplitShares
             );
 
             // Unpack the results
@@ -228,6 +333,10 @@ class StockTracker
             $currentMarketCap = $finalPrice * $newShares;
             $totalMarketCap += $currentMarketCap;
 
+            // Shares printed this tick. The players' own fills are prints too, so they are added rather than
+            // assumed away: a name nobody but the players trades still shows the volume they generated.
+            $tickVolume = $this->liquidityEngine->simulateTickVolume($stock, $dt, abs($tickFlow));
+
             // Determine if a fundamental corporate event occurred this tick
             $isFundamentalTick = !empty($generatedEvents) || $maResult || (isset($divestResult) && $divestResult);
 
@@ -250,6 +359,9 @@ class StockTracker
                 'credit_rating' => $stock->getCreditRating(),
                 'analyst_targets' => $calculation['analyst_targets'],
                 'perceived_fair_value' => $calculation['perceived_fair_value'],
+                'volume' => $tickVolume,
+                'adv_shares' => $this->liquidityEngine->averageDailyVolume($stock),
+                'half_spread_bps' => round($this->liquidityEngine->halfSpreadFraction($stock) * 20000.0, 2),
                 'is_bankrupt' => false,
             ];
 
@@ -268,16 +380,43 @@ class StockTracker
                 $stockUpdate['market_share'] = round($marketShare * 100, 2);
             }
 
+            // AGENT FLOW (Brock & Hommes 1997, 1998)
+            // The simulated institutional book reacts to the price that has just been published and its
+            // orders land on the next tick, through the same impact channel and the same variance budget a
+            // player's fill goes through. The one-tick lag is the causality, not a shortcut: a participant
+            // observes a price and then trades.
+            // The return the agents are scored on is the tick's total return, measured BEFORE the split
+            // like the momentum trend above, and the split reaches them as a share ratio: a 4-for-1 is not
+            // a 75% loss. Their books are sized on the structural volume, not today's activity-scaled
+            // depth, so a stressed tape does not grow every book. The volatility handed in only seeds a
+            // book with no history; after that the agents see the realized measure their engine keeps.
+            $this->agentFlow->trade(new \App\DTO\AgentMarketViewDTO(
+                ticker: $stock->getTicker(),
+                price: $finalPrice,
+                perceivedFairValue: (float) $calculation['perceived_fair_value'],
+                momentumTrend: (float) ($stock->getPriceMomentumTrend() ?? 0.0),
+                averageDailyVolume: $this->liquidityEngine->structuralDailyVolume($stock),
+                logReturn: $tickLogReturn,
+                financialConditions: $macroDTO->financialConditionsIndexEma,
+                dt: $dt,
+                riskFreeRate: $macroDTO->policyRate,
+                annualizedVolatility: (float) $nextVolatility,
+                splitRatio: $preSplitShares > 0.0 ? $newShares / $preSplitShares : 1.0
+            ));
+
             $stockUpdates[] = $stockUpdate;
 
             if ($recordHistory) {
 
                 $historyData[] = [
                     'stock_id' => $stock->getId(),
-                    'price' => $finalPrice
+                    'price' => $finalPrice,
+                    'ticker' => $stock->getTicker(),
                 ];
             }
         }
+
+        $this->agentFlow->endTick();
 
         return [
             'updates' => $stockUpdates,

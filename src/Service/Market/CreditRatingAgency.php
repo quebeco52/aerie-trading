@@ -101,9 +101,13 @@ class CreditRatingAgency
         $effectiveTargetRating = $flippedRanks[$effectiveTargetRank];
 
         if ($effectiveTargetRating !== $oldRating) {
+            // Severe distress is a statement about the balance sheet, not about where the market-implied
+            // d2 happens to point. Treating any CCC-or-worse target as severe defeated the notch clamp in
+            // exactly the case it exists for: a firm whose accounts never deteriorated could be carried from
+            // BBB to D in three evaluations on nothing but a rise in its equity volatility. Agencies move one
+            // notch at a time precisely because a market-implied score is noisier than the credit is.
             $isSevereDistress = ($altmanZScore !== null && $altmanZScore < self::ALTMAN_DISTRESS_THRESHOLD)
-                || ((float) $stock->getTotalEquity() <= 0.0)
-                || $effectiveTargetRank <= self::RATING_RANKS['CCC'];
+                || ((float) $stock->getTotalEquity() <= 0.0);
 
             // During fatal distress or insolvency, execute an immediate emergency downgrade
             // rather than artificially maintaining investment-grade ratings via notch damping.

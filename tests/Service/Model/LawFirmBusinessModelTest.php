@@ -169,4 +169,26 @@ class LawFirmBusinessModelTest extends TestCase
             'Surging corporate default waves expand Chapter 11 bankruptcy restructuring billing.'
         );
     }
+    public function testBillingRatesPriceOffServicesInflationNotGoodsBreakevens(): void
+    {
+        $model = new LawFirmBusinessModel();
+
+        // The repricing lag state persists on the stock, so each scenario gets a fresh firm with no history.
+        $cheapStock = new Stock();
+        $cheapStock->setTicker('LAW');
+        $cheapStock->setBeta('0.8');
+        $dearStock = new Stock();
+        $dearStock->setTicker('LAW');
+        $dearStock->setBeta('0.8');
+
+        $cheapServices = $model->getMacroPhysics($cheapStock, new MacroStateDTO(supercoreInflationEma: 0.02, tipsBreakevenEma: 0.06));
+        $dearServices  = $model->getMacroPhysics($dearStock, new MacroStateDTO(supercoreInflationEma: 0.06, tipsBreakevenEma: 0.02));
+
+        // A goods-inflation spike with calm services prices does not lift billing rates; services inflation does.
+        $this->assertGreaterThan($cheapServices['pricing_power_multiplier'], $dearServices['pricing_power_multiplier']);
+        $this->assertEqualsWithDelta(1.0 + (0.06 * LawFirmBusinessModel::PRICING_ELASTICITY), $dearServices['pricing_power_multiplier'], 1e-9);
+        // Input prices (associate and staff pay) follow services inflation one for one whatever the firm bills.
+        $this->assertEqualsWithDelta(1.06, $dearServices['input_cost_multiplier'], 1e-9);
+    }
+
 }

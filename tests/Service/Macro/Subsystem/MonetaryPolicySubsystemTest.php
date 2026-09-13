@@ -296,13 +296,13 @@ class MonetaryPolicySubsystemTest extends TestCase
         $this->assertGreaterThan(0.0, $lowRateCurve['new_qe_intensity'], 'QE must activate when policy rate is low and output gap is negative');
     }
 
-    public function testTighteningCompressionDecaysWithProlongedInversion(): void
+    public function testTighteningCompressionDecaysWithProlongedRestrictiveStance(): void
     {
         $stateFreshInversion = new MacroState();
         $stateFreshInversion->policyRate = 0.055; // Restrictive policy rate well above r* + pi = 0.035
         $stateFreshInversion->tipsBreakeven = 0.02;
         $stateFreshInversion->outputGap = 0.01;
-        $stateFreshInversion->inversionDuration = 0.0; // Fresh tightening cycle
+        $stateFreshInversion->restrictiveDuration = 0.0; // Fresh tightening cycle
 
         $yieldsFresh = $this->subsystem->calculateYieldCurveAndQE($stateFreshInversion, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 0.25);
 
@@ -310,12 +310,12 @@ class MonetaryPolicySubsystemTest extends TestCase
         $stateProlongedInversion->policyRate = 0.055; // Same restrictive policy rate
         $stateProlongedInversion->tipsBreakeven = 0.02;
         $stateProlongedInversion->outputGap = 0.01;
-        $stateProlongedInversion->inversionDuration = 3.0; // 3 years of prolonged high rates
+        $stateProlongedInversion->restrictiveDuration = 3.0; // 3 years of prolonged high rates
 
         $yieldsProlonged = $this->subsystem->calculateYieldCurveAndQE($stateProlongedInversion, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 0.25);
 
-        // After 3 years of persistent inversion, compression decays and term premium rebounds
-        $this->assertGreaterThan($yieldsFresh['term_premium_10y'], $yieldsProlonged['term_premium_10y'], 'Prolonged inversion must attenuate tightening compression and restore term premium');
+        // After 3 years of restrictive policy, compression decays and term premium rebounds
+        $this->assertGreaterThan($yieldsFresh['term_premium_10y'], $yieldsProlonged['term_premium_10y'], 'Prolonged restrictive stance must attenuate tightening compression and restore term premium');
         $this->assertGreaterThan($yieldsFresh['yield_10y'], $yieldsProlonged['yield_10y'], '10Y yield must steepen as compression decays');
     }
 
@@ -390,5 +390,352 @@ class MonetaryPolicySubsystemTest extends TestCase
         $this->subsystem->calculateMoneySupplyGrowth($stateQe, $dt, $tfp);
         $this->assertGreaterThan($neutralGrowth, $stateQe->moneySupplyGrowth, 'QE and bank lending expansion must accelerate broad money growth');
     }
-}
 
+    /**
+     * A neutral stance (policy at r* plus target, no hikes or cuts priced, no gap) still slopes up, because
+     * the term premium rises with duration: the ten-year point carries the whole benchmark premium and the
+     * two-year note under a third of it. That difference is what a normal 2s10s slope is made of. Folding
+     * the premium into the curve level, as before, handed the two-year the full premium and left the neutral
+     * curve almost flat.
+     */
+    public function testTermPremiumRisesWithDurationSoTheNeutralCurveSlopesUp(): void
+    {
+        $state = new MacroState();
+        $state->policyRate = MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION;
+        $state->targetRate = $state->policyRate;
+        $state->tipsBreakeven = MacroEngine::TARGET_INFLATION;
+        $state->outputGap = 0.0;
+        $state->marketVolatilityEma = 0.15;
+
+        $curve = $this->subsystem->calculateYieldCurve($state, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE);
+
+        $scale2y = MathUtility::calculateTermPremiumDurationScale(2.0, MacroEngine::TERM_PREMIUM_DURATION_HORIZON_YEARS);
+        $scale30y = MathUtility::calculateTermPremiumDurationScale(30.0, MacroEngine::TERM_PREMIUM_DURATION_HORIZON_YEARS);
+        $this->assertLessThan(0.35, $scale2y, 'the two-year note carries under a third of the ten-year premium');
+        $this->assertGreaterThan(1.0, $scale30y, 'the thirty-year bond carries more than the ten-year');
+
+        $expectedSpread = MacroEngine::NS_BASE_TERM_PREMIUM * (1.0 - $scale2y);
+        $this->assertEqualsWithDelta($expectedSpread, $curve['yield_10y'] - $curve['yield_2y'], 0.0010, 'the neutral 2s10s slope is the premium the ten-year earns over the two-year');
+        $this->assertEqualsWithDelta(MacroEngine::NS_BASE_TERM_PREMIUM, $curve['yield_10y'] - $state->policyRate, 0.0010, 'at neutral the ten-year sits one term premium over the policy rate');
+        $this->assertGreaterThan($curve['yield_10y'], $curve['yield_30y'], 'the long end keeps rising');
+        $expectedLongEnd = MacroEngine::NS_BASE_TERM_PREMIUM * ($scale30y - 1.0);
+        $this->assertEqualsWithDelta($expectedLongEnd, $curve['yield_30y'] - $curve['yield_10y'], 0.0010, 'the 10s30s slope is the extra duration compensation the structural regime earns past ten years');
+    }
+
+    /**
+     * A restrictive stance inverts the curve through two channels at once: the two-year prices the cuts
+     * that follow, and the premium is compressed toward nothing while policy sits well above neutral.
+     */
+    public function testRestrictiveStanceInvertsTheCurve(): void
+    {
+        $state = new MacroState();
+        $state->policyRate = MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION + 0.020; // 200bps above neutral
+        $state->targetRate = $state->policyRate - 0.010; // cuts ahead
+        $state->tipsBreakeven = 0.025;
+        $state->outputGap = 0.005;
+        $state->marketVolatilityEma = 0.15;
+
+        $curve = $this->subsystem->calculateYieldCurve($state, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE);
+
+        $this->assertLessThan($state->policyRate, $curve['yield_2y'], 'the two-year prices the cuts ahead');
+        $this->assertLessThan(-0.0025, $curve['yield_10y'] - $curve['yield_2y'], 'the curve inverts by a meaningful margin');
+    }
+
+    public function testBreakevenShareOfTheLevelLandsInExpectationsNotTermPremium(): void
+    {
+        $anchored = new MacroState();
+        $anchored->policyRate = 0.03;
+        $anchored->targetRate = 0.03;
+        $anchored->tipsBreakeven = MacroEngine::TARGET_INFLATION;
+        $anchored->outputGap = 0.0;
+
+        $unanchored = clone $anchored;
+        $unanchored->tipsBreakeven = MacroEngine::TARGET_INFLATION + 0.02;
+
+        $curveAnchored = $this->subsystem->calculateYieldCurve($anchored, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE);
+        $curveUnanchored = $this->subsystem->calculateYieldCurve($unanchored, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE);
+
+        // The only premium channel that reads the breakeven is the Wright (2011) inflation risk premium.
+        $expectedPremiumChange = MacroEngine::TERM_PREMIUM_IRP_EXPECTATION_SCALE * 0.02;
+        $this->assertEqualsWithDelta(
+            $expectedPremiumChange,
+            $curveUnanchored['term_premium_10y'] - $curveAnchored['term_premium_10y'],
+            0.00001,
+            'Higher breakevens must move the term premium by the inflation risk premium only; the level shift belongs to the risk-neutral rate.'
+        );
+
+        // Only the model-consistent share of the anchor carries the breakeven; the Kozicki-Tinsley endpoint does not.
+        $levelShift = (1.0 - MacroEngine::KOZICKI_TINSLEY_ENDPOINT_WEIGHT) * (1.0 - MacroEngine::LONG_RUN_INFLATION_ANCHOR_WEIGHT) * 0.02;
+        $this->assertGreaterThan(
+            $curveAnchored['risk_neutral_10y'] + 0.5 * $levelShift,
+            $curveUnanchored['risk_neutral_10y'],
+            'The expected-inflation share of the level must show up in the ACM risk-neutral ten-year rate.'
+        );
+    }
+
+    public function testTermPremiumCanTurnNegativeButNotBelowTheFloor(): void
+    {
+        $state = new MacroState();
+        $state->policyRate = 0.06;
+        $state->targetRate = 0.06;
+        $state->tipsBreakeven = MacroEngine::TARGET_INFLATION;
+        $state->outputGap = -0.03;
+        $state->marketVolatilityEma = 0.60; // panic: flight to safety
+        $state->inversionDuration = 0.0;
+
+        $curve = $this->subsystem->calculateYieldCurve($state, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE);
+
+        $this->assertLessThan(0.0, $curve['term_premium_10y'], 'Restrictive policy plus flight to safety must push the ten-year term premium negative, as ACM shows for 2016-2021.');
+        $this->assertGreaterThanOrEqual(
+            MacroEngine::MIN_TERM_PREMIUM_10Y - 0.00001,
+            $curve['term_premium_10y'],
+            'The term premium must respect the structural floor.'
+        );
+
+        $extreme = clone $state;
+        $extreme->policyRate = 0.12;
+        $extreme->targetRate = 0.12;
+        $extreme->marketVolatilityEma = 1.50;
+        $curveExtreme = $this->subsystem->calculateYieldCurve($extreme, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE);
+        $this->assertEqualsWithDelta(MacroEngine::MIN_TERM_PREMIUM_10Y, $curveExtreme['term_premium_10y'], 0.00001, 'Stacked compression channels bottom out at the floor.');
+    }
+
+    public function testTermPremiumShockDecaysAndRegimeRevertsToBaselineWithoutInnovations(): void
+    {
+        $quiet = new class extends MathUtility {
+            public function generateStandardNormal(): float { return 0.0; }
+        };
+        $subsystem = new MonetaryPolicySubsystem($quiet);
+
+        $state = new MacroState();
+        $state->termPremiumShock = 0.015;
+        $state->termPremiumRegime = 0.020;
+
+        $subsystem->updateTermPremiumDynamics($state, 1.0);
+
+        $this->assertEqualsWithDelta(0.015 * exp(-MacroEngine::TERM_PREMIUM_SHOCK_KAPPA), $state->termPremiumShock, 0.00001, 'The transitory shock decays at its OU rate toward zero.');
+        $expectedRegime = MacroEngine::NS_BASE_TERM_PREMIUM + (0.020 - MacroEngine::NS_BASE_TERM_PREMIUM) * exp(-MacroEngine::TERM_PREMIUM_REGIME_KAPPA);
+        $this->assertEqualsWithDelta($expectedRegime, $state->termPremiumRegime, 0.00001, 'The regime drifts slowly back toward the structural baseline.');
+        $this->assertGreaterThan(0.019, $state->termPremiumRegime, 'An eight-year half-life barely moves the regime in a year.');
+    }
+
+    public function testTermPremiumStatesAreClampedToTheirStructuralBounds(): void
+    {
+        $extreme = new class extends MathUtility {
+            public function generateStandardNormal(): float { return 40.0; }
+        };
+        $subsystem = new MonetaryPolicySubsystem($extreme);
+
+        $state = new MacroState();
+        $subsystem->updateTermPremiumDynamics($state, 1.0);
+
+        $this->assertEqualsWithDelta(MacroEngine::TERM_PREMIUM_SHOCK_CAP, $state->termPremiumShock, 0.00001);
+        $this->assertEqualsWithDelta(MacroEngine::MAX_TERM_PREMIUM_REGIME, $state->termPremiumRegime, 0.00001);
+    }
+
+    public function testTransitoryTermPremiumShockMovesTheLongEndMoreThanTheTwoYear(): void
+    {
+        $calm = new MacroState();
+        $calm->policyRate = 0.03;
+        $calm->targetRate = 0.03;
+        $calm->tipsBreakeven = MacroEngine::TARGET_INFLATION;
+        $calm->outputGap = 0.0;
+
+        $tantrum = clone $calm;
+        $tantrum->termPremiumShock = 0.01;
+
+        $curveCalm = $this->subsystem->calculateYieldCurve($calm, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE);
+        $curveTantrum = $this->subsystem->calculateYieldCurve($tantrum, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE);
+
+        $move10y = $curveTantrum['yield_10y'] - $curveCalm['yield_10y'];
+        $move2y = $curveTantrum['yield_2y'] - $curveCalm['yield_2y'];
+        $this->assertEqualsWithDelta(0.01, $move10y, 0.00001, 'A 100bps premium shock lands in full on the ten-year.');
+        $this->assertLessThan(0.35 * $move10y, $move2y, 'The two-year carries under a third of it, so the shock bear-steepens the curve.');
+        $move30y = $curveTantrum['yield_30y'] - $curveCalm['yield_30y'];
+        $this->assertEqualsWithDelta($move10y, $move30y, 0.00001, 'The thirty-year moves with the ten-year: the 10s30s spread is stable through a tantrum, not amplified half again.');
+        $this->assertEqualsWithDelta($curveCalm['risk_neutral_10y'], $curveTantrum['risk_neutral_10y'], 0.00001, 'The expected policy path is untouched; the shock is all premium.');
+    }
+
+    public function testBlissSlopeDecayKeepsTheTwoYearNearThePolicyRateAtTheLowerBound(): void
+    {
+        $zlb = new MacroState();
+        $zlb->policyRate = 0.0025;
+        $zlb->targetRate = 0.0025;
+        $zlb->tipsBreakeven = MacroEngine::TARGET_INFLATION;
+        $zlb->outputGap = -0.02;
+        $zlb->termPremiumShock = 0.0;
+
+        $curve = $this->subsystem->calculateYieldCurve($zlb, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE);
+
+        $this->assertLessThan(0.0125, $curve['yield_2y'] - $zlb->policyRate, 'At the lower bound the two-year sits within ~120bps of policy (2012-2015 ran +20 to +50bps); the Diebold-Li decay left it 140bps above.');
+        $this->assertGreaterThan(0.015, $curve['yield_10y'] - $curve['yield_2y'], 'A lower-bound curve is steep, as 2010-2013 were.');
+
+        // Ten-year expectations beta to the policy rate is about a third, the empirical value, not the 0.14 of the
+        // single-decay fit. Measured on the risk-neutral rate so the premium compression of a tightening does not blur it.
+        $hiked = clone $zlb;
+        $hiked->policyRate = 0.0425;
+        $hiked->targetRate = 0.0425;
+        $curveHiked = $this->subsystem->calculateYieldCurve($hiked, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE);
+        $beta10y = ($curveHiked['risk_neutral_10y'] - $curve['risk_neutral_10y']) / ($hiked->policyRate - $zlb->policyRate);
+        $this->assertEqualsWithDelta(0.317, $beta10y, 0.01, 'Ten-year expectations beta to policy near a third.');
+    }
+
+    public function testShiftingEndpointLearnsTheLongRunPolicyRateSlowly(): void
+    {
+        $state = new MacroState();
+        $state->policyRate = 0.055;
+        $state->naturalRate = MacroEngine::BASE_NATURAL_RATE;
+        $start = $state->perceivedNeutralRate;
+
+        // Three years at 5.5%: the gap closes at the adaptation speed (half-life ~5 years), so about a third.
+        for ($tick = 0; $tick < 3 * 252; $tick++) {
+            $this->subsystem->updateMarketExpectations($state, 1.0 / 252.0);
+        }
+        $closed = ($state->perceivedNeutralRate - $start) / (0.055 - $start);
+        $this->assertEqualsWithDelta(1.0 - exp(-3.0 * MacroEngine::KOZICKI_TINSLEY_ADAPTATION_SPEED), $closed, 0.01, 'Kozicki-Tinsley endpoint adapts at its slow learning speed.');
+        $this->assertLessThan(0.5, $closed, 'Three years is not enough to convince the market that neutral has moved.');
+        $this->assertEqualsWithDelta(3.0, $state->restrictiveDuration, 0.01, 'The restrictive clock counts the whole stretch above neutral.');
+
+        // Back at neutral the clock unwinds within months instead of resetting to zero on the first tick.
+        $state->policyRate = 0.030;
+        $this->subsystem->updateMarketExpectations($state, 1.0 / 252.0);
+        $this->assertGreaterThan(2.9, $state->restrictiveDuration, 'A single tick at neutral must not erase the clock.');
+        for ($tick = 0; $tick < 252; $tick++) {
+            $this->subsystem->updateMarketExpectations($state, 1.0 / 252.0);
+        }
+        $this->assertLessThan(0.5, $state->restrictiveDuration, 'A year at neutral unwinds it.');
+    }
+
+    public function testADecadeOfHighPolicyRepricesTheLongEndAndUninvertsTheCurve(): void
+    {
+        $fresh = new MacroState();
+        $fresh->policyRate = 0.050;
+        $fresh->targetRate = 0.050;
+        $fresh->tipsBreakeven = 0.027;
+        $fresh->outputGap = 0.015;
+        $fresh->termPremiumRegime = 0.006; // a low-premium era, where the static anchor inverted for years
+        $fresh->perceivedNeutralRate = MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION;
+        $fresh->restrictiveDuration = 0.0;
+
+        $decade = clone $fresh;
+        $decade->perceivedNeutralRate = 0.048; // the market has learned that 5% is where policy lives
+        $decade->restrictiveDuration = 10.0;
+
+        $curveFresh = $this->subsystem->calculateYieldCurve($fresh, MacroEngine::TARGET_INFLATION, 0.018);
+        $curveDecade = $this->subsystem->calculateYieldCurve($decade, MacroEngine::TARGET_INFLATION, 0.018);
+
+        $this->assertLessThan(0.0, $curveFresh['yield_10y'] - $curveFresh['yield_2y'], 'A fresh 5% stance against a 3.5% anchor inverts the curve.');
+        $this->assertGreaterThan($curveFresh['level'], $curveDecade['level'], 'The anchor rises with the perceived endpoint.');
+        $this->assertGreaterThan(0.0, $curveDecade['yield_10y'] - $curveDecade['yield_2y'], 'After a decade the curve is flat-to-positive, as 1995-1999 was, not inverted.');
+    }
+
+    public function testADecadeAtTheFloorDragsTheTenYearDown(): void
+    {
+        $zlb = new MacroState();
+        $zlb->policyRate = 0.0025;
+        $zlb->targetRate = 0.0025;
+        $zlb->tipsBreakeven = 0.018;
+        $zlb->outputGap = -0.005;
+
+        $learned = clone $zlb;
+        $learned->perceivedNeutralRate = 0.008;
+
+        $curveFresh = $this->subsystem->calculateYieldCurve($zlb, MacroEngine::TARGET_INFLATION, 0.008);
+        $curveLearned = $this->subsystem->calculateYieldCurve($learned, MacroEngine::TARGET_INFLATION, 0.008);
+
+        $this->assertLessThan($curveFresh['yield_10y'] - 0.005, $curveLearned['yield_10y'], 'A learned low endpoint pulls the ten-year down by more than 50bps.');
+        $this->assertLessThan(0.03, $curveLearned['yield_10y'], 'The ten-year can reach the 2012-2016 range once the floor is expected to last.');
+    }
+
+    public function testTaylorRuleLeansAgainstATermPremiumAboveBaseline(): void
+    {
+        $neutral = new MacroState();
+        $neutral->inflation = MacroEngine::TARGET_INFLATION;
+        $neutral->inflationEma = MacroEngine::TARGET_INFLATION;
+        $neutral->tipsBreakeven = MacroEngine::TARGET_INFLATION;
+        $neutral->outputGap = 0.0;
+        $neutral->outputGapEma = 0.0;
+        $neutral->termPremium10yEma = MacroEngine::NS_BASE_TERM_PREMIUM;
+
+        $highPremium = clone $neutral;
+        $highPremium->termPremium10yEma = MacroEngine::NS_BASE_TERM_PREMIUM + 0.010;
+
+        $targetNeutral = $this->subsystem->calculateTargetRate($neutral, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE);
+        $targetHigh = $this->subsystem->calculateTargetRate($highPremium, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE);
+
+        $this->assertEqualsWithDelta(
+            -MacroEngine::TAYLOR_LONG_RATE_OFFSET * 0.010,
+            $targetHigh - $targetNeutral,
+            0.00001,
+            'Bernanke (2006): a 100bps term premium is met with ~50bps easier policy.'
+        );
+    }
+
+    public function testTaylorRuleDoesNotUndoItsOwnQuantitativeEasing(): void
+    {
+        $state = new MacroState();
+        $state->inflation = MacroEngine::TARGET_INFLATION;
+        $state->inflationEma = MacroEngine::TARGET_INFLATION;
+        $state->tipsBreakeven = MacroEngine::TARGET_INFLATION;
+        $state->outputGap = 0.0;
+        $state->outputGapEma = 0.0;
+        $state->termPremium10yEma = MacroEngine::NS_BASE_TERM_PREMIUM;
+
+        // QE compresses the ten-year premium by the habitat shift; the rule must read that as its own doing.
+        $qe = clone $state;
+        $qe->balanceSheetIntensity = 0.008;
+        $qe->qeIntensity = 0.0; // isolate the long-rate channel from the Wu-Xia shadow term
+        $qe->termPremium10yEma = MacroEngine::NS_BASE_TERM_PREMIUM - 0.008;
+
+        $this->assertEqualsWithDelta(0.0, $this->subsystem->calculateLongRateGap($qe, MacroEngine::BASE_NATURAL_RATE), 0.00001, 'Balance-sheet compression is excluded from the long-rate gap.');
+    }
+
+    public function testTaylorRuleLeansAgainstAMarketThatHasRepricedNeutralUpward(): void
+    {
+        $state = new MacroState();
+        $state->inflation = MacroEngine::TARGET_INFLATION;
+        $state->inflationEma = MacroEngine::TARGET_INFLATION;
+        $state->tipsBreakeven = MacroEngine::TARGET_INFLATION;
+        $state->outputGap = 0.0;
+        $state->outputGapEma = 0.0;
+        $state->termPremium10yEma = MacroEngine::NS_BASE_TERM_PREMIUM;
+
+        $repriced = clone $state;
+        $repriced->perceivedNeutralRate = MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION + 0.015;
+
+        $gap = $this->subsystem->calculateLongRateGap($repriced, MacroEngine::BASE_NATURAL_RATE);
+        $this->assertGreaterThan(0.0, $gap);
+        $this->assertLessThan(0.015 * MacroEngine::KOZICKI_TINSLEY_ENDPOINT_WEIGHT, $gap, 'Only the share of the endpoint drift that reaches the ten-year counts.');
+        $this->assertLessThan(
+            $this->subsystem->calculateTargetRate($state, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE),
+            $this->subsystem->calculateTargetRate($repriced, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE),
+            'A market pricing neutral above the model endpoint gets easier policy, which then teaches it a lower endpoint.'
+        );
+    }
+
+
+    public function testRecessionProbabilityRisesWhenSteepnessIsPremiumDrivenRatherThanExpected(): void
+    {
+        // Same 10Y-minus-policy slope, but in one state the slope is made of term premium: the expected
+        // policy path (slope minus premium) is deeply negative, which is the recession signal
+        // (Rosenberg & Maurer 2008), so the probit must read higher there, not lower.
+        $expectationsDriven = new MacroState();
+        $expectationsDriven->policyRate = 0.04;
+        $expectationsDriven->yield10y = 0.045;
+        $expectationsDriven->termPremium10y = 0.005;
+        $expectationsDriven->financialConditionsIndexEma = 0.0;
+
+        $premiumDriven = clone $expectationsDriven;
+        $premiumDriven->termPremium10y = 0.020;
+
+        $this->subsystem->calculateRecessionProbability($expectationsDriven);
+        $this->subsystem->calculateRecessionProbability($premiumDriven);
+
+        $this->assertGreaterThan(0.0, MacroEngine::RECESSION_PROBIT_BETA_TP, 'The premium coefficient must add the premium back, never subtract it twice.');
+        $this->assertGreaterThan(
+            $expectationsDriven->recessionProbability,
+            $premiumDriven->recessionProbability,
+            'A curve held up only by term premium hides an inverted expected policy path and must read more recessionary.'
+        );
+    }
+}

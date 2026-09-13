@@ -36,7 +36,8 @@ class MarketConsensusEngine
      *   analystError        = N(0,1) * coverage.errorStdDev
      *   dynamicVisibility   = clamp(baseVisibility + analystError, minVisibility, 1.0)
      *   analystExpectedRev  = BayesianUpdate(priorAnchor, freshEstimate) * (1 - walkdownBias)
-     *   analystExpectedVarC = analystExpectedRev * expectedVariableMargin
+     *   expectedCostRatio   = blend(expectedVariableMargin, realized cost ratio) by ANALYST_COST_BASE_VISIBILITY
+     *   analystExpectedVarC = analystExpectedRev * volumeShare * expectedCostRatio
      *   estimateDispersion  = coverage.errorStdDev * volatilityScale
      *
      * @param ActualFinancialsDTO    $actuals                What the company actually produced this quarter.
@@ -45,8 +46,9 @@ class MarketConsensusEngine
      * @param MathUtility            $mathUtility            PRNG for analyst estimation noise.
      * @param \App\Entity\Stock      $stock                  The stock entity for anchor history.
      * @param float                  $marketVolatility       Prevailing market volatility (VIX proxy).
-     * @param float|null             $expectedVariableMargin Ex-ante variable margin before physical shocks.
+     * @param float|null             $expectedVariableMargin Ex-ante variable cost ratio before the sector physics move it.
      * @param float                  $seasonalRatio          Seasonality adjustment ratio (Factor_t / Factor_{t-1}).
+     * @param float                  $priorExpectedRevenue   Structural expected revenue the anchor was formed against; 0 when unknown.
      */
     public function generateConsensus(
         ActualFinancialsDTO $actuals,
@@ -56,7 +58,8 @@ class MarketConsensusEngine
         \App\Entity\Stock $stock,
         float $marketVolatility = 0.15,
         ?float $expectedVariableMargin = null,
-        float $seasonalRatio = 1.0
+        float $seasonalRatio = 1.0,
+        float $priorExpectedRevenue = 0.0
     ): ConsensusDTO {
         $analystError = $mathUtility->generateStandardNormal() * $coverage->errorStdDev;
 
@@ -75,7 +78,23 @@ class MarketConsensusEngine
         $accrualsDiscount = max(0.0, (float) ($stock->getAccrualsRatio() ?? 0.0) * FinancialConstants::ACCRUALS_DECAY_EPS_GROWTH_SENSITIVITY);
         $discountedExpectedRevenue = max(1.0, $expectedRevenue * (1.0 - min(0.25, $accrualsDiscount)));
 
-        $freshEstimate = $discountedExpectedRevenue * (1.0 + $actuals->observableShockZ * $dynamicVisibility);
+        // Reported KPIs feeding consensus: an order-driven firm discloses book-to-bill, and orders above
+        // parity are revenue that has already been won and not yet billed. Analysts do not ignore that —
+        // they carry it into the forward estimate, which is why a semiconductor or capital-goods forecast
+        // moves on the order line before it moves on the revenue line. Without this the backlog conversion
+        // the models already run was invisible to consensus and showed up as a standing surprise.
+        $bookToBill = $stock->getLastBookToBill();
+        $orderBookTilt = $bookToBill !== null && $bookToBill > 0.0
+            ? max(
+                -FinancialConstants::MAX_BOOK_TO_BILL_CONSENSUS_TILT,
+                min(
+                    FinancialConstants::MAX_BOOK_TO_BILL_CONSENSUS_TILT,
+                    ($bookToBill - 1.0) * FinancialConstants::BOOK_TO_BILL_CONSENSUS_SENSITIVITY
+                )
+            )
+            : 0.0;
+
+        $freshEstimate = $discountedExpectedRevenue * (1.0 + $orderBookTilt) * (1.0 + $actuals->observableShockZ * $dynamicVisibility);
 
         // Bayesian Updating: Analysts blend structural baseline capacity / anchored prior with noisy channel signals (fresh estimate)
         $priorVariance = FinancialConstants::BAYESIAN_BASE_PRIOR_VARIANCE 
@@ -83,10 +102,26 @@ class MarketConsensusEngine
             
         $signalVariance = max(0.0001, pow($coverage->errorStdDev, 2));
 
+        // The anchor is carried forward WITH the structural base, not frozen at last quarter's dollar size.
+        // Analysts forecast off a firm's disclosed capacity — assets, AUM, store count — and what they carry
+        // from one quarter to the next is their view of the firm relative to that base. Frozen in dollars,
+        // the prior lagged any growing firm by (growth per quarter) x (prior weight / signal weight): at a
+        // sector coverage error of 15% the estimate closed under a quarter of its gap each report, so a
+        // fund compounding its capital at 18% a year sat 12-15% below its own structural revenue forever
+        // and beat every single quarter. The ratio of the two structural figures already carries the
+        // seasonal turn, which is why the seasonal ratio is not applied on top of it.
         $anchor = (float) $stock->getLastAnalystRevenue();
-        $priorEstimate = $anchor > 0.0
-            ? $anchor * $seasonalRatio
-            : $discountedExpectedRevenue;
+        if ($anchor > 0.0 && $priorExpectedRevenue > 0.0 && $expectedRevenue > 0.0) {
+            $rollForward = max(
+                1.0 / FinancialConstants::ANALYST_ANCHOR_MAX_ROLL_FORWARD,
+                min(FinancialConstants::ANALYST_ANCHOR_MAX_ROLL_FORWARD, $expectedRevenue / $priorExpectedRevenue)
+            );
+            $priorEstimate = $anchor * $rollForward;
+        } elseif ($anchor > 0.0) {
+            $priorEstimate = $anchor * $seasonalRatio;
+        } else {
+            $priorEstimate = $discountedExpectedRevenue;
+        }
         
         $analystExpectedRevenue = $mathUtility->calculateBayesianAnalystUpdate(
             $priorEstimate,
@@ -95,12 +130,45 @@ class MarketConsensusEngine
             $signalVariance
         );
 
-        $analystExpectedRevenue *= (1.0 - self::ANALYST_WALKDOWN_BIAS);
-
+        // The anchor is the posterior BEFORE the walkdown. The walkdown is a shading of the number analysts
+        // publish so that firms beat by a little (Richardson, Teoh & Wysocki 2004); it is not new
+        // information, and it must not be learned from. Anchored on the shaded figure, each quarter's 1.5%
+        // compounded against the pull of the fresh signal: at a coverage error of 15% the estimate only
+        // closed a quarter of its gap per report, so the standing deficit was 1.5% / 0.23, about 6.5% of
+        // revenue — which at a 40% margin is a 16% earnings beat every quarter, from a bias designed to
+        // produce a small one.
         $stock->setLastAnalystRevenue((string) $analystExpectedRevenue);
 
-        $marginForCosts = $expectedVariableMargin !== null ? $expectedVariableMargin : $actuals->clampedMargin;
-        $analystExpectedVariableCosts = $analystExpectedRevenue * $marginForCosts;
+        $analystExpectedRevenue *= (1.0 - self::ANALYST_WALKDOWN_BIAS);
+
+        // Cost base. The ex-ante margin is the structural cost ratio BEFORE the sector physics move it, so an
+        // estimate built on it alone was blind to the input-cost basket, the pass-through lag and every other
+        // cost term the models apply — and because the consensus anchor remembers revenue and not margin, a
+        // standing cost shock was re-discovered as a fresh miss every quarter for as long as it lasted.
+        // Analysts are not blind to it: input prices are published series and pass-through terms are
+        // disclosed, so the systematic part of the realized ratio is forecastable and only firm-specific
+        // execution is not. The blend is the same visibility device already applied to revenue above.
+        // The estimate anchors on the ratio the firm last REPORTED — a disclosed, public number — and moves
+        // from it toward the realized one by that visibility. Anchoring matters as much as the blend does:
+        // a flat blend against the level would miss a permanently elevated cost base by the same amount
+        // every quarter forever, which is the level-versus-news error in another place. With the anchor a
+        // lasting shock is missed once, when it arrives, and is in the estimate from the next quarter on.
+        $priorCostRatio = $stock->getLastReportedCostRatio();
+        $anchorCostRatio = $priorCostRatio !== null
+            ? (float) $priorCostRatio
+            : ($expectedVariableMargin ?? $actuals->clampedMargin);
+
+        $expectedCostRatio = $anchorCostRatio
+            + (FinancialConstants::ANALYST_COST_BASE_VISIBILITY * ($actuals->clampedMargin - $anchorCostRatio));
+        $stock->setLastReportedCostRatio((string) $actuals->clampedMargin);
+
+        // Price is not produced, so the cost ratio bites on the volume part of revenue only — exactly as the
+        // physics applies it. Charging the ratio against the whole estimate instead left every firm with a
+        // price-driven revenue stream looking permanently cheaper to run than the analysts assumed.
+        $volumeShare = $actuals->actualRevenue > 0.0
+            ? max(0.0, min(1.0, ($actuals->actualRevenue - $actuals->priceRevenue) / $actuals->actualRevenue))
+            : 1.0;
+        $analystExpectedVariableCosts = $analystExpectedRevenue * $volumeShare * $expectedCostRatio;
 
         // Analyst disagreement is regime-dependent: forecasts fan out when the macro outlook is volatile and
         // converge when it is calm. Holding dispersion at the sector's calm-market constant made the SUE

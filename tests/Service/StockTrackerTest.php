@@ -33,6 +33,7 @@ class StockTrackerTest extends TestCase
     private DebtEngine&Stub $debtEngineMock;
     private MathUtility&Stub $mathUtilityMock;
     private CorporateMetrics&Stub $corporateMetricsMock;
+    private \App\Service\Market\Flow\InMemoryOrderFlowStore $orderFlow;
     private StockTracker $tracker;
 
     protected function setUp(): void
@@ -84,6 +85,8 @@ class StockTrackerTest extends TestCase
             isUnderLeveraged: false
         ));
         
+        $this->orderFlow = new \App\Service\Market\Flow\InMemoryOrderFlowStore();
+
         $this->tracker = new StockTracker(
             $this->entityManagerMock,
             $this->marketEngineMock,
@@ -93,7 +96,15 @@ class StockTrackerTest extends TestCase
             $this->marketEventMock,
             $this->debtEngineMock,
             $this->mathUtilityMock,
-            $this->corporateMetricsMock
+            $this->corporateMetricsMock,
+            new \App\Service\Market\LiquidityEngine(new \App\Service\Math\MathUtility()),
+            $this->orderFlow,
+            new \App\Service\Market\Agent\AgentFlowEngine(
+                new \App\Service\Market\Agent\AgentPopulation(),
+                new \App\Service\Market\Agent\InMemoryAgentStateStore(),
+                new \App\Service\Market\Flow\InMemoryOrderFlowStore(),
+                []
+            )
         );
     }
 

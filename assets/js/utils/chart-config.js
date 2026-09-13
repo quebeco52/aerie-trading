@@ -1,16 +1,17 @@
 import { THEME_COLORS } from './colors.js';
+import { CHART_FONT_MONO } from './fonts.js';
 
-let chartConfigured = false;
+// Identity, not a boolean: Turbo re-executes the library's <script> on navigation and the
+// module holding a "configured" flag is not reloaded, so the fresh global would go unconfigured.
+let configuredChart = null;
 
-/**
- * Initializes global Chart.js settings once.
- */
+/** Applies the app's Chart.js defaults, once per Chart global. */
 export function setupChartDefaults() {
-    if (typeof Chart === 'undefined' || chartConfigured) return;
+    if (typeof Chart === 'undefined' || configuredChart === Chart) return;
 
     Chart.defaults.color = THEME_COLORS.textMuted;
     Chart.defaults.scale.grid.color = 'rgba(45, 52, 73, 0.4)';
-    Chart.defaults.font.family = '"Courier Prime", monospace';
+    Chart.defaults.font.family = CHART_FONT_MONO;
     Chart.defaults.animation = false;
     Chart.defaults.animations = false;
     if (Chart.defaults.transitions && Chart.defaults.transitions.active) {
@@ -26,7 +27,7 @@ export function setupChartDefaults() {
             const { ctx, chartArea } = chart;
             if (!chartArea) return;
             ctx.save();
-            ctx.font = 'bold 20px "Courier Prime", monospace';
+            ctx.font = `bold 20px ${CHART_FONT_MONO}`;
             ctx.fillStyle = '#e2e8f0';
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
@@ -43,7 +44,7 @@ export function setupChartDefaults() {
         // Plugin might already be registered
     }
 
-    chartConfigured = true;
+    configuredChart = Chart;
 }
 
 /**
@@ -72,6 +73,6 @@ export const standardTooltipConfig = {
     borderColor: '#424754',
     borderWidth: 1,
     padding: 10,
-    titleFont: { family: '"Courier Prime", monospace', size: 11, weight: 'bold' },
-    bodyFont: { family: '"Courier Prime", monospace', size: 11 }
+    titleFont: { family: CHART_FONT_MONO, size: 11, weight: 'bold' },
+    bodyFont: { family: CHART_FONT_MONO, size: 11 }
 };

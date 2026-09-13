@@ -77,7 +77,40 @@ class DistrictControllerTest extends WebTestCase
             $this->assertNotEmpty($node->attr('data-conduit-institution'));
             $this->assertNotEmpty($node->attr('data-conduit-building'));
             $this->assertArrayHasKey($node->attr('data-conduit-institution'), DistrictMap::INSTITUTIONS);
+            // Orthogonal routing: the client redraws the last drop from these on every tick.
+            $this->assertIsNumeric($node->attr('data-lane-y'));
+            $this->assertIsNumeric($node->attr('data-tx'));
         });
+    }
+
+    public function testEveryPlotCarriesRoofFurnitureAKerbLightAndKeyedWindows(): void
+    {
+        $client = static::createClient();
+        $crawler = $client->request('GET', '/district/glasswater-row');
+
+        $this->assertResponseIsSuccessful();
+
+        $plots = $crawler->filter('[data-district-target="plot"]');
+        $this->assertGreaterThan(0, $plots->count());
+        $this->assertCount($plots->count(), $crawler->filter('.roof-furniture'), 'Every plot should carry one roof furniture symbol');
+        $this->assertCount($plots->count(), $crawler->filter('[data-district-target="kerbLight"]'), 'Every plot should carry one kerb light');
+
+        $plots->each(function ($node) {
+            $this->assertContains($node->attr('data-return-field'), ['current_roe', 'current_roic']);
+        });
+
+        $windows = $crawler->filter('.window');
+        $this->assertGreaterThan(0, $windows->count());
+        $windows->each(function ($node) {
+            $this->assertIsNumeric($node->attr('data-key'));
+        });
+        $this->assertGreaterThan(0, $crawler->filter('.window[data-twinkle="true"]')->count(), 'Some windows should flicker');
+
+        $this->assertCount(
+            $crawler->filter('[data-district-target="institutionReadout"] .readout-value')->count(),
+            $crawler->filter('[data-district-target="readoutSpark"]'),
+            'Every readout should carry a sparkline strip',
+        );
     }
 
     public function testEveryPlotRendersAFlareAndABadge(): void
@@ -216,11 +249,36 @@ class DistrictControllerTest extends WebTestCase
         $this->assertResponseIsSuccessful();
 
         $rows = count($crawler->filter('svg g[id^="skyline-row-"]'));
+        $gridlines = $crawler->filter('svg .gridline')->count();
+
+        // The rules are generated from the roster's own cap window, so their number is not
+        // fixed — but every row carries the same set, and a street with tenants always has some.
+        $this->assertGreaterThan(0, $rows);
+        $this->assertGreaterThan(0, $gridlines);
+        $this->assertSame(
+            0,
+            $gridlines % $rows,
+            'A cap maps to a facade height, so each row needs its own identical set of reference rules'
+        );
+    }
+
+    public function testSectorBracketsRunAlongTheKerb(): void
+    {
+        $client = static::createClient();
+        $crawler = $client->request('GET', '/district/glasswater-row');
+
+        $this->assertResponseIsSuccessful();
+
+        $runs = $crawler->filter('[data-district-target="sectorRun"]');
+        $this->assertGreaterThan(0, $runs->count(), 'A street with tenants has at least one sector run');
+        $runs->each(function ($node) {
+            $this->assertArrayHasKey($node->attr('data-sector'), DistrictMap::SECTOR_PALETTE);
+        });
 
         $this->assertCount(
-            $rows * count(DistrictMap::MARKET_CAP_GRIDLINES),
-            $crawler->filter('svg .gridline'),
-            'A cap maps to a facade height, so each row needs its own set of reference rules'
+            count(DistrictMap::SECTOR_PALETTE),
+            $crawler->filter('[data-district-target="sectorChip"]'),
+            'Every sector in the legend is a filter chip'
         );
     }
 
@@ -247,5 +305,89 @@ class DistrictControllerTest extends WebTestCase
         $this->assertResponseIsSuccessful();
         $this->assertSelectorExists('[data-district-target="tooltip"]');
         $this->assertSelectorExists('[data-district-target="institutionDetail"]');
+    }
+
+    public function testTerraceEmbankmentRendersAndTheWaterReflectionDoesNot(): void
+    {
+        $client = static::createClient();
+        $client->request('GET', '/district/glasswater-row');
+
+        $this->assertResponseIsSuccessful();
+        $this->assertSelectorExists('svg #terrace-embankment', 'Terrace embankment wall should render');
+        // The mirrored-water effect was removed at the user's request and must not creep back.
+        $this->assertSelectorNotExists('svg #glasswater-reflections');
+        $this->assertSelectorNotExists('svg .facade-reflection');
+        $this->assertSelectorNotExists('svg .water-shimmer');
+    }
+
+    public function testConduitFilterModeToolbarRendersWithAllOptions(): void
+    {
+        $client = static::createClient();
+        $crawler = $client->request('GET', '/district/glasswater-row');
+
+        $this->assertResponseIsSuccessful();
+        $buttons = $crawler->filter('[data-district-target="conduitModeBtn"]');
+        $this->assertCount(4, $buttons, 'Toolbar should contain 4 conduit filter mode buttons');
+
+        $modes = $buttons->each(fn ($node) => $node->attr('data-mode'));
+        $this->assertSame(['all', 'stressed', 'focused', 'muted'], $modes);
+    }
+
+    public function testPositionAndQuickTradeElementsRenderForGuest(): void
+    {
+        $client = static::createClient();
+        $crawler = $client->request('GET', '/district/glasswater-row');
+
+        $this->assertResponseIsSuccessful();
+        $this->assertSelectorExists('[data-district-target="detailPositionWrap"]');
+        $this->assertSelectorExists('[data-district-target="detailPosition"]');
+        $this->assertSelectorExists('[data-district-target="tooltipPosition"]');
+
+        $container = $crawler->filter('[data-controller="district"]');
+        $this->assertNotEmpty($container->attr('data-district-user-holdings-value'));
+        $this->assertIsNumeric($container->attr('data-district-user-cash-value'));
+        $this->assertContains($container->attr('data-district-margin-enabled-value'), ['true', 'false']);
+    }
+
+    public function testQuickTradeFormRendersForAuthenticatedUser(): void
+    {
+        $client = static::createClient();
+        $userRepo = static::getContainer()->get(\App\Repository\UserRepository::class);
+        $testUser = $userRepo->findOneBy(['email' => 'test.test@test.se']);
+
+        if (!$testUser) {
+            $this->markTestSkipped('Test user not found in test database.');
+        }
+
+        $client->loginUser($testUser);
+        $crawler = $client->request('GET', '/district/glasswater-row');
+
+        $this->assertResponseIsSuccessful();
+        $this->assertSelectorExists('[data-district-target="quickTradeForm"]');
+        $this->assertSelectorExists('[data-district-target="quickTradeTickerInput"]');
+        $this->assertSelectorExists('[data-district-target="quickTradeHolding"]');
+        $this->assertSelectorExists('[data-district-target="quickTradeEstimate"]');
+        $this->assertSelectorExists('[data-district-target="quickTradeQuantity"]');
+        $this->assertSelectorExists('[data-district-target="quickTradeSubmit"]');
+    }
+
+    public function testTheStreetIsAReloadableFrameWithAReconstitutionCountdown(): void
+    {
+        $client = static::createClient();
+        $crawler = $client->request('GET', '/district/glasswater-row');
+
+        $this->assertResponseIsSuccessful();
+        $this->assertSelectorExists('turbo-frame#district-ward [data-controller="district"]');
+        $this->assertSelectorExists('[data-district-target="summaryReconstitution"]');
+        $this->assertSelectorExists('[data-district-target="reconstitutionNotice"]');
+        $this->assertMatchesRegularExpression(
+            '/^(in \d+d|now)$/',
+            trim($crawler->filter('[data-district-target="summaryReconstitution"]')->text())
+        );
+
+        $schedule = json_decode($crawler->filter('[data-controller="district"]')->attr('data-district-reconstitution-value'), true);
+        $this->assertIsArray($schedule);
+        $this->assertGreaterThan(0, $schedule['nextTick']);
+        $this->assertGreaterThan(0, $schedule['ticksPerYear']);
     }
 }

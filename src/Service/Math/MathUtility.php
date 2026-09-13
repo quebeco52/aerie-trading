@@ -21,6 +21,18 @@ class MathUtility
      */
     private ?float $spareNormal = null;
 
+    // --- Robust Scale Estimation ---
+    /** Ratio of a zero-mean normal variable's mean absolute deviation to its sigma, sqrt(2 / pi). */
+    public const MEAN_ABSOLUTE_DEVIATION_TO_SIGMA = 0.7978845608028654;
+
+    // --- Yield To Maturity Solver ---
+
+    /** Newton-Raphson iteration cap; a well-bracketed bond converges in well under ten. */
+    public const YTM_MAX_ITERATIONS = 64;
+
+    /** Price convergence tolerance, in currency units on a 100-face bond (0.01 = one cent). */
+    public const YTM_PRICE_TOLERANCE = 1.0e-9;
+
     private float $randMaxInverse;
     private float $twoPi;
 
@@ -133,11 +145,23 @@ class MathUtility
      *
      * @param float $previousZ The previous quarter's realized Z-score (z_{t-1}).
      * @param float $phi       The autoregressive persistence coefficient (0 = i.i.d., 1 = random walk).
+     * @param float|null $commonInnovation Optional firm-wide N(0,1) innovation shared by every stream this period.
+     * @param float $commonLoading  One-factor loading rho in [0, 1] on the common innovation (0 = independent).
      * @return float The new Z-score z_t.
      */
-    public function generatePersistentZ(float $previousZ, float $phi): float
+    public function generatePersistentZ(float $previousZ, float $phi, ?float $commonInnovation = null, float $commonLoading = 0.0): float
     {
-        $innovation = $this->generateStandardNormal();
+        $idiosyncratic = $this->generateStandardNormal();
+        $innovation = $idiosyncratic;
+
+        if ($commonInnovation !== null && $commonLoading > 0.0) {
+            // One-factor model (Sharpe 1963 single-index form): e_t = rho * F_t + sqrt(1 - rho^2) * u_t
+            // keeps the innovation at unit variance while two streams with loadings rho_i, rho_j
+            // share innovation correlation rho_i * rho_j.
+            $loading = min(1.0, $commonLoading);
+            $innovation = ($loading * $commonInnovation) + (sqrt(max(0.0, 1.0 - ($loading * $loading))) * $idiosyncratic);
+        }
+
         $innovationScale = sqrt(max(0.0, 1.0 - ($phi * $phi)));
 
         return ($phi * $previousZ) + ($innovationScale * $innovation);
@@ -163,6 +187,33 @@ class MathUtility
         return sqrt((1.0 - $boundedPhi) / (1.0 + $boundedPhi));
     }
 
+
+    /**
+     * Estimates the normal-equivalent scale (sigma) of a zero-centred sample from its mean absolute value.
+     *
+     * For a zero-mean normal variable E|X| = sigma * sqrt(2 / pi), so dividing the realized mean absolute
+     * value by that constant recovers sigma. This is preferred to the sample standard deviation when the
+     * sample is fat tailed, as earnings surprises are: a single outlier quarter dominates a sum of squares
+     * and pushes the estimate far above the scale of a typical quarter, whereas the mean absolute value
+     * degrades gracefully.
+     *
+     * @param list<float> $samples Observations centred on zero (an unbiased forecast error has zero mean).
+     * @return float The estimated scale, or 0.0 when there is nothing to estimate from.
+     */
+    public function calculateMeanAbsoluteScale(array $samples): float
+    {
+        $count = count($samples);
+        if ($count === 0) {
+            return 0.0;
+        }
+
+        $total = 0.0;
+        foreach ($samples as $sample) {
+            $total += abs((float) $sample);
+        }
+
+        return ($total / $count) / self::MEAN_ABSOLUTE_DEVIATION_TO_SIGMA;
+    }
 
     /**
      * Calculates a log-normal random draw, used for right-skewed distributions like M&A synergy.
@@ -414,11 +465,11 @@ class MathUtility
 
             if ($isUpJump) {
                 $jumpSize = $this->generateExponential($etaUp);
-                // Failsafe: Cap individual upside jumps to +20% (log(1.20) ≈ 0.1823)
+                // Failsafe: Cap individual upside jumps at MAX_JUMP_LOG_RETURN (+30%, log(1.30) ≈ 0.2624)
                 $jumpSize = min($jumpSize, FinancialConstants::MAX_JUMP_LOG_RETURN);
             } else {
                 $jumpSize = -$this->generateExponential($etaDown);
-                // Failsafe: Cap individual downside crashes to -20% (log(0.80) ≈ -0.2231)
+                // Failsafe: Cap individual downside crashes at MIN_JUMP_LOG_RETURN (-30%, log(0.70) ≈ -0.3567)
                 $jumpSize = max($jumpSize, FinancialConstants::MIN_JUMP_LOG_RETURN);
             }
 
@@ -487,15 +538,31 @@ class MathUtility
      * P/E = (1 - Reinvestment Rate) / (Cost of Equity - Growth Rate)
      * Where Reinvestment Rate = Growth Rate / ROIC.
      *
-     * @param float $costOfEquity The required rate of return for equity investors (Hurdle Rate).
-     * @param float $roic         The Return on Invested Capital.
-     * @param float $growthRate   The expected perpetual growth rate.
+     * The Gordon multiple is a ratio whose denominator is a small difference of two estimated rates, so its
+     * sampling error explodes as that spread narrows: by the delta method the standard error of the multiple
+     * scales with 1/spread^2, and the estimate is near worthless once the spread approaches zero. Vasicek
+     * (1973), "A Note on Using Cross-Sectional Information in Bayesian Estimation of Security Betas", is the
+     * standard remedy for exactly this shape of problem: shrink the noisy firm-level estimate toward a stable
+     * cross-sectional prior, weighting each by its precision. Vasicek shrinks a regression beta toward the
+     * market; here the firm's Gordon multiple is shrunk toward its sector's observed trading multiple, whose
+     * precision is fixed by INTRINSIC_PE_SHRINKAGE_SPREAD.
+     *
+     * This also removes the divergence by construction rather than by a hard cap. The firm's contribution is
+     * weight x multiple = spread x payout / (spread^2 + tau^2), which tends to zero as the spread does, so a
+     * firm whose cost of equity approaches its growth rate lands on its sector multiple instead of infinity.
+     *
+     * @param float      $costOfEquity   The required rate of return for equity investors (Hurdle Rate).
+     * @param float      $roic           The Return on Invested Capital.
+     * @param float      $growthRate     The expected perpetual growth rate.
+     * @param float|null $sectorMultiple The sector's baseline trading multiple used as the cross-sectional
+     *                                   prior. Null skips shrinkage and returns the raw Gordon multiple.
      * @return float The intrinsic fair value P/E multiple.
      */
     public function calculateIntrinsicFairValuePE(
         float $costOfEquity,
         float $roic,
-        float $growthRate = FinancialConstants::DEFAULT_PERPETUAL_GROWTH_RATE
+        float $growthRate = FinancialConstants::DEFAULT_PERPETUAL_GROWTH_RATE,
+        ?float $sectorMultiple = null
     ): float {
         // 1. Enforce absolute structural floor on Cost of Equity to prevent divergence under extreme distress
         $effectiveCostOfEquity = max(FinancialConstants::MIN_COST_OF_EQUITY, $costOfEquity);
@@ -519,7 +586,19 @@ class MathUtility
         $spread = max(0.005, $effectiveCostOfEquity - $effectiveGrowth);
         $pe = $payoutRatio / $spread;
 
-        // 7. Enforce structural market boundaries for distressed (4x) and superstar (35x) equities
+        // 7. Vasicek shrinkage toward the sector's multiple, weighted by the precision of each estimate.
+        // Firm precision goes as spread^2 (delta method on a 1/spread ratio); the prior's is the fixed
+        // tau^2. A well-conditioned firm keeps its own multiple; an ill-conditioned one inherits its sector's.
+        if ($sectorMultiple !== null && $sectorMultiple > 0.0) {
+            $tau = FinancialConstants::INTRINSIC_PE_SHRINKAGE_SPREAD;
+            $firmPrecision = $spread * $spread;
+            $priorPrecision = $tau * $tau;
+
+            $firmWeight = $firmPrecision / ($firmPrecision + $priorPrecision);
+            $pe = ($firmWeight * $pe) + ((1.0 - $firmWeight) * $sectorMultiple);
+        }
+
+        // 8. Enforce structural market boundaries for distressed (4x) and superstar (35x) equities
         return max(FinancialConstants::MIN_INTRINSIC_PE, min(FinancialConstants::MAX_INTRINSIC_PE, $pe));
     }
 
@@ -597,17 +676,33 @@ class MathUtility
     }
 
     /**
-     * Calculates the yield for a given maturity using the Nelson-Siegel-Svensson (1994) curve model.
-     * Extends Nelson-Siegel with a second curvature (hump) parameter to model more complex term structures.
+     * Term premium duration scale (Adrian, Crump & Moench 2013): the compensation investors demand for
+     * bearing duration rises with maturity and saturates, so a two-year note carries only a fraction of the
+     * premium a ten-year bond does. Normalized to 1.0 at the ten-year point, where the benchmark premium is
+     * quoted, and 0.0 at zero maturity, where a yield is the policy rate and nothing else.
+     */
+    public static function calculateTermPremiumDurationScale(float $tau, float $horizonYears = 10.0): float
+    {
+        $horizon = max(0.01, $horizonYears);
+
+        return (1.0 - exp(-max(0.0, $tau) / $horizon)) / (1.0 - exp(-10.0 / $horizon));
+    }
+
+    /**
+     * Nelson-Siegel-Svensson (1994) zero-coupon yield with the Bliss (1997) extension: the slope factor may
+     * decay at its own rate, separate from the primary curvature. When the level and slope are pinned to
+     * economics rather than fitted, the slope decay is the market's belief about how fast the policy rate
+     * returns to neutral (a Vasicek expectations-hypothesis loading), while the curvature decay sets where
+     * the forward-guidance hump sits. Diebold-Li's single decay cannot serve both roles at once.
      *
-     * @param float $level      The long-term asymptotic yield level (beta0).
-     * @param float $slope      The short-term yield component (beta1).
-     * @param float $curvature1 The primary medium-term hump component (beta2).
-     * @param float $curvature2 The secondary long-term hump component (beta3).
-     * @param float $tau        The maturity in years (e.g., 10.0 for the 10-year yield).
-     * @param float $lambda1    The first decay parameter governing the location of the primary hump.
-     * @param float $lambda2    The second decay parameter governing the location of the secondary hump.
-     * @return float The calculated yield for the specified maturity.
+     * @param float      $level       The long-term asymptotic yield level (beta0).
+     * @param float      $slope       The short-rate component (beta1), policy rate minus level.
+     * @param float      $curvature1  The primary medium-term hump component (beta2).
+     * @param float      $curvature2  The secondary long-term hump component (beta3).
+     * @param float      $tau         The maturity in years.
+     * @param float      $lambda1     Decay of the primary hump (and of the slope when no slope decay is given).
+     * @param float      $lambda2     Decay of the secondary hump.
+     * @param float|null $slopeLambda Bliss (1997) slope decay; null reproduces the plain Svensson form.
      */
     public function calculateSvenssonYield(
         float $level,
@@ -616,14 +711,17 @@ class MathUtility
         float $curvature2,
         float $tau,
         float $lambda1 = 0.5,
-        float $lambda2 = 0.15
+        float $lambda2 = 0.15,
+        ?float $slopeLambda = null
     ): float {
         if ($tau <= 0.0) {
             return $level + $slope;
         }
 
-        $term1 = (1.0 - exp(-$lambda1 * $tau)) / ($lambda1 * $tau);
-        $term2 = $term1 - exp(-$lambda1 * $tau);
+        $slopeDecay = $slopeLambda ?? $lambda1;
+        $term1 = (1.0 - exp(-$slopeDecay * $tau)) / ($slopeDecay * $tau);
+        $curvatureLoad = (1.0 - exp(-$lambda1 * $tau)) / ($lambda1 * $tau);
+        $term2 = $curvatureLoad - exp(-$lambda1 * $tau);
 
         $term3 = (1.0 - exp(-$lambda2 * $tau)) / ($lambda2 * $tau);
         $term4 = $term3 - exp(-$lambda2 * $tau);
@@ -810,6 +908,47 @@ class MathUtility
         $conditionalPd = $this->calculateNormalCDF($numerator / $denominator);
 
         return $conditionalPd * $lgd;
+    }
+
+    /**
+     * Averages a mean-reverting volatility over a horizon, giving the single volatility a T-year model
+     * should be struck on.
+     *
+     * Spot volatility answers "how much is this moving today"; a T-year default probability asks "how much
+     * will this move between now and T", which under a mean-reverting variance process is the expected
+     * integrated variance, E[(1/T) * int_0^T v_t dt]. For the Heston / GARCH family that expectation is
+     * closed form:
+     *
+     *     sigmaBar^2(T) = theta + (v0 - theta) * (1 - e^(-kappa*T)) / (kappa*T)
+     *
+     * which returns spot variance as T -> 0 and the long-run level as T -> infinity. Feeding raw spot
+     * volatility into a five-year horizon instead asserts that today's shock persists undiminished for five
+     * years, and since the Merton d2 carries a -sigma*sqrt(T) term that assertion alone can consume the whole
+     * distance to default on a firm whose balance sheet never moved.
+     *
+     * @param float $spotVolatility     Today's annualized volatility (sqrt of v0).
+     * @param float $longRunVolatility  The structural volatility the process reverts to (sqrt of theta).
+     * @param float $reversionSpeed     Mean-reversion speed kappa, in reversions per year.
+     * @param float $horizonYears       The horizon T being modelled, in years.
+     * @return float The annualized volatility to use over the horizon.
+     */
+    public function averageMeanRevertingVolatility(
+        float $spotVolatility,
+        float $longRunVolatility,
+        float $reversionSpeed,
+        float $horizonYears
+    ): float {
+        $spotVariance = $spotVolatility ** 2.0;
+        $longRunVariance = $longRunVolatility ** 2.0;
+
+        if ($reversionSpeed <= 0.0 || $horizonYears <= 0.0) {
+            return sqrt(max(0.0, $spotVariance));
+        }
+
+        $decay = $reversionSpeed * $horizonYears;
+        $weight = (1.0 - exp(-$decay)) / $decay;
+
+        return sqrt(max(0.0, $longRunVariance + (($spotVariance - $longRunVariance) * $weight)));
     }
 
     /**
@@ -1287,11 +1426,10 @@ class MathUtility
         float $capacityUtilization,
         float $interbankLiquiditySpread
     ): float {
-        // Dynamic shifts in Days Sales Outstanding (DSO), Days Inventory Outstanding (DIO), and Days Payable Outstanding (DPO)
-        $dsoShiftDays = ($creditSpread - MacroEngine::BASE_CREDIT_SPREAD) * FinancialConstants::CCC_DSO_CREDIT_SPREAD_SENSITIVITY;
-        $dioShiftDays = (1.0 - $capacityUtilization) * FinancialConstants::CCC_DIO_CAPACITY_SENSITIVITY;
-        // Under interbank liquidity stress, vendors demand faster payment (DPO contracts)
-        $dpoShiftDays = - ($interbankLiquiditySpread - MacroEngine::INTERBANK_BASELINE_SPREAD) * FinancialConstants::CCC_DPO_LIQUIDITY_SENSITIVITY;
+        $shifts = $this->calculateWorkingCapitalDayShifts($creditSpread, $capacityUtilization, $interbankLiquiditySpread);
+        $dsoShiftDays = $shifts['dso'];
+        $dioShiftDays = $shifts['dio'];
+        $dpoShiftDays = $shifts['dpo'];
 
         // Total CCC expansion / contraction days translated to annual intensity units (Days / 365)
         // Standard formula: CCC = DSO + DIO - DPO
@@ -1308,6 +1446,30 @@ class MathUtility
         }
 
         return max(FinancialConstants::MIN_POSITIVE_NWC_INTENSITY, min(FinancialConstants::MAX_POSITIVE_NWC_INTENSITY, $dynamicIntensity));
+    }
+
+    /**
+     * The three separate day-count movements behind a cash conversion cycle shift.
+     *
+     * Kept as its own method because the components are not interchangeable once working capital is carried
+     * as real balances: a receivable that ages is exposed to customer default, while inventory that piles up
+     * is exposed to writedown. Only the aggregate is a single number; the risks attach to the parts.
+     *
+     * @return array{dso: float, dio: float, dpo: float} Day-count shifts, signed as movements in each component.
+     */
+    public function calculateWorkingCapitalDayShifts(
+        float $creditSpread,
+        float $capacityUtilization,
+        float $interbankLiquiditySpread
+    ): array {
+        return [
+            // Customers stretch payment when credit is dear.
+            'dso' => ($creditSpread - MacroEngine::BASE_CREDIT_SPREAD) * FinancialConstants::CCC_DSO_CREDIT_SPREAD_SENSITIVITY,
+            // Unsold goods pile up when the plant runs below capacity.
+            'dio' => (1.0 - $capacityUtilization) * FinancialConstants::CCC_DIO_CAPACITY_SENSITIVITY,
+            // Under interbank liquidity stress, vendors demand faster payment (DPO contracts).
+            'dpo' => - ($interbankLiquiditySpread - MacroEngine::INTERBANK_BASELINE_SPREAD) * FinancialConstants::CCC_DPO_LIQUIDITY_SENSITIVITY,
+        ];
     }
 
     /**
@@ -1379,6 +1541,14 @@ class MathUtility
      * @param float $interbankStress  Wholesale interbank liquidity stress above baseline.
      * @param float $hyBaseMultiplier Baseline multiple of HY spread over IG spread (e.g. 2.4x).
      * @param float $fallenAngelSens  Sensitivity coefficient for non-linear HY spread blowout on contractions.
+     * @param float $leverageSens     Merton distance-to-default sensitivity of the IG spread to the output gap.
+     * @param float $volSens          IG spread widening per unit of equity volatility above the threshold.
+     * @param float $volThreshold     Equity volatility below which no volatility premium is charged.
+     * @param float $contagionSens    IG spread widening per unit of interbank stress.
+     * @param float $minIgSpread      Floor on the IG spread.
+     * @param float $maxIgSpread      Cap on the IG spread.
+     * @param float $hyMinMultiplier  Floor multiple of HY over IG.
+     * @param float $maxHySpread      Cap on the HY spread.
      * @return array{ig: float, hy: float} Calculated IG and HY credit spreads.
      */
     public function calculateDualTrancheCreditSpreads(
@@ -1386,20 +1556,28 @@ class MathUtility
         float $outputGapEma,
         float $marketVolEma,
         float $interbankStress,
-        float $hyBaseMultiplier = 2.4,
-        float $fallenAngelSens = 8.0
+        float $hyBaseMultiplier = MacroEngine::HY_BASE_SPREAD_MULTIPLIER,
+        float $fallenAngelSens = MacroEngine::FALLEN_ANGEL_CLIFF_SENSITIVITY,
+        float $leverageSens = MacroEngine::MERTON_LEVERAGE_SENSITIVITY,
+        float $volSens = MacroEngine::MERTON_VOL_SENSITIVITY,
+        float $volThreshold = MacroEngine::CREDIT_SPREAD_EXCESS_VOL_THRESHOLD,
+        float $contagionSens = MacroEngine::INTERBANK_CREDIT_CONTAGION_SENSITIVITY,
+        float $minIgSpread = MacroEngine::MIN_CREDIT_SPREAD,
+        float $maxIgSpread = MacroEngine::MAX_CREDIT_SPREAD,
+        float $hyMinMultiplier = MacroEngine::HY_MIN_SPREAD_MULTIPLIER,
+        float $maxHySpread = MacroEngine::MAX_HY_CREDIT_SPREAD
     ): array {
-        $cycleSpread = $baseIgSpread * exp(-2.5 * $outputGapEma);
-        $excessVol = max(0.0, $marketVolEma - 0.20);
-        $volSpread = 0.15 * $excessVol;
-        $contagionSpread = $interbankStress * 2.0;
+        $cycleSpread = $baseIgSpread * exp(-$leverageSens * $outputGapEma);
+        $excessVol = max(0.0, $marketVolEma - $volThreshold);
+        $volSpread = $volSens * $excessVol;
+        $contagionSpread = $interbankStress * $contagionSens;
 
-        $igSpread = max(0.008, min(0.10, $cycleSpread + $volSpread + $contagionSpread));
+        $igSpread = max($minIgSpread, min($maxIgSpread, $cycleSpread + $volSpread + $contagionSpread));
 
         // Jarrow-Lando-Turnbull (1997): Speculative-grade default intensity surges exponentially during recessions
         $contractionDepth = max(0.0, -$outputGapEma);
         $fallenAngelMultiplier = exp($fallenAngelSens * $contractionDepth);
-        $hySpread = max($igSpread * 1.5, min(0.25, $igSpread * $hyBaseMultiplier * $fallenAngelMultiplier));
+        $hySpread = max($igSpread * $hyMinMultiplier, min($maxHySpread, $igSpread * $hyBaseMultiplier * $fallenAngelMultiplier));
 
         return [
             'ig' => $igSpread,
@@ -1500,10 +1678,10 @@ class MathUtility
         float $slope,
         float $termPremium,
         float $fci,
-        float $beta0 = -0.55,
-        float $betaSlope = -80.0,
-        float $betaTp = -20.0,
-        float $betaFci = 0.35
+        float $beta0 = MacroEngine::RECESSION_PROBIT_BETA_0,
+        float $betaSlope = MacroEngine::RECESSION_PROBIT_BETA_SLOPE,
+        float $betaTp = MacroEngine::RECESSION_PROBIT_BETA_TP,
+        float $betaFci = MacroEngine::RECESSION_PROBIT_BETA_FCI
     ): float {
         $probitIndex = $beta0 + ($betaSlope * $slope) + ($betaTp * $termPremium) + ($betaFci * $fci);
         $probability = $this->calculateNormalCDF($probitIndex);
@@ -1527,9 +1705,9 @@ class MathUtility
     public function calculateCapacityUtilization(
         float $outputGap,
         float $capitalStockOverhang,
-        float $baselineCu = 0.785,
-        float $gapSensitivity = 0.85,
-        float $overhangSensitivity = 0.40
+        float $baselineCu = MacroEngine::CU_BASELINE,
+        float $gapSensitivity = MacroEngine::CU_GAP_SENSITIVITY,
+        float $overhangSensitivity = MacroEngine::CU_OVERHANG_SENSITIVITY
     ): float {
         $rawCu = $baselineCu + ($gapSensitivity * $outputGap) - ($overhangSensitivity * $capitalStockOverhang);
         return max(0.60, min(0.92, $rawCu));
@@ -1670,6 +1848,8 @@ class MathUtility
      * Simulates global investment banking, private equity LBO, and IPO advisory volume
      * as an exponential function of valuation liquidity (ERP compression, tight high-yield spreads, and low volatility):
      *   Target = 100 * exp(-betaErp * erpExcess - betaHy * hySpreadExcess - betaVol * volExcess)
+     * The log deviation is capped at ~1.7x either way: global M&A volume ran 2.2x from the 2007 peak to the 2009
+     * trough, so a target range much wider than that would not be a cycle any market has produced.
      *
      * @param float $currentDealIndex   Current deal flow index.
      * @param float $equityRiskPremium  Current equity risk premium.
@@ -1691,12 +1871,15 @@ class MathUtility
         float $kappa = 1.60,
         float $sigma = 0.15
     ): float {
-        $erpExcess = ($equityRiskPremium - 0.045) / 0.015;
-        $hyExcess = ($hyCreditSpread - 0.048) / 0.020;
-        $volExcess = ($marketVolatility - 0.15) / 0.06;
+        $erpExcess = ($equityRiskPremium - MacroEngine::BASE_EQUITY_RISK_PREMIUM) / 0.015;
+        // 500 bps is one cycle-standard-deviation of HY OAS (2000-2024), so a 2008-type +1,500 bps reads as three units of stress.
+        $hyExcess = ($hyCreditSpread - (MacroEngine::BASE_CREDIT_SPREAD * MacroEngine::HY_BASE_SPREAD_MULTIPLIER)) / 0.050;
+        $volExcess = ($marketVolatility - MacroEngine::MACRO_VOL_BASE_ANCHOR) / 0.06;
 
-        $stressExponent = - (0.35 * $erpExcess + 0.45 * $hyExcess + 0.20 * $volExcess);
-        $targetIndex = 100.0 * exp(max(-2.0, min(1.5, $stressExponent)));
+        $stressExponent = - (MacroEngine::DEAL_ACTIVITY_ERP_BETA * $erpExcess)
+            - (MacroEngine::DEAL_ACTIVITY_HY_BETA * $hyExcess)
+            - (MacroEngine::DEAL_ACTIVITY_VOL_BETA * $volExcess);
+        $targetIndex = MacroEngine::DEAL_ACTIVITY_BASELINE * exp(max(-MacroEngine::DEAL_ACTIVITY_LOG_RANGE, min(MacroEngine::DEAL_ACTIVITY_LOG_RANGE, $stressExponent)));
 
         $drift = $kappa * ($targetIndex - $currentDealIndex) * $dt;
         $diffusion = $sigma * $currentDealIndex * sqrt($dt) * $dW;
@@ -2045,5 +2228,266 @@ class MathUtility
         int $periodsPerYear = 4
     ): float {
         return ($periodValue / max(0.01, $seasonalFactor)) * $periodsPerYear;
+    }
+    // --- Sovereign Term Structure Evaluation ---
+
+    /**
+     * Nominal sovereign zero-coupon yield at an arbitrary tenor, term premium and central-bank duration
+     * extraction included, floored at the effective lower bound.
+     *
+     * This is the single evaluation of the sovereign curve. MonetaryPolicySubsystem calls it to publish the
+     * benchmark 2y/5y/10y/30y points, and the bond desk calls it to discount a cash flow that falls between
+     * them. A second implementation would price a seven-year note off a curve that the macro dashboard never
+     * quoted, and the gap between the two would be a risk-free arbitrage for anyone who noticed.
+     *
+     * @param float $tau                     Maturity in years.
+     * @param float $level                   Asymptotic long-term yield level (beta0).
+     * @param float $slope                   Short-rate slope parameter (beta1).
+     * @param float $curvature1              Medium-term hump parameter (beta2).
+     * @param float $curvature2              Long-term secondary hump parameter (beta3).
+     * @param float $lambda1                 Decay of the primary hump.
+     * @param float $lambda2                 Decay of the secondary hump.
+     * @param float $slopeLambda             Bliss (1997) slope decay.
+     * @param float $termPremium10y          Ten-year term premium, scaled down by duration below ten years.
+     * @param float $longEndPremium          Structural premium that keeps accruing past the ten-year point.
+     * @param float $termPremiumHorizonYears Horizon of the ACM (2013) duration scale.
+     * @param float $balanceSheetIntensity   QE (positive) or QT (negative) duration extraction intensity.
+     * @param float $habitatSensitivity      Vayanos-Vila preferred-habitat sensitivity.
+     * @param float $effectiveLowerBound     Nominal floor on the resulting yield.
+     * @return float The nominal zero-coupon yield at the requested tenor.
+     */
+    public function calculateSovereignZeroYield(
+        float $tau,
+        float $level,
+        float $slope,
+        float $curvature1,
+        float $curvature2,
+        float $lambda1,
+        float $lambda2,
+        float $slopeLambda,
+        float $termPremium10y,
+        float $longEndPremium,
+        float $termPremiumHorizonYears,
+        float $balanceSheetIntensity,
+        float $habitatSensitivity,
+        float $effectiveLowerBound
+    ): float {
+        $preferredHabitatShift = $this->calculatePreferredHabitatTermPremiumShift(
+            balanceSheetIntensity: $balanceSheetIntensity,
+            tau: $tau,
+            habitatSensitivity: $habitatSensitivity
+        );
+
+        $durationScale = self::calculateTermPremiumDurationScale($tau, $termPremiumHorizonYears);
+        $termPremium = ($termPremium10y * min(1.0, $durationScale)) + ($longEndPremium * max(0.0, $durationScale - 1.0));
+
+        $yield = $this->calculateSvenssonYield(
+            level: $level,
+            slope: $slope,
+            curvature1: $curvature1,
+            curvature2: $curvature2,
+            tau: $tau,
+            lambda1: $lambda1,
+            lambda2: $lambda2,
+            slopeLambda: $slopeLambda
+        );
+
+        return max($effectiveLowerBound, $yield + $termPremium + $preferredHabitatShift);
+    }
+
+    // --- Fixed Income Pricing & Risk ---
+
+    /**
+     * Present value of a bond's cash flows under continuous compounding against a zero-coupon curve.
+     *
+     * Each flow is discounted at the zero rate for its own settlement distance rather than at a single
+     * yield to maturity, so a steep curve prices a long bond differently from a flat curve at the same
+     * average level. Continuous compounding matches the Nelson-Siegel-Svensson curve the rates come from,
+     * which is quoted as a continuously compounded zero curve.
+     *
+     * @param array<int, array{time: float, amount: float}> $cashFlows Flows in years from settlement, ascending.
+     * @param callable(float): float                        $zeroYield Zero-coupon yield at a tenor in years.
+     * @return float The dirty price: present value including accrued interest.
+     */
+    public function calculateBondPresentValue(array $cashFlows, callable $zeroYield): float
+    {
+        $presentValue = 0.0;
+
+        foreach ($cashFlows as $flow) {
+            $time = (float) $flow['time'];
+            if ($time <= 0.0) {
+                continue;
+            }
+
+            $presentValue += ((float) $flow['amount']) * exp(-$zeroYield($time) * $time);
+        }
+
+        return $presentValue;
+    }
+
+    /**
+     * Macaulay duration: the present-value-weighted average time to a bond's cash flows, in years.
+     *
+     * @param array<int, array{time: float, amount: float}> $cashFlows Flows in years from settlement.
+     * @param float                                         $yieldToMaturity Continuously compounded YTM.
+     * @return float Weighted average time to cash flow, in years.
+     */
+    public function calculateMacaulayDuration(array $cashFlows, float $yieldToMaturity): float
+    {
+        $weightedTime = 0.0;
+        $presentValue = 0.0;
+
+        foreach ($cashFlows as $flow) {
+            $time = (float) $flow['time'];
+            if ($time <= 0.0) {
+                continue;
+            }
+
+            $discounted = ((float) $flow['amount']) * exp(-$yieldToMaturity * $time);
+            $presentValue += $discounted;
+            $weightedTime += $discounted * $time;
+        }
+
+        if ($presentValue <= 0.0) {
+            return 0.0;
+        }
+
+        return $weightedTime / $presentValue;
+    }
+
+    /**
+     * Modified duration: the first-order price sensitivity to a parallel yield shift, -(1/P)(dP/dy).
+     *
+     * Under continuous compounding modified duration equals Macaulay duration exactly; the periodic
+     * 1/(1 + y/k) adjustment belongs to discrete compounding and applying it here would understate the
+     * sensitivity of every bond on the desk.
+     *
+     * @param float $macaulayDuration Macaulay duration in years.
+     * @return float Modified duration in years.
+     */
+    public function calculateModifiedDuration(float $macaulayDuration): float
+    {
+        return $macaulayDuration;
+    }
+
+    /**
+     * Convexity: the second-order price sensitivity, (1/P)(d2P/dy2), in years squared.
+     *
+     * The term that makes a duration estimate accurate for a large yield move. Price change over a shift
+     * dy is -D_mod * dy + 0.5 * C * dy^2, and without the convexity leg a 100bp move on a thirty-year
+     * bond misprices by enough to be visible in a portfolio.
+     *
+     * @param array<int, array{time: float, amount: float}> $cashFlows Flows in years from settlement.
+     * @param float                                         $yieldToMaturity Continuously compounded YTM.
+     * @return float Convexity in years squared.
+     */
+    public function calculateConvexity(array $cashFlows, float $yieldToMaturity): float
+    {
+        $weighted = 0.0;
+        $presentValue = 0.0;
+
+        foreach ($cashFlows as $flow) {
+            $time = (float) $flow['time'];
+            if ($time <= 0.0) {
+                continue;
+            }
+
+            $discounted = ((float) $flow['amount']) * exp(-$yieldToMaturity * $time);
+            $presentValue += $discounted;
+            $weighted += $discounted * $time * $time;
+        }
+
+        if ($presentValue <= 0.0) {
+            return 0.0;
+        }
+
+        return $weighted / $presentValue;
+    }
+
+    /**
+     * Yield to maturity: the single continuously compounded rate that reproduces a bond's dirty price.
+     *
+     * Newton-Raphson on the price function, whose derivative with respect to yield is the negative
+     * PV-weighted time, so each step is price error divided by a quantity the duration calculation already
+     * needs. Falls back to bisection bounds if a step leaves the bracket, which a deeply distressed or
+     * very long zero can do from a poor starting guess.
+     *
+     * @param array<int, array{time: float, amount: float}> $cashFlows Flows in years from settlement.
+     * @param float                                         $dirtyPrice Target present value.
+     * @param float                                         $guess Starting yield.
+     * @return float The continuously compounded yield to maturity.
+     */
+    public function calculateYieldToMaturity(array $cashFlows, float $dirtyPrice, float $guess = 0.04): float
+    {
+        if ($dirtyPrice <= 0.0 || $cashFlows === []) {
+            return 0.0;
+        }
+
+        $yield = $guess;
+        $lowerBound = -0.99;
+        $upperBound = 5.0;
+
+        for ($iteration = 0; $iteration < self::YTM_MAX_ITERATIONS; $iteration++) {
+            $presentValue = 0.0;
+            $derivative = 0.0;
+
+            foreach ($cashFlows as $flow) {
+                $time = (float) $flow['time'];
+                if ($time <= 0.0) {
+                    continue;
+                }
+
+                $discounted = ((float) $flow['amount']) * exp(-$yield * $time);
+                $presentValue += $discounted;
+                $derivative -= $discounted * $time;
+            }
+
+            $error = $presentValue - $dirtyPrice;
+            if (abs($error) < self::YTM_PRICE_TOLERANCE) {
+                return $yield;
+            }
+
+            if ($error > 0.0) {
+                $lowerBound = $yield;
+            } else {
+                $upperBound = $yield;
+            }
+
+            if ($derivative === 0.0) {
+                break;
+            }
+
+            $step = $error / $derivative;
+            $next = $yield - $step;
+
+            if ($next <= $lowerBound || $next >= $upperBound || !is_finite($next)) {
+                $next = ($lowerBound + $upperBound) / 2.0;
+            }
+
+            $yield = $next;
+        }
+
+        return $yield;
+    }
+
+    /**
+     * Accrued interest on an actual/actual basis: the share of the current coupon period already earned.
+     *
+     * Separates the dirty price a buyer pays from the clean price a desk quotes. Without it the quoted
+     * price of a coupon bond saws upward through every period and drops at each payment, which reads as
+     * volatility that the instrument does not actually have.
+     *
+     * @param float $couponAmount   Cash paid at the end of the current coupon period.
+     * @param float $periodElapsed  Years elapsed since the last coupon.
+     * @param float $periodLength   Full length of the coupon period in years.
+     * @return float Interest accrued to the seller.
+     */
+    public function calculateAccruedInterest(float $couponAmount, float $periodElapsed, float $periodLength): float
+    {
+        if ($periodLength <= 0.0 || $periodElapsed <= 0.0) {
+            return 0.0;
+        }
+
+        return $couponAmount * min(1.0, $periodElapsed / $periodLength);
     }
 }

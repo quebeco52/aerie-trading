@@ -4,11 +4,13 @@ declare(strict_types=1);
 
 namespace App\Service\Model\Sector;
 
+use App\DTO\InterestExpenseDTO;
+
 use App\Service\Model\BusinessModelInterface;
 
-use App\Data\ModelParam;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
+use App\Service\Corporate\EarningsEngine;
 use App\Service\Math\MathUtility;
 use App\Service\Macro\MacroEngine;
 use App\Service\Math\FinancialConstants;
@@ -38,23 +40,45 @@ class StandardCorporateBusinessModel implements BusinessModelInterface
     use StandardMaTrait;
     use StandardValuationTrait;
 
+    // --- Operating Cyclicality & Demand Structure ---
+    /** Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). A firm whose volumes move one for one with the output gap; sector models override. */
+    public const OPERATING_CYCLICALITY = 1.00;
+    /** Own-price elasticity of demand: volume lost per unit of real price increase. */
+    public const PRICE_ELASTICITY_OF_DEMAND = 0.50;
+    /** Share of an idiosyncratic revenue gain taken from same-industry peers rather than won from a larger market. */
+    public const INDUSTRY_SUBSTITUTABILITY = 0.50;
+
+    // --- FX Exposure ---
+    /** Share of revenue whose competitiveness moves with the trade-weighted exchange rate. A mostly domestic firm meeting a little imported competition; sector models override. */
+    public const FX_REVENUE_EXPOSURE = 0.05;
+
     // --- ROIC & Target Metrics ---
     /** Weight given to historical baseline ROIC when blending with TTM ROIC. */
     public const BASELINE_ROIC_WEIGHT = 0.50;
     /** Weight given to TTM ROIC when blending with historical baseline ROIC. */
     public const TTM_ROIC_WEIGHT      = 0.50;
 
+    // --- Firm-Level Common Factor ---
+    /** One-factor loading of each revenue stream on the firm-wide demand innovation (rho^2 = 36% shared variance). */
+    public const FIRM_FACTOR_LOADING = 0.60;
+    /** Two-factor loading of each revenue stream on the persistent macro-sector demand factor (rho_s^2 = 16% variance shared with sector peers). */
+    public const SECTOR_FACTOR_LOADING = 0.40;
+
     // --- Pricing Power & Macro Physics ---
-    /** Minimum beta floor applied when calculating pricing power resistance to inflation. */
+    /** Median pricing-power index (0.5) used as the default PricingPowerIndex by sector models that carry no pricing-power constant of their own. */
     public const MIN_BETA_PRICING_POWER_FLOOR = 0.50;
+
+    // --- Inflation Pass-Through (Gopinath & Itskhoki 2010) ---
+    /** Pass-through elasticity of a pure price taker; the pricing power index adds to it, so the median firm recovers expected inflation exactly and a price setter one and a half times over. */
+    public const PASS_THROUGH_BASE_ELASTICITY = 0.50;
+    /** Characteristic time in years for expected inflation to reach selling prices through menu costs and contract repricing (Nakamura & Steinsson 2008 price durations). Sector models override for annual tariffs or multi-year contracts. */
+    public const PRICE_PASS_THROUGH_LAG_YEARS = 0.75;
+    /** Macro inflation measure selling prices track: goods breakevens by default; services models price off supercore. */
+    public const PRICING_INFLATION_BASIS = 'tips_breakeven_ema';
 
     // --- Revenue & Shock Physics ---
     /** Variance scalar applied to baseline volatility for sales volume shocks. */
     public const REVENUE_VARIANCE_SCALAR = 0.15;
-    /** Sensitivity scalar for supply chain inflation cost penalties during high CPI/PPI regimes. */
-    public const INFLATION_PENALTY_SCALAR = 0.50;
-    /** Sensitivity of corporate variable costs to Producer Price Inflation (PPI). */
-    public const PPI_COST_SENSITIVITY = 0.25;
     /** Upper clamp for realized variable margin under severe supply chain inflation. */
     public const MAX_VARIABLE_MARGIN_CLAMP = 1.50;
     /** Lower clamp for realized variable margin. */
@@ -107,21 +131,82 @@ class StandardCorporateBusinessModel implements BusinessModelInterface
 
     public function getMacroPhysics(Stock $stock, \App\DTO\MacroStateDTO $macroState): array
     {
-        $params = $this->resolveModelParameters($stock, [
-            ModelParam::PricingPowerIndex->value => 0.5,
-        ]);
-        $pricingPower = max(0.0, min(1.0, $params[ModelParam::PricingPowerIndex]));
-        $macroSensitivityMultiplier = 0.5 + $pricingPower;
+        $macroSensitivityMultiplier = self::MIN_BETA_PRICING_POWER_FLOOR + $this->resolvePricingPower($stock);
 
-        $outputGap = $macroState->outputGapEma;
-        $inflation = $macroState->tipsBreakevenEma;
-        $beta = (float) $stock->getBeta();
-        $fxShift = ($macroState->exchangeRateIndexEma - 100.0) / 100.0;
+        $outputGap = $this->resolveLaggedOutputGap($stock, $macroState);
+        $beta = $this->getOperatingCyclicality($stock);
 
         return [
-            'macro_demand_shift' => ($outputGap * $macroSensitivityMultiplier * $beta) - ($fxShift * 0.05 * $beta),
-            'pricing_power_multiplier' => 1.0 + ($inflation * max(self::MIN_BETA_PRICING_POWER_FLOOR, $beta)),
+            'macro_demand_shift' => ($outputGap * $macroSensitivityMultiplier * $beta) + $this->resolveFxDemandShift($macroState),
+            ...$this->resolvePricingMultipliers($stock, $macroState),
         ];
+    }
+
+    /**
+     * Elasticity of the firm's selling prices to expected inflation. Defaults to the pricing-power form
+     * (a price taker recovers half, the median firm all, a price setter one and a half times); sector models
+     * that price off a contractual or regulated formula declare PRICING_ELASTICITY directly.
+     */
+    protected function resolvePricingElasticity(Stock $stock): float
+    {
+        if (defined('static::PRICING_ELASTICITY')) {
+            return (float) static::PRICING_ELASTICITY;
+        }
+
+        return self::PASS_THROUGH_BASE_ELASTICITY + $this->resolvePricingPower($stock);
+    }
+
+    /**
+     * The selling-price and input-cost multipliers the engine applies to revenue capacity and the cost base.
+     * Both track the same inflation measure with the same repricing lag; only the elasticity differs, so the
+     * gap between them is the firm's real pricing. Called exactly once per quarter (the lag state persists on
+     * the stock), so sector models compose it rather than recomputing pass-through themselves.
+     *
+     * @return array{pricing_power_multiplier: float, input_cost_multiplier: float}
+     */
+    public function resolvePricingMultipliers(Stock $stock, \App\DTO\MacroStateDTO $macroState): array
+    {
+        $expectedInflation = $this->resolveExpectedInflationBasis($macroState);
+        $elasticity = $this->resolvePricingElasticity($stock);
+
+        $passThrough = $this->resolveInflationPassThrough($stock, $macroState, $elasticity, $expectedInflation, (float) static::PRICE_PASS_THROUGH_LAG_YEARS);
+
+        return [
+            'pricing_power_multiplier' => 1.0 + $passThrough,
+            // Input prices move with expected inflation at unit elasticity and the same repricing lag, whatever
+            // the firm itself manages to charge: the gap between the two multipliers is the firm's real pricing.
+            'input_cost_multiplier' => 1.0 + ($elasticity > 0.0 ? $passThrough / $elasticity : $expectedInflation),
+        ];
+    }
+
+    /**
+     * Incomplete and lagged pass-through of expected inflation into selling prices (Gopinath & Itskhoki 2010).
+     *
+     * The share of inflation a firm recovers in price is its pricing power, not its beta. Beta measures
+     * systematic risk and already scales the demand shift above; keying pass-through off it as well made a
+     * cyclical commodity producer look like a price setter and a defensive branded staple like a price taker,
+     * and double-counted beta inside one quarter's revenue. The elasticity is centred so the median firm
+     * (pricing power 0.5) keeps the unit elasticity the old beta term produced on average, mirroring the
+     * 0.5 + p form the demand multiplier already uses.
+     *
+     * Pass-through is then distributed over time rather than landing whole in the quarter expectations move:
+     * menu costs and contract repricing mean posted prices reach the new level over several quarters. The
+     * lag state is persisted on the stock, so a firm carries its own repricing history.
+     */
+    protected function resolveInflationPassThrough(Stock $stock, \App\DTO\MacroStateDTO $macroState, float $elasticity, ?float $expectedInflation = null, ?float $lagYears = null): float
+    {
+        $targetPassThrough = ($expectedInflation ?? $macroState->tipsBreakevenEma) * $elasticity;
+
+        $laggedPassThrough = MathUtility::getInstance()->calculateDistributedLag(
+            currentLaggedValue: $stock->getInflationPassThrough() ?? $targetPassThrough,
+            targetValue: $targetPassThrough,
+            dt: EarningsEngine::QUARTERLY_TIME_STEP,
+            lagTimeConstant: $lagYears ?? (float) static::PRICE_PASS_THROUGH_LAG_YEARS
+        );
+
+        $stock->setInflationPassThrough($laggedPassThrough);
+
+        return $laggedPassThrough;
     }
 
     /**
@@ -129,38 +214,20 @@ class StandardCorporateBusinessModel implements BusinessModelInterface
      */
     protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
     {
-        $params = $this->resolveModelParameters($stock, [
-            ModelParam::PricingPowerIndex->value => 0.5,
-        ]);
-        $pricingPower = max(0.0, min(1.0, $params[ModelParam::PricingPowerIndex]));
-
-        // Risk vs Reward:
-        // High pricing power (1.0) = 0x inflation penalty, but 1.5x macro volume sensitivity (highly elastic luxury/premium goods)
-        // Low pricing power (0.0)  = 2.0x inflation penalty, but 0.5x macro volume sensitivity (inelastic discount goods)
-        $inflationMultiplier = 2.0 - ($pricingPower * 2.0);
-        $macroSensitivityMultiplier = 0.5 + $pricingPower;
+        $pricingPower = $this->resolvePricingPower($stock);
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
-        $revenueZ = $mathUtility->generatePersistentZ($momentum['revenue'] ?? 0.0, 0.25);
+        $streams  = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
+        $revenueZ = $streams->generateZ('revenue', 0.25);
 
         $revenueShock = ($revenueZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR));
         $actualRevenue = $expectedRevenue * (1.0 + $revenueShock);
 
-        // Supply Chain Inflation Penalty
-        $inflation = $macroState->inflationEma;
-        $baseInflationPenalty = $inflation > \App\Service\Macro\MacroEngine::TARGET_INFLATION ? ($inflation - \App\Service\Macro\MacroEngine::TARGET_INFLATION) * abs((float) $stock->getBeta()) * self::INFLATION_PENALTY_SCALAR : 0.0;
+        // Input cost basket: energy, metals, agricultural, freight, wholesale-goods and wage prices reach the
+        // variable cost base with the buying lag and are recovered in selling prices with the repricing lag.
+        $inputCostDrag = $this->resolveInputCostDrag($stock, $macroState, $streams, $pricingPower, $realizedVariableMargin);
 
-        $inflationPenalty = $baseInflationPenalty * $inflationMultiplier;
-
-        // Producer Price Inflation: Wholesale input and intermediate goods cost drag
-        $ppiCostDrag = MathUtility::calculatePpiCostDrag(
-            $macroState->producerPriceInflationEma,
-            \App\Service\Macro\MacroEngine::TARGET_INFLATION,
-            $pricingPower,
-            self::PPI_COST_SENSITIVITY
-        );
-
-        $clampedMargin = $this->clampMargin($realizedVariableMargin + $inflationPenalty + $ppiCostDrag);
+        $clampedMargin = $this->clampMargin($realizedVariableMargin + $inputCostDrag);
 
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
@@ -168,9 +235,7 @@ class StandardCorporateBusinessModel implements BusinessModelInterface
             primaryShockZ: $revenueZ,
             observableShockZ: $revenueZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR),
             eventType: null,
-            streamZ: [
-                'revenue' => $revenueZ,
-            ],
+            streamZ: $streams->getStreamZ(),
             streamRevenue: [
                 'core_business' => $actualRevenue,
             ],
@@ -180,7 +245,7 @@ class StandardCorporateBusinessModel implements BusinessModelInterface
     /**
      * Normal physical companies are evaluated on NOPAT / Invested Capital (ROIC).
      */
-    public function updateDynamicRoic(Stock $stock, float $actualTotalNetIncome, float $investedCapital, float $ebit, float $corporateTaxRate, float $wacc = 0.08, float $costOfEquity = 0.10, ?\App\DTO\MacroStateDTO $macroState = null): float
+    public function updateDynamicRoic(Stock $stock, float $actualTotalNetIncome, float $investedCapital, float $ebit, float $corporateTaxRate, float $wacc = 0.08, float $costOfEquity = 0.10, ?\App\DTO\MacroStateDTO $macroState = null, float $depreciation = 0.0): float
     {
         $kappa = $this->getReversionSpeed();
         $moatSpread = $this->getMoatSpread();
@@ -209,7 +274,7 @@ class StandardCorporateBusinessModel implements BusinessModelInterface
         return $truePostTaxReturn;
     }
 
-    public function calculateInterestExpenseAndWholesaleRate(Stock $stock, float $blendedFixedRate, float $floatingInterestRate, float $currentMarketFixedRate, float $policyRate, float $equityLimit, float $totalEquity, float $debt): array
+    public function calculateInterestExpenseAndWholesaleRate(Stock $stock, float $blendedFixedRate, float $floatingInterestRate, float $currentMarketFixedRate, float $policyRate, float $equityLimit, float $totalEquity, float $debt): InterestExpenseDTO
     {
         $floatingRatio = (float) $stock->getFloatingDebtRatio();
 
@@ -218,38 +283,7 @@ class StandardCorporateBusinessModel implements BusinessModelInterface
         $interestExpense = ($debt * (1.0 - $floatingRatio) * $blendedFixedRate) + ($debt * $floatingRatio * $floatingInterestRate);
         $wholesaleRate = $debt > 0 ? ($interestExpense / $debt) : $currentMarketFixedRate;
 
-        return ['interest_expense' => $interestExpense, 'wholesale_rate' => $wholesaleRate];
-    }
-
-    public function calculateEarningsValue(float $revenueFloorValue, float $peFairValue, ?float $fcfPerShare, float $liveWacc, MathUtility $mathUtility): float
-    {
-        if ($fcfPerShare !== null && $fcfPerShare > 0.0) {
-            $multiplier = $mathUtility->calculateDcfMultiplier($liveWacc, self::DCF_TERMINAL_GROWTH_RATE);
-            $annualFcf = $fcfPerShare;
-            // Cap the DCF so a temporary lack of CapEx doesn't cause an infinite perpetual valuation.
-            $dcfFairValue = min(max(0.01, $annualFcf * $multiplier), $peFairValue * self::MAX_DCF_TO_PE_CAP_MULT);
-            return ($peFairValue + $dcfFairValue) / 2.0;
-        }
-        return $fcfPerShare !== null ? max($revenueFloorValue, $peFairValue) * self::NEGATIVE_FCF_VAL_DISCOUNT : max($revenueFloorValue, $peFairValue);
-    }
-
-    public function applyAssetDepreciationDecay(Stock $stock, float $reinvestmentRatio, float $dt): void
-    {
-        $timeScale = $dt / 0.25;
-        $currentMargin = (float) $stock->getOperatingMargin();
-
-        if ($reinvestmentRatio < 1.0) {
-            $decayRate = self::DEPRECIATION_DECAY_RATE * (1.0 - $reinvestmentRatio) * $timeScale;
-            $updatedMargin = max(self::MIN_OPERATING_MARGIN_FLOOR, $currentMargin - ($currentMargin * $decayRate));
-            $stock->setOperatingMargin((string) $updatedMargin);
-        } elseif ($reinvestmentRatio > 1.0) {
-            $modGain = self::MODERNIZATION_GAIN_RATE * log($reinvestmentRatio) * $timeScale;
-            $updatedMargin = min(
-                self::MAX_OPERATING_MARGIN_CEILING,
-                $currentMargin + ((self::MAX_OPERATING_MARGIN_CEILING - $currentMargin) * $modGain)
-            );
-            $stock->setOperatingMargin((string) $updatedMargin);
-        }
+        return new InterestExpenseDTO(interestExpense: $interestExpense, wholesaleRate: $wholesaleRate);
     }
 
     /**
@@ -261,11 +295,25 @@ class StandardCorporateBusinessModel implements BusinessModelInterface
     public function getOperatingMacroFields(): array
     {
         return [
+            'agricultural_commodity_index_ema',
+            'energy_cost_push_lag',
             'exchange_rate_index_ema',
-            'inflation_ema',
+            'freight_rate_index_ema',
+            'industrial_metals_index_ema',
             'output_gap_ema',
             'producer_price_inflation_ema',
             'tips_breakeven_ema',
+            'wage_growth_ema',
         ];
+    }
+
+    public function getFirmFactorLoading(): float
+    {
+        return static::FIRM_FACTOR_LOADING;
+    }
+
+    public function getSectorFactorLoading(): float
+    {
+        return static::SECTOR_FACTOR_LOADING;
     }
 }

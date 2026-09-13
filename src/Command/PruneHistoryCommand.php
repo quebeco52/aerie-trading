@@ -60,6 +60,13 @@ class PruneHistoryCommand extends Command
             );
             $io->success("Cleared $etfDeleted redundant rows from etf_history.");
 
+            // Downsample Bonds
+            $bondDeleted = $conn->executeStatement(
+                str_replace(':table', 'bond_history', $sql),
+                ['cutoff' => $cutoffString, 'ratio' => $ratio]
+            );
+            $io->success("Cleared $bondDeleted redundant rows from bond_history.");
+
             // Prune Macro Reports (Keep the latest 100 simulation quarters)
             $io->text("Pruning old macro reports (keeping the latest 100)...");
             $macroCutoffId = $conn->fetchOne('SELECT id FROM macro_report ORDER BY id DESC LIMIT 1 OFFSET 99');

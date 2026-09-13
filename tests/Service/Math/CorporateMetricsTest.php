@@ -115,4 +115,12 @@ class CorporateMetricsTest extends TestCase
         $expandedPayout = $this->metrics->calculateLifeCyclePayoutRatio(0.30, 1.0);
         $this->assertSame(FinancialConstants::LIFE_CYCLE_MAX_PAYOUT_RATIO, $expandedPayout);
     }
+    public function testLeaseLiabilityScalesWithRevenueAndSectorIntensity(): void
+    {
+        $metrics = new CorporateMetrics();
+        $this->assertEqualsWithDelta(600_000_000.0, $metrics->calculateLeaseLiability(1_000_000_000.0, 0.60), 1e-6);
+        $this->assertSame(0.0, $metrics->calculateLeaseLiability(1_000_000_000.0, 0.0));
+        $this->assertSame(0.0, $metrics->calculateLeaseLiability(-5.0, 0.60), 'negative revenue carries no lease book');
+    }
+
 }

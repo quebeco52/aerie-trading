@@ -98,12 +98,12 @@ class DistrictStressEvaluatorTest extends TestCase
         $this->assertTrue($this->evaluator->evaluate($macro)['statistical-office']);
     }
 
-    public function testLandRegistryStressedByCommercialPropertyDeviation(): void
+    public function testLandRegistryStressedByCommercialPropertyCollapse(): void
     {
         // A hair past the threshold, not exactly on it — the boundary itself is exercised
         // separately below, where float rounding at exact equality is handled deliberately.
         $macro = new MacroStateDTO(
-            commercialPropertyIndexEma: 100.0 * (1.0 + DistrictMap::LAND_REGISTRY_PROPERTY_STRESS_DEVIATION) + 0.5,
+            commercialPropertyIndexEma: 100.0 * (1.0 - DistrictMap::LAND_REGISTRY_PROPERTY_STRESS_DROP) - 0.5,
         );
 
         $this->assertTrue($this->evaluator->evaluate($macro)['land-registry']);
@@ -112,10 +112,25 @@ class DistrictStressEvaluatorTest extends TestCase
     public function testLandRegistryStressedByResidentialPropertyCollapse(): void
     {
         $macro = new MacroStateDTO(
-            residentialPropertyIndexEma: 100.0 * (1.0 - DistrictMap::LAND_REGISTRY_PROPERTY_STRESS_DEVIATION) - 0.5,
+            residentialPropertyIndexEma: 100.0 * (1.0 - DistrictMap::LAND_REGISTRY_PROPERTY_STRESS_DROP) - 0.5,
         );
 
         $this->assertTrue($this->evaluator->evaluate($macro)['land-registry']);
+    }
+
+    /**
+     * The street's legend promises a conduit reddens when its variable turns *adverse*. A
+     * property boom is not that — the symmetric rule this replaced painted a +20% commercial
+     * rally as distress for every bank and REIT on the row.
+     */
+    public function testLandRegistryIsNotStressedByAPropertyBoom(): void
+    {
+        $macro = new MacroStateDTO(
+            commercialPropertyIndexEma: 100.0 * (1.0 + DistrictMap::LAND_REGISTRY_PROPERTY_STRESS_DROP) + 5.0,
+            residentialPropertyIndexEma: 100.0 * (1.0 + DistrictMap::LAND_REGISTRY_PROPERTY_STRESS_DROP) + 5.0,
+        );
+
+        $this->assertFalse($this->evaluator->evaluate($macro)['land-registry']);
     }
 
     public function testJustBelowThresholdDoesNotStress(): void

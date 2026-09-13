@@ -15,6 +15,7 @@ use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
 use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
+use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Macro\MacroEngine;
 
@@ -29,7 +30,8 @@ class MarketSeedCommand extends Command
         private UserPasswordHasherInterface $passwordHasher,
         private MathUtility $mathUtility,
         private \App\Service\Corporate\DebtEngine $debtEngine,
-        private \App\Service\Market\MarketEngine $marketEngine
+        private \App\Service\Market\MarketEngine $marketEngine,
+        private \App\Service\Market\TreasuryAuctionService $treasuryAuction
     ) {
         parent::__construct();
     }
@@ -50,8 +52,15 @@ class MarketSeedCommand extends Command
             macroCreditSpreadEma: 0.02,
             marketVolatilityEma: 0.15,
             corporateTaxRate: MacroEngine::BASE_CORPORATE_TAX_RATE,
-            equityRiskPremium: 0.045
+            equityRiskPremium: 0.045,
 
+            // The fitted curve factors the bond ladder is struck off. beta1 is the policy rate minus the
+            // level, which is what the curve function expects; the yield fields above are outputs of a
+            // curve, not inputs to one, and cannot reconstruct it.
+            nsLevel: MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION,
+            nsBeta1: 0.04 - (MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION),
+            nsBaseTermPremium: MacroEngine::NS_BASE_TERM_PREMIUM,
+            nsLongEndPremium: MacroEngine::NS_BASE_TERM_PREMIUM
         );
 
         // Loop through ETFs
@@ -81,6 +90,18 @@ class MarketSeedCommand extends Command
                 $stock->setJumpIntensity((string) $stockData['jump_intensity']);
                 $stock->setJumpVol((string) $stockData['jump_vol']);
                 $stock->setSystemicImportance($stockData['systemic_importance'] ?? 'none');
+
+                // How much of the float changes hands in a year: the structural input behind this name's
+                // depth, its spread, and how far a given order size moves it.
+                $stock->setTurnoverRatio(
+                    \App\Service\Market\LiquidityEngine::structuralTurnoverRatio((float) $stockData['volatility'])
+                );
+                $stock->setImpactVarianceEma(0.0);
+
+                // Not the whole float: most holders do not lend, which is what makes a name hard to borrow
+                // long before anything like all of it has been shorted.
+                $stock->setLendableSupplyRatio(FinancialConstants::DEFAULT_LENDABLE_SUPPLY_RATIO);
+                $stock->setShortInterestShares('0.00');
 
                 $businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$stockData['industry'] ?? 'General']['business_model'] ?? 'none';
                 $isFinancial = \App\Data\Sectors::isFinancial($businessModel);
@@ -112,6 +133,7 @@ class MarketSeedCommand extends Command
                 $stock->setCustomerDeposits((string) ($stockData['customer_deposits'] ?? 0.00));
                 $stock->setRetainedEarnings((string) ($stockData['retained_earnings'] ?? 0.00));
                 $stock->setSamRatio((string) ($stockData['sam_ratio'] ?? 1.00));
+                $stock->setManagementStyle(\App\Data\ManagementStyle::tryFromNullable($stockData['management_style'] ?? null));
 
                 $margin = $stockData['operating_margin'] ?? 0.15;
                 $strategy = \App\Data\Sectors::getBusinessModelStrategy($businessModel);
@@ -151,10 +173,50 @@ class MarketSeedCommand extends Command
                 $stock->setCreditSpread((string) ($stockData['credit_spread'] ?? 0.0100));
                 $stock->setHistoricalFixedRate((string) ($stockData['historical_fixed_rate'] ?? 0.04));
 
-                $impliedPricingRoic = $isFinancial 
+                // Open the fixed-asset ledger so the very first earnings report depreciates a real plant
+                // rather than falling back to the capital proxy. Financial balance sheets keep no plant.
+                if (!$isFinancial) {
+                    $metrics = \App\Service\Math\CorporateMetrics::getInstance();
+                    $metrics->buildWorkingCapitalBalances(
+                        $stock,
+                        $strategy->getWorkingCapitalDays($stock),
+                        $revenue,
+                        $revenue * (1.0 - $margin)
+                    );
+                    $metrics->seedReceivablesAllowance($stock, $dummyMacro->corporateDefaultRateEma);
+                    $openingNwc = (float) $stock->getNetWorkingCapital();
+                    $metrics->seedFixedAssetLedger(
+                        $stock,
+                        $investedCapital,
+                        $openingNwc,
+                        (float) $stock->getGoodwill(),
+                        $stock->getTotalCipAmount(),
+                        (float) ($stockData['asset_age_ratio'] ?? \App\Service\Math\FinancialConstants::SEED_ASSET_AGE_RATIO)
+                    );
+                } else {
+                    // A balance-sheet business opens its loan book instead, with the allowance already at
+                    // the lifetime loss it expects so the first report books no phantom provision.
+                    \App\Service\Math\CorporateMetrics::getInstance()->seedEarningAssetLedger(
+                        $stock,
+                        $strategy->getThroughTheCycleCreditLossRate($stock)
+                            * $strategy->getCreditLossHorizonYears()
+                            * $strategy->getForwardCreditLossMultiplier($stock, $dummyMacro)
+                    );
+                }
+
+                $impliedPricingRoic = $isFinancial
                     ? max(0.01, (float) $stock->getBaselineRoe())
                     : $impliedRoic;
                 $bookValuePerShare = $shares > 0 ? ((float) ($stockData['total_equity'] ?? 0.0)) / $shares : 0.0;
+
+                // The opening price must be struck on the SAME fundamentals StockTracker feeds the engine on
+                // tick 1, or the market re-rates the instant it starts. Both of these default inside the DTO
+                // (2% growth, zero net debt), so leaving them out priced every firm as a median-growth,
+                // debt-free business and handed a low-growth utility the same multiple as a compounder.
+                $seedSecularGrowth = $strategy->getSecularGrowthRate($stock);
+                $seedNetDebtPerShare = $shares > 0
+                    ? max(0.0, ((float) $stock->getTotalDebt() - (float) $stock->getCorporateTreasury()) / $shares)
+                    : 0.0;
 
                 $pricingCtx = new \App\DTO\MarketPricingContext(
                     currentPrice: $bookValuePerShare,
@@ -179,8 +241,11 @@ class MarketSeedCommand extends Command
                     revenuePerShare: $shares > 0 ? $revenue / $shares : 0.0,
                     businessModel: $businessModel,
                     liveCostOfEquity: $debtHealth->costOfEquity ?? 0.10,
+                    netDebtPerShare: $seedNetDebtPerShare,
+                    secularGrowth: $seedSecularGrowth,
                     baselineRoic: $impliedPricingRoic,
-                    baselineMargin: (float) ($stockData['operating_margin'] ?? 0.20)
+                    baselineMargin: (float) ($stockData['operating_margin'] ?? 0.20),
+                    investedCapitalPerShare: $stock->getInvestedCapital() / max(1.0, (float) $stock->getSharesOutstanding())
                 );
 
                 $marketCalc = $this->marketEngine->calculateNextPrice($pricingCtx);
@@ -298,6 +363,17 @@ class MarketSeedCommand extends Command
         */
 
         $this->entityManager->flush();
+
+        // Open the bond desk with one on-the-run at each tenor. Only the benchmarks are sold here; the rest
+        // of the ladder fills in as the quarterly refunding runs, which is also how a real curve gets its
+        // off-the-run issues rather than having them appear fully formed.
+        $existingBonds = (int) $this->entityManager->getConnection()->fetchOne('SELECT COUNT(*) FROM bonds');
+        if ($existingBonds === 0) {
+            $issued = $this->treasuryAuction->conductAuction($dummyMacro->sovereignCurve(), 0.0);
+            $this->entityManager->flush();
+            $io->text(sprintf('Opened the bond desk with %d benchmark issues.', count($issued)));
+        }
+
         $io->success('Database successfully seeded with full fundamental physics!');
 
         return Command::SUCCESS;

@@ -28,6 +28,10 @@ use App\Service\Macro\MacroEngine;
  */
 class DistressedDebtBusinessModel extends AssetManagementBusinessModel
 {
+    // --- Operating Cyclicality & Demand Structure ---
+    /** Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Counter-cyclical revenue, but capital raising follows the cycle. */
+    public const OPERATING_CYCLICALITY = 0.90;
+
     // --- Analyst Visibility & Error ---
     public const BASE_COVERAGE_VISIBILITY = 0.90;
     public const BASE_COVERAGE_ERROR = 0.05;
@@ -50,8 +54,8 @@ class DistressedDebtBusinessModel extends AssetManagementBusinessModel
     public const BULL_MARKET_GAP_THRESHOLD      = 0.020;
     /** Revenue contraction multiplier during prolonged bull markets with tight credit spreads. */
     public const BULL_MARKET_REVENUE_DRAG       = -0.10;
-    /** Baseline high-yield credit spread (~480bps) above which distressed turnaround opportunities surge. */
-    public const HY_SPREAD_BLOWOUT_BASELINE     = 0.048;
+    /** Baseline high-yield credit spread (macro IG baseline x HY multiple) above which distressed turnaround opportunities surge. */
+    public const HY_SPREAD_BLOWOUT_BASELINE     = MacroEngine::BASE_CREDIT_SPREAD * MacroEngine::HY_BASE_SPREAD_MULTIPLIER;
     /** Sensitivity multiplier translating excess high-yield credit spreads into turnaround recovery revenue. */
     public const HY_SPREAD_SURGE_SCALAR         = 10.00;
     /** Sensitivity multiplier translating corporate default rate surges into turnaround acquisition opportunities. */
@@ -79,7 +83,7 @@ class DistressedDebtBusinessModel extends AssetManagementBusinessModel
     protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
     {
         $momentum = $stock->getEarningsMomentumZ() ?? [];
-        $streams  = new \App\DTO\StreamContext($momentum, $mathUtility);
+        $streams  = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
 
         // Counter-Cyclical Credit Spread Trigger
         $creditSpread = ($macroState->macroCreditSpread !== MacroEngine::BASE_CREDIT_SPREAD)
@@ -201,7 +205,10 @@ class DistressedDebtBusinessModel extends AssetManagementBusinessModel
             'high_yield_credit_spread_ema',
             'macro_credit_spread',
             'macro_credit_spread_ema',
+            'market_volatility_ema',
             'output_gap_ema',
+            'policy_rate_ema',
+            'yield_10y_ema',
         ];
     }
 }

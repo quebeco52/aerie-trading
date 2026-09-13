@@ -23,6 +23,34 @@ use App\Service\Macro\MacroEngine;
  */
 class LuxuryBusinessModel extends StandardCorporateBusinessModel
 {
+    // --- Operating Cyclicality & Demand Structure ---
+    /** Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Wealth-effect demand with Veblen pricing; maisons are weak substitutes. */
+    public const OPERATING_CYCLICALITY = 1.10;
+    /** Own-price elasticity of demand: volume lost per unit of real price increase. */
+    public const PRICE_ELASTICITY_OF_DEMAND = 0.20;
+    /** Share of an idiosyncratic revenue gain taken from same-industry peers rather than won from a larger market. */
+    public const INDUSTRY_SUBSTITUTABILITY = 0.40;
+
+    // --- Input Cost Basket ---
+    /** Shares of the variable cost base bought in tracked input markets (energy, metals, agri, freight, wholesale goods, variable payroll). */
+    public const INPUT_COST_EXPOSURES = ['labor' => 0.25, 'ppi' => 0.15, 'freight' => 0.03];
+
+    // --- Labor Intensity ---
+    /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze. Boutique staffing, atelier artisans and brand marketing are carried through the cycle to protect the brand, not flexed with sales. */
+    public const FIXED_COST_LABOR_SHARE = 0.65;
+
+    // --- FX Exposure ---
+    /** Share of revenue whose competitiveness moves with the trade-weighted exchange rate. Tourist spend and cross-border arbitrage make luxury demand unusually sensitive to the currency. */
+    public const FX_REVENUE_EXPOSURE = 0.15;
+    /** Veblen pricing: maisons raise prices one and a half times expected inflation without losing volume. */
+    public const PRICING_ELASTICITY = 1.50;
+    /** Leather, workshop payroll and logistics are recovered in full through list prices. */
+    public const PRICING_POWER_INDEX = 1.00;
+
+    // --- Balance Sheet Realism ---
+    /** Capitalized operating lease liabilities as a fraction of annual revenue (IFRS 16 / ASC 842). Flagship boutiques on prime retail streets are leased on long terms. */
+    public const LEASE_LIABILITY_INTENSITY = 0.45;
+
     // --- Analyst Visibility & Error ---
     public const BASE_COVERAGE_VISIBILITY = 0.50;
     public const BASE_COVERAGE_ERROR = 0.05;
@@ -47,10 +75,6 @@ class LuxuryBusinessModel extends StandardCorporateBusinessModel
     // --- Veblen Pricing & Macro Physics ---
     /** Macroeconomic demand shift sensitivity to global output gaps for elite luxury goods. */
     public const MACRO_DEMAND_SCALAR       = 0.70;
-    /** Multiplier scaling excess inflation into Veblen pricing power bonuses. */
-    public const VEBLEN_INFLATION_SCALAR   = 1.50;
-    /** Variable margin improvement scalar capturing aggressive Veblen price hikes during inflation. */
-    public const VEBLEN_MARGIN_BENEFIT     = 0.30;
     /** Sensitivity of high-net-worth luxury demand to broad money supply (M2) growth liquidity. */
     public const M2_LIQUIDITY_SENSITIVITY  = 0.40;
 
@@ -93,23 +117,20 @@ class LuxuryBusinessModel extends StandardCorporateBusinessModel
 
     public function getMacroPhysics(Stock $stock, \App\DTO\MacroStateDTO $macroState): array
     {
-        $outputGap = $macroState->outputGapEma;
+        $outputGap = $this->resolveLaggedOutputGap($stock, $macroState);
         $sentimentShift = ($macroState->consumerSentimentIndexEma - MacroEngine::SENTIMENT_BASELINE) / 100.0;
-        $inflation = $macroState->inflationEma;
-        $beta = (float) $stock->getBeta();
+        $beta = $this->getOperatingCyclicality($stock);
 
-        $fxShift = ($macroState->exchangeRateIndexEma - 100.0) / 100.0;
         $resShift = ($macroState->residentialPropertyIndexEma - 100.0) / 100.0; // Wealth effect from property
         $m2Shift = MathUtility::calculateBroadMoneyLiquidityShift($macroState->moneySupplyGrowthEma, MacroEngine::M2_BASE_GROWTH, self::M2_LIQUIDITY_SENSITIVITY);
 
-        $blendedMacroShift = ($outputGap * 0.35) + ($sentimentShift * 0.45) + ($resShift * 0.20) + $m2Shift - ($fxShift * 0.15);
+        $blendedMacroShift = ($outputGap * 0.35) + ($sentimentShift * 0.45) + ($resShift * 0.20) + $m2Shift + $this->resolveFxDemandShift($macroState);
 
-        // Luxury goods benefit from Veblen pricing power during inflation
-        $inflationBonus = $inflation > MacroEngine::TARGET_INFLATION ? ($inflation - MacroEngine::TARGET_INFLATION) * self::VEBLEN_INFLATION_SCALAR : 0.0;
-
+        // Luxury goods benefit from Veblen pricing power: list prices outrun expected inflation (PRICING_ELASTICITY),
+        // and the engine books the gap between price and input cost as margin.
         return [
             'macro_demand_shift' => $blendedMacroShift * $beta * self::MACRO_DEMAND_SCALAR,
-            'pricing_power_multiplier' => 1.0 + $inflationBonus,
+            ...$this->resolvePricingMultipliers($stock, $macroState),
         ];
     }
 
@@ -124,7 +145,7 @@ class LuxuryBusinessModel extends StandardCorporateBusinessModel
         $accessibleWeight = $params[ModelParam::AccessibleLuxuryWeight];
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
-        $streams  = new \App\DTO\StreamContext($momentum, $mathUtility);
+        $streams  = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
 
         // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
         $activeWeights = $streams->resolveActiveStreamWeights([
@@ -138,14 +159,14 @@ class LuxuryBusinessModel extends StandardCorporateBusinessModel
         // Independent stream Z-scores with AR(1) persistence
         $hauteZ      = $streams->generateZ('haute_couture', 0.40); // UHNW leather goods / couture demand
         $accessibleZ = $streams->generateZ('accessible_luxury', 0.15); // Fragrance & cosmetics retail volume
-        $eventZ      = $streams->generateZ('event', 0.05);
+        $eventZ      = $streams->generateExogenousZ('event', 0.05);
 
         $hauteRevenue      = $expectedRevenue * $hauteWeight * (1.0 + ($hauteZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)));
         $accessibleRevenue = $expectedRevenue * $accessibleWeight * (1.0 + ($accessibleZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)));
 
-        // Veblen Inflation Benefit vs. Standard Supply Chain Penalty:
-        $inflation = $macroState->inflationEma;
-        $veblenMarginBenefit = $inflation > MacroEngine::TARGET_INFLATION ? - ($inflation - MacroEngine::TARGET_INFLATION) * self::VEBLEN_MARGIN_BENEFIT * $hauteWeight : 0.0;
+        // Input costs (leather, workshop payroll, logistics) are recovered in full through list prices; the
+        // Veblen margin gain itself is booked by the engine from the price/input-cost gap.
+        $veblenMarginBenefit = $this->resolveInputCostDrag($stock, $macroState, $streams, $this->resolvePricingPower($stock), $realizedVariableMargin);
 
         // Tail Risk: Brand Dilution vs. Viral Fashion Super-Cycle
         $eventType = null;
@@ -209,25 +230,16 @@ class LuxuryBusinessModel extends StandardCorporateBusinessModel
         return [0.85, 0.90, 0.95, 1.30]; // Q4 holiday gift & festive collection surge
     }
 
-    public function applyAssetDepreciationDecay(Stock $stock, float $reinvestmentRatio, float $dt): void
+    /** Boutique craftsmanship decay toward accessible apparel floor */
+    public function getDepreciationDecayRate(): float
     {
-        $timeScale = $dt / 0.25;
-        $currentMargin = (float) $stock->getOperatingMargin();
+        return self::BOUTIQUE_CRAFT_DECAY_RATE;
+    }
 
-        if ($reinvestmentRatio < 1.0) {
-            // Boutique craftsmanship decay toward accessible apparel floor
-            $decayRate = self::BOUTIQUE_CRAFT_DECAY_RATE * (1.0 - $reinvestmentRatio) * $timeScale;
-            $updatedMargin = max(self::MIN_OPERATING_MARGIN_FLOOR, $currentMargin - ($currentMargin * $decayRate));
-            $stock->setOperatingMargin((string) $updatedMargin);
-        } elseif ($reinvestmentRatio > 1.0) {
-            // Heritage exclusivity overinvestment expands Veblen pricing cachet
-            $modGain = self::HERITAGE_EXCLUSIVITY_GAIN_RATE * log($reinvestmentRatio) * $timeScale;
-            $updatedMargin = min(
-                self::MAX_OPERATING_MARGIN_CEILING,
-                $currentMargin + ((self::MAX_OPERATING_MARGIN_CEILING - $currentMargin) * $modGain)
-            );
-            $stock->setOperatingMargin((string) $updatedMargin);
-        }
+    /** Heritage exclusivity overinvestment expands Veblen pricing cachet */
+    public function getModernizationGainRate(): float
+    {
+        return self::HERITAGE_EXCLUSIVITY_GAIN_RATE;
     }
 
     /**
@@ -241,10 +253,13 @@ class LuxuryBusinessModel extends StandardCorporateBusinessModel
         return [
             'consumer_sentiment_index_ema',
             'exchange_rate_index_ema',
-            'inflation_ema',
+            'freight_rate_index_ema',
             'money_supply_growth_ema',
             'output_gap_ema',
+            'producer_price_inflation_ema',
             'residential_property_index_ema',
+            'tips_breakeven_ema',
+            'wage_growth_ema',
         ];
     }
 }

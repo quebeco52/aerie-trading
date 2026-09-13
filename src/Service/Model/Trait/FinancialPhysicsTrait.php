@@ -4,6 +4,10 @@ declare(strict_types=1);
 
 namespace App\Service\Model\Trait;
 
+use App\DTO\InterestExpenseDTO;
+use App\DTO\DebtExpansionAppetiteDTO;
+use App\DTO\DebtCostDTO;
+
 use App\Entity\Stock;
 
 /**
@@ -39,7 +43,8 @@ trait FinancialPhysicsTrait
         float $corporateTaxRate,
         float $wacc = 0.08,
         float $costOfEquity = 0.10,
-        ?\App\DTO\MacroStateDTO $macroState = null
+        ?\App\DTO\MacroStateDTO $macroState = null,
+        float $depreciation = 0.0
     ): float {
         $kappa = $this->getReversionSpeed();
         $moatSpread = $this->getMoatSpread();
@@ -75,12 +80,9 @@ trait FinancialPhysicsTrait
         return $interestExpense > 0 ? ($ebit / $interestExpense) : ($ebit > 0 ? 999.0 : -999.0);
     }
 
-    public function getDebtExpansionAggressiveness(float $spreadMultiplier, float $totalDebt = 0.0, float $customerDeposits = 0.0, float $targetOperatingCash = 0.0, float $currentTreasury = 0.0): array
+    public function getDebtExpansionAggressiveness(float $spreadMultiplier, float $totalDebt = 0.0, float $customerDeposits = 0.0, float $targetOperatingCash = 0.0, float $currentTreasury = 0.0): DebtExpansionAppetiteDTO
     {
-        return [
-            'probability' => 0.40 + ($spreadMultiplier * 0.50),
-            'aggressiveness' => 0.05 + (0.35 * $spreadMultiplier)
-        ];
+        return new DebtExpansionAppetiteDTO(probability: 0.40 + ($spreadMultiplier * 0.50), aggressiveness: 0.05 + (0.35 * $spreadMultiplier));
     }
 
     public function getUnfundedExpansionCapacity(float $baseCapacity, float $excessCash): float
@@ -101,12 +103,12 @@ trait FinancialPhysicsTrait
 
     public function processPassiveLiabilityGrowth(Stock $stock, \App\DTO\MacroStateDTO $macroState, array &$state, \App\Service\Math\MathUtility $mathUtility): void {}
 
-    public function calculateInterestExpenseAndWholesaleRate(Stock $stock, float $blendedFixedRate, float $floatingInterestRate, float $currentMarketFixedRate, float $policyRate, float $equityLimit, float $totalEquity, float $debt): array
+    public function calculateInterestExpenseAndWholesaleRate(Stock $stock, float $blendedFixedRate, float $floatingInterestRate, float $currentMarketFixedRate, float $policyRate, float $equityLimit, float $totalEquity, float $debt): InterestExpenseDTO
     {
         $floatingRatio = (float) $stock->getFloatingDebtRatio();
         $interestExpense = ($debt * (1.0 - $floatingRatio) * $blendedFixedRate) + ($debt * $floatingRatio * $floatingInterestRate);
         $wholesaleRate = $debt > 0 ? ($interestExpense / $debt) : $currentMarketFixedRate;
-        return ['interest_expense' => $interestExpense, 'wholesale_rate' => $wholesaleRate];
+        return new InterestExpenseDTO(interestExpense: $interestExpense, wholesaleRate: $wholesaleRate);
     }
 
     public function getHurdleRate(\App\DTO\DebtHealthDTO $health): float
@@ -155,6 +157,11 @@ trait FinancialPhysicsTrait
         return 0.80; // Financials heavily rely on floating rate wholesale debt/deposits
     }
 
+    public function getDebtMaturityRolloverRate(): float
+    {
+        return \App\Service\Math\FinancialConstants::DEFAULT_QUARTERLY_DEBT_ROLLOVER;
+    }
+
     public function getDeleveragingEvaluationDebt(float $totalDebt, float $wholesaleDebt): float
     {
         return $wholesaleDebt;
@@ -166,6 +173,38 @@ trait FinancialPhysicsTrait
     }
 
     public function isFinancial(): bool { return true; }
+    /** Financial revenue is a yield on a book, not a unit price times a volume: no own-price volume response. */
+    public function getPriceElasticityOfDemand(): float { return 0.0; }
+
+    /**
+     * The loans, securities and other assets the institution earns its yield on, net of the losses it
+     * already expects. Read from the earning-asset ledger once it is open; before that (a firm that has
+     * never reported) it is what the funding must have been deployed into: equity plus all funding less
+     * the cash still idle, which is the identity the ledger is seeded from.
+     */
+    public function resolveEarningAssets(Stock $stock, ?float $currentTreasury = null): float
+    {
+        if ($stock->hasEarningAssetLedger()) {
+            return max(1.0, $stock->getNetEarningAssets());
+        }
+
+        $treasury = $currentTreasury ?? (float) $stock->getCorporateTreasury();
+        $effectiveEquity = max(1.0, (float) $stock->getTotalEquity());
+
+        return max($effectiveEquity, $effectiveEquity + (float) $stock->getTotalDebt() - $treasury);
+    }
+
+    /**
+     * The annual credit provision a lender pays through the cycle on a book of this size: the through-the-
+     * cycle loss rate the allowance roll-forward charges against EBIT every quarter, struck on the same
+     * gross book. A lender's return target is earned AFTER this charge, so any target that reverse-engineers
+     * revenue from an ROE has to fund it, or the firm reports its ROE minus its loss rate forever.
+     */
+    public function resolveThroughTheCycleCreditProvision(?Stock $stock, float $earningAssets): float
+    {
+        return max(0.0, $this->getThroughTheCycleCreditLossRate($stock)) * max(0.0, $earningAssets);
+    }
+
     public function getMinIcr(): float { return 1.05; }
     public function getBankruptEquityThreshold(): float { return 2.0; }
     public function getDistressEquityThreshold(): float { return 4.0; }
@@ -178,11 +217,24 @@ trait FinancialPhysicsTrait
     public function getWorkingCapitalIntensity(Stock $stock): float { return 0.0; }
     public function getCapExCompletionRate(Stock $stock): float { return 1.0; }
     public function getPhysicalCapital(Stock $stock): float { return (float) $stock->getTotalEquity(); }
+
+    /**
+     * A balance sheet business has no trade cycle: it holds loans and securities, not receivables and stock.
+     *
+     * @return array{dso: float, dio: float, dpo: float}
+     */
+    public function getWorkingCapitalDays(Stock $stock): array { return ['dso' => 0.0, 'dio' => 0.0, 'dpo' => 0.0]; }
+
+    /**
+     * A bank's branches and core systems are immaterial next to its balance sheet, so financial models keep
+     * depreciating the equity proxy rather than maintaining a plant ledger they would never use.
+     */
+    public function getDepreciableBase(Stock $stock): float { return $this->getPhysicalCapital($stock); }
     public function allowsPhysicalOrganicCapex(): bool { return false; }
     public function getReturnBasisIncome(Stock $stock, float $quarterlyNopat, float $actualTotalNetIncome): float { return $actualTotalNetIncome; }
     public function appliesDistressPremiumToCostOfEquity(): bool { return true; }
     public function shouldForceDeleveragingOnJunkOrHoarding(): bool { return false; }
-    public function calculateStructuralEps(float $bookValuePerShare, float $structuralRoic, float $revenuePerShare, float $riskFreeRate): float
+    public function calculateStructuralEps(float $bookValuePerShare, float $structuralRoic, float $revenuePerShare, float $riskFreeRate, ?float $investedCapitalPerShare = null): float
     {
         return $bookValuePerShare * $structuralRoic;
     }
@@ -223,17 +275,14 @@ trait FinancialPhysicsTrait
         return false;
     }
 
-    public function getDebtCostMetrics(\App\DTO\DebtMetricsDTO $debtMetrics, float $currentDebt, float $wholesaleDebt, float $interestExpense): array
+    public function getDebtCostMetrics(\App\DTO\DebtMetricsDTO $debtMetrics, float $currentDebt, float $wholesaleDebt, float $interestExpense): DebtCostDTO
     {
         // Use the already-computed wholesale rate from the debt metrics DTO.
         // DO NOT divide total interestExpense by wholesaleDebt — that attributes deposit interest to wholesale,
         // inflating cost-of-debt to junk bond levels for deposit-heavy banks.
         $wholesaleRate = $debtMetrics->wholesaleRate;
         $wholesaleInterest = $wholesaleRate * $wholesaleDebt;
-        return [
-            'gross_cost_of_debt' => $wholesaleRate,
-            'total_interest_cost' => $wholesaleInterest
-        ];
+        return new DebtCostDTO(grossCostOfDebt: $wholesaleRate, totalInterestCost: $wholesaleInterest);
     }
 
     public function getNetDebtCapital(float $currentDebt, float $wholesaleDebt, float $treasury): float

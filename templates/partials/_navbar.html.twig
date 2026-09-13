@@ -1,43 +1,75 @@
-<nav class="sticky top-0 z-50 bg-surface border-b border-outline-variant/20 w-full">
+{# Declared once, rendered twice (desktop bar and mobile panel). `starts_with` is for section
+   roots whose live path carries a slug. #}
+{% set nav_links = [
+    { href: '/', label: 'Markets', match: 'exact' },
+    { href: '/dashboard', label: 'Portfolio', match: 'exact' },
+    { href: '/leaderboard', label: 'Leaderboard', match: 'exact' },
+    { href: '/screener', label: 'Screener', match: 'exact' },
+    { href: '/bonds', label: 'Bonds', match: 'starts_with', prefix: '/bond' },
+    { href: '/district/glasswater-row', label: 'District', match: 'starts_with', prefix: '/district' }
+] %}
+{% set current_path = app.request.pathInfo %}
+
+<nav class="sticky top-0 z-50 bg-surface border-b border-outline-variant/20 w-full" aria-label="Primary">
     <div class="max-w-400 mx-auto px-4 sm:px-6 lg:px-8">
         <div class="flex justify-between items-center h-14">
             <div class="flex items-center gap-8">
                 <a href="/" class="text-lg font-bold tracking-tight text-primary flex items-center gap-2">
-                    <span class="material-symbols-outlined text-xl">monitoring</span>
+                    <span class="material-symbols-outlined text-xl" aria-hidden="true">monitoring</span>
                     <span>Aerie Exchange</span>
                 </a>
                 <div class="hidden md:flex gap-6">
-                    {% set current_path = app.request.pathInfo %}
-                    
-                    <a href="/" class="text-sm font-medium pb-1 border-b-2 transition-colors {{ current_path == '/' ? 'text-primary border-primary' : 'text-on-surface-variant hover:text-on-surface border-transparent hover:border-outline-variant/30' }}">Markets</a>
-                    
-                    <a href="/dashboard" class="text-sm font-medium pb-1 border-b-2 transition-colors {{ current_path == '/dashboard' ? 'text-primary border-primary' : 'text-on-surface-variant hover:text-on-surface border-transparent hover:border-outline-variant/30' }}">Portfolio</a>
-                    
-                    <a href="/leaderboard" class="text-sm font-medium pb-1 border-b-2 transition-colors {{ current_path == '/leaderboard' ? 'text-primary border-primary' : 'text-on-surface-variant hover:text-on-surface border-transparent hover:border-outline-variant/30' }}">Leaderboard</a>
-
-                    <a href="/screener" class="text-sm font-medium pb-1 border-b-2 transition-colors {{ current_path == '/screener' ? 'text-primary border-primary' : 'text-on-surface-variant hover:text-on-surface border-transparent hover:border-outline-variant/30' }}">Screener</a>
-                    
-                    <a href="/district/glasswater-row" class="text-sm font-medium pb-1 border-b-2 transition-colors {{ current_path starts with "/district" ? "text-primary border-primary" : "text-on-surface-variant hover:text-on-surface border-transparent hover:border-outline-variant/30" }}">District</a>
+                    {% for link in nav_links %}
+                        {% set is_active = link.match == 'exact' ? current_path == link.href : current_path starts with link.prefix %}
+                        <a href="{{ link.href }}"
+                           {% if is_active %}aria-current="page"{% endif %}
+                           class="text-sm font-medium pb-1 border-b-2 transition-colors {{ is_active ? 'text-primary border-primary' : 'text-on-surface-variant hover:text-on-surface border-transparent hover:border-outline-variant/30' }}">{{ link.label }}</a>
+                    {% endfor %}
                 </div>
             </div>
-            
+
             <div class="flex items-center gap-4">
                 <div class="relative hidden sm:block" data-controller="navbar-search">
-                    <form action="/search" method="GET" id="search-form">
-                        <input id="market-search-input" name="q" type="text" placeholder="Search ticker or company..." class="bg-surface-container-lowest border border-outline-variant/25 rounded px-3 py-1 text-xs focus:ring-1 focus:ring-primary focus:border-primary w-64 text-on-surface outline-none placeholder:text-on-surface-variant/50" autocomplete="off" data-navbar-search-target="input" data-action="input->navbar-search#onInput keydown->navbar-search#onKeyDown">
-                        <div id="search-results-dropdown" data-navbar-search-target="dropdown" class="absolute left-0 mt-1 w-full bg-surface-container-high border border-outline-variant/30 rounded shadow-md hidden z-50 overflow-hidden text-xs">
+                    <form action="/search" method="GET" id="search-form" role="search">
+                        <label for="market-search-input" class="sr-only">Search ticker or company</label>
+                        <input id="market-search-input" name="q" type="search" placeholder="Search ticker or company..." class="bg-surface-container-lowest border border-outline-variant/25 rounded px-3 py-1 text-xs focus:ring-1 focus:ring-primary focus:border-primary w-64 text-on-surface outline-none placeholder:text-on-surface-variant/50" autocomplete="off" role="combobox" aria-expanded="false" aria-controls="search-results-dropdown" aria-autocomplete="list" data-navbar-search-target="input" data-action="input->navbar-search#onInput keydown->navbar-search#onKeyDown">
+                        <div id="search-results-dropdown" role="listbox" aria-label="Search results" data-navbar-search-target="dropdown" class="absolute left-0 mt-1 w-full bg-surface-container-high border border-outline-variant/30 rounded shadow-md hidden z-50 overflow-hidden text-xs">
                         </div>
                     </form>
                 </div>
-                
+
                 {% if app.user %}
-                    <a href="/dashboard" class="w-7 h-7 rounded bg-surface-container-high flex items-center justify-center text-primary border border-outline-variant/20 hover:bg-surface-bright transition-colors" title="Logged in as {{ app.user.userIdentifier }}">
-                        <span class="material-symbols-outlined text-sm">account_circle</span>
+                    <a href="/dashboard" class="w-7 h-7 rounded bg-surface-container-high flex items-center justify-center text-primary border border-outline-variant/20 hover:bg-surface-bright transition-colors" aria-label="Signed in as {{ app.user.userIdentifier }} — go to portfolio">
+                        <span class="material-symbols-outlined text-sm" aria-hidden="true">account_circle</span>
                     </a>
-                    <a href="{{ path('app_logout') }}" class="material-symbols-outlined text-on-surface-variant hover:text-on-surface transition-colors active:scale-95 text-lg" title="Sign Out">logout</a>
+                    <a href="{{ path('app_logout') }}" class="text-on-surface-variant hover:text-on-surface transition-colors active:scale-95" aria-label="Sign out">
+                        <span class="material-symbols-outlined text-lg" aria-hidden="true">logout</span>
+                    </a>
                 {% else %}
-                    <a href="{{ path('app_login') }}" class="material-symbols-outlined text-on-surface-variant hover:text-on-surface transition-colors active:scale-95 text-lg" title="Sign In">account_circle</a>
+                    <a href="{{ path('app_login') }}" class="text-on-surface-variant hover:text-on-surface transition-colors active:scale-95" aria-label="Sign in">
+                        <span class="material-symbols-outlined text-lg" aria-hidden="true">account_circle</span>
+                    </a>
                 {% endif %}
+
+                {# The link bar is hidden below `md`, so the same links go here. A <details>
+                   disclosure needs no JavaScript and traps no focus. #}
+                <details class="md:hidden relative" data-controller="disclosure">
+                    <summary class="list-none cursor-pointer text-on-surface-variant hover:text-on-surface transition-colors flex items-center" aria-label="Open navigation menu">
+                        <span class="material-symbols-outlined text-xl" aria-hidden="true">menu</span>
+                    </summary>
+                    <div class="absolute right-0 mt-3 w-64 rounded-lg border border-outline-variant/25 bg-surface-container-high shadow-lg shadow-black/40 p-2 z-50">
+                        <form action="/search" method="GET" role="search" class="sm:hidden p-1 pb-2">
+                            <label for="market-search-input-mobile" class="sr-only">Search ticker or company</label>
+                            <input id="market-search-input-mobile" name="q" type="search" placeholder="Search ticker or company..." class="w-full bg-surface-container-lowest border border-outline-variant/25 rounded px-3 py-1.5 text-xs text-on-surface outline-none focus:ring-1 focus:ring-primary placeholder:text-on-surface-variant/50">
+                        </form>
+                        {% for link in nav_links %}
+                            {% set is_active = link.match == 'exact' ? current_path == link.href : current_path starts with link.prefix %}
+                            <a href="{{ link.href }}"
+                               {% if is_active %}aria-current="page"{% endif %}
+                               class="block px-3 py-2 rounded text-sm font-medium transition-colors {{ is_active ? 'text-primary bg-primary/10' : 'text-on-surface-variant hover:text-on-surface hover:bg-surface-bright' }}">{{ link.label }}</a>
+                        {% endfor %}
+                    </div>
+                </details>
             </div>
         </div>
     </div>

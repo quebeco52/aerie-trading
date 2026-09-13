@@ -29,6 +29,40 @@ use App\Service\Math\MathUtility;
  */
 class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
 {
+    // --- Operating Cyclicality & Demand Structure ---
+    /** Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Appropriations, not GDP, set volume; sole-source programs rarely switch. */
+    public const OPERATING_CYCLICALITY = 0.50;
+    /** Own-price elasticity of demand: volume lost per unit of real price increase. */
+    public const PRICE_ELASTICITY_OF_DEMAND = 0.10;
+    /** Share of an idiosyncratic revenue gain taken from same-industry peers rather than won from a larger market. */
+    public const INDUSTRY_SUBSTITUTABILITY = 0.30;
+
+    // --- Input Cost Basket ---
+    /** Shares of the variable cost base bought in tracked input markets (energy, metals, agri, freight, wholesale goods, variable payroll). */
+    public const INPUT_COST_EXPOSURES = ['metals' => 0.10, 'ppi' => 0.20, 'labor' => 0.35, 'energy' => 0.03];
+    /** Cost-plus and FMS contracts reprice through FAR escalators within the year; fixed-price EMD never does. */
+    public const INPUT_PASS_THROUGH_LAG_YEARS = 0.75;
+
+    // --- Labor Intensity ---
+    /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze. Cleared engineers on long programs are carried through the contract regardless of volume, which is what makes a defense prime a payroll with a factory attached. */
+    public const FIXED_COST_LABOR_SHARE = 0.70;
+
+    // --- FX Exposure ---
+    /** Share of revenue whose competitiveness moves with the trade-weighted exchange rate. Foreign military sales compete against European and Israeli primes on delivered price; domestic procurement does not. */
+    public const FX_REVENUE_EXPOSURE = 0.15;
+    /** Cost-plus and FMS work recovers allowable cost by contract; only the fixed-price development share eats an overrun, and fixed-price-heavy primes are tuned down per ticker. */
+    public const PRICING_POWER_INDEX = 0.70;
+
+    /**
+     * Calendar-quarter revenue seasonality [Q1, Q2, Q3, Q4] summing to 4.0: federal fiscal year-end obligation flush in September, continuing resolutions in Q4.
+     *
+     * @return array<int, float>
+     */
+    public function getSeasonalityFactors(): array
+    {
+        return [0.95, 0.98, 1.10, 0.97];
+    }
+
     // --- Analyst Visibility & Forecasting ---
     /** Base coverage visibility for defense contractors from public appropriations. */
     public const BASE_COVERAGE_VISIBILITY = 0.60;
@@ -66,8 +100,20 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
     public const FORWARD_LOSS_Z_SCORE = -1.50;
     /** Variable margin penalty for ASC 606 reach-forward losses on fixed-price contracts. */
     public const FORWARD_LOSS_PENALTY = 0.08;
-    /** Sensitivity scalar translating excess macroeconomic inflation into fixed-price engineering overruns. */
-    public const FIXED_PRICE_INFLATION_DRAG_SCALAR = 0.50;
+
+    // --- Order Backlog (funded and unfunded) ---
+    /** Fraction of the cost-plus procurement backlog executed each quarter (multi-year appropriations, ~5.7 quarters of coverage). */
+    public const COST_PLUS_BACKLOG_BURN_RATE = 0.15;
+    /** Fraction of the fixed-price development backlog executed each quarter (~4 quarters of coverage). */
+    public const FIXED_PRICE_BACKLOG_BURN_RATE = 0.20;
+    /** Fraction of the foreign military sales backlog delivered each quarter (~3 quarters of coverage). */
+    public const FMS_BACKLOG_BURN_RATE = 0.25;
+    /** Regime key for a fixed-price development program in overrun that keeps taking charges until delivery. */
+    public const REGIME_PROGRAM_OVERRUN = 'program_overrun';
+    /** Quarterly probability the troubled program is delivered or re-baselined (~6 quarter expected overrun). */
+    public const PROGRAM_OVERRUN_EXIT_HAZARD = 0.17;
+    /** Ongoing quarterly reach-forward charge while the fixed-price program remains in overrun. */
+    public const FORWARD_LOSS_ONGOING_PENALTY = 0.03;
     /** Margin efficiency elasticity (Wright's Law) applied to mature FMS production volume scale. */
     public const PRODUCTION_LEARNING_CURVE_ELASTICITY = 0.020;
 
@@ -169,7 +215,7 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
         ]);
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
-        $streams = new StreamContext($momentum, $mathUtility);
+        $streams = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
 
         // --- Dynamic Revenue Mix Drift ---
         $activeWeights = $streams->resolveActiveStreamWeights([
@@ -185,7 +231,7 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
         $costPlusZ   = $streams->generateZ('cost_plus_procurement', 0.70); // High multi-year appropriation persistence
         $fixedPriceZ = $streams->generateZ('fixed_price_development', 0.30);
         $fmsZ        = $streams->generateZ('foreign_military_sales', 0.20);
-        $eventZ      = $streams->generateZ('event', 0.10);
+        $eventZ      = $streams->generateExogenousZ('event', 0.10);
 
         // --- Sovereign Procurement & Cost-Plus Fiscal Physics ---
         $inflation = $macroState->inflationEma;
@@ -202,12 +248,6 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
             ? ($creditSpread - self::SOVEREIGN_STRESS_THRESHOLD) * self::CR_BUDGET_DRAG_SCALAR
             : 0.0;
 
-        // Excess inflation aggressively squeezes margins on fixed-price EMD contracts
-        $excessInflation = max(0.0, $inflation - MacroEngine::TARGET_INFLATION);
-        $fixedPriceInflationDrag = $excessInflation > 0.0
-            ? $excessInflation * self::FIXED_PRICE_INFLATION_DRAG_SCALAR
-            : 0.0;
-
         // --- Program Execution, Forward Losses & Tail Shocks ---
         $costPlusMultiplier   = max(self::MAX_CR_BUDGET_DRAG, 1.0 - $crDrag);
         $fixedPriceMultiplier = 1.0;
@@ -220,10 +260,18 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
         // Wright's Law: Learning curve applies to mature FMS export volume
         $learningCurveShift = -self::PRODUCTION_LEARNING_CURVE_ELASTICITY * $fmsZ * $fmsWeight;
 
-        if ($fixedPriceZ < self::FORWARD_LOSS_Z_SCORE) {
-            $forwardLossPenalty = self::FORWARD_LOSS_PENALTY;
+        // A fixed-price development program in trouble books its reach-forward loss once, then keeps
+        // taking charges every quarter until delivery or re-baselining (the tanker-program pattern).
+        $overrunElapsed = $streams->evolveRegime(self::REGIME_PROGRAM_OVERRUN, 0.0, self::PROGRAM_OVERRUN_EXIT_HAZARD);
+        if ($fixedPriceZ < self::FORWARD_LOSS_Z_SCORE && $overrunElapsed === 0) {
+            $overrunElapsed = $streams->startRegime(self::REGIME_PROGRAM_OVERRUN);
             $eventType = ShockEvent::PROJECT_DELAY;
         }
+        $forwardLossPenalty = match (true) {
+            $overrunElapsed === 1 => self::FORWARD_LOSS_PENALTY,
+            $overrunElapsed > 1   => self::FORWARD_LOSS_ONGOING_PENALTY,
+            default               => 0.0,
+        };
 
         if ($eventZ < self::FLAGSHIP_FAILURE_Z_SCORE) {
             $costPlusMultiplier = self::FLAGSHIP_FAILURE_MULT;
@@ -244,13 +292,26 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
         }
 
         // --- Clamped Revenue Streams ---
-        $fxShift = ($macroState->exchangeRateIndexEma - 100.0) / 100.0;
-        $metalsShift = ($macroState->industrialMetalsIndexEma - 100.0) / 100.0;
-        $metalsCostDrag = max(0.0, $metalsShift) * 0.05 * $fixedPriceWeight;
+        // Input cost basket: titanium and specialty metals, electronics, engineering payroll. Cost-plus and FMS
+        // work recovers the move through escalators; the fixed-price development share eats it.
+        $inputCostDrag = $this->resolveInputCostDrag($stock, $macroState, $streams, 1.0 - $fixedPriceWeight, $realizedVariableMargin);
 
-        $costPlusRevenue = max(0.0, $expectedRevenue * $costPlusWeight * (1.0 + ($costPlusZ * $baselineVol * self::COST_PLUS_VARIANCE_SCALAR) + $costPlusBonus + ($govSpendShift * 0.40)) * $costPlusMultiplier);
-        $fixedPriceRevenue = max(0.0, $expectedRevenue * $fixedPriceWeight * (1.0 + ($fixedPriceZ * $baselineVol * self::FIXED_PRICE_DEV_VARIANCE_SCALAR) + ($govSpendShift * 0.40)) * $fixedPriceMultiplier);
-        $fmsRevenue = max(0.0, $expectedRevenue * $fmsWeight * (1.0 + ($fmsZ * $baselineVol * self::FMS_VARIANCE_SCALAR) - ($fxShift * 0.15)) * $fmsMultiplier);
+        // Contract awards fund a multi-year backlog; revenue is recognized on percentage of completion, so
+        // appropriations, continuing resolutions and export bans hit ORDERS in full and revenue gradually.
+        $costPlusBook = $streams->recognizeBacklog('cost_plus_procurement', $expectedRevenue * $costPlusWeight,
+            max(0.0, (1.0 + ($costPlusZ * $baselineVol * self::COST_PLUS_VARIANCE_SCALAR) + $costPlusBonus + ($govSpendShift * 0.40)) * $costPlusMultiplier), self::COST_PLUS_BACKLOG_BURN_RATE);
+        $fixedPriceBook = $streams->recognizeBacklog('fixed_price_development', $expectedRevenue * $fixedPriceWeight,
+            max(0.0, (1.0 + ($fixedPriceZ * $baselineVol * self::FIXED_PRICE_DEV_VARIANCE_SCALAR) + ($govSpendShift * 0.40)) * $fixedPriceMultiplier), self::FIXED_PRICE_BACKLOG_BURN_RATE);
+        $fmsBook = $streams->recognizeBacklog('foreign_military_sales', $expectedRevenue * $fmsWeight,
+            max(0.0, (1.0 + ($fmsZ * $baselineVol * self::FMS_VARIANCE_SCALAR) + $this->resolveFxDemandShift($macroState)) * $fmsMultiplier), self::FMS_BACKLOG_BURN_RATE);
+
+        $costPlusRevenue = $costPlusBook['revenue'];
+        $fixedPriceRevenue = $fixedPriceBook['revenue'];
+        $fmsRevenue = $fmsBook['revenue'];
+
+        $backlogOrders = $costPlusBook['orders'] + $fixedPriceBook['orders'] + $fmsBook['orders'];
+        $backlogRevenue = $costPlusRevenue + $fixedPriceRevenue + $fmsRevenue;
+        $backlogQuarters = ($costPlusBook['backlog'] + $fixedPriceBook['backlog'] + $fmsBook['backlog']) / max(1.0, $expectedRevenue);
 
         $streamRevenues = [
             'cost_plus_procurement'   => $costPlusRevenue,
@@ -265,19 +326,19 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
         $rawMargin = $realizedVariableMargin
             + $learningCurveShift
             + ($forwardLossPenalty * $fixedPriceWeight)
-            + ($fixedPriceInflationDrag * $fixedPriceWeight)
             + ($flagshipPenalty * $costPlusWeight)
             + ($wartimeSupplyDrag * $fmsWeight)
-            + $metalsCostDrag;
+            + $inputCostDrag;
 
         $clampedMargin = $this->clampMargin($rawMargin);
 
         // --- Shock Determination ---
         $primaryShockZ = $streams->resolveDominantShockZ([$costPlusZ, $fixedPriceZ, $fmsZ], $eventZ);
 
-        $costPlusShock   = (($costPlusZ * $baselineVol * self::COST_PLUS_VARIANCE_SCALAR) + $costPlusBonus) * $costPlusMultiplier + ($costPlusMultiplier - 1.0);
-        $fixedPriceShock = ($fixedPriceZ * $baselineVol * self::FIXED_PRICE_DEV_VARIANCE_SCALAR) * $fixedPriceMultiplier + ($fixedPriceMultiplier - 1.0);
-        $fmsShock        = ($fmsZ * $baselineVol * self::FMS_VARIANCE_SCALAR) * $fmsMultiplier + ($fmsMultiplier - 1.0);
+        // Analysts see awards and book-to-bill, but this quarter's revenue only moves at the burn rate.
+        $costPlusShock   = ((($costPlusZ * $baselineVol * self::COST_PLUS_VARIANCE_SCALAR) + $costPlusBonus) * $costPlusMultiplier + ($costPlusMultiplier - 1.0)) * self::COST_PLUS_BACKLOG_BURN_RATE;
+        $fixedPriceShock = (($fixedPriceZ * $baselineVol * self::FIXED_PRICE_DEV_VARIANCE_SCALAR) * $fixedPriceMultiplier + ($fixedPriceMultiplier - 1.0)) * self::FIXED_PRICE_BACKLOG_BURN_RATE;
+        $fmsShock        = (($fmsZ * $baselineVol * self::FMS_VARIANCE_SCALAR) * $fmsMultiplier + ($fmsMultiplier - 1.0)) * self::FMS_BACKLOG_BURN_RATE;
 
         $observableShockZ = ($costPlusShock * $costPlusWeight) + ($fixedPriceShock * $fixedPriceWeight) + ($fmsShock * $fmsWeight);
 
@@ -290,26 +351,20 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
             isPublicEvent: $eventType !== null ? true : null,
             streamZ: $streams->getStreamZ(),
             streamRevenue: $streamRevenues,
+                    kpis: ['book_to_bill' => $backlogRevenue > 0.0 ? $backlogOrders / $backlogRevenue : 1.0, 'backlog_quarters' => $backlogQuarters],
         );
     }
 
-    public function applyAssetDepreciationDecay(Stock $stock, float $reinvestmentRatio, float $dt): void
+    /** Under-investment below replacement CapEx erodes operating margin toward the sector floor. */
+    public function getDepreciationDecayRate(): float
     {
-        $timeScale = $dt / 0.25;
-        $currentMargin = (float) $stock->getOperatingMargin();
+        return self::DEFENSE_TOOLING_DECAY_RATE;
+    }
 
-        if ($reinvestmentRatio < 1.0) {
-            $decayRate = self::DEFENSE_TOOLING_DECAY_RATE * (1.0 - $reinvestmentRatio) * $timeScale;
-            $updatedMargin = max(self::MIN_OPERATING_MARGIN_FLOOR, $currentMargin - ($currentMargin * $decayRate));
-            $stock->setOperatingMargin((string) $updatedMargin);
-        } elseif ($reinvestmentRatio > 1.0) {
-            $modGain = self::CLASSIFIED_PLATFORM_GAIN_RATE * log($reinvestmentRatio) * $timeScale;
-            $updatedMargin = min(
-                self::MAX_OPERATING_MARGIN_CEILING,
-                $currentMargin + ((self::MAX_OPERATING_MARGIN_CEILING - $currentMargin) * $modGain)
-            );
-            $stock->setOperatingMargin((string) $updatedMargin);
-        }
+    /** Over-investment above replacement CapEx compounds margin toward the sector ceiling. */
+    public function getModernizationGainRate(): float
+    {
+        return self::CLASSIFIED_PLATFORM_GAIN_RATE;
     }
 
     /**
@@ -321,11 +376,14 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
     public function getOperatingMacroFields(): array
     {
         return [
+            'energy_cost_push_lag',
             'exchange_rate_index_ema',
             'government_spending_index_ema',
             'industrial_metals_index_ema',
             'inflation_ema',
             'macro_credit_spread_ema',
+            'producer_price_inflation_ema',
+            'wage_growth_ema',
         ];
     }
 }

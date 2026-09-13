@@ -10,7 +10,7 @@
         <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
             <div>
                 <div class="flex items-center gap-2 mb-2">
-                    <span class="text-[11px] font-semibold tracking-wide text-primary uppercase">Market Intelligence</span>
+                    <span class="text-2xs font-semibold tracking-wide text-primary uppercase">Market Intelligence</span>
                 </div>
                 <h1 class="text-2xl md:text-3xl font-bold text-on-surface tracking-tight">Stock Screener</h1>
                 <p class="text-xs text-on-surface-variant mt-1">Filter, sort, and analyze corporate fundamentals across the entire exchange.</p>
@@ -27,7 +27,7 @@
 
     {# Sector Filter Pills #}
     <div class="flex items-center gap-2 overflow-x-auto pb-1 custom-scrollbar" id="sector-filters">
-        <button class="sector-filter-btn px-3 py-1 rounded text-xs font-bold transition-all bg-primary text-[#001a42] whitespace-nowrap cursor-pointer uppercase tracking-wider" data-sector="ALL" data-screener-target="sectorBtn" data-action="click->screener#filterSector">
+        <button class="sector-filter-btn px-3 py-1 rounded text-xs font-bold transition-all bg-primary text-on-primary whitespace-nowrap cursor-pointer uppercase tracking-wider" data-sector="ALL" data-screener-target="sectorBtn" data-action="click->screener#filterSector">
             All Sectors
         </button>
         {% set sectors = [] %}
@@ -48,7 +48,7 @@
         <div class="overflow-x-auto">
             <table class="w-full text-left border-collapse min-w-225" id="screener-table">
                 <thead>
-                    <tr class="bg-surface-container-highest/20 text-on-surface-variant text-[11px] uppercase tracking-wide font-semibold border-b border-outline-variant/15">
+                    <tr class="bg-surface-container-highest/20 text-on-surface-variant text-2xs uppercase tracking-wide font-semibold border-b border-outline-variant/15">
                         <th scope="col" class="px-5 py-3 cursor-pointer select-none hover:text-primary transition-colors" data-col="ticker" role="columnheader" aria-sort="none" tabindex="0" data-screener-target="header" data-action="click->screener#sort">Ticker</th>
                         <th scope="col" class="px-4 py-3 cursor-pointer select-none hover:text-primary transition-colors" data-col="name" role="columnheader" aria-sort="none" tabindex="0" data-screener-target="header" data-action="click->screener#sort">Company</th>
                         <th scope="col" class="px-4 py-3 cursor-pointer select-none hover:text-primary transition-colors" data-col="sector" role="columnheader" aria-sort="none" tabindex="0" data-screener-target="header" data-action="click->screener#sort">Sector</th>
@@ -59,6 +59,8 @@
                         <th scope="col" class="px-4 py-3 text-right cursor-pointer select-none hover:text-primary transition-colors" data-col="roic" role="columnheader" aria-sort="none" tabindex="0" data-screener-target="header" data-action="click->screener#sort">ROIC</th>
                         <th scope="col" class="px-4 py-3 text-right cursor-pointer select-none hover:text-primary transition-colors" data-col="equity" role="columnheader" aria-sort="none" tabindex="0" data-screener-target="header" data-action="click->screener#sort">Equity</th>
                         <th scope="col" class="px-4 py-3 text-right cursor-pointer select-none hover:text-primary transition-colors" data-col="de" role="columnheader" aria-sort="none" tabindex="0" data-screener-target="header" data-action="click->screener#sort">D/E</th>
+                        <th scope="col" class="px-4 py-3 text-right cursor-pointer select-none hover:text-primary transition-colors" data-col="ndebt" role="columnheader" aria-sort="none" tabindex="0" data-screener-target="header" data-action="click->screener#sort" title="Net debt over annualized EBITDA">ND/EBITDA</th>
+                        <th scope="col" class="px-4 py-3 text-right cursor-pointer select-none hover:text-primary transition-colors" data-col="fcfconv" role="columnheader" aria-sort="none" tabindex="0" data-screener-target="header" data-action="click->screener#sort" title="Free cash flow over trailing net income">FCF Conv.</th>
                         <th class="px-5 py-3 text-right">Action</th>
                     </tr>
                 </thead>
@@ -69,7 +71,7 @@
                                 <div class="flex items-center gap-2">
                                     <a href="/stock/{{ stock.ticker }}" class="font-bold text-primary font-mono group-hover:underline outline-none after:absolute after:inset-0 after:content-[''] focus-visible:underline focus-visible:underline-offset-4">{{ stock.ticker }}</a>
                                     {% if stock.isBankrupt %}
-                                        <span class="relative z-10 px-1.5 py-0.2 rounded bg-tertiary/10 text-tertiary text-[9px] font-bold border border-tertiary/25 uppercase tracking-wide">Bankrupt</span>
+                                        <span class="relative z-10 px-1.5 py-0.2 rounded bg-tertiary/10 text-tertiary text-4xs font-bold border border-tertiary/25 uppercase tracking-wide">Bankrupt</span>
                                     {% endif %}
                                 </div>
                             </th>
@@ -89,6 +91,12 @@
                             <td class="px-4 py-2.5 font-mono tabular-nums text-right text-on-surface" data-value="{{ stock.equity }}">${{ stock.equity|format_large }}</td>
                             <td class="px-4 py-2.5 font-mono tabular-nums text-right text-on-surface" data-value="{{ stock.debtToEquity ?? 0 }}">
                                 {{ stock.debtToEquity is not null ? stock.debtToEquity|number_format(2) ~ 'x' : '-' }}
+                            </td>
+                            <td class="px-4 py-2.5 font-mono tabular-nums text-right {{ stock.netDebtToEbitda is not null and stock.netDebtToEbitda > 4 ? 'text-tertiary' : 'text-on-surface' }}" data-value="{{ stock.netDebtToEbitda ?? 0 }}">
+                                {{ stock.netDebtToEbitda is not null ? stock.netDebtToEbitda|number_format(2) ~ 'x' : '-' }}
+                            </td>
+                            <td class="px-4 py-2.5 font-mono tabular-nums text-right {{ stock.fcfConversion is not null and stock.fcfConversion < 0.8 ? 'text-tertiary' : 'text-on-surface' }}" data-value="{{ stock.fcfConversion ?? 0 }}">
+                                {{ stock.fcfConversion is not null ? (stock.fcfConversion * 100)|number_format(0) ~ '%' : '-' }}
                             </td>
                             <td class="px-5 py-2.5 text-right">
                                 <a href="/stock/{{ stock.ticker }}" class="relative z-10 inline-flex items-center px-2.5 py-0.5 rounded bg-surface-container hover:bg-primary/20 text-primary border border-primary/20 text-xs font-semibold transition-colors">

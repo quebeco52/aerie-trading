@@ -15,6 +15,7 @@ use Doctrine\ORM\QueryBuilder;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
+use Symfony\Component\Clock\MockClock;
 
 /**
  * Pins the district event backfill's job: fetch every tenant's recent history in one query and
@@ -34,7 +35,12 @@ class DistrictEventFeedTest extends TestCase
     private QueryBuilder&MockObject $queryBuilder;
     /** @var Query<int, mixed>&MockObject */
     private Query&MockObject $query;
+    private MockClock $clock;
     private DistrictEventFeed $feed;
+
+    /** 3,600 ticks a year at 20ms each: a simulated month is 300 ticks, i.e. 6 wall-clock seconds. */
+    private const TICKS_PER_YEAR = 3600;
+    private const TICK_INTERVAL_US = 20_000;
 
     protected function setUp(): void
     {
@@ -48,11 +54,19 @@ class DistrictEventFeedTest extends TestCase
         $this->queryBuilder->method('setParameter')->willReturn($this->queryBuilder);
         $this->queryBuilder->method('orderBy')->willReturn($this->queryBuilder);
         $this->queryBuilder->method('addOrderBy')->willReturn($this->queryBuilder);
+        $this->queryBuilder->method('setMaxResults')->willReturn($this->queryBuilder);
 
         $this->query = $this->createMock(Query::class);
         $this->queryBuilder->method('getQuery')->willReturn($this->query);
 
-        $this->feed = new DistrictEventFeed($this->entityManager, new EventPresenter());
+        $this->clock = new MockClock('2026-03-14 09:30:00');
+        $this->feed = new DistrictEventFeed(
+            $this->entityManager,
+            new EventPresenter(),
+            self::TICKS_PER_YEAR,
+            self::TICK_INTERVAL_US,
+            $this->clock,
+        );
     }
 
     private function makeStock(string $ticker): Stock
@@ -155,5 +169,46 @@ class DistrictEventFeedTest extends TestCase
 
         $this->assertArrayHasKey('ROOK', $result);
         $this->assertSame([], $result['ROOK']);
+    }
+
+    public function testBadgeWindowIsOneSimulatedMonthInWallClockSeconds(): void
+    {
+        $this->assertEqualsWithDelta(6.0, $this->feed->badgeWindowSeconds(), 1.0e-9);
+    }
+
+    /**
+     * The badge used to print the whole capped backfill, so it read "6" on every building for
+     * good. Only events inside the window count now; the rest still ship for the side panel.
+     */
+    public function testOnlyEventsInsideTheBadgeWindowAreMarkedRecent(): void
+    {
+        $stock = $this->makeStock('LAKE');
+        $justNow = $this->makeEvent($stock, 'EARNINGS', 'Fresh');
+        $justNow->setRecordedAt(new \DateTime('2026-03-14 09:29:58'));
+        $onTheEdge = $this->makeEvent($stock, 'EARNINGS', 'Six seconds ago');
+        $onTheEdge->setRecordedAt(new \DateTime('2026-03-14 09:29:54'));
+        $stale = $this->makeEvent($stock, 'EARNINGS', 'Seven seconds ago');
+        $stale->setRecordedAt(new \DateTime('2026-03-14 09:29:53'));
+
+        $this->query->method('getResult')->willReturn([$justNow, $onTheEdge, $stale]);
+
+        $result = $this->feed->recentEventsByTicker([$stock]);
+
+        $this->assertCount(3, $result['LAKE'], 'Stale events still ship for the side panel');
+        $this->assertSame([true, true, false], array_column($result['LAKE'], 'recent'));
+    }
+
+    public function testEachEventCarriesItsEpochTimestampForTheClientToReCount(): void
+    {
+        $stock = $this->makeStock('SWAN');
+        $event = $this->makeEvent($stock, 'SHOCK', 'Rattled.');
+        $event->setRecordedAt(new \DateTime('2026-03-14 09:00:00'));
+
+        $this->query->method('getResult')->willReturn([$event]);
+
+        $result = $this->feed->recentEventsByTicker([$stock]);
+
+        $this->assertSame((new \DateTime('2026-03-14 09:00:00'))->getTimestamp(), $result['SWAN'][0]['recordedAtTs']);
+        $this->assertFalse($result['SWAN'][0]['recent']);
     }
 }

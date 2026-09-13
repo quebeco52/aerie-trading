@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace App\Tests\Data;
 
+use App\Data\InitialMarket;
 use App\Data\ModelParam;
+use App\Data\Sectors;
 use App\Data\StockModelTuning;
 use App\DTO\ModelParameters;
 use PHPUnit\Framework\TestCase;
@@ -57,6 +59,102 @@ class StockModelTuningTest extends TestCase
         }
     }
 
+    /**
+     * A tuning override is only a tuning override if something reads it. Setting a parameter the ticker's
+     * own business model never resolves is indistinguishable from a comment: it states an intent the
+     * simulation does not act on, and nothing fails, so it survives indefinitely. Eight such overrides
+     * accumulated before this guard existed (a brokerage given the investment bank's VIX dial, a shadow
+     * bank given the auto maker's rate scalar, two insurers given a portfolio volatility nothing modelled).
+     *
+     * A parameter counts as read if the name appears anywhere the resolved model can reach — its own class,
+     * any ancestor, any trait used along that chain — or in the corporate/market engines that call models
+     * back. That is deliberately generous: the point is to catch a parameter with NO reader at all, not to
+     * police which line reads it.
+     */
+    public function testEveryOverrideIsReadableByTheTickersOwnBusinessModel(): void
+    {
+        $engineSource = $this->concatenate([
+            __DIR__ . '/../../src/Service/Corporate',
+            __DIR__ . '/../../src/Service/Market',
+            __DIR__ . '/../../src/Service/Model',
+            __DIR__ . '/../../src/Service/Model/Strategy',
+            __DIR__ . '/../../src/Service/Event',
+        ]);
+
+        $modelByTicker = [];
+        foreach (InitialMarket::STOCKS as $stock) {
+            $industry = $stock['industry'] ?? 'General';
+            $modelByTicker[$stock['ticker']] = Sectors::INDUSTRY_METRICS[$industry]['business_model'] ?? 'none';
+        }
+
+        foreach (StockModelTuning::OVERRIDES as $ticker => $overrides) {
+            $this->assertArrayHasKey(
+                $ticker,
+                $modelByTicker,
+                sprintf("Ticker '%s' has tuning overrides but is not a listed company.", $ticker)
+            );
+
+            $strategy = Sectors::getBusinessModelStrategy($modelByTicker[$ticker]);
+            $reachable = $this->sourceReachableFrom($strategy) . $engineSource;
+
+            foreach (array_keys($overrides) as $key) {
+                $case = ModelParam::tryFrom((string) $key);
+                if ($case === null) {
+                    continue; // Already covered by testAllOverridesUseValidModelParamKeys.
+                }
+
+                // Asserted as a bool rather than assertStringContainsString: the haystack is the whole
+                // reachable source tree, and PHPUnit would print all 600KB of it on failure.
+                $this->assertTrue(
+                    str_contains($reachable, 'ModelParam::' . $case->name),
+                    sprintf(
+                        "Ticker '%s' sets %s, but its business model (%s) has no code path that reads it. "
+                        . 'Either wire the parameter into the model or drop the override.',
+                        $ticker,
+                        $case->name,
+                        (new \ReflectionClass($strategy))->getShortName()
+                    )
+                );
+            }
+        }
+    }
+
+    /** Source of a model's own class plus every ancestor and every trait mixed in along that chain. */
+    private function sourceReachableFrom(object $model): string
+    {
+        $source = '';
+        $seen = [];
+        $class = new \ReflectionClass($model);
+
+        while ($class instanceof \ReflectionClass) {
+            foreach (array_merge([$class], array_values($class->getTraits())) as $unit) {
+                foreach (array_merge([$unit], array_values($unit->getTraits())) as $file) {
+                    $path = $file->getFileName();
+                    if (is_string($path) && !isset($seen[$path])) {
+                        $seen[$path] = true;
+                        $source .= (string) file_get_contents($path);
+                    }
+                }
+            }
+            $class = $class->getParentClass() ?: null;
+        }
+
+        return $source;
+    }
+
+    /** @param list<string> $directories */
+    private function concatenate(array $directories): string
+    {
+        $source = '';
+        foreach ($directories as $directory) {
+            foreach ((array) glob(rtrim($directory, '/') . '/*.php') as $file) {
+                $source .= (string) file_get_contents((string) $file);
+            }
+        }
+
+        return $source;
+    }
+
     public function testStreamWeightSumsAreStrictlyNormalized(): void
     {
         // Define stream weight groups to verify they sum to 1.0 when configured
@@ -66,8 +164,11 @@ class StockModelTuningTest extends TestCase
             'steel' => [ModelParam::ContractOemWeight, ModelParam::SpotHrcWeight],
             'heavy_mfg' => [ModelParam::OemEquipmentWeight, ModelParam::AftermarketMroWeight],
             'biotech' => [ModelParam::CommercialTherapeuticsWeight, ModelParam::PipelineMilestonesWeight],
+            'biotech_drug_mix' => [ModelParam::EstablishedDrugWeight, ModelParam::PipelineDrugWeight],
             'logistics' => [ModelParam::DedicatedFleetWeight, ModelParam::SpotBrokerageWeight, ModelParam::Warehousing3plWeight],
-            'railroad' => [ModelParam::IntermodalFreightWeight, ModelParam::IndustrialCarloadsWeight, ModelParam::BulkCommoditiesWeight],
+            // SubscriptionWeight carries commuter transit for a passenger operator; a pure freight hauler
+            // leaves it at zero and the other three still have to account for the whole network.
+            'railroad' => [ModelParam::IntermodalFreightWeight, ModelParam::IndustrialCarloadsWeight, ModelParam::BulkCommoditiesWeight, ModelParam::SubscriptionWeight],
             'restaurant' => [ModelParam::CompanyStoresWeight, ModelParam::FranchiseRoyaltiesWeight, ModelParam::FranchiseLeaseWeight],
             'education' => [ModelParam::DegreeTuitionWeight, ModelParam::EnterpriseTrainingWeight, ModelParam::LmsLicensingWeight],
             'advertising' => [ModelParam::BrandRetainerWeight, ModelParam::MartechConsultingWeight, ModelParam::MediaBuyingWeight],
@@ -198,10 +299,11 @@ class StockModelTuningTest extends TestCase
         $this->assertSame(0.25, StockModelTuning::get('CANV', ModelParam::SpotBrokerageWeight, 0.0));
         $this->assertSame(0.20, StockModelTuning::get('CANV', ModelParam::Warehousing3plWeight, 0.0));
 
-        // Kestrel Civic Lines (KSTL)
-        $this->assertSame(0.50, StockModelTuning::get('KSTL', ModelParam::IntermodalFreightWeight, 0.0));
-        $this->assertSame(0.30, StockModelTuning::get('KSTL', ModelParam::IndustrialCarloadsWeight, 0.0));
-        $this->assertSame(0.20, StockModelTuning::get('KSTL', ModelParam::BulkCommoditiesWeight, 0.0));
+        // Kestrel Civic Lines (KSTL) — a commuter monopoly that also hauls freight, not a freight hauler.
+        $this->assertSame(0.50, StockModelTuning::get('KSTL', ModelParam::SubscriptionWeight, 0.0));
+        $this->assertSame(0.25, StockModelTuning::get('KSTL', ModelParam::IntermodalFreightWeight, 0.0));
+        $this->assertSame(0.15, StockModelTuning::get('KSTL', ModelParam::IndustrialCarloadsWeight, 0.0));
+        $this->assertSame(0.10, StockModelTuning::get('KSTL', ModelParam::BulkCommoditiesWeight, 0.0));
 
         // Copperhead Coffee (BREW)
         $this->assertSame(0.70, StockModelTuning::get('BREW', ModelParam::CompanyStoresWeight, 0.0));

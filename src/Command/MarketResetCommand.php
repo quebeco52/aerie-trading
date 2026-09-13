@@ -13,6 +13,7 @@ use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
 use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
+use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Macro\MacroEngine;
 
@@ -28,7 +29,8 @@ class MarketResetCommand extends Command
         private UserPasswordHasherInterface $passwordHasher,
         private MathUtility $mathUtility,
         private \App\Service\Market\MarketEngine $marketEngine,
-        private \App\Service\Corporate\DebtEngine $debtEngine
+        private \App\Service\Corporate\DebtEngine $debtEngine,
+        private \App\Service\Market\TreasuryAuctionService $treasuryAuction
     ) {
         parent::__construct();
     }
@@ -48,6 +50,14 @@ class MarketResetCommand extends Command
         $conn->executeStatement('TRUNCATE TABLE etf_events');
         $conn->executeStatement('TRUNCATE TABLE user_stocks');
         $conn->executeStatement('TRUNCATE TABLE user_etfs');
+        $conn->executeStatement('TRUNCATE TABLE user_bonds');
+        $conn->executeStatement('TRUNCATE TABLE bond_history');
+        $conn->executeStatement('TRUNCATE TABLE coupon_payment');
+
+        // The whole ladder goes, not just its history. A bond's economics are anchored to simulation time,
+        // so an issue sold at year 15 of the old timeline becomes a 25-year bond the moment the clock is
+        // reset to zero, with a coupon struck off a curve that no longer exists.
+        $conn->executeStatement('TRUNCATE TABLE bonds');
         $conn->executeStatement('TRUNCATE TABLE portfolio_history');
         $conn->executeStatement('TRUNCATE TABLE corporate_report');
         $conn->executeStatement('TRUNCATE TABLE macro_report');
@@ -96,8 +106,15 @@ class MarketResetCommand extends Command
             macroCreditSpreadEma: 0.02,
             marketVolatilityEma: 0.15,
             corporateTaxRate: MacroEngine::BASE_CORPORATE_TAX_RATE,
-            equityRiskPremium: 0.045
+            equityRiskPremium: 0.045,
 
+            // The fitted curve factors the bond ladder is struck off. beta1 is the policy rate minus the
+            // level, which is what the curve function expects; the yield fields above are outputs of a
+            // curve, not inputs to one, and cannot reconstruct it.
+            nsLevel: MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION,
+            nsBeta1: 0.04 - (MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION),
+            nsBaseTermPremium: MacroEngine::NS_BASE_TERM_PREMIUM,
+            nsLongEndPremium: MacroEngine::NS_BASE_TERM_PREMIUM
         );
 
         foreach (InitialMarket::STOCKS as $stockData) {
@@ -136,7 +153,7 @@ class MarketResetCommand extends Command
             $preTaxYield = $operatingYield / (1.0 - $taxRate);
             $revenue = $margin > 0 ? ($investedCapital * ($preTaxYield / $margin)) : 0.0;
 
-            $impliedPricingRoic = $isFinancial 
+            $impliedPricingRoic = $isFinancial
                 ? max(0.01, (float) $tempStock->getBaselineRoe())
                 : $operatingYield;
 
@@ -166,6 +183,18 @@ class MarketResetCommand extends Command
             $targetPayout = $stockData['target_payout_ratio'] ?? 0.30;
             $startingDividend = ($annualEps / 4.0) * ($targetPayout * 0.50);
 
+            // The reset price must be struck on the SAME fundamentals StockTracker feeds the engine on the
+            // next tick, or the market re-rates immediately. Both default inside the DTO (2% growth, zero
+            // net debt), which priced every firm as a median-growth, debt-free business.
+            $resetSecularGrowth = $strategy->getSecularGrowthRate($tempStock);
+            $resetNetDebtPerShare = $shares > 0
+                ? max(0.0, (
+                    (float) ($stockData['wholesale_debt'] ?? 0.0)
+                    + (float) ($stockData['customer_deposits'] ?? 0.0)
+                    - (float) ($stockData['corporate_treasury'] ?? 1000000000.00)
+                ) / $shares)
+                : 0.0;
+
             $pricingCtx = new \App\DTO\MarketPricingContext(
                 currentPrice: $bookValuePerShare,
                 currentVolatility: (float) ($stockData['volatility'] ?? 0.15),
@@ -189,8 +218,17 @@ class MarketResetCommand extends Command
                 revenuePerShare: $shares > 0 ? $revenue / $shares : 0.0,
                 businessModel: $businessModel,
                 liveCostOfEquity: $debtHealth->costOfEquity ?? 0.10,
+                netDebtPerShare: $resetNetDebtPerShare,
+                secularGrowth: $resetSecularGrowth,
                 baselineRoic: $impliedPricingRoic,
-                baselineMargin: (float) ($stockData['operating_margin'] ?? 0.20)
+                baselineMargin: (float) ($stockData['operating_margin'] ?? 0.20),
+                // The reset writes the balance sheet by SQL rather than through the entity, so capital per share
+                // is built from the same seed figures with the entity's own formula.
+                investedCapitalPerShare: \App\Service\Math\CorporateMetrics::getInstance()->calculateLiveInvestedCapital(
+                    (float) ($stockData['total_equity'] ?? 0.0),
+                    (float) ($stockData['wholesale_debt'] ?? 0.0) + (float) ($stockData['customer_deposits'] ?? 0.0),
+                    (float) ($stockData['corporate_treasury'] ?? 1000000000.00)
+                ) / max(1.0, (float) ($stockData['shares_outstanding'] ?? 1000000000))
             );
 
             $marketCalc = $this->marketEngine->calculateNextPrice($pricingCtx);
@@ -224,7 +262,6 @@ class MarketResetCommand extends Command
                     wholesale_debt = :wholesale_debt,
                     customer_deposits = :customer_deposits,
                     operating_margin = :margin,
-                    structural_variable_margin = :structural_var_margin,
                     public_float_percentage = :float_pct,
                     total_net_income = :net_income,
                     total_equity = :equity,
@@ -244,18 +281,60 @@ class MarketResetCommand extends Command
                     description = :description,
                     sam_ratio = :sam_ratio,
                     industry = :industry,
+                    management_style = :management_style,
                     earnings_momentum_z = NULL,
                     is_bankrupt = 0,
-                    net_working_capital = NULL,
+                    payment_default = 0,
                     accruals_ratio = 0.0,
                     net_operating_loss = 0.0000,
-                    credit_rating = :credit_rating
+                    credit_rating = :credit_rating,
+                    -- Every ledger and learned parameter goes back to its unseeded state. Each of these is
+                    -- nullable (or defaulted) precisely so the engine can re-seed it on the first earnings
+                    -- report; leaving stale values behind would carry the old market into the new one.
+                    receivables = NULL,
+                    inventory = NULL,
+                    payables = NULL,
+                    receivables_allowance = 0.0000,
+                    inventory_allowance = 0.0000,
+                    gross_ppe = NULL,
+                    accumulated_depreciation = 0.0000,
+                    ppe_vintage_deflator = NULL,
+                    ppe_tax_basis = NULL,
+                    deferred_tax_liability = 0.0000,
+                    earning_assets = NULL,
+                    credit_loss_allowance = 0.0000,
+                    asset_turnover = NULL,
+                    lifecycle_stage = NULL,
+                    inflation_pass_through = NULL,
+                    -- The CIR variable-cost process starts at its own long-run mean, which EarningsEngine
+                    -- derives with the depreciation carve-out applied. Computing it here from margin and
+                    -- fixed-cost ratio alone overstated the cost ratio by a median 2% and up to 16% on
+                    -- capital-intensive names, always in the same direction, so every reset opened those
+                    -- firms on a cost base they were not reverting toward.
+                    structural_variable_margin = NULL,
+                    pre_announced_shortfall = 0.0,
+                    last_reported_cost_ratio = NULL,
+                    last_book_to_bill = NULL,
+                    lagged_demand_gap = NULL,
+                    managed_accrual_bank = 0.0000,
+                    price_momentum_trend = 0.0,
+                    turnover_ratio = :turnover_ratio,
+                    impact_variance_ema = 0.0,
+                    lendable_supply_ratio = :lendable_supply_ratio,
+                    short_interest_shares = 0.00,
+                    reported_operating_margin = NULL,
+                    quarterly_net_income_history = NULL,
+                    earnings_surprise_history = NULL
                 WHERE ticker = :ticker',
                 [
                     'credit_rating' => 'BBB',
                     'price' => $neutralPrice,
                     'shares' => $stockData['shares_outstanding'],
                     'vol' => $stockData['volatility'],
+                    // Structural, derived from the name's own volatility rather than stored per ticker, so
+                    // a retuned volatility cannot leave a turnover behind that no longer matches it.
+                    'turnover_ratio' => \App\Service\Market\LiquidityEngine::structuralTurnoverRatio((float) $stockData['volatility']),
+                    'lendable_supply_ratio' => FinancialConstants::DEFAULT_LENDABLE_SUPPLY_RATIO,
                     'current_vol' => $stockData['volatility'],
                     'beta' => $stockData['beta'],
                     'jump_int' => $stockData['jump_intensity'],
@@ -273,7 +352,6 @@ class MarketResetCommand extends Command
                     'wholesale_debt' => $stockData['wholesale_debt'] ?? 0.00,
                     'customer_deposits' => $stockData['customer_deposits'] ?? 0.00,
                     'margin' => $stockData['operating_margin'] ?? 0.15,
-                    'structural_var_margin' => (1.0 - ($stockData['operating_margin'] ?? 0.15)) * (1.0 - ($stockData['fixed_cost_ratio'] ?? 0.50)),
                     'float_pct' => $stockData['public_float'] ?? 0.90,
                     'net_income' => $netIncome,
                     'equity' => $stockData['total_equity'] ?? 0.00,
@@ -290,6 +368,7 @@ class MarketResetCommand extends Command
                     'description' => \App\Data\StockInfo::DESCRIPTIONS[$stockData['ticker']] ?? null,
                     'sam_ratio' => $stockData['sam_ratio'] ?? 1.00,
                     'industry' => $stockData['industry'] ?? null,
+                    'management_style' => $stockData['management_style'] ?? null,
                     'ticker' => $stockData['ticker']
                 ]
             );
@@ -399,6 +478,10 @@ class MarketResetCommand extends Command
         
         $this->entityManager->flush();
         */
+
+        // Reopen the bond desk on the fresh timeline.
+        $this->treasuryAuction->conductAuction($dummyMacro->sovereignCurve(), 0.0);
+        $this->entityManager->flush();
 
         $io->success('Market Reset Complete! You can now start the ticker.');
         return Command::SUCCESS;

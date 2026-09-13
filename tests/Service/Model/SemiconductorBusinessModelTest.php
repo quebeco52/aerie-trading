@@ -4,11 +4,15 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\Model;
 
+use App\Service\Macro\MacroEngine;
 use App\Service\Model\Sector\SemiconductorBusinessModel;
+use App\Service\Math\FinancialConstants;
+use App\Service\Corporate\EarningsEngine;
 use App\Service\Math\MathUtility;
 use App\Entity\Stock;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
+use App\DTO\MacroStateDTO;
 use PHPUnit\Framework\TestCase;
 
 #[AllowMockObjectsWithoutExpectations]
@@ -110,12 +114,13 @@ class SemiconductorBusinessModelTest extends TestCase
             mathUtility: $this->mathUtilityMock
         );
 
-        // Elevated energy price = 120.0 (20% energy spike)
-        // energyShift = 0.20 -> energyDrag = 0.20 * 0.35 * 0.85 = 0.0595
+        // Elevated energy price = 120.0 (20% energy spike). Cleanroom power is bought at spot, so the basket
+        // lands 0.20 x energy exposure in the cost base this quarter, and scarce wafer capacity recovers
+        // pricingPower x MAX_INPUT_COST_PASS_THROUGH of it with the pass-through lag.
         $macroSpike = \App\DTO\MacroStateDTO::fromArray([
             'output_gap_ema' => 0.0,
             'energy_price_index_ema' => 120.0,
-            'energy_cost_push_lag' => 0.0020,
+            'energy_cost_push_lag' => 0.20 * MacroEngine::ENERGY_COST_PUSH_TRANSMISSION,
         ]);
 
         $resultSpike = $this->model->computeActualFinancials(
@@ -130,7 +135,11 @@ class SemiconductorBusinessModelTest extends TestCase
 
         $this->assertGreaterThan($resultBaseline->clampedMargin, $resultSpike->clampedMargin);
         $this->assertLessThan($resultBaseline->ebit, $resultSpike->ebit);
-        $this->assertEqualsWithDelta(359.5, $resultSpike->actualVariableCosts, 0.1);
+        $energyDeviation = 0.20 * SemiconductorBusinessModel::INPUT_COST_EXPOSURES['energy'];
+        $recoveryWeight = 1.0 - exp(-EarningsEngine::QUARTERLY_TIME_STEP / FinancialConstants::DEFAULT_INPUT_PASS_THROUGH_LAG_YEARS);
+        $recovered = SemiconductorBusinessModel::PRICING_POWER_INDEX * SemiconductorBusinessModel::MAX_INPUT_COST_PASS_THROUGH * $recoveryWeight;
+        $expectedDrag = 0.30 * $energyDeviation * (1.0 - $recovered);
+        $this->assertEqualsWithDelta(1000.0 * (0.30 + $expectedDrag), $resultSpike->actualVariableCosts, 0.1);
     }
 
     public function testCapacityUtilizationDrivesFoundryLeverage(): void
@@ -173,4 +182,27 @@ class SemiconductorBusinessModelTest extends TestCase
 
         $this->assertGreaterThan($resultNormal->streamRevenue['foundry'], $resultBoom->streamRevenue['foundry'], 'Elevated industrial capacity utilization must expand foundry throughput.');
     }
+    public function testChannelInventoryOverhangCutsWaferOrdersAndShortfallRestocks(): void
+    {
+        $model = new SemiconductorBusinessModel();
+        $run = function (float $inventoryGap) use ($model) {
+            $stock = new Stock();
+            $stock->setTicker('FAB');
+            $stock->setBeta('1.2');
+            $math = $this->createStub(MathUtility::class);
+            $math->method('generatePersistentZ')->willReturn(0.0);
+            return $model->computeActualFinancials($stock, 100_000_000.0, 0.40, 20_000_000.0, 0.0, new MacroStateDTO(inventoryStockGapEma: $inventoryGap), $math);
+        };
+
+        $neutral = $run(0.0);
+        $overhang = $run(0.10);   // distributors sit on excess chips: destocking
+        $shortfall = $run(-0.10); // channel is empty: restocking
+
+        // Orders move first; recognized foundry revenue follows at the wafer-out burn rate.
+        $this->assertLessThan($neutral->kpis['book_to_bill'], $overhang->kpis['book_to_bill']);
+        $this->assertGreaterThan($neutral->kpis['book_to_bill'], $shortfall->kpis['book_to_bill']);
+        $this->assertLessThan($neutral->streamRevenue['foundry'], $overhang->streamRevenue['foundry']);
+        $this->assertGreaterThan($neutral->streamRevenue['foundry'], $shortfall->streamRevenue['foundry']);
+    }
+
 }
