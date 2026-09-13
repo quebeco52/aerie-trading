@@ -8,7 +8,12 @@ namespace App\DTO;
  * Everything an agent is allowed to see about one name at one tick.
  *
  * A deliberate bottleneck. Agents observe what a real participant could observe — a price, a published
- * fair value, a trend, the macro backdrop — and nothing that only the engine knows. Handing them the Stock
+ * fair value, a trend, realized volatility, the policy rate, the macro backdrop — and nothing that only the
+ * engine knows.
+ *
+ * The return handed in is measured BEFORE any split this tick, and the split is reported separately as a
+ * ratio. A 4-for-1 split quarters the price without anyone losing money; scoring it as a return would
+ * execute every long belief at the exact top of the run that earned the split. Handing them the Stock
  * entity would let a strategy read next quarter's earnings off the balance sheet and trade on it, which
  * would be a strategy that cannot lose rather than one that competes.
  */
@@ -23,6 +28,9 @@ final readonly class AgentMarketViewDTO
      * @param float  $logReturn          The return since the agents last acted, for scoring their beliefs.
      * @param float  $financialConditions Macro conditions index; passive flows respond to it.
      * @param float  $dt                 Elapsed simulated time in years.
+     * @param float  $riskFreeRate       Annual rate cash earns; a belief is scored on what it made over it.
+     * @param float  $annualizedVolatility Realized volatility as a decimal, the risk a belief is charged for its exposure.
+     * @param float  $splitRatio         New shares per old share this tick; 1.0 when nothing happened. Agent books are in shares and must be restated.
      */
     public function __construct(
         public string $ticker,
@@ -33,6 +41,9 @@ final readonly class AgentMarketViewDTO
         public float $logReturn,
         public float $financialConditions,
         public float $dt,
+        public float $riskFreeRate = 0.0,
+        public float $annualizedVolatility = 0.0,
+        public float $splitRatio = 1.0,
     ) {}
 
     /**

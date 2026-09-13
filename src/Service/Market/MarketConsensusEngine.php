@@ -48,6 +48,7 @@ class MarketConsensusEngine
      * @param float                  $marketVolatility       Prevailing market volatility (VIX proxy).
      * @param float|null             $expectedVariableMargin Ex-ante variable cost ratio before the sector physics move it.
      * @param float                  $seasonalRatio          Seasonality adjustment ratio (Factor_t / Factor_{t-1}).
+     * @param float                  $priorExpectedRevenue   Structural expected revenue the anchor was formed against; 0 when unknown.
      */
     public function generateConsensus(
         ActualFinancialsDTO $actuals,
@@ -57,7 +58,8 @@ class MarketConsensusEngine
         \App\Entity\Stock $stock,
         float $marketVolatility = 0.15,
         ?float $expectedVariableMargin = null,
-        float $seasonalRatio = 1.0
+        float $seasonalRatio = 1.0,
+        float $priorExpectedRevenue = 0.0
     ): ConsensusDTO {
         $analystError = $mathUtility->generateStandardNormal() * $coverage->errorStdDev;
 
@@ -100,10 +102,26 @@ class MarketConsensusEngine
             
         $signalVariance = max(0.0001, pow($coverage->errorStdDev, 2));
 
+        // The anchor is carried forward WITH the structural base, not frozen at last quarter's dollar size.
+        // Analysts forecast off a firm's disclosed capacity — assets, AUM, store count — and what they carry
+        // from one quarter to the next is their view of the firm relative to that base. Frozen in dollars,
+        // the prior lagged any growing firm by (growth per quarter) x (prior weight / signal weight): at a
+        // sector coverage error of 15% the estimate closed under a quarter of its gap each report, so a
+        // fund compounding its capital at 18% a year sat 12-15% below its own structural revenue forever
+        // and beat every single quarter. The ratio of the two structural figures already carries the
+        // seasonal turn, which is why the seasonal ratio is not applied on top of it.
         $anchor = (float) $stock->getLastAnalystRevenue();
-        $priorEstimate = $anchor > 0.0
-            ? $anchor * $seasonalRatio
-            : $discountedExpectedRevenue;
+        if ($anchor > 0.0 && $priorExpectedRevenue > 0.0 && $expectedRevenue > 0.0) {
+            $rollForward = max(
+                1.0 / FinancialConstants::ANALYST_ANCHOR_MAX_ROLL_FORWARD,
+                min(FinancialConstants::ANALYST_ANCHOR_MAX_ROLL_FORWARD, $expectedRevenue / $priorExpectedRevenue)
+            );
+            $priorEstimate = $anchor * $rollForward;
+        } elseif ($anchor > 0.0) {
+            $priorEstimate = $anchor * $seasonalRatio;
+        } else {
+            $priorEstimate = $discountedExpectedRevenue;
+        }
         
         $analystExpectedRevenue = $mathUtility->calculateBayesianAnalystUpdate(
             $priorEstimate,
@@ -112,9 +130,16 @@ class MarketConsensusEngine
             $signalVariance
         );
 
-        $analystExpectedRevenue *= (1.0 - self::ANALYST_WALKDOWN_BIAS);
-
+        // The anchor is the posterior BEFORE the walkdown. The walkdown is a shading of the number analysts
+        // publish so that firms beat by a little (Richardson, Teoh & Wysocki 2004); it is not new
+        // information, and it must not be learned from. Anchored on the shaded figure, each quarter's 1.5%
+        // compounded against the pull of the fresh signal: at a coverage error of 15% the estimate only
+        // closed a quarter of its gap per report, so the standing deficit was 1.5% / 0.23, about 6.5% of
+        // revenue — which at a 40% margin is a 16% earnings beat every quarter, from a bias designed to
+        // produce a small one.
         $stock->setLastAnalystRevenue((string) $analystExpectedRevenue);
+
+        $analystExpectedRevenue *= (1.0 - self::ANALYST_WALKDOWN_BIAS);
 
         // Cost base. The ex-ante margin is the structural cost ratio BEFORE the sector physics move it, so an
         // estimate built on it alone was blind to the input-cost basket, the pass-through lag and every other

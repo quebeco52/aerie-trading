@@ -257,8 +257,20 @@ class EarningsEngine
         // A warning is repriced on the day it is issued. The published figure has to BE the move, not a
         // number beside an unchanged price: every surface that renders an event reads change_percent as a
         // realized return, so a headline reaction the price never took was simply a false print.
-        $reaction = -min(FinancialConstants::MAX_PREANNOUNCEMENT_PRICE_REACTION, $shortfallRatio * FinancialConstants::PREANNOUNCEMENT_PRICE_REACTION);
-        $stock->setPrice(number_format(max(0.01, (float) $stock->getPrice() * (1.0 + $reaction)), 8, '.', ''));
+        //
+        // Priced by the SAME law the report uses — the earnings response coefficient on the surprise, with
+        // the same market dampening — because a shortfall is the same news whether it is disclosed a week
+        // early or on the day. The first version applied its own steeper schedule and punished a warning
+        // about twice as hard as the report would have punished the identical miss; with fair value
+        // unmoved by the warning, the reversion then pulled the price straight back before the report.
+        $currentPrice = (float) $stock->getPrice();
+        $annualEps = (float) $stock->getEarningsPerShare();
+        $currentPE = $annualEps > 0.0 ? $currentPrice / $annualEps : FinancialConstants::BASELINE_MARKET_PE;
+        $reaction = max(
+            -FinancialConstants::MAX_PREANNOUNCEMENT_PRICE_REACTION,
+            $this->resolveDampedPriceGap(-min(1.0, $shortfallRatio), (float) $stock->getBeta(), $this->resolveGrowthPremium($currentPE))
+        );
+        $stock->setPrice(number_format(max(0.01, $currentPrice * (1.0 + $reaction)), 8, '.', ''));
 
         return [$this->marketEvent->publish(
             $stock,
@@ -675,6 +687,9 @@ class EarningsEngine
 
         $coverage = $ctx->strategy->getCoverageProfile($ctx->stock);
         $seasonalRatio = $ctx->seasonalFactor / max(0.01, $ctx->priorSeasonalFactor);
+        // The base the LAST consensus was struck against, still the opening state here: the stream map on
+        // the stock is only replaced once the report is booked below.
+        $priorExpectedRevenue = (float) (($ctx->stock->getEarningsMomentumZ() ?? [])[FinancialConstants::STATE_LAST_EXPECTED_REVENUE] ?? 0.0);
         $consensus = $this->marketConsensusEngine->generateConsensus(
             $actuals,
             $coverage,
@@ -683,7 +698,8 @@ class EarningsEngine
             $ctx->stock,
             $ctx->macroState->marketVolatilityEma,
             $ctx->realizedVariableMargin,
-            $seasonalRatio
+            $seasonalRatio,
+            $priorExpectedRevenue
         );
         $ctx->analystExpectedRevenue = $consensus->analystExpectedRevenue;
         $ctx->analystExpectedVariableCosts = $consensus->analystExpectedVariableCosts;
@@ -716,6 +732,9 @@ class EarningsEngine
             (float) ($openingState[FinancialConstants::STATE_INPUT_COST_LEVEL] ?? 0.0)
             - (float) ($openingState[FinancialConstants::STATE_INPUT_COST_RECOVERY] ?? 0.0)
         );
+        // The base this quarter's consensus was struck against, so the next one can roll its anchor
+        // forward with the firm's growth instead of freezing it at today's dollar size.
+        $streamState[FinancialConstants::STATE_LAST_EXPECTED_REVENUE] = $ctx->expectedRevenue;
         $ctx->stock->setEarningsMomentumZ($streamState);
         $ctx->streamRevenue = $actuals->streamRevenue;
         $ctx->scheduledCapex = max(0.0, $actuals->scheduledCapex);
@@ -1620,6 +1639,31 @@ class EarningsEngine
         return min($plannedGrowthCapEx, $fundingCapacity);
     }
 
+    /**
+     * Growth premium proxy from the valuation multiple: 1.0x the market multiple is no premium, 2.0x is +1.0.
+     */
+    private function resolveGrowthPremium(float $currentPE): float
+    {
+        $valuationPremium = max(self::VALUATION_PREMIUM_MIN, min(self::VALUATION_PREMIUM_MAX, $currentPE / FinancialConstants::BASELINE_MARKET_PE));
+
+        return max(0.0, $valuationPremium - 1.0);
+    }
+
+    /**
+     * The price move a given earnings surprise earns: the earnings response coefficient with the empirical
+     * market dampening, bounded. One law for every disclosure of earnings news — the report and a warning
+     * ahead of it — so the same shortfall moves the price the same whether it is learned early or late.
+     *
+     * The raw surprise is passed on purpose; PRICE_GAP_DAMPENING is calibrated against it.
+     */
+    private function resolveDampedPriceGap(float $surprisePct, float $beta, float $growthPremium): float
+    {
+        $priceGapPct = $this->mathUtility->calculateEarningsResponseCoefficient($surprisePct, $beta, $growthPremium);
+        $damped = $priceGapPct * FinancialConstants::PRICE_GAP_DAMPENING;
+
+        return max(-FinancialConstants::MAX_PRICE_GAP, min(FinancialConstants::MAX_PRICE_GAP, $damped));
+    }
+
     private function executePriceAndVolatilityShocks(EarningsSimulationContext $ctx): void
     {
         $stock = $ctx->stock;
@@ -1642,22 +1686,7 @@ class EarningsEngine
             $currentPE = $priceToSales * (1.0 / $structuralAfterTaxMargin);
         }
 
-        $valuationPremium = max(self::VALUATION_PREMIUM_MIN, min(self::VALUATION_PREMIUM_MAX, $currentPE / FinancialConstants::BASELINE_MARKET_PE));
-        $beta = (float) $stock->getBeta();
-
-        // Growth premium proxy: valuationPremium - 1.0 (so 1.0 -> 0 growth premium, 2.0 -> +1.0 growth premium)
-        $growthPremium = max(0.0, $valuationPremium - 1.0);
-
-        // Calculate ERC-driven price gap with empirical market dampening.
-        // Note: Raw surprisePct is intentionally passed to preserve calibrated PRICE_GAP_DAMPENING.
-        $priceGapPct = $this->mathUtility->calculateEarningsResponseCoefficient(
-            $ctx->surprisePct,
-            $beta,
-            $growthPremium
-        );
-
-        $dampedPriceGap = $priceGapPct * FinancialConstants::PRICE_GAP_DAMPENING;
-        $ctx->priceGapPct = max(-FinancialConstants::MAX_PRICE_GAP, min(FinancialConstants::MAX_PRICE_GAP, $dampedPriceGap));
+        $ctx->priceGapPct = $this->resolveDampedPriceGap($ctx->surprisePct, (float) $stock->getBeta(), $this->resolveGrowthPremium($currentPE));
         $ctx->totalShockPct = $ctx->priceGapPct;
         $ctx->corporateActionDescriptions = "";
 

@@ -144,48 +144,98 @@ class AgentStrategyTest extends TestCase
 
     // --- Market maker ---
 
-    public function testTheMakerStandsOnTheOtherSideOfTheMarket(): void
+    /** @param float $dt Elapsed simulated time in years. */
+    private function makerView(float $volatility = 0.20, float $dt = 1.0 / 14400.0): AgentMarketViewDTO
     {
-        // Short when everyone else is long. It is the counterparty, and absorbing part of the net demand
-        // before it reaches the price is why a market with a maker in it moves less on the same flow.
-        $strategy = new MarketMakerStrategy();
-        $capacity = 1000000.0 * FinancialConstants::AGENT_CAPITAL_ADV_MULTIPLE;
-
-        $marketIsLong = $strategy->signal($this->view(), ['fundamentalist' => $capacity * 0.5, 'market_maker' => 0.0]);
-        $marketIsShort = $strategy->signal($this->view(), ['fundamentalist' => -$capacity * 0.5, 'market_maker' => 0.0]);
-
-        $this->assertLessThan(0.0, $marketIsLong);
-        $this->assertGreaterThan(0.0, $marketIsShort);
+        return new AgentMarketViewDTO(
+            ticker: 'TEST',
+            price: 100.0,
+            perceivedFairValue: 100.0,
+            momentumTrend: 0.0,
+            averageDailyVolume: 1000000.0,
+            logReturn: 0.0,
+            financialConditions: 0.0,
+            dt: $dt,
+            annualizedVolatility: $volatility,
+        );
     }
 
-    public function testTheMakerWorksItsOwnInventoryBackTowardFlat(): void
+    public function testTheMakerTakesTheOtherSideOfTheFlowNow(): void
     {
-        // Carrying risk is not what a maker is paid for.
+        // Immediacy: when the others buy, it sells to them in the same tick, and part of their demand
+        // never reaches the price in the tick it arrived.
         $strategy = new MarketMakerStrategy();
-        $capacity = 1000000.0 * FinancialConstants::AGENT_CAPITAL_ADV_MULTIPLE;
+        $capacity = 3000000.0;
 
-        $longInventory = $strategy->signal($this->view(), ['market_maker' => $capacity * 0.5]);
+        $againstBuying = $strategy->trade($this->makerView(), 0.0, 10000.0, $capacity);
+        $againstSelling = $strategy->trade($this->makerView(), 0.0, -10000.0, $capacity);
 
-        $this->assertLessThan(0.0, $longInventory, 'A long book is worked down, not added to.');
+        $this->assertEqualsWithDelta(-FinancialConstants::AGENT_MAKER_ABSORPTION * 10000.0, $againstBuying, 1e-9);
+        $this->assertEqualsWithDelta(FinancialConstants::AGENT_MAKER_ABSORPTION * 10000.0, $againstSelling, 1e-9);
     }
 
-    public function testTheMakerIsFlatWhenNobodyIsPositioned(): void
+    public function testTheMakerWorksItsInventoryOffOverTimeNotOverTicks(): void
+    {
+        // Carrying risk is not what a maker is paid for. A day of simulated time works off the same share
+        // of the book whether it is stepped 57 times or 3 times.
+        $strategy = new MarketMakerStrategy();
+        $capacity = 3000000.0;
+
+        $fine = -100000.0;
+        for ($tick = 0; $tick < 57; $tick++) {
+            $fine += $strategy->trade($this->makerView(dt: 1.0 / 14400.0), $fine, 0.0, $capacity);
+        }
+
+        $coarse = -100000.0;
+        for ($tick = 0; $tick < 3; $tick++) {
+            $coarse += $strategy->trade($this->makerView(dt: 19.0 / 14400.0), $coarse, 0.0, $capacity);
+        }
+
+        $this->assertGreaterThan(-100000.0, $fine, 'A short book is bought back, not added to.');
+        $this->assertLessThan(0.0, $fine, 'And not all at once.');
+        $this->assertEqualsWithDelta($fine, $coarse, abs($fine) * 0.02);
+    }
+
+    public function testTheMakerStepsBackWhenTheMarketIsStressed(): void
+    {
+        // Ho & Stoll: the cost of carrying inventory is proportional to variance. Doubling volatility
+        // above the reference quarters what the maker will absorb; below the reference it absorbs in full.
+        $strategy = new MarketMakerStrategy();
+        $capacity = 3000000.0;
+        $reference = FinancialConstants::AGENT_MAKER_REFERENCE_VOLATILITY;
+
+        $calm = $strategy->trade($this->makerView(volatility: $reference * 0.5), 0.0, 10000.0, $capacity);
+        $atReference = $strategy->trade($this->makerView(volatility: $reference), 0.0, 10000.0, $capacity);
+        $stressed = $strategy->trade($this->makerView(volatility: $reference * 2.0), 0.0, 10000.0, $capacity);
+
+        $this->assertEqualsWithDelta($atReference, $calm, 1e-9);
+        $this->assertEqualsWithDelta($atReference / 4.0, $stressed, 1e-9);
+    }
+
+    public function testTheMakerNeverCarriesMoreThanItsCapacity(): void
     {
         $strategy = new MarketMakerStrategy();
+        $capacity = 3000000.0;
 
-        $this->assertSame(0.0, $strategy->signal($this->view(), ['fundamentalist' => 0.0, 'market_maker' => 0.0]));
+        $trade = $strategy->trade($this->makerView(), -$capacity * 0.99, 1.0e9, $capacity);
+
+        $this->assertEqualsWithDelta(-$capacity * 0.01, $trade, 1e-6);
+    }
+
+    public function testTheMakerIsIdleWhenNothingIsHappening(): void
+    {
+        $this->assertSame(0.0, (new MarketMakerStrategy())->trade($this->makerView(), 0.0, 0.0, 3000000.0));
     }
 
     // --- Population membership ---
 
     public function testOnlyBeliefsAboutThePriceCompeteForCapital(): void
     {
-        // A maker is an intermediary and an index fund is a decision not to have a view. Neither is chosen
-        // because it beat the other side last quarter, so neither takes part in the switching.
+        // An index fund is a decision not to have a view; it is not chosen because it beat the other side
+        // last quarter, so it takes no part in the switching. (A maker is not a strategy at all.)
         $this->assertTrue((new FundamentalistStrategy())->competesForCapital());
         $this->assertTrue((new MomentumStrategy())->competesForCapital());
         $this->assertFalse((new IndexFundStrategy())->competesForCapital());
-        $this->assertFalse((new MarketMakerStrategy())->competesForCapital());
     }
 
     public function testEveryStrategyHasItsOwnIdentifier(): void

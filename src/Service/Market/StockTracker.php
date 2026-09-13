@@ -182,7 +182,14 @@ class StockTracker
                 currentPrice: (float) $stock->getPrice(),
                 currentVolatility: $currentVol,
                 longTermVolatility: $baselineVol,
-                earningsPerShare: (float) $stock->getEarningsPerShare(),
+                // Analysts cut their number on a guidance warning, and fair value is what analysts think
+                // the name is worth. Until the report puts the quarter into trailing earnings, the guided
+                // shortfall comes off the figure fair value is struck on — otherwise the warning moved the
+                // price and nothing else, and the reversion pulled it straight back before the report.
+                // The report resets the guided figure and puts the actual quarter in, so there is no
+                // double count: the two hand over.
+                earningsPerShare: (float) $stock->getEarningsPerShare()
+                    - ($stock->getPreAnnouncedShortfall() / max(1.0, (float) $stock->getSharesOutstanding())),
                 dt: $dt,
                 lambda: (float) $stock->getJumpIntensity(),
                 jumpVol: (float) $stock->getJumpVol(),
@@ -283,10 +290,13 @@ class StockTracker
             }
 
             // CORPORATE ACTIONS (SPLITS)
+            // Read again here rather than reusing the count from the top of the tick: issuance and buybacks
+            // in the earnings engine change it, and only a split should reach the agents as a share ratio.
+            $preSplitShares = (float) $stock->getSharesOutstanding();
             $splitResult = $this->corporateActionEngine->processSplits(
                 $stock,
                 $currentPriceAfterEarnings,
-                (float) $stock->getSharesOutstanding()
+                $preSplitShares
             );
 
             // Unpack the results
@@ -363,15 +373,22 @@ class StockTracker
             // orders land on the next tick, through the same impact channel and the same variance budget a
             // player's fill goes through. The one-tick lag is the causality, not a shortcut: a participant
             // observes a price and then trades.
+            // The return the agents are scored on is measured BEFORE the split, like the momentum trend
+            // above, and the split reaches them as a share ratio: a 4-for-1 is not a 75% loss.
             $this->agentFlow->trade(new \App\DTO\AgentMarketViewDTO(
                 ticker: $stock->getTicker(),
                 price: $finalPrice,
                 perceivedFairValue: (float) $calculation['perceived_fair_value'],
                 momentumTrend: (float) ($stock->getPriceMomentumTrend() ?? 0.0),
                 averageDailyVolume: $this->liquidityEngine->averageDailyVolume($stock),
-                logReturn: $priceAtTickStart > 0.0 && $finalPrice > 0.0 ? log($finalPrice / $priceAtTickStart) : 0.0,
+                logReturn: $priceAtTickStart > 0.0 && $currentPriceAfterEarnings > 0.0
+                    ? log($currentPriceAfterEarnings / $priceAtTickStart)
+                    : 0.0,
                 financialConditions: $macroDTO->financialConditionsIndexEma,
-                dt: $dt
+                dt: $dt,
+                riskFreeRate: $macroDTO->policyRate,
+                annualizedVolatility: (float) $nextVolatility,
+                splitRatio: $preSplitShares > 0.0 ? $newShares / $preSplitShares : 1.0
             ));
 
             $stockUpdates[] = $stockUpdate;

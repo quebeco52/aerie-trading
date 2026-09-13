@@ -31,6 +31,10 @@ class FinancialConstants
     public const ERC_GROWTH_SENSITIVITY = 0.25;
 
     // --- Bayesian Analyst Consensus ---
+    /** Widest one-quarter change in the structural base the analyst anchor is rolled forward by (x0.5 to x2.0). A capacity cap binding or a collapse is not a growth rate analysts extrapolate. */
+    public const ANALYST_ANCHOR_MAX_ROLL_FORWARD = 2.0;
+    /** Stream-state key: the structural expected revenue the last consensus was formed against, so the analyst anchor can be carried forward with the base rather than frozen at last quarter's size. */
+    public const STATE_LAST_EXPECTED_REVENUE = 'state:last_expected_revenue';
     /** Baseline prior uncertainty variance in market analyst earnings consensus formation (~0.06^2). */
     public const BAYESIAN_BASE_PRIOR_VARIANCE = 0.0036;
     /** Multiplier scaling analyst consensus prior uncertainty as VIX rises. */
@@ -248,10 +252,8 @@ class FinancialConstants
     public const PREANNOUNCEMENT_WARNING_THRESHOLD = 0.20;
     /** Share of the warned shortfall analysts take out of their estimate, so the report itself lands as a smaller surprise. */
     public const PREANNOUNCEMENT_CONSENSUS_ABSORPTION = 0.80;
-    /** Price reaction to a warning, as a fraction of the warned shortfall ratio. Warnings are punished on the day they are issued, not on the report. */
-    public const PREANNOUNCEMENT_PRICE_REACTION = 0.35;
-    /** Ceiling on the single-tick repricing a warning may cause. One disclosure moves less than a whole quarter, so it sits inside the 40% MAX_QUARTERLY_PRICE_CIRCUIT_BREAKER that bounds the report around it. */
-    public const MAX_PREANNOUNCEMENT_PRICE_REACTION = 0.25;
+    /** Ceiling on the single-tick repricing a warning may cause. Warning-day abnormal returns average high single digits (Kasznik & Lev 1995; Skinner 1994); the old 25% cap was hit routinely and, with fair value unmoved, produced a V that fully reverted before the report. */
+    public const MAX_PREANNOUNCEMENT_PRICE_REACTION = 0.10;
     /** Floor on the operating margin that sizes structural earnings for a warning, so a break-even firm is scaled by its revenue rather than by a near-zero print. */
     public const PREANNOUNCEMENT_MIN_MARGIN_SCALE = 0.05;
 
@@ -511,12 +513,16 @@ class FinancialConstants
     public const AGENT_FITNESS_HORIZON_YEARS = 0.50;
     /** Floor on any belief's population share, so a strategy that has been wrong for a long time can still come back when conditions turn. */
     public const AGENT_MIN_POPULATION_SHARE = 0.05;
+    /** Risk aversion in the mean-variance fitness U = pi - (a/2) sigma^2 z^2 (Brock & Hommes 1998). Standard relative risk aversion; without it raw profit rewards whichever belief simply carries more exposure. */
+    public const AGENT_RISK_AVERSION = 2.00;
+    /** Share of switching capital that chooses at the STYLE level, on how a belief has paid across the whole market, rather than name by name (Barberis & Shleifer 2003). Zero is a market of unrelated single-name populations; one is a single market-wide population. */
+    public const AGENT_STYLE_CROWDING_WEIGHT = 0.50;
 
     // --- Agent Capital & Positioning ---
     /** Total agent capital per name, as a multiple of its average daily volume. Sets how large the simulated institutional book is relative to the market it trades in. */
     public const AGENT_CAPITAL_ADV_MULTIPLE = 3.00;
-    /** Share of the gap to its target an agent closes each tick. Real books are worked over days, not fired in one print. */
-    public const AGENT_POSITION_ADJUSTMENT_SPEED = 0.04;
+    /** Time an agent takes to work its book 63% of the way to target, in years (~1 trading day; ~95% done in three). In time rather than per tick so the same book is worked the same way at any tick rate. */
+    public const AGENT_POSITION_HORIZON_YEARS = 0.004;
     /** Overall dial on agent activity. The single number to turn when handing more of the market's variance from the diffusion to the agents. */
     public const AGENT_FLOW_INTENSITY = 1.00;
 
@@ -525,10 +531,12 @@ class FinancialConstants
     public const AGENT_FUNDAMENTALIST_GAIN = 2.50;
     /** Chartist conviction per unit of accumulated price trend. */
     public const AGENT_MOMENTUM_GAIN = 3.00;
-    /** Share of the other agents' net book a market maker stands against. It is the counterparty, so it is short when the market is long. */
+    /** Share of the others' flow a market maker takes the other side of in calm conditions (Grossman & Miller 1988 immediacy). The rest reaches the price at once. */
     public const AGENT_MAKER_ABSORPTION = 0.35;
-    /** Speed a market maker works its inventory back toward flat, independent of what it is absorbing. */
-    public const AGENT_MAKER_INVENTORY_DECAY = 0.10;
+    /** Time a maker takes to work 63% of its inventory back to flat, in years (~1 trading day; Hendershott & Menkveld 2014 find inventories mean-revert on that order). Carrying risk is not what it is paid for. */
+    public const AGENT_MAKER_INVENTORY_HORIZON_YEARS = 0.004;
+    /** Volatility at which the base absorption applies. Above it, absorption falls with 1/variance (Ho & Stoll 1981: the cost of immediacy is proportional to variance), so makers step back in a stressed market. */
+    public const AGENT_MAKER_REFERENCE_VOLATILITY = 0.25;
     /** Sensitivity of index fund flows to financial conditions: money leaves passive vehicles when conditions tighten. */
     public const AGENT_INDEX_FLOW_SENSITIVITY = 0.50;
     /** Baseline share of agent capital that indexes rather than picking. */

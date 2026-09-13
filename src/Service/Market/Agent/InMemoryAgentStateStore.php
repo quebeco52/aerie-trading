@@ -9,8 +9,11 @@ namespace App\Service\Market\Agent;
  */
 final class InMemoryAgentStateStore implements AgentStateStoreInterface
 {
-    /** @var array<string, array{positions: array<string, float>, fitness: array<string, float>, last_price: float}> */
+    /** @var array<string, array{positions: array<string, float>, fitness: array<string, float>}> */
     private array $state = [];
+
+    /** @var array<string, float> */
+    private array $style = [];
 
     public function read(string $ticker): ?array
     {
@@ -30,5 +33,15 @@ final class InMemoryAgentStateStore implements AgentStateStoreInterface
     /** Nothing to bulk-send: writes landed as they were made. */
     public function commitBatch(): void
     {
+    }
+
+    public function readStyle(): array
+    {
+        return $this->style;
+    }
+
+    public function writeStyle(array $fitness): void
+    {
+        $this->style = $fitness;
     }
 }

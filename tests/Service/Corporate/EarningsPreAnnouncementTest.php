@@ -54,6 +54,9 @@ final class EarningsPreAnnouncementTest extends TestCase
         $this->engine = (new ReflectionClass(EarningsEngine::class))->newInstanceWithoutConstructor();
         $marketEvent = new ReflectionProperty(EarningsEngine::class, 'marketEvent');
         $marketEvent->setValue($this->engine, $publisher);
+        // The warning is priced by the report's own response law, which lives on the math utility.
+        $math = new ReflectionProperty(EarningsEngine::class, 'mathUtility');
+        $math->setValue($this->engine, new \App\Service\Math\MathUtility());
     }
 
     private function makeStock(
@@ -212,6 +215,26 @@ final class EarningsPreAnnouncementTest extends TestCase
     }
 
     /** No warning, no repricing. */
+    public function testAWarningIsPricedByTheReportsOwnLawAndCappedNearTenPercent(): void
+    {
+        // The same shortfall is the same news whether disclosed early or on the day: the warning uses the
+        // earnings response coefficient with the report's dampening, and no warning moves more than the cap.
+        // The old schedule hit a 25% cap routinely and, with fair value unmoved, drew a V that reverted
+        // before the report.
+        // A squeeze far beyond the whole quarter's earnings: the reaction must still stop at the cap.
+        $stock = $this->makeStock(costLevel: 2.0, recovered: 0.0, priorUnrecovered: 0.0);
+        $priceBefore = (float) $stock->getPrice();
+
+        $this->engine->evaluatePreAnnouncement($stock, $this->warningTick($stock), self::TICKS_PER_YEAR);
+
+        $move = ((float) $stock->getPrice() / $priceBefore) - 1.0;
+
+        $this->assertLessThan(0.0, $move);
+        $this->assertGreaterThanOrEqual(-FinancialConstants::MAX_PREANNOUNCEMENT_PRICE_REACTION - 1e-9, $move);
+        $this->assertLessThanOrEqual(0.10, abs($move), 'Warning-day reactions are high single digits, not a quarter of the equity.');
+        $this->assertLessThanOrEqual(FinancialConstants::MAX_PRICE_GAP, abs($move), 'A warning never moves more than a report could.');
+    }
+
     public function testQuietQuarterLeavesThePriceAlone(): void
     {
         $stock = $this->makeStock(costLevel: 0.20, priorUnrecovered: 0.20);

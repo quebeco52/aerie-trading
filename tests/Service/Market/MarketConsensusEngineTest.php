@@ -181,4 +181,86 @@ class MarketConsensusEngineTest extends TestCase
         // 1000 * (1 + 0.1 * 0.10) = 1010.0 fresh signal -> posterior ~1007.25, minus 1.5% walkdown -> ~992.14
         $this->assertEqualsWithDelta(992.14, $consensus->analystExpectedRevenue, 0.05);
     }
+
+    // --- The anchor rolls forward with the structural base ---
+
+    private function flatActuals(float $revenue): ActualFinancialsDTO
+    {
+        return new ActualFinancialsDTO(
+            actualRevenue: $revenue,
+            actualVariableCosts: $revenue * 0.4,
+            clampedMargin: 0.40,
+            ebit: $revenue * 0.3,
+            primaryShockZ: 0.0,
+            observableShockZ: 0.0,
+            eventType: null,
+            eventContext: [],
+            isPublicEvent: false
+        );
+    }
+
+    public function testTheAnchorIsCarriedForwardWithTheFirmsStructuralBase(): void
+    {
+        // Analysts forecast off disclosed capacity. A base that grew 20% since the last report lifts the
+        // anchor 20% before it is blended — frozen in dollars, a sector with a wide coverage error closed
+        // under a quarter of the gap each report and a fast-growing firm beat every quarter forever.
+        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
+        $coverage = new SectorCoverageProfile(baseVisibility: 0.50, errorStdDev: 0.15, minVisibility: 0.20);
+
+        $stock = new Stock();
+        $stock->setLastAnalystRevenue('1000.0');
+
+        $rolled = $this->engine->generateConsensus($this->flatActuals(1200.0), $coverage, 1200.0, $this->mathUtilityMock, $stock, 0.15, null, 1.0, 1000.0);
+
+        // Prior 1200 (rolled) and fresh 1200 agree, so only the walkdown separates the estimate from the base.
+        $this->assertEqualsWithDelta(1200.0 * (1.0 - MarketConsensusEngine::ANALYST_WALKDOWN_BIAS), $rolled->analystExpectedRevenue, 1e-6);
+    }
+
+    public function testWithoutAKnownPriorBaseTheAnchorBehavesAsBefore(): void
+    {
+        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
+        $coverage = new SectorCoverageProfile(baseVisibility: 0.50, errorStdDev: 0.15, minVisibility: 0.20);
+
+        $stock = new Stock();
+        $stock->setLastAnalystRevenue('1000.0');
+
+        $frozen = $this->engine->generateConsensus($this->flatActuals(1200.0), $coverage, 1200.0, $this->mathUtilityMock, $stock, 0.15, null, 1.0, 0.0);
+
+        // Sticky: the estimate sits well below the base, which is the defect the roll-forward removes.
+        $this->assertLessThan(1100.0, $frozen->analystExpectedRevenue);
+        $this->assertGreaterThan(1000.0, $frozen->analystExpectedRevenue);
+    }
+
+    public function testTheRollForwardIsBoundedSoACapacityCapOrCollapseIsNotExtrapolated(): void
+    {
+        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
+        $coverage = new SectorCoverageProfile(baseVisibility: 0.50, errorStdDev: 0.15, minVisibility: 0.20);
+
+        $stock = new Stock();
+        $stock->setLastAnalystRevenue('1000.0');
+
+        $bounded = $this->engine->generateConsensus($this->flatActuals(5000.0), $coverage, 5000.0, $this->mathUtilityMock, $stock, 0.15, null, 1.0, 1000.0);
+
+        // Anchor rolled to at most 2000, fresh 5000: the estimate cannot have jumped all the way.
+        $this->assertLessThan(4000.0, $bounded->analystExpectedRevenue);
+        $this->assertGreaterThan(2000.0, $bounded->analystExpectedRevenue);
+    }
+
+    public function testTheWalkdownIsNotLearnedFromSoItDoesNotCompoundThroughTheAnchor(): void
+    {
+        // A flat base, quarter after quarter: the published number settles one walkdown below the base,
+        // not lower. Anchored on the shaded figure, a sticky sector compounded the bias into a standing
+        // deficit several times its size.
+        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
+        $coverage = new SectorCoverageProfile(baseVisibility: 0.50, errorStdDev: 0.15, minVisibility: 0.20);
+        $stock = new Stock();
+
+        $estimate = 0.0;
+        for ($quarter = 0; $quarter < 40; $quarter++) {
+            $estimate = $this->engine->generateConsensus($this->flatActuals(1000.0), $coverage, 1000.0, $this->mathUtilityMock, $stock, 0.15, null, 1.0, 1000.0)->analystExpectedRevenue;
+        }
+
+        $this->assertEqualsWithDelta(1000.0 * (1.0 - MarketConsensusEngine::ANALYST_WALKDOWN_BIAS), $estimate, 0.5);
+        $this->assertEqualsWithDelta(1000.0, (float) $stock->getLastAnalystRevenue(), 0.5, 'The anchor itself carries no walkdown.');
+    }
 }

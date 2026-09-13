@@ -32,9 +32,11 @@ interface AgentStrategyInterface
     /**
      * Whether this strategy competes for capital in the discrete-choice switching.
      *
-     * False for participants that are not beliefs about where the price is going: a market maker is an
-     * intermediary and an index fund is a decision not to have a view, and neither one is chosen because
-     * it beat the other side last quarter.
+     * False for a structural holder that is not a belief about where the price is going: an index fund is
+     * a decision not to have a view, and it is not chosen because it beat the other side last quarter. A
+     * structural holder also opens a fresh book AT its holding rather than flat, since it has held the
+     * name all along and the engine is only now keeping track. (An intermediary is not a strategy at all;
+     * see LiquidityProviderInterface.)
      */
     public function competesForCapital(): bool;
 }

@@ -22,6 +22,12 @@ final class RedisAgentStateStore implements AgentStateStoreInterface
 {
     private const KEY = 'agent_state';
 
+    /**
+     * The market-wide style record lives in the same hash under a field no ticker can collide with, so a
+     * batch still costs one HGETALL and one pipeline: a second key would be a third round trip per tick.
+     */
+    private const STYLE_FIELD = '__style__';
+
     private bool $batching = false;
 
     /** @var array<string, string> Raw JSON per ticker, as loaded when the batch opened. */
@@ -54,6 +60,9 @@ final class RedisAgentStateStore implements AgentStateStoreInterface
         return $this->decode($raw);
     }
 
+    /**
+     * @param array<string, mixed> $state A book, or the style record under its reserved field.
+     */
     public function write(string $ticker, array $state): void
     {
         try {
@@ -130,8 +139,56 @@ final class RedisAgentStateStore implements AgentStateStoreInterface
         }
     }
 
+    public function readStyle(): array
+    {
+        if ($this->batching) {
+            return $this->decodeStyle($this->pending[self::STYLE_FIELD] ?? $this->loaded[self::STYLE_FIELD] ?? null);
+        }
+
+        try {
+            /** @phpstan-ignore method.notFound (phpredis hash commands are absent from the analysis stub) */
+            $raw = $this->redis->hGet(self::KEY, self::STYLE_FIELD);
+        } catch (\Throwable $e) {
+            $this->logger?->warning('Agent style read failed: ' . $e->getMessage());
+
+            return [];
+        }
+
+        return $this->decodeStyle($raw);
+    }
+
+    public function writeStyle(array $fitness): void
+    {
+        // Same path as a book: held inside a batch, sent at once outside one.
+        $this->write(self::STYLE_FIELD, $fitness);
+    }
+
     /**
-     * @return array{positions: array<string, float>, fitness: array<string, float>, last_price: float}|null
+     * @return array<string, float>
+     */
+    private function decodeStyle(mixed $raw): array
+    {
+        if (!is_string($raw) || $raw === '') {
+            return [];
+        }
+
+        $decoded = json_decode($raw, true);
+        if (!is_array($decoded)) {
+            return [];
+        }
+
+        $style = [];
+        foreach ($decoded as $identifier => $score) {
+            if (is_int($score) || is_float($score)) {
+                $style[(string) $identifier] = (float) $score;
+            }
+        }
+
+        return $style;
+    }
+
+    /**
+     * @return array{positions: array<string, float>, fitness: array<string, float>}|null
      */
     private function decode(mixed $raw): ?array
     {
@@ -147,7 +204,6 @@ final class RedisAgentStateStore implements AgentStateStoreInterface
         return [
             'positions' => array_map('floatval', (array) $decoded['positions']),
             'fitness' => array_map('floatval', (array) $decoded['fitness']),
-            'last_price' => (float) ($decoded['last_price'] ?? 0.0),
         ];
     }
 }

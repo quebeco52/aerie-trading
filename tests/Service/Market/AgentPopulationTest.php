@@ -102,7 +102,9 @@ class AgentPopulationTest extends TestCase
             ['fundamentalist' => 1000.0, 'momentum' => 0.0],
             0.01,
             1000.0,
-            1.0 / 14400.0
+            1.0 / 14400.0,
+            0.0,
+            0.0
         );
 
         $this->assertGreaterThan(0.0, $fitness['fundamentalist']);
@@ -116,7 +118,9 @@ class AgentPopulationTest extends TestCase
             ['momentum' => 1000.0],
             -0.01,
             1000.0,
-            1.0 / 14400.0
+            1.0 / 14400.0,
+            0.0,
+            0.0
         );
 
         $this->assertLessThan(0.0, $fitness['momentum']);
@@ -129,7 +133,9 @@ class AgentPopulationTest extends TestCase
             ['fundamentalist' => -1000.0],
             -0.01,
             1000.0,
-            1.0 / 14400.0
+            1.0 / 14400.0,
+            0.0,
+            0.0
         );
 
         $this->assertGreaterThan(0.0, $fitness['fundamentalist']);
@@ -149,7 +155,9 @@ class AgentPopulationTest extends TestCase
             ['fundamentalist' => 1000.0],
             0.002,
             1000.0,
-            1.0 / 14400.0
+            1.0 / 14400.0,
+            0.0,
+            0.0
         );
 
         // Fully committed, earning 0.2% in a tick: an annualized rate on the order of tens, not 1e-5.
@@ -164,12 +172,12 @@ class AgentPopulationTest extends TestCase
         // to agree on where they converge.
         $fine = ['f' => 0.0];
         for ($tick = 0; $tick < 14400; $tick++) {
-            $fine = $this->population->updateFitness($fine, ['f' => 1000.0], 0.002, 1000.0, 1.0 / 14400.0);
+            $fine = $this->population->updateFitness($fine, ['f' => 1000.0], 0.002, 1000.0, 1.0 / 14400.0, 0.0, 0.0);
         }
 
         $coarse = ['f' => 0.0];
         for ($tick = 0; $tick < 7200; $tick++) {
-            $coarse = $this->population->updateFitness($coarse, ['f' => 1000.0], 0.004, 1000.0, 2.0 / 14400.0);
+            $coarse = $this->population->updateFitness($coarse, ['f' => 1000.0], 0.004, 1000.0, 2.0 / 14400.0, 0.0, 0.0);
         }
 
         $this->assertEqualsWithDelta($fine['f'], $coarse['f'], abs($fine['f']) * 0.02);
@@ -177,11 +185,11 @@ class AgentPopulationTest extends TestCase
 
     public function testTheScoreIsSmoothedSoOneGoodTickCannotEmptyTheOtherSide(): void
     {
-        $once = $this->population->updateFitness(['f' => 0.0], ['f' => 1000.0], 0.01, 1000.0, 1.0 / 14400.0);
+        $once = $this->population->updateFitness(['f' => 0.0], ['f' => 1000.0], 0.01, 1000.0, 1.0 / 14400.0, 0.0, 0.0);
 
         $sustained = ['f' => 0.0];
         for ($tick = 0; $tick < 2000; $tick++) {
-            $sustained = $this->population->updateFitness($sustained, ['f' => 1000.0], 0.01, 1000.0, 1.0 / 14400.0);
+            $sustained = $this->population->updateFitness($sustained, ['f' => 1000.0], 0.01, 1000.0, 1.0 / 14400.0, 0.0, 0.0);
         }
 
         $this->assertGreaterThan($once['f'] * 10.0, $sustained['f'], 'A persistent edge must accumulate.');
@@ -192,16 +200,141 @@ class AgentPopulationTest extends TestCase
         $fitness = ['f' => 5.0];
 
         for ($tick = 0; $tick < 14400; $tick++) {
-            $fitness = $this->population->updateFitness($fitness, ['f' => 0.0], 0.0, 1000.0, 1.0 / 14400.0);
+            $fitness = $this->population->updateFitness($fitness, ['f' => 0.0], 0.0, 1000.0, 1.0 / 14400.0, 0.0, 0.0);
         }
 
         $this->assertLessThan(1.0, $fitness['f'], 'A belief cannot coast on a year-old edge.');
+    }
+
+    // --- Risk-adjusted excess return (Brock & Hommes 1998) ---
+
+    public function testEarningEqualToTheRiskFreeRateScoresNothing(): void
+    {
+        // Cash would have made the same. A long book that returns the policy rate has no edge to be
+        // rewarded for, and scoring raw returns would hand every long belief a free edge equal to the rate.
+        $dt = 1.0 / 14400.0;
+        $riskFree = 0.04;
+
+        $fitness = $this->population->updateFitness(['f' => 0.0], ['f' => 1000.0], $riskFree * $dt, 1000.0, $dt, $riskFree, 0.0);
+
+        $this->assertEqualsWithDelta(0.0, $fitness['f'], 1e-12);
+    }
+
+    public function testAShortBookEarnsTheRateOnItsProceedsInAFlatMarket(): void
+    {
+        // Brock & Hommes: pi = (p_{t+1} - R p_t) z. A short has sold and sits in cash, so a flat market
+        // pays it the rate — and a market rising exactly at the rate pays it nothing.
+        $dt = 1.0 / 14400.0;
+
+        $flat = $this->population->updateFitness(['f' => 0.0], ['f' => -1000.0], 0.0, 1000.0, $dt, 0.04, 0.0);
+        $atRate = $this->population->updateFitness(['f' => 0.0], ['f' => -1000.0], 0.04 * $dt, 1000.0, $dt, 0.04, 0.0);
+
+        $this->assertGreaterThan(0.0, $flat['f']);
+        $this->assertEqualsWithDelta(0.0, $atRate['f'], 1e-12);
+    }
+
+    public function testExposureIsChargedForRiskSoAFlatMarketPunishesTheBiggerBook(): void
+    {
+        // Same return, no edge either way: the belief carrying more exposure must score lower, not the same.
+        // Without this, whichever signal saturates more often holds a structural fitness edge unrelated to
+        // being right.
+        $dt = 1.0 / 14400.0;
+        $variance = 0.30 ** 2;
+
+        $fitness = $this->population->updateFitness(
+            ['small' => 0.0, 'large' => 0.0],
+            ['small' => 250.0, 'large' => 1000.0],
+            0.0,
+            1000.0,
+            $dt,
+            0.0,
+            $variance
+        );
+
+        $this->assertLessThan(0.0, $fitness['large']);
+        $this->assertLessThan($fitness['small'], $fitness['large']);
+    }
+
+    public function testTheRiskChargeIsQuadraticInExposure(): void
+    {
+        // (a/2) sigma^2 z^2: doubling the book quadruples the charge. Long and short pay the same.
+        $dt = 1.0 / 14400.0;
+
+        $fitness = $this->population->updateFitness(
+            ['half' => 0.0, 'full' => 0.0, 'short' => 0.0],
+            ['half' => 500.0, 'full' => 1000.0, 'short' => -1000.0],
+            0.0,
+            1000.0,
+            $dt,
+            0.0,
+            0.09
+        );
+
+        $this->assertEqualsWithDelta($fitness['half'] * 4.0, $fitness['full'], 1e-12);
+        $this->assertEqualsWithDelta($fitness['full'], $fitness['short'], 1e-12);
+    }
+
+    // --- Style crowding (Barberis & Shleifer 2003) ---
+
+    public function testANameWithNoStyleHistoryIsJudgedOnItselfAlone(): void
+    {
+        // Against a missing style score, not against zero: zero would mean "every style is losing".
+        $local = ['fundamentalist' => 0.4, 'momentum' => -0.1];
+
+        $this->assertSame($local, $this->population->crowdedFitness($local, []));
+    }
+
+    public function testTheCrowdedScoreIsTheWeightedBlendOfNameAndMarket(): void
+    {
+        $weight = FinancialConstants::AGENT_STYLE_CROWDING_WEIGHT;
+
+        $crowded = $this->population->crowdedFitness(
+            ['fundamentalist' => 0.4, 'momentum' => -0.2],
+            ['fundamentalist' => -0.1, 'momentum' => 0.6]
+        );
+
+        $this->assertEqualsWithDelta(((1.0 - $weight) * 0.4) + ($weight * -0.1), $crowded['fundamentalist'], 1e-12);
+        $this->assertEqualsWithDelta(((1.0 - $weight) * -0.2) + ($weight * 0.6), $crowded['momentum'], 1e-12);
+    }
+
+    public function testAStyleThatHasPaidEverywhereTiltsANameWhereItHasNot(): void
+    {
+        // The whole point: momentum has lost on this name but won across the market, and the name's
+        // population still leans toward it. A per-name population could never do this.
+        $local = ['fundamentalist' => 0.3, 'momentum' => -0.3];
+        $style = ['fundamentalist' => -0.8, 'momentum' => 0.8];
+
+        $alone = $this->population->shares($local);
+        $crowded = $this->population->shares($this->population->crowdedFitness($local, $style));
+
+        $this->assertLessThan(0.5, $alone['momentum']);
+        $this->assertGreaterThan($alone['momentum'], $crowded['momentum']);
+    }
+
+    public function testABeliefAbsentFromTheStyleRecordFallsBackToItsOwnScore(): void
+    {
+        // A strategy added after the style record was written has no market history; it must not be
+        // scored as if the market had judged it a total loss.
+        $crowded = $this->population->crowdedFitness(['fundamentalist' => 0.4, 'new' => 0.2], ['fundamentalist' => 0.4]);
+
+        $this->assertEqualsWithDelta(0.2, $crowded['new'], 1e-12);
+    }
+
+    public function testARealEdgeStillBeatsTheRiskCharge(): void
+    {
+        // The charge is second order: a fully committed belief earning a 30% annual rate at 30% volatility
+        // and a 4% rate is still rewarded, so the penalty tempers exposure rather than forbidding it.
+        $dt = 1.0 / 14400.0;
+
+        $fitness = $this->population->updateFitness(['f' => 0.0], ['f' => 1000.0], 0.30 * $dt, 1000.0, $dt, 0.04, 0.09);
+
+        $this->assertGreaterThan(0.0, $fitness['f']);
     }
 
     public function testZeroElapsedTimeChangesNothingRatherThanDividingByIt(): void
     {
         $fitness = ['f' => 0.25];
 
-        $this->assertSame($fitness, $this->population->updateFitness($fitness, ['f' => 1000.0], 0.01, 1000.0, 0.0));
+        $this->assertSame($fitness, $this->population->updateFitness($fitness, ['f' => 1000.0], 0.01, 1000.0, 0.0, 0.0, 0.0));
     }
 }

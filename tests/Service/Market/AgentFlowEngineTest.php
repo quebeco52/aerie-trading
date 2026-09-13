@@ -34,8 +34,11 @@ class AgentFlowEngineTest extends TestCase
         $this->stateStore = new InMemoryAgentStateStore();
     }
 
-    /** @param list<object>|null $strategies Null for the full population; an explicit list, empty or not, otherwise. */
-    private function engine(?array $strategies = null): AgentFlowEngine
+    /**
+     * @param list<object>|null $strategies Null for the full population; an explicit list, empty or not, otherwise.
+     * @param list<object>|null $providers  Null for the full set of intermediaries; an explicit list otherwise.
+     */
+    private function engine(?array $strategies = null, ?array $providers = null): AgentFlowEngine
     {
         return new AgentFlowEngine(
             new AgentPopulation(),
@@ -45,8 +48,8 @@ class AgentFlowEngineTest extends TestCase
                 new FundamentalistStrategy(),
                 new MomentumStrategy(),
                 new IndexFundStrategy(),
-                new MarketMakerStrategy(),
-            ]
+            ],
+            $providers ?? [new MarketMakerStrategy()]
         );
     }
 
@@ -55,7 +58,9 @@ class AgentFlowEngineTest extends TestCase
         float $fairValue = 100.0,
         float $momentum = 0.0,
         float $logReturn = 0.0,
-        float $adv = 1000000.0
+        float $adv = 1000000.0,
+        float $dt = 1.0 / 14400.0,
+        float $splitRatio = 1.0
     ): AgentMarketViewDTO {
         return new AgentMarketViewDTO(
             ticker: 'TEST',
@@ -65,7 +70,8 @@ class AgentFlowEngineTest extends TestCase
             averageDailyVolume: $adv,
             logReturn: $logReturn,
             financialConditions: 0.0,
-            dt: 1.0 / 14400.0,
+            dt: $dt,
+            splitRatio: $splitRatio,
         );
     }
 
@@ -80,15 +86,15 @@ class AgentFlowEngineTest extends TestCase
         $this->assertGreaterThan(0.0, $drained['TEST'], 'A deeply cheap name should be bought.');
     }
 
-    public function testAgentsOpenFlatAndWorkInRatherThanArrivingFullyPositioned(): void
+    public function testBeliefsOpenFlatAndWorkInRatherThanArrivingFullyPositioned(): void
     {
-        // A fresh book starts at zero and takes its first adjustment step. Seeding it at a full target
-        // allocation would put a large one-off order on the first tick a name is seen — an artefact of the
-        // engine starting, not of anything anyone decided.
+        // A fresh book starts a belief at zero and takes its first adjustment step. Seeding it at a full
+        // target allocation would put a large one-off order on the first tick a name is seen — an artefact
+        // of the engine starting, not of anything anyone decided.
         $capacity = 1000000.0 * \App\Service\Math\FinancialConstants::AGENT_CAPITAL_ADV_MULTIPLE;
-        $step = \App\Service\Math\FinancialConstants::AGENT_POSITION_ADJUSTMENT_SPEED;
+        $step = 1.0 - exp(-(1.0 / 14400.0) / \App\Service\Math\FinancialConstants::AGENT_POSITION_HORIZON_YEARS);
 
-        $result = $this->engine()->trade($this->view());
+        $result = $this->engine([new FundamentalistStrategy(), new MomentumStrategy()], [])->trade($this->view(price: 60.0, fairValue: 100.0));
 
         foreach ($result['positions'] as $identifier => $position) {
             $this->assertLessThanOrEqual(
@@ -100,6 +106,22 @@ class AgentFlowEngineTest extends TestCase
 
         // And the book really did start empty, rather than the first step being a rebalance of something.
         $this->assertNull((new InMemoryAgentStateStore())->read('TEST'));
+    }
+
+    public function testTheIndexOpensAtItsHoldingWithoutPlacingAnOrder(): void
+    {
+        // The index has held the name all along; the engine is only now keeping track. Opening it flat and
+        // working in toward its weight was a one-off buy of about a day's volume on every name, every time
+        // the engine or its cache restarted.
+        $capacity = 1000000.0 * \App\Service\Math\FinancialConstants::AGENT_CAPITAL_ADV_MULTIPLE;
+        $index = new IndexFundStrategy();
+        $view = $this->view();
+
+        $result = $this->engine([$index], [])->trade($view);
+
+        $this->assertEqualsWithDelta($index->signal($view, []) * $capacity, $result['positions']['index_fund'], 1e-6);
+        $this->assertSame(0.0, $result['flow'], 'Recognising a holding is not a trade.');
+        $this->assertSame([], $this->orderFlow->drain());
     }
 
     public function testAPositionIsWorkedTowardItsTargetRatherThanFiredAtIt(): void
@@ -118,6 +140,143 @@ class AgentFlowEngineTest extends TestCase
         $this->assertLessThan($second - $first, $third - $second);
     }
 
+    public function testABookIsWorkedOverSimulatedTimeNotOverACountOfTicks(): void
+    {
+        // The same day of simulated time closes the same share of the gap whether it is stepped 57 times
+        // or 3 times. A per-tick fraction would make one book fire in half a day and another take a week.
+        $fine = $this->engine([new FundamentalistStrategy()]);
+        $coarse = new AgentFlowEngine(
+            new AgentPopulation(),
+            new InMemoryAgentStateStore(),
+            new InMemoryOrderFlowStore(),
+            [new FundamentalistStrategy()]
+        );
+
+        for ($tick = 0; $tick < 57; $tick++) {
+            $finePosition = $fine->trade($this->view(price: 60.0, fairValue: 100.0, dt: 1.0 / 14400.0))['positions']['fundamentalist'];
+        }
+
+        for ($tick = 0; $tick < 3; $tick++) {
+            $coarsePosition = $coarse->trade($this->view(price: 60.0, fairValue: 100.0, dt: 19.0 / 14400.0))['positions']['fundamentalist'];
+        }
+
+        $this->assertEqualsWithDelta($finePosition, $coarsePosition, $finePosition * 0.02);
+    }
+
+    public function testASplitRestatesTheBookAndIsNotScoredAsALoss(): void
+    {
+        // A 4-for-1 split quarters the price and quadruples every held share. Nobody lost money and nobody
+        // has to buy anything, so the fitness is untouched and the book is restated rather than rebuilt.
+        $engine = $this->engine([new FundamentalistStrategy(), new MomentumStrategy()]);
+
+        // Build a book, and let one belief earn an edge so there is a non-trivial fitness to preserve.
+        for ($tick = 0; $tick < 200; $tick++) {
+            $engine->trade($this->view(price: 200.0, fairValue: 300.0, momentum: 0.2, logReturn: 0.001));
+        }
+
+        $before = $this->stateStore->read('TEST');
+        $this->orderFlow->drain();
+
+        // The tick of the split: the return handed in is measured pre-split and is flat, the price
+        // arrives quartered, volume in shares arrives quadrupled, and the ratio says why.
+        $engine->trade($this->view(price: 50.0, fairValue: 75.0, momentum: 0.2, logReturn: 0.0, adv: 4000000.0, splitRatio: 4.0));
+
+        $after = $this->stateStore->read('TEST');
+        $flow = $this->orderFlow->drain()['TEST'] ?? 0.0;
+
+        foreach ($before['fitness'] as $identifier => $score) {
+            $this->assertEqualsWithDelta($score, $after['fitness'][$identifier], abs($score) * 0.01 + 1e-9, "{$identifier} was scored on the split.");
+        }
+
+        // Restated: the book is in the right neighbourhood of four times its old size, with only the
+        // ordinary adjustment step on top, rather than a quarter of what it should be.
+        foreach ($before['positions'] as $identifier => $position) {
+            $this->assertEqualsWithDelta($position * 4.0, $after['positions'][$identifier], abs($position * 4.0) * 0.05, "{$identifier} was not restated.");
+        }
+
+        // And no rebuild order went to the market: the flow is the ordinary tick's step, not a quarter of the book.
+        $bookSize = array_sum(array_map('abs', $before['positions'])) * 4.0;
+        $this->assertLessThan($bookSize * 0.05, abs($flow), 'The split produced a rebuild order.');
+    }
+
+    // --- Style crowding across names ---
+
+    public function testANewNameInheritsTheMarketsStyleOnItsFirstTick(): void
+    {
+        // Capital arrives with the prevailing style. A name the market has never seen is not a blank slate
+        // on which the two beliefs start even; it is judged against how they have paid everywhere else.
+        $this->stateStore->writeStyle(['fundamentalist' => -0.6, 'momentum' => 0.6]);
+
+        $shares = $this->engine([new FundamentalistStrategy(), new MomentumStrategy()])->trade($this->view())['shares'];
+
+        $this->assertGreaterThan(0.5, $shares['momentum']);
+    }
+
+    public function testClosingATickAveragesEveryNamesScoreIntoTheStyle(): void
+    {
+        $engine = $this->engine([new FundamentalistStrategy(), new MomentumStrategy()]);
+
+        // Two names, seeded with different histories, both scored on a flat tick so the histories decay
+        // together and the style is their plain average.
+        $this->stateStore->write('AAA', ['positions' => ['fundamentalist' => 0.0, 'momentum' => 0.0], 'fitness' => ['fundamentalist' => 0.4, 'momentum' => -0.2]]);
+        $this->stateStore->write('BBB', ['positions' => ['fundamentalist' => 0.0, 'momentum' => 0.0], 'fitness' => ['fundamentalist' => 0.0, 'momentum' => 0.6]]);
+
+        $engine->beginTick();
+        $engine->trade(new AgentMarketViewDTO('AAA', 100.0, 100.0, 0.0, 1000000.0, 0.0, 0.0, 1.0 / 14400.0));
+        $engine->trade(new AgentMarketViewDTO('BBB', 100.0, 100.0, 0.0, 1000000.0, 0.0, 0.0, 1.0 / 14400.0));
+        $engine->endTick();
+
+        $style = $this->stateStore->readStyle();
+        $decay = exp(-(1.0 / 14400.0) / \App\Service\Math\FinancialConstants::AGENT_FITNESS_HORIZON_YEARS);
+
+        $this->assertEqualsWithDelta(0.2 * $decay, $style['fundamentalist'], 1e-9);
+        $this->assertEqualsWithDelta(0.2 * $decay, $style['momentum'], 1e-9);
+    }
+
+    public function testEveryNameInATickIsJudgedAgainstTheStyleAsItStoodAtTheOpen(): void
+    {
+        // The style score is read once when the tick opens and rebuilt when it closes. Otherwise the last
+        // name visited would be judged against a score the first names had already moved, and the order
+        // the tracker happens to iterate in would decide the population.
+        $engine = $this->engine([new FundamentalistStrategy(), new MomentumStrategy()]);
+        $this->stateStore->writeStyle(['fundamentalist' => 0.0, 'momentum' => 0.0]);
+
+        $strongMomentum = ['positions' => ['fundamentalist' => 0.0, 'momentum' => 0.0], 'fitness' => ['fundamentalist' => -2.0, 'momentum' => 2.0]];
+        $this->stateStore->write('AAA', $strongMomentum);
+        $this->stateStore->write('BBB', $strongMomentum);
+        $this->stateStore->write('CCC', ['positions' => ['fundamentalist' => 0.0, 'momentum' => 0.0], 'fitness' => ['fundamentalist' => 0.0, 'momentum' => 0.0]]);
+
+        $engine->beginTick();
+        $engine->trade(new AgentMarketViewDTO('AAA', 100.0, 100.0, 0.0, 1000000.0, 0.0, 0.0, 1.0 / 14400.0));
+        $engine->trade(new AgentMarketViewDTO('BBB', 100.0, 100.0, 0.0, 1000000.0, 0.0, 0.0, 1.0 / 14400.0));
+        $last = $engine->trade(new AgentMarketViewDTO('CCC', 100.0, 100.0, 0.0, 1000000.0, 0.0, 0.0, 1.0 / 14400.0))['shares'];
+        $engine->endTick();
+
+        // Judged against the neutral style that opened the tick, not the momentum-heavy one AAA and BBB built.
+        $this->assertEqualsWithDelta(0.5, $last['momentum'], 1e-9);
+
+        // And the next tick sees what was built.
+        $engine->beginTick();
+        $next = $engine->trade(new AgentMarketViewDTO('CCC', 100.0, 100.0, 0.0, 1000000.0, 0.0, 0.0, 1.0 / 14400.0))['shares'];
+        $engine->endTick();
+
+        $this->assertGreaterThan(0.5, $next['momentum']);
+    }
+
+    public function testABookOpenedOnASplitTickIsNotRestated(): void
+    {
+        // A fresh book is built on today's capacity, already in post-split shares. Restating it as well
+        // quadrupled the index holding and then sold three quarters of it back in one order.
+        $capacity = 4000000.0 * \App\Service\Math\FinancialConstants::AGENT_CAPITAL_ADV_MULTIPLE;
+        $index = new IndexFundStrategy();
+        $view = $this->view(adv: 4000000.0, splitRatio: 4.0);
+
+        $result = $this->engine([$index], [])->trade($view);
+
+        $this->assertEqualsWithDelta($index->signal($view, []) * $capacity, $result['positions']['index_fund'], 1e-6);
+        $this->assertSame(0.0, $result['flow']);
+    }
+
     public function testTheBookIsCarriedBetweenTicks(): void
     {
         $engine = $this->engine([new FundamentalistStrategy()]);
@@ -127,7 +286,6 @@ class AgentFlowEngineTest extends TestCase
 
         $this->assertNotNull($stored);
         $this->assertGreaterThan(0.0, $stored['positions']['fundamentalist']);
-        $this->assertSame(60.0, $stored['last_price']);
     }
 
     public function testCapitalShiftsTowardWhicheverBeliefHasBeenPaying(): void
@@ -154,35 +312,40 @@ class AgentFlowEngineTest extends TestCase
         $this->assertGreaterThan($shares['fundamentalist'], $shares['momentum']);
     }
 
-    public function testTheMakerDampsTheNetFlowTheOthersGenerate(): void
+    public function testTheMakerSmoothsTheOthersFlowAcrossTimeRatherThanRemovingIt(): void
     {
-        // A market with a maker in it moves less on the same demand than one without.
-        $withoutMaker = new AgentFlowEngine(
-            new AgentPopulation(),
-            new InMemoryAgentStateStore(),
-            $bare = new InMemoryOrderFlowStore(),
-            [new FundamentalistStrategy()]
-        );
-
-        $withMaker = new AgentFlowEngine(
-            new AgentPopulation(),
-            new InMemoryAgentStateStore(),
-            $damped = new InMemoryOrderFlowStore(),
-            [new FundamentalistStrategy(), new MarketMakerStrategy()]
-        );
+        // In the tick demand arrives, a market with a maker in it moves less on the same flow than one
+        // without. But the maker is only carrying that demand: once it has worked its inventory off, the
+        // whole of the flow has reached the price. An intermediary smooths price pressure; it is not a
+        // discount on the impact function.
+        $withoutMaker = new AgentFlowEngine(new AgentPopulation(), new InMemoryAgentStateStore(), $bare = new InMemoryOrderFlowStore(), [new FundamentalistStrategy()], []);
+        $withMaker = new AgentFlowEngine(new AgentPopulation(), new InMemoryAgentStateStore(), $damped = new InMemoryOrderFlowStore(), [new FundamentalistStrategy()], [new MarketMakerStrategy()]);
 
         $view = $this->view(price: 60.0, fairValue: 100.0);
 
-        for ($tick = 0; $tick < 50; $tick++) {
+        // The first day: demand arriving.
+        $bareEarly = 0.0;
+        $dampedEarly = 0.0;
+        for ($tick = 0; $tick < 57; $tick++) {
             $withoutMaker->trade($view);
             $withMaker->trade($view);
+            $bareEarly += array_sum($bare->drain());
+            $dampedEarly += array_sum($damped->drain());
         }
 
-        $this->assertLessThan(
-            array_sum($bare->drain()),
-            array_sum($damped->drain()),
-            'Absorbed demand reaches the price smaller than it started.'
-        );
+        $this->assertLessThan($bareEarly * 0.95, $dampedEarly, 'Absorbed demand reaches the price smaller than it started.');
+
+        // Two more months: the belief has reached its target and the maker has worked its book off.
+        $bareTotal = $bareEarly;
+        $dampedTotal = $dampedEarly;
+        for ($tick = 0; $tick < 2400; $tick++) {
+            $withoutMaker->trade($view);
+            $withMaker->trade($view);
+            $bareTotal += array_sum($bare->drain());
+            $dampedTotal += array_sum($damped->drain());
+        }
+
+        $this->assertEqualsWithDelta($bareTotal, $dampedTotal, $bareTotal * 0.01, 'Over time the whole of the flow reaches the price.');
     }
 
     public function testNoDepthMeansNoAgents(): void

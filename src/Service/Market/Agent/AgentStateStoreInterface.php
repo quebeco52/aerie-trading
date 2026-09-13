@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace App\Service\Market\Agent;
 
 /**
- * Where each name's agent book lives between ticks: every strategy's position, its accumulated fitness,
- * and the price it last acted on.
+ * Where each name's agent book lives between ticks: every participant's position and every belief's
+ * accumulated fitness.
  *
  * Kept out of the Stock entity on purpose. This is written for every name on every tick and read back
  * immediately, which is a cache access rather than a durable fact about a company, and putting seven
@@ -20,13 +20,13 @@ namespace App\Service\Market\Agent;
 interface AgentStateStoreInterface
 {
     /**
-     * @return array{positions: array<string, float>, fitness: array<string, float>, last_price: float}|null
+     * @return array{positions: array<string, float>, fitness: array<string, float>}|null
      *         Null when this name has no book yet.
      */
     public function read(string $ticker): ?array;
 
     /**
-     * @param array{positions: array<string, float>, fitness: array<string, float>, last_price: float} $state
+     * @param array{positions: array<string, float>, fitness: array<string, float>} $state
      */
     public function write(string $ticker, array $state): void;
 
@@ -42,4 +42,19 @@ interface AgentStateStoreInterface
      * Sends the writes the batch collected and closes it. Reads and writes stand alone again afterwards.
      */
     public function commitBatch(): void;
+
+    /**
+     * The market-wide fitness of each competing belief: how a style has been paying across every name.
+     *
+     * One record for the whole market rather than one per name, because it is what lets capital move to a
+     * style — every name reads the same score and tilts the same way.
+     *
+     * @return array<string, float> Empty when the market has no style history yet.
+     */
+    public function readStyle(): array;
+
+    /**
+     * @param array<string, float> $fitness
+     */
+    public function writeStyle(array $fitness): void;
 }

@@ -90,7 +90,8 @@ class AgentMarketDynamicsTest extends TestCase
             new AgentPopulation(),
             new InMemoryAgentStateStore(),
             $orderFlow,
-            [new FundamentalistStrategy(), new MomentumStrategy(), new IndexFundStrategy(), new MarketMakerStrategy()]
+            [new FundamentalistStrategy(), new MomentumStrategy(), new IndexFundStrategy()],
+            [new MarketMakerStrategy()]
         );
 
         $stock = $this->stock();
@@ -155,6 +156,7 @@ class AgentMarketDynamicsTest extends TestCase
             $trend = max(-0.5, min(0.5, ($trend * $momentumPhi) + $logReturn));
 
             if ($agents) {
+                $agentEngine->beginTick();
                 $traded = $agentEngine->trade(new AgentMarketViewDTO(
                     ticker: 'AGT',
                     price: $nextPrice,
@@ -163,8 +165,11 @@ class AgentMarketDynamicsTest extends TestCase
                     averageDailyVolume: $liquidity->averageDailyVolume($stock),
                     logReturn: $logReturn,
                     financialConditions: 0.0,
-                    dt: $dt
+                    dt: $dt,
+                    riskFreeRate: $macro->policyRate,
+                    annualizedVolatility: $volatility
                 ));
+                $agentEngine->endTick();
 
                 if ($tick >= self::WARMUP_TICKS) {
                     $shares[] = $traded['shares']['fundamentalist'] ?? 0.5;

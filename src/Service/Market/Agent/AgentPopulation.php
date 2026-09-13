@@ -68,6 +68,40 @@ final class AgentPopulation
     }
 
     /**
+     * What a name's population actually chooses on: part how each belief has paid here, part how it has
+     * paid everywhere.
+     *
+     * Barberis & Shleifer (2003): much of the capital that switches does so at the level of a style, on
+     * the style's performance across the market, not stock by stock. A population scored only on its own
+     * name cannot do what real capital does — leave momentum in every name at once when the market turns.
+     * Purely style-level switching would be the other extreme, a single population wearing sixty tickers.
+     * The weight sets the mix; the style score is the average of the names' own scores, so the two are in
+     * the same units and a market of one name is the plain single-asset model.
+     *
+     * With no style history yet — the first tick the market runs, or a store that could not be read — a
+     * name is judged on itself alone rather than against a zero that would mean "every style is losing".
+     *
+     * @param array<string, float> $local Fitness of each competing belief on this name.
+     * @param array<string, float> $style Market-wide fitness of each competing belief, same keys.
+     * @return array<string, float>
+     */
+    public function crowdedFitness(array $local, array $style): array
+    {
+        if ($style === []) {
+            return $local;
+        }
+
+        $weight = max(0.0, min(1.0, FinancialConstants::AGENT_STYLE_CROWDING_WEIGHT));
+
+        $crowded = [];
+        foreach ($local as $identifier => $score) {
+            $crowded[$identifier] = ((1.0 - $weight) * $score) + ($weight * ($style[$identifier] ?? $score));
+        }
+
+        return $crowded;
+    }
+
+    /**
      * Keeps a losing belief from being extinguished entirely.
      *
      * Without a floor, a long enough run in one direction drives the other side's share to numerically
@@ -99,26 +133,45 @@ final class AgentPopulation
     }
 
     /**
-     * Scores each belief on what its previous position actually earned, as an annualized rate.
+     * Scores each belief on the risk-adjusted excess return its previous position actually earned, as an
+     * annualized rate.
      *
-     * Realized profit in the Brock-Hommes sense — the return that followed, times the exposure the strategy
-     * was carrying into it — but expressed per year rather than per tick. That matters more than it looks:
-     * a raw per-tick profit at a 14,400-tick year is on the order of 1e-5, and no intensity of choice that
-     * is not itself absurd can tell two such numbers apart. The population would sit at its initial split
-     * forever and the model's entire mechanism would be inert while appearing to run.
+     * Brock & Hommes (1998) mean-variance fitness, U_h = pi_h - (a/2) sigma^2 z_h^2, where pi_h is the
+     * profit on the exposure z_h the belief was carrying into the return that followed. Two things about
+     * the profit term matter:
      *
-     * Annualizing also makes the score independent of the configured tick rate, so the same intensity of
-     * choice means the same thing whatever the simulation is stepping at.
+     *   - It is an EXCESS return. Cash earns the risk-free rate, so a long book that made the policy rate
+     *     made nothing, and a short book sitting on its proceeds earns it. Scoring raw returns would hand
+     *     every long belief a free edge equal to the rate.
+     *   - It is charged for risk. Raw profit rewards whichever belief simply carries more exposure, and the
+     *     chartist signal saturates at full commitment far more often than the fundamentalist one does, so
+     *     without the penalty the chartists hold a structural fitness edge unrelated to being right.
      *
-     * @param array<string, float> $fitness   Accumulated scores.
-     * @param array<string, float> $positions Positions held into the return, in shares.
-     * @param float                $logReturn The return that followed.
-     * @param float                $capacity  Position size that counts as fully committed, for scaling.
-     * @param float                $dt        Elapsed simulated time in years.
+     * Expressed per year rather than per tick. That matters more than it looks: a raw per-tick profit at a
+     * 14,400-tick year is on the order of 1e-5, and no intensity of choice that is not itself absurd can
+     * tell two such numbers apart. The population would sit at its initial split forever and the model's
+     * entire mechanism would be inert while appearing to run. Annualizing also makes the score independent
+     * of the configured tick rate, so the same intensity of choice means the same thing whatever the
+     * simulation is stepping at.
+     *
+     * @param array<string, float> $fitness      Accumulated scores.
+     * @param array<string, float> $positions    Positions held into the return, in shares.
+     * @param float                $logReturn    The return that followed, measured before any split.
+     * @param float                $capacity     Position size that counts as fully committed, for scaling.
+     * @param float                $dt           Elapsed simulated time in years.
+     * @param float                $riskFreeRate Annual rate cash earns.
+     * @param float                $variance     Annualized return variance the exposure is charged for.
      * @return array<string, float> Updated scores.
      */
-    public function updateFitness(array $fitness, array $positions, float $logReturn, float $capacity, float $dt): array
-    {
+    public function updateFitness(
+        array $fitness,
+        array $positions,
+        float $logReturn,
+        float $capacity,
+        float $dt,
+        float $riskFreeRate,
+        float $variance
+    ): array {
         if ($dt <= 0.0) {
             return $fitness;
         }
@@ -127,13 +180,15 @@ final class AgentPopulation
         // number of ticks. Capital chases performance, but over months, not over the last print.
         $phi = exp(-$dt / FinancialConstants::AGENT_FITNESS_HORIZON_YEARS);
         $scale = max(1.0, $capacity);
+        $riskCharge = 0.5 * FinancialConstants::AGENT_RISK_AVERSION * max(0.0, $variance);
 
         $updated = [];
         foreach ($fitness as $identifier => $score) {
             $exposure = ($positions[$identifier] ?? 0.0) / $scale;
-            $annualizedProfit = ($exposure * $logReturn) / $dt;
+            $excessRate = $exposure * (($logReturn / $dt) - $riskFreeRate);
+            $utility = $excessRate - ($riskCharge * $exposure * $exposure);
 
-            $updated[$identifier] = ($score * $phi) + ((1.0 - $phi) * $annualizedProfit);
+            $updated[$identifier] = ($score * $phi) + ((1.0 - $phi) * $utility);
         }
 
         return $updated;

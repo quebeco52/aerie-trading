@@ -19,11 +19,11 @@ use PHPUnit\Framework\TestCase;
 #[AllowMockObjectsWithoutExpectations]
 class RedisAgentStateStoreTest extends TestCase
 {
-    /** @var array{positions: array<string, float>, fitness: array<string, float>, last_price: float} */
-    private const BOOK_A = ['positions' => ['momentum' => 10.0], 'fitness' => ['momentum' => 0.5], 'last_price' => 100.0];
+    /** @var array{positions: array<string, float>, fitness: array<string, float>} */
+    private const BOOK_A = ['positions' => ['momentum' => 10.0], 'fitness' => ['momentum' => 0.5]];
 
-    /** @var array{positions: array<string, float>, fitness: array<string, float>, last_price: float} */
-    private const BOOK_B = ['positions' => ['momentum' => -4.0], 'fitness' => ['momentum' => -0.2], 'last_price' => 50.0];
+    /** @var array{positions: array<string, float>, fitness: array<string, float>} */
+    private const BOOK_B = ['positions' => ['momentum' => -4.0], 'fitness' => ['momentum' => -0.2]];
 
     private \Redis&MockObject $redis;
 
@@ -75,6 +75,50 @@ class RedisAgentStateStoreTest extends TestCase
 
         // Loose on purpose: json_encode writes 10.0 as 10, and the store's own decoder is what restores floats.
         $this->assertEquals(['AAA' => self::BOOK_A, 'BBB' => self::BOOK_B], $sent);
+    }
+
+    public function testTheStyleRecordRidesInTheSameBatchWithNoExtraRoundTrips(): void
+    {
+        // The market-wide score is one more field in the hash, so a tick still costs one HGETALL and one
+        // pipeline. A key of its own would be a third round trip on every tick.
+        $this->redis->expects($this->once())
+            ->method('hGetAll')
+            ->willReturn(['AAA' => json_encode(self::BOOK_A), '__style__' => json_encode(['momentum' => 0.25, 'fundamentalist' => -0.1])]);
+        $this->redis->expects($this->never())->method('hGet');
+        $this->redis->expects($this->once())->method('multi')->willReturnSelf();
+
+        $sent = [];
+        $this->redis->expects($this->once())
+            ->method('hSet')
+            ->willReturnCallback(function (string $key, string $field, string $value) use (&$sent): int {
+                $sent[$field] = json_decode($value, true);
+
+                return 1;
+            });
+        $this->redis->expects($this->once())->method('exec')->willReturn([]);
+
+        $store = new RedisAgentStateStore($this->redis);
+        $store->beginBatch();
+
+        $this->assertSame(['momentum' => 0.25, 'fundamentalist' => -0.1], $store->readStyle());
+        $this->assertNull($store->read('__style__'), 'The style record is not a book.');
+
+        $store->writeStyle(['momentum' => 0.3, 'fundamentalist' => -0.2]);
+        $this->assertSame(['momentum' => 0.3, 'fundamentalist' => -0.2], $store->readStyle(), 'A read after a write in the same batch sees the write.');
+
+        $store->commitBatch();
+
+        $this->assertEquals(['__style__' => ['momentum' => 0.3, 'fundamentalist' => -0.2]], $sent);
+    }
+
+    public function testAMarketWithNoStyleHistoryReadsAnEmptyRecord(): void
+    {
+        $this->redis->method('hGetAll')->willReturn([]);
+
+        $store = new RedisAgentStateStore($this->redis);
+        $store->beginBatch();
+
+        $this->assertSame([], $store->readStyle());
     }
 
     public function testAReadAfterAWriteInTheSameBatchSeesTheWrite(): void

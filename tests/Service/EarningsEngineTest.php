@@ -579,7 +579,9 @@ class EarningsEngineTest extends TestCase
         for ($q = 0; $q < 4; $q++) {
             $tick = ($q * $ticksPerQuarter) + $reportingTick;
             $this->engine->calculate($stock, $positiveMacro, $tick, 252);
-            $consensusRevenues[] = (float) $stock->getLastAnalystRevenue();
+            // The stored anchor is the posterior BEFORE the walkdown, so it cannot compound through the
+            // next estimate; the number analysts PUBLISH is the anchor shaded by the walkdown.
+            $consensusRevenues[] = (float) $stock->getLastAnalystRevenue() * (1.0 - \App\Service\Market\MarketConsensusEngine::ANALYST_WALKDOWN_BIAS);
             $actualRevenues[] = (float) $stock->getTotalRevenue() / 4.0;
         }
 

@@ -8,44 +8,56 @@ use App\DTO\AgentMarketViewDTO;
 use App\Service\Math\FinancialConstants;
 
 /**
- * Stands on the other side of whatever everyone else is doing, and works its book back toward flat.
+ * Takes the other side of the flow the market generates, and works the inventory off afterwards.
  *
- * The intermediary the rest of the market trades against. It is short when the others are long, which
- * absorbs part of their net demand before it reaches the price — the reason a market with a maker in it
- * moves less on the same flow than one without.
+ * Grossman & Miller (1988): a market maker supplies immediacy. When the others want to buy now, it sells
+ * to them now and carries the short until it can pass it on, so only part of their demand reaches the
+ * price in the tick it arrives and the rest reaches it as the maker unwinds. Over the life of the
+ * inventory the maker is flat again and the whole of the flow has been paid for — a maker smooths price
+ * pressure across time, it does not make it disappear. A maker that permanently offset a share of the
+ * others' positions, as the first version of this did, was a discount on the impact function rather than
+ * an intermediary.
  *
- * Two terms, because a maker has two jobs. Absorption is the position it takes to be the counterparty;
- * inventory decay is it getting flat again afterwards, since carrying risk is not what it is paid for.
- *
- * Outside the switching for the same reason as the index fund: making a market is not a belief about
- * where the price is going, and a maker that abandoned its book to chase momentum would not be one.
+ * Two things limit it. Ho & Stoll (1981): the cost of immediacy is proportional to the variance of what
+ * is being carried, so above a reference volatility the absorbed share falls with 1/variance and a
+ * stressed market finds its makers stepping back — the withdrawal of liquidity that every crisis shows.
+ * And it never carries more than its capacity in either direction.
  */
-final class MarketMakerStrategy implements AgentStrategyInterface
+final class MarketMakerStrategy implements LiquidityProviderInterface
 {
     public function identifier(): string
     {
         return 'market_maker';
     }
 
-    public function signal(AgentMarketViewDTO $view, array $positions): float
+    public function trade(AgentMarketViewDTO $view, float $inventory, float $othersFlow, float $capacity): float
     {
-        $capacity = max(1.0, $view->averageDailyVolume * FinancialConstants::AGENT_CAPITAL_ADV_MULTIPLE);
+        $capacity = max(1.0, $capacity);
 
-        $othersNet = 0.0;
-        foreach ($positions as $identifier => $position) {
-            if ($identifier !== $this->identifier()) {
-                $othersNet += $position;
-            }
-        }
+        $absorbed = -FinancialConstants::AGENT_MAKER_ABSORPTION * $this->riskScale($view->annualizedVolatility) * $othersFlow;
 
-        $absorption = -FinancialConstants::AGENT_MAKER_ABSORPTION * ($othersNet / $capacity);
-        $unwind = -FinancialConstants::AGENT_MAKER_INVENTORY_DECAY * (($positions[$this->identifier()] ?? 0.0) / $capacity);
+        // Inventory decays toward flat over a horizon in time, so the same book is worked off at the same
+        // pace whatever the simulation is stepping at.
+        $unwind = -$inventory * (1.0 - exp(-$view->dt / FinancialConstants::AGENT_MAKER_INVENTORY_HORIZON_YEARS));
 
-        return max(-1.0, min(1.0, $absorption + $unwind));
+        $next = max(-$capacity, min($capacity, $inventory + $absorbed + $unwind));
+
+        return $next - $inventory;
     }
 
-    public function competesForCapital(): bool
+    /**
+     * How much of the base absorption survives the current volatility: all of it at or below the
+     * reference, and a 1/variance share above it.
+     */
+    private function riskScale(float $annualizedVolatility): float
     {
-        return false;
+        $reference = FinancialConstants::AGENT_MAKER_REFERENCE_VOLATILITY ** 2;
+        $variance = $annualizedVolatility * $annualizedVolatility;
+
+        if ($variance <= $reference) {
+            return 1.0;
+        }
+
+        return $reference / $variance;
     }
 }

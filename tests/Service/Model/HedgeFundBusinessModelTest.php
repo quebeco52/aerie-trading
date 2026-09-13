@@ -54,27 +54,79 @@ class HedgeFundBusinessModelTest extends TestCase
         $this->assertLessThan(0.60, $metrics['baseline_roic']);
     }
 
-    public function testMacroPhysicsDecoupledToPreventDoubleCounting(): void
+    // --- Analyst-visible macro uplift ---
+
+    private function zeroAlphaMath(): MathUtility
+    {
+        $math = $this->createStub(MathUtility::class);
+        $math->method('generatePersistentZ')->willReturn(0.0);
+        $math->method('generateStandardNormal')->willReturn(0.0);
+
+        return $math;
+    }
+
+    private function swan(): Stock
     {
         $stock = new Stock();
         $stock->setTicker('SWAN');
+        $stock->setBeta('1.5');
+        $stock->setTotalEquity('1000.0');
+        $stock->setWholesaleDebt('0.0');
+        $stock->setEarningsMomentumZ(['management_fees' => 0.0, 'directional_bets' => 0.0, 'quant_alpha' => 0.0]);
 
-        $calmMacro = MacroStateDTO::fromArray([
-            'output_gap_ema'        => 0.0,
-            'market_volatility_ema' => 0.15,
-        ]);
-        $calmPhysics = $this->model->getMacroPhysics($stock, $calmMacro);
+        return $stock;
+    }
 
-        $panicMacro = MacroStateDTO::fromArray([
-            'output_gap_ema'        => -0.05,
-            'market_volatility_ema' => 0.35,
-        ]);
-        $panicPhysics = $this->model->getMacroPhysics($stock, $panicMacro);
+    public function testAnalystsSeeTheMacroUpliftInTheRootDemandShift(): void
+    {
+        // The AUM beta, the directional tilt and the VIX regime are all built from published series.
+        // Zeroing the root shift hid them from consensus and made every boom quarter a fresh beat.
+        $stock = $this->swan();
+        $calm = MacroStateDTO::fromArray(['output_gap_ema' => 0.0, 'market_volatility_ema' => HedgeFundBusinessModel::VIX_ALPHA_BASELINE, 'money_supply_growth_ema' => \App\Service\Macro\MacroEngine::M2_BASE_GROWTH]);
+        $boom = MacroStateDTO::fromArray(['output_gap_ema' => 0.03, 'market_volatility_ema' => HedgeFundBusinessModel::VIX_ALPHA_BASELINE, 'money_supply_growth_ema' => \App\Service\Macro\MacroEngine::M2_BASE_GROWTH]);
+        $bust = MacroStateDTO::fromArray(['output_gap_ema' => -0.03, 'market_volatility_ema' => HedgeFundBusinessModel::VIX_ALPHA_BASELINE, 'money_supply_growth_ema' => \App\Service\Macro\MacroEngine::M2_BASE_GROWTH]);
 
-        $this->assertSame(0.0, $calmPhysics['macro_demand_shift']);
-        $this->assertSame(1.0, $calmPhysics['pricing_power_multiplier']);
-        $this->assertSame(0.0, $panicPhysics['macro_demand_shift']);
-        $this->assertSame(1.0, $panicPhysics['pricing_power_multiplier']);
+        $this->assertEqualsWithDelta(0.0, $this->model->getMacroPhysics($stock, $calm)['macro_demand_shift'], 1e-12);
+        $this->assertGreaterThan(0.0, $this->model->getMacroPhysics($stock, $boom)['macro_demand_shift']);
+        $this->assertLessThan(0.0, $this->model->getMacroPhysics($stock, $bust)['macro_demand_shift']);
+        $this->assertSame(1.0, $this->model->getMacroPhysics($stock, $boom)['pricing_power_multiplier']);
+    }
+
+    public function testTheUpliftIsNotCountedTwiceSoThePhysicsIsUnchanged(): void
+    {
+        // The engine hands the physics expected revenue WITH the root shift inside it. The streams apply
+        // their macro terms in full, so the physics has to divide the root back out — the boom revenue on
+        // a base of 100 must be what the streams alone produce from 100, not the streams on top of the shift.
+        $stock = $this->swan();
+        $gap = 0.03;
+        $boom = MacroStateDTO::fromArray(['output_gap_ema' => $gap, 'market_volatility_ema' => HedgeFundBusinessModel::VIX_ALPHA_BASELINE, 'money_supply_growth_ema' => \App\Service\Macro\MacroEngine::M2_BASE_GROWTH, 'macro_credit_spread_ema' => 0.02]);
+
+        $root = $this->model->getMacroPhysics($stock, $boom)['macro_demand_shift'];
+        $result = $this->model->computeActualFinancials($stock, 100.0 * (1.0 + $root), 0.40, 10.0, 0.10, $boom, $this->zeroAlphaMath());
+
+        $beta = 1.5;
+        $expectedStreams = 100.0 * (
+            (HedgeFundBusinessModel::DEFAULT_MGMT_FEE_WEIGHT * (1.0 + ($gap * $beta * HedgeFundBusinessModel::AUM_MARKET_BETA_SCALAR)))
+            + (HedgeFundBusinessModel::DEFAULT_DIRECTIONAL_BETS_WEIGHT * (1.0 + ($gap * $beta * HedgeFundBusinessModel::DIRECTIONAL_MACRO_SCALAR)))
+            + HedgeFundBusinessModel::DEFAULT_QUANT_ALPHA_WEIGHT
+        );
+
+        $this->assertEqualsWithDelta($expectedStreams, $result->actualRevenue, $expectedStreams * 0.001);
+    }
+
+    public function testABoomIsNotAStandingBeatOnceAnalystsSeeIt(): void
+    {
+        // With the fund's own alpha flat, what the physics produces in a boom equals what expected revenue
+        // (the consensus base) already carries. Before, expected stayed at the calm figure and the whole
+        // uplift landed as surprise every quarter for as long as the boom lasted.
+        $stock = $this->swan();
+        $boom = MacroStateDTO::fromArray(['output_gap_ema' => 0.04, 'market_volatility_ema' => 0.22, 'money_supply_growth_ema' => \App\Service\Macro\MacroEngine::M2_BASE_GROWTH + 0.03, 'macro_credit_spread_ema' => 0.02]);
+
+        $expected = 100.0 * (1.0 + $this->model->getMacroPhysics($stock, $boom)['macro_demand_shift']);
+        $result = $this->model->computeActualFinancials($stock, $expected, 0.40, 10.0, 0.10, $boom, $this->zeroAlphaMath());
+
+        $this->assertGreaterThan(100.0, $expected, 'A boom lifts what analysts expect.');
+        $this->assertEqualsWithDelta(0.0, ($result->actualRevenue - $expected) / $expected, 0.002, 'No standing surprise.');
     }
 
     public function testSectorPhysicsQuantAlphaSurgeUnderHighVix(): void
