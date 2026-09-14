@@ -6,15 +6,16 @@ namespace App\Controller;
 
 use App\DTO\MacroStateDTO;
 use App\Entity\Bond;
-use App\Entity\TradeOrder;
 use App\Entity\User;
-use App\Entity\UserBond;
+use App\Repository\BondRepository;
+use App\Service\Macro\MacroStateProvider;
+use App\Repository\HoldingRepository;
+use App\Repository\TradeOrderRepository;
 use App\Service\Market\BondPricingEngine;
 use App\Service\Market\PriceChangeFeed;
 use App\Service\Math\FinancialConstants;
 use App\Service\User\CostBasisCalculator;
 use App\Service\User\CouponIncomeCalculator;
-use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Response;
@@ -34,18 +35,15 @@ class BondController extends AbstractController
      */
     #[Route('/bonds', name: 'app_bond_ladder')]
     public function ladder(
-        EntityManagerInterface $entityManager,
-        \Redis $redis,
+        BondRepository $bondRepository,
+        HoldingRepository $holdingRepository,
+        MacroStateProvider $macroStateProvider,
         BondPricingEngine $pricingEngine,
         PriceChangeFeed $priceChangeFeed
     ): Response {
-        $macro = $this->readMacroState($redis);
+        $macro = $macroStateProvider->liveState();
 
-        /** @var list<Bond> $bonds */
-        $bonds = $entityManager->getRepository(Bond::class)->findBy(
-            ['status' => Bond::STATUS_ACTIVE],
-            ['tenorYears' => 'ASC', 'maturesAtTime' => 'ASC']
-        );
+        $bonds = $bondRepository->findActiveAlongTheCurve();
 
         $rows = [];
         foreach ($bonds as $bond) {
@@ -60,7 +58,7 @@ class BondController extends AbstractController
         $holdings = [];
         $user = $this->getUser();
         if ($user instanceof User) {
-            foreach ($entityManager->getRepository(UserBond::class)->findBy(['user' => $user]) as $holding) {
+            foreach ($holdingRepository->findBondHoldings($user) as $holding) {
                 $holdings[$holding->getBond()->getTicker()] = (int) $holding->getQuantity();
             }
         }
@@ -81,19 +79,21 @@ class BondController extends AbstractController
     #[Route('/bond/{ticker}', name: 'app_bond_view')]
     public function view(
         string $ticker,
-        EntityManagerInterface $entityManager,
-        \Redis $redis,
+        BondRepository $bondRepository,
+        HoldingRepository $holdingRepository,
+        TradeOrderRepository $orders,
+        MacroStateProvider $macroStateProvider,
         BondPricingEngine $pricingEngine,
         PriceChangeFeed $priceChangeFeed,
         CostBasisCalculator $costBasis,
         CouponIncomeCalculator $couponIncome
     ): Response {
-        $bond = $entityManager->getRepository(Bond::class)->findOneBy(['ticker' => $ticker]);
+        $bond = $bondRepository->findOneByTicker($ticker);
         if (!$bond instanceof Bond) {
             throw $this->createNotFoundException('Issue not found');
         }
 
-        $macro = $this->readMacroState($redis);
+        $macro = $macroStateProvider->liveState();
         $currentTime = $macro->totalTime;
 
         $userQuantity = 0;
@@ -103,20 +103,13 @@ class BondController extends AbstractController
 
         $user = $this->getUser();
         if ($user instanceof User) {
-            $holding = $entityManager->getRepository(UserBond::class)->findOneBy(['user' => $user, 'bond' => $bond]);
+            $holding = $holdingRepository->findBondHolding($user, $bond);
             $userQuantity = $holding ? (int) $holding->getQuantity() : 0;
 
-            $filledOrders = $entityManager->createQuery(
-                'SELECT o FROM App\Entity\TradeOrder o WHERE o.user = :user AND o.status = :status ORDER BY o.createdAt ASC'
-            )->setParameter('user', $user)->setParameter('status', 'FILLED')->getResult();
-
-            $userAvgCost = $costBasis->calculate($filledOrders)[$ticker] ?? 0.0;
+            $userAvgCost = $costBasis->calculate($orders->findFilledForUser($user))[$ticker] ?? 0.0;
             $userCouponIncome = $couponIncome->totalsByTicker($user)[$ticker] ?? 0.0;
 
-            $openOrders = $entityManager->getRepository(TradeOrder::class)->findBy(
-                ['user' => $user, 'ticker' => $ticker, 'status' => 'OPEN'],
-                ['createdAt' => 'DESC']
-            );
+            $openOrders = $orders->findOpenForUserAndTicker($user, $ticker);
         }
 
         // Remaining flows are shown as dates and amounts rather than as a present value: the point of the
@@ -154,9 +147,9 @@ class BondController extends AbstractController
      * The fitted term structure sampled across tenors, for the curve chart.
      */
     #[Route('/api/bond-curve', name: 'api_bond_curve')]
-    public function curve(\Redis $redis, BondPricingEngine $pricingEngine): JsonResponse
+    public function curve(MacroStateProvider $macroStateProvider, BondPricingEngine $pricingEngine): JsonResponse
     {
-        return $this->json($this->sampleCurve($pricingEngine, $this->readMacroState($redis)));
+        return $this->json($this->sampleCurve($pricingEngine, $macroStateProvider->liveState()));
     }
 
     /**
@@ -193,21 +186,5 @@ class BondController extends AbstractController
             ['label' => '10Y', 'tenor' => 10.0, 'yield' => $macro->yield10y],
             ['label' => '30Y', 'tenor' => 30.0, 'yield' => $macro->yield30y],
         ];
-    }
-
-    /**
-     * The live macro state, or engine defaults when the ticker has never run.
-     *
-     * A missing key is a fresh database rather than an error: the page still has to render, with a curve
-     * built from the engine's own starting factors instead of a flat zero line.
-     */
-    private function readMacroState(\Redis $redis): MacroStateDTO
-    {
-        $json = $redis->get('macroeconomic_state');
-        $raw = $json ? json_decode($json, true) : null;
-
-        return is_array($raw)
-            ? MacroStateDTO::fromArray($raw)
-            : MacroStateDTO::fromMacroState(new \App\Service\Macro\MacroState());
     }
 }

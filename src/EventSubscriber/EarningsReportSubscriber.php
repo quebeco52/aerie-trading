@@ -170,10 +170,8 @@ class EarningsReportSubscriber implements EventSubscriberInterface
      */
     private function buildStreamDetails(\App\DTO\EarningsSimulationContext $ctx, \App\Entity\Stock $stock): array
     {
-        $previousReport = $this->entityManager->getRepository(\App\Entity\CorporateReport::class)->findOneBy(
-            ['stock' => $stock],
-            ['recordedAt' => 'DESC']
-        );
+        $previousReport = $this->entityManager->getRepository(\App\Entity\CorporateReport::class)
+            ->findLatestFor($stock);
         $previousStreams = $previousReport ? ($previousReport->getRevenueStreams() ?? []) : [];
 
         $streamDetails = [];

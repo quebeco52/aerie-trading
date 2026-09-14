@@ -111,23 +111,14 @@ class PriceChangeFeed
      */
     private function oldestPersistedPriceInLookback(Stock $stock): ?float
     {
-        /** @var list<array{price: string|float|null}> $rows */
-        $rows = $this->entityManager->getRepository(StockHistory::class)->createQueryBuilder('h')
-            ->select('h.price')
-            ->andWhere('h.stock = :stock')
-            ->setParameter('stock', $stock)
-            ->orderBy('h.recordedAt', 'DESC')
-            ->setMaxResults($this->historyRowsPerLookback())
-            ->getQuery()
-            ->getScalarResult();
+        $prices = $this->entityManager->getRepository(StockHistory::class)
+            ->findRecentPrices($stock, $this->historyRowsPerLookback());
 
-        if ($rows === []) {
+        if ($prices === []) {
             return null;
         }
 
-        $oldest = $rows[count($rows) - 1]['price'] ?? null;
-
-        return $oldest === null ? null : (float) $oldest;
+        return $prices[count($prices) - 1];
     }
 
     /**

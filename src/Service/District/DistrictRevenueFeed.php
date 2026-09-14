@@ -72,16 +72,10 @@ class DistrictRevenueFeed
             return $mixByTicker;
         }
 
-        // One query for the whole street instead of one per tenant. Rows arrive grouped by stock
-        // and newest-first within a stock, so the first HISTORY_QUARTERS rows seen for a ticker
-        // are its history, newest first; the rest of that ticker's rows are skipped.
-        $rows = $this->entityManager->getRepository(CorporateReport::class)->createQueryBuilder('r')
-            ->andWhere('r.stock IN (:stocks)')
-            ->setParameter('stocks', $stocks)
-            ->orderBy('r.stock', 'ASC')
-            ->addOrderBy('r.recordedAt', 'DESC')
-            ->getQuery()
-            ->getResult();
+        // Rows arrive grouped by stock and newest-first within a stock, so the first
+        // HISTORY_QUARTERS rows seen for a ticker are its history, newest first; the rest are skipped.
+        $rows = $this->entityManager->getRepository(CorporateReport::class)
+            ->findForStocksNewestFirst($stocks);
 
         /** @var array<string, list<CorporateReport>> $historyByTicker */
         $historyByTicker = [];

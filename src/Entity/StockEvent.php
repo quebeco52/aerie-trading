@@ -5,7 +5,7 @@ namespace App\Entity;
 use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\Mapping as ORM;
 
-#[ORM\Entity]
+#[ORM\Entity(repositoryClass: \App\Repository\StockEventRepository::class)]
 #[ORM\Table(name: 'stock_events')]
 #[ORM\Index(name: 'idx_stock_event_recorded', columns: ['stock_id', 'recorded_at'])]
 class StockEvent

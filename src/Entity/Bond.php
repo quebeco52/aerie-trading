@@ -22,7 +22,7 @@ use Doctrine\ORM\Mapping as ORM;
  * configurable and a bond's economics depend on how much simulated time is left, never on how long the
  * process has been running.
  */
-#[ORM\Entity]
+#[ORM\Entity(repositoryClass: \App\Repository\BondRepository::class)]
 #[ORM\Table(name: 'bonds')]
 #[ORM\Index(name: 'idx_bond_status_matures', columns: ['status', 'matures_at_time'])]
 #[ORM\Index(name: 'idx_bond_on_the_run', columns: ['tenor_years', 'is_on_the_run'])]

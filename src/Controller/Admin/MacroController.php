@@ -11,9 +11,9 @@ use Symfony\Component\Security\Http\Attribute\IsGranted;
 class MacroController extends AbstractController
 {
     #[Route('/admin/macro', name: 'admin_macro')]
-    public function index(\Redis $redis): Response
+    public function index(\Redis $redis, \App\Service\Macro\MacroStateProvider $macroStateProvider): Response
     {
-        $macroState = json_decode($redis->get('macroeconomic_state') ?: '{}', true);
+        $macroState = $macroStateProvider->livePayload();
         $liveSectors = json_decode($redis->get('macro_sectors_live') ?: '{}', true);
 
         return $this->render('admin/macroDashboard.html.twig', [

@@ -3,7 +3,7 @@
 namespace App\Controller;
 
 use App\Entity\Stock;
-use Doctrine\ORM\EntityManagerInterface;
+use App\Repository\StockRepository;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
@@ -13,7 +13,7 @@ use Symfony\Component\Routing\Attribute\Route;
 class SearchController extends AbstractController
 {
     #[Route('/search/autocomplete', name: 'app_search_autocomplete', methods: ['GET'])]
-    public function autocomplete(Request $request, EntityManagerInterface $entityManager): JsonResponse
+    public function autocomplete(Request $request, StockRepository $stocks): JsonResponse
     {
         $query = $request->query->get('q', '');
         
@@ -21,24 +21,16 @@ class SearchController extends AbstractController
             return new JsonResponse([]);
         }
 
-        // Find up to 5 stocks that match either the ticker or the company name
-        $stocks = $entityManager->getRepository(Stock::class)->createQueryBuilder('s')
-            ->where('s.ticker LIKE :query OR s.name LIKE :query')
-            ->setParameter('query', '%' . $query . '%')
-            ->setMaxResults(5)
-            ->getQuery()
-            ->getResult();
-
         $results = array_map(fn(Stock $stock) => [
             'ticker' => $stock->getTicker(),
             'name' => $stock->getName(),
-        ], $stocks);
+        ], $stocks->searchByTickerOrName($query));
 
         return new JsonResponse($results);
     }
 
     #[Route('/search', name: 'app_search', methods: ['GET'])]
-    public function search(Request $request, EntityManagerInterface $entityManager): Response
+    public function search(Request $request, StockRepository $stocks): Response
     {
         $query = $request->query->get('q', '');
 
@@ -46,14 +38,8 @@ class SearchController extends AbstractController
             return $this->redirect('/');
         }
 
-        // Determine the absolute best match if the user hit "Enter" without clicking an option
-        $stock = $entityManager->getRepository(Stock::class)->createQueryBuilder('s')
-            ->where('s.ticker = :exact OR s.ticker LIKE :query OR s.name LIKE :query')
-            ->setParameter('exact', strtoupper($query))
-            ->setParameter('query', '%' . $query . '%')
-            ->setMaxResults(1)
-            ->getQuery()
-            ->getOneOrNullResult();
+        // Land on the company the reader spelled out, not on whichever partial match sorts first.
+        $stock = $stocks->findBestMatch($query);
 
         if ($stock) {
             return $this->redirect('/stock/' . $stock->getTicker());

@@ -36,17 +36,17 @@ final class AssetResolver
      */
     public function resolve(string $ticker): ?ResolvedAssetDTO
     {
-        $stock = $this->em->getRepository(Stock::class)->findOneBy(['ticker' => $ticker]);
+        $stock = $this->em->getRepository(Stock::class)->findOneByTicker($ticker);
         if ($stock instanceof Stock) {
             return new ResolvedAssetDTO($stock, 'STOCK');
         }
 
-        $etf = $this->em->getRepository(Etf::class)->findOneBy(['ticker' => $ticker]);
+        $etf = $this->em->getRepository(Etf::class)->findOneByTicker($ticker);
         if ($etf instanceof Etf) {
             return new ResolvedAssetDTO($etf, 'ETF');
         }
 
-        $bond = $this->em->getRepository(Bond::class)->findOneBy(['ticker' => $ticker]);
+        $bond = $this->em->getRepository(Bond::class)->findOneByTicker($ticker);
         if ($bond instanceof Bond) {
             return new ResolvedAssetDTO($bond, 'BOND');
         }

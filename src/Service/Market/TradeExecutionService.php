@@ -184,7 +184,7 @@ class TradeExecutionService
                         }
                         $this->assetResolver->removeFromHolding($userAsset, $quantity);
                     }
-                    $order->setStatus('OPEN');
+                    $order->setStatus(TradeOrder::STATUS_OPEN);
                 }
                 
                 $this->em->persist($order);
@@ -198,7 +198,7 @@ class TradeExecutionService
             $this->em->flush();
             $this->em->getConnection()->commit();
 
-            if ($orderType === 'LIMIT' && $order->getStatus() === 'OPEN') {
+            if ($orderType === 'LIMIT' && $order->getStatus() === TradeOrder::STATUS_OPEN) {
                 $this->updateRedisBounds($ticker);
             }
 
@@ -384,7 +384,7 @@ class TradeExecutionService
         $order->setExecutionPrice(MathUtility::formatDecimal($quote->executionPrice, 4));
         $order->setSpreadCost(MathUtility::formatDecimal($quote->spreadCost, 4));
         $order->setImpactCost(MathUtility::formatDecimal($quote->impactCost, 4));
-        $order->setStatus('FILLED');
+        $order->setStatus(TradeOrder::STATUS_FILLED);
         $order->setFilledAt(new \DateTime());
 
         if ($assetType === 'STOCK') {
@@ -429,7 +429,7 @@ class TradeExecutionService
             $this->em->lock($user, \Doctrine\DBAL\LockMode::PESSIMISTIC_WRITE);
             $this->em->refresh($user);
 
-            $order = $this->em->getRepository(TradeOrder::class)->findOneBy(['id' => $orderId, 'user' => $user, 'status' => 'OPEN']);
+            $order = $this->em->getRepository(TradeOrder::class)->findOpenForUserById($user, $orderId);
             if (!$order) {
                 throw new \Exception('Order not found or already processed.');
             }
@@ -452,7 +452,7 @@ class TradeExecutionService
                 $this->assetResolver->addToHolding($user, $asset, $userAsset, $quantity);
             }
 
-            $order->setStatus('CANCELLED');
+            $order->setStatus(TradeOrder::STATUS_CANCELLED);
             $this->em->persist($order);
             $this->em->persist($user);
             $this->em->flush();
@@ -472,7 +472,7 @@ class TradeExecutionService
     {
         // Runs on the messenger worker: ProcessLimitOrdersMessage is routed to the async transport, so the
         // ticker only enqueues and never carries these queries or row locks inside its tick transaction.
-        $openOrders = $this->em->getRepository(TradeOrder::class)->findBy(['ticker' => $ticker, 'status' => 'OPEN']);
+        $openOrders = $this->em->getRepository(TradeOrder::class)->findOpenByTicker($ticker);
 
         foreach ($openOrders as $order) {
             $limitPrice = (float) $order->getLimitPrice();
@@ -510,7 +510,7 @@ class TradeExecutionService
             // against escrow that has already been refunded.
             $this->em->refresh($order);
 
-            if ($order->getStatus() !== 'OPEN') {
+            if ($order->getStatus() !== TradeOrder::STATUS_OPEN) {
                 $this->em->getConnection()->rollBack();
                 return;
             }

@@ -3,12 +3,11 @@
 namespace App\Controller;
 
 use App\Entity\Stock;
-use App\DTO\MacroStateDTO;
+use App\Repository\EtfRepository;
+use App\Repository\StockRepository;
+use App\Service\View\StockPageBuilder;
 use App\Entity\Etf;
 use App\Entity\User;
-use App\Entity\UserStock;
-use App\Entity\StockEvent;
-use App\Entity\EtfEvent;
 use App\Service\Market\PriceBarAggregator;
 use Doctrine\ORM\EntityManagerInterface;
 use Redis;
@@ -24,334 +23,26 @@ use Symfony\Component\Routing\Attribute\Route;
 class StockController extends AbstractController
 {
     /**
-     * Displays the detailed view for a specific stock or ETF.
+     * The instrument page for a listed company or for the index fund.
      *
-     * @param string                 $ticker      The ticker symbol of the asset.
-     * @param EntityManagerInterface $entityManager The entity manager for database operations.
-     *
-     * @return Response Returns the rendered view with asset details.
+     * Composition lives in App\Service\View\StockPageBuilder; this resolves the ticker and renders.
      */
     #[Route('/stock/{ticker}', name: 'app_stock_view')]
     public function view(
         string $ticker,
-        EntityManagerInterface $entityManager,
-        \Redis $redis,
-        \App\Service\Math\CorporateMetrics $corporateMetrics,
-        \App\Service\Market\MarketEngine $marketEngine,
-        \App\Service\Corporate\DebtEngine $debtEngine,
-        \App\Service\Market\PriceChangeFeed $priceChangeFeed,
-        \App\Service\User\CostBasisCalculator $costBasis,
-        \App\Service\User\DividendIncomeCalculator $dividendIncome,
-        \App\Service\Market\LiquidityEngine $liquidityEngine,
-        \App\Service\Market\SecuritiesLendingDesk $lendingDesk
-    ): Response
-    {
-        $isEtf = false;
-        $asset = $entityManager->getRepository(Stock::class)->findOneBy(['ticker' => $ticker]);
-        if (!$asset) {
-            $asset = $entityManager->getRepository(Etf::class)->findOneBy(['ticker' => $ticker]);
-            $isEtf = true;
-        }
-        if (!$asset) {
+        StockRepository $stocks,
+        EtfRepository $etfs,
+        StockPageBuilder $pageBuilder
+    ): Response {
+        $asset = $stocks->findOneByTicker($ticker) ?? $etfs->findOneByTicker($ticker);
+        if ($asset === null) {
             throw $this->createNotFoundException('Ticker not found');
         }
 
         /** @var User|null $currentUser */
         $currentUser = $this->getUser();
 
-        $macroStateJson = $redis->get('macroeconomic_state');
-        $rawMacroState = $macroStateJson ? json_decode($macroStateJson, true) : [
-            'inflation' => 0.02,
-            'output_gap' => 0.00,
-            'policy_rate' => 0.04,
-            'yield_10y' => 0.045,
-            'nominal_gdp_index' => 1.0
-        ];
-
-        // Hydrate the raw array into your strongly-typed DTO!
-        $macroState = MacroStateDTO::fromArray($rawMacroState);
-
-        $userQuantity = 0;
-        if ($currentUser) {
-            if ($isEtf) {
-                $userAsset = $entityManager->getRepository(\App\Entity\UserEtf::class)->findOneBy(['user' => $currentUser, 'etf' => $asset]);
-            } else {
-                $userAsset = $entityManager->getRepository(UserStock::class)->findOneBy(['user' => $currentUser, 'stock' => $asset]);
-            }
-            $userQuantity = $userAsset ? $userAsset->getQuantity() : 0;
-        }
-
-        $marketCap = 0;
-        $peRatio = null;
-        $targetPE = 20.00;
-        $marketShare = 0;
-        $isFinancial = false;
-        $businessModel = 'none';
-        $investedCapital = 0.0;
-        $analystTargets = null;
-        $lifecycleStage = null;
-        $dividendYield = 0.0;
-
-        if (!$isEtf) {
-            $isBankrupt = $asset->isBankrupt();
-            $marketCap = $isBankrupt ? 0.0 : ((float) $asset->getPrice() * (float) $asset->getSharesOutstanding());
-            $eps = $isBankrupt ? 0.0 : (float) $asset->getEarningsPerShare();
-            $peRatio = (!$isBankrupt && $eps > 0) ? ((float) $asset->getPrice() / $eps) : null;
-
-            $nominalGdpIndex = $macroState->nominalGdpIndex;
-            $samRatio = (float) $asset->getSamRatio();
-
-            $businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$asset->getIndustry() ?? 'General']['business_model'] ?? 'none';
-            $isFinancial = \App\Data\Sectors::isFinancial($businessModel);
-            $evaluationCapital = $isFinancial ? (float) $asset->getTotalEquity() : $asset->getInvestedCapital();
-            $investedCapital = $isBankrupt ? 0.0 : (float) $asset->getInvestedCapital();
-
-            $marketShare = $isBankrupt ? 0.0 : min(0.9999, $corporateMetrics->calculateMarketShare($evaluationCapital, $nominalGdpIndex, $samRatio));
-
-            // Dickinson (2011) stage stored by the last quarterly report; null until the first report lands.
-            $lifecycleStage = $asset->getLifecycleStage();
-
-            // lastDividend is the quarterly per-share payment (Lintner step each report), so the yield annualises it.
-            $lastDividend = (float) $asset->getLastDividend();
-            $priceForYield = (float) $asset->getPrice();
-            $dividendYield = (!$isBankrupt && $priceForYield > 0.0 && $lastDividend > 0.0)
-                ? ($lastDividend * 4.0) / $priceForYield
-                : 0.0;
-
-            if (!$isBankrupt) {
-                $currentPrice = (float) $asset->getPrice();
-                $health = $debtEngine->analyzeDebtHealth($asset, $macroState);
-                $industry = $asset->getIndustry() ?: 'General';
-                $strategy = \App\Data\Sectors::getBusinessModelStrategy($businessModel);
-                $shares = max(1.0, (float) $asset->getSharesOutstanding());
-                $revenue = (float) $asset->getTotalRevenue();
-                $debt = (float) $asset->getTotalDebt();
-                $treasury = (float) $asset->getCorporateTreasury();
-                $netDebt = max(0.0, $strategy->getNetDebtCapital($debt, (float) $asset->getWholesaleDebt(), $treasury));
-                $baselinePE = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['pe_ratio'] ?? 20.0;
-                $secularGrowth = $strategy->getSecularGrowthRate($asset);
-
-                $pricingCtx = new \App\DTO\MarketPricingContext(
-                    currentPrice: $currentPrice,
-                    currentVolatility: (float) ($asset->getCurrentVolatility() ?? $asset->getVolatility()),
-                    longTermVolatility: (float) $asset->getVolatility(),
-                    earningsPerShare: (float) $asset->getEarningsPerShare(),
-                    dt: 0.0,
-                    beta: (float) $asset->getBeta(),
-                    macroState: $macroState,
-                    fcfPerShare: $asset->getFreeCashFlowPerShare() !== null ? (float) $asset->getFreeCashFlowPerShare() : null,
-                    bookValuePerShare: (float) $asset->getBookValuePerShare(),
-                    currentRoic: (float) ($asset->getCurrentRoic() ?: $asset->getBaselineRoic()),
-                    roicTtm: (float) $asset->getRoicTtm(),
-                    dividendPerShare: (float) $asset->getLastDividend(),
-                    liveWacc: $health->wacc ?? 0.08,
-                    baselineIndustryPE: $baselinePE,
-                    revenuePerShare: $revenue / $shares,
-                    businessModel: $businessModel,
-                    liveCostOfEquity: $health->costOfEquity ?? 0.10,
-                    netDebtPerShare: $netDebt / $shares,
-                    secularGrowth: $secularGrowth,
-                    baselineRoic: (float) ($asset->getBaselineRoic() ?? 0.10),
-                    baselineMargin: (float) ($asset->getOperatingMargin() ?? 0.20),
-                    investedCapitalPerShare: $asset->getInvestedCapital() / max(1.0, (float) $asset->getSharesOutstanding())
-                );
-
-                $pricingResult = $marketEngine->calculateNextPrice($pricingCtx);
-                $analystTargets = $pricingResult['analyst_targets'];
-                $fairValue = (float) ($pricingResult['perceived_fair_value'] ?? 0.0);
-                $analystTargets['consensus'] = $fairValue > 0 ? $fairValue : max($analystTargets['growth_analyst'], $analystTargets['income_analyst'], $analystTargets['value_analyst']);
-
-                $isOutperform = $analystTargets['consensus'] > ($currentPrice * 1.05);
-                $isUnderperform = $analystTargets['consensus'] < ($currentPrice * 0.95);
-                $analystTargets['rating'] = $isOutperform ? 'Outperform' : ($isUnderperform ? 'Underperform' : 'Neutral');
-                $analystTargets['upside_pct'] = $currentPrice > 0 ? (($analystTargets['consensus'] - $currentPrice) / $currentPrice) * 100 : 0.0;
-            }
-        }
-
-        $generalInfo = $asset->getDescription();
-        $quote = \App\Data\StockInfo::getQuote($ticker);
-
-        $allAssets = [];
-        $pieLabels = [];
-        $pieData = [];
-        $sharesMap = [];
-        $components = [];
-
-        if ($isEtf) {
-            $allAssets = $entityManager->getRepository(Stock::class)->findAll();
-            $totalMcap = 0.0;
-            foreach ($allAssets as $stock) {
-                if ($stock->isBankrupt()) continue;
-                $sPrice = (float) $stock->getPrice();
-                $sShares = (float) $stock->getSharesOutstanding();
-                $sMcap = $sPrice * $sShares;
-                $totalMcap += $sMcap;
-            }
-
-            foreach ($allAssets as $stock) {
-                if ($stock->isBankrupt()) continue;
-                $sPrice = (float) $stock->getPrice();
-                $sShares = (float) $stock->getSharesOutstanding();
-                $sMcap = $sPrice * $sShares;
-                $weight = $totalMcap > 0 ? ($sMcap / $totalMcap) * 100 : 0;
-
-                $pieLabels[] = $stock->getTicker();
-                $pieData[] = $sMcap;
-                $sharesMap[$stock->getTicker()] = $sShares;
-
-                $components[] = [
-                    'ticker' => $stock->getTicker(),
-                    'name' => $stock->getName(),
-                    'sector' => $stock->getSector(),
-                    'price' => $sPrice,
-                    'marketCap' => $sMcap,
-                    'weight' => $weight,
-                ];
-            }
-
-            usort($components, fn($a, $b) => $b['weight'] <=> $a['weight']);
-        }
-
-        $events = [];
-
-        if (!$isEtf) {
-            $events = $entityManager->getRepository(StockEvent::class)->findBy(
-                ['stock' => $asset],
-                ['recordedAt' => 'DESC'], // Newest first
-                15 // Limit to 15
-            );
-        } else {
-            $events = $entityManager->getRepository(EtfEvent::class)->findBy(
-                ['etf' => $asset],
-                ['recordedAt' => 'DESC'],
-                15 // Limit to 15
-            );
-        }
-
-        $economicCycle = $macroState->economicCycleLabel();
-
-        $openOrders = [];
-        $userTrades = [];
-        $userAvgCost = (float) $asset->getPrice();
-        $userUnrealizedPnL = 0.0;
-        $userUnrealizedPnLPercent = 0.0;
-        $userDividendIncome = 0.0;
-
-        if ($currentUser) {
-            // Lifetime dividend cash this ticker has paid the viewer. Read outside the userQuantity > 0
-            // branch below: income already received survives selling out of the position, and zeroing it
-            // for a closed position would hide cash the user actually holds.
-            $userDividendIncome = $dividendIncome->totalsByTicker($currentUser)[$ticker] ?? 0.0;
-
-            $openOrders = $entityManager->getRepository(\App\Entity\TradeOrder::class)->findBy([
-                'user' => $currentUser,
-                'ticker' => $ticker,
-                'status' => 'OPEN'
-            ], ['createdAt' => 'DESC']);
-
-            $userTrades = $entityManager->getRepository(\App\Entity\TradeOrder::class)->findBy([
-                'user' => $currentUser,
-                'ticker' => $ticker,
-                'status' => ['FILLED', 'CANCELLED']
-            ], ['createdAt' => 'DESC'], 20);
-
-            if ($userQuantity > 0) {
-                // Same weighted-average basis the dashboard reports. Averaging BUYs alone and ignoring SELLs
-                // gave this page a different cost, and a different P&L, for the very same position.
-                $filledOrders = $entityManager->createQuery(
-                    'SELECT o FROM App\Entity\TradeOrder o WHERE o.user = :user AND o.ticker = :ticker AND o.status = :status ORDER BY o.createdAt ASC'
-                )->setParameter('user', $currentUser)->setParameter('ticker', $ticker)->setParameter('status', 'FILLED')->getResult();
-
-                $userAvgCost = $costBasis->calculateForTicker($filledOrders, $ticker) ?? $userAvgCost;
-                $userPositionCost = $userAvgCost * $userQuantity;
-                $currentVal = (float)$asset->getPrice() * $userQuantity;
-                $userUnrealizedPnL = $currentVal - $userPositionCost;
-                $userUnrealizedPnLPercent = $userPositionCost > 0 ? ($userUnrealizedPnL / $userPositionCost) * 100 : 0.0;
-            }
-        }
-
-        // Fetch Sector Peers for comparative analysis
-        $peers = [];
-        if (!$isEtf && $asset->getSector()) {
-            $peerEntities = $entityManager->getRepository(Stock::class)->findBy(['sector' => $asset->getSector()]);
-            foreach ($peerEntities as $p) {
-                if ($p->getId() === $asset->getId()) continue;
-                $pPrice = (float) $p->getPrice();
-                $pShares = (float) $p->getSharesOutstanding();
-                $pEps = (float) $p->getEarningsPerShare();
-                $pMcap = $p->isBankrupt() ? 0.0 : ($pPrice * $pShares);
-                $pPe = (!$p->isBankrupt() && $pEps > 0) ? ($pPrice / $pEps) : null;
-                $pModel = \App\Data\Sectors::INDUSTRY_METRICS[$p->getIndustry() ?? 'General']['business_model'] ?? 'none';
-                $pIsFin = \App\Data\Sectors::isFinancial($pModel);
-                $pRoic = $pIsFin ? ((float)$p->getCurrentRoe() ?: (float)$p->getBaselineRoe()) : ((float)$p->getCurrentRoic() ?: (float)$p->getBaselineRoic());
-
-                $peers[] = [
-                    'ticker' => $p->getTicker(),
-                    'name' => $p->getName(),
-                    'industry' => $p->getIndustry(),
-                    'price' => $pPrice,
-                    'marketCap' => $pMcap,
-                    'peRatio' => $pPe,
-                    'roic' => $pRoic,
-                    'totalEquity' => (float)$p->getTotalEquity(),
-                    'isBankrupt' => $p->isBankrupt(),
-                ];
-            }
-            usort($peers, fn($a, $b) => $b['marketCap'] <=> $a['marketCap']);
-        }
-
-        // Null when the ticker has no usable buffered history; the header prints that as
-        // unknown rather than as a flat 0.00%.
-        // Etf carries no bankruptcy flag, so the delisted check only applies to a Stock.
-        $changePercent = (!$isEtf && $asset->isBankrupt())
-            ? null
-            : $priceChangeFeed->changeForTicker($ticker, (float) $asset->getPrice());
-
-        return $this->render('stock/index.html.twig', [
-            'asset' => $asset,
-            'changePercent' => $changePercent,
-            'isEtf' => $isEtf,
-            'isFinancial' => $isFinancial,
-            'businessModel' => $businessModel,
-            'investedCapital' => $investedCapital,
-            'userQuantity' => $userQuantity,
-            'userAvgCost' => $userAvgCost,
-            'userUnrealizedPnL' => $userUnrealizedPnL,
-            'userUnrealizedPnLPercent' => $userUnrealizedPnLPercent,
-            'userDividendIncome' => $userDividendIncome,
-            'marketCap' => $marketCap,
-            'peRatio' => $peRatio,
-            'targetPE' => $targetPE,
-            'generalInfo' => $generalInfo,
-            'allAssets' => $allAssets,
-            'events' => $events,
-            'ticksPerYear' => (int) ($_ENV['SIM_TICKS_PER_YEAR'] ?? 14400),
-            'economic_cycle' => $economicCycle,
-            'macro' => $macroState,
-            'marketShare' => $marketShare,
-            'quote' => $quote,
-            'openOrders' => $openOrders,
-            'userTrades' => $userTrades,
-            'peers' => $peers,
-            'pieLabels' => $pieLabels,
-            'pieData' => $pieData,
-            'sharesMap' => $sharesMap,
-            'components' => $components,
-            'analystTargets' => $analystTargets,
-            'lifecycleStage' => $lifecycleStage,
-            'lifecycleStages' => \App\Data\LifecycleStage::cases(),
-            'dividendYield' => $dividendYield,
-            // Depth and the cost of crossing it. Shown because a page that quotes a price without saying
-            // what size costs is only telling half of what a trade is going to do.
-            'advShares' => $isEtf ? 0.0 : $liquidityEngine->averageDailyVolume($asset),
-            'halfSpread' => $isEtf
-                ? \App\Service\Math\FinancialConstants::ETF_HALF_SPREAD
-                : $liquidityEngine->halfSpreadFraction($asset),
-            // What it costs to be short this name, and how much of it is left to borrow.
-            'borrowFee' => $isEtf ? 0.0 : $lendingDesk->borrowFee($asset),
-            'availableToBorrow' => $isEtf ? 0.0 : $lendingDesk->availableToBorrow($asset),
-            'shortUtilization' => $isEtf ? 0.0 : $lendingDesk->utilization($asset),
-        ]);
+        return $this->render('stock/index.html.twig', $pageBuilder->build($asset, $ticker, $currentUser));
     }
 
     /**
@@ -404,21 +95,21 @@ class StockController extends AbstractController
         $conn = $entityManager->getConnection();
 
         // Fetch the target asset ID
-        $stock = $entityManager->getRepository(Stock::class)->findOneBy(['ticker' => $ticker]);
+        $stock = $entityManager->getRepository(Stock::class)->findOneByTicker($ticker);
         if ($stock) {
             $targetId = $stock->getId();
             $tableName = 'stock_history';
             $foreignKey = 'stock_id';
             $priceColumn = 'price';
         } else {
-            $etf = $entityManager->getRepository(Etf::class)->findOneBy(['ticker' => $ticker]);
+            $etf = $entityManager->getRepository(Etf::class)->findOneByTicker($ticker);
             if ($etf) {
                 $targetId = $etf->getId();
                 $tableName = 'etf_history';
                 $foreignKey = 'etf_id';
                 $priceColumn = 'price';
             } else {
-                $bond = $entityManager->getRepository(\App\Entity\Bond::class)->findOneBy(['ticker' => $ticker]);
+                $bond = $entityManager->getRepository(\App\Entity\Bond::class)->findOneByTicker($ticker);
                 if (!$bond) return $this->json([]);
 
                 $targetId = $bond->getId();
@@ -479,7 +170,7 @@ class StockController extends AbstractController
         $ticker = $request->query->get('ticker');
         if (!$ticker) return $this->json([]);
 
-        $stock = $entityManager->getRepository(Stock::class)->findOneBy(['ticker' => $ticker]);
+        $stock = $entityManager->getRepository(Stock::class)->findOneByTicker($ticker);
         if (!$stock) return $this->json([]); // ETFs don't have corporate reports
 
         $conn = $entityManager->getConnection();
@@ -513,7 +204,7 @@ class StockController extends AbstractController
         $ticker = $request->query->get('ticker');
         if (!$ticker) return $this->json([]);
 
-        $stock = $entityManager->getRepository(Stock::class)->findOneBy(['ticker' => $ticker]);
+        $stock = $entityManager->getRepository(Stock::class)->findOneByTicker($ticker);
         if (!$stock) return $this->json([]);
 
         $conn = $entityManager->getConnection();

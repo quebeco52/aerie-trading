@@ -13,6 +13,9 @@ use App\Entity\UserEtf;
 use App\Entity\UserStock;
 use App\Service\Market\AssetResolver;
 use Doctrine\ORM\EntityManagerInterface;
+use App\Repository\BondRepository;
+use App\Repository\EtfRepository;
+use App\Repository\StockRepository;
 use Doctrine\ORM\EntityRepository;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\TestCase;
@@ -27,6 +30,18 @@ use PHPUnit\Framework\TestCase;
 #[AllowMockObjectsWithoutExpectations]
 class AssetResolverTest extends TestCase
 {
+    /**
+     * The repository class each tradable entity resolves through, so a stub answers the same
+     * ticker lookup the resolver actually calls rather than a generic findOneBy.
+     *
+     * @var array<class-string, class-string>
+     */
+    private const REPOSITORY_FOR = [
+        Stock::class => StockRepository::class,
+        Etf::class => EtfRepository::class,
+        Bond::class => BondRepository::class,
+    ];
+
     /** @var array<string, object> */
     private array $repositories = [];
 
@@ -34,26 +49,34 @@ class AssetResolverTest extends TestCase
     {
         $em = $this->createMock(EntityManagerInterface::class);
         $em->method('getRepository')->willReturnCallback(
-            fn (string $class): object => $this->repositories[$class] ?? $this->emptyRepository()
+            fn (string $class): object => $this->repositories[$class] ?? $this->emptyRepository($class)
         );
 
         return new AssetResolver($em);
     }
 
-    private function emptyRepository(): object
+    private function emptyRepository(string $class = Stock::class): object
     {
-        $repo = $this->createStub(EntityRepository::class);
-        $repo->method('findOneBy')->willReturn(null);
-
-        return $repo;
+        return $this->stubRepository($class, null);
     }
 
     private function repositoryReturning(string $class, ?object $entity): void
     {
-        $repo = $this->createStub(EntityRepository::class);
-        $repo->method('findOneBy')->willReturn($entity);
+        $this->repositories[$class] = $this->stubRepository($class, $entity);
+    }
 
-        $this->repositories[$class] = $repo;
+    private function stubRepository(string $class, ?object $entity): object
+    {
+        $repositoryClass = self::REPOSITORY_FOR[$class] ?? EntityRepository::class;
+        $repo = $this->createStub($repositoryClass);
+
+        if ($repositoryClass === EntityRepository::class) {
+            $repo->method('findOneBy')->willReturn($entity);
+        } else {
+            $repo->method('findOneByTicker')->willReturn($entity);
+        }
+
+        return $repo;
     }
 
     public function testResolvesAStockAheadOfTheOtherClasses(): void

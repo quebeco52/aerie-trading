@@ -52,7 +52,8 @@ final class MacroStateCycleLabelTest extends TestCase
     {
         $root = \dirname(__DIR__, 2);
 
-        foreach (['/src/Command/MarketTickerCommand.php', '/src/Controller/StockController.php'] as $path) {
+        // The ticker publishes the label on the wire; the page builder renders it server-side.
+        foreach (['/src/Command/MarketTickerCommand.php', '/src/Service/View/StockPageBuilder.php'] as $path) {
             $source = file_get_contents($root . $path);
             $this->assertIsString($source);
             $this->assertStringContainsString(
@@ -62,10 +63,12 @@ final class MacroStateCycleLabelTest extends TestCase
             );
         }
 
-        $this->assertStringNotContainsString(
-            "economy_state",
-            (string) file_get_contents($root . '/src/Controller/StockController.php'),
-            'The dead Redis key must not come back.'
-        );
+        foreach (['/src/Controller/StockController.php', '/src/Service/View/StockPageBuilder.php'] as $path) {
+            $this->assertStringNotContainsString(
+                "economy_state",
+                (string) file_get_contents($root . $path),
+                'The dead Redis key must not come back.'
+            );
+        }
     }
 }

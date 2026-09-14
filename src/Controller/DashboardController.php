@@ -3,13 +3,7 @@
 
 namespace App\Controller;
 
-use App\Entity\Bond;
-use App\Entity\Etf;
-use App\Entity\Stock;
 use App\Entity\User;
-use App\Entity\UserBond;
-use App\Entity\UserEtf;
-use App\Entity\UserStock;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -24,6 +18,11 @@ use Symfony\Component\Security\Http\Attribute\IsGranted;
 #[IsGranted('ROLE_USER')]
 class DashboardController extends AbstractController
 {
+    // --- Portfolio Display ---
+
+    /** Settled orders listed in the trade history; older fills are portfolio history, not a working record. */
+    private const TRADE_HISTORY_ROWS = 50;
+
     /**
      * Renders the user's portfolio, including holdings, cash balance, performance metrics,
      * asset allocations, active orders, and trade execution history.
@@ -31,6 +30,8 @@ class DashboardController extends AbstractController
     #[Route('/dashboard', name: 'app_dashboard')]
     public function index(
         EntityManagerInterface $entityManager,
+        \App\Repository\HoldingRepository $holdings,
+        \App\Repository\TradeOrderRepository $orders,
         \App\Service\User\CostBasisCalculator $costBasis,
         \App\Service\User\DividendIncomeCalculator $dividendIncome,
         \App\Service\User\CouponIncomeCalculator $couponIncome,
@@ -40,23 +41,12 @@ class DashboardController extends AbstractController
         /** @var User $user */
         $user = $this->getUser();
 
-        // Fetch holdings with joined assets to completely eliminate N+1 queries
-        $stockHoldings = $entityManager->createQuery(
-            'SELECT us, s FROM App\Entity\UserStock us JOIN us.stock s WHERE us.user = :user'
-        )->setParameter('user', $user)->getResult();
+        // The holdings queries fetch-join their assets, so the loops below do not issue a query per row.
+        $stockHoldings = $holdings->findStockHoldings($user);
+        $etfHoldings = $holdings->findEtfHoldings($user);
+        $bondHoldings = $holdings->findBondHoldings($user);
 
-        $etfHoldings = $entityManager->createQuery(
-            'SELECT ue, e FROM App\Entity\UserEtf ue JOIN ue.etf e WHERE ue.user = :user'
-        )->setParameter('user', $user)->getResult();
-
-        $bondHoldings = $entityManager->createQuery(
-            'SELECT ub, b FROM App\Entity\UserBond ub JOIN ub.bond b WHERE ub.user = :user'
-        )->setParameter('user', $user)->getResult();
-
-        // Fetch all filled trade orders for this user to compute Average Cost Basis
-        $filledOrders = $entityManager->createQuery(
-            'SELECT o FROM App\Entity\TradeOrder o WHERE o.user = :user AND o.status = :status ORDER BY o.createdAt ASC'
-        )->setParameter('user', $user)->setParameter('status', 'FILLED')->getResult();
+        $filledOrders = $orders->findFilledForUser($user);
 
         $costBasisMap = $costBasis->calculate($filledOrders);
 
@@ -245,15 +235,8 @@ class DashboardController extends AbstractController
         // Sort holdings by market value descending
         usort($holdingsData, fn($a, $b) => $b['marketValue'] <=> $a['marketValue']);
 
-        // Query Open Limit Orders
-        $openOrders = $entityManager->createQuery(
-            'SELECT o FROM App\Entity\TradeOrder o WHERE o.user = :user AND o.status = :status ORDER BY o.createdAt DESC'
-        )->setParameter('user', $user)->setParameter('status', 'OPEN')->getResult();
-
-        // Query Historical Trades (up to 50 newest)
-        $tradeHistory = $entityManager->createQuery(
-            'SELECT o FROM App\Entity\TradeOrder o WHERE o.user = :user AND o.status IN (:statuses) ORDER BY o.createdAt DESC'
-        )->setParameter('user', $user)->setParameter('statuses', ['FILLED', 'CANCELLED'])->setMaxResults(50)->getResult();
+        $openOrders = $orders->findOpenForUser($user);
+        $tradeHistory = $orders->findSettledForUser($user, self::TRADE_HISTORY_ROWS);
 
         // Prepare Sector Diversification percentages
         $sectorBreakdown = [];

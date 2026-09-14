@@ -6,12 +6,10 @@ namespace App\Tests\Service\District;
 
 use App\Entity\CorporateReport;
 use App\Entity\Stock;
+use App\Repository\CorporateReportRepository;
 use App\Service\District\DistrictRevenueFeed;
 use App\Service\Math\MathUtility;
 use Doctrine\ORM\EntityManagerInterface;
-use Doctrine\ORM\EntityRepository;
-use Doctrine\ORM\Query;
-use Doctrine\ORM\QueryBuilder;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
@@ -27,28 +25,14 @@ class DistrictRevenueFeedTest extends TestCase
 {
     private EntityManagerInterface&MockObject $entityManager;
 
-    /** @var EntityRepository<CorporateReport>&MockObject */
-    private EntityRepository&MockObject $repository;
-    private QueryBuilder&MockObject $queryBuilder;
-    /** @var Query<int, mixed>&MockObject */
-    private Query&MockObject $query;
+    private CorporateReportRepository&MockObject $repository;
     private DistrictRevenueFeed $feed;
 
     protected function setUp(): void
     {
         $this->entityManager = $this->createMock(EntityManagerInterface::class);
-        $this->repository = $this->createMock(EntityRepository::class);
+        $this->repository = $this->createMock(CorporateReportRepository::class);
         $this->entityManager->method('getRepository')->willReturn($this->repository);
-
-        $this->queryBuilder = $this->createMock(QueryBuilder::class);
-        $this->repository->method('createQueryBuilder')->willReturn($this->queryBuilder);
-        $this->queryBuilder->method('andWhere')->willReturn($this->queryBuilder);
-        $this->queryBuilder->method('setParameter')->willReturn($this->queryBuilder);
-        $this->queryBuilder->method('orderBy')->willReturn($this->queryBuilder);
-        $this->queryBuilder->method('addOrderBy')->willReturn($this->queryBuilder);
-
-        $this->query = $this->createMock(Query::class);
-        $this->queryBuilder->method('getQuery')->willReturn($this->query);
 
         $this->feed = new DistrictRevenueFeed($this->entityManager, new MathUtility());
     }
@@ -91,7 +75,7 @@ class DistrictRevenueFeedTest extends TestCase
     public function testTenantWithNoReportGetsAnEmptyMixNotAMissingKey(): void
     {
         $stock = $this->makeStock('ROOK');
-        $this->query->method('getResult')->willReturn([]);
+        $this->repository->method('findForStocksNewestFirst')->willReturn([]);
 
         $result = $this->feed->latestRevenueMixByTicker([$stock]);
 
@@ -105,8 +89,8 @@ class DistrictRevenueFeedTest extends TestCase
         $lake = $this->makeStock('LAKE');
         $swan = $this->makeStock('SWAN');
 
-        $this->repository->expects($this->once())->method('createQueryBuilder');
-        $this->query->method('getResult')->willReturn([]);
+        $this->repository->expects($this->once())->method('findForStocksNewestFirst');
+        $this->repository->method('findForStocksNewestFirst')->willReturn([]);
 
         $this->feed->latestRevenueMixByTicker([$lake, $swan]);
     }
@@ -118,7 +102,7 @@ class DistrictRevenueFeedTest extends TestCase
         $older = $this->makeReport($stock, 100.0, ['fee_income' => 100.0], ['fee_income' => ['share' => 1.0, 'qoq_delta' => 0.0, 'drivers' => []]]);
 
         // The query orders newest-first per ticker, so the first row for a ticker is its latest.
-        $this->query->method('getResult')->willReturn([$newer, $older]);
+        $this->repository->method('findForStocksNewestFirst')->willReturn([$newer, $older]);
 
         $result = $this->feed->latestRevenueMixByTicker([$stock]);
 
@@ -141,7 +125,7 @@ class DistrictRevenueFeedTest extends TestCase
             ],
         );
 
-        $this->query->method('getResult')->willReturn([$report]);
+        $this->repository->method('findForStocksNewestFirst')->willReturn([$report]);
 
         $result = $this->feed->latestRevenueMixByTicker([$stock]);
 
@@ -162,7 +146,7 @@ class DistrictRevenueFeedTest extends TestCase
                 'net_interest_income' => ['share' => 0.80, 'qoq_delta' => 0.0, 'drivers' => []],
             ],
         );
-        $this->query->method('getResult')->willReturn([$report]);
+        $this->repository->method('findForStocksNewestFirst')->willReturn([$report]);
 
         $streams = $this->feed->latestRevenueMixByTicker([$stock])['LAKE']['streams'];
 
@@ -179,7 +163,7 @@ class DistrictRevenueFeedTest extends TestCase
             ['net_interest_income' => 100.0],
             ['net_interest_income' => ['share' => 1.0, 'qoq_delta' => 0.0, 'drivers' => []]],
         );
-        $this->query->method('getResult')->willReturn([$report]);
+        $this->repository->method('findForStocksNewestFirst')->willReturn([$report]);
 
         $stream = $this->feed->latestRevenueMixByTicker([$stock])['LAKE']['streams'][0];
 
@@ -196,7 +180,7 @@ class DistrictRevenueFeedTest extends TestCase
             ['directional_bets' => 50.0],
             ['directional_bets' => ['share' => 1.0, 'qoq_delta' => 0.22, 'drivers' => [$driver], 'event' => 'Hf Margin Call']],
         );
-        $this->query->method('getResult')->willReturn([$report]);
+        $this->repository->method('findForStocksNewestFirst')->willReturn([$report]);
 
         $stream = $this->feed->latestRevenueMixByTicker([$stock])['SWAN']['streams'][0];
 
@@ -211,7 +195,7 @@ class DistrictRevenueFeedTest extends TestCase
     {
         $stock = $this->makeStock('VULT');
         $report = $this->makeReport($stock, 10.0, ['restructuring_advisory' => 10.0], []);
-        $this->query->method('getResult')->willReturn([$report]);
+        $this->repository->method('findForStocksNewestFirst')->willReturn([$report]);
 
         $stream = $this->feed->latestRevenueMixByTicker([$stock])['VULT']['streams'][0];
 
@@ -230,7 +214,7 @@ class DistrictRevenueFeedTest extends TestCase
         for ($quartersAgo = 0; $quartersAgo < 8; $quartersAgo++) {
             $reports[] = $this->makeReport($stock, 100.0, ['fee_income' => 100.0], [], $quartersAgo);
         }
-        $this->query->method('getResult')->willReturn($reports);
+        $this->repository->method('findForStocksNewestFirst')->willReturn($reports);
 
         $mix = $this->feed->latestRevenueMixByTicker([$stock])['LAKE'];
 
@@ -249,7 +233,7 @@ class DistrictRevenueFeedTest extends TestCase
             $this->makeReport($stock, 80.0, ['fee_income' => 80.0], [], 3),
             $this->makeReport($stock, 60.0, ['fee_income' => 60.0], [], 4),
         ];
-        $this->query->method('getResult')->willReturn($reports);
+        $this->repository->method('findForStocksNewestFirst')->willReturn($reports);
 
         $mix = $this->feed->latestRevenueMixByTicker([$stock])['LAKE'];
         $stream = $mix['streams'][0];
@@ -267,7 +251,7 @@ class DistrictRevenueFeedTest extends TestCase
             $this->makeReport($stock, 150.0, ['fee_income' => 100.0, 'custody_float' => 50.0], [], 0),
             $this->makeReport($stock, 100.0, ['fee_income' => 100.0], [], 1),
         ];
-        $this->query->method('getResult')->willReturn($reports);
+        $this->repository->method('findForStocksNewestFirst')->willReturn($reports);
 
         $streams = $this->feed->latestRevenueMixByTicker([$stock])['LAKE']['streams'];
         $newStream = array_values(array_filter($streams, static fn (array $s): bool => $s['key'] === 'custody_float'))[0];
@@ -284,7 +268,7 @@ class DistrictRevenueFeedTest extends TestCase
             $this->makeReport($stock, 130.0, ['fee_income' => 30.0, 'net_interest_income' => 100.0], [], 0),
             $this->makeReport($stock, 100.0, ['fee_income' => 20.0, 'net_interest_income' => 80.0], [], 1),
         ];
-        $this->query->method('getResult')->willReturn($reports);
+        $this->repository->method('findForStocksNewestFirst')->willReturn($reports);
 
         $mix = $this->feed->latestRevenueMixByTicker([$stock])['LAKE'];
         $contributions = array_sum(array_column($mix['streams'], 'contribution'));
@@ -301,7 +285,7 @@ class DistrictRevenueFeedTest extends TestCase
             $this->makeReport($stock, 200.0, ['fee_income' => 50.0, 'net_interest_income' => 150.0], [], 0),
             $this->makeReport($stock, 100.0, ['fee_income' => 20.0, 'net_interest_income' => 80.0], [], 1),
         ];
-        $this->query->method('getResult')->willReturn($reports);
+        $this->repository->method('findForStocksNewestFirst')->willReturn($reports);
 
         $streams = $this->feed->latestRevenueMixByTicker([$stock])['LAKE']['streams'];
         $fee = array_values(array_filter($streams, static fn (array $s): bool => $s['key'] === 'fee_income'))[0];
@@ -314,7 +298,7 @@ class DistrictRevenueFeedTest extends TestCase
         $stock = $this->makeStock('LAKE');
         // An even two-way split: HHI 0.5, two effective segments.
         $report = $this->makeReport($stock, 100.0, ['fee_income' => 50.0, 'net_interest_income' => 50.0], []);
-        $this->query->method('getResult')->willReturn([$report]);
+        $this->repository->method('findForStocksNewestFirst')->willReturn([$report]);
 
         $concentration = $this->feed->latestRevenueMixByTicker([$stock])['LAKE']['concentration'];
 
@@ -330,7 +314,7 @@ class DistrictRevenueFeedTest extends TestCase
             $this->makeReport($stock, 100.0, ['fee_income' => 100.0], [], 1),
             $this->makeReport($stock, 100.0, ['fee_income' => 100.0], [], 2),
         ];
-        $this->query->method('getResult')->willReturn($three);
+        $this->repository->method('findForStocksNewestFirst')->willReturn($three);
 
         $this->assertNull($this->feed->latestRevenueMixByTicker([$stock])['LAKE']['ttmRevenue']);
     }
@@ -340,7 +324,7 @@ class DistrictRevenueFeedTest extends TestCase
         $stock = $this->makeStock('LAKE');
         $report = $this->makeReport($stock, 100.0, ['fee_income' => 100.0], []);
         $report->setRecordedAt(new \DateTime('2026-08-14 09:30:00'));
-        $this->query->method('getResult')->willReturn([$report]);
+        $this->repository->method('findForStocksNewestFirst')->willReturn([$report]);
 
         $mix = $this->feed->latestRevenueMixByTicker([$stock])['LAKE'];
 

@@ -3,9 +3,9 @@
 namespace App\Controller;
 
 use App\Entity\Stock;
-use App\Entity\Etf;
 use App\Service\Market\PriceChangeFeed;
-use Doctrine\ORM\EntityManagerInterface;
+use App\Repository\EtfRepository;
+use App\Repository\StockRepository;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
@@ -15,21 +15,26 @@ use Symfony\Component\Routing\Attribute\Route;
  */
 class HomeController extends AbstractController
 {
+    // --- Market Board ---
+
+    /** Broad-market fund the board quotes as the index line; the market's own level, not a holding. */
+    private const BENCHMARK_ETF_TICKER = 'LBI';
+
     /**
      * Displays the main landing page and market dashboard.
      *
      * Fetches the primary market ETF and a list of all available stocks,
      * calculates their current market capitalization, and sorts them from largest to smallest.
      *
-     * @param EntityManagerInterface $entityManager The entity manager for database operations.
+     * @param StockRepository $stockRepository The listed companies shown on the board.
      *
      * @return Response Returns the rendered home page view with market data.
      */
     #[Route('/', name: 'app_home')]
-    public function index(EntityManagerInterface $entityManager, \App\Service\Macro\MacroEngine $macroEngine, PriceChangeFeed $priceChangeFeed): Response
+    public function index(StockRepository $stockRepository, EtfRepository $etfs, \App\Service\Macro\MacroEngine $macroEngine, PriceChangeFeed $priceChangeFeed): Response
     {
-        $etf = $entityManager->getRepository(Etf::class)->findOneBy(['ticker' => 'LBI']);
-        $stocks = $entityManager->getRepository(Stock::class)->findAll();
+        $etf = $etfs->findOneByTicker(self::BENCHMARK_ETF_TICKER);
+        $stocks = $stockRepository->findAll();
         $macroState = $macroEngine->getLiveState();
 
         $marketData = $this->buildBaseMarketData($stocks, $priceChangeFeed->changeByTicker($stocks));
@@ -60,15 +65,15 @@ class HomeController extends AbstractController
     /**
      * API endpoint to retrieve the latest market data, often used for live client-side updates.
      *
-     * @param EntityManagerInterface $entityManager The entity manager for database queries.
+     * @param StockRepository $stockRepository The listed companies shown on the board.
      *
      * @return Response Returns a JSON response containing ETF and stock overview data.
      */
     #[Route('/api/market', name: 'api_market')]
-    public function apiMarket(EntityManagerInterface $entityManager, PriceChangeFeed $priceChangeFeed): Response
+    public function apiMarket(StockRepository $stockRepository, EtfRepository $etfs, PriceChangeFeed $priceChangeFeed): Response
     {
-        $etf    = $entityManager->getRepository(Etf::class)->findOneBy(['ticker' => 'LBI']);
-        $stocks = $entityManager->getRepository(Stock::class)->findAll();
+        $etf    = $etfs->findOneByTicker(self::BENCHMARK_ETF_TICKER);
+        $stocks = $stockRepository->findAll();
 
         // Helper function for the API
         $formatLarge = function(float $val): string {

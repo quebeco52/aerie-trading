@@ -9,7 +9,7 @@ use App\Entity\User;
 use App\Service\Event\EventPresenter;
 use App\Twig\Extension\EventExtension;
 use App\Twig\Extension\NumberFormatExtension;
-use App\Twig\Extension\WebsocketExtension;
+use App\Twig\WebSocketTicketExtension;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\MockObject\Stub;
@@ -19,6 +19,9 @@ use Symfony\Bundle\SecurityBundle\Security;
 #[AllowMockObjectsWithoutExpectations]
 class TwigExtensionsTest extends TestCase
 {
+    /** HS256 signing key; the JWT library refuses anything shorter than the hash it signs with. */
+    private const TEST_SECRET = 'test-secret-long-enough-for-hs256-signing';
+
     public function testNumberFormatExtensionFormatsNumbers(): void
     {
         $ext = new NumberFormatExtension();
@@ -48,35 +51,40 @@ class TwigExtensionsTest extends TestCase
         $this->assertSame('EARNINGS BEAT', $result['badge']);
     }
 
-    public function testWebsocketExtensionGeneratesTicketForLoggedInUser(): void
+    /**
+     * The live ticket is a JWT, because bin/websocket-server.php validates it as one. An earlier
+     * Redis-ticket extension sat alongside this and returned an empty string for a logged-out
+     * visitor, which is what left guests unable to open the stream at all.
+     */
+    public function testWebSocketTicketIsAJwtCarryingTheUserId(): void
     {
-        $securityStub = $this->createStub(Security::class);
-        $redisMock = $this->createMock(\Redis::class);
-
         $user = new User();
+        $securityStub = $this->createStub(Security::class);
         $securityStub->method('getUser')->willReturn($user);
 
-        $redisMock->expects($this->once())
-            ->method('setex')
-            ->with($this->stringStartsWith('ws_ticket:'), 30, $this->anything());
+        $ticket = (new WebSocketTicketExtension($securityStub, self::TEST_SECRET))->getWsTicket();
 
-        $ext = new WebsocketExtension($securityStub, $redisMock);
-        $this->assertCount(1, $ext->getFunctions());
-
-        $ticket = $ext->generateTicket();
-        $this->assertNotEmpty($ticket);
-        $this->assertSame(32, strlen($ticket)); // 16 bytes in hex = 32 chars
+        $claims = \Firebase\JWT\JWT::decode($ticket, new \Firebase\JWT\Key(self::TEST_SECRET, 'HS256'));
+        $this->assertSame((string) $user->getId(), $claims->uid);
+        $this->assertGreaterThan(time(), $claims->exp);
     }
 
-    public function testWebsocketExtensionReturnsEmptyWhenNoUser(): void
+    /**
+     * A logged-out visitor still gets a signed ticket, under the "guest" subject. Handing them an
+     * empty one closes the stream and the page reads as a dead market rather than a public one.
+     */
+    public function testGuestsStillReceiveASignedTicket(): void
     {
         $securityStub = $this->createStub(Security::class);
-        $redisMock = $this->createMock(\Redis::class);
         $securityStub->method('getUser')->willReturn(null);
 
-        $redisMock->expects($this->never())->method('setex');
+        $extension = new WebSocketTicketExtension($securityStub, self::TEST_SECRET);
+        $ticket = $extension->getWsTicket();
 
-        $ext = new WebsocketExtension($securityStub, $redisMock);
-        $this->assertSame('', $ext->generateTicket());
+        $this->assertNotSame('', $ticket);
+        $this->assertCount(1, $extension->getFunctions());
+
+        $claims = \Firebase\JWT\JWT::decode($ticket, new \Firebase\JWT\Key(self::TEST_SECRET, 'HS256'));
+        $this->assertSame('guest', $claims->uid);
     }
 }

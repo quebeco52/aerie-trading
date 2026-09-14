@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Controller;
 
 use App\Data\DistrictMap;
-use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\District\DistrictEventFeed;
 use App\Service\District\DistrictHoldingsFeed;
@@ -15,7 +14,8 @@ use App\Service\Market\PriceChangeFeed;
 use App\Service\District\DistrictRevenueFeed;
 use App\Service\District\DistrictRoster;
 use App\Service\District\DistrictStressEvaluator;
-use Doctrine\ORM\EntityManagerInterface;
+use App\Repository\StockRepository;
+use App\Service\Macro\MacroStateProvider;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\RedirectResponse;
 use Symfony\Component\HttpFoundation\Response;
@@ -38,7 +38,7 @@ class DistrictController extends AbstractController
     #[Route('/district/{ward}', name: 'app_district', methods: ['GET'])]
     public function ward(
         string $ward,
-        EntityManagerInterface $entityManager,
+        StockRepository $stockRepository,
         DistrictRoster $districtRoster,
         DistrictMapBuilder $mapBuilder,
         DistrictStressEvaluator $stressEvaluator,
@@ -46,13 +46,14 @@ class DistrictController extends AbstractController
         DistrictRevenueFeed $revenueFeed,
         DistrictHoldingsFeed $holdingsFeed,
         PriceChangeFeed $priceChangeFeed,
+        MacroStateProvider $macroStateProvider,
         \Redis $redis,
     ): Response {
         if ($ward !== DistrictMap::WARD_SLUG) {
             throw $this->createNotFoundException(sprintf('No ward "%s" exists in the District.', $ward));
         }
 
-        $stocks = $entityManager->getRepository(Stock::class)->findAll();
+        $stocks = $stockRepository->findAll();
 
         // The street as frozen at the last reconstitution, laid out against today's universe —
         // see DistrictRoster. findAll() casts wider than the roster because the register only
@@ -81,7 +82,7 @@ class DistrictController extends AbstractController
             $shares[$stock->getTicker()] = (float) $stock->getSharesOutstanding();
         }
 
-        $macroState = $this->readMacroState($redis);
+        $macroState = $macroStateProvider->liveState();
         $institutionStress = $stressEvaluator->evaluate($macroState);
 
         $user = $this->getUser();
@@ -218,16 +219,4 @@ class DistrictController extends AbstractController
         ];
     }
 
-    /**
-     * Same Redis-hydration pattern as StockController::view() — the live macro snapshot the
-     * ticker command publishes on every tick, read here once for the server-rendered initial
-     * paint. Live updates take over from payload.macro once the WebSocket connects.
-     */
-    private function readMacroState(\Redis $redis): MacroStateDTO
-    {
-        $macroStateJson = $redis->get('macroeconomic_state');
-        $rawMacroState = $macroStateJson ? json_decode($macroStateJson, true) : [];
-
-        return MacroStateDTO::fromArray(is_array($rawMacroState) ? $rawMacroState : []);
-    }
 }

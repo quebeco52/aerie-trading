@@ -192,10 +192,8 @@ class MarketOperator
         $stock->setCreditRating('D');
 
         // Cancel all OPEN trade orders for this ticker and refund BUY escrow
-        $openOrders = $this->entityManager->getRepository(\App\Entity\TradeOrder::class)->findBy([
-            'ticker' => $stock->getTicker(),
-            'status' => 'OPEN'
-        ]);
+        $openOrders = $this->entityManager->getRepository(\App\Entity\TradeOrder::class)
+            ->findOpenByTicker($stock->getTicker());
 
         foreach ($openOrders as $order) {
             if ($order->getAction() === 'BUY' && $order->getLimitPrice()) {
@@ -206,7 +204,7 @@ class MarketOperator
                     $this->entityManager->persist($user);
                 }
             }
-            $order->setStatus('CANCELLED');
+            $order->setStatus(\App\Entity\TradeOrder::STATUS_CANCELLED);
             $this->entityManager->persist($order);
         }
 

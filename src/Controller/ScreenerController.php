@@ -2,7 +2,7 @@
 
 namespace App\Controller;
 
-use App\Entity\Stock;
+use App\Repository\StockRepository;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Request;
@@ -16,9 +16,9 @@ use Symfony\Component\Routing\Attribute\Route;
 class ScreenerController extends AbstractController
 {
     #[Route('/screener', name: 'app_screener', methods: ['GET'])]
-    public function index(Request $request, EntityManagerInterface $entityManager): Response
+    public function index(Request $request, EntityManagerInterface $entityManager, StockRepository $stockRepository): Response
     {
-        $stocks = $entityManager->getRepository(Stock::class)->findAll();
+        $stocks = $stockRepository->findAll();
 
         // Latest quarterly report per stock, in one query: the two leverage and cash-quality columns below
         // read statement lines that only exist on the report, and fetching them per row would be N+1.

@@ -6,11 +6,9 @@ namespace App\Tests\Service\Market;
 
 use App\Entity\Stock;
 use App\Entity\StockHistory;
+use App\Repository\StockHistoryRepository;
 use App\Service\Market\PriceChangeFeed;
 use Doctrine\ORM\EntityManagerInterface;
-use Doctrine\ORM\EntityRepository;
-use Doctrine\ORM\Query;
-use Doctrine\ORM\QueryBuilder;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
@@ -32,11 +30,7 @@ class PriceChangeFeedTest extends TestCase
 
     private \Redis&MockObject $redis;
     private EntityManagerInterface&MockObject $entityManager;
-    /** @var EntityRepository<StockHistory>&MockObject */
-    private EntityRepository&MockObject $repository;
-    private QueryBuilder&MockObject $queryBuilder;
-    /** @var Query<int, mixed>&MockObject */
-    private Query&MockObject $query;
+    private StockHistoryRepository&MockObject $repository;
     private PriceChangeFeed $feed;
 
     protected function setUp(): void
@@ -45,19 +39,10 @@ class PriceChangeFeedTest extends TestCase
         $this->redis->method('multi')->willReturnSelf();
 
         $this->entityManager = $this->createMock(EntityManagerInterface::class);
-        $this->repository = $this->createMock(EntityRepository::class);
+        $this->repository = $this->createMock(StockHistoryRepository::class);
         $this->entityManager->method('getRepository')->willReturn($this->repository);
-
-        $this->queryBuilder = $this->createMock(QueryBuilder::class);
-        $this->repository->method('createQueryBuilder')->willReturn($this->queryBuilder);
-        foreach (['select', 'andWhere', 'setParameter', 'orderBy', 'setMaxResults'] as $fluent) {
-            $this->queryBuilder->method($fluent)->willReturn($this->queryBuilder);
-        }
-
-        $this->query = $this->createMock(Query::class);
-        $this->queryBuilder->method('getQuery')->willReturn($this->query);
         // No history on file unless a test says otherwise, so the Redis-only expectations hold.
-        $this->query->method('getScalarResult')->willReturn([]);
+        $this->repository->method('findRecentPrices')->willReturn([]);
 
         $this->feed = new PriceChangeFeed($this->redis, $this->entityManager, self::TICKS_PER_YEAR);
     }
@@ -65,17 +50,8 @@ class PriceChangeFeedTest extends TestCase
     /** @param list<float> $closesNewestFirst */
     private function historyOnFile(array $closesNewestFirst): void
     {
-        $this->query = $this->createMock(Query::class);
-        $this->query->method('getScalarResult')->willReturn(
-            array_map(static fn (float $close) => ['price' => (string) $close], $closesNewestFirst),
-        );
-        $this->queryBuilder = $this->createMock(QueryBuilder::class);
-        foreach (['select', 'andWhere', 'setParameter', 'orderBy', 'setMaxResults'] as $fluent) {
-            $this->queryBuilder->method($fluent)->willReturn($this->queryBuilder);
-        }
-        $this->queryBuilder->method('getQuery')->willReturn($this->query);
-        $this->repository = $this->createMock(EntityRepository::class);
-        $this->repository->method('createQueryBuilder')->willReturn($this->queryBuilder);
+        $this->repository = $this->createMock(StockHistoryRepository::class);
+        $this->repository->method('findRecentPrices')->willReturn($closesNewestFirst);
         $this->entityManager = $this->createMock(EntityManagerInterface::class);
         $this->entityManager->method('getRepository')->willReturn($this->repository);
 
@@ -264,7 +240,7 @@ class PriceChangeFeedTest extends TestCase
     public function testTheFallbackAsksForExactlyOneLookbackOfRows(): void
     {
         $this->redis->method('exec')->willReturn([false]);
-        $this->queryBuilder->expects($this->once())->method('setMaxResults')->with(300);
+        $this->repository->expects($this->once())->method('findRecentPrices')->with($this->anything(), 300)->willReturn([]);
 
         $this->feed->changeByTicker([$this->makeStock('LAKE', 125.0)]);
     }
@@ -272,7 +248,7 @@ class PriceChangeFeedTest extends TestCase
     public function testAWarmBufferNeverTouchesTheDatabase(): void
     {
         $this->redis->method('exec')->willReturn([$this->buffered(100.0), $this->buffered(50.0)]);
-        $this->repository->expects($this->never())->method('createQueryBuilder');
+        $this->repository->expects($this->never())->method('findRecentPrices');
 
         $changes = $this->feed->changeByTicker([$this->makeStock('LAKE', 110.0), $this->makeStock('ROOK', 45.0)]);
 
@@ -283,7 +259,7 @@ class PriceChangeFeedTest extends TestCase
     {
         $this->redis->method('exec')->willReturn([$this->buffered(100.0), false]);
         $this->historyOnFile([200.0]);
-        $this->repository->expects($this->once())->method('createQueryBuilder');
+        $this->repository->expects($this->once())->method('findRecentPrices');
 
         $changes = $this->feed->changeByTicker([$this->makeStock('LAKE', 110.0), $this->makeStock('SWAN', 150.0)]);
 
@@ -309,7 +285,7 @@ class PriceChangeFeedTest extends TestCase
     public function testADelistedStockAtZeroNeverConsultsHistory(): void
     {
         $this->redis->method('exec')->willReturn([false]);
-        $this->repository->expects($this->never())->method('createQueryBuilder');
+        $this->repository->expects($this->never())->method('findRecentPrices');
 
         $this->assertSame([], $this->feed->changeByTicker([$this->makeStock('VULT', 0.0)]));
     }

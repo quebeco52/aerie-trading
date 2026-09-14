@@ -22,6 +22,10 @@ use App\Service\Market\TradeExecutionService;
 use App\Service\User\Portfolio;
 use Doctrine\DBAL\Connection;
 use Doctrine\ORM\EntityManagerInterface;
+use App\Repository\BondRepository;
+use App\Repository\EtfRepository;
+use App\Repository\StockRepository;
+use App\Repository\TradeOrderRepository;
 use Doctrine\ORM\EntityRepository;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
@@ -36,18 +40,14 @@ class TradeExecutionServiceTest extends TestCase
     private Connection&Stub $connectionMock;
     private Portfolio&Stub $portfolioStub;
     private \Redis&Stub $redisStub;
-    /** @var EntityRepository<Stock>&Stub */
-    private EntityRepository&Stub $stockRepoStub;
-    /** @var EntityRepository<Etf>&Stub */
-    private EntityRepository&Stub $etfRepoStub;
+    private StockRepository&Stub $stockRepoStub;
+    private EtfRepository&Stub $etfRepoStub;
     /** @var EntityRepository<UserStock>&Stub */
     private EntityRepository&Stub $userStockRepoStub;
     /** @var EntityRepository<UserEtf>&Stub */
     private EntityRepository&Stub $userEtfRepoStub;
-    /** @var EntityRepository<TradeOrder>&Stub */
-    private EntityRepository&Stub $tradeOrderRepoStub;
-    /** @var EntityRepository<Bond>&Stub */
-    private EntityRepository&Stub $bondRepoStub;
+    private TradeOrderRepository&Stub $tradeOrderRepoStub;
+    private BondRepository&Stub $bondRepoStub;
     /** @var EntityRepository<UserBond>&Stub */
     private EntityRepository&Stub $userBondRepoStub;
     private InMemoryOrderFlowStore $orderFlow;
@@ -64,12 +64,12 @@ class TradeExecutionServiceTest extends TestCase
         $this->portfolioStub = $this->createStub(Portfolio::class);
         $this->redisStub = $this->createStub(\Redis::class);
 
-        $this->stockRepoStub = $this->createStub(EntityRepository::class);
-        $this->etfRepoStub = $this->createStub(EntityRepository::class);
+        $this->stockRepoStub = $this->createStub(StockRepository::class);
+        $this->etfRepoStub = $this->createStub(EtfRepository::class);
         $this->userStockRepoStub = $this->createStub(EntityRepository::class);
         $this->userEtfRepoStub = $this->createStub(EntityRepository::class);
-        $this->tradeOrderRepoStub = $this->createStub(EntityRepository::class);
-        $this->bondRepoStub = $this->createStub(EntityRepository::class);
+        $this->tradeOrderRepoStub = $this->createStub(TradeOrderRepository::class);
+        $this->bondRepoStub = $this->createStub(BondRepository::class);
         $this->userBondRepoStub = $this->createStub(EntityRepository::class);
 
         $this->emMock->method('getRepository')->willReturnCallback(function (string $entityClass) {
@@ -109,7 +109,7 @@ class TradeExecutionServiceTest extends TestCase
         $stock->setTicker('APEX');
         $stock->setPrice('50.00');
 
-        $this->stockRepoStub->method('findOneBy')->willReturn($stock);
+        $this->stockRepoStub->method('findOneByTicker')->willReturn($stock);
         $this->userStockRepoStub->method('findOneBy')->willReturn(null); // First time buying
 
         $this->emMock->expects($this->atLeastOnce())->method('persist');
@@ -144,7 +144,7 @@ class TradeExecutionServiceTest extends TestCase
         $holding->setStock($stock);
         $holding->setQuantity(10);
 
-        $this->stockRepoStub->method('findOneBy')->willReturn($stock);
+        $this->stockRepoStub->method('findOneByTicker')->willReturn($stock);
         $this->userStockRepoStub->method('findOneBy')->willReturn($holding);
 
         $this->service->executeOrder($user, 'APEX', 'BUY', 'MARKET', 10);
@@ -168,7 +168,7 @@ class TradeExecutionServiceTest extends TestCase
         $stock->setTicker('APEX');
         $stock->setPrice('50.00');
 
-        $this->stockRepoStub->method('findOneBy')->willReturn($stock);
+        $this->stockRepoStub->method('findOneByTicker')->willReturn($stock);
         $this->userStockRepoStub->method('findOneBy')->willReturn(null);
 
         $persisted = [];
@@ -199,7 +199,7 @@ class TradeExecutionServiceTest extends TestCase
         $stock->setPrice('50.00');
         $stock->setSharesOutstanding('1000000');
 
-        $this->stockRepoStub->method('findOneBy')->willReturn($stock);
+        $this->stockRepoStub->method('findOneByTicker')->willReturn($stock);
         $this->userStockRepoStub->method('findOneBy')->willReturn(null);
 
         $this->expectException(\Exception::class);
@@ -219,7 +219,7 @@ class TradeExecutionServiceTest extends TestCase
         $stock->setTicker('APEX');
         $stock->setPrice('50.00');
 
-        $this->stockRepoStub->method('findOneBy')->willReturn($stock);
+        $this->stockRepoStub->method('findOneByTicker')->willReturn($stock);
         $this->userStockRepoStub->method('findOneBy')->willReturn(null);
 
         $this->service->executeOrder($user, 'APEX', 'BUY', 'MARKET', 40);
@@ -238,7 +238,7 @@ class TradeExecutionServiceTest extends TestCase
         $stock->setTicker('APEX');
         $stock->setPrice('50.00'); // 10 * 50 = $500 > $100
 
-        $this->stockRepoStub->method('findOneBy')->willReturn($stock);
+        $this->stockRepoStub->method('findOneByTicker')->willReturn($stock);
 
         $this->expectException(\Exception::class);
         $this->expectExceptionMessage('Insufficient funds.');
@@ -260,7 +260,7 @@ class TradeExecutionServiceTest extends TestCase
         $userStock->setStock($stock);
         $userStock->setQuantity(20);
 
-        $this->stockRepoStub->method('findOneBy')->willReturn($stock);
+        $this->stockRepoStub->method('findOneByTicker')->willReturn($stock);
         $this->userStockRepoStub->method('findOneBy')->willReturn($userStock);
 
         // A sell hits the bid, so ten shares raise slightly under $500 and the position halves.
@@ -282,7 +282,7 @@ class TradeExecutionServiceTest extends TestCase
         $stock->setTicker('APEX');
         $stock->setPrice('100.00'); // Live price is $100
 
-        $this->stockRepoStub->method('findOneBy')->willReturn($stock);
+        $this->stockRepoStub->method('findOneByTicker')->willReturn($stock);
 
         // Limit BUY at $80.00 for 5 shares ($400.00 escrowed) -> order stays OPEN
         $this->service->executeOrder($user, 'APEX', 'BUY', 'LIMIT', 5, '80.00');
@@ -304,7 +304,7 @@ class TradeExecutionServiceTest extends TestCase
         $order->setLimitPrice('25.00'); // $250.00 escrowed
         $order->setStatus('OPEN');
 
-        $this->tradeOrderRepoStub->method('findOneBy')->willReturn($order);
+        $this->tradeOrderRepoStub->method('findOpenForUserById')->willReturn($order);
 
         $this->service->cancelOrder($user, 1);
 
@@ -326,7 +326,7 @@ class TradeExecutionServiceTest extends TestCase
         $stock = new Stock();
         $stock->setTicker('APEX');
         $stock->setPrice('100.00');
-        $this->stockRepoStub->method('findOneBy')->willReturn($stock);
+        $this->stockRepoStub->method('findOneByTicker')->willReturn($stock);
 
         try {
             $this->service->executeOrder($user, 'APEX', 'BUY', 'LIMIT', 10, '-5.00');
@@ -347,7 +347,7 @@ class TradeExecutionServiceTest extends TestCase
         $stock = new Stock();
         $stock->setTicker('APEX');
         $stock->setPrice('100.00');
-        $this->stockRepoStub->method('findOneBy')->willReturn($stock);
+        $this->stockRepoStub->method('findOneByTicker')->willReturn($stock);
 
         $this->expectException(\Exception::class);
         $this->expectExceptionMessage('Limit price must be at least');
@@ -367,7 +367,7 @@ class TradeExecutionServiceTest extends TestCase
         $stock = new Stock();
         $stock->setTicker('APEX');
         $stock->setPrice('100.00');
-        $this->stockRepoStub->method('findOneBy')->willReturn($stock);
+        $this->stockRepoStub->method('findOneByTicker')->willReturn($stock);
 
         foreach (['abc', '', '  '] as $bad) {
             try {
@@ -388,7 +388,7 @@ class TradeExecutionServiceTest extends TestCase
         $stock = new Stock();
         $stock->setTicker('APEX');
         $stock->setPrice('100.00');
-        $this->stockRepoStub->method('findOneBy')->willReturn($stock);
+        $this->stockRepoStub->method('findOneByTicker')->willReturn($stock);
 
         $this->expectException(\Exception::class);
         $this->expectExceptionMessage('numeric limit price');
@@ -408,7 +408,7 @@ class TradeExecutionServiceTest extends TestCase
         $stock = new Stock();
         $stock->setTicker('APEX');
         $stock->setPrice('100.00');
-        $this->stockRepoStub->method('findOneBy')->willReturn($stock);
+        $this->stockRepoStub->method('findOneByTicker')->willReturn($stock);
 
         // 8e1 is $80: below the $100 live price, so the order rests and escrows 5 * $80 = $400.
         $this->service->executeOrder($user, 'APEX', 'BUY', 'LIMIT', 5, '8e1');
@@ -445,7 +445,7 @@ class TradeExecutionServiceTest extends TestCase
         $stock->setTicker('DEAD');
         $stock->setIsBankrupt(true); // Marked as bankrupt
 
-        $this->stockRepoStub->method('findOneBy')->willReturn($stock);
+        $this->stockRepoStub->method('findOneByTicker')->willReturn($stock);
 
         $this->expectException(\Exception::class);
         $this->expectExceptionMessage('Trading is halted for DEAD. The company is bankrupt.');
@@ -462,8 +462,8 @@ class TradeExecutionServiceTest extends TestCase
         $etf->setTicker('LBI');
         $etf->setPrice('100.00');
 
-        $this->stockRepoStub->method('findOneBy')->willReturn(null);
-        $this->etfRepoStub->method('findOneBy')->willReturn($etf);
+        $this->stockRepoStub->method('findOneByTicker')->willReturn(null);
+        $this->etfRepoStub->method('findOneByTicker')->willReturn($etf);
         $this->userEtfRepoStub->method('findOneBy')->willReturn(null);
 
         // An ETF quotes at a flat half-spread rather than a modelled depth: creation and redemption keep it
@@ -495,7 +495,7 @@ class TradeExecutionServiceTest extends TestCase
         $userStock->setStock($stock);
         $userStock->setQuantity(20);
 
-        $this->stockRepoStub->method('findOneBy')->willReturn($stock);
+        $this->stockRepoStub->method('findOneByTicker')->willReturn($stock);
         $this->userStockRepoStub->method('findOneBy')->willReturn($userStock);
 
         // Limit SELL at $60.00 for 10 shares (price > $50 live price -> remains OPEN)
@@ -524,8 +524,8 @@ class TradeExecutionServiceTest extends TestCase
         $order->setQuantity(10);
         $order->setStatus('OPEN');
 
-        $this->tradeOrderRepoStub->method('findOneBy')->willReturn($order);
-        $this->stockRepoStub->method('findOneBy')->willReturn($stock);
+        $this->tradeOrderRepoStub->method('findOpenForUserById')->willReturn($order);
+        $this->stockRepoStub->method('findOneByTicker')->willReturn($stock);
         $this->userStockRepoStub->method('findOneBy')->willReturn($userStock);
 
         $this->service->cancelOrder($user, 1);
@@ -556,8 +556,8 @@ class TradeExecutionServiceTest extends TestCase
         $resultStatementMock->method('fetchOne')->willReturn(null);
         $this->connectionMock->method('executeQuery')->willReturn($resultStatementMock);
 
-        $this->tradeOrderRepoStub->method('findBy')->willReturn([$buyOrder]);
-        $this->stockRepoStub->method('findOneBy')->willReturn($stock);
+        $this->tradeOrderRepoStub->method('findOpenByTicker')->willReturn([$buyOrder]);
+        $this->stockRepoStub->method('findOneByTicker')->willReturn($stock);
         $this->userStockRepoStub->method('findOneBy')->willReturn(null);
 
         // Process limit orders at $90.00 (well below the $100 limit, so it fills and most of the escrow
@@ -605,8 +605,8 @@ class TradeExecutionServiceTest extends TestCase
         $resultStatementMock->method('fetchOne')->willReturn(null);
         $this->connectionMock->method('executeQuery')->willReturn($resultStatementMock);
 
-        $this->tradeOrderRepoStub->method('findBy')->willReturn([$buyOrder]);
-        $this->stockRepoStub->method('findOneBy')->willReturn($stock);
+        $this->tradeOrderRepoStub->method('findOpenByTicker')->willReturn([$buyOrder]);
+        $this->stockRepoStub->method('findOneByTicker')->willReturn($stock);
         $this->userStockRepoStub->method('findOneBy')->willReturn(null);
 
         $this->service->processLimitOrders('APEX', 100.0);
@@ -685,7 +685,7 @@ class TradeExecutionServiceTest extends TestCase
 
         // $50k short against $75k of cash: exactly the Reg-T initial requirement, so buying power is zero.
         $this->bookIs(longValue: 0.0, shortValue: 50000.0);
-        $this->stockRepoStub->method('findOneBy')->willReturn($stock);
+        $this->stockRepoStub->method('findOneByTicker')->willReturn($stock);
         $this->userStockRepoStub->method('findOneBy')->willReturn($holding);
 
         $this->service->executeOrder($user, 'APEX', 'COVER', 'MARKET', 400);
@@ -707,7 +707,7 @@ class TradeExecutionServiceTest extends TestCase
 
         // The price has run: equity is now well under the 30% maintenance requirement on the short.
         $this->bookIs(longValue: 0.0, shortValue: 70000.0);
-        $this->stockRepoStub->method('findOneBy')->willReturn($stock);
+        $this->stockRepoStub->method('findOneByTicker')->willReturn($stock);
         $this->userStockRepoStub->method('findOneBy')->willReturn($holding);
 
         $this->service->executeOrder($user, 'APEX', 'COVER', 'MARKET', 1000);
@@ -736,7 +736,7 @@ class TradeExecutionServiceTest extends TestCase
         $holding->setQuantity(-1000);
 
         $this->bookIs(longValue: 0.0, shortValue: 50000.0);
-        $this->stockRepoStub->method('findOneBy')->willReturn($stock);
+        $this->stockRepoStub->method('findOneByTicker')->willReturn($stock);
         $this->userStockRepoStub->method('findOneBy')->willReturn($holding);
 
         // Bidding $40 for stock trading at $50: nowhere near crossing, so it rests.
@@ -760,7 +760,7 @@ class TradeExecutionServiceTest extends TestCase
         $stock = $this->shortableStock();
 
         $this->bookIs(longValue: 0.0, shortValue: 0.0);
-        $this->stockRepoStub->method('findOneBy')->willReturn($stock);
+        $this->stockRepoStub->method('findOneByTicker')->willReturn($stock);
         $this->userStockRepoStub->method('findOneBy')->willReturn(null);
 
         $this->expectException(\Exception::class);
@@ -783,7 +783,7 @@ class TradeExecutionServiceTest extends TestCase
         $order->setLimitPrice('40.00');
         $order->setStatus('OPEN');
 
-        $this->tradeOrderRepoStub->method('findOneBy')->willReturn($order);
+        $this->tradeOrderRepoStub->method('findOpenForUserById')->willReturn($order);
 
         $this->service->cancelOrder($user, 1);
 
@@ -818,8 +818,8 @@ class TradeExecutionServiceTest extends TestCase
         $this->connectionMock->method('executeQuery')->willReturn($resultStatementMock);
 
         $this->bookIs(longValue: 0.0, shortValue: 40000.0);
-        $this->tradeOrderRepoStub->method('findBy')->willReturn([$order]);
-        $this->stockRepoStub->method('findOneBy')->willReturn($stock);
+        $this->tradeOrderRepoStub->method('findOpenByTicker')->willReturn([$order]);
+        $this->stockRepoStub->method('findOneByTicker')->willReturn($stock);
         $this->userStockRepoStub->method('findOneBy')->willReturn($holding);
 
         $this->service->processLimitOrders('APEX', 40.0);
@@ -841,7 +841,7 @@ class TradeExecutionServiceTest extends TestCase
         $stock = $this->shortableStock();
 
         $this->bookIs(longValue: 0.0, shortValue: 50000.0);
-        $this->stockRepoStub->method('findOneBy')->willReturn($stock);
+        $this->stockRepoStub->method('findOneByTicker')->willReturn($stock);
         $this->userStockRepoStub->method('findOneBy')->willReturn(null);
 
         $this->expectException(\Exception::class);
@@ -855,7 +855,7 @@ class TradeExecutionServiceTest extends TestCase
         $user = $this->marginUser();
         $stock = $this->shortableStock();
 
-        $this->stockRepoStub->method('findOneBy')->willReturn($stock);
+        $this->stockRepoStub->method('findOneByTicker')->willReturn($stock);
 
         $holding = null;
         $this->emMock->method('persist')->willReturnCallback(static function (object $entity) use (&$holding): void {
@@ -879,7 +879,7 @@ class TradeExecutionServiceTest extends TestCase
         $user = new User();
         $user->setCashBalance('100000.00');
 
-        $this->stockRepoStub->method('findOneBy')->willReturn($this->shortableStock());
+        $this->stockRepoStub->method('findOneByTicker')->willReturn($this->shortableStock());
 
         $this->expectException(\Exception::class);
         $this->expectExceptionMessageMatches('/requires a margin account/');
@@ -897,7 +897,7 @@ class TradeExecutionServiceTest extends TestCase
         // left to borrow, so the borrow check is what has to reject it.
         $stock->setShortInterestShares('29000000.00');
 
-        $this->stockRepoStub->method('findOneBy')->willReturn($stock);
+        $this->stockRepoStub->method('findOneByTicker')->willReturn($stock);
 
         $this->expectException(\Exception::class);
         $this->expectExceptionMessageMatches('/available to borrow/');
@@ -912,9 +912,9 @@ class TradeExecutionServiceTest extends TestCase
         $bond = new Bond();
         $bond->setTicker('G10-001')->setName('bond')->setTenorYears('10')->setPrice('1000');
 
-        $this->stockRepoStub->method('findOneBy')->willReturn(null);
-        $this->etfRepoStub->method('findOneBy')->willReturn(null);
-        $this->bondRepoStub->method('findOneBy')->willReturn($bond);
+        $this->stockRepoStub->method('findOneByTicker')->willReturn(null);
+        $this->etfRepoStub->method('findOneByTicker')->willReturn(null);
+        $this->bondRepoStub->method('findOneByTicker')->willReturn($bond);
 
         $this->expectException(\Exception::class);
         $this->expectExceptionMessageMatches('/Only equities can be sold short/');
@@ -933,7 +933,7 @@ class TradeExecutionServiceTest extends TestCase
         $holding->setStock($stock);
         $holding->setQuantity(-100);
 
-        $this->stockRepoStub->method('findOneBy')->willReturn($stock);
+        $this->stockRepoStub->method('findOneByTicker')->willReturn($stock);
         $this->userStockRepoStub->method('findOneBy')->willReturn($holding);
 
         $this->service->executeOrder($user, 'APEX', 'COVER', 'MARKET', 40);
@@ -952,7 +952,7 @@ class TradeExecutionServiceTest extends TestCase
         $holding->setStock($stock);
         $holding->setQuantity(-50);
 
-        $this->stockRepoStub->method('findOneBy')->willReturn($stock);
+        $this->stockRepoStub->method('findOneByTicker')->willReturn($stock);
         $this->userStockRepoStub->method('findOneBy')->willReturn($holding);
 
         $this->expectException(\Exception::class);
@@ -973,7 +973,7 @@ class TradeExecutionServiceTest extends TestCase
         $holding->setStock($stock);
         $holding->setQuantity(10);
 
-        $this->stockRepoStub->method('findOneBy')->willReturn($stock);
+        $this->stockRepoStub->method('findOneByTicker')->willReturn($stock);
         $this->userStockRepoStub->method('findOneBy')->willReturn($holding);
 
         $this->expectException(\Exception::class);
@@ -987,7 +987,7 @@ class TradeExecutionServiceTest extends TestCase
         $user = $this->marginUser('1000.00');
         $stock = $this->shortableStock();
 
-        $this->stockRepoStub->method('findOneBy')->willReturn($stock);
+        $this->stockRepoStub->method('findOneByTicker')->willReturn($stock);
         $this->userStockRepoStub->method('findOneBy')->willReturn(null);
 
         // $1,000 of equity supports $2,000 of stock at a 50% initial requirement. 30 shares at $50 is
@@ -1004,7 +1004,7 @@ class TradeExecutionServiceTest extends TestCase
         // Leverage is bounded, not unlimited: $1,000 of equity supports $2,000 of stock and no more.
         $user = $this->marginUser('1000.00');
 
-        $this->stockRepoStub->method('findOneBy')->willReturn($this->shortableStock());
+        $this->stockRepoStub->method('findOneByTicker')->willReturn($this->shortableStock());
         $this->userStockRepoStub->method('findOneBy')->willReturn(null);
 
         $this->expectException(\Exception::class);
@@ -1018,7 +1018,7 @@ class TradeExecutionServiceTest extends TestCase
         $user = new User();
         $user->setCashBalance('1000.00');
 
-        $this->stockRepoStub->method('findOneBy')->willReturn($this->shortableStock());
+        $this->stockRepoStub->method('findOneByTicker')->willReturn($this->shortableStock());
         $this->userStockRepoStub->method('findOneBy')->willReturn(null);
 
         $this->expectException(\Exception::class);
@@ -1040,7 +1040,7 @@ class TradeExecutionServiceTest extends TestCase
         $holding->setStock($stock);
         $holding->setQuantity(100);
 
-        $this->stockRepoStub->method('findOneBy')->willReturn($stock);
+        $this->stockRepoStub->method('findOneByTicker')->willReturn($stock);
         $this->userStockRepoStub->method('findOneBy')->willReturn($holding);
 
         $this->service->executeOrder($user, 'APEX', 'SELL', 'MARKET', 40);
@@ -1063,7 +1063,7 @@ class TradeExecutionServiceTest extends TestCase
         $holding->setStock($stock);
         $holding->setQuantity(-500);
 
-        $this->stockRepoStub->method('findOneBy')->willReturn($stock);
+        $this->stockRepoStub->method('findOneByTicker')->willReturn($stock);
         $this->userStockRepoStub->method('findOneBy')->willReturn($holding);
 
         $this->service->executeOrder($user, 'APEX', 'COVER', 'MARKET', 100);
