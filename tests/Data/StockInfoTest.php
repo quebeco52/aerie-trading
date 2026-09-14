@@ -86,4 +86,30 @@ class StockInfoTest extends TestCase
         $this->assertArrayHasKey('SNDR', StockInfo::QUOTES);
         $this->assertNotEmpty(StockInfo::QUOTES['SNDR']);
     }
+
+    public function testNuthatchDescriptionQuality(): void
+    {
+        $this->assertArrayHasKey('NUTH', StockInfo::DESCRIPTIONS);
+        $nuthDesc = StockInfo::DESCRIPTIONS['NUTH'];
+
+        $this->assertStringContainsString('Nuthatch Climate Systems', $nuthDesc);
+        $this->assertStringContainsString('heat pumps', $nuthDesc);
+        $this->assertGreaterThan(500, strlen($nuthDesc));
+
+        $this->assertArrayHasKey('NUTH', StockInfo::QUOTES);
+        $this->assertNotEmpty(StockInfo::QUOTES['NUTH']);
+    }
+
+    public function testAlcaDescriptionQuality(): void
+    {
+        $this->assertArrayHasKey('ALCA', StockInfo::DESCRIPTIONS);
+        $alcaDesc = StockInfo::DESCRIPTIONS['ALCA'];
+
+        $this->assertStringContainsString('Alca Compression Dynamics', $alcaDesc);
+        $this->assertStringContainsString('compressed air', $alcaDesc);
+        $this->assertGreaterThan(500, strlen($alcaDesc));
+
+        $this->assertArrayHasKey('ALCA', StockInfo::QUOTES);
+        $this->assertNotEmpty(StockInfo::QUOTES['ALCA']);
+    }
 }

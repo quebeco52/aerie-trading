@@ -378,6 +378,26 @@ class StockModelTuning
             ModelParam::OperatingCyclicality->value => 1.15, // Buffered by consumable wear-part replacement cycles
         ],
 
+        // --- Alca Compression Dynamics (ALCA) ---
+        // Industrial air compressors, turbomolecular vacuum pumps & precision assembly systems (Atlas Copco archetype).
+        // Essential 'Fourth Utility' of manufacturing: catastrophic cost of downtime creates immense pricing power and 40% high-margin service tollbooth.
+        'ALCA' => [
+            ModelParam::EquipmentWeight->value     => 0.60, // Oil-free rotary screw compressors, cleanroom turbomolecular vacuum pumps & robotic tools
+            ModelParam::ServicesWeight->value      => 0.40, // Predictive maintenance telemetry, replacement rotor elements & clean-air filter consumables
+            ModelParam::PricingPowerIndex->value   => 0.85, // Critical operational uptime necessity; shutting down a wafer fab or bottling line costs millions
+            ModelParam::OperatingCyclicality->value => 1.05, // Heavy aftermarket service revenue strongly insulates from industrial capex contractions
+        ],
+
+        // --- Nuthatch Climate Systems (NUTH) ---
+        // Geothermal ground-source heat pumps, hydronic climate control & industrial thermal elements (NIBE archetype).
+        // Highly exposed to building permit cycles and dealer inventory destocking, buffered by aftermarket retrofit/service parts.
+        'NUTH' => [
+            ModelParam::OemEquipmentWeight->value  => 0.70, // Heat pumps, geothermal ground loops, air handlers & ventilation systems
+            ModelParam::AftermarketMroWeight->value => 0.30, // Replacement compressors, heat exchangers, glycol loops & service contracts
+            ModelParam::PricingPowerIndex->value   => 0.70, // Strong Nordic energy-efficiency standards and statutory decarbonization capture
+            ModelParam::OperatingCyclicality->value => 1.25, // Moderately high cyclicality driven by mortgage rates and building permits
+        ],
+
         // --- Crossbill Precision Tooling (CBIL) ---
         // Operates as an industrial tollbooth with incredibly high margins and ROIC due to absolute quality control.
         // Extremely insulated from typical manufacturing boom/bust.

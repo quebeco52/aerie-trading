@@ -261,6 +261,18 @@ class StockModelTuningTest extends TestCase
         $this->assertSame(0.80, StockModelTuning::get('SNDR', ModelParam::PricingPowerIndex, 0.0));
         $this->assertSame(1.15, StockModelTuning::get('SNDR', ModelParam::OperatingCyclicality, 0.0));
 
+        // Alca Compression Dynamics (ALCA)
+        $this->assertSame(0.60, StockModelTuning::get('ALCA', ModelParam::EquipmentWeight, 0.0));
+        $this->assertSame(0.40, StockModelTuning::get('ALCA', ModelParam::ServicesWeight, 0.0));
+        $this->assertSame(0.85, StockModelTuning::get('ALCA', ModelParam::PricingPowerIndex, 0.0));
+        $this->assertSame(1.05, StockModelTuning::get('ALCA', ModelParam::OperatingCyclicality, 0.0));
+
+        // Nuthatch Climate Systems (NUTH)
+        $this->assertSame(0.70, StockModelTuning::get('NUTH', ModelParam::OemEquipmentWeight, 0.0));
+        $this->assertSame(0.30, StockModelTuning::get('NUTH', ModelParam::AftermarketMroWeight, 0.0));
+        $this->assertSame(0.70, StockModelTuning::get('NUTH', ModelParam::PricingPowerIndex, 0.0));
+        $this->assertSame(1.25, StockModelTuning::get('NUTH', ModelParam::OperatingCyclicality, 0.0));
+
         // Sinking Shore Extraction (SINK)
         $this->assertSame(0.50, StockModelTuning::get('SINK', ModelParam::ExtractionRevenueWeight, 0.0));
         $this->assertSame(0.50, StockModelTuning::get('SINK', ModelParam::SpotPriceWeight, 0.0));

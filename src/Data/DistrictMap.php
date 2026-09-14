@@ -57,7 +57,7 @@ class DistrictMap
         // Industrials & Materials.
         'steel_manufacturing', 'specialty_industrial_machinery', 'commodity', 'chemical',
         'construction', 'defense_contractor', 'security_protection', 'waste_management',
-        'railroad', 'shipping', 'logistics', 'tools_and_accessories', 'law_firm',
+        'railroad', 'shipping', 'logistics', 'tools_and_accessories', 'heavy_manufacturing', 'law_firm',
         // Consumer Discretionary & Staples.
         'consumer_staples', 'restaurant', 'apparel_manufacturing', 'auto_manufacturer',
         'internet_retail', 'resorts_casinos', 'luxury', 'advertising_agency', 'education',
