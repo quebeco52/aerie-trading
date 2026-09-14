@@ -152,7 +152,6 @@ class DistrictMapTest extends TestCase
     {
         $this->assertGreaterThan(0.0, DistrictMap::WINDOW_TWINKLE_SHARE);
         $this->assertLessThan(0.5, DistrictMap::WINDOW_TWINKLE_SHARE, 'Twinkling windows are meant to be a minority');
-        $this->assertGreaterThan(0.0, DistrictMap::WINDOW_TWINKLE_PERIOD_SECONDS);
         $this->assertGreaterThanOrEqual(3, DistrictMap::WINDOW_KEY_PRECISION, 'Keys need enough precision to place a window on either side of any lit share');
     }
 

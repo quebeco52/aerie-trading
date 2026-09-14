@@ -7,37 +7,51 @@
 	/* Stroke widths throughout are sized for the street's rendered scale (~0.45px per user unit):
 	   anything under ~2.5 units lands below one device pixel and stops reading as a line. */
 	.plot { cursor: pointer; }
+	/* A facade resize is an SVG geometry change, which a transition can only animate on the main
+	   thread: layout, paint and layerize on every frame for as long as any of the 45 facades is
+	   mid-glide. Resizes are therefore rationed to one pass every RESIZE_INTERVAL_MS and the glide
+	   (--facade-glide, set from FACADE_GLIDE_MS in district_controller.js) is shorter than that
+	   interval, so the street is still most of the time. Everything that rides a roofline moves
+	   with it: the windows and the roof kit by one transform each, the conduits by their `d`. */
+	.district-map { --facade-glide: 0ms; }
 	.facade {
 		stroke-width: 2.5;
-		transition: y 150ms ease-out, height 150ms ease-out;
+		transition: y var(--facade-glide) ease-out, height var(--facade-glide) ease-out;
 	}
+	.plot-windows, .roof-kit { transition: transform var(--facade-glide) ease-out; }
+	/* Dimming throughout is fill-opacity / stroke-opacity, never `opacity`: element opacity is a
+	   compositing effect, so every one of the ~450 windows, ~130 conduits and 90 badges/flares
+	   carrying it became its own paint chunk, and Chrome re-layerised all of them on every
+	   repaint (Layerize was the single largest cost in the profile). Paint-level opacity is
+	   part of the fill and costs nothing extra. Element opacity survives only on transient,
+	   few-at-a-time states (sector filter dimming, the tooltip). */
 	/* Lit share tracks return on capital against baseline — see DistrictMap::WINDOW_LIT_SHARE_AT_BASELINE.
 	   Dark windows stay faintly visible so the facade keeps its texture. */
-	.window { opacity: 0.08; shape-rendering: crispEdges; }
-	.window[data-lit="true"] { opacity: 0.5; }
+	.window { fill-opacity: 0.08; shape-rendering: crispEdges; }
+	.window[data-lit="true"] { fill-opacity: 0.5; }
 	/* A few lit windows carry subtle ambient texture — see DistrictMap::WINDOW_TWINKLE_SHARE.
 	   Styled statically with crisp edges to prevent continuous 60-144fps GPU/CPU rasterization. */
-	.window[data-lit="true"][data-twinkle="true"] { opacity: 0.72; }
-	.roofline { transition: y 150ms ease-out; fill: #4a5266; }
+	.window[data-lit="true"][data-twinkle="true"] { fill-opacity: 0.72; }
+	.roofline { fill: #4a5266; }
 
 	/* Condition outranks the sector hue — solvency is the more urgent fact. */
 	/* Condition recolours the windows but leaves the lit pattern alone — a distressed tenant
 	   that still earns its baseline keeps its lights on, in the condition's hue. */
 	.plot[data-condition="distressed"] .facade { fill: #37291d !important; stroke: #a37b3d !important; }
 	.plot[data-condition="distressed"] .window { fill: #ffd9a0 !important; }
-	.plot[data-condition="distressed"] .window[data-lit="true"] { opacity: 0.30; }
+	.plot[data-condition="distressed"] .window[data-lit="true"] { fill-opacity: 0.30; }
 	.plot[data-condition="distressed"] .roofline { fill: #6b5a3d; }
 
 	.plot[data-condition="ruin"] .facade { fill: #241a24 !important; stroke: #8c4b4b !important; stroke-dasharray: 10 7; }
-	.plot[data-condition="ruin"] .window { fill: #ffb3ad !important; opacity: 0.04; }
-	.plot[data-condition="ruin"] .window[data-lit="true"] { opacity: 0.10; }
+	.plot[data-condition="ruin"] .window { fill: #ffb3ad !important; fill-opacity: 0.04; }
+	.plot[data-condition="ruin"] .window[data-lit="true"] { fill-opacity: 0.10; }
 	.plot[data-condition="ruin"] .roofline { fill: #5c3030; }
 
 	.plot:hover .facade { fill: #2c3854 !important; transition: fill 150ms ease-out; }
-	.plot:hover .window[data-lit="true"] { opacity: 0.85; }
-	.plot:hover .window:not([data-lit="true"]) { opacity: 0.18; }
+	.plot:hover .window[data-lit="true"] { fill-opacity: 0.85; }
+	.plot:hover .window:not([data-lit="true"]) { fill-opacity: 0.18; }
 	.plot[data-selected="true"] .facade { stroke: #adc6ff !important; stroke-width: 5; }
-	.plot[data-selected="true"] .window[data-lit="true"] { opacity: 0.95; }
+	.plot[data-selected="true"] .window[data-lit="true"] { fill-opacity: 0.95; }
 
 	/* Sector filter: a legend chip dims every tenant outside its sector, plates and brackets included. */
 	.plot[data-dimmed="true"], .plot-label[data-dimmed="true"], .plot-rank[data-dimmed="true"],
@@ -62,22 +76,22 @@
 	.plot-label[data-selected="true"], .plot-rank[data-selected="true"] { fill: #adc6ff; }
 
 	/* Sector brackets along the kerb — one rule per run of adjacent same-sector plots. */
-	.sector-run .sector-rule { stroke-width: 3; opacity: 0.7; }
-	.sector-run .sector-label { font-size: 20px; letter-spacing: 1.5px; opacity: 0.75; }
+	.sector-run .sector-rule { stroke-width: 3; stroke-opacity: 0.7; }
+	.sector-run .sector-label { font-size: 20px; letter-spacing: 1.5px; fill-opacity: 0.75; }
 
-	.gridline { stroke: #2b3550; stroke-width: 2; stroke-dasharray: 4 12; opacity: 0.55; }
-	.gridline-label { fill: #6b7690; font-size: 32px; letter-spacing: 0.5px; opacity: 0.75; }
+	.gridline { stroke: #2b3550; stroke-width: 2; stroke-dasharray: 4 12; stroke-opacity: 0.55; }
+	.gridline-label { fill: #6b7690; font-size: 32px; letter-spacing: 0.5px; fill-opacity: 0.75; }
 
 	/* Roof furniture: one pictogram per trade (DistrictMap::ROOF_FURNITURE_BY_INDUSTRY), in the
 	   sector's window colour so it is legible at the street's scale; condition recolours it the
 	   way it recolours the windows. */
-	.roof-furniture { opacity: 0.85; transition: y 150ms ease-out; }
+	.roof-furniture { fill-opacity: 0.85; stroke-opacity: 0.85; }
 	.plot[data-condition="distressed"] .roof-furniture { color: #ffd9a0 !important; }
-	.plot[data-condition="ruin"] .roof-furniture { color: #ffb3ad !important; opacity: 0.3; }
+	.plot[data-condition="ruin"] .roof-furniture { color: #ffb3ad !important; fill-opacity: 0.3; stroke-opacity: 0.3; }
 
 	/* Titan marker: rendered with static illumination rather than continuous animation loop
 	   to avoid continuous 60fps CPU SVG rasterization. */
-	.plot .beacon { fill: #ffd9a0; opacity: 0.9; }
+	.plot .beacon { fill: #ffd9a0; fill-opacity: 0.9; }
 
 	/* Kerb lights: a pool in the sector colour under each plate — see DistrictMap::KERB_LIGHT_DEPTH. */
 	.kerb-light { pointer-events: none; }
@@ -92,22 +106,22 @@
 		stroke-width: 2.5;
 		transition: fill 300ms, stroke 300ms;
 	}
-	.institution .column { stroke: #56617a; stroke-width: 3; opacity: 0.5; }
-	.institution-beacon { fill: #ffb3ad; opacity: 0; transition: opacity 300ms; }
+	.institution .column { stroke: #56617a; stroke-width: 3; stroke-opacity: 0.5; }
+	.institution-beacon { fill: #ffb3ad; fill-opacity: 0; transition: fill-opacity 300ms; }
 	.institution-label {
 		fill: #8891a8;
 		font-size: 30px;
 		letter-spacing: 1px;
-		opacity: 0.7;
-		transition: opacity 200ms, fill 200ms;
+		fill-opacity: 0.7;
+		transition: fill-opacity 200ms, fill 200ms;
 	}
 	.institution-readout { font-size: 26px; }
 	.readout-label { fill: #838da3; letter-spacing: 0.5px; }
 	.readout-value { fill: #adc6ff; font-weight: bold; }
 	/* Recent readings under each value, drawn client-side from the ticks seen — see
 	   DistrictMap::INSTITUTION_SPARKLINE_WIDTH. Empty until a second sample lands. */
-	.readout-spark { fill: none; stroke: #56617a; stroke-width: 2; stroke-linejoin: round; opacity: 0.8; }
-	.readout-spark-base { stroke: #2b3550; stroke-width: 1.5; opacity: 0.6; }
+	.readout-spark { fill: none; stroke: #56617a; stroke-width: 2; stroke-linejoin: round; stroke-opacity: 0.8; }
+	.readout-spark-base { stroke: #2b3550; stroke-width: 1.5; stroke-opacity: 0.6; }
 	.institution[data-stressed="true"] .readout-spark { stroke: #ffb3ad; }
 
 	.institution:hover .pediment, .institution:hover .body { fill: #2c3854; }
@@ -115,14 +129,14 @@
 		stroke: #adc6ff;
 		stroke-width: 5;
 	}
-	.institution[data-selected="true"] .institution-label { opacity: 1; fill: #adc6ff; }
+	.institution[data-selected="true"] .institution-label { fill-opacity: 1; fill: #adc6ff; }
 
 	.institution[data-stressed="true"] .pediment, .institution[data-stressed="true"] .body {
 		fill: #3a2a2e;
 		stroke: #a35c5c;
 	}
-	.institution[data-stressed="true"] .institution-beacon { opacity: 1; }
-	.institution[data-stressed="true"] .institution-label { opacity: 1; fill: #ffb3ad; }
+	.institution[data-stressed="true"] .institution-beacon { fill-opacity: 1; }
+	.institution[data-stressed="true"] .institution-label { fill-opacity: 1; fill: #ffb3ad; }
 	.institution[data-stressed="true"] .readout-value { fill: #ffb3ad; }
 
 	/* --- Conduits --- */
@@ -137,36 +151,37 @@
 		stroke-width: 3;
 		stroke-linejoin: round;
 		stroke-dasharray: 10 9;
-		opacity: 0.12;
-		transition: opacity 300ms, stroke 300ms;
+		stroke-opacity: 0.12;
+		transition: stroke-opacity 300ms, stroke 300ms, d var(--facade-glide) ease-out;
 	}
 	.conduit[data-hover="true"] {
-		opacity: 0.85;
+		stroke-opacity: 0.85;
 		stroke: #8fa5d6;
 	}
 	.conduit[data-stressed="true"] {
-		opacity: 0.85;
+		stroke-opacity: 0.85;
 		stroke: #ffb3ad;
 		stroke-width: 3.5;
 		stroke-dasharray: 6 6;
 	}
 	.conduit[data-highlighted="true"] {
-		opacity: 0.95;
+		stroke-opacity: 0.95;
 		stroke: #adc6ff;
 		stroke-width: 4;
 	}
 
 	/* --- Event Flares & Badges --- */
-	.event-flare { opacity: 0; pointer-events: none; fill: #adc6ff; }
-	.event-flare[data-flash="true"] { animation: flare-burst 900ms ease-out; }
+	/* Hidden by visibility, not opacity 0 — see the note on fill-opacity above. */
+	.event-flare { visibility: hidden; fill-opacity: 0; pointer-events: none; fill: #adc6ff; }
+	.event-flare[data-flash="true"] { visibility: visible; animation: flare-burst 900ms ease-out; }
 	@keyframes flare-burst {
-		0%   { opacity: 0.95; r: 6; }
-		55%  { opacity: 0.45; r: 30; }
-		100% { opacity: 0; r: 40; }
+		0%   { fill-opacity: 0.95; r: 6; }
+		55%  { fill-opacity: 0.45; r: 30; }
+		100% { fill-opacity: 0; r: 40; }
 	}
 
-	.event-badge { opacity: 0; transition: opacity 200ms; pointer-events: none; }
-	.event-badge:not([data-count="0"]) { opacity: 1; }
+	.event-badge { visibility: hidden; pointer-events: none; }
+	.event-badge:not([data-count="0"]) { visibility: visible; }
 	.event-badge circle { fill: #171f33; stroke: #56617a; stroke-width: 2.5; }
 	.event-badge text { fill: #c2c6d6; font-size: 26px; font-weight: bold; }
 	.event-badge[data-flash="true"] circle { animation: badge-pop 500ms ease-out; }
@@ -203,17 +218,17 @@
 
 	/* Conduit mode display */
 	.district-map[data-conduit-mode="muted"] .conduit { display: none !important; }
-	.district-map[data-conduit-mode="stressed"] .conduit:not([data-stressed="true"]) { opacity: 0.02 !important; }
-	.district-map[data-conduit-mode="focused"] .conduit:not([data-highlighted="true"]):not([data-hover="true"]) { opacity: 0.02 !important; }
+	.district-map[data-conduit-mode="stressed"] .conduit:not([data-stressed="true"]) { stroke-opacity: 0.02 !important; }
+	.district-map[data-conduit-mode="focused"] .conduit:not([data-highlighted="true"]):not([data-hover="true"]) { stroke-opacity: 0.02 !important; }
 
 	@media (prefers-reduced-motion: reduce) {
-		.plot .beacon { animation: none; opacity: 0.75; }
+		.district-map { --facade-glide: 0ms !important; }
+		.plot .beacon { animation: none; fill-opacity: 0.75; }
 		.window[data-lit="true"][data-twinkle="true"] { animation: none; }
-		.roof-furniture { transition: none; }
-		.institution[data-stressed="true"] .institution-beacon { animation: none; opacity: 1; }
-		.facade, .plot-windows, .roofline, .institution .pediment, .institution .body, .conduit,
+		.institution[data-stressed="true"] .institution-beacon { animation: none; fill-opacity: 1; }
+		.plot-windows, .institution .pediment, .institution .body, .conduit,
 		#plot-tooltip { transition: none; animation: none; }
-		.event-flare[data-flash="true"] { animation: none; opacity: 0.6; }
+		.event-flare[data-flash="true"] { animation: none; fill-opacity: 0.6; }
 		.event-badge[data-flash="true"] circle { animation: none; }
 	}
 </style>
@@ -238,7 +253,6 @@
 	data-district-user-holdings-value="{{ userHoldings|json_encode(constant('JSON_FORCE_OBJECT'))|e('html_attr') }}"
 	data-district-user-cash-value="{{ userCash }}"
 	data-district-margin-enabled-value="{{ marginEnabled ? 'true' : 'false' }}"
-	data-district-position-pennant-value="{{ positionPennant|json_encode|e('html_attr') }}"
 	data-district-reconstitution-value="{{ reconstitution|json_encode|e('html_attr') }}">
 
 	<script type="application/json" id="district-events-data">{{ events|json_encode|raw }}</script>
@@ -741,27 +755,35 @@
 											width="{{ plot.width }}" height="{{ plot.height }}"
 											fill="{{ palette.facade }}" stroke="{{ palette.stroke }}"/>
 
-										<rect class="roofline"
-											x="{{ plot.x - 5 }}" y="{{ plot.y - 7 }}"
-											width="{{ plot.width + 10 }}" height="7"/>
-
 										{% if cols > 0 %}
+											{# Positioned by a CSS transform, not the attribute, so a live resize glides —
+											   resizeFacade() in district_controller.js rewrites the same style. #}
 											<g clip-path="url(#above-ground-{{ rowIndex }})">
-											<g class="plot-windows" transform="translate({{ plot.x }} {{ plot.y }})">
+											<g class="plot-windows" style="transform: translate({{ plot.x }}px, {{ plot.y }}px)">
 												{% for row in 0..(plot.floors - 1) %}
 													{% for col in 0..(cols - 1) %}
 														{% set phase = plot.twinklePhases[row][col] %}
 														<rect class="window" fill="{{ palette.window }}"
 															data-lit="{{ plot.litWindows[row][col] ? 'true' : 'false' }}"
 															data-key="{{ plot.windowKeys[row][col] }}"
-															{%- if phase is not null %} data-twinkle="true" style="animation-duration:{{ window.twinklePeriod }}s;animation-delay:-{{ (phase * window.twinklePeriod)|number_format(2, '.', '') }}s"{% endif %}
+															{%- if phase is not null %} data-twinkle="true"{% endif %}
 															x="{{ plot.windowInset + col * window.pitch }}" y="{{ firstFloorInset + row * floorHeight }}"
 															width="{{ window.width }}" height="{{ window.height }}"/>
 													{% endfor %}
 												{% endfor %}
 											</g>
 											</g>
+										{% endif %}
 
+										{# Everything that rides the roofline, in one group: a live resize moves the kit
+										   by a single transform (data-roof-y is where it was drawn) rather than
+										   rewriting seven elements' coordinates — see resizeFacade(). #}
+										<g class="roof-kit" data-district-target="roofKit" data-roof-for="{{ plot.ticker }}" data-roof-y="{{ plot.y }}">
+										<rect class="roofline"
+											x="{{ plot.x - 5 }}" y="{{ plot.y - 7 }}"
+											width="{{ plot.width + 10 }}" height="7"/>
+
+										{% if cols > 0 %}
 											{# Roof furniture by business model, right-anchored clear of the badge —
 											   see App\Data\DistrictMap::ROOF_FURNITURE_EAST_MARGIN. #}
 											{% set furnitureX = plot.x + plot.width - roofFurniture.eastMargin - roofFurniture.width %}
@@ -785,13 +807,13 @@
 												x="{{ plot.x + 4 }}" y="{{ plot.y - 14 }}">#{{ plot.rank }}</text>
 
 											{# Position pennant on the roof of a building the player holds. Geometry is
-											   App\Data\DistrictMap::POSITION_PENNANT_*; movePennant() in district_controller.js
-											   redraws it from the same figures when the facade resizes. #}
+											   App\Data\DistrictMap::POSITION_PENNANT_*; it rides the roof kit, so a live
+											   resize needs no second copy of these figures client-side. #}
 											{% if isOwned %}
 												{% set poleX = plot.x + positionPennant.inset %}
 												{% set poleTop = plot.y - 14 - positionPennant.height - 6 %}
 												{% set pennantColour = holding.isShort ? '#ffd9a0' : '#4edea3' %}
-												<g class="plot-pennant" data-district-target="pennant" data-pennant-for="{{ plot.ticker }}">
+												<g class="plot-pennant">
 													<line x1="{{ poleX }}" y1="{{ plot.y - 14 }}" x2="{{ poleX }}" y2="{{ poleTop }}"
 														stroke="{{ pennantColour }}" stroke-width="2"/>
 													<polygon points="{{ poleX }},{{ poleTop }} {{ poleX + positionPennant.width }},{{ poleTop + positionPennant.height / 2 }} {{ poleX }},{{ poleTop + positionPennant.height }}"
@@ -813,6 +835,7 @@
 													text-anchor="middle" dominant-baseline="central">{{ recentCount }}</text>
 											</g>
 										{% endif %}
+										</g>
 									</g>
 								{% endfor %}
 							</g>
@@ -847,12 +870,16 @@
 					{# Kerb lights: a pool in the sector colour on the pavement under each plate,
 					   clipped to the kerb band — see App\Data\DistrictMap::KERB_LIGHT_DEPTH. #}
 					<g id="kerb-lights" aria-hidden="true">
-						{% for plot in plots %}
-							<ellipse class="kerb-light" data-district-target="kerbLight" data-light-for="{{ plot.ticker }}"
-								clip-path="url(#kerb-band-{{ plot.row }})"
-								cx="{{ plot.x + plot.width / 2 }}" cy="{{ plot.groundLine }}"
-								rx="{{ plot.width / 2 + 10 }}" ry="{{ kerbLight.depth }}"
-								fill="url(#kerb-glow-{{ kerbGlowIds[plot.sector] ?? 0 }})"/>
+						{% for rowIndex, rowGroundLine in rowGroundLines %}
+							{# One clip per row, not per pool: every clip reference is a separate paint effect. #}
+							<g clip-path="url(#kerb-band-{{ rowIndex }})">
+								{% for plot in plots|filter(p => p.row == rowIndex) %}
+									<ellipse class="kerb-light" data-district-target="kerbLight" data-light-for="{{ plot.ticker }}"
+										cx="{{ plot.x + plot.width / 2 }}" cy="{{ plot.groundLine }}"
+										rx="{{ plot.width / 2 + 10 }}" ry="{{ kerbLight.depth }}"
+										fill="url(#kerb-glow-{{ kerbGlowIds[plot.sector] ?? 0 }})"/>
+								{% endfor %}
+							</g>
 						{% endfor %}
 					</g>
 

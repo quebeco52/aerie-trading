@@ -31,7 +31,7 @@ class DistrictPlotDTO
         public readonly array $litWindows,
         /** Each window's lighting priority in [0, 1), indexed [floor][column]; lit when it falls under the lit share. Shipped so a live tick can relight the facade client-side. @var list<list<float>> */
         public readonly array $windowKeys,
-        /** Flicker phase in [0, 1) for each window that twinkles while lit, null where it burns steady, indexed [floor][column] — see DistrictMap::WINDOW_TWINKLE_SHARE. @var list<list<float|null>> */
+        /** Non-null for each window drawn a step brighter while lit (`data-twinkle`), null where it burns steady, indexed [floor][column] — see DistrictMap::WINDOW_TWINKLE_SHARE. The value is a stable hash in [0, 1); only its presence is rendered now that the flicker animation is gone. @var list<list<float|null>> */
         public readonly array $twinklePhases,
         /** Fraction of windows lit, the figure the lighting was drawn from. */
         public readonly float $litShare,

@@ -11,6 +11,7 @@ import { updateFundamentalCharts, resizeFundamentalCharts, destroyFundamentalCha
 let rawReports = [];
 let currentContext = {};
 let marketUpdateHandler = null;
+let marketFrameHandler = null;
 let tabChangeHandler = null;
 
 function getAerieContext() {
@@ -93,28 +94,36 @@ function initStockPage() {
         });
     }
 
-    // Set up Real-Time Market Stream Listener
+    // Every tick goes to the price chart only: the live bar's high and low are accumulated
+    // from each tick, so the chart is the one consumer that must see all of them.
     marketUpdateHandler = (event) => {
+        const payload = event.detail;
+        const stockUpdate = payload && payload.stocks ? payload.stocks.find(s => s.ticker === ticker) : null;
+        if (!stockUpdate) return;
+        try {
+            updateLivePricePoint(parseFloat(stockUpdate.price), stockUpdate.volume);
+        } catch (err) {
+            console.error('Error updating live chart:', err);
+        }
+    };
+    document.addEventListener('market:update', marketUpdateHandler);
+
+    // Everything written to the page reads the coalesced frame (market-stream.js): latest
+    // state per ticker, every event since the previous frame, at most every FRAME_INTERVAL_MS.
+    marketFrameHandler = (event) => {
         const payload = event.detail;
         if (!payload) return;
 
         if (isEtf) {
-            updateMacroIndicators(payload);
             updateEtfPie(payload, currentContext.sharesMap);
         }
 
         const stockUpdate = payload.stocks ? payload.stocks.find(s => s.ticker === ticker) : null;
         if (stockUpdate) {
-            const newPrice = parseFloat(stockUpdate.price);
             try {
-                updatePriceUI(newPrice, stockUpdate, currentContext);
+                updatePriceUI(parseFloat(stockUpdate.price), stockUpdate, currentContext);
             } catch (err) {
                 console.error('Error updating price UI:', err);
-            }
-            try {
-                updateLivePricePoint(newPrice, stockUpdate.volume);
-            } catch (err) {
-                console.error('Error updating live chart:', err);
             }
         }
 
@@ -122,11 +131,11 @@ function initStockPage() {
             renderEvents(payload.events, ticker);
         }
 
-        if (payload.macro) {
+        if (payload.macro || payload.economic_cycle) {
             updateMacroIndicators(payload);
         }
     };
-    document.addEventListener('market:update', marketUpdateHandler);
+    document.addEventListener('market:frame', marketFrameHandler);
 
     // Handle Tab Changes for Canvas Resizes
     tabChangeHandler = () => {
@@ -163,6 +172,10 @@ function cleanupPageResources() {
     if (marketUpdateHandler) {
         document.removeEventListener('market:update', marketUpdateHandler);
         marketUpdateHandler = null;
+    }
+    if (marketFrameHandler) {
+        document.removeEventListener('market:frame', marketFrameHandler);
+        marketFrameHandler = null;
     }
     if (tabChangeHandler) {
         document.removeEventListener('tabs:changed', tabChangeHandler);

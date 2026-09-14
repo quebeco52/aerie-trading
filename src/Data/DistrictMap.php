@@ -222,14 +222,13 @@ class DistrictMap
      */
     public const WINDOW_KEY_PRECISION = 4;
     /**
-     * Share of a facade's windows that flicker slowly while lit. A static grid of lit windows
-     * reads as a diagram; a few drifting ones read as a city. Which windows flicker, and where
-     * in the cycle each one starts, is a second stable hash of the window's address, so the
-     * street never changes its mind between renders.
+     * Share of a facade's lit windows drawn a step brighter than the rest (`data-twinkle`). A
+     * uniform grid of lit windows reads as a diagram; a few uneven ones read as a city. Which
+     * windows is a second stable hash of the window's address, so the street never changes its
+     * mind between renders. They were once animated; the flicker was dropped because a few
+     * hundred infinitely-animating SVG rects re-rasterised the street at the display's frame rate.
      */
     public const WINDOW_TWINKLE_SHARE = 0.12;
-    /** Seconds one flicker cycle lasts. Slow, so it never competes with the roofline tick flashes. */
-    public const WINDOW_TWINKLE_PERIOD_SECONDS = 5.5;
 
     // --- Roof Furniture ---
     /**

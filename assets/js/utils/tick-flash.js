@@ -2,15 +2,14 @@
 
 const FLASH_DURATION_MS = 500;
 
-// One pending clear per element, so a fast tick supersedes the previous flash rather than
-// leaving two timers racing to restore different colours.
-const pendingClears = new WeakMap();
+// Every flashed element and when its colour should be restored. One sweep timer serves them
+// all: the previous version armed (and cancelled) a timer per element per tick, which on the
+// market table was hundreds of timers a second for nothing.
+const expiries = new Map();
+let sweepTimer = null;
 
 export function flashTick(el, direction) {
     if (!el) return;
-
-    const existing = pendingClears.get(el);
-    if (existing) clearTimeout(existing);
 
     el.classList.remove('tick-up', 'tick-down');
     if (direction > 0) {
@@ -18,12 +17,32 @@ export function flashTick(el, direction) {
     } else if (direction < 0) {
         el.classList.add('tick-down');
     } else {
-        pendingClears.delete(el);
+        expiries.delete(el);
         return;
     }
 
-    pendingClears.set(el, setTimeout(() => {
-        el.classList.remove('tick-up', 'tick-down');
-        pendingClears.delete(el);
-    }, FLASH_DURATION_MS));
+    expiries.set(el, Date.now() + FLASH_DURATION_MS);
+    if (sweepTimer === null) {
+        sweepTimer = setTimeout(sweep, FLASH_DURATION_MS);
+    }
+}
+
+/** Restores every element whose flash has run its course, then re-arms for the next one due. */
+function sweep() {
+    sweepTimer = null;
+    const now = Date.now();
+    let nextDue = Infinity;
+
+    expiries.forEach((expiry, el) => {
+        if (expiry <= now) {
+            el.classList.remove('tick-up', 'tick-down');
+            expiries.delete(el);
+        } else {
+            nextDue = Math.min(nextDue, expiry);
+        }
+    });
+
+    if (nextDue !== Infinity) {
+        sweepTimer = setTimeout(sweep, Math.max(16, nextDue - now));
+    }
 }
