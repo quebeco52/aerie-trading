@@ -102,7 +102,7 @@ class MergerAndAcquisitionEngineTest extends TestCase
 
         $this->debtEngineMock->method('analyzeDebtHealth')->willReturn($debtHealthMock);
         $this->corporateMetricsMock->method('calculateOperatingBase')->willReturn(15000000000.0);
-        $this->mathUtilityMock->method('calculateIntrinsicFairValuePE')->willReturn(15.0);
+        $this->mathUtilityMock->method('calculateManagementFairValuePE')->willReturn(15.0);
         $this->mathUtilityMock->method('calculateLogNormalSynergy')->willReturn(1.10);
         $this->mathUtilityMock->method('checkProbability')->willReturn(true);
         $this->mathUtilityMock->method('generateUniformBetween')->willReturn(0.80);
@@ -174,7 +174,7 @@ class MergerAndAcquisitionEngineTest extends TestCase
 
         $this->debtEngineMock->method('analyzeDebtHealth')->willReturn($debtHealthMock);
         $this->corporateMetricsMock->method('calculateOperatingBase')->willReturn(15000000000.0);
-        $this->mathUtilityMock->method('calculateIntrinsicFairValuePE')->willReturn(15.0);
+        $this->mathUtilityMock->method('calculateManagementFairValuePE')->willReturn(15.0);
         $this->mathUtilityMock->method('calculateLogNormalSynergy')->willReturn(1.10);
         $this->mathUtilityMock->method('checkProbability')->willReturn(true);
         $this->mathUtilityMock->method('generateUniformBetween')->willReturn(0.80);
@@ -255,7 +255,7 @@ class MergerAndAcquisitionEngineTest extends TestCase
 
         $this->debtEngineMock->method('analyzeDebtHealth')->willReturn($debtHealthMock);
         $this->corporateMetricsMock->method('calculateOperatingBase')->willReturn(15000000000.0);
-        $this->mathUtilityMock->method('calculateIntrinsicFairValuePE')->willReturn(15.0);
+        $this->mathUtilityMock->method('calculateManagementFairValuePE')->willReturn(15.0);
         $this->mathUtilityMock->method('calculateLogNormalSynergy')->willReturn(1.10);
         $this->mathUtilityMock->method('checkProbability')->willReturn(true);
         $this->mathUtilityMock->method('generateUniformBetween')->willReturn(0.80);
@@ -339,7 +339,7 @@ class MergerAndAcquisitionEngineTest extends TestCase
 
         $this->debtEngineMock->method('analyzeDebtHealth')->willReturn($debtHealthMock);
         $this->corporateMetricsMock->method('calculateOperatingBase')->willReturn(10000000.0);
-        $this->corporateMetricsMock->method('calculateMarketShare')->willReturn(0.10);
+        $this->corporateMetricsMock->method('calculateScaleRatio')->willReturn(0.10);
         $this->mathUtilityMock->method('checkProbability')->willReturn(true);
         $this->mathUtilityMock->method('generateUniformBetween')->willReturn(0.25); // Divest 25%
         $this->marketEventPublisherMock->method('publish')->willReturn(['event_type' => 'DIVESTITURE']);
@@ -610,7 +610,7 @@ class MergerAndAcquisitionEngineTest extends TestCase
 
         $this->debtEngineMock->method('analyzeDebtHealth')->willReturn($health);
         $this->corporateMetricsMock->method('calculateOperatingBase')->willReturn($operatingBase);
-        $this->mathUtilityMock->method('calculateIntrinsicFairValuePE')->willReturn(15.0);
+        $this->mathUtilityMock->method('calculateManagementFairValuePE')->willReturn(15.0);
         $this->mathUtilityMock->method('calculateLogNormalSynergy')->willReturn(1.10);
         $this->mathUtilityMock->method('checkProbability')->willReturn(true);
         $this->mathUtilityMock->method('generateUniformBetween')->willReturn(0.80);
@@ -652,7 +652,7 @@ class MergerAndAcquisitionEngineTest extends TestCase
 
         $this->debtEngineMock->method('analyzeDebtHealth')->willReturn($health);
         $this->corporateMetricsMock->method('calculateOperatingBase')->willReturn($operatingBase);
-        $this->corporateMetricsMock->method('calculateMarketShare')->willReturn(0.10);
+        $this->corporateMetricsMock->method('calculateScaleRatio')->willReturn(0.10);
         $this->mathUtilityMock->method('checkProbability')->willReturn(true);
         // One draw serves both the divested fraction and the fire-sale cents on the dollar.
         $this->mathUtilityMock->method('generateUniformBetween')->willReturn($fraction);

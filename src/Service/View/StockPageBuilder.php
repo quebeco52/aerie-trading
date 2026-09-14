@@ -37,6 +37,7 @@ class StockPageBuilder
         private readonly CompanySnapshotBuilder $companySnapshot,
         private readonly EtfCompositionBuilder $etfComposition,
         private readonly PeerTableBuilder $peerTable,
+        private readonly IndustryPositionBuilder $industryPosition,
         private readonly ViewerPositionBuilder $viewerPosition,
         private readonly StockEventRepository $stockEvents,
         private readonly EtfEventRepository $etfEvents,
@@ -87,7 +88,7 @@ class StockPageBuilder
      */
     private function companyBlocks(Stock $stock, \App\DTO\MacroStateDTO $macroState): array
     {
-        return $this->companySnapshot->build($stock, $macroState) + [
+        return $this->companySnapshot->build($stock, $macroState) + $this->industryPosition->build($stock, $macroState) + [
             'peers' => $this->peerTable->build($stock),
             'allAssets' => [],
             'pieLabels' => [],
@@ -123,6 +124,7 @@ class StockPageBuilder
             'targetPE' => 20.00,
             'investedCapital' => 0.0,
             'marketShare' => 0.0,
+            'industry' => null,
             'lifecycleStage' => null,
             'dividendYield' => 0.0,
             'analystTargets' => null,

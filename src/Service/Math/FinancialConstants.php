@@ -67,10 +67,6 @@ class FinancialConstants
     public const MIN_JUMP_LOG_RETURN = -0.3567;
 
     // --- EPS Smoothing ---
-    /** Weight applied to historical smoothed EPS when updating trailing twelve month earnings. */
-    public const EPS_TTM_SMOOTHING_OLD_WEIGHT = 0.60;
-    /** Weight applied to latest quarterly annualized EPS in TTM smoothing. */
-    public const EPS_TTM_SMOOTHING_NEW_WEIGHT = 0.40;
 
     // --- Price Gap Dampening ---
     /** Liquidity dampener slowing instantaneous price convergence to fundamental fair value. */
@@ -83,8 +79,6 @@ class FinancialConstants
     public const TARGET_OPERATING_CASH_RATIO = 0.05;
     /** Minimum cash buffer floor before triggering liquidity distress protocols. */
     public const MIN_OPERATING_CASH_RATIO = 0.03;
-    /** Baseline interest yield earned on corporate short-term cash reserves. */
-    public const BASE_CASH_YIELD_TARGET_RATIO = 0.05;
     /** Cash-to-revenue ratio threshold classifying a corporate as a cash hoarder. */
     public const HOARDER_THRESHOLD_RATIO = 0.25;
     /** Cash-to-revenue ratio threshold classifying a firm as an aggressive mega cash hoarder. */
@@ -111,10 +105,16 @@ class FinancialConstants
     // --- Valuation & Multiples ---
     /** Baseline long-run market equilibrium price-to-earnings multiple. */
     public const BASELINE_MARKET_PE = 15.0;
-    /** Defensive fallback P/E multiple used when earnings are negative. */
-    public const NEGATIVE_EPS_FALLBACK_PE = 35.0;
     /** Baseline long-term stable GDP growth rate for Gordon Growth valuation. */
     public const DEFAULT_PERPETUAL_GROWTH_RATE = 0.02;
+    // --- Fundamental Growth Transmission ---
+    /** Share of the output gap that reaches a firm's real growth rate, before its beta scales the cyclical exposure. */
+    public const CYCLICAL_GROWTH_PASS_THROUGH = 0.50;
+    /** Share of inflation that carries into the nominal growth rate used for valuation. */
+    public const INFLATION_NOMINAL_GROWTH_PASS_THROUGH = 0.50;
+    /** Cap on nominal expected growth, held below any plausible hurdle rate so the Gordon Growth denominator cannot diverge. */
+    public const MAX_EXPECTED_GROWTH = 0.05;
+
     /** Absolute floor on intrinsic fundamental P/E multiple. */
     public const MIN_INTRINSIC_PE = 4.0;
     /** Absolute ceiling on intrinsic fundamental P/E multiple. */
@@ -123,12 +123,8 @@ class FinancialConstants
     // --- Relative Valuation Shrinkage (Vasicek 1973) ---
     /** Spread (cost of equity less growth) at which a firm's own Gordon multiple and its sector's carry equal weight. */
     public const INTRINSIC_PE_SHRINKAGE_SPREAD = 0.03;
-    /** Maximum fallback capitalization multiple when DCF denominator approaches zero. */
-    public const DCF_FALLBACK_MULTIPLIER = 60.0;
     /** Fundamental cap on free cash flow capitalization multiple (~33.3x or 3% FCF yield). */
     public const MAX_DCF_MULTIPLIER = 33.33;
-    /** Baseline dividend growth rate for Dividend Discount Model valuations. */
-    public const DEFAULT_DDM_GROWTH_RATE = 0.01;
     /** Minimum price-to-sales multiple clamp during valuation stress. */
     public const MIN_PS_FALLBACK_MULT = 0.2;
     /** Maximum price-to-sales multiple clamp during valuation expansion. */
@@ -147,12 +143,8 @@ class FinancialConstants
     // --- Brokerage & Lending ---
     /** Net interest margin earned by brokerages on client margin debit balances. */
     public const MARGIN_LOAN_SPREAD = 0.03;
-    /** Turnover multiple cap on brokerage revenue scaling relative to total equity. */
-    public const BROKERAGE_MAX_EQUITY_TURNOVER = 15.0;
 
     // --- Institutional & Market Architecture ---
-    /** Margin spread (15 bps) earned by clearinghouses and custodians on client margin pools. */
-    public const CUSTODY_CLEARING_SPREAD = 0.0015;
     /** Penalty credit spread (+200 bps) incurred when issuing emergency liquidity debt. */
     public const EMERGENCY_DEBT_SPREAD_PENALTY = 0.02;
     /** Circuit breaker limiting the price move of a single quarterly earnings report to +/-40%. */
@@ -165,8 +157,8 @@ class FinancialConstants
     // --- Market Saturation & Bureaucratic Bloat ---
     /** Baseline total addressable market size ($1T) for standard corporate sectors. */
     public const BASELINE_SECTOR_TAM = 1_000_000_000_000.00;
-    /** Price elasticity of demand parameter in Cournot market share competition. */
-    public const COURNOT_DEMAND_ELASTICITY = 1.25;
+    /** Ceiling on a firm's displayed share of its addressable market; no firm serves all of one. */
+    public const MAX_ADDRESSABLE_MARKET_SHARE = 0.9999;
     /** Market share threshold (50%) beyond which Penrose bureaucratic bloat accelerates. */
     public const DISECONOMY_OPTIMAL_SHARE_THRESHOLD = 0.50;
     /** Penrose bureaucratic friction coefficient penalizing margins at extreme scale. */
@@ -269,9 +261,19 @@ class FinancialConstants
     /** Share of a financial institution's idiosyncratic gain taken from peers: deposits, mandates and AUM move between houses, but much of the swing is market volume. */
     public const DEFAULT_FINANCIAL_INDUSTRY_SUBSTITUTABILITY = 0.35;
 
-    // --- Industry Exit & Consolidation ---
-    /** Share of a failed rival's addressable market that surviving peers in the same industry recapture; the rest leaks to substitutes or is destroyed. */
-    public const MARKET_EXIT_RECAPTURE_FRACTION = 0.70;
+    // --- Industry Capacity & Cournot Pricing ---
+    /** Industry price elasticity of demand: the inverse demand curve P ~ Q^(-1/e) that installed capacity is sold into (Cournot). */
+    public const COURNOT_DEMAND_ELASTICITY = 1.25;
+    /** Widest capacity-to-demand ratio the industry price responds to; past it the excess is idle plant, not a deeper price cut. */
+    public const MAX_INDUSTRY_CAPACITY_RATIO = 2.0;
+    /** Tightest capacity-to-demand ratio the industry price responds to; past it demand is rationed rather than bid ever higher. */
+    public const MIN_INDUSTRY_CAPACITY_RATIO = 0.5;
+    /** Largest fraction by which the industry capacity balance may move a single firm's realized price level, either way. */
+    public const MAX_INDUSTRY_PRICE_RESPONSE = 0.30;
+
+    // --- Corporate Flow Pacing (SEC Rule 10b-18) ---
+    /** Share of a day's average volume a repurchase program (or a placed offering's flowback) may execute per day under the 10b-18 volume condition. */
+    public const CORPORATE_FLOW_MAX_ADV_SHARE_PER_DAY = 0.25;
 
     // --- Balance Sheet Realism ---
     /** Default capitalized operating lease liability (IFRS 16 / ASC 842) as a fraction of annual revenue. */
@@ -302,8 +304,6 @@ class FinancialConstants
     public const DEBT_EXPANSION_AGGR_MULT = 0.35;
     /** Minimum hurdle spread (100 bps) required between ROIC and WACC before issuing debt. */
     public const WACC_ARBITRAGE_BUFFER = 0.01;
-    /** Regulatory leverage ratio threshold below which a financial institution is underleveraged. */
-    public const FINANCIAL_UNDERLEVERAGED_RATIO = 0.80;
     /** Debt-to-equity ratio threshold below which a corporate entity is underleveraged. */
     public const CORPORATE_UNDERLEVERAGED_RATIO = 0.75;
     /** Safety coverage multiplier required above minimum interest coverage ratio. */
@@ -410,9 +410,9 @@ class FinancialConstants
     // --- Equity Issuance & TAM Scaling Limits ---
     /** Maximum fraction of market capitalization that can be raised in a distressed emergency equity offering (25%). */
     public const MAX_EMERGENCY_EQUITY_RAISE_RATIO = 0.25;
-    /** Maximum structural capacity and revenue multiplier relative to dynamic Sector TAM (150%). */
+    /** Ceiling on structural revenue capacity, as a multiple of the firm's revenue at a full addressable share (150%). */
     public const MAX_SECTOR_TAM_CAPACITY_RATIO = 1.50;
-    /** Maximum structural capacity and revenue multiplier for financial intermediaries relative to dynamic TAM (250%). */
+    /** The same ceiling for financial intermediaries, whose share is read on equity while revenue comes off the leveraged book (250%). */
     public const MAX_FINANCIAL_SECTOR_TAM_CAPACITY_RATIO = 2.50;
     // --- Sovereign Bond Desk ---
     /** Face value of a single sovereign bond, redeemed at maturity and the base every coupon is struck against. */

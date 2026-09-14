@@ -9,7 +9,7 @@ namespace App\Service\Corporate\Industry;
  */
 final class InMemoryIndustryShareStore implements IndustryShareStoreInterface
 {
-    /** @var array<string, array<string, array{revenue: float, gain: float, tick: int, consumed_tick: int}>> */
+    /** @var array<string, array<string, array{revenue: float, gain: float, capacity: float, anchor_capacity_share: float, anchor_demand_share: float, anchor_time: float, addressable_share: float, tick: int, consumed_tick: int}>> */
     private array $records = [];
 
     public function readIndustry(string $industry): array

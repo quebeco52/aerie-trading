@@ -257,7 +257,7 @@ class ClearingHouseBusinessModel extends BaseFinancialBusinessModel
         // Under the Default Waterfall, routine member defaults ($defaultZ >= CATASTROPHE_Z_THRESHOLD) are fully absorbed
         // by the defaulting member's posted Initial Margin and Guaranty Fund contribution ($0 loss to CCP equity).
         // Only a severe systemic failure pierces the waterfall to hit the CCP's Skin-in-the-Game (SITG) capital tranche.
-        $corporateDefaultShift = max(0.0, ($macroState->corporateDefaultRateEma - MacroEngine::CORPORATE_DEFAULT_BASELINE) / MacroEngine::CORPORATE_DEFAULT_BASELINE);
+        $corporateDefaultShift = MathUtility::excessOverBaseline($macroState->corporateDefaultRateEma, MacroEngine::CORPORATE_DEFAULT_BASELINE);
         $macroMemberStress = $corporateDefaultShift * self::MACRO_DEFAULT_STRESS_SCALAR * 0.05;
 
         $catastropheShock = ($defaultZ < self::CATASTROPHE_Z_THRESHOLD

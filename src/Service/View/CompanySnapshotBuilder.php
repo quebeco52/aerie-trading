@@ -10,15 +10,13 @@ use App\DTO\MarketPricingContext;
 use App\Entity\Stock;
 use App\Service\Corporate\DebtEngine;
 use App\Service\Market\MarketEngine;
-use App\Service\Math\CorporateMetrics;
 
 /**
- * Builds the headline valuation block on a company's page: size, multiple, share of its market,
- * yield, and where the analysts have it marked.
+ * Builds the headline valuation block on a company's page: size, multiple, yield, and where the
+ * analysts have it marked. Its place in its industry is IndustryPositionBuilder's.
  *
  * A delisted company keeps its page but none of these readings: the equity claim is gone, so a
- * market cap, a multiple or a share of a market it no longer serves would each be quoting a number
- * for something that does not exist.
+ * market cap or a multiple would each be quoting a number for something that does not exist.
  */
 class CompanySnapshotBuilder
 {
@@ -30,9 +28,6 @@ class CompanySnapshotBuilder
     /** Downside below the traded price under which the consensus reads as a sell. */
     private const UNDERPERFORM_THRESHOLD = 0.95;
 
-    /** Ceiling on a company's modelled share of its addressable market; no firm serves all of one. */
-    private const MAX_MARKET_SHARE = 0.9999;
-
     /** Quarters in a year: lastDividend is one Lintner step, and a yield is an annual rate. */
     private const DIVIDEND_PERIODS_PER_YEAR = 4.0;
 
@@ -40,7 +35,6 @@ class CompanySnapshotBuilder
     private const FALLBACK_INDUSTRY_PE = 20.0;
 
     public function __construct(
-        private readonly CorporateMetrics $corporateMetrics,
         private readonly MarketEngine $marketEngine,
         private readonly DebtEngine $debtEngine,
     ) {}
@@ -58,10 +52,6 @@ class CompanySnapshotBuilder
         $eps = $isBankrupt ? 0.0 : (float) $stock->getEarningsPerShare();
         $lastDividend = (float) $stock->getLastDividend();
 
-        // A lender's capital employed is funded by deposits and wholesale borrowing, so equity is the
-        // base its reach is measured against; an industrial's is the capital it has put to work.
-        $evaluationCapital = $isFinancial ? (float) $stock->getTotalEquity() : $stock->getInvestedCapital();
-
         return [
             'isFinancial' => $isFinancial,
             'businessModel' => $businessModel,
@@ -69,14 +59,6 @@ class CompanySnapshotBuilder
             'peRatio' => (!$isBankrupt && $eps > 0.0) ? $price / $eps : null,
             'targetPE' => self::FALLBACK_INDUSTRY_PE,
             'investedCapital' => $isBankrupt ? 0.0 : (float) $stock->getInvestedCapital(),
-            'marketShare' => $isBankrupt ? 0.0 : min(
-                self::MAX_MARKET_SHARE,
-                $this->corporateMetrics->calculateMarketShare(
-                    $evaluationCapital,
-                    $macroState->nominalGdpIndex,
-                    (float) $stock->getSamRatio()
-                )
-            ),
             // Dickinson (2011) stage stored by the last quarterly report; null until the first lands.
             'lifecycleStage' => $stock->getLifecycleStage(),
             'dividendYield' => (!$isBankrupt && $price > 0.0 && $lastDividend > 0.0)

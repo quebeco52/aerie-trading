@@ -270,7 +270,7 @@ class ConglomerateBusinessModel extends StandardCorporateBusinessModel
         );
 
         // Credit losses: spreads compensate for defaults, they are not free yield. Net carry = spread - expected loss.
-        $corporateDefaultShift = max(0.0, ($macroState->corporateDefaultRateEma - MacroEngine::CORPORATE_DEFAULT_BASELINE) / MacroEngine::CORPORATE_DEFAULT_BASELINE);
+        $corporateDefaultShift = MathUtility::excessOverBaseline($macroState->corporateDefaultRateEma, MacroEngine::CORPORATE_DEFAULT_BASELINE);
         $creditLossDrag = $corporateDefaultShift * self::FLOAT_CREDIT_LOSS_SCALAR;
 
         // Mark-to-market: spreads gapping wider reprice the held book downward this quarter (dP/P ~ -D_s * ds).

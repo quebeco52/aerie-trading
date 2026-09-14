@@ -170,9 +170,16 @@ class MathUtility
             $innovation = ($loading * $commonInnovation) + (sqrt(max(0.0, 1.0 - ($loading * $loading))) * $idiosyncratic);
         }
 
-        $innovationScale = sqrt(max(0.0, 1.0 - ($phi * $phi)));
+        return ($phi * $previousZ) + ($this->persistentInnovationScale($phi) * $innovation);
+    }
 
-        return ($phi * $previousZ) + ($innovationScale * $innovation);
+    /**
+     * Weight on a fresh innovation that keeps an AR(1) series at unit variance: sqrt(1 - phi^2). Shared by
+     * the draw itself and by anyone attributing a realized Z back to the factors that entered it.
+     */
+    public function persistentInnovationScale(float $phi): float
+    {
+        return sqrt(max(0.0, 1.0 - ($phi * $phi)));
     }
 
     /**
@@ -717,6 +724,103 @@ class MathUtility
 
         // 8. Enforce structural market boundaries for distressed (4x) and superstar (35x) equities
         return max(FinancialConstants::MIN_INTRINSIC_PE, min(FinancialConstants::MAX_INTRINSIC_PE, $pe));
+    }
+
+    /**
+     * Relative excess of a cyclical macro series over its through-the-cycle baseline, floored at zero:
+     * (value - baseline) / baseline. The one normalization every sector model applies to a default rate
+     * before scaling its own provision or demand response off it.
+     */
+    public static function excessOverBaseline(float $value, float $baseline): float
+    {
+        return max(0.0, ($value - $baseline) / max(1e-9, abs($baseline)));
+    }
+
+    /**
+     * Nominal expected growth used to strike a fair-value multiple, the same transmission for everyone
+     * who strikes one: secular real growth, the cyclical part scaled by beta, a stagflation drag on real
+     * growth that pricing power offsets, then partial pass-through of inflation into the nominal rate.
+     * Capped below any plausible hurdle so the Gordon denominator cannot diverge.
+     *
+     * Management and the market MUST read the same figure. The corporate engines used to strike their
+     * buyback, issuance and M&A multiples on a flat 2% while the pricing engine read the cycle, which made
+     * repurchases countercyclical by accident: in a boom the market's anchor rose above management's and
+     * buybacks stopped, in a bust management's sat above the market's and buybacks ran into the downturn.
+     */
+    public function calculateExpectedNominalGrowth(
+        float $secularGrowth,
+        float $outputGap,
+        float $beta,
+        float $inflation,
+        float $moatSpread
+    ): float {
+        $realGrowth = $secularGrowth + ($outputGap * FinancialConstants::CYCLICAL_GROWTH_PASS_THROUGH * $beta);
+
+        // Stagflation drag: inflation above target compresses real growth where pricing power is weak.
+        $inflationDrag = max(0.0, ($inflation - MacroEngine::TARGET_INFLATION) * (1.0 - $moatSpread));
+        $realGrowth -= $inflationDrag;
+
+        return max(0.0, min(
+            FinancialConstants::MAX_EXPECTED_GROWTH,
+            $realGrowth + ($inflation * FinancialConstants::INFLATION_NOMINAL_GROWTH_PASS_THROUGH)
+        ));
+    }
+
+    /**
+     * The intrinsic fair-value P/E net of the earnings-quality discount: Damodaran multiple shrunk toward
+     * the sector prior, less the Sloan (1996) accruals penalty, floored at the distressed multiple.
+     * One function so the market's anchor and management's are the same number.
+     */
+    public function calculateQualityAdjustedFairValuePE(
+        float $hurdleRate,
+        float $structuralRoic,
+        float $expectedGrowth,
+        ?float $sectorMultiple,
+        float $accrualsRatio
+    ): float {
+        $fairValuePE = $this->calculateIntrinsicFairValuePE($hurdleRate, $structuralRoic, $expectedGrowth, $sectorMultiple);
+        $accrualsPenalty = max(0.0, $accrualsRatio * FinancialConstants::ACCRUALS_ANOMALY_PE_PENALTY_SCALE);
+
+        return max(FinancialConstants::MIN_INTRINSIC_PE, $fairValuePE - $accrualsPenalty);
+    }
+
+    /**
+     * The price level an industry's installed capacity clears at, relative to the level at which capacity
+     * equals trend demand: the constant-elasticity inverse demand curve P/P* = (Q/Q*)^(-1/e) that Cournot
+     * quantity competition is played on. Ten percent of excess capacity at e = 1.25 clears seven percent
+     * cheaper; a market short of capacity clears dear.
+     *
+     * @param float $capacityRatio Installed capacity over trend demand, already bounded by the caller.
+     * @param float $elasticity    Industry price elasticity of demand (must be positive).
+     */
+    public function calculateCournotPriceLevel(float $capacityRatio, float $elasticity): float
+    {
+        if ($capacityRatio <= 0.0 || $elasticity <= 0.0) {
+            return 1.0;
+        }
+
+        return $capacityRatio ** (-1.0 / $elasticity);
+    }
+
+    /**
+     * The fair-value P/E management strikes its own capital decisions on: the market's anchor, exactly.
+     * Takes the firm's inputs as primitives so every corporate engine can call it through the MathUtility it
+     * already holds; the growth transmission and the accruals discount are the two functions above.
+     */
+    public function calculateManagementFairValuePE(
+        float $hurdleRate,
+        float $trueReturn,
+        float $secularGrowth,
+        float $outputGap,
+        float $beta,
+        float $inflation,
+        float $moatSpread,
+        ?float $sectorMultiple,
+        float $accrualsRatio
+    ): float {
+        $expectedGrowth = $this->calculateExpectedNominalGrowth($secularGrowth, $outputGap, $beta, $inflation, $moatSpread);
+
+        return $this->calculateQualityAdjustedFairValuePE($hurdleRate, $trueReturn, $expectedGrowth, $sectorMultiple, $accrualsRatio);
     }
 
     /**
@@ -1276,9 +1380,9 @@ class MathUtility
         float $baseKappa,
         float $moatSpread,
         float $dt = 0.25,
-        float $erosionAlpha = 0.50,
-        float $distressPersistence = 0.60,
-        float $distressGamma = 1.00
+        float $erosionAlpha = FinancialConstants::REVERSION_COMPETITIVE_EROSION_ALPHA,
+        float $distressPersistence = FinancialConstants::REVERSION_DISTRESS_PERSISTENCE,
+        float $distressGamma = FinancialConstants::REVERSION_DISTRESS_GAMMA
     ): float {
         $equilibrium = $wacc + $moatSpread;
 

@@ -2080,4 +2080,50 @@ class MathUtilityTest extends TestCase
         $this->assertEqualsWithDelta(0.42, $this->mathUtility->averageMeanRevertingVolatility(0.42, 0.20, 0.0, 5.0), 1.0e-9);
         $this->assertEqualsWithDelta(0.42, $this->mathUtility->averageMeanRevertingVolatility(0.42, 0.20, 1.15, 0.0), 1.0e-9);
     }
+
+    // --- Shared valuation helpers ---
+
+    public function testExcessOverBaselineIsTheFlooredRelativeExcess(): void
+    {
+        $this->assertEqualsWithDelta(0.5, MathUtility::excessOverBaseline(0.03, 0.02), 1e-12);
+        $this->assertSame(0.0, MathUtility::excessOverBaseline(0.01, 0.02));
+        $this->assertSame(0.0, MathUtility::excessOverBaseline(0.02, 0.02));
+    }
+
+    public function testExpectedNominalGrowthCarriesTheCycleAndIsCapped(): void
+    {
+        // Boom: secular 2% + half of a 2% gap at beta 1 = 3% real, plus half of 2% inflation = 4% nominal.
+        $this->assertEqualsWithDelta(0.04, $this->mathUtility->calculateExpectedNominalGrowth(0.02, 0.02, 1.0, 0.02, 0.0), 1e-12);
+        // Bust at the same beta takes the same amount off; a flat 2% is what the corporate engines used to assume everywhere.
+        $this->assertEqualsWithDelta(0.02, $this->mathUtility->calculateExpectedNominalGrowth(0.02, -0.02, 1.0, 0.02, 0.0), 1e-12);
+        // Stagflation drag reaches a firm with no moat and is offset by pricing power.
+        $this->assertLessThan(
+            $this->mathUtility->calculateExpectedNominalGrowth(0.02, 0.0, 1.0, 0.06, 1.0),
+            $this->mathUtility->calculateExpectedNominalGrowth(0.02, 0.0, 1.0, 0.06, 0.0)
+        );
+        $this->assertSame(FinancialConstants::MAX_EXPECTED_GROWTH, $this->mathUtility->calculateExpectedNominalGrowth(0.10, 0.05, 2.0, 0.02, 0.0));
+        $this->assertSame(0.0, $this->mathUtility->calculateExpectedNominalGrowth(-0.10, 0.0, 1.0, 0.0, 0.0));
+    }
+
+    public function testManagementAndTheMarketStrikeTheSameFairValueMultiple(): void
+    {
+        $growth = $this->mathUtility->calculateExpectedNominalGrowth(0.03, 0.01, 1.2, 0.025, 0.02);
+        $market = $this->mathUtility->calculateQualityAdjustedFairValuePE(0.09, 0.18, $growth, 22.0, 0.04);
+        $management = $this->mathUtility->calculateManagementFairValuePE(0.09, 0.18, 0.03, 0.01, 1.2, 0.025, 0.02, 22.0, 0.04);
+
+        $this->assertSame($market, $management);
+        // The Sloan discount is inside the shared figure, floored at the distressed multiple.
+        $clean = $this->mathUtility->calculateQualityAdjustedFairValuePE(0.09, 0.18, $growth, 22.0, 0.0);
+        $this->assertEqualsWithDelta($clean - 0.04 * FinancialConstants::ACCRUALS_ANOMALY_PE_PENALTY_SCALE, $market, 1e-12);
+        $this->assertSame(FinancialConstants::MIN_INTRINSIC_PE, $this->mathUtility->calculateQualityAdjustedFairValuePE(0.09, 0.18, $growth, 22.0, 10.0));
+    }
+
+    public function testCournotPriceLevelFallsWithExcessCapacityAtTheInverseElasticity(): void
+    {
+        $this->assertEqualsWithDelta(1.0, $this->mathUtility->calculateCournotPriceLevel(1.0, 1.25), 1e-12);
+        $this->assertEqualsWithDelta(1.2 ** (-0.8), $this->mathUtility->calculateCournotPriceLevel(1.2, 1.25), 1e-12);
+        $this->assertGreaterThan(1.0, $this->mathUtility->calculateCournotPriceLevel(0.8, 1.25));
+        $this->assertSame(1.0, $this->mathUtility->calculateCournotPriceLevel(0.0, 1.25));
+        $this->assertSame(1.0, $this->mathUtility->calculateCournotPriceLevel(1.2, 0.0));
+    }
 }

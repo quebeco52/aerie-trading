@@ -300,19 +300,6 @@ class RunawayFeedbackLoopTest extends TestCase
             $consensusEngine
         );
 
-        $stock = new Stock();
-        $stock->setTicker('LAKE');
-        $stock->setIndustry('Banks - Diversified');
-        $stock->setPrice('100.00000000');
-        $stock->setSharesOutstanding('1000000000');
-        // $10 Trillion Equity
-        $stock->setTotalEquity('10000000000000.00');
-        $stock->setWholesaleDebt('0.00');
-        $stock->setCorporateTreasury('0.00');
-        $stock->setOperatingMargin('0.40');
-        $stock->setBaselineRoe('0.15');
-        $stock->setSamRatio('1.00');
-
         $macro = MacroStateDTO::fromArray([
             'corporate_tax_rate' => 0.20,
             'output_gap_ema' => 0.0,
@@ -323,19 +310,33 @@ class RunawayFeedbackLoopTest extends TestCase
             'equity_risk_premium' => 0.05,
         ]);
 
-        $ctx = new \App\DTO\EarningsSimulationContext(
-            stock: $stock,
-            macroState: $macro,
-            strategy: new \App\Service\Model\Sector\CommercialBankBusinessModel(),
-            businessModel: 'commercial_bank',
-            dt: 0.25
-        );
+        // Two banks in a $1T addressable market: one at exactly its market (share 1.0), one ten times it.
+        $annualRevenue = function (string $equity) use ($engine, $macro): float {
+            mt_srand(3);
+            $stock = new Stock();
+            $stock->setTicker('LAKE');
+            $stock->setIndustry('Banks - Diversified');
+            $stock->setPrice('100.00000000');
+            $stock->setSharesOutstanding('1000000000');
+            $stock->setTotalEquity($equity);
+            $stock->setWholesaleDebt('0.00');
+            $stock->setCorporateTreasury('0.00');
+            $stock->setOperatingMargin('0.40');
+            $stock->setBaselineRoe('0.15');
+            $stock->setSamRatio('1.00');
 
-        $tick = EarningsEngine::resolveReportingTick($stock->getTicker(), 252);
-        $report = $engine->calculate($stock, $macro, $tick, 252);
+            $engine->calculate($stock, $macro, EarningsEngine::resolveReportingTick('LAKE', 252), 252);
 
-        // Bank should not be bounded by the TAM ratio of $1.5T
-        $annualRevenue = (float) $stock->getTotalRevenue();
-        $this->assertGreaterThan(1_500_000_000_000.0, $annualRevenue);
+            return (float) $stock->getTotalRevenue();
+        };
+
+        $atMarket = $annualRevenue('1000000000000.00');
+        $tenTimesMarket = $annualRevenue('10000000000000.00');
+
+        // The cap is struck in REVENUE at a full addressable share, on the financial ratio: a bank ten
+        // times its market earns on 2.5 markets' worth of book, not on 1.5 (the corporate ratio) and not
+        // on all ten. Same seed, so the two draws match and the ratio is the cap itself.
+        $this->assertEqualsWithDelta(FinancialConstants::MAX_FINANCIAL_SECTOR_TAM_CAPACITY_RATIO, $tenTimesMarket / $atMarket, 0.05);
+        $this->assertGreaterThan(FinancialConstants::MAX_SECTOR_TAM_CAPACITY_RATIO, $tenTimesMarket / $atMarket, 'financials are bounded by the looser ratio');
     }
 }

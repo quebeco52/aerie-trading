@@ -301,8 +301,8 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
         // CECL Forward Provisioning & Default Shock:
         // Shadow Banks primarily hold highly leveraged mortgages and direct loans.
         $outputGap = $macroState->outputGapEma;
-        $retailDefaultShift = max(0.0, ($macroState->retailDefaultRateEma - MacroEngine::RETAIL_DEFAULT_BASELINE) / MacroEngine::RETAIL_DEFAULT_BASELINE);
-        $corporateDefaultShift = max(0.0, ($macroState->corporateDefaultRateEma - MacroEngine::CORPORATE_DEFAULT_BASELINE) / MacroEngine::CORPORATE_DEFAULT_BASELINE);
+        $retailDefaultShift = MathUtility::excessOverBaseline($macroState->retailDefaultRateEma, MacroEngine::RETAIL_DEFAULT_BASELINE);
+        $corporateDefaultShift = MathUtility::excessOverBaseline($macroState->corporateDefaultRateEma, MacroEngine::CORPORATE_DEFAULT_BASELINE);
         $creShift = ($macroState->commercialPropertyIndexEma - 100.0) / 100.0;
         
         $propertyDrag = ($creShift < 0.0 ? abs($creShift) * 0.05 : 0.0) + ($residentialShift < 0.0 ? abs($residentialShift) * 0.05 : 0.0);

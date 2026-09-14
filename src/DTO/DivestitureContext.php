@@ -55,7 +55,8 @@ class DivestitureContext
     
     public float $nominalGdpIndex = 0.0;
     public float $samRatio = 0.0;
-    public float $marketShare = 0.0;
+    /** Invested capital over the firm's serviceable addressable market (CorporateMetrics::calculateScaleRatio). */
+    public float $scaleRatio = 0.0;
     
     // Deal Config
     public bool $dealExecuted = false;

@@ -181,12 +181,19 @@ class BiotechBusinessModelTest extends TestCase
         // (1.0 * 27 + 0.12 * 40) / 1.12 = 28.392857...
         $this->assertEqualsWithDelta(28.392857, $state[BiotechBusinessModel::STATE_EXCLUSIVITY_QUARTERS], 1e-5);
 
-        // Next quarter, with no new event, the higher base is still there — this is the behaviour the
-        // old one-quarter revenue multiplier could not produce.
+        // The launched asset is known: next quarter's commercial shift is persisted for the engine, and the
+        // model hands it over as the demand shift so EXPECTED revenue carries the step, not the surprise.
+        $knownShift = $state['weight:commercial_therapeutics'] * (1.12 - 1.0);
+        $this->assertEqualsWithDelta($knownShift, $state[BiotechBusinessModel::STATE_KNOWN_COMMERCIAL_SHIFT], 1e-9);
         $stock->setEarningsMomentumZ($state);
+        $this->assertEqualsWithDelta($knownShift, $model->getMacroPhysics($stock, new MacroStateDTO())['macro_demand_shift'], 1e-9);
+
+        // Next quarter, with no new event, the higher base is still there — this is the behaviour the
+        // old one-quarter revenue multiplier could not produce. The engine's expected revenue arrives
+        // with the shift in it, and the physics strips it back out before applying the franchise.
         $nextQuarter = $model->computeActualFinancials(
             $stock,
-            self::EXPECTED_REVENUE,
+            self::EXPECTED_REVENUE * (1.0 + $knownShift),
             self::VARIABLE_MARGIN,
             self::FIXED_COSTS,
             self::BASELINE_VOL,
@@ -202,6 +209,36 @@ class BiotechBusinessModelTest extends TestCase
         );
         $this->assertEqualsWithDelta(1.12, $nextQuarter->streamZ[BiotechBusinessModel::STATE_FRANCHISE_INDEX], 1e-9);
         $this->assertNull($nextQuarter->eventType);
+        // With no draw and the known step inside expected revenue, the quarter is no surprise at all.
+        $this->assertEqualsWithDelta(0.0, $nextQuarter->observableShockZ, 1e-9);
+    }
+
+    public function testAScheduledPatentCliffReachesExpectedRevenueBeforeItErodesTheActual(): void
+    {
+        $model = new BiotechBusinessModel();
+
+        // Two quarters of exclusivity left: this quarter is clean, but the physics already knows the cliff
+        // lands next quarter and persists next quarter's erosion as the known commercial shift.
+        $stock = $this->makeStock([BiotechBusinessModel::STATE_EXCLUSIVITY_QUARTERS => 2.0]);
+        $clean = $model->computeActualFinancials($stock, self::EXPECTED_REVENUE, self::VARIABLE_MARGIN, self::FIXED_COSTS, self::BASELINE_VOL, new MacroStateDTO(), $this->mockMath([0.0, 0.0], [false]));
+
+        $this->assertNull($clean->eventType);
+        $firstQuarterErosion = BiotechBusinessModel::DEFAULT_LOE_EXPOSURE_SHARE * (1.0 - exp(-$this->blendedLoeHazard()));
+        $expectedShift = -$clean->streamZ['weight:commercial_therapeutics'] * $firstQuarterErosion;
+        $this->assertEqualsWithDelta($expectedShift, $clean->streamZ[BiotechBusinessModel::STATE_KNOWN_COMMERCIAL_SHIFT], 1e-9);
+        $this->assertLessThan(0.0, $expectedShift);
+
+        // The cliff quarter: the engine's expected revenue arrives lower by the shift; the physics erodes the
+        // base by the same fraction, so actual meets expected and the cliff is a known event, not a miss.
+        $stock->setEarningsMomentumZ($clean->streamZ);
+        $expectedRevenue = self::EXPECTED_REVENUE * (1.0 + $expectedShift);
+        $cliff = $model->computeActualFinancials($stock, $expectedRevenue, self::VARIABLE_MARGIN, self::FIXED_COSTS, self::BASELINE_VOL, new MacroStateDTO(), $this->mockMath([0.0, 0.0], [false]));
+
+        $this->assertSame(ShockEvent::BIOTECH_PATENT_CLIFF, $cliff->eventType);
+        $this->assertEqualsWithDelta($expectedRevenue, $cliff->actualRevenue, 1.0);
+        $this->assertEqualsWithDelta(0.0, $cliff->observableShockZ, 1e-9);
+        // And the erosion keeps deepening on a known schedule: the next shift is more negative still.
+        $this->assertLessThan($expectedShift, $cliff->streamZ[BiotechBusinessModel::STATE_KNOWN_COMMERCIAL_SHIFT]);
     }
 
     public function testFailedPivotalTrialLeavesMarketedRevenueIntact(): void

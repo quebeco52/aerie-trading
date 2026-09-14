@@ -21,7 +21,9 @@ class MarketOperator
         private LoggerInterface $logger,
         private MarketEventPublisher $marketEvent,
         private DebtEngine $debtEngine,
-        private \App\Service\Math\MathUtility $mathUtility
+        private \App\Service\Math\MathUtility $mathUtility,
+        /** Industry roster and capacity balance; null (unit tests) leaves a failed firm's plant to age out of it. */
+        private ?\App\Service\Corporate\Industry\IndustryShareLedger $industryShareLedger = null
     ) {}
 
     /**
@@ -64,7 +66,10 @@ class MarketOperator
             $restructureEvents = $this->applyRestructuringRule($stock, $marketCap, $name, $macroState);
             if ($restructureEvents !== null) {
                 $generatedEvents = array_merge($generatedEvents, $restructureEvents);
-                $this->redistributeAddressableMarket($stock, $stocks);
+                // Industry consolidation: the failed firm's plant leaves the capacity balance, its demand
+                // does not, and the survivors sell into a tighter market at a better price. This used to
+                // be approximated by handing peers a slice of the failed firm's addressable market.
+                $this->industryShareLedger?->retireFirm($stock);
                 continue;
             }
 
@@ -98,49 +103,6 @@ class MarketOperator
         $interestExpense = $this->debtEngine->analyzeDebtHealth($stock, $macroState)?->rawMetrics?->interestExpense ?? 0.0;
 
         return $preTaxIncome + max(0.0, $interestExpense);
-    }
-
-    /**
-     * Industry consolidation: a failed rival's demand does not vanish with it. Surviving peers in the same
-     * industry absorb most of its addressable market in proportion to their own, which is how exits leave
-     * survivors with more share and pricing headroom (airline, steel and retail consolidations). The
-     * remainder leaks to substitutes or is destroyed.
-     *
-     * @param Stock[] $stocks
-     */
-    private function redistributeAddressableMarket(Stock $failed, array $stocks): void
-    {
-        $industry = $failed->getIndustry();
-        if ($industry === null) {
-            return;
-        }
-
-        $peers = array_values(array_filter(
-            $stocks,
-            static fn (Stock $peer): bool => $peer !== $failed && !$peer->isBankrupt() && $peer->getIndustry() === $industry
-        ));
-        if ($peers === []) {
-            return;
-        }
-
-        $recaptured = ((float) $failed->getSamRatio()) * \App\Service\Math\FinancialConstants::MARKET_EXIT_RECAPTURE_FRACTION;
-        if ($recaptured <= 0.0) {
-            return;
-        }
-
-        $peerAddressableTotal = array_sum(array_map(static fn (Stock $peer): float => (float) $peer->getSamRatio(), $peers));
-        foreach ($peers as $peer) {
-            $weight = $peerAddressableTotal > 0.0 ? ((float) $peer->getSamRatio()) / $peerAddressableTotal : 1.0 / count($peers);
-            $peer->setSamRatio((string) (((float) $peer->getSamRatio()) + ($recaptured * $weight)));
-        }
-
-        $this->logger->info(sprintf(
-            'CONSOLIDATION: %d surviving %s peers absorbed %.0f%% of %s\'s addressable market.',
-            count($peers),
-            $industry,
-            \App\Service\Math\FinancialConstants::MARKET_EXIT_RECAPTURE_FRACTION * 100,
-            $failed->getTicker()
-        ));
     }
 
     /**

@@ -241,6 +241,18 @@ class StockTracker
             // than a distribution. The variance it supplies is handed back through the budget in
             // MarketEngine, using the EMA maintained below.
             $tickFlow = $netOrderFlow[$stock->getTicker()] ?? 0.0;
+
+            // The company's own program — a repurchase still being executed, or issued stock still being
+            // distributed — is worked off at the 10b-18 pace and joins the tick's flow here. It is a buyer
+            // or seller like any other and is charged the same impact; the invented per-report shock it
+            // replaces charged the price for a quarter's buying in a single tick with no slippage.
+            $corporateBacklog = $stock->getCorporateFlowBacklog();
+            if ($corporateBacklog !== 0.0) {
+                $corporateSlice = $this->liquidityEngine->corporateFlowSlice($stock, $corporateBacklog, $dt);
+                $tickFlow += $corporateSlice;
+                $stock->setCorporateFlowBacklog($corporateBacklog - $corporateSlice);
+            }
+
             $impactLogReturn = 0.0;
 
             if ($tickFlow !== 0.0) {
@@ -400,18 +412,18 @@ class StockTracker
             ];
 
 
-            // Only update Market Share on the UI when Corporate Fundamentals actually change
-            // This prevents the percentage from jittering constantly as the Nominal GDP index expands
+            // The headline market share is the firm's reach into its serviceable addressable market — the
+            // whole market it sells into, modelled rivals or not, which is what the saturation physics is
+            // struck on (IndustryPositionBuilder shows the same figure with the penalty it carries). Only
+            // refreshed when fundamentals change, so it does not jitter with the nominal GDP index.
             if ($isFundamentalTick) {
-                $investedCapital = $stock->getInvestedCapital();
-                $equity = (float) $stock->getTotalEquity();
-                $nominalGdpIndex = $macroDTO->nominalGdpIndex;
-                $samRatio = (float) $stock->getSamRatio();
+                $evaluationCapital = $strategy->getEvaluationCapital((float) $stock->getTotalEquity(), $stock->getInvestedCapital());
+                $addressableShare = min(
+                    FinancialConstants::MAX_ADDRESSABLE_MARKET_SHARE,
+                    $this->corporateMetrics->calculateScaleRatio($evaluationCapital, $macroDTO->nominalGdpIndex, (float) $stock->getSamRatio())
+                );
 
-                $evaluationCapital = $strategy->getEvaluationCapital($equity, $investedCapital);
-                $marketShare = min(0.9999, $this->corporateMetrics->calculateMarketShare($evaluationCapital, $nominalGdpIndex, $samRatio));
-
-                $stockUpdate['market_share'] = round($marketShare * 100, 2);
+                $stockUpdate['market_share'] = round($addressableShare * 100, 2);
             }
 
             // AGENT FLOW (Brock & Hommes 1997, 1998)

@@ -42,6 +42,11 @@ final class RedisIndustryShareStore implements IndustryShareStoreInterface
             $records[(string) $ticker] = [
                 'revenue'       => (float) ($decoded['revenue'] ?? 0.0),
                 'gain'          => (float) ($decoded['gain'] ?? 0.0),
+                'capacity'      => (float) ($decoded['capacity'] ?? 0.0),
+                'anchor_capacity_share' => (float) ($decoded['anchor_capacity_share'] ?? 0.0),
+                'anchor_demand_share'   => (float) ($decoded['anchor_demand_share'] ?? 0.0),
+                'anchor_time'           => (float) ($decoded['anchor_time'] ?? 0.0),
+                'addressable_share'     => (float) ($decoded['addressable_share'] ?? 0.0),
                 'tick'          => (int) ($decoded['tick'] ?? 0),
                 'consumed_tick' => (int) ($decoded['consumed_tick'] ?? 0),
             ];

@@ -22,6 +22,9 @@ use App\Service\Math\CorporateMetrics;
 use App\Service\Event\NarrativeEngine;
 use App\Service\Event\MarketEventPublisher;
 use App\Service\Market\MarketConsensusEngine;
+use App\Service\Corporate\Industry\IndustryShareLedger;
+use App\Service\Math\FinancialConstants;
+use App\Service\Corporate\Industry\InMemoryIndustryShareStore;
 use Symfony\Contracts\EventDispatcher\EventDispatcherInterface;
 
 class EarningsEngineTest extends TestCase
@@ -35,7 +38,7 @@ class EarningsEngineTest extends TestCase
         $this->earningsEngine = $this->buildEngine($this->createStub(EventDispatcherInterface::class));
     }
 
-    private function buildEngine(EventDispatcherInterface $eventDispatcher): EarningsEngine
+    private function buildEngine(EventDispatcherInterface $eventDispatcher, ?IndustryShareLedger $industryShareLedger = null): EarningsEngine
     {
         $corporateMetrics = new CorporateMetrics();
         $debtEngine = new DebtEngine($this->mathUtility, $corporateMetrics);
@@ -70,8 +73,119 @@ class EarningsEngineTest extends TestCase
             $this->mathUtility,
             $corporateMetrics,
             $narrativeEngineMock,
-            $marketConsensusEngine
+            $marketConsensusEngine,
+            $industryShareLedger
         );
+    }
+
+    /**
+     * A rival that builds plant after the industry was anchored is oversupply for everyone in it. The firm
+     * that built nothing sells the same volume at a lower price: revenue and the reported margin fall
+     * against a control where the rival stood still, and the fixed cost base is untouched. Compared on one
+     * seed so the two runs consume the random stream identically.
+     */
+    public function testARivalsCapacityBuildLowersTheIndustryPriceForAFirmThatBuiltNothing(): void
+    {
+        $report = function (float $rivalCapacityMultiple): array {
+            mt_srand(7);
+            $ledger = new IndustryShareLedger(new InMemoryIndustryShareStore());
+            $this->mathUtility = new MathUtility();
+            $engine = $this->buildEngine($this->createStub(EventDispatcherInterface::class), $ledger);
+
+            $firm = $this->buildMatureIndustrial('HOLD');
+            $rival = $this->buildMatureIndustrial('BULD');
+            $macro = new MacroStateDTO(corporateTaxRate: 0.21, policyRateEma: 0.04, yield5yEma: 0.045);
+            $ticksPerYear = 252;
+
+            // Both firms are known to the ledger at equal plant before anyone builds.
+            $engine->calculate($firm, $macro, EarningsEngine::resolveReportingTick('HOLD', $ticksPerYear), $ticksPerYear);
+            $rivalCapacity = (float) $firm->getTotalRevenue();
+            // The rival holds half its market, so its build weighs on the industry price at half strength.
+            $ledger->resolveIndustryCapacityRatio($rival, $rivalCapacity, 0.5, 1.0, 0.0, 0.0, 1, $ticksPerYear);
+            // The rival's next report shows the plant it built (or did not).
+            $ledger->resolveIndustryCapacityRatio($rival, $rivalCapacity * $rivalCapacityMultiple, 0.5, 1.0, 0.0, 0.0, 2, $ticksPerYear);
+
+            $engine->calculate($firm, $macro, 63 + EarningsEngine::resolveReportingTick('HOLD', $ticksPerYear), $ticksPerYear);
+
+            return [
+                'revenue' => (float) $firm->getTotalRevenue(),
+                'margin' => (float) $firm->getReportedOperatingMargin(),
+            ];
+        };
+
+        $control = $report(1.0);
+        $overbuilt = $report(1.6);
+
+        $this->assertLessThan($control['revenue'], $overbuilt['revenue'], 'the industry price fell, so the same volume brings in less');
+        $this->assertLessThan($control['margin'], $overbuilt['margin'], 'unit costs did not move with the industry price, so the margin took the cut');
+        $this->assertGreaterThan($control['revenue'] * (1.0 - FinancialConstants::MAX_INDUSTRY_PRICE_RESPONSE), $overbuilt['revenue'], 'bounded by the per-firm response cap');
+    }
+
+    public function testASectorWideGoodQuarterIsNotBookedAsShareTakenFromRivals(): void
+    {
+        $bookedGain = function (float $sectorZ): array {
+            mt_srand(11);
+            $store = new InMemoryIndustryShareStore();
+            $ledger = new IndustryShareLedger($store);
+            $this->mathUtility = new MathUtility();
+            $engine = $this->buildEngine($this->createStub(EventDispatcherInterface::class), $ledger);
+
+            $firm = $this->buildMatureIndustrial('SECT');
+            $macro = new MacroStateDTO(
+                corporateTaxRate: 0.21,
+                policyRateEma: 0.04,
+                yield5yEma: 0.045,
+                sectorDemandZ: [$firm->getSector() => $sectorZ]
+            );
+
+            $engine->calculate($firm, $macro, EarningsEngine::resolveReportingTick('SECT', 252), 252);
+
+            return [
+                'revenue' => (float) $firm->getTotalRevenue(),
+                'gain' => $store->readIndustry('Auto Manufacturers')['SECT']['gain'],
+            ];
+        };
+
+        $calm = $bookedGain(0.0);
+        $boom = $bookedGain(2.0);
+
+        // The sector factor lifted this firm's revenue — and every peer's. The ledger books only what was the
+        // firm's own. The attribution follows the revenue-weighted Z of the demand streams; what the auto
+        // model does to revenue beyond that line (multipliers, floors) leaves a residual, a fraction of the lift.
+        $sectorLift = ($boom['revenue'] - $calm['revenue']) / $calm['revenue'];
+        $this->assertGreaterThan(0.0, $sectorLift, 'the sector boom reached the top line');
+        $this->assertLessThan(0.25 * $sectorLift, abs($boom['gain'] - $calm['gain']), 'most of the sector lift is not booked as a gain taken from rivals');
+    }
+
+    public function testABiotechsKnownCommercialShiftReachesExpectedRevenue(): void
+    {
+        $expectedRevenue = function (float $knownShift): float {
+            mt_srand(5);
+            $this->mathUtility = new MathUtility();
+
+            $stock = $this->buildMatureIndustrial('PHRM');
+            $stock->setIndustry('Drug Manufacturers - General');
+            $stock->setEarningsMomentumZ([\App\Service\Model\Sector\BiotechBusinessModel::STATE_KNOWN_COMMERCIAL_SHIFT => $knownShift]);
+            $macro = new MacroStateDTO(corporateTaxRate: 0.21, policyRateEma: 0.04, yield5yEma: 0.045);
+
+            $captured = null;
+            $dispatcher = $this->createStub(EventDispatcherInterface::class);
+            $dispatcher->method('dispatch')->willReturnCallback(function (object $event) use (&$captured) {
+                if ($event instanceof \App\Service\Event\EarningsReportedEvent) { $captured = $event->getContext(); }
+                return $event;
+            });
+            $engine = $this->buildEngine($dispatcher);
+            $engine->calculate($stock, $macro, EarningsEngine::resolveReportingTick('PHRM', 252), 252);
+
+            return $captured->expectedRevenue;
+        };
+
+        $intact = $expectedRevenue(0.0);
+        $eroding = $expectedRevenue(-0.20);
+
+        // A cliff the clock has dated is in the estimate before it is in the books: expected revenue is
+        // lower by the known shift, so the erosion itself is not a miss when it lands.
+        $this->assertEqualsWithDelta(0.80, $eroding / $intact, 0.02);
     }
 
     public function testConsecutiveContractionsDoNotCollapseStructuralMargin(): void

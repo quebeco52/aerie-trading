@@ -97,6 +97,7 @@ class MarketSeedCommand extends Command
                     \App\Service\Market\LiquidityEngine::structuralTurnoverRatio((float) $stockData['volatility'])
                 );
                 $stock->setImpactVarianceEma(0.0);
+                $stock->setCorporateFlowBacklog(0.0);
 
                 // Not the whole float: most holders do not lend, which is what makes a name hard to borrow
                 // long before anything like all of it has been shorted.

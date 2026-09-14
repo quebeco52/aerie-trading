@@ -431,6 +431,16 @@ class Stock
     private ?float $impactVarianceEma = 0.0;
 
     /**
+     * @var float|null Shares the company itself still has to put through the market, signed: positive is a
+     *                 repurchase program not yet executed, negative is issued stock (an offering, deal
+     *                 consideration, vested compensation) not yet distributed. Worked off by the ticker
+     *                 at the 10b-18 pace through the same order-flow channel every other trade uses, so a
+     *                 buyback moves the price the way a buyer does rather than by an invented shock.
+     */
+    #[ORM\Column(type: 'float', nullable: true, options: ['default' => 0.0])]
+    private ?float $corporateFlowBacklog = 0.0;
+
+    /**
      * @var float|null Share of the public float that is actually available to borrow. The rest is held by
      *                 owners who do not lend, which is what makes a name hard to borrow long before its
      *                 whole float is shorted.
@@ -1200,6 +1210,24 @@ class Stock
     public function getImpactVarianceEma(): ?float
     {
         return $this->impactVarianceEma;
+    }
+
+    public function getCorporateFlowBacklog(): float
+    {
+        return (float) ($this->corporateFlowBacklog ?? 0.0);
+    }
+
+    public function setCorporateFlowBacklog(?float $corporateFlowBacklog): static
+    {
+        $this->corporateFlowBacklog = $corporateFlowBacklog;
+        return $this;
+    }
+
+    /** Queues shares the company must trade itself: positive to buy back, negative to distribute. */
+    public function addCorporateFlowBacklog(float $signedShares): static
+    {
+        $this->corporateFlowBacklog = $this->getCorporateFlowBacklog() + $signedShares;
+        return $this;
     }
 
     public function setLendableSupplyRatio(?float $lendableSupplyRatio): static

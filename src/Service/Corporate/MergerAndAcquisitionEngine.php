@@ -237,7 +237,17 @@ class MergerAndAcquisitionEngine
         $ctx->hurdleRate = $ctx->strategy->getHurdleRate($ctx->health);
         $ctx->economicSpread = $ctx->trueReturn - $ctx->hurdleRate;
         
-        $ctx->fairValuePE = $this->mathUtility->calculateIntrinsicFairValuePE($ctx->hurdleRate, $ctx->trueReturn, 0.02, \App\Data\Sectors::baselineIndustryPe($stock->getIndustry()));
+        $ctx->fairValuePE = $this->mathUtility->calculateManagementFairValuePE(
+            $ctx->hurdleRate,
+            $ctx->trueReturn,
+            $ctx->strategy->getSecularGrowthRate($stock),
+            $ctx->macroState->outputGap,
+            $ctx->health->leveredBeta,
+            $ctx->macroState->inflation,
+            $ctx->strategy->getMoatSpread(),
+            \App\Data\Sectors::baselineIndustryPe($stock->getIndustry()),
+            (float) ($stock->getAccrualsRatio() ?? 0.0)
+        );
         $ctx->bookValuePerShare = max(0.01, $ctx->equity / max(1.0, $ctx->shares));
         $ctx->priceToBook = $ctx->price / $ctx->bookValuePerShare;
         $ctx->isOvervalued = $ctx->economicSpread > 0.0 && $ctx->currentPE > ($ctx->fairValuePE * 1.5) && $ctx->currentPE > 25.0 && $ctx->priceToBook > 2.0;
@@ -321,6 +331,9 @@ class MergerAndAcquisitionEngine
             $offeringPrice = $ctx->price * (1.0 - self::MA_STOCK_UNDERPRICING);
             $ctx->sharesIssued = $ctx->purchasePrice / max(0.01, $offeringPrice);
             $stock->setSharesOutstanding((string) ($ctx->shares + $ctx->sharesIssued));
+            // Sellers paid in the acquirer's stock distribute it; that supply reaches the tape through the
+            // flow channel rather than vanishing into the share count.
+            $stock->addCorporateFlowBacklog(-$ctx->sharesIssued);
         } elseif ($ctx->purchasePrice <= $ctx->usableTreasury) {
             $stock->setCorporateTreasury((string) ($ctx->treasury - $ctx->purchasePrice));
         } else {
@@ -595,7 +608,7 @@ class MergerAndAcquisitionEngine
         
         $ctx->nominalGdpIndex = $ctx->macroState->nominalGdpIndex;
         $ctx->samRatio = (float) $stock->getSamRatio();
-        $ctx->marketShare = $this->corporateMetrics->calculateMarketShare($ctx->evaluationCapital, $ctx->nominalGdpIndex, $ctx->samRatio);
+        $ctx->scaleRatio = $this->corporateMetrics->calculateScaleRatio($ctx->evaluationCapital, $ctx->nominalGdpIndex, $ctx->samRatio);
     }
 
     private function shouldAbortDivestiture(DivestitureContext $ctx): bool
@@ -604,7 +617,7 @@ class MergerAndAcquisitionEngine
             return true;
         }
 
-        if ($ctx->hasCashBuffer && !($ctx->marketShare > 1.00)) {
+        if ($ctx->hasCashBuffer && !($ctx->scaleRatio > 1.00)) {
             $ctx->isDistressed = false;
             $ctx->isDying = false;
         }

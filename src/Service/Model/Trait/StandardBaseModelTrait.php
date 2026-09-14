@@ -71,7 +71,22 @@ trait StandardBaseModelTrait
             $sectorInnovation = isset($macroState->sectorDemandZ[$sector]) ? (float) $macroState->sectorDemandZ[$sector] : null;
         }
 
-        return new StreamContext($momentum, $mathUtility, $this->getFirmFactorLoading(), $sectorInnovation, $this->getSectorFactorLoading());
+        return $this->activeStreamContext = new StreamContext($momentum, $mathUtility, $this->getFirmFactorLoading(), $sectorInnovation, $this->getSectorFactorLoading());
+    }
+
+    /** The stream context of the physics call in progress, kept for the actuals bridge to read the sector split from. */
+    private ?StreamContext $activeStreamContext = null;
+
+    /**
+     * Hands over, and forgets, the stream context the physics call just built. Set inside calculateSectorPhysics
+     * and consumed in the same computeActualFinancials frame, so the model instance carries nothing between calls.
+     */
+    protected function takeActiveStreamContext(): ?StreamContext
+    {
+        $streams = $this->activeStreamContext;
+        $this->activeStreamContext = null;
+
+        return $streams;
     }
 
     /**

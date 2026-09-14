@@ -54,14 +54,6 @@ class MarketEngine
     /** Floor on the jump scale parameter, so a name configured with no jump size cannot divide by it. */
     private const MIN_JUMP_SCALE = 0.01;
 
-    // --- Fundamental Growth Transmission ---
-    /** Share of the output gap that reaches a firm's real growth rate, before its beta scales the cyclical exposure. */
-    private const CYCLICAL_GROWTH_PASS_THROUGH = 0.50;
-    /** Share of inflation that carries into the nominal growth rate used for valuation. */
-    private const INFLATION_NOMINAL_GROWTH_PASS_THROUGH = 0.50;
-    /** Cap on nominal expected growth, held below any plausible hurdle rate so the Gordon Growth denominator cannot diverge. */
-    private const MAX_EXPECTED_GROWTH = 0.05;
-
     // --- Revenue Floor (Margin-Adjusted Price-to-Sales) ---
     /** Floor on the P/E anchor the price-to-sales multiple is struck from, so a distressed multiple does not erase the revenue floor entirely. */
     private const MIN_PS_ANCHOR_PE = 10.0;
@@ -588,24 +580,23 @@ class MarketEngine
         $systemicStressIndex = $recessionStress + $inflationStress;
 
         // 1. MACRO FORWARD GUIDANCE & FUNDAMENTAL P/E
-        // Real growth is driven by secular trends and the output gap (cyclicality).
-        $realGrowth = $secularGrowth + ($outputGap * self::CYCLICAL_GROWTH_PASS_THROUGH * $beta);
+        // The growth transmission and the Sloan accruals discount live in MathUtility because the corporate
+        // engines strike the same multiple when management decides on a buyback, an offering or a deal.
+        $expectedGrowth = $this->mathUtility->calculateExpectedNominalGrowth(
+            $secularGrowth,
+            $outputGap,
+            $beta,
+            $inflation,
+            $strategy->getMoatSpread()
+        );
 
-        // Stagflation drag: High inflation compresses real growth if pricing power/moat is weak
-        $inflationDrag = max(0.0, ($inflation - 0.02) * (1.0 - $strategy->getMoatSpread()));
-        $realGrowth = $realGrowth - $inflationDrag;
-
-        // Nominal expected growth used for valuation (capped at 5% to prevent Gordon Growth divergence)
-        $expectedGrowth = max(0.0, min(
-            self::MAX_EXPECTED_GROWTH,
-            $realGrowth + ($inflation * self::INFLATION_NOMINAL_GROWTH_PASS_THROUGH)
-        ));
-
-        $fairValuePE = $this->mathUtility->calculateIntrinsicFairValuePE($hurdleRate, $structuralRoic, $expectedGrowth, $baselineIndustryPE);
-
-        // Sloan (1996) Accruals Anomaly: Discount P/E multiple for firms with bloated non-cash accounting accruals
-        $accrualsPenalty = max(0.0, $accrualsRatio * FinancialConstants::ACCRUALS_ANOMALY_PE_PENALTY_SCALE);
-        $fairValuePE = max(FinancialConstants::MIN_INTRINSIC_PE, $fairValuePE - $accrualsPenalty);
+        $fairValuePE = $this->mathUtility->calculateQualityAdjustedFairValuePE(
+            $hurdleRate,
+            $structuralRoic,
+            $expectedGrowth,
+            $baselineIndustryPE,
+            $accrualsRatio
+        );
 
         $trueStructuralEps = $strategy->calculateStructuralEps(
             $bookValuePerShare,

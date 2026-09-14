@@ -109,6 +109,8 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
     public const STATE_LOE_ELAPSED_QUARTERS = 'state:loe_elapsed_quarters';
     /** Live share of revenue still under patent or regulatory exclusivity protection. */
     public const STATE_PROTECTED_SHARE = 'state:patent_protected_share';
+    /** Next quarter's known commercial shift, weight x (franchise x erosion - 1): what the exclusivity clock already says, handed to expected revenue. */
+    public const STATE_KNOWN_COMMERCIAL_SHIFT = 'state:known_commercial_shift';
     /** Prior-quarter R&D reinvestment ratio relative to the patent replacement rate. */
     public const STATE_RND_REPLACEMENT_RATIO = 'state:rnd_replacement_ratio';
 
@@ -232,12 +234,32 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
 
     public function getMacroPhysics(Stock $stock, \App\DTO\MacroStateDTO $macroState): array
     {
-        // Biotechs are structural secular growth stories driven by R&D and demographics,
-        // making them largely decoupled from standard macro business cycles.
+        // Biotechs are structural secular growth stories driven by R&D and demographics, making them
+        // largely decoupled from standard macro business cycles. The demand shift carries instead what the
+        // exclusivity clock already says about this quarter: a patent cliff is dated, an approved asset is
+        // on the market, and analysts read both, so the erosion and the franchise step belong in EXPECTED
+        // revenue. Left to the physics alone they were a miss or a beat every quarter for years.
         return [
-            'macro_demand_shift' => 0.0,
+            'macro_demand_shift' => (float) (($stock->getEarningsMomentumZ() ?? [])[self::STATE_KNOWN_COMMERCIAL_SHIFT] ?? 0.0),
             'pricing_power_multiplier' => 1.0,
         ];
+    }
+
+    /**
+     * The commercial multiplier the exclusivity clock will apply next quarter, from the state being
+     * persisted now: the clock ticks once more, a cliff that is due starts eroding, an active erosion
+     * advances. Nothing here is drawn, so the forecast and next quarter's physics agree exactly.
+     */
+    private function nextQuarterCommercialMultiplier(float $franchise, float $clock, float $elapsed, float $exposureShare, float $loeHazard): float
+    {
+        if ($elapsed > 0.0) {
+            $elapsed += 1.0;
+        } elseif ($clock - 1.0 <= 0.0 && $exposureShare > 0.0) {
+            $elapsed = 1.0;
+        }
+        $erodedFraction = $elapsed > 0.0 ? $exposureShare * (1.0 - exp(-$loeHazard * $elapsed)) : 0.0;
+
+        return $franchise * (1.0 - $erodedFraction);
     }
 
     /**
@@ -297,8 +319,14 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
 
         $commercialMultiplier = $franchise * $erosionFactor;
 
-        $establishedRevenue = max(0.0, $expectedRevenue * $establishedWeight * $commercialMultiplier * (1.0 + ($establishedZ * ($baselineVol * self::COMMERCIAL_VARIANCE_SCALAR))));
-        $pipelineRevenue    = max(0.0, $expectedRevenue * $pipelineWeight    * (1.0 + ($pipelineZ    * ($baselineVol * self::PIPELINE_VARIANCE_SCALAR))));
+        // Expected revenue already carries this quarter's known commercial shift (getMacroPhysics handed
+        // it to the engine from the state persisted last quarter); strip it to get the base the franchise
+        // and the erosion are applied to, so neither is counted twice.
+        $knownShift = $streams->getPersistedState(self::STATE_KNOWN_COMMERCIAL_SHIFT, 0.0);
+        $baseRevenue = $expectedRevenue / max(0.1, 1.0 + $knownShift);
+
+        $establishedRevenue = max(0.0, $baseRevenue * $establishedWeight * $commercialMultiplier * (1.0 + ($establishedZ * ($baselineVol * self::COMMERCIAL_VARIANCE_SCALAR))));
+        $pipelineRevenue    = max(0.0, $baseRevenue * $pipelineWeight    * (1.0 + ($pipelineZ    * ($baselineVol * self::PIPELINE_VARIANCE_SCALAR))));
 
         $preEventPipelineRevenue = $pipelineRevenue;
         $preErosionEstablished   = $erosionFactor > 0.0 ? ($establishedRevenue / $erosionFactor) : $establishedRevenue;
@@ -375,9 +403,14 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
         $streams->registerState(self::STATE_LOE_ELAPSED_QUARTERS, $elapsed);
         $streams->registerState(self::STATE_PROTECTED_SHARE, $protectedShare);
         $streams->registerState(self::STATE_RND_REPLACEMENT_RATIO, $rndRatio);
+        $streams->registerState(
+            self::STATE_KNOWN_COMMERCIAL_SHIFT,
+            $establishedWeight * ($this->nextQuarterCommercialMultiplier($franchise, $clock, $elapsed, $exposureShare, $loeHazard) - 1.0)
+        );
 
-        $establishedBase = max(1.0, $expectedRevenue * $establishedWeight);
-        $pipelineBase    = max(1.0, $expectedRevenue * $pipelineWeight);
+        // What was expected of each stream, the known franchise and erosion included: only the draw is a surprise.
+        $establishedBase = max(1.0, $baseRevenue * $establishedWeight * $commercialMultiplier);
+        $pipelineBase    = max(1.0, $baseRevenue * $pipelineWeight);
         $establishedShock = ($establishedRevenue - $establishedBase) / $establishedBase;
         $pipelineShock    = ($pipelineRevenue - $pipelineBase) / $pipelineBase;
         $observableShockZ = ($establishedShock * $establishedWeight) + ($pipelineShock * $pipelineWeight);

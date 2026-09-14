@@ -2039,9 +2039,117 @@
 							<div class="p-4 rounded bg-surface-container-lowest/80 border border-outline-variant/15">
 								<span class="text-on-surface-variant uppercase text-xs font-bold">Market Share</span>
 								<p class="text-sm font-bold text-primary font-mono tabular-nums mt-1" id="stat-market-share">{{ (marketShare * 100)|number_format(2) }}%</p>
+								<p class="text-3xs uppercase tracking-wide text-on-surface-variant/60 mt-1">of addressable market{% if industry and industry.rosterShare is not null %} · {{ (industry.rosterShare * 100)|number_format(1) }}% of {{ industry.rosterSize }} modelled firms{% endif %}</p>
 							</div>
 						</div>
 					</div>
+
+					{# Industry Position: the industry ledger's roster and capacity balance, and the last report's price response #}
+					{% if industry %}
+						{% set balanceTone = {
+							'overbuilt': 'border-error/40 text-error bg-error/10',
+							'tight': 'border-tertiary/40 text-tertiary bg-tertiary/10',
+							'balanced': 'border-primary/30 text-primary bg-primary/10',
+							'unknown': 'border-outline-variant/30 text-on-surface-variant bg-surface-container-highest'
+						} %}
+						<div class="bg-surface-container-low rounded-lg p-6 border border-outline-variant/15 hover:border-outline-variant/30 transition-all" id="industry-position-card">
+							<div class="flex items-start justify-between gap-3 mb-4">
+								<div>
+									<h3 class="text-sm font-semibold text-primary">Industry Position</h3>
+									<p class="text-xs text-on-surface-variant mt-1">Plant built beyond trend, weighted by each firm's share of its market, sets the price every firm in the industry realizes (Cournot against a fringe supplying at trend); rivals' surprises take share from each other.</p>
+								</div>
+								{% if industry.pricesCapacity %}
+									<span class="shrink-0 inline-flex items-center rounded border px-2 py-0.5 text-xs font-bold uppercase tracking-wide {{ balanceTone[industry.balance] }}">{{ industry.balance == 'unknown' ? 'No balance yet' : industry.balance }}</span>
+								{% endif %}
+							</div>
+
+							{# Scale & saturation: the addressable share the physics is struck on, and the penalty it carries #}
+							{% set sat = industry.saturation %}
+							{% set saturated = industry.addressableShare > sat.threshold %}
+							<div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs mb-3">
+								<div class="p-4 rounded bg-surface-container-lowest/80 border border-outline-variant/15">
+									<span class="text-on-surface-variant uppercase text-xs font-bold">Addressable Share</span>
+									<p class="text-sm font-bold font-mono tabular-nums mt-1 {{ saturated ? 'text-error' : 'text-on-surface' }}">{{ (industry.addressableShare * 100)|number_format(2) }}%</p>
+									<p class="text-3xs uppercase tracking-wide text-on-surface-variant/60 mt-1">{{ saturated ? 'past' : 'under' }} the {{ (sat.threshold * 100)|number_format(0) }}% saturation line</p>
+								</div>
+								<div class="p-4 rounded bg-surface-container-lowest/80 border border-outline-variant/15">
+									<span class="text-on-surface-variant uppercase text-xs font-bold">Scale Penalty</span>
+									<p class="text-sm font-bold font-mono tabular-nums mt-1 {{ sat.penalty > 0.0005 ? 'text-error' : 'text-on-surface' }}">{{ sat.penalty > 0 ? '-' : '' }}{{ (sat.penalty * 100)|number_format(2) }} pts</p>
+									<p class="text-3xs uppercase tracking-wide text-on-surface-variant/60 mt-1">margin friction (Penrose) · {{ (sat.severity * 100)|number_format(0) }}% of return</p>
+								</div>
+								<div class="p-4 rounded bg-surface-container-lowest/80 border border-outline-variant/15">
+									<span class="text-on-surface-variant uppercase text-xs font-bold">Marginal Return</span>
+									<p class="text-sm font-bold font-mono tabular-nums mt-1 {{ sat.marginalReturn < sat.trueReturn - 0.0005 ? 'text-error' : 'text-on-surface' }}">{{ (sat.marginalReturn * 100)|number_format(2) }}%</p>
+									<p class="text-3xs uppercase tracking-wide text-on-surface-variant/60 mt-1">next dollar of capital · trailing {{ (sat.trueReturn * 100)|number_format(2) }}%</p>
+								</div>
+								<div class="p-4 rounded bg-surface-container-lowest/80 border border-outline-variant/15">
+									<span class="text-on-surface-variant uppercase text-xs font-bold">Moat Factor</span>
+									<p class="text-sm font-bold font-mono tabular-nums mt-1 text-on-surface">{{ sat.moatFactor|number_format(2) }}x</p>
+									<p class="text-3xs uppercase tracking-wide text-on-surface-variant/60 mt-1">{{ asset.systemicImportance }} · scales both penalties</p>
+								</div>
+							</div>
+
+							{% if not industry.pricesCapacity %}
+								<p class="text-xs text-on-surface-variant leading-relaxed">Not priced on capacity: {{ isFinancial ? 'a lender sells a yield on its book, not a unit of output, so there is no plant to overbuild.' : 'this industry\'s output is not substitutable enough for rivals\' plant to move its price.' }}</p>
+							{% else %}
+								<div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+									<div class="p-4 rounded bg-surface-container-lowest/80 border border-outline-variant/15">
+										<span class="text-on-surface-variant uppercase text-xs font-bold">Capacity vs Demand</span>
+										<p class="text-sm font-bold font-mono tabular-nums mt-1 {{ industry.balance == 'overbuilt' ? 'text-error' : (industry.balance == 'tight' ? 'text-tertiary' : 'text-on-surface') }}">{{ industry.capacityRatio is not null ? (industry.capacityRatio * 100)|number_format(1) ~ '%' : '-' }}</p>
+										<p class="text-3xs uppercase tracking-wide text-on-surface-variant/60 mt-1">{% if industry.installedCapacity is not null %}${{ industry.installedCapacity|format_large }} plant · ${{ industry.trendCapacity|format_large }} at trend{% else %}anchored at first report{% endif %}</p>
+									</div>
+									<div class="p-4 rounded bg-surface-container-lowest/80 border border-outline-variant/15">
+										<span class="text-on-surface-variant uppercase text-xs font-bold">Realized Price</span>
+										{% if industry.priceLevel is not null %}
+											{% set priceMove = (industry.priceLevel - 1) * 100 %}
+											<p class="text-sm font-bold font-mono tabular-nums mt-1 {{ priceMove < -0.05 ? 'text-error' : (priceMove > 0.05 ? 'text-tertiary' : 'text-on-surface') }}">{{ priceMove >= 0 ? '+' : '' }}{{ priceMove|number_format(2) }}%</p>
+										{% else %}
+											<p class="text-sm font-bold font-mono tabular-nums mt-1 text-on-surface-variant">-</p>
+										{% endif %}
+										<p class="text-3xs uppercase tracking-wide text-on-surface-variant/60 mt-1">vs balanced industry · last report</p>
+									</div>
+									<div class="p-4 rounded bg-surface-container-lowest/80 border border-outline-variant/15">
+										<span class="text-on-surface-variant uppercase text-xs font-bold">Rival Share Drain</span>
+										{% if industry.rivalShareDrain is not null %}
+											{% set drain = industry.rivalShareDrain * 100 %}
+											<p class="text-sm font-bold font-mono tabular-nums mt-1 {{ drain < -0.05 ? 'text-error' : (drain > 0.05 ? 'text-tertiary' : 'text-on-surface') }}">{{ drain >= 0 ? '+' : '' }}{{ drain|number_format(2) }}%</p>
+										{% else %}
+											<p class="text-sm font-bold font-mono tabular-nums mt-1 text-on-surface-variant">-</p>
+										{% endif %}
+										<p class="text-3xs uppercase tracking-wide text-on-surface-variant/60 mt-1">of demand, from rivals' beats and misses</p>
+									</div>
+									<div class="p-4 rounded bg-surface-container-lowest/80 border border-outline-variant/15">
+										<span class="text-on-surface-variant uppercase text-xs font-bold">Own-Price Volume</span>
+										{% if industry.ownPriceVolumeShift is not null %}
+											{% set shift = industry.ownPriceVolumeShift * 100 %}
+											<p class="text-sm font-bold font-mono tabular-nums mt-1 {{ shift < -0.05 ? 'text-error' : (shift > 0.05 ? 'text-tertiary' : 'text-on-surface') }}">{{ shift >= 0 ? '+' : '' }}{{ shift|number_format(2) }}%</p>
+										{% else %}
+											<p class="text-sm font-bold font-mono tabular-nums mt-1 text-on-surface-variant">-</p>
+										{% endif %}
+										<p class="text-3xs uppercase tracking-wide text-on-surface-variant/60 mt-1">volume won or lost on its own real price change</p>
+									</div>
+								</div>
+							{% endif %}
+
+							{% if industry.rosterSize > 1 %}
+								<div class="mt-4 pt-4 border-t border-outline-variant/15">
+									<p class="text-2xs uppercase tracking-wide font-semibold text-on-surface-variant mb-2">Share of modelled industry sales</p>
+									<ul class="space-y-1.5" aria-label="Industry revenue shares">
+										{% for peerTicker, share in industry.peerShares|sort|reverse(true) %}
+											{% set isSelf = peerTicker == asset.ticker %}
+											<li class="flex items-center gap-3 text-xs">
+												<span class="w-14 shrink-0 font-mono {{ isSelf ? 'text-primary font-bold' : 'text-on-surface-variant' }}">{% if isSelf %}{{ peerTicker }}{% else %}<a href="/stock/{{ peerTicker }}" class="hover:underline">{{ peerTicker }}</a>{% endif %}</span>
+												<span class="flex-1 h-1.5 rounded-full bg-surface-container-highest overflow-hidden"><span class="block h-full rounded-full {{ isSelf ? 'bg-primary' : 'bg-outline-variant' }}" style="width: {{ (share * 100)|round(1) }}%"></span></span>
+												<span class="w-14 shrink-0 text-right font-mono tabular-nums {{ isSelf ? 'text-primary font-bold' : 'text-on-surface-variant' }}">{{ (share * 100)|number_format(1) }}%</span>
+											</li>
+										{% endfor %}
+									</ul>
+								</div>
+							{% elseif industry.tracked %}
+								<p class="mt-4 pt-4 border-t border-outline-variant/15 text-xs text-on-surface-variant leading-relaxed">The only modelled firm in its industry: the rest of its addressable market is not simulated, so the roster share is not shown. The capacity balance above weighs its own build beyond trend by its addressable share; the rest of the industry is taken to supply at trend.</p>
+							{% endif %}
+						</div>
+					{% endif %}
 
 					{# Corporate Life-Cycle (Dickinson 2011) #}
 					<div class="bg-surface-container-low rounded-lg p-6 border border-outline-variant/15 hover:border-outline-variant/30 transition-all" id="lifecycle-card">
@@ -2097,6 +2205,7 @@
 										<th class="py-2.5 text-right">Market Cap</th>
 										<th class="py-2.5 text-right">P/E Ratio</th>
 										<th class="py-2.5 text-right">ROIC / ROE</th>
+										<th class="py-2.5 text-right">Ind. Share</th>
 										<th class="py-2.5 text-right">Total Equity</th>
 										<th class="py-2.5 text-right">Action</th>
 									</tr>
@@ -2114,6 +2223,7 @@
 										<td class="py-2.5 text-right font-mono tabular-nums text-on-surface">${{ marketCap|format_large }}</td>
 										<td class="py-2.5 text-right font-mono tabular-nums text-on-surface">{{ peRatio ? peRatio|number_format(2) ~ 'x' : '-' }}</td>
 										<td class="py-2.5 text-right font-mono tabular-nums text-on-surface">{{ ((isFinancial ? (asset.currentRoe ?: asset.baselineRoe) : (asset.currentRoic ?: asset.baselineRoic)) * 100)|number_format(2) }}%</td>
+										<td class="py-2.5 text-right font-mono tabular-nums text-on-surface">{{ industry and industry.rosterShare is not null ? (industry.rosterShare * 100)|number_format(1) ~ '%' : '-' }}</td>
 										<td class="py-2.5 text-right font-mono tabular-nums text-on-surface">${{ asset.totalEquity|format_large }}</td>
 										<td class="py-2.5 text-right text-xs text-on-surface-variant">-</td>
 									</tr>
@@ -2129,6 +2239,7 @@
 											<td class="py-2.5 text-right font-mono tabular-nums text-on-surface">${{ peer.marketCap|format_large }}</td>
 											<td class="py-2.5 text-right font-mono tabular-nums text-on-surface">{{ peer.peRatio ? peer.peRatio|number_format(2) ~ 'x' : '-' }}</td>
 											<td class="py-2.5 text-right font-mono tabular-nums text-on-surface">{{ (peer.roic * 100)|number_format(2) }}%</td>
+											<td class="py-2.5 text-right font-mono tabular-nums text-on-surface-variant">{{ industry and industry.peerShares[peer.ticker] is defined ? (industry.peerShares[peer.ticker] * 100)|number_format(1) ~ '%' : '-' }}</td>
 											<td class="py-2.5 text-right font-mono tabular-nums text-on-surface">${{ peer.totalEquity|format_large }}</td>
 											<td class="py-2.5 text-right">
 												<a href="/stock/{{ peer.ticker }}" class="relative z-10 px-2 py-0.5 text-xs font-semibold text-primary bg-primary/10 rounded hover:bg-primary/20 transition-colors">
@@ -2138,7 +2249,7 @@
 										</tr>
 									{% else %}
 										<tr>
-											<td colspan="7" class="py-4 text-center text-xs text-on-surface-variant">No peer companies found in this sector.</td>
+											<td colspan="8" class="py-4 text-center text-xs text-on-surface-variant">No peer companies found in this sector.</td>
 										</tr>
 									{% endfor %}
 								</tbody>

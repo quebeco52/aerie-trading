@@ -21,7 +21,13 @@ class CorporateMetrics
         return \App\Data\Sectors::INDUSTRY_METRICS[$industry]['depreciation'] ?? 0.05;
     }
 
-    public function calculateMarketShare(float $investedCapital, float $nominalGdpIndex, float $samRatio, float $baselineSectorTam = FinancialConstants::BASELINE_SECTOR_TAM): float
+    /**
+     * How much of its serviceable addressable market a firm's capital already spans: invested capital over
+     * the SAM the firm was seeded with, scaled by nominal GDP. A SCALE reading for the saturation physics
+     * (Penrose bloat, diminishing marginal return, the TAM cap), private to the firm and non-rival — it is
+     * not a share of the industry's sales. That figure lives in the industry ledger's revenue share.
+     */
+    public function calculateScaleRatio(float $investedCapital, float $nominalGdpIndex, float $samRatio, float $baselineSectorTam = FinancialConstants::BASELINE_SECTOR_TAM): float
     {
         $dynamicSam = $baselineSectorTam * $nominalGdpIndex * $samRatio;
         return $investedCapital / max(1.0, $dynamicSam);
@@ -48,7 +54,7 @@ class CorporateMetrics
     {
         $nominalGdpIndex = $macroState->nominalGdpIndex;
         $samRatio = (float) $stock->getSamRatio();
-        $marketShare = $this->calculateMarketShare($investedCapital, $nominalGdpIndex, $samRatio);
+        $marketShare = $this->calculateScaleRatio($investedCapital, $nominalGdpIndex, $samRatio);
 
         $moatFactor = FinancialConstants::SYSTEMIC_MOAT_FACTORS[$stock->getSystemicImportance()]
             ?? FinancialConstants::SYSTEMIC_MOAT_FACTORS['default'];
@@ -77,7 +83,7 @@ class CorporateMetrics
 
         $nominalGdpIndex = $macroState->nominalGdpIndex;
         $samRatio = (float) $stock->getSamRatio();
-        $marketShare = $this->calculateMarketShare($investedCapital, $nominalGdpIndex, $samRatio);
+        $marketShare = $this->calculateScaleRatio($investedCapital, $nominalGdpIndex, $samRatio);
 
         $optimalThreshold = FinancialConstants::DISECONOMY_OPTIMAL_SHARE_THRESHOLD;
         if ($marketShare <= $optimalThreshold) {

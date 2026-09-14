@@ -339,4 +339,19 @@ class StreamContextTest extends TestCase
         $this->assertArrayHasKey(StreamContext::BACKLOG_STATE_PREFIX . 'oem', $context->getStreamZ());
     }
 
+    public function testTheSectorFactorsPartOfEachStreamsZIsKeptBesideIt(): void
+    {
+        $mathUtility = new MathUtility();
+        $withSector = new StreamContext([], $mathUtility, 0.6, 2.0, 0.3);
+        $withSector->generateZ('revenue', 0.25);
+        $withSector->generateExogenousZ('catastrophe', 0.0);
+
+        // sqrt(1 - phi^2) * rho_s * S: the sector's contribution to the fresh innovation, at the AR(1) weight.
+        $this->assertEqualsWithDelta(sqrt(1.0 - 0.0625) * 0.3 * 2.0, $withSector->getSectorZ()['revenue'], 1e-12);
+        $this->assertSame(0.0, $withSector->getSectorZ()['catastrophe'], 'an exogenous draw loads on no sector');
+
+        $noSector = new StreamContext([], $mathUtility, 0.6, null, 0.3);
+        $noSector->generateZ('revenue', 0.25);
+        $this->assertSame(0.0, $noSector->getSectorZ()['revenue']);
+    }
 }

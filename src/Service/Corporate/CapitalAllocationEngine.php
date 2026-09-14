@@ -317,7 +317,17 @@ class CapitalAllocationEngine
         $saturationPenalty = $this->corporateMetrics->calculateMarketSaturationPenalty($stock, $evaluationCapital, $ctx->macroState);
         $saturationSeverity = $this->corporateMetrics->calculateSaturationSeverity($saturationPenalty, $trueReturn);
 
-        $fairValuePE = $this->mathUtility->calculateIntrinsicFairValuePE($hurdleRate, $trueReturn, 0.02, \App\Data\Sectors::baselineIndustryPe($stock->getIndustry()));
+        $fairValuePE = $this->mathUtility->calculateManagementFairValuePE(
+            $hurdleRate,
+            $trueReturn,
+            $ctx->strategy->getSecularGrowthRate($stock),
+            $ctx->macroState->outputGap,
+            $ctx->health->leveredBeta,
+            $ctx->macroState->inflation,
+            $ctx->strategy->getMoatSpread(),
+            \App\Data\Sectors::baselineIndustryPe($stock->getIndustry()),
+            (float) ($stock->getAccrualsRatio() ?? 0.0)
+        );
 
         $ctx->newShares = $ctx->sharesOutstanding;
 
@@ -374,10 +384,15 @@ class CapitalAllocationEngine
                 $stock->setSharesOutstanding($sharesStr);
                 $ctx->newShares = $newSharesVal;
 
-                $pctRetired = ($sharesRepurchased / $ctx->sharesOutstanding) * 100;
+                // The repurchase reaches the price as what it is — shares bought in the market — through the
+                // order-flow channel and the 10b-18 pacing in StockTracker, not as a shock struck here. The
+                // old "half the percentage retired" was invented, and it charged the price for a quarter's
+                // buying in one tick with no slippage while a player buying the same notional paid both.
+                $stock->addCorporateFlowBacklog((float) $sharesRepurchased);
+
                 $ctx->events[] = [
                     'description' => "Bought back " . number_format($sharesRepurchased) . " shares.",
-                    'shock' => $pctRetired * 0.5
+                    'shock' => 0.0
                 ];
             }
         }

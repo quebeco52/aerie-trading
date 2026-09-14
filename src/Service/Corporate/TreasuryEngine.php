@@ -545,7 +545,17 @@ class TreasuryEngine
         $hurdleRate = $ctx->strategy->getHurdleRate($ctx->health);
         $economicSpread = $trueReturn - $hurdleRate;
 
-        $fairValuePE = $this->mathUtility->calculateIntrinsicFairValuePE($hurdleRate, $trueReturn, 0.02, \App\Data\Sectors::baselineIndustryPe($stock->getIndustry()));
+        $fairValuePE = $this->mathUtility->calculateManagementFairValuePE(
+            $hurdleRate,
+            $trueReturn,
+            $ctx->strategy->getSecularGrowthRate($stock),
+            $ctx->macroState->outputGap,
+            $ctx->health->leveredBeta,
+            $ctx->macroState->inflation,
+            $ctx->strategy->getMoatSpread(),
+            \App\Data\Sectors::baselineIndustryPe($stock->getIndustry()),
+            (float) ($stock->getAccrualsRatio() ?? 0.0)
+        );
 
         $bookValuePerShare = max(0.01, (float) $stock->getTotalEquity() / max(1, $ctx->sharesOutstanding));
         $priceToBook = $ctx->currentPrice / $bookValuePerShare;
@@ -591,6 +601,9 @@ class TreasuryEngine
                 $sharesIssued = $targetRaise / max(0.01, $offeringPrice);
 
                 $stock->setSharesOutstanding((string) ($ctx->sharesOutstanding + $sharesIssued));
+                // The offering is placed at the discount above; the stock it put into investors' hands is
+                // then sold down through the flow channel at the 10b-18 pace (the post-offering overhang).
+                $stock->addCorporateFlowBacklog(-$sharesIssued);
                 // The engine writes the context's share count back to the stock after allocation, so the
                 // dilution has to reach the context too or the raise lands as cash with no shares behind it.
                 $ctx->newShares = (float) $stock->getSharesOutstanding();

@@ -81,7 +81,7 @@ class CapitalAllocationEngineTest extends TestCase
         $this->debtEngineMock->method('analyzeDebtHealth')->willReturn($debtHealthMock);
 
         $this->mathUtilityMock = $this->createStub(MathUtility::class);
-        $this->mathUtilityMock->method('calculateIntrinsicFairValuePE')->willReturn(15.0);
+        $this->mathUtilityMock->method('calculateManagementFairValuePE')->willReturn(15.0);
 
         $this->treasuryEngineMock = $this->createStub(TreasuryEngine::class);
 
@@ -458,10 +458,7 @@ class CapitalAllocationEngineTest extends TestCase
 
         $this->assertLessThan(1000000.0, $result['new_shares'], 'Shares should be repurchased');
         $this->assertNotEmpty($result['events']);
-        // Check that shock matches (sharesRepurchased / originalShares) * 100 * 0.5
         $sharesRepurchased = 1000000.0 - $result['new_shares'];
-        $expectedPctRetired = ($sharesRepurchased / 1000000.0) * 100.0;
-        $expectedShock = $expectedPctRetired * 0.5;
 
         $buybackEvent = null;
         foreach ($result['events'] as $event) {
@@ -472,6 +469,9 @@ class CapitalAllocationEngineTest extends TestCase
         }
 
         $this->assertNotNull($buybackEvent);
-        $this->assertEqualsWithDelta($expectedShock, $buybackEvent['shock'], 0.0001);
+        // The price is not shocked by the report: the repurchase is queued as flow and moves the price
+        // through the same impact channel as any other buyer, at the 10b-18 pace, on the ticker.
+        $this->assertSame(0.0, $buybackEvent['shock']);
+        $this->assertEqualsWithDelta($sharesRepurchased, $stock->getCorporateFlowBacklog(), 1e-6);
     }
 }

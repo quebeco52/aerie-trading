@@ -547,8 +547,8 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
         $netChargeOffs = max(0.0, $conditionalEl / self::ANNUALIZATION_FACTOR) * $earningAssets;
 
         $sentimentShift = ($macroState->consumerSentimentIndexEma - MacroEngine::SENTIMENT_BASELINE) / self::INDEX_NORMALIZATION_BASE;
-        $retailDefaultShift = max(0.0, ($macroState->retailDefaultRateEma - MacroEngine::RETAIL_DEFAULT_BASELINE) / MacroEngine::RETAIL_DEFAULT_BASELINE);
-        $corporateDefaultShift = max(0.0, ($macroState->corporateDefaultRateEma - MacroEngine::CORPORATE_DEFAULT_BASELINE) / MacroEngine::CORPORATE_DEFAULT_BASELINE);
+        $retailDefaultShift = MathUtility::excessOverBaseline($macroState->retailDefaultRateEma, MacroEngine::RETAIL_DEFAULT_BASELINE);
+        $corporateDefaultShift = MathUtility::excessOverBaseline($macroState->corporateDefaultRateEma, MacroEngine::CORPORATE_DEFAULT_BASELINE);
 
         $creShift = ($macroState->commercialPropertyIndexEma - self::INDEX_NORMALIZATION_BASE) / self::INDEX_NORMALIZATION_BASE;
         $residentialShift = ($macroState->residentialPropertyIndexEma - self::INDEX_NORMALIZATION_BASE) / self::INDEX_NORMALIZATION_BASE;

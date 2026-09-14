@@ -13,6 +13,7 @@ use App\Service\Event\NarrativeEngine;
 use App\Service\Math\FinancialConstants;
 use App\Service\Market\MarketConsensusEngine;
 use App\DTO\EarningsSimulationContext;
+use App\Service\Corporate\Industry\IndustryShareLedger;
 use App\Service\Event\EarningsReportedEvent;
 use Symfony\Contracts\EventDispatcher\EventDispatcherInterface;
 
@@ -110,7 +111,7 @@ class EarningsEngine
         private NarrativeEngine $narrativeEngine,
         private MarketConsensusEngine $marketConsensusEngine,
         /** Zero-sum industry share ledger; null (unit tests, harnesses) means every firm's gain comes from a larger market. */
-        private ?\App\Service\Corporate\Industry\IndustryShareLedger $industryShareLedger = null
+        private ?IndustryShareLedger $industryShareLedger = null
     ) {}
 
     public function calculate(Stock $stock, \App\DTO\MacroStateDTO $macroState, int $tickCount = 0, int $ticksPerYear = 252): ?array
@@ -442,6 +443,11 @@ class EarningsEngine
         // Input cost level; models that carry inflation inside their own physics leave it at the price level.
         $inputCostMultiplier = (float) ($macroPhysics['input_cost_multiplier'] ?? $pricingPowerMultiplier);
 
+        // The firm's reach into the market it sells into, on the base the saturation physics uses. The
+        // industry ledger weighs both what this firm builds and what it takes from rivals by it.
+        $evaluationCapital = $strategy->getEvaluationCapital((float) $stock->getTotalEquity(), $stock->getInvestedCapital());
+        $ctx->addressableShare = $this->corporateMetrics->calculateScaleRatio($evaluationCapital, $macroState->nominalGdpIndex, (float) $stock->getSamRatio());
+
         // Zero-sum share: rivals' idiosyncratic gains booked since this firm's last report are taken from
         // its demand in proportion to its size, scaled by how substitutable the industry's output is. The
         // drain lands in EXPECTED revenue because analysts have already read the rivals' reports.
@@ -496,25 +502,44 @@ class EarningsEngine
         $effectiveCip = min($maxCipDeduction, $stock->getTotalCipAmount());
         $revenueGeneratingCapital = abs($ctx->investedCapital) - $effectiveCip;
 
-        $dynamicSam = FinancialConstants::BASELINE_SECTOR_TAM * $macroState->nominalGdpIndex * (float) ($stock->getSamRatio() ?? 1.0);
-        $maxSectorCapacity = $dynamicSam * FinancialConstants::MAX_SECTOR_TAM_CAPACITY_RATIO;
-        
         $structuralRevenue = max(1.0, $revenueGeneratingCapital * $assetTurnover * $pricingPowerMultiplier);
+
+        // The firm's addressable market in the unit its capacity is measured in: its own structural revenue
+        // scaled up to a full addressable share, on the base every share reading uses (equity for a lender,
+        // whose book turns over a leveraged multiple of it; invested capital otherwise). The cap used to
+        // compare quarterly revenue against the CAPITAL figure of the market, six times too loose to bind.
+        $fullMarketRevenue = $ctx->addressableShare > 0.0 ? $structuralRevenue / $ctx->addressableShare : INF;
+        $maxSectorCapacity = $fullMarketRevenue * FinancialConstants::MAX_SECTOR_TAM_CAPACITY_RATIO;
         
         if (!$strategy->isFinancial()) {
             $ctx->structuralRevenue = min($maxSectorCapacity, $structuralRevenue);
             $ctx->expectedRevenue = min($maxSectorCapacity * self::EXPECTED_REVENUE_TAM_HEADROOM, $ctx->structuralRevenue * $ctx->capacityUtilization);
         } else {
-            $maxFinancialCapacity = $dynamicSam * FinancialConstants::MAX_FINANCIAL_SECTOR_TAM_CAPACITY_RATIO;
+            $maxFinancialCapacity = $fullMarketRevenue * FinancialConstants::MAX_FINANCIAL_SECTOR_TAM_CAPACITY_RATIO;
             $ctx->structuralRevenue = min($maxFinancialCapacity, $structuralRevenue);
             $ctx->expectedRevenue = min($maxFinancialCapacity * self::EXPECTED_REVENUE_TAM_HEADROOM, $ctx->structuralRevenue * $ctx->capacityUtilization);
         }
+
+        // INDUSTRY CAPACITY BALANCE (Cournot inverse demand, dominant firms against a competitive fringe)
+        // The capacity above was struck against the firm's own plant alone. It is sold into an industry
+        // whose trend demand does not grow because someone built more: the modelled roster's build beyond
+        // trend, each firm weighted by its addressable share, sets a price level every firm in the industry
+        // realizes, scaled by how substitutable the industry's output is (a branded good is mostly share;
+        // an oil producer sells into a global pool). It lands in EXPECTED revenue, since analysts can count the industry's plant
+        // as well as the firm can, and it is a level struck fresh from the balance every report, never a
+        // rate that accumulates. Unit costs do not move with the industry's price: the level scales the
+        // revenue lines below and the cost base is derived from capacity at a balanced price.
+        $industryPriceLevel = $this->resolveIndustryPriceLevel($ctx);
+        $ctx->industryPriceLevel = $industryPriceLevel;
+        $balancedStructuralRevenue = $ctx->structuralRevenue;
+        $ctx->structuralRevenue *= $industryPriceLevel;
+        $ctx->expectedRevenue *= $industryPriceLevel;
 
         $fixedCostRatio = (float) $stock->getFixedCostRatio();
         // The cost base inflates with INPUT prices (expected inflation), not with the firm's own selling
         // price: a price setter's excess pass-through reaches its margin, a price taker's shortfall squeezes
         // it. Scaling costs by the pricing-power multiplier gave every firm a fixed margin whatever it charged.
-        $structuralCosts = $ctx->structuralRevenue * ($inputCostMultiplier / max(0.5, $pricingPowerMultiplier)) * (1.0 - $ctx->stableMargin);
+        $structuralCosts = $balancedStructuralRevenue * ($inputCostMultiplier / max(0.5, $pricingPowerMultiplier)) * (1.0 - $ctx->stableMargin);
 
         // Depreciation becomes its own expense line below EBITDA, so it must be carved OUT of the cash cost
         // base rather than added on top of it. The stock's operatingMargin is its EBIT margin — every seed,
@@ -541,6 +566,37 @@ class EarningsEngine
 
         $structuralVariableCosts = $cashStructuralCosts - ($cashStructuralCosts * $fixedCostRatio);
         $ctx->baselineVariableMargin = $structuralVariableCosts / $ctx->structuralRevenue;
+    }
+
+    /**
+     * The price level this firm realizes given how much plant its industry has installed against trend
+     * demand: one for a balanced industry, below it for an overbuilt one. Financials sell a yield, not a
+     * unit, and are left at one; so is any firm whose model declares its output non-substitutable.
+     */
+    private function resolveIndustryPriceLevel(EarningsSimulationContext $ctx): float
+    {
+        $substitutability = $ctx->strategy->getIndustrySubstitutability();
+        if ($this->industryShareLedger === null || $ctx->strategy->isFinancial() || $substitutability <= 0.0) {
+            return 1.0;
+        }
+
+        // The roster is not the industry: the firm's build weighs on the industry price by its share of the
+        // market it sells into, the same share the saturation penalty is struck on.
+        $capacityRatio = $this->industryShareLedger->resolveIndustryCapacityRatio(
+            $ctx->stock,
+            $ctx->structuralRevenue * self::TTM_QUARTERS,
+            $ctx->addressableShare,
+            IndustryShareLedger::trendNominalGdp($ctx->macroState),
+            $ctx->macroState->totalTime,
+            IndustryShareLedger::secularExcessGrowth($ctx->strategy, $ctx->stock),
+            $ctx->tickCount,
+            $ctx->ticksPerYear
+        );
+
+        $industryPrice = $this->mathUtility->calculateCournotPriceLevel($capacityRatio, FinancialConstants::COURNOT_DEMAND_ELASTICITY);
+        $firmResponse = $substitutability * ($industryPrice - 1.0);
+
+        return 1.0 + max(-FinancialConstants::MAX_INDUSTRY_PRICE_RESPONSE, min(FinancialConstants::MAX_INDUSTRY_PRICE_RESPONSE, $firmResponse));
     }
 
     /**
@@ -664,6 +720,21 @@ class EarningsEngine
         $ctx->realizedVariableMargin = min(0.99, max(0.01, $stickyVariableMargin + $overtimePremium));
     }
 
+    /**
+     * The revenue surprise attributed to the firm's own innovation. The surprise rides on the demand Z
+     * (the two-factor draw in StreamContext: sector, firm, then each stream's own noise, composited over
+     * the streams at their revenue weights); the sector's part of that Z is dropped and the rest keeps the
+     * model's own slope of revenue on Z. A demand Z of zero carries no sector part to drop.
+     */
+    private function firmSpecificSurprise(float $surprise, float $demandShockZ, float $sectorShockZ): float
+    {
+        if (abs($demandShockZ) < 1e-9 || $sectorShockZ === 0.0) {
+            return $surprise;
+        }
+
+        return $surprise * (($demandShockZ - $sectorShockZ) / $demandShockZ);
+    }
+
     private function calculateExpectedVsActualFinancials(EarningsSimulationContext $ctx): void
     {
         $actuals = $ctx->strategy->computeActualFinancials(
@@ -678,11 +749,14 @@ class EarningsEngine
         $ctx->actualRevenue = $actuals->actualRevenue;
         $ctx->actualVariableCosts = $actuals->actualVariableCosts;
 
-        // What this firm just took from (or ceded to) the industry: the idiosyncratic part of the surprise,
-        // since macro and rival effects were already inside expected revenue.
+        // What this firm just took from (or ceded to) the industry: the part of the surprise that is its
+        // OWN. Macro and rival effects were already inside expected revenue; the sector factor was not, and
+        // every peer in the sector drew it too — booked as a gain, a sector-wide good quarter would have each
+        // firm "taking" from the others.
         if ($this->industryShareLedger !== null && $ctx->expectedRevenue > 0.0) {
-            $idiosyncraticGain = ($ctx->actualRevenue - $ctx->expectedRevenue) / $ctx->expectedRevenue;
-            $this->industryShareLedger->recordIdiosyncraticGain($ctx->stock, $ctx->actualRevenue * 4.0, $idiosyncraticGain, $ctx->tickCount);
+            $surprise = ($ctx->actualRevenue - $ctx->expectedRevenue) / $ctx->expectedRevenue;
+            $firmSurprise = $this->firmSpecificSurprise($surprise, $actuals->demandShockZ, $actuals->sectorShockZ);
+            $this->industryShareLedger->recordIdiosyncraticGain($ctx->stock, $ctx->actualRevenue * 4.0, $firmSurprise, $ctx->addressableShare, $ctx->tickCount);
         }
 
         $coverage = $ctx->strategy->getCoverageProfile($ctx->stock);
@@ -741,6 +815,7 @@ class EarningsEngine
         $ctx->kpis = $actuals->kpis;
         $ctx->kpis['rival_share_drain'] = $ctx->rivalShareDrain;
         $ctx->kpis['own_price_volume_shift'] = $ctx->ownPriceVolumeShift;
+        $ctx->kpis['industry_price_level'] = $ctx->industryPriceLevel;
         $ctx->kpis['price_revenue'] = $actuals->priceRevenue;
         $ctx->creditLossProvision = $actuals->creditLossProvision;
         $ctx->netChargeOffs = max(0.0, $actuals->netChargeOffs);
@@ -1196,7 +1271,10 @@ class EarningsEngine
 
         // Settle this quarter's stock-based compensation in new shares (dilution), a non-cash, non-financing flow.
         if ($ctx->stockCompensation > 0.0 && $currentPrice > 0.0) {
-            $stock->setSharesOutstanding((string) ((float) $stock->getSharesOutstanding() + ($ctx->stockCompensation / $currentPrice)));
+            $vestedShares = $ctx->stockCompensation / $currentPrice;
+            $stock->setSharesOutstanding((string) ((float) $stock->getSharesOutstanding() + $vestedShares));
+            // What vests gets sold: the supply reaches the tape through the flow channel over the quarter.
+            $stock->addCorporateFlowBacklog(-$vestedShares);
         }
         $reportedOrganicCapex = $ctx->strategy->allowsPhysicalOrganicCapex() ? $organicCapex : 0.0;
         $annualizedOrganicCapex = $reportedOrganicCapex * 4.0;

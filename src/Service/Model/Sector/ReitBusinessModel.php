@@ -351,8 +351,8 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
                 ? - ($tenantDefaultZ - self::BENIGN_LEASING_Z_FLOOR) * self::LEASING_BONUS_SCALE
                 : 0.0);
 
-        $corpDefaultShift = max(0.0, ($macroState->corporateDefaultRateEma - MacroEngine::CORPORATE_DEFAULT_BASELINE) / MacroEngine::CORPORATE_DEFAULT_BASELINE);
-        $retailDefaultShift = max(0.0, ($macroState->retailDefaultRateEma - MacroEngine::RETAIL_DEFAULT_BASELINE) / MacroEngine::RETAIL_DEFAULT_BASELINE);
+        $corpDefaultShift = MathUtility::excessOverBaseline($macroState->corporateDefaultRateEma, MacroEngine::CORPORATE_DEFAULT_BASELINE);
+        $retailDefaultShift = MathUtility::excessOverBaseline($macroState->retailDefaultRateEma, MacroEngine::RETAIL_DEFAULT_BASELINE);
         $macroTenantDefaultDrag = ($corpDefaultShift * self::CORP_DEFAULT_VACANCY_SCALAR) + ($retailDefaultShift * self::RETAIL_DEFAULT_VACANCY_SCALAR);
 
         // Mortgage and unsecured note costs reach FFO through DebtEngine's maturity wall

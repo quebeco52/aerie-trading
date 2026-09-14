@@ -92,7 +92,7 @@ class DistressedDebtBusinessModel extends AssetManagementBusinessModel
         $outputGap = $macroState->outputGapEma;
 
         $hySpreadSurge = max(0.0, $macroState->highYieldCreditSpreadEma - self::HY_SPREAD_BLOWOUT_BASELINE) * self::HY_SPREAD_SURGE_SCALAR;
-        $corporateDefaultShift = max(0.0, ($macroState->corporateDefaultRateEma - MacroEngine::CORPORATE_DEFAULT_BASELINE) / MacroEngine::CORPORATE_DEFAULT_BASELINE);
+        $corporateDefaultShift = MathUtility::excessOverBaseline($macroState->corporateDefaultRateEma, MacroEngine::CORPORATE_DEFAULT_BASELINE);
         $defaultRateSurge = $corporateDefaultShift * self::DEFAULT_RATE_SURGE_SCALAR;
 
         $distressMultiplier = 0.0;

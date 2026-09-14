@@ -16,6 +16,7 @@ use App\Service\Market\SecuritiesLendingDesk;
 use App\Service\Math\MathUtility;
 use App\Service\View\CompanySnapshotBuilder;
 use App\Service\View\EtfCompositionBuilder;
+use App\Service\View\IndustryPositionBuilder;
 use App\Service\View\PeerTableBuilder;
 use App\Service\View\StockPageBuilder;
 use App\Service\View\ViewerPositionBuilder;
@@ -40,7 +41,7 @@ class StockPageBuilderTest extends TestCase
     private const TEMPLATE_KEYS = [
         'advShares', 'allAssets', 'analystTargets', 'asset', 'availableToBorrow', 'borrowFee',
         'businessModel', 'changePercent', 'components', 'dividendYield', 'economic_cycle', 'events',
-        'generalInfo', 'halfSpread', 'investedCapital', 'isEtf', 'isFinancial', 'lifecycleStage',
+        'generalInfo', 'halfSpread', 'industry', 'investedCapital', 'isEtf', 'isFinancial', 'lifecycleStage',
         'lifecycleStages', 'macro', 'marketCap', 'marketShare', 'openOrders', 'peRatio', 'peers',
         'pieData', 'pieLabels', 'quote', 'sharesMap', 'shortUtilization', 'targetPE', 'ticksPerYear',
         'userAvgCost', 'userDividendIncome', 'userQuantity', 'userTrades', 'userUnrealizedPnL',
@@ -73,7 +74,6 @@ class StockPageBuilderTest extends TestCase
             'peRatio' => 12.5,
             'targetPE' => 20.0,
             'investedCapital' => 500.0,
-            'marketShare' => 0.02,
             'lifecycleStage' => null,
             'dividendYield' => 0.01,
             'analystTargets' => ['consensus' => 110.0],
@@ -91,6 +91,9 @@ class StockPageBuilderTest extends TestCase
         $peerTable = $this->createMock(PeerTableBuilder::class);
         $peerTable->method('build')->willReturn([]);
 
+        $industryPosition = $this->createMock(IndustryPositionBuilder::class);
+        $industryPosition->method('build')->willReturn(['marketShare' => 0.02, 'industry' => ['tracked' => true]]);
+
         $viewerPosition = $this->createMock(ViewerPositionBuilder::class);
         $viewerPosition->method('build')->willReturn($this->positionKeys);
 
@@ -99,6 +102,7 @@ class StockPageBuilderTest extends TestCase
             $companySnapshot,
             $etfComposition,
             $peerTable,
+            $industryPosition,
             $viewerPosition,
             $this->createMock(StockEventRepository::class),
             $this->createMock(EtfEventRepository::class),

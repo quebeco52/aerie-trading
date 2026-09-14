@@ -221,7 +221,7 @@ class LawFirmBusinessModel extends StandardCorporateBusinessModel
         // Restructuring surges counter-cyclically during economic recessions and credit default waves
         $recessionDepth = max(0.0, -$outputGap);
         $excessSpread   = max(0.0, $creditSpread - self::DEFAULT_CREDIT_SPREAD_BASELINE);
-        $corporateDefaultShift = max(0.0, ($macroState->corporateDefaultRateEma - MacroEngine::CORPORATE_DEFAULT_BASELINE) / MacroEngine::CORPORATE_DEFAULT_BASELINE);
+        $corporateDefaultShift = MathUtility::excessOverBaseline($macroState->corporateDefaultRateEma, MacroEngine::CORPORATE_DEFAULT_BASELINE);
         $restructuringSurge = ($recessionDepth * self::RESTRUCTURING_RECESSION_SCALAR * $beta)
             + ($excessSpread * self::RESTRUCTURING_SPREAD_SCALAR)
             + ($corporateDefaultShift * self::CORPORATE_DEFAULT_RESTRUCTURING_SCALAR);

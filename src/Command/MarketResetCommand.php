@@ -320,6 +320,7 @@ class MarketResetCommand extends Command
                     price_momentum_trend = 0.0,
                     turnover_ratio = :turnover_ratio,
                     impact_variance_ema = 0.0,
+                    corporate_flow_backlog = 0.0,
                     lendable_supply_ratio = :lendable_supply_ratio,
                     short_interest_shares = 0.00,
                     reported_operating_margin = NULL,

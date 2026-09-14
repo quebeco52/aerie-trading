@@ -178,6 +178,31 @@ final class LiquidityEngine
     }
 
     /**
+     * The slice of a company's own outstanding program (a repurchase, or the flowback of stock it issued)
+     * that executes this tick, signed like the backlog it is drawn from.
+     *
+     * Paced by the SEC Rule 10b-18 volume condition: no more than a quarter of the name's average daily
+     * volume per day, scaled to the step. A quarter's buyback therefore takes days or weeks to work
+     * through the tape, and the price move it leaves is the same permanent impact any other buyer of
+     * that many shares leaves — which is the point of routing it here rather than shocking the price.
+     *
+     * @param Stock $stock   The name whose program is being worked.
+     * @param float $backlog Signed shares still to execute: positive buys, negative sells.
+     * @param float $dt      The step, in years.
+     */
+    public function corporateFlowSlice(Stock $stock, float $backlog, float $dt): float
+    {
+        if ($backlog === 0.0 || $dt <= 0.0) {
+            return 0.0;
+        }
+
+        $stepDays = $dt * FinancialConstants::TRADING_DAYS_PER_YEAR;
+        $capacity = $this->averageDailyVolume($stock) * FinancialConstants::CORPORATE_FLOW_MAX_ADV_SHARE_PER_DAY * $stepDays;
+
+        return $backlog > 0.0 ? min($backlog, $capacity) : max($backlog, -$capacity);
+    }
+
+    /**
      * Largest order the desk will take in one go, in shares.
      *
      * Beyond this the impact law is extrapolation rather than measurement. Refusing is the honest answer:

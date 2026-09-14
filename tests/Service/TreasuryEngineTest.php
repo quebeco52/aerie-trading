@@ -495,8 +495,9 @@ class TreasuryEngineTest extends TestCase
      */
     public function testEquityIssuanceReachesTheShareCountTheEngineWritesBack(): void
     {
-        // A firm at fifty times earnings and twenty times book with returns well over its hurdle: the bubble
-        // condition, and the draw is pinned so the offering is certain to execute.
+        // A firm at seventy-five times earnings and thirty times book with returns well over its hurdle: the
+        // bubble condition (2.5x a fair-value multiple that now carries the cycle's growth, ~20x here), and
+        // the draw is pinned so the offering is certain to execute.
         $mathUtility = $this->getMockBuilder(MathUtility::class)->onlyMethods(['generateUniform'])->getMock();
         $mathUtility->method('generateUniform')->willReturn(0.0);
         $engine = new TreasuryEngine($this->corporateMetrics, $this->debtEngine, $this->capExEngine, $mathUtility);
@@ -504,13 +505,14 @@ class TreasuryEngineTest extends TestCase
         $stock = $this->createSolventCorporate();
         $stock->setSharesOutstanding('100000000');
         $stock->setRoicTtm('0.30');
-        $ctx = $this->createAllocationContext($stock, stockCompensation: 0.0, currentPrice: 200.0);
+        $ctx = $this->createAllocationContext($stock, stockCompensation: 0.0, currentPrice: 300.0);
         $ctx->newShares = 100_000_000.0; // what the buyback step leaves when nothing is repurchased
 
         $engine->finalizeLiquidity($ctx);
 
         $this->assertGreaterThan(0.0, $ctx->equityRaised, 'the bubble offering must execute for this to test anything');
-        $sharesIssued = $ctx->equityRaised / (200.0 * 0.90); // shares go out at the offering discount
+        $sharesIssued = $ctx->equityRaised / (300.0 * 0.90); // shares go out at the offering discount
+        $this->assertEqualsWithDelta(-$sharesIssued, $stock->getCorporateFlowBacklog(), 1.0, 'the placed stock is queued to flow back onto the tape');
         $this->assertEqualsWithDelta(100_000_000.0 + $sharesIssued, (float) $stock->getSharesOutstanding(), 1.0);
         $this->assertEqualsWithDelta(
             (float) $stock->getSharesOutstanding(),

@@ -210,6 +210,42 @@ class OrderFlowImpactWiringTest extends TestCase
         $this->assertEqualsWithDelta($expected, (float) $stock->getPrice(), 1e-9);
     }
 
+    public function testARepurchaseProgramIsWorkedAtTheTenBEighteenPaceThroughTheImpactChannel(): void
+    {
+        // A quarter's buyback used to be an invented per-report shock. Now it is a backlog of shares the
+        // company has to buy, executed at no more than a quarter of ADV a day and charged the same
+        // permanent impact as any other buyer of that many shares.
+        $stock = $this->stock();
+        $dt = 1.0 / 14400.0;
+        $stepDays = $dt * FinancialConstants::TRADING_DAYS_PER_YEAR;
+        $adv = $this->liquidity->averageDailyVolume($stock);
+        $program = $adv * 3.0; // Three days of volume: far more than one tick may execute.
+        $stock->setCorporateFlowBacklog($program);
+
+        $expectedSlice = $adv * FinancialConstants::CORPORATE_FLOW_MAX_ADV_SHARE_PER_DAY * $stepDays;
+        $expectedPrice = 100.0 * exp($this->liquidity->permanentImpact($stock, $expectedSlice));
+
+        $this->tracker()->updateStocks([$stock], $dt, false, new MacroStateDTO());
+
+        $this->assertEqualsWithDelta($expectedPrice, (float) $stock->getPrice(), 1e-9);
+        $this->assertEqualsWithDelta($program - $expectedSlice, $stock->getCorporateFlowBacklog(), 1e-6, 'The slice executed comes off the backlog.');
+    }
+
+    public function testAnOfferingsFlowbackSellsDownAndASmallProgramFinishesInOneTick(): void
+    {
+        $stock = $this->stock();
+        $dt = 1.0 / 14400.0;
+        $stepDays = $dt * FinancialConstants::TRADING_DAYS_PER_YEAR;
+        $capacity = $this->liquidity->averageDailyVolume($stock) * FinancialConstants::CORPORATE_FLOW_MAX_ADV_SHARE_PER_DAY * $stepDays;
+
+        // Issued stock is a negative backlog: it is distributed, and the price goes down.
+        $stock->setCorporateFlowBacklog(-$capacity * 0.5);
+        $this->tracker()->updateStocks([$stock], $dt, false, new MacroStateDTO());
+
+        $this->assertLessThan(100.0, (float) $stock->getPrice());
+        $this->assertSame(0.0, $stock->getCorporateFlowBacklog(), 'A program smaller than the tick capacity completes in the tick.');
+    }
+
     public function testFlowThatNetsToZeroLeavesThePriceAlone(): void
     {
         // Two traders crossing move the price by nothing: the shares changed hands with no net demand.

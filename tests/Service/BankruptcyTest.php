@@ -461,9 +461,14 @@ class BankruptcyTest extends TestCase
         $this->assertEquals(1000000.0, $resultZero['shares']);
         $this->assertNull($resultZero['event']);
     }
-    public function testSurvivingPeersAbsorbAFailedRivalsAddressableMarket(): void
+    /**
+     * Consolidation is the capacity balance's job now: the failed firm's plant leaves the industry ledger
+     * the moment it fails (its demand stays), so survivors sell into a tighter market at their next report. The old rule
+     * handed peers a slice of the failed firm's addressable market instead; nothing touches samRatio.
+     */
+    public function testAFailedFirmIsRetiredFromTheIndustryLedgerAndPeersKeepTheirOwnMarket(): void
     {
-        $build = function (string $ticker, string $sam, string $industry = 'Airlines'): Stock {
+        $build = function (string $ticker, string $industry = 'Airlines'): Stock {
             $stock = new Stock();
             $stock->setTicker($ticker);
             $stock->setName($ticker . ' Corp');
@@ -472,15 +477,17 @@ class BankruptcyTest extends TestCase
             $stock->setSharesOutstanding('1000000');
             $stock->setOperatingMargin('0.10');
             $stock->setTotalRevenue('1000000');
-            $stock->setSamRatio($sam);
+            $stock->setSamRatio('1.00');
             return $stock;
         };
-        $failed = $build('DEAD', '1.00');
-        $bigPeer = $build('BIG', '1.00');
-        $smallPeer = $build('SMALL', '0.50');
-        $otherIndustry = $build('RAIL', '1.00', 'Railroads');
+        $failed = $build('DEAD');
+        $survivor = $build('BIG');
 
-        // Only the failed carrier is insolvent; every peer survives.
+        $store = new \App\Service\Corporate\Industry\InMemoryIndustryShareStore();
+        $ledger = new \App\Service\Corporate\Industry\IndustryShareLedger($store);
+        $ledger->resolveIndustryCapacityRatio($survivor, 1_000_000.0, 0.5, 1.0, 0.0, 0.0, 1, 252);
+        $ledger->resolveIndustryCapacityRatio($failed, 1_000_000.0, 0.5, 1.0, 0.0, 0.0, 2, 252);
+
         $this->debtEngineMock->method('calculateAltmanZScore')->willReturnCallback(
             static fn (Stock $stock): array => ['z_score' => $stock->getTicker() === 'DEAD' ? -1.5 : 5.0, 'zone' => 'Safe', 'is_bankrupt' => $stock->getTicker() === 'DEAD']
         );
@@ -488,16 +495,15 @@ class BankruptcyTest extends TestCase
         $this->tradeOrderRepoMock->method('findOpenByTicker')->willReturn([]);
         $this->marketEventMock->method('publish')->willReturn(['type' => 'BANKRUPTCY']);
 
-        $operator = new MarketOperator($this->entityManagerMock, $this->loggerMock, $this->marketEventMock, $this->debtEngineMock, $this->mathUtilityMock);
-        $operator->enforceMarketStability([$failed, $bigPeer, $smallPeer, $otherIndustry], new MacroStateDTO());
+        $operator = new MarketOperator($this->entityManagerMock, $this->loggerMock, $this->marketEventMock, $this->debtEngineMock, $this->mathUtilityMock, $ledger);
+        $operator->enforceMarketStability([$failed, $survivor], new MacroStateDTO());
 
         $this->assertTrue($failed->isBankrupt());
-        // 70% of the failed carrier's addressable market is recaptured, split 2:1 by the peers' own size.
-        $recaptured = 1.00 * \App\Service\Math\FinancialConstants::MARKET_EXIT_RECAPTURE_FRACTION;
-        $this->assertEqualsWithDelta(1.00 + ($recaptured * (1.0 / 1.5)), (float) $bigPeer->getSamRatio(), 1e-6);
-        $this->assertEqualsWithDelta(0.50 + ($recaptured * (0.5 / 1.5)), (float) $smallPeer->getSamRatio(), 1e-6);
-        $this->assertEqualsWithDelta(1.00, (float) $otherIndustry->getSamRatio(), 1e-9, 'other industries gain nothing');
-        $this->assertEqualsWithDelta(1.00, (float) $failed->getSamRatio(), 1e-9, 'the failed firm keeps its frozen record');
+        $this->assertSame(0.0, $store->readIndustry('Airlines')['DEAD']['capacity'], 'the failed firm\'s plant is gone');
+        $this->assertSame(0.0, $store->readIndustry('Airlines')['DEAD']['revenue'], 'and so are its sales');
+        // Half the market's plant is gone against unchanged demand: the survivor's next report clears tight.
+        $this->assertEqualsWithDelta(0.5, $ledger->resolveIndustryCapacityRatio($survivor, 1_000_000.0, 0.5, 1.0, 0.0, 0.0, 70, 252), 1e-9);
+        $this->assertEqualsWithDelta(1.00, (float) $survivor->getSamRatio(), 1e-9, 'the addressable market is no longer transferred');
     }
 
 }

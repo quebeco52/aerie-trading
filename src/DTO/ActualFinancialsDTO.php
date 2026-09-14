@@ -45,5 +45,9 @@ readonly class ActualFinancialsDTO
         public float $netChargeOffs = 0.0,
         /** Dollars of actual revenue that are pure price above the expected level and carried no variable cost. */
         public float $priceRevenue = 0.0,
+        /** Revenue-weighted composite Z of the firm's demand streams this quarter: the axis the revenue surprise is attributed along. */
+        public float $demandShockZ = 0.0,
+        /** The sector factor's part of demandShockZ: what every sector peer drew too, so not a gain taken from anyone. */
+        public float $sectorShockZ = 0.0,
     ) {}
 }

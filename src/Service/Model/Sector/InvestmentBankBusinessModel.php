@@ -458,7 +458,7 @@ class InvestmentBankBusinessModel extends BrokerageBusinessModel
 
         // --- Prime Brokerage Counterparty Credit Risk ---
         // Systematic credit provision: Prime brokerage margin debt faces client default risk when corporate defaults rise.
-        $corpDefaultExcess = max(0.0, ($macroState->corporateDefaultRateEma - MacroEngine::CORPORATE_DEFAULT_BASELINE) / MacroEngine::CORPORATE_DEFAULT_BASELINE);
+        $corpDefaultExcess = MathUtility::excessOverBaseline($macroState->corporateDefaultRateEma, MacroEngine::CORPORATE_DEFAULT_BASELINE);
         $primeCreditProvisionCost = ($corpDefaultExcess * self::PRIME_BROKERAGE_DEFAULT_SCALAR) * self::PRIME_BROKERAGE_ALLOCATION;
 
         // --- Compensation Ratio Physics & Operating Leverage ---

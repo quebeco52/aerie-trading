@@ -16,6 +16,9 @@ class StreamContext
     /** @var array<string, float> */
     private array $nextZ = [];
 
+    /** @var array<string, float> Per stream, the sector factor's part of this quarter's Z (zero for exogenous draws). */
+    private array $sectorZ = [];
+
     /** Firm-wide N(0,1) demand innovation shared by every loaded stream this quarter (drawn lazily). */
     private ?float $firmInnovation = null;
 
@@ -82,6 +85,9 @@ class StreamContext
         }
 
         $this->nextZ[$key] = $newZ;
+        // What the sector put into this stream's fresh innovation: every peer in the sector drew it too,
+        // so it is not evidence of share taken from anyone. Kept beside the Z for the actuals bridge.
+        $this->sectorZ[$key] = $this->mathUtility->persistentInnovationScale($phi) * $sectorLoading * (float) ($this->sectorInnovation ?? 0.0);
 
         return $newZ;
     }
@@ -368,5 +374,13 @@ class StreamContext
     public function getStreamZ(): array
     {
         return $this->nextZ;
+    }
+
+    /**
+     * @return array<string, float> Per stream, the sector factor's contribution to this quarter's Z.
+     */
+    public function getSectorZ(): array
+    {
+        return $this->sectorZ;
     }
 }
