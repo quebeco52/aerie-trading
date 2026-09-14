@@ -136,7 +136,7 @@ class DistrictWardComposer
 
     /**
      * Geometry for tenants already in street order: street rank from market cap, plot widths from
-     * systemic importance, then the balanced two-row wrap.
+     * systemic importance, then the balanced wrap across DistrictMap::rowCountForTenants() rows.
      *
      * @param  list<array{stock: Stock, order: int, marketCap: float}> $tenants in street order
      * @return array{
@@ -161,8 +161,8 @@ class DistrictWardComposer
             $tenants,
         );
 
-        $rowCount = count($tenants) >= DistrictMap::ROW_SPLIT_THRESHOLD ? DistrictMap::ROW_COUNT : 1;
-        $splitIndex = $rowCount > 1 ? $this->balancedSplitIndex($widths) : count($tenants);
+        $rowCount = DistrictMap::rowCountForTenants(count($tenants));
+        $splitIndices = $this->balancedSplitIndices($widths, $rowCount);
 
         $slots = [];
         $rowWidths = [];
@@ -170,7 +170,7 @@ class DistrictWardComposer
         $row = 0;
 
         foreach ($tenants as $i => $entry) {
-            if ($i === $splitIndex) {
+            if (in_array($i, $splitIndices, true)) {
                 $rowWidths[] = $x - DistrictMap::FRONTAGE_GUTTER - DistrictMap::FRONTAGE_GAP;
                 $x = DistrictMap::FRONTAGE_GUTTER;
                 $row++;
@@ -198,35 +198,65 @@ class DistrictWardComposer
     }
 
     /**
-     * Finds the wrap point whose two rows render closest in width. A balanced split rather than a
-     * fixed midpoint because plot widths vary 100..190: a titan-heavy prefix can leave a fixed
-     * split's canvas up to ~200 units wider than it needs to be, and canvas width is precisely
-     * what sets the street's rendered pixels-per-unit. Sequence is never reordered — the authored
-     * frontage order survives the wrap intact.
+     * Finds the wrap points whose rows render closest in width — the partition that minimises the
+     * widest row, since the widest row alone sets the viewBox and with it the street's rendered
+     * pixels-per-unit. Balanced rather than an equal count per row because plot widths vary
+     * 100..190: a titan-heavy prefix can leave an even split's canvas a couple of hundred units
+     * wider than it needs to be. Sequence is never reordered — the authored frontage order
+     * survives the wrap intact, so this is a partition of a fixed sequence into contiguous runs.
+     *
+     * Solved exactly (the classic minimax partition of a sequence) rather than greedily: with one
+     * wrap point a sweep sufficed, but from two onward a greedy fill of the first row commits to
+     * a prefix the later rows cannot compensate for. best[$r][$i] is the narrowest achievable
+     * widest row when slots from $i onward are laid across $r rows.
      *
      * @param  list<int> $widths plot widths in frontage order
-     * @return int index of the first slot on the second row
+     * @param  int       $rows   staves to wrap across
+     * @return list<int> index of the first slot on each row after the first, ascending
      */
-    private function balancedSplitIndex(array $widths): int
+    private function balancedSplitIndices(array $widths, int $rows): array
     {
         $count = count($widths);
-        $narrowest = PHP_INT_MAX;
-        $splitIndex = $count;
+        if ($rows < 2 || $count < 2) {
+            return [];
+        }
 
-        for ($candidate = 1; $candidate < $count; $candidate++) {
-            $widest = max(
-                $this->rowWidth($widths, 0, $candidate),
-                $this->rowWidth($widths, $candidate, $count),
-            );
+        // One row left: the rest of the street goes on it, whatever that costs.
+        $best = [1 => []];
+        $from = [1 => []];
+        for ($i = 0; $i < $count; $i++) {
+            $best[1][$i] = $this->rowWidth($widths, $i, $count);
+        }
 
-            // Strict, so the lowest qualifying index wins and the split stays deterministic.
-            if ($widest < $narrowest) {
-                $narrowest = $widest;
-                $splitIndex = $candidate;
+        for ($r = 2; $r <= $rows; $r++) {
+            $best[$r] = [];
+            $from[$r] = [];
+            // Leave at least one slot for each of the $r - 1 rows below this one.
+            for ($i = 0; $i <= $count - $r; $i++) {
+                $narrowest = PHP_INT_MAX;
+                $splitIndex = $i + 1;
+                for ($j = $i + 1; $j <= $count - ($r - 1); $j++) {
+                    $widest = max($this->rowWidth($widths, $i, $j), $best[$r - 1][$j]);
+
+                    // Strict, so the lowest qualifying index wins and the wrap stays deterministic.
+                    if ($widest < $narrowest) {
+                        $narrowest = $widest;
+                        $splitIndex = $j;
+                    }
+                }
+                $best[$r][$i] = $narrowest;
+                $from[$r][$i] = $splitIndex;
             }
         }
 
-        return $splitIndex;
+        $indices = [];
+        $i = 0;
+        for ($r = $rows; $r > 1; $r--) {
+            $i = $from[$r][$i];
+            $indices[] = $i;
+        }
+
+        return $indices;
     }
 
     /**

@@ -674,7 +674,7 @@
 
 					{# Conduits: institution outlet down to its lane, along the lane, and down onto the
 					   tenant's roofline — see App\Data\DistrictMap::CONDUIT_LANE_PITCH. Drawn behind the
-					   skyline, so a lower-row drop passes through the upper row's gaps and behind its
+					   skyline, so a lower-row drop passes through the gaps of the rows above and behind their
 					   kerb, which is the one depth cue the elevation allows itself. #}
 					<g id="conduits">
 						{% set institutionsById = {} %}
@@ -828,15 +828,19 @@
 							stroke="#424754" stroke-width="1.5" opacity="0.35"/>
 					{% endfor %}
 
-					{# Terrace embankment retaining wall beneath the upper row's kerb #}
+					{# Terrace embankment retaining wall beneath every kerb that has a row below it #}
 					{% if rowGroundLines|length > 1 %}
-						{% set upperKerbBottom = rowGroundLines[0] + kerbDepth %}
 						<g id="terrace-embankment" aria-hidden="true">
-							<rect x="0" y="{{ upperKerbBottom }}" width="{{ viewboxWidth }}" height="{{ terraceWallHeight }}" fill="url(#terrace-wall-grad)"/>
-							<line x1="0" y1="{{ upperKerbBottom + terraceWallHeight / 2 }}" x2="{{ viewboxWidth }}" y2="{{ upperKerbBottom + terraceWallHeight / 2 }}"
-								stroke="#28344e" stroke-width="1" stroke-dasharray="60 30 90 40" opacity="0.6"/>
-							<line x1="0" y1="{{ upperKerbBottom + terraceWallHeight }}" x2="{{ viewboxWidth }}" y2="{{ upperKerbBottom + terraceWallHeight }}"
-								stroke="#364566" stroke-width="1.5" opacity="0.8"/>
+							{% for rowIndex, rowGroundLine in rowGroundLines %}
+								{% if rowIndex < rowGroundLines|length - 1 %}
+									{% set kerbBottom = rowGroundLine + kerbDepth %}
+									<rect x="0" y="{{ kerbBottom }}" width="{{ viewboxWidth }}" height="{{ terraceWallHeight }}" fill="url(#terrace-wall-grad)"/>
+									<line x1="0" y1="{{ kerbBottom + terraceWallHeight / 2 }}" x2="{{ viewboxWidth }}" y2="{{ kerbBottom + terraceWallHeight / 2 }}"
+										stroke="#28344e" stroke-width="1" stroke-dasharray="60 30 90 40" opacity="0.6"/>
+									<line x1="0" y1="{{ kerbBottom + terraceWallHeight }}" x2="{{ viewboxWidth }}" y2="{{ kerbBottom + terraceWallHeight }}"
+										stroke="#364566" stroke-width="1.5" opacity="0.8"/>
+								{% endif %}
+							{% endfor %}
 						</g>
 					{% endif %}
 

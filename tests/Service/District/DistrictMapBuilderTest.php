@@ -115,15 +115,16 @@ class DistrictMapBuilderTest extends TestCase
     }
 
     /**
-     * Enough tenants of one model to wrap onto two rows — DistrictMap::ROW_SPLIT_THRESHOLD — with
-     * caps stepping down from $10T so the two rows have different tallest facades.
+     * Enough tenants of one model to wrap onto every row the street has — past the last
+     * DistrictMap::ROW_SPLIT_THRESHOLDS step — with caps stepping down from $10T so no two rows
+     * share a tallest facade.
      *
      * @return Stock[]
      */
     private function fullStreet(): array
     {
         $stocks = [];
-        for ($i = 0; $i < DistrictMap::ROW_SPLIT_THRESHOLD + 2; $i++) {
+        for ($i = 0; $i < DistrictMap::ROW_SPLIT_THRESHOLDS[DistrictMap::ROW_COUNT - 2] + 2; $i++) {
             $stocks[] = $this->makeStock(sprintf('T%02d', $i), price: 100.0, shares: 1.0e11 / (1 + $i));
         }
 
@@ -288,8 +289,8 @@ class DistrictMapBuilderTest extends TestCase
         ['envelope' => $envelope, 'canvas' => $canvas] = $this->compose($this->fullStreet());
         $gridlines = $this->builder->buildGridlines($envelope, $canvas);
 
-        $this->assertSame(2, $canvas->rowCount());
-        $this->assertNotEmpty(array_filter($gridlines, static fn (array $l) => $l['row'] === 1));
+        $this->assertSame(DistrictMap::ROW_COUNT, $canvas->rowCount());
+        $this->assertNotEmpty(array_filter($gridlines, static fn (array $l) => $l['row'] === $canvas->rowCount() - 1));
 
         foreach ($gridlines as $line) {
             $expected = $canvas->groundLineForRow($line['row']) - $this->builder->calculateFacadeHeight(self::capFromLabel($line['label']), $envelope);
@@ -298,17 +299,23 @@ class DistrictMapBuilderTest extends TestCase
         }
     }
 
-    /** The lower row's sky is sized to its own skyline, so it carries fewer rules than the upper row. */
+    /** Each row's sky is sized to its own skyline, so a shorter row down the street carries fewer rules. */
     public function testAShorterRowCarriesFewerGridlines(): void
     {
         ['envelope' => $envelope, 'canvas' => $canvas] = $this->compose($this->fullStreet());
         $gridlines = $this->builder->buildGridlines($envelope, $canvas);
 
-        $upper = count(array_filter($gridlines, static fn (array $l) => $l['row'] === 0));
-        $lower = count(array_filter($gridlines, static fn (array $l) => $l['row'] === 1));
+        $counts = [];
+        for ($row = 0; $row < $canvas->rowCount(); $row++) {
+            $counts[$row] = count(array_filter($gridlines, static fn (array $l) => $l['row'] === $row));
+        }
 
-        $this->assertGreaterThan($lower, $upper);
-        $this->assertGreaterThan(0, $lower);
+        // The fixture's caps descend down the street, so no row may carry more rules than the one above.
+        for ($row = 1; $row < $canvas->rowCount(); $row++) {
+            $this->assertLessThanOrEqual($counts[$row - 1], $counts[$row]);
+        }
+        $this->assertGreaterThan($counts[$canvas->rowCount() - 1], $counts[0]);
+        $this->assertGreaterThan(0, $counts[$canvas->rowCount() - 1]);
     }
 
     /** A rule taller than a row's own sky would run through the lane band or the kerb above it. */
@@ -316,7 +323,10 @@ class DistrictMapBuilderTest extends TestCase
     {
         ['envelope' => $envelope, 'canvas' => $canvas] = $this->compose($this->fullStreet());
 
-        $skyTop = [0 => $canvas->laneBandBottom, 1 => $canvas->rowGroundLines[0] + DistrictMap::KERB_DEPTH];
+        $skyTop = [0 => $canvas->laneBandBottom];
+        for ($row = 1; $row < $canvas->rowCount(); $row++) {
+            $skyTop[$row] = $canvas->rowGroundLines[$row - 1] + DistrictMap::KERB_DEPTH;
+        }
         foreach ($this->builder->buildGridlines($envelope, $canvas) as $line) {
             $this->assertGreaterThanOrEqual($skyTop[$line['row']] + DistrictMap::GRIDLINE_LABEL_SIZE, $line['y']);
         }
@@ -327,7 +337,7 @@ class DistrictMapBuilderTest extends TestCase
         ['canvas' => $canvas, 'plots' => $plots] = $this->compose($this->fullStreet());
 
         $this->assertNotEmpty($plots);
-        $this->assertSame(2, $canvas->rowCount());
+        $this->assertSame(DistrictMap::ROW_COUNT, $canvas->rowCount());
         foreach ($plots as $plot) {
             $this->assertEqualsWithDelta($plot->groundLine, $plot->y + $plot->height, 0.0001);
             $this->assertSame($canvas->groundLineForRow($plot->row), $plot->groundLine);
@@ -348,18 +358,23 @@ class DistrictMapBuilderTest extends TestCase
         $headroomHeight = DistrictMap::MARKET_CAP_LOG_HEADROOM / $envelope->span()
             * (DistrictMap::MAX_FACADE_HEIGHT - DistrictMap::MIN_FACADE_HEIGHT);
 
-        $tallest = [0 => 0.0, 1 => 0.0];
+        $tallest = array_fill(0, $canvas->rowCount(), 0.0);
         foreach ($plots as $plot) {
             $tallest[$plot->row] = max($tallest[$plot->row], $plot->height);
         }
-        $this->assertNotSame($tallest[0], $tallest[1], 'The fixture must give the rows different skylines');
+        $this->assertSame(DistrictMap::ROW_COUNT, $canvas->rowCount());
+        $this->assertSame(count(array_unique($tallest)), count($tallest), 'The fixture must give every row its own skyline');
 
-        $expectedUpper = $canvas->laneBandBottom + DistrictMap::ROW_GAP + min(DistrictMap::MAX_FACADE_HEIGHT, $tallest[0] + $headroomHeight);
-        $expectedLower = $expectedUpper + DistrictMap::KERB_DEPTH + DistrictMap::ROW_GAP + min(DistrictMap::MAX_FACADE_HEIGHT, $tallest[1] + $headroomHeight);
+        // Walk the street from the lane band down: each row is ROW_GAP plus its own clearance
+        // below the kerb of the row above it.
+        $skyTop = $canvas->laneBandBottom;
+        foreach ($tallest as $row => $height) {
+            $expected = $skyTop + DistrictMap::ROW_GAP + min(DistrictMap::MAX_FACADE_HEIGHT, $height + $headroomHeight);
+            $this->assertEqualsWithDelta($expected, $canvas->rowGroundLines[$row], 1.0e-6);
+            $skyTop = $expected + DistrictMap::KERB_DEPTH;
+        }
 
-        $this->assertEqualsWithDelta($expectedUpper, $canvas->rowGroundLines[0], 1.0e-6);
-        $this->assertEqualsWithDelta($expectedLower, $canvas->rowGroundLines[1], 1.0e-6);
-        $this->assertEqualsWithDelta($expectedLower + DistrictMap::KERB_DEPTH + DistrictMap::CANVAS_BOTTOM_MARGIN, $canvas->viewboxHeight, 1.0e-6);
+        $this->assertEqualsWithDelta($skyTop + DistrictMap::CANVAS_BOTTOM_MARGIN, $canvas->viewboxHeight, 1.0e-6);
     }
 
     /** The largest tenant sits exactly one headroom below the ceiling, so its row is given the full envelope. */

@@ -210,20 +210,21 @@ class DistrictControllerTest extends WebTestCase
         });
     }
 
-    public function testTheStreetWrapsIntoTwoRowsEachWithItsOwnGroundLine(): void
+    public function testTheStreetWrapsIntoEveryRowEachWithItsOwnGroundLine(): void
     {
         $client = static::createClient();
         $crawler = $client->request('GET', '/district/glasswater-row');
 
         $this->assertResponseIsSuccessful();
 
-        $this->assertSelectorExists('svg #skyline-row-0');
-        $this->assertSelectorExists('svg #skyline-row-1');
+        for ($row = 0; $row < DistrictMap::ROW_COUNT; $row++) {
+            $this->assertSelectorExists(sprintf('svg #skyline-row-%d', $row));
+        }
 
         $groundLines = array_unique($crawler->filter('[data-district-target="plot"]')
             ->each(fn ($node) => $node->attr('data-ground-line')));
 
-        $this->assertCount(2, $groundLines, 'A full roster should occupy both rows, at two distinct ground lines');
+        $this->assertCount(DistrictMap::ROW_COUNT, $groundLines, 'A full roster should occupy every row, each at its own ground line');
     }
 
     public function testEveryPlotCarriesAKerbPlateWithRankAndPrice(): void

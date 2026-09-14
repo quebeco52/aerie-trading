@@ -556,7 +556,7 @@ export default class extends Controller {
 
     /**
      * Shows the hover card for a building. Reading the street should not require clicking — a
-     * base plot's click target is only ~45px wide even at the two-row scale.
+     * base plot's click target is only ~46px wide even at the wrapped street's scale.
      */
     showTooltip(event) {
         const plot = event.currentTarget;
