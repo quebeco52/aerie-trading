@@ -28,6 +28,21 @@ final class PortfolioEscrowTest extends TestCase
         'src/Controller/DashboardController.php',
     ];
 
+    /**
+     * Where each net-worth surface proves it values bond holdings.
+     *
+     * The snapshot and leaderboard queries are raw SQL against user_bonds. The dashboard no longer
+     * writes that query itself — it reads holdings through App\Repository\HoldingRepository — so its
+     * evidence is the call it makes, and the repository is checked separately below.
+     *
+     * @var array<string, string>
+     */
+    private const BOND_VALUATION_EVIDENCE = [
+        'src/Service/User/Portfolio.php' => '/user_bonds|UserBond/',
+        'src/Controller/LeaderboardController.php' => '/user_bonds|UserBond/',
+        'src/Controller/DashboardController.php' => '/findBondHoldings\(/',
+    ];
+
     private function read(string $relativePath): string
     {
         $path = \dirname(__DIR__, 3) . '/' . $relativePath;
@@ -99,15 +114,27 @@ final class PortfolioEscrowTest extends TestCase
      */
     public function testEveryNetWorthQueryValuesBondHoldings(): void
     {
-        foreach (self::NAV_SOURCES as $source) {
-            // Either spelling counts: the snapshot and leaderboard queries are raw SQL against user_bonds,
-            // while the dashboard reaches the same table through DQL on the entity.
+        foreach (self::BOND_VALUATION_EVIDENCE as $source => $pattern) {
             $this->assertMatchesRegularExpression(
-                '/user_bonds|UserBond/',
+                $pattern,
                 $this->read($source),
                 "{$source} totals a user's net worth and must value bond holdings."
             );
         }
+    }
+
+    /**
+     * The delegation the dashboard's evidence relies on actually reaches the bond holdings.
+     *
+     * Checking only for the call would let the guard pass on a repository method that had stopped
+     * reading user_bonds, which is the omission this class exists to catch, one level further down.
+     */
+    public function testTheHoldingsRepositoryReallyReadsBondHoldings(): void
+    {
+        $repository = $this->read('src/Repository/HoldingRepository.php');
+
+        $this->assertMatchesRegularExpression('/function findBondHoldings\(/', $repository);
+        $this->assertMatchesRegularExpression('/user_bonds|UserBond/', $repository);
     }
 
     /** Every surface that totals net worth accounts for the open book. */

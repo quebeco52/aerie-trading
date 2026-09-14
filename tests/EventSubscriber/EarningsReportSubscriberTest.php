@@ -7,13 +7,13 @@ namespace App\Tests\EventSubscriber;
 use App\DTO\EarningsSimulationContext;
 use App\DTO\MacroStateDTO;
 use App\Entity\CorporateReport;
+use App\Repository\CorporateReportRepository;
 use App\Entity\Stock;
 use App\EventSubscriber\EarningsReportSubscriber;
 use App\Service\Event\EarningsReportedEvent;
 use App\Service\Event\ShockEvent;
 use App\Service\Model\BusinessModelInterface;
 use Doctrine\ORM\EntityManagerInterface;
-use Doctrine\ORM\EntityRepository;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
@@ -22,13 +22,13 @@ use PHPUnit\Framework\TestCase;
 class EarningsReportSubscriberTest extends TestCase
 {
     private EntityManagerInterface&MockObject $entityManager;
-    private EntityRepository&MockObject $reportRepository;
+    private CorporateReportRepository&MockObject $reportRepository;
     private EarningsReportSubscriber $subscriber;
 
     protected function setUp(): void
     {
         $this->entityManager = $this->createMock(EntityManagerInterface::class);
-        $this->reportRepository = $this->createMock(EntityRepository::class);
+        $this->reportRepository = $this->createMock(CorporateReportRepository::class);
 
         $this->entityManager
             ->method('getRepository')
@@ -98,7 +98,7 @@ class EarningsReportSubscriberTest extends TestCase
 
         // No previous report exists in DB
         $this->reportRepository
-            ->method('findOneBy')
+            ->method('findLatestFor')
             ->willReturn(null);
 
         $persistedReport = null;
@@ -208,7 +208,7 @@ class EarningsReportSubscriberTest extends TestCase
             ebitda: 2500000.0
         );
 
-        $this->reportRepository->method('findOneBy')->willReturn(null);
+        $this->reportRepository->method('findLatestFor')->willReturn(null);
 
         $persisted = null;
         $this->entityManager->expects($this->once())->method('persist')
@@ -323,7 +323,7 @@ class EarningsReportSubscriberTest extends TestCase
         $ctx->operatingCashFlow = 1000000.0;
         $ctx->debtMetrics = new \App\DTO\DebtMetricsDTO(1.0, 0.04, 0.04, 0.01, 0.04, 0.04, 1.0, 1.0, 0.0, 1.0);
 
-        $this->reportRepository->method('findOneBy')->willReturn(null);
+        $this->reportRepository->method('findLatestFor')->willReturn(null);
         $persisted = null;
         $this->entityManager->expects($this->once())->method('persist')->willReturnCallback(function ($r) use (&$persisted) { $persisted = $r; });
 
@@ -367,7 +367,7 @@ class EarningsReportSubscriberTest extends TestCase
         $ctx->netLoanOriginations = 3000000.0;
         $ctx->debtMetrics = new \App\DTO\DebtMetricsDTO(4000000.0, 0.04, 0.04, 0.01, 0.04, 0.04, 1.0, 1.0, 0.0, 1.0);
 
-        $this->reportRepository->method('findOneBy')->willReturn(null);
+        $this->reportRepository->method('findLatestFor')->willReturn(null);
         $persisted = null;
         $this->entityManager->expects($this->once())->method('persist')->willReturnCallback(function ($r) use (&$persisted) { $persisted = $r; });
 
@@ -447,7 +447,7 @@ class EarningsReportSubscriberTest extends TestCase
         );
 
         $this->reportRepository
-            ->method('findOneBy')
+            ->method('findLatestFor')
             ->willReturn(null);
 
         $persistedReport = null;
@@ -554,7 +554,7 @@ class EarningsReportSubscriberTest extends TestCase
         ]);
 
         $this->reportRepository
-            ->method('findOneBy')
+            ->method('findLatestFor')
             ->willReturn($prevReport);
 
         $persistedReport = null;

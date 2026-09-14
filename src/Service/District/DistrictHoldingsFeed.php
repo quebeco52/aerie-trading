@@ -39,11 +39,10 @@ class DistrictHoldingsFeed
     {
         $userStocks = $this->entityManager->getRepository(UserStock::class)->findBy(['user' => $user]);
 
-        // Same query the dashboard and stock page run before calling the calculator: filled orders,
-        // oldest first, because the weighted average is a running one.
-        $filledOrders = $this->entityManager->createQuery(
-            'SELECT o FROM App\Entity\TradeOrder o WHERE o.user = :user AND o.status = :status ORDER BY o.createdAt ASC'
-        )->setParameter('user', $user)->setParameter('status', 'FILLED')->getResult();
+        // The calculator needs the running order: a weighted average is path dependent, and a sell
+        // consumes the basis the buys before it laid down.
+        $filledOrders = $this->entityManager->getRepository(\App\Entity\TradeOrder::class)
+            ->findFilledForUser($user);
 
         return $this->describe($userStocks, $this->costBasis->calculate($filledOrders));
     }

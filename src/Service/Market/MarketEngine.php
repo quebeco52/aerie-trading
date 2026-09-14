@@ -36,15 +36,50 @@ class MarketEngine
     /** Divisor applied to the reversion rate per unit of accumulated price trend; at the 0.50 trend cap a name reverts at two thirds speed. */
     private const MOMENTUM_REVERSION_RESISTANCE = 1.00;
 
-    // --- Market-Wide Jump Variance Budget ---
-    /** Second moment E[J^2] of one market-wide Kou jump, the return variance a single arrival contributes at unit beta. */
-    private const SYSTEMIC_JUMP_SECOND_MOMENT =
-        (MacroEngine::SYSTEMIC_JUMP_PROBABILITY_UP * 2.0
-            / (MacroEngine::SYSTEMIC_JUMP_ETA_UP * MacroEngine::SYSTEMIC_JUMP_ETA_UP))
-        + ((1.0 - MacroEngine::SYSTEMIC_JUMP_PROBABILITY_UP) * 2.0
-            / (MacroEngine::SYSTEMIC_JUMP_ETA_DOWN * MacroEngine::SYSTEMIC_JUMP_ETA_DOWN));
-    /** Ceiling on the share of long-run variance the jump budget may reclaim, so a quiet or high-beta name keeps a diffusion that still reads as its configured volatility. */
+    // --- Variance Budget ---
+    /** Ceiling on the share of a name's long-run IDIOSYNCRATIC variance the market-wide jump may reclaim, so a quiet name keeps a diffusion that still reads as its configured volatility. */
     private const MAX_SYSTEMIC_VARIANCE_DRAG_SHARE = 0.25;
+    /** Ceiling on the share of a name's long-run IDIOSYNCRATIC variance its OWN jump process may supply; the jump component of single-stock return variance is a minority of the total (Huang & Tauchen 2005). */
+    private const MAX_IDIOSYNCRATIC_JUMP_VARIANCE_SHARE = 0.25;
+    /** Floor on the share of a name's configured variance that stays idiosyncratic, for a configuration whose beta alone already consumes the whole of its stated volatility. */
+    private const MIN_IDIOSYNCRATIC_VARIANCE_SHARE = 0.20;
+
+    // --- Volatility Process ---
+    /** Mean of the contemporaneous variance jump, as a share of the name's current variance. */
+    private const VARIANCE_JUMP_MEAN_SHARE = 0.50;
+    /** Sensitivity of the variance reversion speed to jump intensity; a jumpier name pulls back to its long-run level faster rather than having its target clamped. */
+    private const JUMP_REGIME_KAPPA_SENSITIVITY = 0.15;
+    /** Ratio of the down-jump scale to the up-jump scale, the Kou left-tail skew a single name carries. */
+    private const JUMP_DOWNSIDE_SCALE_RATIO = 1.25;
+    /** Floor on the jump scale parameter, so a name configured with no jump size cannot divide by it. */
+    private const MIN_JUMP_SCALE = 0.01;
+
+    // --- Fundamental Growth Transmission ---
+    /** Share of the output gap that reaches a firm's real growth rate, before its beta scales the cyclical exposure. */
+    private const CYCLICAL_GROWTH_PASS_THROUGH = 0.50;
+    /** Share of inflation that carries into the nominal growth rate used for valuation. */
+    private const INFLATION_NOMINAL_GROWTH_PASS_THROUGH = 0.50;
+    /** Cap on nominal expected growth, held below any plausible hurdle rate so the Gordon Growth denominator cannot diverge. */
+    private const MAX_EXPECTED_GROWTH = 0.05;
+
+    // --- Revenue Floor (Margin-Adjusted Price-to-Sales) ---
+    /** Floor on the P/E anchor the price-to-sales multiple is struck from, so a distressed multiple does not erase the revenue floor entirely. */
+    private const MIN_PS_ANCHOR_PE = 10.0;
+    /** Bounds on the implied net margin the price-to-sales multiple is built on. */
+    private const MIN_IMPLIED_NET_MARGIN = 0.01;
+    private const MAX_IMPLIED_NET_MARGIN = 0.30;
+
+    // --- Dividend Discount Support ---
+    /** Payout ratio assumed when a dividend payer has no positive trailing earnings to strike one against. */
+    private const UNEARNED_DIVIDEND_PAYOUT_RATIO = 1.5;
+    /** Floor on the required yield used to discount the dividend stream. */
+    private const MIN_DIVIDEND_REQUIRED_YIELD = 0.02;
+    /** Cap on the fundamental growth a retained-earnings calculation may imply for the dividend stream. */
+    private const MAX_DIVIDEND_IMPLIED_GROWTH = 0.04;
+    /** Value retained per unit of payout above one; a dividend funded by debt is discounted toward the floor below. */
+    private const DIVIDEND_SUSTAINABILITY_DECAY = 0.5;
+    /** Floor on the sustainability haircut, so even a wildly overcommitted dividend retains some support value. */
+    private const MIN_DIVIDEND_SUSTAINABILITY_HAIRCUT = 0.20;
 
     public function __construct(
         private MathUtility $mathUtility
@@ -64,7 +99,6 @@ class MarketEngine
      * @param float $longTermVolatility The long-run mean volatility.
      * @param float $earningsPerShare   The current earnings per share (EPS).
      * @param float $dt                 The time step for the simulation (in years).
-     * @param float $drift              The expected return (drift) of the stock.
      * @param float $lambda             The jump intensity (average number of jumps per year).
      * @param float $jumpVol            The volatility of the jump size.
      * @param float $beta               The stock's beta (sensitivity to market movements).
@@ -80,7 +114,7 @@ class MarketEngine
      * @param float $creditSpread       The company's baseline credit spread (borrowing premium).
      * @param float $dividendPerShare   The absolute quarterly dividend per share.
      *
-     * @return array{price: float, shock: float|null, next_volatility: float, analyst_targets: array, perceived_fair_value: float} The calculated next price, shock percentage, updated volatility, and analyst targets.
+     * @return array{price: float, shock: float|null, next_volatility: float, analyst_targets: array<string, float>, perceived_fair_value: float, dynamic_reversion: float} The calculated next price, shock percentage, updated TOTAL volatility, analyst targets, fair value and the reversion speed that was applied.
      */
     public function calculateNextPrice(\App\DTO\MarketPricingContext $ctx): array {
         $currentPrice = $ctx->currentPrice;
@@ -95,7 +129,6 @@ class MarketEngine
         $sectorZ = $ctx->sectorZ;
         $marketJumpMultiplier = $ctx->marketJumpMultiplier;
         $marketVol = $ctx->marketVol;
-        $drift = $ctx->drift;
         $reversionSpeed = $ctx->reversionSpeed;
         $kappa = $ctx->kappa;
         $volOfVol = $ctx->volOfVol;
@@ -127,17 +160,63 @@ class MarketEngine
         $inflation = $macroState->inflation ?? 0.02;
         $erp = $macroState->equityRiskPremium ?? 0.045;
 
-        $finalDrift = $this->mathUtility->calculateCAPM($riskFreeRate, $beta, $erp);
+        $capUp = FinancialConstants::MAX_JUMP_LOG_RETURN;
+        $capDown = abs(FinancialConstants::MIN_JUMP_LOG_RETURN);
 
         // State Variables
         $currentVar = $currentVolatility * $currentVolatility;
         $longTermVar = $longTermVolatility * $longTermVolatility;
 
+        // SYSTEMATIC / IDIOSYNCRATIC SPLIT
+        // A name's market loading is beta * marketVol by definition, so the diffusion supplies it outright
+        // and the stochastic volatility process carries only what is left. Deriving the loading the other
+        // way round — from an implied correlation clamped below one — truncated the beta of any name whose
+        // volatility fell short of what its beta demanded: measured against the market factor a configured
+        // 1.3 realized 1.19 and a 2.8 realized 2.30, and in a crisis, when market volatility triples and the
+        // truncation binds on everything at once, a 1.3 realized 0.45. The CAPM drift and the systemic jump
+        // were paid on the full beta throughout, so high-beta names were handed the premium without the risk.
+        //
+        // The long-run idiosyncratic target is struck against the market's BASELINE volatility, so the
+        // configured figure is the name's total volatility in normal conditions and total volatility then
+        // rises with the market's through beta, rather than being inert to it as it was before.
+        $systematicVar = ($beta * $marketVol) * ($beta * $marketVol);
+        $baselineSystematicVar = ($beta * MacroEngine::MACRO_VOL_BASE_ANCHOR) * ($beta * MacroEngine::MACRO_VOL_BASE_ANCHOR);
 
-        $dynamicEtaUp = 1.0 / max(0.01, $jump_vol);
-        $dynamicEtaDown = 1.0 / (max(0.01, $jump_vol) * 1.25);
+        // A configuration whose beta already consumes the whole of its stated volatility is infeasible; the
+        // name keeps a guaranteed idiosyncratic share and ends up more volatile than its configured figure,
+        // which is the visible failure mode rather than the silent one.
+        $minIdiosyncraticVar = $longTermVar * self::MIN_IDIOSYNCRATIC_VARIANCE_SHARE;
+        $longTermIdiosyncraticVar = max($minIdiosyncraticVar, $longTermVar - $baselineSystematicVar);
 
-        $dynamicMuV = ($currentVolatility * $currentVolatility) * 0.50;
+
+        // IDIOSYNCRATIC JUMP CALIBRATION
+        // The jump scale is held to the share of the name's variance a jump process is entitled to. Left at
+        // whatever the seed configured, the arrival rate and jump size together supplied a median 29% of a
+        // name's variance and up to 148% of it — the jump was not an overlay on the diffusion, it WAS the
+        // diffusion for several names, and since none of it was budgeted every name realized more volatility
+        // than it was configured with. Scaling the size rather than the arrival rate keeps the seed's
+        // statement about how OFTEN a name gaps, which is a property of its business, and only calibrates
+        // how FAR, which has to be consistent with how risky the name is overall.
+        $jumpScale = max(self::MIN_JUMP_SCALE, $jump_vol);
+
+        if ($lambda > 0.0) {
+            // Untruncated second moment of the Kou jump, 2 * scale^2 * (pUp + pDown * ratio^2), which is
+            // monotone in the scale and therefore invertible for the budget. Truncation only removes mass,
+            // so solving on it and deducting the truncated figure below can never over-reclaim.
+            $rawSecondMomentPerUnit = 2.0 * (self::SVJJ_P_UP
+                + (self::SVJJ_P_DOWN * self::JUMP_DOWNSIDE_SCALE_RATIO * self::JUMP_DOWNSIDE_SCALE_RATIO));
+            $budget = $longTermIdiosyncraticVar * self::MAX_IDIOSYNCRATIC_JUMP_VARIANCE_SHARE;
+            $configured = $lambda * $rawSecondMomentPerUnit * $jumpScale * $jumpScale;
+
+            if ($configured > $budget && $configured > 0.0) {
+                $jumpScale = max(self::MIN_JUMP_SCALE, $jumpScale * sqrt($budget / $configured));
+            }
+        }
+
+        $dynamicEtaUp = 1.0 / $jumpScale;
+        $dynamicEtaDown = 1.0 / ($jumpScale * self::JUMP_DOWNSIDE_SCALE_RATIO);
+
+        $dynamicMuV = max(0.0, $currentVar) * self::VARIANCE_JUMP_MEAN_SHARE;
 
         // The SVJJ Jump Process (Kou Distribution)
         $jumpData = $this->mathUtility->calculateSVJJJumps(
@@ -149,6 +228,62 @@ class MarketEngine
             dt: $dt
         );
 
+        // MERTON JUMP COMPENSATION (Merton 1976, Kou 2002)
+        // A drift set to the expected return and then multiplied by e^J does not earn the expected return:
+        // it earns it plus lambda * E[e^J - 1] per unit time. Both Kou processes here are skewed down, so
+        // that term is negative and it was a silent return tax of roughly 4% a year from the name's own jump
+        // and another 5% * beta from the market's. Reversion turned the shortfall into a permanent discount
+        // to fair value that widened with beta — every name traded below its own published fair value, worst
+        // for the high-beta names, and the fundamentalist agents sat structurally long because of it.
+        //
+        // Subtracting the compensator is what makes a jump a change in the SHAPE of returns rather than in
+        // their mean, which is the same principle the variance budget applies to their magnitude.
+        $jumpCompensator = $lambda * $this->mathUtility->kouTruncatedCompensator(
+            self::SVJJ_P_UP,
+            $dynamicEtaUp,
+            $dynamicEtaDown,
+            $capUp,
+            $capDown
+        );
+
+        // The market-wide jump reaches the stock as beta * J, so its compensator and its variance are those
+        // of the SCALED jump, not beta times the unscaled one: scaling an exponential divides its rate, and
+        // a negative beta swaps the two tails outright — an inverse name gains on the market's crashes.
+        $systemicExposure = abs($beta);
+        $systemicCompensator = 0.0;
+        $systemicJumpVariance = 0.0;
+
+        if ($systemicExposure > 0.0) {
+            $scaledEtaUp = MacroEngine::SYSTEMIC_JUMP_ETA_UP / $systemicExposure;
+            $scaledEtaDown = MacroEngine::SYSTEMIC_JUMP_ETA_DOWN / $systemicExposure;
+
+            $exposedPUp = $beta > 0.0
+                ? MacroEngine::SYSTEMIC_JUMP_PROBABILITY_UP
+                : 1.0 - MacroEngine::SYSTEMIC_JUMP_PROBABILITY_UP;
+            $exposedEtaUp = $beta > 0.0 ? $scaledEtaUp : $scaledEtaDown;
+            $exposedEtaDown = $beta > 0.0 ? $scaledEtaDown : $scaledEtaUp;
+
+            $systemicCompensator = MacroEngine::SYSTEMIC_JUMP_INTENSITY * $this->mathUtility->kouTruncatedCompensator(
+                $exposedPUp,
+                $exposedEtaUp,
+                $exposedEtaDown,
+                $capUp,
+                $capDown
+            );
+
+            $systemicJumpVariance = MacroEngine::SYSTEMIC_JUMP_INTENSITY * $this->mathUtility->kouTruncatedSecondMoment(
+                $exposedPUp,
+                $exposedEtaUp,
+                $exposedEtaDown,
+                $capUp,
+                $capDown
+            );
+        }
+
+        $finalDrift = $this->mathUtility->calculateCAPM($riskFreeRate, $beta, $erp)
+            - $jumpCompensator
+            - $systemicCompensator;
+
         $cycleVolModifier = 1.0;
         if ($macroState !== null) {
             // Positive output gap (boom) reduces vol slightly, negative gap (bust) increases vol
@@ -157,7 +292,7 @@ class MarketEngine
 
         // Dynamically scale variance reversion speed (kappa) during jump diffusion regimes
         // instead of linearly clamping theta, preventing artificial volatility suppression
-        $dynamicKappa = $kappa * (1.0 + ($lambda * 0.15));
+        $dynamicKappa = $kappa * (1.0 + ($lambda * self::JUMP_REGIME_KAPPA_SENSITIVITY));
 
         // Market-Wide Jump Variance Budget:
         // The district jump supplies part of a stock's total return variance, so the diffusion has to give up
@@ -165,11 +300,31 @@ class MarketEngine
         // on an already calibrated baseline and every name in the district got roughly four points more
         // volatile. The jump changes the SHAPE of returns, adding the crash days a diffusion cannot produce,
         // never the magnitude. This mirrors the jump variance drag the macro engine applies to its own
-        // volatility process. Exposure is beta squared because the jump reaches the stock through its beta.
+        // volatility process. Exposure enters through the scaled jump computed above, which is exact for a
+        // negative beta where squaring it was not.
         $systemicJumpVariance = min(
-            self::SYSTEMIC_JUMP_SECOND_MOMENT * MacroEngine::SYSTEMIC_JUMP_INTENSITY * ($beta * $beta),
-            $longTermVar * self::MAX_SYSTEMIC_VARIANCE_DRAG_SHARE
+            $systemicJumpVariance,
+            $longTermIdiosyncraticVar * self::MAX_SYSTEMIC_VARIANCE_DRAG_SHARE
         );
+
+        // Idiosyncratic Jump Variance Budget:
+        // The same accounting for the name's own jump, which was the one source of variance nobody was
+        // charging for. It is deducted at the TRUNCATED second moment, which is what the capped draws in
+        // calculateSVJJJumps actually deliver — the plain 2/eta^2 would over-reclaim and leave the diffusion
+        // quieter than the budget intends. The scale was already held to the share above, so this deduction
+        // is within the ceiling by construction and conservation is exact rather than clipped.
+        $idiosyncraticJumpVariance = $lambda > 0.0
+            ? min(
+                $lambda * $this->mathUtility->kouTruncatedSecondMoment(
+                    self::SVJJ_P_UP,
+                    $dynamicEtaUp,
+                    $dynamicEtaDown,
+                    $capUp,
+                    $capDown
+                ),
+                $longTermIdiosyncraticVar * self::MAX_IDIOSYNCRATIC_JUMP_VARIANCE_SHARE
+            )
+            : 0.0;
 
         // Order-Flow Variance Budget:
         // The same accounting, for the same reason. The diffusion is a reduced-form stand-in for the order
@@ -182,14 +337,28 @@ class MarketEngine
         // volatility of every untraded name in the market.
         $impactVariance = min(
             max(0.0, $orderFlowVariance),
-            $longTermVar * FinancialConstants::MAX_IMPACT_VARIANCE_DRAG_SHARE
+            $longTermIdiosyncraticVar * FinancialConstants::MAX_IMPACT_VARIANCE_DRAG_SHARE
         );
 
-        $adjustedTheta = max(0.0001, ($longTermVar * $cycleVolModifier) - $systemicJumpVariance - $impactVariance);
+        // What the idiosyncratic diffusion is left with once every other source of variance has been paid
+        // for. Every jump the name is exposed to is charged here, which is the only bucket that can flex:
+        // the systematic loading is pinned at beta * marketVol and is not the engine's to spend.
+        $adjustedTheta = max(
+            0.0001,
+            ($longTermIdiosyncraticVar * $cycleVolModifier) - $systemicJumpVariance - $idiosyncraticJumpVariance - $impactVariance
+        );
 
-        // Variance Process via Quadratic-Exponential (QE) Scheme
-        $nextVar = $this->mathUtility->calculateQEVarianceStep(
-            currentVar: $currentVar,
+        // The state arrives as the name's TOTAL variance, which is what every other part of the system
+        // reads, so every source the engine adds back below is stripped out before the process steps
+        // forward. Stripping exactly what is added keeps the round trip lossless at any tick rate.
+        $currentIdiosyncraticVar = max(
+            $minIdiosyncraticVar,
+            $currentVar - $systematicVar - $systemicJumpVariance - $idiosyncraticJumpVariance
+        );
+
+        // Variance Process via Quadratic-Exponential (QE) Scheme, run on the idiosyncratic variance.
+        $nextIdiosyncraticVar = $this->mathUtility->calculateQEVarianceStep(
+            currentVar: $currentIdiosyncraticVar,
             theta: $adjustedTheta,
             kappa: $dynamicKappa,
             sigma: $volOfVol,
@@ -197,10 +366,17 @@ class MarketEngine
         );
 
         // Add the contemporaneous volatility jump from the SVJJ model
-        $nextVar += $jumpData['var_jump'];
+        $nextIdiosyncraticVar += $jumpData['var_jump'];
 
-        // Convert back to volatility for the return payload
-        $nextVolatility = sqrt($nextVar);
+        // Back to a TOTAL variance for everything downstream: the liquidity engine's spread and turnover,
+        // the agents' risk charge, and the UI all read this as the name's volatility, and all of them want
+        // what the name actually realizes. That includes the variance its jumps deliver — reporting the
+        // diffusion alone would understate a jumpy name by exactly the amount the budget just deducted, and
+        // the spread and turnover models would be calibrated against a number the tape never prints.
+        $nextVar = $nextIdiosyncraticVar + $systematicVar + $systemicJumpVariance + $idiosyncraticJumpVariance;
+
+        // Convert back to volatility for the return payload.
+        $nextVolatility = sqrt(max(0.0, $nextVar));
 
         // Enforce bounds to prevent flatlining in extreme bull markets and runaway chaos in crashes
         $nextVolatility = max(self::MIN_VOLATILITY, min(self::MAX_VOLATILITY, $nextVolatility));
@@ -265,7 +441,7 @@ class MarketEngine
         // share of the NON-market residual, so total step variance is unchanged either way.
         $gbmPrice = $this->mathUtility->calculateCorrelatedGBM(
             currentPrice: $currentPrice,
-            currentVolatility: $currentVolatility,
+            idiosyncraticVolatility: sqrt(max(0.0, $currentIdiosyncraticVar)),
             drift: $finalDrift,
             gravityDrift: 0.0, // Set to zero, handled below
             dt: $dt,
@@ -289,11 +465,20 @@ class MarketEngine
         $analystTargets = $fundamentalState['analyst_targets'];
 
         // Circuit Breaker: Absolute Maximum Movement per Simulation Step
-        // Standard equities are constrained to max +/- 40% moves per quarter (or equivalent dt scaled)
-        // to prevent mathematical infinities and unrealistic single-tick flash crashes.
-        $maxMovePct = FinancialConstants::MAX_QUARTERLY_PRICE_CIRCUIT_BREAKER;
-        $minPriceFloor = max(0.01, $currentPrice * (1.0 - $maxMovePct));
-        $maxPriceCeiling = $currentPrice * (1.0 + $maxMovePct);
+        // A guard against mathematical blow-ups, not a market rule: the jumps and the M&A shock are applied
+        // outside it deliberately, since those are the moves it must not swallow.
+        //
+        // The bound is stated for a single trading DAY and scaled by the square root of the step actually
+        // taken, the way a diffusion's own dispersion scales. It used to be a flat +/- 40% per tick, against
+        // a constant named for a quarter and shared with the earnings engine, which uses it correctly on a
+        // per-report basis; at the district's tick rate that flat bound is a 235-sigma move on a typical
+        // name, so the breaker could never fire and was providing reassurance rather than protection.
+        // Working in log space keeps it symmetric, and scaling by sqrt(dt) makes it tick-rate invariant.
+        $stepDays = max(0.0, $dt) * FinancialConstants::TRADING_DAYS_PER_YEAR;
+        $maxLogMove = log(1.0 + FinancialConstants::MAX_DAILY_PRICE_CIRCUIT_BREAKER) * sqrt($stepDays);
+
+        $minPriceFloor = max(0.01, $currentPrice * exp(-$maxLogMove));
+        $maxPriceCeiling = $currentPrice * exp($maxLogMove);
         $boundedPrice = max($minPriceFloor, min($maxPriceCeiling, $diffusedPrice));
 
         // Market-Wide Jump Exposure:
@@ -404,14 +589,17 @@ class MarketEngine
 
         // 1. MACRO FORWARD GUIDANCE & FUNDAMENTAL P/E
         // Real growth is driven by secular trends and the output gap (cyclicality).
-        $realGrowth = $secularGrowth + ($outputGap * 0.5 * $beta);
+        $realGrowth = $secularGrowth + ($outputGap * self::CYCLICAL_GROWTH_PASS_THROUGH * $beta);
 
         // Stagflation drag: High inflation compresses real growth if pricing power/moat is weak
         $inflationDrag = max(0.0, ($inflation - 0.02) * (1.0 - $strategy->getMoatSpread()));
         $realGrowth = $realGrowth - $inflationDrag;
 
         // Nominal expected growth used for valuation (capped at 5% to prevent Gordon Growth divergence)
-        $expectedGrowth = max(0.0, min(0.05, $realGrowth + ($inflation * 0.5)));
+        $expectedGrowth = max(0.0, min(
+            self::MAX_EXPECTED_GROWTH,
+            $realGrowth + ($inflation * self::INFLATION_NOMINAL_GROWTH_PASS_THROUGH)
+        ));
 
         $fairValuePE = $this->mathUtility->calculateIntrinsicFairValuePE($hurdleRate, $structuralRoic, $expectedGrowth, $baselineIndustryPE);
 
@@ -448,12 +636,12 @@ class MarketEngine
         // High-turnover physical corporations (retail, grocers) have thin net margins and cannot support software-like P/S multiples.
         $trueMargin = $trueStructuralEps > 0 
             ? $trueStructuralEps / max(0.01, $revenuePerShare) 
-            : 0.01; 
-        $impliedMargin = max(0.01, min(0.30, $trueMargin));
+            : self::MIN_IMPLIED_NET_MARGIN;
+        $impliedMargin = max(self::MIN_IMPLIED_NET_MARGIN, min(self::MAX_IMPLIED_NET_MARGIN, $trueMargin));
         
         $psMultiple = max(
             FinancialConstants::MIN_PS_FALLBACK_MULT,
-            min(FinancialConstants::MAX_PS_FALLBACK_MULT, max(10.0, $fairValuePE) * $impliedMargin)
+            min(FinancialConstants::MAX_PS_FALLBACK_MULT, max(self::MIN_PS_ANCHOR_PE, $fairValuePE) * $impliedMargin)
         );
         $revenueFloorValue = $revenuePerShare * $psMultiple;
         $revenueFloorEquityValue = max(0.01, $revenueFloorValue - $netDebtPerShare);
@@ -465,7 +653,7 @@ class MarketEngine
         $dividendSupportValue = 0.0;
         if ($dividendPerShare > 0.0) {
             $sustainableDividend = $dividendPerShare * 4.0;
-            $requiredYield = max(0.02, $liveCostOfEquity);
+            $requiredYield = max(self::MIN_DIVIDEND_REQUIRED_YIELD, $liveCostOfEquity);
 
             // Calculate Payout Ratio to derive sustainable fundamental growth. The EPS on the context is
             // already trailing twelve months (net income is the SUM of the last four reported quarters),
@@ -473,11 +661,13 @@ class MarketEngine
             // handed mature dividend payers a reinvestment rate they did not have and let a debt-funded
             // dividend escape the sustainability haircut until it passed four times earnings.
             $annualizedEps = max(0.0, $earningsPerShare);
-            $payoutRatio = $annualizedEps > 0.0 ? ($sustainableDividend / $annualizedEps) : 1.5;
+            $payoutRatio = $annualizedEps > 0.0
+                ? ($sustainableDividend / $annualizedEps)
+                : self::UNEARNED_DIVIDEND_PAYOUT_RATIO;
 
             // Fundamental Growth = ROIC * Reinvestment Rate (1 - Payout Ratio)
             $reinvestmentRate = max(0.0, 1.0 - $payoutRatio);
-            $assumedGrowth = max(0.0, min(0.04, $structuralRoic * $reinvestmentRate));
+            $assumedGrowth = max(0.0, min(self::MAX_DIVIDEND_IMPLIED_GROWTH, $structuralRoic * $reinvestmentRate));
 
             $rawDdmValue = $this->mathUtility->calculateDividendDiscountModel(
                 $sustainableDividend,
@@ -488,7 +678,10 @@ class MarketEngine
             // Dividend Sustainability Haircut: Heavily discount debt-funded dividends (payout > 100%)
             $sustainabilityHaircut = 1.0;
             if ($payoutRatio > 1.0) {
-                $sustainabilityHaircut = max(0.20, 1.0 - (($payoutRatio - 1.0) * 0.5));
+                $sustainabilityHaircut = max(
+                    self::MIN_DIVIDEND_SUSTAINABILITY_HAIRCUT,
+                    1.0 - (($payoutRatio - 1.0) * self::DIVIDEND_SUSTAINABILITY_DECAY)
+                );
             }
 
             $dividendSupportValue = $rawDdmValue * $sustainabilityHaircut;

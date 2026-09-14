@@ -7,6 +7,8 @@ namespace App\Tests\Service;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Entity\TradeOrder;
+use App\Repository\StockRepository;
+use App\Repository\TradeOrderRepository;
 use App\Entity\User;
 use App\Entity\UserStock;
 use App\Service\Corporate\DebtEngine;
@@ -35,8 +37,7 @@ class BankruptcyTest extends TestCase
     private DebtEngine&MockObject $debtEngineMock;
     private MathUtility&Stub $mathUtilityMock;
     private Connection&MockObject $connectionMock;
-    /** @var EntityRepository<TradeOrder>&MockObject */
-    private EntityRepository&MockObject $tradeOrderRepoMock;
+    private TradeOrderRepository&MockObject $tradeOrderRepoMock;
 
     protected function setUp(): void
     {
@@ -46,7 +47,7 @@ class BankruptcyTest extends TestCase
         $this->debtEngineMock = $this->createMock(DebtEngine::class);
         $this->mathUtilityMock = $this->createStub(MathUtility::class);
         $this->connectionMock = $this->createMock(Connection::class);
-        $this->tradeOrderRepoMock = $this->createMock(EntityRepository::class);
+        $this->tradeOrderRepoMock = $this->createMock(TradeOrderRepository::class);
 
         $this->entityManagerMock->method('getConnection')->willReturn($this->connectionMock);
     }
@@ -99,8 +100,8 @@ class BankruptcyTest extends TestCase
             ->willReturn($this->tradeOrderRepoMock);
 
         $this->tradeOrderRepoMock->expects($this->once())
-            ->method('findBy')
-            ->with(['ticker' => 'DEAD', 'status' => 'OPEN'])
+            ->method('findOpenByTicker')
+            ->with('DEAD')
             ->willReturn([$buyOrder, $sellOrder]);
 
         // Connection should only execute DELETE on user_stocks, NOT on corporate_report, stock_history, stock_events
@@ -259,8 +260,8 @@ class BankruptcyTest extends TestCase
             ->willReturn(['z_score' => 8.0, 'zone' => 'Safe', 'is_bankrupt' => false]);
 
         $this->entityManagerMock->method('getRepository')->willReturn($this->createConfiguredStub(
-            \Doctrine\ORM\EntityRepository::class,
-            ['findBy' => []]
+            TradeOrderRepository::class,
+            ['findOpenByTicker' => []]
         ));
 
         $operator = new MarketOperator(
@@ -348,8 +349,8 @@ class BankruptcyTest extends TestCase
         $stock->setTicker('DEAD');
         $stock->setIsBankrupt(true);
 
-        $stockRepo = $this->createStub(EntityRepository::class);
-        $stockRepo->method('findOneBy')->willReturn($stock);
+        $stockRepo = $this->createStub(StockRepository::class);
+        $stockRepo->method('findOneByTicker')->willReturn($stock);
 
         $this->entityManagerMock->expects($this->once())
             ->method('getRepository')
@@ -484,7 +485,7 @@ class BankruptcyTest extends TestCase
             static fn (Stock $stock): array => ['z_score' => $stock->getTicker() === 'DEAD' ? -1.5 : 5.0, 'zone' => 'Safe', 'is_bankrupt' => $stock->getTicker() === 'DEAD']
         );
         $this->entityManagerMock->method('getRepository')->willReturn($this->tradeOrderRepoMock);
-        $this->tradeOrderRepoMock->method('findBy')->willReturn([]);
+        $this->tradeOrderRepoMock->method('findOpenByTicker')->willReturn([]);
         $this->marketEventMock->method('publish')->willReturn(['type' => 'BANKRUPTCY']);
 
         $operator = new MarketOperator($this->entityManagerMock, $this->loggerMock, $this->marketEventMock, $this->debtEngineMock, $this->mathUtilityMock);

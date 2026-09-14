@@ -446,6 +446,21 @@ class NarrativeEngine
                 "Acquired high-capacity mid-band spectrum blocks to expand mobile broadband leadership.",
                 "Strategic spectrum license acquisitions reinforced long-term wireless network capacity."
             ]),
+            ShockEvent::NETWORK_ROLLOUT_WAVE => $this->getRandomPhrase([
+                "Carrier customers launched a generational network rollout, stepping up radio access equipment order intake.",
+                "Operators committed multi-year deployment budgets for next-generation base stations and core routing.",
+                "A new wireless generation entered mass deployment, lifting the network equipment backlog."
+            ]),
+            ShockEvent::SEP_ROYALTY_DISPUTE => $this->getRandomPhrase([
+                "A flagship device maker withheld standard-essential patent royalties pending licence renegotiation.",
+                "A major licensee halted royalty payments and challenged the patent portfolio's licensing terms in court.",
+                "Royalty collections fell as a leading handset manufacturer disputed standard-essential patent rates."
+            ]),
+            ShockEvent::SEP_ROYALTY_SETTLEMENT => $this->getRandomPhrase([
+                "Settled the patent licensing dispute, collecting most of the withheld royalty arrears in a catch-up payment.",
+                "A renewed multi-year licence agreement released back royalties accrued during the dispute.",
+                "Resolution of the licensing litigation restored royalty flows and recovered accumulated arrears."
+            ]),
             ShockEvent::MANDATORY_HEALTHCARE_EXPANSION => $this->getRandomPhrase([
                 "Mandatory healthcare coverage expansions and higher patient admissions boosted operating volumes.",
                 "Expanded statutory health insurance coverage drove higher patient utilization across medical centers.",

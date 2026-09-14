@@ -257,6 +257,16 @@ class StockModelTuning
             ModelParam::ConsumerWeight->value    => 0.15,
         ],
 
+        // --- Erne Network Systems (ERNE) ---
+        // Cellular radio access equipment, massive MIMO base stations & standard-essential patent licensing (Ericsson archetype).
+        // Heavily weighted to long-term carrier infrastructure contracts with high SEP royalty tollbooths.
+        'ERNE' => [
+            ModelParam::EnterpriseWeight->value       => 0.75, // Carrier radio access, core network routing & optimization software
+            ModelParam::PatentLicensingWeight->value  => 0.15, // Standard-essential patent royalties on every device shipped under the standard
+            ModelParam::ConsumerWeight->value         => 0.10, // Broadband consumer terminal hardware & IoT micro-modules
+            ModelParam::PricingPowerIndex->value      => 0.75, // Standard-essential patent (SEP) monopoly leverage
+        ],
+
         // --- Weaver Marketplace (WEAV) ---
         // Massive third-party ecosystem (the profit engine) blended with volatile first-party retail (the scale engine).
         'WEAV' => [
@@ -356,6 +366,36 @@ class StockModelTuning
             ModelParam::PricingPowerIndex->value => 0.85,
             ModelParam::EquipmentWeight->value   => 0.40,
             ModelParam::ServicesWeight->value    => 0.60,
+        ],
+
+        // --- Sanderling Rock Dynamics (SNDR) ---
+        // Subterranean rock drill rigs, continuous hard-rock tunneling borers & cemented carbide tooling (Sandvik archetype).
+        // Dual-stream razor-and-blade model: multi-quarter equipment backlogs paired with high-margin consumable wear-parts tollbooth.
+        'SNDR' => [
+            ModelParam::EquipmentWeight->value     => 0.55, // Heavy automated drilling rigs, subterranean continuous miners & crushing units
+            ModelParam::ServicesWeight->value      => 0.45, // Cemented carbide rotary bits, wear-resistant liners & telemetry maintenance
+            ModelParam::PricingPowerIndex->value   => 0.80, // Proprietary sintered carbide metallurgy; essential uptime tollbooth
+            ModelParam::OperatingCyclicality->value => 1.15, // Buffered by consumable wear-part replacement cycles
+        ],
+
+        // --- Alca Compression Dynamics (ALCA) ---
+        // Industrial air compressors, turbomolecular vacuum pumps & precision assembly systems (Atlas Copco archetype).
+        // Essential 'Fourth Utility' of manufacturing: catastrophic cost of downtime creates immense pricing power and 40% high-margin service tollbooth.
+        'ALCA' => [
+            ModelParam::EquipmentWeight->value     => 0.60, // Oil-free rotary screw compressors, cleanroom turbomolecular vacuum pumps & robotic tools
+            ModelParam::ServicesWeight->value      => 0.40, // Predictive maintenance telemetry, replacement rotor elements & clean-air filter consumables
+            ModelParam::PricingPowerIndex->value   => 0.85, // Critical operational uptime necessity; shutting down a wafer fab or bottling line costs millions
+            ModelParam::OperatingCyclicality->value => 1.05, // Heavy aftermarket service revenue strongly insulates from industrial capex contractions
+        ],
+
+        // --- Nuthatch Climate Systems (NUTH) ---
+        // Geothermal ground-source heat pumps, hydronic climate control & industrial thermal elements (NIBE archetype).
+        // Highly exposed to building permit cycles and dealer inventory destocking, buffered by aftermarket retrofit/service parts.
+        'NUTH' => [
+            ModelParam::OemEquipmentWeight->value  => 0.70, // Heat pumps, geothermal ground loops, air handlers & ventilation systems
+            ModelParam::AftermarketMroWeight->value => 0.30, // Replacement compressors, heat exchangers, glycol loops & service contracts
+            ModelParam::PricingPowerIndex->value   => 0.70, // Strong Nordic energy-efficiency standards and statutory decarbonization capture
+            ModelParam::OperatingCyclicality->value => 1.25, // Moderately high cyclicality driven by mortgage rates and building permits
         ],
 
         // --- Crossbill Precision Tooling (CBIL) ---
@@ -620,6 +660,17 @@ class StockModelTuning
             ModelParam::SoftwareServicesWeight->value => 0.20, // Inescapable telemetry, subscription tolls & captive finance
             ModelParam::PricingPowerIndex->value      => 0.65,
             ModelParam::RateSensitivityScalar->value  => 1.25,
+        ],
+
+        // --- Eider Motor Group (EIDR) ---
+        // Fortified passenger vehicles, heavy commercial prime movers & industrial transport chassis (Volvo archetype).
+        // Conservative fleet sales and executive armored wagons supported by mandatory insurance fleet standards.
+        'EIDR' => [
+            ModelParam::AutoSalesWeight->value        => 0.70, // Fortified commercial haulers & municipal fleet sales
+            ModelParam::ApexLuxuryWeight->value       => 0.15, // Armored executive wagons & discrete VIP transports
+            ModelParam::SoftwareServicesWeight->value => 0.15, // Certified telematics, collision avoidance & maintenance tolls
+            ModelParam::PricingPowerIndex->value      => 0.75, // Backed by insurance underwriting standards
+            ModelParam::RateSensitivityScalar->value  => 0.85, // Institutional fleet renewals less rate-sensitive than retail auto loans
         ],
 
         // =====================================================================

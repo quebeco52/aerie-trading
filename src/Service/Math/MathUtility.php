@@ -25,6 +25,14 @@ class MathUtility
     /** Ratio of a zero-mean normal variable's mean absolute deviation to its sigma, sqrt(2 / pi). */
     public const MEAN_ABSOLUTE_DEVIATION_TO_SIGMA = 0.7978845608028654;
 
+    // --- SVJJ Jump Process ---
+    /** Mean variance jump on an UP price jump, as a share of the mean on a down jump; crashes spike volatility harder than rallies. */
+    public const VARIANCE_JUMP_UPSIDE_MEAN_SHARE = 0.50;
+    /** Ceiling on a single variance jump, as a multiple of its mean, so one draw cannot permanently corrupt the volatility state. */
+    public const MAX_VARIANCE_JUMP_MEAN_MULTIPLE = 10.0;
+    /** Exponent rate at which the closed-form compensator switches to its removable-singularity limit, where eta approaches one. */
+    public const COMPENSATOR_UNIT_RATE_TOLERANCE = 1.0e-6;
+
     // --- Yield To Maturity Solver ---
 
     /** Newton-Raphson iteration cap; a well-bracketed bond converges in well under ten. */
@@ -295,8 +303,10 @@ class MathUtility
     /**
      * Calculates the next price using Geometric Brownian Motion (GBM) with correlated market drift.
      *
-     * @param float $currentPrice      The current price of the stock.
-     * @param float $currentVolatility The current instantaneous volatility.
+     * @param float $currentPrice             The current price of the stock.
+     * @param float $idiosyncraticVolatility  The current instantaneous IDIOSYNCRATIC volatility. The market
+     *                                        loading is supplied outright by beta and marketVol, so total
+     *                                        volatility is sqrt((beta * marketVol)^2 + this^2).
      * @param float $drift             The expected return (drift) of the stock.
      * @param float $gravityDrift      The mean reversion drift pulling to fair value.
      * @param float $dt                The time step in years.
@@ -310,7 +320,7 @@ class MathUtility
      */
     public function calculateCorrelatedGBM(
         float $currentPrice,
-        float $currentVolatility,
+        float $idiosyncraticVolatility,
         float $drift,
         float $gravityDrift,
         float $dt,
@@ -321,27 +331,38 @@ class MathUtility
         float $sectorZ = 0.0,
         float $sectorVarianceShare = 0.0
     ): float {
-        $impliedRho = $beta * ($marketVol / max($currentVolatility, 0.01));
-        $marketCorrelation = max(-0.99, min(0.99, $impliedRho));
-
         // Orthogonal three-way variance decomposition: market, sector, idiosyncratic.
-        // A single common factor makes two banks correlated only through their betas, so a sector rotation is
-        // invisible in prices between earnings dates. Carving a share of the NON-market residual out for a
-        // sector factor gives same-sector names a second shared driver: their correlation becomes
-        // rho_market^2 + rho_sector^2 against rho_market^2 for a cross-sector pair. Loadings are square roots
-        // of variance shares that sum to one, so total step variance stays exactly sigma^2 either way.
-        $residualVariance = max(0.0, 1.0 - ($marketCorrelation * $marketCorrelation));
+        //
+        // The market loading is beta * marketVol OUTRIGHT, which is the definition of beta and is therefore
+        // exact at every step and at every level of market volatility. It used to be derived the other way
+        // round — an implied correlation beta * marketVol / sigma, clamped below one — which silently
+        // truncated the loading of any name whose instantaneous volatility fell short of what its beta
+        // demanded. Measured against the market factor a configured beta of 1.3 realized 1.19 and, when
+        // market volatility tripled in a crisis, 0.45, while the CAPM drift kept paying the full figure.
+        //
+        // What the Heston state carries is now the IDIOSYNCRATIC volatility, and total volatility is
+        // sqrt((beta * marketVol)^2 + sigma_idio^2) — so a name gets more volatile when the market does,
+        // through its beta, which is the empirical regularity the clamped form could only approximate.
+        //
+        // A sector factor takes a share of the non-market residual: a single common factor makes two banks
+        // correlated only through their betas, so a sector rotation is invisible in prices between earnings
+        // dates. Loadings are square roots of shares that sum to one, so the residual's variance is
+        // unchanged either way.
         $boundedShare = max(0.0, min(1.0, $sectorVarianceShare));
-        $sectorLoading = sqrt($residualVariance * $boundedShare);
-        $idiosyncraticLoading = sqrt($residualVariance * (1.0 - $boundedShare));
+        $residualVol = max(0.0, $idiosyncraticVolatility);
+        $sectorLoading = $residualVol * sqrt($boundedShare);
+        $idiosyncraticLoading = $residualVol * sqrt(1.0 - $boundedShare);
 
         $sqrtDt = sqrt($dt);
-        $systematicDrift = $currentVolatility * $marketCorrelation * $marketZ * $sqrtDt;
-        $sectorDrift = $currentVolatility * $sectorLoading * $sectorZ * $sqrtDt;
-        $idiosyncraticDrift = $currentVolatility * $idiosyncraticLoading * $w1 * $sqrtDt;
-        $currentVariance = $currentVolatility * $currentVolatility;
+        $systematicDrift = $beta * $marketVol * $marketZ * $sqrtDt;
+        $sectorDrift = $sectorLoading * $sectorZ * $sqrtDt;
+        $idiosyncraticDrift = $idiosyncraticLoading * $w1 * $sqrtDt;
 
-        $gbmExponent = ($drift + $gravityDrift - 0.5 * $currentVariance) * $dt
+        // The Ito correction is taken on TOTAL variance, since that is the variance of the step being
+        // exponentiated; using the residual alone would leave a high-beta name with an upward bias.
+        $totalVariance = ($beta * $marketVol * $beta * $marketVol) + ($residualVol * $residualVol);
+
+        $gbmExponent = ($drift + $gravityDrift - 0.5 * $totalVariance) * $dt
             + $systematicDrift + $sectorDrift + $idiosyncraticDrift;
 
         return $currentPrice * exp($gbmExponent);
@@ -439,6 +460,95 @@ class MathUtility
     }
 
     /**
+     * Second moment of one capped Kou double-exponential jump, E[J^2].
+     *
+     * The jump sizes this engine draws are truncated at MAX_JUMP_LOG_RETURN and MIN_JUMP_LOG_RETURN, so the
+     * plain exponential moment 2/eta^2 overstates what a jump actually delivers — badly for a large jump
+     * scale, where most of the mass sits beyond the cap. For X ~ Exp(eta) truncated at c,
+     *
+     *     E[min(X, c)^2] = (2 / eta^2) * (1 - e^(-eta c) * (eta c + 1))
+     *
+     * which is the incomplete gamma integral with the surviving point mass at the cap folded back in. This
+     * is the variance one arrival supplies, so it is what the variance budget has to hand back.
+     *
+     * @param float $pUp     Probability the jump is upwards.
+     * @param float $etaUp   Exponential rate of the up jump.
+     * @param float $etaDown Exponential rate of the down jump.
+     * @param float $capUp   Largest up jump, as a positive log return.
+     * @param float $capDown Largest down jump, as a POSITIVE magnitude.
+     */
+    public function kouTruncatedSecondMoment(
+        float $pUp,
+        float $etaUp,
+        float $etaDown,
+        float $capUp,
+        float $capDown
+    ): float {
+        return ($pUp * $this->truncatedExponentialSecondMoment($etaUp, $capUp))
+            + ((1.0 - $pUp) * $this->truncatedExponentialSecondMoment($etaDown, $capDown));
+    }
+
+    /**
+     * Merton's jump compensator for a capped Kou jump, E[e^J - 1].
+     *
+     * A jump-diffusion whose drift is set to the expected return and then multiplied by e^J does not earn
+     * that expected return: it earns it plus lambda * E[e^J - 1] per unit time. Kou's jump is skewed down,
+     * so the term is negative and the shortfall is a silent return tax. Merton (1976) removes it by
+     * subtracting lambda * E[e^J - 1] from the drift, which is what makes a jump a change in the SHAPE of
+     * returns rather than in their mean.
+     *
+     * With the same truncation the draws obey, for X ~ Exp(eta) capped at c:
+     *
+     *     E[e^min(X,c)]   = eta / (eta - 1) * (1 - e^(-(eta - 1) c)) + e^(-(eta - 1) c)
+     *     E[e^-min(X,d)]  = eta / (eta + 1) * (1 - e^(-(eta + 1) d)) + e^(-(eta + 1) d)
+     *
+     * The up branch has a removable singularity at eta = 1, where the integral collapses to c; it is taken
+     * as the limit rather than allowed to divide by zero.
+     *
+     * @param float $pUp     Probability the jump is upwards.
+     * @param float $etaUp   Exponential rate of the up jump.
+     * @param float $etaDown Exponential rate of the down jump.
+     * @param float $capUp   Largest up jump, as a positive log return.
+     * @param float $capDown Largest down jump, as a POSITIVE magnitude.
+     */
+    public function kouTruncatedCompensator(
+        float $pUp,
+        float $etaUp,
+        float $etaDown,
+        float $capUp,
+        float $capDown
+    ): float {
+        $upRate = $etaUp - 1.0;
+        if (abs($upRate) < self::COMPENSATOR_UNIT_RATE_TOLERANCE) {
+            // eta = 1: the integrand is constant and the expectation is 1 + c.
+            $upExpectation = 1.0 + $capUp;
+        } else {
+            $upTail = exp(-$upRate * $capUp);
+            $upExpectation = (($etaUp / $upRate) * (1.0 - $upTail)) + $upTail;
+        }
+
+        $downRate = $etaDown + 1.0;
+        $downTail = exp(-$downRate * $capDown);
+        $downExpectation = (($etaDown / $downRate) * (1.0 - $downTail)) + $downTail;
+
+        return ($pUp * $upExpectation) + ((1.0 - $pUp) * $downExpectation) - 1.0;
+    }
+
+    /**
+     * E[min(X, c)^2] for X ~ Exp(rate). See kouTruncatedSecondMoment() for the derivation.
+     */
+    private function truncatedExponentialSecondMoment(float $rate, float $cap): float
+    {
+        if ($rate <= 0.0 || $cap <= 0.0) {
+            return 0.0;
+        }
+
+        $scaled = $rate * $cap;
+
+        return (2.0 / ($rate * $rate)) * (1.0 - (exp(-$scaled) * ($scaled + 1.0)));
+    }
+
+    /**
      * SVJJ Model: Correlated Price and Variance Jumps using Kou Double-Exponential.
      *
      * @param float $lambda   Jump intensity (arrivals per year).
@@ -477,12 +587,19 @@ class MathUtility
             $shockPct = ($priceMultiplier - 1.0) * 100.0;
 
             // Variance Jump (Contemporaneous)
-            // Market crashes usually spike volatility harder than market rallies
-            $varianceJumpRate = $isUpJump ? (1.0 / ($muV * 0.5)) : (1.0 / $muV);
-            $varJump = $this->generateExponential($varianceJumpRate);
-
-            // Failsafe: Cap the variance jump to 10x the mean to prevent permanent volatility corruption
-            $varJump = min($varJump, $muV * 10.0);
+            // Market crashes usually spike volatility harder than market rallies.
+            //
+            // Guarded because the mean is a caller-supplied quantity that is legitimately zero: the per-name
+            // mean is derived from the stock's own volatility, and a name whose volatility state has been
+            // zeroed would divide by it. A zero mean is a jump with no variance component, not a fatal.
+            $varJump = 0.0;
+            if ($muV > 0.0) {
+                $meanVarJump = $isUpJump ? ($muV * self::VARIANCE_JUMP_UPSIDE_MEAN_SHARE) : $muV;
+                $varJump = min(
+                    $this->generateExponential(1.0 / $meanVarJump),
+                    $meanVarJump * self::MAX_VARIANCE_JUMP_MEAN_MULTIPLE
+                );
+            }
 
             return [
                 'price_multiplier' => $priceMultiplier,

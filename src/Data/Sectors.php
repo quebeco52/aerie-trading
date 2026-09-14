@@ -47,6 +47,7 @@ class Sectors
         'auto_manufacturer' => 'Extremely capital-intensive with massive fixed costs. Highly sensitive to the macro output gap and consumer interest rates, as most vehicles are financed. Margins compress violently during recessions or rate hikes.',
         'specialty_industrial_machinery' => 'Specialized heavy machinery with sticky aftermarket services. Features a wider economic moat and less macro sensitivity than raw heavy manufacturing, producing both highly cyclical equipment sales and stable service revenue.',
         'tools_and_accessories' => 'Precision tooling and hardware. Premium B2B sales act as a high-margin, sticky industrial tollbooth. Rejects are liquidated into the retail secondary market as a volatile, cyclical stream.',
+        'communication_equipment' => 'Network equipment vendors selling multi-year radio access and core routing deployments to carriers. Orders follow the carrier capex cycle and generational rollout waves through a multi-quarter backlog, while standard-essential patent royalties on every device shipped provide a near-pure-margin tollbooth that a disputing licensee can withhold for several quarters.',
         'computer_hardware' => 'Physical technology manufacturing. Fast depreciation and inventory obsolescence create high baseline variance. Split between highly volatile B2C consumer electronics and stickier, high-margin B2B enterprise sales.',
         'internet_retail' => 'Digital retail apex predators. Extremely high macro sensitivity and inflation penalties due to massive fulfillment networks. Blends asset-light, high-margin third-party marketplace fees with volatile, logistics-heavy first-party retail.',
         'restaurant'      => 'Operates a mix of corporate-owned and franchised locations. Corporate stores have high revenue and high fixed costs. Franchise operations generate low revenue but near 100% margin royalty streams. Highly sensitive to consumer discretionary spending and input inflation.',
@@ -91,7 +92,7 @@ class Sectors
         'Building Products & Equipment' => ['pe' => 16.00, 'depreciation' => 0.05, 'ebitda_limit' => 3.0, 'equity_limit' => 1.0, 'business_model' => 'heavy_manufacturing'],
         'Business Equipment & Supplies' => ['pe' => 12.00, 'depreciation' => 0.06, 'ebitda_limit' => 2.5, 'equity_limit' => 1.0, 'business_model' => 'none'],
         'Chemicals' => ['pe' => 15.00, 'depreciation' => 0.06, 'ebitda_limit' => 3.0, 'equity_limit' => 1.5, 'business_model' => 'chemical'],
-        'Communication Equipment' => ['pe' => 18.00, 'depreciation' => 0.15, 'ebitda_limit' => 2.5, 'equity_limit' => 0.5, 'business_model' => 'computer_hardware'],
+        'Communication Equipment' => ['pe' => 18.00, 'depreciation' => 0.15, 'ebitda_limit' => 2.5, 'equity_limit' => 0.5, 'business_model' => 'communication_equipment'], // Carrier capex backlog + SEP royalties
         'Computer Hardware' => ['pe' => 15.00, 'depreciation' => 0.15, 'ebitda_limit' => 2.0, 'equity_limit' => 0.5, 'business_model' => 'computer_hardware'],
         'Conglomerates' => ['pe' => 16.00, 'depreciation' => 0.05, 'ebitda_limit' => 3.5, 'equity_limit' => 1.5, 'business_model' => 'conglomerate'],
         'Consulting Services' => ['pe' => 22.00, 'depreciation' => 0.03, 'ebitda_limit' => 2.5, 'equity_limit' => 0.5, 'business_model' => 'law_firm'], // Almost entirely human capital
@@ -283,6 +284,7 @@ class Sectors
             'specialty_industrial_machinery' => new \App\Service\Model\Sector\SpecialtyIndustrialMachineryBusinessModel(),
             'tools_and_accessories' => new \App\Service\Model\Sector\ToolsAndAccessoriesBusinessModel(),
             'computer_hardware' => new \App\Service\Model\Sector\ComputerHardwareBusinessModel(),
+            'communication_equipment' => new \App\Service\Model\Sector\CommunicationEquipmentBusinessModel(),
             'internet_retail' => new \App\Service\Model\Sector\InternetRetailBusinessModel(),
             'restaurant'      => new \App\Service\Model\Sector\RestaurantBusinessModel(),
             'law_firm'        => new \App\Service\Model\Sector\LawFirmBusinessModel(),

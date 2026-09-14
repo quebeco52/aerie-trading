@@ -57,14 +57,14 @@ class DistrictMap
         // Industrials & Materials.
         'steel_manufacturing', 'specialty_industrial_machinery', 'commodity', 'chemical',
         'construction', 'defense_contractor', 'security_protection', 'waste_management',
-        'railroad', 'shipping', 'logistics', 'tools_and_accessories', 'law_firm',
+        'railroad', 'shipping', 'logistics', 'tools_and_accessories', 'heavy_manufacturing', 'law_firm',
         // Consumer Discretionary & Staples.
         'consumer_staples', 'restaurant', 'apparel_manufacturing', 'auto_manufacturer',
         'internet_retail', 'resorts_casinos', 'luxury', 'advertising_agency', 'education',
         // Energy & Utilities.
         'utility',
         // Information Technology & Communication Services.
-        'tech', 'computer_hardware', 'semiconductor', 'telecom',
+        'tech', 'computer_hardware', 'semiconductor', 'communication_equipment', 'telecom',
         // Real Estate & Health Care.
         'reit', 'medical_care_facility', 'biotech',
         // Unclassified conglomerates trail east, matching the old row's "recovery houses" tail.
@@ -261,7 +261,7 @@ class DistrictMap
         'luxury' => 'gem',
         // Power, silicon and signal.
         'utility' => 'bolt', 'tech' => 'cloud', 'computer_hardware' => 'chip',
-        'semiconductor' => 'chip', 'telecom' => 'signal',
+        'semiconductor' => 'chip', 'communication_equipment' => 'signal', 'telecom' => 'signal',
         // Care, cures, property and the conglomerates.
         'medical_care_facility' => 'cross', 'biotech' => 'pill', 'reit' => 'house',
         'conglomerate' => 'blocks',

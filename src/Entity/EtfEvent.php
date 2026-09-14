@@ -5,7 +5,7 @@ namespace App\Entity;
 use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\Mapping as ORM;
 
-#[ORM\Entity]
+#[ORM\Entity(repositoryClass: \App\Repository\EtfEventRepository::class)]
 #[ORM\Table(name: 'etf_events')]
 #[ORM\Index(name: 'idx_etf_event_recorded', columns: ['etf_id', 'recorded_at'])]
 class EtfEvent

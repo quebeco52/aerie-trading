@@ -1,7 +1,10 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Service\Macro\Recorder;
 
+use App\Data\MacroFieldRegistry;
 use App\DTO\MacroStateDTO;
 use Doctrine\DBAL\Connection;
 
@@ -10,127 +13,55 @@ use Doctrine\DBAL\Connection;
  */
 class MacroSnapshotRecorder
 {
+    // --- Snapshot Schema ---
+
+    /** Column carrying the wall-clock time a snapshot was taken; the only column not owned by the macro vector. */
+    private const TIMESTAMP_COLUMN = 'recorded_at';
+
+    /**
+     * Prepared INSERT statement, built once per process from the registry's column list.
+     */
+    private ?string $statement = null;
+
     /**
      * Persists an immutable historical econometric snapshot to the database.
+     *
+     * The column list and the value list are generated from the same
+     * App\Data\MacroFieldRegistry mapping, so a field cannot land in the wrong column. The
+     * previous hand-written statement named 107 columns, 107 placeholders and 106 property reads in
+     * three separate lists that only a careful eye kept aligned; one insertion in the wrong place
+     * silently shifted every following value into its neighbour's column.
      *
      * @param MacroStateDTO $macroState State snapshot to record.
      * @param Connection    $conn       Database connection.
      */
     public function recordSnapshot(MacroStateDTO $macroState, Connection $conn): void
     {
-        $now = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
-        $conn->executeStatement(
-            "INSERT INTO macro_report (recorded_at, inflation, inflation_ema, output_gap, output_gap_ema, policy_rate, policy_rate_ema, target_rate, yield2y, yield2y_ema, yield5y, yield5y_ema, yield10y, yield10y_ema, yield30y, yield30y_ema, corporate_tax_rate, equity_risk_premium, nominal_gdp_index, market_volatility, macro_credit_spread, macro_credit_spread_ema, unemployment_rate, unemployment_rate_ema, energy_price_index, energy_price_index_ema, consumer_sentiment_index, consumer_sentiment_index_ema, exchange_rate_index, exchange_rate_index_ema, industrial_metals_index, industrial_metals_index_ema, government_spending_index, government_spending_index_ema, commercial_property_index, commercial_property_index_ema, residential_property_index, residential_property_index_ema, retail_default_rate, retail_default_rate_ema, agricultural_commodity_index, agricultural_commodity_index_ema, freight_rate_index, freight_rate_index_ema, capital_stock_overhang, capital_stock_overhang_ema, interbank_liquidity_spread, interbank_liquidity_spread_ema, total_factor_productivity_index, total_factor_productivity_index_ema, job_vacancies_rate, job_vacancies_rate_ema, labor_tightness, labor_tightness_ema, wage_growth, wage_growth_ema, natural_rate, natural_rate_ema, term_premium10y, term_premium10y_ema, risk_neutral10y, risk_neutral10y_ema, balance_sheet_intensity, tips_breakeven, tips_breakeven_ema, ns_curvature2, nairu, nairu_ema, sovereign_debt_to_gdp, sovereign_debt_to_gdp_ema, financial_conditions_index, financial_conditions_index_ema, agri_cost_push_lag, supercore_inflation_ema, core_goods_inflation_ema, cumulative_inflation_gap_ema, high_yield_credit_spread_ema, inventory_stock_gap_ema, energy_inventory_index_ema, capacity_utilization_rate, capacity_utilization_rate_ema, recession_probability, recession_probability_ema, corporate_default_rate, corporate_default_rate_ema, sloos_tightening_index, sloos_tightening_index_ema, supply_chain_pressure_index, supply_chain_pressure_index_ema, refining_crack_spread, refining_crack_spread_ema, deal_activity_index, deal_activity_index_ema, manufacturing_pmi, manufacturing_pmi_ema, producer_price_inflation, producer_price_inflation_ema, trade_balance_to_gdp, trade_balance_to_gdp_ema, housing_starts_index, housing_starts_index_ema, money_supply_growth, money_supply_growth_ema, term_premium_shock, term_premium_regime, perceived_neutral_rate, restrictive_duration) 
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            [
-                $now,
-                $macroState->inflation,
-                $macroState->inflationEma,
-                $macroState->outputGap,
-                $macroState->outputGapEma,
-                $macroState->policyRate,
-                $macroState->policyRateEma,
-                $macroState->targetRate,
-                $macroState->yield2y,
-                $macroState->yield2yEma,
-                $macroState->yield5y,
-                $macroState->yield5yEma,
-                $macroState->yield10y,
-                $macroState->yield10yEma,
-                $macroState->yield30y,
-                $macroState->yield30yEma,
-                $macroState->corporateTaxRate,
-                $macroState->equityRiskPremium,
-                $macroState->nominalGdpIndex,
-                $macroState->marketVolatility,
-                $macroState->macroCreditSpread,
-                $macroState->macroCreditSpreadEma,
-                $macroState->unemploymentRate,
-                $macroState->unemploymentRateEma,
-                $macroState->energyPriceIndex,
-                $macroState->energyPriceIndexEma,
-                $macroState->consumerSentimentIndex,
-                $macroState->consumerSentimentIndexEma,
-                $macroState->exchangeRateIndex,
-                $macroState->exchangeRateIndexEma,
-                $macroState->industrialMetalsIndex,
-                $macroState->industrialMetalsIndexEma,
-                $macroState->governmentSpendingIndex,
-                $macroState->governmentSpendingIndexEma,
-                $macroState->commercialPropertyIndex,
-                $macroState->commercialPropertyIndexEma,
-                $macroState->residentialPropertyIndex,
-                $macroState->residentialPropertyIndexEma,
-                $macroState->retailDefaultRate,
-                $macroState->retailDefaultRateEma,
-                $macroState->agriculturalCommodityIndex,
-                $macroState->agriculturalCommodityIndexEma,
-                $macroState->freightRateIndex,
-                $macroState->freightRateIndexEma,
-                $macroState->capitalStockOverhang,
-                $macroState->capitalStockOverhangEma,
-                $macroState->interbankLiquiditySpread,
-                $macroState->interbankLiquiditySpreadEma,
-                $macroState->totalFactorProductivityIndex,
-                $macroState->totalFactorProductivityIndexEma,
-                $macroState->jobVacanciesRate,
-                $macroState->jobVacanciesRateEma,
-                $macroState->laborTightness,
-                $macroState->laborTightnessEma,
-                $macroState->wageGrowth,
-                $macroState->wageGrowthEma,
-                $macroState->naturalRate,
-                $macroState->naturalRateEma,
-                $macroState->termPremium10y,
-                $macroState->termPremium10yEma,
-                $macroState->riskNeutral10y,
-                $macroState->riskNeutral10yEma,
-                $macroState->balanceSheetIntensity,
-                $macroState->tipsBreakeven,
-                $macroState->tipsBreakevenEma,
-                $macroState->nsCurvature2,
-                $macroState->nairu,
-                $macroState->nairuEma,
-                $macroState->sovereignDebtToGdp,
-                $macroState->sovereignDebtToGdpEma,
-                $macroState->financialConditionsIndex,
-                $macroState->financialConditionsIndexEma,
-                $macroState->agriCostPushLag,
-                $macroState->supercoreInflationEma,
-                $macroState->coreGoodsInflationEma,
-                $macroState->cumulativeInflationGapEma,
-                $macroState->highYieldCreditSpreadEma,
-                $macroState->inventoryStockGapEma,
-                $macroState->energyInventoryIndexEma,
-                $macroState->capacityUtilizationRate,
-                $macroState->capacityUtilizationRateEma,
-                $macroState->recessionProbability,
-                $macroState->recessionProbabilityEma,
-                $macroState->corporateDefaultRate,
-                $macroState->corporateDefaultRateEma,
-                $macroState->sloosTighteningIndex,
-                $macroState->sloosTighteningIndexEma,
-                $macroState->supplyChainPressureIndex,
-                $macroState->supplyChainPressureIndexEma,
-                $macroState->refiningCrackSpread,
-                $macroState->refiningCrackSpreadEma,
-                $macroState->dealActivityIndex,
-                $macroState->dealActivityIndexEma,
-                $macroState->manufacturingPmi,
-                $macroState->manufacturingPmiEma,
-                $macroState->producerPriceInflation,
-                $macroState->producerPriceInflationEma,
-                $macroState->tradeBalanceToGdp,
-                $macroState->tradeBalanceToGdpEma,
-                $macroState->housingStartsIndex,
-                $macroState->housingStartsIndexEma,
-                $macroState->moneySupplyGrowth,
-                $macroState->moneySupplyGrowthEma,
-                $macroState->termPremiumShock,
-                $macroState->termPremiumRegime,
-                $macroState->perceivedNeutralRate,
-                $macroState->restrictiveDuration,
-            ]
+        $columns = MacroFieldRegistry::persistedColumns();
+
+        $values = [(new \DateTimeImmutable())->format('Y-m-d H:i:s')];
+        foreach (array_keys($columns) as $field) {
+            $values[] = $macroState->$field;
+        }
+
+        $conn->executeStatement($this->statement ??= $this->buildStatement($columns), $values);
+    }
+
+    /**
+     * Builds the INSERT statement for the timestamp column followed by every persisted macro field.
+     *
+     * @param  array<string, string> $columns PHP property name => macro_report column name.
+     * @return string                The parameterised INSERT statement.
+     */
+    private function buildStatement(array $columns): string
+    {
+        $names = array_merge([self::TIMESTAMP_COLUMN], array_values($columns));
+        $placeholders = array_fill(0, count($names), '?');
+
+        return sprintf(
+            'INSERT INTO macro_report (%s) VALUES (%s)',
+            implode(', ', $names),
+            implode(', ', $placeholders)
         );
     }
 }

@@ -10,7 +10,7 @@ use Doctrine\ORM\Mapping as ORM;
  * * Uses Absolute Values (Total Net Income, Total Equity) to maintain 
  * mathematically flawless accounting during splits, buyouts, and buybacks.
  */
-#[ORM\Entity]
+#[ORM\Entity(repositoryClass: \App\Repository\StockRepository::class)]
 #[ORM\Table(name: 'stocks')]
 class Stock
 {

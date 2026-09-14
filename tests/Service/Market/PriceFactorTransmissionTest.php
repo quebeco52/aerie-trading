@@ -228,22 +228,22 @@ final class PriceFactorTransmissionTest extends TestCase
     }
 
     /**
-     * The market-wide jump supplies part of a stock's return variance, so the diffusion must give up the same
-     * amount. Without the budget, connecting the jump stacked a second source of risk on an already
-     * calibrated baseline and every name in the district became roughly four points more volatile.
+     * Every jump a name is exposed to supplies part of its return variance, so the diffusion must give up
+     * the same amount. Without the budget, connecting a jump stacked a second source of risk on an already
+     * calibrated baseline and the name simply became more volatile than it was configured to be.
      */
-    public function testMarketWideJumpVarianceIsReclaimedFromTheDiffusion(): void
+    public function testJumpVarianceIsReclaimedFromTheDiffusion(): void
     {
         $baselineVol = 0.26;
 
-        $settledVolatility = function (float $beta) use ($baselineVol): float {
+        $settledVolatility = function (float $beta, float $lambda = 0.0) use ($baselineVol): float {
             $ctx = new MarketPricingContext(
                 currentPrice: 60.0,
                 currentVolatility: $baselineVol,
                 longTermVolatility: $baselineVol,
                 earningsPerShare: 5.0,
                 dt: 0.25,
-                lambda: 0.0, // No idiosyncratic jumps, so only the systemic budget moves the anchor.
+                lambda: $lambda,
                 beta: $beta,
                 macroState: new MacroStateDTO(policyRate: 0.04, equityRiskPremium: 0.045),
                 fcfPerShare: 4.0,
@@ -259,14 +259,28 @@ final class PriceFactorTransmissionTest extends TestCase
             return $this->engine->calculateNextPrice($ctx)['next_volatility'];
         };
 
+        // The budget is what keeps a jump from being free variance: turning the name's own jump process on
+        // must not make the name more volatile, because whatever the jump now supplies the diffusion gives
+        // back. This is the property the whole accounting exists for.
+        $calm = $settledVolatility(1.0, 0.0);
+        $jumpy = $settledVolatility(1.0, 1.50);
+
+        $this->assertEqualsWithDelta(
+            $calm,
+            $jumpy,
+            $calm * 0.02,
+            sprintf('Jump intensity is creating variance rather than displacing it: %.4f vs %.4f.', $calm, $jumpy)
+        );
+
+        // Total volatility RISES with beta, because a name's market loading is part of what it realizes.
+        // The previous decomposition had this backwards: it published the diffusion anchor alone, so a
+        // high-beta name looked QUIETER for taking more of the market's risk.
         $highBeta = $settledVolatility(2.0);
         $lowBeta = $settledVolatility(0.2);
 
-        // A name that takes more of the district's jump gives up more of its own diffusion.
-        $this->assertLessThan($lowBeta, $highBeta);
+        $this->assertGreaterThan($lowBeta, $highBeta);
 
-        // And the diffusion anchor sits below the configured baseline, because part of that budget is now
-        // delivered as jumps rather than as continuous diffusion.
-        $this->assertLessThan($baselineVol, $highBeta);
+        // A name can never be quieter than the market loading its own beta demands.
+        $this->assertGreaterThan(2.0 * 0.15, $highBeta);
     }
 }

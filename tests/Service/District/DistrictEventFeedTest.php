@@ -6,12 +6,10 @@ namespace App\Tests\Service\District;
 
 use App\Entity\Stock;
 use App\Entity\StockEvent;
+use App\Repository\StockEventRepository;
 use App\Service\District\DistrictEventFeed;
 use App\Service\Event\EventPresenter;
-use Doctrine\ORM\Query;
 use Doctrine\ORM\EntityManagerInterface;
-use Doctrine\ORM\EntityRepository;
-use Doctrine\ORM\QueryBuilder;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
@@ -30,11 +28,7 @@ class DistrictEventFeedTest extends TestCase
 {
     private EntityManagerInterface&MockObject $entityManager;
 
-    /** @var EntityRepository<StockEvent>&MockObject */
-    private EntityRepository&MockObject $repository;
-    private QueryBuilder&MockObject $queryBuilder;
-    /** @var Query<int, mixed>&MockObject */
-    private Query&MockObject $query;
+    private StockEventRepository&MockObject $repository;
     private MockClock $clock;
     private DistrictEventFeed $feed;
 
@@ -45,19 +39,8 @@ class DistrictEventFeedTest extends TestCase
     protected function setUp(): void
     {
         $this->entityManager = $this->createMock(EntityManagerInterface::class);
-        $this->repository = $this->createMock(EntityRepository::class);
+        $this->repository = $this->createMock(StockEventRepository::class);
         $this->entityManager->method('getRepository')->willReturn($this->repository);
-
-        $this->queryBuilder = $this->createMock(QueryBuilder::class);
-        $this->repository->method('createQueryBuilder')->willReturn($this->queryBuilder);
-        $this->queryBuilder->method('andWhere')->willReturn($this->queryBuilder);
-        $this->queryBuilder->method('setParameter')->willReturn($this->queryBuilder);
-        $this->queryBuilder->method('orderBy')->willReturn($this->queryBuilder);
-        $this->queryBuilder->method('addOrderBy')->willReturn($this->queryBuilder);
-        $this->queryBuilder->method('setMaxResults')->willReturn($this->queryBuilder);
-
-        $this->query = $this->createMock(Query::class);
-        $this->queryBuilder->method('getQuery')->willReturn($this->query);
 
         $this->clock = new MockClock('2026-03-14 09:30:00');
         $this->feed = new DistrictEventFeed(
@@ -101,7 +84,7 @@ class DistrictEventFeedTest extends TestCase
         $stock = $this->makeStock('LAKE');
         $shockEvent = $this->makeEvent($stock, 'SHOCK', 'A sudden liquidity event rattled the row.', -4.2);
 
-        $this->query->method('getResult')->willReturn([$shockEvent]);
+        $this->repository->method('findForStocksNewestFirst')->willReturn([$shockEvent]);
 
         $result = $this->feed->recentEventsByTicker([$stock]);
 
@@ -121,7 +104,7 @@ class DistrictEventFeedTest extends TestCase
         $event = $this->makeEvent($stock, 'BANKRUPTCY', 'Filed for liquidation.');
         $event->setRecordedAt(new \DateTime('2026-03-14 09:30:00'));
 
-        $this->query->method('getResult')->willReturn([$event]);
+        $this->repository->method('findForStocksNewestFirst')->willReturn([$event]);
 
         $result = $this->feed->recentEventsByTicker([$stock]);
 
@@ -134,8 +117,8 @@ class DistrictEventFeedTest extends TestCase
         $lake = $this->makeStock('LAKE');
         $swan = $this->makeStock('SWAN');
 
-        $this->repository->expects($this->once())->method('createQueryBuilder');
-        $this->query->method('getResult')->willReturn([]);
+        $this->repository->expects($this->once())->method('findForStocksNewestFirst');
+        $this->repository->method('findForStocksNewestFirst')->willReturn([]);
 
         $this->feed->recentEventsByTicker([$lake, $swan]);
     }
@@ -152,7 +135,7 @@ class DistrictEventFeedTest extends TestCase
         }
         $rows[] = $this->makeEvent($swan, 'EARNINGS', 'Swan report');
 
-        $this->query->method('getResult')->willReturn($rows);
+        $this->repository->method('findForStocksNewestFirst')->willReturn($rows);
 
         $result = $this->feed->recentEventsByTicker([$lake, $swan]);
 
@@ -163,7 +146,7 @@ class DistrictEventFeedTest extends TestCase
     public function testEmptyHistoryYieldsAnEmptyListNotAMissingKey(): void
     {
         $stock = $this->makeStock('ROOK');
-        $this->query->method('getResult')->willReturn([]);
+        $this->repository->method('findForStocksNewestFirst')->willReturn([]);
 
         $result = $this->feed->recentEventsByTicker([$stock]);
 
@@ -190,7 +173,7 @@ class DistrictEventFeedTest extends TestCase
         $stale = $this->makeEvent($stock, 'EARNINGS', 'Seven seconds ago');
         $stale->setRecordedAt(new \DateTime('2026-03-14 09:29:53'));
 
-        $this->query->method('getResult')->willReturn([$justNow, $onTheEdge, $stale]);
+        $this->repository->method('findForStocksNewestFirst')->willReturn([$justNow, $onTheEdge, $stale]);
 
         $result = $this->feed->recentEventsByTicker([$stock]);
 
@@ -204,7 +187,7 @@ class DistrictEventFeedTest extends TestCase
         $event = $this->makeEvent($stock, 'SHOCK', 'Rattled.');
         $event->setRecordedAt(new \DateTime('2026-03-14 09:00:00'));
 
-        $this->query->method('getResult')->willReturn([$event]);
+        $this->repository->method('findForStocksNewestFirst')->willReturn([$event]);
 
         $result = $this->feed->recentEventsByTicker([$stock]);
 

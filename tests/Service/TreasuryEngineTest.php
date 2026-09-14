@@ -776,6 +776,54 @@ class TreasuryEngineTest extends TestCase
     }
 
     /**
+     * Organic expansion is an NPV decision on the MARGINAL return — what the next dollar of plant earns at
+     * the firm's current scale — not on the average return its existing plant still earns. A saturated firm
+     * keeps a high average for as long as its old capital is in the ground; testing that let it deploy cash
+     * below its hurdle indefinitely. Both cases here pass the pacing draw at the same probability, so the
+     * only thing separating them is which side of the hurdle the marginal return falls on.
+     */
+    public function testOrganicCapexIsGatedOnTheMarginalReturnNotTheAverage(): void
+    {
+        $deploy = function (float $hurdle): CapitalAllocationContext {
+            mt_srand(7);
+            $stock = new Stock();
+            $stock->setTicker('SAT');
+            $stock->setTotalEquity('1000000000.00');
+            $stock->setCorporateTreasury('200000000.00');
+            $stock->setRoicTtm('0.60'); // the AVERAGE return: comfortably above either hurdle
+
+            $ctx = $this->createAllocationContext($stock, stockCompensation: 0.0);
+            $ctx->newTreasury = 200_000_000.0; // above the cash target, well short of hoarder territory
+            $ctx->debtActionTaken = false;     // no debt this quarter, so nothing forces a deployment
+            $ctx->health = new DebtHealthDTO(
+                grossCost: 0.05, effectiveCost: 0.05, cashYield: 0.04, isNegativeCarry: false, isSevereNegativeCarry: false,
+                interestCoverage: 15.0, wantsToPaydownDebt: false, canIssueDebt: false, debtTolerance: 1.0, wacc: $hurdle,
+                costOfEquity: $hurdle + 0.02, leveredBeta: 1.0, rawMetrics: $ctx->health->rawMetrics, isLiquidityCrisis: false,
+                isLiquidityWarning: false, isUnderLeveraged: false
+            );
+
+            // Saturation has taken the marginal return to 40%: the pacing draw sits at its 95% ceiling either way.
+            $this->corporateMetrics->method('calculateLiveInvestedCapital')->willReturn(1_000_000_000.0);
+            $this->corporateMetrics->method('calculateMarketSaturationPenalty')->willReturn(0.20);
+            $this->corporateMetrics->method('calculateMarginalReturn')->willReturn(0.40);
+
+            $capExEngine = $this->createMock(CapExEngine::class);
+            $capExEngine->expects($hurdle > 0.40 ? $this->never() : $this->once())->method('allocateGrowthCapEx');
+            $engine = new TreasuryEngine($this->corporateMetrics, $this->debtEngine, $capExEngine, $this->mathUtility);
+
+            $engine->executeCorporateStrategy($ctx);
+
+            return $ctx;
+        };
+
+        $cleared = $deploy(0.30); // marginal 40% > hurdle 30%
+        $this->assertGreaterThan(0.0, $cleared->organicCapex, 'With the marginal return above the hurdle the firm expands.');
+
+        $refused = $deploy(0.50); // average 60% > hurdle 50% > marginal 40%
+        $this->assertEqualsWithDelta(0.0, $refused->organicCapex, 1e-9, 'An average return above the hurdle is not a reason to deploy when the next dollar earns less than it costs.');
+    }
+
+    /**
      * A lender lends out whatever funding sits above its liquidity target, every quarter and in full, keeping
      * only this quarter's retained earnings back for capital return. The cash goes onto the earning-asset
      * ledger directly; nothing is queued as construction. A bank its regulator has frozen lends nothing.

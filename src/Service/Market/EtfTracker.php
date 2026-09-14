@@ -40,7 +40,7 @@ class EtfTracker
     {
 
         if ($etf === null) {
-            $etf = $this->entityManager->getRepository(Etf::class)->findOneBy(['ticker' => $ticker]);
+            $etf = $this->entityManager->getRepository(Etf::class)->findOneByTicker($ticker);
         }
         
         $divisor = $this->redis->get('market_index_divisor');

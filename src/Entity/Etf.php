@@ -5,7 +5,7 @@ namespace App\Entity;
 use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\Mapping as ORM;
 
-#[ORM\Entity]
+#[ORM\Entity(repositoryClass: \App\Repository\EtfRepository::class)]
 #[ORM\Table(name: 'etfs')]
 class Etf
 {

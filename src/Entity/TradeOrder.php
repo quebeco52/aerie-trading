@@ -5,11 +5,22 @@ namespace App\Entity;
 use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\Mapping as ORM;
 
-#[ORM\Entity]
+#[ORM\Entity(repositoryClass: \App\Repository\TradeOrderRepository::class)]
 #[ORM\Table(name: 'trade_orders')]
 #[ORM\Index(columns: ['ticker', 'status', 'action', 'limit_price'], name: 'idx_trade_order_lookup')]
 class TradeOrder
 {
+    // --- Order Status ---
+
+    /** Resting on the book, still fillable, and its funds or shares still escrowed against the account. */
+    public const STATUS_OPEN = 'OPEN';
+
+    /** Executed in full; the row is now a permanent record of an execution and feeds the cost basis. */
+    public const STATUS_FILLED = 'FILLED';
+
+    /** Withdrawn before filling, by the trader or by a liquidation; escrow released, no execution. */
+    public const STATUS_CANCELLED = 'CANCELLED';
+
     #[ORM\Id]
     #[ORM\GeneratedValue]
     #[ORM\Column]
@@ -58,7 +69,7 @@ class TradeOrder
     private ?string $impactCost = null;
 
     #[ORM\Column(length: 20)]
-    private ?string $status = 'OPEN'; // 'OPEN', 'FILLED', 'CANCELLED'
+    private ?string $status = self::STATUS_OPEN;
 
     #[ORM\Column(type: Types::DATETIME_MUTABLE)]
     private ?\DateTimeInterface $createdAt = null;

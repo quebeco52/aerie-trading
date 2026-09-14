@@ -119,9 +119,14 @@ class StandardCorporateBusinessModel implements BusinessModelInterface
             $baselineRoic = ($baselineRoic * self::BASELINE_ROIC_WEIGHT) + ($ttmRoic * self::TTM_ROIC_WEIGHT);
         }
 
+        // The return the firm can expect on its NEXT dollar of capital: the structural return less the
+        // Penrose diseconomy of its current scale. This is the figure EarningsEngine::calculateGrowthCapEx
+        // tests against the hurdle, so it has to be allowed BELOW the hurdle — that is the whole NPV rule.
+        // Flooring it at the cost of equity pinned it at policy rate + ERP from the first saturated quarter
+        // onward, so a penalty of 0.9 and a penalty of zero produced the same number, the gate could never
+        // fire, and a firm whose capital already exceeded the market it served kept reinvesting at 7% a year.
         $saturationPenalty = \App\Service\Math\CorporateMetrics::getInstance()->calculateMarketSaturationPenalty($stock, $stock->getInvestedCapital(), $macroState);
-        $waccBase = $macroState->policyRate + $macroState->equityRiskPremium;
-        $effectiveRoic = max($waccBase, $baselineRoic - $saturationPenalty);
+        $effectiveRoic = max(0.0, $baselineRoic - $saturationPenalty);
 
         return [
             'invested_capital' => $stock->getInvestedCapital(),
@@ -267,6 +272,11 @@ class StandardCorporateBusinessModel implements BusinessModelInterface
             $saturationPenalty = \App\Service\Math\CorporateMetrics::getInstance()->calculateMarketSaturationPenalty($stock, abs($investedCapital), $macroState);
         }
 
+        // Scale diseconomies eat the moat, but no further: this is the AVERAGE return on capital already in
+        // the ground, and a firm that has stopped adding capital keeps earning what its plant earns. The
+        // saturation penalty is a MARGINAL quantity — it belongs in the growth gate (getTargetMetrics), where
+        // it decides whether the next dollar is deployed. Letting it pull the average below WACC halved the
+        // reported return of every saturated firm while its books printed the old figure.
         $effectiveMoat = max(0.0, $moatSpread - $saturationPenalty);
         $newTtm += MathUtility::getInstance()->calculateReversionPull($newTtm, $wacc, $scaledKappa, $effectiveMoat);
         $stock->setRoicTtm((string) max(-0.50, min(1.0, $newTtm)));

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\DTO;
 
+use App\Data\MacroFieldRegistry;
 use App\Service\Macro\MacroEngine;
 use App\Service\Macro\MacroState;
 
@@ -13,6 +14,38 @@ use App\Service\Macro\MacroState;
  */
 readonly class MacroStateDTO
 {
+    // --- Hydration Openings ---
+
+    /** Output gap a payload with no reading of its own opens at; the seeded market starts mid-expansion, not at trend. */
+    private const HYDRATION_OUTPUT_GAP = 0.02;
+
+    /** 5y-over-policy term spread used to rebuild a curve the payload does not carry (~50bps). */
+    private const HYDRATION_5Y_SPREAD = 0.005;
+
+    /** 10y-over-policy term spread used to rebuild a curve the payload does not carry (~100bps). */
+    private const HYDRATION_10Y_SPREAD = 0.01;
+
+    /** 30y-over-policy term spread used to rebuild a curve the payload does not carry (~150bps). */
+    private const HYDRATION_30Y_SPREAD = 0.015;
+
+    /**
+     * Seeds this snapshot adds to the shared set, for openings only a snapshot needs.
+     *
+     * App\Data\MacroFieldRegistry::seeds() already carries the seeds both readers share — every
+     * `*Ema` pair, plus the three declared in its SEED_OVERRIDES (energyBasePrice,
+     * supercoreInflation, coreGoodsInflation) that the naming convention does not describe. These
+     * three are on top of those, and are not seeded when the engine's own state is hydrated: a
+     * snapshot is read by the pricing surfaces, which cannot be handed a zero for a breakeven, a
+     * structural slope or a 2y yield just because the payload predates that field.
+     *
+     * @var array<string, string>
+     */
+    private const HYDRATION_SEEDS = [
+        'tipsBreakeven' => 'inflation',
+        'structuralSlope' => 'nsSlope',
+        'yield2y' => 'policyRate',
+    ];
+
     public function __construct(
         public float $totalTime = 0.0,
         public float $outputGap = 0.0,
@@ -164,284 +197,86 @@ readonly class MacroStateDTO
     ) {}
 
     /**
-     * Constructs a MacroStateDTO from an associative array payload with defaults.
+     * Constructs a MacroStateDTO from the snake_case payload Redis carries.
+     *
+     * The field list comes from App\Data\MacroFieldRegistry rather than being named here a second
+     * time, so an observable added to the constructor is read back off the wire immediately. A field
+     * this method forgot used to hydrate its opening value on every load with nothing failing — the
+     * caller still got a plausible number, just not the recorded one.
+     *
+     * Three passes, in order: the values the payload carries, the openings computed from those
+     * values, then the series that start level with the series they smooth.
+     *
+     * @param array<string, mixed> $data Decoded payload keyed by wire key.
      */
     public static function fromArray(array $data): self
     {
-        $totalTime = (float) ($data['total_time'] ?? 0.0);
-        $inflation = (float) ($data['inflation'] ?? MacroEngine::TARGET_INFLATION);
-        $inflationEma = (float) ($data['inflation_ema'] ?? $inflation);
-        $tipsBreakeven = (float) ($data['tips_breakeven'] ?? $inflation);
-        $tipsBreakevenEma = (float) ($data['tips_breakeven_ema'] ?? $tipsBreakeven);
-        $outputGap = (float) ($data['output_gap'] ?? 0.02);
-        $outputGapEma = (float) ($data['output_gap_ema'] ?? $outputGap);
-        $capitalStockOverhang = (float) ($data['capital_stock_overhang'] ?? 0.0);
-        $capitalStockOverhangEma = (float) ($data['capital_stock_overhang_ema'] ?? $capitalStockOverhang);
-        
-        $unemploymentRate = (float) ($data['unemployment_rate'] ?? 0.04);
-        $unemploymentRateEma = (float) ($data['unemployment_rate_ema'] ?? $unemploymentRate);
-        $jobVacanciesRate = (float) ($data['job_vacancies_rate'] ?? 0.045);
-        $jobVacanciesRateEma = (float) ($data['job_vacancies_rate_ema'] ?? $jobVacanciesRate);
-        $laborTightness = (float) ($data['labor_tightness'] ?? 1.125);
-        $laborTightnessEma = (float) ($data['labor_tightness_ema'] ?? $laborTightness);
-        $wageGrowth = (float) ($data['wage_growth'] ?? 0.035);
-        $wageGrowthEma = (float) ($data['wage_growth_ema'] ?? $wageGrowth);
-        $nairu = (float) ($data['nairu'] ?? MacroEngine::NATURAL_UNEMPLOYMENT);
-        $nairuEma = (float) ($data['nairu_ema'] ?? $nairu);
+        $fields = MacroFieldRegistry::wireKeys();
+        $defaults = MacroFieldRegistry::defaults();
 
-        $naturalRate = (float) ($data['natural_rate'] ?? MacroEngine::BASE_NATURAL_RATE);
-        $naturalRateEma = (float) ($data['natural_rate_ema'] ?? $naturalRate);
-        
-        $energyPriceIndex = (float) ($data['energy_price_index'] ?? 100.0);
-        $energyPriceIndexEma = (float) ($data['energy_price_index_ema'] ?? $energyPriceIndex);
-        $energyPriceShock = (float) ($data['energy_price_shock'] ?? 0.0);
-        $energyBasePrice = (float) ($data['energy_base_price'] ?? $energyPriceIndex);
-        $energyCostPushLag = (float) ($data['energy_cost_push_lag'] ?? 0.0);
-        $agriCostPushLag = (float) ($data['agri_cost_push_lag'] ?? 0.0);
-        $consumerSentimentIndex = (float) ($data['consumer_sentiment_index'] ?? 100.0);
-        $consumerSentimentIndexEma = (float) ($data['consumer_sentiment_index_ema'] ?? $consumerSentimentIndex);
+        // A field the payload omits keeps the opening value the constructor declares for it.
+        $args = [];
+        foreach ($fields as $field => $key) {
+            if (!isset($data[$key])) {
+                continue;
+            }
 
-        $exchangeRateIndex = (float) ($data['exchange_rate_index'] ?? 100.0);
-        $exchangeRateIndexEma = (float) ($data['exchange_rate_index_ema'] ?? $exchangeRateIndex);
-        $industrialMetalsIndex = (float) ($data['industrial_metals_index'] ?? 100.0);
-        $industrialMetalsIndexEma = (float) ($data['industrial_metals_index_ema'] ?? $industrialMetalsIndex);
-        $metalsChi = (float) ($data['metals_chi'] ?? 0.0);
-        $metalsXi = (float) ($data['metals_xi'] ?? 4.60517);
-        $governmentSpendingIndex = (float) ($data['government_spending_index'] ?? 100.0);
-        $governmentSpendingIndexEma = (float) ($data['government_spending_index_ema'] ?? $governmentSpendingIndex);
-        $commercialPropertyIndex = (float) ($data['commercial_property_index'] ?? 100.0);
-        $commercialPropertyIndexEma = (float) ($data['commercial_property_index_ema'] ?? $commercialPropertyIndex);
-        $residentialPropertyIndex = (float) ($data['residential_property_index'] ?? 100.0);
-        $residentialPropertyIndexEma = (float) ($data['residential_property_index_ema'] ?? $residentialPropertyIndex);
-        $retailDefaultRate = (float) ($data['retail_default_rate'] ?? 0.0250);
-        $retailDefaultRateEma = (float) ($data['retail_default_rate_ema'] ?? $retailDefaultRate);
-        $agriculturalCommodityIndex = (float) ($data['agricultural_commodity_index'] ?? 100.0);
-        $agriculturalCommodityIndexEma = (float) ($data['agricultural_commodity_index_ema'] ?? $agriculturalCommodityIndex);
-        $agriChi = (float) ($data['agri_chi'] ?? 0.0);
-        $agriXi = (float) ($data['agri_xi'] ?? 4.60517);
-        $freightRateIndex = (float) ($data['freight_rate_index'] ?? 100.0);
-        $freightRateIndexEma = (float) ($data['freight_rate_index_ema'] ?? $freightRateIndex);
-        $freightSupplyEma = (float) ($data['freight_supply_ema'] ?? 100.0);
-        
-        $policyRate = (float) ($data['policy_rate'] ?? 0.02);
-        $policyRateEma = (float) ($data['policy_rate_ema'] ?? $policyRate);
-        $targetRate = (float) ($data['target_rate'] ?? 0.02);
+            $args[$field] = match ($field) {
+                'sectorZ', 'sectorDemandZ' => is_array($data[$key]) ? array_map('floatval', $data[$key]) : [],
+                'qeActive', 'qtActive' => (bool) $data[$key],
+                'eventType' => (string) $data[$key],
+                default => (float) $data[$key],
+            };
+        }
 
-        $yield2y = (float) ($data['yield_2y'] ?? $policyRate);
-        $yield2yEma = (float) ($data['yield_2y_ema'] ?? $yield2y);
-        $yield5y = (float) ($data['yield_5y'] ?? ($policyRate + 0.005));
-        $yield5yEma = (float) ($data['yield5y_ema'] ?? ($data['yield_5y_ema'] ?? $yield5y));
-        $yield10y = (float) ($data['yield_10y'] ?? ($policyRate + 0.01));
-        $yield10yEma = (float) ($data['yield_10y_ema'] ?? $yield10y);
-        $yield30y = (float) ($data['yield_30y'] ?? ($policyRate + 0.015));
-        $yield30yEma = (float) ($data['yield_30y_ema'] ?? $yield30y);
+        // By reference: the passes below read openings the earlier passes have already computed.
+        $resolve = static function (string $field) use (&$args, $defaults): mixed {
+            return $args[$field] ?? $defaults[$field];
+        };
 
-        $termPremium10y = (float) ($data['term_premium_10y'] ?? 0.0125);
-        $termPremium10yEma = (float) ($data['term_premium_10y_ema'] ?? $termPremium10y);
-        $riskNeutral10y = (float) ($data['risk_neutral_10y'] ?? 0.0250);
-        $riskNeutral10yEma = (float) ($data['risk_neutral_10y_ema'] ?? $riskNeutral10y);
-        $termPremiumShock = (float) ($data['term_premium_shock'] ?? 0.0);
-        $termPremiumRegime = (float) ($data['term_premium_regime'] ?? MacroEngine::NS_BASE_TERM_PREMIUM);
-        $perceivedNeutralRate = (float) ($data['perceived_neutral_rate'] ?? (MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION));
-        $restrictiveDuration = (float) ($data['restrictive_duration'] ?? 0.0);
+        // A snapshot rehydrated cold sits at the top of the cycle rather than at trend, which is
+        // where the seeded market opens; the constructor's own zero is for a DTO built field by field.
+        $args['outputGap'] ??= self::HYDRATION_OUTPUT_GAP;
 
-        $marketVolatility = (float) ($data['market_volatility'] ?? 0.15);
-        $marketVolatilityEma = (float) ($data['market_volatility_ema'] ?? $marketVolatility);
-        $marketZ = (float) ($data['market_z'] ?? 0.0);
-        $marketZLatent = (float) ($data['market_z_latent'] ?? 0.0);
-        $marketJumpMultiplier = (float) ($data['market_jump_multiplier'] ?? 1.0);
-        $sectorZ = is_array($data['sector_z'] ?? null) ? array_map('floatval', $data['sector_z']) : [];
-        $sectorDemandZ = is_array($data['sector_demand_z'] ?? null) ? array_map('floatval', $data['sector_demand_z']) : [];
+        // The smoothed 5y was recorded under the macro_report column spelling before the wire key
+        // existed, and a payload carrying both is a database row, so the column spelling wins.
+        if (isset($data['yield5y_ema'])) {
+            $args['yield5yEma'] = (float) $data['yield5y_ema'];
+        }
 
-        $corporateTaxRate = (float) ($data['corporate_tax_rate'] ?? MacroEngine::BASE_CORPORATE_TAX_RATE);
-        $sovereignDebtToGdp = (float) ($data['sovereign_debt_to_gdp'] ?? MacroEngine::INITIAL_DEBT_TO_GDP);
-        $sovereignDebtToGdpEma = (float) ($data['sovereign_debt_to_gdp_ema'] ?? $sovereignDebtToGdp);
-        $equityRiskPremium = (float) ($data['equity_risk_premium'] ?? MacroEngine::BASE_EQUITY_RISK_PREMIUM);
-        $macroCreditSpread = (float) ($data['macro_credit_spread'] ?? MacroEngine::BASE_CREDIT_SPREAD);
-        $macroCreditSpreadEma = (float) ($data['macro_credit_spread_ema'] ?? $macroCreditSpread);
-        $interbankLiquiditySpread = (float) ($data['interbank_liquidity_spread'] ?? MacroEngine::INTERBANK_BASELINE_SPREAD);
-        $interbankLiquiditySpreadEma = (float) ($data['interbank_liquidity_spread_ema'] ?? $interbankLiquiditySpread);
-        $totalFactorProductivityIndex = (float) ($data['total_factor_productivity_index'] ?? MacroEngine::TFP_BASELINE);
-        $totalFactorProductivityIndexEma = (float) ($data['total_factor_productivity_index_ema'] ?? $totalFactorProductivityIndex);
-        $financialConditionsIndex = (float) ($data['financial_conditions_index'] ?? 0.0);
-        $financialConditionsIndexEma = (float) ($data['financial_conditions_index_ema'] ?? $financialConditionsIndex);
+        // Balance sheet intensity was recorded as a one-sided qe_intensity before QT existed.
+        $args['balanceSheetIntensity'] ??= (float) ($data['qe_intensity'] ?? 0.0);
+        $balanceSheetIntensity = $args['balanceSheetIntensity'];
 
-        $balanceSheetIntensity = (float) ($data['balance_sheet_intensity'] ?? ($data['qe_intensity'] ?? 0.0));
-        $balanceSheetHoldTimer = (float) ($data['balance_sheet_hold_timer'] ?? 0.0);
-        $qeActive = (bool) ($data['qe_active'] ?? ($balanceSheetIntensity > 0.0005));
-        $qeIntensity = (float) ($data['qe_intensity'] ?? max(0.0, $balanceSheetIntensity));
-        $qtActive = (bool) ($data['qt_active'] ?? ($balanceSheetIntensity < -0.0005));
-        $qtIntensity = (float) ($data['qt_intensity'] ?? max(0.0, -$balanceSheetIntensity));
+        $args['qeActive'] ??= $balanceSheetIntensity > MacroEngine::BALANCE_SHEET_ACTIVE_THRESHOLD;
+        $args['qeIntensity'] ??= max(0.0, $balanceSheetIntensity);
+        $args['qtActive'] ??= $balanceSheetIntensity < -MacroEngine::BALANCE_SHEET_ACTIVE_THRESHOLD;
+        $args['qtIntensity'] ??= max(0.0, -$balanceSheetIntensity);
 
-        $inversionDuration = (float) ($data['inversion_duration'] ?? 0.0);
-        $nsLevel = (float) ($data['ns_level'] ?? 0.0);
-        $nsSlope = (float) ($data['ns_slope'] ?? 0.0);
-        $nsSlopeEma = (float) ($data['ns_slope_ema'] ?? $nsSlope);
-        $structuralSlope = (float) ($data['structural_slope'] ?? $nsSlope);
-        $nsCurvature = (float) ($data['ns_curvature'] ?? 0.0);
-        $nsCurvature2 = (float) ($data['ns_curvature2'] ?? 0.0);
-        $nsBeta1 = (float) ($data['ns_beta1'] ?? ($policyRate - $nsLevel));
-        $nsBaseTermPremium = (float) ($data['ns_base_term_premium'] ?? MacroEngine::NS_BASE_TERM_PREMIUM);
-        $nsLongEndPremium = (float) ($data['ns_long_end_premium'] ?? MacroEngine::NS_BASE_TERM_PREMIUM);
+        // A curve absent from the payload is rebuilt off the policy rate at the standard term spreads,
+        // so the bond desk never discounts against a flat zero curve.
+        $args['yield5y'] ??= $resolve('policyRate') + self::HYDRATION_5Y_SPREAD;
+        $args['yield10y'] ??= $resolve('policyRate') + self::HYDRATION_10Y_SPREAD;
+        $args['yield30y'] ??= $resolve('policyRate') + self::HYDRATION_30Y_SPREAD;
 
-        $nominalGdpIndex = (float) ($data['nominal_gdp_index'] ?? 1.0);
-        $potentialGdpIndex = (float) ($data['potential_gdp_index'] ?? ($nominalGdpIndex / (1.0 + $outputGap)));
-        $gdpDeflator = (float) ($data['gdp_deflator'] ?? 1.0);
-        $eventType = isset($data['event_type']) ? (string) $data['event_type'] : null;
-        $eventCooldownTimer = (float) ($data['event_cooldown_timer'] ?? 0.0);
+        // Nelson-Siegel beta1 is the short-end spread of the curve, not a free parameter.
+        $args['nsBeta1'] ??= $resolve('policyRate') - $resolve('nsLevel');
+        $args['potentialGdpIndex'] ??= $resolve('nominalGdpIndex') / (1.0 + $resolve('outputGap'));
+        $args['highYieldCreditSpread'] ??= $resolve('macroCreditSpread') * MacroEngine::HY_BASE_SPREAD_MULTIPLIER;
 
-        return new self(
-            totalTime: $totalTime,
-            outputGap: $outputGap,
-            outputGapEma: $outputGapEma,
-            capitalStockOverhang: $capitalStockOverhang,
-            capitalStockOverhangEma: $capitalStockOverhangEma,
-            unemploymentRate: $unemploymentRate,
-            unemploymentRateEma: $unemploymentRateEma,
-            jobVacanciesRate: $jobVacanciesRate,
-            jobVacanciesRateEma: $jobVacanciesRateEma,
-            laborTightness: $laborTightness,
-            laborTightnessEma: $laborTightnessEma,
-            wageGrowth: $wageGrowth,
-            wageGrowthEma: $wageGrowthEma,
-            nairu: $nairu,
-            nairuEma: $nairuEma,
-            naturalRate: $naturalRate,
-            naturalRateEma: $naturalRateEma,
-            energyPriceIndex: $energyPriceIndex,
-            energyPriceIndexEma: $energyPriceIndexEma,
-            energyPriceShock: $energyPriceShock,
-            energyBasePrice: $energyBasePrice,
-            energyCostPushLag: $energyCostPushLag,
-            agriCostPushLag: $agriCostPushLag,
-            consumerSentimentIndex: $consumerSentimentIndex,
-            consumerSentimentIndexEma: $consumerSentimentIndexEma,
-            exchangeRateIndex: $exchangeRateIndex,
-            exchangeRateIndexEma: $exchangeRateIndexEma,
-            industrialMetalsIndex: $industrialMetalsIndex,
-            industrialMetalsIndexEma: $industrialMetalsIndexEma,
-            metalsChi: $metalsChi,
-            metalsXi: $metalsXi,
-            governmentSpendingIndex: $governmentSpendingIndex,
-            governmentSpendingIndexEma: $governmentSpendingIndexEma,
-            commercialPropertyIndex: $commercialPropertyIndex,
-            commercialPropertyIndexEma: $commercialPropertyIndexEma,
-            residentialPropertyIndex: $residentialPropertyIndex,
-            residentialPropertyIndexEma: $residentialPropertyIndexEma,
-            retailDefaultRate: $retailDefaultRate,
-            retailDefaultRateEma: $retailDefaultRateEma,
-            agriculturalCommodityIndex: $agriculturalCommodityIndex,
-            agriculturalCommodityIndexEma: $agriculturalCommodityIndexEma,
-            agriChi: $agriChi,
-            agriXi: $agriXi,
-            freightRateIndex: $freightRateIndex,
-            freightRateIndexEma: $freightRateIndexEma,
-            freightSupplyEma: $freightSupplyEma,
-            inflation: $inflation,
-            inflationEma: $inflationEma,
-            tipsBreakeven: $tipsBreakeven,
-            tipsBreakevenEma: $tipsBreakevenEma,
-            policyRate: $policyRate,
-            policyRateEma: $policyRateEma,
-            targetRate: $targetRate,
-            yield2y: $yield2y,
-            yield2yEma: $yield2yEma,
-            yield5y: $yield5y,
-            yield5yEma: $yield5yEma,
-            yield10y: $yield10y,
-            yield10yEma: $yield10yEma,
-            yield30y: $yield30y,
-            yield30yEma: $yield30yEma,
-            termPremium10y: $termPremium10y,
-            termPremium10yEma: $termPremium10yEma,
-            riskNeutral10y: $riskNeutral10y,
-            riskNeutral10yEma: $riskNeutral10yEma,
-            termPremiumShock: $termPremiumShock,
-            termPremiumRegime: $termPremiumRegime,
-            perceivedNeutralRate: $perceivedNeutralRate,
-            restrictiveDuration: $restrictiveDuration,
-            marketVolatility: $marketVolatility,
-            marketVolatilityEma: $marketVolatilityEma,
-            marketZ: $marketZ,
-            marketZLatent: $marketZLatent,
-            marketJumpMultiplier: $marketJumpMultiplier,
-            sectorZ: $sectorZ,
-            sectorDemandZ: $sectorDemandZ,
-            corporateTaxRate: $corporateTaxRate,
-            sovereignDebtToGdp: $sovereignDebtToGdp,
-            sovereignDebtToGdpEma: $sovereignDebtToGdpEma,
-            equityRiskPremium: $equityRiskPremium,
-            macroCreditSpread: $macroCreditSpread,
-            macroCreditSpreadEma: $macroCreditSpreadEma,
-            interbankLiquiditySpread: $interbankLiquiditySpread,
-            interbankLiquiditySpreadEma: $interbankLiquiditySpreadEma,
-            totalFactorProductivityIndex: $totalFactorProductivityIndex,
-            totalFactorProductivityIndexEma: $totalFactorProductivityIndexEma,
-            financialConditionsIndex: $financialConditionsIndex,
-            financialConditionsIndexEma: $financialConditionsIndexEma,
-            qeActive: $qeActive,
-            qeIntensity: $qeIntensity,
-            qtActive: $qtActive,
-            qtIntensity: $qtIntensity,
-            balanceSheetIntensity: $balanceSheetIntensity,
-            balanceSheetHoldTimer: $balanceSheetHoldTimer,
-            inversionDuration: $inversionDuration,
-            nsLevel: $nsLevel,
-            nsSlope: $nsSlope,
-            nsSlopeEma: $nsSlopeEma,
-            structuralSlope: $structuralSlope,
-            nsCurvature: $nsCurvature,
-            nsCurvature2: $nsCurvature2,
-            nsBeta1: $nsBeta1,
-            nsBaseTermPremium: $nsBaseTermPremium,
-            nsLongEndPremium: $nsLongEndPremium,
-            potentialGdpIndex: $potentialGdpIndex,
-            nominalGdpIndex: $nominalGdpIndex,
-            gdpDeflator: $gdpDeflator,
-            eventType: $eventType,
-            eventCooldownTimer: $eventCooldownTimer,
-            supercoreInflation: (float) ($data['supercore_inflation'] ?? $inflation),
-            supercoreInflationEma: (float) ($data['supercore_inflation_ema'] ?? ($data['supercore_inflation'] ?? $inflation)),
-            coreGoodsInflation: (float) ($data['core_goods_inflation'] ?? $inflation),
-            coreGoodsInflationEma: (float) ($data['core_goods_inflation_ema'] ?? ($data['core_goods_inflation'] ?? $inflation)),
-            cumulativeInflationGap: (float) ($data['cumulative_inflation_gap'] ?? 0.0),
-            cumulativeInflationGapEma: (float) ($data['cumulative_inflation_gap_ema'] ?? ($data['cumulative_inflation_gap'] ?? 0.0)),
-            highYieldCreditSpread: (float) ($data['high_yield_credit_spread'] ?? ($macroCreditSpread * MacroEngine::HY_BASE_SPREAD_MULTIPLIER)),
-            highYieldCreditSpreadEma: (float) ($data['high_yield_credit_spread_ema'] ?? ($data['high_yield_credit_spread'] ?? ($macroCreditSpread * MacroEngine::HY_BASE_SPREAD_MULTIPLIER))),
-            inventoryStockGap: (float) ($data['inventory_stock_gap'] ?? 0.0),
-            inventoryStockGapEma: (float) ($data['inventory_stock_gap_ema'] ?? ($data['inventory_stock_gap'] ?? 0.0)),
-            energyInventoryIndex: (float) ($data['energy_inventory_index'] ?? MacroEngine::COMMODITY_INVENTORY_BASELINE),
-            energyInventoryIndexEma: (float) ($data['energy_inventory_index_ema'] ?? ($data['energy_inventory_index'] ?? MacroEngine::COMMODITY_INVENTORY_BASELINE)),
-            capacityUtilizationRate: (float) ($data['capacity_utilization_rate'] ?? MacroEngine::CU_BASELINE),
-            capacityUtilizationRateEma: (float) ($data['capacity_utilization_rate_ema'] ?? ($data['capacity_utilization_rate'] ?? MacroEngine::CU_BASELINE)),
-            recessionProbability: (float) ($data['recession_probability'] ?? 0.15),
-            recessionProbabilityEma: (float) ($data['recession_probability_ema'] ?? ($data['recession_probability'] ?? 0.15)),
-            corporateDefaultRate: (float) ($data['corporate_default_rate'] ?? MacroEngine::CORPORATE_DEFAULT_BASELINE),
-            corporateDefaultRateEma: (float) ($data['corporate_default_rate_ema'] ?? ($data['corporate_default_rate'] ?? MacroEngine::CORPORATE_DEFAULT_BASELINE)),
-            sloosTighteningIndex: (float) ($data['sloos_tightening_index'] ?? 0.0),
-            sloosTighteningIndexEma: (float) ($data['sloos_tightening_index_ema'] ?? ($data['sloos_tightening_index'] ?? 0.0)),
-            supplyChainPressureIndex: (float) ($data['supply_chain_pressure_index'] ?? 0.0),
-            supplyChainPressureIndexEma: (float) ($data['supply_chain_pressure_index_ema'] ?? ($data['supply_chain_pressure_index'] ?? 0.0)),
-            refiningCrackSpread: (float) ($data['refining_crack_spread'] ?? MacroEngine::CRACK_SPREAD_BASELINE),
-            refiningCrackSpreadEma: (float) ($data['refining_crack_spread_ema'] ?? ($data['refining_crack_spread'] ?? MacroEngine::CRACK_SPREAD_BASELINE)),
-            dealActivityIndex: (float) ($data['deal_activity_index'] ?? MacroEngine::DEAL_ACTIVITY_BASELINE),
-            dealActivityIndexEma: (float) ($data['deal_activity_index_ema'] ?? ($data['deal_activity_index'] ?? MacroEngine::DEAL_ACTIVITY_BASELINE)),
-            manufacturingPmi: (float) ($data['manufacturing_pmi'] ?? MacroEngine::PMI_BASELINE),
-            manufacturingPmiEma: (float) ($data['manufacturing_pmi_ema'] ?? ($data['manufacturing_pmi'] ?? MacroEngine::PMI_BASELINE)),
-            producerPriceInflation: (float) ($data['producer_price_inflation'] ?? MacroEngine::TARGET_INFLATION),
-            producerPriceInflationEma: (float) ($data['producer_price_inflation_ema'] ?? ($data['producer_price_inflation'] ?? MacroEngine::TARGET_INFLATION)),
-            tradeBalanceToGdp: (float) ($data['trade_balance_to_gdp'] ?? MacroEngine::TRADE_BALANCE_BASELINE),
-            tradeBalanceToGdpEma: (float) ($data['trade_balance_to_gdp_ema'] ?? ($data['trade_balance_to_gdp'] ?? MacroEngine::TRADE_BALANCE_BASELINE)),
-            housingStartsIndex: (float) ($data['housing_starts_index'] ?? MacroEngine::HOUSING_STARTS_BASELINE),
-            housingStartsIndexEma: (float) ($data['housing_starts_index_ema'] ?? ($data['housing_starts_index'] ?? MacroEngine::HOUSING_STARTS_BASELINE)),
-            moneySupplyGrowth: (float) ($data['money_supply_growth'] ?? MacroEngine::M2_BASE_GROWTH),
-            moneySupplyGrowthEma: (float) ($data['money_supply_growth_ema'] ?? ($data['money_supply_growth'] ?? MacroEngine::M2_BASE_GROWTH)),
-        );
+        // A smoothed series with no reading of its own opens level with the series it smooths. Walked
+        // in constructor order so a series seeded from one that is itself seeded resolves in one pass.
+        $seeds = MacroFieldRegistry::seeds() + self::HYDRATION_SEEDS;
+        foreach (array_keys($fields) as $field) {
+            if (isset($args[$field]) || !isset($seeds[$field])) {
+                continue;
+            }
+
+            $args[$field] = $resolve($seeds[$field]);
+        }
+
+        return new self(...$args);
     }
-
-    /**
-     * Creates a MacroStateDTO from a MacroState entity/model object.
-     */
     /**
      * The fitted term structure, ready for the bond desk to discount an arbitrary maturity against.
      *
@@ -495,308 +330,36 @@ readonly class MacroStateDTO
         };
     }
 
+    /**
+     * Snapshots the engine's mutable state vector into this immutable DTO.
+     *
+     * Every field is carried across by name, so the field list comes from
+     * App\Data\MacroFieldRegistry rather than being spelled out a second time; MacroState declares
+     * an identically named property for each of this constructor's parameters, and
+     * App\Tests\DTO\MacroFieldRegistryTest fails if that ever stops being true.
+     */
     public static function fromMacroState(MacroState $state): self
     {
-        return new self(
-            totalTime: $state->totalTime,
-            outputGap: $state->outputGap,
-            outputGapEma: $state->outputGapEma,
-            capitalStockOverhang: $state->capitalStockOverhang,
-            capitalStockOverhangEma: $state->capitalStockOverhangEma,
-            unemploymentRate: $state->unemploymentRate,
-            unemploymentRateEma: $state->unemploymentRateEma,
-            jobVacanciesRate: $state->jobVacanciesRate,
-            jobVacanciesRateEma: $state->jobVacanciesRateEma,
-            laborTightness: $state->laborTightness,
-            laborTightnessEma: $state->laborTightnessEma,
-            wageGrowth: $state->wageGrowth,
-            wageGrowthEma: $state->wageGrowthEma,
-            nairu: $state->nairu,
-            nairuEma: $state->nairuEma,
-            naturalRate: $state->naturalRate,
-            naturalRateEma: $state->naturalRateEma,
-            energyPriceIndex: $state->energyPriceIndex,
-            energyPriceIndexEma: $state->energyPriceIndexEma,
-            energyPriceShock: $state->energyPriceShock,
-            energyBasePrice: $state->energyBasePrice,
-            energyCostPushLag: $state->energyCostPushLag,
-            agriCostPushLag: $state->agriCostPushLag,
-            consumerSentimentIndex: $state->consumerSentimentIndex,
-            consumerSentimentIndexEma: $state->consumerSentimentIndexEma,
-            exchangeRateIndex: $state->exchangeRateIndex,
-            exchangeRateIndexEma: $state->exchangeRateIndexEma,
-            industrialMetalsIndex: $state->industrialMetalsIndex,
-            industrialMetalsIndexEma: $state->industrialMetalsIndexEma,
-            metalsChi: $state->metalsChi,
-            metalsXi: $state->metalsXi,
-            governmentSpendingIndex: $state->governmentSpendingIndex,
-            governmentSpendingIndexEma: $state->governmentSpendingIndexEma,
-            commercialPropertyIndex: $state->commercialPropertyIndex,
-            commercialPropertyIndexEma: $state->commercialPropertyIndexEma,
-            residentialPropertyIndex: $state->residentialPropertyIndex,
-            residentialPropertyIndexEma: $state->residentialPropertyIndexEma,
-            retailDefaultRate: $state->retailDefaultRate,
-            retailDefaultRateEma: $state->retailDefaultRateEma,
-            agriculturalCommodityIndex: $state->agriculturalCommodityIndex,
-            agriculturalCommodityIndexEma: $state->agriculturalCommodityIndexEma,
-            agriChi: $state->agriChi,
-            agriXi: $state->agriXi,
-            freightRateIndex: $state->freightRateIndex,
-            freightRateIndexEma: $state->freightRateIndexEma,
-            freightSupplyEma: $state->freightSupplyEma,
-            inflation: $state->inflation,
-            inflationEma: $state->inflationEma,
-            tipsBreakeven: $state->tipsBreakeven,
-            tipsBreakevenEma: $state->tipsBreakevenEma,
-            policyRate: $state->policyRate,
-            policyRateEma: $state->policyRateEma,
-            targetRate: $state->targetRate,
-            yield2y: $state->yield2y,
-            yield2yEma: $state->yield2yEma,
-            yield5y: $state->yield5y,
-            yield5yEma: $state->yield5yEma,
-            yield10y: $state->yield10y,
-            yield10yEma: $state->yield10yEma,
-            yield30y: $state->yield30y,
-            yield30yEma: $state->yield30yEma,
-            termPremium10y: $state->termPremium10y,
-            termPremium10yEma: $state->termPremium10yEma,
-            riskNeutral10y: $state->riskNeutral10y,
-            riskNeutral10yEma: $state->riskNeutral10yEma,
-            termPremiumShock: $state->termPremiumShock,
-            termPremiumRegime: $state->termPremiumRegime,
-            perceivedNeutralRate: $state->perceivedNeutralRate,
-            restrictiveDuration: $state->restrictiveDuration,
-            marketVolatility: $state->marketVolatility,
-            marketVolatilityEma: $state->marketVolatilityEma,
-            marketZ: $state->marketZ,
-            marketZLatent: $state->marketZLatent,
-            marketJumpMultiplier: $state->marketJumpMultiplier,
-            sectorZ: $state->sectorZ,
-            sectorDemandZ: $state->sectorDemandZ,
-            corporateTaxRate: $state->corporateTaxRate,
-            sovereignDebtToGdp: $state->sovereignDebtToGdp,
-            sovereignDebtToGdpEma: $state->sovereignDebtToGdpEma,
-            equityRiskPremium: $state->equityRiskPremium,
-            macroCreditSpread: $state->macroCreditSpread,
-            macroCreditSpreadEma: $state->macroCreditSpreadEma,
-            interbankLiquiditySpread: $state->interbankLiquiditySpread,
-            interbankLiquiditySpreadEma: $state->interbankLiquiditySpreadEma,
-            totalFactorProductivityIndex: $state->totalFactorProductivityIndex,
-            totalFactorProductivityIndexEma: $state->totalFactorProductivityIndexEma,
-            financialConditionsIndex: $state->financialConditionsIndex,
-            financialConditionsIndexEma: $state->financialConditionsIndexEma,
-            qeActive: $state->qeActive,
-            qeIntensity: $state->qeIntensity,
-            qtActive: $state->qtActive,
-            qtIntensity: $state->qtIntensity,
-            balanceSheetIntensity: $state->balanceSheetIntensity,
-            balanceSheetHoldTimer: $state->balanceSheetHoldTimer,
-            inversionDuration: $state->inversionDuration,
-            nsLevel: $state->nsLevel,
-            nsSlope: $state->nsSlope,
-            nsSlopeEma: $state->nsSlopeEma,
-            structuralSlope: $state->structuralSlope,
-            nsCurvature: $state->nsCurvature,
-            nsCurvature2: $state->nsCurvature2,
-            nsBeta1: $state->nsBeta1,
-            nsBaseTermPremium: $state->nsBaseTermPremium,
-            nsLongEndPremium: $state->nsLongEndPremium,
-            potentialGdpIndex: $state->potentialGdpIndex,
-            nominalGdpIndex: $state->nominalGdpIndex,
-            gdpDeflator: $state->gdpDeflator,
-            eventType: $state->eventType,
-            eventCooldownTimer: $state->eventCooldownTimer,
-            supercoreInflation: $state->supercoreInflation,
-            supercoreInflationEma: $state->supercoreInflationEma,
-            coreGoodsInflation: $state->coreGoodsInflation,
-            coreGoodsInflationEma: $state->coreGoodsInflationEma,
-            cumulativeInflationGap: $state->cumulativeInflationGap,
-            cumulativeInflationGapEma: $state->cumulativeInflationGapEma,
-            highYieldCreditSpread: $state->highYieldCreditSpread,
-            highYieldCreditSpreadEma: $state->highYieldCreditSpreadEma,
-            inventoryStockGap: $state->inventoryStockGap,
-            inventoryStockGapEma: $state->inventoryStockGapEma,
-            energyInventoryIndex: $state->energyInventoryIndex,
-            energyInventoryIndexEma: $state->energyInventoryIndexEma,
-            capacityUtilizationRate: $state->capacityUtilizationRate,
-            capacityUtilizationRateEma: $state->capacityUtilizationRateEma,
-            recessionProbability: $state->recessionProbability,
-            recessionProbabilityEma: $state->recessionProbabilityEma,
-            corporateDefaultRate: $state->corporateDefaultRate,
-            corporateDefaultRateEma: $state->corporateDefaultRateEma,
-            sloosTighteningIndex: $state->sloosTighteningIndex,
-            sloosTighteningIndexEma: $state->sloosTighteningIndexEma,
-            supplyChainPressureIndex: $state->supplyChainPressureIndex,
-            supplyChainPressureIndexEma: $state->supplyChainPressureIndexEma,
-            refiningCrackSpread: $state->refiningCrackSpread,
-            refiningCrackSpreadEma: $state->refiningCrackSpreadEma,
-            dealActivityIndex: $state->dealActivityIndex,
-            dealActivityIndexEma: $state->dealActivityIndexEma,
-            manufacturingPmi: $state->manufacturingPmi,
-            manufacturingPmiEma: $state->manufacturingPmiEma,
-            producerPriceInflation: $state->producerPriceInflation,
-            producerPriceInflationEma: $state->producerPriceInflationEma,
-            tradeBalanceToGdp: $state->tradeBalanceToGdp,
-            tradeBalanceToGdpEma: $state->tradeBalanceToGdpEma,
-            housingStartsIndex: $state->housingStartsIndex,
-            housingStartsIndexEma: $state->housingStartsIndexEma,
-            moneySupplyGrowth: $state->moneySupplyGrowth,
-            moneySupplyGrowthEma: $state->moneySupplyGrowthEma,
-        );
+        $arguments = [];
+        foreach (array_keys(MacroFieldRegistry::wireKeys()) as $field) {
+            $arguments[$field] = $state->$field;
+        }
+
+        return new self(...$arguments);
     }
 
     /**
-     * Converts the DTO to an associative array for backward compatibility and serialization.
+     * Converts the DTO to the snake_case payload used for Redis persistence and serialization.
+     *
+     * @return array<string, mixed> Wire key => value, in the order MacroFieldRegistry declares.
      */
     public function toArray(): array
     {
-        return [
-            'total_time' => $this->totalTime,
-            'output_gap' => $this->outputGap,
-            'output_gap_ema' => $this->outputGapEma,
-            'capital_stock_overhang' => $this->capitalStockOverhang,
-            'capital_stock_overhang_ema' => $this->capitalStockOverhangEma,
-            'unemployment_rate' => $this->unemploymentRate,
-            'unemployment_rate_ema' => $this->unemploymentRateEma,
-            'job_vacancies_rate' => $this->jobVacanciesRate,
-            'job_vacancies_rate_ema' => $this->jobVacanciesRateEma,
-            'labor_tightness' => $this->laborTightness,
-            'labor_tightness_ema' => $this->laborTightnessEma,
-            'wage_growth' => $this->wageGrowth,
-            'wage_growth_ema' => $this->wageGrowthEma,
-            'nairu' => $this->nairu,
-            'nairu_ema' => $this->nairuEma,
-            'natural_rate' => $this->naturalRate,
-            'natural_rate_ema' => $this->naturalRateEma,
-            'energy_price_index' => $this->energyPriceIndex,
-            'energy_price_index_ema' => $this->energyPriceIndexEma,
-            'energy_price_shock' => $this->energyPriceShock,
-            'energy_base_price' => $this->energyBasePrice,
-            'energy_cost_push_lag' => $this->energyCostPushLag,
-            'agri_cost_push_lag' => $this->agriCostPushLag,
-            'consumer_sentiment_index' => $this->consumerSentimentIndex,
-            'consumer_sentiment_index_ema' => $this->consumerSentimentIndexEma,
-            'exchange_rate_index' => $this->exchangeRateIndex,
-            'exchange_rate_index_ema' => $this->exchangeRateIndexEma,
-            'industrial_metals_index' => $this->industrialMetalsIndex,
-            'industrial_metals_index_ema' => $this->industrialMetalsIndexEma,
-            'metals_chi' => $this->metalsChi,
-            'metals_xi' => $this->metalsXi,
-            'government_spending_index' => $this->governmentSpendingIndex,
-            'government_spending_index_ema' => $this->governmentSpendingIndexEma,
-            'commercial_property_index' => $this->commercialPropertyIndex,
-            'commercial_property_index_ema' => $this->commercialPropertyIndexEma,
-            'residential_property_index' => $this->residentialPropertyIndex,
-            'residential_property_index_ema' => $this->residentialPropertyIndexEma,
-            'retail_default_rate' => $this->retailDefaultRate,
-            'retail_default_rate_ema' => $this->retailDefaultRateEma,
-            'agricultural_commodity_index' => $this->agriculturalCommodityIndex,
-            'agricultural_commodity_index_ema' => $this->agriculturalCommodityIndexEma,
-            'agri_chi' => $this->agriChi,
-            'agri_xi' => $this->agriXi,
-            'freight_rate_index' => $this->freightRateIndex,
-            'freight_rate_index_ema' => $this->freightRateIndexEma,
-            'freight_supply_ema' => $this->freightSupplyEma,
-            'inflation' => $this->inflation,
-            'inflation_ema' => $this->inflationEma,
-            'tips_breakeven' => $this->tipsBreakeven,
-            'tips_breakeven_ema' => $this->tipsBreakevenEma,
-            'policy_rate' => $this->policyRate,
-            'policy_rate_ema' => $this->policyRateEma,
-            'target_rate' => $this->targetRate,
-            'yield_2y' => $this->yield2y,
-            'yield_2y_ema' => $this->yield2yEma,
-            'yield_5y' => $this->yield5y,
-            'yield_5y_ema' => $this->yield5yEma,
-            'yield_10y' => $this->yield10y,
-            'yield_10y_ema' => $this->yield10yEma,
-            'yield_30y' => $this->yield30y,
-            'yield_30y_ema' => $this->yield30yEma,
-            'term_premium_10y' => $this->termPremium10y,
-            'term_premium_10y_ema' => $this->termPremium10yEma,
-            'risk_neutral_10y' => $this->riskNeutral10y,
-            'risk_neutral_10y_ema' => $this->riskNeutral10yEma,
-            'term_premium_shock' => $this->termPremiumShock,
-            'term_premium_regime' => $this->termPremiumRegime,
-            'perceived_neutral_rate' => $this->perceivedNeutralRate,
-            'restrictive_duration' => $this->restrictiveDuration,
-            'market_volatility' => $this->marketVolatility,
-            'market_volatility_ema' => $this->marketVolatilityEma,
-            'market_z' => $this->marketZ,
-            'market_z_latent' => $this->marketZLatent,
-            'market_jump_multiplier' => $this->marketJumpMultiplier,
-            'sector_z' => $this->sectorZ,
-            'sector_demand_z' => $this->sectorDemandZ,
-            'corporate_tax_rate' => $this->corporateTaxRate,
-            'sovereign_debt_to_gdp' => $this->sovereignDebtToGdp,
-            'sovereign_debt_to_gdp_ema' => $this->sovereignDebtToGdpEma,
-            'equity_risk_premium' => $this->equityRiskPremium,
-            'macro_credit_spread' => $this->macroCreditSpread,
-            'macro_credit_spread_ema' => $this->macroCreditSpreadEma,
-            'interbank_liquidity_spread' => $this->interbankLiquiditySpread,
-            'interbank_liquidity_spread_ema' => $this->interbankLiquiditySpreadEma,
-            'total_factor_productivity_index' => $this->totalFactorProductivityIndex,
-            'total_factor_productivity_index_ema' => $this->totalFactorProductivityIndexEma,
-            'financial_conditions_index' => $this->financialConditionsIndex,
-            'financial_conditions_index_ema' => $this->financialConditionsIndexEma,
-            'balance_sheet_intensity' => $this->balanceSheetIntensity,
-            'balance_sheet_hold_timer' => $this->balanceSheetHoldTimer,
-            'qe_active' => $this->qeActive,
-            'qe_intensity' => $this->qeIntensity,
-            'qt_active' => $this->qtActive,
-            'qt_intensity' => $this->qtIntensity,
-            'inversion_duration' => $this->inversionDuration,
-            'ns_level' => $this->nsLevel,
-            'ns_slope' => $this->nsSlope,
-            'ns_slope_ema' => $this->nsSlopeEma,
-            'structural_slope' => $this->structuralSlope,
-            'ns_curvature' => $this->nsCurvature,
-            'ns_curvature2' => $this->nsCurvature2,
-            'ns_beta1' => $this->nsBeta1,
-            'ns_base_term_premium' => $this->nsBaseTermPremium,
-            'ns_long_end_premium' => $this->nsLongEndPremium,
-            'potential_gdp_index' => $this->potentialGdpIndex,
-            'nominal_gdp_index' => $this->nominalGdpIndex,
-            'gdp_deflator' => $this->gdpDeflator,
-            'event_type' => $this->eventType,
-            'event_cooldown_timer' => $this->eventCooldownTimer,
-            'supercore_inflation' => $this->supercoreInflation,
-            'supercore_inflation_ema' => $this->supercoreInflationEma,
-            'core_goods_inflation' => $this->coreGoodsInflation,
-            'core_goods_inflation_ema' => $this->coreGoodsInflationEma,
-            'cumulative_inflation_gap' => $this->cumulativeInflationGap,
-            'cumulative_inflation_gap_ema' => $this->cumulativeInflationGapEma,
-            'high_yield_credit_spread' => $this->highYieldCreditSpread,
-            'high_yield_credit_spread_ema' => $this->highYieldCreditSpreadEma,
-            'inventory_stock_gap' => $this->inventoryStockGap,
-            'inventory_stock_gap_ema' => $this->inventoryStockGapEma,
-            'energy_inventory_index' => $this->energyInventoryIndex,
-            'energy_inventory_index_ema' => $this->energyInventoryIndexEma,
-            'capacity_utilization_rate' => $this->capacityUtilizationRate,
-            'capacity_utilization_rate_ema' => $this->capacityUtilizationRateEma,
-            'recession_probability' => $this->recessionProbability,
-            'recession_probability_ema' => $this->recessionProbabilityEma,
-            'corporate_default_rate' => $this->corporateDefaultRate,
-            'corporate_default_rate_ema' => $this->corporateDefaultRateEma,
-            'sloos_tightening_index' => $this->sloosTighteningIndex,
-            'sloos_tightening_index_ema' => $this->sloosTighteningIndexEma,
-            'supply_chain_pressure_index' => $this->supplyChainPressureIndex,
-            'supply_chain_pressure_index_ema' => $this->supplyChainPressureIndexEma,
-            'refining_crack_spread' => $this->refiningCrackSpread,
-            'refining_crack_spread_ema' => $this->refiningCrackSpreadEma,
-            'deal_activity_index' => $this->dealActivityIndex,
-            'deal_activity_index_ema' => $this->dealActivityIndexEma,
-            'manufacturing_pmi' => $this->manufacturingPmi,
-            'manufacturing_pmi_ema' => $this->manufacturingPmiEma,
-            'producer_price_inflation' => $this->producerPriceInflation,
-            'producer_price_inflation_ema' => $this->producerPriceInflationEma,
-            'trade_balance_to_gdp' => $this->tradeBalanceToGdp,
-            'trade_balance_to_gdp_ema' => $this->tradeBalanceToGdpEma,
-            'housing_starts_index' => $this->housingStartsIndex,
-            'housing_starts_index_ema' => $this->housingStartsIndexEma,
-            'money_supply_growth' => $this->moneySupplyGrowth,
-            'money_supply_growth_ema' => $this->moneySupplyGrowthEma,
-        ];
+        $payload = [];
+        foreach (MacroFieldRegistry::wireKeys() as $field => $key) {
+            $payload[$key] = $this->$field;
+        }
+
+        return $payload;
     }
 }

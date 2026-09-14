@@ -20,11 +20,17 @@ use PHPUnit\Framework\TestCase;
  * allowed one. Management files, waits out the 12 to 18 month lag, and receives an order granting part
  * of the request. Fuel is different — adjustment clauses recover it automatically — and that channel
  * stays in the input-cost basket, untouched by this cycle.
+ *
+ * The persisted state is the GAP between the authorized tariff and the cost base it is chasing, never the
+ * tariff level on its own: the engine deflates the structural cost base by the same pricing multiplier it
+ * inflates revenue with, so a multiplier carrying a cumulative level rather than the lag hands the utility
+ * free margin on every order instead of squeezing it between them.
  */
 #[AllowMockObjectsWithoutExpectations]
 final class UtilityRateCaseTest extends TestCase
 {
     private const PENDING_KEY = StreamContext::REGIME_STATE_PREFIX . UtilityBusinessModel::REGIME_RATE_CASE;
+    private const LAG_KEY = UtilityBusinessModel::STATE_TARIFF_SHORTFALL;
 
     /**
      * Runs quarters through the model, feeding each quarter's stream state back in as the next one's
@@ -65,14 +71,29 @@ final class UtilityRateCaseTest extends TestCase
         return $state;
     }
 
-    /** Between orders the tariff does not move, however long the squeeze runs. */
-    public function testAuthorizedTariffIsFrozenBetweenOrders(): void
+    /** A stock carrying a given tariff lag, ready to be priced. */
+    private function stockWithLag(?float $lag): Stock
+    {
+        $stock = new Stock();
+        $stock->setTicker('ZZZZ');
+        $stock->setBeta('0.5');
+
+        if ($lag !== null) {
+            $stock->setEarningsMomentumZ([self::LAG_KEY => $lag]);
+        }
+
+        return $stock;
+    }
+
+    /** Between orders the tariff does not move, so the gap to the cost base widens for as long as the squeeze runs. */
+    public function testTariffLagWidensWhileFrozen(): void
     {
         // Never decide the case, so no order can land.
-        $state = $this->runQuarters(8);
+        $four = $this->runQuarters(4);
+        $eight = $this->runQuarters(8);
 
-        $this->assertEqualsWithDelta(0.0, $state[UtilityBusinessModel::STATE_AUTHORIZED_TARIFF] ?? 0.0, 1e-9, 'A frozen tariff must not drift upward on its own.');
-        $this->assertGreaterThan(0.0, $state[UtilityBusinessModel::STATE_TARIFF_SHORTFALL] ?? 0.0, 'Unrecovered cost has to be accumulating.');
+        $this->assertGreaterThan(0.0, $four[self::LAG_KEY] ?? 0.0, 'Unrecovered cost has to be accumulating.');
+        $this->assertGreaterThan($four[self::LAG_KEY], $eight[self::LAG_KEY], 'A frozen tariff falls further behind every quarter.');
     }
 
     /** Once the gap is material, a case is filed and sits pending. */
@@ -92,66 +113,112 @@ final class UtilityRateCaseTest extends TestCase
         $this->assertEqualsWithDelta(0.0, $state[self::PENDING_KEY] ?? 0.0, 1e-9, 'A utility does not file a rate case over a rounding error.');
     }
 
-    /** The order steps the tariff up and clears the request. */
-    public function testOrderStepsTheTariffAndClearsTheRequest(): void
+    /**
+     * The order steps the tariff toward its cost base and closes the case, but only part of the way: the
+     * disallowed remainder is a cost the utility is still incurring, so it stays outstanding for the next
+     * filing. A utility that came out of an order fully caught up would never be squeezed again.
+     */
+    public function testOrderClosesPartOfTheGapAndCarriesTheRest(): void
     {
-        // File over the first quarters, then rule in quarter 8.
-        $state = $this->runQuarters(8, [8]);
+        $pending = $this->runQuarters(8);
+        $decided = $this->runQuarters(8, [8]);
 
-        $this->assertGreaterThan(0.0, $state[UtilityBusinessModel::STATE_AUTHORIZED_TARIFF] ?? 0.0, 'An order must actually raise the authorized tariff.');
-        $this->assertEqualsWithDelta(0.0, $state[UtilityBusinessModel::STATE_TARIFF_SHORTFALL] ?? 0.0, 1e-9, 'The granted request is no longer outstanding.');
-        $this->assertEqualsWithDelta(0.0, $state[self::PENDING_KEY] ?? 0.0, 1e-9, 'The case is closed once decided.');
+        $this->assertLessThan($pending[self::LAG_KEY], $decided[self::LAG_KEY], 'An order must actually narrow the gap.');
+        $this->assertGreaterThan(0.0, $decided[self::LAG_KEY], 'The disallowed remainder stays outstanding.');
+        $this->assertEqualsWithDelta(0.0, $decided[self::PENDING_KEY] ?? 0.0, 1e-9, 'The case is closed once decided.');
     }
 
     /** Commissions disallow part of every request, which is why utilities never fully catch up. */
     public function testCommissionGrantsLessThanRequested(): void
     {
-        $pending = $this->runQuarters(7);
-        $requested = $pending[UtilityBusinessModel::STATE_TARIFF_SHORTFALL];
-
-        $decided = $this->runQuarters(8, [8]);
-        $granted = $decided[UtilityBusinessModel::STATE_AUTHORIZED_TARIFF];
+        $requested = $this->runQuarters(7)[self::LAG_KEY];
+        $granted = $requested - $this->runQuarters(8, [8])[self::LAG_KEY];
 
         $this->assertLessThan($requested, $granted, 'A granted increase must be smaller than the amount asked for.');
         $this->assertGreaterThan(0.0, $granted);
     }
 
-    /** The tariff the market prices is the one the orders actually granted. */
-    public function testPricingReadsTheAuthorizedTariff(): void
+    /** The tariff the market prices is the one the orders actually granted: a wider lag is a lower price. */
+    public function testPricingReadsTheTariffLag(): void
     {
         $model = new UtilityBusinessModel();
         $macro = new MacroStateDTO(inflationEma: 0.03);
 
-        $fresh = new Stock();
-        $fresh->setTicker('ZZZZ');
-        $fresh->setBeta('0.5');
-
-        $awarded = new Stock();
-        $awarded->setTicker('ZZZZ');
-        $awarded->setBeta('0.5');
-        $awarded->setEarningsMomentumZ([UtilityBusinessModel::STATE_AUTHORIZED_TARIFF => 0.08]);
-
         $this->assertGreaterThan(
-            $model->getMacroPhysics($fresh, $macro)['pricing_power_multiplier'],
-            $model->getMacroPhysics($awarded, $macro)['pricing_power_multiplier'],
-            'A utility that has won a rate order must charge more than one that has not.'
+            $model->getMacroPhysics($this->stockWithLag(0.08), $macro)['pricing_power_multiplier'],
+            $model->getMacroPhysics($this->stockWithLag(0.01), $macro)['pricing_power_multiplier'],
+            'A utility that has won a rate order must charge more than one still waiting on its case.'
         );
     }
 
-    /** Affordability binds: cumulative uplift cannot compound forever. */
-    public function testAuthorizedUpliftIsCapped(): void
+    /**
+     * The regression guard on the whole cycle. The engine builds the structural cost base by deflating
+     * revenue with the pricing multiplier, so the selling-price multiplier running above the input-cost
+     * one is not a price increase — it is margin created out of nothing, compounding with every order.
+     * Cost-of-service regulation recovers cost; it never beats it.
+     */
+    public function testTariffNeverOutrunsItsCostBase(): void
     {
         $model = new UtilityBusinessModel();
-        $stock = new Stock();
-        $stock->setTicker('ZZZZ');
-        $stock->setBeta('0.5');
-        $stock->setEarningsMomentumZ([UtilityBusinessModel::STATE_AUTHORIZED_TARIFF => 99.0]);
+        $macro = new MacroStateDTO(inflationEma: 0.03);
+
+        foreach ([null, 0.0, 0.005, 0.02, 0.05, UtilityBusinessModel::MAX_TARIFF_SHORTFALL, 99.0] as $lag) {
+            $physics = $model->getMacroPhysics($this->stockWithLag($lag), $macro);
+
+            $this->assertLessThanOrEqual(
+                $physics['input_cost_multiplier'],
+                $physics['pricing_power_multiplier'],
+                sprintf('A tariff lag of %s produced a selling price above the cost base it recovers.', var_export($lag, true))
+            );
+            $this->assertGreaterThan(0.0, $physics['pricing_power_multiplier'], 'The authorized tariff can lag, but it cannot go negative.');
+        }
+    }
+
+    /** With no outstanding case the utility recovers its costs exactly: unit pass-through, no lag, no gift. */
+    public function testAFullyRecoveredTariffIsExactlyUnitPassThrough(): void
+    {
+        $model = new UtilityBusinessModel();
+        $physics = $model->getMacroPhysics($this->stockWithLag(0.0), new MacroStateDTO(inflationEma: 0.03));
 
         $this->assertEqualsWithDelta(
-            1.0 + UtilityBusinessModel::MAX_AUTHORIZED_TARIFF_UPLIFT,
-            $model->getMacroPhysics($stock, new MacroStateDTO(inflationEma: 0.03))['pricing_power_multiplier'],
+            $physics['input_cost_multiplier'],
+            $physics['pricing_power_multiplier'],
             1e-9,
-            'Political and affordability limits cap what a commission will ever authorize.'
+            'PRICING_ELASTICITY of 1.0 means a caught-up tariff recovers the cost base in full and no more.'
+        );
+    }
+
+    /** Interim relief binds: a commission does not leave a monopoly with a service obligation earning below cost. */
+    public function testTariffLagIsBoundedByInterimRelief(): void
+    {
+        $model = new UtilityBusinessModel();
+        $physics = $model->getMacroPhysics($this->stockWithLag(99.0), new MacroStateDTO(inflationEma: 0.03));
+
+        $this->assertEqualsWithDelta(
+            $physics['input_cost_multiplier'] * (1.0 - UtilityBusinessModel::MAX_TARIFF_SHORTFALL),
+            $physics['pricing_power_multiplier'],
+            1e-9,
+            'Attrition is capped at the point interim rates are granted.'
+        );
+    }
+
+    /**
+     * Over a long run of filings and orders the gap oscillates around a steady attrition drag rather than
+     * ratcheting in either direction: it neither closes to zero (the utility would stop filing) nor walks
+     * out to the interim-relief cap under ordinary inflation.
+     */
+    public function testTheCycleReachesASteadyAttritionDragRatherThanRatcheting(): void
+    {
+        // An order every fifth quarter, the 12 to 18 month regulatory lag, across fifteen years.
+        $decideOn = range(5, 60, 5);
+        $state = $this->runQuarters(60, $decideOn, 0.02);
+        $lag = $state[self::LAG_KEY];
+
+        $this->assertGreaterThan(0.0, $lag, 'A lagging tariff never fully catches its cost base.');
+        $this->assertLessThan(
+            UtilityBusinessModel::MAX_TARIFF_SHORTFALL,
+            $lag,
+            'Ordinary inflation must not drive the utility onto the interim-relief floor.'
         );
     }
 }

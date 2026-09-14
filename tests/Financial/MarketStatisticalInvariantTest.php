@@ -25,6 +25,8 @@ class MarketStatisticalInvariantTest extends TestCase
     private const YEARS = 25;
     private const MARKET_VOL = 0.15;
     private const STOCK_VOL = 0.25;
+    /** The residual a beta-1 name carries once its market loading is accounted for: sqrt(0.25^2 - 0.15^2). */
+    private const STOCK_IDIOSYNCRATIC_VOL = 0.20;
 
     private MathUtility $math;
     private float $dt;
@@ -157,7 +159,9 @@ class MarketStatisticalInvariantTest extends TestCase
             foreach ($prices as $ticker => $price) {
                 $diffused = $this->math->calculateCorrelatedGBM(
                     currentPrice: $price,
-                    currentVolatility: self::STOCK_VOL,
+                    // The state carries idiosyncratic variance only; the market loading is beta * marketVol,
+                    // supplied outright by the diffusion, so the name's total volatility is the two combined.
+                    idiosyncraticVolatility: self::STOCK_IDIOSYNCRATIC_VOL,
                     drift: 0.0,
                     gravityDrift: 0.0,
                     dt: $this->dt,

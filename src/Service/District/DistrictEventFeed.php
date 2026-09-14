@@ -27,6 +27,14 @@ class DistrictEventFeed
     private const EVENTS_PER_TICKER = 6;
 
     /**
+     * Rows fetched per tenant before grouping, bounding hydration as history accumulates.
+     *
+     * Wider than EVENTS_PER_TICKER because the query cannot limit per company, so a tenant filing
+     * far more often than its neighbours would otherwise crowd them out of the result entirely.
+     */
+    private const ROWS_SCANNED_PER_TICKER = 20;
+
+    /**
      * @param int $ticksPerYear   simulated ticks in a year (app.ticks_per_year)
      * @param int $tickIntervalUs wall-clock microseconds the ticker sleeps per tick (app.tick_interval)
      */
@@ -71,14 +79,8 @@ class DistrictEventFeed
         // efficient index scan as history accumulates. Grouped in PHP rather than with a
         // per-stock SQL LIMIT, which Doctrine has no portable way to express in one query.
         // Capped at 20 rows per tenant so accumulated history never causes unbounded hydration.
-        $rows = $this->entityManager->getRepository(StockEvent::class)->createQueryBuilder('e')
-            ->andWhere('e.stock IN (:stocks)')
-            ->setParameter('stocks', $stocks)
-            ->orderBy('e.stock', 'ASC')
-            ->addOrderBy('e.recordedAt', 'DESC')
-            ->setMaxResults(count($stocks) * 20)
-            ->getQuery()
-            ->getResult();
+        $rows = $this->entityManager->getRepository(StockEvent::class)
+            ->findForStocksNewestFirst($stocks, count($stocks) * self::ROWS_SCANNED_PER_TICKER);
 
         $windowOpensAt = $this->clock->now()->getTimestamp() - $this->badgeWindowSeconds();
 
