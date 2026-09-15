@@ -122,6 +122,7 @@ class MarketSimulateCommand extends Command
 
             // Batch flush every 1200 ticks to save RAM
             if ($tick % 365 === 0) {
+                \App\Service\Market\StockTickColumns::write($this->entityManager->getConnection(), $stocks);
                 $this->entityManager->flush();
                 $this->entityManager->clear(); // Wipes RAM 
 
@@ -140,6 +141,7 @@ class MarketSimulateCommand extends Command
             $progressBar->advance();
         }
 
+        \App\Service\Market\StockTickColumns::write($this->entityManager->getConnection(), $stocks);
         $this->entityManager->flush();
         $this->entityManager->clear();
 

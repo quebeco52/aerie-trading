@@ -9,7 +9,10 @@ use App\Service\Market\StockTracker;
 use App\Service\Market\CorporateBondDesk;
 use App\Service\Market\IndexCommittee;
 use App\Service\Market\Index\MarketIndex;
+use App\Service\Market\SimulationClockService;
+use App\Service\Market\OptionChainService;
 use App\Service\Market\OptionDeskService;
+use App\Service\Market\StockTickColumns;
 use App\Service\Market\TreasuryAuctionService;
 use App\Service\Market\EtfTracker;
 use App\Service\Macro\MacroEngine;
@@ -47,6 +50,77 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
     /** Target price history rows written per simulated year; the actual rate is this or one row per tick, whichever is coarser. */
     public const TARGET_HISTORY_POINTS_PER_YEAR = 2400;
 
+    // --- Working Set ---
+    /** Times per simulated year the identity map is cleared and the working set re-read from the database: once a trading day. */
+    public const WORKING_SET_RELOADS_PER_YEAR = 252;
+
+    // --- Bond History Sampling ---
+    /**
+     * Bond history points written per simulated year: one per trading day, as a bond is quoted.
+     *
+     * A bond's price is a function of a curve that moves in basis points over weeks, and the market convention
+     * for a fixed income series is an end-of-day mark rather than a print. Sampling the ladder at the equity
+     * rate wrote two hundred rows eight times a second — more rows per real day than the whole equity board
+     * writes in a week — and the insert into a table that size was half of the history tick's overrun. The
+     * short-range chart is unaffected: it reads the Redis buffer, which still takes every tick.
+     */
+    public const BOND_HISTORY_POINTS_PER_YEAR = 252;
+
+    // --- Diagnostics ---
+    /** Phases named in a lag warning, most expensive first. */
+    public const LAG_PHASES_SHOWN = 4;
+
+    /**
+     * History bars between working-set reloads.
+     *
+     * A reload has to follow a flush, so it is counted in bars rather than ticks. Reloading on every bar
+     * re-hydrated sixty companies and a couple of hundred bonds eight times a second, which was a quarter
+     * of the history tick; the only thing a reload brings in that the ticker cannot see otherwise is a
+     * short-interest figure the web process writes, and nothing on the pricing path reads that.
+     */
+    public static function reloadIntervalBars(int $ticksPerYear): int
+    {
+        return self::intervalBars($ticksPerYear, self::WORKING_SET_RELOADS_PER_YEAR);
+    }
+
+    /**
+     * History bars between bond history rows.
+     *
+     * Counted in bars because a bond is only revalued on the history cadence, and a history row has to carry
+     * a mark from the tick that wrote it rather than the last one it happens to remember.
+     */
+    public static function bondHistoryIntervalBars(int $ticksPerYear): int
+    {
+        return self::intervalBars($ticksPerYear, self::BOND_HISTORY_POINTS_PER_YEAR);
+    }
+
+    /** History bars between events that should happen a given number of times a simulated year. */
+    private static function intervalBars(int $ticksPerYear, int $perYear): int
+    {
+        return max(1, (int) round(($ticksPerYear / $perYear) / self::historyIntervalTicks($ticksPerYear)));
+    }
+
+    /** Whether a history bar re-reads the working set. */
+    public static function isReloadBar(int $bar, int $ticksPerYear): bool
+    {
+        return $bar % self::reloadIntervalBars($ticksPerYear) === 0;
+    }
+
+    /**
+     * Whether a history bar samples the bond ladder into bond_history.
+     *
+     * Offset half an interval from the reload bar. Both are once-a-day jobs counted in the same bars, and
+     * at the same offset every bond history insert would land on the tick that had just thrown its working
+     * set away and re-read it — one tick paying for both, which is the shape of an outlier rather than of a
+     * cost. Away from each other they are two ordinary bars.
+     */
+    public static function isBondHistoryBar(int $bar, int $ticksPerYear): bool
+    {
+        $bars = self::bondHistoryIntervalBars($ticksPerYear);
+
+        return $bar % $bars === intdiv($bars, 2);
+    }
+
     /** Ticks between price history rows: one per tick until the tick rate outruns the target sampling rate. */
     public static function historyIntervalTicks(int $ticksPerYear): int
     {
@@ -78,6 +152,9 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
         private EtfTracker $etfTracker,
         private BondTracker $bondTracker,
         private \App\Service\Market\ForcedLiquidationService $liquidationService,
+        private \App\EventListener\FlushProfiler $flushProfiler,
+        private SimulationClockService $simulationClock,
+        private OptionChainService $optionChain,
         private TreasuryAuctionService $treasuryAuction,
         private MacroEngine $macroEngine,
         private MarketOperator $marketOperator,
@@ -186,7 +263,28 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
         $bonds = $this->entityManager->getRepository(Bond::class)->findBy(['status' => Bond::STATUS_ACTIVE]);
 
         $dt = 1.0 / $this->ticksPerYear;
-        $tickCount = (int) ($this->redis->get('simulation_tick_count') ?: 0);
+
+        // Where the simulation actually got to, from the database rather than the cache. The option chain is
+        // handed over as a witness: a listed expiry serial proves the clock once stood at least that far, so
+        // a cache that has lost time cannot talk the simulation into living the same weeks twice.
+        $furthestSerial = $this->optionChain->furthestListedSerial();
+        $clock = $this->simulationClock->resume(
+            (int) ($this->redis->get('simulation_tick_count') ?: 0),
+            $this->macroEngine->getLiveState()->totalTime,
+            $furthestSerial === null ? 0.0 : OptionChainService::earliestTimeFor($furthestSerial)
+        );
+
+        $tickCount = $clock->getTickCount();
+
+        // The macro state is cached in Redis and carries its own copy of the clock, so it is corrected to
+        // the authoritative one before the first tick reads it.
+        $this->macroEngine->alignClock($clock->getTotalTime());
+
+        $output->writeln(sprintf(
+            'Resuming at tick %d (simulation year %.4f).',
+            $tickCount,
+            $clock->getTotalTime()
+        ));
 
         $historyInterval = self::historyIntervalTicks($this->ticksPerYear);
         $operatorInterval = (int) max(1, $this->ticksPerYear / 24);  // Operator audits once a game "month"
@@ -210,9 +308,30 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
          */
         $bars = [];
 
+        /**
+         * Wall time per phase of the tick just run, in ms. Reported with a lag warning so an overrun names
+         * what it spent its time on: the model, the flush, the reload or the wire.
+         *
+         * @var array<string, float>
+         */
+        $phases = [];
+        $phaseStart = hrtime(true);
+
+        // The tick is the only place a flush is timed, so it is the only place that wants the attribution.
+        $this->flushProfiler->enable();
+
+        $lap = static function (string $name) use (&$phases, &$phaseStart): void {
+            $now = hrtime(true);
+            $phases[$name] = ($phases[$name] ?? 0.0) + (($now - $phaseStart) / 1e6);
+            $phaseStart = $now;
+        };
+
         while ($this->keepRunning) {
 
             $tickStartTime = microtime(true);
+            $phases = [];
+            $phaseStart = hrtime(true);
+            $this->flushProfiler->reset();
 
             pcntl_signal_dispatch();
 
@@ -222,6 +341,7 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
             }
 
             $macroState = $this->macroEngine->updateMacroState($dt);
+            $lap('macro');
 
             if ($tickCount % $operatorInterval === 0) {
                 $operatorEvents = $this->marketOperator->enforceMarketStability($stocks, $macroState);
@@ -246,7 +366,9 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
 
                 $isHistoryTick = ($tickCount % $historyInterval === 0);
 
+                $lap('operator+hedge');
                 $result = $this->stockTracker->updateStocks($stocks, $dt, $isHistoryTick, $macroState, $tickCount, $this->ticksPerYear);
+                $lap('stocks');
                 $stockUpdates = $result['updates'];
                 $totalMarketCap = $result['total_cap'];
                 $marketVol = $result['market_vol'];
@@ -348,13 +470,19 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                     }
                 }
 
+                // Marked on the history cadence, but only sampled into bond_history once a trading day:
+                // see BOND_HISTORY_POINTS_PER_YEAR.
+                $isBondHistoryTick = $isHistoryTick
+                    && self::isBondHistoryBar(intdiv($tickCount, $historyInterval), $this->ticksPerYear);
+
                 $bondResult = $this->bondTracker->updateBonds(
                     $bonds,
                     $macroState,
-                    $isHistoryTick,
+                    $isBondHistoryTick,
                     $issuerSpreads,
                     $isHistoryTick
                 );
+                $lap('bonds');
 
                 // A matured issue stops trading, so drop it from the working set immediately rather than
                 // waiting for the next reload: it would otherwise be re-marked and re-redeemed every tick
@@ -397,16 +525,33 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                 // listed contract in the market, and wiring that to the history tick put forty-five thousand
                 // option UPDATEs a second through the database for a mark nothing reads at that resolution.
                 // See OptionDeskService for why nothing downstream wants it fresher.
-                if ($tickCount % $optionSweepInterval === 0) {
-                    $this->optionDesk->sweep(
+                if (OptionDeskService::isSweepTick($tickCount, $optionSweepInterval)) {
+                    $sweepResult = $this->optionDesk->sweep(
                         $stocks,
                         $macroState,
                         $dt * $optionSweepInterval * OptionDeskService::SWEEP_SLICES,
                         OptionDeskService::sweepSlice($tickCount, $optionSweepInterval)
                     );
+                    $lap('options');
+
+                    // The sweep's own stages, so an overrun names the statement rather than the service.
+                    foreach ($sweepResult['timing'] as $stage => $ms) {
+                        $phases['opt:' . $stage] = $ms;
+                    }
                 }
 
                 $allUpdates = array_merge($stockUpdates, $etfUpdates, $bondResult['updates']);
+
+                // What goes out on the wire. The bond ladder is only re-marked on the history tick, so on
+                // every other tick its quotes are byte-for-byte what the browser already holds — and they
+                // were two thirds of a payload that every connected browser received fifty times a second.
+                // The chart buffer below still takes bonds on every tick: the short-range chart and the
+                // change figure count buffer entries as ticks, and thinning one asset class would silently
+                // stretch its month. The limit-order check follows the wire, since a mark that has not
+                // moved cannot have crossed a resting price.
+                $published = $isHistoryTick
+                    ? $allUpdates
+                    : array_merge($stockUpdates, $etfUpdates);
 
                 foreach ($stockUpdates as $update) {
                     if (!empty($update['is_bankrupt'])) {
@@ -428,7 +573,7 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                 // Limit Order Check. The whole book's bounds come over in one MGET: a GET per instrument
                 // was a synchronous round trip for every stock, the index and every bond, every tick.
                 $tradable = array_values(array_filter(
-                    $allUpdates,
+                    $published,
                     static fn (array $update): bool => empty($update['is_bankrupt'])
                 ));
                 $boundsKeys = array_map(static fn (array $update): string => "limit_bounds:{$update['ticker']}", $tradable);
@@ -455,9 +600,18 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                     }
                 }
 
+                $lap('limit orders');
+
                 if ($isHistoryTick) {
 
+                    // The per-tick columns go to the database as data, before the flush: they are mapped
+                    // non-updatable, so the flush below carries only what else changed on a company —
+                    // a report, a split, a default — and a quiet tick writes no stock row at all.
+                    StockTickColumns::write($conn, $stocks);
+                    $lap('stock marks');
+
                     $this->entityManager->flush();
+                    $lap('flush');
 
                     $historyData = $result['history'];
                     if (!empty($historyData)) {
@@ -495,12 +649,20 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                     // The bar is written; the next one opens at the next tick's price.
                     $bars = [];
 
+                    // Empty on nine bars in ten: the ladder is sampled once a trading day, so this is a
+                    // two-hundred-row insert a tenth as often rather than on every bar.
                     $this->bondTracker->recordHistory($bondResult['history']);
+                    $lap('history rows');
 
-                    $this->entityManager->clear();
-                    $stocks = $this->entityManager->getRepository(Stock::class)->findAll();
-                    $indexFunds = $this->loadIndexFunds();
-                    $bonds = $this->entityManager->getRepository(Bond::class)->findBy(['status' => Bond::STATUS_ACTIVE]);
+                    // Once a trading day, not every bar: see reloadIntervalBars(). Everything the tick
+                    // itself changed has just been flushed, so nothing is lost to the clear.
+                    if (self::isReloadBar(intdiv($tickCount, $historyInterval), $this->ticksPerYear)) {
+                        $this->entityManager->clear();
+                        $stocks = $this->entityManager->getRepository(Stock::class)->findAll();
+                        $indexFunds = $this->loadIndexFunds();
+                        $bonds = $this->entityManager->getRepository(Bond::class)->findBy(['status' => Bond::STATUS_ACTIVE]);
+                        $lap('reload');
+                    }
                 }
 
                 $nowStr = (new \DateTime())->format('Y-m-d H:i:s');
@@ -530,10 +692,17 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                     $point = json_encode($point);
 
                     $pipeline->lPush($cacheKey, $point);
-                    $pipeline->lTrim($cacheKey, 0,  $redisBufferSize - 1);
+
+                    // Trimming is idempotent, so once per bar keeps the buffer within a handful of entries
+                    // of its size at half the commands; a trim on every push doubled the pipeline for
+                    // nothing the reader could see.
+                    if ($isHistoryTick) {
+                        $pipeline->lTrim($cacheKey, 0, $redisBufferSize - 1);
+                    }
                 }
 
                 $pipeline->exec();
+                $lap('chart buffers');
 
                 // Glasswater Row reconstitution: once a simulated quarter the street's roster is
                 // re-ranked and frozen (DistrictRoster). Promotions and evictions are ordinary stock
@@ -567,7 +736,7 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                 $this->redis->publish('market_updates', json_encode([
                     'timestamp' => time(),
                     'tick' => $tickCount,
-                    'stocks' => $allUpdates,
+                    'stocks' => $published,
                     'events' => $events,
                     'district' => $districtReconstitution,
                     'market_vol' => $marketVol,
@@ -577,16 +746,16 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                     'bond_curve' => $bondResult['curve'],
                 ]));
 
-                $this->redis->set('stocks_live_data', json_encode($stockUpdates));
-                $this->redis->set('etf_live_data', json_encode($etfUpdates));
-                $this->redis->set('bond_live_data', json_encode($bondResult['updates']));
+                // A cache of the committed clock, for the web process. Never the authority: see SimulationClock.
                 $this->redis->set('simulation_tick_count', $tickCount);
+                $lap('publish');
 
                 // Save Portfolio Snapshots once a "Simulation Week"
                 if ($tickCount % $snapshotInterval === 0) {
                     // Force a flush to the DB if we haven't already, so the raw SQL query
                     // used by recordBulkSnapshots calculates against the latest live prices.
                     if (!$isHistoryTick) {
+                        StockTickColumns::write($conn, $stocks);
                         $this->entityManager->flush();
                     }
 
@@ -599,6 +768,7 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                     );
 
                     $this->portfolio->recordBulkSnapshots();
+                    $lap('snapshots');
                 }
 
                 // Save Macro Report Snapshot once a "Simulation Quarter"
@@ -606,13 +776,19 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                     $this->macroEngine->recordMacroSnapshot($macroState, $conn);
                 }
 
+                // The clock goes in with the tick, on the tick's own connection: a tick that rolls back
+                // rolls its clock back too, and one that commits cannot lose the fact that it happened.
+                $this->simulationClock->advance($conn, $tickCount, $macroState->totalTime);
+
                 $this->entityManager->commit();
+                $lap('commit');
 
                 // The margin sweep runs AFTER the tick commits, never inside it. A forced sale goes through
                 // the ordinary execution path, which opens its own transaction, and nesting one account's
                 // liquidation inside the whole market's tick would couple the two.
                 if ($tickCount % $snapshotInterval === 0) {
                     $this->liquidationService->sweep($macroState->policyRate, $snapshotInterval * $dt);
+                    $lap('margin sweep');
                 }
             } catch (\Exception $e) {
                 if ($this->entityManager->getConnection()->isTransactionActive()) {
@@ -644,7 +820,21 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
             // LAG WARNING
             if ($executionTimeUs > $this->tickIntervalUs) {
                 $overtimeMs = ($executionTimeUs - $this->tickIntervalUs) / 1000;
-                $output->writeln("<comment>⚠️ Lag Spike: Tick {$tickCount} took too long! Dropped behind by " . round($overtimeMs, 2) . "ms</comment>");
+                arsort($phases);
+                $breakdown = implode(', ', array_map(
+                    static fn (string $name, float $ms): string => sprintf('%s %.1f', $name, $ms),
+                    array_keys(array_slice($phases, 0, self::LAG_PHASES_SHOWN, true)),
+                    array_slice($phases, 0, self::LAG_PHASES_SHOWN, true)
+                ));
+
+                // How many entities the unit of work is carrying. A flush that is slow because the identity
+                // map has filled up looks exactly like a flush that is slow because the tick genuinely wrote
+                // a lot, and the two have opposite fixes; this is the number that tells them apart.
+                $managed = $this->entityManager->getUnitOfWork()->size();
+                $written = $this->flushProfiler->summary();
+                $wrote = $written === '' ? 'wrote nothing' : $written;
+
+                $output->writeln("<comment>⚠️ Lag Spike: Tick {$tickCount} took too long! Dropped behind by " . round($overtimeMs, 2) . "ms ({$breakdown} | map {$managed} | {$wrote})</comment>");
             }
 
             $timeToSleepUs = $this->tickIntervalUs - $executionTimeUs;

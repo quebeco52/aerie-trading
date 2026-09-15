@@ -266,8 +266,8 @@ class BondTrackerTest extends TestCase
         $this->assertCount(2 * 9, $params);
         $this->assertSame(11, $params[0]);
         $this->assertSame(12, $params[9]);
-        $this->assertEqualsWithDelta($result['updates'][0]['price'], (float) $params[1], 1e-9);
-        $this->assertEqualsWithDelta($result['updates'][1]['clean_price'], (float) $params[11], 1e-9);
+        $this->assertEqualsWithDelta($result["updates"][0]["price"], (float) $params[1], 1e-4);
+        $this->assertEqualsWithDelta($result["updates"][1]["clean_price"], (float) $params[11], 1e-4);
 
         // The entity's mark fields are untouched, so the unit of work has nothing to flush for them.
         $this->assertSame('1.00', $first->getPrice());

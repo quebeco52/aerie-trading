@@ -39,8 +39,14 @@ class Stock
 
     /**
      * @var string The current share price of the stock.
+     *
+     * PER-TICK COLUMN, `updatable: false`. This and the five others so marked (current volatility, impact
+     * variance, momentum trend, dynamic credit spread, corporate flow backlog) change on every name on
+     * every tick, which made every stock a dirty entity at every flush and cost one UPDATE per stock per
+     * flush. The unit of work never writes them; StockTickColumns writes them in bulk before each flush.
+     * The INSERT still carries them, so seeding is unaffected.
      */
-    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 8, options: ['default' => '100.00000000'])]
+    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 8, options: ['default' => '100.00000000'], updatable: false)]
     private string $price = '100.00000000';
 
     /**
@@ -165,7 +171,7 @@ class Stock
      * discount the firm's listed issues at it. Recomputing it there would put a second authority on what a
      * company's credit costs, and the two would disagree the first time either was retuned.
      */
-    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 6, options: ['default' => '0.010000'])]
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 6, options: ['default' => '0.010000'], updatable: false)]
     private string $dynamicCreditSpread = '0.010000';
 
     /**
@@ -258,7 +264,7 @@ class Stock
     /**
      * @var string|null The current, dynamic instantaneous volatility (used in Heston/GARCH models).
      */
-    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true, updatable: false)]
     private ?string $currentVolatility = null;
 
     #[ORM\Column(type: Types::DECIMAL, precision: 5, scale: 2, nullable: true, options: ['default' => '1.00'])]
@@ -396,8 +402,13 @@ class Stock
 
     /**
      * @var float|null Years the incumbent management has been in post, used for the succession hazard; null on a firm that has never had a turnover evaluated.
+     *
+     * A per-tick clock, and therefore written by StockTickColumns rather than by the unit of work: the
+     * succession engine ages the incumbent on every firm on every tick, which made every company a dirty
+     * entity at every flush and cost one UPDATE each for a float that had moved by a few ten-thousandths of
+     * a year. See the note on $price.
      */
-    #[ORM\Column(type: 'float', nullable: true)]
+    #[ORM\Column(type: 'float', nullable: true, updatable: false)]
     private ?float $ceoTenureYears = 0.0;
 
     /**
@@ -433,7 +444,7 @@ class Stock
     /**
      * @var float|null Exponentially weighted sum of log price returns (Jegadeesh-Titman formation trend); null until the first tick.
      */
-    #[ORM\Column(type: 'float', nullable: true)]
+    #[ORM\Column(type: 'float', nullable: true, updatable: false)]
     private ?float $priceMomentumTrend = 0.0;
 
     /**
@@ -451,7 +462,7 @@ class Stock
      * flow ACTUALLY did rather than from an assumption about what it might do. Measured, so a name nobody
      * trades reclaims nothing and a heavily traded one reclaims in proportion.
      */
-    #[ORM\Column(type: 'float', nullable: true, options: ['default' => 0.0])]
+    #[ORM\Column(type: 'float', nullable: true, options: ['default' => 0.0], updatable: false)]
     private ?float $impactVarianceEma = 0.0;
 
     /**
@@ -461,7 +472,7 @@ class Stock
      *                 at the 10b-18 pace through the same order-flow channel every other trade uses, so a
      *                 buyback moves the price the way a buyer does rather than by an invented shock.
      */
-    #[ORM\Column(type: 'float', nullable: true, options: ['default' => 0.0])]
+    #[ORM\Column(type: 'float', nullable: true, options: ['default' => 0.0], updatable: false)]
     private ?float $corporateFlowBacklog = 0.0;
 
     /**

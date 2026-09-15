@@ -7,6 +7,7 @@ namespace App\Service\Market;
 use App\Entity\OptionContract;
 use App\Entity\Stock;
 use App\Service\Math\FinancialConstants;
+use Doctrine\DBAL\ArrayParameterType;
 use Doctrine\ORM\EntityManagerInterface;
 
 /**
@@ -23,6 +24,23 @@ use Doctrine\ORM\EntityManagerInterface;
  */
 final class OptionChainService
 {
+    // --- Listing Write ---
+    /**
+     * The columns a newly listed contract is written with, in the order a listing row lays them out.
+     *
+     * Every column the table requires is named here rather than left to a default, so a listing is one
+     * statement whose shape does not depend on the schema's opinion of a missing value. OptionChainListingTest
+     * pins the list against the mapping.
+     */
+    public const LISTING_COLUMNS = [
+        'ticker', 'stock_id', 'option_type', 'strike', 'expiry_serial', 'expires_at_time', 'listed_at_time',
+        'status', 'price', 'implied_volatility', 'delta', 'gamma', 'vega', 'theta', 'open_interest',
+        'structural_open_interest', 'updated_at',
+    ];
+
+    /** Contracts written per INSERT. A slice's first pass opens its whole chain, so the batch is sized for that rather than for the quiet case. */
+    public const LISTINGS_PER_STATEMENT = 500;
+
     public function __construct(
         private readonly EntityManagerInterface $em,
         private readonly LiquidityEngine $liquidityEngine,
@@ -43,6 +61,27 @@ final class OptionChainService
     public static function expiryTime(int $serial): float
     {
         return $serial / 12.0;
+    }
+
+    /**
+     * The earliest simulation time at which a serial could have been listed.
+     *
+     * Listing only ever opens serials AHEAD of the clock, the furthest of them OPTION_EXPIRY_MONTHS out, so a
+     * serial sitting in the table is proof that the clock once stood at least that far back from its expiry.
+     * That makes the chain a witness to how far the simulation has actually run — which is the one thing a
+     * clock restored from a lossy cache cannot vouch for about itself.
+     */
+    public static function earliestTimeFor(int $serial): float
+    {
+        return self::expiryTime($serial - max(FinancialConstants::OPTION_EXPIRY_MONTHS));
+    }
+
+    /** The furthest serial ever listed, or null if no chain has been opened yet. */
+    public function furthestListedSerial(): ?int
+    {
+        $serial = $this->em->getConnection()->fetchOne('SELECT MAX(expiry_serial) FROM option_contracts');
+
+        return $serial === null || $serial === false ? null : (int) $serial;
     }
 
     /**
@@ -144,63 +183,139 @@ final class OptionChainService
     }
 
     /**
-     * Opens whatever is missing from a name's chain and returns every contract now listed on it.
+     * Opens whatever is missing from the chains of a whole slice of the market.
      *
-     * Idempotent: called each listing sweep, it adds the strikes the underlying has moved into and leaves
+     * Idempotent: called each listing sweep, it adds the strikes the underlyings have moved into and leaves
      * everything already open untouched.
      *
-     * @return array<int, OptionContract> Newly listed contracts only.
+     * WRITTEN AS DATA, and for the whole slice at once, because listing is bursty. The expiry grid is monthly
+     * and shared, so when a serial rolls, every name in the market wants a fresh expiry on the same pass —
+     * a couple of hundred contracts for one slice. Persisting those through the unit of work sent one INSERT
+     * each and put the sweep thirty milliseconds over a twenty-millisecond tick every simulated month. One
+     * query to see what exists and one INSERT per hundred contracts costs the same whether the slice is
+     * quiet or a serial has just rolled.
+     *
+     * @param array<int, Stock> $stocks The slice being swept.
+     * @return int Contracts newly listed.
      */
-    public function listChain(Stock $stock, float $currentTime): array
+    public function listChains(array $stocks, float $currentTime): int
     {
-        if (!$this->isListable($stock)) {
-            return [];
+        $listable = [];
+
+        foreach ($stocks as $stock) {
+            $id = $stock->getId();
+
+            if ($id !== null && $this->isListable($stock)) {
+                $listable[$id] = $stock;
+            }
         }
 
-        // Symbols only. Listing needs to know which contracts already exist, not what they are worth, and
-        // hydrating a hundred entities to read one string off each of them meant every sweep loaded the
-        // whole chain twice — once here and once to mark it.
-        $existing = array_fill_keys(
-            $this->em->createQuery(
-                'SELECT o.ticker FROM ' . OptionContract::class . ' o WHERE o.stock = :stock AND o.status = :status'
-            )
-                ->setParameter('stock', $stock)
-                ->setParameter('status', OptionContract::STATUS_ACTIVE)
-                ->getSingleColumnResult(),
-            true
-        );
+        if ($listable === []) {
+            return 0;
+        }
 
-        $strikes = self::strikeLadder((float) $stock->getPrice());
-        $listed = [];
+        $existing = $this->existingTickers(array_keys($listable));
+        $serials = self::listedSerials($currentTime);
+        $stamp = (new \DateTime())->format('Y-m-d H:i:s');
+        $rows = [];
 
-        foreach (self::listedSerials($currentTime) as $serial) {
-            $expiresAt = self::expiryTime($serial);
+        foreach ($listable as $stockId => $stock) {
+            $strikes = self::strikeLadder((float) $stock->getPrice());
 
-            foreach ($strikes as $strike) {
-                foreach ([OptionContract::TYPE_CALL, OptionContract::TYPE_PUT] as $optionType) {
-                    $ticker = self::contractTicker($stock->getTicker(), $serial, $optionType, $strike);
+            foreach ($serials as $serial) {
+                $expiresAt = self::expiryTime($serial);
 
-                    if (isset($existing[$ticker])) {
-                        continue;
+                foreach ($strikes as $strike) {
+                    foreach ([OptionContract::TYPE_CALL, OptionContract::TYPE_PUT] as $optionType) {
+                        $ticker = self::contractTicker($stock->getTicker(), $serial, $optionType, $strike);
+
+                        if (isset($existing[$ticker])) {
+                            continue;
+                        }
+
+                        $existing[$ticker] = true;
+
+                        $rows[] = [
+                            $ticker,
+                            $stockId,
+                            $optionType,
+                            (string) $strike,
+                            $serial,
+                            $expiresAt,
+                            $currentTime,
+                            OptionContract::STATUS_ACTIVE,
+                            '0.00000000',
+                            '0.000000',
+                            '0.00000000',
+                            '0.000000000000',
+                            '0.00000000',
+                            '0.00000000',
+                            0,
+                            0,
+                            $stamp,
+                        ];
                     }
-
-                    $contract = (new OptionContract())
-                        ->setTicker($ticker)
-                        ->setStock($stock)
-                        ->setOptionType($optionType)
-                        ->setStrike((string) $strike)
-                        ->setExpirySerial($serial)
-                        ->setExpiresAtTime($expiresAt)
-                        ->setListedAtTime($currentTime)
-                        ->setStatus(OptionContract::STATUS_ACTIVE);
-
-                    $this->em->persist($contract);
-                    $existing[$ticker] = true;
-                    $listed[] = $contract;
                 }
             }
         }
 
-        return $listed;
+        if ($rows === []) {
+            return 0;
+        }
+
+        $this->insert($rows);
+
+        return count($rows);
+    }
+
+    /**
+     * The symbols already taken on a set of names, whatever became of them.
+     *
+     * Symbols only, and one query for the slice rather than one per name. Listing needs to know which
+     * contracts exist, not what they are worth, and hydrating a hundred entities to read one string off each
+     * of them meant every sweep loaded the whole chain twice — once here and once to mark it.
+     *
+     * EVERY status, not just the live ones. A symbol is unique across the whole table, so a settled contract
+     * still owns its name and re-listing it is not a duplicate chain but a failed INSERT that takes the whole
+     * tick down with it. It is tempting to argue that cannot happen — the expiry grid only ever looks
+     * forward, so a serial that has settled is behind us forever — but that argument rests on the clock never
+     * going backwards, and the clock does not live here. Simulation time is accumulated in REDIS while the
+     * chain is in the database, so anything that loses or rewinds the Redis state (a flush, a restore, a
+     * ticker restarted against a half-old stack) puts the grid back over serials whose contracts are still
+     * sitting in the table, settled. Asking whether the name is taken costs the same query and does not care.
+     *
+     * @param array<int, int> $stockIds
+     * @return array<string, true>
+     */
+    private function existingTickers(array $stockIds): array
+    {
+        return array_fill_keys(
+            $this->em->getConnection()->fetchFirstColumn(
+                'SELECT ticker FROM option_contracts WHERE stock_id IN (:stocks)',
+                ['stocks' => $stockIds],
+                ['stocks' => ArrayParameterType::INTEGER]
+            ),
+            true
+        );
+    }
+
+    /**
+     * Writes listing rows, LISTINGS_PER_STATEMENT at a time.
+     *
+     * @param array<int, array<int, mixed>> $rows
+     */
+    private function insert(array $rows): void
+    {
+        $connection = $this->em->getConnection();
+        $columns = implode(', ', self::LISTING_COLUMNS);
+        $placeholders = '(' . implode(', ', array_fill(0, count(self::LISTING_COLUMNS), '?')) . ')';
+
+        foreach (array_chunk($rows, self::LISTINGS_PER_STATEMENT) as $chunk) {
+            $connection->executeStatement(
+                'INSERT INTO option_contracts (' . $columns . ') VALUES '
+                . implode(', ', array_fill(0, count($chunk), $placeholders)),
+                array_merge(...$chunk)
+            );
+        }
     }
 }

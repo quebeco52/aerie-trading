@@ -10,7 +10,6 @@ use App\Entity\Stock;
 use App\Service\Macro\MacroEngine;
 use App\Service\Market\Flow\OrderFlowStoreInterface;
 use Doctrine\DBAL\ArrayParameterType;
-use Doctrine\DBAL\Connection;
 use Doctrine\ORM\EntityManagerInterface;
 
 /**
@@ -42,6 +41,10 @@ use Doctrine\ORM\EntityManagerInterface;
  */
 final class OptionDeskService
 {
+    // --- Mark Write ---
+    /** The columns a mark writes on a held contract, in the order the bulk row lays them out. */
+    private const MARK_COLUMNS = ['price', 'implied_volatility', 'delta', 'gamma', 'vega', 'theta', 'updated_at'];
+
     // --- Sweep Cadence ---
 
     /**
@@ -63,10 +66,32 @@ final class OptionDeskService
         return max(1, (int) ($ticksPerYear / (self::SWEEPS_PER_YEAR * self::SWEEP_SLICES)));
     }
 
-    /** Which slice of the market a pass belongs to. */
+    /**
+     * Tick offset of a pass within its interval.
+     *
+     * One rather than zero, so a pass does not land on a history tick. The sweep interval and the history
+     * interval are both derived from the tick rate and share a factor at the shipped one, which means at an
+     * offset of zero they coincide on every seventeenth pass and that single tick pays for the sweep AND the
+     * bar — the twenty-five-millisecond outliers in the ticker's log were all of them this collision.
+     *
+     * Shifting by one removes it outright whenever the two intervals share a factor: a solution to
+     * sweep·k + 1 ≡ 0 (mod history) exists only if the two are coprime. At 14,400 ticks a year that is
+     * 34 and 6, so they never meet again.
+     */
+    public const SWEEP_TICK_OFFSET = 1;
+
+    /** Whether a tick runs a sweep pass. */
+    public static function isSweepTick(int $tickCount, int $intervalTicks): bool
+    {
+        $interval = max(1, $intervalTicks);
+
+        return $tickCount % $interval === self::SWEEP_TICK_OFFSET % $interval;
+    }
+
+    /** Which slice of the market a pass belongs to: the pass number, counted from the start, modulo the slices. */
     public static function sweepSlice(int $tickCount, int $intervalTicks): int
     {
-        return (int) (($tickCount / max(1, $intervalTicks)) % self::SWEEP_SLICES);
+        return intdiv($tickCount, max(1, $intervalTicks)) % self::SWEEP_SLICES;
     }
 
     public function __construct(
@@ -82,40 +107,67 @@ final class OptionDeskService
     /**
      * Settles the market, then lists, marks and re-measures one slice of it.
      *
+     * A pass reports its own WALL TIME PER STAGE. Measured on the bench, the whole model side of a full
+     * slice — pricing eight hundred contracts, evolving the public's demand and re-measuring the desk's
+     * gamma — is under two milliseconds, so when a sweep runs long it is a statement that ran long, and
+     * which one is not guessable from outside. The ticker folds these into its lag warning.
+     *
      * @param array<int, Stock> $stocks The ticker's working set.
      * @param float             $dt     Years since THIS SLICE was last swept, not since the last pass.
      * @param int               $slice  Which slice of the market to process.
-     * @return array{settled: int, listed: int, marked: int, exercised: int}
+     * @return array{settled: int, listed: int, marked: int, exercised: int, timing: array<string, float>}
      */
     public function sweep(array $stocks, MacroStateDTO $macroState, float $dt, int $slice = 0): array
     {
+        /** @var array<string, float> $timing */
+        $timing = [];
+        $mark = hrtime(true);
+        $lap = static function (string $stage) use (&$timing, &$mark): void {
+            $now = hrtime(true);
+            $timing[$stage] = ($timing[$stage] ?? 0.0) + (($now - $mark) / 1e6);
+            $mark = $now;
+        };
+
         $settlements = $this->settlementEngine->settle($macroState->totalTime);
+        $lap('settle');
 
         $stocks = $this->slice($stocks, $slice);
 
-        $listed = 0;
-        foreach ($stocks as $stock) {
-            $listed += count($this->chainService->listChain($stock, $macroState->totalTime));
-        }
+        // Listing writes its rows directly, so the contracts below are read back from the table in the same
+        // transaction without anything having gone through the unit of work.
+        $listed = $this->chainService->listChains($stocks, $macroState->totalTime);
+        $lap('list');
 
-        // Newly listed contracts have no row until they are flushed, and the chain below is read from the
-        // table rather than from the identity map.
-        $this->em->flush();
+        // Settlement is the only part of a pass that touches managed entities, and only when somebody held
+        // what expired. Every other sweep skips the flush rather than paying for a walk of the identity map
+        // to discover there is nothing to write.
+        if ($settlements !== []) {
+            $this->em->flush();
+            $lap('flush');
+        }
 
         $marked = 0;
         $curve = $macroState->sovereignCurve();
         $held = $this->heldContractTickers();
         $connection = $this->em->getConnection();
+        $lap('held');
 
         /** @var array<int, array<int, mixed>> $bookRows Contract id => [structural open interest], where it moved. */
         $bookRows = [];
 
-        foreach ($this->chainsByStock($stocks) as $chain) {
+        /** @var array<int, array<int, mixed>> $markRows Contract id => the mark, for the few contracts held. */
+        $markRows = [];
+
+        $chains = $this->chainsByStock($stocks);
+        $lap('chain');
+
+        foreach ($chains as $chain) {
             $stock = $chain['stock'];
             $contracts = $chain['contracts'];
             $ids = $chain['ids'];
 
             $quotes = $this->pricingEngine->quoteChain($contracts, $curve, $macroState->totalTime);
+            $lap('price');
 
             $bookBefore = [];
 
@@ -129,7 +181,7 @@ final class OptionDeskService
                 }
 
                 $this->pricingEngine->applyMark($contract, $quote);
-                $this->writeMark($connection, $ids[$ticker], $contract);
+                $markRows[$ids[$ticker]] = self::markRow($contract);
                 $marked++;
             }
 
@@ -154,10 +206,17 @@ final class OptionDeskService
             }
 
             $this->gammaEngine->refresh($stock, $contracts, $quotes);
+            $lap('model');
+        }
+
+        if ($markRows !== []) {
+            BulkRowUpdate::apply($connection, 'option_contracts', self::MARK_COLUMNS, $markRows);
+            $lap('marks');
         }
 
         if ($bookRows !== []) {
             BulkRowUpdate::apply($connection, 'option_contracts', ['structural_open_interest'], $bookRows);
+            $lap('book');
         }
 
         return [
@@ -165,6 +224,7 @@ final class OptionDeskService
             'listed' => $listed,
             'marked' => $marked,
             'exercised' => count(array_filter($settlements, static fn (array $s): bool => $s['exercised'])),
+            'timing' => $timing,
         ];
     }
 
@@ -224,26 +284,24 @@ final class OptionDeskService
     }
 
     /**
-     * Writes one held contract's mark. Few contracts are held, so a row each is fine here; it is the
-     * thousands that are not held that must never cost a statement.
+     * One held contract's mark, laid out for MARK_COLUMNS.
+     *
+     * Few contracts are held, but "few" is a property of who is playing rather than of the market, and a
+     * statement each meant the sweep's cost grew with the size of the book. They go out together.
+     *
+     * @return array<int, mixed>
      */
-    private function writeMark(Connection $connection, int $id, OptionContract $contract): void
+    private static function markRow(OptionContract $contract): array
     {
-        $connection->executeStatement(
-            'UPDATE option_contracts
-             SET price = ?, implied_volatility = ?, delta = ?, gamma = ?, vega = ?, theta = ?, updated_at = ?
-             WHERE id = ?',
-            [
-                $contract->getPrice(),
-                $contract->getImpliedVolatility(),
-                $contract->getDelta(),
-                $contract->getGamma(),
-                $contract->getVega(),
-                $contract->getTheta(),
-                $contract->getUpdatedAt()->format('Y-m-d H:i:s'),
-                $id,
-            ]
-        );
+        return [
+            $contract->getPrice(),
+            $contract->getImpliedVolatility(),
+            $contract->getDelta(),
+            $contract->getGamma(),
+            $contract->getVega(),
+            $contract->getTheta(),
+            $contract->getUpdatedAt()->format('Y-m-d H:i:s'),
+        ];
     }
 
     /**

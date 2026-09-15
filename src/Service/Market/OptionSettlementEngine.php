@@ -12,6 +12,7 @@ use App\Entity\UserOption;
 use App\Entity\UserStock;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
+use Doctrine\DBAL\Connection;
 use Doctrine\ORM\EntityManagerInterface;
 
 /**
@@ -39,6 +40,13 @@ use Doctrine\ORM\EntityManagerInterface;
  */
 final class OptionSettlementEngine
 {
+    // --- Settlement Write ---
+    /** Contracts stamped per statement. A shared monthly grid retires the whole market's front month at once. */
+    public const EXPIRY_ROWS_PER_STATEMENT = 250;
+
+    /** What an expired contract's greeks are worth, ordered as the expiry statement sets them: delta, gamma, vega, theta. */
+    private const EXPIRY_GREEKS = ['0.00000000', '0.000000000000', '0.00000000', '0.00000000'];
+
     public function __construct(
         private readonly EntityManagerInterface $em,
         private readonly \App\Service\User\CashLedger $cashLedger,
@@ -47,60 +55,154 @@ final class OptionSettlementEngine
     /**
      * Settles every contract whose expiry has passed.
      *
+     * SET-BASED, because expiries arrive in a herd. A serial rolls off for the whole market at once, so this
+     * is called with nothing to do on almost every sweep and with several hundred contracts on the one that
+     * catches a roll. Settling them one at a time meant a position lookup per contract and a dirty entity per
+     * contract — several hundred round trips plus several hundred UPDATEs inside a single twenty-millisecond
+     * tick, which is exactly the hundred-millisecond spike the ticker logged whenever a serial expired.
+     *
+     * So: one query for the expiring batch and its settlement prices, one query for every open position
+     * across all of them, and one bulk write for the expiry stamp. The contracts are read as rows and rebuilt
+     * as transient objects — the engines see the same model, the unit of work sees nothing. That matters
+     * beyond this method: a settled contract left in the identity map was re-examined by every flush for the
+     * rest of the simulated day, and the ticker's flush grew from six milliseconds to twenty as the map
+     * filled up with them.
+     *
      * @return array<int, array{ticker: string, underlying: string, settlement: float, exercised: bool, positions: int}>
      *         One record per contract settled, for the tick's event feed.
      */
     public function settle(float $currentTime): array
     {
-        $repository = $this->em->getRepository(OptionContract::class);
-        $settled = [];
+        $connection = $this->em->getConnection();
 
-        foreach ($repository->findExpiring($currentTime) as $contract) {
-            $settled[] = $this->settleContract($contract);
+        $rows = $connection->fetchAllAssociative(
+            'SELECT o.id, o.ticker, o.option_type, o.strike, s.ticker AS underlying, s.price AS settlement
+             FROM option_contracts o
+             JOIN stocks s ON s.id = o.stock_id
+             WHERE o.status = :status AND o.expires_at_time <= :now',
+            ['status' => OptionContract::STATUS_ACTIVE, 'now' => $currentTime]
+        );
+
+        if ($rows === []) {
+            return [];
         }
+
+        $positions = $this->positionsByContract(
+            array_map(static fn (array $row): int => (int) $row['id'], $rows)
+        );
+
+        $stamp = (new \DateTime())->format('Y-m-d H:i:s');
+        $settled = [];
+        $expiryRows = [];
+
+        foreach ($rows as $row) {
+            $id = (int) $row['id'];
+
+            // Transient: never persisted, never managed. Rebuilt rather than read field by field so the
+            // exercise decision still goes through the contract's own intrinsic value.
+            $contract = (new OptionContract())
+                ->setTicker((string) $row['ticker'])
+                ->setOptionType((string) $row['option_type'])
+                ->setStrike((string) $row['strike']);
+
+            // The settlement price is the underlying's last print. A bankrupt shell settles every call at
+            // zero and every put at the full strike, which is the correct answer rather than a special case.
+            $settlementPrice = (float) $row['settlement'];
+            $intrinsic = $contract->intrinsicValue($settlementPrice);
+            $exercised = $intrinsic >= FinancialConstants::OPTION_EXERCISE_THRESHOLD;
+            $held = $positions[$id] ?? [];
+
+            foreach ($held as $position) {
+                if ($exercised) {
+                    $this->deliver($position, $contract, $position->getContract()->getStock(), $settlementPrice);
+                }
+
+                $this->em->remove($position);
+            }
+
+            $expiryRows[$id] = MathUtility::formatDecimal($intrinsic, 8);
+
+            $settled[] = [
+                'ticker' => $contract->getTicker(),
+                'underlying' => (string) $row['underlying'],
+                'settlement' => $settlementPrice,
+                'exercised' => $exercised,
+                'positions' => count($held),
+            ];
+        }
+
+        $this->writeExpiry($connection, $expiryRows, $stamp);
 
         return $settled;
     }
 
     /**
-     * @return array{ticker: string, underlying: string, settlement: float, exercised: bool, positions: int}
+     * Stamps a batch of contracts as expired.
+     *
+     * Every column but the settlement price is IDENTICAL across the batch — expired, no open interest, no
+     * greeks, stamped now — so they are set once per statement instead of carried on every row, and the batch
+     * is addressed by its primary key so the server seeks the rows rather than joining a derived table to
+     * them. This is not a micro-optimisation at this size: the expiry grid is shared, so the front month of
+     * the whole market retires on a single pass, and at nine values a row that was the better part of two
+     * thousand rows sent as eighteen of the widest statements the codebase has.
+     *
+     * @param array<int, string> $prices Contract id => settlement price.
      */
-    private function settleContract(OptionContract $contract): array
+    private function writeExpiry(Connection $connection, array $prices, string $stamp): void
     {
-        $stock = $contract->getStock();
+        foreach (array_chunk($prices, self::EXPIRY_ROWS_PER_STATEMENT, true) as $chunk) {
+            $cases = '';
+            $params = [OptionContract::STATUS_EXPIRED, ...self::EXPIRY_GREEKS, $stamp];
 
-        // The settlement price is the underlying's last print. A bankrupt shell settles every call at zero
-        // and every put at the full strike, which is the correct answer rather than a special case.
-        $settlementPrice = (float) $stock->getPrice();
-        $intrinsic = $contract->intrinsicValue($settlementPrice);
-        $exercised = $intrinsic >= FinancialConstants::OPTION_EXERCISE_THRESHOLD;
-
-        $positions = $this->em->getRepository(UserOption::class)->findBy(['contract' => $contract]);
-
-        foreach ($positions as $position) {
-            if ($exercised) {
-                $this->deliver($position, $contract, $stock, $settlementPrice);
+            foreach ($chunk as $id => $price) {
+                $cases .= ' WHEN ? THEN ?';
+                $params[] = $id;
+                $params[] = $price;
             }
 
-            $this->em->remove($position);
+            $connection->executeStatement(
+                'UPDATE option_contracts'
+                . ' SET status = ?, open_interest = 0, delta = ?, gamma = ?, vega = ?, theta = ?, updated_at = ?,'
+                . ' price = CASE id' . $cases . ' END'
+                . ' WHERE id IN (' . implode(', ', array_fill(0, count($chunk), '?')) . ')',
+                array_merge($params, array_keys($chunk))
+            );
+        }
+    }
+
+    /**
+     * Every open position across a batch of contracts, grouped by contract id.
+     *
+     * One query for the whole batch. Holdings are rare next to listed contracts — most of an expiring herd
+     * is owned by nobody — so this usually returns an empty set and the settlement never touches the ORM
+     * again. The contract and its underlying are joined in because delivery moves real shares and needs a
+     * managed stock to move them on.
+     *
+     * @param array<int, int> $contractIds
+     * @return array<int, array<int, UserOption>>
+     */
+    private function positionsByContract(array $contractIds): array
+    {
+        if ($contractIds === []) {
+            return [];
         }
 
-        $contract->setStatus(OptionContract::STATUS_EXPIRED)
-            ->setOpenInterest(0)
-            ->setPrice(MathUtility::formatDecimal($intrinsic, 8))
-            ->setDelta('0.00000000')
-            ->setGamma('0.000000000000')
-            ->setVega('0.00000000')
-            ->setTheta('0.00000000')
-            ->setUpdatedAt(new \DateTime());
+        /** @var array<int, UserOption> $held */
+        $held = $this->em->createQuery(
+            'SELECT uo, c, s FROM ' . UserOption::class . ' uo
+             JOIN uo.contract c JOIN c.stock s
+             WHERE c.id IN (:contracts)'
+        )
+            ->setParameter('contracts', $contractIds)
+            ->getResult();
 
-        return [
-            'ticker' => $contract->getTicker(),
-            'underlying' => $stock->getTicker(),
-            'settlement' => $settlementPrice,
-            'exercised' => $exercised,
-            'positions' => count($positions),
-        ];
+        $byContract = [];
+
+        foreach ($held as $position) {
+            $byContract[(int) $position->getContract()->getId()][] = $position;
+        }
+
+        return $byContract;
     }
 
     /**

@@ -43,7 +43,11 @@ class OptionDeskSweepTest extends TestCase
     {
         $connection = $this->createStub(Connection::class);
         $connection->method('fetchFirstColumn')->willReturn($heldTickers);
-        $connection->method('fetchAllAssociative')->willReturn($rows);
+        // The settlement's expiry scan and the sweep's chain read share one connection. Only the chain read
+        // is being described here, so the expiry scan is answered empty.
+        $connection->method('fetchAllAssociative')->willReturnCallback(
+            static fn (string $sql): array => str_contains($sql, 'expires_at_time <=') ? [] : $rows
+        );
         $connection->method('executeStatement')->willReturnCallback(
             function (string $sql, array $params = []): int {
                 $this->sent[] = [$sql, $params];
@@ -52,12 +56,9 @@ class OptionDeskSweepTest extends TestCase
             }
         );
 
-        $repository = $this->createStub(OptionContractRepository::class);
-        $repository->method('findExpiring')->willReturn([]);
-
         $em = $this->createStub(EntityManagerInterface::class);
         $em->method('getConnection')->willReturn($connection);
-        $em->method('getRepository')->willReturn($repository);
+        $em->method('getRepository')->willReturn($this->createStub(OptionContractRepository::class));
 
         $math = new MathUtility();
         $liquidity = new LiquidityEngine($math);
@@ -131,14 +132,16 @@ class OptionDeskSweepTest extends TestCase
 
         $this->assertSame(1, $result['marked']);
 
-        $marks = array_values(array_filter($this->sent, static fn (array $s): bool => str_contains($s[0], 'SET price = ?')));
+        $marks = array_values(array_filter($this->sent, static fn (array $s): bool => str_contains($s[0], '? AS price')));
         $books = array_values(array_filter($this->sent, static fn (array $s): bool => str_contains($s[0], 'structural_open_interest')));
 
-        // Exactly the held contract is marked, with the eight mark values and its own id last.
+        // Exactly the held contract is marked, and it goes out in the bulk shape: its id, then the seven
+        // mark values. A book of a thousand held contracts would cost the same one statement.
         $this->assertCount(1, $marks);
-        $this->assertSame(102, end($marks[0][1]));
+        $this->assertStringStartsWith('UPDATE option_contracts t JOIN (SELECT ? AS id, ? AS price, ? AS implied_volatility', $marks[0][0]);
         $this->assertCount(8, $marks[0][1]);
-        $this->assertGreaterThan(0.0, (float) $marks[0][1][0], 'An at-the-money put must carry a premium.');
+        $this->assertSame(102, $marks[0][1][0]);
+        $this->assertGreaterThan(0.0, (float) $marks[0][1][1], 'An at-the-money put must carry a premium.');
 
         // The public's book moved on the first pass (it opens flat), and it moved in ONE statement.
         $this->assertCount(1, $books);

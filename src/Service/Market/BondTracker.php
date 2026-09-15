@@ -31,9 +31,11 @@ use Doctrine\ORM\EntityManagerInterface;
  * entity's mark fields are left alone, so the flush has nothing to say about them. Coupons, redemptions
  * and maturity still go through the entity: those are rare, and they are real state changes.
  *
- * The ticker reloads its working set right after each flush, so an entity never carries a stale mark
- * past the tick that wrote it. Between marks the tracker quotes the valuation it last struck, kept per
- * ticker in memory: a price nothing has re-marked is by definition the last one.
+ * Nothing in the ticker process reads a bond's mark back off the entity — the quote, the history row and
+ * the wire all come from the valuation — so the entity's mark fields may lag until the ticker's next
+ * working-set reload; every reader that wants the mark reads the row. Between marks the tracker quotes
+ * the valuation it last struck, kept per ticker in memory: a price nothing has re-marked is by
+ * definition the last one.
  */
 class BondTracker
 {
@@ -161,22 +163,24 @@ class BondTracker
                 $spread = $this->lastMarks[$ticker]['spread'];
             }
 
+            // Wire precision: what a screen shows, not what the valuation carries. The history row below
+            // keeps the full figure.
             $updates[] = [
                 'ticker' => $bond->getTicker(),
                 'asset_type' => 'BOND',
                 'name' => $bond->getName(),
-                'price' => $valuation->dirtyPrice,
-                'clean_price' => $valuation->cleanPrice,
-                'accrued_interest' => $valuation->accruedInterest,
-                'yield_to_maturity' => $valuation->yieldToMaturity,
-                'modified_duration' => $valuation->modifiedDuration,
-                'convexity' => $valuation->convexity,
+                'price' => round($valuation->dirtyPrice, 4),
+                'clean_price' => round($valuation->cleanPrice, 4),
+                'accrued_interest' => round($valuation->accruedInterest, 4),
+                'yield_to_maturity' => round($valuation->yieldToMaturity, 6),
+                'modified_duration' => round($valuation->modifiedDuration, 4),
+                'convexity' => round($valuation->convexity, 2),
                 'tenor_years' => (float) $bond->getTenorYears(),
-                'years_to_maturity' => $bond->yearsToMaturity($currentTime),
+                'years_to_maturity' => round($bond->yearsToMaturity($currentTime), 4),
                 'coupon_rate' => (float) $bond->getCouponRate(),
                 'is_on_the_run' => $bond->isOnTheRun(),
                 'issuer' => $bond->getIssuer()?->getTicker(),
-                'credit_spread' => $spread,
+                'credit_spread' => round($spread, 6),
             ];
 
             if ($recordHistory) {

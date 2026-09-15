@@ -36,6 +36,7 @@
             <directory>tests/Command</directory>
             <directory>tests/MessageHandler</directory>
             <directory>tests/EventSubscriber</directory>
+            <directory>tests/EventListener</directory>
             <directory>tests/Security</directory>
             <directory>tests/Financial</directory>
             <directory>tests/Service</directory>
@@ -65,7 +66,13 @@
             <file>tests/Service/Market/CorporateDefaultServiceTest.php</file>
             <file>tests/Service/Market/IndexCommitteeTest.php</file>
             <file>tests/Service/Market/BulkRowUpdateTest.php</file>
+            <file>tests/Service/Market/StockTickColumnsTest.php</file>
+            <file>tests/Command/MarketTickerCadenceTest.php</file>
             <file>tests/Service/Market/OptionDeskSweepTest.php</file>
+            <file>tests/Service/Market/OptionSettlementBatchTest.php</file>
+            <file>tests/Service/Market/OptionChainListingTest.php</file>
+            <file>tests/EventListener/FlushProfilerTest.php</file>
+            <file>tests/Service/Market/SimulationClockTest.php</file>
             <file>tests/Service/Corporate/MergerAndAcquisitionGateTest.php</file>
             <directory>tests/Support</directory>
         </testsuite>

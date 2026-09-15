@@ -52,20 +52,4 @@ class OptionContractRepository extends ServiceEntityRepository
     {
         return $this->findBy(['status' => OptionContract::STATUS_ACTIVE]);
     }
-
-    /**
-     * Contracts whose expiry has passed and which have not been settled yet.
-     *
-     * @return array<int, OptionContract>
-     */
-    public function findExpiring(float $currentTime): array
-    {
-        return $this->createQueryBuilder('o')
-            ->andWhere('o.status = :status')
-            ->andWhere('o.expiresAtTime <= :now')
-            ->setParameter('status', OptionContract::STATUS_ACTIVE)
-            ->setParameter('now', $currentTime)
-            ->getQuery()
-            ->getResult();
-    }
 }

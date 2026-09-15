@@ -420,12 +420,15 @@ class StockTracker
             $isFundamentalTick = !empty($generatedEvents) || $maResult || (isset($divestResult) && $divestResult);
 
 
+            // Everything below is display data that every connected browser receives on every tick, so
+            // it is carried at the precision a screen can show. The full-precision figures live on the
+            // entity and in the engines; a fair value with fifteen decimals was a third of the payload.
             $stockUpdate = [
                 'ticker' => $stock->getTicker(),
                 'sector' => $sectorName,
                 'industry' => $stock->getIndustry() ?: 'General',
                 'price' => round($finalPrice, 2),
-                'market_cap' => $currentMarketCap,
+                'market_cap' => round($currentMarketCap),
                 'current_volatility' => round($nextVolatility * 100, 2),
                 'current_roic' => $effectiveRoic, // Backwards compatible fix so frontend JS updates the UI with ROE for banks
                 'current_roe' => (float) $stock->getCurrentRoe() != 0.0 ? (float) $stock->getCurrentRoe() : (float) $stock->getBaselineRoe(),
@@ -436,10 +439,10 @@ class StockTracker
                 'invested_capital' => $stock->getInvestedCapital(),
                 'debt_ratio' => (float) $stock->getDebtToEquityRatio(),
                 'credit_rating' => $stock->getCreditRating(),
-                'analyst_targets' => $analystTargets,
-                'perceived_fair_value' => $perceivedFairValue,
-                'volume' => $tickVolume,
-                'adv_shares' => $this->liquidityEngine->averageDailyVolume($stock),
+                'analyst_targets' => array_map(static fn (float $target): float => round($target, 2), $analystTargets),
+                'perceived_fair_value' => round($perceivedFairValue, 2),
+                'volume' => round($tickVolume),
+                'adv_shares' => round($this->liquidityEngine->averageDailyVolume($stock)),
                 'spread_bps' => round($this->liquidityEngine->halfSpreadFraction($stock) * 20000.0, 2),
                 'is_bankrupt' => false,
             ];
