@@ -23,7 +23,7 @@ use Doctrine\ORM\Mapping as ORM;
 #[ORM\Entity(repositoryClass: \App\Repository\OptionContractRepository::class)]
 #[ORM\Table(name: 'option_contracts')]
 #[ORM\Index(name: 'option_underlying_status', columns: ['stock_id', 'status'])]
-#[ORM\Index(name: 'option_expiry', columns: ['expires_at_time'])]
+#[ORM\Index(name: 'option_status_expiry', columns: ['status', 'expires_at_time'])]
 class OptionContract
 {
     /** Listed and quoting. */

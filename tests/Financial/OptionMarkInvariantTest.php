@@ -127,9 +127,9 @@ class OptionMarkInvariantTest extends TestCase
 
         // The gate itself. Without it the sweep is back to rewriting the whole chain every pass, which is
         // what made the ticker crawl.
-        $this->assertStringContainsString('heldContractIds', $source);
+        $this->assertStringContainsString('heldContractTickers', $source);
         $this->assertStringContainsString('user_options', $source);
-        $this->assertStringContainsString('isset($held[$contract->getId()])', $source);
+        $this->assertStringContainsString('!isset($held[$ticker])', $source);
     }
 
     public function testTheTradePathMarksAContractAsItBecomesHeld(): void

@@ -140,6 +140,50 @@ class MergerAndAcquisitionEngine
 
     /** Minimum cents on the dollar for fire sale. */
     public const DIV_FIRE_SALE_MIN_CENTS = 0.40;
+    /** Ceiling on the acquisition hazard, cached: the styles and constants it is built from never change. */
+    private static ?float $acquisitionHazardCeiling = null;
+
+    /**
+     * The largest annual acquisition hazard any firm can carry, in any state, under any manager.
+     *
+     * The bound the rejection gate is struck at. Every branch of determineAcquisitionStrategy() is a base
+     * rate times the manager's acquisition bias (or 1.0 where the branch is priced by style), and the cash
+     * fallback can fire independently on top, so the ceiling is the largest primary rate plus the fallback
+     * rate, both at the most acquisitive manager the profile can produce. Exact, not tuned: a hazard above
+     * this cannot occur, and one below it is reproduced exactly by the two-stage draw.
+     */
+    public static function acquisitionHazardCeiling(): float
+    {
+        if (self::$acquisitionHazardCeiling !== null) {
+            return self::$acquisitionHazardCeiling;
+        }
+
+        $maxBias = 1.0;
+        foreach (\App\Data\ManagementStyle::cases() as $style) {
+            $maxBias = max(
+                $maxBias,
+                \App\Data\ManagementProfile::forStyle($style, \App\Data\ManagementProfile::MAX_INTENSITY)->acquisitionBias()
+            );
+        }
+
+        $primary = max(
+            self::MA_EMPIRE_BUILDER_PROB,
+            self::MA_OVERVALUED_PROB * $maxBias,
+            self::MA_MEGA_HOARDER_PROB * $maxBias,
+            self::MA_HOARDER_PROB * $maxBias,
+            self::MA_LOW_LEVERAGE_PROB * $maxBias,
+            self::MA_MOD_LEVERAGE_PROB * $maxBias
+        );
+
+        return self::$acquisitionHazardCeiling = $primary + (self::MA_CASH_FALLBACK_PROB * $maxBias);
+    }
+
+    /** The largest annual divestiture hazard any state assigns; the bound its rejection gate is struck at. */
+    public static function divestitureHazardCeiling(): float
+    {
+        return max(self::DIV_DYING_ANNUAL_PROB, self::DIV_DISTRESSED_ANNUAL_PROB, self::DIV_PREMIUM_ANNUAL_PROB);
+    }
+
     /** Maximum cents on the dollar for fire sale. */
     public const DIV_FIRE_SALE_MAX_CENTS = 0.80;
 
@@ -157,6 +201,17 @@ class MergerAndAcquisitionEngine
     public function evaluatePrivateAcquisition(Stock $acquirer, MacroStateDTO $macroState, float $dt): ?array
     {
         if ($acquirer->isBankrupt()) {
+            return null;
+        }
+
+        // REJECTION GATE. Whether a deal fires this tick is a Bernoulli draw with a hazard the firm's state
+        // decides, and that hazard is bounded above by a constant. So the draw is made in two stages: pass a
+        // gate at the ceiling, and only then work out the firm's own hazard and accept with the ratio of the
+        // two. The product is exactly the firm's hazard — this is rejection sampling, not an approximation —
+        // and the second stage is what costs: the debt analysis, the fair-value multiple and the hoarding
+        // test were being computed for every firm on every tick to decide an event that fires about once a
+        // decade per firm. At the ceiling the gate rejects all but a few passes in ten thousand.
+        if (!$this->mathUtility->checkProbability(self::acquisitionHazardCeiling() * $dt)) {
             return null;
         }
 
@@ -299,17 +354,24 @@ class MergerAndAcquisitionEngine
         // twice a year. Everywhere else the bias is the only thing the style says about deal frequency.
         $hazardBias = ($config['style_priced'] ?? false) ? 1.0 : $manager->acquisitionBias();
 
-        if ($config && $this->mathUtility->checkProbability($config['prob'] * $hazardBias * $ctx->dt)) {
+        // Second stage of the gate in evaluatePrivateAcquisition(): one uniform on [0, ceiling * dt),
+        // which is the draw conditional on having passed. The primary deal takes the low end of the
+        // interval and the cash fallback the band above it, sized so that P(fallback) is exactly what an
+        // independent second draw would have given: (1 - p1) * p2. Both fire at their own hazards.
+        $ctx->dealExecuted = false;
+        $primaryHazard = $config ? $config['prob'] * $hazardBias * $ctx->dt : 0.0;
+        $fallbackHazard = $ctx->excessCash > self::MA_CASH_FALLBACK_THRESHOLD
+            ? self::MA_CASH_FALLBACK_PROB * $manager->acquisitionBias() * $ctx->dt
+            : 0.0;
+        $draw = $this->mathUtility->generateUniform() * self::acquisitionHazardCeiling() * $ctx->dt;
+
+        if ($config && $draw < $primaryHazard) {
             $ctx->dealExecuted = true;
-        }
-        
-        if (!$ctx->dealExecuted && $ctx->excessCash > self::MA_CASH_FALLBACK_THRESHOLD) {
+        } elseif ($fallbackHazard > 0.0 && $draw < $primaryHazard + ((1.0 - $primaryHazard) * $fallbackHazard)) {
             $config = [
                 'prob' => self::MA_CASH_FALLBACK_PROB, 'spend' => 0.20, 'type' => 'STRATEGIC ACQUISITION', 'use_leverage' => false, 'use_stock' => false
             ];
-            if ($this->mathUtility->checkProbability($config['prob'] * $manager->acquisitionBias() * $ctx->dt)) {
-                $ctx->dealExecuted = true;
-            }
+            $ctx->dealExecuted = true;
         }
 
         if (!$ctx->dealExecuted || !$config) {
@@ -580,6 +642,12 @@ class MergerAndAcquisitionEngine
             return null;
         }
 
+        // The same rejection gate as evaluatePrivateAcquisition(): pass at the ceiling hazard first, work
+        // out which hazard actually applies only then.
+        if (!$this->mathUtility->checkProbability(self::divestitureHazardCeiling() * $dt)) {
+            return null;
+        }
+
         $ctx = new DivestitureContext($seller, $macroState, $dt);
 
         $this->initializeDivestitureContext($ctx);
@@ -687,7 +755,9 @@ class MergerAndAcquisitionEngine
             $ctx->annualProbability = self::DIV_PREMIUM_ANNUAL_PROB;
         }
 
-        if (!$this->mathUtility->checkProbability($ctx->annualProbability * $ctx->dt)) {
+        // Second stage of the gate: accept with the ratio of this state's hazard to the ceiling. The dt
+        // cancels, so the comparison is between annual rates.
+        if ($this->mathUtility->generateUniform() * self::divestitureHazardCeiling() >= $ctx->annualProbability) {
             $ctx->dealExecuted = false;
             return;
         }

@@ -64,6 +64,9 @@
             <file>tests/Service/Market/CorporateBondDeskTest.php</file>
             <file>tests/Service/Market/CorporateDefaultServiceTest.php</file>
             <file>tests/Service/Market/IndexCommitteeTest.php</file>
+            <file>tests/Service/Market/BulkRowUpdateTest.php</file>
+            <file>tests/Service/Market/OptionDeskSweepTest.php</file>
+            <file>tests/Service/Corporate/MergerAndAcquisitionGateTest.php</file>
             <directory>tests/Support</directory>
         </testsuite>
 

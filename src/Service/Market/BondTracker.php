@@ -22,9 +22,41 @@ use Doctrine\ORM\EntityManagerInterface;
  * scheduled on a wall clock. A tick can span more than one coupon period at a high tick rate or after a
  * restart, so the check is a loop, not an equality: a missed coupon is a permanent cash shortfall to every
  * holder and there is nothing later to detect it.
+ *
+ * THE MARK IS WRITTEN AS DATA, NOT THROUGH THE ENTITY. Every issue on the ladder is revalued on the mark
+ * cadence, and a ladder that has aged for a few decades of quarterly auctions is a couple of hundred
+ * issues deep. Setting seven fields on each of them made Doctrine send one UPDATE per bond on every flush
+ * — more synchronous round trips than the whole tick budget, for numbers that are the same shape on every
+ * row. The valuation therefore goes to the database in a few bulk statements (BulkRowUpdate) and the
+ * entity's mark fields are left alone, so the flush has nothing to say about them. Coupons, redemptions
+ * and maturity still go through the entity: those are rare, and they are real state changes.
+ *
+ * The ticker reloads its working set right after each flush, so an entity never carries a stale mark
+ * past the tick that wrote it. Between marks the tracker quotes the valuation it last struck, kept per
+ * ticker in memory: a price nothing has re-marked is by definition the last one.
  */
 class BondTracker
 {
+    // --- Mark Columns ---
+    /** The columns one mark writes, in the order the valuation row carries them. */
+    private const MARK_COLUMNS = [
+        'price',
+        'clean_price',
+        'accrued_interest',
+        'yield_to_maturity',
+        'modified_duration',
+        'convexity',
+        'credit_spread',
+        'updated_at',
+    ];
+
+    /**
+     * The last valuation struck per ticker, quoted on the ticks between marks.
+     *
+     * @var array<string, array{valuation: \App\DTO\BondValuationDTO, spread: float}>
+     */
+    private array $lastMarks = [];
+
     public function __construct(
         private readonly EntityManagerInterface $entityManager,
         private readonly BondPricingEngine $pricingEngine,
@@ -40,14 +72,15 @@ class BondTracker
      * @return array{updates: array<int, array<string, mixed>>, history: array<int, array<string, mixed>>, matured: array<int, Bond>, curve: array<int, array{tenor: float, yield: float}>}
      * @param array<int, float> $issuerSpreads Live credit spread per issuer id, so marking the corporate
      *                                         ladder does not lazy-load a company for every bond on it.
-     * @param bool              $markCorporate Whether corporate issues are revalued this pass.
+     * @param bool              $mark          Whether the ladder is revalued and written this pass. Off, every
+     *                                         issue quotes the valuation it was last marked at.
      */
     public function updateBonds(
         array $bonds,
         MacroStateDTO $macroState,
         bool $recordHistory = false,
         array $issuerSpreads = [],
-        bool $markCorporate = true
+        bool $mark = true
     ): array {
         $curve = $macroState->sovereignCurve();
         $currentTime = $macroState->totalTime;
@@ -56,6 +89,10 @@ class BondTracker
         $updates = [];
         $history = [];
         $matured = [];
+
+        /** @var array<int, array<int, mixed>> $markRows Primary key => mark columns, for the bulk write. */
+        $markRows = [];
+        $markedAt = $now->format('Y-m-d H:i:s');
 
         foreach ($bonds as $bond) {
             if ($bond->getStatus() !== Bond::STATUS_ACTIVE) {
@@ -77,40 +114,52 @@ class BondTracker
                     ->setUpdatedAt($now);
 
                 $matured[] = $bond;
+                unset($this->lastMarks[$bond->getTicker()]);
                 continue;
             }
 
-            // A corporate issue is remarked on the slower cadence. Its two drivers — the curve and its
-            // issuer's credit — both move far slower than a tick, and the ladder is large enough that
-            // revaluing all of it every tick is a measurable share of the tick budget for a price that has
-            // not meaningfully changed. Coupons and maturity above are NOT on that cadence: those are dates,
-            // and a date cannot be approximately reached.
-            if (!$bond->isSovereign() && !$markCorporate) {
-                continue;
+            // The whole ladder is remarked on the slower cadence. Its drivers — the curve and each issuer's
+            // credit — move far slower than a tick, and the ladder is large enough that revaluing all of
+            // it every tick was a measurable share of the tick budget for a price that had not meaningfully
+            // changed. Coupons and maturity above are NOT on that cadence: those are dates, and a date
+            // cannot be approximately reached. An issue never marked in this process — the first pass after
+            // a start, or one listed since the last mark — is valued now rather than quoted from nothing.
+            $ticker = $bond->getTicker();
+            $struck = $mark || !isset($this->lastMarks[$ticker]);
+
+            if ($struck) {
+                // The spread comes from the issuer map the caller already holds rather than from the bond's
+                // association, so marking the ladder does not lazy-load a company per bond.
+                $spread = 0.0;
+
+                if (!$bond->isSovereign()) {
+                    $issuerId = $bond->getIssuer()?->getId();
+                    $spread = $issuerId !== null
+                        ? (float) ($issuerSpreads[$issuerId] ?? (float) $bond->getCreditSpread())
+                        : (float) $bond->getCreditSpread();
+                }
+
+                $valuation = $this->pricingEngine->value($bond, $curve, $currentTime, $spread);
+                $this->lastMarks[$ticker] = ['valuation' => $valuation, 'spread' => $spread];
+
+                // Written below in bulk; an issue not yet flushed has no row to write to and is picked up
+                // by the next mark, after the flush has given it one.
+                if ($mark && $bond->getId() !== null) {
+                    $markRows[$bond->getId()] = [
+                        (string) $valuation->dirtyPrice,
+                        (string) $valuation->cleanPrice,
+                        (string) $valuation->accruedInterest,
+                        (string) $valuation->yieldToMaturity,
+                        (string) $valuation->modifiedDuration,
+                        (string) $valuation->convexity,
+                        (string) $spread,
+                        $markedAt,
+                    ];
+                }
+            } else {
+                $valuation = $this->lastMarks[$ticker]['valuation'];
+                $spread = $this->lastMarks[$ticker]['spread'];
             }
-
-            // The spread comes from the issuer map the caller already holds rather than from the bond's
-            // association, so marking the ladder does not lazy-load a company per bond.
-            $spread = 0.0;
-
-            if (!$bond->isSovereign()) {
-                $issuerId = $bond->getIssuer()?->getId();
-                $spread = $issuerId !== null
-                    ? (float) ($issuerSpreads[$issuerId] ?? (float) $bond->getCreditSpread())
-                    : (float) $bond->getCreditSpread();
-
-                $bond->setCreditSpread((string) $spread);
-            }
-
-            $valuation = $this->pricingEngine->value($bond, $curve, $currentTime, $spread);
-
-            $bond->setPrice((string) $valuation->dirtyPrice)
-                ->setCleanPrice((string) $valuation->cleanPrice)
-                ->setAccruedInterest((string) $valuation->accruedInterest)
-                ->setYieldToMaturity((string) $valuation->yieldToMaturity)
-                ->setModifiedDuration((string) $valuation->modifiedDuration)
-                ->setConvexity((string) $valuation->convexity)
-                ->setUpdatedAt($now);
 
             $updates[] = [
                 'ticker' => $bond->getTicker(),
@@ -137,6 +186,10 @@ class BondTracker
                     'yield_to_maturity' => $valuation->yieldToMaturity,
                 ];
             }
+        }
+
+        if ($markRows !== []) {
+            BulkRowUpdate::apply($this->entityManager->getConnection(), 'bonds', self::MARK_COLUMNS, $markRows);
         }
 
         return [

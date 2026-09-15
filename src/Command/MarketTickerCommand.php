@@ -334,7 +334,9 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
 
                 // The bond desk. Coupons, redemptions and the mark all happen inside the same tick
                 // transaction as the equity book, so a crash mid-tick cannot leave a coupon credited
-                // against a mark that was rolled back.
+                // against a mark that was rolled back. The ladder is revalued and written on the history
+                // cadence, in bulk, and quotes its last mark on the ticks between; the working set is
+                // reloaded right after the flush, so no entity outlives the mark it was loaded with.
                 // What each issuer's credit costs right now, taken off the working set the tick already
                 // holds. Handing it to the tracker keeps the corporate ladder from loading a company per
                 // bond just to read one number off it.

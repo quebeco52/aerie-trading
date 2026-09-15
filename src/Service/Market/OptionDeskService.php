@@ -9,6 +9,8 @@ use App\Entity\OptionContract;
 use App\Entity\Stock;
 use App\Service\Macro\MacroEngine;
 use App\Service\Market\Flow\OrderFlowStoreInterface;
+use Doctrine\DBAL\ArrayParameterType;
+use Doctrine\DBAL\Connection;
 use Doctrine\ORM\EntityManagerInterface;
 
 /**
@@ -35,6 +37,8 @@ use Doctrine\ORM\EntityManagerInterface;
  *     public's demand has a time constant of weeks, and an expiry is a month apart.
  *   - Settlement stays on EVERY pass, unsliced. It is one indexed query that returns nothing almost every
  *     time, and a contract that has expired must not wait for its slice to come round before it settles.
+ *   - The chain is read as rows and written back as data. Hydrating it made every contract the public
+ *     nudged a dirty entity, and the next flush paid one UPDATE for each; see chainsByStock().
  */
 final class OptionDeskService
 {
@@ -94,28 +98,38 @@ final class OptionDeskService
             $listed += count($this->chainService->listChain($stock, $macroState->totalTime));
         }
 
-        // Newly listed contracts have no identity until they are flushed, and the chain query below reads
-        // from the database rather than from the identity map.
+        // Newly listed contracts have no row until they are flushed, and the chain below is read from the
+        // table rather than from the identity map.
         $this->em->flush();
 
         $marked = 0;
         $curve = $macroState->sovereignCurve();
-        $held = $this->heldContractIds();
+        $held = $this->heldContractTickers();
+        $connection = $this->em->getConnection();
+
+        /** @var array<int, array<int, mixed>> $bookRows Contract id => [structural open interest], where it moved. */
+        $bookRows = [];
 
         foreach ($this->chainsByStock($stocks) as $chain) {
             $stock = $chain['stock'];
             $contracts = $chain['contracts'];
+            $ids = $chain['ids'];
 
             $quotes = $this->pricingEngine->quoteChain($contracts, $curve, $macroState->totalTime);
 
-            foreach ($contracts as $contract) {
-                $quote = $quotes[$contract->getTicker()] ?? null;
+            $bookBefore = [];
 
-                if ($quote === null || !isset($held[$contract->getId()])) {
+            foreach ($contracts as $contract) {
+                $ticker = $contract->getTicker();
+                $bookBefore[$ticker] = (int) $contract->getStructuralOpenInterest();
+                $quote = $quotes[$ticker] ?? null;
+
+                if ($quote === null || !isset($held[$ticker])) {
                     continue;
                 }
 
                 $this->pricingEngine->applyMark($contract, $quote);
+                $this->writeMark($connection, $ids[$ticker], $contract);
                 $marked++;
             }
 
@@ -128,7 +142,22 @@ final class OptionDeskService
                 $dt
             );
 
+            // Only a book that actually moved is written. Most of a chain sits still on any one pass, and
+            // rewriting an unchanged row is the whole cost this pass is trying not to pay.
+            foreach ($contracts as $contract) {
+                $ticker = $contract->getTicker();
+                $after = (int) $contract->getStructuralOpenInterest();
+
+                if ($after !== $bookBefore[$ticker]) {
+                    $bookRows[$ids[$ticker]] = [$after];
+                }
+            }
+
             $this->gammaEngine->refresh($stock, $contracts, $quotes);
+        }
+
+        if ($bookRows !== []) {
+            BulkRowUpdate::apply($connection, 'option_contracts', ['structural_open_interest'], $bookRows);
         }
 
         return [
@@ -166,7 +195,7 @@ final class OptionDeskService
     }
 
     /**
-     * The contracts somebody actually holds, as a lookup.
+     * The contracts somebody actually holds, as a lookup by symbol.
      *
      * THE INVARIANT THIS ESTABLISHES: a contract with a position carries a stored mark; one without carries
      * a stale one, and nothing may read it. Every SQL reader of option_contracts.price in this codebase —
@@ -177,17 +206,43 @@ final class OptionDeskService
      *
      * Break that invariant and the failure is silent: a new query that reads price for an unheld contract
      * gets whatever the mark was when somebody last had a position in it, which could be years stale.
-     * OptionDeskMarkingTest guards it.
+     * OptionMarkInvariantTest guards it.
      *
-     * @return array<int, true>
+     * @return array<string, true>
      */
-    private function heldContractIds(): array
+    private function heldContractTickers(): array
     {
         return array_fill_keys(
             $this->em->getConnection()->fetchFirstColumn(
-                'SELECT DISTINCT option_contract_id FROM user_options WHERE quantity <> 0'
+                'SELECT DISTINCT o.ticker
+                 FROM user_options uo
+                 JOIN option_contracts o ON o.id = uo.option_contract_id
+                 WHERE uo.quantity <> 0'
             ),
             true
+        );
+    }
+
+    /**
+     * Writes one held contract's mark. Few contracts are held, so a row each is fine here; it is the
+     * thousands that are not held that must never cost a statement.
+     */
+    private function writeMark(Connection $connection, int $id, OptionContract $contract): void
+    {
+        $connection->executeStatement(
+            'UPDATE option_contracts
+             SET price = ?, implied_volatility = ?, delta = ?, gamma = ?, vega = ?, theta = ?, updated_at = ?
+             WHERE id = ?',
+            [
+                $contract->getPrice(),
+                $contract->getImpliedVolatility(),
+                $contract->getDelta(),
+                $contract->getGamma(),
+                $contract->getVega(),
+                $contract->getTheta(),
+                $contract->getUpdatedAt()->format('Y-m-d H:i:s'),
+                $id,
+            ]
         );
     }
 
@@ -218,12 +273,16 @@ final class OptionDeskService
     /**
      * The live chain of every name in the working set, grouped by underlying.
      *
-     * One query for the whole market rather than one per name: a sweep touches every listed contract, and
-     * fifty round trips to assemble what a single indexed read returns is the difference between a sweep
-     * that fits inside a tick and one that does not.
+     * One query for the whole slice rather than one per name, and rows rather than entities. A sweep touches
+     * every listed contract, and hydrating them through the ORM meant two things the tick could not afford:
+     * the hydration itself, and — worse — that every contract the public's book had nudged became a dirty
+     * entity, and the next flush sent an UPDATE for each one. The contracts here are plain objects built
+     * from the rows, so the engines see exactly what they always saw and the unit of work sees nothing.
+     * What changed is written back as data, in bulk, by the caller; the row's identity rides alongside so
+     * it can be.
      *
      * @param array<int, Stock> $stocks
-     * @return array<int, array{stock: Stock, contracts: array<int, OptionContract>}>
+     * @return array<int, array{stock: Stock, contracts: array<int, OptionContract>, ids: array<string, int>}>
      */
     private function chainsByStock(array $stocks): array
     {
@@ -238,28 +297,42 @@ final class OptionDeskService
             return [];
         }
 
-        $contracts = $this->em->getRepository(OptionContract::class)->createQueryBuilder('o')
-            ->andWhere('o.status = :status')
-            ->andWhere('o.stock IN (:stocks)')
-            ->setParameter('status', OptionContract::STATUS_ACTIVE)
-            ->setParameter('stocks', array_values($byId))
-            ->getQuery()
-            ->getResult();
+        $rows = $this->em->getConnection()->fetchAllAssociative(
+            'SELECT id, ticker, stock_id, option_type, strike, expiry_serial, expires_at_time, listed_at_time,
+                    open_interest, structural_open_interest
+             FROM option_contracts
+             WHERE status = :status AND stock_id IN (:stocks)',
+            ['status' => OptionContract::STATUS_ACTIVE, 'stocks' => array_keys($byId)],
+            ['stocks' => ArrayParameterType::INTEGER]
+        );
 
         $chains = [];
 
-        foreach ($contracts as $contract) {
-            $stockId = $contract->getStock()->getId();
+        foreach ($rows as $row) {
+            $stockId = (int) $row['stock_id'];
 
-            if ($stockId === null || !isset($byId[$stockId])) {
+            if (!isset($byId[$stockId])) {
                 continue;
             }
 
             if (!isset($chains[$stockId])) {
-                $chains[$stockId] = ['stock' => $byId[$stockId], 'contracts' => []];
+                $chains[$stockId] = ['stock' => $byId[$stockId], 'contracts' => [], 'ids' => []];
             }
 
+            $contract = (new OptionContract())
+                ->setTicker((string) $row['ticker'])
+                ->setStock($byId[$stockId])
+                ->setOptionType((string) $row['option_type'])
+                ->setStrike((string) $row['strike'])
+                ->setExpirySerial((int) $row['expiry_serial'])
+                ->setExpiresAtTime((float) $row['expires_at_time'])
+                ->setListedAtTime((float) $row['listed_at_time'])
+                ->setStatus(OptionContract::STATUS_ACTIVE)
+                ->setOpenInterest((int) $row['open_interest'])
+                ->setStructuralOpenInterest((int) $row['structural_open_interest']);
+
             $chains[$stockId]['contracts'][] = $contract;
+            $chains[$stockId]['ids'][(string) $row['ticker']] = (int) $row['id'];
         }
 
         return array_values($chains);
