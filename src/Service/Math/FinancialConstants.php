@@ -547,6 +547,16 @@ class FinancialConstants
     public const SHORT_OPTION_MINIMUM_REQUIREMENT = 0.10;
 
 
+    // --- Market Index Membership (Shleifer 1986) ---
+    /** Names the index carries. Fewer than the listed universe, so membership is a real distinction and joining or leaving it means something. */
+    public const INDEX_CONSTITUENT_COUNT = 40;
+    /** Banding around the cut, as a fraction of the constituent count. A sitting member is not evicted the first time a marginal name edges past it: real indices band precisely because ranking noise at the boundary would otherwise churn the whole passive book twice a year for nothing. */
+    public const INDEX_MEMBERSHIP_BUFFER = 0.20;
+    /** Reconstitutions per year. */
+    public const INDEX_RECONSTITUTIONS_PER_YEAR = 4;
+    /** Level the index opens at on a market with no history. An index base is a convention, not a measurement: what carries meaning is the return from it. */
+    public const INDEX_BASE_LEVEL = 100.0;
+
     // --- Corporate Bond Issuance ---
     /** Share of a firm's wholesale debt that is funded in the PUBLIC bond market rather than by banks. The listed issues are a tranche of the debt the balance sheet already carries, never additional borrowing. */
     public const CORPORATE_PUBLIC_DEBT_SHARE = 0.50;

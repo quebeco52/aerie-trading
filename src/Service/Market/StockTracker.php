@@ -47,7 +47,9 @@ class StockTracker
         private LiquidityEngine $liquidityEngine,
         private OrderFlowStoreInterface $orderFlow,
         private \App\Service\Market\Agent\AgentFlowEngine $agentFlow,
-        private \App\Service\Corporate\ManagementSuccessionEngine $successionEngine
+        private \App\Service\Corporate\ManagementSuccessionEngine $successionEngine,
+        /** Standing index membership; null (unit tests without an index) leaves every name a constituent. */
+        private ?IndexCommittee $indexCommittee = null
     ) {}
 
     /**
@@ -65,7 +67,7 @@ class StockTracker
      * @param bool    $recordHistory Whether to persist the new prices to the stock history table.
      * @param MacroStateDTO|null $macroState    The current state of the macroeconomic cycle.
      * 
-     * @return array{updates: array<mixed>, total_cap: float, events: array<mixed>, market_vol: float, history: array<mixed>}
+     * @return array{updates: array<mixed>, total_cap: float, float_caps: array<string, float>, events: array<mixed>, market_vol: float, history: array<mixed>}
      */
     public function updateStocks(array $stocks, float $dt, bool $recordHistory, ?\App\DTO\MacroStateDTO $macroState = null, int $tickCount = 0, int $ticksPerYear = 252): array
     {
@@ -73,6 +75,7 @@ class StockTracker
         $stockUpdates = [];
         $historyData = [];
         $totalMarketCap = 0.0;
+        $floatAdjustedCaps = [];
         $events = [];
 
         // Pull systemic variables from the Macro Engine
@@ -84,6 +87,11 @@ class StockTracker
         // rather than per stock: it is one round trip, and a quantity that has already moved the price must
         // not be able to move it again on the next tick.
         $netOrderFlow = $this->orderFlow->drain();
+
+        // The standing index membership, read once for the whole tick. An empty roster — a fresh market
+        // before its first reconstitution — means every listed name counts, which is what the market was
+        // before there was a membership at all.
+        $indexMembers = $this->indexCommittee?->currentMembers() ?? [];
 
         // The agent books are loaded once for the whole tick and written back once at the end, for the
         // same reason the order flow is drained once: a round trip per name is the cost that scales.
@@ -397,6 +405,11 @@ class StockTracker
             $currentMarketCap = $finalPrice * $newShares;
             $totalMarketCap += $currentMarketCap;
 
+            // What a passive fund could actually buy of this name, which is what an index weights on: the
+            // part of the company that trades. Published per ticker so the index can sum its OWN members
+            // rather than the whole board.
+            $floatAdjustedCaps[$stock->getTicker()] = IndexCommittee::floatAdjustedCap($stock);
+
             // Shares printed this tick. The players' own fills are prints too, so they are added rather than
             // assumed away: a name nobody but the players trades still shows the volume they generated.
             $tickVolume = $this->liquidityEngine->simulateTickVolume($stock, $dt, abs($tickFlow));
@@ -465,7 +478,8 @@ class StockTracker
                 dt: $dt,
                 riskFreeRate: $macroDTO->policyRate,
                 annualizedVolatility: (float) $nextVolatility,
-                splitRatio: $splitRatio
+                splitRatio: $splitRatio,
+                isIndexMember: $indexMembers === [] || isset($indexMembers[$stock->getTicker()])
             ));
 
             $stockUpdates[] = $stockUpdate;
@@ -486,6 +500,7 @@ class StockTracker
             'updates' => $stockUpdates,
             'history' => $historyData,
             'total_cap' => $totalMarketCap,
+            'float_caps' => $floatAdjustedCaps,
             'events' => $events,
             'market_vol' => $marketVol
         ];

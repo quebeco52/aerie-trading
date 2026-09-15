@@ -27,6 +27,16 @@ final class IndexFundStrategy implements AgentStrategyInterface
 
     public function signal(AgentMarketViewDTO $view, array $positions): float
     {
+        // A fund that tracks an index holds what is IN the index, and nothing else. This is the whole of the
+        // inclusion effect: the target for a name that has just been dropped is zero, the target for one
+        // that has just been added is a full position, and the population works every position toward its
+        // target on its own. So the trade that moves the price is placed by the same machinery that trades
+        // everything else and is charged the same impact — which is what makes the downward-sloping demand
+        // curve (Shleifer 1986) something the market produces rather than something written into it.
+        if (!$view->isIndexMember) {
+            return 0.0;
+        }
+
         // A tightening in conditions withdraws money from passive vehicles and an easing sends it back.
         // The index carries no other opinion, so this is the whole of its signal. The tilt is a fraction
         // of the passive book and it is bounded: fund flows are a few percent of assets a year even in a

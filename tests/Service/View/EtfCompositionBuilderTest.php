@@ -6,6 +6,8 @@ namespace App\Tests\Service\View;
 
 use App\Entity\Stock;
 use App\Repository\StockRepository;
+use App\Service\Market\IndexCommittee;
+use App\Service\Market\Index\InMemoryIndexMembershipStore;
 use App\Service\View\EtfCompositionBuilder;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\TestCase;
@@ -19,7 +21,15 @@ class EtfCompositionBuilderTest extends TestCase
         $stocks = $this->createMock(StockRepository::class);
         $stocks->method('findAll')->willReturn($board);
 
-        return new EtfCompositionBuilder($stocks);
+        // No membership taken, which is the fund tracking the whole live board — the behaviour these cases
+        // were written against, and still what a market does before its first reconstitution.
+        return new EtfCompositionBuilder(
+            $stocks,
+            new IndexCommittee(
+                new InMemoryIndexMembershipStore(),
+                $this->createStub(\App\Service\Market\EtfTracker::class)
+            )
+        );
     }
 
     private function listing(string $ticker, float $price, float $shares, bool $bankrupt = false): Stock
@@ -99,5 +109,42 @@ class EtfCompositionBuilderTest extends TestCase
 
         $this->assertSame([], $composition['components']);
         $this->assertSame([], $composition['pieData']);
+    }
+
+    public function testWeightsAreStruckOnTheFloatNotTheWholeCompany(): void
+    {
+        // What a passive fund can hold is the part of the company that trades. Two firms of identical
+        // market capitalisation are not identical positions if one of them is mostly closely held.
+        $open = $this->listing('OPEN', 100.0, 1_000_000);
+        $closed = $this->listing('CLOSED', 100.0, 1_000_000);
+        $closed->setPublicFloatPercentage('0.2500');
+
+        $components = $this->builder([$open, $closed])->build()['components'];
+        $byTicker = array_column($components, null, 'ticker');
+
+        $this->assertGreaterThan($byTicker['CLOSED']['weight'], $byTicker['OPEN']['weight']);
+        $this->assertEqualsWithDelta(80.0, $byTicker['OPEN']['weight'], 1e-6);
+        $this->assertEqualsWithDelta(20.0, $byTicker['CLOSED']['weight'], 1e-6);
+    }
+
+    public function testOnlyTheIndexMembersAreHoldings(): void
+    {
+        $inside = $this->listing('IN', 100.0, 1_000_000);
+        $outside = $this->listing('OUT', 100.0, 1_000_000);
+
+        $store = new InMemoryIndexMembershipStore();
+        $store->store(0, ['IN']);
+
+        $stocks = $this->createStub(StockRepository::class);
+        $stocks->method('findAll')->willReturn([$inside, $outside]);
+
+        $builder = new EtfCompositionBuilder(
+            $stocks,
+            new IndexCommittee($store, $this->createStub(\App\Service\Market\EtfTracker::class))
+        );
+
+        $tickers = array_column($builder->build()['components'], 'ticker');
+
+        $this->assertSame(['IN'], $tickers);
     }
 }

@@ -6,17 +6,26 @@ namespace App\Service\View;
 
 use App\Entity\Stock;
 use App\Repository\StockRepository;
+use App\Service\Market\IndexCommittee;
 
 /**
  * Builds the holdings breakdown shown on a fund's page.
  *
- * The fund tracks the whole listed market by capitalisation, so its composition is derived from the
- * live board rather than stored: a constituent's weight is its share of total market cap, and a
- * delisted shell carries none of the fund at all.
+ * The fund tracks an INDEX, not the whole board, so its composition is the index's standing membership —
+ * and a constituent's weight is its share of the members' FLOAT-adjusted capitalisation, because what a
+ * passive fund can actually hold is the part of a company that trades. Listing every company instead was
+ * describing a market capitalisation rather than a fund: it showed holdings in names the fund does not own
+ * and weights struck on stock it could not buy.
+ *
+ * Derived rather than stored, like the index level itself. Before the first reconstitution there is no
+ * membership, and the fund is then the whole live board — which is exactly what it was.
  */
 class EtfCompositionBuilder
 {
-    public function __construct(private readonly StockRepository $stocks) {}
+    public function __construct(
+        private readonly StockRepository $stocks,
+        private readonly IndexCommittee $indexCommittee,
+    ) {}
 
     /**
      * @return array{
@@ -30,6 +39,7 @@ class EtfCompositionBuilder
     public function build(): array
     {
         $allAssets = $this->stocks->findAll();
+        $members = $this->indexCommittee->currentMembers();
 
         $capByTicker = [];
         $totalMarketCap = 0.0;
@@ -39,7 +49,13 @@ class EtfCompositionBuilder
                 continue;
             }
 
-            $marketCap = (float) $stock->getPrice() * (float) $stock->getSharesOutstanding();
+            // Only what the index carries. An empty membership is a market that has not reconstituted yet,
+            // and there the fund is still the whole board.
+            if ($members !== [] && !isset($members[$stock->getTicker()])) {
+                continue;
+            }
+
+            $marketCap = IndexCommittee::floatAdjustedCap($stock);
             $capByTicker[$stock->getTicker()] = $marketCap;
             $totalMarketCap += $marketCap;
         }

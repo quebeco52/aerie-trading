@@ -46,6 +46,13 @@ final readonly class AgentMarketViewDTO
         public float $annualizedVolatility = 0.0,
         public float $splitRatio = 1.0,
         public ?float $marketLogMispricing = null,
+        /**
+         * Whether this name is in the index.
+         *
+         * Defaults to true, which is what the market was before there was a membership at all: every listed
+         * company counted, so every listed company was something a passive fund held.
+         */
+        public bool $isIndexMember = true,
     ) {}
 
     /**

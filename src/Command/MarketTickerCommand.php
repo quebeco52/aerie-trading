@@ -7,6 +7,7 @@ use App\Entity\Stock;
 use App\Service\Market\BondTracker;
 use App\Service\Market\StockTracker;
 use App\Service\Market\CorporateBondDesk;
+use App\Service\Market\IndexCommittee;
 use App\Service\Market\OptionDeskService;
 use App\Service\Market\TreasuryAuctionService;
 use App\Service\Market\EtfTracker;
@@ -82,6 +83,7 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
         private DistrictRoster $districtRoster,
         private \App\Service\Market\OptionDeskService $optionDesk,
         private CorporateBondDesk $corporateBondDesk,
+        private IndexCommittee $indexCommittee,
         private \Symfony\Component\Messenger\MessageBusInterface $messageBus,
 
         private int $tickIntervalUs,
@@ -217,7 +219,30 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                     $events = array_merge($events, $operatorEvents);
                 }
 
-                $etfUpdate = $this->etfTracker->updateIndex($totalMarketCap, $isHistoryTick, 'LBI', $lbiEtf);
+                // The index re-ranks the market on its own quarterly calendar. Passive money follows the
+                // membership rather than the whole board, so an addition is bought and a deletion is sold by
+                // the agent population itself — see IndexCommittee for why the inclusion effect is emergent
+                // here rather than scripted.
+                if (IndexCommittee::isReconstitutionTick($tickCount, $this->ticksPerYear)) {
+                    $reconstitution = $this->indexCommittee->reconstitute($stocks, $tickCount);
+
+                    if ($reconstitution['added'] !== [] || $reconstitution['deleted'] !== []) {
+                        $output->writeln(sprintf(
+                            '<info>Index reconstitution: +%s / -%s</info>',
+                            implode(',', $reconstitution['added']) ?: 'none',
+                            implode(',', $reconstitution['deleted']) ?: 'none'
+                        ));
+                    }
+                }
+
+                // Struck on the MEMBERS' float-adjusted capitalisation, not the whole board's total. An index
+                // measures what it actually holds, and it weights on what a passive fund could actually buy.
+                $etfUpdate = $this->etfTracker->updateIndex(
+                    $this->indexCommittee->memberCapitalisation($result['float_caps']),
+                    $isHistoryTick,
+                    'LBI',
+                    $lbiEtf
+                );
 
                 // The bond desk. Coupons, redemptions and the mark all happen inside the same tick
                 // transaction as the equity book, so a crash mid-tick cannot leave a coupon credited
