@@ -30,6 +30,10 @@ class MarketEngine
     /** Divisor applied to the reversion rate per unit of accumulated price trend; at the 0.50 trend cap a name reverts at two thirds speed. */
     private const MOMENTUM_REVERSION_RESISTANCE = 1.00;
 
+    // --- Variance Process Calibration ---
+    /** Speed the idiosyncratic variance reverts to its long-run level, in reversions per year; a shock is most of the way gone inside two months. */
+    public const BASE_VARIANCE_REVERSION_SPEED = 6.0;
+
     // --- Variance Budget ---
     /** Ceiling on the share of a name's long-run IDIOSYNCRATIC variance the market-wide jump may reclaim, so a quiet name keeps a diffusion that still reads as its configured volatility. */
     private const MAX_SYSTEMIC_VARIANCE_DRAG_SHARE = 0.25;
@@ -70,6 +74,111 @@ class MarketEngine
     public function __construct(
         private MathUtility $mathUtility
     ) {}
+
+    /**
+     * The long-run variance a name carries on its own, once its market loading has been paid for.
+     *
+     * A name's market loading is beta * marketVol by definition, so the diffusion supplies it outright and
+     * the stochastic volatility process carries only what is left. Deriving the loading the other way round
+     * — from an implied correlation clamped below one — truncated the beta of any name whose volatility fell
+     * short of what its beta demanded: measured against the market factor a configured 1.3 realized 1.19 and
+     * a 2.8 realized 2.30, and in a crisis, when market volatility triples and the truncation binds on
+     * everything at once, a 1.3 realized 0.45. The CAPM drift and the systemic jump were paid on the full
+     * beta throughout, so high-beta names were handed the premium without the risk.
+     *
+     * The target is struck against the market's BASELINE volatility, so the configured figure is the name's
+     * total volatility in normal conditions and total volatility then rises with the market's through beta,
+     * rather than being inert to it as it was before.
+     *
+     * A configuration whose beta already consumes the whole of its stated volatility is infeasible; the name
+     * keeps a guaranteed idiosyncratic share and ends up more volatile than its configured figure, which is
+     * the visible failure mode rather than the silent one.
+     *
+     * @param float $longTermVolatility The name's configured total volatility.
+     * @param float $beta               Its market loading.
+     * @return float Annualized variance, excluding the systematic loading.
+     */
+    public static function longTermIdiosyncraticVariance(float $longTermVolatility, float $beta): float
+    {
+        $longTermVar = $longTermVolatility * $longTermVolatility;
+        $baselineSystematicVar = ($beta * MacroEngine::MACRO_VOL_BASE_ANCHOR) * ($beta * MacroEngine::MACRO_VOL_BASE_ANCHOR);
+
+        return max($longTermVar * self::MIN_IDIOSYNCRATIC_VARIANCE_SHARE, $longTermVar - $baselineSystematicVar);
+    }
+
+    /**
+     * The Kou jump rates a name actually gaps at, after its jump is held to its variance budget.
+     *
+     * The jump scale is held to the share of the name's variance a jump process is entitled to. Left at
+     * whatever the seed configured, the arrival rate and jump size together supplied a median 29% of a
+     * name's variance and up to 148% of it — the jump was not an overlay on the diffusion, it WAS the
+     * diffusion for several names, and since none of it was budgeted every name realized more volatility
+     * than it was configured with. Scaling the size rather than the arrival rate keeps the seed's statement
+     * about how OFTEN a name gaps, which is a property of its business, and only calibrates how FAR, which
+     * has to be consistent with how risky the name is overall.
+     *
+     * Public and shared rather than inline in the price step, because the option desk writes contracts on
+     * exactly this jump: the smile it quotes is the skewness and kurtosis these two rates imply, and a desk
+     * quoting the seed's uncalibrated figures would be selling a different distribution from the one the
+     * price process goes on to realize.
+     *
+     * @param float $longTermVolatility The name's configured total volatility.
+     * @param float $beta               Its market loading.
+     * @param float $lambda             Jump intensity, arrivals per year.
+     * @param float $jumpVol            The configured jump scale, before calibration.
+     * @return array{eta_up: float, eta_down: float, scale: float} Exponential rates and the scale behind them.
+     */
+    public static function calibratedJumpParameters(
+        float $longTermVolatility,
+        float $beta,
+        float $lambda,
+        float $jumpVol
+    ): array {
+        $jumpScale = max(self::MIN_JUMP_SCALE, $jumpVol);
+
+        if ($lambda > 0.0) {
+            // Untruncated second moment of the Kou jump, 2 * scale^2 * (pUp + pDown * ratio^2), which is
+            // monotone in the scale and therefore invertible for the budget. Truncation only removes mass,
+            // so solving on it and deducting the truncated figure at the budget can never over-reclaim.
+            $rawSecondMomentPerUnit = 2.0 * (self::SVJJ_P_UP
+                + (self::SVJJ_P_DOWN * self::JUMP_DOWNSIDE_SCALE_RATIO * self::JUMP_DOWNSIDE_SCALE_RATIO));
+            $budget = self::longTermIdiosyncraticVariance($longTermVolatility, $beta)
+                * self::MAX_IDIOSYNCRATIC_JUMP_VARIANCE_SHARE;
+            $configured = $lambda * $rawSecondMomentPerUnit * $jumpScale * $jumpScale;
+
+            if ($configured > $budget && $configured > 0.0) {
+                $jumpScale = max(self::MIN_JUMP_SCALE, $jumpScale * sqrt($budget / $configured));
+            }
+        }
+
+        return [
+            'eta_up' => 1.0 / $jumpScale,
+            'eta_down' => 1.0 / ($jumpScale * self::JUMP_DOWNSIDE_SCALE_RATIO),
+            'scale' => $jumpScale,
+        ];
+    }
+
+    /** Probability that a single-name jump is upwards; the behavioural skew the price process carries. */
+    public static function jumpProbabilityUp(): float
+    {
+        return self::SVJJ_P_UP;
+    }
+
+    /**
+     * The speed the variance process actually reverts at, once its jump regime is accounted for.
+     *
+     * A jumpier name pulls back to its long-run level faster rather than having its target clamped, which is
+     * what keeps a jump from permanently raising the volatility it was budgeted out of. The option desk
+     * needs the same figure: the volatility it writes a contract at is the variance expected over the
+     * contract's life, and that expectation is an integral whose only shape parameter is this speed.
+     *
+     * @param float $lambda    Jump intensity, arrivals per year.
+     * @param float $baseKappa  Reversion speed before the jump regime scales it.
+     */
+    public static function varianceReversionSpeed(float $lambda, float $baseKappa = self::BASE_VARIANCE_REVERSION_SPEED): float
+    {
+        return $baseKappa * (1.0 + ($lambda * self::JUMP_REGIME_KAPPA_SENSITIVITY));
+    }
 
     /**
      * Calculates the next stock price using a hybrid model.
@@ -154,52 +263,18 @@ class MarketEngine
         $longTermVar = $longTermVolatility * $longTermVolatility;
 
         // SYSTEMATIC / IDIOSYNCRATIC SPLIT
-        // A name's market loading is beta * marketVol by definition, so the diffusion supplies it outright
-        // and the stochastic volatility process carries only what is left. Deriving the loading the other
-        // way round — from an implied correlation clamped below one — truncated the beta of any name whose
-        // volatility fell short of what its beta demanded: measured against the market factor a configured
-        // 1.3 realized 1.19 and a 2.8 realized 2.30, and in a crisis, when market volatility triples and the
-        // truncation binds on everything at once, a 1.3 realized 0.45. The CAPM drift and the systemic jump
-        // were paid on the full beta throughout, so high-beta names were handed the premium without the risk.
-        //
-        // The long-run idiosyncratic target is struck against the market's BASELINE volatility, so the
-        // configured figure is the name's total volatility in normal conditions and total volatility then
-        // rises with the market's through beta, rather than being inert to it as it was before.
+        // See longTermIdiosyncraticVariance() for why the loading is delivered outright rather than implied.
         $systematicVar = ($beta * $marketVol) * ($beta * $marketVol);
-        $baselineSystematicVar = ($beta * MacroEngine::MACRO_VOL_BASE_ANCHOR) * ($beta * MacroEngine::MACRO_VOL_BASE_ANCHOR);
+        $longTermIdiosyncraticVar = self::longTermIdiosyncraticVariance($longTermVolatility, $beta);
 
-        // A configuration whose beta already consumes the whole of its stated volatility is infeasible; the
-        // name keeps a guaranteed idiosyncratic share and ends up more volatile than its configured figure,
-        // which is the visible failure mode rather than the silent one.
+        // The floor the same split guarantees, which the variance state is held to when it is stripped back
+        // to its idiosyncratic part below.
         $minIdiosyncraticVar = $longTermVar * self::MIN_IDIOSYNCRATIC_VARIANCE_SHARE;
-        $longTermIdiosyncraticVar = max($minIdiosyncraticVar, $longTermVar - $baselineSystematicVar);
 
         // IDIOSYNCRATIC JUMP CALIBRATION
-        // The jump scale is held to the share of the name's variance a jump process is entitled to. Left at
-        // whatever the seed configured, the arrival rate and jump size together supplied a median 29% of a
-        // name's variance and up to 148% of it — the jump was not an overlay on the diffusion, it WAS the
-        // diffusion for several names, and since none of it was budgeted every name realized more volatility
-        // than it was configured with. Scaling the size rather than the arrival rate keeps the seed's
-        // statement about how OFTEN a name gaps, which is a property of its business, and only calibrates
-        // how FAR, which has to be consistent with how risky the name is overall.
-        $jumpScale = max(self::MIN_JUMP_SCALE, $jump_vol);
-
-        if ($lambda > 0.0) {
-            // Untruncated second moment of the Kou jump, 2 * scale^2 * (pUp + pDown * ratio^2), which is
-            // monotone in the scale and therefore invertible for the budget. Truncation only removes mass,
-            // so solving on it and deducting the truncated figure below can never over-reclaim.
-            $rawSecondMomentPerUnit = 2.0 * (self::SVJJ_P_UP
-                + (self::SVJJ_P_DOWN * self::JUMP_DOWNSIDE_SCALE_RATIO * self::JUMP_DOWNSIDE_SCALE_RATIO));
-            $budget = $longTermIdiosyncraticVar * self::MAX_IDIOSYNCRATIC_JUMP_VARIANCE_SHARE;
-            $configured = $lambda * $rawSecondMomentPerUnit * $jumpScale * $jumpScale;
-
-            if ($configured > $budget && $configured > 0.0) {
-                $jumpScale = max(self::MIN_JUMP_SCALE, $jumpScale * sqrt($budget / $configured));
-            }
-        }
-
-        $dynamicEtaUp = 1.0 / $jumpScale;
-        $dynamicEtaDown = 1.0 / ($jumpScale * self::JUMP_DOWNSIDE_SCALE_RATIO);
+        $jumpParameters = self::calibratedJumpParameters($longTermVolatility, $beta, $lambda, $jump_vol);
+        $dynamicEtaUp = $jumpParameters['eta_up'];
+        $dynamicEtaDown = $jumpParameters['eta_down'];
 
         $dynamicMuV = max(0.0, $currentVar) * self::VARIANCE_JUMP_MEAN_SHARE;
 
@@ -277,7 +352,7 @@ class MarketEngine
 
         // Dynamically scale variance reversion speed (kappa) during jump diffusion regimes
         // instead of linearly clamping theta, preventing artificial volatility suppression
-        $dynamicKappa = $kappa * (1.0 + ($lambda * self::JUMP_REGIME_KAPPA_SENSITIVITY));
+        $dynamicKappa = self::varianceReversionSpeed($lambda, $kappa);
 
         // Market-Wide Jump Variance Budget:
         // The district jump supplies part of a stock's total return variance, so the diffusion has to give up

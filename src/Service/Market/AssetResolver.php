@@ -7,6 +7,7 @@ namespace App\Service\Market;
 use App\DTO\ResolvedAssetDTO;
 use App\Entity\Bond;
 use App\Entity\Etf;
+use App\Entity\OptionContract;
 use App\Entity\Stock;
 use App\Entity\User;
 use App\Entity\UserBond;
@@ -49,6 +50,13 @@ final class AssetResolver
         $bond = $this->em->getRepository(Bond::class)->findOneByTicker($ticker);
         if ($bond instanceof Bond) {
             return new ResolvedAssetDTO($bond, 'BOND');
+        }
+
+        // Last, and only on a miss everywhere else: an option symbol carries its underlying's ticker as a
+        // prefix, so it can never collide with one of the classes above and never needs to be tried first.
+        $option = $this->em->getRepository(OptionContract::class)->findOneByTicker($ticker);
+        if ($option instanceof OptionContract) {
+            return new ResolvedAssetDTO($option, 'OPTION');
         }
 
         return null;

@@ -4,6 +4,7 @@ namespace App\Service\Market;
 
 use App\DTO\ExecutionQuoteDTO;
 use App\DTO\ResolvedAssetDTO;
+use App\Entity\OptionContract;
 use App\Entity\Stock;
 use App\Entity\TradeOrder;
 use App\Entity\User;
@@ -49,7 +50,9 @@ class TradeExecutionService
         private LiquidityEngine $liquidityEngine,
         private OrderFlowStoreInterface $orderFlow,
         private MarginEngine $marginEngine,
-        private SecuritiesLendingDesk $lendingDesk
+        private SecuritiesLendingDesk $lendingDesk,
+        private OptionTradeService $optionTradeService,
+        private \App\Service\User\CashLedger $cashLedger
     ) {}
 
     /** Whether an action buys stock (and pays cash) or sells it (and receives cash). */
@@ -64,7 +67,10 @@ class TradeExecutionService
             throw new \Exception('Invalid quantity.');
         }
 
-        if (!in_array($action, self::VALID_ACTIONS, true)) {
+        // Loose here, strict once the instrument is known. The two desks share BUY, SELL and COVER but
+        // differ on the fourth — an equity is SHORTed and a contract is WRITTEN — and which one is legal is
+        // a property of what is being traded, so it cannot be decided before the ticker has been resolved.
+        if (!in_array($action, self::VALID_ACTIONS, true) && !in_array($action, OptionTradeService::VALID_ACTIONS, true)) {
             throw new \Exception('Invalid order action.');
         }
 
@@ -87,6 +93,29 @@ class TradeExecutionService
             $haltReason = $asset->haltReason();
             if ($haltReason !== null) {
                 throw new \Exception($haltReason);
+            }
+
+            // An option settles in contracts, is paid for in full, and is collateralized against its
+            // underlying rather than against itself, so it is filled by its own desk. Routing here rather
+            // than at the controller keeps one front door: a player types a symbol, and what happens next is
+            // a property of the symbol.
+            if ($asset->entity instanceof OptionContract) {
+                if ($orderType !== 'MARKET') {
+                    throw new \Exception('Listed options trade at market. A resting option order is not supported yet.');
+                }
+
+                $this->optionTradeService->execute($user, $asset->entity, $action, $quantity);
+
+                $this->em->flush();
+                $this->portfolio->recordUserSnapshot($user);
+                $this->em->flush();
+                $this->em->getConnection()->commit();
+
+                return;
+            }
+
+            if (!in_array($action, self::VALID_ACTIONS, true)) {
+                throw new \Exception("{$action} is not an action on {$asset->ticker()}.");
             }
 
             $assetType = $asset->type;
@@ -155,7 +184,7 @@ class TradeExecutionService
                     if ($action === 'BUY') {
                         $escrowCashStr = \bcmul((string) $limitPrice, $quantityStr, 4);
                         $this->requireFunding($user, (float) $escrowCashStr, $action);
-                        $this->debitCash($user, $escrowCashStr);
+                        $this->cashLedger->debit($user, $escrowCashStr);
                     } elseif ($action === 'COVER') {
                         // A resting COVER escrows nothing, for the same reason it is not gated on buying
                         // power: it is the closing leg of a position that is already collateralized. Holding
@@ -239,7 +268,7 @@ class TradeExecutionService
             }
 
             $this->requireFunding($user, (float) $totalValue, $action);
-            $this->debitCash($user, $totalValue);
+            $this->cashLedger->debit($user, $totalValue);
 
             $userAsset = $this->assetResolver->addToHolding($user, $asset, $userAsset, $quantity);
 
@@ -274,7 +303,7 @@ class TradeExecutionService
 
             // Proceeds are credited, then immediately collateralize the borrowed stock. They are not free
             // cash: MarginEngine subtracts the position's market value straight back out of equity.
-            $this->creditCash($user, $totalValue);
+            $this->cashLedger->credit($user, $totalValue);
             $userAsset = $this->assetResolver->addToHolding($user, $asset, $userAsset, -$quantity);
             $this->adjustShortInterest($stock, $quantity);
 
@@ -286,7 +315,7 @@ class TradeExecutionService
             throw new \Exception('Insufficient shares.');
         }
 
-        $this->creditCash($user, $totalValue);
+        $this->cashLedger->credit($user, $totalValue);
         $this->assetResolver->removeFromHolding($userAsset, $quantity);
 
         return $userAsset;
@@ -325,38 +354,6 @@ class TradeExecutionService
         if (!$this->marginEngine->canOpen($user, $notional)) {
             throw new \Exception('Insufficient buying power for this order.');
         }
-    }
-
-    /**
-     * Pays cash out, borrowing whatever the settled balance does not cover.
-     *
-     * Drawing the balance to zero before borrowing is the order a real account sweeps in: nobody pays
-     * margin interest while holding idle cash.
-     */
-    private function debitCash(User $user, string $amount): void
-    {
-        $cash = (string) $user->getCashBalance();
-        $fromCash = \bccomp($cash, $amount, 4) >= 0 ? $amount : $cash;
-
-        $user->setCashBalance(\bcsub($cash, $fromCash, 4));
-
-        $borrowed = \bcsub($amount, $fromCash, 4);
-        if (\bccomp($borrowed, '0.0000', 4) > 0) {
-            $user->setMarginDebit(\bcadd((string) $user->getMarginDebit(), $borrowed, 2));
-        }
-    }
-
-    /** Takes cash in, paying down any borrowing first. */
-    private function creditCash(User $user, string $amount): void
-    {
-        $debit = (string) $user->getMarginDebit();
-        $repaid = \bccomp($debit, $amount, 4) >= 0 ? $amount : $debit;
-
-        if (\bccomp($repaid, '0.0000', 4) > 0) {
-            $user->setMarginDebit(\bcsub($debit, $repaid, 2));
-        }
-
-        $user->setCashBalance(\bcadd((string) $user->getCashBalance(), \bcsub($amount, $repaid, 4), 4));
     }
 
     /**
@@ -439,7 +436,7 @@ class TradeExecutionService
 
             if ($order->getAction() === 'BUY') {
                 // Refund cash, paying down the borrowing it was drawn from first.
-                $this->creditCash($user, \bcmul((string) $order->getLimitPrice(), (string) $quantity, 4));
+                $this->cashLedger->credit($user, \bcmul((string) $order->getLimitPrice(), (string) $quantity, 4));
             } elseif ($order->getAction() === 'SELL') {
                 // Refund the escrowed shares. A resting SHORT and a resting COVER escrowed nothing, so
                 // there is nothing to give back and no branch for either.
@@ -559,7 +556,7 @@ class TradeExecutionService
                     return;
                 }
 
-                $this->debitCash($user, $considerationStr);
+                $this->cashLedger->debit($user, $considerationStr);
 
                 if ($stock !== null) {
                     $this->adjustShortInterest($stock, -$quantity);
@@ -573,7 +570,7 @@ class TradeExecutionService
                 $refundStr = \bcsub(\bcmul((string) $limitPrice, (string) $quantity, 4), $considerationStr, 4);
 
                 if (\bccomp($refundStr, '0.0000', 4) > 0) {
-                    $this->creditCash($user, $refundStr);
+                    $this->cashLedger->credit($user, $refundStr);
                 }
 
                 $this->assetResolver->addToHolding($user, $asset, $userAsset, $quantity);
@@ -592,13 +589,13 @@ class TradeExecutionService
                     return;
                 }
 
-                $this->creditCash($user, $considerationStr);
+                $this->cashLedger->credit($user, $considerationStr);
                 $this->assetResolver->addToHolding($user, $asset, $userAsset, -$quantity);
                 $this->adjustShortInterest($stock, $quantity);
 
             } else { // SELL
                 // Shares were already escrowed. Just give them the cash from the sale.
-                $this->creditCash($user, $considerationStr);
+                $this->cashLedger->credit($user, $considerationStr);
             }
 
             $this->recordFill($order, $quote, $quantity, $order->getAction(), $ticker, $asset->type);

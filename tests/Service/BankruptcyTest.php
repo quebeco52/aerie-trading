@@ -363,8 +363,26 @@ class BankruptcyTest extends TestCase
             new \App\Service\Market\AssetResolver($this->entityManagerMock),
             new \App\Service\Market\LiquidityEngine(new \App\Service\Math\MathUtility()),
             new \App\Service\Market\Flow\InMemoryOrderFlowStore(),
-            new \App\Service\Market\MarginEngine($this->entityManagerMock),
-            new \App\Service\Market\SecuritiesLendingDesk()
+            new \App\Service\Market\MarginEngine(
+                $this->entityManagerMock,
+                new \App\Service\Market\OptionMarginCalculator($this->entityManagerMock, new \App\Service\Math\MathUtility())
+            ),
+            new \App\Service\Market\SecuritiesLendingDesk(),
+            new \App\Service\Market\OptionTradeService(
+                $this->entityManagerMock,
+                new \App\Service\Market\OptionPricingEngine(
+                    new \App\Service\Math\MathUtility(),
+                    new \App\Service\Market\BondPricingEngine(new \App\Service\Math\MathUtility())
+                ),
+                new \App\Service\Macro\MacroStateProvider($redis),
+                new \App\Service\Market\MarginEngine(
+                    $this->entityManagerMock,
+                    new \App\Service\Market\OptionMarginCalculator($this->entityManagerMock, new \App\Service\Math\MathUtility())
+                ),
+                new \App\Service\Math\MathUtility(),
+                new \App\Service\User\CashLedger()
+            ),
+            new \App\Service\User\CashLedger()
         );
 
         $this->expectException(\Exception::class);

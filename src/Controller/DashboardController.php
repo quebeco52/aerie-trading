@@ -4,6 +4,7 @@
 namespace App\Controller;
 
 use App\Entity\User;
+use App\Service\Math\FinancialConstants;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -220,9 +221,20 @@ class DashboardController extends AbstractController
         $escrowedShareValue = (float) $escrowRow['escrowed_shares'];
         $escrowedTotal = $escrowedCash + $escrowedShareValue;
 
+        // The option book, on the same signed definition every other net-worth surface uses: a long contract
+        // is an asset and a written one a liability. Left out, this headline disagreed with the account's own
+        // NAV chart on the same page and with its leaderboard rank, both of which count it.
+        $totalOptionsValue = (float) $conn->fetchOne(
+            'SELECT COALESCE(SUM(uo.quantity * oc.price * ' . FinancialConstants::OPTION_CONTRACT_MULTIPLIER . '), 0)
+             FROM user_options uo
+             JOIN option_contracts oc ON uo.option_contract_id = oc.id
+             WHERE uo.user_id = :user_id',
+            ['user_id' => $user->getId()]
+        );
+
         // Borrowed cash is spent but still owed, so it comes back out of the headline figure.
         $marginDebit = (float) $user->getMarginDebit();
-        $totalPortfolioValue = $cashBalance - $marginDebit + $totalStocksValue + $totalEtfsValue + $totalBondsValue + $escrowedTotal;
+        $totalPortfolioValue = $cashBalance - $marginDebit + $totalStocksValue + $totalEtfsValue + $totalBondsValue + $totalOptionsValue + $escrowedTotal;
         $totalUnrealizedPnL = ($totalStocksValue + $totalEtfsValue + $totalBondsValue) - $totalInvestedCost;
         $totalUnrealizedPnLPercent = $totalInvestedCost > 0 ? ($totalUnrealizedPnL / $totalInvestedCost) * 100 : 0.0;
 

@@ -159,6 +159,11 @@ final class ForcedLiquidationService
     /**
      * Accounts carrying leverage, which are the only ones a sweep can do anything to.
      *
+     * A written contract is the third way to carry it, alongside a margin loan and a short sale, and it is
+     * the one that leaves no other trace: the premium the account received PAID DOWN its debit, and it holds
+     * no negative stock position, so an account short nothing but naked calls would have been invisible to
+     * this query — the one account whose loss is unbounded would be the one the sweep never looked at.
+     *
      * @return list<User>
      */
     private function accountsAtRisk(): array
@@ -167,7 +172,8 @@ final class ForcedLiquidationService
             'SELECT DISTINCT u.id
              FROM users u
              LEFT JOIN user_stocks us ON us.user_id = u.id AND us.quantity < 0
-             WHERE u.margin_debit > 0 OR us.id IS NOT NULL'
+             LEFT JOIN user_options uo ON uo.user_id = u.id AND uo.quantity < 0
+             WHERE u.margin_debit > 0 OR us.id IS NOT NULL OR uo.id IS NOT NULL'
         );
 
         $users = [];
@@ -233,17 +239,32 @@ final class ForcedLiquidationService
             return 0;
         }
 
-        $remaining = $this->marginEngine->liquidationNotional($status);
-        if ($remaining <= 0.0) {
-            return 0;
-        }
-
         $this->logger->info('Margin call', [
             'user' => $user->getId(),
             'equity' => $status->equity,
             'required' => $status->maintenanceRequirement,
-            'to_liquidate' => $remaining,
         ]);
+
+        // Written contracts are bought back FIRST, and the order is not a preference. A written call is
+        // collateralized by stock the account holds, so selling that stock turns a covered position into a
+        // naked one and RAISES the requirement the sale was meant to reduce — a sweep that reached for the
+        // shares first could liquidate an entire account without ever clearing the call. Closing the
+        // contract releases the requirement outright, and it is also the only leg here whose loss is
+        // unbounded, which is the other reason a desk closes it before anything else.
+        $closed = $this->closeWrittenOptions($user);
+
+        if ($closed > 0) {
+            $status = $this->marginEngine->status($user);
+
+            if (!$status->isCalled()) {
+                return $closed;
+            }
+        }
+
+        $remaining = $this->marginEngine->liquidationNotional($status);
+        if ($remaining <= 0.0) {
+            return $closed;
+        }
 
         $positions = $this->entityManager->getConnection()->fetchAllAssociative(
             'SELECT s.ticker, us.quantity, s.price
@@ -254,7 +275,7 @@ final class ForcedLiquidationService
             ['user_id' => $user->getId()]
         );
 
-        $sold = 0;
+        $sold = $closed;
 
         foreach ($positions as $position) {
             if ($remaining <= 0.0) {
@@ -278,6 +299,53 @@ final class ForcedLiquidationService
         }
 
         return $sold;
+    }
+
+    /**
+     * Buys back written contracts until the account is no longer called, or until there are none left.
+     *
+     * The requirement a written contract carries is a function of the underlying rather than of the
+     * contract's own price, so there is no notional to subtract as each one closes the way there is for a
+     * stock sale: the account is simply re-marked after each buy-back and the sweep stops as soon as it is
+     * solvent again. Positions are taken largest liability first, which is the closest ordering to largest
+     * requirement without pricing every contract twice.
+     *
+     * @return int Contracts positions closed.
+     */
+    private function closeWrittenOptions(User $user): int
+    {
+        $written = $this->entityManager->getConnection()->fetchAllAssociative(
+            'SELECT oc.ticker, -uo.quantity AS contracts
+             FROM user_options uo
+             JOIN option_contracts oc ON uo.option_contract_id = oc.id
+             WHERE uo.user_id = :user_id
+               AND uo.quantity < 0
+               AND oc.status = :active
+             ORDER BY (-uo.quantity * oc.price) DESC',
+            ['user_id' => $user->getId(), 'active' => \App\Entity\OptionContract::STATUS_ACTIVE]
+        );
+
+        $closed = 0;
+
+        foreach ($written as $position) {
+            $contracts = (int) $position['contracts'];
+
+            if ($contracts <= 0) {
+                continue;
+            }
+
+            if (!$this->forceOrder($user, (string) $position['ticker'], 'COVER', $contracts, 'margin call')) {
+                continue;
+            }
+
+            $closed++;
+
+            if (!$this->marginEngine->status($user)->isCalled()) {
+                break;
+            }
+        }
+
+        return $closed;
     }
 
     /**

@@ -53,6 +53,12 @@ class MarketResetCommand extends Command
         $conn->executeStatement('TRUNCATE TABLE user_bonds');
         $conn->executeStatement('TRUNCATE TABLE bond_history');
         $conn->executeStatement('TRUNCATE TABLE coupon_payment');
+        $conn->executeStatement('TRUNCATE TABLE user_options');
+
+        // The chain goes with the ladder, and for the same reason: a contract's expiry is a point in
+        // simulation time, so every one of them is either already expired or decades out the moment the
+        // clock is reset. The desk relists against the new timeline on its first sweep.
+        $conn->executeStatement('TRUNCATE TABLE option_contracts');
 
         // The whole ladder goes, not just its history. A bond's economics are anchored to simulation time,
         // so an issue sold at year 15 of the old timeline becomes a 25-year bond the moment the clock is

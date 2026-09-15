@@ -53,6 +53,12 @@
             <file>tests/Service/CapExEngineTest.php</file>
             <file>tests/Service/MarketEngineTest.php</file>
             <file>tests/Service/PortfolioCalculationTest.php</file>
+            <file>tests/Service/Market/OptionPricingEngineTest.php</file>
+            <file>tests/Service/Market/OptionChainServiceTest.php</file>
+            <file>tests/Service/Market/DealerGammaEngineTest.php</file>
+            <file>tests/Service/Market/OptionDemandEngineTest.php</file>
+            <file>tests/Service/Market/OptionSettlementTest.php</file>
+            <file>tests/Service/User/CashLedgerTest.php</file>
             <directory>tests/Support</directory>
         </testsuite>
 
@@ -68,6 +74,12 @@
             <exclude>tests/Service/CapExEngineTest.php</exclude>
             <exclude>tests/Service/MarketEngineTest.php</exclude>
             <exclude>tests/Service/PortfolioCalculationTest.php</exclude>
+            <exclude>tests/Service/Market/OptionPricingEngineTest.php</exclude>
+            <exclude>tests/Service/Market/OptionChainServiceTest.php</exclude>
+            <exclude>tests/Service/Market/DealerGammaEngineTest.php</exclude>
+            <exclude>tests/Service/Market/OptionDemandEngineTest.php</exclude>
+            <exclude>tests/Service/Market/OptionSettlementTest.php</exclude>
+            <exclude>tests/Service/User/CashLedgerTest.php</exclude>
         </testsuite>
 
         <testsuite name="Functional">

@@ -508,6 +508,67 @@ class FinancialConstants
     /** Flat half-spread on a sovereign bond, the deepest instrument on the desk. */
     public const BOND_HALF_SPREAD = 0.00005;
 
+
+    // --- Listed Equity Options ---
+    /** Shares one contract is written on, the listed convention. Every premium here is quoted PER SHARE and multiplied by this only where cash actually moves. */
+    public const OPTION_CONTRACT_MULTIPLIER = 100;
+    /** Months to expiry of the expiries listed at any one time: two near months, a quarterly and a two-quarter, which is the front of a standard listed cycle. */
+    public const OPTION_EXPIRY_MONTHS = [1, 2, 3, 6];
+    /** Strike ladder spacing as a fraction of spot, before it is snapped to a round increment. */
+    public const OPTION_STRIKE_SPACING_FRACTION = 0.05;
+    /** Widest strike listed either side of spot, as a fraction of it. Wide enough to carry the tails the smile prices, short of the strikes nobody quotes. */
+    public const OPTION_STRIKE_LADDER_WIDTH = 0.30;
+    /** Round increments a strike ladder may be struck on; the ladder snaps to the smallest one at or above the spacing fraction, which is how a real ladder ends up on whole and half numbers at every price level. */
+    public const OPTION_STRIKE_INCREMENTS = [0.50, 1.00, 2.50, 5.00, 10.00, 25.00, 50.00, 100.00, 250.00];
+    /** Average daily volume a name must trade before a class is opened on it; exchanges list options against a float and a trading record, not against every listed company. */
+    public const OPTION_LISTING_MIN_ADV = 50000.0;
+    /** Price a name must hold to carry a class. Below it the round-increment ladder has no usable strikes and every contract is one tick wide. */
+    public const OPTION_LISTING_MIN_PRICE = 5.00;
+
+    // --- Option Market Making ---
+    /** Volatility points a desk quotes either side of its mark. An option's spread is a spread in VOLATILITY — the desk is trading variance, not premium — and the premium spread is this times vega. */
+    public const OPTION_HALF_SPREAD_VOLATILITY = 0.015;
+    /** Floor on the half-spread as a fraction of the premium, so a deep in-the-money contract carrying almost no vega still costs something to cross. */
+    public const OPTION_MIN_HALF_SPREAD_FRACTION = 0.005;
+    /** Ceiling on the same, because a far out-of-the-money contract's vega spread can otherwise exceed the whole of its premium. */
+    public const OPTION_MAX_HALF_SPREAD_FRACTION = 0.25;
+    /** Smallest premium a listed contract quotes at: one cent, the minimum increment. A contract worth less than this is quoted here and worth nothing on exercise. */
+    public const OPTION_MIN_PREMIUM = 0.01;
+    // --- Option Exercise & Settlement ---
+    /** Intrinsic value per share at which a contract is exercised by exception at expiry. The clearing house exercises anything in the money by a tick unless the holder says otherwise, so a contract a cent in the money is delivered, not abandoned. */
+    public const OPTION_EXERCISE_THRESHOLD = 0.01;
+
+    // --- Short Option Margin (FINRA Rule 4210 / CBOE minimums) ---
+    /** Share of the underlying a naked short option is collateralized at, before the out-of-the-money amount is credited back against it. */
+    public const SHORT_OPTION_UNDERLYING_REQUIREMENT = 0.20;
+    /** Floor on that requirement, struck on the underlying for a call and on the STRIKE for a put, so a far out-of-the-money short is never collateralized at nothing. */
+    public const SHORT_OPTION_MINIMUM_REQUIREMENT = 0.10;
+
+    // --- Public Option Demand (Bollen & Whaley 2004 net buying pressure) ---
+    /** The public's net long position across a name's whole chain, in contracts, as a multiple of its average daily volume converted to contract-equivalents. The public is a persistent NET BUYER of options, which is the whole reason a dealer is structurally short them. */
+    public const OPTION_PUBLIC_OPEN_INTEREST_ADV_MULTIPLE = 0.50;
+    /** Absolute delta the public's demand is centred on. Open interest concentrates out of the money rather than at it: the buyer is paying for convexity, not for the underlying. */
+    public const OPTION_PUBLIC_TARGET_DELTA = 0.30;
+    /** Width of that concentration, in delta. Wide enough that the whole listed ladder carries some interest, narrow enough that the wings do not dominate it. */
+    public const OPTION_PUBLIC_DELTA_DISPERSION = 0.18;
+    /** Share of single-name public demand that goes to calls in calm conditions. Bollen & Whaley find net buying pressure in INDIVIDUAL equity options is call-driven — the lottery preference of Bali, Cakici & Whitelaw (2011) — where in index options it is puts. */
+    public const OPTION_PUBLIC_CALL_SHARE = 0.60;
+    /** Shift of that share toward puts per unit of market volatility above its baseline: hedging demand displaces lottery demand as the market becomes frightening, which is what steepens a skew in a selloff. */
+    public const OPTION_PUBLIC_FEAR_PUT_SENSITIVITY = 1.50;
+    /** Decay of demand with time to expiry, per year. Listed open interest is concentrated in the front months; the back months are quoted more than they are held. */
+    public const OPTION_PUBLIC_EXPIRY_DECAY = 2.00;
+    /** Years for public open interest to close 63% of the gap to its target. Positions are opened and rolled over weeks; a book that rebuilt itself every tick would be a flow, not a position. */
+    public const OPTION_PUBLIC_DEMAND_HORIZON_YEARS = 0.08;
+
+    // --- Dealer Gamma Hedging (Barbon & Buraschi 2020; Baltussen, Da, Lammers & Radeva 2021) ---
+    /** Share of the desk's delta exposure that actually reaches the market as a hedge. A desk nets customer flow against itself first and only hedges the residual, so the whole of its book never trades. */
+    public const DEALER_HEDGE_RATIO = 0.80;
+    /** Ceiling on one tick's hedging flow as a multiple of the name's average daily volume. A short-gamma desk chasing a gap would otherwise demand more liquidity in one tick than the name trades in a day, and the impact law is extrapolation past that point. */
+    public const MAX_DEALER_HEDGE_ADV_MULTIPLE = 0.25;
+
+    /** Markup from the variance a desk expects to the variance it quotes (Carr & Wu 2009). A desk that quotes its own forecast loses money on average, which is why implied runs above subsequent realized. Held modest because the premium on SINGLE-NAME options is a fraction of the index premium (Bakshi, Kapadia & Madan 2003). */
+    public const OPTION_VARIANCE_RISK_PREMIUM = 1.05;
+
     // --- Market Microstructure: Order Flow Variance Budget ---
     /** Ceiling on the share of long-run variance order flow may reclaim from the diffusion. */
     public const MAX_IMPACT_VARIANCE_DRAG_SHARE = 0.25;

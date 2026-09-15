@@ -17,6 +17,8 @@ final readonly class MarginStatusDTO
      * @param float $equity                 What the account would be worth if everything closed at mid.
      * @param float $maintenanceRequirement Equity the account must keep before it is called.
      * @param float $buyingPower            Additional position value the account can still open, net of resting buys.
+     * @param float $optionLongValue        Market value of long option positions; an asset with no loan value.
+     * @param float $optionShortValue       What buying the written contracts back would cost, as a positive number.
      */
     public function __construct(
         public float $cash,
@@ -26,6 +28,8 @@ final readonly class MarginStatusDTO
         public float $equity,
         public float $maintenanceRequirement,
         public float $buyingPower,
+        public float $optionLongValue = 0.0,
+        public float $optionShortValue = 0.0,
     ) {}
 
     /** True when equity has fallen below what the positions require. */
@@ -37,7 +41,7 @@ final readonly class MarginStatusDTO
     /** Equity as a share of gross exposure; the number a risk screen actually reads. */
     public function equityRatio(): float
     {
-        $gross = $this->longMarketValue + $this->shortMarketValue;
+        $gross = $this->longMarketValue + $this->shortMarketValue + $this->optionLongValue + $this->optionShortValue;
 
         return $gross > 0.0 ? $this->equity / $gross : 1.0;
     }

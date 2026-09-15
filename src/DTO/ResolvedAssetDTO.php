@@ -6,6 +6,7 @@ namespace App\DTO;
 
 use App\Entity\Bond;
 use App\Entity\Etf;
+use App\Entity\OptionContract;
 use App\Entity\Stock;
 
 /**
@@ -19,7 +20,7 @@ use App\Entity\Stock;
 final readonly class ResolvedAssetDTO
 {
     public function __construct(
-        public Stock|Etf|Bond $entity,
+        public Stock|Etf|Bond|OptionContract $entity,
         public string $type,
     ) {}
 
@@ -32,7 +33,8 @@ final readonly class ResolvedAssetDTO
      * The price one unit trades at.
      *
      * For a bond this is the dirty price, so quantity times price is the cash that actually changes hands
-     * and the seller is paid the coupon they have accrued.
+     * and the seller is paid the coupon they have accrued. For an option it is the premium per SHARE, which
+     * the contract multiplier turns into the consideration for one contract.
      */
     public function price(): string
     {
@@ -53,6 +55,16 @@ final readonly class ResolvedAssetDTO
 
         if ($this->entity instanceof Bond && $this->entity->getStatus() !== Bond::STATUS_ACTIVE) {
             return "Trading is halted for {$this->entity->getTicker()}. The issue has matured.";
+        }
+
+        if ($this->entity instanceof OptionContract) {
+            if ($this->entity->getStatus() !== OptionContract::STATUS_ACTIVE) {
+                return "Trading is halted for {$this->entity->getTicker()}. The contract has expired.";
+            }
+
+            if ($this->entity->getStock()->isBankrupt()) {
+                return "Trading is halted for {$this->entity->getTicker()}. The underlying is bankrupt.";
+            }
         }
 
         return null;

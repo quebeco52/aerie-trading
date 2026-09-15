@@ -27,6 +27,7 @@ final class MarginEngine
 {
     public function __construct(
         private readonly EntityManagerInterface $entityManager,
+        private readonly OptionMarginCalculator $optionMarginCalculator,
     ) {}
 
     /**
@@ -70,12 +71,20 @@ final class MarginEngine
         $escrowCash = (float) ($escrow['escrow_cash'] ?? 0.0);
         $escrowLong = (float) ($escrow['escrow_long'] ?? 0.0);
 
+        // The option book is marked and collateralized on its own terms: a long contract is an asset with no
+        // loan value, and a written one is a liability whose requirement is a function of the underlying
+        // rather than of the contract's own price.
+        $options = $this->optionMarginCalculator->evaluate($user);
+
         return $this->evaluate(
             cash: (float) $user->getCashBalance() + $escrowCash,
             longMarketValue: (float) $row['long_value'] + $etfValue + $bondValue + $escrowLong,
             shortMarketValue: (float) $row['short_value'],
             marginDebit: (float) $user->getMarginDebit(),
-            openBuyCommitment: $escrowCash
+            openBuyCommitment: $escrowCash,
+            optionLongValue: $options['long_value'],
+            optionShortValue: $options['short_value'],
+            optionRequirement: $options['requirement']
         );
     }
 
@@ -87,18 +96,28 @@ final class MarginEngine
      * What it does change is capacity, which is what $openBuyCommitment carries.
      *
      * @param float $openBuyCommitment Cash already committed to resting buy orders.
+     * @param float $optionLongValue    Market value of long contracts.
+     * @param float $optionShortValue   Cost of buying written contracts back, as a positive number.
+     * @param float $optionRequirement  Equity the written contracts must be backed by (Rule 4210).
      */
     public function evaluate(
         float $cash,
         float $longMarketValue,
         float $shortMarketValue,
         float $marginDebit,
-        float $openBuyCommitment = 0.0
+        float $openBuyCommitment = 0.0,
+        float $optionLongValue = 0.0,
+        float $optionShortValue = 0.0,
+        float $optionRequirement = 0.0
     ): MarginStatusDTO {
-        $equity = $cash + $longMarketValue - $marginDebit - $shortMarketValue;
+        // A long contract is an asset and a written one is a liability, both at what it would cost to close
+        // them. Leaving the written side out would have shown an account that had sold unbounded risk as
+        // richer by the premium it collected, for as long as the position stayed open.
+        $equity = $cash + $longMarketValue + $optionLongValue - $marginDebit - $shortMarketValue - $optionShortValue;
 
         $maintenance = (FinancialConstants::MAINTENANCE_MARGIN_LONG * $longMarketValue)
-            + (FinancialConstants::MAINTENANCE_MARGIN_SHORT * $shortMarketValue);
+            + (FinancialConstants::MAINTENANCE_MARGIN_SHORT * $shortMarketValue)
+            + $optionRequirement;
 
         // What is left after the current book is collateralized, geared up by the initial requirement. At a
         // 50% requirement a dollar of free equity supports two dollars of new position.
@@ -106,7 +125,12 @@ final class MarginEngine
         // Resting buys come off the top. They are not positions yet, so they do not consume equity, but the
         // capacity behind them is spoken for: without this the same free equity backs every order placed
         // against it, and an account can work ten orders it can only afford one of.
-        $initialRequirement = FinancialConstants::INITIAL_MARGIN_REQUIREMENT * ($longMarketValue + $shortMarketValue);
+        //
+        // Written contracts enter at their own requirement rather than at the Reg-T half, because that
+        // requirement IS the collateral rule for them. Long contracts are excluded entirely: listed options
+        // have no loan value, so a long position neither consumes capacity nor creates it.
+        $initialRequirement = (FinancialConstants::INITIAL_MARGIN_REQUIREMENT * ($longMarketValue + $shortMarketValue))
+            + $optionRequirement;
         $buyingPower = max(0.0, ($equity - $initialRequirement) / FinancialConstants::INITIAL_MARGIN_REQUIREMENT - $openBuyCommitment);
 
         return new MarginStatusDTO(
@@ -117,6 +141,8 @@ final class MarginEngine
             equity: $equity,
             maintenanceRequirement: $maintenance,
             buyingPower: $buyingPower,
+            optionLongValue: $optionLongValue,
+            optionShortValue: $optionShortValue,
         );
     }
 

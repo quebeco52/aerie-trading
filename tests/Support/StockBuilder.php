@@ -91,6 +91,36 @@ class StockBuilder
         return $this;
     }
 
+    public function withCurrentVolatility(float|string $vol): self
+    {
+        $this->stock->setCurrentVolatility(is_float($vol) ? number_format($vol, 4, '.', '') : $vol);
+        return $this;
+    }
+
+    public function withJumpIntensity(float|string $lambda): self
+    {
+        $this->stock->setJumpIntensity(is_float($lambda) ? number_format($lambda, 2, '.', '') : $lambda);
+        return $this;
+    }
+
+    public function withJumpVol(float|string $jumpVol): self
+    {
+        $this->stock->setJumpVol(is_float($jumpVol) ? number_format($jumpVol, 4, '.', '') : $jumpVol);
+        return $this;
+    }
+
+    public function withLastDividend(float|string $dividend): self
+    {
+        $this->stock->setLastDividend(is_float($dividend) ? number_format($dividend, 4, '.', '') : $dividend);
+        return $this;
+    }
+
+    public function withPublicFloatPercentage(float|string $share): self
+    {
+        $this->stock->setPublicFloatPercentage(is_float($share) ? number_format($share, 4, '.', '') : $share);
+        return $this;
+    }
+
     public function build(): Stock
     {
         return clone $this->stock;

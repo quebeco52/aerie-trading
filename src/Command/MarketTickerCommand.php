@@ -78,6 +78,7 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
         private NarrativeEngine $narrativeEngine,
         private MarketEventPublisher $marketEvent,
         private DistrictRoster $districtRoster,
+        private \App\Service\Market\OptionDeskService $optionDesk,
         private \Symfony\Component\Messenger\MessageBusInterface $messageBus,
 
         private int $tickIntervalUs,
@@ -167,6 +168,12 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                 $operatorEvents = [];
             }
 
+            // The option desk re-hedges the move it has just seen, BEFORE the tick drains its order flow.
+            // A desk observes a price and then trades; hedging the move it is itself causing would close an
+            // algebraic loop inside one tick, and whether the market was stable would then depend on how
+            // much open interest happened to be outstanding.
+            $this->optionDesk->hedge($stocks);
+
             try {
                 $this->entityManager->beginTransaction();
 
@@ -229,6 +236,14 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                     foreach ($newIssues as $newIssue) {
                         $bonds[] = $newIssue;
                     }
+                }
+
+                // The option desk's own sweep: settle what has expired, list what the market has moved into,
+                // mark the chain, rebuild the public's book and re-measure what the desk is short. On the
+                // history cadence rather than every tick — a chain of five thousand contracts does not need
+                // remarking fourteen thousand times a year, and the trade path reprices live anyway.
+                if ($isHistoryTick) {
+                    $this->optionDesk->sweep($stocks, $macroState, $dt * $historyInterval);
                 }
 
                 $allUpdates = array_merge($stockUpdates, [$etfUpdate], $bondResult['updates']);
