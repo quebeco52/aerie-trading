@@ -19,12 +19,10 @@ use PHPUnit\Framework\TestCase;
 class ChemicalBusinessModelTest extends TestCase
 {
     private ChemicalBusinessModel $model;
-    private MathUtility $mathUtility;
 
     protected function setUp(): void
     {
         $this->model = new ChemicalBusinessModel();
-        $this->mathUtility = new MathUtility();
     }
 
     public function testImplementsBusinessModelInterface(): void

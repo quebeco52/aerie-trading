@@ -11,6 +11,7 @@ use App\Service\Market\BondTracker;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
 use App\Tests\Support\MacroStateBuilder;
+use Doctrine\DBAL\Connection;
 use Doctrine\ORM\EntityManagerInterface;
 use PHPUnit\Framework\TestCase;
 
@@ -214,5 +215,103 @@ class BondTrackerTest extends TestCase
         $withHistory = $this->tracker($ledger)->updateBonds([$bond], $this->macroAt(1.25), true);
         $this->assertCount(1, $withHistory['history']);
         $this->assertArrayHasKey('yield_to_maturity', $withHistory['history'][0]);
+    }
+
+    /**
+     * A tracker whose connection is observed: the mark goes to the database as data, so the assertion is
+     * on the statement, not on the entity.
+     *
+     * @param list<array{0: string, 1: array<int, mixed>}> $sent Statement and parameters, in the order sent.
+     */
+    private function observedTracker(BondLedgerService $ledger, array &$sent): BondTracker
+    {
+        $connection = $this->createStub(Connection::class);
+        $connection->method('executeStatement')->willReturnCallback(
+            static function (string $sql, array $params = []) use (&$sent): int {
+                $sent[] = [$sql, $params];
+
+                return 1;
+            }
+        );
+
+        $em = $this->createStub(EntityManagerInterface::class);
+        $em->method('getConnection')->willReturn($connection);
+
+        return new BondTracker($em, new BondPricingEngine(new MathUtility()), $ledger);
+    }
+
+    private function persisted(Bond $bond, int $id): Bond
+    {
+        $property = new \ReflectionProperty(Bond::class, 'id');
+        $property->setValue($bond, $id);
+
+        return $bond;
+    }
+
+    public function testAMarkIsWrittenInBulkAndNeverThroughTheEntity(): void
+    {
+        $sent = [];
+        $tracker = $this->observedTracker($this->createStub(BondLedgerService::class), $sent);
+
+        $first = $this->persisted($this->bond(10.0, 0.05), 11)->setPrice('1.00')->setCleanPrice('1.00');
+        $second = $this->persisted($this->bond(2.0, 0.03), 12)->setPrice('1.00')->setCleanPrice('1.00');
+        $second->setTicker('G02-001');
+
+        $result = $tracker->updateBonds([$first, $second], $this->macroAt(1.25), false, [], true);
+
+        // One statement carries both rows: id, then the seven mark columns and the timestamp for each.
+        $this->assertCount(1, $sent);
+        [$sql, $params] = $sent[0];
+        $this->assertStringStartsWith('UPDATE bonds t JOIN (SELECT ? AS id, ? AS price, ? AS clean_price', $sql);
+        $this->assertCount(2 * 9, $params);
+        $this->assertSame(11, $params[0]);
+        $this->assertSame(12, $params[9]);
+        $this->assertEqualsWithDelta($result["updates"][0]["price"], (float) $params[1], 1e-4);
+        $this->assertEqualsWithDelta($result["updates"][1]["clean_price"], (float) $params[11], 1e-4);
+
+        // The entity's mark fields are untouched, so the unit of work has nothing to flush for them.
+        $this->assertSame('1.00', $first->getPrice());
+        $this->assertSame('1.00', $second->getCleanPrice());
+    }
+
+    public function testBetweenMarksTheLastValuationIsQuotedAndNothingIsWritten(): void
+    {
+        $sent = [];
+        $tracker = $this->observedTracker($this->createStub(BondLedgerService::class), $sent);
+        $bond = $this->persisted($this->bond(10.0, 0.05), 11);
+
+        $marked = $tracker->updateBonds([$bond], $this->macroAt(1.25), false, [], true);
+        $quoted = $tracker->updateBonds([$bond], $this->macroAt(1.26), false, [], false);
+
+        $this->assertCount(1, $sent, 'The pass between marks must not write.');
+        $this->assertSame($marked['updates'][0]['price'], $quoted['updates'][0]['price']);
+        $this->assertSame($marked['updates'][0]['yield_to_maturity'], $quoted['updates'][0]['yield_to_maturity']);
+        // Time still moves between marks: what is quoted is the mark, not a frozen calendar.
+        $this->assertEqualsWithDelta(8.74, $quoted['updates'][0]['years_to_maturity'], 1e-9);
+    }
+
+    public function testAnIssueNeverMarkedInThisProcessIsValuedRatherThanQuotedFromNothing(): void
+    {
+        $sent = [];
+        $tracker = $this->observedTracker($this->createStub(BondLedgerService::class), $sent);
+        $bond = $this->persisted($this->bond(10.0, 0.05), 11);
+
+        $result = $tracker->updateBonds([$bond], $this->macroAt(1.25), false, [], false);
+
+        $this->assertCount(1, $result['updates']);
+        $this->assertGreaterThan(0.0, $result['updates'][0]['price']);
+        $this->assertSame([], $sent, 'Valued for the quote, but a pass that is not a mark writes nothing.');
+    }
+
+    public function testAnIssueWithoutARowYetIsQuotedButLeftForTheNextMarkToWrite(): void
+    {
+        $sent = [];
+        $tracker = $this->observedTracker($this->createStub(BondLedgerService::class), $sent);
+        $unflushed = $this->bond(10.0, 0.05);
+
+        $result = $tracker->updateBonds([$unflushed], $this->macroAt(1.25), false, [], true);
+
+        $this->assertCount(1, $result['updates']);
+        $this->assertSame([], $sent);
     }
 }

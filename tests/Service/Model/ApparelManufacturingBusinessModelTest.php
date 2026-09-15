@@ -20,12 +20,10 @@ use PHPUnit\Framework\TestCase;
 class ApparelManufacturingBusinessModelTest extends TestCase
 {
     private ApparelManufacturingBusinessModel $model;
-    private MathUtility $mathUtility;
 
     protected function setUp(): void
     {
         $this->model = new ApparelManufacturingBusinessModel();
-        $this->mathUtility = new MathUtility();
     }
 
     public function testImplementsBusinessModelInterface(): void

@@ -7,6 +7,7 @@ namespace App\Tests\Service;
 use App\DTO\DebtHealthDTO;
 use App\DTO\DebtMetricsDTO;
 use App\DTO\MacroStateDTO;
+use App\Data\ManagementStyle;
 use App\Entity\Stock;
 use App\Service\Corporate\CapitalAllocationEngine;
 use App\Service\Corporate\CorporateLedgerService;
@@ -92,6 +93,93 @@ class CapitalAllocationEngineTest extends TestCase
             $this->mathUtilityMock,
             $this->treasuryEngineMock
         );
+    }
+
+    /**
+     * The fortress must be able to HOLD what it retains.
+     *
+     * Its reserves are the archetype, but the hoarding tests read any large balance as a defect and unlock
+     * repurchases at a mega-hoarder pace to correct it — so the manager that withheld the dividend watched
+     * the cash leave through the other leg anyway, and ended up distributing MORE than the steward beside
+     * it. Both the target the firm runs to and the threshold that judges it now scale with the style, and
+     * the payout bias governs the repurchase leg as well as the dividend.
+     */
+    public function testFortressKeepsTheReservesTheHoardingTestUsedToCorrectAway(): void
+    {
+        $operator = $this->buildCashRichFirm('HOARD_OP', null);
+        $fortress = $this->buildCashRichFirm('HOARD_FT', ManagementStyle::Fortress);
+
+        $macroState = new MacroStateDTO(corporateTaxRate: 0.21);
+
+        mt_srand(20260915);
+        $operatorResult = $this->engine->allocateCapital($operator, 10.00, 2.00, 100.00, 1_000_000.0, $macroState);
+        mt_srand(20260915);
+        $fortressResult = $this->engine->allocateCapital($fortress, 10.00, 2.00, 100.00, 1_000_000.0, $macroState);
+
+        $operatorBuyback = (float) $operatorResult['total_cash_spent'];
+        $fortressBuyback = (float) $fortressResult['total_cash_spent'];
+
+        $this->assertGreaterThan(0.0, $operatorBuyback, 'The control firm must actually be force-fed, or the test proves nothing.');
+        $this->assertLessThan(
+            $operatorBuyback,
+            $fortressBuyback,
+            'Identical balance sheets: the only thing holding the cash in is the style.'
+        );
+
+        // Total distribution, not just the leg the bias used to reach. This is the assertion that would have
+        // failed before: the fortress paid a smaller dividend and a LARGER buyback out of the same treasury.
+        $operatorTotal = (float) $operatorResult['total_paid'] + $operatorBuyback;
+        $fortressTotal = (float) $fortressResult['total_paid'] + $fortressBuyback;
+
+        $this->assertLessThan(
+            $operatorTotal,
+            $fortressTotal,
+            'A manager that retains must return less in total than the neutral baseline, through every channel combined.'
+        );
+    }
+
+    /** A steward distributes what it will not reinvest, so the same balance sheet returns more. */
+    public function testStewardReturnsMoreThanTheNeutralBaselineFromTheSameBalanceSheet(): void
+    {
+        $operator = $this->buildCashRichFirm('HOARD_O2', null);
+        $steward = $this->buildCashRichFirm('HOARD_ST', ManagementStyle::Steward);
+
+        $macroState = new MacroStateDTO(corporateTaxRate: 0.21);
+
+        mt_srand(20260915);
+        $operatorResult = $this->engine->allocateCapital($operator, 10.00, 2.00, 100.00, 1_000_000.0, $macroState);
+        mt_srand(20260915);
+        $stewardResult = $this->engine->allocateCapital($steward, 10.00, 2.00, 100.00, 1_000_000.0, $macroState);
+
+        $operatorTotal = (float) $operatorResult['total_paid'] + (float) $operatorResult['total_cash_spent'];
+        $stewardTotal = (float) $stewardResult['total_paid'] + (float) $stewardResult['total_cash_spent'];
+
+        $this->assertGreaterThan($operatorTotal, $stewardTotal);
+    }
+
+    /** A cash-rich, profitable, undervalued firm: the configuration the buyback engine acts on hardest. */
+    private function buildCashRichFirm(string $ticker, ?ManagementStyle $style): Stock
+    {
+        $stock = new Stock();
+        $stock->setTicker($ticker);
+        $stock->setIndustry('Software - Infrastructure');
+        $stock->setSharesOutstanding('1000000');
+        $stock->setPrice('100.00');
+        $stock->setTotalEquity('100000000');
+        $stock->setCorporateTreasury('20000000');
+        $stock->setTargetPayoutRatio('0.30');
+        $stock->setDividendSpeed('1.00');
+        $stock->setLastDividend('1.00');
+        $stock->setRetainedEarnings('50000000.00');
+        $stock->setTotalRevenue('10000000.00');
+        $stock->setOperatingMargin('0.20');
+        $stock->setWholesaleDebt('1000000.00');
+        $stock->setCustomerDeposits('0.00');
+        $stock->setRoicTtm('0.15');
+        $stock->setBaselineRoic('0.15');
+        $stock->setManagementStyle($style);
+
+        return $stock;
     }
 
     public function testReitFfoDividendCapacity(): void
@@ -393,7 +481,7 @@ class CapitalAllocationEngineTest extends TestCase
         return $stock;
     }
 
-    private function buildHealth(): DebtHealthDTO
+    private function buildHealth(bool $hasLeverageHeadroom = true): DebtHealthDTO
     {
         return new DebtHealthDTO(
             grossCost: 0.05,
@@ -422,8 +510,71 @@ class CapitalAllocationEngineTest extends TestCase
             ),
             isLiquidityCrisis: false,
             isLiquidityWarning: false,
-            isUnderLeveraged: false
+            isUnderLeveraged: false,
+            hasLeverageHeadroom: $hasLeverageHeadroom,
+            netDebtToEbitda: $hasLeverageHeadroom ? 0.5 : 4.5,
+            ebitdaCovenantLimit: 2.0
         );
+    }
+
+    /**
+     * The restricted-payments clause that travels with every maintenance leverage covenant. This firm is
+     * cash-rich and comfortably covered — nothing in the ICR or liquidity ladder would stop it — so the
+     * covenant is the only thing that can, and a buyback here would retire the equity cushion sitting
+     * underneath debt already too large for the cash flow supporting it.
+     */
+    public function testCovenantBreachBlocksTheBuybackTheCashPileWouldOtherwiseFund(): void
+    {
+        $macroState = new MacroStateDTO(corporateTaxRate: 0.21);
+
+        $compliant = $this->buildDistributor('OKAY');
+        $engine = $this->buildEngineWith($this->debtEngineReturning($this->buildHealth(true)));
+        $allowed = $engine->allocateCapital($compliant, 4.00, 2.00, 10.00, 1000000.0, $macroState);
+
+        $breached = $this->buildDistributor('BRCH');
+        $engine = $this->buildEngineWith($this->debtEngineReturning($this->buildHealth(false)));
+        $blocked = $engine->allocateCapital($breached, 4.00, 2.00, 10.00, 1000000.0, $macroState);
+
+        $this->assertLessThan(1000000.0, $allowed['new_shares'], 'Control must actually repurchase, or the comparison proves nothing.');
+        $this->assertSame(1000000.0, $blocked['new_shares'], 'A firm past its leverage covenant may not repurchase stock.');
+    }
+
+    /**
+     * The dividend leg is a freeze, not a cut: lenders withhold consent for an INCREASE in distributions
+     * while the firm is out of compliance, and the distress ladder already owns the collapse case.
+     */
+    public function testCovenantBreachFreezesTheDividendRatherThanCuttingIt(): void
+    {
+        $macroState = new MacroStateDTO(corporateTaxRate: 0.21);
+
+        $build = function (string $ticker): Stock {
+            $stock = $this->buildDistributor($ticker);
+            $stock->setTargetPayoutRatio('0.50');
+            $stock->setDividendSpeed('1.00');
+            $stock->setLastDividend('0.20');
+
+            return $stock;
+        };
+
+        $compliant = $build('RISE');
+        $rising = $this->buildEngineWith($this->debtEngineReturning($this->buildHealth(true)))
+            ->allocateCapital($compliant, 4.00, 2.00, 10.00, 1000000.0, $macroState);
+
+        $breached = $build('FRZE');
+        $frozen = $this->buildEngineWith($this->debtEngineReturning($this->buildHealth(false)))
+            ->allocateCapital($breached, 4.00, 2.00, 10.00, 1000000.0, $macroState);
+
+        $this->assertGreaterThan(0.20, $rising['dividend_paid'], 'Control must want to raise the dividend, or the freeze is untestable.');
+        $this->assertSame(0.20, $frozen['dividend_paid'], 'A breach holds the distribution where it stands.');
+        $this->assertGreaterThan(0.0, $frozen['dividend_paid'], 'A freeze is not a cut: the existing distress ladder owns that case.');
+    }
+
+    private function debtEngineReturning(DebtHealthDTO $health): DebtEngine
+    {
+        $debtEngine = $this->createStub(DebtEngine::class);
+        $debtEngine->method('analyzeDebtHealth')->willReturn($health);
+
+        return $debtEngine;
     }
 
     public function testBuybackPercentageCalculatesFromOriginalSharesOutstanding(): void

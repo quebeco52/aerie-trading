@@ -14,12 +14,10 @@ use PHPUnit\Framework\TestCase;
 class ComputerHardwareBusinessModelTest extends TestCase
 {
     private ComputerHardwareBusinessModel $model;
-    private MathUtility $mathUtility;
 
     protected function setUp(): void
     {
         $this->model = new ComputerHardwareBusinessModel();
-        $this->mathUtility = new MathUtility();
     }
 
     public function testDualStreamRevenueAndFxSensitivity(): void

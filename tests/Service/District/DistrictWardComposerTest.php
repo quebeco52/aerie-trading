@@ -175,7 +175,7 @@ class DistrictWardComposerTest extends TestCase
 
     public function testShortStreetsStayOnOneRow(): void
     {
-        $stocks = $this->makeDescendingMarketCapStocks(DistrictMap::ROW_SPLIT_THRESHOLD - 1);
+        $stocks = $this->makeDescendingMarketCapStocks(DistrictMap::ROW_SPLIT_THRESHOLDS[0] - 1);
         $frontage = $this->composer->composeFrontage($stocks);
 
         $this->assertSame(1, $frontage['rowCount'], 'A short street is already legible unwrapped');
@@ -184,7 +184,7 @@ class DistrictWardComposerTest extends TestCase
         }
     }
 
-    public function testAFullStreetWrapsIntoTwoRows(): void
+    public function testAFullStreetWrapsIntoEveryRow(): void
     {
         $stocks = $this->makeDescendingMarketCapStocks(DistrictMap::STREET_ROSTER_SIZE);
         $frontage = $this->composer->composeFrontage($stocks);
@@ -193,7 +193,19 @@ class DistrictWardComposerTest extends TestCase
 
         $rows = array_unique(array_map(static fn (array $slot) => $slot['row'], $frontage['slots']));
         sort($rows);
-        $this->assertSame([0, 1], $rows);
+        $this->assertSame(range(0, DistrictMap::ROW_COUNT - 1), $rows, 'Every row the street claims must be occupied');
+    }
+
+    /** A row opens only once the street is long enough to fill it — see DistrictMap::ROW_SPLIT_THRESHOLDS. */
+    public function testEachRowOpensAtItsOwnThreshold(): void
+    {
+        foreach (DistrictMap::ROW_SPLIT_THRESHOLDS as $step => $threshold) {
+            $below = $this->composer->composeFrontage($this->makeDescendingMarketCapStocks($threshold - 1));
+            $at = $this->composer->composeFrontage($this->makeDescendingMarketCapStocks($threshold));
+
+            $this->assertSame($step + 1, $below['rowCount'], sprintf('%d tenants must stay on %d row(s)', $threshold - 1, $step + 1));
+            $this->assertSame($step + 2, $at['rowCount'], sprintf('%d tenants must open row %d', $threshold, $step + 2));
+        }
     }
 
     /**
@@ -222,7 +234,7 @@ class DistrictWardComposerTest extends TestCase
      * The split balances by rendered width rather than by count, because canvas width is what
      * sets the street's pixels-per-unit and plot widths vary by a factor of nearly two.
      */
-    public function testTheSplitBalancesTheTwoRowsByWidth(): void
+    public function testTheSplitBalancesEveryRowByWidth(): void
     {
         $stocks = $this->makeDescendingMarketCapStocks(DistrictMap::STREET_ROSTER_SIZE);
         $frontage = $this->composer->composeFrontage($stocks);
@@ -238,7 +250,7 @@ class DistrictWardComposerTest extends TestCase
         $this->assertLessThanOrEqual(
             max(DistrictMap::PLOT_WIDTH_BY_IMPORTANCE) + DistrictMap::FRONTAGE_GAP,
             $widest - $narrowest,
-            'The two rows should differ by at most one plot\'s worth of width'
+            'The rows should differ by at most one plot\'s worth of width'
         );
     }
 

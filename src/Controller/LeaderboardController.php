@@ -28,9 +28,10 @@ class LeaderboardController extends AbstractController
                    COALESCE(stock_totals.stock_val, 0) as stock_value,
                    COALESCE(etf_totals.etf_val, 0) as etf_value,
                    COALESCE(bond_totals.bond_val, 0) as bond_value,
+                   COALESCE(option_totals.option_val, 0) as option_value,
                    COALESCE(escrow.escrow_val, 0) as escrow_value,
                    u.margin_debit,
-                   (u.cash_balance - u.margin_debit + COALESCE(stock_totals.stock_val, 0) + COALESCE(etf_totals.etf_val, 0) + COALESCE(bond_totals.bond_val, 0) + COALESCE(escrow.escrow_val, 0)) as total_value
+                   (u.cash_balance - u.margin_debit + COALESCE(stock_totals.stock_val, 0) + COALESCE(etf_totals.etf_val, 0) + COALESCE(bond_totals.bond_val, 0) + COALESCE(option_totals.option_val, 0) + COALESCE(escrow.escrow_val, 0)) as total_value
             FROM users u
             LEFT JOIN (
                 -- A short's quantity is negative, so this one SUM marks longs and shorts alike.
@@ -51,6 +52,7 @@ class LeaderboardController extends AbstractController
                 JOIN bonds b ON ub.bond_id = b.id
                 GROUP BY ub.user_id
             ) bond_totals ON bond_totals.user_id = u.id
+            LEFT JOIN (" . \App\Service\User\Portfolio::OPTION_VALUE_SQL . ") option_totals ON option_totals.user_id = u.id
             LEFT JOIN (" . \App\Service\User\Portfolio::OPEN_ORDER_ESCROW_SQL . ") escrow ON escrow.user_id = u.id
             ORDER BY total_value DESC
             LIMIT 100

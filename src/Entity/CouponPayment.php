@@ -28,6 +28,9 @@ class CouponPayment
     /** Return of face value at maturity, which also closes out the holding. */
     public const TYPE_REDEMPTION = 'REDEMPTION';
 
+    /** What a holder got back when the issuer failed: the claim settled at its recovery, not at face. */
+    public const TYPE_RECOVERY = 'RECOVERY';
+
     #[ORM\Id]
     #[ORM\GeneratedValue]
     #[ORM\Column]

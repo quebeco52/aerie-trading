@@ -47,5 +47,15 @@ services:
     # alongside the macro state; the in-memory store is for tests and harnesses.
     App\Service\Market\Agent\AgentStateStoreInterface:
         alias: App\Service\Market\Agent\RedisAgentStateStore
+
+    # The desk's option-book exposure is per-tick market state the web process displays and the ticker
+    # writes, and every repricing sweep rebuilds it from the chain, so Redis rather than a column.
+    App\Service\Market\Gamma\DealerGammaStoreInterface:
+        alias: App\Service\Market\Gamma\RedisDealerGammaStore
+
+    # The index membership is frozen between quarterly reconstitutions and read by both the ticker and the
+    # pages that list constituents, so it lives in Redis alongside the district roster it mirrors.
+    App\Service\Market\Index\IndexMembershipStoreInterface:
+        alias: App\Service\Market\Index\RedisIndexMembershipStore
     # add more service definitions when explicit configuration is needed
     # please note that last definitions always *replace* previous ones

@@ -54,6 +54,35 @@ class BondController extends AbstractController
             ];
         }
 
+        // The corporate market, read one borrower at a time. Grouped by issuer rather than by tenor: a
+        // company's own ladder is what a credit reader compares, and its rating and spread belong to the
+        // borrower rather than to any one of its issues.
+        $corporate = [];
+        foreach ($bondRepository->findActiveCorporate() as $bond) {
+            $issuer = $bond->getIssuer();
+
+            if ($issuer === null) {
+                continue;
+            }
+
+            $ticker = $issuer->getTicker();
+
+            if (!isset($corporate[$ticker])) {
+                $corporate[$ticker] = [
+                    'issuer' => $issuer,
+                    'rating' => $issuer->getCreditRating(),
+                    'spread' => (float) $issuer->getDynamicCreditSpread(),
+                    'issues' => [],
+                ];
+            }
+
+            $corporate[$ticker]['issues'][] = [
+                'bond' => $bond,
+                'yearsToMaturity' => $bond->yearsToMaturity($macro->totalTime),
+                'change' => $priceChangeFeed->changeForTicker($bond->getTicker(), (float) $bond->getCleanPrice()),
+            ];
+        }
+
         // Every position the signed-in user holds, so the ladder can mark their own line items.
         $holdings = [];
         $user = $this->getUser();
@@ -65,6 +94,7 @@ class BondController extends AbstractController
 
         return $this->render('bond/ladder.html.twig', [
             'rowsByTenor' => $rows,
+            'corporateByIssuer' => $corporate,
             'holdings' => $holdings,
             'curve' => $this->sampleCurve($pricingEngine, $macro),
             'macro' => $macro,

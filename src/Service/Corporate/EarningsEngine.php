@@ -593,7 +593,14 @@ class EarningsEngine
             $ctx->ticksPerYear
         );
 
-        $industryPrice = $this->mathUtility->calculateCournotPriceLevel($capacityRatio, FinancialConstants::COURNOT_DEMAND_ELASTICITY);
+        // The roster is priced as dominant firms against a competitive fringe that answers the price: an
+        // overbuild is partly absorbed by fringe exit, a hole left by a failed firm partly refilled.
+        $industryPrice = $this->mathUtility->calculateFringeAdjustedPriceLevel(
+            $capacityRatio,
+            $this->industryShareLedger->resolveRosterTrendShare($ctx->stock, $ctx->tickCount, $ctx->ticksPerYear),
+            FinancialConstants::COURNOT_DEMAND_ELASTICITY,
+            FinancialConstants::FRINGE_SUPPLY_ELASTICITY
+        );
         $firmResponse = $substitutability * ($industryPrice - 1.0);
 
         return 1.0 + max(-FinancialConstants::MAX_INDUSTRY_PRICE_RESPONSE, min(FinancialConstants::MAX_INDUSTRY_PRICE_RESPONSE, $firmResponse));
@@ -1689,8 +1696,8 @@ class EarningsEngine
     private function calculateGrowthCapEx(EarningsSimulationContext $ctx, float $cycleCapExModifier, float $maintenanceCapEx, float $deltaNwc): float
     {
         $stock = $ctx->stock;
-        $style = $stock->getManagementStyle();
-        $reinvestmentRate = max(0.0, (float) $stock->getCapexRatio()) * $style->reinvestmentBias();
+        $manager = $stock->getManagementProfile();
+        $reinvestmentRate = max(0.0, (float) $stock->getCapexRatio()) * $manager->reinvestmentBias();
         $hurdleRate = $ctx->health instanceof \App\DTO\DebtHealthDTO
             ? $ctx->strategy->getHurdleRate($ctx->health)
             : FinancialConstants::DEFAULT_WACC_FALLBACK;
@@ -1699,7 +1706,7 @@ class EarningsEngine
         // that do not clear the cost of capital. The style bends the hurdle management applies, so an
         // empire builder keeps growing through returns a disciplined board would refuse to fund — and the
         // ROIC reversion downstream then prices exactly that value destruction.
-        $appliedHurdle = $hurdleRate * $style->hurdleBias();
+        $appliedHurdle = $manager->appliedHurdle($hurdleRate);
 
         if ($reinvestmentRate <= 0.0 || $ctx->baselineRoic < $appliedHurdle) {
             return 0.0;
@@ -1708,6 +1715,45 @@ class EarningsEngine
         $structuralQuarterlyNopat = $ctx->baselineRoic * abs($ctx->investedCapital) / 4.0;
         $plannedGrowthCapEx = $structuralQuarterlyNopat * $reinvestmentRate * $cycleCapExModifier;
 
+        // Plant that grows with the firm's market moves no price: the industry capacity balance charges
+        // nothing for capacity that tracks trend demand, so that tranche clears at the average return.
+        // Anything beyond it is share-taking, and the next unit of THAT earns a marginal return, which is
+        // the structural return less two things a firm growing with its market never pays:
+        //
+        //   - the price cut it imposes on everything it already sells (Cournot, via the Lerner term), and
+        //   - Cobb-Douglas diminishing marginal productivity once its capital has outgrown the market it
+        //     serves, which at a scale ratio of 1.4 is worth more than the price cut is.
+        //
+        // The saturation penalty, the third component, is NOT subtracted here: baselineRoic arrives from
+        // getTargetMetrics already net of it, and charging it again would price the same bloat twice.
+        //
+        // The decay used to be missing on this side, so the two gates were composing the marginal return
+        // from different parts. In practice it is a BACKSTOP rather than a live brake: the Penrose penalty
+        // already inside baselineRoic is quadratic and reaches 0.2 x moat by a scale ratio of 1.0, which
+        // takes the structural return to roughly zero over the same band where the decay first bites — so
+        // the primary NPV gate above has almost always refused already. It is composed here anyway because
+        // the law belongs in one place: if the penalty is ever softened, or moved onto realized margins
+        // where its own docblock says it belongs, this gate does not silently become the loose one.
+        $shareTakingReturn = $this->corporateMetrics->applyScaleDiseconomies(
+            $stock,
+            $ctx->baselineRoic - $this->corporateMetrics->calculateCournotPriceHaircut(
+                $stock,
+                $ctx->addressableShare,
+                abs($ctx->investedCapital),
+                $ctx->macroState
+            ),
+            $ctx->addressableShare
+        );
+        if ($shareTakingReturn < $appliedHurdle) {
+            // Trend is the sector's secular real growth plus the price level. Replacement-cost maintenance
+            // has already carried part of the price level onto the plant ledger this quarter (the slice it
+            // replaced dearer than it was booked), so only the remainder is growth spend.
+            $trendNominalGrowth = max(0.0, $ctx->strategy->getSecularGrowthRate($stock) + max(0.0, $ctx->macroState->inflationEma));
+            $revaluationAlreadyBooked = max(0.0, $maintenanceCapEx - $ctx->quarterlyDepreciation);
+            $plantBase = $stock->getGrossPpe() !== null ? max(0.0, $stock->getNetPpe()) : abs($ctx->investedCapital);
+            $trendTranche = max(0.0, $plantBase * $trendNominalGrowth / 4.0 - $revaluationAlreadyBooked);
+            $plannedGrowthCapEx = min($plannedGrowthCapEx, $trendTranche);
+        }
         $operatingBase = $this->corporateMetrics->calculateOperatingBase((float) $stock->getTotalRevenue(), (float) $stock->getTotalEquity());
         $minOperatingCash = $ctx->strategy->calculateMinOperatingCash($operatingBase, (float) $stock->getCustomerDeposits(), (float) $stock->getWholesaleDebt());
         $deployableCash = max(0.0, (float) $stock->getCorporateTreasury() - $minOperatingCash);

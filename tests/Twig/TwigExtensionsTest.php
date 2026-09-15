@@ -33,6 +33,47 @@ class TwigExtensionsTest extends TestCase
         $this->assertSame('500.00', $ext->formatLargeNumber(500));
     }
 
+    /**
+     * An insolvent firm carries negative equity, and the board ranks it beside solvent peers. Scaling on
+     * the signed value skipped every magnitude branch and printed the figure in full, so one bankrupt row
+     * blew the column out to -$3,200,000,000.00 next to peers reading $3.20B.
+     */
+    public function testNumberFormatExtensionScalesNegativeMagnitudes(): void
+    {
+        $ext = new NumberFormatExtension();
+
+        $this->assertSame('-1.50T', $ext->formatLargeNumber(-1_500_000_000_000));
+        $this->assertSame('-3.20B', $ext->formatLargeNumber(-3_200_000_000));
+        $this->assertSame('-450.00M', $ext->formatLargeNumber(-450_000_000));
+        $this->assertSame('-500.00', $ext->formatLargeNumber(-500));
+    }
+
+    /**
+     * The currency prefix sits INSIDE the sign, because these figures are rendered server-side on page
+     * load and then repainted by formatLarge() in assets/js/utils/formatters.js on the first market frame.
+     * A prefix hung outside the sign in the template would reformat itself under the reader.
+     */
+    public function testNumberFormatExtensionAppliesPrefixInsideTheSign(): void
+    {
+        $ext = new NumberFormatExtension();
+
+        $this->assertSame('$3.20B', $ext->formatLargeNumber(3_200_000_000, '$'));
+        $this->assertSame('-$3.20B', $ext->formatLargeNumber(-3_200_000_000, '$'));
+        $this->assertSame('$0.00', $ext->formatLargeNumber(0, '$'));
+        $this->assertSame('1,000.00', $ext->formatLargeNumber(1_000), 'An omitted prefix must render nothing.');
+    }
+
+    /**
+     * Doctrine hands decimal columns over as strings; the filter is applied straight to them in the templates.
+     */
+    public function testNumberFormatExtensionAcceptsDecimalStrings(): void
+    {
+        $ext = new NumberFormatExtension();
+
+        $this->assertSame('$3.20B', $ext->formatLargeNumber('3200000000.00', '$'));
+        $this->assertSame('-$3.20B', $ext->formatLargeNumber('-3200000000.00', '$'));
+    }
+
     public function testEventExtensionDelegatesToPresenter(): void
     {
         $presenterMock = $this->createMock(EventPresenter::class);

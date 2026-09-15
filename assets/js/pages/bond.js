@@ -3,6 +3,7 @@ import { initPriceChart, updateLivePricePoint, resizePriceChart, destroyPriceCha
 import { flashTick } from '../utils/tick-flash.js';
 
 let marketUpdateHandler = null;
+let marketFrameHandler = null;
 let beforeRenderHandler = null;
 let resizeHandler = null;
 let context = {};
@@ -42,7 +43,6 @@ function applyQuote(quote) {
             flashTick(el, clean - (previousCleanPrice ?? clean));
         }
         previousCleanPrice = clean;
-        updateLivePricePoint(clean);
     }
 
     if (Number.isFinite(dirty)) {
@@ -76,12 +76,24 @@ function applyQuote(quote) {
     }
 }
 
-function onMarketUpdate(event) {
+/** Bonds ride in the same payload array as equities; the ticker merges all three desks into it. */
+function quoteFor(event) {
     const quotes = event.detail?.stocks;
-    if (!Array.isArray(quotes) || !context.ticker) return;
+    if (!Array.isArray(quotes) || !context.ticker) return null;
+    return quotes.find(q => q.ticker === context.ticker) || null;
+}
 
-    // Bonds ride in the same payload array as equities; the ticker merges all three desks into it.
-    const quote = quotes.find(q => q.ticker === context.ticker);
+/** Every tick, for the chart alone: the live bar's high and low accumulate from each one. */
+function onMarketUpdate(event) {
+    const quote = quoteFor(event);
+    if (!quote) return;
+    const clean = parseFloat(quote.clean_price);
+    if (Number.isFinite(clean)) updateLivePricePoint(clean);
+}
+
+/** The coalesced frame (market-stream.js), for everything written to the page. */
+function onMarketFrame(event) {
+    const quote = quoteFor(event);
     if (quote) applyQuote(quote);
 }
 
@@ -89,6 +101,10 @@ function cleanup() {
     if (marketUpdateHandler) {
         document.removeEventListener('market:update', marketUpdateHandler);
         marketUpdateHandler = null;
+    }
+    if (marketFrameHandler) {
+        document.removeEventListener('market:frame', marketFrameHandler);
+        marketFrameHandler = null;
     }
     if (resizeHandler) {
         window.removeEventListener('resize', resizeHandler);
@@ -112,6 +128,8 @@ function initBondPage() {
 
     marketUpdateHandler = onMarketUpdate;
     document.addEventListener('market:update', marketUpdateHandler);
+    marketFrameHandler = onMarketFrame;
+    document.addEventListener('market:frame', marketFrameHandler);
 
     resizeHandler = () => resizePriceChart();
     window.addEventListener('resize', resizeHandler);

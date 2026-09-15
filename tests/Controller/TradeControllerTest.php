@@ -99,7 +99,7 @@ class TradeControllerTest extends WebTestCase
 
         $this->assertResponseRedirects('/stock/WING');
         $client->followRedirect();
-        $this->assertSelectorExists('div:contains("Order placed successfully")');
+        $this->assertSelectorExists('div:contains("Bought 2 shares of WING")');
     }
 
     public function testCancelTradeRequiresAuthentication(): void

@@ -12,6 +12,7 @@ use App\Entity\User;
 use App\Repository\EtfEventRepository;
 use App\Repository\StockEventRepository;
 use App\Service\Macro\MacroStateProvider;
+use App\Service\Market\Index\MarketIndex;
 use App\Service\Market\LiquidityEngine;
 use App\Service\Market\PriceChangeFeed;
 use App\Service\Market\SecuritiesLendingDesk;
@@ -44,6 +45,7 @@ class StockPageBuilder
         private readonly PriceChangeFeed $priceChangeFeed,
         private readonly LiquidityEngine $liquidityEngine,
         private readonly SecuritiesLendingDesk $lendingDesk,
+        private readonly OptionChainBuilder $optionChain,
         private readonly int $ticksPerYear,
     ) {}
 
@@ -76,7 +78,9 @@ class StockPageBuilder
         ];
 
         $payload += $this->viewerPosition->build($asset, $ticker, $viewer);
-        $payload += $isEtf ? $this->fundBlocks($asset) : $this->companyBlocks($asset, $macroState);
+        $payload += $isEtf
+            ? $this->fundBlocks($asset)
+            : $this->companyBlocks($asset, $macroState) + $this->optionChain->build($asset, $viewer, $macroState);
 
         return $payload;
     }
@@ -95,6 +99,7 @@ class StockPageBuilder
             'pieData' => [],
             'sharesMap' => [],
             'components' => [],
+            'indexFacts' => null,
             // Depth and the cost of crossing it. Shown because a page that quotes a price without
             // saying what size costs is only telling half of what a trade is going to do.
             'advShares' => $this->liquidityEngine->averageDailyVolume($stock),
@@ -103,20 +108,47 @@ class StockPageBuilder
             'borrowFee' => $this->lendingDesk->borrowFee($stock),
             'availableToBorrow' => $this->lendingDesk->availableToBorrow($stock),
             'shortUtilization' => $this->lendingDesk->utilization($stock),
+            'management' => $this->managementBlock($stock),
         ];
     }
 
     /**
-     * The blocks only the fund has: what it holds, and in what weight.
+     * Who is running the company, and for how long.
+     *
+     * The archetype and how firmly it is held are shown; the dials behind them are not. A player is meant
+     * to read the policy off the firm's behaviour — the payout, the capital budget, the deals — and this
+     * card only says what kind of manager to expect it from, which is what a market already knows about a
+     * sitting chief executive.
+     *
+     * @return array<string, mixed>
+     */
+    private function managementBlock(Stock $stock): array
+    {
+        $profile = $stock->getManagementProfile();
+
+        return [
+            'style' => $profile->style->value,
+            'label' => $profile->style->label(),
+            'mandate' => $profile->style->mandate(),
+            'conviction' => $profile->convictionLabel(),
+            'tenureYears' => $stock->getCeoTenureYears(),
+        ];
+    }
+
+    /**
+     * The blocks only the fund has: what it holds, in what weight, and what it costs to hold.
      *
      * The fund is not borrowable and is not quoted against a company's own book, so the trading-cost
      * readings stand down to the fund's fixed spread rather than being computed from a share count.
      *
      * @return array<string, mixed>
      */
-    private function fundBlocks(Etf $etf): array
+    private function fundBlocks(Etf $fund): array
     {
-        return $this->etfComposition->build() + [
+        // A fund is the vehicle for one published index; a ticker the enum does not know is the whole board.
+        $index = MarketIndex::tryFrom((string) $fund->getTicker()) ?? MarketIndex::Composite;
+
+        return $this->etfComposition->build($index, $fund) + [
             'isFinancial' => false,
             'businessModel' => 'none',
             'marketCap' => 0.0,
@@ -126,7 +158,12 @@ class StockPageBuilder
             'marketShare' => 0.0,
             'industry' => null,
             'lifecycleStage' => null,
-            'dividendYield' => 0.0,
+            // The fund's own yield, and a real one: what it has actually paid out over the trailing year
+            // out of the dividends its constituents paid it. A price index has no yield; a fund holding
+            // the basket does, and reporting zero was the visible face of it keeping the cash.
+            'dividendYield' => (float) $fund->getPrice() > 0.0
+                ? $fund->trailingDistribution() / (float) $fund->getPrice()
+                : 0.0,
             'analystTargets' => null,
             'peers' => [],
             'advShares' => 0.0,
@@ -134,6 +171,16 @@ class StockPageBuilder
             'borrowFee' => 0.0,
             'availableToBorrow' => 0.0,
             'shortUtilization' => 0.0,
+            'management' => null,
+            // The fund carries no class of its own: contracts are written on companies here, not on the
+            // index, so the panel stands down rather than rendering an empty ladder.
+            'optionsListed' => false,
+            'optionsReason' => 'Contracts are written on listed companies, not on the index fund.',
+            'optionExpiries' => [],
+            'optionDealerGamma' => 0.0,
+            'optionDealerGammaPerPercent' => 0.0,
+            'optionOpenInterest' => 0,
+            'optionMultiplier' => FinancialConstants::OPTION_CONTRACT_MULTIPLIER,
         ];
     }
 }

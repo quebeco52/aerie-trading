@@ -83,7 +83,7 @@ class DistrictRosterTest extends TestCase
         // At the boundary it is admitted and the smallest incumbent is evicted.
         $result = $this->roster->reconstitute($stocks, DistrictRoster::intervalTicks(self::TICKS_PER_YEAR));
         $this->assertSame([$riser->getTicker()], $result['promoted']);
-        $this->assertSame(['T029'], $result['evicted']);
+        $this->assertSame([$stocks[DistrictMap::STREET_ROSTER_SIZE - 1]->getTicker()], $result['evicted']);
     }
 
     public function testABankruptTenantKeepsItsPlotUntilTheNextReconstitution(): void

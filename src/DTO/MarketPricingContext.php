@@ -23,7 +23,7 @@ class MarketPricingContext
         public float $marketJumpMultiplier = 1.0,
         public float $marketVol = 0.15,
         public float $reversionSpeed = 0.25,
-        public float $kappa = 6.0,
+        public float $kappa = \App\Service\Market\MarketEngine::BASE_VARIANCE_REVERSION_SPEED,
         public float $volOfVol = 0.3,
         public ?MacroStateDTO $macroState = null,
         public ?float $fcfPerShare = null,

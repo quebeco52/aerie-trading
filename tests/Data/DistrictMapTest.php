@@ -61,6 +61,31 @@ class DistrictMapTest extends TestCase
         $this->assertGreaterThan(0, DistrictMap::STREET_ROSTER_SIZE);
     }
 
+    /**
+     * ROW_COUNT is the cap the wrap is written against and ROW_SPLIT_THRESHOLDS the steps that
+     * reach it; a mismatch would either leave a row that can never open or a step that can never
+     * be honoured.
+     */
+    public function testEveryRowHasAThresholdThatOpensIt(): void
+    {
+        $this->assertCount(DistrictMap::ROW_COUNT - 1, DistrictMap::ROW_SPLIT_THRESHOLDS);
+
+        $previous = 0;
+        foreach (DistrictMap::ROW_SPLIT_THRESHOLDS as $threshold) {
+            $this->assertGreaterThan($previous, $threshold, 'The thresholds must ascend');
+            $previous = $threshold;
+        }
+
+        // A full roster has to actually reach the last step, or the street never wraps that far.
+        $this->assertGreaterThanOrEqual($previous, DistrictMap::STREET_ROSTER_SIZE);
+        $this->assertSame(DistrictMap::ROW_COUNT, DistrictMap::rowCountForTenants(DistrictMap::STREET_ROSTER_SIZE));
+        $this->assertSame(1, DistrictMap::rowCountForTenants(DistrictMap::ROW_SPLIT_THRESHOLDS[0] - 1));
+        // However long the roster grows, the wrap stops at the rows the canvas is drawn for.
+        $this->assertSame(DistrictMap::ROW_COUNT, DistrictMap::rowCountForTenants(DistrictMap::STREET_ROSTER_SIZE * 10));
+        // An empty or near-empty street never claims a row it cannot fill.
+        $this->assertSame(1, DistrictMap::rowCountForTenants(0));
+    }
+
     public function testRowSpacingLeavesRoomForTheRoofFurniture(): void
     {
         // Rank label at y-14, titan beacon at y-20, event badge at y-18 with r=15, flare at y-34: all inside ROW_GAP.
@@ -127,7 +152,6 @@ class DistrictMapTest extends TestCase
     {
         $this->assertGreaterThan(0.0, DistrictMap::WINDOW_TWINKLE_SHARE);
         $this->assertLessThan(0.5, DistrictMap::WINDOW_TWINKLE_SHARE, 'Twinkling windows are meant to be a minority');
-        $this->assertGreaterThan(0.0, DistrictMap::WINDOW_TWINKLE_PERIOD_SECONDS);
         $this->assertGreaterThanOrEqual(3, DistrictMap::WINDOW_KEY_PRECISION, 'Keys need enough precision to place a window on either side of any lit share');
     }
 

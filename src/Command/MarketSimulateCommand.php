@@ -6,6 +6,10 @@ use App\Entity\Stock;
 use App\Entity\Etf;
 use App\Service\Market\StockTracker;
 use App\Service\Market\EtfTracker;
+use App\Service\Market\IndexCommittee;
+use App\Service\Market\IndexFundAccountant;
+use App\Service\Math\FinancialConstants;
+use App\Service\Market\Index\MarketIndex;
 use App\Service\Macro\MacroEngine;
 use App\Service\Market\MarketOperator;
 use App\Service\Event\MarketEventPublisher;
@@ -41,6 +45,8 @@ class MarketSimulateCommand extends Command
         private EntityManagerInterface $entityManager,
         private StockTracker $stockTracker,
         private EtfTracker $etfTracker,
+        private IndexCommittee $indexCommittee,
+        private IndexFundAccountant $fundAccountant,
         private MacroEngine $macroEngine,
         private MarketOperator $marketOperator,
         private MarketEventPublisher $marketEvent,
@@ -53,6 +59,26 @@ class MarketSimulateCommand extends Command
     protected function configure(): void
     {
         $this->addArgument('years', InputArgument::REQUIRED, 'Number of years to simulate');
+    }
+
+    /**
+     * The fund behind each published index, keyed by ticker. Reloaded after every EntityManager clear.
+     *
+     * @return array<string, Etf>
+     */
+    private function loadIndexFunds(): array
+    {
+        $funds = [];
+        $repository = $this->entityManager->getRepository(Etf::class);
+
+        foreach (MarketIndex::cases() as $index) {
+            $fund = $repository->findOneBy(['ticker' => $index->value]);
+            if ($fund !== null) {
+                $funds[$index->value] = $fund;
+            }
+        }
+
+        return $funds;
     }
 
     /**
@@ -85,6 +111,7 @@ class MarketSimulateCommand extends Command
 
         // Load the stocks into RAM initially
         $stocks = $this->entityManager->getRepository(Stock::class)->findAll();
+        $indexFunds = $this->loadIndexFunds();
         $conn = $this->entityManager->getConnection();
 
         for ($tick = 1; $tick <= $totalTicks; $tick++) {
@@ -95,10 +122,49 @@ class MarketSimulateCommand extends Command
 
             // Pass the $stocks array in
             $result = $this->stockTracker->updateStocks($stocks, $dt, $isHistoryTick, $macroState, $tick, self::TICKS_PER_YEAR);
-            $this->etfTracker->updateIndex($result['total_cap'], $isHistoryTick);
+
+            // Every published index, on the same calendar and the same arithmetic the live ticker uses.
+            // Striking a single index off the whole board's capitalisation was generating fast-forward
+            // history that no index actually had: the headline level ignored its own membership, and the
+            // other three had no history at all until the ticker was next started.
+            if (IndexCommittee::isReconstitutionTick($tick, self::TICKS_PER_YEAR)) {
+                foreach (MarketIndex::cases() as $index) {
+                    $fund = $indexFunds[$index->value] ?? null;
+                    $this->indexCommittee->reconstitute(
+                        $index,
+                        $stocks,
+                        $tick,
+                        // The level behind the fund's price, stripped of the fund's own fee drag and
+                        // undistributed income; see MarketTickerCommand for why the price will not do.
+                        $fund?->getIndexLevel()
+                    );
+                }
+            }
+
+            $isDistributionTick = $tick > 0
+                && $tick % max(1, intdiv(self::TICKS_PER_YEAR, FinancialConstants::FUND_DISTRIBUTIONS_PER_YEAR)) === 0;
+
+            foreach ($indexFunds as $ticker => $fund) {
+                $index = MarketIndex::from($ticker);
+
+                // Paid before the strike, so the published price is already ex the cash that left.
+                if ($isDistributionTick) {
+                    $this->fundAccountant->distribute($fund, new \DateTime());
+                }
+
+                $this->etfTracker->updateIndex(
+                    $this->indexCommittee->memberCapitalisation($index, $result['float_caps']),
+                    $isHistoryTick,
+                    $ticker,
+                    $fund,
+                    $macroState->totalTime,
+                    $this->indexCommittee->memberDividendPoints($index, $result['dividend_points']),
+                    $dt
+                );
+            }
 
             if ($macroState->eventType !== null) {
-                $lbi = $this->entityManager->getRepository(Etf::class)->findOneBy(['ticker' => 'LBI']);
+                $lbi = $indexFunds[MarketIndex::benchmark()->value] ?? null;
                 if ($lbi) {
                     $macroContext = [
                         'interbank_spread_bps' => number_format($macroState->interbankLiquiditySpread * 10000.0, 0),
@@ -122,12 +188,16 @@ class MarketSimulateCommand extends Command
 
             // Batch flush every 1200 ticks to save RAM
             if ($tick % 365 === 0) {
+                \App\Service\Market\StockTickColumns::write($this->entityManager->getConnection(), $stocks);
                 $this->entityManager->flush();
                 $this->entityManager->clear(); // Wipes RAM 
 
                 gc_collect_cycles();
 
                 $stocks = $this->entityManager->getRepository(Stock::class)->findAll();
+                // The funds were detached with everything else; a stale one would be written to and never
+                // flushed, so the levels would silently stop advancing after the first year.
+                $indexFunds = $this->loadIndexFunds();
 
                 $this->redis->set('stocks_live_data', json_encode($result['updates']));
             }
@@ -140,6 +210,7 @@ class MarketSimulateCommand extends Command
             $progressBar->advance();
         }
 
+        \App\Service\Market\StockTickColumns::write($this->entityManager->getConnection(), $stocks);
         $this->entityManager->flush();
         $this->entityManager->clear();
 

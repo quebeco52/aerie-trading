@@ -125,7 +125,7 @@ class StockController extends AbstractController
 
         // Row count sets the bucket width the aggregator folds into bars.
         $countSql = sprintf(
-            'SELECT COUNT(id) FROM (SELECT id FROM %s WHERE %s = :id ORDER BY recorded_at DESC, id DESC LIMIT %d) as sub',
+            'SELECT COUNT(id) FROM (SELECT id FROM %s WHERE %s = :id ORDER BY sim_time DESC, id DESC LIMIT %d) as sub',
             $tableName,
             $foreignKey,
             (int)$dbLimit
@@ -141,11 +141,14 @@ class StockController extends AbstractController
             : '';
 
         $sql = sprintf(
-            // The id tie-break is not decoration: at a 100ms tick the timestamp has ten rows to a second
+            // Ordered by SIMULATION time, which is the clock the market is keyed on. `recorded_at` is the
+            // wall clock of whichever container wrote the row, and the two only track each other while the
+            // ticker runs uninterrupted — a restart leaves a gap in one and none in the other. The id
+            // tie-break is not decoration either: many rows share a simulation instant at a fast tick rate
             // and their order within it is undefined, which scrambles the open and close inside every bar.
-            // Leading with recorded_at keeps the idx_stock_recorded backward scan — ordering by id alone
-            // cannot use that index and filesorts the name's whole history on every chart load.
-            'SELECT id, %s AS price%s, recorded_at FROM %s WHERE %s = :id ORDER BY recorded_at DESC, id DESC LIMIT %d',
+            // Leading with sim_time keeps the idx_*_sim_time backward scan; ordering by id alone cannot use
+            // an index and filesorts the name's whole history on every chart load.
+            'SELECT id, %s AS price%s, recorded_at FROM %s WHERE %s = :id ORDER BY sim_time DESC, id DESC LIMIT %d',
             $priceColumn,
             $barColumns,
             $tableName,

@@ -930,6 +930,33 @@ class MacroEngine
     }
 
     /**
+     * Sets the macroeconomic clock to an authoritative simulation time.
+     *
+     * The macro state is cached in Redis and the simulation clock is committed to the database, so a cache
+     * that has lost writes comes back describing an economy at the wrong moment. Everything else in the state
+     * — the rate, the regime, where the cycle stands — is a level with no record of when it was taken, and
+     * there is nothing to reconcile it against; only time itself can be corrected, and it has to be, because
+     * the expiry grids and sampling cadences read off it. The ticker does this once at start-up.
+     */
+    public function alignClock(float $totalTime): void
+    {
+        $state = $this->loadState();
+
+        if ($state->totalTime === $totalTime) {
+            return;
+        }
+
+        $this->logger?->warning(sprintf(
+            'Macroeconomic clock realigned from %.6f to %.6f simulation years to match the database.',
+            $state->totalTime,
+            $totalTime
+        ));
+
+        $state->totalTime = $totalTime;
+        $this->saveState($state);
+    }
+
+    /**
      * Advances the macroeconomic state by one tick.
      * Calculates Inflation, Output Gap, Taylor Rule (Short Rate), and the Yield Curve.
      */

@@ -11,6 +11,9 @@ use App\Service\Event\MarketEventPublisher;
 use App\Service\Event\NarrativeEngine;
 use App\Service\Macro\MacroEngine;
 use App\Service\Market\EtfTracker;
+use App\Service\Market\Index\InMemoryIndexMembershipStore;
+use App\Service\Market\IndexCommittee;
+use App\Service\Market\IndexFundAccountant;
 use App\Service\Market\MarketOperator;
 use App\Service\Market\StockTracker;
 use Doctrine\DBAL\Connection;
@@ -31,6 +34,10 @@ class MarketSimulateCommandTest extends TestCase
         $emMock = $this->createMock(EntityManagerInterface::class);
         $stockTrackerMock = $this->createMock(StockTracker::class);
         $etfTrackerMock = $this->createMock(EtfTracker::class);
+        // The real committee over a process-local store: it is collaborator-free apart from the tracker,
+        // and doubling it would only assert that the command calls a mock.
+        $indexCommittee = new IndexCommittee(new InMemoryIndexMembershipStore(), $etfTrackerMock);
+        $fundAccountant = new IndexFundAccountant($emMock);
         $macroEngineMock = $this->createMock(MacroEngine::class);
         $marketOperatorMock = $this->createStub(MarketOperator::class);
         $marketEventMock = $this->createStub(MarketEventPublisher::class);
@@ -60,6 +67,8 @@ class MarketSimulateCommandTest extends TestCase
             'updates' => [],
             'events' => [],
             'total_cap' => 1_000_000_000.0,
+            'float_caps' => ['APEX' => 800_000_000.0],
+            'dividend_points' => ['APEX' => 1_200_000.0],
             'history' => []
         ]);
 
@@ -67,6 +76,8 @@ class MarketSimulateCommandTest extends TestCase
             $emMock,
             $stockTrackerMock,
             $etfTrackerMock,
+            $indexCommittee,
+            $fundAccountant,
             $macroEngineMock,
             $marketOperatorMock,
             $marketEventMock,

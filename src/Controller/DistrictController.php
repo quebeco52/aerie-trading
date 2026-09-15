@@ -115,7 +115,6 @@ class DistrictController extends AbstractController
                 'pitch' => DistrictMap::WINDOW_PITCH,
                 'width' => DistrictMap::WINDOW_WIDTH,
                 'height' => DistrictMap::WINDOW_HEIGHT,
-                'twinklePeriod' => DistrictMap::WINDOW_TWINKLE_PERIOD_SECONDS,
             ],
             // What the client needs to relight windows and recolour masonry on a live tick — the
             // same rule DistrictMapBuilder applied on first paint, never a second copy of it.

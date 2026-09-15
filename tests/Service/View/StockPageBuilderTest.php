@@ -17,6 +17,7 @@ use App\Service\Math\MathUtility;
 use App\Service\View\CompanySnapshotBuilder;
 use App\Service\View\EtfCompositionBuilder;
 use App\Service\View\IndustryPositionBuilder;
+use App\Service\View\OptionChainBuilder;
 use App\Service\View\PeerTableBuilder;
 use App\Service\View\StockPageBuilder;
 use App\Service\View\ViewerPositionBuilder;
@@ -41,8 +42,10 @@ class StockPageBuilderTest extends TestCase
     private const TEMPLATE_KEYS = [
         'advShares', 'allAssets', 'analystTargets', 'asset', 'availableToBorrow', 'borrowFee',
         'businessModel', 'changePercent', 'components', 'dividendYield', 'economic_cycle', 'events',
-        'generalInfo', 'halfSpread', 'industry', 'investedCapital', 'isEtf', 'isFinancial', 'lifecycleStage',
-        'lifecycleStages', 'macro', 'marketCap', 'marketShare', 'openOrders', 'peRatio', 'peers',
+        'generalInfo', 'halfSpread', 'indexFacts', 'industry', 'investedCapital', 'isEtf', 'isFinancial', 'lifecycleStage',
+        'lifecycleStages', 'macro', 'management', 'marketCap', 'marketShare', 'openOrders',
+        'optionDealerGamma', 'optionDealerGammaPerPercent', 'optionExpiries', 'optionMultiplier',
+        'optionOpenInterest', 'optionsListed', 'optionsReason', 'peRatio', 'peers',
         'pieData', 'pieLabels', 'quote', 'sharesMap', 'shortUtilization', 'targetPE', 'ticksPerYear',
         'userAvgCost', 'userDividendIncome', 'userQuantity', 'userTrades', 'userUnrealizedPnL',
         'userUnrealizedPnLPercent',
@@ -86,6 +89,7 @@ class StockPageBuilderTest extends TestCase
             'pieData' => [],
             'sharesMap' => [],
             'components' => [],
+            'indexFacts' => ['ticker' => 'LBI'],
         ]);
 
         $peerTable = $this->createMock(PeerTableBuilder::class);
@@ -96,6 +100,17 @@ class StockPageBuilderTest extends TestCase
 
         $viewerPosition = $this->createMock(ViewerPositionBuilder::class);
         $viewerPosition->method('build')->willReturn($this->positionKeys);
+
+        $optionChain = $this->createMock(OptionChainBuilder::class);
+        $optionChain->method('build')->willReturn([
+            'optionsListed' => false,
+            'optionsReason' => 'No class open on this name.',
+            'optionExpiries' => [],
+            'optionDealerGamma' => 0.0,
+            'optionDealerGammaPerPercent' => 0.0,
+            'optionOpenInterest' => 0,
+            'optionMultiplier' => 100,
+        ]);
 
         return new StockPageBuilder(
             $macroStateProvider,
@@ -110,6 +125,7 @@ class StockPageBuilderTest extends TestCase
             // Final by design, so the real ones stand in; both are pure calculators over the entity.
             new LiquidityEngine(new MathUtility()),
             new SecuritiesLendingDesk(),
+            $optionChain,
             self::TICKS_PER_YEAR,
         );
     }
@@ -125,6 +141,17 @@ class StockPageBuilderTest extends TestCase
         return $stock;
     }
 
+    /** A listed fund as the resolver hands one over: a persisted row, with a ticker. */
+    private function fund(string $ticker = 'LBI'): Etf
+    {
+        $fund = new Etf();
+        $fund->setTicker($ticker);
+        $fund->setName('Skein Lakebird 30 ETF');
+        $fund->setPrice('100.00');
+
+        return $fund;
+    }
+
     public function testACompanyPageSuppliesEveryTemplateKey(): void
     {
         $payload = $this->builder()->build($this->stock(), 'LAKE', null);
@@ -136,7 +163,7 @@ class StockPageBuilderTest extends TestCase
 
     public function testTheFundPageSuppliesEveryTemplateKey(): void
     {
-        $payload = $this->builder()->build(new Etf(), 'LBI', null);
+        $payload = $this->builder()->build($this->fund(), 'LBI', null);
 
         foreach (self::TEMPLATE_KEYS as $key) {
             $this->assertArrayHasKey($key, $payload, "The fund page does not supply '{$key}'.");
@@ -150,7 +177,7 @@ class StockPageBuilderTest extends TestCase
     public function testBothInstrumentsSupplyTheSameKeys(): void
     {
         $company = array_keys($this->builder()->build($this->stock(), 'LAKE', null));
-        $fund = array_keys($this->builder()->build(new Etf(), 'LBI', null));
+        $fund = array_keys($this->builder()->build($this->fund(), 'LBI', null));
 
         sort($company);
         sort($fund);
@@ -159,9 +186,26 @@ class StockPageBuilderTest extends TestCase
         $this->assertSame(self::TEMPLATE_KEYS, $company, 'The payload gained or lost a key.');
     }
 
+    /** Who runs the company's capital: the archetype and its strength, without the dials behind them. */
+    public function testTheCompanyPageCarriesItsManagementAndTheFundDoesNot(): void
+    {
+        $management = $this->builder()->build($this->stock(), 'LAKE', null)['management'];
+
+        $this->assertIsArray($management);
+        $this->assertNotSame('', $management['label']);
+        $this->assertNotSame('', $management['mandate']);
+        $this->assertContains($management['conviction'], ['nominal', 'characteristic', 'pronounced']);
+        $this->assertGreaterThanOrEqual(0.0, $management['tenureYears']);
+
+        $this->assertNull(
+            $this->builder()->build($this->fund(), 'LBI', null)['management'],
+            'A fund has no board and nobody allocating its capital.'
+        );
+    }
+
     public function testTheFundIsNotTreatedAsABorrowableCompany(): void
     {
-        $payload = $this->builder()->build(new Etf(), 'LBI', null);
+        $payload = $this->builder()->build($this->fund(), 'LBI', null);
 
         $this->assertTrue($payload['isEtf']);
         $this->assertNull($payload['analystTargets'], 'A fund has no company to put a target on.');

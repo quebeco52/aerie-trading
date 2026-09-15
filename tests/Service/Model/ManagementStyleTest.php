@@ -26,6 +26,97 @@ final class ManagementStyleTest extends TestCase
         $this->assertSame(1.0, ManagementStyle::Operator->payoutBias());
         $this->assertSame(1.0, ManagementStyle::Operator->reinvestmentBias());
         $this->assertSame(1.0, ManagementStyle::Operator->hurdleBias());
+        $this->assertSame(1.0, ManagementStyle::Operator->cashTargetBias());
+        $this->assertSame(1.0, ManagementStyle::Operator->leverageBias());
+        $this->assertSame(1.0, ManagementStyle::Operator->acquisitionBias());
+        $this->assertSame(0.0, ManagementStyle::Operator->hubrisPremium());
+
+        // The helpers have to be exact identities on the default, since most of the market is unassigned and
+        // a rounding wobble here would move every firm that never opted into the mechanic.
+        $this->assertSame(0.0825, ManagementStyle::Operator->appliedHurdle(0.0825));
+        $this->assertSame(1_234.5, ManagementStyle::Operator->appliedTargetCash(1_234.5));
+    }
+
+    /** The manager's hurdle is a preference laid over the true cost of capital, in the stated direction. */
+    public function testAppliedHurdleBendsTheTrueCostOfCapital(): void
+    {
+        $trueHurdle = 0.10;
+
+        $this->assertEqualsWithDelta(0.075, ManagementStyle::EmpireBuilder->appliedHurdle($trueHurdle), 1e-12);
+        $this->assertEqualsWithDelta(0.120, ManagementStyle::Steward->appliedHurdle($trueHurdle), 1e-12);
+        $this->assertLessThan(
+            $trueHurdle,
+            ManagementStyle::EmpireBuilder->appliedHurdle($trueHurdle),
+            'The wedge below the true cost of capital IS the agency cost; without it the style prices nothing.'
+        );
+    }
+
+    /**
+     * The fortress must be able to HOLD what it retains. Its discretionary cash target has to sit above the
+     * model's, or the hoarding tests read the reserves that define the archetype as a defect and the buyback
+     * engine corrects them away.
+     */
+    public function testFortressRunsAHigherDiscretionaryCashTarget(): void
+    {
+        $modelTarget = 1_000_000_000.0;
+
+        $this->assertGreaterThan($modelTarget, ManagementStyle::Fortress->appliedTargetCash($modelTarget));
+        $this->assertLessThan(
+            $modelTarget,
+            ManagementStyle::EmpireBuilder->appliedTargetCash($modelTarget),
+            'Cash is a project waiting to happen for this manager, not a buffer.'
+        );
+        $this->assertGreaterThan(
+            ManagementStyle::Steward->cashTargetBias(),
+            ManagementStyle::Fortress->cashTargetBias(),
+            'A steward distributes what it will not reinvest; a fortress keeps it.'
+        );
+    }
+
+    /** Bertrand & Schoar find the manager effect in financial policy too, and an empire is a levered thing. */
+    public function testLeverageAppetiteOrdersFortressBelowEmpireBuilder(): void
+    {
+        $this->assertGreaterThan(1.0, ManagementStyle::EmpireBuilder->leverageBias());
+        $this->assertLessThan(1.0, ManagementStyle::Fortress->leverageBias());
+        $this->assertGreaterThan(
+            ManagementStyle::Steward->leverageBias(),
+            ManagementStyle::EmpireBuilder->leverageBias()
+        );
+    }
+
+    /**
+     * Roll (1986): the overpayment is the empire builder's alone, and it is an ADDITIVE premium, so every
+     * disciplined style must sit at exactly zero rather than merely low.
+     */
+    public function testOnlyTheEmpireBuilderPaysAHubrisPremium(): void
+    {
+        $this->assertGreaterThan(0.0, ManagementStyle::EmpireBuilder->hubrisPremium());
+        $this->assertGreaterThan(1.0, ManagementStyle::EmpireBuilder->acquisitionBias());
+
+        foreach ([ManagementStyle::Operator, ManagementStyle::Steward, ManagementStyle::Fortress] as $disciplined) {
+            $this->assertSame(0.0, $disciplined->hubrisPremium(), $disciplined->value . ' must not overpay.');
+        }
+
+        $this->assertLessThan(1.0, ManagementStyle::Steward->acquisitionBias());
+        $this->assertLessThan(1.0, ManagementStyle::Fortress->acquisitionBias());
+    }
+
+    /**
+     * Guards the contract the whole mechanic rests on: an unassigned firm is untouched. Half the seeded
+     * market declares no style at all, so any dial added later that is not neutral on Operator silently
+     * re-tunes every one of those firms.
+     */
+    public function testEveryMultiplierIsExactlyNeutralOnTheDefaultStyle(): void
+    {
+        $multipliers = ['payoutBias', 'reinvestmentBias', 'hurdleBias', 'cashTargetBias', 'leverageBias', 'acquisitionBias'];
+
+        foreach ($multipliers as $dial) {
+            $this->assertSame(
+                1.0,
+                ManagementStyle::Operator->{$dial}(),
+                sprintf('Operator::%s() must be exactly 1.0 — it is the no-op baseline every unassigned firm runs on.', $dial)
+            );
+        }
     }
 
     /** The agency case: growth is funded past the point where it creates value. */

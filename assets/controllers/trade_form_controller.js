@@ -17,13 +17,14 @@ export default class extends Controller {
     };
 
     connect() {
+        // The coalesced frame (market-stream.js): the ticket only needs the latest quote.
         this.marketUpdateHandler = (event) => this.onMarketUpdate(event);
-        document.addEventListener('market:update', this.marketUpdateHandler);
+        document.addEventListener('market:frame', this.marketUpdateHandler);
         this.render();
     }
 
     disconnect() {
-        document.removeEventListener('market:update', this.marketUpdateHandler);
+        document.removeEventListener('market:frame', this.marketUpdateHandler);
     }
 
     onMarketUpdate(event) {

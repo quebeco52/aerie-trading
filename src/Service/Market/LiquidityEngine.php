@@ -262,15 +262,20 @@ final class LiquidityEngine
      *
      * @param string $assetType 'STOCK', 'ETF' or 'BOND'.
      */
-    public function quoteAsset(Stock|null $stock, string $assetType, string $action, int $quantity, float $midPrice): ExecutionQuoteDTO
+    public function quoteAsset(Stock|null $stock, string $assetType, string $action, int $quantity, float $midPrice, bool $isCorporateIssue = false): ExecutionQuoteDTO
     {
         if ($assetType === 'STOCK' && $stock instanceof Stock) {
             return $this->quote($stock, $action, $quantity, $midPrice);
         }
 
-        $halfSpread = $assetType === 'BOND'
-            ? FinancialConstants::BOND_HALF_SPREAD
-            : FinancialConstants::ETF_HALF_SPREAD;
+        // A corporate issue is not a sovereign one. It trades in a fraction of the size against a fraction
+        // of the buyers, and quoting it at the sovereign's depth would make credit risk free to get into and
+        // out of — which is exactly the property that makes it risky.
+        $halfSpread = match (true) {
+            $assetType === 'BOND' && $isCorporateIssue => FinancialConstants::CORPORATE_BOND_HALF_SPREAD,
+            $assetType === 'BOND' => FinancialConstants::BOND_HALF_SPREAD,
+            default => FinancialConstants::ETF_HALF_SPREAD,
+        };
 
         $direction = $action === 'BUY' ? 1.0 : -1.0;
 

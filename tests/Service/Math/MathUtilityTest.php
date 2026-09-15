@@ -2118,6 +2118,47 @@ class MathUtilityTest extends TestCase
         $this->assertSame(FinancialConstants::MIN_INTRINSIC_PE, $this->mathUtility->calculateQualityAdjustedFairValuePE(0.09, 0.18, $growth, 22.0, 10.0));
     }
 
+    public function testFringeAdjustedPriceLevelReducesToCournotWithNoFringeResponseAndSoftensItOtherwise(): void
+    {
+        $cournot = $this->mathUtility->calculateCournotPriceLevel(1.2, 1.25);
+
+        // No fringe elasticity, or no fringe at all, is the plain Cournot level.
+        $this->assertEqualsWithDelta($cournot, $this->mathUtility->calculateFringeAdjustedPriceLevel(1.2, 0.4, 1.25, 0.0), 1e-12);
+        $this->assertEqualsWithDelta($cournot, $this->mathUtility->calculateFringeAdjustedPriceLevel(1.2, 1.0, 1.25, 1.0), 1e-12);
+        // A balanced industry clears at one whatever the fringe does.
+        $this->assertEqualsWithDelta(1.0, $this->mathUtility->calculateFringeAdjustedPriceLevel(1.0, 0.4, 1.25, 1.0), 1e-9);
+
+        // With a responsive fringe the overbuild is partly absorbed by fringe exit: the price sits between
+        // the Cournot level and one, and the solution satisfies the market-clearing identity exactly.
+        $adjusted = $this->mathUtility->calculateFringeAdjustedPriceLevel(1.2, 0.4, 1.25, 1.0);
+        $this->assertGreaterThan($cournot, $adjusted);
+        $this->assertLessThan(1.0, $adjusted);
+        $this->assertEqualsWithDelta(0.4 + 0.2 + 0.6 * $adjusted, $adjusted ** -1.25, 1e-9, 'roster + excess + fringe supply = demand');
+
+        // A more elastic fringe absorbs more; a larger fringe absorbs more.
+        $this->assertGreaterThan($adjusted, $this->mathUtility->calculateFringeAdjustedPriceLevel(1.2, 0.4, 1.25, 2.0));
+        $this->assertGreaterThan($adjusted, $this->mathUtility->calculateFringeAdjustedPriceLevel(1.2, 0.2, 1.25, 1.0));
+        // A hole (capacity short of trend) is likewise partly refilled: dearer than one, cheaper than Cournot.
+        $short = $this->mathUtility->calculateFringeAdjustedPriceLevel(0.8, 0.4, 1.25, 1.0);
+        $this->assertGreaterThan(1.0, $short);
+        $this->assertLessThan($this->mathUtility->calculateCournotPriceLevel(0.8, 1.25), $short);
+        $this->assertSame(1.0, $this->mathUtility->calculateFringeAdjustedPriceLevel(0.0, 0.4, 1.25, 1.0));
+    }
+
+    public function testCournotMarginalRevenueFactorIsTheLernerConditionScaledBySubstitutability(): void
+    {
+        // MR/P = 1 - s/e for a firm selling its whole output into one price.
+        $this->assertEqualsWithDelta(1.0 - 0.4 / 1.25, $this->mathUtility->calculateCournotMarginalRevenueFactor(0.4, 1.25, 1.0), 1e-12);
+        // Output that is only partly substitutable moves the industry price only partly.
+        $this->assertEqualsWithDelta(1.0 - 0.4 * 0.5 / 1.25, $this->mathUtility->calculateCournotMarginalRevenueFactor(0.4, 1.25, 0.5), 1e-12);
+        // Non-substitutable output, or a firm with no share, is a price-taker.
+        $this->assertSame(1.0, $this->mathUtility->calculateCournotMarginalRevenueFactor(0.4, 1.25, 0.0));
+        $this->assertSame(1.0, $this->mathUtility->calculateCournotMarginalRevenueFactor(0.0, 1.25, 1.0));
+        // A closed loop with inelastic demand can go no lower than zero; share is capped at the whole market.
+        $this->assertSame(0.0, $this->mathUtility->calculateCournotMarginalRevenueFactor(3.0, 0.8, 1.0));
+        $this->assertSame(1.0, $this->mathUtility->calculateCournotMarginalRevenueFactor(0.4, 0.0, 1.0));
+    }
+
     public function testCournotPriceLevelFallsWithExcessCapacityAtTheInverseElasticity(): void
     {
         $this->assertEqualsWithDelta(1.0, $this->mathUtility->calculateCournotPriceLevel(1.0, 1.25), 1e-12);

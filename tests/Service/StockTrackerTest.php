@@ -88,14 +88,12 @@ class StockTrackerTest extends TestCase
         $this->orderFlow = new \App\Service\Market\Flow\InMemoryOrderFlowStore();
 
         $this->tracker = new StockTracker(
-            $this->entityManagerMock,
             $this->marketEngineMock,
             $this->earningsEngineMock,
             $this->corporateActionEngineMock,
             $this->maEngineMock,
             $this->marketEventMock,
             $this->debtEngineMock,
-            $this->mathUtilityMock,
             $this->corporateMetricsMock,
             new \App\Service\Market\LiquidityEngine(new \App\Service\Math\MathUtility()),
             $this->orderFlow,
@@ -104,6 +102,12 @@ class StockTrackerTest extends TestCase
                 new \App\Service\Market\Agent\InMemoryAgentStateStore(),
                 new \App\Service\Market\Flow\InMemoryOrderFlowStore(),
                 []
+            ),
+            // Stubbed maths, so checkProbability() is false and no succession fires in tests that
+            // are about something else.
+            new \App\Service\Corporate\ManagementSuccessionEngine(
+                $this->createStub(\App\Service\Event\MarketEventPublisher::class),
+                $this->createStub(\App\Service\Math\MathUtility::class)
             )
         );
     }

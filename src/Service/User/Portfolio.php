@@ -5,6 +5,7 @@ namespace App\Service\User;
 use App\Entity\User;
 use App\Entity\UserStock;
 use App\Entity\PortfolioHistory;
+use App\Service\Math\FinancialConstants;
 use Doctrine\ORM\EntityManagerInterface;
 
 /**
@@ -45,6 +46,21 @@ class Portfolio
         LEFT JOIN bonds  b ON b.ticker = o.ticker AND o.asset_type = 'BOND'
         WHERE o.status = 'OPEN'
         GROUP BY o.user_id
+    ";
+
+    /**
+     * Per-user option market value, signed.
+     *
+     * One contract is a hundred shares, so the premium has to be multiplied out before it means anything in
+     * currency. The sign on the quantity does the rest of the work: a written contract is a negative asset,
+     * which is exactly what a liability is, so a book that is short more premium than it is long correctly
+     * reduces net worth.
+     */
+    public const OPTION_VALUE_SQL = "
+        SELECT uo.user_id, SUM(uo.quantity * oc.price * " . FinancialConstants::OPTION_CONTRACT_MULTIPLIER . ") AS option_val
+        FROM user_options uo
+        JOIN option_contracts oc ON uo.option_contract_id = oc.id
+        GROUP BY uo.user_id
     ";
 
     /**
@@ -104,7 +120,7 @@ class Portfolio
         $snapshotSql = "
             INSERT INTO portfolio_history (user_id, total_value, recorded_at)
             SELECT u.id,
-                   (u.cash_balance - u.margin_debit + COALESCE(stock_totals.stock_val, 0) + COALESCE(etf_totals.etf_val, 0) + COALESCE(bond_totals.bond_val, 0) + COALESCE(escrow.escrow_val, 0)),
+                   (u.cash_balance - u.margin_debit + COALESCE(stock_totals.stock_val, 0) + COALESCE(etf_totals.etf_val, 0) + COALESCE(bond_totals.bond_val, 0) + COALESCE(option_totals.option_val, 0) + COALESCE(escrow.escrow_val, 0)),
                    :now
             FROM users u
             LEFT JOIN (
@@ -125,6 +141,7 @@ class Portfolio
                 JOIN bonds b ON ub.bond_id = b.id
                 GROUP BY ub.user_id
             ) bond_totals ON bond_totals.user_id = u.id
+            LEFT JOIN (" . self::OPTION_VALUE_SQL . ") option_totals ON option_totals.user_id = u.id
             LEFT JOIN (" . self::OPEN_ORDER_ESCROW_SQL . ") escrow ON escrow.user_id = u.id
         ";
 
@@ -158,6 +175,7 @@ class Portfolio
                 COALESCE((SELECT SUM(us.quantity * s.price) FROM user_stocks us JOIN stocks s ON us.stock_id = s.id WHERE us.user_id = :user_id), 0) +
                 COALESCE((SELECT SUM(ue.quantity * e.price) FROM user_etfs ue JOIN etfs e ON ue.etf_id = e.id WHERE ue.user_id = :user_id), 0) +
                 COALESCE((SELECT SUM(ub.quantity * b.price) FROM user_bonds ub JOIN bonds b ON ub.bond_id = b.id WHERE ub.user_id = :user_id), 0) +
+                COALESCE((SELECT SUM(uo.quantity * oc.price * " . FinancialConstants::OPTION_CONTRACT_MULTIPLIER . ") FROM user_options uo JOIN option_contracts oc ON uo.option_contract_id = oc.id WHERE uo.user_id = :user_id), 0) +
                 COALESCE((
                     SELECT SUM(CASE WHEN o.action = 'BUY'
                                     THEN COALESCE(o.limit_price, 0) * o.quantity

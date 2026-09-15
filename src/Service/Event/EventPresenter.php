@@ -59,6 +59,18 @@ class EventPresenter
             return $this->presentDistrict($rawType, $rawDesc, $changePct, $recordedAt);
         }
 
+        if ($rawType === 'INDEX') {
+            return $this->presentIndex($rawType, $rawDesc, $changePct, $recordedAt);
+        }
+
+        if ($rawType === 'DIVIDEND') {
+            return $this->presentDistribution($rawType, $rawDesc, $changePct, $recordedAt);
+        }
+
+        if ($rawType === 'MANAGEMENT CHANGE') {
+            return $this->presentSuccession($rawType, $rawDesc, $changePct, $recordedAt);
+        }
+
         return $this->presentGeneral($rawType, $rawDesc, $changePct, $recordedAt);
     }
 
@@ -285,6 +297,90 @@ class EventPresenter
             'iconClass' => $evicted ? 'bg-amber-500/20 text-amber-300' : 'bg-primary/20 text-primary',
             'isEarnings' => false,
             'headline' => !empty($rawDesc) ? $rawDesc : 'Glasswater Row roster reconstituted.',
+            'pills' => [],
+            'changePercent' => $changePct,
+            'recordedAt' => $recordedAt,
+            'rawDescription' => $rawDesc,
+        ];
+    }
+
+    /**
+     * An index reconstitution (App\Service\Market\IndexCommittee): who was admitted and who was dropped. Not
+     * a price event — the divisor is restated across the change, so the level itself does not move on it.
+     *
+     * @return array<string, mixed>
+     */
+    private function presentIndex(string $type, string $rawDesc, ?float $changePct, \DateTimeInterface $recordedAt): array
+    {
+        return [
+            'type' => $type,
+            'category' => 'index',
+            'badge' => 'INDEX RECONSTITUTION',
+            'badgeClass' => 'bg-primary/15 text-primary border-primary/40',
+            'borderClass' => 'border-l-primary',
+            'icon' => 'checklist',
+            'iconClass' => 'bg-primary/20 text-primary',
+            'isEarnings' => false,
+            'headline' => !empty($rawDesc) ? $rawDesc : 'Index membership reconstituted.',
+            'pills' => [],
+            'changePercent' => $changePct,
+            'recordedAt' => $recordedAt,
+            'rawDescription' => $rawDesc,
+        ];
+    }
+
+    /**
+     * A fund distribution (App\Service\Market\IndexFundAccountant): dividend cash the fund collected from
+     * its constituents and passed on to its holders.
+     *
+     * Not a price event, though the price falls by the payment on the same tick. The holder has the cash
+     * instead, so nothing was made or lost and the card must not read as a drop — which is exactly why it
+     * carries its own presentation rather than falling through to the generic one.
+     *
+     * @return array<string, mixed>
+     */
+    private function presentDistribution(string $type, string $rawDesc, ?float $changePct, \DateTimeInterface $recordedAt): array
+    {
+        return [
+            'type' => $type,
+            'category' => 'income',
+            'badge' => 'DISTRIBUTION',
+            'badgeClass' => 'bg-secondary/15 text-secondary border-secondary/40',
+            'borderClass' => 'border-l-secondary',
+            'icon' => 'payments',
+            'iconClass' => 'bg-secondary/20 text-secondary',
+            'isEarnings' => false,
+            'headline' => !empty($rawDesc) ? $rawDesc : 'Fund distribution paid.',
+            'pills' => [],
+            'changePercent' => $changePct,
+            'recordedAt' => $recordedAt,
+            'rawDescription' => $rawDesc,
+        ];
+    }
+
+    /**
+     * A change at the top (App\Service\Corporate\ManagementSuccessionEngine). Not a price event — the
+     * value in it is the policy that follows, which the engines price through the dials the incoming
+     * style moves, so the card states what changed and implies no move of its own.
+     *
+     * @return array<string, mixed>
+     */
+    private function presentSuccession(string $type, string $rawDesc, ?float $changePct, \DateTimeInterface $recordedAt): array
+    {
+        $dismissed = str_contains(strtolower($rawDesc), 'removed by the board');
+
+        return [
+            'type' => $type,
+            'category' => 'governance',
+            'badge' => $dismissed ? 'BOARD REMOVAL' : 'MANAGEMENT CHANGE',
+            'badgeClass' => $dismissed
+                ? 'bg-amber-500/15 text-amber-300 border-amber-500/40'
+                : 'bg-surface-container-high text-on-surface-variant border-outline-variant/30',
+            'borderClass' => $dismissed ? 'border-l-amber-500' : 'border-l-primary',
+            'icon' => $dismissed ? 'gavel' : 'badge',
+            'iconClass' => $dismissed ? 'bg-amber-500/20 text-amber-300' : 'bg-primary/10 text-primary',
+            'isEarnings' => false,
+            'headline' => !empty($rawDesc) ? $rawDesc : 'The company named new management.',
             'pills' => [],
             'changePercent' => $changePct,
             'recordedAt' => $recordedAt,

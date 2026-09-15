@@ -176,6 +176,12 @@ export function renderEvents(events, currentTicker, feedId = 'events-feed') {
             cardData.borderClass = 'border-l-cyan-400';
             cardData.icon = 'domain_add';
             cardData.iconClass = 'bg-cyan-500/15 text-cyan-300';
+        } else if (type === 'INDEX') {
+            cardData.badge = 'INDEX RECONSTITUTION';
+            cardData.badgeClass = 'bg-primary/15 text-primary border-primary/40';
+            cardData.borderClass = 'border-l-primary';
+            cardData.icon = 'checklist';
+            cardData.iconClass = 'bg-primary/20 text-primary';
         } else if (type === 'BANKRUPTCY') {
             cardData.badge = 'BANKRUPTCY';
             cardData.badgeClass = 'bg-red-500/15 text-red-400 border-red-500/40';

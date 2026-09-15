@@ -121,8 +121,7 @@ class BankruptcyTest extends TestCase
             $this->entityManagerMock,
             $this->loggerMock,
             $this->marketEventMock,
-            $this->debtEngineMock,
-            $this->mathUtilityMock
+            $this->debtEngineMock
         );
 
         $events = $operator->enforceMarketStability([$stock], new MacroStateDTO());
@@ -151,8 +150,7 @@ class BankruptcyTest extends TestCase
             $this->entityManagerMock,
             $this->loggerMock,
             $this->marketEventMock,
-            $this->debtEngineMock,
-            $this->mathUtilityMock
+            $this->debtEngineMock
         );
 
         $events = $operator->enforceMarketStability([$stock], new MacroStateDTO());
@@ -189,8 +187,7 @@ class BankruptcyTest extends TestCase
             $this->entityManagerMock,
             $this->loggerMock,
             $this->marketEventMock,
-            $this->debtEngineMock,
-            $this->mathUtilityMock
+            $this->debtEngineMock
         );
 
         $operator->enforceMarketStability([$stock], new MacroStateDTO(corporateTaxRate: 0.21));
@@ -227,8 +224,7 @@ class BankruptcyTest extends TestCase
             $this->entityManagerMock,
             $this->loggerMock,
             $this->marketEventMock,
-            $this->debtEngineMock,
-            $this->mathUtilityMock
+            $this->debtEngineMock
         );
 
         $operator->enforceMarketStability([$stock], new MacroStateDTO());
@@ -268,8 +264,7 @@ class BankruptcyTest extends TestCase
             $this->entityManagerMock,
             $this->loggerMock,
             $this->marketEventMock,
-            $this->debtEngineMock,
-            $this->mathUtilityMock
+            $this->debtEngineMock
         );
 
         $operator->enforceMarketStability([$stock], new MacroStateDTO());
@@ -298,8 +293,7 @@ class BankruptcyTest extends TestCase
             $this->entityManagerMock,
             $this->loggerMock,
             $this->marketEventMock,
-            $this->debtEngineMock,
-            $this->mathUtilityMock
+            $this->debtEngineMock
         );
 
         $operator->enforceMarketStability([$stock], new MacroStateDTO());
@@ -331,8 +325,7 @@ class BankruptcyTest extends TestCase
             $this->entityManagerMock,
             $this->loggerMock,
             $this->marketEventMock,
-            $this->debtEngineMock,
-            $this->mathUtilityMock
+            $this->debtEngineMock
         );
 
         $operator->enforceMarketStability([$stock], new MacroStateDTO());
@@ -370,8 +363,26 @@ class BankruptcyTest extends TestCase
             new \App\Service\Market\AssetResolver($this->entityManagerMock),
             new \App\Service\Market\LiquidityEngine(new \App\Service\Math\MathUtility()),
             new \App\Service\Market\Flow\InMemoryOrderFlowStore(),
-            new \App\Service\Market\MarginEngine($this->entityManagerMock),
-            new \App\Service\Market\SecuritiesLendingDesk()
+            new \App\Service\Market\MarginEngine(
+                $this->entityManagerMock,
+                new \App\Service\Market\OptionMarginCalculator($this->entityManagerMock, new \App\Service\Math\MathUtility())
+            ),
+            new \App\Service\Market\SecuritiesLendingDesk(),
+            new \App\Service\Market\OptionTradeService(
+                $this->entityManagerMock,
+                new \App\Service\Market\OptionPricingEngine(
+                    new \App\Service\Math\MathUtility(),
+                    new \App\Service\Market\BondPricingEngine(new \App\Service\Math\MathUtility())
+                ),
+                new \App\Service\Macro\MacroStateProvider($redis),
+                new \App\Service\Market\MarginEngine(
+                    $this->entityManagerMock,
+                    new \App\Service\Market\OptionMarginCalculator($this->entityManagerMock, new \App\Service\Math\MathUtility())
+                ),
+                new \App\Service\Math\MathUtility(),
+                new \App\Service\User\CashLedger()
+            ),
+            new \App\Service\User\CashLedger()
         );
 
         $this->expectException(\Exception::class);
@@ -400,14 +411,12 @@ class BankruptcyTest extends TestCase
         $corpActionEngine->expects($this->never())->method('processSplits');
 
         $tracker = new StockTracker(
-            $this->entityManagerMock,
             $marketEngine,
             $earningsEngine,
             $corpActionEngine,
             $maEngine,
             $this->marketEventMock,
             $this->debtEngineMock,
-            $this->mathUtilityMock,
             $corpMetrics,
             new \App\Service\Market\LiquidityEngine(new \App\Service\Math\MathUtility()),
             new \App\Service\Market\Flow\InMemoryOrderFlowStore(),
@@ -416,6 +425,12 @@ class BankruptcyTest extends TestCase
                 new \App\Service\Market\Agent\InMemoryAgentStateStore(),
                 new \App\Service\Market\Flow\InMemoryOrderFlowStore(),
                 []
+            ),
+            // Stubbed maths, so checkProbability() is false and no succession fires in tests that
+            // are about something else.
+            new \App\Service\Corporate\ManagementSuccessionEngine(
+                $this->createStub(\App\Service\Event\MarketEventPublisher::class),
+                $this->createStub(\App\Service\Math\MathUtility::class)
             )
         );
 
@@ -495,7 +510,7 @@ class BankruptcyTest extends TestCase
         $this->tradeOrderRepoMock->method('findOpenByTicker')->willReturn([]);
         $this->marketEventMock->method('publish')->willReturn(['type' => 'BANKRUPTCY']);
 
-        $operator = new MarketOperator($this->entityManagerMock, $this->loggerMock, $this->marketEventMock, $this->debtEngineMock, $this->mathUtilityMock, $ledger);
+        $operator = new MarketOperator($this->entityManagerMock, $this->loggerMock, $this->marketEventMock, $this->debtEngineMock, $ledger);
         $operator->enforceMarketStability([$failed, $survivor], new MacroStateDTO());
 
         $this->assertTrue($failed->isBankrupt());

@@ -79,25 +79,80 @@ class CorporateMetrics
      */
     public function calculateMarginalReturn(Stock $stock, float $trueReturn, float $saturationPenalty, float $investedCapital, \App\DTO\MacroStateDTO $macroState): float
     {
-        $baseReturn = max(0.0, $trueReturn - $saturationPenalty);
-
         $nominalGdpIndex = $macroState->nominalGdpIndex;
         $samRatio = (float) $stock->getSamRatio();
         $marketShare = $this->calculateScaleRatio($investedCapital, $nominalGdpIndex, $samRatio);
 
+        $baseReturn = max(0.0, $trueReturn - $saturationPenalty - $this->calculateCournotPriceHaircut($stock, $marketShare, $investedCapital, $macroState));
+
+        return $this->applyScaleDiseconomies($stock, $baseReturn, $marketShare);
+    }
+
+    /**
+     * Cobb-Douglas diminishing marginal productivity above the firm's optimal operating scale:
+     * ROIC_marginal = ROIC_base x (K / K_optimal)^(-alpha), with a moat factor softening the elasticity for
+     * firms whose position genuinely defends the extra scale.
+     *
+     * This is the third and last component of a marginal return, after the saturation penalty and the
+     * Cournot price haircut, and it is the one a firm growing WITH its market never pays: the decay is a
+     * function of share, so at constant share the next unit of capital is as productive as the last. That is
+     * why it belongs on the share-taking tranche alone, exactly like the Cournot haircut beside it.
+     *
+     * Extracted so the earnings engine's structural growth gate and the treasury's deployment gates apply
+     * one law rather than two: the treasury applied the decay and the earnings gate did not, so the two were
+     * composing the same marginal return from different parts. Note that the Penrose saturation penalty
+     * dominates this term over the band where it first bites, so on the structural path it is a backstop
+     * against the penalty being softened later rather than a brake that fires on its own today.
+     */
+    public function applyScaleDiseconomies(Stock $stock, float $return, float $marketShare): float
+    {
         $optimalThreshold = FinancialConstants::DISECONOMY_OPTIMAL_SHARE_THRESHOLD;
         if ($marketShare <= $optimalThreshold) {
-            return $baseReturn;
+            return max(0.0, $return);
         }
 
         $moatFactor = FinancialConstants::SYSTEMIC_MOAT_FACTORS[$stock->getSystemicImportance()]
             ?? FinancialConstants::SYSTEMIC_MOAT_FACTORS['default'];
 
-        // Cobb-Douglas diminishing marginal productivity decay above optimal scale: ROIC_marginal = ROIC_base * (K / K_optimal)^(-α)
         $capitalScale = $marketShare / max(0.01, $optimalThreshold);
         $effectiveElasticity = FinancialConstants::CAPITAL_MARGINAL_ELASTICITY * $moatFactor;
 
-        return max(0.0, $baseReturn * pow($capitalScale, -$effectiveElasticity));
+        return max(0.0, $return * pow($capitalScale, -$effectiveElasticity));
+    }
+
+    /**
+     * What the next unit of plant costs the firm on the plant it already runs: a quantity-setting firm sells
+     * every unit into one industry price, so adding capacity lowers the price on all of its output (Cournot;
+     * the Lerner term s/e of the marginal-revenue factor). Per unit of capital that is the asset turnover
+     * times the after-tax share of revenue lost, so the marginal return is the average return less this
+     * haircut. It is the mirror image of the industry capacity balance in the earnings engine: the firm
+     * internalises the price response the ledger will charge it, and stops building before the price cut
+     * has eaten its margin. Financials sell a yield, not a unit, and are left alone; so is any model whose
+     * output is declared non-substitutable.
+     */
+    public function calculateCournotPriceHaircut(Stock $stock, float $marketShare, float $investedCapital, \App\DTO\MacroStateDTO $macroState): float
+    {
+        $revenue = (float) $stock->getTotalRevenue();
+        if ($revenue <= 0.0 || $investedCapital <= 0.0 || $marketShare <= 0.0) {
+            return 0.0;
+        }
+
+        $industry = $stock->getIndustry() ?: 'General';
+        $businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['business_model'] ?? 'none';
+        $strategy = \App\Data\Sectors::getBusinessModelStrategy($businessModel);
+        $substitutability = $strategy->getIndustrySubstitutability();
+        if ($strategy->isFinancial() || $substitutability <= 0.0) {
+            return 0.0;
+        }
+
+        $marginalRevenueFactor = MathUtility::getInstance()->calculateCournotMarginalRevenueFactor(
+            $marketShare,
+            FinancialConstants::COURNOT_DEMAND_ELASTICITY,
+            $substitutability
+        );
+        $assetTurnover = $revenue / $investedCapital;
+
+        return $assetTurnover * (1.0 - $macroState->corporateTaxRate) * (1.0 - $marginalRevenueFactor);
     }
 
     /**

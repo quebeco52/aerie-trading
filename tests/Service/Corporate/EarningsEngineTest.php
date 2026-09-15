@@ -121,6 +121,42 @@ class EarningsEngineTest extends TestCase
         $this->assertGreaterThan($control['revenue'] * (1.0 - FinancialConstants::MAX_INDUSTRY_PRICE_RESPONSE), $overbuilt['revenue'], 'bounded by the per-firm response cap');
     }
 
+    public function testADominantFirmReinvestsAtTrendButNotToTakeShareItWouldHaveToSpoilItsPriceFor(): void
+    {
+        // Same firm twice, differing only in how much of its market it already spans. Reinvestment is set
+        // high enough that the planned growth spend runs well past trend for both.
+        $capitalGrowth = function (string $samRatio): float {
+            mt_srand(5);
+            $this->mathUtility = new MathUtility();
+            $engine = $this->buildEngine($this->createStub(EventDispatcherInterface::class));
+            $stock = $this->buildMatureIndustrial('GROW');
+            $stock->setSamRatio($samRatio);
+            $stock->setCapexRatio('0.90');
+            $macro = new MacroStateDTO(corporateTaxRate: 0.21, policyRateEma: 0.04, yield5yEma: 0.045, inflationEma: 0.02);
+            $ticksPerYear = 252;
+
+            $engine->calculate($stock, $macro, EarningsEngine::resolveReportingTick('GROW', $ticksPerYear), $ticksPerYear);
+            $opening = $stock->getInvestedCapital();
+            for ($quarter = 1; $quarter <= 8; $quarter++) {
+                $engine->calculate($stock, $macro, ($quarter * 63) + EarningsEngine::resolveReportingTick('GROW', $ticksPerYear), $ticksPerYear);
+            }
+
+            return $stock->getInvestedCapital() / $opening;
+        };
+
+        // Half a percent of a $10T market: a price-taker, whose build moves no price.
+        $priceTaker = $capitalGrowth('10.0');
+        // Forty-odd percent of a $125B market, under the saturation line: every unit it adds cuts the price
+        // on everything it already sells, and the share-taking return fails the hurdle.
+        $dominant = $capitalGrowth('0.125');
+
+        $this->assertGreaterThan(1.0, $dominant, 'the dominant firm still reinvests to grow with its market');
+        $this->assertLessThan($priceTaker, $dominant, 'but it no longer builds past trend to take share');
+        // Two years at trend (the sector\'s secular real growth plus inflation) with working capital riding
+        // revenue: nowhere near the price-taker\'s compounding at the full reinvestment rate.
+        $this->assertLessThan($priceTaker - 0.05, $dominant);
+    }
+
     public function testASectorWideGoodQuarterIsNotBookedAsShareTakenFromRivals(): void
     {
         $bookedGain = function (float $sectorZ): array {

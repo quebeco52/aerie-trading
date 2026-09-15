@@ -9,6 +9,7 @@ use App\DTO\DebtExpansionAppetiteDTO;
 use App\DTO\DebtCostDTO;
 
 use App\Entity\Stock;
+use App\Service\Math\FinancialConstants;
 
 /**
  * Encapsulates the core financial physics overrides for financial institutions 
@@ -128,7 +129,9 @@ trait FinancialPhysicsTrait
 
     public function getMaxOrganicGrowthSpeed(bool $isHoarder, bool $isMegaHoarder): float
     {
-        return $isMegaHoarder ? 0.35 : ($isHoarder ? 0.20 : 0.12);
+        return $isMegaHoarder
+            ? FinancialConstants::FIN_MEGA_HOARDER_GROWTH_LIMIT
+            : ($isHoarder ? FinancialConstants::FIN_HOARDER_GROWTH_LIMIT : FinancialConstants::FIN_STANDARD_GROWTH_LIMIT);
     }
 
     public function calculateDebtExpansionCapacity(float $equity, float $totalDebt, float $wholesaleDebt, \App\DTO\DebtHealthDTO $health, float $newBorrowingRate, float $ebit, float $depreciation): float
@@ -246,12 +249,12 @@ trait FinancialPhysicsTrait
         $leverageRatio = (float) $stock->getDebtToEquityRatio();
         $leverageOvershoot = $leverageRatio / $equityLimit;
 
-        if ($leverageOvershoot >= 1.25) {
+        if ($leverageOvershoot >= FinancialConstants::REGULATORY_BUFFER_TIER_3_THRESHOLD) {
             return 0.0;
-        } elseif ($leverageOvershoot >= 1.15) {
-            return 0.30;
-        } elseif ($leverageOvershoot >= 1.05) {
-            return 0.60;
+        } elseif ($leverageOvershoot >= FinancialConstants::REGULATORY_BUFFER_TIER_2_THRESHOLD) {
+            return FinancialConstants::REGULATORY_BUFFER_TIER_2_PAYOUT_CAP;
+        } elseif ($leverageOvershoot >= FinancialConstants::REGULATORY_BUFFER_TIER_1_THRESHOLD) {
+            return FinancialConstants::REGULATORY_BUFFER_TIER_1_PAYOUT_CAP;
         }
 
         return null;

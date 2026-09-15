@@ -1,0 +1,154 @@
+{# ============================================================================
+   Option chain.
+
+   Laid out as a desk lays one out: one table per expiry, calls on the left of the
+   strike and puts on the right, because what a trader compares is the two sides of
+   the SAME strike. A row is blank on one side only where a contract was never listed
+   there.
+   ============================================================================ #}
+
+{% if not optionsListed %}
+	<div class="p-5 rounded-lg bg-surface-container-lowest border border-outline-variant/20">
+		<h3 class="text-sm font-bold text-on-surface mb-1.5">No listed contracts</h3>
+		<p class="text-xs text-on-surface-variant leading-relaxed">{{ optionsReason }}</p>
+	</div>
+{% else %}
+
+	{# ---- What the desk is carrying ---- #}
+	<div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+		<div class="p-4 rounded-lg bg-surface-container-lowest border border-outline-variant/20">
+			<div class="text-2xs uppercase tracking-wide font-semibold text-on-surface-variant mb-1">Open Interest</div>
+			<div class="font-mono tabular-nums text-xl font-bold text-on-surface">{{ optionOpenInterest|number_format(0) }}</div>
+			<p class="text-3xs text-on-surface-variant/70 mt-1">contracts &middot; {{ optionMultiplier }} shares each</p>
+		</div>
+
+		<div class="p-4 rounded-lg bg-surface-container-lowest border border-outline-variant/20 sm:col-span-2">
+			<div class="text-2xs uppercase tracking-wide font-semibold text-on-surface-variant mb-1">Dealer Gamma</div>
+			<div class="flex items-baseline gap-2">
+				<span class="font-mono tabular-nums text-xl font-bold {{ optionDealerGammaPerPercent > 0 ? 'text-tertiary' : (optionDealerGammaPerPercent < 0 ? 'text-secondary' : 'text-on-surface') }}">
+					{{ optionDealerGammaPerPercent > 0 ? '+' : '' }}{{ optionDealerGammaPerPercent|format_large }}
+				</span>
+				<span class="text-2xs text-on-surface-variant">shares per 1% move</span>
+			</div>
+			<p class="text-3xs text-on-surface-variant/70 mt-1 leading-relaxed">
+				{% if optionDealerGammaPerPercent > 0 %}
+					The desk is <span class="text-tertiary font-semibold">short gamma</span>: it has to buy as the price rises and sell as it falls, so its hedging amplifies whatever the tape is already doing.
+				{% elseif optionDealerGammaPerPercent < 0 %}
+					The desk is <span class="text-secondary font-semibold">long gamma</span>: it sells strength and buys weakness, so its hedging leans against the move and damps it.
+				{% else %}
+					Nothing outstanding for the desk to hedge.
+				{% endif %}
+			</p>
+		</div>
+	</div>
+
+	{# ---- The ladder, one table per expiry ---- #}
+	{% for expiry in optionExpiries %}
+		<div class="rounded-lg bg-surface-container-lowest border border-outline-variant/20 overflow-hidden">
+			<div class="px-4 py-2.5 flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border-b border-outline-variant/20 bg-surface-container-low">
+				<h3 class="text-sm font-bold text-on-surface">
+					Expiry Y{{ expiry.expiresAtTime|number_format(2) }}
+					<span class="ml-2 text-2xs font-normal text-on-surface-variant">{{ expiry.daysToExpiry|number_format(0) }} days</span>
+				</h3>
+				{% if expiry.atmVolatility is not null %}
+					<div class="text-2xs text-on-surface-variant">
+						At-the-money vol
+						<span class="ml-1 font-mono tabular-nums font-bold text-on-surface">{{ (expiry.atmVolatility * 100)|number_format(1) }}%</span>
+					</div>
+				{% endif %}
+			</div>
+
+			<div class="overflow-x-auto custom-scrollbar">
+				<table class="w-full text-xs min-w-[46rem]">
+					<thead>
+						<tr class="text-on-surface-variant/70 border-b border-outline-variant/20">
+							<th scope="colgroup" colspan="5" class="px-3 py-1.5 text-3xs uppercase tracking-wider font-bold text-secondary">Calls</th>
+							<th scope="col" class="px-3 py-1.5 text-3xs uppercase tracking-wider font-bold text-center">Strike</th>
+							<th scope="colgroup" colspan="5" class="px-3 py-1.5 text-3xs uppercase tracking-wider font-bold text-tertiary">Puts</th>
+						</tr>
+						<tr class="text-3xs uppercase tracking-wide text-on-surface-variant/60 border-b border-outline-variant/20">
+							<th scope="col" class="px-3 py-1 font-semibold text-left">Pos</th>
+							<th scope="col" class="px-3 py-1 font-semibold text-right">OI</th>
+							<th scope="col" class="px-3 py-1 font-semibold text-right">Delta</th>
+							<th scope="col" class="px-3 py-1 font-semibold text-right">IV</th>
+							<th scope="col" class="px-3 py-1 font-semibold text-right">Mark</th>
+							<th scope="col" class="px-3 py-1 font-semibold text-center"></th>
+							<th scope="col" class="px-3 py-1 font-semibold text-left">Mark</th>
+							<th scope="col" class="px-3 py-1 font-semibold text-left">IV</th>
+							<th scope="col" class="px-3 py-1 font-semibold text-left">Delta</th>
+							<th scope="col" class="px-3 py-1 font-semibold text-left">OI</th>
+							<th scope="col" class="px-3 py-1 font-semibold text-right">Pos</th>
+						</tr>
+					</thead>
+					<tbody>
+						{% for row in expiry.rows %}
+							<tr class="border-b border-outline-variant/10 last:border-0 {{ row.isNearestStrike ? 'bg-primary/5' : '' }} hover:bg-surface-container-high/40 transition-colors">
+								{# ---- Call side ---- #}
+								{% if row.call %}
+									<td class="px-3 py-1.5 font-mono tabular-nums {{ row.call.position != 0 ? (row.call.position > 0 ? 'text-secondary font-bold' : 'text-tertiary font-bold') : 'text-on-surface-variant/30' }}">
+										{{ row.call.position != 0 ? (row.call.position > 0 ? '+' ~ row.call.position : row.call.position) : '—' }}
+									</td>
+									<td class="px-3 py-1.5 font-mono tabular-nums text-right text-on-surface-variant">{{ row.call.openInterest|number_format(0) }}</td>
+									<td class="px-3 py-1.5 font-mono tabular-nums text-right text-on-surface-variant">{{ row.call.delta|number_format(2) }}</td>
+									<td class="px-3 py-1.5 font-mono tabular-nums text-right text-on-surface-variant">{{ (row.call.impliedVolatility * 100)|number_format(1) }}%</td>
+									<td class="px-3 py-1.5 font-mono tabular-nums text-right font-bold {{ row.call.inTheMoney ? 'text-on-surface' : 'text-on-surface-variant' }}">
+										{% if app.user %}
+											<button type="button"
+													class="hover:text-primary hover:underline cursor-pointer transition-colors"
+													data-action="option-ticket#open"
+													data-option-ticket-symbol-param="{{ row.call.ticker }}"
+													data-option-ticket-mark-param="{{ row.call.mark }}"
+													data-option-ticket-position-param="{{ row.call.position }}"
+													title="Decays ${{ (row.call.theta / 365)|abs|number_format(3) }} per day">${{ row.call.mark|number_format(2) }}</button>
+										{% else %}
+											${{ row.call.mark|number_format(2) }}
+										{% endif %}
+									</td>
+								{% else %}
+									<td colspan="5" class="px-3 py-1.5 text-center text-on-surface-variant/20">—</td>
+								{% endif %}
+
+								{# ---- Strike ---- #}
+								<td class="px-3 py-1.5 font-mono tabular-nums text-center font-bold {{ row.isNearestStrike ? 'text-primary' : 'text-on-surface' }} border-x border-outline-variant/15">
+									{{ row.strike|number_format(2) }}
+								</td>
+
+								{# ---- Put side ---- #}
+								{% if row.put %}
+									<td class="px-3 py-1.5 font-mono tabular-nums text-left font-bold {{ row.put.inTheMoney ? 'text-on-surface' : 'text-on-surface-variant' }}">
+										{% if app.user %}
+											<button type="button"
+													class="hover:text-primary hover:underline cursor-pointer transition-colors"
+													data-action="option-ticket#open"
+													data-option-ticket-symbol-param="{{ row.put.ticker }}"
+													data-option-ticket-mark-param="{{ row.put.mark }}"
+													data-option-ticket-position-param="{{ row.put.position }}"
+													title="Decays ${{ (row.put.theta / 365)|abs|number_format(3) }} per day">${{ row.put.mark|number_format(2) }}</button>
+										{% else %}
+											${{ row.put.mark|number_format(2) }}
+										{% endif %}
+									</td>
+									<td class="px-3 py-1.5 font-mono tabular-nums text-left text-on-surface-variant">{{ (row.put.impliedVolatility * 100)|number_format(1) }}%</td>
+									<td class="px-3 py-1.5 font-mono tabular-nums text-left text-on-surface-variant">{{ row.put.delta|number_format(2) }}</td>
+									<td class="px-3 py-1.5 font-mono tabular-nums text-left text-on-surface-variant">{{ row.put.openInterest|number_format(0) }}</td>
+									<td class="px-3 py-1.5 font-mono tabular-nums text-right {{ row.put.position != 0 ? (row.put.position > 0 ? 'text-secondary font-bold' : 'text-tertiary font-bold') : 'text-on-surface-variant/30' }}">
+										{{ row.put.position != 0 ? (row.put.position > 0 ? '+' ~ row.put.position : row.put.position) : '—' }}
+									</td>
+								{% else %}
+									<td colspan="5" class="px-3 py-1.5 text-center text-on-surface-variant/20">—</td>
+								{% endif %}
+							</tr>
+						{% endfor %}
+					</tbody>
+				</table>
+			</div>
+		</div>
+	{% endfor %}
+
+	<p class="text-3xs text-on-surface-variant/60 leading-relaxed">
+		Marks are the desk's last sweep. An order is repriced against the live underlying when it is sent, so
+		the fill is struck on the price at that moment rather than on the figure in this table. One contract
+		is {{ optionMultiplier }} shares; premiums are quoted per share. Contracts are European and are
+		exercised by exception at expiry — anything in the money is delivered whether or not you act.
+	</p>
+{% endif %}

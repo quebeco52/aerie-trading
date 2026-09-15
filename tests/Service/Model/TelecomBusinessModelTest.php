@@ -19,12 +19,10 @@ use PHPUnit\Framework\TestCase;
 class TelecomBusinessModelTest extends TestCase
 {
     private TelecomBusinessModel $model;
-    private MathUtility $mathUtility;
 
     protected function setUp(): void
     {
         $this->model = new TelecomBusinessModel();
-        $this->mathUtility = new MathUtility();
     }
 
     public function testDualStreamRevenueDecomposition(): void

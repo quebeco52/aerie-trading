@@ -542,9 +542,9 @@ class DistrictMapBuilder
     }
 
     /**
-     * Which windows flicker while lit, and where in the cycle each starts, [floor][column]:
-     * null for a window that burns steady. A second hash of the address, salted so it is
-     * independent of the lighting priority — otherwise the flickering windows would always be
+     * Which windows are drawn a step brighter while lit, [floor][column]: a stable draw for a
+     * marked window, null for one that burns steady. A second hash of the address, salted so
+     * it is independent of the lighting priority — otherwise the marked windows would always be
      * the ones lit first. See DistrictMap::WINDOW_TWINKLE_SHARE.
      *
      * @return list<list<float|null>>

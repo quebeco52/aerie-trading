@@ -36,6 +36,7 @@
             <directory>tests/Command</directory>
             <directory>tests/MessageHandler</directory>
             <directory>tests/EventSubscriber</directory>
+            <directory>tests/EventListener</directory>
             <directory>tests/Security</directory>
             <directory>tests/Financial</directory>
             <directory>tests/Service</directory>
@@ -53,6 +54,28 @@
             <file>tests/Service/CapExEngineTest.php</file>
             <file>tests/Service/MarketEngineTest.php</file>
             <file>tests/Service/PortfolioCalculationTest.php</file>
+            <file>tests/Service/Market/OptionPricingEngineTest.php</file>
+            <file>tests/Service/Market/OptionChainServiceTest.php</file>
+            <file>tests/Service/Market/DealerGammaEngineTest.php</file>
+            <file>tests/Service/Market/OptionDemandEngineTest.php</file>
+            <file>tests/Service/Market/OptionSettlementTest.php</file>
+            <file>tests/Service/User/CashLedgerTest.php</file>
+            <file>tests/Service/View/OptionChainBuilderTest.php</file>
+            <file>tests/Service/Market/OptionDeskCadenceTest.php</file>
+            <file>tests/Service/Market/CorporateBondDeskTest.php</file>
+            <file>tests/Service/Market/CorporateDefaultServiceTest.php</file>
+            <file>tests/Service/Market/IndexCommitteeTest.php</file>
+            <file>tests/Service/Market/IndexFundAccountantTest.php</file>
+            <file>tests/Service/Market/BulkRowUpdateTest.php</file>
+            <file>tests/Service/Market/StockTickColumnsTest.php</file>
+            <file>tests/Command/MarketTickerCadenceTest.php</file>
+            <file>tests/Service/Market/OptionDeskSweepTest.php</file>
+            <file>tests/Service/Market/OptionSettlementBatchTest.php</file>
+            <file>tests/Service/Market/OptionChainListingTest.php</file>
+            <file>tests/EventListener/FlushProfilerTest.php</file>
+            <file>tests/Service/Market/SimulationClockTest.php</file>
+            <file>tests/Service/Market/HistorySimTimeTest.php</file>
+            <file>tests/Service/Corporate/MergerAndAcquisitionGateTest.php</file>
             <directory>tests/Support</directory>
         </testsuite>
 
@@ -68,6 +91,18 @@
             <exclude>tests/Service/CapExEngineTest.php</exclude>
             <exclude>tests/Service/MarketEngineTest.php</exclude>
             <exclude>tests/Service/PortfolioCalculationTest.php</exclude>
+            <exclude>tests/Service/Market/OptionPricingEngineTest.php</exclude>
+            <exclude>tests/Service/Market/OptionChainServiceTest.php</exclude>
+            <exclude>tests/Service/Market/DealerGammaEngineTest.php</exclude>
+            <exclude>tests/Service/Market/OptionDemandEngineTest.php</exclude>
+            <exclude>tests/Service/Market/OptionSettlementTest.php</exclude>
+            <exclude>tests/Service/User/CashLedgerTest.php</exclude>
+            <exclude>tests/Service/View/OptionChainBuilderTest.php</exclude>
+            <exclude>tests/Service/Market/OptionDeskCadenceTest.php</exclude>
+            <exclude>tests/Service/Market/CorporateBondDeskTest.php</exclude>
+            <exclude>tests/Service/Market/CorporateDefaultServiceTest.php</exclude>
+            <exclude>tests/Service/Market/IndexCommitteeTest.php</exclude>
+            <exclude>tests/Service/Market/IndexFundAccountantTest.php</exclude>
         </testsuite>
 
         <testsuite name="Functional">

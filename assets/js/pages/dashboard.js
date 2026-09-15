@@ -3,6 +3,7 @@ import { formatCurrency } from '../utils/formatters.js';
 import { CHART_FONT_MONO } from '../utils/fonts.js';
 import { readPageData } from '../utils/page-data.js';
 import { flashTick } from '../utils/tick-flash.js';
+import { setText } from '../utils/set-text.js';
 
 const previousPrices = {};
 let previousPortfolioValue = null;
@@ -163,7 +164,8 @@ function initDashboard() {
         }
     }
 
-    function onMarketUpdate(event) {
+    /** One coalesced frame from market-stream.js (`market:frame`) — see the home page for the contract. */
+    function onMarketFrame(event) {
         const payload = event.detail;
         if (!payload || !payload.stocks) return;
 
@@ -186,23 +188,27 @@ function initDashboard() {
 
                 const priceEl = document.getElementById(`price-${stock.ticker}`);
                 if (priceEl) {
-                    priceEl.textContent = '$' + newPrice.toFixed(2);
+                    setText(priceEl, '$' + newPrice.toFixed(2));
                     flashTick(priceEl, newPrice - oldPrice);
                 }
 
                 const valueEl = document.getElementById(`value-${stock.ticker}`);
-                if (valueEl) {
-                    valueEl.textContent = formatCurrency(holdingValue);
-                }
+                setText(valueEl, formatCurrency(holdingValue));
 
+                // The cell is server-rendered as a value line and a percent line (plus an
+                // optional borrow line for a short); the two figures are written into those
+                // lines in place. Rebuilding the cell's markup here used to drop the borrow line.
                 const pnlEl = document.getElementById(`pnl-${stock.ticker}`);
                 if (pnlEl) {
                     const sign = unrealizedPnL >= 0 ? '+' : '';
-                    pnlEl.className = `px-6 py-4 font-mono text-right font-bold ${unrealizedPnL >= 0 ? 'text-secondary' : 'text-tertiary'}`;
-                    pnlEl.innerHTML = `
-                        <div>${sign}${formatCurrency(unrealizedPnL)}</div>
-                        <div class="text-3xs font-normal opacity-80">${sign}${unrealizedPnLPct.toFixed(2)}%</div>
-                    `;
+                    const tone = unrealizedPnL >= 0 ? 'text-secondary' : 'text-tertiary';
+                    if (!pnlEl.classList.contains(tone)) {
+                        pnlEl.classList.remove('text-secondary', 'text-tertiary');
+                        pnlEl.classList.add(tone);
+                    }
+                    const lines = pnlEl.children;
+                    setText(lines[0], `${sign}${formatCurrency(unrealizedPnL)}`);
+                    setText(lines[1], `(${sign}${unrealizedPnLPct.toFixed(2)}%)`);
                 }
 
                 previousPrices[stock.ticker] = newPrice;
@@ -226,15 +232,12 @@ function initDashboard() {
             const totalPnL = totalInvested - totalInvestedCost;
             const totalPnLPct = totalInvestedCost > 0 ? (totalPnL / totalInvestedCost) * 100 : 0.0;
 
-            const investedEl = document.getElementById('total-invested');
-            if (investedEl) {
-                investedEl.textContent = formatCurrency(totalInvested);
-            }
+            setText(document.getElementById('total-invested'), formatCurrency(totalInvested));
 
             const portfolioValEl = document.getElementById('portfolio-total-value');
             if (portfolioValEl) {
                 const oldVal = previousPortfolioValue || totalPortfolioValue;
-                portfolioValEl.textContent = formatCurrency(totalPortfolioValue);
+                setText(portfolioValEl, formatCurrency(totalPortfolioValue));
 
                 flashTick(portfolioValEl, totalPortfolioValue - oldVal);
                 previousPortfolioValue = totalPortfolioValue;
@@ -246,8 +249,8 @@ function initDashboard() {
 
             if (pnlValEl && pnlPctEl && pnlBadge) {
                 const sign = totalPnL >= 0 ? '+' : '';
-                pnlValEl.textContent = `${sign}${formatCurrency(totalPnL)}`;
-                pnlPctEl.textContent = `(${sign}${totalPnLPct.toFixed(2)}%)`;
+                setText(pnlValEl, `${sign}${formatCurrency(totalPnL)}`);
+                setText(pnlPctEl, `(${sign}${totalPnLPct.toFixed(2)}%)`);
 
                 if (totalPnL >= 0) {
                     pnlBadge.className = 'inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold font-mono bg-secondary/10 text-secondary border border-secondary/20';
@@ -259,10 +262,10 @@ function initDashboard() {
     }
 
     initPortfolioChart();
-    document.addEventListener('market:update', onMarketUpdate);
+    document.addEventListener('market:frame', onMarketFrame);
 
     document.addEventListener('turbo:before-render', () => {
-        document.removeEventListener('market:update', onMarketUpdate);
+        document.removeEventListener('market:frame', onMarketFrame);
         if (chartResizeObserver) {
             chartResizeObserver.disconnect();
             chartResizeObserver = null;

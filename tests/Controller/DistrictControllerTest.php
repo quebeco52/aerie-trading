@@ -210,20 +210,21 @@ class DistrictControllerTest extends WebTestCase
         });
     }
 
-    public function testTheStreetWrapsIntoTwoRowsEachWithItsOwnGroundLine(): void
+    public function testTheStreetWrapsIntoEveryRowEachWithItsOwnGroundLine(): void
     {
         $client = static::createClient();
         $crawler = $client->request('GET', '/district/glasswater-row');
 
         $this->assertResponseIsSuccessful();
 
-        $this->assertSelectorExists('svg #skyline-row-0');
-        $this->assertSelectorExists('svg #skyline-row-1');
+        for ($row = 0; $row < DistrictMap::ROW_COUNT; $row++) {
+            $this->assertSelectorExists(sprintf('svg #skyline-row-%d', $row));
+        }
 
         $groundLines = array_unique($crawler->filter('[data-district-target="plot"]')
             ->each(fn ($node) => $node->attr('data-ground-line')));
 
-        $this->assertCount(2, $groundLines, 'A full roster should occupy both rows, at two distinct ground lines');
+        $this->assertCount(DistrictMap::ROW_COUNT, $groundLines, 'A full roster should occupy every row, each at its own ground line');
     }
 
     public function testEveryPlotCarriesAKerbPlateWithRankAndPrice(): void
@@ -251,15 +252,10 @@ class DistrictControllerTest extends WebTestCase
         $rows = count($crawler->filter('svg g[id^="skyline-row-"]'));
         $gridlines = $crawler->filter('svg .gridline')->count();
 
-        // The rules are generated from the roster's own cap window, so their number is not
-        // fixed — but every row carries the same set, and a street with tenants always has some.
+        // Each row's sky is sized to its own skyline, so lower/shorter rows carry fewer rules than
+        // the top row, but every row carries at least one reference rule.
         $this->assertGreaterThan(0, $rows);
-        $this->assertGreaterThan(0, $gridlines);
-        $this->assertSame(
-            0,
-            $gridlines % $rows,
-            'A cap maps to a facade height, so each row needs its own identical set of reference rules'
-        );
+        $this->assertGreaterThanOrEqual($rows, $gridlines);
     }
 
     public function testSectorBracketsRunAlongTheKerb(): void

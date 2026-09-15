@@ -1,5 +1,6 @@
 import { Controller } from '@hotwired/stimulus';
 import { formatLarge, formatCurrency, formatPercent } from '../js/utils/formatters.js';
+import { setText } from '../js/utils/set-text.js';
 
 /** SVG namespace — segment sparklines are built element by element, not parsed from markup. */
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -190,6 +191,11 @@ function categorizeEvent(type, changePercent) {
     if (t === 'ACQUISITION' || t === 'MERGER' || t === 'DIVESTITURE') {
         return { category: 'mna', color: EVENT_COLORS.cyan, icon: 'domain_add', badge: t };
     }
+    if (t === 'MANAGEMENT CHANGE') {
+        // Carries no price move of its own; the policy the new management brings is priced by the engines.
+        const dismissed = (type || '').toLowerCase().includes('removal');
+        return { category: 'governance', color: EVENT_COLORS.amber, icon: dismissed ? 'gavel' : 'badge', badge: 'MANAGEMENT' };
+    }
     if (t === 'BANKRUPTCY') {
         return { category: 'bankruptcy', color: EVENT_COLORS.red500, icon: 'gavel', badge: 'BANKRUPTCY' };
     }
@@ -229,7 +235,7 @@ export default class extends Controller {
         'institutionDetail', 'institutionName', 'institutionStatus', 'institutionReadings',
         'institutionFeeds', 'institutionFeedCount',
         'sectorChip', 'sectorRun',
-        'conduitModeBtn', 'pennant', 'detailPositionWrap', 'detailPosition', 'tooltipPosition',
+        'conduitModeBtn', 'roofKit', 'detailPositionWrap', 'detailPosition', 'tooltipPosition',
         'quickTradeForm', 'quickTradeTickerInput', 'quickTradeHolding', 'quickTradeEstimate', 'quickTradeQuantity', 'quickTradeSubmit',
     ];
 
@@ -251,8 +257,6 @@ export default class extends Controller {
         userCash: Number,
         /** Whether the account may short and cover — decides which ticket actions are rendered. */
         marginEnabled: Boolean,
-        /** Roof pennant geometry — App\Data\DistrictMap::POSITION_PENNANT_*; the Twig draws from the same figures. */
-        positionPennant: Object,
         /** Reconstitution calendar — App\Service\District\DistrictRoster::schedule(): nextTick, ticksPerYear… */
         reconstitution: Object,
     };
@@ -274,11 +278,21 @@ export default class extends Controller {
     static RERANK_THROTTLE_MS = 1000;
 
     /**
-     * Perceptual jitter deadband in viewBox units (~1.1px). Microscopic sub-cent price noise
-     * below this threshold is skipped to keep quiescent buildings from continuous 60 FPS
-     * rasterization loops while allowing genuine price moves to glide smoothly.
+     * Perceptual jitter deadband in viewBox units (~1.1px). A facade whose height moved by less
+     * than this since it was last drawn is left alone, so sub-cent price noise never touches
+     * the DOM while a genuine move still glides.
      */
     static HEIGHT_DEADBAND = 2.5;
+
+    /**
+     * How often facade heights are re-evaluated, and how long a resize glides. A skyline is a
+     * slow variable — market cap at the flush cadence is noise — and a glide is a main-thread
+     * SVG geometry animation (see the .facade rule in the template), so the glide is kept well
+     * short of the interval: the street then moves for under a third of the time, smoothly,
+     * instead of snapping every flush. Caps arriving between passes are kept in capByTicker.
+     */
+    static RESIZE_INTERVAL_MS = 3000;
+    static FACADE_GLIDE_MS = 900;
 
     /**
      * How often an institution's readings are sampled for its sparklines, and how many samples
@@ -325,43 +339,23 @@ export default class extends Controller {
 
         // Latest-quarter revenue mix from App\Service\District\DistrictRevenueFeed. This is a
         // snapshot, not a stream — it only changes once a simulated quarter, so unlike prices and
-        // events it is never touched by onMarketUpdate()/flushPending(), only re-read on select().
+        // events it is never touched by onMarketFrame(), only re-read on select().
         this.revenueMixByTicker = new Map(Object.entries(this.revenueMixValue || {}));
-
-        // The market feed publishes at up to 50 Hz. Writing SVG attributes on every tick would
-        // mean ~850 DOM writes/second for this ward alone, so ticks are coalesced here and the
-        // DOM is only touched once per animation frame — see onMarketUpdate() / flushPending().
-        this.pendingStockUpdates = new Map();
-        this.pendingMacro = null;
-        this.pendingEvents = [];
-        this.frameHandle = null;
 
         this.rankMoveTimers = {};
         // Each window's lighting priority, parsed once — a live tick compares ~50 of them per
         // facade against the new lit share (see relightWindows()).
         this.windowsByTicker = new Map();
         this.facadesByTicker = new Map();
-        this.rooflinesByTicker = new Map();
         this.plotWindowsByTicker = new Map();
         this.rankPlatesByTicker = new Map();
-        this.beaconsByTicker = new Map();
-        this.furnituresByTicker = new Map();
         this.plotTargets.forEach(plot => {
             const ticker = plot.dataset.ticker;
             if (ticker) {
                 this.plotsByTicker.set(ticker, plot);
                 this.facadesByTicker.set(ticker, plot.querySelector('.facade'));
-                this.rooflinesByTicker.set(ticker, plot.querySelector('.roofline'));
                 this.plotWindowsByTicker.set(ticker, plot.querySelector('.plot-windows'));
                 this.rankPlatesByTicker.set(ticker, plot.querySelector('.plot-rank'));
-                this.beaconsByTicker.set(ticker, plot.querySelector('.beacon'));
-                const furniture = plot.querySelector('.roof-furniture');
-                if (furniture) {
-                    this.furnituresByTicker.set(ticker, {
-                        el: furniture,
-                        height: parseFloat(furniture.getAttribute('height')) || 0,
-                    });
-                }
                 this.windowsByTicker.set(ticker, Array.from(plot.querySelectorAll('.window')).map(el => ({
                     el,
                     key: parseFloat(el.dataset.key),
@@ -384,14 +378,7 @@ export default class extends Controller {
         });
 
         this.flareTargets.forEach(flare => this.flaresByTicker.set(flare.dataset.flareFor, flare));
-        this.badgeCirclesByTicker = new Map();
-        this.badgeTextsByTicker = new Map();
-        this.badgeTargets.forEach(badge => {
-            const ticker = badge.dataset.badgeFor;
-            this.badgesByTicker.set(ticker, badge);
-            this.badgeCirclesByTicker.set(ticker, badge.querySelector('circle'));
-            this.badgeTextsByTicker.set(ticker, badge.querySelector('text'));
-        });
+        this.badgeTargets.forEach(badge => this.badgesByTicker.set(badge.dataset.badgeFor, badge));
 
         // Kerb plates are rewritten on every tick, so index them once rather than searching the
         // DOM 30 times per animation frame.
@@ -421,8 +408,22 @@ export default class extends Controller {
         this.userHoldings = this.userHoldingsValue || {};
         this.userCash = Number(this.userCashValue) || 0;
 
-        this.pennantsByTicker = new Map();
-        this.pennantTargets.forEach(pen => this.pennantsByTicker.set(pen.dataset.pennantFor, pen));
+        this.roofKitsByTicker = new Map();
+        this.roofKitTargets.forEach(kit => this.roofKitsByTicker.set(kit.dataset.roofFor, {
+            el: kit,
+            drawnY: parseFloat(kit.dataset.roofY) || 0,
+        }));
+
+        // A Stimulus target getter is a querySelectorAll over the controller element (thousands
+        // of nodes here) on every call, so the live paths read these once instead.
+        this.institutionElements = this.institutionTargets;
+        this.summaryStressElement = this.hasSummaryStressTarget ? this.summaryStressTarget : null;
+        this.summaryReconstitutionElement = this.hasSummaryReconstitutionTarget ? this.summaryReconstitutionTarget : null;
+
+        // Facade heights move on their own, slower clock — see RESIZE_INTERVAL_MS.
+        this.capByTicker = new Map();
+        this.lastResizeAt = Date.now();
+        this.svgTarget.style.setProperty('--facade-glide', `${this.constructor.FACADE_GLIDE_MS}ms`);
 
         this.onSubmitEnd = () => {
             if (this.hasQuickTradeSubmitTarget) {
@@ -434,12 +435,10 @@ export default class extends Controller {
         };
         document.addEventListener('turbo:submit-end', this.onSubmitEnd);
 
-        this.onMarketUpdate = this.onMarketUpdate.bind(this);
-        this.flushPending = this.flushPending.bind(this);
-        document.addEventListener('market:update', this.onMarketUpdate);
-
-        this.onVisibilityChange = this.onVisibilityChange.bind(this);
-        document.addEventListener('visibilitychange', this.onVisibilityChange);
+        this.onMarketFrame = this.onMarketFrame.bind(this);
+        // The coalesced feed (market-stream.js): every DOM write on the street happens in
+        // onMarketFrame(), so the page's cost is set by FRAME_INTERVAL_MS, not the tick rate.
+        document.addEventListener('market:frame', this.onMarketFrame);
 
         this.reconstituting = false;
         this.settleReconstitution();
@@ -459,28 +458,13 @@ export default class extends Controller {
     }
 
     disconnect() {
-        document.removeEventListener('visibilitychange', this.onVisibilityChange);
-        document.removeEventListener('market:update', this.onMarketUpdate);
+        document.removeEventListener('market:frame', this.onMarketFrame);
         document.removeEventListener('turbo:submit-end', this.onSubmitEnd);
         Object.values(this.rankMoveTimers).forEach(clearTimeout);
         Object.values(this.flareTimers).forEach(clearTimeout);
         Object.values(this.badgeTimers).forEach(clearTimeout);
         clearInterval(this.badgeRefreshHandle);
         clearTimeout(this.reconstitutionNoticeTimer);
-
-        if (this.frameHandle !== null) {
-            cancelAnimationFrame(this.frameHandle);
-            this.frameHandle = null;
-        }
-    }
-
-    /** Flushes any queued market ticks when the user switches back to this tab. */
-    onVisibilityChange() {
-        if (!document.hidden && this.frameHandle === null) {
-            if (this.pendingStockUpdates.size > 0 || this.pendingMacro || this.pendingEvents.length > 0) {
-                this.frameHandle = requestAnimationFrame(this.flushPending);
-            }
-        }
     }
 
     select(event) {
@@ -556,7 +540,7 @@ export default class extends Controller {
 
     /**
      * Shows the hover card for a building. Reading the street should not require clicking — a
-     * base plot's click target is only ~45px wide even at the two-row scale.
+     * base plot's click target is only ~46px wide even at the wrapped street's scale.
      */
     showTooltip(event) {
         const plot = event.currentTarget;
@@ -911,7 +895,7 @@ export default class extends Controller {
 
     /** Rewrites the countdown tile from the live tick count: simulated days to the next reconstitution. */
     renderReconstitutionCountdown(tick) {
-        if (!this.hasSummaryReconstitutionTarget) return;
+        if (!this.summaryReconstitutionElement) return;
         const schedule = this.reconstitutionValue || {};
         const ticksPerYear = Number(schedule.ticksPerYear) || 0;
         const nextTick = Number(schedule.nextTick) || 0;
@@ -919,9 +903,7 @@ export default class extends Controller {
 
         const days = Math.max(0, Math.ceil((nextTick - tick) / ticksPerYear * 365));
         const countdownText = days === 0 ? 'now' : `in ${days}d`;
-        if (this.summaryReconstitutionTarget.textContent !== countdownText) {
-            this.summaryReconstitutionTarget.textContent = countdownText;
-        }
+        setText(this.summaryReconstitutionElement, countdownText);
 
         // The boundary has passed but no announcement reached us — the announcement is one
         // 20ms message, and the market stream drops its socket while the tab is hidden. The
@@ -1498,73 +1480,65 @@ export default class extends Controller {
         return list;
     }
 
-    onMarketUpdate(event) {
+    /**
+     * One coalesced frame from market-stream.js: the latest state per ticker, every event
+     * since the previous frame, the latest macro snapshot and tick, at most every
+     * FRAME_INTERVAL_MS and already on an animation frame. Every live DOM write on the street
+     * happens here, in one pass.
+     */
+    onMarketFrame(event) {
         const payload = event.detail;
         if (!payload) return;
 
-        // Queue only; DOM writes happen in flushPending(). The Map naturally coalesces several
-        // ticks landing in the same frame down to the latest state per ticker. The LBI index
-        // entry carries `is_etf: true` and none of this ward's fields (no market_cap, no
-        // is_bankrupt) — it never holds a plot here, so it is skipped explicitly rather than
-        // relying only on the plotsByTicker miss.
+        // The LBI index entry carries `is_etf: true` and none of this ward's fields (no
+        // market_cap, no is_bankrupt) — it never holds a plot here, so it is skipped explicitly
+        // rather than relying only on the plotsByTicker miss.
+        let touched = false;
         if (Array.isArray(payload.stocks)) {
             payload.stocks.forEach(update => {
-                if (update.is_etf || !this.plotsByTicker.has(update.ticker)) return;
-                this.pendingStockUpdates.set(update.ticker, update);
+                if (update.is_etf) return;
+                const plot = this.plotsByTicker.get(update.ticker);
+                if (!plot) return;
+                this.applyUpdate(plot, update);
+                touched = true;
             });
         }
 
+        const now = Date.now();
+        if (touched && now - this.lastRerankAt >= this.constructor.RERANK_THROTTLE_MS) {
+            this.lastRerankAt = now;
+            this.rerank();
+        }
+
+        if (this.capByTicker.size > 0 && now - this.lastResizeAt >= this.constructor.RESIZE_INTERVAL_MS) {
+            this.lastResizeAt = now;
+            this.capByTicker.forEach((cap, ticker) => {
+                const plot = this.plotsByTicker.get(ticker);
+                if (plot) this.resizeFacade(plot, cap);
+            });
+            this.capByTicker.clear();
+        }
+
         if (payload.macro) {
-            this.pendingMacro = payload.macro;
+            this.applyStress(payload.macro);
         }
 
         if (Number.isFinite(payload.tick)) {
             this.renderReconstitutionCountdown(payload.tick);
         }
 
-        // A new roster was taken on this tick. The street is server-rendered, so the frame is
-        // reloaded rather than re-laid-out here; everything up to the reload is choreography.
+        // A new roster was taken. The street is server-rendered, so the frame is reloaded
+        // rather than re-laid-out here; everything up to the reload is choreography.
         if (payload.district && typeof payload.district === 'object') {
             this.reconstitute(payload.district);
         }
 
-        // Unlike stock ticks, events are discrete occurrences rather than a replaceable state —
-        // several can land on different buildings in the same frame and all of them must fire,
-        // so they are appended rather than coalesced by ticker.
+        // Events are occurrences rather than replaceable state: several can land on different
+        // buildings in one frame and all of them fire.
         if (Array.isArray(payload.events)) {
             payload.events.forEach(evt => {
-                if (this.plotsByTicker.has(evt.ticker)) this.pendingEvents.push(evt);
+                if (this.plotsByTicker.has(evt.ticker)) this.applyEvent(evt);
             });
-        }
-
-        if (!document.hidden && this.frameHandle === null) {
-            this.frameHandle = requestAnimationFrame(this.flushPending);
-        }
-    }
-
-    /** Applies every tick coalesced since the last animation frame in a single DOM pass. */
-    flushPending() {
-        this.frameHandle = null;
-
-        this.pendingStockUpdates.forEach((update, ticker) => {
-            const plot = this.plotsByTicker.get(ticker);
-            if (plot) this.applyUpdate(plot, update);
-        });
-        const now = Date.now();
-        if (this.pendingStockUpdates.size > 0 && (now - this.lastRerankAt >= this.constructor.RERANK_THROTTLE_MS)) {
-            this.lastRerankAt = now;
-            this.rerank();
-        }
-        this.pendingStockUpdates.clear();
-
-        if (this.pendingMacro) {
-            this.applyStress(this.pendingMacro);
-            this.pendingMacro = null;
-        }
-
-        if (this.pendingEvents.length > 0) {
-            this.pendingEvents.forEach(evt => this.applyEvent(evt));
-            this.pendingEvents = [];
         }
     }
 
@@ -1628,7 +1602,7 @@ export default class extends Controller {
 
         const count = this.countRecentEvents(ticker);
         badge.dataset.count = String(count);
-        badgeCount.textContent = String(count);
+        setText(badgeCount, String(count));
     }
 
     /** Re-counts every badge so events age out of the window while the page stays open. */
@@ -1657,7 +1631,7 @@ export default class extends Controller {
             const ticker = plot.dataset.ticker;
             const plate = this.rankPlatesByTicker.get(ticker) || plot.querySelector('.plot-rank');
             if (plate) {
-                plate.textContent = `#${rank}`;
+                setText(plate, `#${rank}`);
                 plate.setAttribute('data-rank-move', rank < previous ? 'up' : 'down');
                 clearTimeout(this.rankMoveTimers[ticker]);
                 this.rankMoveTimers[ticker] = setTimeout(() => {
@@ -1678,7 +1652,7 @@ export default class extends Controller {
         this.sampleReadings(macro);
         let stressedCount = 0;
 
-        this.institutionTargets.forEach(institution => {
+        this.institutionElements.forEach(institution => {
             const institutionId = institution.dataset.institution;
             const config = this.institutionsById.get(institutionId);
             if (config) {
@@ -1701,11 +1675,11 @@ export default class extends Controller {
         });
 
         // Keep the summary tile honest — it is a server-rendered count of the same verdict.
-        if (this.hasSummaryStressTarget) {
-            const stressText = `${stressedCount}/${this.institutionTargets.length} stressed`;
-            if (this.summaryStressTarget.textContent !== stressText) {
-                this.summaryStressTarget.textContent = stressText;
-                this.summaryStressTarget.className = 'text-sm font-bold font-mono tabular-nums mt-1 '
+        if (this.summaryStressElement) {
+            const stressText = `${stressedCount}/${this.institutionElements.length} stressed`;
+            if (this.summaryStressElement.textContent !== stressText) {
+                setText(this.summaryStressElement, stressText);
+                this.summaryStressElement.className = 'text-sm font-bold font-mono tabular-nums mt-1 '
                     + (stressedCount > 0 ? 'text-tertiary' : 'text-on-surface');
             }
         }
@@ -1751,10 +1725,7 @@ export default class extends Controller {
         config.readouts.forEach(readout => {
             const node = Array.from(valueNodes).find(n => n.dataset.readoutField === readout.field);
             if (node) {
-                const formatted = formatReadoutValue(macro[readout.field], readout.unit);
-                if (node.textContent !== formatted) {
-                    node.textContent = formatted;
-                }
+                setText(node, formatReadoutValue(macro[readout.field], readout.unit));
             }
         });
     }
@@ -1779,7 +1750,7 @@ export default class extends Controller {
 
         this.applyCondition(plot, update);
         this.relightWindows(plot, update);
-        this.resizeFacade(plot, update.is_bankrupt ? 0 : marketCap);
+        this.capByTicker.set(ticker, update.is_bankrupt ? 0 : marketCap);
         this.updateKerbPlate(ticker, newPrice);
 
         if (plot.getAttribute('data-selected') === 'true') {
@@ -1841,10 +1812,7 @@ export default class extends Controller {
     updateKerbPlate(ticker, price) {
         const priceNode = this.kerbPriceByTicker.get(ticker);
         if (priceNode) {
-            const formatted = formatCurrency(price);
-            if (priceNode.textContent !== formatted) {
-                priceNode.textContent = formatted;
-            }
+            setText(priceNode, formatCurrency(price));
         }
     }
 
@@ -1874,84 +1842,35 @@ export default class extends Controller {
             return;
         }
 
-        const roofline = this.rooflinesByTicker.get(ticker);
-        const windows = this.plotWindowsByTicker.get(ticker);
-
         facade.setAttribute('y', String(y));
         facade.setAttribute('height', String(height));
+
+        // The window grid and the roof kit (roofline, furniture, rank, badge, flare, beacon,
+        // pennant) each move as one transform, which the .plot-windows/.roof-kit rules glide.
+        const windows = this.plotWindowsByTicker.get(ticker);
         if (windows) {
-            windows.setAttribute('transform', `translate(${facade.getAttribute('x')} ${y})`);
+            windows.style.transform = `translate(${facade.getAttribute('x')}px, ${y}px)`;
         }
-        if (roofline) {
-            roofline.setAttribute('y', String(y - 7));
+        const kit = this.roofKitsByTicker.get(ticker);
+        if (kit) {
+            kit.el.style.transform = `translate(0px, ${y - kit.drawnY}px)`;
         }
 
-        // Conduits terminate at the roofline, so they must be redrawn every time it moves —
-        // outlet, lane and drop x are fixed by the canvas, only ty changes.
+        // Conduits terminate at the roofline — outlet, lane and drop x are fixed by the canvas,
+        // only ty changes. Written as the CSS `d` property so the .conduit rule can glide it in
+        // step with the roof (same four commands, so the path interpolates), and as the attribute
+        // for engines without CSS `d`, where it snaps.
         const ty = y - 7;
         (this.conduitsByBuilding.get(ticker) || []).forEach(conduit => {
-            conduit.setAttribute('d', conduitPath(
+            const d = conduitPath(
                 parseFloat(conduit.dataset.sx),
                 parseFloat(conduit.dataset.sy),
                 parseFloat(conduit.dataset.tx),
                 ty,
                 parseFloat(conduit.dataset.laneY),
-            ));
+            );
+            conduit.setAttribute('d', d);
+            conduit.style.d = `path('${d}')`;
         });
-
-        // The rank, badge, flare, beacon and roof furniture all ride the roofline, so they move
-        // with it.
-        const flare = this.flaresByTicker.get(ticker);
-        if (flare) flare.setAttribute('cy', y - 34);
-
-        const beacon = this.beaconsByTicker.get(ticker);
-        if (beacon) beacon.setAttribute('cy', y - 20);
-
-        const furniture = this.furnituresByTicker.get(ticker);
-        if (furniture) furniture.el.setAttribute('y', y - 7 - furniture.height);
-
-        const rank = this.rankPlatesByTicker.get(ticker);
-        if (rank) rank.setAttribute('y', y - 14);
-
-        const circle = this.badgeCirclesByTicker.get(ticker);
-        if (circle) circle.setAttribute('cy', y - 18);
-        const count = this.badgeTextsByTicker.get(ticker);
-        if (count) count.setAttribute('y', y - 18);
-
-        this.movePennant(ticker, parseFloat(facade.getAttribute('x')) || 0, y);
-    }
-
-    /**
-     * Rides the position pennant along with its roofline. Mirrors the Twig: pole at
-     * `inset` from the west edge, foot on the rank plate (roof − 14), flag `height` tall with
-     * a 6-unit clearance above the plate, flying `width` eastward.
-     */
-    movePennant(ticker, roofX, roofY) {
-        const pennant = this.pennantsByTicker.get(ticker);
-        if (!pennant) return;
-
-        const geometry = this.positionPennantValue || {};
-        const width = Number(geometry.width) || 0;
-        const height = Number(geometry.height) || 0;
-        const poleX = roofX + (Number(geometry.inset) || 0);
-        const poleFoot = roofY - 14;
-        const poleTop = poleFoot - height - 6;
-
-        const line = pennant.querySelector('line');
-        const poly = pennant.querySelector('polygon');
-        const circle = pennant.querySelector('circle');
-        if (line) {
-            line.setAttribute('x1', String(poleX));
-            line.setAttribute('x2', String(poleX));
-            line.setAttribute('y1', String(poleFoot));
-            line.setAttribute('y2', String(poleTop));
-        }
-        if (poly) {
-            poly.setAttribute('points', `${poleX},${poleTop} ${poleX + width},${poleTop + height / 2} ${poleX},${poleTop + height}`);
-        }
-        if (circle) {
-            circle.setAttribute('cx', String(poleX));
-            circle.setAttribute('cy', String(poleTop));
-        }
     }
 }

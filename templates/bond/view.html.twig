@@ -287,7 +287,7 @@
 						</div>
 						<div class="py-2 flex justify-between items-center">
 							<dt class="text-sm font-semibold text-on-surface-variant">Amount Outstanding</dt>
-							<dd class="font-bold text-on-surface font-mono tabular-nums">${{ bond.outstandingFace|format_large }}</dd>
+							<dd class="font-bold text-on-surface font-mono tabular-nums">{{ bond.outstandingFace|format_large('$') }}</dd>
 						</div>
 					</dl>
 				</div>

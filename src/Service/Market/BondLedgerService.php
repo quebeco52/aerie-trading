@@ -59,9 +59,48 @@ class BondLedgerService
      */
     public function processRedemption(Bond $bond, float $simulationTime, \DateTimeInterface $paidAt): void
     {
+        $this->closeOut($bond, (float) $bond->getFaceValue(), CouponPayment::TYPE_REDEMPTION, $simulationTime, $paidAt);
+    }
+
+    /**
+     * Settles an issue whose borrower failed, at whatever the claim actually recovers.
+     *
+     * Mechanically the same event as a redemption — the holders are paid, the working orders are torn down
+     * and the positions close — and deliberately routed through the same code, because the ways this can go
+     * wrong are the ways redemption could: escrow destroyed with the order that held it, or a holding left
+     * pointing at an instrument that no longer pays. What differs is only the amount, and that a default
+     * pays it EARLY and short rather than on the day and in full.
+     *
+     * @param Bond               $bond             The failed issue.
+     * @param float              $recoveryPerBond  Cash per bond, the recovery share of face.
+     * @param float              $simulationTime   Simulation time in years of settlement.
+     * @param \DateTimeInterface $paidAt           Settlement timestamp.
+     */
+    public function processDefaultSettlement(
+        Bond $bond,
+        float $recoveryPerBond,
+        float $simulationTime,
+        \DateTimeInterface $paidAt
+    ): void {
+        $this->closeOut($bond, max(0.0, $recoveryPerBond), CouponPayment::TYPE_RECOVERY, $simulationTime, $paidAt);
+    }
+
+    /**
+     * Pays an issue out for the last time and closes every position and order standing against it.
+     *
+     * @param float  $amountPerBond Cash per bond.
+     * @param string $paymentType   CouponPayment::TYPE_*.
+     */
+    private function closeOut(
+        Bond $bond,
+        float $amountPerBond,
+        string $paymentType,
+        float $simulationTime,
+        \DateTimeInterface $paidAt
+    ): void {
         $conn = $this->entityManager->getConnection();
 
-        $this->distribute($bond, (float) $bond->getFaceValue(), CouponPayment::TYPE_REDEMPTION, $simulationTime, $paidAt);
+        $this->distribute($bond, $amountPerBond, $paymentType, $simulationTime, $paidAt);
 
         // Refund the cash escrowed behind open BUYs before the orders are dropped, otherwise the escrow is
         // simply destroyed along with the row.

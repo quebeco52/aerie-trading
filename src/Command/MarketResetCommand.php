@@ -53,6 +53,12 @@ class MarketResetCommand extends Command
         $conn->executeStatement('TRUNCATE TABLE user_bonds');
         $conn->executeStatement('TRUNCATE TABLE bond_history');
         $conn->executeStatement('TRUNCATE TABLE coupon_payment');
+        $conn->executeStatement('TRUNCATE TABLE user_options');
+
+        // The chain goes with the ladder, and for the same reason: a contract's expiry is a point in
+        // simulation time, so every one of them is either already expired or decades out the moment the
+        // clock is reset. The desk relists against the new timeline on its first sweep.
+        $conn->executeStatement('TRUNCATE TABLE option_contracts');
 
         // The whole ladder goes, not just its history. A bond's economics are anchored to simulation time,
         // so an issue sold at year 15 of the old timeline becomes a 25-year bond the moment the clock is
@@ -61,6 +67,10 @@ class MarketResetCommand extends Command
         $conn->executeStatement('TRUNCATE TABLE portfolio_history');
         $conn->executeStatement('TRUNCATE TABLE corporate_report');
         $conn->executeStatement('TRUNCATE TABLE macro_report');
+
+        // The clock is part of the market's state, not of the installation. Leaving it behind would resume a
+        // freshly emptied database part-way through a year it has no history for.
+        $conn->executeStatement('TRUNCATE TABLE simulation_clock');
 
         // Delete any procedurally generated stocks
         $initialTickers = array_column(InitialMarket::STOCKS, 'ticker');
@@ -143,7 +153,6 @@ class MarketResetCommand extends Command
             $tempStock->setIndustry($stockData['industry'] ?? 'General');
             $tempStock->setBaselineRoe((string) ($isFinancial ? ($stockData['baseline_roe'] ?? $stockData['baseline_roic'] ?? 0.10) : 0.10));
             $tempStock->setBaselineRoic((string) ($isFinancial ? 0.10 : ($stockData['baseline_roic'] ?? 0.10)));
-
 
             // Query the exact structural metrics the engine uses to prevent massive gravity explosions on tick 1
             $targetMetrics = $strategy->getTargetMetrics($tempStock, $dummyMacro, $this->mathUtility);
@@ -276,12 +285,17 @@ class MarketResetCommand extends Command
                     cip_balance = 0.00,
                     historical_fixed_rate = :historical_rate,
                     credit_spread = :credit_spread,
+                    -- Opens at the baseline: until the first tick builds a Merton spread and an
+                    -- accelerator premium on top of it, the baseline is what the credit costs.
+                    dynamic_credit_spread = :credit_spread,
                     buyback_authorization = 0.00,
                     last_dividend = :last_dividend,
                     description = :description,
                     sam_ratio = :sam_ratio,
                     industry = :industry,
                     management_style = :management_style,
+                    ceo_tenure_years = :ceo_tenure_years,
+                    management_intensity = :management_intensity,
                     earnings_momentum_z = NULL,
                     is_bankrupt = 0,
                     payment_default = 0,
@@ -370,6 +384,8 @@ class MarketResetCommand extends Command
                     'sam_ratio' => $stockData['sam_ratio'] ?? 1.00,
                     'industry' => $stockData['industry'] ?? null,
                     'management_style' => $stockData['management_style'] ?? null,
+                    'ceo_tenure_years' => \App\Service\Corporate\ManagementSuccessionEngine::drawSeedTenure($this->mathUtility),
+                    'management_intensity' => \App\Data\ManagementProfile::drawIntensity($this->mathUtility),
                     'ticker' => $stockData['ticker']
                 ]
             );
@@ -377,108 +393,48 @@ class MarketResetCommand extends Command
 
         $io->text('4. Resetting ETF Prices...');
         foreach (InitialMarket::ETFS as $etfData) {
+            $params = [
+                'name' => $etfData['name'],
+                'price' => $etfData['price'],
+                'description' => \App\Data\StockInfo::DESCRIPTIONS[$etfData['ticker']] ?? null,
+                'expense_ratio' => $etfData['expense_ratio'] ?? 0.0,
+                'ticker' => $etfData['ticker']
+            ];
+
+            // Created when missing rather than only updated: a fund added to the seed after a market was
+            // first seeded would otherwise never exist on that market, and the index it backs would be
+            // struck every tick against a row that is not there.
+            $exists = $conn->fetchOne('SELECT id FROM etfs WHERE ticker = :ticker', ['ticker' => $etfData['ticker']]);
+
+            if ($exists === false) {
+                $conn->executeStatement(
+                    'INSERT INTO etfs (ticker, name, price, description, expense_ratio, basket_per_share, accrued_income, cumulative_fees_paid, recent_distributions, last_distribution_at, updated_at)
+                     VALUES (:ticker, :name, :price, :description, :expense_ratio, 1, 0, 0, NULL, NULL, NOW())',
+                    $params
+                );
+                continue;
+            }
+
+            // A reset reopens the timeline, so the fund's BOOKS are reopened with it: the basket goes back
+            // to a whole index unit per share and the income it was holding for its members is cleared.
+            // Carrying a fee drag and an accrual across a reset would leave the fund already behind an
+            // index that has not moved yet, and holding cash collected from companies on a timeline that
+            // no longer exists.
             $conn->executeStatement(
-                'UPDATE etfs SET name = :name, price = :price, description = :description WHERE ticker = :ticker',
-                [
-                    'name' => $etfData['name'],
-                    'price' => $etfData['price'],
-                    'description' => \App\Data\StockInfo::DESCRIPTIONS[$etfData['ticker']] ?? null,
-                    'ticker' => $etfData['ticker']
-                ]
+                'UPDATE etfs
+                    SET name = :name,
+                        price = :price,
+                        description = :description,
+                        expense_ratio = :expense_ratio,
+                        basket_per_share = 1,
+                        accrued_income = 0,
+                        cumulative_fees_paid = 0,
+                        recent_distributions = NULL,
+                        last_distribution_at = NULL
+                  WHERE ticker = :ticker',
+                $params
             );
         }
-
-        $io->text('5. Generating new $50B procedural corporations for every industry...');
-
-        /*
-        $industryList = array_keys(\App\Data\Sectors::INDUSTRY_METRICS);
-        $prefixes = ['Apex', 'Horizon', 'Vertex', 'Quantum', 'Aegis', 'Omni', 'Vanguard', 'Pinnacle', 'Meridian', 'Zenith', 'Nova', 'Crest', 'Echo', 'Atlas', 'Helios'];
-        $sectorSuffixes = [
-            'Information Technology' => ['Technologies', 'Systems', 'Software', 'Networks'],
-            'Financials' => ['Capital', 'Financial', 'Partners', 'Holdings'],
-            'Health Care' => ['Medical', 'Health', 'Biosciences', 'Pharma'],
-            'Consumer Discretionary' => ['Brands', 'Retail', 'Apparel', 'Leisure'],
-            'Consumer Staples' => ['Foods', 'Consumer', 'Groceries', 'Beverages'],
-            'Industrials' => ['Industries', 'Dynamics', 'Manufacturing', 'Logistics'],
-            'Real Estate' => ['Properties', 'Realty', 'Estates', 'Development'],
-            'Energy' => ['Energy', 'Resources', 'Petroleum', 'Power'],
-            'Materials' => ['Materials', 'Metals', 'Chemicals', 'Mining'],
-            'Utilities' => ['Utilities', 'Power', 'Water', 'Energy'],
-            'Communication Services' => ['Communications', 'Media', 'Broadcasting', 'Telecom']
-        ];
-
-        $existingTickers = array_column(InitialMarket::STOCKS, 'ticker');
-
-        foreach ($industryList as $industry) {
-            if ($industry === 'General') continue;
-
-            $sector = $this->determineSectorForIndustry($industry);
-
-            $prefix = $prefixes[array_rand($prefixes)];
-            $suffixes = $sectorSuffixes[$sector] ?? ['Group', 'Holdings', 'Inc'];
-            $suffix = $suffixes[array_rand($suffixes)];
-            
-            $name = "$prefix $suffix";
-            
-            do {
-                $ticker = strtoupper(substr($prefix, 0, 1) . substr($suffix, 0, 1) . chr(mt_rand(65, 90)) . chr(mt_rand(65, 90)));
-            } while (in_array($ticker, $existingTickers));
-            
-            $existingTickers[] = $ticker;
-
-            $stock = new Stock();
-            $stock->setTicker($ticker);
-            $stock->setName($name);
-            $stock->setSector($sector);
-            $stock->setIndustry($industry);
-            $stock->setPrice('50.00');
-            $stock->setSharesOutstanding('1000000000'); // 1 Billion Shares = $50B Market Cap
-            $stock->setVolatility('0.20');
-            $stock->setCurrentVolatility('0.20');
-            $stock->setBeta('1.00');
-            $stock->setJumpIntensity('0.50');
-            $stock->setJumpVol('0.05');
-            $stock->setSystemicImportance('none');
-            $stock->setBaselineRoic('0.12');
-            $stock->setCurrentRoic('0.12');
-            $stock->setRoicTtm('0.12');
-            $stock->setBaselineRoe('0.10');
-            $stock->setCurrentRoe('0.10');
-            $stock->setRoeTtm('0.10');
-            $stock->setCapexRatio('0.20');
-            $stock->setTargetPayoutRatio('0.25');
-            $stock->setDividendSpeed('0.20');
-            $stock->setFixedCostRatio(0.35);
-            $stock->setDepreciationRate('0.05');
-            $stock->setCorporateTreasury('2500000000.00');
-            $stock->setFloatingDebtRatio('0.30');
-            $stock->setWholesaleDebt('10000000000.00');
-            $stock->setCustomerDeposits('0.00');
-            $stock->setOperatingMargin('0.15');
-            $stock->setStructuralVariableMargin((1.0 - 0.15) * (1.0 - 0.35));
-            $stock->setPublicFloatPercentage('0.85');
-            $stock->setTotalNetIncome('5000000000.00');
-            $stock->setTotalEquity('20000000000.00');
-            $stock->setRetainedEarnings('5000000000.00');
-            
-            $netIncomeGen = 5000000000.00;
-            $ebtGen = $netIncomeGen / 0.79;
-            $interestExpGen = 10000000000.00 * 0.05;
-            $interestIncGen = 2500000000.00 * 0.0375;
-            $ebitGen = $ebtGen + $interestExpGen - $interestIncGen;
-            $stock->setTotalRevenue((string) ($ebitGen / 0.15));
-            $stock->setHistoricalFixedRate('0.05');
-            $stock->setCreditSpread('0.015');
-            $stock->setLastDividend('0.15625');
-            $stock->setSamRatio('0.25');
-            $stock->setEarningsPerShare('5.00');
-            $stock->setDescription("A procedurally generated mega-corporation operating in the $industry space.");
-
-            $this->entityManager->persist($stock);
-        }
-        
-        $this->entityManager->flush();
-        */
 
         // Reopen the bond desk on the fresh timeline.
         $this->treasuryAuction->conductAuction($dummyMacro->sovereignCurve(), 0.0);
@@ -486,21 +442,5 @@ class MarketResetCommand extends Command
 
         $io->success('Market Reset Complete! You can now start the ticker.');
         return Command::SUCCESS;
-    }
-
-    private function determineSectorForIndustry(string $industry): string
-    {
-        $industryLower = strtolower($industry);
-        if (str_contains($industryLower, 'bank') || str_contains($industryLower, 'insurance') || str_contains($industryLower, 'capital') || str_contains($industryLower, 'financial') || str_contains($industryLower, 'credit') || str_contains($industryLower, 'asset') || str_contains($industryLower, 'mortgage')) return 'Financials';
-        if (str_contains($industryLower, 'software') || str_contains($industryLower, 'computer') || str_contains($industryLower, 'semiconductor') || str_contains($industryLower, 'electronic') || str_contains($industryLower, 'information') || str_contains($industryLower, 'communication equipment')) return 'Information Technology';
-        if (str_contains($industryLower, 'medical') || str_contains($industryLower, 'health') || str_contains($industryLower, 'drug') || str_contains($industryLower, 'biotechnology') || str_contains($industryLower, 'diagnostics')) return 'Health Care';
-        if (str_contains($industryLower, 'apparel') || str_contains($industryLower, 'auto') || str_contains($industryLower, 'entertainment') || str_contains($industryLower, 'leisure') || str_contains($industryLower, 'luxury') || str_contains($industryLower, 'restaurant') || str_contains($industryLower, 'retail') || str_contains($industryLower, 'gambling') || str_contains($industryLower, 'travel') || str_contains($industryLower, 'footwear') || str_contains($industryLower, 'discount stores') || str_contains($industryLower, 'furnishings') || str_contains($industryLower, 'recreational') || str_contains($industryLower, 'lodging')) return 'Consumer Discretionary';
-        if (str_contains($industryLower, 'beverage') || str_contains($industryLower, 'food') || str_contains($industryLower, 'grocery') || str_contains($industryLower, 'tobacco') || str_contains($industryLower, 'household') || str_contains($industryLower, 'personal') || str_contains($industryLower, 'farm')) return 'Consumer Staples';
-        if (str_contains($industryLower, 'reit') || str_contains($industryLower, 'real estate')) return 'Real Estate';
-        if (str_contains($industryLower, 'oil') || str_contains($industryLower, 'gas') || str_contains($industryLower, 'energy') || str_contains($industryLower, 'solar')) return 'Energy';
-        if (str_contains($industryLower, 'aluminum') || str_contains($industryLower, 'chemical') || str_contains($industryLower, 'copper') || str_contains($industryLower, 'gold') || str_contains($industryLower, 'material') || str_contains($industryLower, 'steel') || str_contains($industryLower, 'agricultural')) return 'Materials';
-        if (str_contains($industryLower, 'utilit')) return 'Utilities';
-        if (str_contains($industryLower, 'communication') || str_contains($industryLower, 'advertising') || str_contains($industryLower, 'publishing') || str_contains($industryLower, 'telecom') || str_contains($industryLower, 'media')) return 'Communication Services';
-        return 'Industrials';
     }
 }

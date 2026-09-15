@@ -132,7 +132,7 @@ final class BondPricingEngine
      * @param SovereignCurveDTO $curve       The fitted term structure.
      * @param float             $currentTime Simulation time in years.
      */
-    public function value(Bond $bond, SovereignCurveDTO $curve, float $currentTime): BondValuationDTO
+    public function value(Bond $bond, SovereignCurveDTO $curve, float $currentTime, float $creditSpread = 0.0): BondValuationDTO
     {
         $face = (float) $bond->getFaceValue();
         $flows = $this->remainingCashFlows($bond, $currentTime);
@@ -141,17 +141,21 @@ final class BondPricingEngine
             return new BondValuationDTO($face, $face, 0.0, 0.0, 0.0, 0.0);
         }
 
-        $dirtyPrice = $this->mathUtility->calculateBondPresentValue(
-            $flows,
-            fn (float $tau): float => $this->zeroYield($curve, $tau)
-        );
+        // A risky claim is the same cash flows discounted at a higher rate. The spread is added to the
+        // sovereign zero at EVERY tenor rather than to the yield at the end, which is what makes the credit
+        // charge compound along the schedule the way it actually does: a ten-year bond pays the spread on
+        // every coupon it is still waiting for, not once on its redemption.
+        $spread = max(0.0, $creditSpread);
+        $discount = fn (float $tau): float => $this->zeroYield($curve, $tau) + $spread;
+
+        $dirtyPrice = $this->mathUtility->calculateBondPresentValue($flows, $discount);
 
         $accrued = $this->accruedInterest($bond, $currentTime);
 
         // The yield is solved from the curve-discounted price rather than assumed, so duration and convexity
         // are measured at the bond's own yield. Seeding the solver with the zero rate at the bond's maturity
         // puts it within a few basis points of the answer for anything but a deeply off-market coupon.
-        $guess = $this->zeroYield($curve, $bond->yearsToMaturity($currentTime));
+        $guess = $discount($bond->yearsToMaturity($currentTime));
         $ytm = $this->mathUtility->calculateYieldToMaturity($flows, $dirtyPrice, $guess);
 
         $macaulay = $this->mathUtility->calculateMacaulayDuration($flows, $ytm);
@@ -177,18 +181,23 @@ final class BondPricingEngine
      * @param float             $tenorYears Original maturity of the new issue.
      * @param float             $faceValue  Face value per bond.
      */
-    public function parCouponRate(SovereignCurveDTO $curve, float $tenorYears, float $faceValue): float
+    public function parCouponRate(SovereignCurveDTO $curve, float $tenorYears, float $faceValue, float $creditSpread = 0.0): float
     {
         $period = 1.0 / FinancialConstants::BOND_COUPON_FREQUENCY;
         $totalCoupons = (int) round($tenorYears * FinancialConstants::BOND_COUPON_FREQUENCY);
 
+        // A risky issue prices at par on a HIGHER coupon, which is the whole of what a credit spread costs
+        // the borrower. Struck off the same discount function the issue will then be marked against, so a
+        // fresh corporate bond opens at par rather than immediately at a discount to its own issue price.
+        $spread = max(0.0, $creditSpread);
+
         $annuityFactor = 0.0;
         for ($k = 1; $k <= $totalCoupons; $k++) {
             $time = $k * $period;
-            $annuityFactor += exp(-$this->zeroYield($curve, $time) * $time);
+            $annuityFactor += exp(-($this->zeroYield($curve, $time) + $spread) * $time);
         }
 
-        $redemptionFactor = exp(-$this->zeroYield($curve, $tenorYears) * $tenorYears);
+        $redemptionFactor = exp(-($this->zeroYield($curve, $tenorYears) + $spread) * $tenorYears);
 
         if ($annuityFactor <= 0.0) {
             return FinancialConstants::BOND_MIN_COUPON_RATE;

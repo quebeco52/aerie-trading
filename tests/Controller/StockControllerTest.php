@@ -62,9 +62,21 @@ class StockControllerTest extends WebTestCase
 
         $this->assertResponseIsSuccessful();
         $this->assertSelectorExists('h1');
-        $this->assertSelectorTextContains('h1', 'Lakebird Index');
+        $this->assertSelectorTextContains('h1', 'Skein Lakebird 30 ETF');
         $this->assertSelectorExists('#etfPieChart');
-        $this->assertSelectorExists('.stock-tab-btn[data-tab="macro"]');
+        $this->assertSelectorExists('.stock-tab-btn[data-tab="constituents"]');
+        $this->assertSelectorExists('#stock-tab-content-constituents table');
+        $this->assertSelectorNotExists('.stock-tab-btn[data-tab="macro"]');
+    }
+
+    public function testTheCompositeIndexHasItsOwnPage(): void
+    {
+        $client = static::createClient();
+        $client->request('GET', '/stock/LBC');
+
+        $this->assertResponseIsSuccessful();
+        $this->assertSelectorTextContains('h1', 'Skein Total Market ETF');
+        $this->assertSelectorExists('.stock-tab-btn[data-tab="constituents"]');
     }
 
     public function testStockViewThrows404ForNonexistentTicker(): void

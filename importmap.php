@@ -36,6 +36,10 @@ return [
         'path' => './assets/js/pages/bond-ladder.js',
         'entrypoint' => true,
     ],
+    'pages/economy' => [
+        'path' => './assets/js/pages/economy.js',
+        'entrypoint' => true,
+    ],
     '@hotwired/stimulus' => [
         'version' => '3.2.2',
     ],

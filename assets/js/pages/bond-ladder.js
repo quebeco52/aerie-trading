@@ -77,7 +77,8 @@ function setCell(id, text, delta) {
     if (typeof delta === 'number') flashTick(el, delta);
 }
 
-function onMarketUpdate(event) {
+/** The coalesced frame (market-stream.js): the table and the curve redraw at most every FRAME_INTERVAL_MS. */
+function onMarketFrame(event) {
     const quotes = event.detail?.stocks;
     if (!Array.isArray(quotes)) return;
 
@@ -107,7 +108,7 @@ function onMarketUpdate(event) {
 
 function cleanup() {
     if (marketUpdateHandler) {
-        document.removeEventListener('market:update', marketUpdateHandler);
+        document.removeEventListener('market:frame', marketUpdateHandler);
         marketUpdateHandler = null;
     }
     if (curveChart) {
@@ -127,8 +128,8 @@ function initLadder() {
 
     drawCurve(readPageData('aerie-data').curve);
 
-    marketUpdateHandler = onMarketUpdate;
-    document.addEventListener('market:update', marketUpdateHandler);
+    marketUpdateHandler = onMarketFrame;
+    document.addEventListener('market:frame', marketUpdateHandler);
 
     if (!beforeRenderHandler) {
         beforeRenderHandler = () => cleanup();

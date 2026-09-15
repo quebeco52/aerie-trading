@@ -4,7 +4,6 @@ namespace App\Service\Market;
 
 use App\Entity\Stock;
 use App\DTO\MacroStateDTO;
-use Doctrine\ORM\EntityManagerInterface;
 use App\Service\Corporate\CorporateActionEngine;
 use App\Service\Corporate\DebtEngine;
 use App\Service\Corporate\EarningsEngine;
@@ -13,7 +12,6 @@ use App\Service\Event\MarketEventPublisher;
 use App\Service\Market\Flow\OrderFlowStoreInterface;
 use App\Service\Math\CorporateMetrics;
 use App\Service\Math\FinancialConstants;
-use App\Service\Math\MathUtility;
 
 /**
  * Service responsible for tracking and updating stock prices.
@@ -33,26 +31,25 @@ class StockTracker
     /**
      * Constructor.
      *
-     * @param EntityManagerInterface $entityManager The Doctrine entity manager.
      * @param MarketEngine $marketEngine Engine for calculating stock price movements.
      * @param EarningsEngine $earningsEngine Engine for processing quarterly earnings reports.
      * @param CorporateActionEngine $corporateActionEngine Engine for handling corporate actions like stock splits.
      * @param MarketEventPublisher $eventService Publisher for market events, shocks, and headlines.
-     * @param MathUtility $mathUtility Utility for generating standard normal distributions.
      */
     public function __construct(
-        private EntityManagerInterface $entityManager,
         private MarketEngine $marketEngine,
         private EarningsEngine $earningsEngine,
         private CorporateActionEngine $corporateActionEngine,
         private MergerAndAcquisitionEngine $maEngine,
         private MarketEventPublisher $eventService,
         private DebtEngine $debtEngine,
-        private MathUtility $mathUtility,
         private CorporateMetrics $corporateMetrics,
         private LiquidityEngine $liquidityEngine,
         private OrderFlowStoreInterface $orderFlow,
-        private \App\Service\Market\Agent\AgentFlowEngine $agentFlow
+        private \App\Service\Market\Agent\AgentFlowEngine $agentFlow,
+        private \App\Service\Corporate\ManagementSuccessionEngine $successionEngine,
+        /** Standing index membership; null (unit tests without an index) leaves every name a constituent. */
+        private ?IndexCommittee $indexCommittee = null
     ) {}
 
     /**
@@ -70,7 +67,7 @@ class StockTracker
      * @param bool    $recordHistory Whether to persist the new prices to the stock history table.
      * @param MacroStateDTO|null $macroState    The current state of the macroeconomic cycle.
      * 
-     * @return array{updates: array<mixed>, total_cap: float, events: array<mixed>, market_vol: float, history: array<mixed>}
+     * @return array{updates: array<mixed>, total_cap: float, float_caps: array<string, float>, dividend_points: array<string, float>, events: array<mixed>, market_vol: float, history: array<mixed>}
      */
     public function updateStocks(array $stocks, float $dt, bool $recordHistory, ?\App\DTO\MacroStateDTO $macroState = null, int $tickCount = 0, int $ticksPerYear = 252): array
     {
@@ -78,6 +75,8 @@ class StockTracker
         $stockUpdates = [];
         $historyData = [];
         $totalMarketCap = 0.0;
+        $floatAdjustedCaps = [];
+        $dividendPoints = [];
         $events = [];
 
         // Pull systemic variables from the Macro Engine
@@ -89,6 +88,14 @@ class StockTracker
         // rather than per stock: it is one round trip, and a quantity that has already moved the price must
         // not be able to move it again on the next tick.
         $netOrderFlow = $this->orderFlow->drain();
+
+        // How much passive money each name carries relative to its weight in the market, read once for the
+        // whole tick. Every published index contributes in proportion to the assets that track it, so this
+        // is what decides who receives passive money — not membership of the benchmark alone, which said a
+        // name was either in one index or in nothing. An empty map — a fresh market before its first
+        // reconstitution — means every listed name is held in line with its size, which is what the market
+        // was before there was a membership at all.
+        $passiveOwnership = $this->indexCommittee?->passiveOwnership() ?? [];
 
         // The agent books are loaded once for the whole tick and written back once at the end, for the
         // same reason the order flow is drained once: a round trip per name is the cost that scales.
@@ -148,6 +155,13 @@ class StockTracker
             // Fetch true, dynamic WACC from the DebtEngine
             $health = $this->debtEngine->analyzeDebtHealth($stock, $macroDTO);
 
+            // What this firm's credit costs, published for the bond desk to discount its listed issues at.
+            // Computed here rather than there so there is one authority on it: the same figure the firm
+            // borrows at is the one its bonds are priced off.
+            $stock->setDynamicCreditSpread(
+                \App\Service\Math\MathUtility::formatDecimal($health->rawMetrics->dynamicSpread, 6)
+            );
+
             $sharesOutstanding = (float) $stock->getSharesOutstanding();
             $shares = max(1.0, $sharesOutstanding);
 
@@ -163,6 +177,22 @@ class StockTracker
 
             $effectiveRoic = $strategy->getEffectiveReturn($stock);
             $roicTtm = $strategy->getTrueReturn($stock);
+
+            // MANAGEMENT SUCCESSION
+            // The board judges the manager on economic profit against the firm's TRUE cost of capital, never
+            // the hurdle the incumbent has been applying — a manager cannot mark their own homework by
+            // holding a lower bar. Before the first report there is no realised return to judge, so the
+            // structural baseline stands in and a freshly seeded firm is not dismissed for having no history.
+            $structuralReturn = $strategy->isFinancial() ? (float) $stock->getBaselineRoe() : (float) $stock->getBaselineRoic();
+            $boardReturn = $roicTtm !== 0.0 ? $roicTtm : $structuralReturn;
+            $successionResult = $this->successionEngine->evaluateSuccession(
+                $stock,
+                $dt,
+                $boardReturn - $strategy->getHurdleRate($health)
+            );
+            if ($successionResult) {
+                $events[] = $successionResult['event'];
+            }
 
             $totalDebt = (float) $stock->getTotalDebt();
             $corporateTreasury = (float) $stock->getCorporateTreasury();
@@ -309,6 +339,21 @@ class StockTracker
                 $dividendPaidPerShare += (float) ($generatedEvent['dividend_per_share'] ?? 0.0);
             }
 
+            // The same cash, measured the way an INDEX has to measure it. A fund tracking the index owns the
+            // float-adjusted share count, so what it receives from this payment is the rate times those
+            // shares — the index dividend, in the same units as the capitalisation the level is struck
+            // from. Published per ticker so each index can sum its own members and nothing else.
+            //
+            // Measured here, before the split block below, because the rate was declared against the share
+            // count that is current NOW. A 4-for-1 later in the same tick quarters the rate and quadruples
+            // the count; multiplying one by the other afterwards would quadruple the cash the fund thinks
+            // it received.
+            if ($dividendPaidPerShare > 0.0) {
+                $dividendPoints[$stock->getTicker()] = $dividendPaidPerShare
+                    * (float) $stock->getSharesOutstanding()
+                    * max(0.0, min(1.0, (float) $stock->getPublicFloatPercentage()));
+            }
+
             $tickLogReturn = $priceAtTickStart > 0.0 && $currentPriceAfterEarnings > 0.0
                 ? log(($currentPriceAfterEarnings + $dividendPaidPerShare) / $priceAtTickStart)
                 : 0.0;
@@ -379,6 +424,11 @@ class StockTracker
             $currentMarketCap = $finalPrice * $newShares;
             $totalMarketCap += $currentMarketCap;
 
+            // What a passive fund could actually buy of this name, which is what an index weights on: the
+            // part of the company that trades. Published per ticker so the index can sum its OWN members
+            // rather than the whole board.
+            $floatAdjustedCaps[$stock->getTicker()] = IndexCommittee::floatAdjustedCap($stock);
+
             // Shares printed this tick. The players' own fills are prints too, so they are added rather than
             // assumed away: a name nobody but the players trades still shows the volume they generated.
             $tickVolume = $this->liquidityEngine->simulateTickVolume($stock, $dt, abs($tickFlow));
@@ -387,12 +437,15 @@ class StockTracker
             $isFundamentalTick = !empty($generatedEvents) || $maResult || (isset($divestResult) && $divestResult);
 
 
+            // Everything below is display data that every connected browser receives on every tick, so
+            // it is carried at the precision a screen can show. The full-precision figures live on the
+            // entity and in the engines; a fair value with fifteen decimals was a third of the payload.
             $stockUpdate = [
                 'ticker' => $stock->getTicker(),
                 'sector' => $sectorName,
                 'industry' => $stock->getIndustry() ?: 'General',
                 'price' => round($finalPrice, 2),
-                'market_cap' => $currentMarketCap,
+                'market_cap' => round($currentMarketCap),
                 'current_volatility' => round($nextVolatility * 100, 2),
                 'current_roic' => $effectiveRoic, // Backwards compatible fix so frontend JS updates the UI with ROE for banks
                 'current_roe' => (float) $stock->getCurrentRoe() != 0.0 ? (float) $stock->getCurrentRoe() : (float) $stock->getBaselineRoe(),
@@ -403,10 +456,10 @@ class StockTracker
                 'invested_capital' => $stock->getInvestedCapital(),
                 'debt_ratio' => (float) $stock->getDebtToEquityRatio(),
                 'credit_rating' => $stock->getCreditRating(),
-                'analyst_targets' => $analystTargets,
-                'perceived_fair_value' => $perceivedFairValue,
-                'volume' => $tickVolume,
-                'adv_shares' => $this->liquidityEngine->averageDailyVolume($stock),
+                'analyst_targets' => array_map(static fn (float $target): float => round($target, 2), $analystTargets),
+                'perceived_fair_value' => round($perceivedFairValue, 2),
+                'volume' => round($tickVolume),
+                'adv_shares' => round($this->liquidityEngine->averageDailyVolume($stock)),
                 'spread_bps' => round($this->liquidityEngine->halfSpreadFraction($stock) * 20000.0, 2),
                 'is_bankrupt' => false,
             ];
@@ -447,7 +500,10 @@ class StockTracker
                 dt: $dt,
                 riskFreeRate: $macroDTO->policyRate,
                 annualizedVolatility: (float) $nextVolatility,
-                splitRatio: $splitRatio
+                splitRatio: $splitRatio,
+                passiveOwnershipMultiple: $passiveOwnership === []
+                    ? 1.0
+                    : ($passiveOwnership[$stock->getTicker()] ?? 0.0)
             ));
 
             $stockUpdates[] = $stockUpdate;
@@ -468,6 +524,8 @@ class StockTracker
             'updates' => $stockUpdates,
             'history' => $historyData,
             'total_cap' => $totalMarketCap,
+            'float_caps' => $floatAdjustedCaps,
+            'dividend_points' => $dividendPoints,
             'events' => $events,
             'market_vol' => $marketVol
         ];

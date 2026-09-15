@@ -50,7 +50,8 @@ class AppFixtures extends Fixture
             $etf->setPrice((string) $etfData['price']);
 
             $etf->setDescription(\App\Data\StockInfo::DESCRIPTIONS[$etfData['ticker']] ?? null);
-            
+            $etf->setExpenseRatio((float) ($etfData['expense_ratio'] ?? 0.0));
+
             $manager->persist($etf);
         }
 

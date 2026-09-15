@@ -21,18 +21,18 @@ class DebtEngine
     private const MAX_LEVERAGE_RATIO = 15.0;
     /** 25% max Junk Bond penalty spread. */
     private const MAX_LEVERAGE_PENALTY = 0.25;
-    /** Penalty rate for high leverage. */
-    private const LEVERAGE_PENALTY_RATE = 0.20;
-    /** Base penalty for high leverage. */
-    private const LEVERAGE_PENALTY_BASE = 0.010;
     /** BGG (1999) Financial Accelerator external finance premium sensitivity to leverage during recessions. */
     private const BGG_ACCELERATOR_SENSITIVITY = 0.050;
+
+    // --- Leverage Covenant (Net Debt / EBITDA) ---
+    /** Sector limits at or above this are a no-test sentinel: financials are bound by regulatory capital, not cash-flow leverage. */
+    private const EBITDA_COVENANT_EXEMPT_LIMIT = 999.0;
+    /** Fallback Net Debt / EBITDA covenant for an industry carrying no calibrated limit. */
+    private const DEFAULT_EBITDA_COVENANT_LIMIT = 3.0;
 
     // --- CAPM / Beta Limits ---
     /** Prevent runaway WACC in standard CAPM by capping debt to equity ratio. */
     private const MAX_BETA_DEBT_TO_EQUITY = 2.5;
-    /** Dampen double-counting of historical debt when calculating Levered Beta. */
-    private const HAMADA_DAMPENING_FACTOR = 0.25;
 
     // --- Refinancing Hurdles ---
     /** 150 bps drop triggers early refinancing. */
@@ -54,7 +54,7 @@ class DebtEngine
     /** Dynamic credit spread above which the primary market is shut to the issuer; high-yield spreads reached this in 2008 and 2020. */
     private const PRIMARY_MARKET_CLOSURE_SPREAD = 0.10;
     /** Lowest credit rating that can still refinance a maturity at any price. */
-    private const REFINANCING_RATING_FLOOR = 'CCC';
+    public const REFINANCING_RATING_FLOOR = 'CCC';
     /** Interest coverage below which lenders will not roll a maturity: the firm cannot service what it already owes. */
     private const REFINANCING_MIN_COVERAGE = 1.0;
 
@@ -173,7 +173,6 @@ class DebtEngine
         $totalDebtObligations = max(0.01, $strategy->getDeleveragingEvaluationDebt($debt, $wholesaleDebt));
         $netDebt = max(0.0, $strategy->getNetDebtCapital($debt, $wholesaleDebt, $treasury));
         $totalEquity = (float) $stock->getTotalEquity();
-
 
         // Fetch our Dual Constraints
         $metrics = \App\Data\Sectors::INDUSTRY_METRICS[$industry] ?? \App\Data\Sectors::INDUSTRY_METRICS['General'];
@@ -319,7 +318,6 @@ class DebtEngine
         $policyRate = $macroState->policyRateEma;
         $corporateTaxRate = $macroState->corporateTaxRate;
 
-
         $industry = $stock->getIndustry() ?: 'General';
         $metrics = \App\Data\Sectors::INDUSTRY_METRICS[$industry] ?? \App\Data\Sectors::INDUSTRY_METRICS['General'];
         $businessModel = $metrics['business_model'] ?? 'none';
@@ -436,7 +434,6 @@ class DebtEngine
 
         $yieldOnCash = $strategy->calculateCashYield($macroState);
 
-
         // Fetch the CFO's target Debt-to-Equity limit
         $equityLimit = $metrics['equity_limit'];
 
@@ -460,6 +457,25 @@ class DebtEngine
 
         $icrBuffer = $strategy->getRequiredIcrBuffer();
         $canIssueDebt = $interestCoverage >= ($minIcr + $icrBuffer);
+
+        // MAINTENANCE LEVERAGE COVENANT (Net Debt / EBITDA)
+        // The cash-flow twin of the D/E limit below, and the test that actually binds a capital-intensive
+        // borrower. Interest coverage is rate-sensitive, so cheap debt keeps it healthy while leverage
+        // compounds; book equity moves far too slowly to register an earnings collapse. This ratio is the
+        // one that reacts to the earnings side, which is why a breach here is what forces deleveraging in
+        // a downturn.
+        //
+        // Struck on funded debt only. Market convention (the frozen-GAAP clause most credit agreements
+        // carry) excludes capitalized operating leases, and including them would oblige us to gross the
+        // rent back into EBITDA to keep numerator and denominator on the same basis.
+        //
+        // A 999.0 sentinel exempts the sector: a bank's binding constraint is its capital ratio, not this.
+        $ebitdaCovenantLimit = (float) ($metrics['ebitda_limit'] ?? self::DEFAULT_EBITDA_COVENANT_LIMIT);
+        $netDebtToEbitda = $debtMetrics->ebitda > 0.0
+            ? min(self::MAX_LEVERAGE_RATIO, $netDebtCapital / $debtMetrics->ebitda)
+            : self::MAX_LEVERAGE_RATIO;
+        $hasLeverageHeadroom = $ebitdaCovenantLimit >= self::EBITDA_COVENANT_EXEMPT_LIMIT
+            || $netDebtToEbitda < $ebitdaCovenantLimit;
 
         // Macro-Economic Leverage Tolerance
         $macroDebtTolerance = $equityLimit;
@@ -496,7 +512,10 @@ class DebtEngine
             $debtMetrics,
             $isLiquidityCrisis,
             $isLiquidityWarning,
-            $isUnderLeveraged
+            $isUnderLeveraged,
+            $hasLeverageHeadroom,
+            $netDebtToEbitda,
+            $ebitdaCovenantLimit
         );
     }
 

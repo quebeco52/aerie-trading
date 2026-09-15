@@ -47,14 +47,24 @@ class TradeController extends AbstractController
         }
 
         try {
-            $tradeExecutionService->executeOrder($user, $ticker, $action, $orderType, $quantity, $limitPrice);
+            $assetType = $tradeExecutionService->executeOrder($user, $ticker, $action, $orderType, $quantity, $limitPrice);
             $verb = match ($action) {
                 'SHORT' => 'Sold short',
                 'COVER' => 'Covered',
                 'SELL' => 'Sold',
+                'WRITE' => 'Wrote',
                 default => 'Bought',
             };
-            $this->addFlash('success', "{$verb} {$quantity} shares of {$ticker}.");
+
+            // An option order is counted in contracts of a hundred shares, and saying "shares" would
+            // understate the position by the multiplier in the one message confirming what was just done.
+            $unit = match ($assetType) {
+                'OPTION' => 'contracts',
+                'BOND' => 'bonds',
+                default => 'shares',
+            };
+
+            $this->addFlash('success', "{$verb} {$quantity} {$unit} of {$ticker}.");
         } catch (\Exception $e) {
             $this->addFlash('error', $e->getMessage());
         }
@@ -94,8 +104,17 @@ class TradeController extends AbstractController
                 ['user_id' => $user->getId()]
             ) > 0;
 
-            if ($hasDebit || $hasShorts) {
-                $this->addFlash('error', 'Close every short position and repay the margin loan before disabling margin.');
+            // A written contract requires a margin account exactly as a short sale does — OptionTradeService
+            // refuses to open one without it — so it has to hold the toggle shut on the way out too.
+            // Otherwise an account could write a naked call, disable margin, and carry an unbounded
+            // liability under the cash-account rule, which does not measure the requirement at all.
+            $hasWrittenOptions = (int) $entityManager->getConnection()->fetchOne(
+                'SELECT COUNT(*) FROM user_options WHERE user_id = :user_id AND quantity < 0',
+                ['user_id' => $user->getId()]
+            ) > 0;
+
+            if ($hasDebit || $hasShorts || $hasWrittenOptions) {
+                $this->addFlash('error', 'Close every short position and written contract, and repay the margin loan, before disabling margin.');
 
                 return $this->redirect($request->headers->get('referer') ?? '/dashboard');
             }

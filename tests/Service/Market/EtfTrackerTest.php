@@ -29,6 +29,7 @@ class EtfTrackerTest extends TestCase
     /** @var EntityRepository<Etf>&Stub */
     private EntityRepository&Stub $etfRepoStub;
     private EtfTracker $tracker;
+    private \App\Service\Market\IndexFundAccountant $accountant;
     /** @var list<string> Every SQL statement the tracker issued, in order. */
     private array $statements = [];
 
@@ -51,10 +52,13 @@ class EtfTrackerTest extends TestCase
             return $this->createStub(EntityRepository::class);
         });
 
+        $this->accountant = new \App\Service\Market\IndexFundAccountant($this->emMock);
+
         $this->tracker = new EtfTracker(
             $this->emMock,
             $this->marketEventMock,
-            $this->redisMock
+            $this->redisMock,
+            $this->accountant
         );
     }
 
@@ -62,14 +66,14 @@ class EtfTrackerTest extends TestCase
     {
         $etf = new Etf();
         $etf->setTicker('LBI');
-        $etf->setName('Lakebird Index');
+        $etf->setName('Skein Lakebird 30 ETF');
         $etf->setPrice('100.00');
 
         // Redis has no divisor initially
-        $this->redisMock->expects($this->once())->method('get')->with('market_index_divisor')->willReturn(false);
+        $this->redisMock->expects($this->once())->method('get')->with('market_index_divisor:LBI')->willReturn(false);
         $this->redisMock->expects($this->once())
             ->method('set')
-            ->with('market_index_divisor', $this->callback(fn(mixed $val) => is_string($val)));
+            ->with('market_index_divisor:LBI', $this->callback(fn(mixed $val) => is_string($val)));
 
         $totalMarketCap = 1_000_000_000.0; // $1B
         $result = $this->tracker->updateIndex($totalMarketCap, false, 'LBI', $etf);
@@ -84,10 +88,10 @@ class EtfTrackerTest extends TestCase
     {
         $etf = new Etf();
         $etf->setTicker('LBI');
-        $etf->setName('Lakebird Index');
+        $etf->setName('Skein Lakebird 30 ETF');
         $etf->setPrice('100.00');
 
-        $this->redisMock->expects($this->once())->method('get')->with('market_index_divisor')->willReturn('10000000'); // 10M divisor
+        $this->redisMock->expects($this->once())->method('get')->with('market_index_divisor:LBI')->willReturn('10000000'); // 10M divisor
 
         $this->emMock->expects($this->once())
             ->method('persist')
@@ -103,15 +107,92 @@ class EtfTrackerTest extends TestCase
         $this->assertSame(110.0, $result['price']);
     }
 
+    // --- The Fund Versus Its Index ---
+
+    /**
+     * The published price is the fund's, not the index's: the level scaled by the basket a share still owns,
+     * plus the income the fund is holding for its members.
+     *
+     * Publishing the level instead made every fund a claim on a price index — perfect tracking, and no
+     * dividends, forever.
+     */
+    public function testThePublishedPriceIsTheFundsRatherThanTheIndexs(): void
+    {
+        $etf = new Etf();
+        $etf->setTicker('LBI');
+        $etf->setName('Skein Lakebird 30 ETF');
+        $etf->setPrice('100.00');
+        $etf->setExpenseRatio(0.0);
+        $etf->setBasketPerShare(0.98);
+        $etf->setAccruedIncome(1.25);
+
+        $this->redisMock->method('get')->willReturn('10000000');
+
+        // A $1.1B members' cap on a 10M divisor is a level of 110.
+        $result = $this->tracker->updateIndex(1_100_000_000.0, false, 'LBI', $etf);
+
+        $this->assertSame(round((110.0 * 0.98) + 1.25, 2), $result['price']);
+        $this->assertEqualsWithDelta(110.0, $etf->getIndexLevel(), 1e-9);
+    }
+
+    /**
+     * The fund collects the dividends its constituents paid, and the divisor converts them into the same
+     * units the level is struck in.
+     */
+    public function testTheFundCollectsTheIndexDividend(): void
+    {
+        $etf = new Etf();
+        $etf->setTicker('LBI');
+        $etf->setName('Skein Lakebird 30 ETF');
+        $etf->setPrice('100.00');
+        $etf->setExpenseRatio(0.0);
+
+        $this->redisMock->method('get')->willReturn('10000000');
+
+        // $20M of dividends over a 10M divisor is 2 index points of income.
+        $this->tracker->updateIndex(1_000_000_000.0, false, 'LBI', $etf, null, 20_000_000.0, 0.0);
+
+        $this->assertEqualsWithDelta(2.0, $etf->getAccruedIncome(), 1e-9);
+        // And the price carries it until it is paid out.
+        $this->assertEqualsWithDelta(102.0, (float) $etf->getPrice(), 1e-9);
+    }
+
+    /**
+     * A split restates the accrued income, because it is a per-SHARE amount and a split changes the share
+     * count. Left alone, a 4-for-1 would quadruple the cash the fund believes it is holding for its members
+     * and hand out four times what it collected at the next distribution.
+     */
+    public function testAForwardSplitRestatesTheAccruedIncome(): void
+    {
+        $etf = new Etf();
+        $etf->setTicker('LBI');
+        $etf->setName('Skein Lakebird 30 ETF');
+        $etf->setPrice('100.00');
+        $etf->setExpenseRatio(0.0);
+        $etf->setAccruedIncome(4.0);
+
+        $this->redisMock->method('get')->willReturn('1000000');
+        $this->schemaManagerStub->method('tablesExist')->willReturn(true);
+
+        // $800M on a 1M divisor is a level of 800; plus $4 of income the price is $804, so it splits 4-for-1.
+        $result = $this->tracker->updateIndex(800_000_000.0, false, 'LBI', $etf);
+
+        $this->assertEqualsWithDelta(201.0, $result['price'], 0.01);
+        $this->assertEqualsWithDelta(1.0, $etf->getAccruedIncome(), 1e-9);
+
+        // The identity still holds on the far side of the split, which is what the restatement is for.
+        $this->assertEqualsWithDelta(200.0, $etf->getIndexLevel(), 1e-6);
+    }
+
     public function testUpdateIndexExecutesForwardSplitWhenPriceExceeds400(): void
     {
         $etf = new Etf();
         $etf->setTicker('LBI');
-        $etf->setName('Lakebird Index');
+        $etf->setName('Skein Lakebird 30 ETF');
         $etf->setPrice('100.00');
 
         // Divisor is 1M -> with $800M cap, price would be $800 >= 400 -> triggers 4:1 forward split
-        $this->redisMock->expects($this->once())->method('get')->with('market_index_divisor')->willReturn('1000000');
+        $this->redisMock->expects($this->once())->method('get')->with('market_index_divisor:LBI')->willReturn('1000000');
         $this->schemaManagerStub->method('tablesExist')->willReturn(true);
 
         $this->connectionMock->expects($this->once())->method('beginTransaction');
@@ -133,11 +214,11 @@ class EtfTrackerTest extends TestCase
     {
         $etf = new Etf();
         $etf->setTicker('LBI');
-        $etf->setName('Lakebird Index');
+        $etf->setName('Skein Lakebird 30 ETF');
         $etf->setPrice('100.00');
 
         // Divisor is 10M -> with $100M cap, price would be $10 < 25 -> triggers 1-for-4 reverse split
-        $this->redisMock->expects($this->once())->method('get')->with('market_index_divisor')->willReturn('10000000');
+        $this->redisMock->expects($this->once())->method('get')->with('market_index_divisor:LBI')->willReturn('10000000');
         $this->schemaManagerStub->method('tablesExist')->willReturn(true);
 
         $this->connectionMock->expects($this->once())->method('beginTransaction');
@@ -160,7 +241,7 @@ class EtfTrackerTest extends TestCase
     {
         $etf = new Etf();
         $etf->setTicker('LBI');
-        $etf->setName('Lakebird Index');
+        $etf->setName('Skein Lakebird 30 ETF');
         $etf->setPrice('100.00');
 
         $this->redisMock->method('get')->willReturn($divisor);

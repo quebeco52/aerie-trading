@@ -6,7 +6,7 @@ namespace App\Data;
 
 /**
  * Authored cartography for the Aerie Autonomous District: a single street, Glasswater Row,
- * fronted by whichever ~30 listed companies currently rank largest by market cap.
+ * fronted by whichever ~45 listed companies currently rank largest by market cap.
  *
  * The roster is never authored — App\Service\District\DistrictWardComposer recomputes it from
  * live Stock rows on every request, so a company entering or dropping out of the top tier moves
@@ -29,8 +29,12 @@ class DistrictMap
      * How many of the District's largest listed companies (by market cap) hold frontage. Ranked
      * by DistrictWardComposer::composeFrontage() at each reconstitution and frozen in between —
      * see DistrictRoster. No company is ever authored on or off the street.
+     *
+     * Sized to ROW_COUNT: fifteen plots a row at the tier mix a top-45 ranking actually draws is
+     * the same rendered width a row carried when the street ran on two rows of fifteen, so the
+     * third stave shows half again as many houses at the scale the canvas already had.
      */
-    public const STREET_ROSTER_SIZE = 30;
+    public const STREET_ROSTER_SIZE = 45;
 
     // --- Reconstitution ---
     /**
@@ -73,18 +77,30 @@ class DistrictMap
 
     // --- Street Canvas Geometry ---
     /**
-     * Staves the frontage wraps across, like a line of music continued below. The whole roster on
-     * one row put the canvas ~5,000 units wide against a ~1,150px column — 0.23px per unit, at
-     * which every label and stroke on the page falls under its legibility floor. Wrapping to two
-     * rows roughly halves the width and roughly doubles that scale.
+     * Most staves the frontage wraps across, like a line of music continued below. The whole
+     * roster on one row put the canvas ~5,000 units wide against a ~1,150px column — 0.23px per
+     * unit, at which every label and stroke on the page falls under its legibility floor. Each
+     * stave divides the width by roughly its own count and multiplies that scale by the same.
+     *
+     * The third stave buys frontage, not scale: STREET_ROSTER_SIZE was raised alongside it so a
+     * row still carries about the same rendered width it did on two, leaving pixels-per-unit
+     * where it was and spending the extra row on more of the listed universe. Adding a row
+     * without adding tenants would instead have magnified the same thirty houses.
      *
      * Deliberately *not* framed as near/far terraces: this is an orthographic elevation with no
-     * perspective cue, and conduits render behind the upper row's buildings, so any depth claim
-     * would contradict what is actually drawn. It is one street, continued on a second line.
+     * perspective cue, and conduits render behind the upper rows' buildings, so any depth claim
+     * would contradict what is actually drawn. It is one street, continued on further lines.
      */
-    public const ROW_COUNT = 2;
-    /** Tenant count below which a single row is already legible and wrapping would only make the canvas tall and thin. */
-    public const ROW_SPLIT_THRESHOLD = 8;
+    public const ROW_COUNT = 3;
+    /**
+     * Tenant counts at which each further stave opens: the street runs on one row until it holds
+     * the first figure, two until the second, and so on. Wrapping earlier than this only makes
+     * the canvas tall and thin — a row carrying fewer than the first figure's worth of plots
+     * reads as a fragment rather than a street — so the steps are a multiple of that floor, and
+     * ROW_COUNT (one more than the steps listed) caps the wrap however long the roster grows.
+     * DistrictMapTest pins the two constants to each other.
+     */
+    public const ROW_SPLIT_THRESHOLDS = [8, 24];
     /**
      * Clear sky in user units between one row's kerb (or the conduit lane band) and the tallest
      * facade of the row below, allowing for everything that rides above a roofline: the rank
@@ -137,7 +153,7 @@ class DistrictMap
      * Floor of an institution's derived width, however many share the street's frontage. Kept
      * narrow relative to a plot — an institution is a small publisher, not a tenant, and should
      * read as background structure the skyline stands in front of, not compete with it. Low
-     * enough that on the two-row canvas the frontage always drives the width and
+     * enough that on the wrapped canvas the frontage always drives the width and
      * DistrictMapBuilder::resolveViewboxWidth() never becomes the binding constraint.
      */
     public const MIN_INSTITUTION_WIDTH = 180;
@@ -150,7 +166,7 @@ class DistrictMap
     /**
      * Facade height in user units for a plot at or above the market capitalisation ceiling, and
      * the most sky any row is ever given (see resolveCanvas()). Lower than the single-row value
-     * it replaced, but *taller on screen* — the two-row canvas narrowed by more than this shrank.
+     * it replaced, but *taller on screen* — the wrapped canvas narrowed by more than this shrank.
      */
     public const MAX_FACADE_HEIGHT = 620.0;
     /**
@@ -206,14 +222,13 @@ class DistrictMap
      */
     public const WINDOW_KEY_PRECISION = 4;
     /**
-     * Share of a facade's windows that flicker slowly while lit. A static grid of lit windows
-     * reads as a diagram; a few drifting ones read as a city. Which windows flicker, and where
-     * in the cycle each one starts, is a second stable hash of the window's address, so the
-     * street never changes its mind between renders.
+     * Share of a facade's lit windows drawn a step brighter than the rest (`data-twinkle`). A
+     * uniform grid of lit windows reads as a diagram; a few uneven ones read as a city. Which
+     * windows is a second stable hash of the window's address, so the street never changes its
+     * mind between renders. They were once animated; the flicker was dropped because a few
+     * hundred infinitely-animating SVG rects re-rasterised the street at the display's frame rate.
      */
     public const WINDOW_TWINKLE_SHARE = 0.12;
-    /** Seconds one flicker cycle lasts. Slow, so it never competes with the roofline tick flashes. */
-    public const WINDOW_TWINKLE_PERIOD_SECONDS = 5.5;
 
     // --- Roof Furniture ---
     /**
@@ -298,7 +313,7 @@ class DistrictMap
     public const KERB_LIGHT_OPACITY = 0.16;
 
     // --- Terrace Embankment ---
-    /** Height in user units of the retaining wall drawn under the upper row's kerb, inside ROW_GAP. */
+    /** Height in user units of the retaining wall drawn under every kerb but the lowest, inside ROW_GAP. */
     public const TERRACE_WALL_HEIGHT = 14;
 
     // --- Portfolio Position Pennant ---
@@ -435,8 +450,8 @@ class DistrictMap
      * institution owns one horizontal lane in a band below the outlets, drops from its outlet
      * into that lane, runs along it, and drops again onto each tenant's roofline. The symmetric
      * S-curves this replaced fanned ~100 crossing curves across the sky; with lanes, a stressed
-     * institution reads as one red bus with drops, and the band is what makes a two-row street
-     * drawable at all — lower-row drops fall through the upper row's gaps and behind its kerb.
+     * institution reads as one red bus with drops, and the band is what makes a wrapped street
+     * drawable at all — lower-row drops fall through the rows above them and behind their kerbs.
      * Sized for one lane per rendered institution; the band's depth is derived from that count.
      */
     /** Vertical distance in user units between adjacent lanes — a 3-unit dashed stroke needs this much to read as separate lines. */
@@ -656,6 +671,22 @@ class DistrictMap
             // other constant in the simulation treats government spending as a crisis signal.
         ],
     ];
+
+    /**
+     * How many staves a frontage of this many tenants wraps across: one row per
+     * ROW_SPLIT_THRESHOLDS step the count has passed, capped at ROW_COUNT.
+     */
+    public static function rowCountForTenants(int $tenants): int
+    {
+        $rows = 1;
+        foreach (self::ROW_SPLIT_THRESHOLDS as $threshold) {
+            if ($tenants >= $threshold) {
+                $rows++;
+            }
+        }
+
+        return min($rows, self::ROW_COUNT, max(1, $tenants));
+    }
 
     /** Returns the plot width in user units for a given systemic importance tier. */
     public static function plotWidthForImportance(?string $systemicImportance): int

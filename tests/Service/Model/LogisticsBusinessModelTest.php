@@ -15,12 +15,10 @@ use PHPUnit\Framework\TestCase;
 class LogisticsBusinessModelTest extends TestCase
 {
     private LogisticsBusinessModel $model;
-    private MathUtility $mathUtility;
 
     protected function setUp(): void
     {
         $this->model = new LogisticsBusinessModel();
-        $this->mathUtility = new MathUtility();
     }
 
     public function testTriStreamLogisticsRevenueAndFreightIndexSensitivity(): void

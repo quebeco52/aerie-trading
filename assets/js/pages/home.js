@@ -1,6 +1,7 @@
 import { formatLarge } from '../utils/formatters.js';
 import { readPageData } from '../utils/page-data.js';
 import { flashTick } from '../utils/tick-flash.js';
+import { setText } from '../utils/set-text.js';
 
 const previousPrices = {};
 
@@ -8,14 +9,19 @@ const previousPrices = {};
 let sharesByTicker = {};
 
 function initHome() {
-    const etfEl = document.getElementById('etf-price');
-    if (!etfEl) return;
-    if (etfEl.dataset.initialized) return;
-    etfEl.dataset.initialized = 'true';
+    const tableEl = document.getElementById('market-table-body');
+    if (!tableEl) return;
+    if (tableEl.dataset.initialized) return;
+    tableEl.dataset.initialized = 'true';
 
     sharesByTicker = readPageData('market-data').shares || {};
 
-    function onMarketUpdate(event) {
+    /**
+     * One coalesced frame from market-stream.js (`market:frame`): the latest entry per ticker,
+     * at most every FRAME_INTERVAL_MS. Every figure on the table is written here, in place and
+     * only when its text changed, so the page's cost is set by that cadence, not the tick rate.
+     */
+    function onMarketFrame(event) {
         const payload = event.detail;
         if (!payload) return;
 
@@ -25,17 +31,18 @@ function initHome() {
             if (macroCycleEl) {
                 const cycleText = payload.macro.output_gap > 0.01 ? 'Boom' : (payload.macro.output_gap < -0.01 ? 'Bust' : 'Neutral');
                 if (macroCycleEl.textContent !== cycleText) {
-                    macroCycleEl.textContent = cycleText;
+                    setText(macroCycleEl, cycleText);
                     flashTick(macroCycleEl, 1);
                 }
             }
         }
 
-        // Update the Market Index (ETF) Live
-        const lbiStock = payload.stocks ? payload.stocks.find(s => s.ticker === 'LBI') : null;
-        if (lbiStock) {
-            const etfElLive = document.getElementById('etf-price');
-            if (etfElLive) etfElLive.textContent = '$' + parseFloat(lbiStock.price).toFixed(2);
+        // The index tiles: every fund on the frame that has a tile is repainted, whatever it is called.
+        if (Array.isArray(payload.stocks)) {
+            payload.stocks.forEach(update => {
+                const tileEl = document.getElementById(`index-price-${update.ticker}`);
+                if (tileEl) setText(tileEl, '$' + parseFloat(update.price).toFixed(2));
+            });
         }
 
         // Loop through live prices and update DOM
@@ -50,11 +57,11 @@ function initHome() {
                     if (stock.is_bankrupt) {
                         rowEl.setAttribute('data-bankrupt', 'true');
                         rowEl.setAttribute('data-mcap', '0');
-                        priceEl.textContent = '$0.00';
+                        setText(priceEl, '$0.00');
                         priceEl.classList.add('text-tertiary', 'line-through');
-                        mcapEl.textContent = '$0.00';
+                        setText(mcapEl, '$0.00');
                         if (chgEl) {
-                            chgEl.textContent = '\u2014';
+                            setText(chgEl, '\u2014');
                             chgEl.classList.remove('text-secondary', 'text-tertiary');
                             chgEl.classList.add('text-on-surface-variant');
                         }
@@ -65,12 +72,12 @@ function initHome() {
                     const newPrice = parseFloat(stock.price);
                     const oldPrice = previousPrices[stock.ticker] || newPrice;
 
-                    priceEl.textContent = '$' + newPrice.toFixed(2);
+                    setText(priceEl, '$' + newPrice.toFixed(2));
 
                     const sharesCount = sharesByTicker[stock.ticker] || 0;
                     const newMcap = stock.market_cap !== undefined ? stock.market_cap : (newPrice * sharesCount);
 
-                    mcapEl.textContent = formatLarge(newMcap, '$');
+                    setText(mcapEl, formatLarge(newMcap, '$'));
                     rowEl.setAttribute('data-mcap', newMcap);
 
                     // A ticker with nothing buffered yet reports no change at all, which is a
@@ -80,10 +87,10 @@ function initHome() {
                         // Steady state, not a flash: the day's direction, held until it changes.
                         chgEl.classList.remove('text-secondary', 'text-tertiary', 'text-on-surface-variant');
                         if (chg === null || chg === undefined) {
-                            chgEl.textContent = '\u2014';
+                            setText(chgEl, '\u2014');
                             chgEl.classList.add('text-on-surface-variant');
                         } else {
-                            chgEl.textContent = (chg >= 0 ? '+' : '') + (chg * 100).toFixed(2) + '%';
+                            setText(chgEl, (chg >= 0 ? '+' : '') + (chg * 100).toFixed(2) + '%');
                             chgEl.classList.add(chg >= 0 ? 'text-secondary' : 'text-tertiary');
                         }
                     }
@@ -97,7 +104,7 @@ function initHome() {
         }
     }
 
-    document.addEventListener('market:update', onMarketUpdate);
+    document.addEventListener('market:frame', onMarketFrame);
 
     // Throttled Table Sorter
     const sortInterval = setInterval(() => {
@@ -121,7 +128,7 @@ function initHome() {
 
     // Clean up when leaving the page
     document.addEventListener('turbo:before-render', () => {
-        document.removeEventListener('market:update', onMarketUpdate);
+        document.removeEventListener('market:frame', onMarketFrame);
         clearInterval(sortInterval);
     }, { once: true });
 }

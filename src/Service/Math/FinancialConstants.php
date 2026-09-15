@@ -207,6 +207,30 @@ class FinancialConstants
     /** Maximum market cap percentage (15%) a fully saturated firm can repurchase in a single quarter. */
     public const MAX_REGULATORY_SPEND_SATURATED = 0.15;
 
+    // --- Regulatory Capital Conservation Buffer (Basel III / Solvency II) ---
+    /** Leverage overshoot ratio (1.05x) triggering Tier 1 Capital Conservation Buffer restriction (max 60% payout). */
+    public const REGULATORY_BUFFER_TIER_1_THRESHOLD = 1.05;
+    /** Maximum target payout ratio allowed when operating under Tier 1 capital buffer restrictions. */
+    public const REGULATORY_BUFFER_TIER_1_PAYOUT_CAP = 0.60;
+    /** Leverage overshoot ratio (1.15x) triggering Tier 2 Capital Conservation Buffer restriction (max 30% payout). */
+    public const REGULATORY_BUFFER_TIER_2_THRESHOLD = 1.15;
+    /** Maximum target payout ratio allowed when operating under Tier 2 capital buffer restrictions. */
+    public const REGULATORY_BUFFER_TIER_2_PAYOUT_CAP = 0.30;
+    /** Leverage overshoot ratio (1.25x) triggering severe Tier 3 regulatory dividend prohibition (0% payout). */
+    public const REGULATORY_BUFFER_TIER_3_THRESHOLD = 1.25;
+
+    // --- Physical Capacity Limits (Growth Speed Limits) ---
+    /** Ceiling on one quarter's organic book growth for a financial mega-hoarder; a funded balance sheet can be put to work fast. */
+    public const FIN_MEGA_HOARDER_GROWTH_LIMIT = 0.35;
+    /** Ceiling on one quarter's organic book growth for a cash-hoarding financial. */
+    public const FIN_HOARDER_GROWTH_LIMIT = 0.20;
+    /** Ceiling on one quarter's organic book growth for a normally capitalised financial. */
+    public const FIN_STANDARD_GROWTH_LIMIT = 0.12;
+    /** Ceiling on one quarter's organic capacity growth for a cash-hoarding operating firm; plant takes time to build. */
+    public const STD_HOARDER_GROWTH_LIMIT = 0.15;
+    /** Ceiling on one quarter's organic capacity growth for a normally funded operating firm. */
+    public const STD_STANDARD_GROWTH_LIMIT = 0.08;
+
     // --- Input Cost Basket ---
     /** Default shares of the variable cost base bought in tracked input markets for a producing firm; the remainder has no macro index. */
     public const DEFAULT_INPUT_COST_EXPOSURES = ['energy' => 0.05, 'metals' => 0.05, 'agri' => 0.02, 'freight' => 0.03, 'ppi' => 0.35, 'labor' => 0.30];
@@ -270,6 +294,8 @@ class FinancialConstants
     public const MIN_INDUSTRY_CAPACITY_RATIO = 0.5;
     /** Largest fraction by which the industry capacity balance may move a single firm's realized price level, either way. */
     public const MAX_INDUSTRY_PRICE_RESPONSE = 0.30;
+    /** Long-run supply elasticity of the competitive fringe (Forchheimer): fringe output ~ P^eta, so it cedes share when dominant firms overbuild and refills a hole when one exits; unit elasticity is the textbook constant-cost long run. */
+    public const FRINGE_SUPPLY_ELASTICITY = 1.0;
 
     // --- Corporate Flow Pacing (SEC Rule 10b-18) ---
     /** Share of a day's average volume a repurchase program (or a placed offering's flowback) may execute per day under the 10b-18 volume condition. */
@@ -310,6 +336,8 @@ class FinancialConstants
     public const REQUIRED_ICR_SAFETY_MULT = 1.50;
     /** Absolute minimum interest coverage ratio buffer required for discretionary debt issuance. */
     public const MIN_ABSOLUTE_ICR_BUFFER = 2.00;
+    /** Dampen double-counting of historical debt when re-levering Beta through the Hamada equation. */
+    public const HAMADA_DAMPENING_FACTOR = 0.25;
 
     // --- Valuation Consensus Weights ---
     /** Consensus weight given to earnings/DCF intrinsic fair value in valuation blending. */
@@ -479,6 +507,149 @@ class FinancialConstants
     public const ETF_HALF_SPREAD = 0.0001;
     /** Flat half-spread on a sovereign bond, the deepest instrument on the desk. */
     public const BOND_HALF_SPREAD = 0.00005;
+    /** Half-spread on a CORPORATE issue. Wider than the sovereign by an order of magnitude and then some: a company's bonds trade in a fraction of the size, against a fraction of the buyers, and most of them sit in portfolios that never sell. Quoting them at the sovereign's depth would make credit risk free to get into and out of, which is the opposite of what makes it risky. */
+    public const CORPORATE_BOND_HALF_SPREAD = 0.0015;
+
+
+    // --- Listed Equity Options ---
+    /** Shares one contract is written on, the listed convention. Every premium here is quoted PER SHARE and multiplied by this only where cash actually moves. */
+    public const OPTION_CONTRACT_MULTIPLIER = 100;
+    /** Months to expiry of the expiries listed at any one time: two near months, a quarterly and a two-quarter, which is the front of a standard listed cycle. */
+    public const OPTION_EXPIRY_MONTHS = [1, 2, 3, 6];
+    /** Strike ladder spacing as a fraction of spot, before it is snapped to a round increment. */
+    public const OPTION_STRIKE_SPACING_FRACTION = 0.05;
+    /** Widest strike listed either side of spot, as a fraction of it. Wide enough to carry the tails the smile prices, short of the strikes nobody quotes. */
+    public const OPTION_STRIKE_LADDER_WIDTH = 0.30;
+    /** Round increments a strike ladder may be struck on; the ladder snaps to the smallest one at or above the spacing fraction, which is how a real ladder ends up on whole and half numbers at every price level. */
+    public const OPTION_STRIKE_INCREMENTS = [0.50, 1.00, 2.50, 5.00, 10.00, 25.00, 50.00, 100.00, 250.00];
+    /** Average daily volume a name must trade before a class is opened on it; exchanges list options against a float and a trading record, not against every listed company. */
+    public const OPTION_LISTING_MIN_ADV = 50000.0;
+    /** Price a name must hold to carry a class. Below it the round-increment ladder has no usable strikes and every contract is one tick wide. */
+    public const OPTION_LISTING_MIN_PRICE = 5.00;
+
+    // --- Option Market Making ---
+    /** Volatility points a desk quotes either side of its mark. An option's spread is a spread in VOLATILITY — the desk is trading variance, not premium — and the premium spread is this times vega. */
+    public const OPTION_HALF_SPREAD_VOLATILITY = 0.015;
+    /** Floor on the half-spread as a fraction of the premium, so a deep in-the-money contract carrying almost no vega still costs something to cross. */
+    public const OPTION_MIN_HALF_SPREAD_FRACTION = 0.005;
+    /** Ceiling on the same, because a far out-of-the-money contract's vega spread can otherwise exceed the whole of its premium. */
+    public const OPTION_MAX_HALF_SPREAD_FRACTION = 0.25;
+    /** Smallest premium a listed contract quotes at: one cent, the minimum increment. A contract worth less than this is quoted here and worth nothing on exercise. */
+    public const OPTION_MIN_PREMIUM = 0.01;
+    // --- Option Exercise & Settlement ---
+    /** Intrinsic value per share at which a contract is exercised by exception at expiry. The clearing house exercises anything in the money by a tick unless the holder says otherwise, so a contract a cent in the money is delivered, not abandoned. */
+    public const OPTION_EXERCISE_THRESHOLD = 0.01;
+
+    // --- Short Option Margin (FINRA Rule 4210 / CBOE minimums) ---
+    /** Share of the underlying a naked short option is collateralized at, before the out-of-the-money amount is credited back against it. */
+    public const SHORT_OPTION_UNDERLYING_REQUIREMENT = 0.20;
+    /** Floor on that requirement, struck on the underlying for a call and on the STRIKE for a put, so a far out-of-the-money short is never collateralized at nothing. */
+    public const SHORT_OPTION_MINIMUM_REQUIREMENT = 0.10;
+
+
+    // --- Market Index Membership (Shleifer 1986) ---
+    /** Seats in the headline index. Fewer than the listed universe, so membership is a real distinction and joining or leaving it means something; the composite index carries every listed name and has no count. */
+    public const INDEX_CONSTITUENT_COUNT = 30;
+    /** Banding around the cut, as a fraction of the constituent count. A sitting member is not evicted the first time a marginal name edges past it: real indices band precisely because ranking noise at the boundary would otherwise churn the whole passive book twice a year for nothing. */
+    public const INDEX_MEMBERSHIP_BUFFER = 0.20;
+    /** Reconstitutions per year. */
+    public const INDEX_RECONSTITUTIONS_PER_YEAR = 4;
+    /** Level the index opens at on a market with no history. An index base is a convention, not a measurement: what carries meaning is the return from it. */
+    public const INDEX_BASE_LEVEL = 100.0;
+    /** Seats in the low-volatility index, drawn from the whole listed board. S&P's low-volatility index takes the quietest fifth of its parent; the same fraction of this board is about this many names. */
+    public const INDEX_LOW_VOLATILITY_COUNT = 20;
+    /** Floor on the trailing volatility an inverse-volatility weighting divides by. A name that has gone quiet enough to divide by nothing would otherwise take the whole fund. */
+    public const INDEX_MINIMUM_WEIGHT_VOLATILITY = 0.04;
+
+    // --- Headline Index Eligibility ---
+    /** Most any one constituent may weigh in the headline index. Set between the 10% the UCITS limits and most national benchmarks use and the 22.5% the sector fund carries under the RIC rules: a thirty-name benchmark with half its weight in three companies measures those three, but this District genuinely is dominated by its titans and a tighter cap would re-engineer the index around them rather than measure them. It also bounds the publisher's own seat in the index it publishes. */
+    public const INDEX_HEADLINE_MAX_CONSTITUENT_WEIGHT = 0.15;
+
+    // --- Index Diversification Caps (RIC / UCITS 5-10-40, as applied by the S&P Select Sector indices) ---
+    /** Most any one constituent may weigh in a capped index. A sector fund that must stay a regulated investment company cannot let one name run away with it. */
+    public const INDEX_MAX_CONSTITUENT_WEIGHT = 0.225;
+    /** Weight above which a constituent counts toward the concentration budget below. */
+    public const INDEX_CONCENTRATION_THRESHOLD = 0.045;
+    /** Most the constituents above that threshold may weigh in combination. */
+    public const INDEX_CONCENTRATION_BUDGET = 0.45;
+
+    // --- Passive Assets by Index (share of the indexed book each published index carries) ---
+    /** Share of passive money tracking the headline index. Broad cap-weighted benchmarks hold the large majority of indexed assets. */
+    public const INDEX_PASSIVE_SHARE_HEADLINE = 0.62;
+    /** Share tracking the whole-board composite: total-market funds, the second-largest passive vehicle. */
+    public const INDEX_PASSIVE_SHARE_COMPOSITE = 0.30;
+    /** Share tracking the low-volatility fund. Smart beta is a low single-digit share of indexed money, and it is spread across the near half of the board that qualifies as quiet. */
+    public const INDEX_PASSIVE_SHARE_LOW_VOLATILITY = 0.05;
+    /** Share tracking the consumer staples sector fund. Deliberately near the sector's own weight in the market: a narrow fund holding far more indexed money than its sector is worth would leave its handful of names with passive ownership no real constituent carries. */
+    public const INDEX_PASSIVE_SHARE_STAPLES = 0.03;
+    /** Ceiling on how much passive ownership a single name can carry relative to its weight in the market. A name held by every fund at once is still only so much of anyone's book. */
+    public const INDEX_MAX_PASSIVE_OWNERSHIP_MULTIPLE = 4.0;
+
+    // --- Index Fund Accounting ---
+    /** Distributions a fund pays per year. Quarterly, matching both the constituents' own dividend cycle and the reconstitution calendar. */
+    public const FUND_DISTRIBUTIONS_PER_YEAR = 4;
+    /** Smallest distribution worth paying, per share. Below this the income stays accrued into the next quarter rather than writing a ledger row per holder that rounds to nothing. */
+    public const FUND_MINIMUM_DISTRIBUTION = 0.005;
+
+    // --- Corporate Bond Issuance ---
+    /** Share of a firm's wholesale debt that is funded in the PUBLIC bond market rather than by banks. The listed issues are a tranche of the debt the balance sheet already carries, never additional borrowing. */
+    public const CORPORATE_PUBLIC_DEBT_SHARE = 0.50;
+    /** Issues a firm keeps outstanding at once. Sets the steady-state size of the corporate ladder directly: a firm holding this many issues holds this many, whatever the tenors are. */
+    public const CORPORATE_LADDER_ISSUES = 3;
+    /** Original maturities a firm issues at, cycled so a ladder ends up spread across the curve instead of stacked on one point. */
+    public const CORPORATE_ISSUE_TENORS = [3.0, 5.0, 7.0, 10.0];
+    /** Smallest face a single issue may be brought at. A gap smaller than this waits rather than bringing a deal nobody would underwrite. */
+    public const CORPORATE_MIN_ISSUE_FACE = 5.0e7;
+    /** Wholesale debt a firm must carry before the public market is worth tapping. DERIVED, not chosen: it is exactly the debt at which a full ladder of minimum-size issues fits inside the public tranche. Set independently, the two rules disagree — a firm passes the debt gate, then every deal it tries to bring prices below the minimum size and it silently never issues at all. */
+    public const CORPORATE_MIN_PUBLIC_DEBT = (self::CORPORATE_LADDER_ISSUES * self::CORPORATE_MIN_ISSUE_FACE) / self::CORPORATE_PUBLIC_DEBT_SHARE;
+    /** Reconciliations of the public tranche per year. A firm comes to market when it has room, not continuously. */
+    public const CORPORATE_ISSUANCE_PER_YEAR = 4;
+
+    // --- Corporate Credit: Recovery Given Default (Altman, Brady, Resti & Sironi 2005) ---
+    /** Recovery on a senior SECURED claim in an average default year, as a share of face; collateral is what puts this claim ahead of the rest. */
+    public const RECOVERY_SENIOR_SECURED = 0.62;
+    /** Recovery on a senior UNSECURED claim, the ordinary public corporate bond. */
+    public const RECOVERY_SENIOR_UNSECURED = 0.48;
+    /** Recovery on a SUBORDINATED claim, which is paid only once everything above it is whole. */
+    public const RECOVERY_SUBORDINATED = 0.28;
+    /** Aggregate corporate default rate the base recoveries above are quoted at; the long-run average year. */
+    public const RECOVERY_BASELINE_DEFAULT_RATE = 0.018;
+    /** Fall in recovery per unit of log excess in the aggregate default rate. Recovery and default are NEGATIVELY correlated: defaults cluster in bad years, distressed assets are sold into a market with no buyers, and the same claim is worth less precisely when more of them are being settled. Ignoring it prices the tail of a credit portfolio far too kindly. */
+    public const RECOVERY_DEFAULT_RATE_ELASTICITY = 0.12;
+    /** Bounds on recovery. Nothing recovers everything once it has defaulted, and even a wiped-out claim usually salvages something. */
+    public const MIN_RECOVERY_RATE = 0.05;
+    public const MAX_RECOVERY_RATE = 0.90;
+
+    // --- Corporate Credit: Spread Composition (Longstaff, Mithal & Neis 2005) ---
+    /** Non-default component of a corporate spread: what a buyer charges for holding a claim they cannot sell as readily as a sovereign. Measured to be a material minority of an investment-grade spread, so a bond priced on default risk alone quotes through the market. */
+    public const CORPORATE_ILLIQUIDITY_SPREAD = 0.0040;
+    /** Ceiling on the credit spread a listed issue may be discounted at, matching the cap the Merton spread itself carries. */
+    public const MAX_CORPORATE_SPREAD = 1.00;
+
+    // --- Public Option Demand (Bollen & Whaley 2004 net buying pressure) ---
+    /** The public's net long position across a name's whole chain, in contracts, as a multiple of its average daily volume converted to contract-equivalents. The public is a persistent NET BUYER of options, which is the whole reason a dealer is structurally short them. */
+    public const OPTION_PUBLIC_OPEN_INTEREST_ADV_MULTIPLE = 0.50;
+    /** Absolute delta the public's demand is centred on. Open interest concentrates out of the money rather than at it: the buyer is paying for convexity, not for the underlying. */
+    public const OPTION_PUBLIC_TARGET_DELTA = 0.30;
+    /** Width of that concentration, in delta. Wide enough that the whole listed ladder carries some interest, narrow enough that the wings do not dominate it. */
+    public const OPTION_PUBLIC_DELTA_DISPERSION = 0.18;
+    /** Share of single-name public demand that goes to calls in calm conditions. Bollen & Whaley find net buying pressure in INDIVIDUAL equity options is call-driven — the lottery preference of Bali, Cakici & Whitelaw (2011) — where in index options it is puts. */
+    public const OPTION_PUBLIC_CALL_SHARE = 0.60;
+    /** Shift of that share toward puts per unit of market volatility above its baseline: hedging demand displaces lottery demand as the market becomes frightening, which is what steepens a skew in a selloff. */
+    public const OPTION_PUBLIC_FEAR_PUT_SENSITIVITY = 1.50;
+    /** Decay of demand with time to expiry, per year. Listed open interest is concentrated in the front months; the back months are quoted more than they are held. */
+    public const OPTION_PUBLIC_EXPIRY_DECAY = 2.00;
+    /** Years for public open interest to close 63% of the gap to its target. Positions are opened and rolled over weeks; a book that rebuilt itself every tick would be a flow, not a position. */
+    public const OPTION_PUBLIC_DEMAND_HORIZON_YEARS = 0.08;
+
+    // --- Dealer Gamma Hedging (Barbon & Buraschi 2020; Baltussen, Da, Lammers & Radeva 2021) ---
+    /** Share of the desk's delta exposure that actually reaches the market as a hedge. A desk nets customer flow against itself first and only hedges the residual, so the whole of its book never trades. */
+    public const DEALER_HEDGE_RATIO = 0.80;
+    /** Ceiling on one tick's hedging flow as a multiple of the name's average daily volume. A short-gamma desk chasing a gap would otherwise demand more liquidity in one tick than the name trades in a day, and the impact law is extrapolation past that point. */
+    public const MAX_DEALER_HEDGE_ADV_MULTIPLE = 0.25;
+
+    /** Markup from the variance a desk expects to the variance it quotes (Carr & Wu 2009). A desk that quotes its own forecast loses money on average, which is why implied runs above subsequent realized. Held modest because the premium on SINGLE-NAME options is a fraction of the index premium (Bakshi, Kapadia & Madan 2003). */
+    public const OPTION_VARIANCE_RISK_PREMIUM = 1.05;
 
     // --- Market Microstructure: Order Flow Variance Budget ---
     /** Ceiling on the share of long-run variance order flow may reclaim from the diffusion. */

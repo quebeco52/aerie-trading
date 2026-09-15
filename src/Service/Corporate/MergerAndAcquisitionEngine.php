@@ -6,7 +6,6 @@ namespace App\Service\Corporate;
 
 use App\Entity\Stock;
 use App\DTO\MacroStateDTO;
-use Doctrine\ORM\EntityManagerInterface;
 use App\Service\Event\MarketEventPublisher;
 use App\Service\Math\MathUtility;
 use App\Service\Math\CorporateMetrics;
@@ -141,11 +140,54 @@ class MergerAndAcquisitionEngine
 
     /** Minimum cents on the dollar for fire sale. */
     public const DIV_FIRE_SALE_MIN_CENTS = 0.40;
+    /** Ceiling on the acquisition hazard, cached: the styles and constants it is built from never change. */
+    private static ?float $acquisitionHazardCeiling = null;
+
+    /**
+     * The largest annual acquisition hazard any firm can carry, in any state, under any manager.
+     *
+     * The bound the rejection gate is struck at. Every branch of determineAcquisitionStrategy() is a base
+     * rate times the manager's acquisition bias (or 1.0 where the branch is priced by style), and the cash
+     * fallback can fire independently on top, so the ceiling is the largest primary rate plus the fallback
+     * rate, both at the most acquisitive manager the profile can produce. Exact, not tuned: a hazard above
+     * this cannot occur, and one below it is reproduced exactly by the two-stage draw.
+     */
+    public static function acquisitionHazardCeiling(): float
+    {
+        if (self::$acquisitionHazardCeiling !== null) {
+            return self::$acquisitionHazardCeiling;
+        }
+
+        $maxBias = 1.0;
+        foreach (\App\Data\ManagementStyle::cases() as $style) {
+            $maxBias = max(
+                $maxBias,
+                \App\Data\ManagementProfile::forStyle($style, \App\Data\ManagementProfile::MAX_INTENSITY)->acquisitionBias()
+            );
+        }
+
+        $primary = max(
+            self::MA_EMPIRE_BUILDER_PROB,
+            self::MA_OVERVALUED_PROB * $maxBias,
+            self::MA_MEGA_HOARDER_PROB * $maxBias,
+            self::MA_HOARDER_PROB * $maxBias,
+            self::MA_LOW_LEVERAGE_PROB * $maxBias,
+            self::MA_MOD_LEVERAGE_PROB * $maxBias
+        );
+
+        return self::$acquisitionHazardCeiling = $primary + (self::MA_CASH_FALLBACK_PROB * $maxBias);
+    }
+
+    /** The largest annual divestiture hazard any state assigns; the bound its rejection gate is struck at. */
+    public static function divestitureHazardCeiling(): float
+    {
+        return max(self::DIV_DYING_ANNUAL_PROB, self::DIV_DISTRESSED_ANNUAL_PROB, self::DIV_PREMIUM_ANNUAL_PROB);
+    }
+
     /** Maximum cents on the dollar for fire sale. */
     public const DIV_FIRE_SALE_MAX_CENTS = 0.80;
 
     public function __construct(
-        private EntityManagerInterface $entityManager,
         private MarketEventPublisher $marketEvent,
         private DebtEngine $debtEngine,
         private MathUtility $mathUtility,
@@ -159,6 +201,17 @@ class MergerAndAcquisitionEngine
     public function evaluatePrivateAcquisition(Stock $acquirer, MacroStateDTO $macroState, float $dt): ?array
     {
         if ($acquirer->isBankrupt()) {
+            return null;
+        }
+
+        // REJECTION GATE. Whether a deal fires this tick is a Bernoulli draw with a hazard the firm's state
+        // decides, and that hazard is bounded above by a constant. So the draw is made in two stages: pass a
+        // gate at the ceiling, and only then work out the firm's own hazard and accept with the ratio of the
+        // two. The product is exactly the firm's hazard — this is rejection sampling, not an approximation —
+        // and the second stage is what costs: the debt analysis, the fair-value multiple and the hoarding
+        // test were being computed for every firm on every tick to decide an event that fires about once a
+        // decade per firm. At the ceiling the gate rejects all but a few passes in ten thousand.
+        if (!$this->mathUtility->checkProbability(self::acquisitionHazardCeiling() * $dt)) {
             return null;
         }
 
@@ -214,6 +267,10 @@ class MergerAndAcquisitionEngine
     {
         $stock = $ctx->acquirer;
         
+        // The archetype answers "which kind of manager is this?" and the profile answers "how firmly?" —
+        // the branch below is an identity test, everything after it reads dials.
+        $style = $stock->getManagementStyle();
+        $manager = $stock->getManagementProfile();
         $ctx->costOfNewBorrowing = $ctx->health->rawMetrics->currentMarketRate ?? ($ctx->yield5y + (float) $stock->getCreditSpread());
 
         $equityLimit = \App\Data\Sectors::INDUSTRY_METRICS[$ctx->industry]['equity_limit'] ?? 1.0;
@@ -222,8 +279,8 @@ class MergerAndAcquisitionEngine
         $ctx->borrowingCapacity = max(0.0, $ctx->maxAllowableDebt - $ctx->currentDebt);
         $ctx->totalBuyingPower = $ctx->treasury + $ctx->borrowingCapacity;
 
-        $ctx->targetCash = $ctx->strategy->calculateTargetOperatingCash($ctx->operatingBase, (float) $stock->getCustomerDeposits(), (float) $stock->getWholesaleDebt());
-        $hoardStatus = $ctx->strategy->evaluateHoardingStatus($ctx->treasury, $ctx->targetCash, $ctx->operatingBase, $ctx->currentDebt);
+        $ctx->targetCash = $stock->getManagementProfile()->appliedTargetCash($ctx->strategy->calculateTargetOperatingCash($ctx->operatingBase, (float) $stock->getCustomerDeposits(), (float) $stock->getWholesaleDebt()));
+        $hoardStatus = $ctx->strategy->evaluateHoardingStatus($ctx->treasury, $ctx->targetCash, $manager->appliedHoardingBase($ctx->operatingBase), $ctx->currentDebt);
         $ctx->excessCash = $hoardStatus['excess_cash'];
         $ctx->isHoarder = $hoardStatus['is_hoarder'];
         $ctx->isMegaHoarder = $hoardStatus['is_mega_hoarder'];
@@ -253,9 +310,24 @@ class MergerAndAcquisitionEngine
         $ctx->isOvervalued = $ctx->economicSpread > 0.0 && $ctx->currentPE > ($ctx->fairValuePE * 1.5) && $ctx->currentPE > 25.0 && $ctx->priceToBook > 2.0;
         
         $ctx->aggression = 1.0;
-        $ctx->isEmpireBuilder = false;
+        $ctx->isEmpireBuilder = $style === \App\Data\ManagementStyle::EmpireBuilder;
+        $ctx->hubrisPremium = $manager->hubrisPremium();
         
+        // Every branch below that sets use_leverage is a DISCRETIONARY leveraged deal, so the Net Debt /
+        // EBITDA covenant has to reach all three or it becomes an accident of which branch matched first.
         $config = match (true) {
+            // Morck, Shleifer & Vishny (1990): for this manager the deal IS the objective, not a use for
+            // spare capacity, so the branch is read ahead of the hoarding and leverage reads rather than
+            // behind them. Both constants below were already declared and had been unreachable for as long
+            // as the flag above was hardcoded false — this is the branch they were written for.
+            //
+            // It funds itself like the LBO branches below (use_leverage draws on borrowing capacity), so it
+            // answers to the same two lender tests. Hubris is a reason to overpay for a target, not a reason
+            // a bank lends to a firm that cannot service what it already owes. Failing either test does not
+            // stop the empire builder acquiring — it falls through to the cash-funded branches.
+            $ctx->isEmpireBuilder && $ctx->health->canIssueDebt && $ctx->health->hasLeverageHeadroom && $ctx->totalBuyingPower > self::MA_EMPIRE_BUILDER_MIN_POWER => [
+                'prob' => self::MA_EMPIRE_BUILDER_PROB, 'spend' => 0.55, 'type' => $ctx->strategy->getAcquisitionType('CONGLOMERATE EXPANSION'), 'use_leverage' => true, 'use_stock' => false, 'style_priced' => true
+            ],
             $ctx->isOvervalued => [
                 'prob' => self::MA_OVERVALUED_PROB, 'spend' => 0.50, 'type' => 'STOCK-FOR-STOCK MERGER', 'use_leverage' => false, 'use_stock' => true
             ],
@@ -265,10 +337,10 @@ class MergerAndAcquisitionEngine
             $ctx->isHoarder => [
                 'prob' => self::MA_HOARDER_PROB, 'spend' => 0.40, 'type' => $ctx->strategy->getAcquisitionType('CONGLOMERATE EXPANSION'), 'use_leverage' => false, 'use_stock' => false
             ],
-            $ctx->health->canIssueDebt && $ctx->normalizedDebtUtilization < self::MA_LOW_UTIL_THRESHOLD && $ctx->totalBuyingPower > self::MA_LBO_MIN_POWER && $ctx->costOfNewBorrowing < self::MA_LOW_RATE_CEILING => [
+            $ctx->health->canIssueDebt && $ctx->health->hasLeverageHeadroom && $ctx->normalizedDebtUtilization < self::MA_LOW_UTIL_THRESHOLD && $ctx->totalBuyingPower > self::MA_LBO_MIN_POWER && $ctx->costOfNewBorrowing < self::MA_LOW_RATE_CEILING => [
                 'prob' => self::MA_LOW_LEVERAGE_PROB, 'spend' => 0.40, 'type' => $ctx->strategy->getAcquisitionType('LEVERAGED BUYOUT'), 'use_leverage' => true, 'use_stock' => false
             ],
-            $ctx->health->canIssueDebt && $ctx->normalizedDebtUtilization < self::MA_MOD_UTIL_THRESHOLD && $ctx->totalBuyingPower > self::MA_LBO_MIN_POWER && $ctx->costOfNewBorrowing < self::MA_MOD_RATE_CEILING => [
+            $ctx->health->canIssueDebt && $ctx->health->hasLeverageHeadroom && $ctx->normalizedDebtUtilization < self::MA_MOD_UTIL_THRESHOLD && $ctx->totalBuyingPower > self::MA_LBO_MIN_POWER && $ctx->costOfNewBorrowing < self::MA_MOD_RATE_CEILING => [
                 'prob' => self::MA_MOD_LEVERAGE_PROB, 'spend' => 0.30, 'type' => $ctx->strategy->getAcquisitionType('LEVERAGED BUYOUT'), 'use_leverage' => true, 'use_stock' => false
             ],
             default => null,
@@ -276,17 +348,30 @@ class MergerAndAcquisitionEngine
 
         $ctx->dealExecuted = false;
 
-        if ($config && $this->mathUtility->checkProbability($config['prob'] * $ctx->dt)) {
+        // These hazards are annual and $dt is a fraction of a year. The empire builder's own branch already
+        // carries its elevated rate in MA_EMPIRE_BUILDER_PROB, so the style bias must NOT be laid on top of
+        // it — that counted the same behaviour twice and put a $1B+ transformative deal on the tape nearly
+        // twice a year. Everywhere else the bias is the only thing the style says about deal frequency.
+        $hazardBias = ($config['style_priced'] ?? false) ? 1.0 : $manager->acquisitionBias();
+
+        // Second stage of the gate in evaluatePrivateAcquisition(): one uniform on [0, ceiling * dt),
+        // which is the draw conditional on having passed. The primary deal takes the low end of the
+        // interval and the cash fallback the band above it, sized so that P(fallback) is exactly what an
+        // independent second draw would have given: (1 - p1) * p2. Both fire at their own hazards.
+        $ctx->dealExecuted = false;
+        $primaryHazard = $config ? $config['prob'] * $hazardBias * $ctx->dt : 0.0;
+        $fallbackHazard = $ctx->excessCash > self::MA_CASH_FALLBACK_THRESHOLD
+            ? self::MA_CASH_FALLBACK_PROB * $manager->acquisitionBias() * $ctx->dt
+            : 0.0;
+        $draw = $this->mathUtility->generateUniform() * self::acquisitionHazardCeiling() * $ctx->dt;
+
+        if ($config && $draw < $primaryHazard) {
             $ctx->dealExecuted = true;
-        }
-        
-        if (!$ctx->dealExecuted && $ctx->excessCash > self::MA_CASH_FALLBACK_THRESHOLD) {
+        } elseif ($fallbackHazard > 0.0 && $draw < $primaryHazard + ((1.0 - $primaryHazard) * $fallbackHazard)) {
             $config = [
                 'prob' => self::MA_CASH_FALLBACK_PROB, 'spend' => 0.20, 'type' => 'STRATEGIC ACQUISITION', 'use_leverage' => false, 'use_stock' => false
             ];
-            if ($this->mathUtility->checkProbability($config['prob'] * $ctx->dt)) {
-                $ctx->dealExecuted = true;
-            }
+            $ctx->dealExecuted = true;
         }
 
         if (!$ctx->dealExecuted || !$config) {
@@ -398,24 +483,41 @@ class MergerAndAcquisitionEngine
         $effectiveTargetRoic = $targetRoic * $ctx->synergyMultiplier;
         
         $targetMargin = max(0.01, $oldOperatingMargin * (mt_rand(70, 95) / 100.0));
-        
+
+        // Roll's (1986) hubris hypothesis: the winning bidder is the one that most overestimates the target,
+        // and the difference is simply paid. So the price and the thing bought are two separate quantities
+        // here — the business is worth its standalone value and earns on that, while the acquirer's capital
+        // goes out at the price. The overpayment buys no earnings at all: it lands in goodwill, drags the
+        // blended return down by exactly the capital it consumed, and waits for the annual impairment test.
+        // The realised synergy above is drawn independently and is NOT touched, because hubris is an error
+        // in the estimate rather than in the outcome.
+        $economicValue = $ctx->purchasePrice / (1.0 + max(0.0, $ctx->hubrisPremium));
+        $roicOnPricePaid = $effectiveTargetRoic * ($economicValue / max(1.0, $ctx->purchasePrice));
+
         $totalNewCapital = max(1.0, $oldCapitalBase + $ctx->purchasePrice);
         
-        $ctx->strategy->blendAcquisitionDNA($stock, $oldCapitalBase, $ctx->purchasePrice, $effectiveTargetRoic, $totalNewCapital);
+        $ctx->strategy->blendAcquisitionDNA($stock, $oldCapitalBase, $ctx->purchasePrice, $roicOnPricePaid, $totalNewCapital);
 
         // Goodwill is the premium over the fair value of net identifiable assets. At a no-growth justified
-        // price-to-book of ROIC / hurdle (residual income identity), net assets acquired are the purchase
-        // price scaled by hurdle / ROIC and the remainder is goodwill, tested annually for impairment.
-        $netAssetsAcquired = $ctx->purchasePrice * min(1.0, max(0.01, $ctx->hurdleRate) / max(0.01, $effectiveTargetRoic));
+        // price-to-book of ROIC / hurdle (residual income identity), net assets acquired are the target's
+        // standalone value scaled by hurdle / ROIC and the remainder is goodwill, tested annually for
+        // impairment. Net assets scale with what was bought, never with what was paid — that is what puts
+        // the whole overpayment into goodwill instead of quietly capitalising it as plant.
+        $netAssetsAcquired = $economicValue * min(1.0, max(0.01, $ctx->hurdleRate) / max(0.01, $effectiveTargetRoic));
         $ctx->goodwillRecorded = max(0.0, $ctx->purchasePrice - $netAssetsAcquired);
         $stock->setGoodwill((string) ((float) $stock->getGoodwill() + $ctx->goodwillRecorded));
 
         $this->bookAcquiredNetAssets($stock, $ctx->strategy, $netAssetsAcquired);
         
-        $blendedMargin = (($oldCapitalBase * $oldOperatingMargin) + ($ctx->purchasePrice * $targetMargin)) / $totalNewCapital;
+        // Operating margin blends on the revenue-generating base, which is the business acquired and not the
+        // cheque written for it: overpaying destroys return on capital, it does not make the target's costs
+        // any worse. Both weights therefore run on standalone value, and with no premium this is the
+        // identity it always was.
+        $marginBlendCapital = max(1.0, $oldCapitalBase + $economicValue);
+        $blendedMargin = (($oldCapitalBase * $oldOperatingMargin) + ($economicValue * $targetMargin)) / $marginBlendCapital;
         $stock->setOperatingMargin((string) max(0.01, $blendedMargin * (1.0 - self::MA_INDIGESTION_PENALTY)));
         
-        $acquiredOperatingIncome = $ctx->purchasePrice * $effectiveTargetRoic;
+        $acquiredOperatingIncome = $economicValue * $effectiveTargetRoic;
         $acquiredRevenue = $acquiredOperatingIncome / max(0.01, $targetMargin);
         $currentRevenue = (float) $stock->getTotalRevenue();
         $stock->setTotalRevenue((string) ($currentRevenue + $acquiredRevenue));
@@ -540,6 +642,12 @@ class MergerAndAcquisitionEngine
             return null;
         }
 
+        // The same rejection gate as evaluatePrivateAcquisition(): pass at the ceiling hazard first, work
+        // out which hazard actually applies only then.
+        if (!$this->mathUtility->checkProbability(self::divestitureHazardCeiling() * $dt)) {
+            return null;
+        }
+
         $ctx = new DivestitureContext($seller, $macroState, $dt);
 
         $this->initializeDivestitureContext($ctx);
@@ -603,8 +711,8 @@ class MergerAndAcquisitionEngine
         $ctx->normalizedEps = $ctx->normalizedNetIncome / $ctx->shares;
         $ctx->currentPE = $ctx->normalizedEps > 0 ? $ctx->price / $ctx->normalizedEps : 0.0;
         
-        $ctx->targetCash = $ctx->strategy->calculateTargetOperatingCash($ctx->operatingBase, (float) $stock->getCustomerDeposits(), (float) $stock->getWholesaleDebt());
-        $ctx->hoardStatus = $ctx->strategy->evaluateHoardingStatus($ctx->treasury, $ctx->targetCash, $ctx->operatingBase, (float) $stock->getTotalDebt());
+        $ctx->targetCash = $stock->getManagementProfile()->appliedTargetCash($ctx->strategy->calculateTargetOperatingCash($ctx->operatingBase, (float) $stock->getCustomerDeposits(), (float) $stock->getWholesaleDebt()));
+        $ctx->hoardStatus = $ctx->strategy->evaluateHoardingStatus($ctx->treasury, $ctx->targetCash, $stock->getManagementProfile()->appliedHoardingBase($ctx->operatingBase), (float) $stock->getTotalDebt());
         
         $ctx->nominalGdpIndex = $ctx->macroState->nominalGdpIndex;
         $ctx->samRatio = (float) $stock->getSamRatio();
@@ -647,7 +755,9 @@ class MergerAndAcquisitionEngine
             $ctx->annualProbability = self::DIV_PREMIUM_ANNUAL_PROB;
         }
 
-        if (!$this->mathUtility->checkProbability($ctx->annualProbability * $ctx->dt)) {
+        // Second stage of the gate: accept with the ratio of this state's hazard to the ceiling. The dt
+        // cancels, so the comparison is between annual rates.
+        if ($this->mathUtility->generateUniform() * self::divestitureHazardCeiling() >= $ctx->annualProbability) {
             $ctx->dealExecuted = false;
             return;
         }

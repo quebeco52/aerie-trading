@@ -4,7 +4,9 @@ namespace App\Controller;
 
 use App\Entity\Stock;
 use App\Service\Market\PriceChangeFeed;
+use App\Twig\Extension\NumberFormatExtension;
 use App\Repository\EtfRepository;
+use App\Service\Market\Index\MarketIndex;
 use App\Repository\StockRepository;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Response;
@@ -15,10 +17,6 @@ use Symfony\Component\Routing\Attribute\Route;
  */
 class HomeController extends AbstractController
 {
-    // --- Market Board ---
-
-    /** Broad-market fund the board quotes as the index line; the market's own level, not a holding. */
-    private const BENCHMARK_ETF_TICKER = 'LBI';
 
     /**
      * Displays the main landing page and market dashboard.
@@ -33,7 +31,8 @@ class HomeController extends AbstractController
     #[Route('/', name: 'app_home')]
     public function index(StockRepository $stockRepository, EtfRepository $etfs, \App\Service\Macro\MacroEngine $macroEngine, PriceChangeFeed $priceChangeFeed): Response
     {
-        $etf = $etfs->findOneByTicker(self::BENCHMARK_ETF_TICKER);
+        $etf = $etfs->findOneByTicker(MarketIndex::benchmark()->value);
+        $indices = $this->indexTiles($etfs);
         $stocks = $stockRepository->findAll();
         $macroState = $macroEngine->getLiveState();
 
@@ -56,9 +55,10 @@ class HomeController extends AbstractController
         }
 
         return $this->render('home/index.html.twig', [
-            'etf'    => $etf,
-            'stocks' => $marketData,
-            'macro'  => $macroState->toArray()
+            'etf'     => $etf,
+            'indices' => $indices,
+            'stocks'  => $marketData,
+            'macro'   => $macroState->toArray()
         ]);
     }
 
@@ -70,17 +70,10 @@ class HomeController extends AbstractController
      * @return Response Returns a JSON response containing ETF and stock overview data.
      */
     #[Route('/api/market', name: 'api_market')]
-    public function apiMarket(StockRepository $stockRepository, EtfRepository $etfs, PriceChangeFeed $priceChangeFeed): Response
+    public function apiMarket(StockRepository $stockRepository, EtfRepository $etfs, PriceChangeFeed $priceChangeFeed, NumberFormatExtension $numberFormat): Response
     {
-        $etf    = $etfs->findOneByTicker(self::BENCHMARK_ETF_TICKER);
+        $etf    = $etfs->findOneByTicker(MarketIndex::benchmark()->value);
         $stocks = $stockRepository->findAll();
-
-        // Helper function for the API
-        $formatLarge = function(float $val): string {
-            if ($val >= 1_000_000_000_000) return number_format($val / 1_000_000_000_000, 2) . 'T';
-            if ($val >= 1_000_000_000) return number_format($val / 1_000_000_000, 2) . 'B';
-            return number_format($val / 1_000_000, 2) . 'M';
-        };
 
         $marketData = [];
         foreach ($this->buildBaseMarketData($stocks, $priceChangeFeed->changeByTicker($stocks)) as $row) {
@@ -90,9 +83,9 @@ class HomeController extends AbstractController
                 'sector'       => $row['sector'],
                 'price'        => number_format($row['price'], 2),
                 'marketCapRaw' => $row['marketCap'],
-                'marketCap'    => $formatLarge($row['marketCap']),
-                'treasury'     => $formatLarge($row['treasury']),
-                'equity'       => $formatLarge($row['equity']),
+                'marketCap'    => $numberFormat->formatLargeNumber($row['marketCap']),
+                'treasury'     => $numberFormat->formatLargeNumber($row['treasury']),
+                'equity'       => $numberFormat->formatLargeNumber($row['equity']),
                 'currentRoic'  => $row['currentRoic'],
                 'changePercent' => $row['changePercent'],
                 'is_bankrupt'  => $row['isBankrupt'],
@@ -106,10 +99,43 @@ class HomeController extends AbstractController
             return $b['marketCapRaw'] <=> $a['marketCapRaw'];
         });
 
+        $indices = [];
+        foreach ($this->indexTiles($etfs) as $tile) {
+            $indices[$tile['ticker']] = ['price' => number_format($tile['price'], 2)];
+        }
+
         return $this->json([
-            'etf'    => ['price' => $etf ? number_format((float) $etf->getPrice(), 2) : '0.00'],
-            'stocks' => $marketData
+            'etf'     => ['price' => $etf ? number_format((float) $etf->getPrice(), 2) : '0.00'],
+            'indices' => $indices,
+            'stocks'  => $marketData
         ]);
+    }
+
+    /**
+     * The published indices as the board quotes them, benchmark first, each with the fund it trades as.
+     *
+     * @return list<array{index: MarketIndex, ticker: string, name: string, price: float, label: string, isBenchmark: bool}>
+     */
+    private function indexTiles(EtfRepository $etfs): array
+    {
+        $tiles = [];
+        foreach (MarketIndex::cases() as $index) {
+            $fund = $etfs->findOneByTicker($index->value);
+            if ($fund === null) {
+                continue;
+            }
+
+            $tiles[] = [
+                'index' => $index,
+                'ticker' => $index->value,
+                'name' => (string) $fund->getName(),
+                'price' => (float) $fund->getPrice(),
+                'label' => $index->label(),
+                'isBenchmark' => $index === MarketIndex::benchmark(),
+            ];
+        }
+
+        return $tiles;
     }
 
     /**

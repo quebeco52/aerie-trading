@@ -16,6 +16,11 @@ use App\Service\Market\AssetResolver;
 use App\Service\Market\Flow\InMemoryOrderFlowStore;
 use App\Service\Market\LiquidityEngine;
 use App\Service\Market\MarginEngine;
+use App\Service\Macro\MacroStateProvider;
+use App\Service\Market\BondPricingEngine;
+use App\Service\Market\OptionPricingEngine;
+use App\Service\Market\OptionTradeService;
+use App\Service\Market\OptionMarginCalculator;
 use App\Service\Market\SecuritiesLendingDesk;
 use App\Service\Math\MathUtility;
 use App\Service\Market\TradeExecutionService;
@@ -95,8 +100,17 @@ class TradeExecutionServiceTest extends TestCase
             new AssetResolver($this->emMock),
             new LiquidityEngine(new MathUtility()),
             $this->orderFlow,
-            new MarginEngine($this->emMock),
-            new SecuritiesLendingDesk()
+            new MarginEngine($this->emMock, new OptionMarginCalculator($this->emMock, new MathUtility())),
+            new SecuritiesLendingDesk(),
+            new OptionTradeService(
+                $this->emMock,
+                new OptionPricingEngine(new MathUtility(), new BondPricingEngine(new MathUtility())),
+                new MacroStateProvider($this->redisStub),
+                new MarginEngine($this->emMock, new OptionMarginCalculator($this->emMock, new MathUtility())),
+                new MathUtility(),
+                new \App\Service\User\CashLedger()
+            ),
+            new \App\Service\User\CashLedger()
         );
     }
 

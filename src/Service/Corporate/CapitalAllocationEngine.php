@@ -41,18 +41,6 @@ class CapitalAllocationEngine
     /** Catch-up ratio threshold (1.30x) where Aristocrats accelerate dividend adjustment speed. */
     private const ARISTOCRAT_CATCHUP_THRESHOLD = 1.30;
 
-    // --- Regulatory Capital Conservation Buffer (Basel III / Solvency II) ---
-    /** Leverage overshoot ratio (1.05x) triggering Tier 1 Capital Conservation Buffer restriction (max 60% payout). */
-    private const REGULATORY_BUFFER_TIER_1_THRESHOLD = 1.05;
-    /** Maximum target payout ratio allowed when operating under Tier 1 capital buffer restrictions. */
-    private const REGULATORY_BUFFER_TIER_1_PAYOUT_CAP = 0.60;
-    /** Leverage overshoot ratio (1.15x) triggering Tier 2 Capital Conservation Buffer restriction (max 30% payout). */
-    private const REGULATORY_BUFFER_TIER_2_THRESHOLD = 1.15;
-    /** Maximum target payout ratio allowed when operating under Tier 2 capital buffer restrictions. */
-    private const REGULATORY_BUFFER_TIER_2_PAYOUT_CAP = 0.30;
-    /** Leverage overshoot ratio (1.25x) triggering severe Tier 3 regulatory dividend prohibition (0% payout). */
-    private const REGULATORY_BUFFER_TIER_3_THRESHOLD = 1.25;
-
     public function __construct(
         private CorporateLedgerService $corporateLedgerService,
         private CorporateMetrics $corporateMetrics,
@@ -145,7 +133,7 @@ class CapitalAllocationEngine
         
         // Bertrand & Schoar (2003): payout policy carries a persistent manager fixed effect. An empire
         // builder retains what a steward would distribute, from the same balance sheet.
-        $targetPayout = (float) $stock->getTargetPayoutRatio() * $stock->getManagementStyle()->payoutBias();
+        $targetPayout = (float) $stock->getTargetPayoutRatio() * $stock->getManagementProfile()->payoutBias();
         $speed = (float) $stock->getDividendSpeed();
         $lastDividend = (float) $stock->getLastDividend();
         $isAristocrat = $speed <= 0.03;
@@ -216,6 +204,14 @@ class CapitalAllocationEngine
             $speed = min(1.0, $speed + 0.15);
         }
 
+        // The dividend leg of the same restricted-payments clause. A breach freezes the distribution where
+        // it stands rather than cutting it: what lenders withhold consent for is an INCREASE in payments
+        // while the firm is out of compliance, and the distress ladder above already handles the case where
+        // cash flow has actually collapsed. min() keeps that ladder's cut winning whenever it is deeper.
+        if (!$ctx->health->hasLeverageHeadroom) {
+            $targetDividend = min($targetDividend, $lastDividend);
+        }
+
         if ($lastDividend > 0 && $isAristocrat) {
             $catchUpRatio = $calculatedTarget / $lastDividend;
             if ($catchUpRatio > self::ARISTOCRAT_CATCHUP_THRESHOLD) {
@@ -259,7 +255,12 @@ class CapitalAllocationEngine
     {
         $this->treasuryEngine->executeCorporateStrategy($ctx);
         
-        $ctx->targetOperatingCash = $ctx->strategy->calculateTargetOperatingCash($ctx->operatingBase, (float) $ctx->stock->getCustomerDeposits(), (float) $ctx->stock->getWholesaleDebt());
+        // The DISCRETIONARY cash target — the buffer a manager chooses to run, not the solvency floor, which
+        // stays exactly where the model puts it. Every hoarding test downstream measures against this, so
+        // the fortress is no longer detected as defective for holding the reserves that define it.
+        $ctx->targetOperatingCash = $ctx->stock->getManagementProfile()->appliedTargetCash(
+            $ctx->strategy->calculateTargetOperatingCash($ctx->operatingBase, (float) $ctx->stock->getCustomerDeposits(), (float) $ctx->stock->getWholesaleDebt())
+        );
         $ctx->excessCash = max(0.0, $ctx->newTreasury - $ctx->targetOperatingCash);
         
         if ($ctx->actualAnnualEps > 0) {
@@ -289,7 +290,23 @@ class CapitalAllocationEngine
             return;
         }
 
-        $hoardStatus = $ctx->strategy->evaluateHoardingStatus($ctx->newTreasury, $ctx->targetOperatingCash, $ctx->operatingBase, (float) $stock->getTotalDebt());
+        // RESTRICTED PAYMENTS
+        // Every credit agreement carrying a maintenance leverage test carries a restricted-payments clause
+        // beside it, and the two are one bargain: while leverage is out of compliance the lender's claim on
+        // cash flow ranks ahead of the shareholder's. A buyback is the most discretionary distribution there
+        // is and the first thing that clause stops — it retires the equity cushion sitting underneath debt
+        // that is already too large for the cash flow supporting it.
+        //
+        // This is a separate question from the incurrence test in TreasuryEngine: that one asks whether the
+        // firm may borrow MORE, this one asks whether it may pay cash out. A firm can breach while holding
+        // plenty of cash and a healthy ICR, which is exactly the case the equity ratio waves through.
+        if (!$ctx->health->hasLeverageHeadroom) {
+            $ctx->newShares = $ctx->sharesOutstanding;
+            return;
+        }
+
+        $manager = $stock->getManagementProfile();
+        $hoardStatus = $ctx->strategy->evaluateHoardingStatus($ctx->newTreasury, $ctx->targetOperatingCash, $manager->appliedHoardingBase($ctx->operatingBase), (float) $stock->getTotalDebt());
         $excessCash = $hoardStatus['excess_cash'];
         $isHoarder = $hoardStatus['is_hoarder'];
         $isMegaHoarder = $hoardStatus['is_mega_hoarder'];
@@ -342,6 +359,13 @@ class CapitalAllocationEngine
                 $saturationWillingSpend = $excessCash * $saturationSpendRatio * $saturationSeverity;
                 $maxWillingSpend = max($maxWillingSpend, $saturationWillingSpend);
             }
+
+            // Bertrand & Schoar's payout fixed effect is over TOTAL distribution. Biasing the dividend alone
+            // simply rerouted the cash: what a fortress withheld from the dividend piled up in the treasury
+            // and came straight back out through this leg, so the firm that was supposed to retain ended up
+            // distributing more than the steward. The recap floor below is deliberately left unbiased —
+            // that is a capital-structure repair, not a distribution preference.
+            $maxWillingSpend *= $manager->payoutBias();
 
             $marketCap = $ctx->sharesOutstanding * max($ctx->currentPrice, 0.01);
             $baseRegulatoryPct = $isMegaHoarder ? 0.075 : ($isHoarder ? 0.05 : 0.015);
