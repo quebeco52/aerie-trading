@@ -44,6 +44,7 @@ class StockPageBuilder
         private readonly PriceChangeFeed $priceChangeFeed,
         private readonly LiquidityEngine $liquidityEngine,
         private readonly SecuritiesLendingDesk $lendingDesk,
+        private readonly OptionChainBuilder $optionChain,
         private readonly int $ticksPerYear,
     ) {}
 
@@ -76,7 +77,9 @@ class StockPageBuilder
         ];
 
         $payload += $this->viewerPosition->build($asset, $ticker, $viewer);
-        $payload += $isEtf ? $this->fundBlocks($asset) : $this->companyBlocks($asset, $macroState);
+        $payload += $isEtf
+            ? $this->fundBlocks($asset)
+            : $this->companyBlocks($asset, $macroState) + $this->optionChain->build($asset, $viewer, $macroState);
 
         return $payload;
     }
@@ -159,6 +162,15 @@ class StockPageBuilder
             'availableToBorrow' => 0.0,
             'shortUtilization' => 0.0,
             'management' => null,
+            // The fund carries no class of its own: contracts are written on companies here, not on the
+            // index, so the panel stands down rather than rendering an empty ladder.
+            'optionsListed' => false,
+            'optionsReason' => 'Contracts are written on listed companies, not on the index fund.',
+            'optionExpiries' => [],
+            'optionDealerGamma' => 0.0,
+            'optionDealerGammaPerPercent' => 0.0,
+            'optionOpenInterest' => 0,
+            'optionMultiplier' => FinancialConstants::OPTION_CONTRACT_MULTIPLIER,
         ];
     }
 }

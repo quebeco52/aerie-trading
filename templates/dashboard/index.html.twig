@@ -157,12 +157,20 @@
                                 <tr class="relative hover:bg-surface-container-high/30 focus-within:bg-surface-container-high/30 transition-colors group">
                                     <td class="px-5 py-3">
                                         <div class="flex items-center gap-3">
-                                            <img class="w-7 h-7 rounded shrink-0 border border-outline-variant/20 p-0.5 bg-surface-container-lowest" src="{{ asset('icons/' ~ holding.ticker ~ '.svg') }}" onerror="this.onerror=null; this.src='{{ asset('icons/default.svg') }}';" alt="{{ holding.ticker }} logo">
+                                            <img class="w-7 h-7 rounded shrink-0 border border-outline-variant/20 p-0.5 bg-surface-container-lowest" src="{{ asset('icons/' ~ (holding.underlying|default(holding.ticker)) ~ '.svg') }}" onerror="this.onerror=null; this.src='{{ asset('icons/default.svg') }}';" alt="{{ holding.ticker }} logo">
                                             <div>
                                                 <div class="flex items-center gap-2">
                                                     {% if holding.type == 'BOND' %}
                                                         <a href="{{ path('app_bond_view', { ticker: holding.ticker }) }}" class="font-bold text-on-surface text-sm group-hover:text-primary transition-colors outline-none after:absolute after:inset-0 after:content-[''] focus-visible:underline focus-visible:decoration-primary focus-visible:underline-offset-4">{{ holding.name }}</a>
                                                         <span class="relative z-10 px-1.5 py-0.2 rounded bg-primary/10 text-primary text-4xs font-bold border border-primary/25 uppercase tracking-wide">Bond</span>
+                                                    {% elseif holding.type == 'OPTION' %}
+                                                        {# The contract has no page of its own: its chain lives on the underlying. #}
+                                                        <a href="/stock/{{ holding.underlying }}" class="font-bold text-on-surface text-sm group-hover:text-primary transition-colors outline-none after:absolute after:inset-0 after:content-[''] focus-visible:underline focus-visible:decoration-primary focus-visible:underline-offset-4">{{ holding.name }}</a>
+                                                        {% if holding.quantity < 0 %}
+                                                            <span class="relative z-10 px-1.5 py-0.2 rounded bg-tertiary/10 text-tertiary text-4xs font-bold border border-tertiary/25 uppercase tracking-wide" title="Written: the premium was received, and the loss on a call has no ceiling">Written</span>
+                                                        {% else %}
+                                                            <span class="relative z-10 px-1.5 py-0.2 rounded bg-primary/10 text-primary text-4xs font-bold border border-primary/25 uppercase tracking-wide">Option</span>
+                                                        {% endif %}
                                                     {% else %}
                                                         <a href="/stock/{{ holding.ticker }}" class="font-bold text-on-surface text-sm group-hover:text-primary transition-colors outline-none after:absolute after:inset-0 after:content-[''] focus-visible:underline focus-visible:decoration-primary focus-visible:underline-offset-4">{{ holding.name }}</a>
                                                     {% endif %}
@@ -178,12 +186,16 @@
                                                     <span class="text-xs text-on-surface-variant">{{ holding.sector }}</span>
                                                     {% if holding.type == 'BOND' %}
                                                         <span class="text-xs text-on-surface-variant font-mono" title="Yield to maturity and modified duration">{{ (holding.yieldToMaturity * 100)|number_format(2) }}% YTM · {{ holding.modifiedDuration|number_format(1) }}y dur</span>
+                                                    {% elseif holding.type == 'OPTION' %}
+                                                        <span class="text-xs text-on-surface-variant font-mono" title="Implied volatility, delta, and the expiry in simulation time">{{ (holding.impliedVolatility * 100)|number_format(1) }}% IV · {{ holding.delta|number_format(2) }}Δ · exp Y{{ holding.expiresAtTime|number_format(2) }}</span>
                                                     {% endif %}
                                                 </div>
                                             </div>
                                         </div>
                                     </td>
-                                    <td class="px-4 py-3 font-mono tabular-nums text-right text-on-surface">{{ holding.quantity|number_format }}</td>
+                                    <td class="px-4 py-3 font-mono tabular-nums text-right text-on-surface">
+                                        {{ holding.quantity|number_format }}{% if holding.type == 'OPTION' %}<span class="block text-3xs font-normal text-on-surface-variant">contracts</span>{% endif %}
+                                    </td>
                                     <td class="px-4 py-3 font-mono tabular-nums text-right text-on-surface-variant">${{ holding.avgCost|number_format(2) }}</td>
                                     <td class="px-4 py-3 font-mono tabular-nums text-right font-bold text-on-surface" id="price-{{ holding.ticker }}">${{ holding.price|number_format(2) }}</td>
                                     <td class="px-5 py-3 font-mono tabular-nums text-right font-bold text-on-surface" id="value-{{ holding.ticker }}">${{ holding.marketValue|number_format(2) }}</td>
@@ -203,7 +215,7 @@
                                     </td>
                                     <td class="px-4 py-3 font-mono tabular-nums text-right text-on-surface-variant text-xs">{{ holding.weight|number_format(1) }}%</td>
                                     <td class="px-5 py-3 text-right">
-                                        <a href="{{ holding.type == 'BOND' ? path('app_bond_view', { ticker: holding.ticker }) : '/stock/' ~ holding.ticker }}" class="relative z-10 inline-flex items-center px-2.5 py-1 rounded bg-surface-container hover:bg-primary/20 text-primary border border-primary/25 text-xs font-semibold transition-colors">
+                                        <a href="{{ holding.type == 'BOND' ? path('app_bond_view', { ticker: holding.ticker }) : '/stock/' ~ (holding.underlying|default(holding.ticker)) }}" class="relative z-10 inline-flex items-center px-2.5 py-1 rounded bg-surface-container hover:bg-primary/20 text-primary border border-primary/25 text-xs font-semibold transition-colors">
                                             Trade
                                         </a>
                                     </td>
@@ -485,6 +497,12 @@
                             <dt class="text-2xs font-semibold text-on-surface-variant uppercase tracking-wide">Short Exposure</dt>
                             <dd class="text-lg font-bold font-mono tabular-nums mt-0.5 text-on-surface">${{ margin.shortMarketValue|number_format(2) }}</dd>
                         </div>
+                        {% if margin.optionShortValue > 0 %}
+                            <div>
+                                <dt class="text-2xs font-semibold text-on-surface-variant uppercase tracking-wide">Written Contracts</dt>
+                                <dd class="text-lg font-bold font-mono tabular-nums mt-0.5 text-on-surface" title="What buying the written contracts back would cost at the current mark">${{ margin.optionShortValue|number_format(2) }}</dd>
+                            </div>
+                        {% endif %}
                         <div>
                             <dt class="text-2xs font-semibold text-on-surface-variant uppercase tracking-wide">Account Equity</dt>
                             <dd class="text-lg font-bold font-mono tabular-nums mt-0.5 text-on-surface">${{ margin.equity|number_format(2) }}</dd>
@@ -502,9 +520,13 @@
                                 Equity is ${{ margin.callAmount|number_format(2) }} below the maintenance requirement.
                                 Positions will be sold at the market on the next sweep unless the account is
                                 brought back into compliance.
+                                {% if margin.optionShortValue > 0 %}
+                                    Written contracts are bought back first: selling the stock behind a covered
+                                    call would uncover it and raise the requirement.
+                                {% endif %}
                             </p>
                         </div>
-                    {% elseif margin.shortMarketValue > 0 or marginDebit > 0 %}
+                    {% elseif margin.shortMarketValue > 0 or margin.optionShortValue > 0 or marginDebit > 0 %}
                         <p class="text-2xs text-on-surface-variant">
                             Equity is {{ (margin.equityRatio * 100)|number_format(1) }}% of gross exposure.
                         </p>

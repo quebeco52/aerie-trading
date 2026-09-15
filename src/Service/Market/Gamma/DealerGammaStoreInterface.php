@@ -35,4 +35,22 @@ interface DealerGammaStoreInterface
      * @return array{gamma: float, reference_price: float}|null
      */
     public function read(string $ticker): ?array;
+
+    /**
+     * Every name's exposure in one read.
+     *
+     * The hedging pass needs all of them at once and there is no cheaper way to ask for that than asking
+     * once: a read per name turned one pass into a hundred round trips against a store that holds the whole
+     * market in a single hash.
+     *
+     * @return array<string, array{gamma: float, reference_price: float}>
+     */
+    public function readAll(): array;
+
+    /**
+     * Moves many names' marks forward in one write, for the same reason.
+     *
+     * @param array<string, array{gamma: float, reference_price: float}> $entries
+     */
+    public function recordAll(array $entries): void;
 }

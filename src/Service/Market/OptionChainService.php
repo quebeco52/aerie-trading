@@ -157,12 +157,18 @@ final class OptionChainService
             return [];
         }
 
-        $repository = $this->em->getRepository(OptionContract::class);
-        $existing = [];
-
-        foreach ($repository->findBy(['stock' => $stock, 'status' => OptionContract::STATUS_ACTIVE]) as $contract) {
-            $existing[$contract->getTicker()] = true;
-        }
+        // Symbols only. Listing needs to know which contracts already exist, not what they are worth, and
+        // hydrating a hundred entities to read one string off each of them meant every sweep loaded the
+        // whole chain twice — once here and once to mark it.
+        $existing = array_fill_keys(
+            $this->em->createQuery(
+                'SELECT o.ticker FROM ' . OptionContract::class . ' o WHERE o.stock = :stock AND o.status = :status'
+            )
+                ->setParameter('stock', $stock)
+                ->setParameter('status', OptionContract::STATUS_ACTIVE)
+                ->getSingleColumnResult(),
+            true
+        );
 
         $strikes = self::strikeLadder((float) $stock->getPrice());
         $listed = [];

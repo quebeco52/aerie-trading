@@ -299,6 +299,24 @@ final class OptionPricingEngine
     }
 
     /**
+     * Writes a quote onto the contract it prices.
+     *
+     * Only contracts somebody HOLDS are marked — see OptionDeskService::heldContractIds() for the invariant
+     * and why it is safe. The trade path calls this at the moment a position is opened, so a contract that
+     * has just become held carries a value without waiting for its slice of the sweep to come round.
+     */
+    public function applyMark(OptionContract $contract, OptionQuoteDTO $quote): void
+    {
+        $contract->setPrice(MathUtility::formatDecimal($quote->mark, 8))
+            ->setImpliedVolatility(MathUtility::formatDecimal($quote->impliedVolatility, 6))
+            ->setDelta(MathUtility::formatDecimal($quote->delta, 8))
+            ->setGamma(MathUtility::formatDecimal($quote->gamma, 12))
+            ->setVega(MathUtility::formatDecimal($quote->vega, 8))
+            ->setTheta(MathUtility::formatDecimal($quote->theta, 8))
+            ->setUpdatedAt(new \DateTime());
+    }
+
+    /**
      * The half-spread the desk quotes around its mark.
      *
      * An option desk does not quote a spread in premium, it quotes one in VOLATILITY: what it is trading is

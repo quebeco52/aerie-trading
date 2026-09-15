@@ -6,6 +6,7 @@ use App\Entity\Bond;
 use App\Entity\Stock;
 use App\Service\Market\BondTracker;
 use App\Service\Market\StockTracker;
+use App\Service\Market\OptionDeskService;
 use App\Service\Market\TreasuryAuctionService;
 use App\Service\Market\EtfTracker;
 use App\Service\Macro\MacroEngine;
@@ -134,6 +135,7 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
         $snapshotInterval = (int) max(1, $this->ticksPerYear / 52);  // Snapshots once a game "week"
         $quarterlyInterval = (int) max(1, $this->ticksPerYear / 4);   // Snapshots once a game "quarter"
         $auctionInterval = TreasuryAuctionService::auctionIntervalTicks($this->ticksPerYear);
+        $optionSweepInterval = OptionDeskService::sweepIntervalTicks($this->ticksPerYear);
 
         $conn = $this->entityManager->getConnection();
 
@@ -172,7 +174,13 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
             // A desk observes a price and then trades; hedging the move it is itself causing would close an
             // algebraic loop inside one tick, and whether the market was stable would then depend on how
             // much open interest happened to be outstanding.
-            $this->optionDesk->hedge($stocks);
+            //
+            // On the history cadence rather than every tick. The hedge is gamma times the move since the
+            // last one, so it telescopes: one hedge across the bar trades exactly what a hedge on each of
+            // its ticks would have, and the flow still lands inside the same bar.
+            if ($tickCount % $historyInterval === 0) {
+                $this->optionDesk->hedge($stocks);
+            }
 
             try {
                 $this->entityManager->beginTransaction();
@@ -239,11 +247,19 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                 }
 
                 // The option desk's own sweep: settle what has expired, list what the market has moved into,
-                // mark the chain, rebuild the public's book and re-measure what the desk is short. On the
-                // history cadence rather than every tick — a chain of five thousand contracts does not need
-                // remarking fourteen thousand times a year, and the trade path reprices live anyway.
-                if ($isHistoryTick) {
-                    $this->optionDesk->sweep($stocks, $macroState, $dt * $historyInterval);
+                // mark the chain, rebuild the public's book and re-measure what the desk is short.
+                //
+                // One SLICE of the market per pass, on its own slow interval. A full pass rewrites every
+                // listed contract in the market, and wiring that to the history tick put forty-five thousand
+                // option UPDATEs a second through the database for a mark nothing reads at that resolution.
+                // See OptionDeskService for why nothing downstream wants it fresher.
+                if ($tickCount % $optionSweepInterval === 0) {
+                    $this->optionDesk->sweep(
+                        $stocks,
+                        $macroState,
+                        $dt * $optionSweepInterval * OptionDeskService::SWEEP_SLICES,
+                        OptionDeskService::sweepSlice($tickCount, $optionSweepInterval)
+                    );
                 }
 
                 $allUpdates = array_merge($stockUpdates, [$etfUpdate], $bondResult['updates']);

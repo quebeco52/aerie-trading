@@ -17,6 +17,7 @@ use App\Service\Math\MathUtility;
 use App\Service\View\CompanySnapshotBuilder;
 use App\Service\View\EtfCompositionBuilder;
 use App\Service\View\IndustryPositionBuilder;
+use App\Service\View\OptionChainBuilder;
 use App\Service\View\PeerTableBuilder;
 use App\Service\View\StockPageBuilder;
 use App\Service\View\ViewerPositionBuilder;
@@ -42,7 +43,9 @@ class StockPageBuilderTest extends TestCase
         'advShares', 'allAssets', 'analystTargets', 'asset', 'availableToBorrow', 'borrowFee',
         'businessModel', 'changePercent', 'components', 'dividendYield', 'economic_cycle', 'events',
         'generalInfo', 'halfSpread', 'industry', 'investedCapital', 'isEtf', 'isFinancial', 'lifecycleStage',
-        'lifecycleStages', 'macro', 'management', 'marketCap', 'marketShare', 'openOrders', 'peRatio', 'peers',
+        'lifecycleStages', 'macro', 'management', 'marketCap', 'marketShare', 'openOrders',
+        'optionDealerGamma', 'optionDealerGammaPerPercent', 'optionExpiries', 'optionMultiplier',
+        'optionOpenInterest', 'optionsListed', 'optionsReason', 'peRatio', 'peers',
         'pieData', 'pieLabels', 'quote', 'sharesMap', 'shortUtilization', 'targetPE', 'ticksPerYear',
         'userAvgCost', 'userDividendIncome', 'userQuantity', 'userTrades', 'userUnrealizedPnL',
         'userUnrealizedPnLPercent',
@@ -97,6 +100,17 @@ class StockPageBuilderTest extends TestCase
         $viewerPosition = $this->createMock(ViewerPositionBuilder::class);
         $viewerPosition->method('build')->willReturn($this->positionKeys);
 
+        $optionChain = $this->createMock(OptionChainBuilder::class);
+        $optionChain->method('build')->willReturn([
+            'optionsListed' => false,
+            'optionsReason' => 'No class open on this name.',
+            'optionExpiries' => [],
+            'optionDealerGamma' => 0.0,
+            'optionDealerGammaPerPercent' => 0.0,
+            'optionOpenInterest' => 0,
+            'optionMultiplier' => 100,
+        ]);
+
         return new StockPageBuilder(
             $macroStateProvider,
             $companySnapshot,
@@ -110,6 +124,7 @@ class StockPageBuilderTest extends TestCase
             // Final by design, so the real ones stand in; both are pure calculators over the entity.
             new LiquidityEngine(new MathUtility()),
             new SecuritiesLendingDesk(),
+            $optionChain,
             self::TICKS_PER_YEAR,
         );
     }

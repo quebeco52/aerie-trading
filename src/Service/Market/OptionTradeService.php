@@ -84,6 +84,11 @@ final class OptionTradeService
             throw new \Exception("{$contract->getTicker()} has expired and is awaiting settlement.");
         }
 
+        // The contract is now held, so it carries a stored mark. Stamping it here rather than waiting for
+        // the sweep is what keeps net worth and the margin requirement — both of which read the column
+        // through SQL — correct between the fill and the next pass over this name's slice.
+        $this->pricingEngine->applyMark($contract, $quote);
+
         $position = $this->findPosition($user, $contract);
         $held = $position !== null ? (int) $position->getQuantity() : 0;
 

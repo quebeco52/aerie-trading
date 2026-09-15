@@ -21,4 +21,16 @@ final class InMemoryDealerGammaStore implements DealerGammaStoreInterface
     {
         return $this->state[$ticker] ?? null;
     }
+
+    public function readAll(): array
+    {
+        return $this->state;
+    }
+
+    public function recordAll(array $entries): void
+    {
+        foreach ($entries as $ticker => $entry) {
+            $this->state[$ticker] = $entry;
+        }
+    }
 }

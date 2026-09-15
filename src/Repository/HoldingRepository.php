@@ -7,6 +7,7 @@ namespace App\Repository;
 use App\Entity\User;
 use App\Entity\UserBond;
 use App\Entity\UserEtf;
+use App\Entity\UserOption;
 use App\Entity\UserStock;
 use Doctrine\ORM\EntityManagerInterface;
 
@@ -57,6 +58,24 @@ class HoldingRepository
     {
         return $this->entityManager
             ->createQuery('SELECT ub, b FROM ' . UserBond::class . ' ub JOIN ub.bond b WHERE ub.user = :user')
+            ->setParameter('user', $user)
+            ->getResult();
+    }
+
+    /**
+     * An account's option positions with their contracts and underlyings already loaded.
+     *
+     * Signed: a positive quantity is a long contract and a negative one is a written one, so a caller that
+     * filters to positives is looking at half the book.
+     *
+     * @return list<UserOption>
+     */
+    public function findOptionHoldings(User $user): array
+    {
+        return $this->entityManager
+            ->createQuery(
+                'SELECT uo, oc, s FROM ' . UserOption::class . ' uo JOIN uo.contract oc JOIN oc.stock s WHERE uo.user = :user'
+            )
             ->setParameter('user', $user)
             ->getResult();
     }

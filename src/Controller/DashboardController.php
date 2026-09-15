@@ -46,6 +46,7 @@ class DashboardController extends AbstractController
         $stockHoldings = $holdings->findStockHoldings($user);
         $etfHoldings = $holdings->findEtfHoldings($user);
         $bondHoldings = $holdings->findBondHoldings($user);
+        $optionHoldings = $holdings->findOptionHoldings($user);
 
         $filledOrders = $orders->findFilledForUser($user);
 
@@ -201,6 +202,70 @@ class DashboardController extends AbstractController
             ];
         }
 
+        // The option book. Signed throughout: a written contract is a negative position whose market value
+        // is a liability and whose gain is the premium DECAYING, so the same two subtractions that price a
+        // long position price a short one without a branch. Premiums are carried per share, which is the
+        // convention the desk quotes in, so the multiplier appears wherever currency does.
+        $totalOptionsValue = 0.0;
+
+        foreach ($optionHoldings as $holding) {
+            $contracts = (int) $holding->getQuantity();
+
+            if ($contracts === 0) {
+                continue;
+            }
+
+            $contract = $holding->getContract();
+            $shares = $contracts * FinancialConstants::OPTION_CONTRACT_MULTIPLIER;
+
+            $mark = (float) $contract->getPrice();
+            $basis = (float) $holding->getAveragePremium();
+
+            $marketValue = $mark * $shares;
+            $positionCost = $basis * $shares;
+
+            $totalOptionsValue += $marketValue;
+            $totalInvestedCost += abs($positionCost);
+
+            $unrealizedPnL = $marketValue - $positionCost;
+
+            // Measured against what the position tied up, not against a signed cost: a written contract has
+            // a negative basis, and dividing by it would report a profitable short as a loss.
+            $unrealizedPnLPercent = abs($positionCost) > 0.0 ? ($unrealizedPnL / abs($positionCost)) * 100 : 0.0;
+
+            // Gross, like the equity loop above and for the same reason: a written contract is exposure to
+            // the underlying, not an offset against it. A signed sum here would let a book that had written
+            // more premium than it holds report a NEGATIVE slice, which shrinks the denominator every other
+            // sector's share is struck against and pushes them all past 100%.
+            $sectorValues['Options'] = ($sectorValues['Options'] ?? 0.0) + abs($marketValue);
+
+            $holdingsData[] = [
+                'type' => 'OPTION',
+                'ticker' => $contract->getTicker(),
+                'name' => sprintf(
+                    '%s %s $%s',
+                    $contract->getStock()->getTicker(),
+                    $contract->isCall() ? 'Call' : 'Put',
+                    number_format((float) $contract->getStrike(), 2)
+                ),
+                'sector' => 'Options',
+                'quantity' => $contracts,
+                'price' => $mark,
+                'avgCost' => $basis,
+                'totalCost' => $positionCost,
+                'marketValue' => $marketValue,
+                'unrealizedPnL' => $unrealizedPnL,
+                'unrealizedPnLPercent' => $unrealizedPnLPercent,
+                'dividendsReceived' => 0.0,
+                'isBankrupt' => false,
+                'weight' => 0.0,
+                'underlying' => $contract->getStock()->getTicker(),
+                'expiresAtTime' => $contract->getExpiresAtTime(),
+                'impliedVolatility' => (float) $contract->getImpliedVolatility(),
+                'delta' => (float) $contract->getDelta(),
+            ];
+        }
+
         // Value working in open limit orders. A BUY has already debited the cash to escrow and a SELL has
         // already removed the shares from the holdings above, so both have to be added back or the headline
         // net worth falls the moment an order is placed and jumps back when it is cancelled.
@@ -221,21 +286,10 @@ class DashboardController extends AbstractController
         $escrowedShareValue = (float) $escrowRow['escrowed_shares'];
         $escrowedTotal = $escrowedCash + $escrowedShareValue;
 
-        // The option book, on the same signed definition every other net-worth surface uses: a long contract
-        // is an asset and a written one a liability. Left out, this headline disagreed with the account's own
-        // NAV chart on the same page and with its leaderboard rank, both of which count it.
-        $totalOptionsValue = (float) $conn->fetchOne(
-            'SELECT COALESCE(SUM(uo.quantity * oc.price * ' . FinancialConstants::OPTION_CONTRACT_MULTIPLIER . '), 0)
-             FROM user_options uo
-             JOIN option_contracts oc ON uo.option_contract_id = oc.id
-             WHERE uo.user_id = :user_id',
-            ['user_id' => $user->getId()]
-        );
-
         // Borrowed cash is spent but still owed, so it comes back out of the headline figure.
         $marginDebit = (float) $user->getMarginDebit();
         $totalPortfolioValue = $cashBalance - $marginDebit + $totalStocksValue + $totalEtfsValue + $totalBondsValue + $totalOptionsValue + $escrowedTotal;
-        $totalUnrealizedPnL = ($totalStocksValue + $totalEtfsValue + $totalBondsValue) - $totalInvestedCost;
+        $totalUnrealizedPnL = ($totalStocksValue + $totalEtfsValue + $totalBondsValue + $totalOptionsValue) - $totalInvestedCost;
         $totalUnrealizedPnLPercent = $totalInvestedCost > 0 ? ($totalUnrealizedPnL / $totalInvestedCost) * 100 : 0.0;
 
         // Calculate weights for holdings
@@ -283,7 +337,7 @@ class DashboardController extends AbstractController
             'user' => $user,
             'holdings' => $holdingsData,
             'portfolioValue' => $totalPortfolioValue,
-            'totalInvested' => $totalStocksValue + $totalEtfsValue + $totalBondsValue,
+            'totalInvested' => $totalStocksValue + $totalEtfsValue + $totalBondsValue + $totalOptionsValue,
             'totalInvestedCost' => $totalInvestedCost,
             'totalUnrealizedPnL' => $totalUnrealizedPnL,
             'totalUnrealizedPnLPercent' => $totalUnrealizedPnLPercent,

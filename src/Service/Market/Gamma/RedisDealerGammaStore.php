@@ -48,6 +48,65 @@ final class RedisDealerGammaStore implements DealerGammaStoreInterface
             return null;
         }
 
+        return $this->decode($raw);
+    }
+
+    public function readAll(): array
+    {
+        try {
+            /** @phpstan-ignore method.notFound (phpredis hash commands are absent from the analysis stub) */
+            $rows = $this->redis->hGetAll(self::KEY);
+        } catch (\Throwable $e) {
+            $this->logger?->warning('Dealer gamma bulk read failed: ' . $e->getMessage());
+
+            return [];
+        }
+
+        if (!is_array($rows)) {
+            return [];
+        }
+
+        $state = [];
+
+        foreach ($rows as $ticker => $raw) {
+            $entry = $this->decode($raw);
+
+            if ($entry !== null) {
+                $state[(string) $ticker] = $entry;
+            }
+        }
+
+        return $state;
+    }
+
+    public function recordAll(array $entries): void
+    {
+        if ($entries === []) {
+            return;
+        }
+
+        $payload = [];
+
+        foreach ($entries as $ticker => $entry) {
+            $payload[$ticker] = json_encode([
+                'gamma' => $entry['gamma'],
+                'reference_price' => $entry['reference_price'],
+            ], JSON_THROW_ON_ERROR);
+        }
+
+        try {
+            /** @phpstan-ignore method.notFound (phpredis hash commands are absent from the analysis stub) */
+            $this->redis->hMSet(self::KEY, $payload);
+        } catch (\Throwable $e) {
+            $this->logger?->warning('Dealer gamma bulk record failed: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * @return array{gamma: float, reference_price: float}|null
+     */
+    private function decode(mixed $raw): ?array
+    {
         if (!is_string($raw) || $raw === '') {
             return null;
         }

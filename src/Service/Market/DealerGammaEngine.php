@@ -82,7 +82,61 @@ final class DealerGammaEngine
     public function hedgeFlow(Stock $stock): float
     {
         $state = $this->store->read($stock->getTicker());
+        $shares = $this->hedgeShares($stock, $state);
 
+        if ($state !== null && $shares !== 0.0) {
+            $this->store->record($stock->getTicker(), $state['gamma'], (float) $stock->getPrice());
+        }
+
+        return $shares;
+    }
+
+    /**
+     * Hedges every name in one pass, against one read of the store and one write back to it.
+     *
+     * A read and a write per name turned a pass over the market into a couple of hundred round trips
+     * against a store that holds all of it in a single hash, and that was running on every tick. The
+     * arithmetic is identical; only the number of times the desk asks for it has changed.
+     *
+     * @param array<int, Stock> $stocks
+     * @return array<string, float> Signed shares to trade, by ticker; names with nothing to do are absent.
+     */
+    public function hedgeMarket(array $stocks): array
+    {
+        $state = $this->store->readAll();
+
+        $flows = [];
+        $marks = [];
+
+        foreach ($stocks as $stock) {
+            if ($stock->isBankrupt()) {
+                continue;
+            }
+
+            $ticker = $stock->getTicker();
+            $entry = $state[$ticker] ?? null;
+            $shares = $this->hedgeShares($stock, $entry);
+
+            if ($shares === 0.0 || $entry === null) {
+                continue;
+            }
+
+            $flows[$ticker] = $shares;
+            $marks[$ticker] = ['gamma' => $entry['gamma'], 'reference_price' => (float) $stock->getPrice()];
+        }
+
+        $this->store->recordAll($marks);
+
+        return $flows;
+    }
+
+    /**
+     * The hedge one name's stored exposure implies, without touching the store.
+     *
+     * @param array{gamma: float, reference_price: float}|null $state
+     */
+    private function hedgeShares(Stock $stock, ?array $state): float
+    {
         if ($state === null || $state['gamma'] === 0.0) {
             return 0.0;
         }
@@ -96,16 +150,12 @@ final class DealerGammaEngine
 
         $shares = $state['gamma'] * $move * FinancialConstants::DEALER_HEDGE_RATIO;
 
-        // A desk cannot demand more liquidity in one tick than the name trades in a quarter of a day. Past
+        // A desk cannot demand more liquidity in one pass than the name trades in a quarter of a day. Past
         // that the impact law is extrapolation, and a short-gamma desk chasing a gap would otherwise size
         // its way into an unbounded spiral against a market that cannot fill it.
         $ceiling = $this->liquidityEngine->averageDailyVolume($stock) * FinancialConstants::MAX_DEALER_HEDGE_ADV_MULTIPLE;
-        $shares = max(-$ceiling, min($ceiling, $shares));
 
-        // The exposure the hedge was computed from is already in hand, so the mark moves forward in one
-        // write rather than a read to recover a number this method is holding.
-        $this->store->record($stock->getTicker(), $state['gamma'], $price);
-
-        return $shares;
+        return max(-$ceiling, min($ceiling, $shares));
     }
+
 }

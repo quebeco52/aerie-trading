@@ -61,7 +61,16 @@ class TradeExecutionService
         return in_array($action, self::BUY_SIDE_ACTIONS, true);
     }
 
-    public function executeOrder(User $user, string $ticker, string $action, string $orderType, int $quantity, ?string $limitPrice = null): void
+    /**
+     * Places one order and reports which asset class it was filled in.
+     *
+     * The class comes back because the units differ by it — an option order is counted in contracts of a
+     * hundred shares — and the caller that has to say what just happened would otherwise be left inferring
+     * it from the ticker's shape, which a bond symbol such as G02-001 defeats.
+     *
+     * @return string The asset class filled: STOCK, ETF, BOND or OPTION.
+     */
+    public function executeOrder(User $user, string $ticker, string $action, string $orderType, int $quantity, ?string $limitPrice = null): string
     {
         if ($quantity <= 0) {
             throw new \Exception('Invalid quantity.');
@@ -111,7 +120,7 @@ class TradeExecutionService
                 $this->em->flush();
                 $this->em->getConnection()->commit();
 
-                return;
+                return 'OPTION';
             }
 
             if (!in_array($action, self::VALID_ACTIONS, true)) {
@@ -230,6 +239,8 @@ class TradeExecutionService
             if ($orderType === 'LIMIT' && $order->getStatus() === TradeOrder::STATUS_OPEN) {
                 $this->updateRedisBounds($ticker);
             }
+
+            return $assetType;
 
         } catch (\Throwable $e) {
             if ($this->em->getConnection()->isTransactionActive()) {

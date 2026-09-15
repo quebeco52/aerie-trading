@@ -47,14 +47,24 @@ class TradeController extends AbstractController
         }
 
         try {
-            $tradeExecutionService->executeOrder($user, $ticker, $action, $orderType, $quantity, $limitPrice);
+            $assetType = $tradeExecutionService->executeOrder($user, $ticker, $action, $orderType, $quantity, $limitPrice);
             $verb = match ($action) {
                 'SHORT' => 'Sold short',
                 'COVER' => 'Covered',
                 'SELL' => 'Sold',
+                'WRITE' => 'Wrote',
                 default => 'Bought',
             };
-            $this->addFlash('success', "{$verb} {$quantity} shares of {$ticker}.");
+
+            // An option order is counted in contracts of a hundred shares, and saying "shares" would
+            // understate the position by the multiplier in the one message confirming what was just done.
+            $unit = match ($assetType) {
+                'OPTION' => 'contracts',
+                'BOND' => 'bonds',
+                default => 'shares',
+            };
+
+            $this->addFlash('success', "{$verb} {$quantity} {$unit} of {$ticker}.");
         } catch (\Exception $e) {
             $this->addFlash('error', $e->getMessage());
         }
