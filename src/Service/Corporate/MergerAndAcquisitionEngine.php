@@ -6,7 +6,6 @@ namespace App\Service\Corporate;
 
 use App\Entity\Stock;
 use App\DTO\MacroStateDTO;
-use Doctrine\ORM\EntityManagerInterface;
 use App\Service\Event\MarketEventPublisher;
 use App\Service\Math\MathUtility;
 use App\Service\Math\CorporateMetrics;
@@ -145,7 +144,6 @@ class MergerAndAcquisitionEngine
     public const DIV_FIRE_SALE_MAX_CENTS = 0.80;
 
     public function __construct(
-        private EntityManagerInterface $entityManager,
         private MarketEventPublisher $marketEvent,
         private DebtEngine $debtEngine,
         private MathUtility $mathUtility,

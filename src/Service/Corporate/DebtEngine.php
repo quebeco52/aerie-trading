@@ -21,10 +21,6 @@ class DebtEngine
     private const MAX_LEVERAGE_RATIO = 15.0;
     /** 25% max Junk Bond penalty spread. */
     private const MAX_LEVERAGE_PENALTY = 0.25;
-    /** Penalty rate for high leverage. */
-    private const LEVERAGE_PENALTY_RATE = 0.20;
-    /** Base penalty for high leverage. */
-    private const LEVERAGE_PENALTY_BASE = 0.010;
     /** BGG (1999) Financial Accelerator external finance premium sensitivity to leverage during recessions. */
     private const BGG_ACCELERATOR_SENSITIVITY = 0.050;
 
@@ -37,8 +33,6 @@ class DebtEngine
     // --- CAPM / Beta Limits ---
     /** Prevent runaway WACC in standard CAPM by capping debt to equity ratio. */
     private const MAX_BETA_DEBT_TO_EQUITY = 2.5;
-    /** Dampen double-counting of historical debt when calculating Levered Beta. */
-    private const HAMADA_DAMPENING_FACTOR = 0.25;
 
     // --- Refinancing Hurdles ---
     /** 150 bps drop triggers early refinancing. */
@@ -179,7 +173,6 @@ class DebtEngine
         $totalDebtObligations = max(0.01, $strategy->getDeleveragingEvaluationDebt($debt, $wholesaleDebt));
         $netDebt = max(0.0, $strategy->getNetDebtCapital($debt, $wholesaleDebt, $treasury));
         $totalEquity = (float) $stock->getTotalEquity();
-
 
         // Fetch our Dual Constraints
         $metrics = \App\Data\Sectors::INDUSTRY_METRICS[$industry] ?? \App\Data\Sectors::INDUSTRY_METRICS['General'];
@@ -325,7 +318,6 @@ class DebtEngine
         $policyRate = $macroState->policyRateEma;
         $corporateTaxRate = $macroState->corporateTaxRate;
 
-
         $industry = $stock->getIndustry() ?: 'General';
         $metrics = \App\Data\Sectors::INDUSTRY_METRICS[$industry] ?? \App\Data\Sectors::INDUSTRY_METRICS['General'];
         $businessModel = $metrics['business_model'] ?? 'none';
@@ -441,7 +433,6 @@ class DebtEngine
         }
 
         $yieldOnCash = $strategy->calculateCashYield($macroState);
-
 
         // Fetch the CFO's target Debt-to-Equity limit
         $equityLimit = $metrics['equity_limit'];

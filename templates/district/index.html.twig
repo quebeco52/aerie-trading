@@ -285,7 +285,7 @@
 		<div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mt-5">
 			<div class="bg-surface-container-lowest/80 border border-outline-variant/20 rounded p-3 flex flex-col justify-between">
 				<span class="text-2xs font-semibold text-on-surface-variant uppercase tracking-wide">Street Cap</span>
-				<span class="text-sm font-bold text-on-surface font-mono tabular-nums mt-1">${{ summary.totalMarketCap|format_large }}</span>
+				<span class="text-sm font-bold text-on-surface font-mono tabular-nums mt-1">{{ summary.totalMarketCap|format_large('$') }}</span>
 			</div>
 			<div class="bg-surface-container-lowest/80 border border-outline-variant/20 rounded p-3 flex flex-col justify-between">
 				<span class="text-2xs font-semibold text-on-surface-variant uppercase tracking-wide">Street 1M</span>

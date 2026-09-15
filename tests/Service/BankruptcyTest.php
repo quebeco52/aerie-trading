@@ -121,8 +121,7 @@ class BankruptcyTest extends TestCase
             $this->entityManagerMock,
             $this->loggerMock,
             $this->marketEventMock,
-            $this->debtEngineMock,
-            $this->mathUtilityMock
+            $this->debtEngineMock
         );
 
         $events = $operator->enforceMarketStability([$stock], new MacroStateDTO());
@@ -151,8 +150,7 @@ class BankruptcyTest extends TestCase
             $this->entityManagerMock,
             $this->loggerMock,
             $this->marketEventMock,
-            $this->debtEngineMock,
-            $this->mathUtilityMock
+            $this->debtEngineMock
         );
 
         $events = $operator->enforceMarketStability([$stock], new MacroStateDTO());
@@ -189,8 +187,7 @@ class BankruptcyTest extends TestCase
             $this->entityManagerMock,
             $this->loggerMock,
             $this->marketEventMock,
-            $this->debtEngineMock,
-            $this->mathUtilityMock
+            $this->debtEngineMock
         );
 
         $operator->enforceMarketStability([$stock], new MacroStateDTO(corporateTaxRate: 0.21));
@@ -227,8 +224,7 @@ class BankruptcyTest extends TestCase
             $this->entityManagerMock,
             $this->loggerMock,
             $this->marketEventMock,
-            $this->debtEngineMock,
-            $this->mathUtilityMock
+            $this->debtEngineMock
         );
 
         $operator->enforceMarketStability([$stock], new MacroStateDTO());
@@ -268,8 +264,7 @@ class BankruptcyTest extends TestCase
             $this->entityManagerMock,
             $this->loggerMock,
             $this->marketEventMock,
-            $this->debtEngineMock,
-            $this->mathUtilityMock
+            $this->debtEngineMock
         );
 
         $operator->enforceMarketStability([$stock], new MacroStateDTO());
@@ -298,8 +293,7 @@ class BankruptcyTest extends TestCase
             $this->entityManagerMock,
             $this->loggerMock,
             $this->marketEventMock,
-            $this->debtEngineMock,
-            $this->mathUtilityMock
+            $this->debtEngineMock
         );
 
         $operator->enforceMarketStability([$stock], new MacroStateDTO());
@@ -331,8 +325,7 @@ class BankruptcyTest extends TestCase
             $this->entityManagerMock,
             $this->loggerMock,
             $this->marketEventMock,
-            $this->debtEngineMock,
-            $this->mathUtilityMock
+            $this->debtEngineMock
         );
 
         $operator->enforceMarketStability([$stock], new MacroStateDTO());
@@ -400,14 +393,12 @@ class BankruptcyTest extends TestCase
         $corpActionEngine->expects($this->never())->method('processSplits');
 
         $tracker = new StockTracker(
-            $this->entityManagerMock,
             $marketEngine,
             $earningsEngine,
             $corpActionEngine,
             $maEngine,
             $this->marketEventMock,
             $this->debtEngineMock,
-            $this->mathUtilityMock,
             $corpMetrics,
             new \App\Service\Market\LiquidityEngine(new \App\Service\Math\MathUtility()),
             new \App\Service\Market\Flow\InMemoryOrderFlowStore(),
@@ -501,7 +492,7 @@ class BankruptcyTest extends TestCase
         $this->tradeOrderRepoMock->method('findOpenByTicker')->willReturn([]);
         $this->marketEventMock->method('publish')->willReturn(['type' => 'BANKRUPTCY']);
 
-        $operator = new MarketOperator($this->entityManagerMock, $this->loggerMock, $this->marketEventMock, $this->debtEngineMock, $this->mathUtilityMock, $ledger);
+        $operator = new MarketOperator($this->entityManagerMock, $this->loggerMock, $this->marketEventMock, $this->debtEngineMock, $ledger);
         $operator->enforceMarketStability([$failed, $survivor], new MacroStateDTO());
 
         $this->assertTrue($failed->isBankrupt());

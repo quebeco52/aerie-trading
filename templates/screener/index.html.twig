@@ -80,7 +80,7 @@
                                 <span class="px-2 py-0.5 rounded bg-surface-container text-on-surface-variant text-xs font-mono border border-outline-variant/15">{{ stock.sector }}</span>
                             </td>
                             <td class="px-4 py-2.5 font-mono tabular-nums text-right font-bold {{ stock.isBankrupt ? 'text-tertiary line-through' : 'text-on-surface' }}" data-value="{{ stock.isBankrupt ? 0 : stock.price }}">${{ (stock.isBankrupt ? 0.00 : stock.price)|number_format(2) }}</td>
-                            <td class="px-4 py-2.5 font-mono tabular-nums text-right text-on-surface" data-value="{{ stock.isBankrupt ? 0 : stock.marketCap }}">${{ stock.isBankrupt ? '0.00' : stock.marketCap|format_large }}</td>
+                            <td class="px-4 py-2.5 font-mono tabular-nums text-right text-on-surface" data-value="{{ stock.isBankrupt ? 0 : stock.marketCap }}">{{ stock.isBankrupt ? '$0.00' : stock.marketCap|format_large('$') }}</td>
                             <td class="px-4 py-2.5 font-mono tabular-nums text-right text-on-surface" data-value="{{ stock.isBankrupt ? 0 : (stock.peRatio ?? 0) }}">
                                 {{ not stock.isBankrupt and stock.peRatio is not null ? stock.peRatio|number_format(2) ~ 'x' : '-' }}
                             </td>
@@ -88,7 +88,7 @@
                             <td class="px-4 py-2.5 font-mono tabular-nums text-right font-bold {{ stock.currentRoic >= 0 ? 'text-secondary' : 'text-tertiary' }}" data-value="{{ stock.currentRoic }}">
                                 {{ (stock.currentRoic * 100)|number_format(2) }}%
                             </td>
-                            <td class="px-4 py-2.5 font-mono tabular-nums text-right text-on-surface" data-value="{{ stock.equity }}">${{ stock.equity|format_large }}</td>
+                            <td class="px-4 py-2.5 font-mono tabular-nums text-right text-on-surface" data-value="{{ stock.equity }}">{{ stock.equity|format_large('$') }}</td>
                             <td class="px-4 py-2.5 font-mono tabular-nums text-right text-on-surface" data-value="{{ stock.debtToEquity ?? 0 }}">
                                 {{ stock.debtToEquity is not null ? stock.debtToEquity|number_format(2) ~ 'x' : '-' }}
                             </td>

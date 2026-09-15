@@ -37,13 +37,6 @@ class TreasuryEngine
     /** Drawn-revolver spread (+100 bps) over the issuer's market rate; a pre-negotiated facility prices inside emergency paper. */
     private const REVOLVER_DRAW_SPREAD_PENALTY = 0.01;
 
-    // --- Physical Capacity Limits (Growth Speed Limits) ---
-    private const FIN_MEGA_HOARDER_GROWTH_LIMIT = 0.35;
-    private const FIN_HOARDER_GROWTH_LIMIT = 0.20;
-    private const FIN_STANDARD_GROWTH_LIMIT = 0.12;
-    private const STD_HOARDER_GROWTH_LIMIT = 0.15;
-    private const STD_STANDARD_GROWTH_LIMIT = 0.08;
-
     public function __construct(
         private CorporateMetrics $corporateMetrics,
         private DebtEngine $debtEngine,

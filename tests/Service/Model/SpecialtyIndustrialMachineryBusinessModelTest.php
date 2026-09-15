@@ -13,12 +13,10 @@ use PHPUnit\Framework\TestCase;
 class SpecialtyIndustrialMachineryBusinessModelTest extends TestCase
 {
     private SpecialtyIndustrialMachineryBusinessModel $model;
-    private MathUtility $mathUtility;
 
     protected function setUp(): void
     {
         $this->model = new SpecialtyIndustrialMachineryBusinessModel();
-        $this->mathUtility = new MathUtility();
     }
 
     public function testDualStreamEmissionAndFxMetalsSensitivity(): void

@@ -39,7 +39,6 @@ class MergerAndAcquisitionEngineTest extends TestCase
         $this->corporateMetricsMock = $this->createStub(CorporateMetrics::class);
 
         $this->engine = new MergerAndAcquisitionEngine(
-            $this->entityManagerMock,
             $this->marketEventPublisherMock,
             $this->debtEngineMock,
             $this->mathUtilityMock,

@@ -23,12 +23,6 @@ class MarketEngine
     private const SVJJ_P_UP = 0.40;
     private const SVJJ_P_DOWN = 0.60;
 
-    // Valuation Multiple Bounds
-    private const MIN_BASE_PE = 8.0;
-    private const MAX_BASE_PE = 80.0;
-    private const MIN_FAIR_VALUE_PE = 4.0;
-    private const MAX_FAIR_VALUE_PE = 150.0;
-
     // Analyst Multipliers
     private const VALUE_ANALYST_BOOK_MULT = 0.80;
 
@@ -179,7 +173,6 @@ class MarketEngine
         // which is the visible failure mode rather than the silent one.
         $minIdiosyncraticVar = $longTermVar * self::MIN_IDIOSYNCRATIC_VARIANCE_SHARE;
         $longTermIdiosyncraticVar = max($minIdiosyncraticVar, $longTermVar - $baselineSystematicVar);
-
 
         // IDIOSYNCRATIC JUMP CALIBRATION
         // The jump scale is held to the share of the name's variance a jump process is entitled to. Left at
@@ -445,8 +438,6 @@ class MarketEngine
             sectorVarianceShare: MacroEngine::SECTOR_FACTOR_VARIANCE_SHARE
         );
 
-
-
         // Geometrically blend the GBM price with the fundamental Fair Value
         $diffusedPrice = exp(
             $reversionWeight * log(max(0.01, $gbmPrice)) +
@@ -492,7 +483,6 @@ class MarketEngine
         // once, so publishing it per ticker would bury the feed. The district reports it as one macro event.
         $totalShockMultiplier = $jumpData['price_multiplier'] * $systemicJumpMultiplier * (1.0 + $maShock);
         $finalPrice = $boundedPrice * $totalShockMultiplier;
-
 
         return [
             'price'             => max(0.01, $finalPrice),

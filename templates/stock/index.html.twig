@@ -446,7 +446,7 @@
 								<dl class="divide-y divide-outline-variant/15 text-xs">
 									<div class="py-2 flex justify-between items-center">
 										<dt class="text-sm font-semibold text-on-surface-variant">Market Cap</dt>
-										<dd class="font-bold text-on-surface font-mono tabular-nums" id="stat-mkt-cap">${{ marketCap|format_large }}</dd>
+										<dd class="font-bold text-on-surface font-mono tabular-nums" id="stat-mkt-cap">{{ marketCap|format_large('$') }}</dd>
 									</div>
 									<div class="py-2 flex justify-between items-center">
 										<dt class="text-sm font-semibold text-on-surface-variant">Shares Out</dt>
@@ -492,7 +492,7 @@
 									</div>
 									<div class="py-2 flex justify-between items-center">
 										<dt class="text-sm font-semibold text-on-surface-variant">Book Value (Equity)</dt>
-										<dd class="font-bold text-on-surface font-mono tabular-nums" id="stat-equity">${{ asset.totalEquity|format_large }}</dd>
+										<dd class="font-bold text-on-surface font-mono tabular-nums" id="stat-equity">{{ asset.totalEquity|format_large('$') }}</dd>
 									</div>
 									<div class="py-2 flex justify-between items-center">
 										<dt class="text-sm font-semibold text-on-surface-variant">Debt-to-Equity</dt>
@@ -2129,7 +2129,7 @@
 									<div class="p-4 rounded bg-surface-container-lowest/80 border border-outline-variant/15">
 										<span class="text-on-surface-variant uppercase text-xs font-bold">Capacity vs Demand</span>
 										<p class="text-sm font-bold font-mono tabular-nums mt-1 {{ industry.balance == 'overbuilt' ? 'text-error' : (industry.balance == 'tight' ? 'text-tertiary' : 'text-on-surface') }}">{{ industry.capacityRatio is not null ? (industry.capacityRatio * 100)|number_format(1) ~ '%' : '-' }}</p>
-										<p class="text-3xs uppercase tracking-wide text-on-surface-variant/60 mt-1">{% if industry.installedCapacity is not null %}${{ industry.installedCapacity|format_large }} plant · ${{ industry.trendCapacity|format_large }} at trend{% else %}anchored at first report{% endif %}</p>
+										<p class="text-3xs uppercase tracking-wide text-on-surface-variant/60 mt-1">{% if industry.installedCapacity is not null %}{{ industry.installedCapacity|format_large('$') }} plant · {{ industry.trendCapacity|format_large('$') }} at trend{% else %}anchored at first report{% endif %}</p>
 									</div>
 									<div class="p-4 rounded bg-surface-container-lowest/80 border border-outline-variant/15">
 										<span class="text-on-surface-variant uppercase text-xs font-bold">Realized Price</span>
@@ -2253,11 +2253,11 @@
 											<span class="px-1.5 py-0.2 rounded text-4xs bg-primary/20 text-primary uppercase">Current</span>
 										</td>
 										<td class="py-2.5 text-right font-mono tabular-nums text-on-surface">${{ asset.price|number_format(2) }}</td>
-										<td class="py-2.5 text-right font-mono tabular-nums text-on-surface">${{ marketCap|format_large }}</td>
+										<td class="py-2.5 text-right font-mono tabular-nums text-on-surface">{{ marketCap|format_large('$') }}</td>
 										<td class="py-2.5 text-right font-mono tabular-nums text-on-surface">{{ peRatio ? peRatio|number_format(2) ~ 'x' : '-' }}</td>
 										<td class="py-2.5 text-right font-mono tabular-nums text-on-surface">{{ ((isFinancial ? (asset.currentRoe ?: asset.baselineRoe) : (asset.currentRoic ?: asset.baselineRoic)) * 100)|number_format(2) }}%</td>
 										<td class="py-2.5 text-right font-mono tabular-nums text-on-surface">{{ industry and industry.rosterShare is not null ? (industry.rosterShare * 100)|number_format(1) ~ '%' : '-' }}</td>
-										<td class="py-2.5 text-right font-mono tabular-nums text-on-surface">${{ asset.totalEquity|format_large }}</td>
+										<td class="py-2.5 text-right font-mono tabular-nums text-on-surface">{{ asset.totalEquity|format_large('$') }}</td>
 										<td class="py-2.5 text-right text-xs text-on-surface-variant">-</td>
 									</tr>
 
@@ -2269,11 +2269,11 @@
 												<span class="text-on-surface-variant text-xs">{{ peer.name }}</span>
 											</th>
 											<td class="py-2.5 text-right font-mono tabular-nums text-on-surface">${{ peer.price|number_format(2) }}</td>
-											<td class="py-2.5 text-right font-mono tabular-nums text-on-surface">${{ peer.marketCap|format_large }}</td>
+											<td class="py-2.5 text-right font-mono tabular-nums text-on-surface">{{ peer.marketCap|format_large('$') }}</td>
 											<td class="py-2.5 text-right font-mono tabular-nums text-on-surface">{{ peer.peRatio ? peer.peRatio|number_format(2) ~ 'x' : '-' }}</td>
 											<td class="py-2.5 text-right font-mono tabular-nums text-on-surface">{{ (peer.roic * 100)|number_format(2) }}%</td>
 											<td class="py-2.5 text-right font-mono tabular-nums text-on-surface-variant">{{ industry and industry.peerShares[peer.ticker] is defined ? (industry.peerShares[peer.ticker] * 100)|number_format(1) ~ '%' : '-' }}</td>
-											<td class="py-2.5 text-right font-mono tabular-nums text-on-surface">${{ peer.totalEquity|format_large }}</td>
+											<td class="py-2.5 text-right font-mono tabular-nums text-on-surface">{{ peer.totalEquity|format_large('$') }}</td>
 											<td class="py-2.5 text-right">
 												<a href="/stock/{{ peer.ticker }}" class="relative z-10 px-2 py-0.5 text-xs font-semibold text-primary bg-primary/10 rounded hover:bg-primary/20 transition-colors">
 													View

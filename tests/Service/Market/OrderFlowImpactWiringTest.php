@@ -122,14 +122,12 @@ class OrderFlowImpactWiringTest extends TestCase
         $ma->method('evaluateCorporateDivestiture')->willReturn(null);
 
         return new StockTracker(
-            $this->createMock(EntityManagerInterface::class),
             $marketEngine,
             $earnings,
             $corporateActions,
             $ma,
             $this->createStub(MarketEventPublisher::class),
             $debtEngine,
-            new MathUtility(),
             $this->createStub(CorporateMetrics::class),
             $this->liquidity,
             $this->orderFlow,

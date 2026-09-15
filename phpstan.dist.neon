@@ -28,13 +28,10 @@ parameters:
         - identifier: nullCoalesce.property
         - identifier: nullCoalesce.expr
         - identifier: nullCoalesce.offset
-        - identifier: classConstant.unused
-        - identifier: property.onlyWritten
         - identifier: parameter.notFound
         - identifier: doctrine.columnType
         - identifier: doctrine.associationType
         - identifier: greater.alwaysTrue
-        - identifier: method.unused
         - identifier: method.alreadyNarrowedType
 
 

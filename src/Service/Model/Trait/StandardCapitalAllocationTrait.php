@@ -28,7 +28,9 @@ trait StandardCapitalAllocationTrait
 
     public function getMaxOrganicGrowthSpeed(bool $isHoarder, bool $isMegaHoarder): float
     {
-        return $isHoarder ? 0.15 : 0.08;
+        return $isHoarder
+            ? FinancialConstants::STD_HOARDER_GROWTH_LIMIT
+            : FinancialConstants::STD_STANDARD_GROWTH_LIMIT;
     }
 
     public function getRegulatoryDividendCap(Stock $stock, float $currentTreasury): ?float

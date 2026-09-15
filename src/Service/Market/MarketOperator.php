@@ -21,7 +21,6 @@ class MarketOperator
         private LoggerInterface $logger,
         private MarketEventPublisher $marketEvent,
         private DebtEngine $debtEngine,
-        private \App\Service\Math\MathUtility $mathUtility,
         /** Industry roster and capacity balance; null (unit tests) leaves a failed firm's plant to age out of it. */
         private ?\App\Service\Corporate\Industry\IndustryShareLedger $industryShareLedger = null
     ) {}

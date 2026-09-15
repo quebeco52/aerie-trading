@@ -207,6 +207,30 @@ class FinancialConstants
     /** Maximum market cap percentage (15%) a fully saturated firm can repurchase in a single quarter. */
     public const MAX_REGULATORY_SPEND_SATURATED = 0.15;
 
+    // --- Regulatory Capital Conservation Buffer (Basel III / Solvency II) ---
+    /** Leverage overshoot ratio (1.05x) triggering Tier 1 Capital Conservation Buffer restriction (max 60% payout). */
+    public const REGULATORY_BUFFER_TIER_1_THRESHOLD = 1.05;
+    /** Maximum target payout ratio allowed when operating under Tier 1 capital buffer restrictions. */
+    public const REGULATORY_BUFFER_TIER_1_PAYOUT_CAP = 0.60;
+    /** Leverage overshoot ratio (1.15x) triggering Tier 2 Capital Conservation Buffer restriction (max 30% payout). */
+    public const REGULATORY_BUFFER_TIER_2_THRESHOLD = 1.15;
+    /** Maximum target payout ratio allowed when operating under Tier 2 capital buffer restrictions. */
+    public const REGULATORY_BUFFER_TIER_2_PAYOUT_CAP = 0.30;
+    /** Leverage overshoot ratio (1.25x) triggering severe Tier 3 regulatory dividend prohibition (0% payout). */
+    public const REGULATORY_BUFFER_TIER_3_THRESHOLD = 1.25;
+
+    // --- Physical Capacity Limits (Growth Speed Limits) ---
+    /** Ceiling on one quarter's organic book growth for a financial mega-hoarder; a funded balance sheet can be put to work fast. */
+    public const FIN_MEGA_HOARDER_GROWTH_LIMIT = 0.35;
+    /** Ceiling on one quarter's organic book growth for a cash-hoarding financial. */
+    public const FIN_HOARDER_GROWTH_LIMIT = 0.20;
+    /** Ceiling on one quarter's organic book growth for a normally capitalised financial. */
+    public const FIN_STANDARD_GROWTH_LIMIT = 0.12;
+    /** Ceiling on one quarter's organic capacity growth for a cash-hoarding operating firm; plant takes time to build. */
+    public const STD_HOARDER_GROWTH_LIMIT = 0.15;
+    /** Ceiling on one quarter's organic capacity growth for a normally funded operating firm. */
+    public const STD_STANDARD_GROWTH_LIMIT = 0.08;
+
     // --- Input Cost Basket ---
     /** Default shares of the variable cost base bought in tracked input markets for a producing firm; the remainder has no macro index. */
     public const DEFAULT_INPUT_COST_EXPOSURES = ['energy' => 0.05, 'metals' => 0.05, 'agri' => 0.02, 'freight' => 0.03, 'ppi' => 0.35, 'labor' => 0.30];
@@ -312,6 +336,8 @@ class FinancialConstants
     public const REQUIRED_ICR_SAFETY_MULT = 1.50;
     /** Absolute minimum interest coverage ratio buffer required for discretionary debt issuance. */
     public const MIN_ABSOLUTE_ICR_BUFFER = 2.00;
+    /** Dampen double-counting of historical debt when re-levering Beta through the Hamada equation. */
+    public const HAMADA_DAMPENING_FACTOR = 0.25;
 
     // --- Valuation Consensus Weights ---
     /** Consensus weight given to earnings/DCF intrinsic fair value in valuation blending. */

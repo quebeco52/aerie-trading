@@ -41,18 +41,6 @@ class CapitalAllocationEngine
     /** Catch-up ratio threshold (1.30x) where Aristocrats accelerate dividend adjustment speed. */
     private const ARISTOCRAT_CATCHUP_THRESHOLD = 1.30;
 
-    // --- Regulatory Capital Conservation Buffer (Basel III / Solvency II) ---
-    /** Leverage overshoot ratio (1.05x) triggering Tier 1 Capital Conservation Buffer restriction (max 60% payout). */
-    private const REGULATORY_BUFFER_TIER_1_THRESHOLD = 1.05;
-    /** Maximum target payout ratio allowed when operating under Tier 1 capital buffer restrictions. */
-    private const REGULATORY_BUFFER_TIER_1_PAYOUT_CAP = 0.60;
-    /** Leverage overshoot ratio (1.15x) triggering Tier 2 Capital Conservation Buffer restriction (max 30% payout). */
-    private const REGULATORY_BUFFER_TIER_2_THRESHOLD = 1.15;
-    /** Maximum target payout ratio allowed when operating under Tier 2 capital buffer restrictions. */
-    private const REGULATORY_BUFFER_TIER_2_PAYOUT_CAP = 0.30;
-    /** Leverage overshoot ratio (1.25x) triggering severe Tier 3 regulatory dividend prohibition (0% payout). */
-    private const REGULATORY_BUFFER_TIER_3_THRESHOLD = 1.25;
-
     public function __construct(
         private CorporateLedgerService $corporateLedgerService,
         private CorporateMetrics $corporateMetrics,

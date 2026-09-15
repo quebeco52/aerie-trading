@@ -118,14 +118,12 @@ final class StockTrackerFactorWiringTest extends TestCase
         $ma->method('evaluateCorporateDivestiture')->willReturn(null);
 
         return new StockTracker(
-            $this->createMock(EntityManagerInterface::class),
             $marketEngine,
             $earnings,
             $corporateActions,
             $ma,
             $this->createStub(MarketEventPublisher::class),
             $debtEngine,
-            $this->createStub(MathUtility::class),
             $this->createStub(CorporateMetrics::class),
             new \App\Service\Market\LiquidityEngine(new MathUtility()),
             new \App\Service\Market\Flow\InMemoryOrderFlowStore(),

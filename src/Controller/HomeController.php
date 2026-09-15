@@ -4,6 +4,7 @@ namespace App\Controller;
 
 use App\Entity\Stock;
 use App\Service\Market\PriceChangeFeed;
+use App\Twig\Extension\NumberFormatExtension;
 use App\Repository\EtfRepository;
 use App\Repository\StockRepository;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -70,17 +71,10 @@ class HomeController extends AbstractController
      * @return Response Returns a JSON response containing ETF and stock overview data.
      */
     #[Route('/api/market', name: 'api_market')]
-    public function apiMarket(StockRepository $stockRepository, EtfRepository $etfs, PriceChangeFeed $priceChangeFeed): Response
+    public function apiMarket(StockRepository $stockRepository, EtfRepository $etfs, PriceChangeFeed $priceChangeFeed, NumberFormatExtension $numberFormat): Response
     {
         $etf    = $etfs->findOneByTicker(self::BENCHMARK_ETF_TICKER);
         $stocks = $stockRepository->findAll();
-
-        // Helper function for the API
-        $formatLarge = function(float $val): string {
-            if ($val >= 1_000_000_000_000) return number_format($val / 1_000_000_000_000, 2) . 'T';
-            if ($val >= 1_000_000_000) return number_format($val / 1_000_000_000, 2) . 'B';
-            return number_format($val / 1_000_000, 2) . 'M';
-        };
 
         $marketData = [];
         foreach ($this->buildBaseMarketData($stocks, $priceChangeFeed->changeByTicker($stocks)) as $row) {
@@ -90,9 +84,9 @@ class HomeController extends AbstractController
                 'sector'       => $row['sector'],
                 'price'        => number_format($row['price'], 2),
                 'marketCapRaw' => $row['marketCap'],
-                'marketCap'    => $formatLarge($row['marketCap']),
-                'treasury'     => $formatLarge($row['treasury']),
-                'equity'       => $formatLarge($row['equity']),
+                'marketCap'    => $numberFormat->formatLargeNumber($row['marketCap']),
+                'treasury'     => $numberFormat->formatLargeNumber($row['treasury']),
+                'equity'       => $numberFormat->formatLargeNumber($row['equity']),
                 'currentRoic'  => $row['currentRoic'],
                 'changePercent' => $row['changePercent'],
                 'is_bankrupt'  => $row['isBankrupt'],
