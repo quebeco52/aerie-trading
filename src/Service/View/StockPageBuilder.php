@@ -103,6 +103,30 @@ class StockPageBuilder
             'borrowFee' => $this->lendingDesk->borrowFee($stock),
             'availableToBorrow' => $this->lendingDesk->availableToBorrow($stock),
             'shortUtilization' => $this->lendingDesk->utilization($stock),
+            'management' => $this->managementBlock($stock),
+        ];
+    }
+
+    /**
+     * Who is running the company, and for how long.
+     *
+     * The archetype and how firmly it is held are shown; the dials behind them are not. A player is meant
+     * to read the policy off the firm's behaviour — the payout, the capital budget, the deals — and this
+     * card only says what kind of manager to expect it from, which is what a market already knows about a
+     * sitting chief executive.
+     *
+     * @return array<string, mixed>
+     */
+    private function managementBlock(Stock $stock): array
+    {
+        $profile = $stock->getManagementProfile();
+
+        return [
+            'style' => $profile->style->value,
+            'label' => $profile->style->label(),
+            'mandate' => $profile->style->mandate(),
+            'conviction' => $profile->convictionLabel(),
+            'tenureYears' => $stock->getCeoTenureYears(),
         ];
     }
 
@@ -134,6 +158,7 @@ class StockPageBuilder
             'borrowFee' => 0.0,
             'availableToBorrow' => 0.0,
             'shortUtilization' => 0.0,
+            'management' => null,
         ];
     }
 }

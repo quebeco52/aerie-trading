@@ -214,7 +214,10 @@ class MergerAndAcquisitionEngine
     {
         $stock = $ctx->acquirer;
         
+        // The archetype answers "which kind of manager is this?" and the profile answers "how firmly?" —
+        // the branch below is an identity test, everything after it reads dials.
         $style = $stock->getManagementStyle();
+        $manager = $stock->getManagementProfile();
         $ctx->costOfNewBorrowing = $ctx->health->rawMetrics->currentMarketRate ?? ($ctx->yield5y + (float) $stock->getCreditSpread());
 
         $equityLimit = \App\Data\Sectors::INDUSTRY_METRICS[$ctx->industry]['equity_limit'] ?? 1.0;
@@ -223,8 +226,8 @@ class MergerAndAcquisitionEngine
         $ctx->borrowingCapacity = max(0.0, $ctx->maxAllowableDebt - $ctx->currentDebt);
         $ctx->totalBuyingPower = $ctx->treasury + $ctx->borrowingCapacity;
 
-        $ctx->targetCash = $stock->getManagementStyle()->appliedTargetCash($ctx->strategy->calculateTargetOperatingCash($ctx->operatingBase, (float) $stock->getCustomerDeposits(), (float) $stock->getWholesaleDebt()));
-        $hoardStatus = $ctx->strategy->evaluateHoardingStatus($ctx->treasury, $ctx->targetCash, $style->appliedHoardingBase($ctx->operatingBase), $ctx->currentDebt);
+        $ctx->targetCash = $stock->getManagementProfile()->appliedTargetCash($ctx->strategy->calculateTargetOperatingCash($ctx->operatingBase, (float) $stock->getCustomerDeposits(), (float) $stock->getWholesaleDebt()));
+        $hoardStatus = $ctx->strategy->evaluateHoardingStatus($ctx->treasury, $ctx->targetCash, $manager->appliedHoardingBase($ctx->operatingBase), $ctx->currentDebt);
         $ctx->excessCash = $hoardStatus['excess_cash'];
         $ctx->isHoarder = $hoardStatus['is_hoarder'];
         $ctx->isMegaHoarder = $hoardStatus['is_mega_hoarder'];
@@ -255,7 +258,7 @@ class MergerAndAcquisitionEngine
         
         $ctx->aggression = 1.0;
         $ctx->isEmpireBuilder = $style === \App\Data\ManagementStyle::EmpireBuilder;
-        $ctx->hubrisPremium = $style->hubrisPremium();
+        $ctx->hubrisPremium = $manager->hubrisPremium();
         
         $config = match (true) {
             // Morck, Shleifer & Vishny (1990): for this manager the deal IS the objective, not a use for
@@ -289,7 +292,7 @@ class MergerAndAcquisitionEngine
         // carries its elevated rate in MA_EMPIRE_BUILDER_PROB, so the style bias must NOT be laid on top of
         // it — that counted the same behaviour twice and put a $1B+ transformative deal on the tape nearly
         // twice a year. Everywhere else the bias is the only thing the style says about deal frequency.
-        $hazardBias = ($config['style_priced'] ?? false) ? 1.0 : $style->acquisitionBias();
+        $hazardBias = ($config['style_priced'] ?? false) ? 1.0 : $manager->acquisitionBias();
 
         if ($config && $this->mathUtility->checkProbability($config['prob'] * $hazardBias * $ctx->dt)) {
             $ctx->dealExecuted = true;
@@ -299,7 +302,7 @@ class MergerAndAcquisitionEngine
             $config = [
                 'prob' => self::MA_CASH_FALLBACK_PROB, 'spend' => 0.20, 'type' => 'STRATEGIC ACQUISITION', 'use_leverage' => false, 'use_stock' => false
             ];
-            if ($this->mathUtility->checkProbability($config['prob'] * $style->acquisitionBias() * $ctx->dt)) {
+            if ($this->mathUtility->checkProbability($config['prob'] * $manager->acquisitionBias() * $ctx->dt)) {
                 $ctx->dealExecuted = true;
             }
         }
@@ -635,8 +638,8 @@ class MergerAndAcquisitionEngine
         $ctx->normalizedEps = $ctx->normalizedNetIncome / $ctx->shares;
         $ctx->currentPE = $ctx->normalizedEps > 0 ? $ctx->price / $ctx->normalizedEps : 0.0;
         
-        $ctx->targetCash = $stock->getManagementStyle()->appliedTargetCash($ctx->strategy->calculateTargetOperatingCash($ctx->operatingBase, (float) $stock->getCustomerDeposits(), (float) $stock->getWholesaleDebt()));
-        $ctx->hoardStatus = $ctx->strategy->evaluateHoardingStatus($ctx->treasury, $ctx->targetCash, $stock->getManagementStyle()->appliedHoardingBase($ctx->operatingBase), (float) $stock->getTotalDebt());
+        $ctx->targetCash = $stock->getManagementProfile()->appliedTargetCash($ctx->strategy->calculateTargetOperatingCash($ctx->operatingBase, (float) $stock->getCustomerDeposits(), (float) $stock->getWholesaleDebt()));
+        $ctx->hoardStatus = $ctx->strategy->evaluateHoardingStatus($ctx->treasury, $ctx->targetCash, $stock->getManagementProfile()->appliedHoardingBase($ctx->operatingBase), (float) $stock->getTotalDebt());
         
         $ctx->nominalGdpIndex = $ctx->macroState->nominalGdpIndex;
         $ctx->samRatio = (float) $stock->getSamRatio();

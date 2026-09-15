@@ -85,19 +85,39 @@ class CorporateMetrics
 
         $baseReturn = max(0.0, $trueReturn - $saturationPenalty - $this->calculateCournotPriceHaircut($stock, $marketShare, $investedCapital, $macroState));
 
+        return $this->applyScaleDiseconomies($stock, $baseReturn, $marketShare);
+    }
+
+    /**
+     * Cobb-Douglas diminishing marginal productivity above the firm's optimal operating scale:
+     * ROIC_marginal = ROIC_base x (K / K_optimal)^(-alpha), with a moat factor softening the elasticity for
+     * firms whose position genuinely defends the extra scale.
+     *
+     * This is the third and last component of a marginal return, after the saturation penalty and the
+     * Cournot price haircut, and it is the one a firm growing WITH its market never pays: the decay is a
+     * function of share, so at constant share the next unit of capital is as productive as the last. That is
+     * why it belongs on the share-taking tranche alone, exactly like the Cournot haircut beside it.
+     *
+     * Extracted so the earnings engine's structural growth gate and the treasury's deployment gates apply
+     * one law rather than two: the treasury applied the decay and the earnings gate did not, so the two were
+     * composing the same marginal return from different parts. Note that the Penrose saturation penalty
+     * dominates this term over the band where it first bites, so on the structural path it is a backstop
+     * against the penalty being softened later rather than a brake that fires on its own today.
+     */
+    public function applyScaleDiseconomies(Stock $stock, float $return, float $marketShare): float
+    {
         $optimalThreshold = FinancialConstants::DISECONOMY_OPTIMAL_SHARE_THRESHOLD;
         if ($marketShare <= $optimalThreshold) {
-            return $baseReturn;
+            return max(0.0, $return);
         }
 
         $moatFactor = FinancialConstants::SYSTEMIC_MOAT_FACTORS[$stock->getSystemicImportance()]
             ?? FinancialConstants::SYSTEMIC_MOAT_FACTORS['default'];
 
-        // Cobb-Douglas diminishing marginal productivity decay above optimal scale: ROIC_marginal = ROIC_base * (K / K_optimal)^(-α)
         $capitalScale = $marketShare / max(0.01, $optimalThreshold);
         $effectiveElasticity = FinancialConstants::CAPITAL_MARGINAL_ELASTICITY * $moatFactor;
 
-        return max(0.0, $baseReturn * pow($capitalScale, -$effectiveElasticity));
+        return max(0.0, $return * pow($capitalScale, -$effectiveElasticity));
     }
 
     /**

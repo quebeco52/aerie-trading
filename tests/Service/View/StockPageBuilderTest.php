@@ -42,7 +42,7 @@ class StockPageBuilderTest extends TestCase
         'advShares', 'allAssets', 'analystTargets', 'asset', 'availableToBorrow', 'borrowFee',
         'businessModel', 'changePercent', 'components', 'dividendYield', 'economic_cycle', 'events',
         'generalInfo', 'halfSpread', 'industry', 'investedCapital', 'isEtf', 'isFinancial', 'lifecycleStage',
-        'lifecycleStages', 'macro', 'marketCap', 'marketShare', 'openOrders', 'peRatio', 'peers',
+        'lifecycleStages', 'macro', 'management', 'marketCap', 'marketShare', 'openOrders', 'peRatio', 'peers',
         'pieData', 'pieLabels', 'quote', 'sharesMap', 'shortUtilization', 'targetPE', 'ticksPerYear',
         'userAvgCost', 'userDividendIncome', 'userQuantity', 'userTrades', 'userUnrealizedPnL',
         'userUnrealizedPnLPercent',
@@ -157,6 +157,23 @@ class StockPageBuilderTest extends TestCase
 
         $this->assertSame($fund, $company);
         $this->assertSame(self::TEMPLATE_KEYS, $company, 'The payload gained or lost a key.');
+    }
+
+    /** Who runs the company's capital: the archetype and its strength, without the dials behind them. */
+    public function testTheCompanyPageCarriesItsManagementAndTheFundDoesNot(): void
+    {
+        $management = $this->builder()->build($this->stock(), 'LAKE', null)['management'];
+
+        $this->assertIsArray($management);
+        $this->assertNotSame('', $management['label']);
+        $this->assertNotSame('', $management['mandate']);
+        $this->assertContains($management['conviction'], ['nominal', 'characteristic', 'pronounced']);
+        $this->assertGreaterThanOrEqual(0.0, $management['tenureYears']);
+
+        $this->assertNull(
+            $this->builder()->build(new Etf(), 'LBI', null)['management'],
+            'A fund has no board and nobody allocating its capital.'
+        );
     }
 
     public function testTheFundIsNotTreatedAsABorrowableCompany(): void

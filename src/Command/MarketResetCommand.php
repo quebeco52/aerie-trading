@@ -283,6 +283,7 @@ class MarketResetCommand extends Command
                     industry = :industry,
                     management_style = :management_style,
                     ceo_tenure_years = :ceo_tenure_years,
+                    management_intensity = :management_intensity,
                     earnings_momentum_z = NULL,
                     is_bankrupt = 0,
                     payment_default = 0,
@@ -372,6 +373,7 @@ class MarketResetCommand extends Command
                     'industry' => $stockData['industry'] ?? null,
                     'management_style' => $stockData['management_style'] ?? null,
                     'ceo_tenure_years' => \App\Service\Corporate\ManagementSuccessionEngine::drawSeedTenure($this->mathUtility),
+                    'management_intensity' => \App\Data\ManagementProfile::drawIntensity($this->mathUtility),
                     'ticker' => $stockData['ticker']
                 ]
             );

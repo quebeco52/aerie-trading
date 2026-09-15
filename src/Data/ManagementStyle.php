@@ -189,6 +189,31 @@ enum ManagementStyle: string
         return $operatingBase * $this->cashTargetBias();
     }
 
+    /** Display name for the archetype. */
+    public function label(): string
+    {
+        return match ($this) {
+            self::Operator => 'Operator',
+            self::EmpireBuilder => 'Empire Builder',
+            self::Steward => 'Steward',
+            self::Fortress => 'Fortress',
+        };
+    }
+
+    /**
+     * What this management is expected to do with the firm's capital, in a sentence. Shared by the
+     * succession announcement and the company page, so the market is told one story about a manager.
+     */
+    public function mandate(): string
+    {
+        return match ($this) {
+            self::Operator => 'expected to invest at the cost of capital and distribute the rest',
+            self::EmpireBuilder => 'mandated to grow, and will fund projects a stricter board would refuse',
+            self::Steward => 'expected to hold a high internal hurdle and return what it cannot beat',
+            self::Fortress => 'expected to rebuild the balance sheet and hold cash against the cycle',
+        };
+    }
+
     public static function tryFromNullable(?string $value): self
     {
         return $value !== null ? (self::tryFrom($value) ?? self::Operator) : self::Operator;

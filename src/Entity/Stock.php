@@ -389,6 +389,12 @@ class Stock
     private ?float $ceoTenureYears = 0.0;
 
     /**
+     * @var float|null How firmly the incumbent holds their style, scaling every dial's distance from neutral; null is the archetype's published strength.
+     */
+    #[ORM\Column(type: 'float', nullable: true)]
+    private ?float $managementIntensity = null;
+
+    /**
      * @var float|null Book-to-bill disclosed in the last report (orders booked over revenue billed); null when the firm discloses no order book.
      */
     #[ORM\Column(type: 'float', nullable: true)]
@@ -1153,6 +1159,27 @@ class Stock
     public function setManagementStyle(?\App\Data\ManagementStyle $style): static
     {
         $this->managementStyle = $style?->value;
+
+        return $this;
+    }
+
+    /**
+     * The individual running the firm: the archetype plus how firmly they hold it. Every engine reads its
+     * dials through here, so a style and its strength can never be picked up separately by accident.
+     */
+    public function getManagementProfile(): \App\Data\ManagementProfile
+    {
+        return \App\Data\ManagementProfile::forStyle($this->getManagementStyle(), $this->managementIntensity);
+    }
+
+    public function getManagementIntensity(): ?float
+    {
+        return $this->managementIntensity;
+    }
+
+    public function setManagementIntensity(?float $managementIntensity): static
+    {
+        $this->managementIntensity = $managementIntensity;
 
         return $this;
     }

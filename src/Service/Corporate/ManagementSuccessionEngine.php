@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service\Corporate;
 
+use App\Data\ManagementProfile;
 use App\Data\ManagementStyle;
 use App\Entity\Stock;
 use App\Service\Event\MarketEventPublisher;
@@ -96,7 +97,10 @@ class ManagementSuccessionEngine
         $wasForced = $this->isDismissal($tenure, $evaSpread);
         $successor = $this->drawSuccessor($incumbent, $wasForced);
 
+        // A successor is a person, not a label: they bring their own strength of conviction, drawn fresh.
+        // Without this every empire builder the board ever hires would run the firm identically.
         $stock->setManagementStyle($successor);
+        $stock->setManagementIntensity(ManagementProfile::drawIntensity($this->mathUtility));
         $stock->setCeoTenureYears(0.0);
 
         return $this->publishSuccession($stock, $incumbent, $successor, $wasForced, $tenure);
@@ -242,7 +246,7 @@ class ManagementSuccessionEngine
             : 'chief executive stepped down after';
         $mandate = $successor === $outgoing
             ? 'An internal promotion inherits the mandate unchanged.'
-            : sprintf('The incoming management is %s.', $this->describe($successor));
+            : sprintf('The incoming management is %s.', $successor->mandate());
 
         $description = sprintf(
             '%s %s %s years. %s',
@@ -261,15 +265,5 @@ class ManagementSuccessionEngine
             'outgoing' => $outgoing->value,
             'successor' => $successor->value,
         ];
-    }
-
-    private function describe(ManagementStyle $style): string
-    {
-        return match ($style) {
-            ManagementStyle::Operator => 'expected to invest at the cost of capital and distribute the rest',
-            ManagementStyle::EmpireBuilder => 'mandated to grow, and will fund projects a stricter board would refuse',
-            ManagementStyle::Steward => 'expected to hold a high internal hurdle and return what it cannot beat',
-            ManagementStyle::Fortress => 'expected to rebuild the balance sheet and hold cash against the cycle',
-        };
     }
 }

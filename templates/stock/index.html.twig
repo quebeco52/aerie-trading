@@ -2044,6 +2044,39 @@
 						</div>
 					</div>
 
+					{# Management: the archetype running the firm's capital, and how long it has been in post.
+					   Bertrand & Schoar (2003) manager fixed effects, surfaced because the market knows who is
+					   in the chair. The dials themselves are deliberately not shown — the policy is meant to be
+					   read off the payout, the capital budget and the deals. #}
+					{% if management %}
+						{% set convictionTone = {
+							'nominal': 'border-outline-variant/40 text-on-surface-variant bg-surface-container-highest/60',
+							'characteristic': 'border-primary/40 text-primary bg-primary/10',
+							'pronounced': 'border-amber-500/40 text-amber-300 bg-amber-500/10'
+						} %}
+						<div class="bg-surface-container-low rounded-lg p-6 border border-outline-variant/15 hover:border-outline-variant/30 transition-all" id="management-card">
+							<div class="flex items-start justify-between gap-4">
+								<div>
+									<h3 class="text-sm font-semibold text-primary">Capital Allocation</h3>
+									<p class="text-xs text-on-surface-variant mt-1">Management carries a persistent policy bias (Bertrand &amp; Schoar 2003): two firms with the same fundamentals are run differently depending on who runs them. The board replaces a manager whose capital stops earning its cost, and the successor need not share the mandate.</p>
+								</div>
+								<span class="shrink-0 inline-flex items-center rounded border px-2 py-0.5 text-xs font-bold uppercase tracking-wide {{ convictionTone[management.conviction]|default(convictionTone['characteristic']) }}">{{ management.conviction }}</span>
+							</div>
+							<div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs mt-4">
+								<div class="p-4 rounded bg-surface-container-lowest/80 border border-outline-variant/15">
+									<span class="text-on-surface-variant uppercase text-xs font-bold">Style</span>
+									<p class="text-sm font-bold text-on-surface mt-1">{{ management.label }}</p>
+									<p class="text-3xs text-on-surface-variant/70 mt-1 leading-relaxed">Capital is {{ management.mandate }}.</p>
+								</div>
+								<div class="p-4 rounded bg-surface-container-lowest/80 border border-outline-variant/15">
+									<span class="text-on-surface-variant uppercase text-xs font-bold">Tenure</span>
+									<p class="text-sm font-bold text-primary font-mono tabular-nums mt-1">{{ management.tenureYears|number_format(1) }} yrs</p>
+									<p class="text-3xs uppercase tracking-wide text-on-surface-variant/60 mt-1">in post</p>
+								</div>
+							</div>
+						</div>
+					{% endif %}
+
 					{# Industry Position: the industry ledger's roster and capacity balance, and the last report's price response #}
 					{% if industry %}
 						{% set balanceTone = {

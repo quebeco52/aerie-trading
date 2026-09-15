@@ -145,7 +145,7 @@ class CapitalAllocationEngine
         
         // Bertrand & Schoar (2003): payout policy carries a persistent manager fixed effect. An empire
         // builder retains what a steward would distribute, from the same balance sheet.
-        $targetPayout = (float) $stock->getTargetPayoutRatio() * $stock->getManagementStyle()->payoutBias();
+        $targetPayout = (float) $stock->getTargetPayoutRatio() * $stock->getManagementProfile()->payoutBias();
         $speed = (float) $stock->getDividendSpeed();
         $lastDividend = (float) $stock->getLastDividend();
         $isAristocrat = $speed <= 0.03;
@@ -262,7 +262,7 @@ class CapitalAllocationEngine
         // The DISCRETIONARY cash target — the buffer a manager chooses to run, not the solvency floor, which
         // stays exactly where the model puts it. Every hoarding test downstream measures against this, so
         // the fortress is no longer detected as defective for holding the reserves that define it.
-        $ctx->targetOperatingCash = $ctx->stock->getManagementStyle()->appliedTargetCash(
+        $ctx->targetOperatingCash = $ctx->stock->getManagementProfile()->appliedTargetCash(
             $ctx->strategy->calculateTargetOperatingCash($ctx->operatingBase, (float) $ctx->stock->getCustomerDeposits(), (float) $ctx->stock->getWholesaleDebt())
         );
         $ctx->excessCash = max(0.0, $ctx->newTreasury - $ctx->targetOperatingCash);
@@ -294,8 +294,8 @@ class CapitalAllocationEngine
             return;
         }
 
-        $style = $stock->getManagementStyle();
-        $hoardStatus = $ctx->strategy->evaluateHoardingStatus($ctx->newTreasury, $ctx->targetOperatingCash, $style->appliedHoardingBase($ctx->operatingBase), (float) $stock->getTotalDebt());
+        $manager = $stock->getManagementProfile();
+        $hoardStatus = $ctx->strategy->evaluateHoardingStatus($ctx->newTreasury, $ctx->targetOperatingCash, $manager->appliedHoardingBase($ctx->operatingBase), (float) $stock->getTotalDebt());
         $excessCash = $hoardStatus['excess_cash'];
         $isHoarder = $hoardStatus['is_hoarder'];
         $isMegaHoarder = $hoardStatus['is_mega_hoarder'];
@@ -354,7 +354,7 @@ class CapitalAllocationEngine
             // and came straight back out through this leg, so the firm that was supposed to retain ended up
             // distributing more than the steward. The recap floor below is deliberately left unbiased —
             // that is a capital-structure repair, not a distribution preference.
-            $maxWillingSpend *= $style->payoutBias();
+            $maxWillingSpend *= $manager->payoutBias();
 
             $marketCap = $ctx->sharesOutstanding * max($ctx->currentPrice, 0.01);
             $baseRegulatoryPct = $isMegaHoarder ? 0.075 : ($isHoarder ? 0.05 : 0.015);

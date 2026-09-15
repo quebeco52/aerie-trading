@@ -19,6 +19,124 @@ class CorporateMetricsTest extends TestCase
         $this->metrics = CorporateMetrics::getInstance();
     }
 
+    /**
+     * Cobb-Douglas diminishing marginal productivity above the optimal operating scale. It is one of the
+     * three components of a marginal return, and the only one a firm growing WITH its market never pays:
+     * the decay is a function of share, so at constant share the next unit of capital is as productive as
+     * the last.
+     */
+    public function testScaleDiseconomiesAreANoOpBelowTheOptimalScaleAndADecayAboveIt(): void
+    {
+        $stock = $this->scaledFirm('SCAL');
+        $threshold = FinancialConstants::DISECONOMY_OPTIMAL_SHARE_THRESHOLD;
+
+        // A firm that still has market left to grow into pays nothing.
+        $this->assertSame(0.18, $this->metrics->applyScaleDiseconomies($stock, 0.18, $threshold * 0.5));
+        $this->assertSame(0.18, $this->metrics->applyScaleDiseconomies($stock, 0.18, $threshold));
+
+        // Past it the return decays as a power law in how far past it the capital has run.
+        $mild = $this->metrics->applyScaleDiseconomies($stock, 0.18, $threshold * 1.5);
+        $severe = $this->metrics->applyScaleDiseconomies($stock, 0.18, $threshold * 3.0);
+
+        $this->assertLessThan(0.18, $mild);
+        $this->assertLessThan($mild, $severe);
+        $this->assertEqualsWithDelta(
+            0.18 * pow(3.0, -FinancialConstants::CAPITAL_MARGINAL_ELASTICITY),
+            $severe,
+            1e-12,
+            'ROIC_marginal = ROIC_base x (K / K_optimal)^(-alpha) at the default moat factor.'
+        );
+
+        // A firm whose position defends the extra scale pays a softer elasticity for the same capital.
+        $titan = $this->scaledFirm('TITN');
+        $titan->setSystemicImportance('titan');
+        $this->assertGreaterThan(
+            $this->metrics->applyScaleDiseconomies($stock, 0.18, $threshold * 3.0),
+            $this->metrics->applyScaleDiseconomies($titan, 0.18, $threshold * 3.0)
+        );
+
+        // A return already at or below zero has nothing left to decay.
+        $this->assertSame(0.0, $this->metrics->applyScaleDiseconomies($stock, -0.05, $threshold * 3.0));
+    }
+
+    /**
+     * The invariant behind the fix: the earnings engine's structural growth gate and the treasury's
+     * deployment gates must price the next share-taking dollar identically.
+     *
+     * The earnings gate composes it from the pieces (its structural return already carries the saturation
+     * penalty from getTargetMetrics, so it nets only the Cournot haircut and then the scale decay); the
+     * treasury calls calculateMarginalReturn. Those two have to be the same number, or a firm can clear one
+     * gate on a return the very next gate in the same quarter refuses.
+     */
+    public function testBothGrowthGatesPriceTheNextShareTakingDollarIdentically(): void
+    {
+        $macroState = new MacroStateDTO(nominalGdpIndex: 1.0);
+        $structuralReturn = 0.16;
+
+        foreach ([0.20, 0.50, 0.90, 1.40] as $targetShare) {
+            $stock = $this->scaledFirm('GATE');
+            $investedCapital = $targetShare * FinancialConstants::BASELINE_SECTOR_TAM * (float) $stock->getSamRatio();
+            $share = $this->metrics->calculateScaleRatio($investedCapital, $macroState->nominalGdpIndex, (float) $stock->getSamRatio());
+
+            // How EarningsEngine::calculateGrowthCapEx builds its share-taking return.
+            $earningsGate = $this->metrics->applyScaleDiseconomies(
+                $stock,
+                $structuralReturn - $this->metrics->calculateCournotPriceHaircut($stock, $share, $investedCapital, $macroState),
+                $share
+            );
+
+            // How TreasuryEngine builds the same figure. The penalty is zero because the structural return
+            // the earnings engine starts from already carries it.
+            $treasuryGate = $this->metrics->calculateMarginalReturn($stock, $structuralReturn, 0.0, $investedCapital, $macroState);
+
+            $this->assertEqualsWithDelta(
+                $treasuryGate,
+                $earningsGate,
+                1e-12,
+                sprintf('The two gates disagree at a scale ratio of %.2f.', $share)
+            );
+        }
+    }
+
+    /**
+     * A statutory monopoly sells nothing substitutable, so adding capacity cuts no price and the Cournot
+     * haircut is exactly zero. Before the decay was shared, that left such a firm with NO scale brake at all
+     * on the earnings side — its share-taking return was its average return however far its plant had
+     * outrun the territory it serves.
+     */
+    public function testANonSubstitutableFirmStillPaysForOutgrowingItsMarket(): void
+    {
+        $utility = $this->scaledFirm('WATT');
+        $utility->setIndustry('Utilities - Regulated Electric');
+
+        $macroState = new MacroStateDTO(nominalGdpIndex: 1.0);
+        $investedCapital = 1.4 * FinancialConstants::BASELINE_SECTOR_TAM * (float) $utility->getSamRatio();
+        $share = $this->metrics->calculateScaleRatio($investedCapital, $macroState->nominalGdpIndex, (float) $utility->getSamRatio());
+
+        $this->assertSame(
+            0.0,
+            $this->metrics->calculateCournotPriceHaircut($utility, $share, $investedCapital, $macroState),
+            'Nothing substitutable is being sold, so no price is cut by building.'
+        );
+        $this->assertLessThan(
+            0.16,
+            $this->metrics->applyScaleDiseconomies($utility, 0.16, $share),
+            'The plant has still outrun the territory it serves, and the next unit of it earns less.'
+        );
+    }
+
+    private function scaledFirm(string $ticker): Stock
+    {
+        $stock = new Stock();
+        $stock->setTicker($ticker);
+        $stock->setIndustry('Auto Manufacturers');
+        $stock->setSamRatio('1.00');
+        $stock->setTotalRevenue('80000000000');
+        $stock->setAssetTurnover('1.0000');
+
+        return $stock;
+    }
+
     public function testGetIndustryDepreciationRate(): void
     {
         $this->assertSame(0.02, $this->metrics->getIndustryDepreciationRate('Banks - Diversified'));

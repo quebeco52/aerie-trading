@@ -223,8 +223,8 @@ class TreasuryEngine
         // build is the same decision as building from cash, so one manager has to bring one hurdle to both;
         // reading the raw rate here left an empire builder disciplined about debt-funded plant and reckless
         // about cash-funded plant, which is not a persistent style but an accident of funding source.
-        $style = $stock->getManagementStyle();
-        $hurdleRate = $style->appliedHurdle($ctx->strategy->getHurdleRate($ctx->health));
+        $manager = $stock->getManagementProfile();
+        $hurdleRate = $manager->appliedHurdle($ctx->strategy->getHurdleRate($ctx->health));
 
         $evaluationCapital = $ctx->strategy->getEvaluationCapital($preBuybackEquity, $liveInvestedCapital);
 
@@ -253,7 +253,7 @@ class TreasuryEngine
             );
 
             // Subtract excess cash from the TOTAL balance sheet capacity first
-            $targetCashReserves = $style->appliedTargetCash($ctx->strategy->calculateTargetOperatingCash($ctx->operatingBase, $ctx->customerDeposits, $ctx->wholesaleDebt)) * 1.20;
+            $targetCashReserves = $manager->appliedTargetCash($ctx->strategy->calculateTargetOperatingCash($ctx->operatingBase, $ctx->customerDeposits, $ctx->wholesaleDebt)) * 1.20;
             $excessCash = max(0.0, $ctx->newTreasury - $targetCashReserves);
 
             $trueExpansionCapacity = $ctx->strategy->getUnfundedExpansionCapacity($trueExpansionCapacity, $excessCash);
@@ -276,8 +276,8 @@ class TreasuryEngine
                 // How much of that capacity the firm is willing to draw is a manager's choice; the capacity
                 // itself is not, so the style scales the appetite and never the limit. A fortress leaves
                 // headroom unused through the cycle, an empire builder borrows into it.
-                $borrowProbability = min(1.0, $aggressionData->probability * $style->leverageBias());
-                $aggressiveness = min(1.0, $aggressionData->aggressiveness * $style->leverageBias());
+                $borrowProbability = min(1.0, $aggressionData->probability * $manager->leverageBias());
+                $aggressiveness = min(1.0, $aggressionData->aggressiveness * $manager->leverageBias());
 
                 if ($isUnderLeveragedForDebt) {
                     $aggressiveness = max($aggressiveness, 0.50);
@@ -326,8 +326,8 @@ class TreasuryEngine
         }
         // Management's own hurdle again, the same one the debt-funded gate above and the earnings engine's
         // growth-capex gate apply.
-        $style = $stock->getManagementStyle();
-        $hurdleRate = $style->appliedHurdle($ctx->strategy->getHurdleRate($ctx->health));
+        $manager = $stock->getManagementProfile();
+        $hurdleRate = $manager->appliedHurdle($ctx->strategy->getHurdleRate($ctx->health));
         $evaluationCapital = $ctx->strategy->getEvaluationCapital($preBuybackEquity, $liveInvestedCapital);
 
         $saturationPenalty = $this->corporateMetrics->calculateMarketSaturationPenalty($stock, $evaluationCapital, $ctx->macroState);
@@ -351,8 +351,8 @@ class TreasuryEngine
             return;
         }
 
-        $targetCashReserves = $style->appliedTargetCash($ctx->strategy->calculateTargetOperatingCash($ctx->operatingBase, $ctx->customerDeposits, $ctx->wholesaleDebt)) * 1.20;
-        $hoardStatus = $ctx->strategy->evaluateHoardingStatus($ctx->newTreasury, $targetCashReserves, $style->appliedHoardingBase($ctx->operatingBase), $totalDebt);
+        $targetCashReserves = $manager->appliedTargetCash($ctx->strategy->calculateTargetOperatingCash($ctx->operatingBase, $ctx->customerDeposits, $ctx->wholesaleDebt)) * 1.20;
+        $hoardStatus = $ctx->strategy->evaluateHoardingStatus($ctx->newTreasury, $targetCashReserves, $manager->appliedHoardingBase($ctx->operatingBase), $totalDebt);
         $excessCash = $hoardStatus['excess_cash'];
         $isHoarder = $hoardStatus['is_hoarder'];
         $isMegaHoarder = $hoardStatus['is_mega_hoarder'];
@@ -801,7 +801,7 @@ class TreasuryEngine
 
         // The hoarding test below asks whether this manager is sitting on too much cash, which is the very
         // question the style answers, so it has to be measured against the balance the manager runs to.
-        $targetOperatingCash = $ctx->stock->getManagementStyle()->appliedTargetCash(
+        $targetOperatingCash = $ctx->stock->getManagementProfile()->appliedTargetCash(
             $ctx->strategy->calculateTargetOperatingCash($ctx->operatingBase, $ctx->customerDeposits, $ctx->wholesaleDebt)
         );
 
@@ -814,7 +814,7 @@ class TreasuryEngine
 
             $currentDebtRatio = $evalDebt / max(1.0, $newEquity);
 
-            $hoardStatus = $ctx->strategy->evaluateHoardingStatus($ctx->newTreasury, $targetOperatingCash, $ctx->stock->getManagementStyle()->appliedHoardingBase($ctx->operatingBase), $totalDebt);
+            $hoardStatus = $ctx->strategy->evaluateHoardingStatus($ctx->newTreasury, $targetOperatingCash, $ctx->stock->getManagementProfile()->appliedHoardingBase($ctx->operatingBase), $totalDebt);
 
             $baselineSpread = (float) $stock->getCreditSpread();
             $dynamicSpread = $ctx->health->rawMetrics->dynamicSpread ?? $baselineSpread;

@@ -1696,8 +1696,8 @@ class EarningsEngine
     private function calculateGrowthCapEx(EarningsSimulationContext $ctx, float $cycleCapExModifier, float $maintenanceCapEx, float $deltaNwc): float
     {
         $stock = $ctx->stock;
-        $style = $stock->getManagementStyle();
-        $reinvestmentRate = max(0.0, (float) $stock->getCapexRatio()) * $style->reinvestmentBias();
+        $manager = $stock->getManagementProfile();
+        $reinvestmentRate = max(0.0, (float) $stock->getCapexRatio()) * $manager->reinvestmentBias();
         $hurdleRate = $ctx->health instanceof \App\DTO\DebtHealthDTO
             ? $ctx->strategy->getHurdleRate($ctx->health)
             : FinancialConstants::DEFAULT_WACC_FALLBACK;
@@ -1706,7 +1706,7 @@ class EarningsEngine
         // that do not clear the cost of capital. The style bends the hurdle management applies, so an
         // empire builder keeps growing through returns a disciplined board would refuse to fund — and the
         // ROIC reversion downstream then prices exactly that value destruction.
-        $appliedHurdle = $style->appliedHurdle($hurdleRate);
+        $appliedHurdle = $manager->appliedHurdle($hurdleRate);
 
         if ($reinvestmentRate <= 0.0 || $ctx->baselineRoic < $appliedHurdle) {
             return 0.0;
@@ -1717,16 +1717,32 @@ class EarningsEngine
 
         // Plant that grows with the firm's market moves no price: the industry capacity balance charges
         // nothing for capacity that tracks trend demand, so that tranche clears at the average return.
-        // Anything beyond it is share-taking, and for a quantity-setting firm the next unit of that earns
-        // the structural return less the price cut it imposes on everything the firm already sells
-        // (Cournot; the same haircut the treasury's expansion gate applies). A firm that could only grow
-        // faster than its market by spoiling it stops at trend, rather than after the industry price has
-        // eaten its margin.
-        $shareTakingReturn = $ctx->baselineRoic - $this->corporateMetrics->calculateCournotPriceHaircut(
+        // Anything beyond it is share-taking, and the next unit of THAT earns a marginal return, which is
+        // the structural return less two things a firm growing with its market never pays:
+        //
+        //   - the price cut it imposes on everything it already sells (Cournot, via the Lerner term), and
+        //   - Cobb-Douglas diminishing marginal productivity once its capital has outgrown the market it
+        //     serves, which at a scale ratio of 1.4 is worth more than the price cut is.
+        //
+        // The saturation penalty, the third component, is NOT subtracted here: baselineRoic arrives from
+        // getTargetMetrics already net of it, and charging it again would price the same bloat twice.
+        //
+        // The decay used to be missing on this side, so the two gates were composing the marginal return
+        // from different parts. In practice it is a BACKSTOP rather than a live brake: the Penrose penalty
+        // already inside baselineRoic is quadratic and reaches 0.2 x moat by a scale ratio of 1.0, which
+        // takes the structural return to roughly zero over the same band where the decay first bites — so
+        // the primary NPV gate above has almost always refused already. It is composed here anyway because
+        // the law belongs in one place: if the penalty is ever softened, or moved onto realized margins
+        // where its own docblock says it belongs, this gate does not silently become the loose one.
+        $shareTakingReturn = $this->corporateMetrics->applyScaleDiseconomies(
             $stock,
-            $ctx->addressableShare,
-            abs($ctx->investedCapital),
-            $ctx->macroState
+            $ctx->baselineRoic - $this->corporateMetrics->calculateCournotPriceHaircut(
+                $stock,
+                $ctx->addressableShare,
+                abs($ctx->investedCapital),
+                $ctx->macroState
+            ),
+            $ctx->addressableShare
         );
         if ($shareTakingReturn < $appliedHurdle) {
             // Trend is the sector's secular real growth plus the price level. Replacement-cost maintenance
