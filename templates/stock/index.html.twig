@@ -367,7 +367,7 @@
 									</div>
 
 									{# Borrowed sides, shown only on a margin account and only for equities. #}
-									{% if not isEtf and app.user.marginEnabled %}
+									{% if not isEtf and app.user and app.user.marginEnabled %}
 										<div class="flex gap-2 bg-surface-container-lowest p-1 rounded border border-outline-variant/20">
 											<label class="flex-1 cursor-pointer">
 												<input type="radio" name="action" value="SHORT" class="peer sr-only">

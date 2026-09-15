@@ -265,7 +265,8 @@ class IndustryShareLedger
      *     peers: array<string, array{revenue: float, revenue_share: float, capacity: float}>,
      *     installed_capacity: float|null,
      *     trend_capacity: float|null,
-     *     capacity_ratio: float|null
+     *     capacity_ratio: float|null,
+     *     roster_trend_share: float|null
      * }|null
      */
     public function describeIndustry(Stock $stock, ?array $trend, int $tick, int $ticksPerYear): ?array
@@ -303,11 +304,13 @@ class IndustryShareLedger
         $installedCapacity = null;
         $trendCapacity = null;
         $capacityRatio = null;
+        $rosterTrendShare = null;
         if ($trend !== null && $own !== null && (float) ($own['anchor_capacity_share'] ?? 0.0) > 0.0) {
             $balance = $this->capacityBalance($records, $ticker, $trend['trend_nominal_gdp'], $trend['total_time'], $trend['secular_excess_growth'], $tick, $ticksPerYear);
             $installedCapacity = $balance['installed_capacity'];
             $trendCapacity = $balance['trend_capacity'];
             $capacityRatio = $this->boundedCapacityRatio($balance['supply_over_demand']);
+            $rosterTrendShare = $balance['roster_trend_share'];
         }
 
         return [
@@ -316,6 +319,7 @@ class IndustryShareLedger
             'installed_capacity' => $installedCapacity,
             'trend_capacity' => $trendCapacity,
             'capacity_ratio' => $capacityRatio,
+            'roster_trend_share' => $rosterTrendShare,
         ];
     }
 
@@ -324,7 +328,7 @@ class IndustryShareLedger
      * its record is under a year old): industry supply over demand, and the modelled plant behind it.
      *
      * @param array<string, array{revenue: float, gain: float, capacity: float, anchor_capacity_share: float, anchor_demand_share: float, anchor_time: float, addressable_share: float, tick: int, consumed_tick: int}> $records
-     * @return array{supply_over_demand: float, installed_capacity: float, trend_capacity: float}
+     * @return array{supply_over_demand: float, installed_capacity: float, trend_capacity: float, roster_trend_share: float}
      */
     private function capacityBalance(
         array $records,
@@ -338,6 +342,7 @@ class IndustryShareLedger
         $excess = 0.0;
         $installed = 0.0;
         $trendCapacity = 0.0;
+        $rosterTrendShare = 0.0;
 
         foreach ($records as $peerTicker => $record) {
             if ((float) ($record['anchor_capacity_share'] ?? 0.0) <= 0.0) {
@@ -355,13 +360,45 @@ class IndustryShareLedger
             $installed += $capacity;
             $trendCapacity += $trendPlant;
             $excess += ($capacity - $trendPlant) / max(1.0, $trendDemand);
+            // Trend plant over trend demand is the anchor share itself: the growth factor cancels.
+            $rosterTrendShare += $trendDemand > 0.0 ? $trendPlant / $trendDemand : 0.0;
         }
 
         return [
             'supply_over_demand' => 1.0 + $excess,
             'installed_capacity' => $installed,
             'trend_capacity' => $trendCapacity,
+            'roster_trend_share' => min(1.0, $rosterTrendShare),
         ];
+    }
+
+    /**
+     * The modelled roster's trend share of the market it sells into: the sum of the anchor shares of every
+     * record on the roster (a retired firm's hole included until its record ages out). The rest of the
+     * market is the competitive fringe that answers the industry price. One at most: a roster that spans
+     * more than its market is a closed loop with no fringe left to cede.
+     */
+    public function resolveRosterTrendShare(Stock $stock, int $tick, int $ticksPerYear): float
+    {
+        $industry = $stock->getIndustry();
+        $ticker = $stock->getTicker();
+        if ($industry === null || $industry === '' || $ticker === '') {
+            return 0.0;
+        }
+
+        $share = 0.0;
+        foreach ($this->store->readIndustry($industry) as $peerTicker => $record) {
+            $demandShare = (float) ($record['anchor_demand_share'] ?? 0.0);
+            if ($demandShare <= 0.0 || (float) ($record['anchor_capacity_share'] ?? 0.0) <= 0.0) {
+                continue;
+            }
+            if ($peerTicker !== $ticker && $tick - $record['tick'] > $ticksPerYear) {
+                continue;
+            }
+            $share += (float) $record['anchor_capacity_share'] / $demandShare;
+        }
+
+        return min(1.0, $share);
     }
 
     private function boundedCapacityRatio(float $supplyOverDemand): float

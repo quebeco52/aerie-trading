@@ -183,6 +183,38 @@ class IndustryShareLedgerTest extends TestCase
         $this->assertArrayNotHasKey('NVR', (new \ReflectionProperty($ledger, 'store'))->getValue($ledger)->readIndustry('Steel'));
     }
 
+    public function testTheRosterTrendShareIsTheSumOfAnchorSharesAndTheFringeIsTheRest(): void
+    {
+        $ledger = new IndustryShareLedger(new InMemoryIndustryShareStore());
+        $leader = $this->stock('LDR', 4_000.0);
+        $peer = $this->stock('PER', 2_000.0);
+
+        $this->assertSame(0.0, $ledger->resolveRosterTrendShare($leader, 10, 252), 'nothing anchored yet');
+
+        $ledger->resolveIndustryCapacityRatio($leader, 4_000.0, 0.40, 1.0, 0.0, 0.0, 10, 252);
+        $this->assertEqualsWithDelta(0.40, $ledger->resolveRosterTrendShare($leader, 10, 252), 1e-9);
+
+        $ledger->resolveIndustryCapacityRatio($peer, 2_000.0, 0.25, 1.0, 0.0, 0.0, 20, 252);
+        $this->assertEqualsWithDelta(0.65, $ledger->resolveRosterTrendShare($leader, 20, 252), 1e-9);
+
+        // The anchor share does not move when the firm builds: the fringe is sized off trend, not off plant.
+        $ledger->resolveIndustryCapacityRatio($leader, 6_000.0, 0.55, 1.0, 0.0, 0.0, 73, 252);
+        $this->assertEqualsWithDelta(0.65, $ledger->resolveRosterTrendShare($leader, 73, 252), 1e-9);
+
+        // A retired firm's hole stays on the roster until its record ages out, then belongs to the fringe.
+        $ledger->retireFirm($peer);
+        $this->assertEqualsWithDelta(0.65, $ledger->resolveRosterTrendShare($leader, 73, 252), 1e-9);
+        $this->assertEqualsWithDelta(0.40, $ledger->resolveRosterTrendShare($leader, 20 + 253, 252), 1e-9);
+
+        // A roster past its whole market is a closed loop: no fringe.
+        $ledger->resolveIndustryCapacityRatio($this->stock('BIG', 9_000.0), 9_000.0, 0.90, 1.0, 0.0, 0.0, 300, 252);
+        $this->assertSame(1.0, $ledger->resolveRosterTrendShare($leader, 300, 252));
+        $this->assertSame(0.0, $ledger->resolveRosterTrendShare($this->stock('', 1.0), 300, 252));
+
+        $described = $ledger->describeIndustry($leader, ['trend_nominal_gdp' => 1.0, 'total_time' => 0.0, 'secular_excess_growth' => 0.0], 300, 252);
+        $this->assertEqualsWithDelta(1.0, $described['roster_trend_share'], 1e-9);
+    }
+
     public function testTheCapacityRatioIsBoundedToTheRangeThePriceRespondsTo(): void
     {
         $ledger = new IndustryShareLedger(new InMemoryIndustryShareStore());

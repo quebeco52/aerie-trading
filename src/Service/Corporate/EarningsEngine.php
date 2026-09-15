@@ -593,7 +593,14 @@ class EarningsEngine
             $ctx->ticksPerYear
         );
 
-        $industryPrice = $this->mathUtility->calculateCournotPriceLevel($capacityRatio, FinancialConstants::COURNOT_DEMAND_ELASTICITY);
+        // The roster is priced as dominant firms against a competitive fringe that answers the price: an
+        // overbuild is partly absorbed by fringe exit, a hole left by a failed firm partly refilled.
+        $industryPrice = $this->mathUtility->calculateFringeAdjustedPriceLevel(
+            $capacityRatio,
+            $this->industryShareLedger->resolveRosterTrendShare($ctx->stock, $ctx->tickCount, $ctx->ticksPerYear),
+            FinancialConstants::COURNOT_DEMAND_ELASTICITY,
+            FinancialConstants::FRINGE_SUPPLY_ELASTICITY
+        );
         $firmResponse = $substitutability * ($industryPrice - 1.0);
 
         return 1.0 + max(-FinancialConstants::MAX_INDUSTRY_PRICE_RESPONSE, min(FinancialConstants::MAX_INDUSTRY_PRICE_RESPONSE, $firmResponse));
@@ -1708,6 +1715,29 @@ class EarningsEngine
         $structuralQuarterlyNopat = $ctx->baselineRoic * abs($ctx->investedCapital) / 4.0;
         $plannedGrowthCapEx = $structuralQuarterlyNopat * $reinvestmentRate * $cycleCapExModifier;
 
+        // Plant that grows with the firm's market moves no price: the industry capacity balance charges
+        // nothing for capacity that tracks trend demand, so that tranche clears at the average return.
+        // Anything beyond it is share-taking, and for a quantity-setting firm the next unit of that earns
+        // the structural return less the price cut it imposes on everything the firm already sells
+        // (Cournot; the same haircut the treasury's expansion gate applies). A firm that could only grow
+        // faster than its market by spoiling it stops at trend, rather than after the industry price has
+        // eaten its margin.
+        $shareTakingReturn = $ctx->baselineRoic - $this->corporateMetrics->calculateCournotPriceHaircut(
+            $stock,
+            $ctx->addressableShare,
+            abs($ctx->investedCapital),
+            $ctx->macroState
+        );
+        if ($shareTakingReturn < $appliedHurdle) {
+            // Trend is the sector's secular real growth plus the price level. Replacement-cost maintenance
+            // has already carried part of the price level onto the plant ledger this quarter (the slice it
+            // replaced dearer than it was booked), so only the remainder is growth spend.
+            $trendNominalGrowth = max(0.0, $ctx->strategy->getSecularGrowthRate($stock) + max(0.0, $ctx->macroState->inflationEma));
+            $revaluationAlreadyBooked = max(0.0, $maintenanceCapEx - $ctx->quarterlyDepreciation);
+            $plantBase = $stock->getGrossPpe() !== null ? max(0.0, $stock->getNetPpe()) : abs($ctx->investedCapital);
+            $trendTranche = max(0.0, $plantBase * $trendNominalGrowth / 4.0 - $revaluationAlreadyBooked);
+            $plannedGrowthCapEx = min($plannedGrowthCapEx, $trendTranche);
+        }
         $operatingBase = $this->corporateMetrics->calculateOperatingBase((float) $stock->getTotalRevenue(), (float) $stock->getTotalEquity());
         $minOperatingCash = $ctx->strategy->calculateMinOperatingCash($operatingBase, (float) $stock->getCustomerDeposits(), (float) $stock->getWholesaleDebt());
         $deployableCash = max(0.0, (float) $stock->getCorporateTreasury() - $minOperatingCash);

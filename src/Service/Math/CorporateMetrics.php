@@ -79,11 +79,11 @@ class CorporateMetrics
      */
     public function calculateMarginalReturn(Stock $stock, float $trueReturn, float $saturationPenalty, float $investedCapital, \App\DTO\MacroStateDTO $macroState): float
     {
-        $baseReturn = max(0.0, $trueReturn - $saturationPenalty);
-
         $nominalGdpIndex = $macroState->nominalGdpIndex;
         $samRatio = (float) $stock->getSamRatio();
         $marketShare = $this->calculateScaleRatio($investedCapital, $nominalGdpIndex, $samRatio);
+
+        $baseReturn = max(0.0, $trueReturn - $saturationPenalty - $this->calculateCournotPriceHaircut($stock, $marketShare, $investedCapital, $macroState));
 
         $optimalThreshold = FinancialConstants::DISECONOMY_OPTIMAL_SHARE_THRESHOLD;
         if ($marketShare <= $optimalThreshold) {
@@ -98,6 +98,41 @@ class CorporateMetrics
         $effectiveElasticity = FinancialConstants::CAPITAL_MARGINAL_ELASTICITY * $moatFactor;
 
         return max(0.0, $baseReturn * pow($capitalScale, -$effectiveElasticity));
+    }
+
+    /**
+     * What the next unit of plant costs the firm on the plant it already runs: a quantity-setting firm sells
+     * every unit into one industry price, so adding capacity lowers the price on all of its output (Cournot;
+     * the Lerner term s/e of the marginal-revenue factor). Per unit of capital that is the asset turnover
+     * times the after-tax share of revenue lost, so the marginal return is the average return less this
+     * haircut. It is the mirror image of the industry capacity balance in the earnings engine: the firm
+     * internalises the price response the ledger will charge it, and stops building before the price cut
+     * has eaten its margin. Financials sell a yield, not a unit, and are left alone; so is any model whose
+     * output is declared non-substitutable.
+     */
+    public function calculateCournotPriceHaircut(Stock $stock, float $marketShare, float $investedCapital, \App\DTO\MacroStateDTO $macroState): float
+    {
+        $revenue = (float) $stock->getTotalRevenue();
+        if ($revenue <= 0.0 || $investedCapital <= 0.0 || $marketShare <= 0.0) {
+            return 0.0;
+        }
+
+        $industry = $stock->getIndustry() ?: 'General';
+        $businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['business_model'] ?? 'none';
+        $strategy = \App\Data\Sectors::getBusinessModelStrategy($businessModel);
+        $substitutability = $strategy->getIndustrySubstitutability();
+        if ($strategy->isFinancial() || $substitutability <= 0.0) {
+            return 0.0;
+        }
+
+        $marginalRevenueFactor = MathUtility::getInstance()->calculateCournotMarginalRevenueFactor(
+            $marketShare,
+            FinancialConstants::COURNOT_DEMAND_ELASTICITY,
+            $substitutability
+        );
+        $assetTurnover = $revenue / $investedCapital;
+
+        return $assetTurnover * (1.0 - $macroState->corporateTaxRate) * (1.0 - $marginalRevenueFactor);
     }
 
     /**

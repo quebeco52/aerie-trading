@@ -113,8 +113,8 @@ final class DecimalArithmeticTest extends TestCase
         yield 'exponent notation' => ['1.0E-5'];
         yield 'large exponent' => ['1.0E+25'];
         yield 'letters' => ['abc'];
-        yield 'empty' => [''];
         yield 'whitespace only' => ['   '];
+        yield 'leading and trailing whitespace' => ['  12.5  '];
         yield 'currency symbol' => ['$12.50'];
         yield 'thousands separator' => ['1,000.00'];
         yield 'trailing garbage' => ['12.5x'];
@@ -128,6 +128,6 @@ final class DecimalArithmeticTest extends TestCase
         $this->assertSame('-12.5000', bcadd('-12.5', '0', 4));
         $this->assertSame('0.5000', bcadd('.5', '0', 4));
         $this->assertSame('5.0000', bcadd('5.', '0', 4));
-        $this->assertSame('12.5000', bcadd('  12.5  ', '0', 4));
+        $this->assertSame('0.0000', bcadd('', '0', 4));
     }
 }

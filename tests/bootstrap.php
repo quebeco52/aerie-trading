@@ -55,13 +55,15 @@ if (!function_exists('bcadd')) {
      * @return array{0: int, 1: string, 2: int}
      */
     function __bcpoly_parse(string $num): array {
-        $num = trim($num);
-
         // Reject what real bcmath rejects. Stripping the offending characters instead - which is what this
         // did - meant the polyfill answered where the extension throws, and answered WRONGLY: the sole
         // caller of `(string) $someFloat` reaching bcmath hands it "1.0E-5" for 0.00001, which parsed to
         // 1.05 here and a ValueError in production. A test suite that cannot see that divergence is not
         // testing the arithmetic that runs.
+        if ($num === '') {
+            return [1, '0', 0];
+        }
+
         if (!preg_match('/^[+-]?\d*(\.\d*)?$/', $num) || !preg_match('/\d/', $num)) {
             throw new \ValueError('is not well-formed');
         }

@@ -90,6 +90,42 @@ class CorporateMetricsTest extends TestCase
         $this->assertGreaterThan(0.0, $returnSaturated);
     }
 
+    public function testMarginalReturnInternalisesTheFirmsOwnPriceEffectOnItsIndustry(): void
+    {
+        // A steel maker (substitutability 0.6) at a 30% addressable share, turning its capital 1.5x a year.
+        $stock = new Stock();
+        $stock->setIndustry('Steel');
+        $stock->setSamRatio('1.0');
+        $stock->setSystemicImportance('default');
+        $stock->setTotalRevenue((string) (450_000_000_000.0));
+        $macro = new MacroStateDTO(nominalGdpIndex: 1.0, corporateTaxRate: 0.21);
+        $capital = 300_000_000_000.0;
+
+        $substitutability = \App\Data\Sectors::getBusinessModelStrategy(\App\Data\Sectors::INDUSTRY_METRICS['Steel']['business_model'])->getIndustrySubstitutability();
+        $lerner = 0.30 * $substitutability / FinancialConstants::COURNOT_DEMAND_ELASTICITY;
+        $expectedHaircut = 1.5 * (1.0 - 0.21) * $lerner;
+
+        $haircut = $this->metrics->calculateCournotPriceHaircut($stock, 0.30, $capital, $macro);
+        $this->assertEqualsWithDelta($expectedHaircut, $haircut, 1e-12);
+        $this->assertEqualsWithDelta(0.20 - $expectedHaircut, $this->metrics->calculateMarginalReturn($stock, 0.20, 0.0, $capital, $macro), 1e-12);
+
+        // The haircut grows with share: the same plant is a smaller cut for a smaller firm.
+        $this->assertLessThan($haircut, $this->metrics->calculateCournotPriceHaircut($stock, 0.10, $capital, $macro));
+        // It never takes the marginal return below zero.
+        $this->assertSame(0.0, $this->metrics->calculateMarginalReturn($stock, 0.01, 0.0, $capital, $macro));
+
+        // No revenue, no share, a financial, or a non-substitutable model: price-taker, no haircut.
+        $this->assertSame(0.0, $this->metrics->calculateCournotPriceHaircut($stock, 0.0, $capital, $macro));
+        $bank = new Stock();
+        $bank->setIndustry('Banks - Diversified');
+        $bank->setTotalRevenue('450000000000');
+        $this->assertSame(0.0, $this->metrics->calculateCournotPriceHaircut($bank, 0.30, $capital, $macro));
+        $utility = new Stock();
+        $utility->setIndustry('Utilities - Regulated Electric');
+        $utility->setTotalRevenue('450000000000');
+        $this->assertSame(0.0, $this->metrics->calculateCournotPriceHaircut($utility, 0.30, $capital, $macro));
+    }
+
     public function testInterestCoverageRatioZeroHandling(): void
     {
         // Zero interest expense should return 999.0 safe maximum

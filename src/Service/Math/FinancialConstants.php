@@ -270,6 +270,8 @@ class FinancialConstants
     public const MIN_INDUSTRY_CAPACITY_RATIO = 0.5;
     /** Largest fraction by which the industry capacity balance may move a single firm's realized price level, either way. */
     public const MAX_INDUSTRY_PRICE_RESPONSE = 0.30;
+    /** Long-run supply elasticity of the competitive fringe (Forchheimer): fringe output ~ P^eta, so it cedes share when dominant firms overbuild and refills a hole when one exits; unit elasticity is the textbook constant-cost long run. */
+    public const FRINGE_SUPPLY_ELASTICITY = 1.0;
 
     // --- Corporate Flow Pacing (SEC Rule 10b-18) ---
     /** Share of a day's average volume a repurchase program (or a placed offering's flowback) may execute per day under the 10b-18 volume condition. */

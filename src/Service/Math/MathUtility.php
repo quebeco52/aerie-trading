@@ -803,6 +803,69 @@ class MathUtility
     }
 
     /**
+     * The price level an industry clears at once the competitive fringe has answered it (Forchheimer dominant
+     * firm with a price-taking fringe). The modelled roster holds its plant fixed at rosterShare + excess of
+     * trend demand; the fringe supplies (1 - rosterShare) * P^eta; demand is P^(-e). The clearing price solves
+     *   rosterShare + excess + (1 - rosterShare) * P^eta = P^(-e),
+     * which is the plain Cournot level when eta = 0 or the roster is the whole market. Overbuilding is then
+     * partly absorbed by fringe exit rather than carried forever as a price cut.
+     *
+     * @param float $capacityRatio     Installed supply over trend demand at the trend price, already bounded.
+     * @param float $rosterShare       The modelled roster's trend share of the market it sells into (0..1).
+     * @param float $elasticity        Industry price elasticity of demand (must be positive).
+     * @param float $fringeElasticity  Long-run supply elasticity of the fringe (0 = fixed at trend).
+     */
+    public function calculateFringeAdjustedPriceLevel(float $capacityRatio, float $rosterShare, float $elasticity, float $fringeElasticity): float
+    {
+        if ($capacityRatio <= 0.0 || $elasticity <= 0.0) {
+            return 1.0;
+        }
+        $rosterShare = max(0.0, min(1.0, $rosterShare));
+        $fringeShare = 1.0 - $rosterShare;
+        if ($fringeElasticity <= 0.0 || $fringeShare <= 0.0) {
+            return $this->calculateCournotPriceLevel($capacityRatio, $elasticity);
+        }
+
+        // f(P) = roster + excess + fringe * P^eta - P^(-e) rises monotonically in P; bracket and bisect.
+        $rosterSupply = $capacityRatio - $fringeShare;
+        $f = fn(float $p): float => $rosterSupply + $fringeShare * ($p ** $fringeElasticity) - ($p ** (-$elasticity));
+        $low = 0.05;
+        $high = 20.0;
+        if ($f($low) >= 0.0) {
+            return $low;
+        }
+        if ($f($high) <= 0.0) {
+            return $high;
+        }
+        for ($i = 0; $i < 64; $i++) {
+            $mid = 0.5 * ($low + $high);
+            if ($f($mid) > 0.0) {
+                $high = $mid;
+            } else {
+                $low = $mid;
+            }
+        }
+
+        return 0.5 * ($low + $high);
+    }
+
+    /**
+     * Marginal revenue over price for a quantity-setting firm that internalises its own price effect: the
+     * Cournot Lerner condition MR/P = 1 - s/e, with s the firm's share of the market it sells into and e the
+     * industry price elasticity of demand, scaled by how substitutable its output is (a firm whose output
+     * is not substitutable does not move the industry price). Floored at zero: past that point another unit
+     * of output earns nothing.
+     */
+    public function calculateCournotMarginalRevenueFactor(float $share, float $elasticity, float $substitutability): float
+    {
+        if ($elasticity <= 0.0) {
+            return 1.0;
+        }
+
+        return max(0.0, 1.0 - max(0.0, min(1.0, $share)) * max(0.0, $substitutability) / $elasticity);
+    }
+
+    /**
      * The fair-value P/E management strikes its own capital decisions on: the market's anchor, exactly.
      * Takes the firm's inputs as primitives so every corporate engine can call it through the MathUtility it
      * already holds; the growth transmission and the accruals discount are the two functions above.
