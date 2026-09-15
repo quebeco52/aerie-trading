@@ -12,6 +12,7 @@ use App\Entity\User;
 use App\Repository\EtfEventRepository;
 use App\Repository\StockEventRepository;
 use App\Service\Macro\MacroStateProvider;
+use App\Service\Market\Index\MarketIndex;
 use App\Service\Market\LiquidityEngine;
 use App\Service\Market\PriceChangeFeed;
 use App\Service\Market\SecuritiesLendingDesk;
@@ -78,7 +79,7 @@ class StockPageBuilder
 
         $payload += $this->viewerPosition->build($asset, $ticker, $viewer);
         $payload += $isEtf
-            ? $this->fundBlocks($asset)
+            ? $this->fundBlocks($ticker)
             : $this->companyBlocks($asset, $macroState) + $this->optionChain->build($asset, $viewer, $macroState);
 
         return $payload;
@@ -98,6 +99,7 @@ class StockPageBuilder
             'pieData' => [],
             'sharesMap' => [],
             'components' => [],
+            'indexFacts' => null,
             // Depth and the cost of crossing it. Shown because a page that quotes a price without
             // saying what size costs is only telling half of what a trade is going to do.
             'advShares' => $this->liquidityEngine->averageDailyVolume($stock),
@@ -141,9 +143,12 @@ class StockPageBuilder
      *
      * @return array<string, mixed>
      */
-    private function fundBlocks(Etf $etf): array
+    private function fundBlocks(string $ticker): array
     {
-        return $this->etfComposition->build() + [
+        // A fund is the vehicle for one published index; a ticker the enum does not know is the whole board.
+        $index = MarketIndex::tryFrom($ticker) ?? MarketIndex::Composite;
+
+        return $this->etfComposition->build($index) + [
             'isFinancial' => false,
             'businessModel' => 'none',
             'marketCap' => 0.0,

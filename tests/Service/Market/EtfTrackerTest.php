@@ -66,10 +66,10 @@ class EtfTrackerTest extends TestCase
         $etf->setPrice('100.00');
 
         // Redis has no divisor initially
-        $this->redisMock->expects($this->once())->method('get')->with('market_index_divisor')->willReturn(false);
+        $this->redisMock->expects($this->once())->method('get')->with('market_index_divisor:LBI')->willReturn(false);
         $this->redisMock->expects($this->once())
             ->method('set')
-            ->with('market_index_divisor', $this->callback(fn(mixed $val) => is_string($val)));
+            ->with('market_index_divisor:LBI', $this->callback(fn(mixed $val) => is_string($val)));
 
         $totalMarketCap = 1_000_000_000.0; // $1B
         $result = $this->tracker->updateIndex($totalMarketCap, false, 'LBI', $etf);
@@ -87,7 +87,7 @@ class EtfTrackerTest extends TestCase
         $etf->setName('Lakebird Index');
         $etf->setPrice('100.00');
 
-        $this->redisMock->expects($this->once())->method('get')->with('market_index_divisor')->willReturn('10000000'); // 10M divisor
+        $this->redisMock->expects($this->once())->method('get')->with('market_index_divisor:LBI')->willReturn('10000000'); // 10M divisor
 
         $this->emMock->expects($this->once())
             ->method('persist')
@@ -111,7 +111,7 @@ class EtfTrackerTest extends TestCase
         $etf->setPrice('100.00');
 
         // Divisor is 1M -> with $800M cap, price would be $800 >= 400 -> triggers 4:1 forward split
-        $this->redisMock->expects($this->once())->method('get')->with('market_index_divisor')->willReturn('1000000');
+        $this->redisMock->expects($this->once())->method('get')->with('market_index_divisor:LBI')->willReturn('1000000');
         $this->schemaManagerStub->method('tablesExist')->willReturn(true);
 
         $this->connectionMock->expects($this->once())->method('beginTransaction');
@@ -137,7 +137,7 @@ class EtfTrackerTest extends TestCase
         $etf->setPrice('100.00');
 
         // Divisor is 10M -> with $100M cap, price would be $10 < 25 -> triggers 1-for-4 reverse split
-        $this->redisMock->expects($this->once())->method('get')->with('market_index_divisor')->willReturn('10000000');
+        $this->redisMock->expects($this->once())->method('get')->with('market_index_divisor:LBI')->willReturn('10000000');
         $this->schemaManagerStub->method('tablesExist')->willReturn(true);
 
         $this->connectionMock->expects($this->once())->method('beginTransaction');

@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Service\Market\Index;
 
 /**
- * Who is in the index, and the divisor that keeps its level continuous.
+ * Who is in an index, and what changed the last time it was reviewed.
  *
  * Frozen between reconstitutions rather than recomputed on demand, for the same reason the district roster
  * is: a membership that re-ranked itself on every read would change under the reader, and the passive book
@@ -14,11 +14,11 @@ namespace App\Service\Market\Index;
 interface IndexMembershipStoreInterface
 {
     /**
-     * The standing membership, or null when none has been taken since the last reset.
+     * The standing membership of an index, or null when none has been taken since the last reset.
      *
-     * @return array{tick: int, tickers: list<string>}|null
+     * @return array{tick: int, tickers: list<string>, added: list<string>, deleted: list<string>}|null
      */
-    public function current(): ?array;
+    public function current(MarketIndex $index): ?array;
 
     /**
      * Freezes a new membership.
@@ -28,6 +28,8 @@ interface IndexMembershipStoreInterface
      * index is worth.
      *
      * @param list<string> $tickers Constituents, best-ranked first.
+     * @param list<string> $added   Names admitted at this review.
+     * @param list<string> $deleted Names dropped at this review.
      */
-    public function store(int $tick, array $tickers): void;
+    public function store(MarketIndex $index, int $tick, array $tickers, array $added = [], array $deleted = []): void;
 }

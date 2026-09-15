@@ -389,14 +389,29 @@ class MarketResetCommand extends Command
 
         $io->text('4. Resetting ETF Prices...');
         foreach (InitialMarket::ETFS as $etfData) {
+            $params = [
+                'name' => $etfData['name'],
+                'price' => $etfData['price'],
+                'description' => \App\Data\StockInfo::DESCRIPTIONS[$etfData['ticker']] ?? null,
+                'ticker' => $etfData['ticker']
+            ];
+
+            // Created when missing rather than only updated: a fund added to the seed after a market was
+            // first seeded would otherwise never exist on that market, and the index it backs would be
+            // struck every tick against a row that is not there.
+            $exists = $conn->fetchOne('SELECT id FROM etfs WHERE ticker = :ticker', ['ticker' => $etfData['ticker']]);
+
+            if ($exists === false) {
+                $conn->executeStatement(
+                    'INSERT INTO etfs (ticker, name, price, description, updated_at) VALUES (:ticker, :name, :price, :description, NOW())',
+                    $params
+                );
+                continue;
+            }
+
             $conn->executeStatement(
                 'UPDATE etfs SET name = :name, price = :price, description = :description WHERE ticker = :ticker',
-                [
-                    'name' => $etfData['name'],
-                    'price' => $etfData['price'],
-                    'description' => \App\Data\StockInfo::DESCRIPTIONS[$etfData['ticker']] ?? null,
-                    'ticker' => $etfData['ticker']
-                ]
+                $params
             );
         }
 

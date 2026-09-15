@@ -9,10 +9,10 @@ const previousPrices = {};
 let sharesByTicker = {};
 
 function initHome() {
-    const etfEl = document.getElementById('etf-price');
-    if (!etfEl) return;
-    if (etfEl.dataset.initialized) return;
-    etfEl.dataset.initialized = 'true';
+    const tableEl = document.getElementById('market-table-body');
+    if (!tableEl) return;
+    if (tableEl.dataset.initialized) return;
+    tableEl.dataset.initialized = 'true';
 
     sharesByTicker = readPageData('market-data').shares || {};
 
@@ -37,11 +37,12 @@ function initHome() {
             }
         }
 
-        // Update the Market Index (ETF) Live
-        const lbiStock = payload.stocks ? payload.stocks.find(s => s.ticker === 'LBI') : null;
-        if (lbiStock) {
-            const etfElLive = document.getElementById('etf-price');
-            setText(etfElLive, '$' + parseFloat(lbiStock.price).toFixed(2));
+        // The index tiles: every fund on the frame that has a tile is repainted, whatever it is called.
+        if (Array.isArray(payload.stocks)) {
+            payload.stocks.forEach(update => {
+                const tileEl = document.getElementById(`index-price-${update.ticker}`);
+                if (tileEl) setText(tileEl, '$' + parseFloat(update.price).toFixed(2));
+            });
         }
 
         // Loop through live prices and update DOM

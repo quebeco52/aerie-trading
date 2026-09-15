@@ -42,7 +42,7 @@ class StockPageBuilderTest extends TestCase
     private const TEMPLATE_KEYS = [
         'advShares', 'allAssets', 'analystTargets', 'asset', 'availableToBorrow', 'borrowFee',
         'businessModel', 'changePercent', 'components', 'dividendYield', 'economic_cycle', 'events',
-        'generalInfo', 'halfSpread', 'industry', 'investedCapital', 'isEtf', 'isFinancial', 'lifecycleStage',
+        'generalInfo', 'halfSpread', 'indexFacts', 'industry', 'investedCapital', 'isEtf', 'isFinancial', 'lifecycleStage',
         'lifecycleStages', 'macro', 'management', 'marketCap', 'marketShare', 'openOrders',
         'optionDealerGamma', 'optionDealerGammaPerPercent', 'optionExpiries', 'optionMultiplier',
         'optionOpenInterest', 'optionsListed', 'optionsReason', 'peRatio', 'peers',
@@ -89,6 +89,7 @@ class StockPageBuilderTest extends TestCase
             'pieData' => [],
             'sharesMap' => [],
             'components' => [],
+            'indexFacts' => ['ticker' => 'LBI'],
         ]);
 
         $peerTable = $this->createMock(PeerTableBuilder::class);

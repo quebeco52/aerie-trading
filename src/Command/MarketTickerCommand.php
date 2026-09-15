@@ -8,6 +8,7 @@ use App\Service\Market\BondTracker;
 use App\Service\Market\StockTracker;
 use App\Service\Market\CorporateBondDesk;
 use App\Service\Market\IndexCommittee;
+use App\Service\Market\Index\MarketIndex;
 use App\Service\Market\OptionDeskService;
 use App\Service\Market\TreasuryAuctionService;
 use App\Service\Market\EtfTracker;
@@ -38,6 +39,10 @@ use Symfony\Component\Console\Output\OutputInterface;
  */
 class MarketTickerCommand extends Command implements SignalableCommandInterface
 {
+    // --- Index Reconstitution ---
+    /** Tickers named per side of a reconstitution event before the rest are counted; an event description holds 255 characters. */
+    public const RECONSTITUTION_TICKERS_SHOWN = 8;
+
     // --- History Sampling ---
     /** Target price history rows written per simulated year; the actual rate is this or one row per tick, whichever is coarser. */
     public const TARGET_HISTORY_POINTS_PER_YEAR = 2400;
@@ -93,6 +98,55 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
     }
 
     /**
+     * The fund behind each published index, keyed by ticker. Reloaded after every EntityManager clear.
+     *
+     * @return array<string, Etf>
+     */
+    private function loadIndexFunds(): array
+    {
+        $funds = [];
+        $repository = $this->entityManager->getRepository(Etf::class);
+
+        foreach (MarketIndex::cases() as $index) {
+            $fund = $repository->findOneBy(['ticker' => $index->value]);
+            if ($fund !== null) {
+                $funds[$index->value] = $fund;
+            }
+        }
+
+        return $funds;
+    }
+
+    /**
+     * The event text for a reconstitution, within the 255 characters an event description holds.
+     *
+     * A composite that has just lost a dozen names to a wave of bankruptcies would otherwise overflow the
+     * column, so each list is cut and the remainder counted rather than dropped silently.
+     *
+     * @param list<string> $added
+     * @param list<string> $deleted
+     */
+    public static function describeReconstitution(array $added, array $deleted): string
+    {
+        $list = static function (array $tickers): string {
+            $shown = array_slice($tickers, 0, self::RECONSTITUTION_TICKERS_SHOWN);
+            $rest = count($tickers) - count($shown);
+
+            return implode(', ', $shown) . ($rest > 0 ? sprintf(' and %d more', $rest) : '');
+        };
+
+        $parts = [];
+        if ($added !== []) {
+            $parts[] = 'added ' . $list($added);
+        }
+        if ($deleted !== []) {
+            $parts[] = 'dropped ' . $list($deleted);
+        }
+
+        return 'Quarterly reconstitution: ' . implode('; ', $parts) . '.';
+    }
+
+    /**
      * Returns the list of signals to subscribe to.
      *
      * @return array<int> The signals to listen for (SIGINT, SIGTERM).
@@ -128,7 +182,7 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
 
         // Fetch the stocks ONCE into RAM before the loop starts!
         $stocks = $this->entityManager->getRepository(Stock::class)->findAll();
-        $lbiEtf = $this->entityManager->getRepository(Etf::class)->findOneBy(['ticker' => 'LBI']);
+        $indexFunds = $this->loadIndexFunds();
         $bonds = $this->entityManager->getRepository(Bond::class)->findBy(['status' => Bond::STATUS_ACTIVE]);
 
         $dt = 1.0 / $this->ticksPerYear;
@@ -199,7 +253,8 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                 $events = $result['events'];
 
                 if ($macroState->eventType !== null) {
-                    if ($lbiEtf) {
+                    $benchmarkFund = $indexFunds[MarketIndex::benchmark()->value] ?? null;
+                    if ($benchmarkFund !== null) {
                         $macroContext = [
                             'interbank_spread_bps' => number_format($macroState->interbankLiquiditySpread * 10000.0, 0),
                             'hy_spread_pct' => number_format($macroState->highYieldCreditSpread * 100.0, 2),
@@ -211,7 +266,7 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                         ];
                         $desc = $this->narrativeEngine->generateLore($macroState->eventType, $macroContext);
                         $shockPct = in_array($macroState->eventType, [\App\Service\Event\ShockEvent::TITAN_INTERVENTION, \App\Service\Event\ShockEvent::SOVEREIGN_WEALTH_DEPLOYMENT]) ? 5.0 : -5.0;
-                        $events[] = $this->marketEvent->publish($lbiEtf, 'SHOCK', $desc, $shockPct);
+                        $events[] = $this->marketEvent->publish($benchmarkFund, 'SHOCK', $desc, $shockPct);
                     }
                 }
 
@@ -219,30 +274,63 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                     $events = array_merge($events, $operatorEvents);
                 }
 
-                // The index re-ranks the market on its own quarterly calendar. Passive money follows the
-                // membership rather than the whole board, so an addition is bought and a deletion is sold by
-                // the agent population itself — see IndexCommittee for why the inclusion effect is emergent
-                // here rather than scripted.
+                // Every index re-ranks the market on the same quarterly calendar. Passive money follows the
+                // benchmark's membership rather than the whole board, so an addition is bought and a deletion
+                // is sold by the agent population itself — see IndexCommittee for why the inclusion effect is
+                // emergent here rather than scripted. A change is published as an event on the fund, which is
+                // how it reaches the index page and the live feed through the one channel everything uses.
                 if (IndexCommittee::isReconstitutionTick($tickCount, $this->ticksPerYear)) {
-                    $reconstitution = $this->indexCommittee->reconstitute($stocks, $tickCount);
+                    foreach (MarketIndex::cases() as $index) {
+                        $fund = $indexFunds[$index->value] ?? null;
+                        $reconstitution = $this->indexCommittee->reconstitute(
+                            $index,
+                            $stocks,
+                            $tickCount,
+                            $fund !== null ? (float) $fund->getPrice() : null
+                        );
 
-                    if ($reconstitution['added'] !== [] || $reconstitution['deleted'] !== []) {
+                        if ($reconstitution['added'] === [] && $reconstitution['deleted'] === []) {
+                            continue;
+                        }
+
                         $output->writeln(sprintf(
-                            '<info>Index reconstitution: +%s / -%s</info>',
+                            '<info>%s reconstitution: +%s / -%s</info>',
+                            $index->value,
                             implode(',', $reconstitution['added']) ?: 'none',
                             implode(',', $reconstitution['deleted']) ?: 'none'
                         ));
+
+                        if ($fund !== null) {
+                            $events[] = $this->marketEvent->publish(
+                                $fund,
+                                'INDEX',
+                                self::describeReconstitution($reconstitution['added'], $reconstitution['deleted']),
+                                0.0
+                            );
+                        }
                     }
                 }
 
-                // Struck on the MEMBERS' float-adjusted capitalisation, not the whole board's total. An index
-                // measures what it actually holds, and it weights on what a passive fund could actually buy.
-                $etfUpdate = $this->etfTracker->updateIndex(
-                    $this->indexCommittee->memberCapitalisation($result['float_caps']),
-                    $isHistoryTick,
-                    'LBI',
-                    $lbiEtf
-                );
+                // Each index is struck on its MEMBERS' float-adjusted capitalisation, not the whole board's
+                // total. An index measures what it actually holds, and it weights on what a passive fund
+                // could actually buy.
+                //
+                // An index whose fund is not on this market (a fund added to the seed after the market was
+                // seeded, before a reset has created it) is not struck at all: the tracker would otherwise
+                // look the missing row up on every tick and have nowhere to write the level.
+                $etfUpdates = [];
+                foreach (MarketIndex::cases() as $index) {
+                    if (!isset($indexFunds[$index->value])) {
+                        continue;
+                    }
+
+                    $etfUpdates[] = $this->etfTracker->updateIndex(
+                        $this->indexCommittee->memberCapitalisation($index, $result['float_caps']),
+                        $isHistoryTick,
+                        $index->value,
+                        $indexFunds[$index->value]
+                    );
+                }
 
                 // The bond desk. Coupons, redemptions and the mark all happen inside the same tick
                 // transaction as the equity book, so a crash mid-tick cannot leave a coupon credited
@@ -316,7 +404,7 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                     );
                 }
 
-                $allUpdates = array_merge($stockUpdates, [$etfUpdate], $bondResult['updates']);
+                $allUpdates = array_merge($stockUpdates, $etfUpdates, $bondResult['updates']);
 
                 foreach ($stockUpdates as $update) {
                     if (!empty($update['is_bankrupt'])) {
@@ -409,7 +497,7 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
 
                     $this->entityManager->clear();
                     $stocks = $this->entityManager->getRepository(Stock::class)->findAll();
-                    $lbiEtf = $this->entityManager->getRepository(Etf::class)->findOneBy(['ticker' => 'LBI']);
+                    $indexFunds = $this->loadIndexFunds();
                     $bonds = $this->entityManager->getRepository(Bond::class)->findBy(['status' => Bond::STATUS_ACTIVE]);
                 }
 
@@ -488,7 +576,7 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                 ]));
 
                 $this->redis->set('stocks_live_data', json_encode($stockUpdates));
-                $this->redis->set('etf_live_data', json_encode([$etfUpdate]));
+                $this->redis->set('etf_live_data', json_encode($etfUpdates));
                 $this->redis->set('bond_live_data', json_encode($bondResult['updates']));
                 $this->redis->set('simulation_tick_count', $tickCount);
 
@@ -539,7 +627,7 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                 // Clear detached entities and reload fresh ones so the next tick has a valid state
                 $this->entityManager->clear();
                 $stocks = $this->entityManager->getRepository(Stock::class)->findAll();
-                $lbiEtf = $this->entityManager->getRepository(Etf::class)->findOneBy(['ticker' => 'LBI']);
+                $indexFunds = $this->loadIndexFunds();
                 $bonds = $this->entityManager->getRepository(Bond::class)->findBy(['status' => Bond::STATUS_ACTIVE]);
 
                 sleep(5);

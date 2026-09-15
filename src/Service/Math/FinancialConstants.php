@@ -548,8 +548,8 @@ class FinancialConstants
 
 
     // --- Market Index Membership (Shleifer 1986) ---
-    /** Names the index carries. Fewer than the listed universe, so membership is a real distinction and joining or leaving it means something. */
-    public const INDEX_CONSTITUENT_COUNT = 40;
+    /** Seats in the headline index. Fewer than the listed universe, so membership is a real distinction and joining or leaving it means something; the composite index carries every listed name and has no count. */
+    public const INDEX_CONSTITUENT_COUNT = 30;
     /** Banding around the cut, as a fraction of the constituent count. A sitting member is not evicted the first time a marginal name edges past it: real indices band precisely because ranking noise at the boundary would otherwise churn the whole passive book twice a year for nothing. */
     public const INDEX_MEMBERSHIP_BUFFER = 0.20;
     /** Reconstitutions per year. */

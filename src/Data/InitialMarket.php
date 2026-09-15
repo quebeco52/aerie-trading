@@ -2026,6 +2026,11 @@ class InitialMarket
             'ticker' => 'LBI',
             'name' => 'Lakebird Index',
             'price' => 100.00,
-        ]
+        ],
+        [
+            'ticker' => 'LBC',
+            'name' => 'Lakebird Composite',
+            'price' => 100.00,
+        ],
     ];
 }

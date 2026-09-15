@@ -21,12 +21,12 @@
 		{# Macroeconomic Indicators #}
 		{% if macro is defined %}
 		<div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
-			{# Economic Cycle #}
-			<div class="bg-surface-container-low rounded-lg p-4 border border-outline-variant/25">
+			{# Economic Cycle: links through to the economy page, where the full set of series lives. #}
+			<a href="/economy" class="block bg-surface-container-low rounded-lg p-4 border border-outline-variant/25 hover:border-primary/50 transition-colors group">
 				<p class="text-2xs font-semibold text-on-surface-variant uppercase tracking-wide mb-2">Economic cycle</p>
 				<p id="macro-cycle" class="text-2xl font-bold text-on-surface tracking-tight">{{ macro.output_gap > 0.01 ? 'Boom' : (macro.output_gap < -0.01 ? 'Bust' : 'Neutral') }}</p>
-				<p class="text-xs text-on-surface-variant mt-1 font-mono">Output gap {{ macro.output_gap >= 0 ? '+' : '' }}{{ (macro.output_gap * 100)|number_format(2) }}%</p>
-			</div>
+				<p class="text-xs text-on-surface-variant mt-1 font-mono">Output gap {{ macro.output_gap >= 0 ? '+' : '' }}{{ (macro.output_gap * 100)|number_format(2) }}% <span class="text-primary group-hover:underline">&middot; Economy</span></p>
+			</a>
 
 			{# Inflation #}
 			<div class="bg-surface-container-low rounded-lg p-4 border border-outline-variant/25">
@@ -54,22 +54,26 @@
 		</div>
 		{% endif %}
 
-		{# The Market Index Highlight #}
-		{% if etf %}
-			<a href="/stock/{{ etf.ticker }}" class="block bg-surface-container-low rounded-lg p-5 md:p-6 border border-outline-variant/25 hover:border-primary/50 transition-colors cursor-pointer group">
-				<div class="flex flex-col md:flex-row justify-between md:items-center gap-4">
-					<div>
-						<h2 class="text-xl md:text-2xl font-bold text-on-surface group-hover:text-primary transition-colors tracking-tight">{{ etf.name }}</h2>
-						<span class="inline-flex items-center rounded bg-primary/10 px-2 py-0.5 text-xs font-bold text-primary border border-primary/20 mt-2 uppercase tracking-wider">
-							Market Index ({{ etf.ticker }})
-						</span>
-					</div>
-					<div class="md:text-right">
-						<p class="text-2xs font-semibold text-on-surface-variant uppercase tracking-wide mb-1">Live Valuation</p>
-						<p id="etf-price" class="text-3xl md:text-4xl font-bold text-on-surface tracking-tight font-mono tabular-nums">${{ etf.price|number_format(2) }}</p>
-					</div>
-				</div>
-			</a>
+		{# The Indices: the headline scoreboard and the whole board, read against each other for breadth. #}
+		{% if indices|default([])|length > 0 %}
+			<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+				{% for tile in indices %}
+					<a href="/stock/{{ tile.ticker }}" class="block bg-surface-container-low rounded-lg p-5 md:p-6 border {{ tile.isBenchmark ? 'border-primary/30' : 'border-outline-variant/25' }} hover:border-primary/50 transition-colors cursor-pointer group">
+						<div class="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
+							<div class="min-w-0">
+								<h2 class="text-lg md:text-xl font-bold text-on-surface group-hover:text-primary transition-colors tracking-tight truncate">{{ tile.name }}</h2>
+								<span class="inline-flex items-center rounded {{ tile.isBenchmark ? 'bg-primary/10 text-primary border-primary/20' : 'bg-surface-container-highest text-on-surface-variant border-outline-variant/30' }} px-2 py-0.5 text-xs font-bold border mt-2 uppercase tracking-wider">
+									{{ tile.label }} ({{ tile.ticker }})
+								</span>
+							</div>
+							<div class="sm:text-right shrink-0">
+								<p class="text-2xs font-semibold text-on-surface-variant uppercase tracking-wide mb-1">Live level</p>
+								<p id="index-price-{{ tile.ticker }}" class="text-3xl md:text-4xl font-bold text-on-surface tracking-tight font-mono tabular-nums">${{ tile.price|number_format(2) }}</p>
+							</div>
+						</div>
+					</a>
+				{% endfor %}
+			</div>
 		{% endif %}
 
 		{# The Global Stock Leaderboard #}

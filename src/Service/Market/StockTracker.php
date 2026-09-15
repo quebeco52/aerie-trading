@@ -2,6 +2,7 @@
 
 namespace App\Service\Market;
 
+use App\Service\Market\Index\MarketIndex;
 use App\Entity\Stock;
 use App\DTO\MacroStateDTO;
 use App\Service\Corporate\CorporateActionEngine;
@@ -88,10 +89,11 @@ class StockTracker
         // not be able to move it again on the next tick.
         $netOrderFlow = $this->orderFlow->drain();
 
-        // The standing index membership, read once for the whole tick. An empty roster — a fresh market
-        // before its first reconstitution — means every listed name counts, which is what the market was
-        // before there was a membership at all.
-        $indexMembers = $this->indexCommittee?->currentMembers() ?? [];
+        // The standing membership of the BENCHMARK index, read once for the whole tick: it is the one the
+        // passive book holds, so it is the one that decides who receives passive money. An empty roster — a
+        // fresh market before its first reconstitution — means every listed name counts, which is what the
+        // market was before there was a membership at all.
+        $indexMembers = $this->indexCommittee?->currentMembers(MarketIndex::benchmark()) ?? [];
 
         // The agent books are loaded once for the whole tick and written back once at the end, for the
         // same reason the order flow is drained once: a round trip per name is the cost that scales.

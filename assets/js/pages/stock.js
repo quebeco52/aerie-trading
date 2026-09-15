@@ -1,11 +1,12 @@
 import { setupChartDefaults } from '../utils/chart-config.js';
 import { readPageData } from '../utils/page-data.js';
 import { showLoading, showError, hideStatus } from '../utils/fetch-status.js';
+import { setupChartGridFilters, setupExpandableCards } from '../utils/chart-grid.js';
 import { initPriceChart, updateLivePricePoint, resizePriceChart, destroyPriceChart } from '../stock/price-chart.js';
 import { initEtfChart, updateEtfPie, resizeEtfChart, destroyEtfChart } from '../stock/etf-chart.js';
-import { updatePriceUI, updateMacroIndicators, resetPriceHistoryState } from '../stock/stats-updater.js';
+import { updatePriceUI, resetPriceHistoryState } from '../stock/stats-updater.js';
 import { renderEvents } from '../stock/events-feed.js';
-import { updateMacroCharts, resizeMacroCharts, destroyMacroCharts, setMacroTimeframe } from '../stock/macro-charts.js';
+import { updateConstituentRows } from '../stock/index-table.js';
 import { updateFundamentalCharts, resizeFundamentalCharts, destroyFundamentalCharts } from '../stock/fundamental-charts.js';
 
 let rawReports = [];
@@ -78,19 +79,13 @@ function initStockPage() {
         }
     }
 
+    // A fund has no reports of its own; the economy it tracks has its own page now (pages/economy.js).
     if (!isEtf) {
         loadReports({
             url: `/api/fundamentals?ticker=${encodeURIComponent(ticker)}`,
             statusId: 'financialChartsStatus',
             label: 'fundamentals',
             draw: () => updateFundamentalCharts('12Y', rawReports, currentContext)
-        });
-    } else {
-        loadReports({
-            url: '/api/macro-reports',
-            statusId: 'macroChartsStatus',
-            label: 'macro series',
-            draw: () => updateMacroCharts(rawReports)
         });
     }
 
@@ -116,6 +111,7 @@ function initStockPage() {
 
         if (isEtf) {
             updateEtfPie(payload, currentContext.sharesMap);
+            updateConstituentRows(payload, currentContext.sharesMap);
         }
 
         const stockUpdate = payload.stocks ? payload.stocks.find(s => s.ticker === ticker) : null;
@@ -130,10 +126,6 @@ function initStockPage() {
         if (payload.events && payload.events.length > 0) {
             renderEvents(payload.events, ticker);
         }
-
-        if (payload.macro || payload.economic_cycle) {
-            updateMacroIndicators(payload);
-        }
     };
     document.addEventListener('market:frame', marketFrameHandler);
 
@@ -142,17 +134,20 @@ function initStockPage() {
         setTimeout(() => {
             resizePriceChart();
             resizeEtfChart();
-            resizeMacroCharts();
             resizeFundamentalCharts();
         }, 50);
     };
     document.addEventListener('tabs:changed', tabChangeHandler);
     window.addEventListener('resize', tabChangeHandler);
 
-    setupExpandableCards();
-    setupChartGridFilters('macro');
-    setupChartGridFilters('financial');
-    setupMacroTimeframeButtons();
+    setupExpandableCards(resizeFundamentalCharts);
+    setupChartGridFilters({
+        gridId: 'financialChartsGrid',
+        categoryAttribute: 'financialCategory',
+        buttonClass: 'financial-cat-btn',
+        searchInputId: 'financialIndicatorSearch',
+        resize: resizeFundamentalCharts
+    });
     setupFinancialTimeframeButtons();
 
     // Turbo cleanup
@@ -166,7 +161,6 @@ function cleanupPageResources() {
     resetPriceHistoryState();
     destroyPriceChart();
     destroyEtfChart();
-    destroyMacroCharts();
     destroyFundamentalCharts();
 
     if (marketUpdateHandler) {
@@ -184,83 +178,6 @@ function cleanupPageResources() {
     }
 }
 
-/**
- * Both chart grids carry a category bar, a text filter and per-card expand buttons, and all
- * three decide whether a card is shown. One implementation, driven by this config; visibility
- * runs through the `hidden` class throughout, never an inline `style.display`.
- */
-const CHART_GRIDS = {
-    macro: {
-        gridId: 'macroChartsGrid',
-        categoryAttribute: 'macroCategory',
-        buttonClass: 'macro-cat-btn',
-        searchInputId: 'macroIndicatorSearch',
-        resize: resizeMacroCharts
-    },
-    financial: {
-        gridId: 'financialChartsGrid',
-        categoryAttribute: 'financialCategory',
-        buttonClass: 'financial-cat-btn',
-        searchInputId: 'financialIndicatorSearch',
-        resize: resizeFundamentalCharts
-    }
-};
-
-/** Category-button styling, kept in one place so the two states cannot drift apart. */
-const CAT_BTN_BASE = 'px-3 py-1.5 text-xs font-bold rounded-lg transition-all whitespace-nowrap cursor-pointer';
-const CAT_BTN_ACTIVE = 'bg-primary text-on-primary shadow-md shadow-primary/20';
-const CAT_BTN_IDLE = 'bg-surface-container text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface';
-
-/** Each grid's live filter state, and the function that re-applies it. */
-const gridFilters = {};
-
-function setupChartGridFilters(key) {
-    const config = CHART_GRIDS[key];
-    const grid = document.getElementById(config.gridId);
-    if (!grid) return;
-
-    const state = { category: 'all', search: '' };
-
-    const apply = () => {
-        const query = state.search.toLowerCase().trim();
-        grid.querySelectorAll('.chart-card').forEach(card => {
-            // An expanded card hides its siblings outright and owns the grid until collapsed.
-            if (card.dataset.soloHidden === 'true') return;
-
-            const category = card.dataset[config.categoryAttribute] || '';
-            const matchesCategory = state.category === 'all' || category === state.category;
-            const matchesSearch = !query || (card.textContent || '').toLowerCase().includes(query);
-            card.classList.toggle('hidden', !(matchesCategory && matchesSearch));
-        });
-        setTimeout(config.resize, 50);
-    };
-
-    gridFilters[config.gridId] = apply;
-
-    // The category bar sits outside the grid element, so this is a document-wide lookup; the
-    // button class is already specific to one grid.
-    const catButtons = document.querySelectorAll(`.${config.buttonClass}`);
-    catButtons.forEach(btn => {
-        btn.addEventListener('click', () => {
-            state.category = btn.dataset.category || 'all';
-            catButtons.forEach(b => {
-                const isActive = b === btn;
-                b.className = `${config.buttonClass} ${CAT_BTN_BASE} ${isActive ? CAT_BTN_ACTIVE : CAT_BTN_IDLE}`;
-                b.setAttribute('aria-pressed', isActive ? 'true' : 'false');
-            });
-            apply();
-        });
-    });
-
-    const searchInput = document.getElementById(config.searchInputId);
-    if (searchInput) {
-        searchInput.addEventListener('input', (e) => {
-            state.search = e.target.value;
-            apply();
-        });
-    }
-}
-
 function setupFinancialTimeframeButtons() {
     document.querySelectorAll('[data-financial-timeframe]').forEach(btn => {
         btn.addEventListener('click', () => {
@@ -268,62 +185,6 @@ function setupFinancialTimeframeButtons() {
             document.querySelectorAll('[data-financial-timeframe]').forEach(b => {
                 b.setAttribute('aria-pressed', b === btn ? 'true' : 'false');
             });
-        });
-    });
-}
-
-function setupMacroTimeframeButtons() {
-    document.querySelectorAll('.macro-range-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-            const tf = btn.dataset.macroTimeframe;
-            if (tf) setMacroTimeframe(tf);
-        });
-    });
-}
-
-function setupExpandableCards() {
-    document.querySelectorAll('.expand-chart-btn').forEach(btn => {
-        btn.addEventListener('click', function () {
-            const card = this.closest('.chart-card');
-            const grid = card?.closest('.grid');
-            if (!card || !grid) return;
-
-            const icon = this.querySelector('.expand-icon');
-            const canvasContainer = card.querySelector('.chart-canvas-container');
-            const siblings = [...grid.querySelectorAll('.chart-card')].filter(c => c !== card);
-            const isExpanded = card.classList.contains('md:col-span-2') || card.classList.contains('lg:col-span-2');
-
-            if (isExpanded) {
-                card.classList.remove('md:col-span-2', 'lg:col-span-2');
-                canvasContainer?.classList.remove('h-96', 'md:h-[500px]');
-                if (icon) icon.textContent = 'open_in_full';
-                this.setAttribute('aria-expanded', 'false');
-
-                siblings.forEach(c => { delete c.dataset.soloHidden; });
-                // Hand the grid back to its filter, which knows which siblings belong on screen.
-                const reapply = gridFilters[grid.id];
-                if (reapply) {
-                    reapply();
-                } else {
-                    siblings.forEach(c => c.classList.remove('hidden'));
-                }
-            } else {
-                card.classList.add('md:col-span-2', 'lg:col-span-2');
-                canvasContainer?.classList.add('h-96', 'md:h-[500px]');
-                if (icon) icon.textContent = 'close_fullscreen';
-                this.setAttribute('aria-expanded', 'true');
-
-                siblings.forEach(c => {
-                    c.dataset.soloHidden = 'true';
-                    c.classList.add('hidden');
-                });
-            }
-
-            setTimeout(() => {
-                window.dispatchEvent(new Event('resize'));
-                resizeMacroCharts();
-                resizeFundamentalCharts();
-            }, 60);
         });
     });
 }

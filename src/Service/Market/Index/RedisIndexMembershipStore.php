@@ -14,17 +14,15 @@ use Psr\Log\LoggerInterface;
  */
 final class RedisIndexMembershipStore implements IndexMembershipStoreInterface
 {
-    public const REDIS_KEY = 'index_membership';
-
     public function __construct(
         private readonly \Redis $redis,
         private readonly ?LoggerInterface $logger = null,
     ) {}
 
-    public function current(): ?array
+    public function current(MarketIndex $index): ?array
     {
         try {
-            $raw = $this->redis->get(self::REDIS_KEY);
+            $raw = $this->redis->get($index->membershipKey());
         } catch (\Throwable $e) {
             $this->logger?->warning('Index membership read failed: ' . $e->getMessage());
 
@@ -37,18 +35,24 @@ final class RedisIndexMembershipStore implements IndexMembershipStoreInterface
             return null;
         }
 
+        $list = static fn (mixed $value): array => is_array($value) ? array_values(array_map('strval', $value)) : [];
+
         return [
             'tick' => (int) ($decoded['tick'] ?? 0),
-            'tickers' => array_values(array_map('strval', $decoded['tickers'])),
+            'tickers' => $list($decoded['tickers']),
+            'added' => $list($decoded['added'] ?? []),
+            'deleted' => $list($decoded['deleted'] ?? []),
         ];
     }
 
-    public function store(int $tick, array $tickers): void
+    public function store(MarketIndex $index, int $tick, array $tickers, array $added = [], array $deleted = []): void
     {
         try {
-            $this->redis->set(self::REDIS_KEY, json_encode([
+            $this->redis->set($index->membershipKey(), json_encode([
                 'tick' => $tick,
                 'tickers' => array_values($tickers),
+                'added' => array_values($added),
+                'deleted' => array_values($deleted),
             ], JSON_THROW_ON_ERROR));
         } catch (\Throwable $e) {
             $this->logger?->warning('Index membership write failed: ' . $e->getMessage());

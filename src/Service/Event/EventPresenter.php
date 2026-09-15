@@ -59,6 +59,10 @@ class EventPresenter
             return $this->presentDistrict($rawType, $rawDesc, $changePct, $recordedAt);
         }
 
+        if ($rawType === 'INDEX') {
+            return $this->presentIndex($rawType, $rawDesc, $changePct, $recordedAt);
+        }
+
         if ($rawType === 'MANAGEMENT CHANGE') {
             return $this->presentSuccession($rawType, $rawDesc, $changePct, $recordedAt);
         }
@@ -289,6 +293,31 @@ class EventPresenter
             'iconClass' => $evicted ? 'bg-amber-500/20 text-amber-300' : 'bg-primary/20 text-primary',
             'isEarnings' => false,
             'headline' => !empty($rawDesc) ? $rawDesc : 'Glasswater Row roster reconstituted.',
+            'pills' => [],
+            'changePercent' => $changePct,
+            'recordedAt' => $recordedAt,
+            'rawDescription' => $rawDesc,
+        ];
+    }
+
+    /**
+     * An index reconstitution (App\Service\Market\IndexCommittee): who was admitted and who was dropped. Not
+     * a price event — the divisor is restated across the change, so the level itself does not move on it.
+     *
+     * @return array<string, mixed>
+     */
+    private function presentIndex(string $type, string $rawDesc, ?float $changePct, \DateTimeInterface $recordedAt): array
+    {
+        return [
+            'type' => $type,
+            'category' => 'index',
+            'badge' => 'INDEX RECONSTITUTION',
+            'badgeClass' => 'bg-primary/15 text-primary border-primary/40',
+            'borderClass' => 'border-l-primary',
+            'icon' => 'checklist',
+            'iconClass' => 'bg-primary/20 text-primary',
+            'isEarnings' => false,
+            'headline' => !empty($rawDesc) ? $rawDesc : 'Index membership reconstituted.',
             'pills' => [],
             'changePercent' => $changePct,
             'recordedAt' => $recordedAt,

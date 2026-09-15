@@ -29,46 +29,53 @@ class EtfTracker
     }
 
     /**
-     * Updates the price of the market index ETF based on total market capitalization.
-     *
-     * @param float  $totalMarketCap The total market capitalization of all tracked stocks.
-     * @param bool   $recordHistory  Whether to persist the new price to the history table.
-     * @param string $ticker         The ETF ticker symbol to update (defaults to 'LBI').
-     * @return array{ticker: string, price: float, name: string, is_etf: bool}
+     * Redis key holding an index's divisor. One key per index, because a divisor written in two places is
+     * two answers to what the index is worth.
      */
-    /** Redis key holding the index divisor. One key, because a divisor written in two places is two answers. */
-    public const DIVISOR_KEY = 'market_index_divisor';
-
-    /** The divisor the index level is currently struck on, or null before one has been set. */
-    public function currentDivisor(): ?float
+    public static function divisorKey(string $ticker): string
     {
-        $divisor = $this->redis->get(self::DIVISOR_KEY);
+        return 'market_index_divisor:' . $ticker;
+    }
+
+    /** The divisor an index level is currently struck on, or null before one has been set. */
+    public function currentDivisor(string $ticker): ?float
+    {
+        $divisor = $this->redis->get(self::divisorKey($ticker));
 
         return is_numeric($divisor) && (float) $divisor > 0.0 ? (float) $divisor : null;
     }
 
     /**
-     * Restates the divisor.
+     * Restates an index's divisor.
      *
      * A divisor absorbs changes in the index's own composition so that its level keeps measuring prices
      * rather than the committee's decisions. Both things that change composition come through here: a split,
      * which changes the units, and a reconstitution, which changes who is counted.
      */
-    public function restateDivisor(float $divisor): void
+    public function restateDivisor(string $ticker, float $divisor): void
     {
         if ($divisor > 0.0) {
-            $this->redis->set(self::DIVISOR_KEY, (string) $divisor);
+            $this->redis->set(self::divisorKey($ticker), (string) $divisor);
         }
     }
 
+    /**
+     * Strikes an index level from the capitalisation of its members and writes it to the fund of that ticker.
+     *
+     * @param float  $totalMarketCap The float-adjusted capitalisation of the index's members.
+     * @param bool   $recordHistory  Whether to persist the new price to the history table.
+     * @param string $ticker         The fund the level is written to; its divisor is keyed on the same ticker.
+     * @return array{ticker: string, price: float, name: string, is_etf: bool}
+     */
     public function updateIndex(float $totalMarketCap, bool $recordHistory = false, string $ticker = 'LBI', ?Etf $etf = null): array
     {
 
         if ($etf === null) {
             $etf = $this->entityManager->getRepository(Etf::class)->findOneByTicker($ticker);
         }
-        
-        $divisor = $this->redis->get(self::DIVISOR_KEY);
+
+        $divisorKey = self::divisorKey($ticker);
+        $divisor = $this->redis->get($divisorKey);
 
         if (!$divisor && $totalMarketCap > 0) {
             
@@ -79,7 +86,7 @@ class EtfTracker
                 $divisor = $totalMarketCap / 100.00;
             }
             
-            $this->redis->set(self::DIVISOR_KEY, (string) $divisor);
+            $this->redis->set($divisorKey, (string) $divisor);
         }
 
         $price = ($divisor > 0) ? ($totalMarketCap / (float) $divisor) : 100.00;
@@ -94,7 +101,7 @@ class EtfTracker
                 }
                 
                 $divisor *= $splitFactor;
-                $this->redis->set(self::DIVISOR_KEY, (string) $divisor);
+                $this->redis->set($divisorKey, (string) $divisor);
                 $this->executeEtfSplit($etf, $splitFactor, 'forward', $price * $splitFactor);
                 
             } elseif ($price < 25.0 && $price > 0) {
@@ -106,7 +113,7 @@ class EtfTracker
                 }
                 
                 $divisor /= $splitFactor;
-                $this->redis->set(self::DIVISOR_KEY, (string) $divisor);
+                $this->redis->set($divisorKey, (string) $divisor);
                 $this->executeEtfSplit($etf, $splitFactor, 'reverse', $preSplitPrice);
             }
 
