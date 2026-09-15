@@ -481,7 +481,7 @@ class CapitalAllocationEngineTest extends TestCase
         return $stock;
     }
 
-    private function buildHealth(): DebtHealthDTO
+    private function buildHealth(bool $hasLeverageHeadroom = true): DebtHealthDTO
     {
         return new DebtHealthDTO(
             grossCost: 0.05,
@@ -510,8 +510,71 @@ class CapitalAllocationEngineTest extends TestCase
             ),
             isLiquidityCrisis: false,
             isLiquidityWarning: false,
-            isUnderLeveraged: false
+            isUnderLeveraged: false,
+            hasLeverageHeadroom: $hasLeverageHeadroom,
+            netDebtToEbitda: $hasLeverageHeadroom ? 0.5 : 4.5,
+            ebitdaCovenantLimit: 2.0
         );
+    }
+
+    /**
+     * The restricted-payments clause that travels with every maintenance leverage covenant. This firm is
+     * cash-rich and comfortably covered — nothing in the ICR or liquidity ladder would stop it — so the
+     * covenant is the only thing that can, and a buyback here would retire the equity cushion sitting
+     * underneath debt already too large for the cash flow supporting it.
+     */
+    public function testCovenantBreachBlocksTheBuybackTheCashPileWouldOtherwiseFund(): void
+    {
+        $macroState = new MacroStateDTO(corporateTaxRate: 0.21);
+
+        $compliant = $this->buildDistributor('OKAY');
+        $engine = $this->buildEngineWith($this->debtEngineReturning($this->buildHealth(true)));
+        $allowed = $engine->allocateCapital($compliant, 4.00, 2.00, 10.00, 1000000.0, $macroState);
+
+        $breached = $this->buildDistributor('BRCH');
+        $engine = $this->buildEngineWith($this->debtEngineReturning($this->buildHealth(false)));
+        $blocked = $engine->allocateCapital($breached, 4.00, 2.00, 10.00, 1000000.0, $macroState);
+
+        $this->assertLessThan(1000000.0, $allowed['new_shares'], 'Control must actually repurchase, or the comparison proves nothing.');
+        $this->assertSame(1000000.0, $blocked['new_shares'], 'A firm past its leverage covenant may not repurchase stock.');
+    }
+
+    /**
+     * The dividend leg is a freeze, not a cut: lenders withhold consent for an INCREASE in distributions
+     * while the firm is out of compliance, and the distress ladder already owns the collapse case.
+     */
+    public function testCovenantBreachFreezesTheDividendRatherThanCuttingIt(): void
+    {
+        $macroState = new MacroStateDTO(corporateTaxRate: 0.21);
+
+        $build = function (string $ticker): Stock {
+            $stock = $this->buildDistributor($ticker);
+            $stock->setTargetPayoutRatio('0.50');
+            $stock->setDividendSpeed('1.00');
+            $stock->setLastDividend('0.20');
+
+            return $stock;
+        };
+
+        $compliant = $build('RISE');
+        $rising = $this->buildEngineWith($this->debtEngineReturning($this->buildHealth(true)))
+            ->allocateCapital($compliant, 4.00, 2.00, 10.00, 1000000.0, $macroState);
+
+        $breached = $build('FRZE');
+        $frozen = $this->buildEngineWith($this->debtEngineReturning($this->buildHealth(false)))
+            ->allocateCapital($breached, 4.00, 2.00, 10.00, 1000000.0, $macroState);
+
+        $this->assertGreaterThan(0.20, $rising['dividend_paid'], 'Control must want to raise the dividend, or the freeze is untestable.');
+        $this->assertSame(0.20, $frozen['dividend_paid'], 'A breach holds the distribution where it stands.');
+        $this->assertGreaterThan(0.0, $frozen['dividend_paid'], 'A freeze is not a cut: the existing distress ladder owns that case.');
+    }
+
+    private function debtEngineReturning(DebtHealthDTO $health): DebtEngine
+    {
+        $debtEngine = $this->createStub(DebtEngine::class);
+        $debtEngine->method('analyzeDebtHealth')->willReturn($health);
+
+        return $debtEngine;
     }
 
     public function testBuybackPercentageCalculatesFromOriginalSharesOutstanding(): void

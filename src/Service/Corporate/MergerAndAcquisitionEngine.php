@@ -260,12 +260,19 @@ class MergerAndAcquisitionEngine
         $ctx->isEmpireBuilder = $style === \App\Data\ManagementStyle::EmpireBuilder;
         $ctx->hubrisPremium = $manager->hubrisPremium();
         
+        // Every branch below that sets use_leverage is a DISCRETIONARY leveraged deal, so the Net Debt /
+        // EBITDA covenant has to reach all three or it becomes an accident of which branch matched first.
         $config = match (true) {
             // Morck, Shleifer & Vishny (1990): for this manager the deal IS the objective, not a use for
             // spare capacity, so the branch is read ahead of the hoarding and leverage reads rather than
             // behind them. Both constants below were already declared and had been unreachable for as long
             // as the flag above was hardcoded false — this is the branch they were written for.
-            $ctx->isEmpireBuilder && $ctx->totalBuyingPower > self::MA_EMPIRE_BUILDER_MIN_POWER => [
+            //
+            // It funds itself like the LBO branches below (use_leverage draws on borrowing capacity), so it
+            // answers to the same two lender tests. Hubris is a reason to overpay for a target, not a reason
+            // a bank lends to a firm that cannot service what it already owes. Failing either test does not
+            // stop the empire builder acquiring — it falls through to the cash-funded branches.
+            $ctx->isEmpireBuilder && $ctx->health->canIssueDebt && $ctx->health->hasLeverageHeadroom && $ctx->totalBuyingPower > self::MA_EMPIRE_BUILDER_MIN_POWER => [
                 'prob' => self::MA_EMPIRE_BUILDER_PROB, 'spend' => 0.55, 'type' => $ctx->strategy->getAcquisitionType('CONGLOMERATE EXPANSION'), 'use_leverage' => true, 'use_stock' => false, 'style_priced' => true
             ],
             $ctx->isOvervalued => [
@@ -277,10 +284,10 @@ class MergerAndAcquisitionEngine
             $ctx->isHoarder => [
                 'prob' => self::MA_HOARDER_PROB, 'spend' => 0.40, 'type' => $ctx->strategy->getAcquisitionType('CONGLOMERATE EXPANSION'), 'use_leverage' => false, 'use_stock' => false
             ],
-            $ctx->health->canIssueDebt && $ctx->normalizedDebtUtilization < self::MA_LOW_UTIL_THRESHOLD && $ctx->totalBuyingPower > self::MA_LBO_MIN_POWER && $ctx->costOfNewBorrowing < self::MA_LOW_RATE_CEILING => [
+            $ctx->health->canIssueDebt && $ctx->health->hasLeverageHeadroom && $ctx->normalizedDebtUtilization < self::MA_LOW_UTIL_THRESHOLD && $ctx->totalBuyingPower > self::MA_LBO_MIN_POWER && $ctx->costOfNewBorrowing < self::MA_LOW_RATE_CEILING => [
                 'prob' => self::MA_LOW_LEVERAGE_PROB, 'spend' => 0.40, 'type' => $ctx->strategy->getAcquisitionType('LEVERAGED BUYOUT'), 'use_leverage' => true, 'use_stock' => false
             ],
-            $ctx->health->canIssueDebt && $ctx->normalizedDebtUtilization < self::MA_MOD_UTIL_THRESHOLD && $ctx->totalBuyingPower > self::MA_LBO_MIN_POWER && $ctx->costOfNewBorrowing < self::MA_MOD_RATE_CEILING => [
+            $ctx->health->canIssueDebt && $ctx->health->hasLeverageHeadroom && $ctx->normalizedDebtUtilization < self::MA_MOD_UTIL_THRESHOLD && $ctx->totalBuyingPower > self::MA_LBO_MIN_POWER && $ctx->costOfNewBorrowing < self::MA_MOD_RATE_CEILING => [
                 'prob' => self::MA_MOD_LEVERAGE_PROB, 'spend' => 0.30, 'type' => $ctx->strategy->getAcquisitionType('LEVERAGED BUYOUT'), 'use_leverage' => true, 'use_stock' => false
             ],
             default => null,

@@ -236,7 +236,15 @@ class TreasuryEngine
             && $ctx->strategy->supportsUnderleveragedDebtExpansion()
             && !$ctx->health->isSevereNegativeCarry;
 
-        if (($marginalReturn > $hurdleRate || $isUnderLeveragedForDebt) && $ctx->health->canIssueDebt) {
+        // The leverage covenant gates DISCRETIONARY borrowing only. A breach shuts off expansion and
+        // recapitalisation, which is the whole point of a maintenance test, but it must never reach the
+        // refinancing or emergency-liquidity paths: a firm refused the rollover of debt it already owes
+        // defaults on the spot, and that is a market-access question, not a covenant one.
+        //
+        // This is also the gate that closes the perverse case the covenant exists for. A firm whose EBITDA
+        // has collapsed still carries slow-moving book equity, so isUnderLeveraged reads TRUE and the branch
+        // below would issue debt to recapitalise precisely when cash flow can no longer support any.
+        if (($marginalReturn > $hurdleRate || $isUnderLeveragedForDebt) && $ctx->health->canIssueDebt && $ctx->health->hasLeverageHeadroom) {
             $newBorrowingRate = $ctx->health->rawMetrics->currentMarketRate ?? 0.05;
 
             $ebit = $ctx->health->rawMetrics->ebit ?? 0.0;

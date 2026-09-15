@@ -660,6 +660,34 @@ class MergerAndAcquisitionEngineTest extends TestCase
         return new MacroStateDTO(policyRateEma: 0.03, corporateTaxRate: 0.21, yield5yEma: 0.035, nominalGdpIndex: 1.0);
     }
 
+    /**
+     * The empire builder's branch is read ahead of every other one and funds itself with leverage, but it
+     * had no lender test on it at all: hubris is a reason to overpay for a target, not a reason a bank lends
+     * to a firm that cannot service what it already owes. Failing either test does not stop it acquiring —
+     * it drops through to the cash-funded branches — so what must fall is the size of the cheque.
+     */
+    public function testEmpireBuilderCannotFundADealOnCreditItDoesNotHave(): void
+    {
+        $treasury = 4_000_000_000.0;
+
+        $this->primeHealthyDeal(operatingBase: 15_000_000_000.0, canIssueDebt: true, hasLeverageHeadroom: true);
+        $banked = $this->buildLedgeredAcquirer('EMPA', $treasury, 1_000_000_000.0, 100_000_000.0);
+        $banked->setManagementStyle(\App\Data\ManagementStyle::EmpireBuilder);
+        $levered = $this->engine->evaluatePrivateAcquisition($banked, $this->healthyMacro(), 1.0);
+        $this->assertIsArray($levered, 'The control deal must execute, or the comparison proves nothing.');
+        $this->assertGreaterThan($treasury, (float) $levered['spent'], 'The control must actually be drawing on borrowing capacity.');
+
+        $this->setUp();
+        $this->primeHealthyDeal(operatingBase: 15_000_000_000.0, canIssueDebt: false, hasLeverageHeadroom: true);
+        $shutOut = $this->buildLedgeredAcquirer('EMPB', $treasury, 1_000_000_000.0, 100_000_000.0);
+        $shutOut->setManagementStyle(\App\Data\ManagementStyle::EmpireBuilder);
+        $cashOnly = $this->engine->evaluatePrivateAcquisition($shutOut, $this->healthyMacro(), 1.0);
+
+        $spent = is_array($cashOnly) ? (float) $cashOnly['spent'] : 0.0;
+        $this->assertLessThanOrEqual($treasury, $spent, 'A firm the lenders have refused cannot spend borrowed money.');
+        $this->assertLessThan((float) $levered['spent'], $spent, 'Losing access to credit must shrink the cheque.');
+    }
+
     private function buildLedgeredAcquirer(string $ticker, float $treasury, float $debt, float $shares): Stock
     {
         $stock = new Stock();
@@ -693,7 +721,7 @@ class MergerAndAcquisitionEngineTest extends TestCase
         return $stock;
     }
 
-    private function primeHealthyDeal(float $operatingBase): void
+    private function primeHealthyDeal(float $operatingBase, bool $canIssueDebt = true, bool $hasLeverageHeadroom = true): void
     {
         $debtMetrics = new DebtMetricsDTO(
             interestExpense: 50000000.0,
@@ -715,7 +743,7 @@ class MergerAndAcquisitionEngineTest extends TestCase
             isSevereNegativeCarry: false,
             interestCoverage: 100.0,
             wantsToPaydownDebt: false,
-            canIssueDebt: true,
+            canIssueDebt: $canIssueDebt,
             debtTolerance: 1.5,
             wacc: 0.06,
             costOfEquity: 0.08,
@@ -723,7 +751,10 @@ class MergerAndAcquisitionEngineTest extends TestCase
             rawMetrics: $debtMetrics,
             isLiquidityCrisis: false,
             isLiquidityWarning: false,
-            isUnderLeveraged: false
+            isUnderLeveraged: false,
+            hasLeverageHeadroom: $hasLeverageHeadroom,
+            netDebtToEbitda: $hasLeverageHeadroom ? 0.2 : 4.0,
+            ebitdaCovenantLimit: 2.0
         );
 
         $this->debtEngineMock->method('analyzeDebtHealth')->willReturn($health);

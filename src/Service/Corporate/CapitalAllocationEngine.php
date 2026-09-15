@@ -216,6 +216,14 @@ class CapitalAllocationEngine
             $speed = min(1.0, $speed + 0.15);
         }
 
+        // The dividend leg of the same restricted-payments clause. A breach freezes the distribution where
+        // it stands rather than cutting it: what lenders withhold consent for is an INCREASE in payments
+        // while the firm is out of compliance, and the distress ladder above already handles the case where
+        // cash flow has actually collapsed. min() keeps that ladder's cut winning whenever it is deeper.
+        if (!$ctx->health->hasLeverageHeadroom) {
+            $targetDividend = min($targetDividend, $lastDividend);
+        }
+
         if ($lastDividend > 0 && $isAristocrat) {
             $catchUpRatio = $calculatedTarget / $lastDividend;
             if ($catchUpRatio > self::ARISTOCRAT_CATCHUP_THRESHOLD) {
@@ -290,6 +298,21 @@ class CapitalAllocationEngine
         $canEasilyCoverDebt = $ctx->excessCash > ((float) $stock->getTotalDebt() * 2.0);
 
         if ($ctx->strategy->checkBuybackRegulatoryLockout($stock, $ctx->newTreasury)) {
+            $ctx->newShares = $ctx->sharesOutstanding;
+            return;
+        }
+
+        // RESTRICTED PAYMENTS
+        // Every credit agreement carrying a maintenance leverage test carries a restricted-payments clause
+        // beside it, and the two are one bargain: while leverage is out of compliance the lender's claim on
+        // cash flow ranks ahead of the shareholder's. A buyback is the most discretionary distribution there
+        // is and the first thing that clause stops — it retires the equity cushion sitting underneath debt
+        // that is already too large for the cash flow supporting it.
+        //
+        // This is a separate question from the incurrence test in TreasuryEngine: that one asks whether the
+        // firm may borrow MORE, this one asks whether it may pay cash out. A firm can breach while holding
+        // plenty of cash and a healthy ICR, which is exactly the case the equity ratio waves through.
+        if (!$ctx->health->hasLeverageHeadroom) {
             $ctx->newShares = $ctx->sharesOutstanding;
             return;
         }

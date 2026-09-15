@@ -905,4 +905,92 @@ class DebtEngineTest extends TestCase
             'A 0.45 beta must cost more equity capital than a 0.10 beta.'
         );
     }
+
+    /**
+     * Builds a firm whose only interesting property is its leverage, so the covenant is the variable under test.
+     */
+    private function leverageFixture(string $industry, string $debt, string $treasury): Stock
+    {
+        $stock = new Stock();
+        $stock->setTicker('LEV');
+        $stock->setIndustry($industry);
+        $stock->setPrice('50.00');
+        $stock->setSharesOutstanding('1000000');
+        $stock->setTotalEquity('80000000');
+        $stock->setWholesaleDebt($debt);
+        $stock->setCorporateTreasury($treasury);
+        $stock->setTotalRevenue('100000000');
+        $stock->setOperatingMargin('0.30');
+        $stock->setBeta('0.5');
+        // Cheap legacy debt on purpose: it is what lets interest coverage stay comfortable while the
+        // firm's leverage against actual cash generation runs away.
+        $stock->setHistoricalFixedRate('0.02');
+        $stock->setCreditSpread('0.01');
+
+        return $stock;
+    }
+
+    private function leverageMacro(): MacroStateDTO
+    {
+        return new MacroStateDTO(
+            policyRateEma: 0.03,
+            corporateTaxRate: 0.20,
+            yield5yEma: 0.03,
+            equityRiskPremium: 0.05
+        );
+    }
+
+    /**
+     * The whole reason the covenant has to exist: interest coverage is rate-sensitive and this is not, so
+     * cheap debt keeps the ICR gate open while cash-flow leverage runs past the sector limit.
+     */
+    public function testLeverageCovenantBindsWhereInterestCoverageDoesNot(): void
+    {
+        $engine = new DebtEngine(new MathUtility(), new CorporateMetrics(), $this->creditRatingAgency, $this->marketEventPublisherMock);
+
+        $health = $engine->analyzeDebtHealth($this->leverageFixture('Software - Application', '200000000', '10000000'), $this->leverageMacro());
+
+        $this->assertTrue($health->canIssueDebt, 'Interest coverage must still be satisfied, or this test proves nothing about the covenant.');
+        $this->assertGreaterThan($health->ebitdaCovenantLimit, $health->netDebtToEbitda, 'Fixture must actually breach the sector covenant.');
+        $this->assertFalse($health->hasLeverageHeadroom, 'A firm past its Net Debt / EBITDA covenant has no discretionary leverage headroom.');
+    }
+
+    public function testCompliantFirmKeepsItsLeverageHeadroom(): void
+    {
+        $engine = new DebtEngine(new MathUtility(), new CorporateMetrics(), $this->creditRatingAgency, $this->marketEventPublisherMock);
+
+        $health = $engine->analyzeDebtHealth($this->leverageFixture('Utilities - Regulated Electric', '120000000', '10000000'), $this->leverageMacro());
+
+        $this->assertLessThan($health->ebitdaCovenantLimit, $health->netDebtToEbitda);
+        $this->assertTrue($health->hasLeverageHeadroom);
+    }
+
+    /**
+     * Financials carry a 999.0 sentinel because their binding constraint is regulatory capital. A bank funds
+     * itself at a leverage no industrial covenant would tolerate, and that is the business, not a breach.
+     */
+    public function testFinancialsAreExemptFromTheCashFlowLeverageCovenant(): void
+    {
+        $engine = new DebtEngine(new MathUtility(), new CorporateMetrics(), $this->creditRatingAgency, $this->marketEventPublisherMock);
+
+        $health = $engine->analyzeDebtHealth($this->leverageFixture('Banks - Regional', '300000000', '10000000'), $this->leverageMacro());
+
+        $this->assertGreaterThan(6.0, $health->netDebtToEbitda, 'The bank should look extremely levered on this ratio.');
+        $this->assertTrue($health->hasLeverageHeadroom, 'The sentinel limit must exempt the sector outright.');
+    }
+
+    /**
+     * The covenant is struck on NET debt, so a cash pile is a genuine defence rather than window dressing.
+     */
+    public function testCovenantIsStruckOnNetDebtSoTreasuryBuysHeadroom(): void
+    {
+        $engine = new DebtEngine(new MathUtility(), new CorporateMetrics(), $this->creditRatingAgency, $this->marketEventPublisherMock);
+        $macro = $this->leverageMacro();
+
+        $geared = $engine->analyzeDebtHealth($this->leverageFixture('Software - Application', '200000000', '10000000'), $macro);
+        $funded = $engine->analyzeDebtHealth($this->leverageFixture('Software - Application', '200000000', '170000000'), $macro);
+
+        $this->assertLessThan($geared->netDebtToEbitda, $funded->netDebtToEbitda, 'Holding cash against the same gross debt must lower measured leverage.');
+        $this->assertTrue($funded->hasLeverageHeadroom, 'Once net debt is inside the limit the covenant is satisfied again.');
+    }
 }

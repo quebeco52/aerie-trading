@@ -449,6 +449,94 @@ class TreasuryEngineTest extends TestCase
     }
 
     /**
+     * The perverse case the covenant exists to close. Book equity moves far too slowly to register an
+     * earnings collapse, so isUnderLeveraged still reads TRUE and this branch would issue debt to
+     * recapitalise at precisely the moment cash flow can no longer support any. Identical to
+     * testUnderleveragedStandardCorporateIssuesDebt above in every respect but the covenant flag, so a
+     * pass here is attributable to the covenant and nothing else.
+     */
+    public function testCovenantBreachStopsTheRecapitalisationTheEquityRatioWouldWaveThrough(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('CORP');
+        $stock->setIndustry('Technology');
+        $stock->setTotalEquity('1000000000.00');
+        $stock->setWholesaleDebt('0.00');
+        $stock->setCorporateTreasury('50000000.00');
+        $stock->setCreditSpread('0.02');
+
+        $macro = MacroStateDTO::fromArray([
+            'policy_rate_ema' => 0.04,
+            'yield_5y_ema' => 0.045,
+            'macro_credit_spread_ema' => 0.02,
+        ]);
+
+        $ctx = new CapitalAllocationContext(
+            stock: $stock,
+            macroState: $macro,
+            actualAnnualEps: 1.0,
+            quarterlyFcfPerShare: 0.25,
+            currentPrice: 50.0,
+            sharesOutstanding: 100_000_000,
+            actualTotalNetIncome: 25_000_000
+        );
+
+        $ctx->strategy = new StandardCorporateBusinessModel();
+        $ctx->businessModel = 'standard_corporate';
+        $ctx->isFinancial = false;
+        $ctx->newTreasury = 50_000_000.0;
+        $ctx->operatingBase = 1_000_000_000.0;
+        $ctx->wholesaleDebt = 0.0;
+        $ctx->customerDeposits = 0.0;
+
+        $debtMetrics = new DebtMetricsDTO(
+            interestExpense: 0.0,
+            blendedRate: 0.05,
+            historicalFixedRate: 0.05,
+            dynamicSpread: 0.02,
+            currentMarketRate: 0.05,
+            wholesaleRate: 0.05,
+            ebit: 50_000_000.0,
+            revenue: 200_000_000.0,
+            depreciation: 5_000_000.0,
+            ebitda: 55_000_000.0
+        );
+
+        $ctx->health = new DebtHealthDTO(
+            grossCost: 0.05,
+            effectiveCost: 0.05,
+            cashYield: 0.04,
+            isNegativeCarry: false,
+            isSevereNegativeCarry: false,
+            interestCoverage: 10.0,
+            wantsToPaydownDebt: false,
+            canIssueDebt: true,
+            debtTolerance: 1.5,
+            wacc: 0.08,
+            costOfEquity: 0.10,
+            leveredBeta: 1.0,
+            rawMetrics: $debtMetrics,
+            isLiquidityCrisis: false,
+            isLiquidityWarning: false,
+            isUnderLeveraged: true,
+            hasLeverageHeadroom: false,
+            netDebtToEbitda: 4.5,
+            ebitdaCovenantLimit: 2.0
+        );
+
+        $this->corporateMetrics->method('calculateLiveInvestedCapital')->willReturn(1_000_000_000.0);
+        $this->corporateMetrics->method('calculateMarketSaturationPenalty')->willReturn(0.15);
+        $this->corporateMetrics->method('calculateMarginalReturn')->willReturn(0.02);
+
+        $this->debtEngine->expects($this->never())->method('issueDebt');
+
+        $this->treasuryEngine->executeCorporateStrategy($ctx);
+
+        $this->assertFalse($ctx->recapActionTaken, 'A firm past its leverage covenant must not lever up to recapitalise.');
+        $this->assertSame(0.0, $ctx->debtIssued);
+    }
+
+    /**
      * ASC 718: stock-based compensation is an expense inside net income whose credit side is additional
      * paid-in capital. Equity must roll forward net of it, otherwise book value falls every quarter by a
      * charge that never left the company.

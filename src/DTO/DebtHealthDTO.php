@@ -25,6 +25,12 @@ class DebtHealthDTO
         public readonly DebtMetricsDTO $rawMetrics,
         public readonly bool $isLiquidityCrisis,
         public readonly bool $isLiquidityWarning,
-        public readonly bool $isUnderLeveraged
+        public readonly bool $isUnderLeveraged,
+        /** False when Net Debt / EBITDA has breached the sector covenant: no discretionary new leverage. */
+        public readonly bool $hasLeverageHeadroom = true,
+        /** Funded net debt over EBITDA, capped; the cash-flow leverage the covenant is tested on. */
+        public readonly float $netDebtToEbitda = 0.0,
+        /** The sector's Net Debt / EBITDA covenant level; a 999.0 sentinel means the sector is exempt. */
+        public readonly float $ebitdaCovenantLimit = 999.0
     ) {}
 }
