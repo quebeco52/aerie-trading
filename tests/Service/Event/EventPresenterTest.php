@@ -181,4 +181,32 @@ class EventPresenterTest extends TestCase
         $this->assertSame('gavel', $presented['icon']);
         $this->assertSame(-100.0, $presented['changePercent']);
     }
+
+    /**
+     * A change at the top reads differently depending on whether the manager jumped or was pushed, and it
+     * carries no move of its own — the policy the successor brings is priced by the engines, not the card.
+     */
+    public function testPresentManagementSuccessionSeparatesADismissalFromADeparture(): void
+    {
+        $dismissal = $this->presenter->present([
+            'type' => 'MANAGEMENT CHANGE',
+            'description' => 'Falcon Holdings chief executive was removed by the board after 5.2 years. The incoming management is expected to hold a high internal hurdle and return what it cannot beat.',
+            'change_percent' => 0.0,
+        ]);
+
+        $this->assertSame('governance', $dismissal['category']);
+        $this->assertSame('BOARD REMOVAL', $dismissal['badge']);
+        $this->assertSame('gavel', $dismissal['icon']);
+        $this->assertSame(0.0, $dismissal['changePercent'], 'A succession implies no price move of its own.');
+
+        $orderly = $this->presenter->present([
+            'type' => 'MANAGEMENT CHANGE',
+            'description' => 'Lakeside Mutual chief executive stepped down after 13.4 years. An internal promotion inherits the mandate unchanged.',
+            'change_percent' => 0.0,
+        ]);
+
+        $this->assertSame('MANAGEMENT CHANGE', $orderly['badge']);
+        $this->assertSame('badge', $orderly['icon']);
+        $this->assertFalse($orderly['isEarnings']);
+    }
 }

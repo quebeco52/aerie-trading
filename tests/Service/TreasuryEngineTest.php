@@ -9,6 +9,7 @@ use App\DTO\DebtHealthDTO;
 use App\DTO\DebtMetricsDTO;
 use App\DTO\MacroStateDTO;
 use App\DTO\MaturityRollDTO;
+use App\Data\ManagementStyle;
 use App\Entity\Stock;
 use App\Service\Corporate\CapExEngine;
 use App\Service\Corporate\DebtEngine;
@@ -20,14 +21,16 @@ use App\Service\Model\Sector\InvestmentBankBusinessModel;
 use App\Service\Model\Sector\ShadowBankBusinessModel;
 use App\Service\Model\Sector\StandardCorporateBusinessModel;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
+use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 
 #[AllowMockObjectsWithoutExpectations]
 class TreasuryEngineTest extends TestCase
 {
-    private CorporateMetrics $corporateMetrics;
-    private DebtEngine $debtEngine;
-    private CapExEngine $capExEngine;
+    private CorporateMetrics&Stub $corporateMetrics;
+    private DebtEngine&MockObject $debtEngine;
+    private CapExEngine&Stub $capExEngine;
     private MathUtility $mathUtility;
     private TreasuryEngine $treasuryEngine;
 
@@ -823,6 +826,61 @@ class TreasuryEngineTest extends TestCase
 
         $refused = $deploy(0.50); // average 60% > hurdle 50% > marginal 40%
         $this->assertEqualsWithDelta(0.0, $refused->organicCapex, 1e-9, 'An average return above the hurdle is not a reason to deploy when the next dollar earns less than it costs.');
+    }
+
+    /**
+     * The applied hurdle has to reach the CASH-funded deployment gate, not only the earnings engine's.
+     *
+     * Jensen's (1986) agency cost is a manager funding projects a disciplined board would refuse, and it is
+     * one manager with one hurdle: reading the raw cost of capital here left an empire builder disciplined
+     * about debt-funded plant and reckless about cash-funded plant, which is an accident of funding source
+     * rather than a persistent style. The marginal return below sits between the two hurdles, so the
+     * neutral firm refuses the project and the empire builder takes it — from the same balance sheet.
+     */
+    public function testOrganicCapexGateAppliesTheHurdleManagementHoldsNotTheRawCostOfCapital(): void
+    {
+        $deploy = function (?ManagementStyle $style): CapitalAllocationContext {
+            mt_srand(7);
+            $stock = new Stock();
+            $stock->setTicker('AGCY');
+            $stock->setTotalEquity('1000000000.00');
+            $stock->setCorporateTreasury('200000000.00');
+            $stock->setRoicTtm('0.60');
+            $stock->setManagementStyle($style);
+
+            $ctx = $this->createAllocationContext($stock, stockCompensation: 0.0);
+            $ctx->newTreasury = 200_000_000.0;
+            $ctx->debtActionTaken = false;
+            $ctx->health = new DebtHealthDTO(
+                grossCost: 0.05, effectiveCost: 0.05, cashYield: 0.04, isNegativeCarry: false, isSevereNegativeCarry: false,
+                interestCoverage: 15.0, wantsToPaydownDebt: false, canIssueDebt: false, debtTolerance: 1.0, wacc: 0.50,
+                costOfEquity: 0.52, leveredBeta: 1.0, rawMetrics: $ctx->health->rawMetrics, isLiquidityCrisis: false,
+                isLiquidityWarning: false, isUnderLeveraged: false
+            );
+
+            // The next dollar of plant earns 40%, against a true cost of capital of 50%.
+            $this->corporateMetrics->method('calculateLiveInvestedCapital')->willReturn(1_000_000_000.0);
+            $this->corporateMetrics->method('calculateMarketSaturationPenalty')->willReturn(0.20);
+            $this->corporateMetrics->method('calculateMarginalReturn')->willReturn(0.40);
+
+            $engine = new TreasuryEngine($this->corporateMetrics, $this->debtEngine, $this->createStub(CapExEngine::class), $this->mathUtility);
+            $engine->executeCorporateStrategy($ctx);
+
+            return $ctx;
+        };
+
+        // 0.50 x 0.75 = 0.375, which the 40% marginal return clears. That gap is the agency cost.
+        $this->assertLessThan(
+            0.40,
+            ManagementStyle::EmpireBuilder->appliedHurdle(0.50),
+            'The fixture only means anything while the empire builder\'s hurdle sits below the marginal return.'
+        );
+
+        $neutral = $deploy(null);
+        $this->assertEqualsWithDelta(0.0, $neutral->organicCapex, 1e-9, 'A disciplined firm does not buy a 40% return with 50% money.');
+
+        $empireBuilder = $deploy(ManagementStyle::EmpireBuilder);
+        $this->assertGreaterThan(0.0, $empireBuilder->organicCapex, 'The empire builder funds it, and the value destruction is the point.');
     }
 
     /**

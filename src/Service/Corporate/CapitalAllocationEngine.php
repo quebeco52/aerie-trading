@@ -259,7 +259,12 @@ class CapitalAllocationEngine
     {
         $this->treasuryEngine->executeCorporateStrategy($ctx);
         
-        $ctx->targetOperatingCash = $ctx->strategy->calculateTargetOperatingCash($ctx->operatingBase, (float) $ctx->stock->getCustomerDeposits(), (float) $ctx->stock->getWholesaleDebt());
+        // The DISCRETIONARY cash target — the buffer a manager chooses to run, not the solvency floor, which
+        // stays exactly where the model puts it. Every hoarding test downstream measures against this, so
+        // the fortress is no longer detected as defective for holding the reserves that define it.
+        $ctx->targetOperatingCash = $ctx->stock->getManagementStyle()->appliedTargetCash(
+            $ctx->strategy->calculateTargetOperatingCash($ctx->operatingBase, (float) $ctx->stock->getCustomerDeposits(), (float) $ctx->stock->getWholesaleDebt())
+        );
         $ctx->excessCash = max(0.0, $ctx->newTreasury - $ctx->targetOperatingCash);
         
         if ($ctx->actualAnnualEps > 0) {
@@ -289,7 +294,8 @@ class CapitalAllocationEngine
             return;
         }
 
-        $hoardStatus = $ctx->strategy->evaluateHoardingStatus($ctx->newTreasury, $ctx->targetOperatingCash, $ctx->operatingBase, (float) $stock->getTotalDebt());
+        $style = $stock->getManagementStyle();
+        $hoardStatus = $ctx->strategy->evaluateHoardingStatus($ctx->newTreasury, $ctx->targetOperatingCash, $style->appliedHoardingBase($ctx->operatingBase), (float) $stock->getTotalDebt());
         $excessCash = $hoardStatus['excess_cash'];
         $isHoarder = $hoardStatus['is_hoarder'];
         $isMegaHoarder = $hoardStatus['is_mega_hoarder'];
@@ -342,6 +348,13 @@ class CapitalAllocationEngine
                 $saturationWillingSpend = $excessCash * $saturationSpendRatio * $saturationSeverity;
                 $maxWillingSpend = max($maxWillingSpend, $saturationWillingSpend);
             }
+
+            // Bertrand & Schoar's payout fixed effect is over TOTAL distribution. Biasing the dividend alone
+            // simply rerouted the cash: what a fortress withheld from the dividend piled up in the treasury
+            // and came straight back out through this leg, so the firm that was supposed to retain ended up
+            // distributing more than the steward. The recap floor below is deliberately left unbiased —
+            // that is a capital-structure repair, not a distribution preference.
+            $maxWillingSpend *= $style->payoutBias();
 
             $marketCap = $ctx->sharesOutstanding * max($ctx->currentPrice, 0.01);
             $baseRegulatoryPct = $isMegaHoarder ? 0.075 : ($isHoarder ? 0.05 : 0.015);

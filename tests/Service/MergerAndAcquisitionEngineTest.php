@@ -7,6 +7,7 @@ namespace App\Tests\Service;
 use App\DTO\DebtHealthDTO;
 use App\DTO\DebtMetricsDTO;
 use App\DTO\MacroStateDTO;
+use App\Data\ManagementStyle;
 use App\Entity\Stock;
 use App\Service\Corporate\DebtEngine;
 use App\Service\Corporate\MergerAndAcquisitionEngine;
@@ -542,6 +543,123 @@ class MergerAndAcquisitionEngineTest extends TestCase
      * Opens every ledger on a non-financial balance sheet and derives equity from the identity, so the
      * fixture starts balanced to the dollar and any drift is the engine's doing.
      */
+    /**
+     * Roll's (1986) hubris hypothesis, wired to the management style: the empire builder pays a premium over
+     * the target's standalone value, and that premium buys nothing.
+     *
+     * The two runs share every draw the harness fixes — synergy, target ROIC, the hurdle — so the whole
+     * difference in the goodwill booked per dollar spent is the overpayment. Net identifiable assets scale
+     * with what was BOUGHT and goodwill absorbs the gap to what was PAID, which is what leaves the premium
+     * exposed to the annual impairment test instead of quietly capitalised as plant.
+     */
+    public function testEmpireBuilderHubrisPremiumLandsInGoodwillRatherThanNetAssets(): void
+    {
+        $openingGoodwill = 1_000_000_000.0;
+        // Fixed by the harness: synergy 1.10 on a target ROIC draw that clamps to the 0.25 ceiling.
+        $effectiveTargetRoic = MergerAndAcquisitionEngine::MA_TARGET_ROIC_CEILING * 1.10;
+        $hurdleRate = 0.06;
+        $netAssetShare = min(1.0, $hurdleRate / $effectiveTargetRoic);
+
+        $this->primeHealthyDeal(operatingBase: 15_000_000_000.0);
+        $this->bookIssuedDebt();
+
+        $disciplined = $this->buildLedgeredAcquirer('DSCP', 40_000_000_000.0, 1_000_000_000.0, 100_000_000.0);
+        $disciplined->setManagementStyle(ManagementStyle::Steward);
+        $disciplinedResult = $this->engine->evaluatePrivateAcquisition($disciplined, $this->healthyMacro(), 1.0);
+        $this->assertIsArray($disciplinedResult, 'The control deal must actually execute for the comparison to mean anything.');
+
+        $hubristic = $this->buildLedgeredAcquirer('EMPR', 40_000_000_000.0, 1_000_000_000.0, 100_000_000.0);
+        $hubristic->setManagementStyle(ManagementStyle::EmpireBuilder);
+        $hubristicResult = $this->engine->evaluatePrivateAcquisition($hubristic, $this->healthyMacro(), 1.0);
+        $this->assertIsArray($hubristicResult);
+
+        $disciplinedGoodwillRate = ((float) $disciplined->getGoodwill() - $openingGoodwill) / (float) $disciplinedResult['spent'];
+        $hubristicGoodwillRate = ((float) $hubristic->getGoodwill() - $openingGoodwill) / (float) $hubristicResult['spent'];
+
+        // A disciplined acquirer pays standalone value, so goodwill is purely the residual-income premium.
+        $this->assertEqualsWithDelta(1.0 - $netAssetShare, $disciplinedGoodwillRate, 1e-9);
+
+        // The empire builder's net assets scale with value/(1+premium); the premium itself is all goodwill.
+        $premium = ManagementStyle::EmpireBuilder->hubrisPremium();
+        $this->assertEqualsWithDelta(1.0 - ($netAssetShare / (1.0 + $premium)), $hubristicGoodwillRate, 1e-9);
+
+        $this->assertGreaterThan(
+            $disciplinedGoodwillRate,
+            $hubristicGoodwillRate,
+            'Overpaying must show up as goodwill per dollar spent, or the hubris is free.'
+        );
+
+        // The cheque still equals the assets that came in, premium and all.
+        $this->assertBalanced($disciplined, 'a disciplined acquisition');
+        $this->assertBalanced($hubristic, 'an acquisition carrying a hubris premium');
+    }
+
+    /**
+     * The other half of the same transaction: overpaying does not change what the target earns, so the same
+     * money has to buy strictly less business. Without this the empire builder simply got a larger firm at
+     * an unchanged return — growth with no agency cost attached to it.
+     *
+     * Both runs are driven off one seed, so the target drawn is the same target and the only difference
+     * between them is the cheque written for it.
+     */
+    public function testHubrisPremiumBuysStrictlyLessBusinessForTheSameMoney(): void
+    {
+        $this->primeHealthyDeal(operatingBase: 15_000_000_000.0);
+        $this->bookIssuedDebt();
+
+        $openingRevenue = 20_000_000_000.0;
+
+        mt_srand(20260915);
+        $disciplined = $this->buildLedgeredAcquirer('DSC2', 40_000_000_000.0, 1_000_000_000.0, 100_000_000.0);
+        $disciplined->setManagementStyle(ManagementStyle::Steward);
+        $disciplinedResult = $this->engine->evaluatePrivateAcquisition($disciplined, $this->healthyMacro(), 1.0);
+        $this->assertIsArray($disciplinedResult);
+
+        mt_srand(20260915);
+        $hubristic = $this->buildLedgeredAcquirer('EMP2', 40_000_000_000.0, 1_000_000_000.0, 100_000_000.0);
+        $hubristic->setManagementStyle(ManagementStyle::EmpireBuilder);
+        $hubristicResult = $this->engine->evaluatePrivateAcquisition($hubristic, $this->healthyMacro(), 1.0);
+        $this->assertIsArray($hubristicResult);
+
+        // Revenue bought per dollar spent is the target's turnover on the price paid, and the premium is the
+        // only thing separating the two.
+        $disciplinedYield = ((float) $disciplined->getTotalRevenue() - $openingRevenue) / (float) $disciplinedResult['spent'];
+        $hubristicYield = ((float) $hubristic->getTotalRevenue() - $openingRevenue) / (float) $hubristicResult['spent'];
+
+        $this->assertGreaterThan(0.0, $disciplinedYield);
+        $this->assertEqualsWithDelta(
+            $disciplinedYield / (1.0 + ManagementStyle::EmpireBuilder->hubrisPremium()),
+            $hubristicYield,
+            1e-9,
+            'The premium buys no revenue at all, so the yield on the price paid falls by exactly (1 + premium).'
+        );
+
+        // And the capital that bought nothing drags the acquirer's own structural return down with it.
+        $this->assertLessThan(
+            (float) $disciplined->getBaselineRoic(),
+            (float) $hubristic->getBaselineRoic(),
+            'Goodwill sits in invested capital and earns nothing; the blended return has to reflect that.'
+        );
+    }
+
+    /**
+     * The empire builder's branch funds with leverage, so the stub has to actually book the borrowing or the
+     * sheet is short by whatever the treasury could not cover.
+     */
+    private function bookIssuedDebt(): void
+    {
+        $this->debtEngineMock->method('issueDebt')->willReturnCallback(
+            static function (Stock $borrower, float $amount): void {
+                $borrower->setWholesaleDebt((string) ((float) $borrower->getWholesaleDebt() + $amount));
+            }
+        );
+    }
+
+    private function healthyMacro(): MacroStateDTO
+    {
+        return new MacroStateDTO(policyRateEma: 0.03, corporateTaxRate: 0.21, yield5yEma: 0.035, nominalGdpIndex: 1.0);
+    }
+
     private function buildLedgeredAcquirer(string $ticker, float $treasury, float $debt, float $shares): Stock
     {
         $stock = new Stock();

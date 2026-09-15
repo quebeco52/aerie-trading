@@ -52,7 +52,8 @@ class StockTracker
         private CorporateMetrics $corporateMetrics,
         private LiquidityEngine $liquidityEngine,
         private OrderFlowStoreInterface $orderFlow,
-        private \App\Service\Market\Agent\AgentFlowEngine $agentFlow
+        private \App\Service\Market\Agent\AgentFlowEngine $agentFlow,
+        private \App\Service\Corporate\ManagementSuccessionEngine $successionEngine
     ) {}
 
     /**
@@ -163,6 +164,22 @@ class StockTracker
 
             $effectiveRoic = $strategy->getEffectiveReturn($stock);
             $roicTtm = $strategy->getTrueReturn($stock);
+
+            // MANAGEMENT SUCCESSION
+            // The board judges the manager on economic profit against the firm's TRUE cost of capital, never
+            // the hurdle the incumbent has been applying — a manager cannot mark their own homework by
+            // holding a lower bar. Before the first report there is no realised return to judge, so the
+            // structural baseline stands in and a freshly seeded firm is not dismissed for having no history.
+            $structuralReturn = $strategy->isFinancial() ? (float) $stock->getBaselineRoe() : (float) $stock->getBaselineRoic();
+            $boardReturn = $roicTtm !== 0.0 ? $roicTtm : $structuralReturn;
+            $successionResult = $this->successionEngine->evaluateSuccession(
+                $stock,
+                $dt,
+                $boardReturn - $strategy->getHurdleRate($health)
+            );
+            if ($successionResult) {
+                $events[] = $successionResult['event'];
+            }
 
             $totalDebt = (float) $stock->getTotalDebt();
             $corporateTreasury = (float) $stock->getCorporateTreasury();

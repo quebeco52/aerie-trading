@@ -282,6 +282,7 @@ class MarketResetCommand extends Command
                     sam_ratio = :sam_ratio,
                     industry = :industry,
                     management_style = :management_style,
+                    ceo_tenure_years = :ceo_tenure_years,
                     earnings_momentum_z = NULL,
                     is_bankrupt = 0,
                     payment_default = 0,
@@ -370,6 +371,7 @@ class MarketResetCommand extends Command
                     'sam_ratio' => $stockData['sam_ratio'] ?? 1.00,
                     'industry' => $stockData['industry'] ?? null,
                     'management_style' => $stockData['management_style'] ?? null,
+                    'ceo_tenure_years' => \App\Service\Corporate\ManagementSuccessionEngine::drawSeedTenure($this->mathUtility),
                     'ticker' => $stockData['ticker']
                 ]
             );

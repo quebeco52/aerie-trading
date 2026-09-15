@@ -1706,7 +1706,7 @@ class EarningsEngine
         // that do not clear the cost of capital. The style bends the hurdle management applies, so an
         // empire builder keeps growing through returns a disciplined board would refuse to fund — and the
         // ROIC reversion downstream then prices exactly that value destruction.
-        $appliedHurdle = $hurdleRate * $style->hurdleBias();
+        $appliedHurdle = $style->appliedHurdle($hurdleRate);
 
         if ($reinvestmentRate <= 0.0 || $ctx->baselineRoic < $appliedHurdle) {
             return 0.0;

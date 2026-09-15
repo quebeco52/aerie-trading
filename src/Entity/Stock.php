@@ -383,6 +383,12 @@ class Stock
     private ?string $managementStyle = null;
 
     /**
+     * @var float|null Years the incumbent management has been in post, used for the succession hazard; null on a firm that has never had a turnover evaluated.
+     */
+    #[ORM\Column(type: 'float', nullable: true)]
+    private ?float $ceoTenureYears = 0.0;
+
+    /**
      * @var float|null Book-to-bill disclosed in the last report (orders booked over revenue billed); null when the firm discloses no order book.
      */
     #[ORM\Column(type: 'float', nullable: true)]
@@ -1147,6 +1153,18 @@ class Stock
     public function setManagementStyle(?\App\Data\ManagementStyle $style): static
     {
         $this->managementStyle = $style?->value;
+
+        return $this;
+    }
+
+    public function getCeoTenureYears(): float
+    {
+        return (float) ($this->ceoTenureYears ?? 0.0);
+    }
+
+    public function setCeoTenureYears(?float $ceoTenureYears): static
+    {
+        $this->ceoTenureYears = $ceoTenureYears === null ? null : max(0.0, $ceoTenureYears);
 
         return $this;
     }

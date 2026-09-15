@@ -135,6 +135,7 @@ class MarketSeedCommand extends Command
                 $stock->setRetainedEarnings((string) ($stockData['retained_earnings'] ?? 0.00));
                 $stock->setSamRatio((string) ($stockData['sam_ratio'] ?? 1.00));
                 $stock->setManagementStyle(\App\Data\ManagementStyle::tryFromNullable($stockData['management_style'] ?? null));
+                $stock->setCeoTenureYears(\App\Service\Corporate\ManagementSuccessionEngine::drawSeedTenure($this->mathUtility));
 
                 $margin = $stockData['operating_margin'] ?? 0.15;
                 $strategy = \App\Data\Sectors::getBusinessModelStrategy($businessModel);

@@ -191,6 +191,11 @@ function categorizeEvent(type, changePercent) {
     if (t === 'ACQUISITION' || t === 'MERGER' || t === 'DIVESTITURE') {
         return { category: 'mna', color: EVENT_COLORS.cyan, icon: 'domain_add', badge: t };
     }
+    if (t === 'MANAGEMENT CHANGE') {
+        // Carries no price move of its own; the policy the new management brings is priced by the engines.
+        const dismissed = (type || '').toLowerCase().includes('removal');
+        return { category: 'governance', color: EVENT_COLORS.amber, icon: dismissed ? 'gavel' : 'badge', badge: 'MANAGEMENT' };
+    }
     if (t === 'BANKRUPTCY') {
         return { category: 'bankruptcy', color: EVENT_COLORS.red500, icon: 'gavel', badge: 'BANKRUPTCY' };
     }

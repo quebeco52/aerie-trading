@@ -138,6 +138,12 @@ class OrderFlowImpactWiringTest extends TestCase
                 $agentStateStore ?? new \App\Service\Market\Agent\InMemoryAgentStateStore(),
                 new \App\Service\Market\Flow\InMemoryOrderFlowStore(),
                 []
+            ),
+            // Stubbed maths, so checkProbability() is false and no succession fires in tests that
+            // are about something else.
+            new \App\Service\Corporate\ManagementSuccessionEngine(
+                $this->createStub(\App\Service\Event\MarketEventPublisher::class),
+                $this->createStub(\App\Service\Math\MathUtility::class)
             )
         );
     }

@@ -58,6 +58,8 @@ class AcquisitionContext
     public bool $isOvervalued = false;
     public float $aggression = 1.0;
     public bool $isEmpireBuilder = false;
+    /** Fraction of the target's standalone value paid on top of it — the acquirer's overpayment (Roll 1986). */
+    public float $hubrisPremium = 0.0;
     public float $costOfNewBorrowing = 0.0;
     
     // Deal Config

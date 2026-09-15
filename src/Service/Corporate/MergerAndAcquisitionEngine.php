@@ -214,6 +214,7 @@ class MergerAndAcquisitionEngine
     {
         $stock = $ctx->acquirer;
         
+        $style = $stock->getManagementStyle();
         $ctx->costOfNewBorrowing = $ctx->health->rawMetrics->currentMarketRate ?? ($ctx->yield5y + (float) $stock->getCreditSpread());
 
         $equityLimit = \App\Data\Sectors::INDUSTRY_METRICS[$ctx->industry]['equity_limit'] ?? 1.0;
@@ -222,8 +223,8 @@ class MergerAndAcquisitionEngine
         $ctx->borrowingCapacity = max(0.0, $ctx->maxAllowableDebt - $ctx->currentDebt);
         $ctx->totalBuyingPower = $ctx->treasury + $ctx->borrowingCapacity;
 
-        $ctx->targetCash = $ctx->strategy->calculateTargetOperatingCash($ctx->operatingBase, (float) $stock->getCustomerDeposits(), (float) $stock->getWholesaleDebt());
-        $hoardStatus = $ctx->strategy->evaluateHoardingStatus($ctx->treasury, $ctx->targetCash, $ctx->operatingBase, $ctx->currentDebt);
+        $ctx->targetCash = $stock->getManagementStyle()->appliedTargetCash($ctx->strategy->calculateTargetOperatingCash($ctx->operatingBase, (float) $stock->getCustomerDeposits(), (float) $stock->getWholesaleDebt()));
+        $hoardStatus = $ctx->strategy->evaluateHoardingStatus($ctx->treasury, $ctx->targetCash, $style->appliedHoardingBase($ctx->operatingBase), $ctx->currentDebt);
         $ctx->excessCash = $hoardStatus['excess_cash'];
         $ctx->isHoarder = $hoardStatus['is_hoarder'];
         $ctx->isMegaHoarder = $hoardStatus['is_mega_hoarder'];
@@ -253,9 +254,17 @@ class MergerAndAcquisitionEngine
         $ctx->isOvervalued = $ctx->economicSpread > 0.0 && $ctx->currentPE > ($ctx->fairValuePE * 1.5) && $ctx->currentPE > 25.0 && $ctx->priceToBook > 2.0;
         
         $ctx->aggression = 1.0;
-        $ctx->isEmpireBuilder = false;
+        $ctx->isEmpireBuilder = $style === \App\Data\ManagementStyle::EmpireBuilder;
+        $ctx->hubrisPremium = $style->hubrisPremium();
         
         $config = match (true) {
+            // Morck, Shleifer & Vishny (1990): for this manager the deal IS the objective, not a use for
+            // spare capacity, so the branch is read ahead of the hoarding and leverage reads rather than
+            // behind them. Both constants below were already declared and had been unreachable for as long
+            // as the flag above was hardcoded false — this is the branch they were written for.
+            $ctx->isEmpireBuilder && $ctx->totalBuyingPower > self::MA_EMPIRE_BUILDER_MIN_POWER => [
+                'prob' => self::MA_EMPIRE_BUILDER_PROB, 'spend' => 0.55, 'type' => $ctx->strategy->getAcquisitionType('CONGLOMERATE EXPANSION'), 'use_leverage' => true, 'use_stock' => false, 'style_priced' => true
+            ],
             $ctx->isOvervalued => [
                 'prob' => self::MA_OVERVALUED_PROB, 'spend' => 0.50, 'type' => 'STOCK-FOR-STOCK MERGER', 'use_leverage' => false, 'use_stock' => true
             ],
@@ -276,7 +285,13 @@ class MergerAndAcquisitionEngine
 
         $ctx->dealExecuted = false;
 
-        if ($config && $this->mathUtility->checkProbability($config['prob'] * $ctx->dt)) {
+        // These hazards are annual and $dt is a fraction of a year. The empire builder's own branch already
+        // carries its elevated rate in MA_EMPIRE_BUILDER_PROB, so the style bias must NOT be laid on top of
+        // it — that counted the same behaviour twice and put a $1B+ transformative deal on the tape nearly
+        // twice a year. Everywhere else the bias is the only thing the style says about deal frequency.
+        $hazardBias = ($config['style_priced'] ?? false) ? 1.0 : $style->acquisitionBias();
+
+        if ($config && $this->mathUtility->checkProbability($config['prob'] * $hazardBias * $ctx->dt)) {
             $ctx->dealExecuted = true;
         }
         
@@ -284,7 +299,7 @@ class MergerAndAcquisitionEngine
             $config = [
                 'prob' => self::MA_CASH_FALLBACK_PROB, 'spend' => 0.20, 'type' => 'STRATEGIC ACQUISITION', 'use_leverage' => false, 'use_stock' => false
             ];
-            if ($this->mathUtility->checkProbability($config['prob'] * $ctx->dt)) {
+            if ($this->mathUtility->checkProbability($config['prob'] * $style->acquisitionBias() * $ctx->dt)) {
                 $ctx->dealExecuted = true;
             }
         }
@@ -398,24 +413,41 @@ class MergerAndAcquisitionEngine
         $effectiveTargetRoic = $targetRoic * $ctx->synergyMultiplier;
         
         $targetMargin = max(0.01, $oldOperatingMargin * (mt_rand(70, 95) / 100.0));
-        
+
+        // Roll's (1986) hubris hypothesis: the winning bidder is the one that most overestimates the target,
+        // and the difference is simply paid. So the price and the thing bought are two separate quantities
+        // here — the business is worth its standalone value and earns on that, while the acquirer's capital
+        // goes out at the price. The overpayment buys no earnings at all: it lands in goodwill, drags the
+        // blended return down by exactly the capital it consumed, and waits for the annual impairment test.
+        // The realised synergy above is drawn independently and is NOT touched, because hubris is an error
+        // in the estimate rather than in the outcome.
+        $economicValue = $ctx->purchasePrice / (1.0 + max(0.0, $ctx->hubrisPremium));
+        $roicOnPricePaid = $effectiveTargetRoic * ($economicValue / max(1.0, $ctx->purchasePrice));
+
         $totalNewCapital = max(1.0, $oldCapitalBase + $ctx->purchasePrice);
         
-        $ctx->strategy->blendAcquisitionDNA($stock, $oldCapitalBase, $ctx->purchasePrice, $effectiveTargetRoic, $totalNewCapital);
+        $ctx->strategy->blendAcquisitionDNA($stock, $oldCapitalBase, $ctx->purchasePrice, $roicOnPricePaid, $totalNewCapital);
 
         // Goodwill is the premium over the fair value of net identifiable assets. At a no-growth justified
-        // price-to-book of ROIC / hurdle (residual income identity), net assets acquired are the purchase
-        // price scaled by hurdle / ROIC and the remainder is goodwill, tested annually for impairment.
-        $netAssetsAcquired = $ctx->purchasePrice * min(1.0, max(0.01, $ctx->hurdleRate) / max(0.01, $effectiveTargetRoic));
+        // price-to-book of ROIC / hurdle (residual income identity), net assets acquired are the target's
+        // standalone value scaled by hurdle / ROIC and the remainder is goodwill, tested annually for
+        // impairment. Net assets scale with what was bought, never with what was paid — that is what puts
+        // the whole overpayment into goodwill instead of quietly capitalising it as plant.
+        $netAssetsAcquired = $economicValue * min(1.0, max(0.01, $ctx->hurdleRate) / max(0.01, $effectiveTargetRoic));
         $ctx->goodwillRecorded = max(0.0, $ctx->purchasePrice - $netAssetsAcquired);
         $stock->setGoodwill((string) ((float) $stock->getGoodwill() + $ctx->goodwillRecorded));
 
         $this->bookAcquiredNetAssets($stock, $ctx->strategy, $netAssetsAcquired);
         
-        $blendedMargin = (($oldCapitalBase * $oldOperatingMargin) + ($ctx->purchasePrice * $targetMargin)) / $totalNewCapital;
+        // Operating margin blends on the revenue-generating base, which is the business acquired and not the
+        // cheque written for it: overpaying destroys return on capital, it does not make the target's costs
+        // any worse. Both weights therefore run on standalone value, and with no premium this is the
+        // identity it always was.
+        $marginBlendCapital = max(1.0, $oldCapitalBase + $economicValue);
+        $blendedMargin = (($oldCapitalBase * $oldOperatingMargin) + ($economicValue * $targetMargin)) / $marginBlendCapital;
         $stock->setOperatingMargin((string) max(0.01, $blendedMargin * (1.0 - self::MA_INDIGESTION_PENALTY)));
         
-        $acquiredOperatingIncome = $ctx->purchasePrice * $effectiveTargetRoic;
+        $acquiredOperatingIncome = $economicValue * $effectiveTargetRoic;
         $acquiredRevenue = $acquiredOperatingIncome / max(0.01, $targetMargin);
         $currentRevenue = (float) $stock->getTotalRevenue();
         $stock->setTotalRevenue((string) ($currentRevenue + $acquiredRevenue));
@@ -603,8 +635,8 @@ class MergerAndAcquisitionEngine
         $ctx->normalizedEps = $ctx->normalizedNetIncome / $ctx->shares;
         $ctx->currentPE = $ctx->normalizedEps > 0 ? $ctx->price / $ctx->normalizedEps : 0.0;
         
-        $ctx->targetCash = $ctx->strategy->calculateTargetOperatingCash($ctx->operatingBase, (float) $stock->getCustomerDeposits(), (float) $stock->getWholesaleDebt());
-        $ctx->hoardStatus = $ctx->strategy->evaluateHoardingStatus($ctx->treasury, $ctx->targetCash, $ctx->operatingBase, (float) $stock->getTotalDebt());
+        $ctx->targetCash = $stock->getManagementStyle()->appliedTargetCash($ctx->strategy->calculateTargetOperatingCash($ctx->operatingBase, (float) $stock->getCustomerDeposits(), (float) $stock->getWholesaleDebt()));
+        $ctx->hoardStatus = $ctx->strategy->evaluateHoardingStatus($ctx->treasury, $ctx->targetCash, $stock->getManagementStyle()->appliedHoardingBase($ctx->operatingBase), (float) $stock->getTotalDebt());
         
         $ctx->nominalGdpIndex = $ctx->macroState->nominalGdpIndex;
         $ctx->samRatio = (float) $stock->getSamRatio();

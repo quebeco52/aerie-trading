@@ -7,6 +7,7 @@ namespace App\Tests\Service;
 use App\DTO\DebtHealthDTO;
 use App\DTO\DebtMetricsDTO;
 use App\DTO\MacroStateDTO;
+use App\Data\ManagementStyle;
 use App\Entity\Stock;
 use App\Service\Corporate\CapitalAllocationEngine;
 use App\Service\Corporate\CorporateLedgerService;
@@ -92,6 +93,93 @@ class CapitalAllocationEngineTest extends TestCase
             $this->mathUtilityMock,
             $this->treasuryEngineMock
         );
+    }
+
+    /**
+     * The fortress must be able to HOLD what it retains.
+     *
+     * Its reserves are the archetype, but the hoarding tests read any large balance as a defect and unlock
+     * repurchases at a mega-hoarder pace to correct it — so the manager that withheld the dividend watched
+     * the cash leave through the other leg anyway, and ended up distributing MORE than the steward beside
+     * it. Both the target the firm runs to and the threshold that judges it now scale with the style, and
+     * the payout bias governs the repurchase leg as well as the dividend.
+     */
+    public function testFortressKeepsTheReservesTheHoardingTestUsedToCorrectAway(): void
+    {
+        $operator = $this->buildCashRichFirm('HOARD_OP', null);
+        $fortress = $this->buildCashRichFirm('HOARD_FT', ManagementStyle::Fortress);
+
+        $macroState = new MacroStateDTO(corporateTaxRate: 0.21);
+
+        mt_srand(20260915);
+        $operatorResult = $this->engine->allocateCapital($operator, 10.00, 2.00, 100.00, 1_000_000.0, $macroState);
+        mt_srand(20260915);
+        $fortressResult = $this->engine->allocateCapital($fortress, 10.00, 2.00, 100.00, 1_000_000.0, $macroState);
+
+        $operatorBuyback = (float) $operatorResult['total_cash_spent'];
+        $fortressBuyback = (float) $fortressResult['total_cash_spent'];
+
+        $this->assertGreaterThan(0.0, $operatorBuyback, 'The control firm must actually be force-fed, or the test proves nothing.');
+        $this->assertLessThan(
+            $operatorBuyback,
+            $fortressBuyback,
+            'Identical balance sheets: the only thing holding the cash in is the style.'
+        );
+
+        // Total distribution, not just the leg the bias used to reach. This is the assertion that would have
+        // failed before: the fortress paid a smaller dividend and a LARGER buyback out of the same treasury.
+        $operatorTotal = (float) $operatorResult['total_paid'] + $operatorBuyback;
+        $fortressTotal = (float) $fortressResult['total_paid'] + $fortressBuyback;
+
+        $this->assertLessThan(
+            $operatorTotal,
+            $fortressTotal,
+            'A manager that retains must return less in total than the neutral baseline, through every channel combined.'
+        );
+    }
+
+    /** A steward distributes what it will not reinvest, so the same balance sheet returns more. */
+    public function testStewardReturnsMoreThanTheNeutralBaselineFromTheSameBalanceSheet(): void
+    {
+        $operator = $this->buildCashRichFirm('HOARD_O2', null);
+        $steward = $this->buildCashRichFirm('HOARD_ST', ManagementStyle::Steward);
+
+        $macroState = new MacroStateDTO(corporateTaxRate: 0.21);
+
+        mt_srand(20260915);
+        $operatorResult = $this->engine->allocateCapital($operator, 10.00, 2.00, 100.00, 1_000_000.0, $macroState);
+        mt_srand(20260915);
+        $stewardResult = $this->engine->allocateCapital($steward, 10.00, 2.00, 100.00, 1_000_000.0, $macroState);
+
+        $operatorTotal = (float) $operatorResult['total_paid'] + (float) $operatorResult['total_cash_spent'];
+        $stewardTotal = (float) $stewardResult['total_paid'] + (float) $stewardResult['total_cash_spent'];
+
+        $this->assertGreaterThan($operatorTotal, $stewardTotal);
+    }
+
+    /** A cash-rich, profitable, undervalued firm: the configuration the buyback engine acts on hardest. */
+    private function buildCashRichFirm(string $ticker, ?ManagementStyle $style): Stock
+    {
+        $stock = new Stock();
+        $stock->setTicker($ticker);
+        $stock->setIndustry('Software - Infrastructure');
+        $stock->setSharesOutstanding('1000000');
+        $stock->setPrice('100.00');
+        $stock->setTotalEquity('100000000');
+        $stock->setCorporateTreasury('20000000');
+        $stock->setTargetPayoutRatio('0.30');
+        $stock->setDividendSpeed('1.00');
+        $stock->setLastDividend('1.00');
+        $stock->setRetainedEarnings('50000000.00');
+        $stock->setTotalRevenue('10000000.00');
+        $stock->setOperatingMargin('0.20');
+        $stock->setWholesaleDebt('1000000.00');
+        $stock->setCustomerDeposits('0.00');
+        $stock->setRoicTtm('0.15');
+        $stock->setBaselineRoic('0.15');
+        $stock->setManagementStyle($style);
+
+        return $stock;
     }
 
     public function testReitFfoDividendCapacity(): void

@@ -59,6 +59,10 @@ class EventPresenter
             return $this->presentDistrict($rawType, $rawDesc, $changePct, $recordedAt);
         }
 
+        if ($rawType === 'MANAGEMENT CHANGE') {
+            return $this->presentSuccession($rawType, $rawDesc, $changePct, $recordedAt);
+        }
+
         return $this->presentGeneral($rawType, $rawDesc, $changePct, $recordedAt);
     }
 
@@ -285,6 +289,36 @@ class EventPresenter
             'iconClass' => $evicted ? 'bg-amber-500/20 text-amber-300' : 'bg-primary/20 text-primary',
             'isEarnings' => false,
             'headline' => !empty($rawDesc) ? $rawDesc : 'Glasswater Row roster reconstituted.',
+            'pills' => [],
+            'changePercent' => $changePct,
+            'recordedAt' => $recordedAt,
+            'rawDescription' => $rawDesc,
+        ];
+    }
+
+    /**
+     * A change at the top (App\Service\Corporate\ManagementSuccessionEngine). Not a price event — the
+     * value in it is the policy that follows, which the engines price through the dials the incoming
+     * style moves, so the card states what changed and implies no move of its own.
+     *
+     * @return array<string, mixed>
+     */
+    private function presentSuccession(string $type, string $rawDesc, ?float $changePct, \DateTimeInterface $recordedAt): array
+    {
+        $dismissed = str_contains(strtolower($rawDesc), 'removed by the board');
+
+        return [
+            'type' => $type,
+            'category' => 'governance',
+            'badge' => $dismissed ? 'BOARD REMOVAL' : 'MANAGEMENT CHANGE',
+            'badgeClass' => $dismissed
+                ? 'bg-amber-500/15 text-amber-300 border-amber-500/40'
+                : 'bg-surface-container-high text-on-surface-variant border-outline-variant/30',
+            'borderClass' => $dismissed ? 'border-l-amber-500' : 'border-l-primary',
+            'icon' => $dismissed ? 'gavel' : 'badge',
+            'iconClass' => $dismissed ? 'bg-amber-500/20 text-amber-300' : 'bg-primary/10 text-primary',
+            'isEarnings' => false,
+            'headline' => !empty($rawDesc) ? $rawDesc : 'The company named new management.',
             'pills' => [],
             'changePercent' => $changePct,
             'recordedAt' => $recordedAt,
