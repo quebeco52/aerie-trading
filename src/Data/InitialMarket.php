@@ -2021,16 +2021,47 @@ class InitialMarket
         ],
     ];
 
+    /**
+     * The listed index funds.
+     *
+     * A fund is not an index and it is not named like one. The INDICES are the Lakebird family, published by
+     * Lakebird Bank (see App\Service\Market\Index\MarketIndex); the FUNDS here are the tradable
+     * vehicles that track them, and every one of them is run by the Skein Group. That is the structure real
+     * fund names carry — sponsor, then index, then vehicle — and it is why a name like "Skein Lakebird 30
+     * ETF" tells you three separate things while "Lakebird Index" told you none of them.
+     *
+     * `expense_ratio` is the annual fee, and it is not decoration: it is the whole of the fund's long-run
+     * shortfall against the index it follows, and it is why a broad fund is a better vehicle for the same
+     * market than a narrow one. The spread across the four is narrow because the Skein Group is mutually
+     * owned by its own funds and has no shareholders to earn anything for — what is left is the real cost of
+     * running each mandate. A whole-board fund that never has to trade is nearly free; a sector fund costs a
+     * little more; a fund that re-ranks the market on a risk measure every quarter and trades its whole book
+     * to match costs several times either, and pays its index licence out of the same fee.
+     */
     public const ETFS = [
         [
             'ticker' => 'LBI',
-            'name' => 'Lakebird Index',
+            'name' => 'Skein Lakebird 30 ETF',
             'price' => 100.00,
+            'expense_ratio' => 0.0005,
         ],
         [
             'ticker' => 'LBC',
-            'name' => 'Lakebird Composite',
+            'name' => 'Skein Total Market ETF',
             'price' => 100.00,
+            'expense_ratio' => 0.0003,
+        ],
+        [
+            'ticker' => 'LBV',
+            'name' => 'Skein Low Volatility ETF',
+            'price' => 100.00,
+            'expense_ratio' => 0.0013,
+        ],
+        [
+            'ticker' => 'LBS',
+            'name' => 'Skein Consumer Staples ETF',
+            'price' => 100.00,
+            'expense_ratio' => 0.0010,
         ],
     ];
 }

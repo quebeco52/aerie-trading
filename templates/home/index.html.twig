@@ -54,7 +54,9 @@
 		</div>
 		{% endif %}
 
-		{# The Indices: the headline scoreboard and the whole board, read against each other for breadth. #}
+		{# The published indices. Read against each other rather than one at a time: the headline against the
+		   whole board is breadth, the staples fund against the headline is rotation, and the low-volatility
+		   fund against the headline is how much of the move is being paid for in risk. #}
 		{% if indices|default([])|length > 0 %}
 			<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
 				{% for tile in indices %}

@@ -32,6 +32,7 @@ final readonly class AgentMarketViewDTO
      * @param float  $annualizedVolatility Volatility as a decimal, the risk a belief is charged for its exposure and what the vol-sensitive holders size on. The engine replaces it with the realized measure it keeps in the name's book; the value handed in only seeds a book with no history.
      * @param float  $splitRatio         New shares per old share this tick; 1.0 when nothing happened. Agent books are in shares and must be restated.
      * @param ?float $marketLogMispricing Average log mispricing across the market as it stood when the tick opened; null until the market has one. A relative view has nothing to compare against without it.
+     * @param float  $passiveOwnershipMultiple Passive money pointed at this name over its weight in the market: 1.0 is held in line with its size, 0.0 is held by no published index.
      */
     public function __construct(
         public string $ticker,
@@ -47,12 +48,18 @@ final readonly class AgentMarketViewDTO
         public float $splitRatio = 1.0,
         public ?float $marketLogMispricing = null,
         /**
-         * Whether this name is in the index.
+         * How much passive money this name carries, relative to how much of the market it is.
          *
-         * Defaults to true, which is what the market was before there was a membership at all: every listed
+         * One means held exactly in line with its size; above one means several published indices are
+         * overweight it at once; zero means no index holds it at all. A boolean membership flag could not
+         * express any of that: it said a name was either in the benchmark or in nothing, when in fact a
+         * quiet staple is held by four funds and a volatile mid-cap outside the headline by the whole-board
+         * fund alone.
+         *
+         * Defaults to one, which is what the market was before there was a membership at all: every listed
          * company counted, so every listed company was something a passive fund held.
          */
-        public bool $isIndexMember = true,
+        public float $passiveOwnershipMultiple = 1.0,
     ) {}
 
     /**
@@ -74,6 +81,7 @@ final readonly class AgentMarketViewDTO
             $this->annualizedVolatility,
             $this->splitRatio,
             $marketLogMispricing,
+            $this->passiveOwnershipMultiple,
         );
     }
 
@@ -95,6 +103,7 @@ final readonly class AgentMarketViewDTO
             $annualizedVolatility,
             $this->splitRatio,
             $this->marketLogMispricing,
+            $this->passiveOwnershipMultiple,
         );
     }
 

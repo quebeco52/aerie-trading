@@ -63,6 +63,10 @@ class EventPresenter
             return $this->presentIndex($rawType, $rawDesc, $changePct, $recordedAt);
         }
 
+        if ($rawType === 'DIVIDEND') {
+            return $this->presentDistribution($rawType, $rawDesc, $changePct, $recordedAt);
+        }
+
         if ($rawType === 'MANAGEMENT CHANGE') {
             return $this->presentSuccession($rawType, $rawDesc, $changePct, $recordedAt);
         }
@@ -318,6 +322,35 @@ class EventPresenter
             'iconClass' => 'bg-primary/20 text-primary',
             'isEarnings' => false,
             'headline' => !empty($rawDesc) ? $rawDesc : 'Index membership reconstituted.',
+            'pills' => [],
+            'changePercent' => $changePct,
+            'recordedAt' => $recordedAt,
+            'rawDescription' => $rawDesc,
+        ];
+    }
+
+    /**
+     * A fund distribution (App\Service\Market\IndexFundAccountant): dividend cash the fund collected from
+     * its constituents and passed on to its holders.
+     *
+     * Not a price event, though the price falls by the payment on the same tick. The holder has the cash
+     * instead, so nothing was made or lost and the card must not read as a drop — which is exactly why it
+     * carries its own presentation rather than falling through to the generic one.
+     *
+     * @return array<string, mixed>
+     */
+    private function presentDistribution(string $type, string $rawDesc, ?float $changePct, \DateTimeInterface $recordedAt): array
+    {
+        return [
+            'type' => $type,
+            'category' => 'income',
+            'badge' => 'DISTRIBUTION',
+            'badgeClass' => 'bg-secondary/15 text-secondary border-secondary/40',
+            'borderClass' => 'border-l-secondary',
+            'icon' => 'payments',
+            'iconClass' => 'bg-secondary/20 text-secondary',
+            'isEarnings' => false,
+            'headline' => !empty($rawDesc) ? $rawDesc : 'Fund distribution paid.',
             'pills' => [],
             'changePercent' => $changePct,
             'recordedAt' => $recordedAt,

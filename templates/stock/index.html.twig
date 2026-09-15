@@ -66,7 +66,7 @@
 							<span class="text-sm font-bold text-primary font-mono tracking-wider">{{ asset.ticker }}</span>
 
 							<span class="group relative cursor-help inline-flex items-center rounded bg-surface-container-highest px-2 py-0.5 text-sm font-semibold text-on-surface-variant focus-visible:outline-none" tabindex="0">
-								<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">{{ isEtf ? indexFacts.label : asset.industry|default('General') }}</span>
+								<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">{{ isEtf ? indexFacts.indexName : asset.industry|default('General') }}</span>
 								{% set bmMap = constant('App\\Data\\Sectors::BUSINESS_MODEL_DESCRIPTIONS') %}
 								{% set bmDesc = isEtf ? indexFacts.mandate : (bmMap[businessModel|default('none')] ?? bmMap['none']) %}
 								{{ _self.tooltip(bmDesc, 'left', 'w-72', 'bottom') }}
@@ -680,6 +680,47 @@
 										<dt class="text-sm font-semibold text-on-surface-variant">Passive money</dt>
 										<dd class="font-bold text-on-surface font-mono tabular-nums">{{ indexFacts.carriesPassiveBook ? 'tracks this index' : 'benchmark only' }}</dd>
 									</div>
+									{% if indexFacts.expenseRatio is not null %}
+										<div class="py-2 flex justify-between items-center">
+											<dt class="group relative cursor-help text-sm font-semibold text-on-surface-variant" tabindex="0">
+												<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Expense ratio</span>
+												{{ _self.tooltip('The annual fee, accrued continuously against net assets. It is met out of the dividend income the fund collects; anything income cannot cover is met by selling holdings, which is what makes the fund fall behind its index.', 'left', 'w-72') }}
+											</dt>
+											<dd class="font-bold text-on-surface font-mono tabular-nums">{{ indexFacts.expenseRatio|number_format(2) }}%</dd>
+										</div>
+										<div class="py-2 flex justify-between items-center">
+											<dt class="group relative cursor-help text-sm font-semibold text-on-surface-variant" tabindex="0">
+												<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Distribution yield</span>
+												{{ _self.tooltip('Paid out over the trailing year, as a share of the current price. The index is a PRICE index and has no yield of its own; this is the dividend cash the fund collected from its constituents and passed on.', 'left', 'w-72') }}
+											</dt>
+											<dd class="font-bold text-on-surface font-mono tabular-nums">{{ indexFacts.distributionYield|number_format(2) }}%</dd>
+										</div>
+										<div class="py-2 flex justify-between items-center">
+											<dt class="group relative cursor-help text-sm font-semibold text-on-surface-variant" tabindex="0">
+												<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Fees charged</span>
+												{{ _self.tooltip('What the fee has come to since the fund opened, per share. It is taken out of the dividend income before that income is distributed, so it never appears as a fall in the price — the holder simply receives less every quarter.', 'left', 'w-72') }}
+											</dt>
+											<dd class="font-bold text-on-surface font-mono tabular-nums">${{ indexFacts.feesPaidPerShare|number_format(2) }}</dd>
+										</div>
+										{% if indexFacts.holdingsSoldForFees > 0.005 %}
+											<div class="py-2 flex justify-between items-center">
+												<dt class="group relative cursor-help text-sm font-semibold text-on-surface-variant" tabindex="0">
+													<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Holdings sold for fees</span>
+													{{ _self.tooltip('The part of the fee that income could not cover, so the fund sold basket to meet it. This is a permanent lag against the index and it only ever grows: a fund never buys its fee back.', 'left', 'w-72') }}
+												</dt>
+												<dd class="font-bold text-on-surface font-mono tabular-nums">&minus;{{ indexFacts.holdingsSoldForFees|number_format(2) }}%</dd>
+											</div>
+										{% endif %}
+										{% if indexFacts.accruedIncome > 0 %}
+											<div class="py-2 flex justify-between items-center">
+												<dt class="group relative cursor-help text-sm font-semibold text-on-surface-variant" tabindex="0">
+													<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Income accrued</span>
+													{{ _self.tooltip('Dividend cash the fund has collected and not yet distributed, per share. It is already in the price and leaves it at the next distribution — the drop is the payment, not a loss.', 'left', 'w-72') }}
+												</dt>
+												<dd class="font-bold text-on-surface font-mono tabular-nums">${{ indexFacts.accruedIncome|number_format(2) }}</dd>
+											</div>
+										{% endif %}
+									{% endif %}
 								</dl>
 							</div>
 
@@ -728,7 +769,8 @@
 								<span class="material-symbols-outlined text-primary text-base">checklist</span>
 								<span class="text-3xs font-bold tracking-widest text-primary uppercase font-mono">{{ indexFacts.label }}</span>
 							</div>
-							<h2 class="text-xl md:text-2xl font-bold text-on-surface">{{ asset.name }} constituents</h2>
+							<h2 class="text-xl md:text-2xl font-bold text-on-surface">{{ indexFacts.indexName }} constituents</h2>
+							<p class="text-xs text-on-surface-variant mt-0.5 text-on-surface-variant/80">{{ asset.name }} tracks the {{ indexFacts.indexName }}, published by <a href="/stock/{{ indexFacts.indexProviderTicker }}" class="text-primary hover:underline">{{ indexFacts.indexProvider }}</a>.</p>
 							<p class="text-xs text-on-surface-variant mt-1 max-w-3xl">{{ indexFacts.mandate }}</p>
 						</div>
 						<div class="grid grid-cols-3 gap-3 shrink-0">
@@ -754,7 +796,7 @@
 								<div class="px-5 py-4 border-b border-outline-variant/15 flex items-center justify-between">
 									<div>
 										<h3 class="text-sm font-semibold text-on-surface">Constituents</h3>
-										<p class="text-xs text-on-surface-variant mt-0.5">Ranked on float-adjusted capitalisation across the whole board. Weights repaint live.</p>
+										<p class="text-xs text-on-surface-variant mt-0.5">Ranked on {{ indexFacts.rankingLabel|lower }} across {{ indexFacts.universe }}, weighted by {{ indexFacts.weightingLabel|lower }}. Weights repaint live and drift with prices between reviews.</p>
 									</div>
 								</div>
 								<div class="overflow-x-auto">
@@ -772,7 +814,7 @@
 										</thead>
 										<tbody class="divide-y divide-outline-variant/10 text-sm">
 											{% for comp in components %}
-												<tr id="idx-row-{{ comp.ticker }}" data-float-cap="{{ comp.floatCap }}" class="hover:bg-surface-container-high/30 transition-colors group relative">
+												<tr id="idx-row-{{ comp.ticker }}" data-float-cap="{{ comp.adjustedCap }}" class="hover:bg-surface-container-high/30 transition-colors group relative">
 													<td class="px-4 py-3 text-right font-mono text-xs text-on-surface-variant tabular-nums">{{ comp.rank }}</td>
 													<th scope="row" class="px-4 py-3 text-left font-normal">
 														<div class="flex items-center gap-2">
@@ -792,7 +834,18 @@
 															<div class="h-1.5 w-20 bg-surface-container-highest rounded overflow-hidden hidden sm:block" aria-hidden="true">
 																<div id="idx-bar-{{ comp.ticker }}" class="h-1.5 bg-primary rounded" style="width: {{ comp.weight|number_format(2, '.', '') }}%"></div>
 															</div>
-															<span class="font-bold font-mono tabular-nums text-xs sm:text-sm text-on-surface w-16 text-right" id="idx-weight-{{ comp.ticker }}">{{ comp.weight|number_format(2) }}%</span>
+															<div class="w-16 text-right">
+												<span class="font-bold font-mono tabular-nums text-xs sm:text-sm text-on-surface block" id="idx-weight-{{ comp.ticker }}">{{ comp.weight|number_format(2) }}%</span>
+												{# Where the review set it, shown only once the live weight has drifted off it. A capped name
+												   above its cap is the commonest case and the one most likely to read as a broken cap: the
+												   fund holds the shares it bought at the review and does not trade again until the next one. #}
+												{% if comp.targetWeight is not null and (comp.weight - comp.targetWeight)|abs >= 0.05 %}
+													<span class="group relative cursor-help text-4xs font-mono text-on-surface-variant/70 block" tabindex="0">
+														{{ comp.targetWeight|number_format(2) }}% set
+														{{ _self.tooltip('The weight the last review set. Weights drift with prices between reviews because the fund holds a fixed number of shares &mdash; it does not trade again until the next review pulls it back to target.', 'left', 'w-64') }}
+													</span>
+												{% endif %}
+											</div>
 														</div>
 													</td>
 												</tr>
@@ -915,20 +968,34 @@
 								<h3 class="text-sm font-semibold text-on-surface mb-3">Methodology</h3>
 								<dl class="space-y-3 text-xs">
 									<div>
+										<dt class="font-semibold text-on-surface">Index</dt>
+										<dd class="text-on-surface-variant font-serif leading-relaxed">{{ asset.name }} is the fund; the {{ indexFacts.indexName }} is the index it tracks, published by <a href="/stock/{{ indexFacts.indexProviderTicker }}" class="text-primary hover:underline">{{ indexFacts.indexProvider }}</a>. They are separate things and the fund does not decide the index &mdash; it licenses it, out of the fee below.{% if indexFacts.providerIsConstituent %} The publisher is also the largest company in the index it publishes, which is a conflict the methodology discloses rather than resolves.{% endif %}</dd>
+									</div>
+									<div>
+										<dt class="font-semibold text-on-surface">Universe</dt>
+										<dd class="text-on-surface-variant font-serif leading-relaxed">{{ indexFacts.universe }}, ranked on: {{ indexFacts.rankingLabel|lower }}. Everything below applies to that universe and nothing outside it.{% if indexFacts.screensEarnings %} Admission additionally requires profitability &mdash; trailing twelve-month earnings and the most recent quarter both positive &mdash; and that test governs joining, never staying: a member that falls into losses keeps its seat until the bands take it.{% endif %}</dd>
+									</div>
+									<div>
 										<dt class="font-semibold text-on-surface">Weighting</dt>
-										<dd class="text-on-surface-variant font-serif leading-relaxed">Float-adjusted capitalisation: price &times; shares outstanding &times; the share of the company that publicly trades. What a passive fund can actually hold.</dd>
+										<dd class="text-on-surface-variant font-serif leading-relaxed">{{ indexFacts.weightingLabel }}. {{ indexFacts.weightingDescription }}{% if indexFacts.isCapped %} Capped at each review at {{ indexFacts.maxConstituentWeight|number_format(1) }}% per constituent, with the excess redistributed across the rest &mdash; between reviews a constituent that outruns the index carries more than the cap, because the fund holds the shares it bought and does not trade until the next review{% if indexFacts.appliesConcentrationBudget %} &mdash; a sector this narrow cannot be sold as a diversified fund otherwise{% else %} &mdash; a benchmark carrying half its weight in three companies has stopped measuring the market and started measuring those three{% endif %}.{% endif %}</dd>
 									</div>
 									<div>
 										<dt class="font-semibold text-on-surface">Level</dt>
-										<dd class="text-on-surface-variant font-serif leading-relaxed">Members' float-adjusted cap divided by a divisor. The divisor is restated at every review and every fund split, so composition changes never move the level; only prices do. A fresh market opens at {{ constant('App\\Service\\Math\\FinancialConstants::INDEX_BASE_LEVEL')|number_format(0) }}.</dd>
+										<dd class="text-on-surface-variant font-serif leading-relaxed">Members' float-adjusted cap, each carrying the weight factor fixed at the last review, divided by a divisor. The divisor is restated at every review and every fund split, so composition and re-weighting never move the level; only prices do. Between reviews the weights drift with prices, as a real fund's holdings do. A fresh market opens at {{ constant('App\\Service\\Math\\FinancialConstants::INDEX_BASE_LEVEL')|number_format(0) }}.</dd>
 									</div>
 									<div>
 										<dt class="font-semibold text-on-surface">Review</dt>
-										<dd class="text-on-surface-variant font-serif leading-relaxed">{{ indexFacts.reconstitutionsPerYear }} times a year. {% if indexFacts.isSelective %}Membership is banded: a &plusmn;{{ (constant('App\\Service\\Math\\FinancialConstants::INDEX_MEMBERSHIP_BUFFER') * 100)|number_format(0) }}% buffer around the cut, so a marginal overtake buys nothing and a clear one gets in.{% else %}Every listed name is a member; the review only removes what has been delisted.{% endif %} A bankrupt shell leaves at the first review after it dies.</dd>
+										<dd class="text-on-surface-variant font-serif leading-relaxed">{{ indexFacts.reconstitutionsPerYear }} times a year. {% if indexFacts.isSelective %}Membership is banded: a &plusmn;{{ (constant('App\\Service\\Math\\FinancialConstants::INDEX_MEMBERSHIP_BUFFER') * 100)|number_format(0) }}% buffer around the cut, so a marginal overtake buys nothing and a clear one gets in.{% else %}Every name in the universe is a member; the review only removes what has been delisted or has left it.{% endif %} A bankrupt shell leaves at the first review after it dies.</dd>
 									</div>
+									{% if indexFacts.expenseRatio is not null %}
+										<div>
+											<dt class="font-semibold text-on-surface">Fees and income</dt>
+											<dd class="text-on-surface-variant font-serif leading-relaxed">The fund holds the basket, so it receives the dividends its constituents pay and passes them on {{ constant('App\\Service\\Math\\FinancialConstants::FUND_DISTRIBUTIONS_PER_YEAR') }} times a year; the level above is a price index and shows none of that. Its {{ indexFacts.expenseRatio|number_format(2) }}% fee is charged against net assets and met out of that income first, so a distribution is net of what the fund costs to run. Only where income falls short does the fund sell holdings, which is why its price can track the index exactly while its holders are still paying for it: the cost is the ${{ indexFacts.feesPaidPerShare|number_format(2) }} a share that never reached a distribution.</dd>
+										</div>
+									{% endif %}
 									<div>
 										<dt class="font-semibold text-on-surface">Passive flow</dt>
-										<dd class="text-on-surface-variant font-serif leading-relaxed">{% if indexFacts.carriesPassiveBook %}Index funds in the agent population hold this membership and nothing else, so an admitted name is bought and a dropped name is sold by the same flow that trades everything else. The inclusion effect is a consequence, not a rule.{% else %}No passive book tracks this index; it is a benchmark for breadth, read against the headline index.{% endif %}</dd>
+										<dd class="text-on-surface-variant font-serif leading-relaxed">{% if indexFacts.carriesPassiveBook %}{{ indexFacts.passiveShare|number_format(0) }}% of the market's indexed money tracks this index. Index funds in the agent population hold each name in proportion to how much indexed money is pointed at it across every published index, so an admitted name is bought and a dropped name is sold by the same flow that trades everything else. The inclusion effect is a consequence, not a rule.{% else %}No passive book tracks this index; it is a benchmark, read against the headline index.{% endif %}</dd>
 									</div>
 								</dl>
 							</div>

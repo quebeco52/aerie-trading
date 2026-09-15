@@ -6,6 +6,7 @@ namespace App\Tests\Data;
 
 use App\Data\InitialMarket;
 use App\Data\Sectors;
+use App\Service\Market\Index\MarketIndex;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
@@ -42,6 +43,70 @@ class InitialMarketTest extends TestCase
             $tickers[$ticker] = true;
             $names[$name] = true;
         }
+    }
+
+    // --- The Fund Lineup ---
+
+    /**
+     * Every published index has a fund to trade it, and every fund tracks a published index.
+     *
+     * The two lists are maintained in different files and nothing else checks them against each other. An
+     * index without a fund is struck every tick against a row that does not exist; a fund without an index
+     * is a tradable instrument nothing ever prices.
+     */
+    public function testEveryPublishedIndexHasExactlyOneFund(): void
+    {
+        $funds = array_column(InitialMarket::ETFS, null, 'ticker');
+
+        $this->assertCount(count(MarketIndex::cases()), InitialMarket::ETFS);
+
+        foreach (MarketIndex::cases() as $index) {
+            $this->assertArrayHasKey($index->value, $funds, "No fund is seeded for {$index->value}.");
+        }
+    }
+
+    /**
+     * A fund is named the way real funds are named: sponsor, then mandate, then vehicle.
+     *
+     * The convention is the realism. "Skein Low Volatility ETF" says who runs it, what it does and what it
+     * is; "Lakebird Low Volatility" said only the middle one and read like the index it tracks. The index
+     * family name is deliberately NOT what a fund is called — that is checked on the enum side.
+     */
+    public function testFundNamesCarryTheirSponsorAndTheirVehicle(): void
+    {
+        foreach (InitialMarket::ETFS as $fund) {
+            $this->assertStringStartsWith('Skein ', $fund['name'], 'the sponsor leads the name');
+            $this->assertStringEndsWith(' ETF', $fund['name'], 'the vehicle closes it');
+            $this->assertGreaterThanOrEqual(3, count(explode(' ', $fund['name'])));
+        }
+
+        $names = array_column(InitialMarket::ETFS, 'name');
+        $this->assertSame($names, array_unique($names), 'two funds may not share a name');
+    }
+
+    /**
+     * Every fund charges something, and none of them charges a lot.
+     *
+     * The sponsor is mutually owned by the funds it runs, so there are no shareholders to earn for and the
+     * fee is what the mandate actually costs to operate. A zero would mean a fund that runs itself; a fat
+     * one would mean a house quietly taking a margin the structure says it cannot take.
+     */
+    public function testEveryFundChargesAPlausibleAtCostFee(): void
+    {
+        foreach (InitialMarket::ETFS as $fund) {
+            $this->assertArrayHasKey('expense_ratio', $fund, "{$fund['ticker']} has no fee.");
+            $this->assertGreaterThan(0.0, $fund['expense_ratio'], "{$fund['ticker']} must cost something to run.");
+            $this->assertLessThanOrEqual(0.0030, $fund['expense_ratio'], "{$fund['ticker']} is dearer than an at-cost house can justify.");
+        }
+
+        $fees = array_column(InitialMarket::ETFS, 'expense_ratio', 'ticker');
+
+        // The ordering is structural, not decorative. A whole-board fund that admits and drops nothing has
+        // almost nothing to trade; a fund that re-ranks the market on a risk measure every quarter has to
+        // trade its whole book to match, and that is what its holders are paying for.
+        $this->assertLessThan($fees['LBI'], $fees['LBC'], 'the whole-board fund is the cheapest to run');
+        $this->assertLessThan($fees['LBS'], $fees['LBI'], 'a sector mandate costs more than a broad one');
+        $this->assertLessThan($fees['LBV'], $fees['LBS'], 'the rules-based fund turns over most and costs most');
     }
 
     #[DataProvider('stockProvider')]

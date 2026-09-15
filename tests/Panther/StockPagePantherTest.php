@@ -13,7 +13,7 @@ class StockPagePantherTest extends BasePantherTestCase
 
         $this->assertSelectorExists('#mainChartContainer');
         $this->assertSelectorExists('#etfPieChart');
-        $this->assertSelectorTextContains('h1', 'Lakebird Index');
+        $this->assertSelectorTextContains('h1', 'Skein Lakebird 30 ETF');
 
         // Test Chart Range Buttons
         $client->executeScript("document.querySelector('button.range-btn[data-range=\"1w\"]').click()");

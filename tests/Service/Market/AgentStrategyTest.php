@@ -30,7 +30,8 @@ class AgentStrategyTest extends TestCase
         float $conditions = 0.0,
         float $adv = 1000000.0,
         float $volatility = 0.0,
-        ?float $marketMispricing = null
+        ?float $marketMispricing = null,
+        float $passiveOwnership = 1.0
     ): AgentMarketViewDTO {
         return new AgentMarketViewDTO(
             ticker: 'TEST',
@@ -43,6 +44,7 @@ class AgentStrategyTest extends TestCase
             dt: 1.0 / 14400.0,
             annualizedVolatility: $volatility,
             marketLogMispricing: $marketMispricing,
+            passiveOwnershipMultiple: $passiveOwnership,
         );
     }
 
@@ -156,6 +158,52 @@ class AgentStrategyTest extends TestCase
             $base * (1.0 - FinancialConstants::AGENT_INDEX_FLOW_SENSITIVITY),
             $strategy->signal($this->view(conditions: 1.0), []),
             1e-12
+        );
+    }
+
+    /**
+     * The passive book is held in proportion to how much indexed money is pointed at each name.
+     *
+     * A boolean membership could only say "in the benchmark" or "in nothing", which is not what passive
+     * ownership looks like: a quiet staple inside the headline index is held by four funds at once and a
+     * volatile mid-cap outside it by the whole-board fund alone.
+     */
+    public function testThePassiveBookIsSizedByHowMuchIndexedMoneyHoldsTheName(): void
+    {
+        $strategy = new IndexFundStrategy();
+
+        $crowded = $strategy->signal($this->view(passiveOwnership: 2.0), []);
+        $average = $strategy->signal($this->view(passiveOwnership: 1.0), []);
+        $thin = $strategy->signal($this->view(passiveOwnership: 0.3), []);
+
+        $this->assertGreaterThan($average, $crowded);
+        $this->assertGreaterThan($thin, $average);
+        $this->assertEqualsWithDelta($average * 0.3, $thin, 1e-12);
+    }
+
+    public function testAnIndexFundHoldsNothingNoPublishedIndexHolds(): void
+    {
+        $strategy = new IndexFundStrategy();
+
+        $this->assertSame(0.0, $strategy->signal($this->view(passiveOwnership: 0.0), []));
+    }
+
+    /**
+     * The view must carry passive ownership through the copies the flow engine makes of it.
+     *
+     * Both withers rebuild the DTO positionally, and both are applied BEFORE any strategy is asked for a
+     * signal. A field left out of either one silently reverts to its default by the time it is read, which
+     * is how the membership gate this replaced came to be inert: every name looked like a member.
+     */
+    public function testPassiveOwnershipSurvivesTheEngineRebuildingTheView(): void
+    {
+        $view = $this->view(passiveOwnership: 0.0);
+
+        $this->assertSame(0.0, $view->withMarketLogMispricing(0.01)->passiveOwnershipMultiple);
+        $this->assertSame(0.0, $view->withAnnualizedVolatility(0.25)->passiveOwnershipMultiple);
+        $this->assertSame(
+            0.0,
+            $view->withMarketLogMispricing(0.01)->withAnnualizedVolatility(0.25)->passiveOwnershipMultiple
         );
     }
 

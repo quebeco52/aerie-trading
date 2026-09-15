@@ -556,6 +556,40 @@ class FinancialConstants
     public const INDEX_RECONSTITUTIONS_PER_YEAR = 4;
     /** Level the index opens at on a market with no history. An index base is a convention, not a measurement: what carries meaning is the return from it. */
     public const INDEX_BASE_LEVEL = 100.0;
+    /** Seats in the low-volatility index, drawn from the whole listed board. S&P's low-volatility index takes the quietest fifth of its parent; the same fraction of this board is about this many names. */
+    public const INDEX_LOW_VOLATILITY_COUNT = 20;
+    /** Floor on the trailing volatility an inverse-volatility weighting divides by. A name that has gone quiet enough to divide by nothing would otherwise take the whole fund. */
+    public const INDEX_MINIMUM_WEIGHT_VOLATILITY = 0.04;
+
+    // --- Headline Index Eligibility ---
+    /** Most any one constituent may weigh in the headline index. Set between the 10% the UCITS limits and most national benchmarks use and the 22.5% the sector fund carries under the RIC rules: a thirty-name benchmark with half its weight in three companies measures those three, but this District genuinely is dominated by its titans and a tighter cap would re-engineer the index around them rather than measure them. It also bounds the publisher's own seat in the index it publishes. */
+    public const INDEX_HEADLINE_MAX_CONSTITUENT_WEIGHT = 0.15;
+
+    // --- Index Diversification Caps (RIC / UCITS 5-10-40, as applied by the S&P Select Sector indices) ---
+    /** Most any one constituent may weigh in a capped index. A sector fund that must stay a regulated investment company cannot let one name run away with it. */
+    public const INDEX_MAX_CONSTITUENT_WEIGHT = 0.225;
+    /** Weight above which a constituent counts toward the concentration budget below. */
+    public const INDEX_CONCENTRATION_THRESHOLD = 0.045;
+    /** Most the constituents above that threshold may weigh in combination. */
+    public const INDEX_CONCENTRATION_BUDGET = 0.45;
+
+    // --- Passive Assets by Index (share of the indexed book each published index carries) ---
+    /** Share of passive money tracking the headline index. Broad cap-weighted benchmarks hold the large majority of indexed assets. */
+    public const INDEX_PASSIVE_SHARE_HEADLINE = 0.62;
+    /** Share tracking the whole-board composite: total-market funds, the second-largest passive vehicle. */
+    public const INDEX_PASSIVE_SHARE_COMPOSITE = 0.30;
+    /** Share tracking the low-volatility fund. Smart beta is a low single-digit share of indexed money, and it is spread across the near half of the board that qualifies as quiet. */
+    public const INDEX_PASSIVE_SHARE_LOW_VOLATILITY = 0.05;
+    /** Share tracking the consumer staples sector fund. Deliberately near the sector's own weight in the market: a narrow fund holding far more indexed money than its sector is worth would leave its handful of names with passive ownership no real constituent carries. */
+    public const INDEX_PASSIVE_SHARE_STAPLES = 0.03;
+    /** Ceiling on how much passive ownership a single name can carry relative to its weight in the market. A name held by every fund at once is still only so much of anyone's book. */
+    public const INDEX_MAX_PASSIVE_OWNERSHIP_MULTIPLE = 4.0;
+
+    // --- Index Fund Accounting ---
+    /** Distributions a fund pays per year. Quarterly, matching both the constituents' own dividend cycle and the reconstitution calendar. */
+    public const FUND_DISTRIBUTIONS_PER_YEAR = 4;
+    /** Smallest distribution worth paying, per share. Below this the income stays accrued into the next quarter rather than writing a ledger row per holder that rounds to nothing. */
+    public const FUND_MINIMUM_DISTRIBUTION = 0.005;
 
     // --- Corporate Bond Issuance ---
     /** Share of a firm's wholesale debt that is funded in the PUBLIC bond market rather than by banks. The listed issues are a tranche of the debt the balance sheet already carries, never additional borrowing. */

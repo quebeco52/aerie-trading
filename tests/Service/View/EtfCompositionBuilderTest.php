@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\View;
 
+use App\Entity\Etf;
 use App\Entity\Stock;
 use App\Repository\StockRepository;
 use App\Service\Market\EtfTracker;
@@ -375,5 +376,148 @@ class EtfCompositionBuilderTest extends TestCase
         $this->assertNull($facts['bands']);
         $this->assertSame([], $facts['atRisk']);
         $this->assertSame([], $facts['contenders']);
+    }
+
+    // --- Weighted And Sector Funds ---
+
+    /**
+     * The factsheet reports the portfolio the fund actually runs, not the one its members' sizes imply.
+     *
+     * A page that summed raw float caps would print a cap-weighted portfolio for every index, which for a
+     * low-volatility or a capped sector fund is simply a different fund from the one on the page.
+     */
+    public function testWeightsCarryTheFactorTheCommitteeStruck(): void
+    {
+        $board = [
+            $this->listing('BIG', 800.0, 1.0),
+            $this->listing('SMALL', 200.0, 1.0),
+        ];
+
+        // A review that deliberately inverts size: the small name is to carry three quarters of the fund.
+        // factor = target weight x member cap / own cap.
+        $this->store->store(
+            MarketIndex::LowVolatility,
+            0,
+            ['SMALL', 'BIG'],
+            weights: ['SMALL' => 0.75, 'BIG' => 0.25],
+            factors: ['SMALL' => (0.75 * 1000.0) / 200.0, 'BIG' => (0.25 * 1000.0) / 800.0]
+        );
+
+        $result = $this->builder($board)->build(MarketIndex::LowVolatility);
+        $weights = array_column($result['components'], 'weight', 'ticker');
+
+        $this->assertEqualsWithDelta(75.0, $weights['SMALL'], 1e-9);
+        $this->assertEqualsWithDelta(25.0, $weights['BIG'], 1e-9);
+
+        // Rows are ordered by what the fund holds, so the largest HOLDING leads whatever its size.
+        $this->assertSame('SMALL', $result['components'][0]['ticker']);
+        $this->assertSame('SMALL', $result['indexFacts']['largest']['ticker']);
+
+        // And the target the review set is carried beside the drifted weight.
+        $targets = array_column($result['components'], 'targetWeight', 'ticker');
+        $this->assertEqualsWithDelta(75.0, $targets['SMALL'], 1e-9);
+    }
+
+    /**
+     * The live table's fallback capitalisation has to be on the same basis as the figures the live frame
+     * carries, or a weighted fund's bars would mix adjusted and unadjusted caps in one total.
+     */
+    public function testTheLiveFallbackCapitalisationCarriesTheFactorToo(): void
+    {
+        $board = [$this->listing('ONE', 500.0, 1.0), $this->listing('TWO', 500.0, 1.0)];
+
+        $this->store->store(
+            MarketIndex::LowVolatility,
+            0,
+            ['ONE', 'TWO'],
+            weights: ['ONE' => 0.8, 'TWO' => 0.2],
+            factors: ['ONE' => 1.6, 'TWO' => 0.4]
+        );
+
+        $result = $this->builder($board)->build(MarketIndex::LowVolatility);
+        $adjusted = array_column($result['components'], 'adjustedCap', 'ticker');
+
+        $this->assertEqualsWithDelta(800.0, $adjusted['ONE'], 1e-9);
+        $this->assertEqualsWithDelta(200.0, $adjusted['TWO'], 1e-9);
+        $this->assertEqualsWithDelta(0.8, $adjusted['ONE'] / array_sum($adjusted), 1e-9);
+
+        // The shares the live repaint multiplies by price carry the same factor.
+        $this->assertEqualsWithDelta(1.6, $result['sharesMap']['ONE'], 1e-9);
+    }
+
+    // --- What The Fund Costs And Pays ---
+
+    /**
+     * The factsheet reports the fund's own economics, not just its index's composition.
+     *
+     * The fee is the figure that matters and it is the one a holder can least easily see: it is taken out
+     * of the dividend income before the income is ever distributed, so it never shows up as a fall in the
+     * price. Reporting what it has come to is the only place a holder meets it.
+     */
+    public function testTheFactsheetReportsWhatTheFundCostsAndHasPaid(): void
+    {
+        $this->store->store(MarketIndex::Headline, 0, ['T000']);
+
+        $fund = new Etf();
+        $fund->setTicker('LBI');
+        $fund->setName('Skein Lakebird 30 ETF');
+        $fund->setPrice('200.00');
+        $fund->setExpenseRatio(0.0005);
+        $fund->setCumulativeFeesPaid(1.94);
+        $fund->setAccruedIncome(0.85);
+        $fund->recordDistribution(1.00, new \DateTime());
+        $fund->recordDistribution(1.10, new \DateTime());
+
+        $facts = $this->builder($this->rankedBoard(1))->build(MarketIndex::Headline, $fund)['indexFacts'];
+
+        $this->assertEqualsWithDelta(0.05, $facts['expenseRatio'], 1e-9);
+        $this->assertEqualsWithDelta(1.94, $facts['feesPaidPerShare'], 1e-9);
+        $this->assertEqualsWithDelta(0.85, $facts['accruedIncome'], 1e-9);
+
+        // A trailing yield is the year of payments over the price, not the last one annualised.
+        $this->assertEqualsWithDelta(2.10, $facts['trailingDistribution'], 1e-9);
+        $this->assertEqualsWithDelta((2.10 / 200.0) * 100.0, $facts['distributionYield'], 1e-9);
+
+        // Nothing was sold to meet the fee, so the fund still owns a whole index unit per share.
+        $this->assertEqualsWithDelta(0.0, $facts['holdingsSoldForFees'], 1e-9);
+    }
+
+    /** Without a fund there is no fund to report on, and the page says so rather than inventing zeroes. */
+    public function testTheFundFiguresAreAbsentWhenNoFundIsGiven(): void
+    {
+        $this->store->store(MarketIndex::Headline, 0, ['T000']);
+
+        $facts = $this->builder($this->rankedBoard(1))->build(MarketIndex::Headline)['indexFacts'];
+
+        $this->assertNull($facts['expenseRatio']);
+        $this->assertNull($facts['feesPaidPerShare']);
+        $this->assertNull($facts['distributionYield']);
+    }
+
+    /**
+     * A sector fund is ranked against its sector, not against the board.
+     *
+     * Ranking it against the board would tell its largest constituent it is 41st, which is a statement about
+     * a decision this index never makes.
+     */
+    public function testASectorFundIsRankedWithinItsOwnUniverse(): void
+    {
+        $board = [
+            $this->listing('MEGA', 9000.0, 1.0, sector: 'Information Technology'),
+            $this->listing('MILK', 300.0, 1.0, sector: 'Consumer Staples'),
+            $this->listing('BEER', 100.0, 1.0, sector: 'Consumer Staples'),
+        ];
+
+        $this->store->store(MarketIndex::Staples, 0, ['MILK', 'BEER']);
+
+        $result = $this->builder($board)->build(MarketIndex::Staples);
+        $ranks = array_column($result['components'], 'rank', 'ticker');
+
+        $this->assertSame(1, $ranks['MILK']);
+        $this->assertSame(2, $ranks['BEER']);
+
+        // The listed count is the universe the index draws from, not the whole board.
+        $this->assertSame(2, $result['indexFacts']['listedCount']);
+        $this->assertSame('Consumer Staples', $result['indexFacts']['universe']);
     }
 }

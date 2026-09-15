@@ -79,7 +79,7 @@ class StockPageBuilder
 
         $payload += $this->viewerPosition->build($asset, $ticker, $viewer);
         $payload += $isEtf
-            ? $this->fundBlocks($ticker)
+            ? $this->fundBlocks($asset)
             : $this->companyBlocks($asset, $macroState) + $this->optionChain->build($asset, $viewer, $macroState);
 
         return $payload;
@@ -136,19 +136,19 @@ class StockPageBuilder
     }
 
     /**
-     * The blocks only the fund has: what it holds, and in what weight.
+     * The blocks only the fund has: what it holds, in what weight, and what it costs to hold.
      *
      * The fund is not borrowable and is not quoted against a company's own book, so the trading-cost
      * readings stand down to the fund's fixed spread rather than being computed from a share count.
      *
      * @return array<string, mixed>
      */
-    private function fundBlocks(string $ticker): array
+    private function fundBlocks(Etf $fund): array
     {
         // A fund is the vehicle for one published index; a ticker the enum does not know is the whole board.
-        $index = MarketIndex::tryFrom($ticker) ?? MarketIndex::Composite;
+        $index = MarketIndex::tryFrom((string) $fund->getTicker()) ?? MarketIndex::Composite;
 
-        return $this->etfComposition->build($index) + [
+        return $this->etfComposition->build($index, $fund) + [
             'isFinancial' => false,
             'businessModel' => 'none',
             'marketCap' => 0.0,
@@ -158,7 +158,12 @@ class StockPageBuilder
             'marketShare' => 0.0,
             'industry' => null,
             'lifecycleStage' => null,
-            'dividendYield' => 0.0,
+            // The fund's own yield, and a real one: what it has actually paid out over the trailing year
+            // out of the dividends its constituents paid it. A price index has no yield; a fund holding
+            // the basket does, and reporting zero was the visible face of it keeping the cash.
+            'dividendYield' => (float) $fund->getPrice() > 0.0
+                ? $fund->trailingDistribution() / (float) $fund->getPrice()
+                : 0.0,
             'analystTargets' => null,
             'peers' => [],
             'advShares' => 0.0,

@@ -73,6 +73,10 @@ class MarketSeedCommand extends Command
             }
             $etf->setName($etfData['name']);
             $etf->setDescription(\App\Data\StockInfo::DESCRIPTIONS[$etfData['ticker']] ?? null);
+            // The fee is a property of the fund, not of a run, so it is re-applied on every seed. Its books
+            // — the basket it still owns and the income it is holding — are NOT touched here: those are
+            // accumulated history, and a reseed is not a liquidation.
+            $etf->setExpenseRatio((float) ($etfData['expense_ratio'] ?? 0.0));
             $this->entityManager->persist($etf);
         }
 

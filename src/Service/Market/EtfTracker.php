@@ -4,15 +4,19 @@ namespace App\Service\Market;
 
 use App\Entity\Etf;
 use App\Entity\EtfHistory;
+use App\Service\Math\FinancialConstants;
 use Doctrine\ORM\EntityManagerInterface;
 use App\Service\Event\MarketEventPublisher;
 
 /**
- * Service responsible for tracking and updating ETF (Exchange Traded Fund) prices.
+ * Turns an index into a tradable fund: strikes the level, prices a share of the portfolio off it, and
+ * persists both.
  *
- * This service specifically handles the calculation of a market index ETF
- * based on the total market capitalization of the tracked stocks. It manages
- * the index divisor via Redis to maintain price continuity.
+ * Two jobs, kept distinct because they are different measurements. The LEVEL is the index — its members'
+ * adjusted capitalisation over a divisor, held continuous across splits and reconstitutions by restating
+ * that divisor. The PRICE is what one share of the fund tracking it is worth, which differs from the level
+ * by the fund's own books: the fee it has paid and the dividends it is holding for its members
+ * (IndexFundAccountant).
  */
 class EtfTracker
 {
@@ -20,11 +24,13 @@ class EtfTracker
      * @param EntityManagerInterface $entityManager The Doctrine Entity Manager
      * @param MarketEventPublisher $marketEvent The publisher for market announcements
      * @param \Redis $redis The Redis connection instance
+     * @param IndexFundAccountant $accountant Keeper of each fund's own books: its fee and its income
      */
     public function __construct(
         private EntityManagerInterface $entityManager,
         private MarketEventPublisher $marketEvent,
-        private \Redis $redis
+        private \Redis $redis,
+        private IndexFundAccountant $accountant
     ) {
     }
 
@@ -60,15 +66,39 @@ class EtfTracker
     }
 
     /**
-     * Strikes an index level from the capitalisation of its members and writes it to the fund of that ticker.
+     * Strikes an index level from the capitalisation of its members, prices the FUND off it, and writes it.
      *
-     * @param float  $totalMarketCap The float-adjusted capitalisation of the index's members.
+     * The two are not the same number and this is where they part company. The level is the index: member
+     * capitalisation over a divisor, a price index, the thing the committee restates and the charts quote.
+     * The fund's price is what a share of the portfolio tracking that index is worth, which is the level
+     * scaled by how much basket the share still owns, plus the dividend cash the fund has collected and not
+     * yet handed over:
+     *
+     *     price = level x basket per share + accrued income
+     *
+     * Publishing the level as the price, as this did, made every fund a claim on a price index: it lagged
+     * the basket it claimed to hold by the market's whole dividend yield every year, and it charged nothing
+     * to run, so a clever expensive fund and a cheap plain one tracked their indices equally perfectly.
+     * See IndexFundAccountant for the books being carried here.
+     *
+     * @param float  $totalMarketCap The float-adjusted, factor-adjusted capitalisation of the index's members.
      * @param bool   $recordHistory  Whether to persist the new price to the history table.
      * @param string $ticker         The fund the level is written to; its divisor is keyed on the same ticker.
+     * @param float  $dividendPoints Dividend cash the members paid this tick, on the same adjusted basis as
+     *                               the capitalisation. Divided by the same divisor, it is the index
+     *                               dividend, and it is what the fund actually collects.
+     * @param float  $dt             Elapsed simulated time in years, over which the fee accrues.
      * @return array{ticker: string, price: float, name: string, is_etf: bool}
      */
-    public function updateIndex(float $totalMarketCap, bool $recordHistory = false, string $ticker = 'LBI', ?Etf $etf = null): array
-    {
+    public function updateIndex(
+        float $totalMarketCap,
+        bool $recordHistory = false,
+        string $ticker = 'LBI',
+        ?Etf $etf = null,
+        ?float $simTime = null,
+        float $dividendPoints = 0.0,
+        float $dt = 0.0
+    ): array {
 
         if ($etf === null) {
             $etf = $this->entityManager->getRepository(Etf::class)->findOneByTicker($ticker);
@@ -78,21 +108,35 @@ class EtfTracker
         $divisor = $this->redis->get($divisorKey);
 
         if (!$divisor && $totalMarketCap > 0) {
-            
-            if ($etf && (float)$etf->getPrice() > 0) {
-                $lastKnownPrice = (float) $etf->getPrice();
-                $divisor = $totalMarketCap / $lastKnownPrice;
+
+            // Seeded from the LEVEL behind the fund's last price, not the price itself. The price carries
+            // the fund's own fee drag and undistributed income; striking a divisor on it would fold the
+            // fund's costs into the index and then measure the fund's tracking against them.
+            if ($etf && $etf->getIndexLevel() > 0) {
+                $divisor = $totalMarketCap / $etf->getIndexLevel();
             } else {
-                $divisor = $totalMarketCap / 100.00;
+                $divisor = $totalMarketCap / FinancialConstants::INDEX_BASE_LEVEL;
             }
             
             $this->redis->set($divisorKey, (string) $divisor);
         }
 
-        $price = ($divisor > 0) ? ($totalMarketCap / (float) $divisor) : 100.00;
+        $level = ($divisor > 0) ? ($totalMarketCap / (float) $divisor) : FinancialConstants::INDEX_BASE_LEVEL;
+        $price = $level;
 
         if ($etf) {
-            // 1. Process ETF Splits
+            // 1. The fund's own books, before anything is priced off them: the fee it owes for the time
+            //    just elapsed, and the dividends its constituents just paid it.
+            $this->accountant->accrue(
+                $etf,
+                $level,
+                $divisor > 0 ? $dividendPoints / (float) $divisor : 0.0,
+                $dt
+            );
+
+            $price = ($level * $etf->getBasketPerShare()) + $etf->getAccruedIncome();
+
+            // 2. Process ETF Splits
             if ($price >= 400.0) {
                 $splitFactor = 1;
                 while ($price >= 400.0 && $splitFactor <= 1000000) {
@@ -102,6 +146,11 @@ class EtfTracker
                 
                 $divisor *= $splitFactor;
                 $this->redis->set($divisorKey, (string) $divisor);
+                // Both are per-SHARE amounts and there are now more shares. Left alone, a 4-for-1 would
+                // quadruple the cash the fund believes it is holding for its members, and quadruple what
+                // it reports having charged them.
+                $etf->setAccruedIncome($etf->getAccruedIncome() / $splitFactor);
+                $etf->setCumulativeFeesPaid($etf->getCumulativeFeesPaid() / $splitFactor);
                 $this->executeEtfSplit($etf, $splitFactor, 'forward', $price * $splitFactor);
                 
             } elseif ($price < 25.0 && $price > 0) {
@@ -114,17 +163,23 @@ class EtfTracker
                 
                 $divisor /= $splitFactor;
                 $this->redis->set($divisorKey, (string) $divisor);
+                $etf->setAccruedIncome($etf->getAccruedIncome() * $splitFactor);
+                $etf->setCumulativeFeesPaid($etf->getCumulativeFeesPaid() * $splitFactor);
                 $this->executeEtfSplit($etf, $splitFactor, 'reverse', $preSplitPrice);
             }
 
-            // 2. Persist the updated price
+            // 3. Persist the updated price
             $etf->setPrice((string) $price);
 
             if ($recordHistory) {
                 $history = new EtfHistory();
                 $history->setEtf($etf);
                 $history->setPrice((string) $price);
-                
+
+                // Null when the caller is not the ticker: an honest "written outside the simulation clock"
+                // rather than a zero that would sort the row before the beginning of time.
+                $history->setSimTime($simTime);
+
                 $this->entityManager->persist($history);
             }
         }

@@ -397,6 +397,7 @@ class MarketResetCommand extends Command
                 'name' => $etfData['name'],
                 'price' => $etfData['price'],
                 'description' => \App\Data\StockInfo::DESCRIPTIONS[$etfData['ticker']] ?? null,
+                'expense_ratio' => $etfData['expense_ratio'] ?? 0.0,
                 'ticker' => $etfData['ticker']
             ];
 
@@ -407,14 +408,30 @@ class MarketResetCommand extends Command
 
             if ($exists === false) {
                 $conn->executeStatement(
-                    'INSERT INTO etfs (ticker, name, price, description, updated_at) VALUES (:ticker, :name, :price, :description, NOW())',
+                    'INSERT INTO etfs (ticker, name, price, description, expense_ratio, basket_per_share, accrued_income, cumulative_fees_paid, recent_distributions, last_distribution_at, updated_at)
+                     VALUES (:ticker, :name, :price, :description, :expense_ratio, 1, 0, 0, NULL, NULL, NOW())',
                     $params
                 );
                 continue;
             }
 
+            // A reset reopens the timeline, so the fund's BOOKS are reopened with it: the basket goes back
+            // to a whole index unit per share and the income it was holding for its members is cleared.
+            // Carrying a fee drag and an accrual across a reset would leave the fund already behind an
+            // index that has not moved yet, and holding cash collected from companies on a timeline that
+            // no longer exists.
             $conn->executeStatement(
-                'UPDATE etfs SET name = :name, price = :price, description = :description WHERE ticker = :ticker',
+                'UPDATE etfs
+                    SET name = :name,
+                        price = :price,
+                        description = :description,
+                        expense_ratio = :expense_ratio,
+                        basket_per_share = 1,
+                        accrued_income = 0,
+                        cumulative_fees_paid = 0,
+                        recent_distributions = NULL,
+                        last_distribution_at = NULL
+                  WHERE ticker = :ticker',
                 $params
             );
         }

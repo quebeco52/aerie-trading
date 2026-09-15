@@ -15,6 +15,8 @@ use App\Service\Market\OptionDeskService;
 use App\Service\Market\StockTickColumns;
 use App\Service\Market\TreasuryAuctionService;
 use App\Service\Market\EtfTracker;
+use App\Service\Market\IndexFundAccountant;
+use App\Service\Math\FinancialConstants;
 use App\Service\Macro\MacroEngine;
 use App\Service\Market\MarketOperator;
 use App\Service\User\Portfolio;
@@ -166,6 +168,7 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
         private \App\Service\Market\OptionDeskService $optionDesk,
         private CorporateBondDesk $corporateBondDesk,
         private IndexCommittee $indexCommittee,
+        private IndexFundAccountant $fundAccountant,
         private \Symfony\Component\Messenger\MessageBusInterface $messageBus,
 
         private int $tickIntervalUs,
@@ -408,7 +411,10 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                             $index,
                             $stocks,
                             $tickCount,
-                            $fund !== null ? (float) $fund->getPrice() : null
+                            // The LEVEL behind the fund's price, not the price. The price carries the
+                            // fund's fee drag and its undistributed income, and restating a divisor
+                            // against those would fold the fund's own costs into the index.
+                            $fund?->getIndexLevel()
                         );
 
                         if ($reconstitution['added'] === [] && $reconstitution['deleted'] === []) {
@@ -440,17 +446,49 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                 // An index whose fund is not on this market (a fund added to the seed after the market was
                 // seeded, before a reset has created it) is not struck at all: the tracker would otherwise
                 // look the missing row up on every tick and have nowhere to write the level.
+                //
+                // Each fund also collects the dividends its members just paid and is charged for the time
+                // just elapsed, and pays out what it has collected once a quarter. An index is a price
+                // index and knows nothing about any of that; a FUND that ignored it would lag the basket it
+                // claims to hold by the whole dividend yield of the market, every year.
+                $isDistributionTick = $tickCount > 0
+                    && $tickCount % max(1, intdiv($this->ticksPerYear, FinancialConstants::FUND_DISTRIBUTIONS_PER_YEAR)) === 0;
+
                 $etfUpdates = [];
                 foreach (MarketIndex::cases() as $index) {
                     if (!isset($indexFunds[$index->value])) {
                         continue;
                     }
 
+                    $fund = $indexFunds[$index->value];
+
+                    // Paid BEFORE the strike below, so the price the tick publishes is already ex the cash
+                    // that left. The drop is not a return: the holder has the money instead.
+                    if ($isDistributionTick) {
+                        $paid = $this->fundAccountant->distribute($fund, new \DateTime());
+
+                        if ($paid > 0.0) {
+                            $events[] = $this->marketEvent->publish(
+                                $fund,
+                                'DIVIDEND',
+                                sprintf(
+                                    '%s distributed $%s per share of income collected from its constituents.',
+                                    $fund->getName(),
+                                    number_format($paid, 2)
+                                ),
+                                0.0
+                            );
+                        }
+                    }
+
                     $etfUpdates[] = $this->etfTracker->updateIndex(
                         $this->indexCommittee->memberCapitalisation($index, $result['float_caps']),
                         $isHistoryTick,
                         $index->value,
-                        $indexFunds[$index->value]
+                        $fund,
+                        $macroState->totalTime,
+                        $this->indexCommittee->memberDividendPoints($index, $result['dividend_points']),
+                        $dt
                     );
                 }
 
@@ -615,7 +653,7 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
 
                     $historyData = $result['history'];
                     if (!empty($historyData)) {
-                        $sql = "INSERT INTO stock_history (stock_id, price, open_price, high_price, low_price, volume, recorded_at) VALUES ";
+                        $sql = "INSERT INTO stock_history (stock_id, price, open_price, high_price, low_price, volume, recorded_at, sim_time) VALUES ";
                         $insertValues = [];
                         $params = [];
                         $now = (new \DateTime())->format('Y-m-d H:i:s');
@@ -631,7 +669,7 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                                 'volume' => 0.0,
                             ];
 
-                            $insertValues[] = "(?, ?, ?, ?, ?, ?, ?)";
+                            $insertValues[] = "(?, ?, ?, ?, ?, ?, ?, ?)";
                             $params[] = $row['stock_id'];
                             $params[] = $row['price'];
                             $params[] = $bar['open'];
@@ -639,6 +677,7 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                             $params[] = min($bar['low'], (float) $row['price']);
                             $params[] = (int) round($bar['volume']);
                             $params[] = $now;
+                            $params[] = $macroState->totalTime;
                         }
 
                         $sql .= implode(', ', $insertValues);

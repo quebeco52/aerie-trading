@@ -3,10 +3,12 @@ import { setText } from '../utils/set-text.js';
 /**
  * Keeps the index fund's constituent table live.
  *
- * Prices come straight off the frame. Weights are recomputed from FLOAT-adjusted shares (the page hands
- * over `sharesMap` on that basis), so the table stays on the same footing the server struck it on rather
- * than drifting back to whole-company capitalisation as prices tick. Everything is written in place and
- * only when it changed; the cost of this is set by the frame cadence, not the tick rate.
+ * Prices come straight off the frame. Weights are recomputed from float-adjusted shares CARRYING THE INDEX
+ * WEIGHT FACTOR (the page hands over `sharesMap` on that basis, and `data-float-cap` on the same one), so
+ * the table stays on the footing the server struck it on rather than drifting back to whole-company
+ * capitalisation as prices tick — which for a low-volatility or capped fund is not the portfolio it holds
+ * at all. Everything is written in place and only when it changed; the cost of this is set by the frame
+ * cadence, not the tick rate.
  */
 export function updateConstituentRows(payload, sharesMap = {}) {
     if (!Array.isArray(payload?.stocks)) return;

@@ -188,6 +188,7 @@ class BondTracker
                     'bond_id' => $bond->getId(),
                     'clean_price' => $valuation->cleanPrice,
                     'yield_to_maturity' => $valuation->yieldToMaturity,
+                    'sim_time' => $currentTime,
                 ];
             }
         }
@@ -278,15 +279,16 @@ class BondTracker
         $params = [];
 
         foreach ($history as $row) {
-            $values[] = '(?, ?, ?, ?)';
+            $values[] = '(?, ?, ?, ?, ?)';
             $params[] = $row['bond_id'];
             $params[] = $row['clean_price'];
             $params[] = $row['yield_to_maturity'];
             $params[] = $now;
+            $params[] = $row['sim_time'] ?? null;
         }
 
         $conn->executeStatement(
-            'INSERT INTO bond_history (bond_id, clean_price, yield_to_maturity, recorded_at) VALUES '
+            'INSERT INTO bond_history (bond_id, clean_price, yield_to_maturity, recorded_at, sim_time) VALUES '
             . implode(', ', $values),
             $params
         );

@@ -37,22 +37,50 @@ final class RedisIndexMembershipStore implements IndexMembershipStoreInterface
 
         $list = static fn (mixed $value): array => is_array($value) ? array_values(array_map('strval', $value)) : [];
 
+        // A weight map written by an older build is simply absent; every reader reads a missing factor as
+        // one, which is the cap-weighted index this store used to assume every index was.
+        $map = static function (mixed $value): array {
+            if (!is_array($value)) {
+                return [];
+            }
+
+            $out = [];
+            foreach ($value as $ticker => $weight) {
+                if (is_numeric($weight)) {
+                    $out[(string) $ticker] = (float) $weight;
+                }
+            }
+
+            return $out;
+        };
+
         return [
             'tick' => (int) ($decoded['tick'] ?? 0),
             'tickers' => $list($decoded['tickers']),
             'added' => $list($decoded['added'] ?? []),
             'deleted' => $list($decoded['deleted'] ?? []),
+            'weights' => $map($decoded['weights'] ?? []),
+            'factors' => $map($decoded['factors'] ?? []),
         ];
     }
 
-    public function store(MarketIndex $index, int $tick, array $tickers, array $added = [], array $deleted = []): void
-    {
+    public function store(
+        MarketIndex $index,
+        int $tick,
+        array $tickers,
+        array $added = [],
+        array $deleted = [],
+        array $weights = [],
+        array $factors = []
+    ): void {
         try {
             $this->redis->set($index->membershipKey(), json_encode([
                 'tick' => $tick,
                 'tickers' => array_values($tickers),
                 'added' => array_values($added),
                 'deleted' => array_values($deleted),
+                'weights' => $weights,
+                'factors' => $factors,
             ], JSON_THROW_ON_ERROR));
         } catch (\Throwable $e) {
             $this->logger?->warning('Index membership write failed: ' . $e->getMessage());

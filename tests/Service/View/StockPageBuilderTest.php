@@ -141,6 +141,17 @@ class StockPageBuilderTest extends TestCase
         return $stock;
     }
 
+    /** A listed fund as the resolver hands one over: a persisted row, with a ticker. */
+    private function fund(string $ticker = 'LBI'): Etf
+    {
+        $fund = new Etf();
+        $fund->setTicker($ticker);
+        $fund->setName('Skein Lakebird 30 ETF');
+        $fund->setPrice('100.00');
+
+        return $fund;
+    }
+
     public function testACompanyPageSuppliesEveryTemplateKey(): void
     {
         $payload = $this->builder()->build($this->stock(), 'LAKE', null);
@@ -152,7 +163,7 @@ class StockPageBuilderTest extends TestCase
 
     public function testTheFundPageSuppliesEveryTemplateKey(): void
     {
-        $payload = $this->builder()->build(new Etf(), 'LBI', null);
+        $payload = $this->builder()->build($this->fund(), 'LBI', null);
 
         foreach (self::TEMPLATE_KEYS as $key) {
             $this->assertArrayHasKey($key, $payload, "The fund page does not supply '{$key}'.");
@@ -166,7 +177,7 @@ class StockPageBuilderTest extends TestCase
     public function testBothInstrumentsSupplyTheSameKeys(): void
     {
         $company = array_keys($this->builder()->build($this->stock(), 'LAKE', null));
-        $fund = array_keys($this->builder()->build(new Etf(), 'LBI', null));
+        $fund = array_keys($this->builder()->build($this->fund(), 'LBI', null));
 
         sort($company);
         sort($fund);
@@ -187,14 +198,14 @@ class StockPageBuilderTest extends TestCase
         $this->assertGreaterThanOrEqual(0.0, $management['tenureYears']);
 
         $this->assertNull(
-            $this->builder()->build(new Etf(), 'LBI', null)['management'],
+            $this->builder()->build($this->fund(), 'LBI', null)['management'],
             'A fund has no board and nobody allocating its capital.'
         );
     }
 
     public function testTheFundIsNotTreatedAsABorrowableCompany(): void
     {
-        $payload = $this->builder()->build(new Etf(), 'LBI', null);
+        $payload = $this->builder()->build($this->fund(), 'LBI', null);
 
         $this->assertTrue($payload['isEtf']);
         $this->assertNull($payload['analystTargets'], 'A fund has no company to put a target on.');

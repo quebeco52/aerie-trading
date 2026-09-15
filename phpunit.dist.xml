@@ -65,6 +65,7 @@
             <file>tests/Service/Market/CorporateBondDeskTest.php</file>
             <file>tests/Service/Market/CorporateDefaultServiceTest.php</file>
             <file>tests/Service/Market/IndexCommitteeTest.php</file>
+            <file>tests/Service/Market/IndexFundAccountantTest.php</file>
             <file>tests/Service/Market/BulkRowUpdateTest.php</file>
             <file>tests/Service/Market/StockTickColumnsTest.php</file>
             <file>tests/Command/MarketTickerCadenceTest.php</file>
@@ -73,6 +74,7 @@
             <file>tests/Service/Market/OptionChainListingTest.php</file>
             <file>tests/EventListener/FlushProfilerTest.php</file>
             <file>tests/Service/Market/SimulationClockTest.php</file>
+            <file>tests/Service/Market/HistorySimTimeTest.php</file>
             <file>tests/Service/Corporate/MergerAndAcquisitionGateTest.php</file>
             <directory>tests/Support</directory>
         </testsuite>
@@ -100,6 +102,7 @@
             <exclude>tests/Service/Market/CorporateBondDeskTest.php</exclude>
             <exclude>tests/Service/Market/CorporateDefaultServiceTest.php</exclude>
             <exclude>tests/Service/Market/IndexCommitteeTest.php</exclude>
+            <exclude>tests/Service/Market/IndexFundAccountantTest.php</exclude>
         </testsuite>
 
         <testsuite name="Functional">

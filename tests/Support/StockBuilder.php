@@ -26,6 +26,10 @@ class StockBuilder
         $this->stock->setWholesaleDebt('100000000.0000');
         $this->stock->setBeta('1.00');
         $this->stock->setVolatility('0.2000');
+
+        // A listed company that earns money, because that is the ordinary case and index eligibility now
+        // depends on it. A test about what happens to a loss-maker says so with withQuarterlyNetIncome().
+        $this->withQuarterlyNetIncome(25_000_000.0);
     }
 
     public static function create(string $ticker = 'TEST', string $name = 'Test Corporation'): self
@@ -36,6 +40,32 @@ class StockBuilder
     public function withSector(string $sector): self
     {
         $this->stock->setSector($sector);
+        return $this;
+    }
+
+    /**
+     * Sets four identical reported quarters, which is what most tests mean by "this company earns this".
+     *
+     * Trailing twelve-month net income is the sum of the four, so a negative figure here is a company that
+     * has lost money in every quarter of the last year — the unambiguous end of the index's viability
+     * screen. Pass the quarters explicitly where the distinction between the trailing figure and the latest
+     * quarter is the point of the test.
+     */
+    public function withQuarterlyNetIncome(float $perQuarter): self
+    {
+        return $this->withQuarterlyNetIncomeHistory(array_fill(0, 4, $perQuarter));
+    }
+
+    /**
+     * Sets the reported quarters directly, oldest first.
+     *
+     * @param list<float> $quarters
+     */
+    public function withQuarterlyNetIncomeHistory(array $quarters): self
+    {
+        $this->stock->setQuarterlyNetIncomeHistory($quarters);
+        $this->stock->setTotalNetIncome((string) array_sum($quarters));
+
         return $this;
     }
 

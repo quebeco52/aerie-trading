@@ -153,7 +153,9 @@ final class SplitCostBasisRestatementTest extends TestCase
 
         preg_match_all('/private [^;]*\$(\w+)\s*=/', $entity, $matches);
 
-        $exempt = ['id', 'stock', 'recordedAt'];
+        // Exempt: an identity, the owning relation, and the two CLOCKS. A split restates what a row is
+        // quoted in, never when it happened — wall time and simulation time both survive it untouched.
+        $exempt = ['id', 'stock', 'recordedAt', 'simTime'];
         foreach ($matches[1] as $property) {
             if (in_array($property, $exempt, true)) {
                 continue;

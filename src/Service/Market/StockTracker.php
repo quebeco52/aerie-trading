@@ -2,7 +2,6 @@
 
 namespace App\Service\Market;
 
-use App\Service\Market\Index\MarketIndex;
 use App\Entity\Stock;
 use App\DTO\MacroStateDTO;
 use App\Service\Corporate\CorporateActionEngine;
@@ -68,7 +67,7 @@ class StockTracker
      * @param bool    $recordHistory Whether to persist the new prices to the stock history table.
      * @param MacroStateDTO|null $macroState    The current state of the macroeconomic cycle.
      * 
-     * @return array{updates: array<mixed>, total_cap: float, float_caps: array<string, float>, events: array<mixed>, market_vol: float, history: array<mixed>}
+     * @return array{updates: array<mixed>, total_cap: float, float_caps: array<string, float>, dividend_points: array<string, float>, events: array<mixed>, market_vol: float, history: array<mixed>}
      */
     public function updateStocks(array $stocks, float $dt, bool $recordHistory, ?\App\DTO\MacroStateDTO $macroState = null, int $tickCount = 0, int $ticksPerYear = 252): array
     {
@@ -77,6 +76,7 @@ class StockTracker
         $historyData = [];
         $totalMarketCap = 0.0;
         $floatAdjustedCaps = [];
+        $dividendPoints = [];
         $events = [];
 
         // Pull systemic variables from the Macro Engine
@@ -89,11 +89,13 @@ class StockTracker
         // not be able to move it again on the next tick.
         $netOrderFlow = $this->orderFlow->drain();
 
-        // The standing membership of the BENCHMARK index, read once for the whole tick: it is the one the
-        // passive book holds, so it is the one that decides who receives passive money. An empty roster — a
-        // fresh market before its first reconstitution — means every listed name counts, which is what the
-        // market was before there was a membership at all.
-        $indexMembers = $this->indexCommittee?->currentMembers(MarketIndex::benchmark()) ?? [];
+        // How much passive money each name carries relative to its weight in the market, read once for the
+        // whole tick. Every published index contributes in proportion to the assets that track it, so this
+        // is what decides who receives passive money — not membership of the benchmark alone, which said a
+        // name was either in one index or in nothing. An empty map — a fresh market before its first
+        // reconstitution — means every listed name is held in line with its size, which is what the market
+        // was before there was a membership at all.
+        $passiveOwnership = $this->indexCommittee?->passiveOwnership() ?? [];
 
         // The agent books are loaded once for the whole tick and written back once at the end, for the
         // same reason the order flow is drained once: a round trip per name is the cost that scales.
@@ -337,6 +339,21 @@ class StockTracker
                 $dividendPaidPerShare += (float) ($generatedEvent['dividend_per_share'] ?? 0.0);
             }
 
+            // The same cash, measured the way an INDEX has to measure it. A fund tracking the index owns the
+            // float-adjusted share count, so what it receives from this payment is the rate times those
+            // shares — the index dividend, in the same units as the capitalisation the level is struck
+            // from. Published per ticker so each index can sum its own members and nothing else.
+            //
+            // Measured here, before the split block below, because the rate was declared against the share
+            // count that is current NOW. A 4-for-1 later in the same tick quarters the rate and quadruples
+            // the count; multiplying one by the other afterwards would quadruple the cash the fund thinks
+            // it received.
+            if ($dividendPaidPerShare > 0.0) {
+                $dividendPoints[$stock->getTicker()] = $dividendPaidPerShare
+                    * (float) $stock->getSharesOutstanding()
+                    * max(0.0, min(1.0, (float) $stock->getPublicFloatPercentage()));
+            }
+
             $tickLogReturn = $priceAtTickStart > 0.0 && $currentPriceAfterEarnings > 0.0
                 ? log(($currentPriceAfterEarnings + $dividendPaidPerShare) / $priceAtTickStart)
                 : 0.0;
@@ -484,7 +501,9 @@ class StockTracker
                 riskFreeRate: $macroDTO->policyRate,
                 annualizedVolatility: (float) $nextVolatility,
                 splitRatio: $splitRatio,
-                isIndexMember: $indexMembers === [] || isset($indexMembers[$stock->getTicker()])
+                passiveOwnershipMultiple: $passiveOwnership === []
+                    ? 1.0
+                    : ($passiveOwnership[$stock->getTicker()] ?? 0.0)
             ));
 
             $stockUpdates[] = $stockUpdate;
@@ -506,6 +525,7 @@ class StockTracker
             'history' => $historyData,
             'total_cap' => $totalMarketCap,
             'float_caps' => $floatAdjustedCaps,
+            'dividend_points' => $dividendPoints,
             'events' => $events,
             'market_vol' => $marketVol
         ];
