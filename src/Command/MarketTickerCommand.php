@@ -6,6 +6,7 @@ use App\Entity\Bond;
 use App\Entity\Stock;
 use App\Service\Market\BondTracker;
 use App\Service\Market\StockTracker;
+use App\Service\Market\CorporateBondDesk;
 use App\Service\Market\OptionDeskService;
 use App\Service\Market\TreasuryAuctionService;
 use App\Service\Market\EtfTracker;
@@ -80,6 +81,7 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
         private MarketEventPublisher $marketEvent,
         private DistrictRoster $districtRoster,
         private \App\Service\Market\OptionDeskService $optionDesk,
+        private CorporateBondDesk $corporateBondDesk,
         private \Symfony\Component\Messenger\MessageBusInterface $messageBus,
 
         private int $tickIntervalUs,
@@ -136,6 +138,7 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
         $quarterlyInterval = (int) max(1, $this->ticksPerYear / 4);   // Snapshots once a game "quarter"
         $auctionInterval = TreasuryAuctionService::auctionIntervalTicks($this->ticksPerYear);
         $optionSweepInterval = OptionDeskService::sweepIntervalTicks($this->ticksPerYear);
+        $corporateIssuanceInterval = CorporateBondDesk::issuanceIntervalTicks($this->ticksPerYear);
 
         $conn = $this->entityManager->getConnection();
 
@@ -219,7 +222,24 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                 // The bond desk. Coupons, redemptions and the mark all happen inside the same tick
                 // transaction as the equity book, so a crash mid-tick cannot leave a coupon credited
                 // against a mark that was rolled back.
-                $bondResult = $this->bondTracker->updateBonds($bonds, $macroState, $isHistoryTick);
+                // What each issuer's credit costs right now, taken off the working set the tick already
+                // holds. Handing it to the tracker keeps the corporate ladder from loading a company per
+                // bond just to read one number off it.
+                $issuerSpreads = [];
+                foreach ($stocks as $issuer) {
+                    $issuerId = $issuer->getId();
+                    if ($issuerId !== null) {
+                        $issuerSpreads[$issuerId] = (float) $issuer->getDynamicCreditSpread();
+                    }
+                }
+
+                $bondResult = $this->bondTracker->updateBonds(
+                    $bonds,
+                    $macroState,
+                    $isHistoryTick,
+                    $issuerSpreads,
+                    $isHistoryTick
+                );
 
                 // A matured issue stops trading, so drop it from the working set immediately rather than
                 // waiting for the next reload: it would otherwise be re-marked and re-redeemed every tick
@@ -230,6 +250,15 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                         $bonds,
                         static fn (Bond $b): bool => !in_array($b->getId(), $maturedIds, true)
                     ));
+                }
+
+                // Companies come to the public market to keep their listed ladder in step with the debt the
+                // balance sheet already carries. No new borrowing happens here — see CorporateBondDesk for
+                // why a listed issue is a tranche of the scalar rather than an addition to it.
+                if ($tickCount % $corporateIssuanceInterval === 0) {
+                    foreach ($this->corporateBondDesk->reconcile($stocks, $macroState->sovereignCurve(), $macroState->totalTime) as $newIssue) {
+                        $bonds[] = $newIssue;
+                    }
                 }
 
                 // Quarterly refunding: a fresh on-the-run at every tenor, so a benchmark maturity is always

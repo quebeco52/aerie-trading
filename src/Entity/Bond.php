@@ -34,6 +34,20 @@ class Bond
     /** Redeemed at par; holdings have been cashed out and the issue no longer trades. */
     public const STATUS_MATURED = 'MATURED';
 
+    /** The issuer failed; the claim has been settled at its recovery and no longer trades. */
+    public const STATUS_DEFAULTED = 'DEFAULTED';
+
+    // --- Seniority ---
+
+    /** Secured on collateral, which is what puts this claim ahead of the rest. */
+    public const SENIORITY_SENIOR_SECURED = 'SENIOR_SECURED';
+
+    /** The ordinary public corporate bond. */
+    public const SENIORITY_SENIOR_UNSECURED = 'SENIOR_UNSECURED';
+
+    /** Paid only once everything above it is whole. */
+    public const SENIORITY_SUBORDINATED = 'SUBORDINATED';
+
     #[ORM\Id]
     #[ORM\GeneratedValue]
     #[ORM\Column]
@@ -44,6 +58,30 @@ class Bond
 
     #[ORM\Column(length: 255)]
     private string $name;
+
+    /**
+     * The company that owes the money, or null for a sovereign issue.
+     *
+     * Nullable rather than a separate entity because a bond is a bond: it has a coupon, a maturity and a
+     * price, and every one of the desk's mechanics — accrual, the clean/dirty split, duration, the ladder —
+     * is identical whoever issued it. What differs is only what it is discounted at, and that is one term
+     * added to the curve.
+     */
+    #[ORM\ManyToOne(targetEntity: Stock::class)]
+    #[ORM\JoinColumn(nullable: true, onDelete: 'CASCADE')]
+    private ?Stock $issuer = null;
+
+    /** Where this claim sits in the queue when the issuer fails. Sovereign issues carry none. */
+    #[ORM\Column(length: 20, nullable: true)]
+    private ?string $seniority = null;
+
+    /** The spread over the sovereign curve this issue was last marked at. Zero for a sovereign. */
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 6, options: ['default' => '0.000000'])]
+    private string $creditSpread = '0.000000';
+
+    /** Share of face actually recovered, set when the issue is settled in a default. */
+    #[ORM\Column(type: Types::DECIMAL, precision: 6, scale: 4, nullable: true)]
+    private ?string $recoveryRate = null;
 
     /** Original maturity in years at auction (2, 5, 10, 30). Kept for grouping; it is not the remaining life. */
     #[ORM\Column(type: Types::DECIMAL, precision: 6, scale: 2)]
@@ -352,6 +390,60 @@ class Bond
     public function setOutstandingFace(string $outstandingFace): static
     {
         $this->outstandingFace = $outstandingFace;
+
+        return $this;
+    }
+
+    public function getIssuer(): ?Stock
+    {
+        return $this->issuer;
+    }
+
+    public function setIssuer(?Stock $issuer): static
+    {
+        $this->issuer = $issuer;
+
+        return $this;
+    }
+
+    /** Whether the taxpayer stands behind this issue, or a company does. */
+    public function isSovereign(): bool
+    {
+        return $this->issuer === null;
+    }
+
+    public function getSeniority(): ?string
+    {
+        return $this->seniority;
+    }
+
+    public function setSeniority(?string $seniority): static
+    {
+        $this->seniority = $seniority;
+
+        return $this;
+    }
+
+    public function getCreditSpread(): string
+    {
+        return $this->creditSpread;
+    }
+
+    public function setCreditSpread(string $creditSpread): static
+    {
+        $this->creditSpread = $creditSpread;
+
+        return $this;
+    }
+
+    public function getRecoveryRate(): ?string
+    {
+        return $this->recoveryRate;
+    }
+
+    public function setRecoveryRate(?string $recoveryRate): static
+    {
+        $this->recoveryRate = $recoveryRate;
 
         return $this;
     }

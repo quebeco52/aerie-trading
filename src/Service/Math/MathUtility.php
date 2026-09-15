@@ -2803,6 +2803,89 @@ class MathUtility
         return $couponAmount * min(1.0, $periodElapsed / $periodLength);
     }
 
+
+    // --- Corporate Credit ---
+
+    /**
+     * Recovery on a defaulted claim, as a share of face.
+     *
+     * Recovery is not a constant, and treating it as one is the single most common way a credit model
+     * understates its own tail. Altman, Brady, Resti & Sironi (2005) measure what practitioners had long
+     * suspected: recovery rates and default rates are NEGATIVELY correlated. Defaults cluster in bad years,
+     * which is exactly when distressed assets are being sold into a market with no buyers for them, so the
+     * same claim is worth less precisely when more of them are being settled. A portfolio priced at an
+     * average recovery is therefore priced at a recovery it will not get in the year it needs one.
+     *
+     * Specified log-linearly in the aggregate default rate around the year the base recoveries are quoted
+     * for, which is the shape their regressions take:
+     *
+     *     recovery = base + elasticity * ln(baseline default rate / realized default rate)
+     *
+     * so a default rate at the long-run average returns the base unchanged, a rate at twice the average
+     * takes off elasticity * ln(2), and an unusually quiet year recovers slightly more than the base.
+     *
+     * @param float $baseRecovery        Recovery for the claim's seniority in an average default year.
+     * @param float $defaultRate         The realized aggregate corporate default rate.
+     * @param float $baselineDefaultRate The rate the base recovery is quoted at.
+     * @return float Share of face recovered, bounded.
+     */
+    public function calculateRecoveryGivenDefault(
+        float $baseRecovery,
+        float $defaultRate,
+        float $baselineDefaultRate = FinancialConstants::RECOVERY_BASELINE_DEFAULT_RATE
+    ): float {
+        if ($defaultRate <= 0.0 || $baselineDefaultRate <= 0.0) {
+            return max(FinancialConstants::MIN_RECOVERY_RATE, min(FinancialConstants::MAX_RECOVERY_RATE, $baseRecovery));
+        }
+
+        $cyclical = FinancialConstants::RECOVERY_DEFAULT_RATE_ELASTICITY
+            * log($baselineDefaultRate / $defaultRate);
+
+        return max(
+            FinancialConstants::MIN_RECOVERY_RATE,
+            min(FinancialConstants::MAX_RECOVERY_RATE, $baseRecovery + $cyclical)
+        );
+    }
+
+    /**
+     * The spread a corporate issue is discounted at, over the sovereign curve.
+     *
+     * Two components, because a corporate spread is not all compensation for default. Longstaff, Mithal &
+     * Neis (2005) separate the two by comparing bond spreads with credit default swap premia and find a
+     * material non-default residual: a buyer charges for holding a claim they cannot sell as readily as a
+     * sovereign, whether or not the issuer is ever going to miss a payment. A bond priced on default risk
+     * alone quotes through the market at every rating, and worst at the safe end, where the default
+     * component is nearly nothing and the residual is nearly all of it.
+     *
+     * The default component is the issuer's own Merton spread at the claim's horizon, so it carries the
+     * term structure of default risk rather than a flat number: a firm close to the barrier is far riskier
+     * over ten years than over one, and a distressed one is riskier over one year than over ten because it
+     * either survives that year or does not.
+     *
+     * @param float $distanceToDefault The issuer's Merton d2.
+     * @param float $lossGivenDefault  One minus the recovery on this claim.
+     * @param float $timeToMaturity    Years to maturity.
+     * @param float $illiquidityPremium Non-default component.
+     * @return float Continuously compounded spread over the sovereign curve.
+     */
+    public function calculateCorporateSpread(
+        float $distanceToDefault,
+        float $lossGivenDefault,
+        float $timeToMaturity,
+        float $illiquidityPremium = FinancialConstants::CORPORATE_ILLIQUIDITY_SPREAD
+    ): float {
+        $defaultComponent = $this->calculateMertonCreditSpread(
+            $distanceToDefault,
+            $lossGivenDefault,
+            max(1.0e-6, $timeToMaturity)
+        );
+
+        return max(0.0, min(
+            FinancialConstants::MAX_CORPORATE_SPREAD,
+            $defaultComponent + max(0.0, $illiquidityPremium)
+        ));
+    }
+
     // --- Option Pricing & Greeks ---
 
     /**

@@ -281,6 +281,9 @@ class MarketResetCommand extends Command
                     cip_balance = 0.00,
                     historical_fixed_rate = :historical_rate,
                     credit_spread = :credit_spread,
+                    -- Opens at the baseline: until the first tick builds a Merton spread and an
+                    -- accelerator premium on top of it, the baseline is what the credit costs.
+                    dynamic_credit_spread = :credit_spread,
                     buyback_authorization = 0.00,
                     last_dividend = :last_dividend,
                     description = :description,

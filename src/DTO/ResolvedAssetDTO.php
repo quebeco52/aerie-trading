@@ -54,7 +54,13 @@ final readonly class ResolvedAssetDTO
         }
 
         if ($this->entity instanceof Bond && $this->entity->getStatus() !== Bond::STATUS_ACTIVE) {
-            return "Trading is halted for {$this->entity->getTicker()}. The issue has matured.";
+            // A defaulted issue and a matured one are both untradable, but for opposite reasons, and telling
+            // a holder their bond "matured" when the borrower failed is the wrong thing to say about it.
+            $reason = $this->entity->getStatus() === Bond::STATUS_DEFAULTED
+                ? 'The issuer defaulted and the claim has been settled at its recovery.'
+                : 'The issue has matured.';
+
+            return "Trading is halted for {$this->entity->getTicker()}. {$reason}";
         }
 
         if ($this->entity instanceof OptionContract) {

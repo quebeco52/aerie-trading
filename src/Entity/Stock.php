@@ -157,6 +157,18 @@ class Stock
     private string $creditSpread = '0.0100';
 
     /**
+     * The spread the firm's credit actually commands right now, over the sovereign curve.
+     *
+     * Distinct from $creditSpread above, which is the BASELINE the seed gave the firm and which DebtEngine
+     * treats as a floor to build on. This is what that build produces each tick — baseline plus the Merton
+     * spread plus the financial-accelerator premium — and it is persisted because the bond desk has to
+     * discount the firm's listed issues at it. Recomputing it there would put a second authority on what a
+     * company's credit costs, and the two would disagree the first time either was retuned.
+     */
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 6, options: ['default' => '0.010000'])]
+    private string $dynamicCreditSpread = '0.010000';
+
+    /**
      * @var string Alphanumeric credit rating assigned by CreditRatingAgency (e.g. AAA, BBB, CCC, D).
      */
     #[ORM\Column(type: Types::STRING, length: 4, options: ['default' => 'BBB'])]
@@ -861,6 +873,18 @@ class Stock
     public function setCreditSpread(string $creditSpread): static
     {
         $this->creditSpread = self::cleanBcStr($creditSpread, 4);
+
+        return $this;
+    }
+
+    public function getDynamicCreditSpread(): string
+    {
+        return $this->dynamicCreditSpread;
+    }
+
+    public function setDynamicCreditSpread(string $dynamicCreditSpread): static
+    {
+        $this->dynamicCreditSpread = self::cleanBcStr($dynamicCreditSpread, 6);
 
         return $this;
     }

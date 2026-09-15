@@ -507,6 +507,8 @@ class FinancialConstants
     public const ETF_HALF_SPREAD = 0.0001;
     /** Flat half-spread on a sovereign bond, the deepest instrument on the desk. */
     public const BOND_HALF_SPREAD = 0.00005;
+    /** Half-spread on a CORPORATE issue. Wider than the sovereign by an order of magnitude and then some: a company's bonds trade in a fraction of the size, against a fraction of the buyers, and most of them sit in portfolios that never sell. Quoting them at the sovereign's depth would make credit risk free to get into and out of, which is the opposite of what makes it risky. */
+    public const CORPORATE_BOND_HALF_SPREAD = 0.0015;
 
 
     // --- Listed Equity Options ---
@@ -543,6 +545,42 @@ class FinancialConstants
     public const SHORT_OPTION_UNDERLYING_REQUIREMENT = 0.20;
     /** Floor on that requirement, struck on the underlying for a call and on the STRIKE for a put, so a far out-of-the-money short is never collateralized at nothing. */
     public const SHORT_OPTION_MINIMUM_REQUIREMENT = 0.10;
+
+
+    // --- Corporate Bond Issuance ---
+    /** Share of a firm's wholesale debt that is funded in the PUBLIC bond market rather than by banks. The listed issues are a tranche of the debt the balance sheet already carries, never additional borrowing. */
+    public const CORPORATE_PUBLIC_DEBT_SHARE = 0.50;
+    /** Issues a firm keeps outstanding at once. Sets the steady-state size of the corporate ladder directly: a firm holding this many issues holds this many, whatever the tenors are. */
+    public const CORPORATE_LADDER_ISSUES = 3;
+    /** Original maturities a firm issues at, cycled so a ladder ends up spread across the curve instead of stacked on one point. */
+    public const CORPORATE_ISSUE_TENORS = [3.0, 5.0, 7.0, 10.0];
+    /** Smallest face a single issue may be brought at. A gap smaller than this waits rather than bringing a deal nobody would underwrite. */
+    public const CORPORATE_MIN_ISSUE_FACE = 5.0e7;
+    /** Wholesale debt a firm must carry before the public market is worth tapping. DERIVED, not chosen: it is exactly the debt at which a full ladder of minimum-size issues fits inside the public tranche. Set independently, the two rules disagree — a firm passes the debt gate, then every deal it tries to bring prices below the minimum size and it silently never issues at all. */
+    public const CORPORATE_MIN_PUBLIC_DEBT = (self::CORPORATE_LADDER_ISSUES * self::CORPORATE_MIN_ISSUE_FACE) / self::CORPORATE_PUBLIC_DEBT_SHARE;
+    /** Reconciliations of the public tranche per year. A firm comes to market when it has room, not continuously. */
+    public const CORPORATE_ISSUANCE_PER_YEAR = 4;
+
+    // --- Corporate Credit: Recovery Given Default (Altman, Brady, Resti & Sironi 2005) ---
+    /** Recovery on a senior SECURED claim in an average default year, as a share of face; collateral is what puts this claim ahead of the rest. */
+    public const RECOVERY_SENIOR_SECURED = 0.62;
+    /** Recovery on a senior UNSECURED claim, the ordinary public corporate bond. */
+    public const RECOVERY_SENIOR_UNSECURED = 0.48;
+    /** Recovery on a SUBORDINATED claim, which is paid only once everything above it is whole. */
+    public const RECOVERY_SUBORDINATED = 0.28;
+    /** Aggregate corporate default rate the base recoveries above are quoted at; the long-run average year. */
+    public const RECOVERY_BASELINE_DEFAULT_RATE = 0.018;
+    /** Fall in recovery per unit of log excess in the aggregate default rate. Recovery and default are NEGATIVELY correlated: defaults cluster in bad years, distressed assets are sold into a market with no buyers, and the same claim is worth less precisely when more of them are being settled. Ignoring it prices the tail of a credit portfolio far too kindly. */
+    public const RECOVERY_DEFAULT_RATE_ELASTICITY = 0.12;
+    /** Bounds on recovery. Nothing recovers everything once it has defaulted, and even a wiped-out claim usually salvages something. */
+    public const MIN_RECOVERY_RATE = 0.05;
+    public const MAX_RECOVERY_RATE = 0.90;
+
+    // --- Corporate Credit: Spread Composition (Longstaff, Mithal & Neis 2005) ---
+    /** Non-default component of a corporate spread: what a buyer charges for holding a claim they cannot sell as readily as a sovereign. Measured to be a material minority of an investment-grade spread, so a bond priced on default risk alone quotes through the market. */
+    public const CORPORATE_ILLIQUIDITY_SPREAD = 0.0040;
+    /** Ceiling on the credit spread a listed issue may be discounted at, matching the cap the Merton spread itself carries. */
+    public const MAX_CORPORATE_SPREAD = 1.00;
 
     // --- Public Option Demand (Bollen & Whaley 2004 net buying pressure) ---
     /** The public's net long position across a name's whole chain, in contracts, as a multiple of its average daily volume converted to contract-equivalents. The public is a persistent NET BUYER of options, which is the whole reason a dealer is structurally short them. */

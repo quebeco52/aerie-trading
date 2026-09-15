@@ -38,9 +38,17 @@ class BondTracker
      * @param MacroStateDTO    $macroState    Live macro state carrying the fitted curve.
      * @param bool             $recordHistory Whether this tick writes a history point.
      * @return array{updates: array<int, array<string, mixed>>, history: array<int, array<string, mixed>>, matured: array<int, Bond>, curve: array<int, array{tenor: float, yield: float}>}
+     * @param array<int, float> $issuerSpreads Live credit spread per issuer id, so marking the corporate
+     *                                         ladder does not lazy-load a company for every bond on it.
+     * @param bool              $markCorporate Whether corporate issues are revalued this pass.
      */
-    public function updateBonds(array $bonds, MacroStateDTO $macroState, bool $recordHistory = false): array
-    {
+    public function updateBonds(
+        array $bonds,
+        MacroStateDTO $macroState,
+        bool $recordHistory = false,
+        array $issuerSpreads = [],
+        bool $markCorporate = true
+    ): array {
         $curve = $macroState->sovereignCurve();
         $currentTime = $macroState->totalTime;
         $now = new \DateTime();
@@ -72,7 +80,29 @@ class BondTracker
                 continue;
             }
 
-            $valuation = $this->pricingEngine->value($bond, $curve, $currentTime);
+            // A corporate issue is remarked on the slower cadence. Its two drivers — the curve and its
+            // issuer's credit — both move far slower than a tick, and the ladder is large enough that
+            // revaluing all of it every tick is a measurable share of the tick budget for a price that has
+            // not meaningfully changed. Coupons and maturity above are NOT on that cadence: those are dates,
+            // and a date cannot be approximately reached.
+            if (!$bond->isSovereign() && !$markCorporate) {
+                continue;
+            }
+
+            // The spread comes from the issuer map the caller already holds rather than from the bond's
+            // association, so marking the ladder does not lazy-load a company per bond.
+            $spread = 0.0;
+
+            if (!$bond->isSovereign()) {
+                $issuerId = $bond->getIssuer()?->getId();
+                $spread = $issuerId !== null
+                    ? (float) ($issuerSpreads[$issuerId] ?? (float) $bond->getCreditSpread())
+                    : (float) $bond->getCreditSpread();
+
+                $bond->setCreditSpread((string) $spread);
+            }
+
+            $valuation = $this->pricingEngine->value($bond, $curve, $currentTime, $spread);
 
             $bond->setPrice((string) $valuation->dirtyPrice)
                 ->setCleanPrice((string) $valuation->cleanPrice)
@@ -96,6 +126,8 @@ class BondTracker
                 'years_to_maturity' => $bond->yearsToMaturity($currentTime),
                 'coupon_rate' => (float) $bond->getCouponRate(),
                 'is_on_the_run' => $bond->isOnTheRun(),
+                'issuer' => $bond->getIssuer()?->getTicker(),
+                'credit_spread' => $spread,
             ];
 
             if ($recordHistory) {

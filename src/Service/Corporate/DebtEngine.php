@@ -54,7 +54,7 @@ class DebtEngine
     /** Dynamic credit spread above which the primary market is shut to the issuer; high-yield spreads reached this in 2008 and 2020. */
     private const PRIMARY_MARKET_CLOSURE_SPREAD = 0.10;
     /** Lowest credit rating that can still refinance a maturity at any price. */
-    private const REFINANCING_RATING_FLOOR = 'CCC';
+    public const REFINANCING_RATING_FLOOR = 'CCC';
     /** Interest coverage below which lenders will not roll a maturity: the firm cannot service what it already owes. */
     private const REFINANCING_MIN_COVERAGE = 1.0;
 

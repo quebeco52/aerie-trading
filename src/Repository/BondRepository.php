@@ -36,9 +36,39 @@ class BondRepository extends ServiceEntityRepository
      */
     public function findActiveAlongTheCurve(): array
     {
-        return $this->findBy(
-            ['status' => Bond::STATUS_ACTIVE],
-            ['tenorYears' => 'ASC', 'maturesAtTime' => 'ASC']
-        );
+        // SOVEREIGN only. The ladder this feeds is a term structure of one borrower, and a corporate issue
+        // dropped into its tenor buckets would sit beside a government bond of the same maturity as though
+        // the two were the same instrument priced differently — which is the one thing the page exists to
+        // say they are not.
+        return $this->createQueryBuilder('b')
+            ->andWhere('b.status = :status')
+            ->andWhere('b.issuer IS NULL')
+            ->setParameter('status', Bond::STATUS_ACTIVE)
+            ->orderBy('b.tenorYears', 'ASC')
+            ->addOrderBy('b.maturesAtTime', 'ASC')
+            ->getQuery()
+            ->getResult();
+    }
+
+    /**
+     * Every outstanding corporate issue, with its issuer loaded.
+     *
+     * Ordered by issuer and then out along that issuer's own ladder, because a corporate market is read one
+     * borrower at a time: what a reader compares is this company's three-year against its ten-year, not one
+     * company's three-year against another's.
+     *
+     * @return list<Bond>
+     */
+    public function findActiveCorporate(): array
+    {
+        return $this->createQueryBuilder('b')
+            ->addSelect('s')
+            ->join('b.issuer', 's')
+            ->andWhere('b.status = :status')
+            ->setParameter('status', Bond::STATUS_ACTIVE)
+            ->orderBy('s.ticker', 'ASC')
+            ->addOrderBy('b.maturesAtTime', 'ASC')
+            ->getQuery()
+            ->getResult();
     }
 }

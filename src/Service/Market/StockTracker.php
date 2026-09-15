@@ -143,6 +143,13 @@ class StockTracker
             // Fetch true, dynamic WACC from the DebtEngine
             $health = $this->debtEngine->analyzeDebtHealth($stock, $macroDTO);
 
+            // What this firm's credit costs, published for the bond desk to discount its listed issues at.
+            // Computed here rather than there so there is one authority on it: the same figure the firm
+            // borrows at is the one its bonds are priced off.
+            $stock->setDynamicCreditSpread(
+                \App\Service\Math\MathUtility::formatDecimal($health->rawMetrics->dynamicSpread, 6)
+            );
+
             $sharesOutstanding = (float) $stock->getSharesOutstanding();
             $shares = max(1.0, $sharesOutstanding);
 

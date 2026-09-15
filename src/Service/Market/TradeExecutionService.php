@@ -148,7 +148,14 @@ class TradeExecutionService
                 }
             }
 
-            $quote = $this->liquidityEngine->quoteAsset($stock, $assetType, $action, $quantity, $livePrice);
+            $quote = $this->liquidityEngine->quoteAsset(
+                $stock,
+                $assetType,
+                $action,
+                $quantity,
+                $livePrice,
+                $asset->entity instanceof \App\Entity\Bond && !$asset->entity->isSovereign()
+            );
             $livePriceStr = MathUtility::formatDecimal($quote->executionPrice, 4);
             $totalValueStr = \bcmul($livePriceStr, $quantityStr, 4);
 

@@ -22,7 +22,9 @@ class MarketOperator
         private MarketEventPublisher $marketEvent,
         private DebtEngine $debtEngine,
         /** Industry roster and capacity balance; null (unit tests) leaves a failed firm's plant to age out of it. */
-        private ?\App\Service\Corporate\Industry\IndustryShareLedger $industryShareLedger = null
+        private ?\App\Service\Corporate\Industry\IndustryShareLedger $industryShareLedger = null,
+        /** Settles the failed firm's listed debt; null (unit tests without a bond desk) leaves its issues alone. */
+        private ?CorporateDefaultService $corporateDefault = null
     ) {}
 
     /**
@@ -175,6 +177,12 @@ class MarketOperator
             ['id' => $stock->getId()]
         );
 
+        // The creditors are not the shareholders. Equity has just been wiped to zero above, but a bondholder
+        // stands ahead of it and is owed whatever the estate is worth — so the listed debt is settled at its
+        // recovery rather than disappearing with the company. Skipping this would make credit strictly worse
+        // than equity in the one scenario it exists to be better in.
+        $settledIssues = $this->corporateDefault?->settle($stock, $macroState, new \DateTime()) ?? [];
+
         $this->entityManager->persist($stock);
         $this->entityManager->flush();
 
@@ -184,6 +192,25 @@ class MarketOperator
         $eventDesc = $isPaymentDefault
             ? "{$name} ({$stock->getTicker()}) missed a principal payment it could not refinance and filed for Chapter 7 bankruptcy liquidation. Shareholder equity wiped to 0 and trading permanently halted."
             : "{$name} ({$stock->getTicker()}) has collapsed into insolvency and filed for Chapter 7 bankruptcy liquidation. Shareholder equity wiped to 0 and trading permanently halted.";
+
+        if ($settledIssues !== []) {
+            // Face-weighted, not the first issue's: seniorities recover differently, so quoting one of them
+            // as the answer would misreport the estate the moment a firm has more than one kind of claim.
+            $totalFace = array_sum(array_column($settledIssues, 'face'));
+            $recovery = $totalFace > 0.0
+                ? (array_sum(array_map(
+                    static fn (array $issue): float => $issue['recovery'] * $issue['face'],
+                    $settledIssues
+                )) / $totalFace) * 100.0
+                : $settledIssues[0]['recovery'] * 100.0;
+
+            $eventDesc .= sprintf(
+                ' %d listed bond issue%s settled at %.1f cents on the dollar.',
+                count($settledIssues),
+                count($settledIssues) === 1 ? '' : 's',
+                $recovery
+            );
+        }
 
         return [
             $this->marketEvent->publish($stock, 'BANKRUPTCY', $eventDesc, -100.00)

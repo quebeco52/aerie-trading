@@ -61,6 +61,8 @@
             <file>tests/Service/User/CashLedgerTest.php</file>
             <file>tests/Service/View/OptionChainBuilderTest.php</file>
             <file>tests/Service/Market/OptionDeskCadenceTest.php</file>
+            <file>tests/Service/Market/CorporateBondDeskTest.php</file>
+            <file>tests/Service/Market/CorporateDefaultServiceTest.php</file>
             <directory>tests/Support</directory>
         </testsuite>
 
@@ -84,6 +86,8 @@
             <exclude>tests/Service/User/CashLedgerTest.php</exclude>
             <exclude>tests/Service/View/OptionChainBuilderTest.php</exclude>
             <exclude>tests/Service/Market/OptionDeskCadenceTest.php</exclude>
+            <exclude>tests/Service/Market/CorporateBondDeskTest.php</exclude>
+            <exclude>tests/Service/Market/CorporateDefaultServiceTest.php</exclude>
         </testsuite>
 
         <testsuite name="Functional">
