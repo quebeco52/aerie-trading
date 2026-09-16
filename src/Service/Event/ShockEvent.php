@@ -126,7 +126,6 @@ class ShockEvent
     /** Annual ASC 350 test wrote acquired goodwill down to its value in use (non-cash GAAP charge). */
     public const GOODWILL_IMPAIRMENT = 'goodwill_impairment';
 
-    public const CONGLOMERATE_PORTFOLIO_REALIGNMENT = 'conglomerate_portfolio_realignment';
     public const CONGLOMERATE_SUBSIDIARY_WRITEDOWN = 'conglomerate_subsidiary_writedown';
 }
 

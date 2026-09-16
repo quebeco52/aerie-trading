@@ -269,15 +269,11 @@ class NarrativeEngine
                 "Project delays on fixed-price development contracts resulted in significant cost overrun provisions."
             ]),
 
-            ShockEvent::CONGLOMERATE_PORTFOLIO_REALIGNMENT => $this->getRandomPhrase([
-                "Completed a landmark bolt-on acquisition, consolidating a new industrial subsidiary into the group.",
-                "Portfolio realignment unlocked substantial gains on the divestiture of a non-core operating segment.",
-                "Opportunistic acquisition of a distressed competitor materially expanded the industrial subsidiary base."
-            ]),
             ShockEvent::CONGLOMERATE_SUBSIDIARY_WRITEDOWN => $this->getRandomPhrase([
                 "Multi-subsidiary restructuring charges and goodwill impairments weighed on group operating costs.",
                 "Operational bottlenecks across the industrial segment triggered inventory write-offs and severance provisions.",
-                "Consolidation of overlapping subsidiary operations incurred significant one-time restructuring costs."
+                "Consolidation of overlapping subsidiary operations incurred significant one-time restructuring costs.",
+                "A counterparty failure on a physical cargo book forced provisions against unwound trade receivables."
             ]),
 
             ShockEvent::RESERVE_RELEASE => $this->getRandomPhrase([

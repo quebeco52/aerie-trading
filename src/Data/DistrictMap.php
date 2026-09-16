@@ -57,7 +57,7 @@ class DistrictMap
         // Financials — the historical core of the row.
         'credit_services', 'commercial_bank', 'insurance', 'retail_insurance', 'reinsurance', 'shadow_bank',
         'investment_bank', 'clearing_house', 'financial_data', 'asset_manager', 'hedge_fund',
-        'brokerage', 'distressed_debt',
+        'brokerage', 'distressed_debt', 'private_equity',
         // Industrials & Materials.
         'steel_manufacturing', 'specialty_industrial_machinery', 'commodity', 'chemical',
         'construction', 'defense_contractor', 'security_protection', 'waste_management',
@@ -71,8 +71,9 @@ class DistrictMap
         'tech', 'computer_hardware', 'semiconductor', 'communication_equipment', 'telecom',
         // Real Estate & Health Care.
         'reit', 'medical_care_facility', 'biotech',
-        // Unclassified conglomerates trail east, matching the old row's "recovery houses" tail.
-        'conglomerate',
+        // Unclassified conglomerates trail east, matching the old row's "recovery houses" tail; the
+        // merchant houses stand at the far end, where the row meets the water they work off.
+        'conglomerate', 'merchant_house',
     ];
 
     // --- Street Canvas Geometry ---
@@ -277,9 +278,10 @@ class DistrictMap
         // Power, silicon and signal.
         'utility' => 'bolt', 'tech' => 'cloud', 'computer_hardware' => 'chip',
         'semiconductor' => 'chip', 'communication_equipment' => 'signal', 'telecom' => 'signal',
-        // Care, cures, property and the conglomerates.
+        // Care, cures, property and the conglomerates. A merchant house takes the anchor rather than the
+        // blocks: it is known by the wharves it owns, not by the businesses it has bolted together.
         'medical_care_facility' => 'cross', 'biotech' => 'pill', 'reit' => 'house',
-        'conglomerate' => 'blocks',
+        'conglomerate' => 'blocks', 'merchant_house' => 'anchor',
     ];
     /** Every symbol the template must define; every furniture value must be one of these. */
     public const ROOF_FURNITURE_SYMBOLS = [

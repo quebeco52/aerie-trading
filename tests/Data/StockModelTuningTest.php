@@ -228,9 +228,9 @@ class StockModelTuningTest extends TestCase
         $this->assertSame(0.10, StockModelTuning::get('TRIV', ModelParam::ContrarianFloatWeight, 0.0));
 
         // Breakwater Trust (BRKW)
-        $this->assertSame(0.30, StockModelTuning::get('BRKW', ModelParam::IndustrialConglomerateWeight, 0.0));
-        $this->assertSame(0.45, StockModelTuning::get('BRKW', ModelParam::DefensiveStaplesWeight, 0.0));
-        $this->assertSame(0.25, StockModelTuning::get('BRKW', ModelParam::ContrarianFloatWeight, 0.0));
+        $this->assertSame(0.50, StockModelTuning::get('BRKW', ModelParam::IndustrialConglomerateWeight, 0.0));
+        $this->assertSame(0.15, StockModelTuning::get('BRKW', ModelParam::DefensiveStaplesWeight, 0.0));
+        $this->assertSame(0.35, StockModelTuning::get('BRKW', ModelParam::ContrarianFloatWeight, 0.0));
 
         // Clear Rivers Law / Claw & Talons Law (CLAW)
         $this->assertSame(0.40, StockModelTuning::get('CLAW', ModelParam::CorporateRetainerWeight, 0.0));
@@ -386,6 +386,7 @@ class StockModelTuningTest extends TestCase
             new \App\Service\Model\Sector\ComputerHardwareBusinessModel(),
             new \App\Service\Model\Sector\CommunicationEquipmentBusinessModel(),
             new \App\Service\Model\Sector\ConglomerateBusinessModel(),
+            new \App\Service\Model\Sector\MerchantHouseBusinessModel(),
             new \App\Service\Model\Sector\ConstructionBusinessModel(),
             new \App\Service\Model\Sector\ConsumerStaplesBusinessModel(),
             new \App\Service\Model\Sector\CreditServicesBusinessModel(),

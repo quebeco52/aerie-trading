@@ -16,17 +16,62 @@ class ConglomerateBusinessModelTest extends TestCase
     private ConglomerateBusinessModel $model;
     private MathUtility $mathUtility;
 
+    /** The short rate a calm economy sits at: the neutral rate the MacroStateDTO itself perceives. */
+    private const NEUTRAL_POLICY_RATE = MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION;
+
     protected function setUp(): void
     {
         $this->model = new ConglomerateBusinessModel();
         $this->mathUtility = new MathUtility();
     }
 
-    public function testTriStreamEmissionAndSumConsistency(): void
+    /**
+     * A macro state with every series this model reads sitting exactly on its baseline. Anything a test
+     * varies from here is the only thing moving, which is what lets the assertions below be exact.
+     */
+    private function neutralMacro(): MacroStateDTO
+    {
+        return new MacroStateDTO(
+            outputGapEma: 0.0,
+            macroCreditSpread: MacroEngine::BASE_CREDIT_SPREAD,
+            macroCreditSpreadEma: MacroEngine::BASE_CREDIT_SPREAD,
+            policyRateEma: self::NEUTRAL_POLICY_RATE,
+        );
+    }
+
+    /**
+     * Real financial mathematics with the random draws pinned to zero. Every assertion below about the COST
+     * base is worth a few tenths of a point, and the +-2.3 sigma portfolio event is worth several, so a live
+     * RNG would flip these comparisons about one run in fifty. The HHI, the lag and the saturation curves
+     * stay real, which is the half these tests are actually about.
+     */
+    private function deterministicMath(): MathUtility
+    {
+        return new class extends MathUtility {
+            public function generatePersistentZ(float $previousZ, float $phi, ?float $commonInnovation = null, float $commonLoading = 0.0): float
+            {
+                return 0.0;
+            }
+
+            public function generateStandardNormal(): float
+            {
+                return 0.0;
+            }
+        };
+    }
+
+    private function stock(string $ticker, string $beta): Stock
     {
         $stock = new Stock();
-        $stock->setTicker('GEN_CONGLOMERATE');
-        $stock->setBeta('0.8');
+        $stock->setTicker($ticker);
+        $stock->setBeta($beta);
+
+        return $stock;
+    }
+
+    public function testTriStreamEmissionAndSumConsistency(): void
+    {
+        $stock = $this->stock('GEN_CONGLOMERATE', '0.8');
 
         $macro = new MacroStateDTO(outputGapEma: 0.0, inflationEma: 0.02, energyPriceIndexEma: 100.0);
 
@@ -60,22 +105,54 @@ class ConglomerateBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta($result->actualRevenue, $sumStreams, 1.0);
     }
 
+    /**
+     * A stream a firm does not run must not be reported, drawn, or costed. This is what lets one class
+     * price several different holding companies: the portfolio a conglomerate declares is the portfolio it
+     * is priced on. A portfolio this model has no stream for at all belongs to a sub-model instead — see
+     * MerchantHouseBusinessModelTest.
+     */
+    public function testDormantStreamsAreNeitherDrawnNorReported(): void
+    {
+        $result = $this->model->computeActualFinancials(
+            $this->stock('TRIV', '0.6'),
+            100_000_000.0,
+            0.20,
+            10_000_000.0,
+            0.05,
+            $this->neutralMacro(),
+            $this->deterministicMath()
+        );
+
+        $this->assertArrayNotHasKey('merchant_trading', $result->streamRevenue);
+        $this->assertArrayNotHasKey('merchant_trading', $result->streamZ);
+        $this->assertArrayHasKey('industrial_manufacturing', $result->streamRevenue);
+
+        // ...and conversely, a firm that holds no float by policy reports no float segment.
+        $harr = $this->model->computeActualFinancials(
+            $this->stock('HARR', '0.65'),
+            100_000_000.0,
+            0.64,
+            10_000_000.0,
+            0.05,
+            $this->neutralMacro(),
+            $this->deterministicMath()
+        );
+
+        $this->assertArrayNotHasKey('financial_investments', $harr->streamRevenue);
+        $this->assertArrayHasKey('defensive_staples', $harr->streamRevenue);
+    }
+
     public function testSustainedCreditBlowoutSurgesContrarianFloat(): void
     {
-        $stock = new Stock();
-        $stock->setTicker('BRKW');
-        $stock->setBeta('0.4');
+        $stock = $this->stock('BRKW', '0.4');
 
         // Spot and trend spreads agree: the blowout has plateaued, so carry is earned with no further repricing.
-        $calmMacro = new MacroStateDTO(
-            outputGapEma: 0.0,
-            macroCreditSpread: MacroEngine::BASE_CREDIT_SPREAD,
-            macroCreditSpreadEma: MacroEngine::BASE_CREDIT_SPREAD
-        );
+        $calmMacro = $this->neutralMacro();
         $blowoutMacro = new MacroStateDTO(
             outputGapEma: -0.04,
             macroCreditSpread: 0.045,
-            macroCreditSpreadEma: 0.045
+            macroCreditSpreadEma: 0.045,
+            policyRateEma: self::NEUTRAL_POLICY_RATE,
         );
 
         $calm = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.25, 15_000_000.0, 0.0, $calmMacro, $this->mathUtility);
@@ -89,20 +166,15 @@ class ConglomerateBusinessModelTest extends TestCase
 
     public function testSpreadWideningImpulseMarksFloatBookDown(): void
     {
-        $stock = new Stock();
-        $stock->setTicker('BRKW');
-        $stock->setBeta('0.4');
+        $stock = $this->stock('BRKW', '0.4');
 
-        $calmMacro = new MacroStateDTO(
-            outputGapEma: 0.0,
-            macroCreditSpread: MacroEngine::BASE_CREDIT_SPREAD,
-            macroCreditSpreadEma: MacroEngine::BASE_CREDIT_SPREAD
-        );
-        // Spot spread gaps 250bps above trend: the held credit book reprices downward before any carry is earned.
+        $calmMacro = $this->neutralMacro();
+        // Spot spread gaps 320bps above trend: the held credit book reprices downward before any carry is earned.
         $wideningMacro = new MacroStateDTO(
             outputGapEma: 0.0,
             macroCreditSpread: 0.045,
-            macroCreditSpreadEma: MacroEngine::BASE_CREDIT_SPREAD
+            macroCreditSpreadEma: MacroEngine::BASE_CREDIT_SPREAD,
+            policyRateEma: self::NEUTRAL_POLICY_RATE,
         );
 
         $calm = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.25, 15_000_000.0, 0.0, $calmMacro, $this->mathUtility);
@@ -116,22 +188,22 @@ class ConglomerateBusinessModelTest extends TestCase
 
     public function testCorporateDefaultsErodeContrarianFloatCarry(): void
     {
-        $stock = new Stock();
-        $stock->setTicker('BRKW');
-        $stock->setBeta('0.4');
+        $stock = $this->stock('BRKW', '0.4');
 
         $cleanBlowout = new MacroStateDTO(
             outputGapEma: -0.04,
             macroCreditSpread: 0.045,
-            macroCreditSpreadEma: 0.045
+            macroCreditSpreadEma: 0.045,
+            policyRateEma: self::NEUTRAL_POLICY_RATE,
         );
         // Same spread level, but the spread is now compensating for a genuine default wave.
         $defaultWave = new MacroStateDTO(
             outputGapEma: -0.04,
             macroCreditSpread: 0.045,
             macroCreditSpreadEma: 0.045,
+            policyRateEma: self::NEUTRAL_POLICY_RATE,
             corporateDefaultRate: 0.090,
-            corporateDefaultRateEma: 0.090
+            corporateDefaultRateEma: 0.090,
         );
 
         $clean = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.25, 15_000_000.0, 0.0, $cleanBlowout, $this->mathUtility);
@@ -145,27 +217,48 @@ class ConglomerateBusinessModelTest extends TestCase
 
     public function testBaselineCreditSpreadYieldsNoContrarianAlpha(): void
     {
-        $stock = new Stock();
-        $stock->setTicker('TRIV');
-        $stock->setBeta('0.6');
+        $stock = $this->stock('TRIV', '0.6');
 
-        $macro = new MacroStateDTO(
+        $result = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.20, 10_000_000.0, 0.0, $this->neutralMacro(), $this->mathUtility);
+
+        // TRIV holds 10% float; a calm economy at a neutral short rate must not book a standing bonus on it.
+        $this->assertEqualsWithDelta(10_000_000.0, $result->streamRevenue['financial_investments'], 1.0);
+    }
+
+    /**
+     * Dry powder is not free money. A treasury float is cash and short sovereign paper, so it earns the
+     * front rate: an asset when policy is restrictive and an idle drag through a zero-rate decade. The model
+     * used to produce identical float revenue at 0% and at 6%, which made a holding company's hoard
+     * costless to carry and its patience free.
+     */
+    public function testFloatCarryTracksThePolicyRateGapFromNeutral(): void
+    {
+        $stock = $this->stock('BRKW', '0.4');
+
+        $zirp = new MacroStateDTO(
             outputGapEma: 0.0,
             macroCreditSpread: MacroEngine::BASE_CREDIT_SPREAD,
-            macroCreditSpreadEma: MacroEngine::BASE_CREDIT_SPREAD
+            macroCreditSpreadEma: MacroEngine::BASE_CREDIT_SPREAD,
+            policyRateEma: 0.0,
+        );
+        $restrictive = new MacroStateDTO(
+            outputGapEma: 0.0,
+            macroCreditSpread: MacroEngine::BASE_CREDIT_SPREAD,
+            macroCreditSpreadEma: MacroEngine::BASE_CREDIT_SPREAD,
+            policyRateEma: 0.055,
         );
 
-        $result = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.20, 10_000_000.0, 0.0, $macro, $this->mathUtility);
+        $neutral = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.25, 15_000_000.0, 0.0, $this->neutralMacro(), $this->deterministicMath());
+        $atZero = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.25, 15_000_000.0, 0.0, $zirp, $this->deterministicMath());
+        $tight = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.25, 15_000_000.0, 0.0, $restrictive, $this->deterministicMath());
 
-        // TRIV holds 10% float; a calm economy must not book a standing distress bonus on it.
-        $this->assertEqualsWithDelta(10_000_000.0, $result->streamRevenue['financial_investments'], 1.0);
+        $this->assertLessThan($neutral->streamRevenue['financial_investments'], $atZero->streamRevenue['financial_investments']);
+        $this->assertGreaterThan($neutral->streamRevenue['financial_investments'], $tight->streamRevenue['financial_investments']);
     }
 
     public function testInflationPassesThroughToNominalRevenueBase(): void
     {
-        $stock = new Stock();
-        $stock->setTicker('BRKW');
-        $stock->setBeta('0.4');
+        $stock = $this->stock('BRKW', '0.4');
 
         $stable = $this->model->getMacroPhysics($stock, new MacroStateDTO(tipsBreakevenEma: 0.02));
         $inflationary = $this->model->getMacroPhysics($stock, new MacroStateDTO(tipsBreakevenEma: 0.06));
@@ -178,36 +271,28 @@ class ConglomerateBusinessModelTest extends TestCase
         $this->assertGreaterThan($stable['pricing_power_multiplier'], $inflationary['pricing_power_multiplier']);
     }
 
-    public function testTrivAndBrkwParameterResolution(): void
+    public function testPortfolioMixResolutionAcrossEveryConglomerateArchetype(): void
     {
-        $mathMock = $this->createStub(MathUtility::class);
-        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+        $macro = $this->neutralMacro();
 
-        $triv = new Stock();
-        $triv->setTicker('TRIV');
-        $triv->setBeta('0.6');
+        // Declared in the order the model reports its segments, so the assertion also pins the fact that a
+        // dormant stream leaves no hole in the segment table.
+        $expected = [
+            // TRIV: 60% Industrial, 30% Defensive, 10% Float
+            'TRIV' => ['industrial_manufacturing' => 60.0, 'defensive_staples' => 30.0, 'financial_investments' => 10.0],
+            // BRKW: 50% Industrial, 15% Defensive, 35% Float
+            'BRKW' => ['industrial_manufacturing' => 50.0, 'defensive_staples' => 15.0, 'financial_investments' => 35.0],
+            // HARR: 30% Industrial hardware, 70% Niche instrumentation — and no float, by policy
+            'HARR' => ['industrial_manufacturing' => 30.0, 'defensive_staples' => 70.0],
+        ];
 
-        $brkw = new Stock();
-        $brkw->setTicker('BRKW');
-        $brkw->setBeta('0.2');
+        foreach ($expected as $ticker => $mix) {
+            $result = $this->model->computeActualFinancials($this->stock($ticker, '0.6'), 100_000_000.0, 0.20, 10_000_000.0, 0.0, $macro, $this->deterministicMath());
 
-        $macro = new MacroStateDTO(
-            outputGapEma: 0.0,
-            macroCreditSpread: MacroEngine::BASE_CREDIT_SPREAD,
-            macroCreditSpreadEma: MacroEngine::BASE_CREDIT_SPREAD
-        );
-
-        $trivRes = $this->model->computeActualFinancials($triv, 100_000_000.0, 0.20, 10_000_000.0, 0.0, $macro, $mathMock);
-        $brkwRes = $this->model->computeActualFinancials($brkw, 100_000_000.0, 0.20, 10_000_000.0, 0.0, $macro, $mathMock);
-
-        // TRIV: 60% Industrial, 30% Defensive, 10% Float
-        $this->assertEqualsWithDelta(60_000_000.0, $trivRes->streamRevenue['industrial_manufacturing'], 1.0);
-        $this->assertEqualsWithDelta(30_000_000.0, $trivRes->streamRevenue['defensive_staples'], 1.0);
-        $this->assertEqualsWithDelta(10_000_000.0, $trivRes->streamRevenue['financial_investments'], 1.0);
-
-        // BRKW: 30% Industrial, 45% Defensive, 25% Float
-        $this->assertEqualsWithDelta(30_000_000.0, $brkwRes->streamRevenue['industrial_manufacturing'], 1.0);
-        $this->assertEqualsWithDelta(45_000_000.0, $brkwRes->streamRevenue['defensive_staples'], 1.0);
-        $this->assertEqualsWithDelta(25_000_000.0, $brkwRes->streamRevenue['financial_investments'], 1.0);
+            $this->assertSame(array_keys($mix), array_keys($result->streamRevenue), sprintf('%s reports the wrong segments.', $ticker));
+            foreach ($mix as $stream => $millions) {
+                $this->assertEqualsWithDelta($millions * 1_000_000.0, $result->streamRevenue[$stream], 1.0, sprintf('%s %s', $ticker, $stream));
+            }
+        }
     }
 }

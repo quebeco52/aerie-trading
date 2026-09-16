@@ -112,4 +112,97 @@ class StockInfoTest extends TestCase
         $this->assertArrayHasKey('ALCA', StockInfo::QUOTES);
         $this->assertNotEmpty(StockInfo::QUOTES['ALCA']);
     }
+
+    public function testRavenDescriptionQuality(): void
+    {
+        $this->assertArrayHasKey('RAVN', StockInfo::DESCRIPTIONS);
+        $desc = StockInfo::DESCRIPTIONS['RAVN'];
+
+        $this->assertStringContainsString('Raven Merchant Group', $desc);
+        $this->assertStringContainsString('Iron Quay', $desc);
+        $this->assertGreaterThan(500, strlen($desc));
+
+        $this->assertArrayHasKey('RAVN', StockInfo::QUOTES);
+        $this->assertNotEmpty(StockInfo::QUOTES['RAVN']);
+    }
+
+    public function testHarrierDescriptionQuality(): void
+    {
+        $this->assertArrayHasKey('HARR', StockInfo::DESCRIPTIONS);
+        $desc = StockInfo::DESCRIPTIONS['HARR'];
+
+        $this->assertStringContainsString('Harrier Industrial Holdings', $desc);
+        $this->assertStringContainsString('Harrier Business System', $desc);
+        $this->assertGreaterThan(500, strlen($desc));
+
+        $this->assertArrayHasKey('HARR', StockInfo::QUOTES);
+        $this->assertNotEmpty(StockInfo::QUOTES['HARR']);
+    }
+
+    public function testTiercelDescriptionQuality(): void
+    {
+        $this->assertArrayHasKey('TIER', StockInfo::DESCRIPTIONS);
+        $desc = StockInfo::DESCRIPTIONS['TIER'];
+
+        $this->assertStringContainsString('Tiercel Capital Partners', $desc);
+        $this->assertStringContainsString('carried interest', $desc);
+        $this->assertGreaterThan(500, strlen($desc));
+
+        $this->assertArrayHasKey('TIER', StockInfo::QUOTES);
+        $this->assertNotEmpty(StockInfo::QUOTES['TIER']);
+    }
+
+    public function testBustardDescriptionQuality(): void
+    {
+        $this->assertArrayHasKey('BUZT', StockInfo::DESCRIPTIONS);
+        $desc = StockInfo::DESCRIPTIONS['BUZT'];
+
+        $this->assertStringContainsString('Bustard Heavy Dynamics', $desc);
+        $this->assertStringContainsString('earthmoving', $desc);
+        $this->assertGreaterThan(500, strlen($desc));
+
+        $this->assertArrayHasKey('BUZT', StockInfo::QUOTES);
+        $this->assertNotEmpty(StockInfo::QUOTES['BUZT']);
+    }
+
+    public function testBobyDescriptionQuality(): void
+    {
+        $this->assertArrayHasKey('BOBY', StockInfo::DESCRIPTIONS);
+        $desc = StockInfo::DESCRIPTIONS['BOBY'];
+
+        $this->assertStringContainsString('Boby Electrical Systems', $desc);
+        $this->assertStringContainsString('transformers', $desc);
+        $this->assertGreaterThan(500, strlen($desc));
+
+        $this->assertArrayHasKey('BOBY', StockInfo::QUOTES);
+        $this->assertNotEmpty(StockInfo::QUOTES['BOBY']);
+    }
+
+    public function testMagpieDescriptionQuality(): void
+    {
+        $this->assertArrayHasKey('MAGP', StockInfo::DESCRIPTIONS);
+        $desc = StockInfo::DESCRIPTIONS['MAGP'];
+
+        $this->assertStringContainsString('Magpie Industrial Supply', $desc);
+        $this->assertStringContainsString('fasteners', $desc);
+        $this->assertGreaterThan(500, strlen($desc));
+
+        $this->assertArrayHasKey('MAGP', StockInfo::QUOTES);
+        $this->assertNotEmpty(StockInfo::QUOTES['MAGP']);
+    }
+
+    public function testBreakwaterDescriptionQuality(): void
+    {
+        $this->assertArrayHasKey('BRKW', StockInfo::DESCRIPTIONS);
+        $desc = StockInfo::DESCRIPTIONS['BRKW'];
+
+        $this->assertStringContainsString('Breakwater Trust', $desc);
+        $this->assertStringContainsString('Esse, non videri', $desc);
+        $this->assertStringContainsString('industrial stewardship', $desc);
+        $this->assertGreaterThan(500, strlen($desc));
+
+        $this->assertArrayHasKey('BRKW', StockInfo::QUOTES);
+        $this->assertNotEmpty(StockInfo::QUOTES['BRKW']);
+    }
 }
+

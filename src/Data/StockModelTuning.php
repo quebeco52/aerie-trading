@@ -420,12 +420,25 @@ class StockModelTuning
         ],
 
         // --- Breakwater Trust (BRKW) ---
-        // Deeply entrenched multi-generational industrial conglomerate and value anchor.
+        // Dynastic industrial investment trust and generational anchor.
         'BRKW' => [
-            ModelParam::IndustrialConglomerateWeight->value => 0.30, // Entrenched industrial subsidiaries
-            ModelParam::DefensiveStaplesWeight->value       => 0.45, // Prime district real estate & infrastructure tollbooths
-            ModelParam::ContrarianFloatWeight->value        => 0.25, // High-yield catastrophe bond shadow liquidity
+            ModelParam::IndustrialConglomerateWeight->value => 0.50, // Anchor industrial engineering & machinery stakes
+            ModelParam::DefensiveStaplesWeight->value       => 0.15, // Essential civic infrastructure concessions & defensive cash cows
+            ModelParam::ContrarianFloatWeight->value        => 0.35, // Permanent capital treasury reserves & counter-cyclical liquidity float
             ModelParam::PricingPowerIndex->value            => 0.90,
+        ],
+
+        // --- Harrier Industrial Holdings (HARR) ---
+        // Programmatic serial acquirer of mission-critical niche manufacturers. Its acquisitiveness is NOT
+        // modelled here at all: bought revenue becomes ordinary revenue once the operating system has been
+        // applied, and the deals themselves are MergerAndAcquisitionEngine's, hazard-rated off the steward
+        // archetype. What is left to tune is the portfolio those acquisitions have built.
+        'HARR' => [
+            ModelParam::DefensiveStaplesWeight->value       => 0.70, // Mission-critical instrumentation with regulatory switching friction
+            ModelParam::IndustrialConglomerateWeight->value => 0.30, // The precision hardware itself, exposed to the client capex cycle
+            ModelParam::ContrarianFloatWeight->value        => 0.00, // Refuses to accumulate idle cash; it redeploys instead
+            ModelParam::PricingPowerIndex->value            => 0.85, // Under 1% of a client facility's capex, catastrophic to fail
+            ModelParam::OperatingCyclicality->value         => 0.60, // Replacement and consumable demand, not new-build demand
         ],
 
         // =====================================================================
