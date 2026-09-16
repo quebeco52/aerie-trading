@@ -131,6 +131,12 @@
 						<span class="px-2 py-0.5 rounded-full text-3xs bg-primary/20 text-primary font-mono font-bold">{{ indexFacts.memberCount }}</span>
 					</button>
 				{% else %}
+					{% if anchorPortfolio %}
+						<button class="stock-tab-btn pb-2.5 px-1 text-sm font-medium border-b-2 transition-all flex items-center gap-2 whitespace-nowrap text-on-surface-variant hover:text-on-surface border-transparent cursor-pointer" data-tab="holdings" data-tabs-target="tab" data-action="click->tabs#select">
+							Holdings
+							<span class="px-2 py-0.5 rounded-full text-3xs bg-primary/20 text-primary font-mono font-bold">{{ anchorPortfolio.holdings|length }}</span>
+						</button>
+					{% endif %}
 					<button class="stock-tab-btn pb-2.5 px-1 text-sm font-medium border-b-2 transition-all flex items-center gap-2 whitespace-nowrap text-on-surface-variant hover:text-on-surface border-transparent cursor-pointer" data-tab="financials" data-tabs-target="tab" data-action="click->tabs#select">
 						Financials & Fundamentals
 					</button>
@@ -471,6 +477,17 @@
 										<dt class="text-sm font-semibold text-on-surface-variant">Dividend Yield</dt>
 										<dd class="font-bold text-on-surface font-mono tabular-nums" id="stat-div-yield">{{ dividendYield > 0 ? (dividendYield * 100)|number_format(2) ~ '%' : '-' }}</dd>
 									</div>
+									{% if netAssetValue %}
+										{# A closed-end structure is quoted against its assets, never against its earnings. #}
+										<div class="py-2 flex justify-between items-center">
+											<dt class="text-sm font-semibold text-on-surface-variant">NAV / Share</dt>
+											<dd class="font-bold text-on-surface font-mono tabular-nums" id="stat-nav">${{ netAssetValue.perShare|number_format(2) }}</dd>
+										</div>
+										<div class="py-2 flex justify-between items-center">
+											<dt class="text-sm font-semibold text-on-surface-variant">{{ netAssetValue.premium < 0 ? 'Discount to NAV' : 'Premium to NAV' }}</dt>
+											<dd class="font-bold font-mono tabular-nums {{ netAssetValue.premium >= 0 ? 'text-secondary' : 'text-tertiary' }}" id="stat-nav-premium">{{ (netAssetValue.premium * 100)|number_format(1) }}%</dd>
+										</div>
+									{% endif %}
 									<div class="py-2 flex justify-between items-center">
 										<dt class="text-sm font-semibold text-on-surface-variant">Avg Daily Volume</dt>
 										<dd class="font-bold text-on-surface font-mono tabular-nums" id="stat-adv">{{ advShares|format_large }}</dd>
@@ -1017,6 +1034,62 @@
 			{# TAB 2: FINANCIALS & FUNDAMENTALS #}
 			{# ========================================================================= #}
 				{% if not isEtf %}
+				{% if anchorPortfolio %}
+					<div id="stock-tab-content-holdings" class="stock-tab-panel hidden space-y-6" data-tabs-target="panel" data-tab-panel="holdings">
+					{# Look-through holdings: for a sphere the portfolio IS the company, so these are its fundamentals. #}
+					<div class="bg-surface-container-low rounded-lg border border-outline-variant/15 overflow-hidden p-6 hover:border-outline-variant/30 transition-all">
+						<div class="flex items-baseline justify-between mb-3 gap-4 flex-wrap">
+							<h3 class="text-sm font-semibold text-on-surface">Anchor Holdings</h3>
+							<p class="text-xs text-on-surface-variant">
+								{{ anchorPortfolio.totalValue|format_large('$') }}
+								<span class="text-on-surface-variant/70">&middot; {{ (anchorPortfolio.shareOfNav * 100)|number_format(1) }}% of net asset value</span>
+							</p>
+						</div>
+
+						<div class="overflow-x-auto">
+							<table class="w-full text-left border-collapse min-w-162.5">
+								<thead>
+									<tr class="text-2xs text-on-surface-variant uppercase tracking-wide border-b border-outline-variant/15 font-semibold">
+										<th class="py-2.5">Holding</th>
+										<th class="py-2.5 text-right">Owned</th>
+										<th class="py-2.5 text-right">Price</th>
+										<th class="py-2.5 text-right">Change</th>
+										<th class="py-2.5 text-right">Stake Value</th>
+										<th class="py-2.5 text-right">% of Portfolio</th>
+										<th class="py-2.5 text-right">% of NAV</th>
+									</tr>
+								</thead>
+								<tbody class="divide-y divide-outline-variant/10 text-xs sm:text-sm">
+									{% for holding in anchorPortfolio.holdings %}
+										<tr class="{{ holding.isBankrupt ? 'opacity-50' : '' }}">
+										<td class="py-2.5">
+											<a href="/stock/{{ holding.ticker }}" class="font-bold text-on-surface hover:text-primary transition-colors">{{ holding.ticker }}</a>
+											<span class="block text-2xs text-on-surface-variant">{{ holding.industry ?? holding.name }}</span>
+										</td>
+										<td class="py-2.5 text-right">
+											<span class="font-mono tabular-nums text-on-surface">{{ (holding.ownership * 100)|number_format(0) }}%</span>
+											<span class="block text-2xs text-on-surface-variant">{{ holding.tier }}</span>
+										</td>
+										<td class="py-2.5 text-right font-mono tabular-nums text-on-surface">${{ holding.price|number_format(2) }}</td>
+										<td class="py-2.5 text-right font-mono tabular-nums {{ holding.changePercent is null ? 'text-on-surface-variant/50' : (holding.changePercent >= 0 ? 'text-secondary' : 'text-tertiary') }}">
+											{%- if holding.changePercent is null -%}&mdash;{%- else -%}{{ holding.changePercent >= 0 ? '+' : '' }}{{ (holding.changePercent * 100)|number_format(2) }}%{%- endif -%}
+										</td>
+										<td class="py-2.5 text-right font-mono tabular-nums text-on-surface">{{ holding.value|format_large('$') }}</td>
+										<td class="py-2.5 text-right font-mono tabular-nums text-on-surface-variant">{{ (holding.shareOfPortfolio * 100)|number_format(1) }}%</td>
+										<td class="py-2.5 text-right font-mono tabular-nums text-on-surface-variant">{{ (holding.shareOfNav * 100)|number_format(1) }}%</td>
+										</tr>
+									{% endfor %}
+								</tbody>
+							</table>
+						</div>
+
+						<p class="mt-3 text-2xs text-on-surface-variant/80">
+							Stakes are valued at the holdings' live prices. Shares held by an anchor do not trade, so they are outside each holding's free float.
+						</p>
+					</div>
+					</div>
+				{% endif %}
+
 					<div
 					id="stock-tab-content-financials" class="stock-tab-panel hidden space-y-6" data-tabs-target="panel" data-tab-panel="financials">
 					{# Institutional Terminal Header #}
@@ -1369,6 +1442,39 @@
 								<canvas id="valuationMultiplesChart"></canvas>
 							</div>
 						</div>
+
+						{% if netAssetValue %}
+							{# Premium / discount to NAV: the chart every closed-end factsheet leads with. #}
+							<div class="chart-card bg-surface-container-low border border-outline-variant/15 rounded-lg p-5 hover:border-outline-variant/30 transition-all flex flex-col justify-between" data-financial-category="valuation">
+								<div class="flex items-start justify-between mb-3 gap-2">
+									<div class="flex items-center gap-2.5 min-w-0">
+										<div class="p-2 rounded bg-amber-500/10 text-amber-400 shrink-0">
+											<span class="material-symbols-outlined text-lg leading-none">account_balance</span>
+										</div>
+										<div class="min-w-0">
+											<div class="flex items-center gap-2 flex-wrap">
+												<h4 class="text-xs font-bold text-on-surface truncate">Premium &amp; Discount to NAV</h4>
+												<span class="text-4xs font-mono text-primary/80 bg-primary/10 px-1.5 py-0.5 rounded border border-primary/20 shrink-0">Lee, Shleifer &amp; Thaler 1991</span>
+											</div>
+											<p class="text-3xs text-on-surface-variant truncate">Where the market has priced the shares against the assets behind them</p>
+										</div>
+									</div>
+									<div class="flex items-center gap-2 shrink-0">
+										<div class="hidden sm:flex flex-col items-end text-right">
+											<span class="text-4xs font-semibold uppercase tracking-wide text-on-surface-variant/70">Latest</span>
+											<span class="text-xs font-mono font-bold tabular-nums {{ netAssetValue.premium >= 0 ? 'text-secondary' : 'text-tertiary' }}">{{ (netAssetValue.premium * 100)|number_format(1) }}%</span>
+										</div>
+										<span class="text-4xs font-semibold px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant uppercase tracking-wide">Closed-End</span>
+										<button type="button" class="expand-chart-btn p-1 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface transition-all cursor-pointer" title="Toggle Fullscreen / Expand">
+											<span class="material-symbols-outlined text-[15px] expand-icon">open_in_full</span>
+										</button>
+									</div>
+								</div>
+								<div class="chart-canvas-container h-80 md:h-85 w-full relative">
+									<canvas id="navDiscountChart"></canvas>
+								</div>
+							</div>
+						{% endif %}
 
 						{# 9. Shareholder Yield & Cumulative Value Creation #}
 						<div class="chart-card bg-surface-container-low border border-outline-variant/15 rounded-lg p-5 hover:border-outline-variant/30 transition-all flex flex-col justify-between" data-financial-category="valuation">

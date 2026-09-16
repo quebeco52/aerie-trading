@@ -76,6 +76,9 @@
             <file>tests/Service/Market/SimulationClockTest.php</file>
             <file>tests/Service/Market/HistorySimTimeTest.php</file>
             <file>tests/Service/Corporate/MergerAndAcquisitionGateTest.php</file>
+            <file>tests/Service/Corporate/Holdings/AnchorStakeLedgerTest.php</file>
+            <file>tests/Service/View/CompanySnapshotNavTest.php</file>
+            <file>tests/Service/View/AnchorPortfolioBuilderTest.php</file>
             <directory>tests/Support</directory>
         </testsuite>
 

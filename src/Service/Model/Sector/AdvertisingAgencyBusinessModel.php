@@ -10,7 +10,6 @@ use App\Data\ModelParam;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
-use App\Service\Macro\MacroEngine;
 use App\Service\Event\ShockEvent;
 
 /**
@@ -137,7 +136,7 @@ class AdvertisingAgencyBusinessModel extends StandardCorporateBusinessModel
         $martechWeight = $activeWeights['martech_consulting'];
 
         // Ad budgets expand aggressively during GDP booms and contract sharply during recessions and consumer sentiment drops
-        $sentimentShift = ($macroState->consumerSentimentIndexEma - MacroEngine::SENTIMENT_BASELINE) / 100.0;
+        $sentimentShift = $macroState->sentimentDeviation();
         $macroAdSpendShift = ($macroState->outputGapEma * 1.5 * $beta) + ($sentimentShift * 0.50 * $beta);
 
         $mediaZ   = $streams->generateZ('media_buying_commissions', 0.25);

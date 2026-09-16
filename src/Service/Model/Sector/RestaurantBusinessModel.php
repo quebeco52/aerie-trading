@@ -111,7 +111,7 @@ class RestaurantBusinessModel extends StandardCorporateBusinessModel
     {
         $physics = parent::getMacroPhysics($stock, $macroState);
 
-        $sentimentShift = ($macroState->consumerSentimentIndexEma - MacroEngine::SENTIMENT_BASELINE) / 100.0;
+        $sentimentShift = $macroState->sentimentDeviation();
         $beta = $this->getOperatingCyclicality($stock);
 
         $physics['macro_demand_shift'] = $sentimentShift * $beta;

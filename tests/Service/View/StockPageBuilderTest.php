@@ -14,6 +14,7 @@ use App\Service\Market\LiquidityEngine;
 use App\Service\Market\PriceChangeFeed;
 use App\Service\Market\SecuritiesLendingDesk;
 use App\Service\Math\MathUtility;
+use App\Service\View\AnchorPortfolioBuilder;
 use App\Service\View\CompanySnapshotBuilder;
 use App\Service\View\EtfCompositionBuilder;
 use App\Service\View\IndustryPositionBuilder;
@@ -40,15 +41,15 @@ class StockPageBuilderTest extends TestCase
      * @var list<string>
      */
     private const TEMPLATE_KEYS = [
-        'advShares', 'allAssets', 'analystTargets', 'asset', 'availableToBorrow', 'borrowFee',
-        'businessModel', 'changePercent', 'components', 'dividendYield', 'economic_cycle', 'events',
-        'generalInfo', 'halfSpread', 'indexFacts', 'industry', 'investedCapital', 'isEtf', 'isFinancial', 'lifecycleStage',
-        'lifecycleStages', 'macro', 'management', 'marketCap', 'marketShare', 'openOrders',
-        'optionDealerGamma', 'optionDealerGammaPerPercent', 'optionExpiries', 'optionMultiplier',
-        'optionOpenInterest', 'optionsListed', 'optionsReason', 'peRatio', 'peers',
-        'pieData', 'pieLabels', 'quote', 'sharesMap', 'shortUtilization', 'targetPE', 'ticksPerYear',
-        'userAvgCost', 'userDividendIncome', 'userQuantity', 'userTrades', 'userUnrealizedPnL',
-        'userUnrealizedPnLPercent',
+        'advShares', 'allAssets', 'analystTargets', 'anchorPortfolio', 'asset', 'availableToBorrow',
+        'borrowFee', 'businessModel', 'changePercent', 'components', 'dividendYield', 'economic_cycle',
+        'events', 'generalInfo', 'halfSpread', 'indexFacts', 'industry', 'investedCapital', 'isEtf',
+        'isFinancial', 'lifecycleStage', 'lifecycleStages', 'macro', 'management', 'marketCap',
+        'marketShare', 'netAssetValue', 'openOrders', 'optionDealerGamma', 'optionDealerGammaPerPercent',
+        'optionExpiries', 'optionMultiplier', 'optionOpenInterest', 'optionsListed', 'optionsReason',
+        'peRatio', 'peers', 'pieData', 'pieLabels', 'quote', 'sharesMap', 'shortUtilization', 'targetPE',
+        'ticksPerYear', 'userAvgCost', 'userDividendIncome', 'userQuantity', 'userTrades',
+        'userUnrealizedPnL', 'userUnrealizedPnLPercent'
     ];
 
     private const TICKS_PER_YEAR = 14400;
@@ -80,6 +81,7 @@ class StockPageBuilderTest extends TestCase
             'lifecycleStage' => null,
             'dividendYield' => 0.01,
             'analystTargets' => ['consensus' => 110.0],
+            'netAssetValue' => null,
         ]);
 
         $etfComposition = $this->createMock(EtfCompositionBuilder::class);
@@ -101,6 +103,10 @@ class StockPageBuilderTest extends TestCase
         $viewerPosition = $this->createMock(ViewerPositionBuilder::class);
         $viewerPosition->method('build')->willReturn($this->positionKeys);
 
+        // A sphere's holdings table; every ordinary company has none, which is what the page must handle.
+        $anchorPortfolio = $this->createMock(AnchorPortfolioBuilder::class);
+        $anchorPortfolio->method('build')->willReturn(null);
+
         $optionChain = $this->createMock(OptionChainBuilder::class);
         $optionChain->method('build')->willReturn([
             'optionsListed' => false,
@@ -117,6 +123,7 @@ class StockPageBuilderTest extends TestCase
             $companySnapshot,
             $etfComposition,
             $peerTable,
+            $anchorPortfolio,
             $industryPosition,
             $viewerPosition,
             $this->createMock(StockEventRepository::class),

@@ -1245,12 +1245,18 @@ class InitialMarket
             'beta' => 0.90,
             'jump_intensity' => 0.30,
             'jump_vol' => 0.08,
-            'baseline_roic' => 0.080,
+            // The INCOME return alone: appreciation arrives as OCI through AnchorStakeLedger, so pricing
+            // it into the P&L too would count the portfolio's return twice, which 0.080 was doing before
+            // the stakes could be marked. = margin x (1 - tax) x the turnover the portfolio implies.
+            'baseline_roic' => 0.048,
             'capex_ratio' => 0.12,
             'target_payout_ratio' => 0.40,
             'dividendSpeed' => 0.02,
             'fixed_cost_ratio' => 0.03,
-            'operating_margin' => 0.92,
+            // Blended across a revenue line that is ~77% consolidated subsidiaries at ~35% and ~23%
+            // dividends and interest at no cost of goods. 0.92 was the smaller half's margin applied to
+            // the whole line, leaving a cost base too thin to hold the group's own depreciation.
+            'operating_margin' => 0.50,
             'public_float' => 0.75,
             'sam_ratio' => 3.00,
             'floating_debt_ratio' => 0.10,

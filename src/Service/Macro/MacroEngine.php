@@ -399,6 +399,10 @@ class MacroEngine
     // --- Consumer Sentiment Index & Animal Spirits ---
     /** Baseline consumer sentiment index value (neutral consumer confidence). */
     public const SENTIMENT_BASELINE = 100.0;
+    /** Where the index actually sits with output at trend. The baseline is the ceiling the one-sided penalties below hang off, never a mean: measured 88.0 over 600 simulated quarters. */
+    public const SENTIMENT_TREND_LEVEL = 88.0;
+    /** Index points of sentiment per unit of output gap. The fundamental half of confidence, which a reader already pricing the cycle must take back out. */
+    public const SENTIMENT_GAP_LOADING = 385.0;
     /** Sensitivity of consumer misery index (unemployment and inflation) on sentiment. */
     public const SENTIMENT_MISERY_MULTIPLIER = 500.0;
     /** Sensitivity of financial market volatility on consumer sentiment confidence. */

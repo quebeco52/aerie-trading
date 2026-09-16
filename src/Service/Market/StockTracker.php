@@ -49,7 +49,9 @@ class StockTracker
         private \App\Service\Market\Agent\AgentFlowEngine $agentFlow,
         private \App\Service\Corporate\ManagementSuccessionEngine $successionEngine,
         /** Standing index membership; null (unit tests without an index) leaves every name a constituent. */
-        private ?IndexCommittee $indexCommittee = null
+        private ?IndexCommittee $indexCommittee = null,
+        /** Listed anchor stakes. Required, not optional: a missing one would price a sphere off its stale filed book with nothing to say so. Holds only a per-tick price map, so a harness builds one free. */
+        private \App\Service\Corporate\Holdings\AnchorStakeLedger $anchorStakes = new \App\Service\Corporate\Holdings\AnchorStakeLedger()
     ) {}
 
     /**
@@ -100,6 +102,10 @@ class StockTracker
         // The agent books are loaded once for the whole tick and written back once at the end, for the
         // same reason the order flow is drained once: a round trip per name is the cost that scales.
         $this->agentFlow->beginTick();
+
+        // The board's capitalisations, read once for the tick: a sphere's assets ARE these companies, so
+        // its net asset value comes from this map rather than from its own filed book.
+        $this->anchorStakes->beginTick($stocks);
 
         foreach ($stocks as $stock) {
             $sectorName = $stock->getSector();
@@ -232,7 +238,10 @@ class StockTracker
                 marketVol: $marketVol,
                 macroState: $macroDTO,
                 fcfPerShare: $stock->getFreeCashFlowPerShare() !== null ? (float) $stock->getFreeCashFlowPerShare() : null,
-                bookValuePerShare: (float) $stock->getBookValuePerShare(),
+                // A sphere's filed book moves once a quarter; the listed portfolio inside it moves every
+                // tick, and fair value is struck on the second.
+                bookValuePerShare: $this->anchorStakes->resolveMarkedBookValuePerShare($stock)
+                    ?? (float) $stock->getBookValuePerShare(),
                 maShock: $maShock,
                 currentRoic: $effectiveRoic,
                 roicTtm: $roicTtm,

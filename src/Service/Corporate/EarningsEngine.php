@@ -13,6 +13,7 @@ use App\Service\Event\NarrativeEngine;
 use App\Service\Math\FinancialConstants;
 use App\Service\Market\MarketConsensusEngine;
 use App\DTO\EarningsSimulationContext;
+use App\Service\Corporate\Holdings\AnchorStakeLedger;
 use App\Service\Corporate\Industry\IndustryShareLedger;
 use App\Service\Event\EarningsReportedEvent;
 use Symfony\Contracts\EventDispatcher\EventDispatcherInterface;
@@ -111,7 +112,9 @@ class EarningsEngine
         private NarrativeEngine $narrativeEngine,
         private MarketConsensusEngine $marketConsensusEngine,
         /** Zero-sum industry share ledger; null (unit tests, harnesses) means every firm's gain comes from a larger market. */
-        private ?IndustryShareLedger $industryShareLedger = null
+        private ?IndustryShareLedger $industryShareLedger = null,
+        /** Listed anchor stakes. Required, not optional: a sphere with no ledger would silently never open a plant ledger either. Holds only a per-tick price map, so a harness builds one free. */
+        private AnchorStakeLedger $anchorStakes = new AnchorStakeLedger()
     ) {}
 
     public function calculate(Stock $stock, \App\DTO\MacroStateDTO $macroState, int $tickCount = 0, int $ticksPerYear = 252): ?array
@@ -133,6 +136,10 @@ class EarningsEngine
         );
         $ctx->tickCount = $tickCount;
         $ctx->ticksPerYear = $ticksPerYear;
+
+        // Remarked before anything is struck on the balance sheet, because everything downstream is struck
+        // ON it: a portfolio worth more carries more invested capital and upstreams more in dividends.
+        $this->anchorStakes->markToMarket($stock, $strategy->getEffectiveTaxRate($macroState->corporateTaxRate));
 
         $this->initializeContext($ctx);
         // Assets finished this quarter leave construction in progress; the ledger roll-forward below moves
@@ -419,9 +426,22 @@ class EarningsEngine
         }
         $netWorkingCapital = (float) $stock->getNetWorkingCapital();
 
+        // Marketable investments open on their own asset line before the plant is carved out of what is
+        // left, so the two together account for the whole balance sheet. Null means the investments have no
+        // price yet and the ledger waits: a plant struck first would BE the portfolio, and be depreciated.
+        $openingInvestments = $ctx->strategy->getOpeningInvestmentAssets($stock);
+
+        if ($openingInvestments === null) {
+            return;
+        }
+
+        if ($stock->getListedStakesCarrying() === null && $openingInvestments > 0.0) {
+            $stock->setListedStakesCarrying((string) $openingInvestments);
+        }
+
         $this->corporateMetrics->seedFixedAssetLedger(
             $stock,
-            $ctx->investedCapital,
+            $ctx->strategy->getPlantCapital($stock, $ctx->investedCapital),
             $netWorkingCapital,
             (float) $stock->getGoodwill(),
             $stock->getTotalCipAmount()

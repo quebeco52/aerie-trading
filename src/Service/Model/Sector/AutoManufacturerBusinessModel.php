@@ -205,7 +205,7 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
 
         // FIX: Tamed the sentiment multiplier from 1.50 to 0.40.
         // A -40 point drop in sentiment for a 1.75 beta stock now results in a realistic -28% demand drop.
-        $sentimentShift = ($macroState->consumerSentimentIndexEma - MacroEngine::SENTIMENT_BASELINE) / 100.0;
+        $sentimentShift = $macroState->sentimentDeviation();
         $physics['macro_demand_shift'] += ($sentimentShift * $beta * 0.40);
 
         return $physics;
@@ -285,7 +285,7 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
         $inflationCostPenalty = ($inputCostDrag / max(0.05, $salesWeight)) + ($gscpiShift * self::SUPPLY_CHAIN_PRESSURE_COST_SCALAR * (1.0 - ($pricingPower * 0.50)));
 
         // Captive Finance NIM Squeeze & Subprime Provisioning
-        $sentimentShift = ($macroState->consumerSentimentIndexEma - MacroEngine::SENTIMENT_BASELINE) / 100.0;
+        $sentimentShift = $macroState->sentimentDeviation();
         $retailDefaultShift = MathUtility::excessOverBaseline($macroState->retailDefaultRateEma, MacroEngine::RETAIL_DEFAULT_BASELINE);
         $corporateDefaultShift = MathUtility::excessOverBaseline($macroState->corporateDefaultRateEma, MacroEngine::CORPORATE_DEFAULT_BASELINE);
         $macroDefaultDrag = ($sentimentShift < 0.0 ? abs($sentimentShift) * self::MACRO_DEFAULT_SCALAR : 0.0) + ($retailDefaultShift * 0.05) + ($corporateDefaultShift * 0.02);

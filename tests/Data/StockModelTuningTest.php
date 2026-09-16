@@ -230,11 +230,12 @@ class StockModelTuningTest extends TestCase
         // Breakwater Trust (BRKW)
         // BRKW runs the investment trust, which splits on control rather than on trade. The conglomerate's
         // own weights must stay absent: a dial the model does not read is worse than no dial at all.
-        $this->assertSame(0.30, StockModelTuning::get('BRKW', ModelParam::WhollyOwnedNavShare, 0.0));
-        $this->assertSame(0.60, StockModelTuning::get('BRKW', ModelParam::ListedPortfolioNavShare, 0.0));
-        // The treasury share is read off Stock::corporateTreasury, so it must NOT be declared here as well:
-        // a second copy of a number the ledger rewrites every quarter can only drift out of step with it.
-        $this->assertArrayNotHasKey('treasury_nav_share', StockModelTuning::getOverridesForTicker('BRKW'));
+        // NO portfolio composition may be declared here: treasury off the balance sheet, stakes off the
+        // board via AnchorHoldings, subsidiaries the residual. A sleeve entered here is a second copy of a
+        // number the balance sheet already settles, and both that used to live here went stale.
+        foreach (['wholly_owned_nav_share', 'listed_portfolio_nav_share', 'treasury_nav_share'] as $sleeve) {
+            $this->assertArrayNotHasKey($sleeve, StockModelTuning::getOverridesForTicker('BRKW'), $sleeve);
+        }
         $this->assertSame(0.90, StockModelTuning::get('BRKW', ModelParam::PricingPowerIndex, 0.0));
         $this->assertSame(0.45, StockModelTuning::get('BRKW', ModelParam::OperatingCyclicality, 0.0));
         $this->assertSame(-1.0, StockModelTuning::get('BRKW', ModelParam::IndustrialConglomerateWeight, -1.0));

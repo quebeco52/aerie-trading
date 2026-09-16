@@ -113,13 +113,16 @@ class CommunicationEquipmentBusinessModelTest extends TestCase
     public function testConsumerSentimentMovesRoyaltiesAndTerminalsButNotTheCarrierBook(): void
     {
         $base = $this->runQuarter();
-        $upbeat = $this->runQuarter(macro: new MacroStateDTO(consumerSentimentIndexEma: 110.0));
+        // Confidence is read against the level the index sits at with output at trend, so the uplift is the
+        // deviation from THAT and not from the constant the index is built down from.
+        $upbeatMacro = new MacroStateDTO(consumerSentimentIndexEma: 110.0);
+        $upbeat = $this->runQuarter(macro: $upbeatMacro);
 
         $this->assertGreaterThan($base->streamRevenue['sep_licensing'], $upbeat->streamRevenue['sep_licensing']);
         $this->assertGreaterThan($base->streamRevenue['consumer_terminals'], $upbeat->streamRevenue['consumer_terminals']);
         $this->assertEqualsWithDelta($base->streamRevenue['carrier_networks'], $upbeat->streamRevenue['carrier_networks'], 1.0);
         $this->assertEqualsWithDelta(
-            10_000_000.0 * (1.0 + (0.10 * CommunicationEquipmentBusinessModel::DEVICE_SHIPMENT_SENTIMENT_SENSITIVITY)),
+            10_000_000.0 * (1.0 + ($upbeatMacro->sentimentDeviation() * CommunicationEquipmentBusinessModel::DEVICE_SHIPMENT_SENTIMENT_SENSITIVITY)),
             $upbeat->streamRevenue['sep_licensing'],
             1.0
         );

@@ -38,6 +38,7 @@ class StockPageBuilder
         private readonly CompanySnapshotBuilder $companySnapshot,
         private readonly EtfCompositionBuilder $etfComposition,
         private readonly PeerTableBuilder $peerTable,
+        private readonly AnchorPortfolioBuilder $anchorPortfolio,
         private readonly IndustryPositionBuilder $industryPosition,
         private readonly ViewerPositionBuilder $viewerPosition,
         private readonly StockEventRepository $stockEvents,
@@ -94,6 +95,8 @@ class StockPageBuilder
     {
         return $this->companySnapshot->build($stock, $macroState) + $this->industryPosition->build($stock, $macroState) + [
             'peers' => $this->peerTable->build($stock),
+            // What a permanent-capital sphere actually owns; null for every firm that owns no stakes.
+            'anchorPortfolio' => $this->anchorPortfolio->build($stock),
             'allAssets' => [],
             'pieLabels' => [],
             'pieData' => [],
@@ -165,7 +168,9 @@ class StockPageBuilder
                 ? $fund->trailingDistribution() / (float) $fund->getPrice()
                 : 0.0,
             'analystTargets' => null,
+            'netAssetValue' => null,
             'peers' => [],
+            'anchorPortfolio' => null,
             'advShares' => 0.0,
             'halfSpread' => FinancialConstants::ETF_HALF_SPREAD,
             'borrowFee' => 0.0,

@@ -14,6 +14,11 @@ use App\Service\Macro\MacroState;
  */
 readonly class MacroStateDTO
 {
+    // --- Index Normalization ---
+
+    /** Points in one unit of a 100-based macro index, so a deviation off one reads as a fraction. */
+    private const INDEX_SCALE = 100.0;
+
     // --- Hydration Openings ---
 
     /** Output gap a payload with no reading of its own opens at; the seeded market starts mid-expansion, not at trend. */
@@ -70,8 +75,8 @@ readonly class MacroStateDTO
         public float $energyBasePrice = 100.0,
         public float $energyCostPushLag = 0.0,
         public float $agriCostPushLag = 0.0,
-        public float $consumerSentimentIndex = 100.0,
-        public float $consumerSentimentIndexEma = 100.0,
+        public float $consumerSentimentIndex = MacroEngine::SENTIMENT_TREND_LEVEL,
+        public float $consumerSentimentIndexEma = MacroEngine::SENTIMENT_TREND_LEVEL,
         public float $exchangeRateIndex = 100.0,
         public float $exchangeRateIndexEma = 100.0,
         public float $industrialMetalsIndex = 100.0,
@@ -328,6 +333,38 @@ readonly class MacroStateDTO
             $this->outputGap < self::CYCLE_BUST_GAP => 'Bust',
             default => 'Neutral',
         };
+    }
+
+    /**
+     * Consumer confidence as a fraction, against where the index sits with output at trend.
+     *
+     * SENTIMENT_BASELINE is the constant the index is BUILT from — one hundred, less a stack of one-sided
+     * penalties for misery, momentum, fear, rates and fuel — so it is a ceiling and cannot be a mean. Read
+     * as a deviation from it, confidence comes out negative 83% of the time and ten points light on
+     * average: a permanent demand haircut every consumer-facing model was charging, and a standing
+     * negative driver every earnings report was attributing to a consumer who had not changed their mind.
+     *
+     * Use this where confidence is the only channel through which a stream sees the cycle.
+     */
+    public function sentimentDeviation(): float
+    {
+        return ($this->consumerSentimentIndexEma - MacroEngine::SENTIMENT_TREND_LEVEL) / self::INDEX_SCALE;
+    }
+
+    /**
+     * The same reading with the output gap that is already inside it taken back out.
+     *
+     * Confidence is built from the cycle — the gap enters it directly, and again through the unemployment
+     * Okun's law hands it — so a reader that prices the gap AND reads confidence prices the cycle twice.
+     * Measured on this engine, the index carries SENTIMENT_GAP_LOADING points of gap (r = 0.78), which is
+     * what the second helping is worth. Lemmon & Portniaguina (2006) orthogonalise confidence against
+     * fundamentals for exactly this reason: what predicts anything beyond the macro data is the residual.
+     *
+     * Use this where the cycle is priced beside it.
+     */
+    public function sentimentResidual(): float
+    {
+        return $this->sentimentDeviation() - (($this->outputGapEma * MacroEngine::SENTIMENT_GAP_LOADING) / self::INDEX_SCALE);
     }
 
     /**

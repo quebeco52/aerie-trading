@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service\Model\Strategy;
 
+use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
 
@@ -29,14 +30,12 @@ interface ValuationStrategyInterface
     public function getIntrinsicPbMultiple(float $structuralRoic, float $hurdleRate): float;
 
     /**
-     * A standing discount applied to the assembled fair value, as a fraction of it.
+     * A standing discount applied to the assembled fair value. Zero for an operating company, whose fair
+     * value is already what the business is worth; a closed-end structure is the exception, trading below
+     * the assets it represents with a gap that moves on the cycle and on sentiment.
      *
-     * Zero for an operating company: its fair value is already what the business is worth. A closed-end
-     * structure is the exception — its shares persistently trade below the assets they represent, and the
-     * gap moves with the cycle rather than with anything the firm did.
-     *
-     * @param float $outputGap The macro output gap. Deliberately not the firm's own volatility, which would
-     *                         let a widening discount raise the volatility that widened it.
+     * Takes the macro state and never the firm's own volatility: a discount that widened on realised
+     * volatility would raise the volatility that widened it, with no damping in the loop.
      */
-    public function getStructuralValuationDiscount(float $outputGap): float;
+    public function getStructuralValuationDiscount(MacroStateDTO $macroState): float;
 }

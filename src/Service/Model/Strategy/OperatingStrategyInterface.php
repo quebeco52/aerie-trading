@@ -107,6 +107,12 @@ interface OperatingStrategyInterface
      * firm. Financial balance sheets have no meaningful plant, so they keep their capital proxy.
      */
     public function getDepreciableBase(Stock $stock): float;
+
+    /** The part of invested capital that is physical plant, and so opens a fixed-asset ledger. All of it for an operating company; marketable investments sit on their own line and are not plant. */
+    public function getPlantCapital(Stock $stock, float $investedCapital): float;
+
+    /** Opening balance of marketable investments. Zero for a firm holding none; NULL for one holding them unpriced, which tells the caller to leave the fixed-asset ledger closed. */
+    public function getOpeningInvestmentAssets(Stock $stock): ?float;
     public function allowsPhysicalOrganicCapex(): bool;
     public function getReturnBasisIncome(Stock $stock, float $quarterlyNopat, float $actualTotalNetIncome): float;
     /**

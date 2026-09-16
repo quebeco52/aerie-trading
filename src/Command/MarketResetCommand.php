@@ -30,7 +30,8 @@ class MarketResetCommand extends Command
         private MathUtility $mathUtility,
         private \App\Service\Market\MarketEngine $marketEngine,
         private \App\Service\Corporate\DebtEngine $debtEngine,
-        private \App\Service\Market\TreasuryAuctionService $treasuryAuction
+        private \App\Service\Market\TreasuryAuctionService $treasuryAuction,
+        private \App\Service\Corporate\Holdings\AnchorStakeLedger $anchorStakes
     ) {
         parent::__construct();
     }
@@ -126,6 +127,9 @@ class MarketResetCommand extends Command
             nsBaseTermPremium: MacroEngine::NS_BASE_TERM_PREMIUM,
             nsLongEndPremium: MacroEngine::NS_BASE_TERM_PREMIUM
         );
+
+        // The reset prices the board through throwaway entities, kept here to mark the spheres against.
+        $pricedBoard = [];
 
         foreach (InitialMarket::STOCKS as $stockData) {
             $margin = $stockData['operating_margin'] ?? 0.15;
@@ -244,6 +248,8 @@ class MarketResetCommand extends Command
 
             // Use the engine's perceived fair value as the neutral Analyst Consensus
             $neutralPrice = $marketCalc['perceived_fair_value'];
+            $tempStock->setPrice((string) $neutralPrice);
+            $pricedBoard[$stockData['ticker']] = $tempStock;
 
             $conn->executeStatement(
                 'UPDATE stocks SET 
@@ -317,6 +323,7 @@ class MarketResetCommand extends Command
                     deferred_tax_liability = 0.0000,
                     earning_assets = NULL,
                     credit_loss_allowance = 0.0000,
+                    listed_stakes_carrying = NULL,
                     asset_turnover = NULL,
                     lifecycle_stage = NULL,
                     inflation_pass_through = NULL,
@@ -372,7 +379,10 @@ class MarketResetCommand extends Command
                     'wholesale_debt' => $stockData['wholesale_debt'] ?? 0.00,
                     'customer_deposits' => $stockData['customer_deposits'] ?? 0.00,
                     'margin' => $stockData['operating_margin'] ?? 0.15,
-                    'float_pct' => $stockData['public_float'] ?? 0.90,
+                    'float_pct' => \App\Data\AnchorHoldings::tradableFloat(
+                        $stockData['ticker'],
+                        (float) ($stockData['public_float'] ?? 0.90)
+                    ),
                     'net_income' => $netIncome,
                     'equity' => $stockData['total_equity'] ?? 0.00,
                     'retained' => $stockData['retained_earnings'] ?? 0.00,
@@ -393,6 +403,42 @@ class MarketResetCommand extends Command
                     'management_intensity' => \App\Data\ManagementProfile::drawIntensity($this->mathUtility),
                     'ticker' => $stockData['ticker']
                 ]
+            );
+        }
+
+        // Every sphere opens carrying what its holdings are worth at these prices. Written by SQL like the
+        // rest of the reset, but it is the same ledger arithmetic on the same board, so a reset market
+        // opens on the NAV a marked one would report rather than on a book that has not seen its portfolio.
+        $this->anchorStakes->beginTick($pricedBoard);
+
+        foreach (array_keys(\App\Data\AnchorHoldings::STAKES) as $holder) {
+            $stakeValue = isset($pricedBoard[$holder])
+                ? $this->anchorStakes->resolveStakeValue($pricedBoard[$holder])
+                : null;
+
+            if ($stakeValue === null) {
+                continue;
+            }
+
+            // Same check the seed makes: a portfolio that swallows the book leaves the consolidated stream
+            // with no residual to be drawn from.
+            $fit = \App\Data\AnchorHoldings::consolidatedShare($stakeValue, $pricedBoard[$holder]->getInvestedCapital());
+
+            if ($fit < \App\Data\AnchorHoldings::MIN_CONSOLIDATED_SHARE) {
+                $io->error(sprintf(
+                    '%s holds a portfolio worth %.1f%% of its capital employed, leaving %.1f%% for its subsidiaries (minimum %.0f%%). Trim its stakes in AnchorHoldings or raise its balance sheet in InitialMarket.',
+                    $holder,
+                    100.0 * (1.0 - $fit),
+                    100.0 * $fit,
+                    100.0 * \App\Data\AnchorHoldings::MIN_CONSOLIDATED_SHARE
+                ));
+
+                return Command::FAILURE;
+            }
+
+            $conn->executeStatement(
+                'UPDATE stocks SET listed_stakes_carrying = :value WHERE ticker = :ticker',
+                ['value' => number_format($stakeValue, 4, '.', ''), 'ticker' => $holder]
             );
         }
 

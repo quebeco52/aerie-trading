@@ -107,11 +107,13 @@ class ApparelManufacturingBusinessModelTest extends TestCase
 
         $genericPhysics = $this->model->getMacroPhysics($genericStock, $recessionMacro);
 
-        // Pro-cyclical drag = ((-0.05 * 0.70) + (-0.20 * 0.40)) * cyclicality = -0.115 * cyclicality
+        // Confidence is read against the level the index sits at with output at trend (88.0), not the
+        // construction constant it is built down from, so 80.0 is eight points of fear and not twenty.
+        // Pro-cyclical drag = ((-0.05 * 0.70) + (-0.08 * 0.40)) * cyclicality = -0.067 * cyclicality
         // Generic trade-down bonus = 0.05 * 0.60 * (1.5 - 0.5) = +0.030
         $cyclicality = ApparelManufacturingBusinessModel::OPERATING_CYCLICALITY;
-        $this->assertEqualsWithDelta((-0.115 * $cyclicality) + 0.030, $genericPhysics['macro_demand_shift'], 0.0001);
-        $this->assertGreaterThan(-0.115 * $cyclicality, $genericPhysics['macro_demand_shift'], 'Trade-down effect must soften the recessionary drop.');
+        $this->assertEqualsWithDelta((-0.067 * $cyclicality) + 0.030, $genericPhysics['macro_demand_shift'], 0.0001);
+        $this->assertGreaterThan(-0.067 * $cyclicality, $genericPhysics['macro_demand_shift'], 'Trade-down effect must soften the recessionary drop.');
 
         // 2. SHER stock (tuned pricing power = 0.60)
         $sherStock = new Stock();
@@ -120,8 +122,8 @@ class ApparelManufacturingBusinessModelTest extends TestCase
 
         $sherPhysics = $this->model->getMacroPhysics($sherStock, $recessionMacro);
         // SHER trade-down bonus = 0.05 * 0.60 * (1.5 - 0.60) = 0.05 * 0.54 = +0.027
-        // Blended demand shift = (-0.115 * cyclicality) + 0.027
-        $this->assertEqualsWithDelta((-0.115 * $cyclicality) + 0.027, $sherPhysics['macro_demand_shift'], 0.0001);
+        // Blended demand shift = (-0.067 * cyclicality) + 0.027
+        $this->assertEqualsWithDelta((-0.067 * $cyclicality) + 0.027, $sherPhysics['macro_demand_shift'], 0.0001);
     }
 
     public function testContractStreamFxExportCompetitiveness(): void

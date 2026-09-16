@@ -328,7 +328,7 @@ class EarningsReportSubscriber implements EventSubscriberInterface
                         'type'   => 'macro',
                         'fields' => ['output_gap_ema'],
                     ];
-                    $sentShift = ($macro->consumerSentimentIndexEma - 100.0) / 100.0;
+                    $sentShift = $macro->sentimentDeviation();
                     $drivers[] = [
                         'label'  => 'Consumer Confidence Index',
                         'impact' => round($sentShift * 0.25, 4),
@@ -722,7 +722,7 @@ class EarningsReportSubscriber implements EventSubscriberInterface
                         'fields' => ['output_gap_ema', 'capital_stock_overhang_ema'],
                     ];
                 } else {
-                    $sentShift = ($macro->consumerSentimentIndexEma - 100.0) / 100.0;
+                    $sentShift = $macro->sentimentDeviation();
                     $isRoyalty = $streamKey === 'sep_licensing';
                     $drivers[] = [
                         'label'  => $isRoyalty ? 'Royalty-Bearing Device Shipments' : 'Consumer Terminal Demand',
@@ -744,7 +744,7 @@ class EarningsReportSubscriber implements EventSubscriberInterface
                         'fields' => ['output_gap_ema'],
                     ];
                 } else {
-                    $sentShift = ($macro->consumerSentimentIndexEma - 100.0) / 100.0;
+                    $sentShift = $macro->sentimentDeviation();
                     $drivers[] = [
                         'label'  => 'Consumer Device & Digital Demand',
                         'impact' => round(($sentShift * 0.35) + ($macro->outputGapEma * 0.60), 4),
@@ -759,7 +759,7 @@ class EarningsReportSubscriber implements EventSubscriberInterface
             case 'restaurant':
             case 'luxury':
             case 'resorts_casinos':
-                $sentShift = ($macro->consumerSentimentIndexEma - 100.0) / 100.0;
+                $sentShift = $macro->sentimentDeviation();
                 $drivers[] = [
                     'label'  => 'Consumer Sentiment & Confidence',
                     'impact' => round($sentShift * 0.35, 4),
@@ -788,7 +788,7 @@ class EarningsReportSubscriber implements EventSubscriberInterface
             case 'auto_manufacturer':
                 $drivers[] = [
                     'label'  => 'Auto Loan Interest Rates & Financing Demand',
-                    'impact' => round((-$macro->policyRateEma * 1.5) + (($macro->consumerSentimentIndexEma - 100.0) * 0.003), 4),
+                    'impact' => round((-$macro->policyRateEma * 1.5) + ($macro->sentimentDeviation() * 0.30), 4),
                     'type'   => 'macro',
                     'fields' => ['consumer_sentiment_index_ema', 'policy_rate_ema'],
                 ];
@@ -841,7 +841,7 @@ class EarningsReportSubscriber implements EventSubscriberInterface
                         'fields' => ['inflation_ema'],
                     ];
                 }
-                $sentShift = ($macro->consumerSentimentIndexEma - 100.0) / 100.0;
+                $sentShift = $macro->sentimentDeviation();
                 if (abs($sentShift) >= 0.02) {
                     $drivers[] = [
                         'label'  => 'Consumer Sentiment & Demand',

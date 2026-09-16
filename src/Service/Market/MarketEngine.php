@@ -465,7 +465,8 @@ class MarketEngine
             $baselineRoic,
             $baselineMargin,
             $accrualsRatio,
-            $investedCapitalPerShare
+            $investedCapitalPerShare,
+            $macroState
         );
 
         $perceivedFairValue = $fundamentalState['perceived_fair_value'];
@@ -623,7 +624,8 @@ class MarketEngine
         float $baselineRoic = 0.10,
         float $baselineMargin = 0.20,
         float $accrualsRatio = 0.0,
-        float $investedCapitalPerShare = 0.0
+        float $investedCapitalPerShare = 0.0,
+        ?MacroStateDTO $macroState = null
     ): array {
 
         $strategy = \App\Data\Sectors::getBusinessModelStrategy($businessModel);
@@ -756,7 +758,7 @@ class MarketEngine
         // Closed-end structures trade below the assets they hold, by a gap that moves with the cycle. Applied
         // here rather than inside the consensus so it reaches the reversion target: the price is pulled toward
         // the discounted value, which is what makes a widening discount a fall rather than a mispricing.
-        $fairValue *= (1.0 - $strategy->getStructuralValuationDiscount($outputGap));
+        $fairValue *= (1.0 - $strategy->getStructuralValuationDiscount($macroState ?? new MacroStateDTO()));
 
         $perceivedFairValue = max(0.01, $fairValue);
 

@@ -13,7 +13,6 @@ use App\DTO\SectorPhysicsResult;
 use App\DTO\StreamContext;
 use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
-use App\Service\Macro\MacroEngine;
 use App\Service\Math\MathUtility;
 
 /**
@@ -234,7 +233,7 @@ class ApparelManufacturingBusinessModel extends StandardCorporateBusinessModel
         $pricingPower = max(0.0, min(1.0, $params[ModelParam::PricingPowerIndex]));
 
         $outputGap = $this->resolveLaggedOutputGap($stock, $macroState);
-        $sentimentShift = ($macroState->consumerSentimentIndexEma - MacroEngine::SENTIMENT_BASELINE) / 100.0;
+        $sentimentShift = $macroState->sentimentDeviation();
         $beta = $this->getOperatingCyclicality($stock);
 
         // Hybrid demand physics: Pro-cyclical consumer sentiment + output gap,

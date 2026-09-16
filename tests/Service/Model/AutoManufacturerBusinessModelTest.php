@@ -6,6 +6,7 @@ namespace App\Tests\Service\Model;
 
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
+use App\Service\Macro\MacroEngine;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\AutoManufacturerBusinessModel;
 use PHPUnit\Framework\TestCase;
@@ -252,25 +253,46 @@ class AutoManufacturerBusinessModelTest extends TestCase
     /**
      * A vehicle is a consumer durable: demand follows the output gap at the sector's cyclicality, household
      * sentiment and financing rates. The heavy-manufacturing parent's amplified gap and manufacturing PMI
-     * used to stack on top of those, so a mild slowdown (gap -1.5%, sentiment 85) cut volume by a quarter,
-     * which is the 2008-09 collapse and not 1991 (-12%). A 2008-scale shock must still be a collapse.
+     * used to stack on top of those, so a mild slowdown cut volume by a quarter, which is the 2008-09
+     * collapse and not 1991 (-12%). A 2008-scale shock must still be a collapse.
+     *
+     * Measured against the NEUTRAL state rather than against zero. Confidence used to be read off the
+     * index's construction constant, which the series sits twelve points under at trend, so every shift
+     * this model returned carried a standing -0.07 that a recession scenario was silently claiming as part
+     * of its depth. The drop from neutral is what was calibrated here, and it is unchanged by that fix.
+     *
+     * Each scenario pairs its gap with the confidence that gap actually comes with (SENTIMENT_TREND_LEVEL
+     * less SENTIMENT_GAP_LOADING per unit of gap): 82 is a mild slowdown, 55 at a -6% gap is a panic.
      */
     public function testMildSlowdownCutsVolumeByAnEleventhNotAQuarterAndPmiDoesNotStack(): void
     {
-        $stock = new Stock();
-        $stock->setTicker('AUTO');
-        $stock->setBeta('1.35');
+        // A fresh stock per reading: resolveLaggedOutputGap() opens the demand lag at whatever gap it first
+        // sees and carries it on the entity, so scenarios sharing one stock would read each other's cycle.
+        $shift = function (MacroStateDTO $macroState): float {
+            $stock = new Stock();
+            $stock->setTicker('AUTO');
+            $stock->setBeta('1.35');
 
-        $mild = new MacroStateDTO(outputGapEma: -0.015, consumerSentimentIndexEma: 85.0, policyRateEma: 0.043, manufacturingPmiEma: 43.0);
-        $mildShift = $this->model->getMacroPhysics($stock, $mild)['macro_demand_shift'];
-        $this->assertLessThan(-0.08, $mildShift);
-        $this->assertGreaterThan(-0.18, $mildShift, 'a mild recession is not the 2008 auto collapse');
+            return $this->model->getMacroPhysics($stock, $macroState)['macro_demand_shift'];
+        };
 
-        $mildStrongPmi = new MacroStateDTO(outputGapEma: -0.015, consumerSentimentIndexEma: 85.0, policyRateEma: 0.043, manufacturingPmiEma: 56.0);
-        $this->assertEqualsWithDelta($mildShift, $this->model->getMacroPhysics($stock, $mildStrongPmi)['macro_demand_shift'], 1e-12, 'the industrial PMI is the machinery makers\' signal, not the car buyer\'s');
+        $neutralShift = $shift(new MacroStateDTO(outputGapEma: 0.0, consumerSentimentIndexEma: MacroEngine::SENTIMENT_TREND_LEVEL, policyRateEma: 0.02));
+
+        $mild = new MacroStateDTO(outputGapEma: -0.015, consumerSentimentIndexEma: 82.0, policyRateEma: 0.043, manufacturingPmiEma: 43.0);
+        $mildDrop = $shift($mild) - $neutralShift;
+        $this->assertLessThan(-0.07, $mildDrop);
+        $this->assertGreaterThan(-0.18, $mildDrop, 'a mild recession is not the 2008 auto collapse');
+
+        $mildStrongPmi = new MacroStateDTO(outputGapEma: -0.015, consumerSentimentIndexEma: 82.0, policyRateEma: 0.043, manufacturingPmiEma: 56.0);
+        $this->assertEqualsWithDelta(
+            $mildDrop,
+            $shift($mildStrongPmi) - $neutralShift,
+            1e-12,
+            'the industrial PMI is the machinery makers\' signal, not the car buyer\'s'
+        );
 
         $severe = new MacroStateDTO(outputGapEma: -0.06, consumerSentimentIndexEma: 55.0, policyRateEma: 0.01);
-        $this->assertLessThan(-0.30, $this->model->getMacroPhysics($stock, $severe)['macro_demand_shift'], 'a 2008-scale shock still collapses volume');
+        $this->assertLessThan(-0.20, $shift($severe) - $neutralShift, 'a 2008-scale shock still collapses volume');
     }
 
     public function testFalcCalibratedFinancialsUnderMacroShifts(): void

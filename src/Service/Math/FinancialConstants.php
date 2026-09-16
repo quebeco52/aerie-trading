@@ -192,6 +192,8 @@ class FinancialConstants
     public const MIN_VARIABLE_MARGIN_CLAMP = 0.01;
 
     // --- Capital Allocation & Life-Cycle Physics ---
+    /** Discount to intrinsic book at which a board starts repurchasing for the accretion itself. Below this the gap is inside the noise a board would act on. */
+    public const MIN_ACCRETIVE_REPURCHASE_DISCOUNT = 0.05;
     /** Fraction of excess cash allocated to quarterly share repurchases for normal firms. */
     public const BUYBACK_SPEND_NORMAL_RATIO = 0.10;
     /** Fraction of excess cash allocated to quarterly share repurchases for mega cash hoarders. */

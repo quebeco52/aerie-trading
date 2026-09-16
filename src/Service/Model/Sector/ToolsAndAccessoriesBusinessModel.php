@@ -12,7 +12,6 @@ use App\Entity\Stock;
 use App\DTO\MacroStateDTO;
 use App\Service\Math\MathUtility;
 use App\Service\Event\ShockEvent;
-use App\Service\Macro\MacroEngine;
 
 /**
  * Earnings strategy for Tools & Accessories (Precision Tooling, Hardware).
@@ -160,7 +159,7 @@ class ToolsAndAccessoriesBusinessModel extends StandardCorporateBusinessModel
         $pricingPower = $this->resolvePricingPower($stock);
         $macroSensitivityMultiplier = self::MIN_BETA_PRICING_POWER_FLOOR + $pricingPower;
 
-        $sentimentShift = ($macroState->consumerSentimentIndexEma - MacroEngine::SENTIMENT_BASELINE) / 100.0;
+        $sentimentShift = $macroState->sentimentDeviation();
         $pmiShift = MathUtility::calculatePmiDemandShift($macroState->manufacturingPmiEma, sensitivity: self::PMI_COMMERCIAL_SENSITIVITY);
         $housingShift = MathUtility::calculateHousingStartsShift($macroState->housingStartsIndexEma, sensitivity: self::HOUSING_STARTS_SENSITIVITY);
 

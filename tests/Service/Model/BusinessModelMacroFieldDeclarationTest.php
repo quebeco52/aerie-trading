@@ -37,6 +37,18 @@ final class BusinessModelMacroFieldDeclarationTest extends TestCase
      */
     private const DERIVED_ACCESSORS = ['calendar_quarter'];
 
+    /**
+     * Derived sentiment readings, and the published series each one resolves from. Unlike the accessors
+     * above these ARE macro observations — a model reading confidence against its trend level is coupled to
+     * the confidence series, and one reading the residual is coupled to the output gap it nets out too.
+     *
+     * @var array<string, list<string>>
+     */
+    private const SENTIMENT_ACCESSOR_FIELDS = [
+        'sentiment_deviation' => ['consumer_sentiment_index_ema'],
+        'sentiment_residual'  => ['consumer_sentiment_index_ema', 'output_gap_ema'],
+    ];
+
     /** Macro field each input-cost basket channel reads (StandardOperatingPhysicsTrait::resolveInputPriceDeviations). */
     private const BASKET_CHANNEL_FIELDS = [
         'energy'  => 'energy_cost_push_lag',
@@ -170,7 +182,12 @@ final class BusinessModelMacroFieldDeclarationTest extends TestCase
             $this->walk($concreteClass, $concreteClass, $method, $fields, $visited);
         }
 
-        $snake = array_map([$this, 'canonicalKey'], $fields);
+        $snake = [];
+        foreach (array_map([$this, 'canonicalKey'], $fields) as $key) {
+            foreach (self::SENTIMENT_ACCESSOR_FIELDS[$key] ?? [$key] as $resolved) {
+                $snake[] = $resolved;
+            }
+        }
 
         return array_values(array_unique(array_diff($snake, self::VALUATION_ONLY_FIELDS, self::DERIVED_ACCESSORS)));
     }

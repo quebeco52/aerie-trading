@@ -11,7 +11,6 @@ use App\DTO\SectorPhysicsResult;
 use App\DTO\StreamContext;
 use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
-use App\Service\Macro\MacroEngine;
 use App\Service\Math\MathUtility;
 
 /**
@@ -282,7 +281,7 @@ class CommunicationEquipmentBusinessModel extends StandardCorporateBusinessModel
         $networkRevenue = $networkBook['revenue'];
 
         // Royalties are per device shipped under the standard: handset upgrades follow consumer sentiment.
-        $sentimentShift = ($macroState->consumerSentimentIndexEma - MacroEngine::SENTIMENT_BASELINE) / 100.0;
+        $sentimentShift = $macroState->sentimentDeviation();
         $deviceShipmentShift = $sentimentShift * self::DEVICE_SHIPMENT_SENTIMENT_SENSITIVITY;
         $licensingRevenue = max(0.0, $expectedLicensingRevenue * (1.0 + ($licensingZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR * self::LICENSING_VARIANCE_RATIO)) + $deviceShipmentShift));
         if ($inDispute) {

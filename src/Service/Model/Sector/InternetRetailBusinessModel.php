@@ -14,7 +14,6 @@ use App\Entity\Stock;
 use App\DTO\MacroStateDTO;
 use App\Service\Math\MathUtility;
 use App\Service\Event\ShockEvent;
-use App\Service\Macro\MacroEngine;
 
 /**
  * Earnings strategy for Internet Retail & Digital Marketplace Megacorporations.
@@ -167,7 +166,7 @@ class InternetRetailBusinessModel extends StandardCorporateBusinessModel
 
         // --- Macro Sensitivities ---
         $outputGap = $macroState->outputGapEma;
-        $sentimentShift = ($macroState->consumerSentimentIndexEma - MacroEngine::SENTIMENT_BASELINE) / 100.0;
+        $sentimentShift = $macroState->sentimentDeviation();
 
         // 1P Retail bears the absolute brunt of consumer recessions, and household confidence moves the basket
         // before the output gap does: a shopper who fears for their job trades down while GDP is still growing.

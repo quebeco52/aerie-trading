@@ -546,7 +546,7 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
         // part of it is already inside the stable cost base; only the excess reaches the margin below.
         $netChargeOffs = max(0.0, $conditionalEl / self::ANNUALIZATION_FACTOR) * $earningAssets;
 
-        $sentimentShift = ($macroState->consumerSentimentIndexEma - MacroEngine::SENTIMENT_BASELINE) / self::INDEX_NORMALIZATION_BASE;
+        $sentimentShift = $macroState->sentimentDeviation();
         $retailDefaultShift = MathUtility::excessOverBaseline($macroState->retailDefaultRateEma, MacroEngine::RETAIL_DEFAULT_BASELINE);
         $corporateDefaultShift = MathUtility::excessOverBaseline($macroState->corporateDefaultRateEma, MacroEngine::CORPORATE_DEFAULT_BASELINE);
 

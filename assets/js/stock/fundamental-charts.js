@@ -12,6 +12,7 @@ let capitalReturnChartInstance = null;
 let payoutRatioChartInstance = null;
 let regulatoryRatiosChartInstance = null;
 let valuationMultiplesChartInstance = null;
+let navDiscountChartInstance = null;
 let shareholderValueChartInstance = null;
 let cashFlowSummaryChartInstance = null;
 let netInterestEngineChartInstance = null;
@@ -130,6 +131,10 @@ export function updateFundamentalCharts(timeframe, rawReports, context = {}) {
     let epsData = [];
     let bvpsData = [];
     let sharesData = [];
+    // A closed-end structure is quoted against its assets. Its intrinsic book multiple is one, so book
+    // value per share IS net asset value per share and nothing new has to be stored to draw this.
+    let navPriceData = [];
+    let navDiscountData = [];
     let fcfData = [];
     let fcfConversionData = [];
     let retainedCashData = [];
@@ -219,6 +224,8 @@ export function updateFundamentalCharts(timeframe, rawReports, context = {}) {
             epsData.push(shs > 0 ? (inc / shs) : 0);
             bvpsData.push(shs > 0 ? (eqVal / shs) : 0);
             sharesData.push(shs);
+            navPriceData.push(pr);
+            navDiscountData.push(shs > 0 && eqVal > 0 ? ((pr / (eqVal / shs)) - 1) * 100 : null);
 
             let fcf = report.free_cash_flow !== undefined && report.free_cash_flow !== null
                 ? parseFloat(report.free_cash_flow)
@@ -349,6 +356,9 @@ export function updateFundamentalCharts(timeframe, rawReports, context = {}) {
             pbData.unshift(eqVal > 0 ? (mktCap / eqVal) : null);
             psData.unshift(sumRev > 0 ? (mktCap / sumRev) : null);
 
+            navPriceData.unshift(pr);
+            navDiscountData.unshift(shs > 0 && eqVal > 0 ? ((pr / (eqVal / shs)) - 1) * 100 : null);
+
             epsData.unshift(shs > 0 ? (sumInc / shs) : 0);
             bvpsData.unshift(shs > 0 ? (eqVal / shs) : 0);
             sharesData.unshift(shs);
@@ -429,6 +439,7 @@ export function updateFundamentalCharts(timeframe, rawReports, context = {}) {
     }
 
     renderWhenVisible('valuationMultiplesChart', () => renderValuationMultiplesChart(labels, peData, pbData, psData));
+    renderWhenVisible('navDiscountChart', () => renderNavDiscountChart(labels, bvpsData, navPriceData, navDiscountData));
     renderWhenVisible('shareholderValueChart', () => renderShareholderValueChart(labels, epsData, bvpsData, sharesData));
     renderWhenVisible('cashFlowSummaryChart', () => renderCashFlowSummaryChart(labels, fcfData, fcfConversionData, retainedCashData, operatingCashFlowData, investingCashFlowData, financingCashFlowData));
 
@@ -466,6 +477,7 @@ export function updateFundamentalCharts(timeframe, rawReports, context = {}) {
         payoutRatio, retainedRatio,
         peData, pbData,
         epsData, bvpsData,
+        navPriceData, navDiscountData,
         fcfData, fcfConversionData,
         interestIncomeData, interestExpenseData, netInterestSpreadData,
         capitalRatioData, customerDepositRatioData,
@@ -1154,6 +1166,88 @@ function renderPayoutRatioChart(latestDiv, latestInc) {
     });
 }
 
+/**
+ * Premium and discount to net asset value: the chart every closed-end factsheet leads with.
+ *
+ * The gap is the whole behaviour of the class — it widens in a downturn and closes in an expansion while
+ * the portfolio underneath does neither — and a page showing only the price cannot tell that story.
+ */
+function renderNavDiscountChart(labels, navData, priceData, discountData) {
+    const canvas = document.getElementById('navDiscountChart');
+    if (!canvas) return;
+    navDiscountChartInstance = destroyChartInstance(navDiscountChartInstance);
+
+    const ctx = canvas.getContext('2d');
+    navDiscountChartInstance = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    label: 'NAV / Share',
+                    data: navData,
+                    borderColor: '#4ade80',
+                    backgroundColor: 'rgba(74, 222, 128, 0.1)',
+                    borderWidth: 2,
+                    tension: 0.3,
+                    pointRadius: 2,
+                    yAxisID: 'y'
+                },
+                {
+                    label: 'Share Price',
+                    data: priceData,
+                    borderColor: '#7dd3fc',
+                    backgroundColor: 'rgba(125, 211, 252, 0.1)',
+                    borderWidth: 2,
+                    tension: 0.3,
+                    pointRadius: 2,
+                    yAxisID: 'y'
+                },
+                {
+                    label: 'Premium / Discount',
+                    data: discountData,
+                    borderColor: '#facc15',
+                    backgroundColor: 'rgba(250, 204, 21, 0.15)',
+                    borderWidth: 2,
+                    tension: 0.3,
+                    pointRadius: 0,
+                    fill: 'origin',
+                    yAxisID: 'yDiscount'
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+                legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } },
+                tooltip: {
+                    callbacks: {
+                        label: (c) => {
+                            if (c.raw === null || c.raw === undefined) return `${c.dataset.label}: N/A`;
+                            return c.dataset.yAxisID === 'yDiscount'
+                                ? `${c.dataset.label}: ${c.raw > 0 ? '+' : ''}${c.raw.toFixed(1)}%`
+                                : `${c.dataset.label}: $${c.raw.toFixed(2)}`;
+                        }
+                    }
+                }
+            },
+            scales: {
+                y: {
+                    position: 'left',
+                    ticks: { callback: (v) => `$${v}` }
+                },
+                yDiscount: {
+                    position: 'right',
+                    grid: { drawOnChartArea: false },
+                    ticks: { callback: (v) => `${v > 0 ? '+' : ''}${v}%` }
+                }
+            }
+        }
+    });
+}
+
 function renderValuationMultiplesChart(labels, peData, pbData, psData) {
     const canvas = document.getElementById('valuationMultiplesChart');
     if (!canvas) return;
@@ -1793,6 +1887,7 @@ export function resizeFundamentalCharts() {
         profitEngineChartInstance, revenueStreamsChartInstance, debtEquityChartInstance,
         creditHealthChartInstance, capitalEfficiencyChartInstance, capitalReturnChartInstance,
         payoutRatioChartInstance, regulatoryRatiosChartInstance, valuationMultiplesChartInstance,
+        navDiscountChartInstance,
         shareholderValueChartInstance, cashFlowSummaryChartInstance, netInterestEngineChartInstance,
         insuranceDualEngineChartInstance, reitCoverageChartInstance, reinvestmentIntensityChartInstance,
         cyclicalDynamicsChartInstance
@@ -1971,6 +2066,7 @@ export function destroyFundamentalCharts() {
     payoutRatioChartInstance = destroyChartInstance(payoutRatioChartInstance);
     regulatoryRatiosChartInstance = destroyChartInstance(regulatoryRatiosChartInstance);
     valuationMultiplesChartInstance = destroyChartInstance(valuationMultiplesChartInstance);
+    navDiscountChartInstance = destroyChartInstance(navDiscountChartInstance);
     shareholderValueChartInstance = destroyChartInstance(shareholderValueChartInstance);
     cashFlowSummaryChartInstance = destroyChartInstance(cashFlowSummaryChartInstance);
     netInterestEngineChartInstance = destroyChartInstance(netInterestEngineChartInstance);

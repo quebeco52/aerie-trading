@@ -92,15 +92,15 @@ class ResortsCasinosBusinessModelTest extends TestCase
         $stock->setTicker('CASINO');
         $stock->setBeta('1.4');
 
-        // Sentiment boom (120 vs 100 baseline -> +0.20 shift)
-        $macroBoom = $this->createMacroState(consumerSentimentIndexEma: 120.0);
+        // Sentiment boom (twenty points above where the index sits at trend -> +0.20 shift)
+        $macroBoom = $this->createMacroState(consumerSentimentIndexEma: MacroEngine::SENTIMENT_TREND_LEVEL + 20.0);
         $physicsBoom = $model->getMacroPhysics($stock, $macroBoom);
 
         // Expected shift: outputGap (0) + 0.20 * cyclicality * 0.25
         $this->assertEqualsWithDelta(0.20 * ResortsCasinosBusinessModel::OPERATING_CYCLICALITY * 0.25, $physicsBoom['macro_demand_shift'], 0.001);
 
-        // Sentiment slump (80 vs 100 baseline -> -0.20 shift)
-        $macroSlump = $this->createMacroState(consumerSentimentIndexEma: 80.0);
+        // Sentiment slump (twenty points below it -> -0.20 shift)
+        $macroSlump = $this->createMacroState(consumerSentimentIndexEma: MacroEngine::SENTIMENT_TREND_LEVEL - 20.0);
         $physicsSlump = $model->getMacroPhysics($stock, $macroSlump);
 
         // Expected shift: -0.20 * cyclicality * 0.25
@@ -163,10 +163,10 @@ class ResortsCasinosBusinessModelTest extends TestCase
         // gamingZ = 0.0, nonGamingZ = 0.0, eventZ = 0.0
         $mathMock = $this->createMathUtilityMock([0.0, 0.0, 0.0]);
 
-        // Sentiment slump of 20 points (sentimentIndex = 80.0 vs 100.0 baseline) -> -0.20 shift
+        // Sentiment slump of 20 points below where the index sits at trend -> -0.20 shift
         // promotionalDrag = 0.20 * cyclicality * 0.15
         $promotionalDrag = 0.20 * ResortsCasinosBusinessModel::OPERATING_CYCLICALITY * 0.15;
-        $macroState = $this->createMacroState(consumerSentimentIndexEma: 80.0);
+        $macroState = $this->createMacroState(consumerSentimentIndexEma: MacroEngine::SENTIMENT_TREND_LEVEL - 20.0);
 
         // Gaming weight = 0.55, Non-gaming weight = 0.45.
         // baseGamingMargin = 0.58 / (0.55 + 2.0 * 0.45) = 0.58 / 1.45 = 0.40.

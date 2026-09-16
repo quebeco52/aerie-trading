@@ -420,15 +420,10 @@ class StockModelTuning
         ],
 
         // --- Breakwater Trust (BRKW) ---
-        // Dynastic industrial investment trust and generational anchor.
-        // Shares of NET ASSET VALUE. The revenue mix is derived from these and comes out inverted: the
-        // controlled 30% of the sphere is about four fifths of the income statement, because consolidation
-        // takes a subsidiary's whole top line while a 60% NAV weight in listed anchors contributes only the
-        // dividends those companies declare. The treasury's share is not here — it is read off the balance
-        // sheet, so the hoard funding the float is the hoard the firm actually holds.
+        // Dynastic industrial investment trust and generational anchor. No portfolio composition is
+        // declared here: treasury off the balance sheet, stakes off the board via AnchorHoldings,
+        // subsidiaries the residual. The revenue mix then inverts the asset mix on its own.
         'BRKW' => [
-            ModelParam::WhollyOwnedNavShare->value     => 0.30, // Deepwater berths, municipal concessions and the precision toolmakers it owns outright
-            ModelParam::ListedPortfolioNavShare->value => 0.60, // Anchor stakes in the District's engineering and infrastructure champions, governed from the board
             ModelParam::PricingPowerIndex->value       => 0.90,
             ModelParam::OperatingCyclicality->value    => 0.45,
         ],

@@ -4,11 +4,14 @@ declare(strict_types=1);
 
 namespace App\Service\View;
 
+use App\Data\AnchorHoldings;
 use App\Data\Sectors;
 use App\DTO\MacroStateDTO;
 use App\DTO\MarketPricingContext;
 use App\Entity\Stock;
+use App\Repository\StockRepository;
 use App\Service\Corporate\DebtEngine;
+use App\Service\Corporate\Holdings\AnchorStakeLedger;
 use App\Service\Market\MarketEngine;
 
 /**
@@ -37,6 +40,8 @@ class CompanySnapshotBuilder
     public function __construct(
         private readonly MarketEngine $marketEngine,
         private readonly DebtEngine $debtEngine,
+        private readonly AnchorStakeLedger $anchorStakes,
+        private readonly StockRepository $stocks,
     ) {}
 
     /**
@@ -65,7 +70,44 @@ class CompanySnapshotBuilder
                 ? ($lastDividend * self::DIVIDEND_PERIODS_PER_YEAR) / $price
                 : 0.0,
             'analystTargets' => $isBankrupt ? null : $this->analystTargets($stock, $macroState, $businessModel),
+            'netAssetValue' => $isBankrupt ? null : $this->netAssetValue($stock, $macroState, $businessModel, $price),
         ];
+    }
+
+    /**
+     * Net asset value per share and where the market has it against that.
+     *
+     * The headline number on every closed-end factsheet. Shown for any model declaring a standing
+     * structural discount, which is what "closed-end structure" means in ValuationStrategyInterface.
+     *
+     * Priced off the board rather than read from the last filing, since the holdings are listed and have
+     * moved since. The web process has its own ledger instance, primed here from the holdings alone.
+     *
+     * @return array{perShare: float, premium: float}|null
+     */
+    private function netAssetValue(Stock $stock, MacroStateDTO $macroState, string $businessModel, float $price): ?array
+    {
+        $strategy = Sectors::getBusinessModelStrategy($businessModel);
+
+        if ($strategy->getStructuralValuationDiscount($macroState) <= 0.0) {
+            return null;
+        }
+
+        $held = array_keys(AnchorHoldings::forHolder($stock->getTicker()));
+
+        if ($held !== []) {
+            $this->anchorStakes->beginTick($this->stocks->findBy(['ticker' => $held]));
+        }
+
+        $navPerShare = $this->anchorStakes->resolveMarkedBookValuePerShare($stock)
+            ?? (float) $stock->getBookValuePerShare();
+
+        if ($navPerShare <= 0.0 || $price <= 0.0) {
+            return null;
+        }
+
+        // Signed the way a factsheet signs it: negative is a discount, positive a premium.
+        return ['perShare' => $navPerShare, 'premium' => ($price / $navPerShare) - 1.0];
     }
 
     /**

@@ -6,6 +6,7 @@ use App\Entity\Etf;
 use App\Entity\Stock;
 use App\DTO\MacroStateDTO;
 use App\Entity\User;
+use App\Data\AnchorHoldings;
 use App\Data\InitialMarket;
 use App\Data\Sectors;
 use Doctrine\ORM\EntityManagerInterface;
@@ -31,7 +32,8 @@ class MarketSeedCommand extends Command
         private MathUtility $mathUtility,
         private \App\Service\Corporate\DebtEngine $debtEngine,
         private \App\Service\Market\MarketEngine $marketEngine,
-        private \App\Service\Market\TreasuryAuctionService $treasuryAuction
+        private \App\Service\Market\TreasuryAuctionService $treasuryAuction,
+        private \App\Service\Corporate\Holdings\AnchorStakeLedger $anchorStakes
     ) {
         parent::__construct();
     }
@@ -79,6 +81,11 @@ class MarketSeedCommand extends Command
             $etf->setExpenseRatio((float) ($etfData['expense_ratio'] ?? 0.0));
             $this->entityManager->persist($etf);
         }
+
+        // Every seeded firm, kept so the anchor spheres can be marked against the finished board below.
+        $seeded = [];
+        /** @var list<array{stock: Stock, data: array<string, mixed>, invested: float, strategy: \App\Service\Model\BusinessModelInterface}> */
+        $deferredPlant = [];
 
         // Loop through Stocks
         foreach (InitialMarket::STOCKS as $stockData) {
@@ -136,7 +143,12 @@ class MarketSeedCommand extends Command
                 $stock->setCorporateTreasury((string) ($stockData['corporate_treasury'] ?? 1000000000.00));
                 $stock->setFloatingDebtRatio((string) ($stockData['floating_debt_ratio'] ?? 0.30));
                 $stock->setOperatingMargin((string) ($stockData['operating_margin'] ?? 0.15));
-                $stock->setPublicFloatPercentage((string) ($stockData['public_float'] ?? 0.90));
+                // Shares an anchor sphere holds are not tradable, so the float is the declared one less
+                // whatever AnchorHoldings locks away. Derived so a stake and a float cannot drift apart.
+                $stock->setPublicFloatPercentage((string) \App\Data\AnchorHoldings::tradableFloat(
+                    $stockData['ticker'],
+                    (float) ($stockData['public_float'] ?? 0.90)
+                ));
                 $stock->setTotalEquity((string) ($stockData['total_equity'] ?? 0.00));
                 $stock->setWholesaleDebt((string) ($stockData['wholesale_debt'] ?? 0.00));
                 $stock->setCustomerDeposits((string) ($stockData['customer_deposits'] ?? 0.00));
@@ -195,15 +207,22 @@ class MarketSeedCommand extends Command
                         $revenue * (1.0 - $margin)
                     );
                     $metrics->seedReceivablesAllowance($stock, $dummyMacro->corporateDefaultRateEma);
-                    $openingNwc = (float) $stock->getNetWorkingCapital();
-                    $metrics->seedFixedAssetLedger(
-                        $stock,
-                        $investedCapital,
-                        $openingNwc,
-                        (float) $stock->getGoodwill(),
-                        $stock->getTotalCipAmount(),
-                        (float) ($stockData['asset_age_ratio'] ?? \App\Service\Math\FinancialConstants::SEED_ASSET_AGE_RATIO)
-                    );
+
+                    // A sphere's plant is what its portfolio leaves, and the portfolio cannot be valued
+                    // until the board it holds has prices — which, halfway down this loop, half of it does
+                    // not. Deferred to the pass below, which marks first and carves second.
+                    if (AnchorHoldings::forHolder($stockData['ticker']) === []) {
+                        $metrics->seedFixedAssetLedger(
+                            $stock,
+                            $strategy->getPlantCapital($stock, $investedCapital),
+                            (float) $stock->getNetWorkingCapital(),
+                            (float) $stock->getGoodwill(),
+                            $stock->getTotalCipAmount(),
+                            (float) ($stockData['asset_age_ratio'] ?? \App\Service\Math\FinancialConstants::SEED_ASSET_AGE_RATIO)
+                        );
+                    } else {
+                        $deferredPlant[] = ['stock' => $stock, 'data' => $stockData, 'invested' => $investedCapital, 'strategy' => $strategy];
+                    }
                 } else {
                     // A balance-sheet business opens its loan book instead, with the allowance already at
                     // the lifetime loss it expects so the first report books no phantom provision.
@@ -267,7 +286,47 @@ class MarketSeedCommand extends Command
             $stock->setIndustry($stockData['industry'] ?? null);
             $stock->setDescription(\App\Data\StockInfo::DESCRIPTIONS[$stockData['ticker']] ?? null);
 
+            $seeded[$stockData['ticker']] = $stock;
             $this->entityManager->persist($stock);
+        }
+
+        // The first moment the stakes can be valued at all. Marking here rather than at the first earnings
+        // report means a trust opens carrying what its holdings are worth: NAV is right from tick one, and
+        // the plant below is carved out of a real portfolio instead of a guess at one.
+        $this->anchorStakes->beginTick($seeded);
+
+        foreach ($deferredPlant as $sphere) {
+            $this->anchorStakes->markToMarket($sphere['stock'], $sphere['strategy']->getEffectiveTaxRate($dummyMacro->corporateTaxRate));
+
+            // The stake list is edited by hand in a file that knows nothing about the balance sheet it has
+            // to fit inside. Refused rather than logged: a portfolio that swallows the book leaves the
+            // subsidiaries no residual, and their stream stops being drawn at all.
+            $fit = AnchorHoldings::consolidatedShare(
+                (float) ($sphere['stock']->getListedStakesCarrying() ?? 0.0),
+                $sphere['invested']
+            );
+
+            if ($fit < AnchorHoldings::MIN_CONSOLIDATED_SHARE) {
+                $io->error(sprintf(
+                    '%s holds a portfolio worth %.1f%% of its capital employed, leaving %.1f%% for its subsidiaries (minimum %.0f%%). Trim its stakes in AnchorHoldings or raise its balance sheet in InitialMarket.',
+                    $sphere['stock']->getTicker(),
+                    100.0 * (1.0 - $fit),
+                    100.0 * $fit,
+                    100.0 * AnchorHoldings::MIN_CONSOLIDATED_SHARE
+                ));
+
+                return Command::FAILURE;
+            }
+
+            $metrics = \App\Service\Math\CorporateMetrics::getInstance();
+            $metrics->seedFixedAssetLedger(
+                $sphere['stock'],
+                $sphere['strategy']->getPlantCapital($sphere['stock'], $sphere['invested']),
+                (float) $sphere['stock']->getNetWorkingCapital(),
+                (float) $sphere['stock']->getGoodwill(),
+                $sphere['stock']->getTotalCipAmount(),
+                (float) ($sphere['data']['asset_age_ratio'] ?? \App\Service\Math\FinancialConstants::SEED_ASSET_AGE_RATIO)
+            );
         }
 
         // Test User

@@ -8,6 +8,7 @@ use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Event\NarrativeEngine;
 use App\Service\Event\ShockEvent;
+use App\Service\Macro\MacroEngine;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\InternetRetailBusinessModel;
 use PHPUnit\Framework\TestCase;
@@ -174,8 +175,10 @@ class InternetRetailBusinessModelTest extends TestCase
             return $this->model->computeActualFinancials($stock, 1000.0, 0.60, 50.0, 0.0, new MacroStateDTO(outputGapEma: 0.0, consumerSentimentIndexEma: $sentiment), $math)->streamRevenue;
         };
 
-        $calm = $run(100.0);
-        $slump = $run(80.0);
+        // Calm is the level the index sits at with output at trend, so the slump is a clean twenty points
+        // off a state the model reads as neutral rather than off one it already reads as upbeat.
+        $calm = $run(MacroEngine::SENTIMENT_TREND_LEVEL);
+        $slump = $run(MacroEngine::SENTIMENT_TREND_LEVEL - 20.0);
 
         $expectedDrop = 0.20 * InternetRetailBusinessModel::CONSUMER_SENTIMENT_SCALAR * InternetRetailBusinessModel::OPERATING_CYCLICALITY;
         $this->assertEqualsWithDelta($calm['first_party_retail'] * (1.0 - $expectedDrop), $slump['first_party_retail'], 1e-6);

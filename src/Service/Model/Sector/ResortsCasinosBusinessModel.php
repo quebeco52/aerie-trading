@@ -143,7 +143,7 @@ class ResortsCasinosBusinessModel extends StandardCorporateBusinessModel
     {
         $physics = parent::getMacroPhysics($stock, $macroState);
 
-        $sentimentShift = ($macroState->consumerSentimentIndexEma - MacroEngine::SENTIMENT_BASELINE) / 100.0;
+        $sentimentShift = $macroState->sentimentDeviation();
         $beta = $this->getOperatingCyclicality($stock);
 
         $physics['macro_demand_shift'] += ($sentimentShift * $beta * self::SENTIMENT_SENSITIVITY_SCALAR) + $this->resolveFxDemandShift($macroState);
@@ -258,7 +258,7 @@ class ResortsCasinosBusinessModel extends StandardCorporateBusinessModel
         // spot; room and menu pricing recovers part of it. Only the physical resort footprint carries them.
         $inputCostDrag = $this->resolveInputCostDrag($stock, $macroState, $streams, $pricingPower, $realizedVariableMargin);
 
-        $sentimentShift = ($macroState->consumerSentimentIndexEma - MacroEngine::SENTIMENT_BASELINE) / 100.0;
+        $sentimentShift = $macroState->sentimentDeviation();
         $promotionalDrag = $sentimentShift < 0.0
             ? abs($sentimentShift) * $this->getOperatingCyclicality($stock) * self::PROMOTIONAL_COMP_DRAG_SCALAR
             : 0.0;

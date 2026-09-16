@@ -251,6 +251,10 @@ class Stock
     #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, options: ['default' => '0.0000'])]
     private string $creditLossAllowance = '0.0000';
 
+    /** @var string|null What a sphere's listed anchor stakes sit at on the balance sheet, remarked at every report. Null for the firms that hold none. */
+    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, nullable: true)]
+    private ?string $listedStakesCarrying = null;
+
 
     // CORPORATE POLICY & MARKET PHYSICS
 
@@ -1028,6 +1032,19 @@ class Stock
         return $this;
     }
 
+    public function getListedStakesCarrying(): ?string
+    {
+        return $this->listedStakesCarrying;
+    }
+
+    public function setListedStakesCarrying(?string $listedStakesCarrying): self
+    {
+        $this->listedStakesCarrying = $listedStakesCarrying === null
+            ? null
+            : self::cleanBcStr($listedStakesCarrying, 4);
+        return $this;
+    }
+
     /** Whether the earning-asset ledger a balance-sheet business carries has been opened. */
     public function hasEarningAssetLedger(): bool
     {
@@ -1631,8 +1648,9 @@ class Stock
     /**
      * Total assets, derived from the balance sheet's asset side rather than stored: cash, the trade cycle,
      * the plant and what is still being built, the loans and securities a balance-sheet business holds
-     * net of the losses it expects on them, plus the intangibles an acquisition left behind and the
-     * right-of-use asset that sits opposite a capitalized lease.
+     * net of the losses it expects on them, the listed stakes a holding company carries at market, plus
+     * the intangibles an acquisition left behind and the right-of-use asset that sits opposite a
+     * capitalized lease.
      */
     public function getTotalAssets(float $leaseLiability = 0.0): float
     {
@@ -1641,6 +1659,7 @@ class Stock
             + $this->getNetInventory()
             + $this->getNetPpe()
             + $this->getNetEarningAssets()
+            + max(0.0, (float) ($this->listedStakesCarrying ?? 0.0))
             + (float) $this->cipBalance
             + (float) $this->goodwill
             + max(0.0, $leaseLiability);

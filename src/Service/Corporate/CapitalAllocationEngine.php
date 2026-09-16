@@ -348,7 +348,14 @@ class CapitalAllocationEngine
 
         $ctx->newShares = $ctx->sharesOutstanding;
 
-        if (($economicSpread > 0.02 && $ctx->currentPE < ($fairValuePE + 3.0)) || $isHoarder || $isUnderLeveraged || $saturationSeverity > 0.20) {
+        // A share retired below intrinsic book raises every remaining share's book value, whatever the
+        // business does next. Zero for an operating company, whose case is the earnings test above; for a
+        // closed-end structure that test can never find it, because a trust's economic spread sits at zero
+        // and the discount inflates the very P/E being compared.
+        $repurchaseAccretion = $ctx->strategy->resolveRepurchaseAccretion($stock, $ctx->currentPrice);
+        $isTradingBelowBook = $repurchaseAccretion >= FinancialConstants::MIN_ACCRETIVE_REPURCHASE_DISCOUNT;
+
+        if (($economicSpread > 0.02 && $ctx->currentPE < ($fairValuePE + 3.0)) || $isHoarder || $isUnderLeveraged || $saturationSeverity > 0.20 || $isTradingBelowBook) {
             $maxWillingSpend = $ctx->strategy->calculateMaxBuybackSpend($excessCash, $ctx->retainedEarningsThisQuarter, $isMegaHoarder);
 
             // Saturation Buyback Unlock: Mature firms distribute non-reinvestable excess cash
@@ -391,7 +398,10 @@ class CapitalAllocationEngine
             $availableCashBuffer = max(0.0, $ctx->newTreasury - $minOperatingCash);
             $absoluteMaxSpend = min($absoluteMaxSpend, $availableCashBuffer);
 
-            $valuationDiscount = max(0.0, ($fairValuePE - $ctx->currentPE) / max(1.0, $fairValuePE));
+            $valuationDiscount = max(
+                $repurchaseAccretion,
+                max(0.0, ($fairValuePE - $ctx->currentPE) / max(1.0, $fairValuePE))
+            );
             $aggression = $isMegaHoarder ? 1.0 : min(1.0, 0.50 + $valuationDiscount);
 
             $actualSpend = $absoluteMaxSpend * $aggression * ($isHoarder ? 1.0 : (mt_rand(50, 100) / 100.0));

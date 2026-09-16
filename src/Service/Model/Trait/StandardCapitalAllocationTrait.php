@@ -42,4 +42,10 @@ trait StandardCapitalAllocationTrait
     {
         return null;
     }
+
+    /** An operating company's repurchase case is the return it earns, which the earnings test already asks. */
+    public function resolveRepurchaseAccretion(Stock $stock, float $currentPrice): float
+    {
+        return 0.0;
+    }
 }

@@ -583,6 +583,17 @@ trait StandardOperatingPhysicsTrait
         return $netPpe > 0.0 ? $netPpe : $this->getPhysicalCapital($stock);
     }
 
+    /** Invested capital less any marketable investments, which carry their own asset line and no depreciation. The treasury is already outside it, so the stakes are the only deduction. */
+    public function getPlantCapital(Stock $stock, float $investedCapital): float
+    {
+        return max(0.0, $investedCapital - max(0.0, (float) ($stock->getListedStakesCarrying() ?? 0.0)));
+    }
+
+    public function getOpeningInvestmentAssets(Stock $stock): ?float
+    {
+        return 0.0;
+    }
+
     public function allowsPhysicalOrganicCapex(): bool
     {
         return true;

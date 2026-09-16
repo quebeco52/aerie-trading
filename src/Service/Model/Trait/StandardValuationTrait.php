@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace App\Service\Model\Trait;
 
+use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
 use App\Service\Math\FinancialConstants;
@@ -40,7 +41,7 @@ trait StandardValuationTrait
     }
 
     /** An operating company carries no standing discount: its fair value is already what it is worth. */
-    public function getStructuralValuationDiscount(float $outputGap): float
+    public function getStructuralValuationDiscount(MacroStateDTO $macroState): float
     {
         return 0.0;
     }
