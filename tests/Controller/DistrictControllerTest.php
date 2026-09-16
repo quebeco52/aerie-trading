@@ -265,10 +265,12 @@ class DistrictControllerTest extends WebTestCase
 
         $this->assertResponseIsSuccessful();
 
-        $runs = $crawler->filter('[data-district-target="sectorRun"]');
-        $this->assertGreaterThan(0, $runs->count(), 'A street with tenants has at least one sector run');
+        $runs = $crawler->filter('[data-district-target="districtRun"]');
+        $this->assertGreaterThan(0, $runs->count(), 'A street with tenants has at least one district run');
         $runs->each(function ($node) {
-            $this->assertArrayHasKey($node->attr('data-sector'), DistrictMap::SECTOR_PALETTE);
+            foreach (explode('|', (string) $node->attr('data-sectors')) as $sector) {
+                $this->assertArrayHasKey($sector, DistrictMap::SECTOR_PALETTE, 'Every trade a bracket lists is a legend chip');
+            }
         });
 
         $this->assertCount(

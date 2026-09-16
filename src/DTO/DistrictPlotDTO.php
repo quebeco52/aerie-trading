@@ -44,6 +44,8 @@ class DistrictPlotDTO
         /** Market-cap position on the street, 1 being the largest tenant. */
         public readonly int $rank,
         public readonly ?string $sector = null,
+        /** Block of the street the tenant trades in — see DistrictMap::FRONTAGE_DISTRICTS. What the kerb bracket names. */
+        public readonly ?string $district = null,
         public readonly ?string $industry = null,
         public readonly ?string $systemicImportance = null,
         public readonly ?string $creditRating = null,

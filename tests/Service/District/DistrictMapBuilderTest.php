@@ -363,7 +363,7 @@ class DistrictMapBuilderTest extends TestCase
             $tallest[$plot->row] = max($tallest[$plot->row], $plot->height);
         }
         $this->assertSame(DistrictMap::ROW_COUNT, $canvas->rowCount());
-        $this->assertSame(count(array_unique($tallest)), count($tallest), 'The fixture must give every row its own skyline');
+        $this->assertCount(count(array_unique($tallest)), $tallest, 'The fixture must give every row its own skyline');
 
         // Walk the street from the lane band down: each row is ROW_GAP plus its own clearance
         // below the kerb of the row above it.
@@ -608,16 +608,14 @@ class DistrictMapBuilderTest extends TestCase
         $this->assertSame('flare_stack', $this->findPlot('REFN', [$refiner])->roofFurniture);
     }
 
-    // --- Sector runs ---
+    // --- District runs ---
 
-    public function testAdjacentSameSectorPlotsFormOneRunPerRow(): void
+    public function testAdjacentSameDistrictPlotsFormOneRunPerRow(): void
     {
         $stocks = $this->fullStreet();
-        $stocks[3]->setSector('Information Technology');
-        $stocks[4]->setSector('Information Technology');
         ['plots' => $plots] = $this->compose($stocks);
 
-        $runs = $this->builder->buildSectorRuns($plots);
+        $runs = $this->builder->buildDistrictRuns($plots);
 
         // Each run spans exactly its plots, never crosses a row, and covers every plot once.
         $covered = 0;
@@ -625,15 +623,83 @@ class DistrictMapBuilderTest extends TestCase
             $members = array_filter($plots, static fn (DistrictPlotDTO $p) => $p->row === $run['row'] && $p->x >= $run['x'] && $p->x + $p->width <= $run['x'] + $run['width']);
             $this->assertNotEmpty($members);
             foreach ($members as $member) {
-                $this->assertSame($run['sector'], $member->sector);
+                $this->assertSame($run['district'], $member->district);
+                $this->assertContains($member->sector, $run['sectors'], 'A run lists every trade standing in it, for the legend filter');
             }
             $covered += count($members);
         }
         $this->assertSame(count($plots), $covered);
+    }
 
-        $sectors = array_map(static fn (array $r) => $r['sector'], $runs);
-        $this->assertContains('Information Technology', $sectors);
-        $this->assertGreaterThanOrEqual(3, count($runs), 'Financials, then IT, then Financials again at least');
+    /**
+     * The bracket names the block of the street, and the street is ordered by that same list — so a
+     * district can only ever be broken by a row wrap, never by a neighbour of another trade standing
+     * inside it. Sector brackets could not say this: a data house inside the banking run split it.
+     */
+    public function testADistrictIsNeverInterruptedWithinARow(): void
+    {
+        ['plots' => $plots] = $this->compose($this->fullStreet());
+
+        $seen = [];
+        foreach ($this->builder->buildDistrictRuns($plots) as $run) {
+            $key = $run['row'] . ':' . $run['district'];
+            $this->assertArrayNotHasKey($key, $seen, "{$run['district']} is bracketed twice on row {$run['row']}");
+            $seen[$key] = true;
+        }
+    }
+
+    /**
+     * A district the wrap cuts in two is named once and then marked as carried on, never named
+     * twice: two identical brackets read as two places.
+     */
+    public function testAWrappedDistrictIsNamedOnceAndThenMarkedAsContinued(): void
+    {
+        ['plots' => $plots] = $this->compose($this->fullStreet());
+        $runs = $this->builder->buildDistrictRuns($plots);
+
+        $named = [];
+        foreach ($runs as $run) {
+            if ($run['label'] === null) {
+                continue;
+            }
+
+            if (isset($named[$run['district']])) {
+                $this->assertStringEndsWith(
+                    DistrictMap::DISTRICT_CONTINUATION_SUFFIX,
+                    $run['label'],
+                    "{$run['district']} is named twice on the street"
+                );
+                continue;
+            }
+
+            $this->assertSame($run['district'], $run['label']);
+            $named[$run['district']] = true;
+        }
+
+        $this->assertNotEmpty($named);
+    }
+
+    /**
+     * A fragment too narrow to print its name does not claim it: the next fragment of that district
+     * says the name in full rather than announcing the continuation of something never announced.
+     */
+    public function testAContinuationOnlyFollowsANamePrintedSomewhere(): void
+    {
+        ['plots' => $plots] = $this->compose($this->fullStreet());
+
+        $printed = [];
+        foreach ($this->builder->buildDistrictRuns($plots) as $run) {
+            if ($run['label'] === null) {
+                continue;
+            }
+
+            if (str_ends_with($run['label'], DistrictMap::DISTRICT_CONTINUATION_SUFFIX)) {
+                $this->assertArrayHasKey($run['district'], $printed, "{$run['district']} is continued before it is named");
+                continue;
+            }
+
+            $printed[$run['district']] = true;
+        }
     }
 
     public function testARunCarriesItsNameOnlyWhereItIsWideEnough(): void
@@ -641,11 +707,11 @@ class DistrictMapBuilderTest extends TestCase
         $narrow = $this->buildPlots([$this->makeStock('LAKE')]);          // one 100-unit plot
         $wide = $this->buildPlots(array_slice($this->fullStreet(), 0, 4)); // four plots on one row
 
-        $narrowRuns = $this->builder->buildSectorRuns($narrow);
-        $wideRuns = $this->builder->buildSectorRuns($wide);
+        $narrowRuns = $this->builder->buildDistrictRuns($narrow);
+        $wideRuns = $this->builder->buildDistrictRuns($wide);
 
-        $this->assertNull($narrowRuns[0]['label'], '"Financials" at 20 units a glyph does not fit a 100-unit plot');
-        $this->assertSame('Financials', $wideRuns[0]['label']);
+        $this->assertNull($narrowRuns[0]['label'], '"Capital Markets" at 20 units a glyph does not fit a 100-unit plot');
+        $this->assertSame('Capital Markets', $wideRuns[0]['label']);
     }
 
     public function testTheSameCapSitsAtADifferentHeightOnEachRow(): void

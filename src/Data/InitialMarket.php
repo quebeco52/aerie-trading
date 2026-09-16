@@ -687,7 +687,13 @@ class InitialMarket
             'ticker' => 'TICK',
             'management_style' => 'empire_builder', // Predatory acquisitions to swallow rivals before they become a legitimate threat
             'name' => 'Tickbird Data Systems',
-            'sector' => 'Information Technology',
+            // Financials, not technology: SHRK runs the same industry and the same business model
+            // and reads as a financial, and GICS files exchanges and data vendors under Financial
+            // Exchanges & Data for the same reason — the terminal is sold to the market it reports
+            // on, and its revenue moves with that market, not with the technology cycle. The sector
+            // is not cosmetic: it picks which demand factor the stream draws on and which cohort
+            // the P/E anchor shrinks toward, so the twins used to load on different economies.
+            'sector' => 'Financials',
             'industry' => 'Financial Data & Stock Exchanges',
             'systemic_importance' => 'systemic',
             'shares_outstanding' => 1_000_000_000,
@@ -1249,7 +1255,17 @@ class InitialMarket
             // Industrial holding trust structured around dual-class foundation voting control (40% public float),
             // anchor equity stakes across the District's crown-jewel engineering and infrastructure pillars, active
             // board-level stewardship, and counter-cyclical emergency liquidity.
-            'sector' => 'Industrials',
+            //
+            // Financials, like OWLS: what this house does for a living is hold other people's balance
+            // sheets, which is the trade the sector names — its own industry says Investment Companies,
+            // and a closed-end trust is filed under Financials for the same reason a fund is. It stays
+            // an INDUSTRIAL holding in every way that touches the physics: the business model is
+            // investment_company, not a financial one, so it keeps its subsidiaries' plant and its
+            // NAV-anchored valuation. Two things do move with the label — its streams now load on the
+            // financial demand factor at the 0.25 sector loading its model declares, and its P/E shrinks
+            // toward the Financials anchor of 14 rather than the Industrials 20, which pulls with the
+            // holding-company discount this trust's lore claims rather than against it.
+            'sector' => 'Financials',
             'industry' => 'Investment Companies',
             'systemic_importance' => 'titan',
             'shares_outstanding' => 1_000_000_000,
@@ -1320,7 +1336,14 @@ class InitialMarket
             'ticker' => 'SWFT',
             'management_style' => 'steward', // Master-franchise royalties grow the estate on the franchisees capital, not its own
             'name' => 'Golden Swift Holdings',
-            'sector' => 'Consumer Staples',
+            // Restaurants are Consumer Discretionary, and BREW — the same industry, the same
+            // RestaurantBusinessModel — was already filed there. One industry standing in two
+            // sectors means the twins draw different demand factors and shrink toward different
+            // P/E cohorts. What makes this one defensive is its book, not its label: beta 0.15 and
+            // 95% of revenue in royalties and leases. If its EARNINGS should also ride the cycle
+            // more gently than a company-operated chain's, that is ModelParam::OperatingCyclicality
+            // (the restaurant default is a full 1.00), not the sector.
+            'sector' => 'Consumer Discretionary',
             'industry' => 'Restaurants',
             'systemic_importance' => 'none',
             'shares_outstanding' => 1_000_000_000,

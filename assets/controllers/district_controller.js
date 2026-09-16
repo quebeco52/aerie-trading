@@ -234,7 +234,7 @@ export default class extends Controller {
         'detailRevenueMixBar', 'detailRevenueFootnote',
         'institutionDetail', 'institutionName', 'institutionStatus', 'institutionReadings',
         'institutionFeeds', 'institutionFeedCount',
-        'sectorChip', 'sectorRun',
+        'sectorChip', 'districtRun',
         'conduitModeBtn', 'roofKit', 'detailPositionWrap', 'detailPosition', 'tooltipPosition',
         'quickTradeForm', 'quickTradeTickerInput', 'quickTradeHolding', 'quickTradeEstimate', 'quickTradeQuantity', 'quickTradeSubmit',
     ];
@@ -629,7 +629,16 @@ export default class extends Controller {
         };
 
         this.plotTargets.forEach(plot => mark(plot, plot.dataset.sector));
-        this.sectorRunTargets.forEach(run => mark(run, run.dataset.sector));
+        // A district bracket spans more than one trade, so it dims only when the chosen sector
+        // has no house standing in it.
+        this.districtRunTargets.forEach(run => {
+            const sectors = (run.dataset.sectors || '').split('|').filter(Boolean);
+            if (sector !== null && !sectors.includes(sector)) {
+                run.setAttribute('data-dimmed', 'true');
+            } else {
+                run.removeAttribute('data-dimmed');
+            }
+        });
 
         const sectorByTicker = new Map();
         this.plotTargets.forEach(plot => sectorByTicker.set(plot.dataset.ticker, plot.dataset.sector));

@@ -137,7 +137,7 @@ class DistrictController extends AbstractController
             ],
             'gridlines' => $mapBuilder->buildGridlines($envelope, $canvas),
             'sectorPalette' => DistrictMap::SECTOR_PALETTE,
-            'sectorRuns' => $mapBuilder->buildSectorRuns($plots),
+            'districtRuns' => $mapBuilder->buildDistrictRuns($plots),
             'sectorBracket' => [
                 'ruleOffset' => DistrictMap::SECTOR_BRACKET_RULE_OFFSET,
                 'labelOffset' => DistrictMap::SECTOR_BRACKET_LABEL_OFFSET,

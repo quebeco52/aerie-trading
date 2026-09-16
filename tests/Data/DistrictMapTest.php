@@ -36,6 +36,23 @@ class DistrictMapTest extends TestCase
      * caught BRKW-style orphans (a company reclassified to a sector/model this list never
      * learned about).
      */
+    /**
+     * FRONTAGE_ORDER is flattened from FRONTAGE_DISTRICTS, and the kerb brackets are drawn on the
+     * districts: if the two ever drift, the street orders itself by one list and names itself by
+     * another, which is exactly the split that had a data house cutting the banking run in two.
+     */
+    public function testFrontageOrderIsExactlyTheDistrictsFlattened(): void
+    {
+        $flattened = array_merge(...array_values(DistrictMap::FRONTAGE_DISTRICTS));
+
+        $this->assertSame($flattened, DistrictMap::FRONTAGE_ORDER);
+        $this->assertSame(
+            $flattened,
+            array_values(array_unique($flattened)),
+            'A business model trades in exactly one district'
+        );
+    }
+
     public function testFrontageOrderCoversEveryBusinessModelInTheListedUniverse(): void
     {
         foreach (self::businessModelsInUse() as $businessModel) {

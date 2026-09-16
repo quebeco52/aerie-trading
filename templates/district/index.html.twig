@@ -906,14 +906,16 @@
 						{% endfor %}
 					</g>
 
-					{# Sector brackets: a rule in the sector's colour under each run of adjacent
-					   same-sector plots, named where the run is wide enough to carry it — see
-					   App\Service\District\DistrictMapBuilder::buildSectorRuns(). #}
-					<g id="sector-runs" aria-hidden="true">
-						{% for run in sectorRuns %}
-							{% set palette = sectorPalette[run.sector] ?? {'facade': '#1b2439', 'stroke': '#424754', 'window': '#adc6ff'} %}
+					{# District brackets: a rule under each run of adjacent plots trading in the same
+					   block of the street, named where the run is wide enough to carry it — see
+					   App\Service\District\DistrictMapBuilder::buildDistrictRuns(). The rule takes the
+					   colour of the first sector standing in the run; the legend filter reads the
+					   whole list, since a block holds more than one trade. #}
+					<g id="district-runs" aria-hidden="true">
+						{% for run in districtRuns %}
+							{% set palette = sectorPalette[run.sectors|first] ?? {'facade': '#1b2439', 'stroke': '#424754', 'window': '#adc6ff'} %}
 							{% set groundLine = rowGroundLines[run.row] %}
-							<g class="sector-run" data-district-target="sectorRun" data-sector="{{ run.sector }}">
+							<g class="sector-run" data-district-target="districtRun" data-sectors="{{ run.sectors|join('|') }}">
 								<line class="sector-rule" stroke="{{ palette.window }}"
 									x1="{{ run.x }}" y1="{{ groundLine + sectorBracket.ruleOffset }}"
 									x2="{{ run.x + run.width }}" y2="{{ groundLine + sectorBracket.ruleOffset }}"/>

@@ -45,37 +45,95 @@ class DistrictMap
     public const RECONSTITUTIONS_PER_YEAR = 4;
 
     /**
+     * The street's districts, west to east, and the business models that trade in each.
+     *
+     * This is the authored layer: qualification is ranked (largest by market cap hold frontage),
+     * but WHERE a house stands is composed. A district is a block of the street, not a GICS
+     * sector — the two do not nest, and the kerb brackets used to be drawn on sector while the
+     * order was drawn on business model, which left the row reading a lie: a data house sat
+     * inside the banking run and split it into two brackets, the oil houses straddled a row wrap
+     * and appeared twice, and five sectors held frontage under no name at all because a one-plot
+     * run is too narrow to print one. Bracketing on the same list that does the ordering makes
+     * every block contiguous by construction. Sector still reaches the street where a viewer
+     * actually reads it: the facade colour, the kerb plate and the legend filter.
+     *
+     * Every business model carried by a company in App\Data\InitialMarket::STOCKS must appear in
+     * exactly one district — see DistrictMapTest::testFrontageOrderCoversEveryBusinessModelInTheListedUniverse.
+     *
+     * @var array<string, list<string>>
+     */
+    public const FRONTAGE_DISTRICTS = [
+        // The historical core of the row, and the deepest balance sheets on it. A closed-end trust
+        // closes the block: what it owns is paper, it is priced on the net asset value of that
+        // paper, and it stands where the funds stand rather than beside the works it holds.
+        'Capital Markets' => [
+            'credit_services', 'commercial_bank', 'insurance', 'retail_insurance', 'reinsurance', 'shadow_bank',
+            'investment_bank', 'clearing_house', 'financial_data', 'asset_manager', 'hedge_fund',
+            'brokerage', 'distressed_debt', 'private_equity', 'investment_company',
+        ],
+        // The diversified groups open the works: a conglomerate and a merchant house OPERATE what
+        // they own and trade what they carry, which is this block's trade and not the trust's, so
+        // they stand at its western end where it meets the capital that funds them.
+        'Industry & Materials' => [
+            'conglomerate', 'merchant_house',
+            'steel_manufacturing', 'specialty_industrial_machinery', 'chemical',
+            'construction', 'defense_contractor', 'security_protection', 'waste_management',
+            'railroad', 'shipping', 'logistics', 'tools_and_accessories', 'heavy_manufacturing', 'law_firm',
+        ],
+        'Consumer Trades' => [
+            'consumer_staples', 'restaurant', 'apparel_manufacturing', 'auto_manufacturer',
+            'internet_retail', 'resorts_casinos', 'luxury', 'advertising_agency', 'education',
+        ],
+        // The extraction and generation end. 'commodity' used to sit inside the materials block,
+        // which stood the oil houses between the machine shops and the chemical works. Named for
+        // extraction rather than energy because one business model carries both the wells and the
+        // mines: CNDR digs copper on the same `commodity` physics SINK drills with, and a copper
+        // miner under a bracket reading ENERGY is the same kind of lie this pass set out to remove.
+        'Extraction & Power' => ['commodity', 'utility'],
+        'Technology & Telecoms' => ['tech', 'computer_hardware', 'semiconductor', 'communication_equipment', 'telecom'],
+        'Property & Health' => ['reit', 'medical_care_facility', 'biotech'],
+    ];
+
+    /**
      * West-to-east ordering: a business model identifier's position here decides where a
      * qualifying tenant stands relative to tenants of other models (tenants of the same model
-     * then order by market cap descending). Every business model actually carried by a company in
-     * App\Data\InitialMarket::STOCKS must appear here — see
-     * DistrictMapTest::testFrontageOrderCoversEveryBusinessModelInTheListedUniverse — because
-     * unlike the roster itself, this list is authored: the street's character (capital markets
-     * west, industry and consumer names fanning east) is composed, not ranked.
+     * then order by market cap descending).
+     *
+     * Flattened from FRONTAGE_DISTRICTS so the order and the brackets can never disagree;
+     * DistrictMapTest pins the two together.
      */
     public const FRONTAGE_ORDER = [
-        // Financials — the historical core of the row.
-        'credit_services', 'commercial_bank', 'insurance', 'retail_insurance', 'reinsurance', 'shadow_bank',
-        'investment_bank', 'clearing_house', 'financial_data', 'asset_manager', 'hedge_fund',
-        'brokerage', 'distressed_debt', 'private_equity',
-        // Industrials & Materials.
-        'steel_manufacturing', 'specialty_industrial_machinery', 'commodity', 'chemical',
-        'construction', 'defense_contractor', 'security_protection', 'waste_management',
-        'railroad', 'shipping', 'logistics', 'tools_and_accessories', 'heavy_manufacturing', 'law_firm',
-        // Consumer Discretionary & Staples.
-        'consumer_staples', 'restaurant', 'apparel_manufacturing', 'auto_manufacturer',
-        'internet_retail', 'resorts_casinos', 'luxury', 'advertising_agency', 'education',
-        // Energy & Utilities.
-        'utility',
-        // Information Technology & Communication Services.
-        'tech', 'computer_hardware', 'semiconductor', 'communication_equipment', 'telecom',
-        // Real Estate & Health Care.
-        'reit', 'medical_care_facility', 'biotech',
-        // Unclassified conglomerates trail east, matching the old row's "recovery houses" tail; the
-        // merchant houses stand at the far end, where the row meets the water they work off, and the
-        // investment trusts sit between the two, owning both without working either.
-        'conglomerate', 'investment_company', 'merchant_house',
+        ...self::FRONTAGE_DISTRICTS['Capital Markets'],
+        ...self::FRONTAGE_DISTRICTS['Industry & Materials'],
+        ...self::FRONTAGE_DISTRICTS['Consumer Trades'],
+        ...self::FRONTAGE_DISTRICTS['Extraction & Power'],
+        ...self::FRONTAGE_DISTRICTS['Technology & Telecoms'],
+        ...self::FRONTAGE_DISTRICTS['Property & Health'],
     ];
+
+    /**
+     * How much wider than the tightest possible partition the street may render in order to keep
+     * a district whole across a row wrap. The tightest partition alone split the oil houses and
+     * the consumer trades across staves, printing one district twice; a wrap is worth a few
+     * percent of canvas to avoid that, and past this it is not — the widest row sets the street's
+     * pixels-per-unit, and legibility is what the wrap exists to protect.
+     */
+    public const DISTRICT_WRAP_SLACK = 0.12;
+
+    /** Marks the second half of a district the row wrap had to cut, so the street reads one block continued rather than two blocks alike. */
+    public const DISTRICT_CONTINUATION_SUFFIX = ' cont.';
+
+    /** The district a business model trades in, or null for a model with no authored place on the street. */
+    public static function districtFor(string $businessModel): ?string
+    {
+        foreach (self::FRONTAGE_DISTRICTS as $district => $models) {
+            if (in_array($businessModel, $models, true)) {
+                return $district;
+            }
+        }
+
+        return null;
+    }
 
     // --- Street Canvas Geometry ---
     /**

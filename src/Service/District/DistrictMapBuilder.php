@@ -22,7 +22,7 @@ use App\Service\Market\CreditRatingAgency;
  * produced by this service may ever be read back into the simulation.
  *
  * Call order for one request: resolveEnvelope() → resolveCanvas() → buildWard() →
- * resolveViewboxWidth() → buildInstitutions() / buildGridlines() / buildSectorRuns(). Each step
+ * resolveViewboxWidth() → buildInstitutions() / buildGridlines() / buildDistrictRuns(). Each step
  * only needs what the previous ones returned.
  */
 class DistrictMapBuilder
@@ -275,50 +275,79 @@ class DistrictMapBuilder
     }
 
     /**
-     * Runs of adjacent same-sector plots on each row, for the kerb's sector brackets. A run
-     * carries its sector's name only where it is wide enough to print it at
-     * DistrictMap::SECTOR_BRACKET_LABEL_SIZE; a narrower run keeps the coloured rule alone, which
-     * still ties it to the legend.
+     * Runs of adjacent same-district plots on each row, for the kerb's brackets. A run carries its
+     * district's name only where it is wide enough to print it at
+     * DistrictMap::SECTOR_BRACKET_LABEL_SIZE; a narrower run keeps the rule alone.
+     *
+     * Bracketed on district rather than GICS sector because the street is ORDERED by district (see
+     * DistrictMap::FRONTAGE_DISTRICTS): bracketing on a taxonomy the order does not follow cut the
+     * banking run in two around a data house, printed the oil houses twice across a row wrap, and
+     * left every one-plot sector unnamed. A run also carries the sectors standing in it, so the
+     * legend's sector filter can still dim the brackets its sector has no house in.
      *
      * @param  list<DistrictPlotDTO> $plots in frontage order
-     * @return list<array{row: int, x: int, width: int, sector: string, label: string|null}>
+     * @return list<array{row: int, x: int, width: int, district: string, sectors: list<string>, label: string|null}>
      */
-    public function buildSectorRuns(array $plots): array
+    public function buildDistrictRuns(array $plots): array
     {
         $runs = [];
         $current = null;
+        $opened = [];
 
         foreach ($plots as $plot) {
+            $district = $plot->district ?? '';
             $sector = $plot->sector ?? '';
-            if ($current !== null && $current['row'] === $plot->row && $current['sector'] === $sector) {
+
+            if ($current !== null && $current['row'] === $plot->row && $current['district'] === $district) {
                 $current['width'] = $plot->x + $plot->width - $current['x'];
+                $current['sectors'][$sector] = true;
                 continue;
             }
 
             if ($current !== null) {
-                $runs[] = $this->finishSectorRun($current);
+                $runs[] = $finished = $this->finishDistrictRun($current, ($opened[$current['district']] ?? false) === true);
+                // Claimed only once the name has actually been PRINTED: a fragment too narrow to
+                // carry it leaves the district unnamed, and the next one should print the name in
+                // full rather than announce the continuation of something never announced.
+                $opened[$current['district']] = isset($opened[$current['district']]) || $finished['label'] !== null;
             }
-            $current = ['row' => $plot->row, 'x' => $plot->x, 'width' => $plot->width, 'sector' => $sector];
+            $current = ['row' => $plot->row, 'x' => $plot->x, 'width' => $plot->width, 'district' => $district, 'sectors' => [$sector => true]];
         }
 
         if ($current !== null) {
-            $runs[] = $this->finishSectorRun($current);
+            $runs[] = $this->finishDistrictRun($current, isset($opened[$current['district']]) && $opened[$current['district']]);
         }
 
         return $runs;
     }
 
     /**
-     * @param  array{row: int, x: int, width: int, sector: string} $run
-     * @return array{row: int, x: int, width: int, sector: string, label: string|null}
+     * A district the wrap has already opened on an earlier row is NAMED AS A CONTINUATION rather
+     * than named again. Aligning every wrap to a district edge would cost this street a quarter of
+     * its rendered scale (see DistrictWardComposer::wrapIndices), so a block does still get cut in
+     * two now and then — but a reader seeing the same name twice reads two places, while a reader
+     * seeing "cont." reads one place carried onto the next line, which is what it is.
+     *
+     * @param  array{row: int, x: int, width: int, district: string, sectors: array<string, bool>} $run
+     * @return array{row: int, x: int, width: int, district: string, sectors: list<string>, label: string|null}
      */
-    private function finishSectorRun(array $run): array
+    private function finishDistrictRun(array $run, bool $continued = false): array
     {
-        $labelWidth = mb_strlen($run['sector']) * DistrictMap::SECTOR_BRACKET_LABEL_ADVANCE * DistrictMap::SECTOR_BRACKET_LABEL_SIZE
-            + 2 * DistrictMap::SECTOR_BRACKET_LABEL_PADDING;
-        $run['label'] = $run['sector'] !== '' && $labelWidth <= $run['width'] ? $run['sector'] : null;
+        $name = $continued && $run['district'] !== ''
+            ? $run['district'] . DistrictMap::DISTRICT_CONTINUATION_SUFFIX
+            : $run['district'];
 
-        return $run;
+        $labelWidth = mb_strlen($name) * DistrictMap::SECTOR_BRACKET_LABEL_ADVANCE * DistrictMap::SECTOR_BRACKET_LABEL_SIZE
+            + 2 * DistrictMap::SECTOR_BRACKET_LABEL_PADDING;
+
+        return [
+            'row' => $run['row'],
+            'x' => $run['x'],
+            'width' => $run['width'],
+            'district' => $run['district'],
+            'sectors' => array_values(array_filter(array_keys($run['sectors']), static fn (string $sector): bool => $sector !== '')),
+            'label' => $name !== '' && $labelWidth <= $run['width'] ? $name : null,
+        ];
     }
 
     /**
@@ -459,6 +488,7 @@ class DistrictMapBuilder
             name: (string) $stock->getName(),
             rank: $slot['rank'],
             sector: $stock->getSector(),
+            district: DistrictMap::districtFor($businessModel),
             industry: $stock->getIndustry(),
             systemicImportance: $stock->getSystemicImportance(),
             creditRating: $stock->getCreditRating(),
