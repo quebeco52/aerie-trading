@@ -702,13 +702,22 @@
 											</dt>
 											<dd class="font-bold text-on-surface font-mono tabular-nums">${{ indexFacts.feesPaidPerShare|number_format(2) }}</dd>
 										</div>
-										{% if indexFacts.holdingsSoldForFees > 0.005 %}
+										{% if indexFacts.tradingCostsPerShare > 0.005 %}
 											<div class="py-2 flex justify-between items-center">
 												<dt class="group relative cursor-help text-sm font-semibold text-on-surface-variant" tabindex="0">
-													<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Holdings sold for fees</span>
-													{{ _self.tooltip('The part of the fee that income could not cover, so the fund sold basket to meet it. This is a permanent lag against the index and it only ever grows: a fund never buys its fee back.', 'left', 'w-72') }}
+													<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Trading costs</span>
+													{{ _self.tooltip('The spread the fund has crossed rebalancing itself, per share. An index changes its weights by arithmetic; a fund has to trade to follow it. A fund weighted by size pays almost none of this, because its weights maintain themselves as prices move.', 'left', 'w-72') }}
 												</dt>
-												<dd class="font-bold text-on-surface font-mono tabular-nums">&minus;{{ indexFacts.holdingsSoldForFees|number_format(2) }}%</dd>
+												<dd class="font-bold text-on-surface font-mono tabular-nums">${{ indexFacts.tradingCostsPerShare|number_format(2) }}</dd>
+											</div>
+										{% endif %}
+										{% if indexFacts.trackingDifference > 0.005 %}
+											<div class="py-2 flex justify-between items-center">
+												<dt class="group relative cursor-help text-sm font-semibold text-on-surface-variant" tabindex="0">
+													<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Tracking difference</span>
+													{{ _self.tooltip('How far the basket has fallen behind the one index unit a share started with. It only ever grows: a fund never buys back what it sold to pay for itself, whether that was a fee income could not cover or the spread on a rebalance.', 'left', 'w-72') }}
+												</dt>
+												<dd class="font-bold text-on-surface font-mono tabular-nums">&minus;{{ indexFacts.trackingDifference|number_format(2) }}%</dd>
 											</div>
 										{% endif %}
 										{% if indexFacts.accruedIncome > 0 %}
@@ -990,7 +999,7 @@
 									{% if indexFacts.expenseRatio is not null %}
 										<div>
 											<dt class="font-semibold text-on-surface">Fees and income</dt>
-											<dd class="text-on-surface-variant font-serif leading-relaxed">The fund holds the basket, so it receives the dividends its constituents pay and passes them on {{ constant('App\\Service\\Math\\FinancialConstants::FUND_DISTRIBUTIONS_PER_YEAR') }} times a year; the level above is a price index and shows none of that. Its {{ indexFacts.expenseRatio|number_format(2) }}% fee is charged against net assets and met out of that income first, so a distribution is net of what the fund costs to run. Only where income falls short does the fund sell holdings, which is why its price can track the index exactly while its holders are still paying for it: the cost is the ${{ indexFacts.feesPaidPerShare|number_format(2) }} a share that never reached a distribution.</dd>
+											<dd class="text-on-surface-variant font-serif leading-relaxed">The fund holds the basket, so it receives the dividends its constituents pay and passes them on {{ constant('App\\Service\\Math\\FinancialConstants::FUND_DISTRIBUTIONS_PER_YEAR') }} times a year; the level above is a price index and shows none of that. Its {{ indexFacts.expenseRatio|number_format(2) }}% fee is charged against net assets and met out of that income first, so a distribution is net of what the fund costs to run. Only where income falls short does the fund sell holdings, which is why its price can track the index exactly while its holders are still paying for it: the cost is the ${{ indexFacts.feesPaidPerShare|number_format(2) }} a share that never reached a distribution.{% if indexFacts.tradingCostsPerShare > 0.005 %} The fee is not the only cost. This index restrikes its weights at every review, and the fund has to trade to follow it: ${{ indexFacts.tradingCostsPerShare|number_format(2) }} a share has gone in spread doing so, out of the basket rather than out of income, because a spread is paid inside the trade.{% endif %}</dd>
 										</div>
 									{% endif %}
 									<div>

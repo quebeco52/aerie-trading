@@ -63,6 +63,7 @@ final class IndexCommittee
     public function __construct(
         private readonly IndexMembershipStoreInterface $store,
         private readonly EtfTracker $etfTracker,
+        private readonly LiquidityEngine $liquidityEngine,
     ) {}
 
     /** Ticks between reconstitutions. */
@@ -92,16 +93,27 @@ final class IndexCommittee
     }
 
     /**
-     * The volatility an index selects and weights on: what the name has actually been doing, falling back to
-     * its structural volatility before the market has moved it.
+     * The volatility an index selects and weights on: what the name has REALIZED over the trailing window.
      *
-     * Floored, because an inverse-volatility weight divides by this. A name that has gone briefly quiet
-     * enough to divide by almost nothing would otherwise take almost the whole fund, which is the standard
-     * failure of risk-weighted portfolios built on an unfloored estimate.
+     * A volatility screen is a trailing measurement, and that is not a detail of how it is computed — it is
+     * what the screen means. S&P's low-volatility index ranks on a year of daily returns, and a year is
+     * what `realizedVarianceEma` carries. What it used to read instead was `currentVolatility`, which is
+     * the instantaneous state of the variance process: the number the diffusion is about to draw from,
+     * which a single jump moves outright and which the QE step re-draws every tick. Ranking on it meant the
+     * index reconstituted itself on volatility spikes rather than on volatility, and since the fund trades
+     * every reconstitution, each spike was another round trip — a name was sold for having jumped and
+     * bought back a quarter later for having settled down.
+     *
+     * The state is the fallback, and the structural figure the fallback's fallback, for the market's first
+     * year before there is a window to measure. Floored, because an inverse-volatility weight divides by
+     * this: a name that has gone briefly quiet enough to divide by almost nothing would otherwise take
+     * almost the whole fund, which is the standard failure of risk-weighted portfolios built on an
+     * unfloored estimate.
      */
     public static function trailingVolatility(Stock $stock): float
     {
-        $vol = (float) ($stock->getCurrentVolatility() ?? $stock->getVolatility());
+        $vol = $stock->getRealizedVolatility()
+            ?? (float) ($stock->getCurrentVolatility() ?? $stock->getVolatility());
 
         return max(FinancialConstants::INDEX_MINIMUM_WEIGHT_VOLATILITY, $vol);
     }
@@ -310,7 +322,7 @@ final class IndexCommittee
      *                                          — a Redis that has been emptied under a market that has
      *                                          not — so that the level survives that rather than reopening
      *                                          at the base.
-     * @return array{tickers: list<string>, added: list<string>, deleted: list<string>, weights: array<string, float>, factors: array<string, float>, divisor: float, level: float}
+     * @return array{tickers: list<string>, added: list<string>, deleted: list<string>, weights: array<string, float>, factors: array<string, float>, divisor: float, level: float, turnover: float, trading_cost: float}
      */
     public function reconstitute(MarketIndex $index, array $stocks, int $tick, ?float $lastKnownLevel = null): array
     {
@@ -332,6 +344,7 @@ final class IndexCommittee
         $admissible = [];
         $capByTicker = [];
         $volByTicker = [];
+        $stockByTicker = [];
         $standing = array_fill_keys($previousMembers, true);
         $screensEarnings = $index->requiresEarningsViability();
 
@@ -354,6 +367,7 @@ final class IndexCommittee
 
             $capByTicker[$ticker] = $cap;
             $volByTicker[$ticker] = self::trailingVolatility($stock);
+            $stockByTicker[$ticker] = $stock;
 
             if ($isEligible) {
                 $eligible[$ticker] = $cap;
@@ -386,6 +400,16 @@ final class IndexCommittee
         $added = $previousMembers === [] ? [] : array_values(array_diff($tickers, $previousMembers));
         $deleted = array_values(array_diff($previousMembers, $tickers));
 
+        // What the fund tracking this index has to trade to get from the portfolio it is holding to the one
+        // just decided, and what crossing the spread on that trade costs it.
+        $rebalance = $this->rebalanceCost(
+            $previousMembers,
+            $previousFactors,
+            $capByTicker,
+            $weights,
+            $stockByTicker
+        );
+
         $this->store->store($index, $tick, $tickers, $added, $deleted, $weights, $factors);
 
         // The restatement. A divisor is what an index uses to absorb a change in its own composition, so
@@ -414,6 +438,8 @@ final class IndexCommittee
             'factors' => $factors,
             'divisor' => $divisor ?? 0.0,
             'level' => $divisor !== null && $divisor > 0.0 ? $newCap / $divisor : $levelBefore,
+            'turnover' => $rebalance['turnover'],
+            'trading_cost' => $rebalance['cost'],
         ];
     }
 
@@ -447,6 +473,112 @@ final class IndexCommittee
         }
 
         return $cap / $previousDivisor;
+    }
+
+    /**
+     * What the review costs the fund that has to follow it.
+     *
+     * An index changes its weights by arithmetic and pays nothing. A fund holding the index has to TRADE to
+     * get from the portfolio it is carrying into the review to the one the committee just decided, and the
+     * two are not the same portfolio: weights drift with prices between reviews, so even a membership that
+     * did not change has to be traded back to its targets. That trade crosses the spread in every name it
+     * touches, and the spread is the one execution cost that is knowable here — see the note on impact
+     * below.
+     *
+     * Without this the quarterly restrike was free money and the index arithmetic said so: a rebalance sells
+     * whatever has drifted up and buys whatever has drifted down, which on mean-reverting prices is a
+     * profitable trade in its own right, repeated four times a year, at mid, in unlimited size. It is the
+     * reason a low-volatility fund could beat a cap-weighted benchmark by a steady margin that had nothing
+     * to do with holding quiet companies. A CAP-WEIGHTED index pays almost nothing here and that is not an
+     * exemption granted to it: its weights maintain themselves as prices move, so there is nothing to trade
+     * except the names that actually joined or left.
+     *
+     * TURNOVER is stated one-way, which is the convention a factsheet reports and half the sum of the weight
+     * changes. The COST is not halved, because both sides are real: the fund sells one name and buys another,
+     * and each crossing pays its own half-spread at its own name's liquidity.
+     *
+     * What is charged here is the spread and nothing else. A real rebalance also pays market impact, and
+     * this deliberately does not estimate it: impact is a function of how much of a name's daily volume the
+     * order is, and the fund's assets are not modelled in shares anywhere in this system, so any impact
+     * figure would be a number invented to look like one. The charge is therefore a FLOOR on what following
+     * the index costs, not the whole of it.
+     *
+     * The first review of a fresh market is free, because a fund is created in kind: the authorised
+     * participant delivers the basket and receives shares, and no spread is crossed doing it.
+     *
+     * @param list<string>          $previousMembers The roster the fund is holding as the review opens.
+     * @param array<string, float>  $previousFactors The factors those holdings were struck with.
+     * @param array<string, float>  $capByTicker     Float-adjusted capitalisation, now.
+     * @param array<string, float>  $weights         The target weights the review has just decided.
+     * @param array<string, Stock>  $stockByTicker   The names themselves, for what each costs to cross.
+     * @return array{turnover: float, cost: float} One-way turnover, and the cost as a fraction of the fund.
+     */
+    private function rebalanceCost(
+        array $previousMembers,
+        array $previousFactors,
+        array $capByTicker,
+        array $weights,
+        array $stockByTicker
+    ): array {
+        $nothing = ['turnover' => 0.0, 'cost' => 0.0];
+
+        if ($previousMembers === [] || $weights === []) {
+            return $nothing;
+        }
+
+        // The weights the fund is actually carrying, which are the ones it struck at the last review left to
+        // drift with prices since — not the weights that review decided. Trading is measured from where the
+        // portfolio IS.
+        //
+        // A member that has gone to zero (a bankrupt shell) drops out of this: it is worth nothing, so it is
+        // neither part of what the fund holds nor something that can be sold for anything.
+        $held = [];
+        $heldTotal = 0.0;
+
+        foreach ($previousMembers as $ticker) {
+            $value = ($capByTicker[$ticker] ?? 0.0) * ($previousFactors[$ticker] ?? 1.0);
+
+            if ($value <= 0.0) {
+                continue;
+            }
+
+            $held[$ticker] = $value;
+            $heldTotal += $value;
+        }
+
+        if ($heldTotal <= 0.0) {
+            return $nothing;
+        }
+
+        foreach ($held as $ticker => $value) {
+            $held[$ticker] = $value / $heldTotal;
+        }
+
+        $traded = 0.0;
+        $cost = 0.0;
+
+        foreach (array_keys($held + $weights) as $ticker) {
+            $delta = abs(($weights[$ticker] ?? 0.0) - ($held[$ticker] ?? 0.0));
+
+            if ($delta <= 0.0) {
+                continue;
+            }
+
+            $stock = $stockByTicker[$ticker] ?? null;
+
+            $traded += $delta;
+            $cost += $delta * ($stock === null
+                ? FinancialConstants::MIN_HALF_SPREAD
+                : $this->liquidityEngine->halfSpreadFraction($stock));
+        }
+
+        $turnover = $traded / 2.0;
+
+        // Below the threshold the "trade" is the rounding on a weight that barely moved. Charging it would
+        // write a cost against the fund every quarter for a rebalance nobody would have bothered placing.
+        return $turnover < FinancialConstants::FUND_MINIMUM_REBALANCE_TURNOVER
+            ? $nothing
+            : ['turnover' => $turnover, 'cost' => $cost];
     }
 
     /**

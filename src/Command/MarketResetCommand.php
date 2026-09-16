@@ -334,6 +334,10 @@ class MarketResetCommand extends Command
                     price_momentum_trend = 0.0,
                     turnover_ratio = :turnover_ratio,
                     impact_variance_ema = 0.0,
+                    -- Reopened at the structural variance rather than at zero, for the same reason the seed
+                    -- does: the index screens rank on this, and a board that reads as perfectly quiet on
+                    -- day one seats its low-volatility index on nothing.
+                    realized_variance_ema = :realized_variance,
                     corporate_flow_backlog = 0.0,
                     lendable_supply_ratio = :lendable_supply_ratio,
                     short_interest_shares = 0.00,
@@ -350,6 +354,7 @@ class MarketResetCommand extends Command
                     // a retuned volatility cannot leave a turnover behind that no longer matches it.
                     'turnover_ratio' => \App\Service\Market\LiquidityEngine::structuralTurnoverRatio((float) $stockData['volatility']),
                     'lendable_supply_ratio' => FinancialConstants::DEFAULT_LENDABLE_SUPPLY_RATIO,
+                    'realized_variance' => (float) $stockData['volatility'] ** 2,
                     'current_vol' => $stockData['volatility'],
                     'beta' => $stockData['beta'],
                     'jump_int' => $stockData['jump_intensity'],

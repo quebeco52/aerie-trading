@@ -466,6 +466,18 @@ class Stock
     private ?float $impactVarianceEma = 0.0;
 
     /**
+     * @var float|null Exponentially weighted realized variance of the name's TOTAL return, annualized.
+     *
+     * What the tape actually printed, as opposed to `currentVolatility`, which is the instantaneous state
+     * of the variance process — the forward-looking number the diffusion is about to draw from. The two
+     * are different measurements and an index wants this one: a real volatility screen ranks on a trailing
+     * window of realized returns, so a name is admitted for having BEEN quiet rather than for a variance
+     * state that a single jump moves.
+     */
+    #[ORM\Column(type: 'float', nullable: true, options: ['default' => 0.0], updatable: false)]
+    private ?float $realizedVarianceEma = 0.0;
+
+    /**
      * @var float|null Shares the company itself still has to put through the market, signed: positive is a
      *                 repurchase program not yet executed, negative is issued stock (an offering, deal
      *                 consideration, vested compensation) not yet distributed. Worked off by the ticker
@@ -1290,6 +1302,33 @@ class Stock
     public function getImpactVarianceEma(): ?float
     {
         return $this->impactVarianceEma;
+    }
+
+    public function setRealizedVarianceEma(?float $realizedVarianceEma): static
+    {
+        $this->realizedVarianceEma = $realizedVarianceEma === null ? null : max(0.0, $realizedVarianceEma);
+
+        return $this;
+    }
+
+    public function getRealizedVarianceEma(): ?float
+    {
+        return $this->realizedVarianceEma;
+    }
+
+    /**
+     * The volatility the name has actually realized over the trailing window, or null before it has
+     * measured one.
+     *
+     * Null rather than zero for an unmeasured name, because zero is a legitimate reading — a name that has
+     * not moved — and a screen that ranks on quiet would put an unmeasured name first on the strength of
+     * never having traded.
+     */
+    public function getRealizedVolatility(): ?float
+    {
+        $variance = $this->realizedVarianceEma;
+
+        return $variance !== null && $variance > 0.0 ? sqrt($variance) : null;
     }
 
     public function getCorporateFlowBacklog(): float

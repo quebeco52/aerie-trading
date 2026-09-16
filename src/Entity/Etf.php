@@ -33,7 +33,7 @@ class Etf
     // --- The Fund's Own Books ---
     //
     // A published index is a number. A FUND that tracks it is a portfolio with costs and income, and the two
-    // do not have the same return. These four columns are the whole difference:
+    // do not have the same return. These five columns are the whole difference:
     //
     //   price = indexLevel x basketPerShare + accruedIncome
     //
@@ -45,6 +45,11 @@ class Etf
     // because the basket records only the fees that had to be met by SELLING something, and in an ordinary
     // market the dividend income covers the fee every quarter — so the basket sits at one and a holder
     // reading it alone would conclude the fund had been free.
+    //
+    // `cumulativeTradingCosts` is the spread the fund has crossed rebalancing itself. An index restrikes its
+    // weights by arithmetic; a fund has to trade to follow it, and that trade is not free. Kept apart from
+    // the fee because they answer different questions — what the manager charges, and what the index's own
+    // turnover costs to track — and because a cap-weighted fund pays almost none of the second.
     //
     // `accruedIncome` is the dividend cash the fund has received from its constituents and not yet paid out.
     // The index is a PRICE index, so that cash is nowhere in the level; a fund holding the basket really
@@ -66,6 +71,10 @@ class Etf
     /** Fees charged over the fund's life, per share. The basket only records what had to be SOLD to meet a fee; almost all of it is met out of income, and a holder who read the basket alone would think the fund had cost them nothing. */
     #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 8, options: ['default' => '0.00000000'])]
     private string $cumulativeFeesPaid = '0.00000000';
+
+    /** Spread the fund has crossed rebalancing itself, per share, over its life. Separate from the fee because it is a different cost with a different cause: the fee is what the manager charges, this is what the index's own turnover costs to follow. */
+    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 8, options: ['default' => '0.00000000'])]
+    private string $cumulativeTradingCosts = '0.00000000';
 
     /** The last four distributions per share, newest first. A trailing yield is a real factsheet figure and it cannot be derived from a single payment. */
     #[ORM\Column(type: Types::JSON, nullable: true)]
@@ -176,6 +185,18 @@ class Etf
     public function setCumulativeFeesPaid(float $cumulativeFeesPaid): static
     {
         $this->cumulativeFeesPaid = (string) max(0.0, $cumulativeFeesPaid);
+
+        return $this;
+    }
+
+    public function getCumulativeTradingCosts(): float
+    {
+        return (float) $this->cumulativeTradingCosts;
+    }
+
+    public function setCumulativeTradingCosts(float $cumulativeTradingCosts): static
+    {
+        $this->cumulativeTradingCosts = (string) max(0.0, $cumulativeTradingCosts);
 
         return $this;
     }

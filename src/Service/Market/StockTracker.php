@@ -371,6 +371,25 @@ class StockTracker
                 );
             }
 
+            // REALIZED VOLATILITY
+            // The same return, squared and annualized, as an exponentially weighted mean. This is the
+            // trailing window a volatility screen ranks on, and it is measured here for the same reason the
+            // trend is: before the split block, because a 4-for-1 is not a 75% move.
+            //
+            // It is not the same number as `currentVolatility`. That is the variance process's state — what
+            // the name is about to draw from — and a single jump moves it outright; this is what the tape
+            // printed over the past year. An index that selected on the state rather than the window
+            // reconstituted itself on every volatility spike and traded on every one of them.
+            if ($dt > 0.0 && $priceAtTickStart > 0.0 && $currentPriceAfterEarnings > 0.0) {
+                $realizedPhi = exp(-$dt / FinancialConstants::INDEX_TRAILING_VOLATILITY_YEARS);
+                $annualizedTickVariance = ($tickLogReturn * $tickLogReturn) / $dt;
+
+                $stock->setRealizedVarianceEma(
+                    (($stock->getRealizedVarianceEma() ?? 0.0) * $realizedPhi)
+                        + ($annualizedTickVariance * (1.0 - $realizedPhi))
+                );
+            }
+
             // CORPORATE ACTIONS (SPLITS)
             // Read again here rather than reusing the count from the top of the tick: issuance and buybacks
             // in the earnings engine change it, and only a split should reach the agents as a share ratio.

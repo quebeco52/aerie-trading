@@ -78,6 +78,7 @@ class AppFixtures extends Fixture
             $stock->setSharesOutstanding((string) $stockData['shares_outstanding']);
             $stock->setVolatility((string) $stockData['volatility']);
             $stock->setCurrentVolatility((string) $stockData['volatility']);
+            $stock->setRealizedVarianceEma((float) $stockData['volatility'] ** 2);
             $stock->setBeta((string) $stockData['beta']);
             $stock->setJumpIntensity((string) $stockData['jump_intensity']);
             $stock->setJumpVol((string) $stockData['jump_vol']);

@@ -130,7 +130,7 @@ class MarketSimulateCommand extends Command
             if (IndexCommittee::isReconstitutionTick($tick, self::TICKS_PER_YEAR)) {
                 foreach (MarketIndex::cases() as $index) {
                     $fund = $indexFunds[$index->value] ?? null;
-                    $this->indexCommittee->reconstitute(
+                    $reconstitution = $this->indexCommittee->reconstitute(
                         $index,
                         $stocks,
                         $tick,
@@ -138,6 +138,16 @@ class MarketSimulateCommand extends Command
                         // undistributed income; see MarketTickerCommand for why the price will not do.
                         $fund?->getIndexLevel()
                     );
+
+                    // Fast-forward history has to carry the fund's costs or it prints a past the live
+                    // market could not have produced: every quarter of it would be a free rebalance.
+                    if ($fund !== null) {
+                        $this->fundAccountant->chargeRebalance(
+                            $fund,
+                            $reconstitution['trading_cost'],
+                            $reconstitution['level']
+                        );
+                    }
                 }
             }
 

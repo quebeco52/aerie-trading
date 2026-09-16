@@ -560,6 +560,8 @@ class FinancialConstants
     public const INDEX_LOW_VOLATILITY_COUNT = 20;
     /** Floor on the trailing volatility an inverse-volatility weighting divides by. A name that has gone quiet enough to divide by nothing would otherwise take the whole fund. */
     public const INDEX_MINIMUM_WEIGHT_VOLATILITY = 0.04;
+    /** Window the realized volatility an index ranks and weights on is measured over, as the mean life of its exponential weighting. A year, which is what S&P's low-volatility index uses; ranking on the instantaneous variance state instead turned every volatility spike into a reconstitution. */
+    public const INDEX_TRAILING_VOLATILITY_YEARS = 1.0;
 
     // --- Index Diversification Caps (RIC / UCITS 5-10-40, as applied by the S&P Select Sector indices) ---
     /** Most any one constituent may weigh in a capped index. A sector fund that must stay a regulated investment company cannot let one name run away with it. */
@@ -586,6 +588,8 @@ class FinancialConstants
     public const FUND_DISTRIBUTIONS_PER_YEAR = 4;
     /** Smallest distribution worth paying, per share. Below this the income stays accrued into the next quarter rather than writing a ledger row per holder that rounds to nothing. */
     public const FUND_MINIMUM_DISTRIBUTION = 0.005;
+    /** Smallest rebalance worth charging for, as a fraction of the fund. Below this the trade is the rounding on a weight that barely moved, and charging it would write a cost row every quarter for nothing. */
+    public const FUND_MINIMUM_REBALANCE_TURNOVER = 0.0005;
 
     // --- Corporate Bond Issuance ---
     /** Share of a firm's wholesale debt that is funded in the PUBLIC bond market rather than by banks. The listed issues are a tranche of the debt the balance sheet already carries, never additional borrowing. */

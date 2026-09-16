@@ -22,6 +22,8 @@ use Doctrine\ORM\EntityRepository;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\MockObject\Stub;
+use App\Service\Market\LiquidityEngine;
+use App\Service\Math\MathUtility;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Tester\CommandTester;
@@ -36,7 +38,7 @@ class MarketSimulateCommandTest extends TestCase
         $etfTrackerMock = $this->createMock(EtfTracker::class);
         // The real committee over a process-local store: it is collaborator-free apart from the tracker,
         // and doubling it would only assert that the command calls a mock.
-        $indexCommittee = new IndexCommittee(new InMemoryIndexMembershipStore(), $etfTrackerMock);
+        $indexCommittee = new IndexCommittee(new InMemoryIndexMembershipStore(), $etfTrackerMock, new LiquidityEngine(new MathUtility()));
         $fundAccountant = new IndexFundAccountant($emMock);
         $macroEngineMock = $this->createMock(MacroEngine::class);
         $marketOperatorMock = $this->createStub(MarketOperator::class);

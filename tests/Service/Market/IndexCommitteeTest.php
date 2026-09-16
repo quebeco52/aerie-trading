@@ -14,6 +14,8 @@ use App\Command\MarketTickerCommand;
 use App\Service\Math\FinancialConstants;
 use App\Tests\Support\StockBuilder;
 use Doctrine\ORM\EntityManagerInterface;
+use App\Service\Market\LiquidityEngine;
+use App\Service\Math\MathUtility;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -63,7 +65,7 @@ class IndexCommitteeTest extends TestCase
 
     private function committee(): IndexCommittee
     {
-        return new IndexCommittee($this->store, $this->etfTracker);
+        return new IndexCommittee($this->store, $this->etfTracker, new LiquidityEngine(new MathUtility()));
     }
 
     /**
@@ -995,6 +997,141 @@ class IndexCommitteeTest extends TestCase
         $this->assertStringContainsString('and 32 more', $text);
         $this->assertStringContainsString('dropped DEAD', $text);
         $this->assertSame('Quarterly reconstitution: added A, B.', MarketTickerCommand::describeReconstitution(['A', 'B'], []));
+    }
+
+    // --- What the Screen Measures ---
+
+    /**
+     * A volatility screen is a TRAILING measurement, and that is what the screen means rather than a detail
+     * of how it is computed.
+     *
+     * `currentVolatility` is the instantaneous state of the variance process — what the name is about to
+     * draw from, moved outright by a single jump. Ranking on it meant the index reconstituted itself on
+     * volatility spikes rather than on volatility, and since the fund trades every reconstitution, each
+     * spike became a round trip: sold for having jumped, bought back a quarter later for having settled.
+     */
+    public function testTheScreenRanksOnWhatTheNameRealizedNotOnItsVarianceState(): void
+    {
+        // A quiet name in the middle of a spike, and a noisy one that happens to be still this instant.
+        $spiking = StockBuilder::create('QUIET')->withPrice(1.0e11)->withSharesOutstanding(1)
+            ->withPublicFloatPercentage(1.0)->withRealizedVolatility(0.10)->withCurrentVolatility(0.90)->build();
+        $settled = StockBuilder::create('NOISY')->withPrice(1.0e11)->withSharesOutstanding(1)
+            ->withPublicFloatPercentage(1.0)->withRealizedVolatility(0.45)->withCurrentVolatility(0.09)->build();
+
+        $this->assertEqualsWithDelta(0.10, IndexCommittee::trailingVolatility($spiking), 1e-9);
+        $this->assertEqualsWithDelta(0.45, IndexCommittee::trailingVolatility($settled), 1e-9);
+
+        $result = $this->committee()->reconstitute(MarketIndex::LowVolatility, [$spiking, $settled], 0);
+
+        $this->assertSame(['QUIET', 'NOISY'], $result['tickers'], 'ranked on the window, not on the state');
+        $this->assertGreaterThan($result['weights']['NOISY'], $result['weights']['QUIET']);
+    }
+
+    /** Before a market has a window to measure, the variance state stands in rather than nothing at all. */
+    public function testTheVarianceStateStandsInUntilThereIsAWindow(): void
+    {
+        $fresh = StockBuilder::create('NEW')->withCurrentVolatility(0.33)->build();
+
+        $this->assertNull($fresh->getRealizedVolatility());
+        $this->assertEqualsWithDelta(0.33, IndexCommittee::trailingVolatility($fresh), 1e-9);
+    }
+
+    // --- What the Review Costs ---
+
+    /**
+     * A fund is created in kind, so its first basket costs it nothing to assemble.
+     */
+    public function testTheFirstReviewOfAFreshMarketIsFree(): void
+    {
+        $result = $this->committee()->reconstitute(MarketIndex::LowVolatility, $this->volatileUniverse(), 0);
+
+        $this->assertEqualsWithDelta(0.0, $result['turnover'], 1e-12);
+        $this->assertEqualsWithDelta(0.0, $result['trading_cost'], 1e-12);
+    }
+
+    /**
+     * A cap-weighted index pays nothing for a review that changed nothing.
+     *
+     * This is not an exemption granted to it. Its weights maintain themselves as prices move — a constituent's
+     * capitalisation moves with its price and its weight stays correct on its own — so a review that admits
+     * and drops nobody leaves the fund with nothing to trade.
+     */
+    public function testACapWeightedReviewThatChangesNothingCostsNothing(): void
+    {
+        $committee = $this->committee();
+        $stocks = $this->rankedUniverse(60);
+
+        $committee->reconstitute(MarketIndex::Headline, $stocks, 0);
+        $again = $committee->reconstitute(MarketIndex::Headline, $stocks, 100);
+
+        $this->assertSame([], $again['added']);
+        $this->assertEqualsWithDelta(0.0, $again['turnover'], 1e-12);
+        $this->assertEqualsWithDelta(0.0, $again['trading_cost'], 1e-12);
+    }
+
+    /**
+     * An inverse-volatility index pays for every review, because every review is a trade.
+     *
+     * Weights drift with prices between reviews and the committee puts them back. That is a real order in
+     * every name whose weight moved, and until it was charged for it the index was harvesting a quarterly
+     * rebalance for free — selling whatever had drifted up and buying whatever had drifted down, at mid, in
+     * unlimited size, four times a year.
+     */
+    public function testRestrikingDriftedWeightsIsChargedAsATrade(): void
+    {
+        $committee = $this->committee();
+
+        $struck = [['A', 1.0e11, 0.10], ['B', 1.0e11, 0.10]];
+        $committee->reconstitute(MarketIndex::LowVolatility, $this->volatileUniverse($struck), 0);
+
+        // A doubles. The fund did not trade, so it is carrying two thirds A into the review — and the
+        // review puts it back to a half, which is a sixth of the fund sold and a sixth bought.
+        $moved = [['A', 2.0e11, 0.10], ['B', 1.0e11, 0.10]];
+        $again = $committee->reconstitute(MarketIndex::LowVolatility, $this->volatileUniverse($moved), 100);
+
+        $this->assertSame([], $again['added'], 'nobody joined: the whole of this is the re-weighting');
+        $this->assertEqualsWithDelta(1.0 / 6.0, $again['turnover'], 1e-9);
+        $this->assertGreaterThan(0.0, $again['trading_cost']);
+
+        // Both sides are real and each crosses its own name's half-spread, so the cost is the sum over the
+        // weight changes rather than half of it.
+        $this->assertLessThan(2.0 * $again['turnover'] * FinancialConstants::MAX_HALF_SPREAD, $again['trading_cost']);
+        $this->assertGreaterThanOrEqual(2.0 * $again['turnover'] * FinancialConstants::MIN_HALF_SPREAD, $again['trading_cost']);
+    }
+
+    /** A rebalance too small to be worth placing is not charged for. */
+    public function testATrivialRebalanceIsNotCharged(): void
+    {
+        $committee = $this->committee();
+
+        $struck = [['A', 1.0e11, 0.10], ['B', 1.0e11, 0.10]];
+        $committee->reconstitute(MarketIndex::LowVolatility, $this->volatileUniverse($struck), 0);
+
+        // A hair of drift: a hundredth of a percent, well inside the threshold.
+        $nudged = [['A', 1.00002e11, 0.10], ['B', 1.0e11, 0.10]];
+        $again = $committee->reconstitute(MarketIndex::LowVolatility, $this->volatileUniverse($nudged), 100);
+
+        $this->assertEqualsWithDelta(0.0, $again['trading_cost'], 1e-12);
+    }
+
+    /**
+     * @param list<array{0: string, 1: float, 2: float}> $spec ticker, capitalisation, realized volatility
+     * @return array<int, Stock>
+     */
+    private function volatileUniverse(array $spec = [['A', 4.0e11, 0.10], ['B', 1.0e11, 0.20], ['C', 5.0e11, 0.40]]): array
+    {
+        $stocks = [];
+
+        foreach ($spec as [$ticker, $cap, $vol]) {
+            $stocks[] = StockBuilder::create($ticker)
+                ->withPrice($cap)
+                ->withSharesOutstanding(1)
+                ->withPublicFloatPercentage(1.0)
+                ->withRealizedVolatility($vol)
+                ->build();
+        }
+
+        return $stocks;
     }
 
     // --- Cadence ---

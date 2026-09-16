@@ -33,6 +33,11 @@ use Doctrine\ORM\EntityManagerInterface;
  * the basket only where income falls short. That ordering is not cosmetic. It is what makes a distribution
  * NET of costs, as a real one is, rather than the fund paying out its gross income and quietly selling
  * holdings to cover its own fee.
+ *
+ * The fee is not the only thing that costs. A fund that REBALANCES has to trade to do it, and the spread it
+ * crosses comes out of the basket as well — see chargeRebalance(). That is the difference between a fund
+ * whose weights maintain themselves and one that restrikes them every quarter, and it is the reason a real
+ * factsheet reports transaction costs next to the expense ratio instead of folding them into it.
  */
 final class IndexFundAccountant
 {
@@ -85,6 +90,48 @@ final class IndexFundAccountant
 
         $fund->setBasketPerShare($basket);
         $fund->setAccruedIncome($accrued);
+    }
+
+    /**
+     * Charges the fund for the rebalance its index has just decided on.
+     *
+     * An index restrikes its weights by arithmetic. A FUND has to trade to get there, and what it trades
+     * costs it: the reconstitution is a real order in every name whose weight moved, crossing a real spread.
+     * Without this the index level and the fund tracking it both harvested a quarterly rebalance for free —
+     * selling whatever had drifted up and buying whatever had drifted down, at mid, in unlimited size — and
+     * the only index that could do so was the one that rebalances, which is why the low-volatility fund beat
+     * a cap-weighted benchmark by a steady margin no cost ever touched. A cap-weighted index pays almost
+     * nothing here, and that is not an exemption: its weights maintain themselves, so there is nothing to
+     * trade but the membership changes.
+     *
+     * It comes out of the BASKET rather than out of income, because a transaction cost is paid inside the
+     * trade — the fund really does end the day owning fewer index units — where a management fee is a claim
+     * against the fund that income can meet. That also makes it show up where it belongs: in the tracking
+     * difference, which is what a factsheet reports and what a holder actually experiences.
+     *
+     * @param float $costFraction What the rebalance cost, as a fraction of the portfolio traded.
+     * @param float $indexLevel   The level the charge is recorded against, so the running total is in the
+     *                            same money as the fee beside it rather than in index units.
+     * @return float The cost actually charged, per share.
+     */
+    public function chargeRebalance(Etf $fund, float $costFraction, float $indexLevel): float
+    {
+        $basket = $fund->getBasketPerShare();
+
+        if ($costFraction <= 0.0 || $basket <= 0.0) {
+            return 0.0;
+        }
+
+        // Charged against the basket alone rather than net assets: the accrued income is cash the fund is
+        // holding for its members, not part of the portfolio being traded, and charging it here would take
+        // the rebalance out of a distribution that has already been earned.
+        $unitsSold = $basket * min(1.0, $costFraction);
+        $cost = $unitsSold * max(0.0, $indexLevel);
+
+        $fund->setBasketPerShare($basket - $unitsSold);
+        $fund->setCumulativeTradingCosts($fund->getCumulativeTradingCosts() + $cost);
+
+        return $cost;
     }
 
     /**

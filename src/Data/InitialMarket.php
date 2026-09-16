@@ -659,18 +659,16 @@ class InitialMarket
             'dividendSpeed' => 0.15,
             'fixed_cost_ratio' => 0.60,
             'operating_margin' => 0.09,
-            // LAKE and SWAN hold the control block, so barely half the register trades. Float is liquidity
-            // only: it sets daily volume and borrowable supply, not the price.
             'public_float' => 0.45,
-            'sam_ratio' => 0.50,
+            'sam_ratio' => 0.85,
             'floating_debt_ratio' => 0.35,
             'historical_fixed_rate' => 0.055,
             'credit_spread' => 0.0200,
             'depreciation_rate' => 0.06,
             'corporate_treasury' => 12_000_000_000.00,
-            'total_equity' => 80_000_000_000.00,
+            'total_equity' => 180_000_000_000.00,
             'customer_deposits' => 0.00,
-            'wholesale_debt' => 70_000_000_000.00,
+            'wholesale_debt' => 100_000_000_000.00,
             'retained_earnings' => 45_000_000_000.00
         ],
         [

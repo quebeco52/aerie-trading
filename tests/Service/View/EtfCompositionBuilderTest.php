@@ -15,6 +15,8 @@ use App\Service\Market\PriceChangeFeed;
 use App\Service\Math\FinancialConstants;
 use App\Service\View\EtfCompositionBuilder;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
+use App\Service\Market\LiquidityEngine;
+use App\Service\Math\MathUtility;
 use PHPUnit\Framework\TestCase;
 
 #[AllowMockObjectsWithoutExpectations]
@@ -49,7 +51,7 @@ class EtfCompositionBuilderTest extends TestCase
 
         return new EtfCompositionBuilder(
             $stocks,
-            new IndexCommittee($this->store, $etfTracker),
+            new IndexCommittee($this->store, $etfTracker, new LiquidityEngine(new MathUtility())),
             $etfTracker,
             $feed,
             $redis,
@@ -464,6 +466,8 @@ class EtfCompositionBuilderTest extends TestCase
         $fund->setPrice('200.00');
         $fund->setExpenseRatio(0.0005);
         $fund->setCumulativeFeesPaid(1.94);
+        $fund->setCumulativeTradingCosts(0.12);
+        $fund->setBasketPerShare(0.9988);
         $fund->setAccruedIncome(0.85);
         $fund->recordDistribution(1.00, new \DateTime());
         $fund->recordDistribution(1.10, new \DateTime());
@@ -478,8 +482,13 @@ class EtfCompositionBuilderTest extends TestCase
         $this->assertEqualsWithDelta(2.10, $facts['trailingDistribution'], 1e-9);
         $this->assertEqualsWithDelta((2.10 / 200.0) * 100.0, $facts['distributionYield'], 1e-9);
 
-        // Nothing was sold to meet the fee, so the fund still owns a whole index unit per share.
-        $this->assertEqualsWithDelta(0.0, $facts['holdingsSoldForFees'], 1e-9);
+        // What following the index cost in spread, reported apart from the fee because it is a different
+        // cost with a different cause — and because a cap-weighted fund pays almost none of it.
+        $this->assertEqualsWithDelta(0.12, $facts['tradingCostsPerShare'], 1e-9);
+
+        // How far the basket has fallen behind the one index unit a share started with: the fund's
+        // cumulative tracking difference, whatever the costs that caused it.
+        $this->assertEqualsWithDelta(0.12, $facts['trackingDifference'], 1e-9);
     }
 
     /** Without a fund there is no fund to report on, and the page says so rather than inventing zeroes. */
@@ -491,6 +500,8 @@ class EtfCompositionBuilderTest extends TestCase
 
         $this->assertNull($facts['expenseRatio']);
         $this->assertNull($facts['feesPaidPerShare']);
+        $this->assertNull($facts['tradingCostsPerShare']);
+        $this->assertNull($facts['trackingDifference']);
         $this->assertNull($facts['distributionYield']);
     }
 

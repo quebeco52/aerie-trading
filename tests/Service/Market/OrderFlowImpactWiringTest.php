@@ -315,6 +315,59 @@ class OrderFlowImpactWiringTest extends TestCase
         $this->assertLessThan($peak * 0.5, $stock->getImpactVarianceEma());
     }
 
+    /**
+     * The trailing window an index screen ranks on measures what the TAPE printed.
+     *
+     * It is a different number from `currentVolatility`, which is the variance process's state, and the
+     * difference is the whole reason it exists: a screen that ranks on the state admits a name for being
+     * about to be quiet rather than for having been quiet, and reconstitutes itself on every spike.
+     */
+    public function testRealizedVolatilityMeasuresWhatTheTapePrinted(): void
+    {
+        $stock = $this->stock();
+        $tracker = $this->tracker();
+        $dt = 1.0 / 14400.0;
+
+        // The price engine is stubbed to hand back the price it was given, so the only thing that can move
+        // this name is the order flow — which makes the return of the tick a figure the test knows.
+        $before = (float) $stock->getPrice();
+        $this->orderFlow->record('APEX', $this->liquidity->averageDailyVolume($stock) * 0.20);
+        $tracker->updateStocks([$stock], $dt, false, new MacroStateDTO());
+
+        $realized = log((float) $stock->getPrice() / $before);
+        $this->assertGreaterThan(0.0, $realized);
+
+        // One tick into an EMA opened at zero: the reading is the tick's annualized variance times the
+        // weight a single tick carries in a window a year long.
+        $weight = 1.0 - exp(-$dt / FinancialConstants::INDEX_TRAILING_VOLATILITY_YEARS);
+        $this->assertEqualsWithDelta(
+            (($realized * $realized) / $dt) * $weight,
+            (float) $stock->getRealizedVarianceEma(),
+            1e-12
+        );
+    }
+
+    /** A name that has stopped moving stops reading as volatile, or the screen ranks on ancient history. */
+    public function testRealizedVolatilityDecaysOnceTheNameSettlesDown(): void
+    {
+        $stock = $this->stock();
+        $tracker = $this->tracker();
+        $dt = 1.0 / 14400.0;
+
+        $this->orderFlow->record('APEX', $this->liquidity->averageDailyVolume($stock) * 0.50);
+        $tracker->updateStocks([$stock], $dt, false, new MacroStateDTO());
+
+        $peak = (float) $stock->getRealizedVarianceEma();
+        $this->assertGreaterThan(0.0, $peak);
+
+        // A quarter of quiet ticks, which is one review's worth of the window.
+        for ($tick = 0; $tick < 3600; $tick++) {
+            $tracker->updateStocks([$stock], $dt, false, new MacroStateDTO());
+        }
+
+        $this->assertLessThan($peak * 0.80, (float) $stock->getRealizedVarianceEma());
+    }
+
     public function testEveryQuoteCarriesTheVolumeAndDepthTheBarIsBuiltFrom(): void
     {
         $stock = $this->stock();

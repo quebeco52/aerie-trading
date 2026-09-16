@@ -417,6 +417,18 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                             $fund?->getIndexLevel()
                         );
 
+                        // The fund pays for the review before anything else is published about it. A
+                        // re-weighting with no membership change is still a trade — the low-volatility fund
+                        // restrikes every quarter — so the charge is taken above the early exit below, not
+                        // inside the branch that only fires when the roster moved.
+                        if ($fund !== null) {
+                            $this->fundAccountant->chargeRebalance(
+                                $fund,
+                                $reconstitution['trading_cost'],
+                                $reconstitution['level']
+                            );
+                        }
+
                         if ($reconstitution['added'] === [] && $reconstitution['deleted'] === []) {
                             continue;
                         }

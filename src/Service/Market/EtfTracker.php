@@ -146,11 +146,12 @@ class EtfTracker
                 
                 $divisor *= $splitFactor;
                 $this->redis->set($divisorKey, (string) $divisor);
-                // Both are per-SHARE amounts and there are now more shares. Left alone, a 4-for-1 would
-                // quadruple the cash the fund believes it is holding for its members, and quadruple what
-                // it reports having charged them.
+                // All three are per-SHARE amounts and there are now more shares. Left alone, a 4-for-1 would
+                // quadruple the cash the fund believes it is holding for its members, and quadruple both of
+                // the costs it reports having charged them.
                 $etf->setAccruedIncome($etf->getAccruedIncome() / $splitFactor);
                 $etf->setCumulativeFeesPaid($etf->getCumulativeFeesPaid() / $splitFactor);
+                $etf->setCumulativeTradingCosts($etf->getCumulativeTradingCosts() / $splitFactor);
                 $this->executeEtfSplit($etf, $splitFactor, 'forward', $price * $splitFactor);
                 
             } elseif ($price < 25.0 && $price > 0) {
@@ -165,6 +166,7 @@ class EtfTracker
                 $this->redis->set($divisorKey, (string) $divisor);
                 $etf->setAccruedIncome($etf->getAccruedIncome() * $splitFactor);
                 $etf->setCumulativeFeesPaid($etf->getCumulativeFeesPaid() * $splitFactor);
+                $etf->setCumulativeTradingCosts($etf->getCumulativeTradingCosts() * $splitFactor);
                 $this->executeEtfSplit($etf, $splitFactor, 'reverse', $preSplitPrice);
             }
 

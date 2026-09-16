@@ -127,6 +127,13 @@ class StockBuilder
         return $this;
     }
 
+    /** The volatility the name has REALIZED over the trailing window, which is what an index screen ranks on. */
+    public function withRealizedVolatility(float $vol): self
+    {
+        $this->stock->setRealizedVarianceEma($vol * $vol);
+        return $this;
+    }
+
     public function withJumpIntensity(float|string $lambda): self
     {
         $this->stock->setJumpIntensity(is_float($lambda) ? number_format($lambda, 2, '.', '') : $lambda);

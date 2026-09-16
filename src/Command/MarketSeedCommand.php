@@ -101,6 +101,10 @@ class MarketSeedCommand extends Command
                     \App\Service\Market\LiquidityEngine::structuralTurnoverRatio((float) $stockData['volatility'])
                 );
                 $stock->setImpactVarianceEma(0.0);
+                // Opened at the structural variance rather than at zero. The index screens rank on this, and
+                // a market whose whole board reads as perfectly quiet on day one would seat its
+                // low-volatility index alphabetically and then spend a year unwinding it.
+                $stock->setRealizedVarianceEma((float) $stockData['volatility'] ** 2);
                 $stock->setCorporateFlowBacklog(0.0);
 
                 // Not the whole float: most holders do not lend, which is what makes a name hard to borrow

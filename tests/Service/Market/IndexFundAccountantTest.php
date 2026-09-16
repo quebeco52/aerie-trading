@@ -143,6 +143,64 @@ class IndexFundAccountantTest extends TestCase
         $this->assertSame(0.0, $fund->getCumulativeFeesPaid());
     }
 
+    // --- The Rebalance ---
+
+    /**
+     * A rebalance comes out of the BASKET, because a spread is paid inside the trade.
+     *
+     * This is the difference between a fund whose weights maintain themselves and one that restrikes them:
+     * an index restrikes by arithmetic and pays nothing, and a fund following it has to trade. Charging it
+     * anywhere else — against income, say — would let a fund with a generous yield rebalance itself for free
+     * and hand its holders a smaller distribution instead of a smaller portfolio.
+     */
+    public function testARebalanceIsPaidOutOfTheBasketAndNotOutOfIncome(): void
+    {
+        $accountant = $this->accountant();
+        $fund = $this->fund(expenseRatio: 0.0);
+        $fund->setAccruedIncome(1.25);
+
+        $cost = $accountant->chargeRebalance($fund, 0.0010, 100.0);
+
+        $this->assertEqualsWithDelta(0.9990, $fund->getBasketPerShare(), 1e-9);
+        $this->assertEqualsWithDelta(1.25, $fund->getAccruedIncome(), 1e-9, 'income is the holders\' cash, not the portfolio');
+
+        // Recorded in the same money as the fee beside it, so a factsheet can put the two costs together.
+        $this->assertEqualsWithDelta(0.10, $cost, 1e-9);
+        $this->assertEqualsWithDelta(0.10, $fund->getCumulativeTradingCosts(), 1e-9);
+    }
+
+    /** Free is free: a review that decided nothing costs the fund nothing. */
+    public function testAReviewThatChangesNothingCostsNothing(): void
+    {
+        $fund = $this->fund(expenseRatio: 0.0);
+
+        $this->assertEqualsWithDelta(0.0, $this->accountant()->chargeRebalance($fund, 0.0, 100.0), 1e-12);
+        $this->assertEqualsWithDelta(1.0, $fund->getBasketPerShare(), 1e-12);
+        $this->assertEqualsWithDelta(0.0, $fund->getCumulativeTradingCosts(), 1e-12);
+    }
+
+    /**
+     * The cost is a RATCHET on the tracking difference, exactly as the fee is.
+     *
+     * A fund never buys back what it sold to pay for itself, so a quarterly rebalance compounds into a
+     * permanent lag against the index it tracks. That lag is the whole point of charging it: without it the
+     * fund's price said the rebalance was free, which is what made a high-turnover index look like a better
+     * investment than a low-turnover one holding the same market.
+     */
+    public function testRebalanceCostsCompoundIntoAPermanentLag(): void
+    {
+        $accountant = $this->accountant();
+        $fund = $this->fund(expenseRatio: 0.0);
+
+        // Four reviews a year for five years, each costing 10bp of the portfolio.
+        for ($i = 0; $i < 20; $i++) {
+            $accountant->chargeRebalance($fund, 0.0010, 100.0);
+        }
+
+        $this->assertEqualsWithDelta(0.999 ** 20, $fund->getBasketPerShare(), 1e-9);
+        $this->assertGreaterThan(0.0, 1.0 - $fund->getBasketPerShare());
+    }
+
     // --- The Income ---
 
     /**

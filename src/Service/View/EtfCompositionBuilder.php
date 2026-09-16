@@ -259,7 +259,8 @@ class EtfCompositionBuilder
                 'lastDistributionAt' => null,
                 'accruedIncome' => null,
                 'feesPaidPerShare' => null,
-                'holdingsSoldForFees' => null,
+                'tradingCostsPerShare' => null,
+                'trackingDifference' => null,
             ];
         }
 
@@ -277,10 +278,16 @@ class EtfCompositionBuilder
             // almost all of it comes out of income before the income is ever distributed, so a holder who
             // only watched the price would never see it leave.
             'feesPaidPerShare' => $fund->getCumulativeFeesPaid(),
-            // The part of that fee the fund had to SELL holdings to meet, as a percentage of the index unit
-            // a share started with. Normally zero — income covers the fee — and non-zero only after a
-            // stretch in which the constituents paid less than the fund cost to run.
-            'holdingsSoldForFees' => (1.0 - $fund->getBasketPerShare()) * 100.0,
+            // What following the index has cost in spread, per share, over the fund's life. A different cost
+            // with a different cause: the fee is what the manager charges, this is what the index's own
+            // turnover costs to track. A cap-weighted fund pays almost none of it, because its weights
+            // maintain themselves; a fund that restrikes its weights every quarter pays it every quarter.
+            'tradingCostsPerShare' => $fund->getCumulativeTradingCosts(),
+            // How far the basket has fallen behind the one index unit a share started with, as a percentage.
+            // This is the fund's cumulative tracking difference and it only ever grows: a fund never buys
+            // back what it sold. Both costs above can land here — the fee only when income failed to cover
+            // it, a rebalance always, because a spread is paid inside the trade.
+            'trackingDifference' => (1.0 - $fund->getBasketPerShare()) * 100.0,
         ];
     }
 
