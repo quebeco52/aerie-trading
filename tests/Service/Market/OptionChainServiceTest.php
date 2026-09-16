@@ -115,6 +115,47 @@ class OptionChainServiceTest extends TestCase
         $this->assertLessThan(40, count($strikes));
     }
 
+    /**
+     * A real chain is dense where it is traded and sparse where it is not, and thinning the wings is how the
+     * sweep stops paying full price for the part of the book nobody asks for. What it must NOT cost is
+     * range: the ends stay listed however coarse the grid gets, because narrowing the delta the public's
+     * book is spread over would move the desk's gamma — see OptionDemandEngineTest.
+     */
+    public function testTheLadderIsDenseAtTheMoneyAndThinnedInTheWingsWithoutLosingItsEnds(): void
+    {
+        $spot = 100.0;
+        $increment = OptionChainService::strikeIncrement($spot);
+        $strikes = OptionChainService::strikeLadder($spot);
+        $band = $spot * FinancialConstants::OPTION_STRIKE_DENSE_BAND;
+
+        // Every increment inside the band is listed.
+        for ($strike = $spot - $band; $strike <= $spot + $band + 1e-9; $strike += $increment) {
+            $this->assertContains(round($strike, 4), $strikes, "the money is listed on every increment");
+        }
+
+        // Outside it, the grid is coarser than the increment.
+        $wingGaps = [];
+        foreach ($strikes as $i => $strike) {
+            if ($i > 0 && abs($strike - $spot) > $band && abs($strikes[$i - 1] - $spot) > $band) {
+                $wingGaps[] = $strike - $strikes[$i - 1];
+            }
+        }
+        $this->assertNotEmpty($wingGaps);
+        $this->assertGreaterThan($increment, max($wingGaps), 'the wings should be thinned, not listed whole');
+
+        // And the ladder still reaches as far as it ever did.
+        $this->assertEqualsWithDelta(
+            floor(($spot * (1.0 + FinancialConstants::OPTION_STRIKE_LADDER_WIDTH)) / $increment) * $increment,
+            max($strikes),
+            1e-9
+        );
+        $this->assertEqualsWithDelta(
+            ceil(($spot * (1.0 - FinancialConstants::OPTION_STRIKE_LADDER_WIDTH)) / $increment) * $increment,
+            min($strikes),
+            1e-9
+        );
+    }
+
     public function testAWorthlessStockHasNoLadder(): void
     {
         $this->assertSame([], OptionChainService::strikeLadder(0.0));

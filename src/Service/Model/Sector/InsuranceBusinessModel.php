@@ -282,18 +282,30 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
         // 3. The engine requires Baseline ROIC, which implies a specific Asset Turnover.
         // Turnover = Revenue / Invested Capital
         $impliedTurnover = $targetRevenue / $operatingEquity;
-        $baselineRoic = ($impliedTurnover * $stableMargin) * (1.0 - $taxRate);
+        $capacityRoic = ($impliedTurnover * $stableMargin) * (1.0 - $taxRate);
+        $baselineRoic = $capacityRoic;
 
         $ttmRoe = (float) $stock->getRoeTtm();
         if ($ttmRoe !== 0.0) {
             // Apply structural floor locally when deriving baseline capacity return so catastrophe losses do not collapse required underwriting turnover
             $structuralRoe = max(self::MIN_STRUCTURAL_ROE_FLOOR, $ttmRoe);
-            $baselineRoic = ($baselineRoic * self::BASELINE_ROIC_WEIGHT) + ($structuralRoe * self::TTM_ROIC_WEIGHT);
+            // The blend may only ever LOWER the premium book, never raise it. What comes back from here is
+            // divided by the after-tax underwriting margin to recover a premium turnover, and TTM ROE is a
+            // return on EQUITY that the policyholder float has already levered several times over: blending
+            // it in unclamped writes premium against investment income and defeats the Kenney capacity
+            // constraint struck above. Measured on the reinsurance book, an insurer earning its float yield
+            // on 3x leverage wrote at 1.9x surplus against a 1.5x cap.
+            $baselineRoic = min($capacityRoic, ($capacityRoic * self::BASELINE_ROIC_WEIGHT) + ($structuralRoe * self::TTM_ROIC_WEIGHT));
         }
 
         $saturationPenalty = \App\Service\Math\CorporateMetrics::getInstance()->calculateMarketSaturationPenalty($stock, max(1.0, $equity), $macroState);
         $waccBase = $macroState->policyRate + $macroState->equityRiskPremium;
-        $baselineRoic = max($waccBase, $baselineRoic - $saturationPenalty);
+        // The cost of capital is a floor under the RETURN, never under the BOOK. Capacity is a balance-sheet
+        // fact: an underwriter whose margin cannot earn its hurdle on the premium its surplus supports does
+        // not answer by writing more of it. Left uncapped this floor re-opened the constraint the blend
+        // above respects — at a 4% underwriting margin the implied turnover came back as 2.1x surplus, and
+        // at 2% as 4.1x, purely because the floor was being divided by a thinner margin downstream.
+        $baselineRoic = min($capacityRoic, max($waccBase, $baselineRoic - $saturationPenalty));
 
         return [
             'invested_capital' => $operatingEquity,

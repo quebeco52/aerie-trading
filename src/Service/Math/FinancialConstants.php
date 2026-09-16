@@ -524,6 +524,10 @@ class FinancialConstants
     public const OPTION_STRIKE_LADDER_WIDTH = 0.30;
     /** Round increments a strike ladder may be struck on; the ladder snaps to the smallest one at or above the spacing fraction, which is how a real ladder ends up on whole and half numbers at every price level. */
     public const OPTION_STRIKE_INCREMENTS = [0.50, 1.00, 2.50, 5.00, 10.00, 25.00, 50.00, 100.00, 250.00];
+    /** Half-width around spot listed on every increment. A real chain is dense at the money and thins as it goes out, because that is where the strikes anyone asks for are. */
+    public const OPTION_STRIKE_DENSE_BAND = 0.10;
+    /** Increments between strikes outside the dense band, the ends of the ladder always listed. Three: measured across a $8-$1400 price range at 30% fewer rows for 1.2% of dealer gamma, against 19% fewer for 0.1% at two. */
+    public const OPTION_STRIKE_WING_INCREMENT_MULTIPLE = 3;
     /** Average daily volume a name must trade before a class is opened on it; exchanges list options against a float and a trading record, not against every listed company. */
     public const OPTION_LISTING_MIN_ADV = 50000.0;
     /** Price a name must hold to carry a class. Below it the round-increment ladder has no usable strikes and every contract is one tick wide. */

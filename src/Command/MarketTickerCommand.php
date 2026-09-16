@@ -72,6 +72,9 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
     /** Phases named in a lag warning, most expensive first. */
     public const LAG_PHASES_SHOWN = 4;
 
+    /** Ticks a steady-state phase report covers. Long enough that the slowest cadence in the tick — the option sweep, at a pass every few dozen ticks — is averaged over several of its own passes. */
+    public const PHASE_REPORT_INTERVAL_TICKS = 600;
+
     /**
      * History bars between working-set reloads.
      *
@@ -315,10 +318,32 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
          * Wall time per phase of the tick just run, in ms. Reported with a lag warning so an overrun names
          * what it spent its time on: the model, the flush, the reload or the wire.
          *
+         * A phase is EVERYTHING SINCE THE LAST MARKER, so a missing marker never loses time — it charges it
+         * to whatever is marked next, under that name. 'bonds' used to carry the shock narrative, both index
+         * passes and every ETF update as well as the bond desk, which made the largest line in the profile
+         * the one nobody could act on. Add a marker whenever a phase grows a second job.
+         *
          * @var array<string, float>
          */
         $phases = [];
         $phaseStart = hrtime(true);
+
+        /**
+         * The same phases summed over the reporting window, with the window's tick count beside them.
+         *
+         * SUMMED RATHER THAN SAMPLED, because most of the tick is not on every tick. Options sweep on their
+         * own interval, history rows and the reload on theirs, settlement on the expiry grid; one tick's
+         * breakdown shows whichever of those happened to land on it and says nothing about the rest. A total
+         * over the window divided by the window is what each subsystem actually costs per tick, cadence
+         * included, which is the number to optimise against.
+         *
+         * @var array<string, float>
+         */
+        $phaseTotals = [];
+        $windowTicks = 0;
+        $windowOverruns = 0;
+        $windowMaxMs = 0.0;
+        $windowTotalMs = 0.0;
 
         // The tick is the only place a flush is timed, so it is the only place that wants the attribution.
         $this->flushProfiler->enable();
@@ -398,6 +423,8 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                 if (!empty($operatorEvents)) {
                     $events = array_merge($events, $operatorEvents);
                 }
+
+                $lap('events');
 
                 // Every index re-ranks the market on the same quarterly calendar. Passive money follows the
                 // benchmark's membership rather than the whole board, so an addition is bought and a deletion
@@ -503,6 +530,8 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                         $dt
                     );
                 }
+
+                $lap('etfs');
 
                 // The bond desk. Coupons, redemptions and the mark all happen inside the same tick
                 // transaction as the equity book, so a crash mid-tick cannot leave a coupon credited
@@ -886,6 +915,50 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                 $wrote = $written === '' ? 'wrote nothing' : $written;
 
                 $output->writeln("<comment>⚠️ Lag Spike: Tick {$tickCount} took too long! Dropped behind by " . round($overtimeMs, 2) . "ms ({$breakdown} | map {$managed} | {$wrote})</comment>");
+            }
+
+            // STEADY STATE, not spikes. The warning above only ever fires on the overruns, so the log shows
+            // the tail of the distribution and never its middle — and a subsystem that is slow on every
+            // single tick never appears in it at all.
+            //
+            // The `opt:` entries are STAGES OF `options`, not phases beside it, so the list does not sum to
+            // the tick: the measured mean on the line above is the total.
+            $executionMs = $executionTimeSec * 1000.0;
+            $windowTicks++;
+            $windowTotalMs += $executionMs;
+            $windowMaxMs = max($windowMaxMs, $executionMs);
+            $windowOverruns += $executionTimeUs > $this->tickIntervalUs ? 1 : 0;
+
+            foreach ($phases as $name => $ms) {
+                $phaseTotals[$name] = ($phaseTotals[$name] ?? 0.0) + $ms;
+            }
+
+            if ($windowTicks >= self::PHASE_REPORT_INTERVAL_TICKS) {
+                arsort($phaseTotals);
+                $budgetMs = $this->tickIntervalUs / 1000.0;
+                $perTick = implode(', ', array_map(
+                    static fn (string $name, float $ms): string => sprintf('%s %.2f', $name, $ms / $windowTicks),
+                    array_keys($phaseTotals),
+                    $phaseTotals
+                ));
+
+                $output->writeln(sprintf(
+                    '<info>⏱  Tick %d | %d ticks: mean %.1fms of %.1fms budget, max %.1fms, %d over (%.0f%%)</info>',
+                    $tickCount,
+                    $windowTicks,
+                    $windowTotalMs / $windowTicks,
+                    $budgetMs,
+                    $windowMaxMs,
+                    $windowOverruns,
+                    100.0 * $windowOverruns / $windowTicks
+                ));
+                $output->writeln('<info>   ms/tick: ' . $perTick . '</info>');
+
+                $phaseTotals = [];
+                $windowTicks = 0;
+                $windowOverruns = 0;
+                $windowMaxMs = 0.0;
+                $windowTotalMs = 0.0;
             }
 
             $timeToSleepUs = $this->tickIntervalUs - $executionTimeUs;

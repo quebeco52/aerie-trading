@@ -263,6 +263,66 @@ class InsuranceBusinessModelTest extends TestCase
         $moderateCatastropheRoic = $model->calculateStructuralRoic(-0.10, $baselineRoic, $revenuePerShare, $bookValuePerShare, $baselineMargin);
         $this->assertEqualsWithDelta(0.096, $moderateCatastropheRoic, 0.001);
     }
+
+    /**
+     * The premium book an insurer writes is capped by its surplus (Kenney), whatever it happens to be
+     * earning. Everything getTargetMetrics() returns is divided by the after-tax underwriting margin
+     * downstream to recover a premium turnover, so any term that reaches the result in units of a
+     * return on EQUITY writes premium against float investment income.
+     */
+    public function testPremiumTurnoverNeverExceedsKenneyCapacity(): void
+    {
+        $model = new InsuranceBusinessModel();
+        $mathUtility = new MathUtility();
+        $macroState = new \App\DTO\MacroStateDTO();
+        $afterTaxMargin = static fn(float $margin): float => $margin * (1.0 - $macroState->corporateTaxRate);
+
+        // A float-levered underwriter: a 4.5% underwriting margin, and a TTM ROE of 20% that the float,
+        // not the premium book, is earning. The blend must not turn that ROE back into premium.
+        $stock = $this->kenneyStock(0.045, 0.20);
+        $turnover = $model->getTargetMetrics($stock, $macroState, $mathUtility)['baseline_roic'] / $afterTaxMargin(0.045);
+        $this->assertEqualsWithDelta(InsuranceBusinessModel::KENNEY_CAPACITY_RATIO, $turnover, 0.001);
+
+        // Thin margins put the capacity return below the cost of capital. The WACC floor under the
+        // RETURN must not become a floor under the BOOK: an underwriter that cannot earn its hurdle on
+        // the premium its surplus supports does not answer by writing more of it.
+        $thin = $this->kenneyStock(0.02, 0.20);
+        $thinCapacityRoic = InsuranceBusinessModel::KENNEY_CAPACITY_RATIO * $afterTaxMargin(0.02);
+        $this->assertLessThan($macroState->policyRate + $macroState->equityRiskPremium, $thinCapacityRoic);
+        $thinTurnover = $model->getTargetMetrics($thin, $macroState, $mathUtility)['baseline_roic'] / $afterTaxMargin(0.02);
+        $this->assertEqualsWithDelta(InsuranceBusinessModel::KENNEY_CAPACITY_RATIO, $thinTurnover, 0.001);
+
+        // The blend still bites downward: a book earning far below its structural capacity return pulls
+        // the target under the cap, which is the pullback after a loss year the blend exists to model.
+        $impaired = $this->kenneyStock(0.20, 0.03);
+        $capacityRoic = InsuranceBusinessModel::KENNEY_CAPACITY_RATIO * $afterTaxMargin(0.20);
+        $blended = ($capacityRoic * InsuranceBusinessModel::BASELINE_ROIC_WEIGHT)
+            + (InsuranceBusinessModel::MIN_STRUCTURAL_ROE_FLOOR * InsuranceBusinessModel::TTM_ROIC_WEIGHT);
+        $impairedRoic = $model->getTargetMetrics($impaired, $macroState, $mathUtility)['baseline_roic'];
+        $this->assertEqualsWithDelta($blended, $impairedRoic, 0.0001);
+        $this->assertLessThan(InsuranceBusinessModel::KENNEY_CAPACITY_RATIO, $impairedRoic / $afterTaxMargin(0.20));
+    }
+
+    /** An unsaturated insurer carrying a float too small to imply runoff equity, opened at exactly Kenney capacity. */
+    private function kenneyStock(float $operatingMargin, float $roeTtm): Stock
+    {
+        $equity = 1_500_000_000_000.0;
+
+        $stock = new Stock();
+        $stock->setTicker('TEST');
+        $stock->setIndustry('Insurance - Reinsurance');
+        $stock->setSystemicImportance('titan');
+        $stock->setTotalEquity((string) $equity);
+        $stock->setCustomerDeposits((string) ($equity * 2.0));
+        $stock->setOperatingMargin((string) $operatingMargin);
+        $stock->setTotalRevenue((string) ($equity * InsuranceBusinessModel::KENNEY_CAPACITY_RATIO));
+        $stock->setRoeTtm((string) $roeTtm);
+        // Serviceable market wide enough that the Penrose saturation penalty is zero here: this test is
+        // about the capacity cap, and tests/Financial covers the saturation channel on its own.
+        $stock->setSamRatio('10.00');
+
+        return $stock;
+    }
 }
 
 

@@ -123,6 +123,20 @@ final class OptionChainService
     /**
      * The strikes listed around a spot price.
      *
+     * DENSE AT THE MONEY, SPARSE IN THE WINGS, which is how a chain is actually listed: the strikes anyone
+     * asks for sit near the money, and a uniform grid all the way to the edge of the ladder spends most of
+     * its rows where nobody trades. Every row costs a quote on each sweep and an INSERT when its serial
+     * rolls, so the uniform version was paying full price for the thinnest part of the book.
+     *
+     * The thinning is safe for the physics only because the public's book is allocated as a DENSITY over
+     * the ladder (OptionDemandEngine::evolve): a rung standing in for three increments carries the open
+     * interest of three, so the desk's gamma is what it was and only the row count moved. It is NOT safe
+     * against a point-weighted allocation, where dropping wing rungs concentrates the same book nearer the
+     * money and lifts dealer gamma by a fifth or more. Measured both ways before this was changed.
+     *
+     * The coarse grid is anchored to absolute multiples of the increment rather than to spot, so a name
+     * drifting through its ladder does not shuffle which wing strikes exist underneath it.
+     *
      * @return array<int, float> Ascending, on the round increment, inside the ladder width.
      */
     public static function strikeLadder(float $spot): array
@@ -133,13 +147,26 @@ final class OptionChainService
 
         $increment = self::strikeIncrement($spot);
         $width = FinancialConstants::OPTION_STRIKE_LADDER_WIDTH;
+        $band = $spot * FinancialConstants::OPTION_STRIKE_DENSE_BAND;
+        $wing = max(1, FinancialConstants::OPTION_STRIKE_WING_INCREMENT_MULTIPLE);
 
         $lowest = max($increment, ceil(($spot * (1.0 - $width)) / $increment) * $increment);
         $highest = floor(($spot * (1.0 + $width)) / $increment) * $increment;
 
+        $edge = $increment * 1.0e-9;
         $strikes = [];
-        for ($strike = $lowest; $strike <= $highest + ($increment * 1.0e-9); $strike += $increment) {
-            $strikes[] = round($strike, 4);
+
+        for ($strike = $lowest; $strike <= $highest + $edge; $strike += $increment) {
+            // The ends are always listed. Thinning is meant to cost rows, never RANGE — and on a name whose
+            // round increment is coarse enough that the whole ladder is five strikes, dropping an odd rung
+            // is dropping an end, which narrows the delta the book is spread over and lifts the desk's gamma
+            // with it. That is the one thing this change is not allowed to do.
+            $isEnd = $strike <= $lowest + $edge || $strike >= $highest - $edge;
+            $onCoarseGrid = ((int) round($strike / $increment)) % $wing === 0;
+
+            if ($isEnd || $onCoarseGrid || abs($strike - $spot) <= $band + $edge) {
+                $strikes[] = round($strike, 4);
+            }
         }
 
         return $strikes;

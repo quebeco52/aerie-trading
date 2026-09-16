@@ -188,4 +188,81 @@ class OptionDemandEngineTest extends TestCase
 
         $this->addToAssertionCount(1);
     }
+
+    // --- The Listing Grid Is Not Physics ---
+
+    /**
+     * THE INVARIANT THAT LETS THE LADDER BE TUNED. The book is spread over a demand profile, and a listed
+     * ladder only samples that profile, so listing fewer strikes across the same range must move where the
+     * public's contracts sit and NOT how much convexity the desk is short. Break it and the strike grid
+     * becomes a hedging parameter: thinning the wings to save rows would lift dealer gamma by a fifth and
+     * amplify every move in the market, for a change that was supposed to be about row counts.
+     */
+    public function testThinningTheLadderMovesRowsAndNotTheDesksGamma(): void
+    {
+        // The production pattern: every rung near the money, every third in the wings, the ends always kept.
+        $dense = $this->ladder(range(-6, 6));
+        $thin = $this->ladder([-6, -3, -2, -1, 0, 1, 2, 3, 6]);
+
+        $this->assertLessThan(count($dense['contracts']), count($thin['contracts']));
+
+        $this->assertEqualsWithDelta(
+            $this->settledGamma($dense),
+            $this->settledGamma($thin),
+            $this->settledGamma($dense) * 0.05,
+            'the same book spread over a coarser sampling of the same range is the same exposure'
+        );
+    }
+
+    /**
+     * One side of one expiry, sampled at the given rungs. Delta falls as the strike rises, which is what
+     * puts the wings close together in delta and the money far apart — the shape the density has to answer.
+     *
+     * @param list<int> $rungs Strike offsets from the money, in increments.
+     * @return array{contracts: list<OptionContract>, quotes: array<string, OptionQuoteDTO>}
+     */
+    private function ladder(array $rungs): array
+    {
+        $contracts = [];
+        $quotes = [];
+
+        foreach ($rungs as $rung) {
+            $ticker = 'VANE-13C' . ($rung + 6);
+            // Black-Scholes delta against the offset: near one deep in, near zero deep out.
+            $delta = 1.0 / (1.0 + exp($rung * 0.9));
+
+            $contracts[] = $this->contract($ticker, true);
+            $quotes[$ticker] = new OptionQuoteDTO(
+                mark: 5.0, bid: 4.9, ask: 5.1, impliedVolatility: 0.30,
+                delta: $delta, gamma: 0.04 * (1.0 - abs(2.0 * $delta - 1.0)), vega: 20.0, theta: -8.0, rho: 15.0,
+                timeToExpiry: 0.25, riskFreeRate: 0.04, dividendYield: 0.0,
+            );
+        }
+
+        return ['contracts' => $contracts, 'quotes' => $quotes];
+    }
+
+    /**
+     * What the desk is short once the book has settled: open interest times gamma, over the whole ladder.
+     *
+     * @param array{contracts: list<OptionContract>, quotes: array<string, OptionQuoteDTO>} $ladder
+     */
+    private function settledGamma(array $ladder): float
+    {
+        $stock = $this->stock();
+
+        for ($i = 0; $i < 500; $i++) {
+            $this->engine->evolve($stock, $ladder['contracts'], $ladder['quotes'], 0.13, 0.13, 0.01);
+        }
+
+        $gamma = 0.0;
+
+        foreach ($ladder['contracts'] as $contract) {
+            $gamma += $contract->customerOpenInterest()
+                * FinancialConstants::OPTION_CONTRACT_MULTIPLIER
+                * $ladder['quotes'][$contract->getTicker()]->gamma;
+        }
+
+        return $gamma;
+    }
 }
