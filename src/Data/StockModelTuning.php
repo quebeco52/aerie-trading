@@ -421,24 +421,25 @@ class StockModelTuning
 
         // --- Breakwater Trust (BRKW) ---
         // Dynastic industrial investment trust and generational anchor.
+        // Shares of NET ASSET VALUE. The revenue mix is derived from these and comes out inverted: the
+        // controlled 30% of the sphere is about four fifths of the income statement, because consolidation
+        // takes a subsidiary's whole top line while a 60% NAV weight in listed anchors contributes only the
+        // dividends those companies declare. The treasury's share is not here — it is read off the balance
+        // sheet, so the hoard funding the float is the hoard the firm actually holds.
         'BRKW' => [
-            ModelParam::IndustrialConglomerateWeight->value => 0.50, // Anchor industrial engineering & machinery stakes
-            ModelParam::DefensiveStaplesWeight->value       => 0.15, // Essential civic infrastructure concessions & defensive cash cows
-            ModelParam::ContrarianFloatWeight->value        => 0.35, // Permanent capital treasury reserves & counter-cyclical liquidity float
-            ModelParam::PricingPowerIndex->value            => 0.90,
+            ModelParam::WhollyOwnedNavShare->value     => 0.30, // Deepwater berths, municipal concessions and the precision toolmakers it owns outright
+            ModelParam::ListedPortfolioNavShare->value => 0.60, // Anchor stakes in the District's engineering and infrastructure champions, governed from the board
+            ModelParam::PricingPowerIndex->value       => 0.90,
+            ModelParam::OperatingCyclicality->value    => 0.45,
         ],
 
         // --- Harrier Industrial Holdings (HARR) ---
-        // Programmatic serial acquirer of mission-critical niche manufacturers. Its acquisitiveness is NOT
-        // modelled here at all: bought revenue becomes ordinary revenue once the operating system has been
-        // applied, and the deals themselves are MergerAndAcquisitionEngine's, hazard-rated off the steward
-        // archetype. What is left to tune is the portfolio those acquisitions have built.
         'HARR' => [
-            ModelParam::DefensiveStaplesWeight->value       => 0.70, // Mission-critical instrumentation with regulatory switching friction
-            ModelParam::IndustrialConglomerateWeight->value => 0.30, // The precision hardware itself, exposed to the client capex cycle
-            ModelParam::ContrarianFloatWeight->value        => 0.00, // Refuses to accumulate idle cash; it redeploys instead
-            ModelParam::PricingPowerIndex->value            => 0.85, // Under 1% of a client facility's capex, catastrophic to fail
-            ModelParam::OperatingCyclicality->value         => 0.60, // Replacement and consumable demand, not new-build demand
+            ModelParam::DefensiveStaplesWeight->value       => 0.70,
+            ModelParam::IndustrialConglomerateWeight->value => 0.30,
+            ModelParam::ContrarianFloatWeight->value        => 0.00,
+            ModelParam::PricingPowerIndex->value            => 0.85,
+            ModelParam::OperatingCyclicality->value         => 0.60,
         ],
 
         // =====================================================================

@@ -744,12 +744,19 @@ class MarketEngine
         }
 
         // Intrinsic Price-to-Book (P/B) Valuation
-        // A living company rarely trades below 0.4x Book Value unless bankruptcy is imminent.
-        $pbMultiple = max(FinancialConstants::MIN_INTRINSIC_PB, min(FinancialConstants::MAX_INTRINSIC_PB, $structuralRoic / max(0.01, $hurdleRate)));
+        // The multiple belongs to the business model: plant earning above its hurdle is worth more than the
+        // plant, while a portfolio of marketable stakes is worth the portfolio, so a trust declares 1.0 and
+        // this term hands its model net asset value per share rather than a multiple of it.
+        $pbMultiple = $strategy->getIntrinsicPbMultiple($structuralRoic, $hurdleRate);
         $pbFairValue = $bookValuePerShare * $pbMultiple;
 
         // PERFECTED WEIGHTED CONSENSUS MODEL
         $fairValue = $strategy->calculateFairValue($earningsValue, $pbFairValue, $normalizedEps, $dividendSupportValue);
+
+        // Closed-end structures trade below the assets they hold, by a gap that moves with the cycle. Applied
+        // here rather than inside the consensus so it reaches the reversion target: the price is pulled toward
+        // the discounted value, which is what makes a widening discount a fall rather than a mispricing.
+        $fairValue *= (1.0 - $strategy->getStructuralValuationDiscount($outputGap));
 
         $perceivedFairValue = max(0.01, $fairValue);
 

@@ -127,8 +127,8 @@ class ConglomerateBusinessModel extends StandardCorporateBusinessModel
     /** Distress intensity signal at which half the maximum contrarian float expansion is realized. */
     public const CONTRARIAN_HALF_SATURATION_POINT = 0.50;
 
-    /** Revenue elasticity of the float segment to the policy rate's gap from neutral. About 40% of a holding company's float is cash and short sovereign paper earning the front rate against a ~3.5% neutral yield, so a 1pp gap moves segment revenue by 0.40 / 0.035 ~ 12%. Dry powder is not free money in a ZIRP decade. */
-    public const FLOAT_RATE_CARRY_ELASTICITY = 12.00;
+    /** Revenue elasticity of the float segment to the policy rate's gap from neutral. About 40% of the float is cash and short sovereign paper earning the front rate; the denominator is the BOOK's blended yield, not the neutral policy rate, because the other 60% is high-yield and catastrophe paper yielding well above it. Blending 40% at ~3.5% with 60% at ~7% gives ~5.6%, so a 1pp gap moves segment revenue by 0.40 / 0.056 ~ 7%. Dry powder is not free money in a ZIRP decade, but it is not a pure rates bet either. */
+    public const FLOAT_RATE_CARRY_ELASTICITY = 7.00;
 
     /** Spread duration (years) of the float credit book: short corporates, preferreds, and cat bonds. */
     public const FLOAT_SPREAD_DURATION = 4.00;

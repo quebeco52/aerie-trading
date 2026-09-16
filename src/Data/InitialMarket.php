@@ -1238,33 +1238,30 @@ class InitialMarket
             // anchor equity stakes across the District's crown-jewel engineering and infrastructure pillars, active
             // board-level stewardship, and counter-cyclical emergency liquidity.
             'sector' => 'Industrials',
-            'industry' => 'Conglomerates',
+            'industry' => 'Investment Companies',
             'systemic_importance' => 'titan',
             'shares_outstanding' => 1_000_000_000,
-            'volatility' => 0.12,
-            'beta' => 0.45,
+            'volatility' => 0.18,
+            'beta' => 0.90,
             'jump_intensity' => 0.30,
             'jump_vol' => 0.08,
-            'baseline_roic' => 0.120,
+            'baseline_roic' => 0.080,
             'capex_ratio' => 0.12,
             'target_payout_ratio' => 0.40,
             'dividendSpeed' => 0.02,
-            'fixed_cost_ratio' => 0.20,
-            'operating_margin' => 0.32,
-            'public_float' => 0.40,
-            'sam_ratio' => 2.00,
+            'fixed_cost_ratio' => 0.03,
+            'operating_margin' => 0.92,
+            'public_float' => 0.75,
+            'sam_ratio' => 3.00,
             'floating_debt_ratio' => 0.10,
             'historical_fixed_rate' => 0.030,
             'credit_spread' => 0.0035,
             'depreciation_rate' => 0.03,
-            // Sits on $250B in unencumbered liquidity across its treasury divisions: an impenetrable balance-sheet
-            // buffer that funds generational R&D programs, backstops operating holdings during credit contractions,
-            // and supports a persistent holding-company discount to Net Asset Value (NAV).
             'corporate_treasury' => 250_000_000_000.00,
-            'total_equity' => 700_000_000_000.00,
+            'total_equity' => 1_880_000_000_000.00,
             'customer_deposits' => 0.00,
             'wholesale_debt' => 140_000_000_000.00,
-            'retained_earnings' => 450_000_000_000.00
+            'retained_earnings' => 1_200_000_000_000.00
         ],
         [
             'ticker' => 'ELDE',
@@ -2021,7 +2018,7 @@ class InitialMarket
             'management_style' => 'operator', // Disciplined volume throughput, inventory velocity, and counterparty risk management across global trade corridors
             'name' => 'Raven Merchant Group',
             'sector' => 'Industrials',
-            'industry' => 'Conglomerates - Merchant Houses',
+            'industry' => 'Merchant Houses',
             'systemic_importance' => 'titan',
             'shares_outstanding' => 1_000_000_000,
             'volatility' => 0.14,

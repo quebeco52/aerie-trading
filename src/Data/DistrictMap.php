@@ -72,8 +72,9 @@ class DistrictMap
         // Real Estate & Health Care.
         'reit', 'medical_care_facility', 'biotech',
         // Unclassified conglomerates trail east, matching the old row's "recovery houses" tail; the
-        // merchant houses stand at the far end, where the row meets the water they work off.
-        'conglomerate', 'merchant_house',
+        // merchant houses stand at the far end, where the row meets the water they work off, and the
+        // investment trusts sit between the two, owning both without working either.
+        'conglomerate', 'investment_company', 'merchant_house',
     ];
 
     // --- Street Canvas Geometry ---
@@ -282,6 +283,10 @@ class DistrictMap
         // blocks: it is known by the wharves it owns, not by the businesses it has bolted together.
         'medical_care_facility' => 'cross', 'biotech' => 'pill', 'reit' => 'house',
         'conglomerate' => 'blocks', 'merchant_house' => 'anchor',
+        // A trust keeps the conglomerate's blocks on purpose: it owns the others' roofs and operates none
+        // of them, so from the street it IS a holding company and dressing it otherwise would claim a
+        // trade it does not practise.
+        'investment_company' => 'blocks',
     ];
     /** Every symbol the template must define; every furniture value must be one of these. */
     public const ROOF_FURNITURE_SYMBOLS = [

@@ -276,12 +276,11 @@ class ConglomerateBusinessModelTest extends TestCase
         $macro = $this->neutralMacro();
 
         // Declared in the order the model reports its segments, so the assertion also pins the fact that a
-        // dormant stream leaves no hole in the segment table.
+        // dormant stream leaves no hole in the segment table. BRKW is deliberately absent: it moved to
+        // InvestmentCompanyBusinessModel, which reports its own streams and reads none of these weights.
         $expected = [
             // TRIV: 60% Industrial, 30% Defensive, 10% Float
             'TRIV' => ['industrial_manufacturing' => 60.0, 'defensive_staples' => 30.0, 'financial_investments' => 10.0],
-            // BRKW: 50% Industrial, 15% Defensive, 35% Float
-            'BRKW' => ['industrial_manufacturing' => 50.0, 'defensive_staples' => 15.0, 'financial_investments' => 35.0],
             // HARR: 30% Industrial hardware, 70% Niche instrumentation — and no float, by policy
             'HARR' => ['industrial_manufacturing' => 30.0, 'defensive_staples' => 70.0],
         ];

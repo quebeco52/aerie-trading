@@ -26,6 +26,25 @@ trait StandardValuationTrait
         return $fcfPerShare !== null ? max($revenueFloorValue, $peFairValue * $discount) : max($revenueFloorValue, $peFairValue);
     }
 
+    /**
+     * A living company rarely trades below 0.4x book unless bankruptcy is imminent, and the multiple it
+     * earns above that is the ratio of the return it makes on its capital to the return that capital is
+     * required to make. A model whose book is a portfolio rather than plant declares its own instead.
+     */
+    public function getIntrinsicPbMultiple(float $structuralRoic, float $hurdleRate): float
+    {
+        return max(
+            FinancialConstants::MIN_INTRINSIC_PB,
+            min(FinancialConstants::MAX_INTRINSIC_PB, $structuralRoic / max(0.01, $hurdleRate))
+        );
+    }
+
+    /** An operating company carries no standing discount: its fair value is already what it is worth. */
+    public function getStructuralValuationDiscount(float $outputGap): float
+    {
+        return 0.0;
+    }
+
     public function calculateFairValue(float $earningsValue, float $pbFairValue, float $normalizedEps, float $dividendSupportValue = 0.0): float
     {
         $baseConsensus = ($earningsValue * FinancialConstants::FAIR_VALUE_EARNINGS_WEIGHT) + ($pbFairValue * FinancialConstants::FAIR_VALUE_BOOK_WEIGHT);

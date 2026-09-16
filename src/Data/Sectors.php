@@ -56,6 +56,7 @@ class Sectors
         'advertising_agency' => 'Asset light, human-capital intensive. Revenue driven by steady long-term corporate retainers and counter-cyclical crisis management mandates.',
         'education'       => 'Revenue is a mix of highly sticky, guaranteed corporate/government subsidies and highly cyclical talent placement fees.',
         'conglomerate'    => 'A mix of diverse, unrelated business lines (industrial manufacturing, consumer products, financial investments) providing incredibly low baseline variance.',
+        'investment_company' => 'A permanent-capital holding sphere. Owns anchor stakes in listed industrial champions and a handful of wholly-owned subsidiaries; revenue is upstreamed dividends rather than output. Priced on NET ASSET VALUE at a persistent holding-company discount, not on an earnings multiple.',
         'merchant_house'  => 'A physical merchant and mercantile trading group. Revenue is invoiced TURNOVER, so it inflates with commodity prices while the per-unit spread does not; the desk earns on dislocation (backwardation, congested corridors) and pays for it in working-capital funding. Owns the berths and bonded warehouses the cargo moves through.',
         'logistics'       => 'Extremely sensitive to global GDP. Mix of high-volume parcel shipping and highly lucrative algorithmic surge pricing.',
         'railroad'        => 'Highly capital intensive with monopoly pricing. Revenue is a mix of sticky commuter passes, volatile walk-up tickets, and cyclical real estate monetization.',
@@ -96,11 +97,6 @@ class Sectors
         'Communication Equipment' => ['pe' => 18.00, 'depreciation' => 0.15, 'ebitda_limit' => 2.5, 'equity_limit' => 0.5, 'business_model' => 'communication_equipment'], // Carrier capex backlog + SEP royalties
         'Computer Hardware' => ['pe' => 15.00, 'depreciation' => 0.15, 'ebitda_limit' => 2.0, 'equity_limit' => 0.5, 'business_model' => 'computer_hardware'],
         'Conglomerates' => ['pe' => 16.00, 'depreciation' => 0.05, 'ebitda_limit' => 3.5, 'equity_limit' => 1.5, 'business_model' => 'conglomerate'],
-        // A merchant house is filed as a conglomerate and is not one: it manufactures nothing and its top
-        // line is turnover rather than output, so it gets its own model the way reinsurance does. Thin
-        // margins on a large invoice earn a lower multiple, and a working-capital book financed on short
-        // wholesale credit carries more debt against the same equity.
-        'Conglomerates - Merchant Houses' => ['pe' => 11.00, 'depreciation' => 0.05, 'ebitda_limit' => 4.0, 'equity_limit' => 2.0, 'business_model' => 'merchant_house'],
         'Consulting Services' => ['pe' => 22.00, 'depreciation' => 0.03, 'ebitda_limit' => 2.5, 'equity_limit' => 0.5, 'business_model' => 'law_firm'], // Almost entirely human capital
         'Copper' => ['pe' => 12.00, 'depreciation' => 0.08, 'ebitda_limit' => 2.5, 'equity_limit' => 1.0, 'business_model' => 'commodity'], // Asset heavy, cyclical mining
         'Credit Services' => ['pe' => 15.00, 'depreciation' => 0.05, 'ebitda_limit' => 999.0, 'equity_limit' => 7.0, 'business_model' => 'credit_services'], // Amex, Discover. Unsecured lending & swipe fees.
@@ -134,6 +130,12 @@ class Sectors
         'Industrial Distribution' => ['pe' => 16.00, 'depreciation' => 0.05, 'ebitda_limit' => 3.0, 'equity_limit' => 1.0, 'business_model' => 'tools_and_accessories'],
         'Information Technology Services' => ['pe' => 24.00, 'depreciation' => 0.04, 'ebitda_limit' => 2.0, 'equity_limit' => 0.5, 'business_model' => 'tech'], // Asset light
         'Investment Banking' => ['pe' => 14.00, 'depreciation' => 0.02, 'ebitda_limit' => 999.0, 'equity_limit' => 8.0, 'business_model' => 'investment_bank'], // Pure-play investment banks and M&A syndicates
+        // Not filed under conglomerates, because it is not one and the model is built on it not being one:
+        // its book is a portfolio of marketable stakes, so it is priced on net asset value at a discount
+        // rather than on the multiple below, which survives only to feed the sector P/E anchor. Leverage is
+        // held near nothing — a permanent-capital sphere that gears its portfolio stops being permanent
+        // capital the first time the market halves.
+        'Investment Companies' => ['pe' => 13.00, 'depreciation' => 0.02, 'ebitda_limit' => 1.5, 'equity_limit' => 0.3, 'business_model' => 'investment_company'],
         'Insurance Brokers' => ['pe' => 22.00, 'depreciation' => 0.02, 'ebitda_limit' => 3.5, 'equity_limit' => 1.0, 'business_model' => 'brokerage'], // Asset light fee business
         // A multi-line retail carrier writes P&C and Life side by side and cedes its tail upward, which is
         // exactly the retail model's two-stream split. The generic insurance model has no such split, so a
@@ -155,6 +157,11 @@ class Sectors
         'Medical Devices' => ['pe' => 25.00, 'depreciation' => 0.05, 'ebitda_limit' => 2.5, 'equity_limit' => 1.0, 'business_model' => 'none'],
         'Medical Distribution' => ['pe' => 15.00, 'depreciation' => 0.04, 'ebitda_limit' => 3.0, 'equity_limit' => 1.0, 'business_model' => 'none'], // Low margin volume business
         'Medical Instruments & Supplies' => ['pe' => 24.00, 'depreciation' => 0.05, 'ebitda_limit' => 2.5, 'equity_limit' => 1.0, 'business_model' => 'none'],
+        // Not filed under conglomerates: a merchant house manufactures nothing and its top line is turnover
+        // rather than output, so it gets its own model the way reinsurance does. Thin margins on a large
+        // invoice earn a lower multiple, and a working-capital book financed on short wholesale credit
+        // carries more debt against the same equity.
+        'Merchant Houses' => ['pe' => 11.00, 'depreciation' => 0.05, 'ebitda_limit' => 4.0, 'equity_limit' => 2.0, 'business_model' => 'merchant_house'],
         'Metal Fabrication' => ['pe' => 13.00, 'depreciation' => 0.06, 'ebitda_limit' => 3.0, 'equity_limit' => 1.5, 'business_model' => 'heavy_manufacturing'],
         'Mortgage Finance' => ['pe' => 11.00, 'depreciation' => 0.02, 'ebitda_limit' => 999.0, 'equity_limit' => 8.0, 'business_model' => 'shadow_bank'], // Shadow banks / Fannie Mae. Bank Rule.
         'Oil & Gas E&P' => ['pe' => 11.00, 'depreciation' => 0.12, 'ebitda_limit' => 2.5, 'equity_limit' => 1.0, 'business_model' => 'commodity'], // Exploration. Wells deplete incredibly fast.
@@ -298,6 +305,7 @@ class Sectors
             'education'       => new \App\Service\Model\Sector\EducationBusinessModel(),
             'conglomerate'    => new \App\Service\Model\Sector\ConglomerateBusinessModel(),
             'merchant_house'  => new \App\Service\Model\Sector\MerchantHouseBusinessModel(),
+            'investment_company' => new \App\Service\Model\Sector\InvestmentCompanyBusinessModel(),
             'logistics'       => new \App\Service\Model\Sector\LogisticsBusinessModel(),
             'railroad'        => new \App\Service\Model\Sector\RailroadBusinessModel(),
             'steel_manufacturing' => new \App\Service\Model\Sector\SteelManufacturingBusinessModel(),

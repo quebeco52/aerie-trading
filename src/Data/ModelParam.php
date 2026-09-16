@@ -198,6 +198,17 @@ enum ModelParam: string
     case DefensiveStaplesWeight = 'defensive_staples_weight';
     case ContrarianFloatWeight = 'contrarian_float_weight';
 
+    // --- Investment Companies ---
+    // Shares of NET ASSET VALUE, not of revenue: how the portfolio is split is what a sphere publishes and
+    // what anyone actually knows about it, so that is what these dials take. The revenue mix is DERIVED from
+    // them and comes out inverted, because a controlled company is consolidated and contributes its whole top
+    // line where a minority stake contributes only the dividend it declares. Entering the revenue split by
+    // hand made it possible to enter that inversion backwards; deriving it puts the mistake out of reach.
+    // The treasury share is deliberately absent: it is read from Stock::corporateTreasury, which the ledger
+    // already maintains, rather than declared a second time here where it could only drift out of step.
+    case WhollyOwnedNavShare = 'wholly_owned_nav_share';
+    case ListedPortfolioNavShare = 'listed_portfolio_nav_share';
+
     // --- Legal Services ---
     case CorporateRetainerWeight = 'corporate_retainer_weight';
     case LitigationContingencyWeight = 'litigation_contingency_weight';

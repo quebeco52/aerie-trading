@@ -228,9 +228,18 @@ class StockModelTuningTest extends TestCase
         $this->assertSame(0.10, StockModelTuning::get('TRIV', ModelParam::ContrarianFloatWeight, 0.0));
 
         // Breakwater Trust (BRKW)
-        $this->assertSame(0.50, StockModelTuning::get('BRKW', ModelParam::IndustrialConglomerateWeight, 0.0));
-        $this->assertSame(0.15, StockModelTuning::get('BRKW', ModelParam::DefensiveStaplesWeight, 0.0));
-        $this->assertSame(0.35, StockModelTuning::get('BRKW', ModelParam::ContrarianFloatWeight, 0.0));
+        // BRKW runs the investment trust, which splits on control rather than on trade. The conglomerate's
+        // own weights must stay absent: a dial the model does not read is worse than no dial at all.
+        $this->assertSame(0.30, StockModelTuning::get('BRKW', ModelParam::WhollyOwnedNavShare, 0.0));
+        $this->assertSame(0.60, StockModelTuning::get('BRKW', ModelParam::ListedPortfolioNavShare, 0.0));
+        // The treasury share is read off Stock::corporateTreasury, so it must NOT be declared here as well:
+        // a second copy of a number the ledger rewrites every quarter can only drift out of step with it.
+        $this->assertArrayNotHasKey('treasury_nav_share', StockModelTuning::getOverridesForTicker('BRKW'));
+        $this->assertSame(0.90, StockModelTuning::get('BRKW', ModelParam::PricingPowerIndex, 0.0));
+        $this->assertSame(0.45, StockModelTuning::get('BRKW', ModelParam::OperatingCyclicality, 0.0));
+        $this->assertSame(-1.0, StockModelTuning::get('BRKW', ModelParam::IndustrialConglomerateWeight, -1.0));
+        $this->assertSame(-1.0, StockModelTuning::get('BRKW', ModelParam::DefensiveStaplesWeight, -1.0));
+        $this->assertSame(-1.0, StockModelTuning::get('BRKW', ModelParam::ContrarianFloatWeight, -1.0));
 
         // Clear Rivers Law / Claw & Talons Law (CLAW)
         $this->assertSame(0.40, StockModelTuning::get('CLAW', ModelParam::CorporateRetainerWeight, 0.0));
@@ -387,6 +396,7 @@ class StockModelTuningTest extends TestCase
             new \App\Service\Model\Sector\CommunicationEquipmentBusinessModel(),
             new \App\Service\Model\Sector\ConglomerateBusinessModel(),
             new \App\Service\Model\Sector\MerchantHouseBusinessModel(),
+            new \App\Service\Model\Sector\InvestmentCompanyBusinessModel(),
             new \App\Service\Model\Sector\ConstructionBusinessModel(),
             new \App\Service\Model\Sector\ConsumerStaplesBusinessModel(),
             new \App\Service\Model\Sector\CreditServicesBusinessModel(),
