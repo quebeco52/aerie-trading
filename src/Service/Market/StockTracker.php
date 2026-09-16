@@ -254,7 +254,10 @@ class StockTracker
                 netDebtPerShare: $netDebtPerShare,
                 recentPriceTrend: (float) ($stock->getPriceMomentumTrend() ?? 0.0),
                 secularGrowth: $secularGrowth,
-                baselineRoic: (float) ($stock->getBaselineRoic() ?? 0.10),
+                // The anchor the firm's own model measures it by: a lender or underwriter carries a
+                // placeholder in baselineRoic, and pricing was reading that placeholder as its through-the
+                // -cycle return. MarketSeedCommand has always passed the ROE here for a financial.
+                baselineRoic: $strategy->getBaselineReturn($stock),
                 baselineMargin: (float) ($stock->getOperatingMargin() ?? 0.20),
                 accrualsRatio: (float) ($stock->getAccrualsRatio() ?? 0.0),
                 investedCapitalPerShare: $stock->getInvestedCapital() / max(1.0, (float) $stock->getSharesOutstanding()),

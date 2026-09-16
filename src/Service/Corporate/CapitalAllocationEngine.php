@@ -148,9 +148,7 @@ class CapitalAllocationEngine
 
         // Life-Cycle Payout Target Expansion (DeAngelo & DeAngelo 2006 / Jensen 1986)
         // As a firm approaches market saturation, internal reinvestment slows and target payout scales toward cash cow levels.
-        $evaluationCapital = $ctx->strategy->getEvaluationCapital((float) $stock->getTotalEquity(), $ctx->investedCapital);
-        $saturationPenalty = $this->corporateMetrics->calculateMarketSaturationPenalty($stock, $evaluationCapital, $ctx->macroState);
-        $saturationSeverity = $this->corporateMetrics->calculateSaturationSeverity($saturationPenalty, $trueReturn);
+        $saturationSeverity = $this->resolveRedeploymentSeverity($ctx, $trueReturn);
         $effectiveTargetPayout = $this->corporateMetrics->calculateLifeCyclePayoutRatio($targetPayout, $saturationSeverity);
 
         // Life-cycle gate (Dickinson 2011): a pre-profit firm funding itself with outside capital does not
@@ -274,6 +272,26 @@ class CapitalAllocationEngine
         }
     }
 
+    /**
+     * How much of the firm's capital has nowhere to go this quarter, as the life-cycle payout expansion and
+     * the buyback gate both read it.
+     *
+     * Saturation is the general case: a firm whose capital has outgrown its market earns less on the next
+     * unit of it. A model may also know its capital is idle for a reason saturation cannot see — an
+     * underwriter declining to write at the rate on offer holds surplus behind a book it is not writing —
+     * and the larger of the two is what management is actually looking at when it decides what to hand back.
+     */
+    private function resolveRedeploymentSeverity(CapitalAllocationContext $ctx, float $trueReturn): float
+    {
+        $evaluationCapital = $ctx->strategy->getEvaluationCapital((float) $ctx->stock->getTotalEquity(), $ctx->investedCapital);
+        $saturationPenalty = $this->corporateMetrics->calculateMarketSaturationPenalty($ctx->stock, $evaluationCapital, $ctx->macroState);
+
+        return max(
+            $this->corporateMetrics->calculateSaturationSeverity($saturationPenalty, $trueReturn),
+            $ctx->strategy->getUndeployableCapitalShare($ctx->stock, $ctx->macroState, $this->mathUtility)
+        );
+    }
+
     private function executeBuybacks(CapitalAllocationContext $ctx): void
     {
         if ($ctx->businessModel === 'reit') {
@@ -330,9 +348,7 @@ class CapitalAllocationEngine
         $hurdleRate = $ctx->strategy->getHurdleRate($ctx->health);
         $economicSpread = $trueReturn - $hurdleRate;
 
-        $evaluationCapital = $ctx->strategy->getEvaluationCapital((float) $stock->getTotalEquity(), $ctx->investedCapital);
-        $saturationPenalty = $this->corporateMetrics->calculateMarketSaturationPenalty($stock, $evaluationCapital, $ctx->macroState);
-        $saturationSeverity = $this->corporateMetrics->calculateSaturationSeverity($saturationPenalty, $trueReturn);
+        $saturationSeverity = $this->resolveRedeploymentSeverity($ctx, $trueReturn);
 
         $fairValuePE = $this->mathUtility->calculateManagementFairValuePE(
             $hurdleRate,

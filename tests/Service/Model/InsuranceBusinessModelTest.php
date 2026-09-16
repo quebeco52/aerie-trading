@@ -386,6 +386,85 @@ class InsuranceBusinessModelTest extends TestCase
     }
 
     /**
+     * Capital behind a book the firm is declining to write is redundant, and the life-cycle payout
+     * expansion reads that as a reason to hand it back. Without the return leg the capacity cycle has no
+     * way down: capital only ever accumulates, and the firm grinds into a fund with an insurance licence.
+     */
+    public function testSurplusBehindUnwrittenBusinessIsReportedAsUndeployable(): void
+    {
+        $model = new InsuranceBusinessModel();
+        $mathUtility = new MathUtility();
+        $macroState = new \App\DTO\MacroStateDTO(policyRateEma: InsuranceBusinessModel::DEFAULT_POLICY_RATE_FALLBACK);
+
+        // Writing the whole book: every dollar of surplus is doing something.
+        $this->assertSame(0.0, $model->getUndeployableCapitalShare($this->underwriterAtShare(0.40), $macroState, $mathUtility));
+
+        // Withdrawing from a soft market: the surplus behind the business it declines is not.
+        $soft = $this->underwriterAtShare(0.65);
+        $undeployable = $model->getUndeployableCapitalShare($soft, $macroState, $mathUtility);
+        $this->assertGreaterThan(0.0, $undeployable);
+        $this->assertLessThanOrEqual(1.0 - InsuranceBusinessModel::MIN_WRITTEN_CAPACITY, $undeployable);
+
+        // It is the exact complement of what the firm chose to write, so the two decisions cannot disagree.
+        $written = $model->getTargetMetrics($soft, $macroState, $mathUtility)['baseline_roic']
+            / (InsuranceBusinessModel::KENNEY_CAPACITY_RATIO * (float) $soft->getOperatingMargin() * (1.0 - $macroState->corporateTaxRate));
+        $this->assertEqualsWithDelta(1.0 - $written, $undeployable, 0.0001);
+    }
+
+    /**
+     * Rates are quoted against the capital the market has SEEN. The lag between a firm's capital changing
+     * and its renewal rates moving is what makes the capacity cycle a cycle rather than a level.
+     */
+    public function testRatesFollowObservedCapitalRatherThanTodaysBalanceSheet(): void
+    {
+        $model = new InsuranceBusinessModel();
+        $macroState = new \App\DTO\MacroStateDTO(policyRateEma: InsuranceBusinessModel::DEFAULT_POLICY_RATE_FALLBACK);
+
+        // Capital already well past the market's optimal scale, but nothing has been filed or rated yet.
+        $stock = $this->underwriterAtShare(1.00);
+        $stock->setEarningsMomentumZ([InsuranceBusinessModel::STATE_OBSERVED_CAPACITY => 0.40]);
+        $this->assertEqualsWithDelta(1.0, (float) $model->getMacroPhysics($stock, $macroState)['pricing_power_multiplier'], 0.0001);
+
+        // Each quarter of physics moves the observed position toward the real one, and once the market has
+        // caught up with the capital that was built, the rate follows it down.
+        $observed = 0.40;
+        foreach (range(1, 2) as $quarter) {
+            $result = $model->computeActualFinancials($stock, 50_000_000_000.0, 0.90, 1.0e9, 0.10, $macroState, $this->scriptedMath());
+            $next = $result->streamZ[InsuranceBusinessModel::STATE_OBSERVED_CAPACITY] ?? 0.0;
+
+            $this->assertGreaterThan($observed, $next);
+            $this->assertLessThan(1.00, $next);
+
+            $observed = $next;
+            $stock->setEarningsMomentumZ([InsuranceBusinessModel::STATE_OBSERVED_CAPACITY => $observed]);
+        }
+
+        $this->assertLessThan(1.0, (float) $model->getMacroPhysics($stock, $macroState)['pricing_power_multiplier']);
+    }
+
+    /**
+     * An insurer earns on premium AND on float, and only the premium leg moves with the book it writes.
+     */
+    public function testStructuralReturnKeepsTheFloatLegWhenTheBookShrinks(): void
+    {
+        $model = new InsuranceBusinessModel();
+        $baselineMargin = 0.045;
+        $baselineReturn = 0.14; // What the firm is built to earn: underwriting plus float.
+        $bookValuePerShare = 100.0;
+        $fullCapacityRevenue = $bookValuePerShare * InsuranceBusinessModel::KENNEY_CAPACITY_RATIO;
+
+        // The float leg is whatever the anchor carries beyond full-capacity underwriting (0.14 - 0.0675).
+        $atCapacity = $model->calculateStructuralRoic(0.14, $baselineReturn, $fullCapacityRevenue, $bookValuePerShare, $baselineMargin);
+        $this->assertEqualsWithDelta(0.14, $atCapacity, 0.0001);
+
+        // Writing two thirds of the book costs the underwriting third of it, and nothing else: the float is
+        // invested either way. Measured on underwriting alone this firm re-rated on every rate cycle.
+        $withdrawn = $model->calculateStructuralRoic(0.14, $baselineReturn, $fullCapacityRevenue * (2.0 / 3.0), $bookValuePerShare, $baselineMargin);
+        $underwritingLost = (InsuranceBusinessModel::KENNEY_CAPACITY_RATIO * (1.0 / 3.0)) * $baselineMargin;
+        $this->assertEqualsWithDelta(0.14 - ($underwritingLost * 0.70), $withdrawn, 0.0001);
+    }
+
+    /**
      * The Kenney ratio is annual premium to surplus, and sector physics is handed one quarter of it: the
      * capacity trigger used to ask whether three quarters of the firm's capital had gone.
      */

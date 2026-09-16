@@ -308,7 +308,9 @@ class InitialMarket
             'target_payout_ratio' => 0.30,
             'dividendSpeed' => 0.03,
             'fixed_cost_ratio' => 0.35,
-            'operating_margin' => 0.09,
+            // 95.5% combined ratio, the same correction SAFE needed: 0.09 was a 91% ratio held through
+            // every cycle, which is top-decile for a carrier writing both P&C and life.
+            'operating_margin' => 0.045,
             'public_float' => 0.90,
             'sam_ratio' => 0.50,
             'floating_debt_ratio' => 0.10,
@@ -317,9 +319,15 @@ class InitialMarket
             'depreciation_rate' => 0.02,
             // Float fully backed by liquid assets, as SAFE is. A retail carrier that sheds its tail risk
             // upward has no excuse to run its policyholder float short of cash.
-            'corporate_treasury' => 850_000_000_000.00,
+            //
+            // 3.2x equity, down from 5.0x. Float in this model is FREE — it earns the portfolio yield and
+            // pays nothing for the privilege — which is a fair reading of P&C reserves and a poor one of
+            // life reserves, where the crediting rate is most of the cost of the business. At 5x, the
+            // float alone earned this carrier an 18.6% ROE before it underwrote anything, against the
+            // 15% tuned below; nothing it could do to its combined ratio would reconcile the two.
+            'corporate_treasury' => 550_000_000_000.00,
             'total_equity'      => 170_000_000_000.00,
-            'customer_deposits' => 850_000_000_000.00,
+            'customer_deposits' => 550_000_000_000.00,
             'wholesale_debt'    => 22_000_000_000.00,
             'retained_earnings' => 67_500_000_000.00
         ],
@@ -1268,7 +1276,12 @@ class InitialMarket
             'credit_spread' => 0.0035,
             'depreciation_rate' => 0.03,
             'corporate_treasury' => 250_000_000_000.00,
-            'total_equity' => 1_880_000_000_000.00,
+            // A trust whose holdings are worth more is worth more itself. The engineering and machinery
+            // pillars it stewards were recapitalized, which lifted the declared portfolio to 1,423B against
+            // 1,770B of capital employed and left its own operating subsidiaries below the 20% of the
+            // balance sheet AnchorHoldings::MIN_CONSOLIDATED_SHARE requires them to be — a trust whose
+            // stakes swallow it has no operations left to draw a stream from. 2,010B puts them back at 25%.
+            'total_equity' => 2_010_000_000_000.00,
             'customer_deposits' => 0.00,
             'wholesale_debt' => 140_000_000_000.00,
             'retained_earnings' => 1_200_000_000_000.00

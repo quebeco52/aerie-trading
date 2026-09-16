@@ -30,6 +30,12 @@ trait FinancialPhysicsTrait
         return (float) $stock->getRoeTtm();
     }
 
+    /** A balance-sheet firm is measured on equity; its baselineRoic column is a seed placeholder nothing fills. */
+    public function getBaselineReturn(Stock $stock): float
+    {
+        return (float) $stock->getBaselineRoe();
+    }
+
     public function calculateEconomicReturn(Stock $stock, float $quarterlyNopatOrIncome, float $investedCapital): float
     {
         $equity = (float) $stock->getTotalEquity();

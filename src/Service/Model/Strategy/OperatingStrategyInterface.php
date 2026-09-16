@@ -44,6 +44,12 @@ interface OperatingStrategyInterface
     public function getSurpriseBlendWeights(): array;
     public function getEffectiveReturn(Stock $stock): float;
     public function getTrueReturn(Stock $stock): float;
+    /**
+     * The return the firm is BUILT to earn on the capital its own model measures it by: ROIC for an
+     * operating company, ROE for a balance-sheet one, whose ROIC field carries a placeholder the seed
+     * never fills. Pricing reads it as the through-the-cycle anchor behind a noisy trailing return.
+     */
+    public function getBaselineReturn(Stock $stock): float;
     public function getEvaluationCapital(float $equity, float $investedCapital): float;
     public function getWorkingCapitalIntensity(Stock $stock): float;
     /**

@@ -117,6 +117,10 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
     public const SOFT_MARKET_MAX_DISCOUNT = 0.30;
     /** Smallest share of Kenney capacity a going concern still writes at any price: obligatory renewals, treaty shares it cannot walk away from mid-term, and the distribution it must keep alive to have a book to write when rates recover. */
     public const MIN_WRITTEN_CAPACITY = 0.35;
+    /** State key holding the capital position the market has actually observed, which is what renewal rates are struck against. */
+    public const STATE_OBSERVED_CAPACITY = 'state:capacity:observed_share';
+    /** Years for a change in an underwriter's capital to reach the rates it is quoted: statutory filings, rating reviews and annual renewal dates all sit between the two, and that delay is what turns the capacity cycle into a cycle rather than a level. */
+    public const CAPACITY_OBSERVATION_LAG_YEARS = 1.50;
 
     // --- Catastrophe Seasonality ---
     /** Relative catastrophe frequency by calendar quarter [Q1..Q4], summing to 4.0: Q3 carries the Atlantic wind season, Q1 the winter freeze and storm peak. */
@@ -381,15 +385,15 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
      */
     protected function resolveSoftMarketCapacityDiscount(Stock $stock, MacroStateDTO $macroState): float
     {
-        $evaluationCapital = $this->getEvaluationCapital((float) $stock->getTotalEquity(), $stock->getInvestedCapital());
-        $capacityShare = \App\Service\Math\CorporateMetrics::getInstance()->calculateScaleRatio(
-            $evaluationCapital,
-            $macroState->nominalGdpIndex,
-            (float) $stock->getSamRatio()
-        );
+        $capacityShare = $this->resolveCapacityShare($stock, $macroState);
+
+        // Rates are quoted against the capital the market has SEEN, which is where the cycle comes from:
+        // capital built through a soft market is not priced until it has been filed, rated and renewed
+        // against, so the industry overshoots in both directions instead of settling at a level.
+        $observedShare = (float) ($stock->getEarningsMomentumZ()[self::STATE_OBSERVED_CAPACITY] ?? $capacityShare);
 
         $optimalShare = \App\Service\Math\FinancialConstants::DISECONOMY_OPTIMAL_SHARE_THRESHOLD;
-        $excessCapacity = max(0.0, ($capacityShare - $optimalShare) / max(0.01, 1.0 - $optimalShare));
+        $excessCapacity = max(0.0, ($observedShare - $optimalShare) / max(0.01, 1.0 - $optimalShare));
 
         return min(self::SOFT_MARKET_MAX_DISCOUNT, $excessCapacity * self::SOFT_MARKET_CAPACITY_BETA);
     }
@@ -454,13 +458,32 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
      * and the retail carrier — the two listed underwriters — could never enter the regime at all, and the
      * uplift getMacroPhysics() reads off it was permanently zero for both.
      */
-    protected function advanceHardMarketRegime(StreamContext $streams, float $surplusDeficitRatio, float $claimZ): void
+    protected function advanceUnderwritingCycle(StreamContext $streams, Stock $stock, MacroStateDTO $macroState, float $surplusDeficitRatio, float $claimZ): void
     {
         $streams->evolveRegime(self::REGIME_HARD_MARKET, 0.0, self::HARD_MARKET_EXIT_HAZARD);
 
         if ($surplusDeficitRatio >= self::HARD_MARKET_ONSET_SURPLUS_DEFICIT || $claimZ < self::REINSURANCE_ATTACHMENT_Z) {
             $streams->startRegime(self::REGIME_HARD_MARKET);
         }
+
+        // What the market will have observed of this firm's capital by the time it quotes again.
+        $currentShare = $this->resolveCapacityShare($stock, $macroState);
+        $streams->registerState(self::STATE_OBSERVED_CAPACITY, MathUtility::getInstance()->calculateDistributedLag(
+            currentLaggedValue: $streams->getPersistedState(self::STATE_OBSERVED_CAPACITY, $currentShare),
+            targetValue: $currentShare,
+            dt: \App\Service\Corporate\EarningsEngine::QUARTERLY_TIME_STEP,
+            lagTimeConstant: self::CAPACITY_OBSERVATION_LAG_YEARS
+        ));
+    }
+
+    /** The firm's capital measured against the market it serves, on the base the saturation physics uses. */
+    protected function resolveCapacityShare(Stock $stock, MacroStateDTO $macroState): float
+    {
+        return \App\Service\Math\CorporateMetrics::getInstance()->calculateScaleRatio(
+            $this->getEvaluationCapital((float) $stock->getTotalEquity(), $stock->getInvestedCapital()),
+            $macroState->nominalGdpIndex,
+            (float) $stock->getSamRatio()
+        );
     }
 
     /**
@@ -583,7 +606,7 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
         // Reinsurers absorbing higher frequency ($catThreshold) & severity ($catScalar) gain stronger post-disaster pricing power.
         $hardMarketRecoveryDiscount = min(0.30, $surplusDeficitRatio * 0.35 * $catRiskBeta);
 
-        $this->advanceHardMarketRegime($streams, $surplusDeficitRatio, $claimZ);
+        $this->advanceUnderwritingCycle($streams, $stock, $macroState, $surplusDeficitRatio, $claimZ);
 
         $reinsuranceSurcharge = 0.0;
         if ($claimZ < self::REINSURANCE_ATTACHMENT_Z) {
@@ -684,6 +707,25 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
         $moneyMarketYield = max(0.0, $policyRate - MacroEngine::CASH_YIELD_SPREAD);
 
         return ($investableFloat * $floatYield) + ($excessCash * $moneyMarketYield);
+    }
+
+    /**
+     * An underwriter that declines to write at the rate on offer is holding surplus behind a book it is not
+     * writing, and that surplus is redundant until rates recover. Handing it back is what closes the
+     * capacity cycle: the industry's capital falls, the glut it was pricing clears, rates harden, and the
+     * capital that comes back is deployed into a book worth writing. A firm that keeps it instead simply
+     * accumulates until it is a fund with an insurance licence.
+     *
+     * The written share is struck against the same hurdle the writing decision uses, so the two cannot
+     * disagree: whatever fraction of capacity fails that test is the fraction of surplus this returns.
+     */
+    public function getUndeployableCapitalShare(Stock $stock, MacroStateDTO $macroState, MathUtility $mathUtility): float
+    {
+        $operatingEquity = max(1.0, (float) $stock->getTotalEquity());
+        $stableMargin = max(0.01, (float) $stock->getOperatingMargin());
+        $capacityReturn = self::KENNEY_CAPACITY_RATIO * $stableMargin * (1.0 - $macroState->corporateTaxRate);
+
+        return max(0.0, min(1.0, 1.0 - $this->resolveWrittenCapacity($stock, $macroState, $mathUtility, $operatingEquity, $capacityReturn)));
     }
 
     public function getSustainableDividendBase(Stock $stock, float $quarterlyEps, float $investedCapital, float $depRate): float
@@ -862,9 +904,18 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
     {
         // DuPont Decomposition anchored by Kenney Rule capacity (Premium-to-Surplus ratio = 1.50)
         $actualTurnover = $bookValuePerShare > 0.0 ? ($revenuePerShare / $bookValuePerShare) : self::KENNEY_CAPACITY_RATIO;
-        $effectiveTurnover = min(self::KENNEY_CAPACITY_RATIO, max(0.5, $actualTurnover));
+        $effectiveTurnover = min(self::KENNEY_CAPACITY_RATIO, max(self::MIN_WRITTEN_CAPACITY * self::KENNEY_CAPACITY_RATIO, $actualTurnover));
 
-        $structuralRoe = $effectiveTurnover * $baselineMargin;
+        // An insurer earns on two things and only one of them is premium. Underwriting is the leg that
+        // moves with the book — it is turnover x margin, and it is the volatile half this method exists to
+        // smooth. The float earns whether or not a treaty is signed, so it is carried at the level the
+        // firm's own return anchor implies once full-capacity underwriting is taken out of it: measuring an
+        // insurer on turnover x margin alone priced a reinsurer running 3x investment leverage as if its
+        // investment income did not exist, and then re-rated it every time it wrote a smaller book.
+        $fullCapacityUnderwriting = self::KENNEY_CAPACITY_RATIO * $baselineMargin;
+        $investmentLeg = max(0.0, $baselineRoic - $fullCapacityUnderwriting);
+
+        $structuralRoe = ($effectiveTurnover * $baselineMargin) + $investmentLeg;
 
         // Blend through-the-cycle structural capacity with actual TTM ROE
         $blendedRoe = ($structuralRoe * 0.70) + ($roicTtm * 0.30);

@@ -103,7 +103,7 @@ class RetailInsuranceBusinessModel extends InsuranceBusinessModel
         $hardMarketRecoveryDiscount = min(0.25, $surplusDeficitRatio * 0.30 * $pcWeight);
 
         // A primary carrier renews its book annually and holds the harder rate well past the loss.
-        $this->advanceHardMarketRegime($streams, $surplusDeficitRatio, $claimZ);
+        $this->advanceUnderwritingCycle($streams, $stock, $macroState, $surplusDeficitRatio, $claimZ);
 
         $reinsuranceSurcharge = 0.0;
         if ($claimZ < self::REINSURANCE_ATTACHMENT_Z) {

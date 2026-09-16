@@ -547,6 +547,11 @@ trait StandardOperatingPhysicsTrait
         return (float) ($stock->getCurrentRoic() ?: $stock->getBaselineRoic());
     }
 
+    public function getBaselineReturn(Stock $stock): float
+    {
+        return (float) $stock->getBaselineRoic();
+    }
+
     public function getTrueReturn(Stock $stock): float
     {
         return (float) $stock->getRoicTtm();

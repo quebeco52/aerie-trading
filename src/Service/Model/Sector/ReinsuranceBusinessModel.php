@@ -107,7 +107,7 @@ class ReinsuranceBusinessModel extends InsuranceBusinessModel
         $hardMarketPricingBonus = min(0.35, $surplusDeficitRatio * 0.40 * $catRiskBeta);
 
         // Rates on a renewed treaty stay hard for years after the capital that withdrew has come back.
-        $this->advanceHardMarketRegime($streams, $surplusDeficitRatio, $claimZ);
+        $this->advanceUnderwritingCycle($streams, $stock, $macroState, $surplusDeficitRatio, $claimZ);
 
         // Cat Bond Principal / Yield Haircut during extreme catastrophe attachment:
         // When attachment points breach, Cat Bond collateral shields the ILS tranche by absorbing tail severity,
