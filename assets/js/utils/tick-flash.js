@@ -1,6 +1,12 @@
 /** Green/red flash marking a figure that moved on a tick. */
 
-const FLASH_DURATION_MS = 500;
+/**
+ * How long a flash is held at full colour. The decay that follows it is CSS (`.tick-flash`,
+ * ~420ms), so this is the hold and not the whole flash: kept short, because a figure that
+ * moves on consecutive frames would otherwise never leave the flashed state and read as a
+ * strobe rather than as a pulse.
+ */
+const FLASH_DURATION_MS = 180;
 
 // Every flashed element and when its colour should be restored. One sweep timer serves them
 // all: the previous version armed (and cancelled) a timer per element per tick, which on the
@@ -10,6 +16,10 @@ let sweepTimer = null;
 
 export function flashTick(el, direction) {
     if (!el) return;
+
+    // Carries the decay transition. It is never removed: the class is inert until one of the
+    // direction classes is taken off again.
+    el.classList.add('tick-flash');
 
     el.classList.remove('tick-up', 'tick-down');
     if (direction > 0) {

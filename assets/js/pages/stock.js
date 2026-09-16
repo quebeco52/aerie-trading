@@ -8,6 +8,7 @@ import { updatePriceUI, resetPriceHistoryState } from '../stock/stats-updater.js
 import { renderEvents } from '../stock/events-feed.js';
 import { updateConstituentRows } from '../stock/index-table.js';
 import { updateFundamentalCharts, resizeFundamentalCharts, destroyFundamentalCharts } from '../stock/fundamental-charts.js';
+import { onPageLoad } from '../utils/page-init.js';
 
 let rawReports = [];
 let currentContext = {};
@@ -189,9 +190,8 @@ function setupFinancialTimeframeButtons() {
     });
 }
 
-/* Bound to `turbo:load` only. It fires on first load as well as on every Turbo navigation,
-   and it is the load-bearing path: on a repeat visit this module is already in the module
-   registry and its top level never runs again, so a direct call here would fire only on
-   the very first evaluation and be pure duplication on that one. */
-document.addEventListener('turbo:load', initStockPage);
+/* `onPageLoad`, not a bare `turbo:load` listener: on a Turbo navigation this module is
+   fetched asynchronously and can evaluate after that page's `turbo:load` has already
+   fired. See utils/page-init.js. */
+onPageLoad(initStockPage);
 

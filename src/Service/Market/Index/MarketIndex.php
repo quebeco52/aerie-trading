@@ -119,24 +119,19 @@ enum MarketIndex: string
     /**
      * The most any one constituent may weigh, or null where the index lets weights fall where they will.
      *
-     * Two indices cap, for two different reasons. The SECTOR fund caps because a six-company fund weighted
-     * purely by size cannot satisfy the diversification limits a fund has to satisfy to be sold as one. The
-     * HEADLINE index caps because a thirty-name benchmark carrying half its weight in three companies has
-     * stopped measuring the market and started measuring those three — which is why national benchmarks cap
-     * and why the S&P 500, with five hundred names, does not need to. Its cap is deliberately looser than
-     * the sector fund's is tight: the sector fund caps to stay sellable as a diversified fund, while the
-     * headline index caps only to stop a handful of names becoming the whole measurement.
-     *
-     * The headline cap does a second job here that a real one usually does not have to. The publisher of
-     * this index is its largest constituent, and a cap is the one rule that bounds how much of its own
-     * benchmark it can come to occupy, whatever happens to its share price.
+     * Only the SECTOR fund caps, and it caps because a six-company fund weighted purely by size cannot
+     * satisfy the diversification limits a fund has to satisfy to be sold as one. Every broad index here
+     * lets the weights fall where they will, which is what the S&P 500, the FTSE 100 and the Nikkei do: a
+     * benchmark that caps its largest names stops reporting the market it measures and starts reporting a
+     * re-engineered version of it. On a board this dominated by its titans that matters most precisely
+     * where a cap would bite — including the publisher's own seat, which is left to the market rather than
+     * bounded by a rule.
      */
     public function weightCap(): ?float
     {
         return match ($this) {
-            self::Headline => FinancialConstants::INDEX_HEADLINE_MAX_CONSTITUENT_WEIGHT,
             self::Staples => FinancialConstants::INDEX_MAX_CONSTITUENT_WEIGHT,
-            self::Composite, self::LowVolatility => null,
+            self::Headline, self::Composite, self::LowVolatility => null,
         };
     }
 
@@ -235,9 +230,8 @@ enum MarketIndex: string
     {
         return match ($this) {
             self::Headline => sprintf(
-                'The %d largest listed companies by float-adjusted capitalisation, weighted by float and capped so that no constituent exceeds %s%%. Admission additionally requires profitability: trailing twelve-month earnings and the most recent quarter must both be positive, a test that governs joining rather than staying. Membership is reviewed quarterly and banded, so a name is admitted only once it has clearly risen into the index and dropped only once it has clearly fallen out of it.',
-                FinancialConstants::INDEX_CONSTITUENT_COUNT,
-                number_format(FinancialConstants::INDEX_HEADLINE_MAX_CONSTITUENT_WEIGHT * 100, 0)
+                'The %d largest listed companies by float-adjusted capitalisation, weighted by float with no ceiling on any constituent. Admission additionally requires profitability: trailing twelve-month earnings and the most recent quarter must both be positive, a test that governs joining rather than staying. Membership is reviewed quarterly and banded, so a name is admitted only once it has clearly risen into the index and dropped only once it has clearly fallen out of it.',
+                FinancialConstants::INDEX_CONSTITUENT_COUNT
             ),
             self::Composite => 'Every listed company, weighted by float-adjusted capitalisation. The market as a whole rather than a selection from it: nothing is admitted or dropped except by listing or delisting.',
             self::LowVolatility => sprintf(

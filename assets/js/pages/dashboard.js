@@ -4,6 +4,7 @@ import { CHART_FONT_MONO } from '../utils/fonts.js';
 import { readPageData } from '../utils/page-data.js';
 import { flashTick } from '../utils/tick-flash.js';
 import { setText } from '../utils/set-text.js';
+import { onPageLoad } from '../utils/page-init.js';
 
 const previousPrices = {};
 let previousPortfolioValue = null;
@@ -278,8 +279,7 @@ function initDashboard() {
 }
 
 
-/* Bound to `turbo:load` only. It fires on first load as well as on every Turbo navigation,
-   and it is the load-bearing path: on a repeat visit this module is already in the module
-   registry and its top level never runs again, so a direct call here would fire only on
-   the very first evaluation and be pure duplication on that one. */
-document.addEventListener('turbo:load', initDashboard);
+/* `onPageLoad`, not a bare `turbo:load` listener: on a Turbo navigation this module is
+   fetched asynchronously and can evaluate after that page's `turbo:load` has already
+   fired. See utils/page-init.js. */
+onPageLoad(initDashboard);

@@ -2,6 +2,7 @@ import { readPageData } from '../utils/page-data.js';
 import { setupChartDefaults } from '../utils/chart-config.js';
 import { THEME_COLORS } from '../utils/colors.js';
 import { flashTick } from '../utils/tick-flash.js';
+import { onPageLoad } from '../utils/page-init.js';
 
 let curveChart = null;
 let marketUpdateHandler = null;
@@ -137,4 +138,7 @@ function initLadder() {
     }
 }
 
-document.addEventListener('turbo:load', initLadder);
+/* `onPageLoad`, not a bare `turbo:load` listener: on a Turbo navigation this module is
+   fetched asynchronously and can evaluate after that page's `turbo:load` has already
+   fired. See utils/page-init.js. */
+onPageLoad(initLadder);

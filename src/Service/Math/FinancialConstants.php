@@ -561,10 +561,6 @@ class FinancialConstants
     /** Floor on the trailing volatility an inverse-volatility weighting divides by. A name that has gone quiet enough to divide by nothing would otherwise take the whole fund. */
     public const INDEX_MINIMUM_WEIGHT_VOLATILITY = 0.04;
 
-    // --- Headline Index Eligibility ---
-    /** Most any one constituent may weigh in the headline index. Set between the 10% the UCITS limits and most national benchmarks use and the 22.5% the sector fund carries under the RIC rules: a thirty-name benchmark with half its weight in three companies measures those three, but this District genuinely is dominated by its titans and a tighter cap would re-engineer the index around them rather than measure them. It also bounds the publisher's own seat in the index it publishes. */
-    public const INDEX_HEADLINE_MAX_CONSTITUENT_WEIGHT = 0.15;
-
     // --- Index Diversification Caps (RIC / UCITS 5-10-40, as applied by the S&P Select Sector indices) ---
     /** Most any one constituent may weigh in a capped index. A sector fund that must stay a regulated investment company cannot let one name run away with it. */
     public const INDEX_MAX_CONSTITUENT_WEIGHT = 0.225;

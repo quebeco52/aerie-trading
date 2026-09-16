@@ -3,6 +3,7 @@ import { showLoading, showError, hideStatus } from '../utils/fetch-status.js';
 import { setupChartGridFilters, setupExpandableCards } from '../utils/chart-grid.js';
 import { updateMacroIndicators } from '../stock/stats-updater.js';
 import { updateMacroCharts, resizeMacroCharts, destroyMacroCharts, setMacroTimeframe } from '../stock/macro-charts.js';
+import { onPageLoad } from '../utils/page-init.js';
 
 let rawReports = [];
 let marketFrameHandler = null;
@@ -91,6 +92,7 @@ function cleanupPageResources() {
     }
 }
 
-/* Bound to `turbo:load` only: it fires on first load as well as on every Turbo navigation, and on a
-   repeat visit this module's top level never runs again. */
-document.addEventListener('turbo:load', initEconomyPage);
+/* `onPageLoad`, not a bare `turbo:load` listener: on a Turbo navigation this module is
+   fetched asynchronously and can evaluate after that page's `turbo:load` has already
+   fired. See utils/page-init.js. */
+onPageLoad(initEconomyPage);

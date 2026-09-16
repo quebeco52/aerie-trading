@@ -2,11 +2,23 @@ import { formatLarge } from '../utils/formatters.js';
 import { readPageData } from '../utils/page-data.js';
 import { flashTick } from '../utils/tick-flash.js';
 import { setText } from '../utils/set-text.js';
+import { onPageLoad } from '../utils/page-init.js';
 
-const previousPrices = {};
+/**
+ * The last price each ticker was *shown at*, not the last price received. A move too small to
+ * survive rounding to the cent leaves the reader looking at the same digits, so it must not
+ * arm a flash and must not become the baseline the next flash is measured against.
+ */
+const renderedPrices = {};
 
 /** Shares outstanding per ticker, for recomputing market caps as prices tick. */
 let sharesByTicker = {};
+
+// --- Table re-ranking ---
+/** How often the table is re-ranked by market cap. */
+const SORT_INTERVAL_MS = 5000;
+/** How long a row takes to slide from its old rank to its new one after a re-rank. */
+const ROW_SLIDE_MS = 320;
 
 function initHome() {
     const tableEl = document.getElementById('market-table-body');
@@ -70,14 +82,12 @@ function initHome() {
                     }
 
                     const newPrice = parseFloat(stock.price);
-                    const oldPrice = previousPrices[stock.ticker] || newPrice;
-
-                    setText(priceEl, '$' + newPrice.toFixed(2));
+                    const priceMoved = setText(priceEl, '$' + newPrice.toFixed(2));
 
                     const sharesCount = sharesByTicker[stock.ticker] || 0;
                     const newMcap = stock.market_cap !== undefined ? stock.market_cap : (newPrice * sharesCount);
 
-                    setText(mcapEl, formatLarge(newMcap, '$'));
+                    const mcapMoved = setText(mcapEl, formatLarge(newMcap, '$'));
                     rowEl.setAttribute('data-mcap', newMcap);
 
                     // A ticker with nothing buffered yet reports no change at all, which is a
@@ -95,10 +105,16 @@ function initHome() {
                         }
                     }
 
-                    flashTick(priceEl, newPrice - oldPrice);
-                    flashTick(mcapEl, newPrice - oldPrice);
+                    // Only figures whose digits changed flash, and they flash against the last
+                    // price the reader was shown. A ticker with no baseline yet — the first frame
+                    // after the server-rendered table — reports no direction, so arriving on the
+                    // page does not light the whole board up.
+                    const shownAt = renderedPrices[stock.ticker];
+                    const direction = shownAt === undefined ? 0 : newPrice - shownAt;
 
-                    previousPrices[stock.ticker] = newPrice;
+                    if (priceMoved) flashTick(priceEl, direction);
+                    if (mcapMoved) flashTick(mcapEl, direction);
+                    if (priceMoved) renderedPrices[stock.ticker] = newPrice;
                 }
             });
         }
@@ -106,25 +122,49 @@ function initHome() {
 
     document.addEventListener('market:frame', onMarketFrame);
 
-    // Throttled Table Sorter
+    /** Largest market cap first, with the bankrupt shells held at the bottom. */
+    function byMarketCap(a, b) {
+        const aBankrupt = a.getAttribute('data-bankrupt') === 'true';
+        const bBankrupt = b.getAttribute('data-bankrupt') === 'true';
+        if (aBankrupt !== bBankrupt) {
+            return aBankrupt ? 1 : -1;
+        }
+        const mcapA = parseFloat(a.getAttribute('data-mcap')) || 0;
+        const mcapB = parseFloat(b.getAttribute('data-mcap')) || 0;
+        return mcapB - mcapA;
+    }
+
+    /**
+     * Re-ranks the table. Two neighbours trading places used to teleport, which on a table that
+     * re-ranks every few seconds is the most visible jump on the page, so the rows that move
+     * slide from where they stood to where they stand now (FLIP: measure, reorder, animate the
+     * difference away). Reordering is skipped outright when the ranking has not changed, which
+     * is the common case and spares both the layout and the animation.
+     */
+    const reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     const sortInterval = setInterval(() => {
         const tbody = document.getElementById('market-table-body');
         if (!tbody) return;
 
         const rows = Array.from(tbody.querySelectorAll('tr'));
-        rows.sort((a, b) => {
-            const aBankrupt = a.getAttribute('data-bankrupt') === 'true';
-            const bBankrupt = b.getAttribute('data-bankrupt') === 'true';
-            if (aBankrupt !== bBankrupt) {
-                return aBankrupt ? 1 : -1;
-            }
-            const mcapA = parseFloat(a.getAttribute('data-mcap')) || 0;
-            const mcapB = parseFloat(b.getAttribute('data-mcap')) || 0;
-            return mcapB - mcapA;
-        });
+        const ranked = rows.slice().sort(byMarketCap);
+        if (ranked.every((row, i) => row === rows[i])) return;
 
-        rows.forEach(row => tbody.appendChild(row));
-    }, 5000);
+        const before = reduceMotion ? null : new Map(ranked.map(row => [row, row.getBoundingClientRect().top]));
+
+        ranked.forEach(row => tbody.appendChild(row));
+        if (!before) return;
+
+        const after = new Map(ranked.map(row => [row, row.getBoundingClientRect().top]));
+        ranked.forEach(row => {
+            const dy = before.get(row) - after.get(row);
+            if (!dy) return;
+            row.animate(
+                [{ transform: `translateY(${dy}px)` }, { transform: 'none' }],
+                { duration: ROW_SLIDE_MS, easing: 'ease-out' }
+            );
+        });
+    }, SORT_INTERVAL_MS);
 
     // Clean up when leaving the page
     document.addEventListener('turbo:before-render', () => {
@@ -134,8 +174,7 @@ function initHome() {
 }
 
 
-/* Bound to `turbo:load` only. It fires on first load as well as on every Turbo navigation,
-   and it is the load-bearing path: on a repeat visit this module is already in the module
-   registry and its top level never runs again, so a direct call here would fire only on
-   the very first evaluation and be pure duplication on that one. */
-document.addEventListener('turbo:load', initHome);
+/* `onPageLoad`, not a bare `turbo:load` listener: on a Turbo navigation this module is
+   fetched asynchronously and can evaluate after that page's `turbo:load` has already
+   fired. See utils/page-init.js. */
+onPageLoad(initHome);

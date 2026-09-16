@@ -754,31 +754,36 @@ class IndexCommitteeTest extends TestCase
     // --- Concentration Caps ---
 
     /**
-     * The headline index caps its largest constituents, which on this board is most of the point.
+     * The headline index does NOT cap its largest constituents: each one weighs its own float share.
      *
-     * A thirty-name benchmark carrying half its weight in three companies has stopped measuring the market
-     * and started measuring those three. It also bounds the publisher's own seat: Lakebird Bank publishes
-     * this index and is the largest company in it.
+     * A benchmark that trims the names that have grown largest reports a re-engineered market rather than
+     * the one it measures, which is why the S&P 500, the FTSE 100 and the Nikkei leave the weights where
+     * the market puts them. That includes the publisher's own seat — Lakebird Bank publishes this index and
+     * is the largest company in it, and its weight is whatever the market makes it.
      */
-    public function testTheHeadlineIndexCapsItsLargestConstituents(): void
+    public function testTheHeadlineIndexLeavesItsLargestConstituentsUncapped(): void
     {
-        // A board whose top three would otherwise be half the index.
+        // A board whose top three are half the index between them.
         $caps = ['LAKE' => 1.9e12, 'SAFE' => 1.5e12, 'SWAN' => 1.4e12];
         for ($i = 0; $i < 30; $i++) {
             $caps[sprintf('T%03d', $i)] = 2.0e11 - ($i * 1.0e9);
         }
 
         $result = $this->committee()->reconstitute(MarketIndex::Headline, $this->universe($caps), 0);
-        $cap = FinancialConstants::INDEX_HEADLINE_MAX_CONSTITUENT_WEIGHT;
 
         $this->assertEqualsWithDelta(1.0, array_sum($result['weights']), 1e-9);
 
-        foreach ($result['weights'] as $ticker => $weight) {
-            $this->assertLessThanOrEqual($cap + 1e-9, $weight, "{$ticker} is over the cap.");
+        // Members are the thirty largest, so the weights are their float shares of that membership.
+        $memberCap = 0.0;
+        foreach ($result['tickers'] as $ticker) {
+            $memberCap += $caps[$ticker];
         }
 
-        $this->assertEqualsWithDelta($cap, $result['weights']['LAKE'], 1e-9);
-        $this->assertEqualsWithDelta($cap, $result['weights']['SWAN'], 1e-9);
+        foreach ($result['weights'] as $ticker => $weight) {
+            $this->assertEqualsWithDelta($caps[$ticker] / $memberCap, $weight, 1e-9, "{$ticker} is not at its float share.");
+        }
+
+        $this->assertGreaterThan(0.15, $result['weights']['LAKE'], 'The publisher is no longer held to the old ceiling.');
     }
 
     /**

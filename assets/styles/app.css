@@ -61,9 +61,13 @@
     font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
   }
 
-  /* Applied and cleared by assets/js/utils/tick-flash.js. */
-  .tick-up { color: var(--color-secondary); }
-  .tick-down { color: var(--color-tertiary); }
+  /* Applied and cleared by assets/js/utils/tick-flash.js. The transition sits on the resting
+     state and is switched off in the flashed one, so a tick snaps straight to its colour — the
+     move is the thing being reported — and then decays back over this duration instead of
+     cutting out. Rows updating several times a second otherwise read as a strobe. */
+  .tick-flash { transition: color 420ms ease-out; }
+  .tick-up { color: var(--color-secondary); transition: none; }
+  .tick-down { color: var(--color-tertiary); transition: none; }
 
   /* `list-none` covers the standards marker; Safari draws its own triangle regardless. */
   summary.list-none::-webkit-details-marker { display: none; }

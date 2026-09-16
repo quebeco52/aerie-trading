@@ -1,6 +1,7 @@
 import { readPageData } from '../utils/page-data.js';
 import { initPriceChart, updateLivePricePoint, resizePriceChart, destroyPriceChart } from '../stock/price-chart.js';
 import { flashTick } from '../utils/tick-flash.js';
+import { onPageLoad } from '../utils/page-init.js';
 
 let marketUpdateHandler = null;
 let marketFrameHandler = null;
@@ -140,6 +141,7 @@ function initBondPage() {
     }
 }
 
-/* turbo:load only, matching the other page modules: it fires on first load and on every Turbo
-   navigation, whereas this module's top level runs once and never again on a repeat visit. */
-document.addEventListener('turbo:load', initBondPage);
+/* `onPageLoad`, not a bare `turbo:load` listener: on a Turbo navigation this module is
+   fetched asynchronously and can evaluate after that page's `turbo:load` has already
+   fired. See utils/page-init.js. */
+onPageLoad(initBondPage);
