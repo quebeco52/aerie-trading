@@ -99,10 +99,11 @@ class RetailInsuranceBusinessModel extends InsuranceBusinessModel
             : ($claimZ > self::BENIGN_CLAIM_Z_FLOOR ? self::BENIGN_CLAIM_BONUS * $pcWeight : 0.0);
 
         // Kenney Rule Hard-Market Capital Recovery
-        $equity = (float) $stock->getTotalEquity();
-        $targetSurplus = $expectedRevenue / self::KENNEY_CAPACITY_RATIO;
-        $surplusDeficitRatio = $targetSurplus > 0.0 ? max(0.0, ($targetSurplus - $equity) / $targetSurplus) : 0.0;
+        $surplusDeficitRatio = $this->resolveSurplusDeficitRatio($expectedRevenue, (float) $stock->getTotalEquity());
         $hardMarketRecoveryDiscount = min(0.25, $surplusDeficitRatio * 0.30 * $pcWeight);
+
+        // A primary carrier renews its book annually and holds the harder rate well past the loss.
+        $this->advanceHardMarketRegime($streams, $surplusDeficitRatio, $claimZ);
 
         $reinsuranceSurcharge = 0.0;
         if ($claimZ < self::REINSURANCE_ATTACHMENT_Z) {
@@ -155,6 +156,7 @@ class RetailInsuranceBusinessModel extends InsuranceBusinessModel
         return [
             'inflation_ema',
             'market_volatility_ema',
+            'nominal_gdp_index',
             'output_gap_ema',
             'policy_rate_ema',
             'yield_10y_ema',

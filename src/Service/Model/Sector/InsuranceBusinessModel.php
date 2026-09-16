@@ -51,6 +51,8 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
     // --- The Kenney Rule & Capacity Limits ---
     /** Standard Premium-to-Surplus capacity ratio required to maintain strong credit ratings. */
     public const KENNEY_CAPACITY_RATIO    = 1.50;
+    /** Quarters of premium in the ANNUAL written book the Kenney ratio is defined over; sector physics is handed one quarter of it. */
+    public const KENNEY_PREMIUM_QUARTERS  = 4.0;
     /** Implied runoff equity fraction of customer deposit float allowed for insolvent insurers. */
     public const IMPLIED_RUNOFF_EQUITY    = 0.10;
     /** Default maximum financial leverage (Debt/Equity) limit if sector configuration is absent. */
@@ -109,6 +111,12 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
     public const HARD_MARKET_PRICING_UPLIFT = 0.25;
     /** Quarters over which the rate uplift decays as capital rebuilds, even while the regime itself persists. */
     public const HARD_MARKET_UPLIFT_DECAY_QUARTERS = 8.0;
+    /** Premium rate cut per unit of capital held beyond what the market it serves can absorb (the soft half of the same capacity cycle). */
+    public const SOFT_MARKET_CAPACITY_BETA = 0.40;
+    /** Deepest rate cut price competition inflicts, however overcapitalized the industry becomes. */
+    public const SOFT_MARKET_MAX_DISCOUNT = 0.30;
+    /** Smallest share of Kenney capacity a going concern still writes at any price: obligatory renewals, treaty shares it cannot walk away from mid-term, and the distribution it must keep alive to have a book to write when rates recover. */
+    public const MIN_WRITTEN_CAPACITY = 0.35;
 
     // --- Catastrophe Seasonality ---
     /** Relative catastrophe frequency by calendar quarter [Q1..Q4], summing to 4.0: Q3 carries the Atlantic wind season, Q1 the winter freeze and storm peak. */
@@ -271,9 +279,14 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
         $taxRate = $macroState->corporateTaxRate;
 
         // 2. Structural Revenue is anchored strictly to their capacity limit and required policy reserves.
-        $targetRevenue = $operatingEquity * $capacityRatio;
+        // Capacity is the ceiling, not the plan: an underwriter offered a rate its own capital cannot earn
+        // a return on writes less of the book rather than all of it (see resolveWrittenCapacity()).
+        $targetRevenue = $operatingEquity * $capacityRatio
+            * $this->resolveWrittenCapacity($stock, $macroState, $mathUtility, $operatingEquity, $capacityRatio * $stableMargin * (1.0 - $taxRate));
         // Hard Market Revenue Floor: post-catastrophe pricing power prevents revenue from collapsing
-        // proportionally with surplus. Industry-wide capacity depletion supports premium rates.
+        // proportionally with surplus. Industry-wide capacity depletion supports premium rates. It doubles
+        // as the runoff lag on a withdrawal: a book of annual treaties cannot be put down faster than it
+        // comes up for renewal, and this floor lets at most 15% of it go in any one quarter.
         $priorRevenue = (float) $stock->getTotalRevenue();
         $targetSurplusForPriorRevenue = $priorRevenue / $capacityRatio;
         $surplusAdequacy = $targetSurplusForPriorRevenue > 0.0 ? min(1.0, $operatingEquity / $targetSurplusForPriorRevenue) : 1.0;
@@ -318,20 +331,152 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
         $outputGap = $this->resolveLaggedOutputGap($stock, $macroState);
         $beta = $this->getOperatingCyclicality($stock);
 
+        return [
+            'macro_demand_shift' => $outputGap * $beta * self::MACRO_DEMAND_SCALAR, // Highly immune to macro demand
+            'pricing_power_multiplier' => $this->resolvePremiumRateLevel($stock, $macroState),
+            // Claims do not get cheaper because the industry cut its rates. The engine deflates the cost
+            // base by this against the pricing multiplier, so leaving it to default to the pricing multiplier
+            // (as every model that carries no separate cost level does) held the combined ratio fixed
+            // whatever the market charged — a soft market that costs an underwriter nothing is not one.
+            // Claim cost inflation itself is not carried here: calculateSectorPhysics already loads
+            // property replacement values onto the loss ratio, and charging it twice would double it.
+            'input_cost_multiplier' => 1.0,
+        ];
+    }
+
+    /**
+     * The premium rate level the market is offering this firm, as a multiple of the rate its structural
+     * margin was struck at: the hard market's uplift, the Cummins & Danzon (1997) float-yield discount, and
+     * the soft market's capacity discount, composed.
+     *
+     * Separate from getMacroPhysics() because the underwriting decision needs the rate BEFORE it decides
+     * how much to write, and getMacroPhysics() advances the firm's demand lag as a side effect — reading
+     * the rate through it twice in a quarter would age the lag twice.
+     */
+    protected function resolvePremiumRateLevel(Stock $stock, MacroStateDTO $macroState): float
+    {
         // Cash-flow underwriting (Cummins & Danzon 1997): when float yields are high insurers discount
         // premium to gather investable money, so a high policy rate softens rates on its own.
-        $policyRate = $macroState->policyRateEma;
-        $softMarketRateDiscount = max(0.0, ($policyRate - self::DEFAULT_POLICY_RATE_FALLBACK) * self::SOFT_MARKET_CYCLE_BETA);
+        $softMarketRateDiscount = max(0.0, ($macroState->policyRateEma - self::DEFAULT_POLICY_RATE_FALLBACK) * self::SOFT_MARKET_CYCLE_BETA);
 
         // The capacity cycle sits on top of it and dominates. The regime clock is advanced by this model's
         // own physics (see calculateSectorPhysics) and read back here a quarter later, which is right:
         // rates reset at renewal, after the loss that withdrew the capacity.
-        $pricingPower = 1.0 + $this->resolveHardMarketUplift($stock) - min(0.50, $softMarketRateDiscount);
+        return 1.0 + $this->resolveHardMarketUplift($stock) - min(0.50, $softMarketRateDiscount)
+            - $this->resolveSoftMarketCapacityDiscount($stock, $macroState);
+    }
 
-        return [
-            'macro_demand_shift' => $outputGap * $beta * self::MACRO_DEMAND_SCALAR, // Highly immune to macro demand
-            'pricing_power_multiplier' => $pricingPower,
-        ];
+    /**
+     * Winter (1994) / Gron (1994): the underwriting cycle is a CAPACITY cycle, and it runs in both
+     * directions. Capital destroyed by a catastrophe withdraws capacity and hardens rates — the half
+     * resolveHardMarketUplift() carries. Capital ACCUMULATED past what the market can absorb does the
+     * opposite: it competes for the same premium and rates soften until the industry's return falls back
+     * to its cost of capital. Without this half an insurer that retains its earnings simply keeps them,
+     * because nothing prices the glut it is creating, and book value compounds at ROE x retention forever.
+     *
+     * The glut is measured as capital against the market it serves rather than against the firm's own
+     * book: premium is pinned at the Kenney ratio to surplus, so an insurer's own premium-to-surplus can
+     * never show a surplus of capital — only its share of serviceable demand can. That is the same scale
+     * ratio the saturation physics reads, against the same optimal-share threshold.
+     */
+    protected function resolveSoftMarketCapacityDiscount(Stock $stock, MacroStateDTO $macroState): float
+    {
+        $evaluationCapital = $this->getEvaluationCapital((float) $stock->getTotalEquity(), $stock->getInvestedCapital());
+        $capacityShare = \App\Service\Math\CorporateMetrics::getInstance()->calculateScaleRatio(
+            $evaluationCapital,
+            $macroState->nominalGdpIndex,
+            (float) $stock->getSamRatio()
+        );
+
+        $optimalShare = \App\Service\Math\FinancialConstants::DISECONOMY_OPTIMAL_SHARE_THRESHOLD;
+        $excessCapacity = max(0.0, ($capacityShare - $optimalShare) / max(0.01, 1.0 - $optimalShare));
+
+        return min(self::SOFT_MARKET_MAX_DISCOUNT, $excessCapacity * self::SOFT_MARKET_CAPACITY_BETA);
+    }
+
+    /**
+     * Underwriting discipline: the share of its Kenney capacity the firm chooses to write at the rate the
+     * market is offering.
+     *
+     * Capacity says how much an underwriter MAY write; it does not say it should. A soft market prices
+     * cover below what the exposure costs, and the answer to that is to write less of it — the capacity
+     * withdrawal that is the other half of Winter's (1994) cycle, and the reason industry premium-to-surplus
+     * is procyclical with rates. Without it a firm is forced to write its whole book into a loss and its
+     * only lever is how much capital it hands back.
+     *
+     * The rule is the same one every other deployment gate in this engine applies: write while the capital
+     * that business consumes still earns its hurdle. An insurer's return has two parts, and only one of them
+     * is on offer — the float is already invested and earns whether or not another treaty is signed, so the
+     * marginal question is whether the premium's own contribution keeps the total above the hurdle:
+     *
+     *     u * underwritingReturn + floatReturn >= appliedHurdle
+     *
+     * At a rate that still earns an underwriting profit the answer is the whole book. Below it the equality
+     * gives the fraction directly, with no free parameter: a firm whose float covers its hurdle handsomely
+     * can absorb a soft market and keep writing (cash-flow underwriting), one whose float barely covers it
+     * cannot. The manager's own hurdle bias applies, so an empire builder keeps writing into a market a
+     * fortress has already withdrawn from, which is Jensen's agency cost in its underwriting form.
+     */
+    protected function resolveWrittenCapacity(Stock $stock, MacroStateDTO $macroState, MathUtility $mathUtility, float $operatingEquity, float $capacityReturnAtNeutralRates): float
+    {
+        $pricingPower = $this->resolvePremiumRateLevel($stock, $macroState);
+        if ($pricingPower <= 0.0 || $operatingEquity <= 0.0) {
+            return 1.0;
+        }
+
+        // What the book earns at the offered rate. Premium scales with the rate and claims do not, so the
+        // margin on a 95.5% book written 10% below the rate it was priced at is negative, not 4.5% smaller.
+        $stableMargin = max(0.01, (float) $stock->getOperatingMargin());
+        $marginAtOfferedRate = 1.0 - ((1.0 - $stableMargin) / $pricingPower);
+        $underwritingReturn = $capacityReturnAtNeutralRates * ($marginAtOfferedRate / $stableMargin);
+
+        if ($underwritingReturn >= 0.0) {
+            return 1.0;
+        }
+
+        $floatReturn = ($this->calculateInterestIncome($stock, $macroState, $mathUtility) * (1.0 - $macroState->corporateTaxRate)) / $operatingEquity;
+        $hurdle = $stock->getManagementProfile()->appliedHurdle($macroState->policyRate + $macroState->equityRiskPremium);
+
+        return max(self::MIN_WRITTEN_CAPACITY, min(1.0, ($hurdle - $floatReturn) / $underwritingReturn));
+    }
+
+    /**
+     * Advances the hard-market clock: the multi-year stretch of rate increases that follows a capital shock.
+     *
+     * The underwriting cycle is a CAPACITY cycle, not a rate cycle. A catastrophe destroys surplus, capacity
+     * withdraws from the market, rates harden for years, and the returning capital the hard market attracts
+     * is what eventually softens them again (Winter 1994, Gron 1994). Modelling it as a persistent regime
+     * rather than a function of this quarter's surplus is the point: rates stay hard well after the capital
+     * is back, which is the discipline lag the cycle is named for.
+     *
+     * It lives here, called by every insurance model's own physics, because the subclasses replace
+     * calculateSectorPhysics() outright: the clock used to run in this class's copy alone, so the reinsurer
+     * and the retail carrier — the two listed underwriters — could never enter the regime at all, and the
+     * uplift getMacroPhysics() reads off it was permanently zero for both.
+     */
+    protected function advanceHardMarketRegime(StreamContext $streams, float $surplusDeficitRatio, float $claimZ): void
+    {
+        $streams->evolveRegime(self::REGIME_HARD_MARKET, 0.0, self::HARD_MARKET_EXIT_HAZARD);
+
+        if ($surplusDeficitRatio >= self::HARD_MARKET_ONSET_SURPLUS_DEFICIT || $claimZ < self::REINSURANCE_ATTACHMENT_Z) {
+            $streams->startRegime(self::REGIME_HARD_MARKET);
+        }
+    }
+
+    /**
+     * How far an underwriter's surplus has fallen below the capital the book it is writing requires.
+     *
+     * The Kenney ratio is premium to surplus over a YEAR, and sector physics is handed one QUARTER's
+     * premium: comparing equity against a quarter of the book asked whether the firm had lost three
+     * quarters of its capital, so the capacity trigger only ever fired on the edge of insolvency. Measured
+     * on the reinsurance book it fired in 0 of 240 quarters — the hard market could be reached by
+     * catastrophe alone, and the capital channel this ratio exists to carry was dead.
+     */
+    protected function resolveSurplusDeficitRatio(float $quarterlyExpectedRevenue, float $equity): float
+    {
+        $targetSurplus = ($quarterlyExpectedRevenue * self::KENNEY_PREMIUM_QUARTERS) / self::KENNEY_CAPACITY_RATIO;
+
+        return $targetSurplus > 0.0 ? max(0.0, ($targetSurplus - $equity) / $targetSurplus) : 0.0;
     }
 
     /**
@@ -433,22 +578,12 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
         // When an insurer's capital surplus drops below its Kenney target (Equity < Target Surplus),
         // the insurer enters a Hard Market—raising premium rates and tightening underwriting criteria
         // to rebuild surplus capital.
-        $equity = (float) $stock->getTotalEquity();
-        $targetSurplus = $expectedRevenue / self::KENNEY_CAPACITY_RATIO;
-        $surplusDeficitRatio = $targetSurplus > 0.0 ? max(0.0, ($targetSurplus - $equity) / $targetSurplus) : 0.0;
+        $surplusDeficitRatio = $this->resolveSurplusDeficitRatio($expectedRevenue, (float) $stock->getTotalEquity());
         // Strengthened Hard-Market pricing power scaled by company catastrophe exposure ($catRiskBeta):
         // Reinsurers absorbing higher frequency ($catThreshold) & severity ($catScalar) gain stronger post-disaster pricing power.
         $hardMarketRecoveryDiscount = min(0.30, $surplusDeficitRatio * 0.35 * $catRiskBeta);
 
-        // The underwriting cycle is a CAPACITY cycle, not a rate cycle. A catastrophe destroys surplus,
-        // capacity withdraws from the market, rates harden for years, and the returning capital that the
-        // hard market attracts is what eventually softens them again (Winter 1994, Gron 1994). Modelling
-        // it as a persistent regime rather than a function of this quarter's surplus is the point: rates
-        // stay hard well after the capital is back, which is the discipline lag the cycle is named for.
-        $streams->evolveRegime(self::REGIME_HARD_MARKET, 0.0, self::HARD_MARKET_EXIT_HAZARD);
-        if ($surplusDeficitRatio >= self::HARD_MARKET_ONSET_SURPLUS_DEFICIT || $claimZ < self::REINSURANCE_ATTACHMENT_Z) {
-            $streams->startRegime(self::REGIME_HARD_MARKET);
-        }
+        $this->advanceHardMarketRegime($streams, $surplusDeficitRatio, $claimZ);
 
         $reinsuranceSurcharge = 0.0;
         if ($claimZ < self::REINSURANCE_ATTACHMENT_Z) {
@@ -819,6 +954,7 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
             'commercial_property_index_ema',
             'inflation_ema',
             'market_volatility_ema',
+            'nominal_gdp_index',
             'output_gap_ema',
             'policy_rate_ema',
             'residential_property_index_ema',

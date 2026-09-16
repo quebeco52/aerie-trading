@@ -103,10 +103,11 @@ class ReinsuranceBusinessModel extends InsuranceBusinessModel
 
         // Kenney Rule Hard-Market Capital Recovery:
         // Post-catastrophe capital depletion triggers massive rate increases on treaty reinsurance renewals.
-        $equity = (float) $stock->getTotalEquity();
-        $targetSurplus = $expectedRevenue / self::KENNEY_CAPACITY_RATIO;
-        $surplusDeficitRatio = $targetSurplus > 0.0 ? max(0.0, ($targetSurplus - $equity) / $targetSurplus) : 0.0;
+        $surplusDeficitRatio = $this->resolveSurplusDeficitRatio($expectedRevenue, (float) $stock->getTotalEquity());
         $hardMarketPricingBonus = min(0.35, $surplusDeficitRatio * 0.40 * $catRiskBeta);
+
+        // Rates on a renewed treaty stay hard for years after the capital that withdrew has come back.
+        $this->advanceHardMarketRegime($streams, $surplusDeficitRatio, $claimZ);
 
         // Cat Bond Principal / Yield Haircut during extreme catastrophe attachment:
         // When attachment points breach, Cat Bond collateral shields the ILS tranche by absorbing tail severity,
@@ -174,6 +175,7 @@ class ReinsuranceBusinessModel extends InsuranceBusinessModel
         return [
             'inflation_ema',
             'market_volatility_ema',
+            'nominal_gdp_index',
             'output_gap_ema',
             'policy_rate_ema',
             'yield_10y_ema',
