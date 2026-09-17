@@ -50,7 +50,7 @@ class LaborMarketSubsystemTest extends TestCase
             $this->subsystem->calculateUnemployment($state, 0.25);
         }
 
-        $this->assertGreaterThanOrEqual(\App\Service\Macro\MacroEngine::MIN_FRICTIONAL_UNEMPLOYMENT, $state->unemploymentRate);
+        $this->assertGreaterThanOrEqual(LaborMarketSubsystem::MIN_FRICTIONAL_UNEMPLOYMENT, $state->unemploymentRate);
         $this->assertGreaterThan(0.03, $state->unemploymentRate, 'Search friction keeps unemployment above 3% even at an 8% output gap.');
     }
 

@@ -32,8 +32,11 @@ class MacroState
     public float $energyPriceIndexEma = 90.0;
     public float $energyPriceShock = 0.0;
     public float $energyBasePrice = 90.0;
-    public float $consumerSentimentIndex = 108.0;
-    public float $consumerSentimentIndexEma = 108.0;
+    // Sentiment is built DOWN from SENTIMENT_BASELINE by one-sided penalties, so that constant is a ceiling
+    // and never the series' mean; the measured resting level is SENTIMENT_TREND_LEVEL. The 108.0 here opened
+    // the economy eight points above even the ceiling, a reading only a strong boom reaches.
+    public float $consumerSentimentIndex = MacroEngine::SENTIMENT_TREND_LEVEL;
+    public float $consumerSentimentIndexEma = MacroEngine::SENTIMENT_TREND_LEVEL;
 
     public float $exchangeRateIndex = 100.0;
     public float $exchangeRateIndexEma = 100.0;
@@ -122,6 +125,17 @@ class MacroState
 
     public float $potentialGdpIndex = 1.0;
     public float $nominalGdpIndex = 1.0;
+
+    // The whole-board composite index level, fed back by the ticker one tick behind. It opens at the index's
+    // own base level and nominalGdpIndex opens at 1.0, so a run that never feeds it sits at a wealth ratio of
+    // exactly 1.0 and contributes nothing -- the headless harness and the simulate command are unaffected.
+    public float $equityIndexLevel = \App\Service\Math\FinancialConstants::INDEX_BASE_LEVEL;
+    public float $equityIndexLevelEma = \App\Service\Math\FinancialConstants::INDEX_BASE_LEVEL;
+
+    // What the households have got used to: the wealth ratio's own slow trend, which is what the effect is
+    // measured against. Anchoring to a fixed 1.0 instead would let any lasting gap between how fast the
+    // board compounds and how fast the economy does accumulate into a permanent drift in the output gap.
+    public float $equityWealthTrend = 1.0;
     public float $gdpDeflator = 1.0;
 
     public float $marketVolatility = 0.13;

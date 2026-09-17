@@ -343,7 +343,7 @@ class MacroAggregateSubsystemTest extends TestCase
         $gapBaseline = $this->subsystem->calculateOutputGap($baseline, 0.035, MacroEngine::BASE_NATURAL_RATE, 0.25, 1.0);
         $gapStimulus = $this->subsystem->calculateOutputGap($stimulus, 0.035, MacroEngine::BASE_NATURAL_RATE, 0.25, 1.0);
 
-        $expectedImpulse = MacroEngine::KALDOR_GOVT_SPENDING_MULTIPLIER * 0.10 * 0.25;
+        $expectedImpulse = MacroAggregateSubsystem::KALDOR_GOVT_SPENDING_MULTIPLIER * 0.10 * 0.25;
         $this->assertEqualsWithDelta(
             $expectedImpulse,
             $gapStimulus - $gapBaseline,
@@ -364,10 +364,96 @@ class MacroAggregateSubsystemTest extends TestCase
 
         $this->assertLessThan(0.0, $state->agriCostPushLag, 'Falling farm prices must pass through as a food-CPI dividend, symmetric to a spike.');
         $this->assertEqualsWithDelta(
-            -0.20 * MacroEngine::AGRI_COST_PUSH_TRANSMISSION,
+            -0.20 * MacroAggregateSubsystem::AGRI_COST_PUSH_TRANSMISSION,
             $state->agriCostPushLag,
             0.0005,
             'After two years the distributed lag must have converged to the full symmetric pass-through.'
         );
+    }
+
+    /**
+     * One step of the output gap with the board at a given multiple of its base level. Passing $trend equal
+     * to that multiple is a board households have become used to; leaving it at 1.0 is one that just got there.
+     */
+    private function gapWithEquityAt(float $multipleOfTrend, float $trend = 1.0): float
+    {
+        $state = new MacroState();
+        $state->outputGap = 0.0;
+        $state->nominalGdpIndex = 1.0;
+        $state->equityWealthTrend = $trend;
+        $state->equityIndexLevel = \App\Service\Math\FinancialConstants::INDEX_BASE_LEVEL * $multipleOfTrend;
+        $state->equityIndexLevelEma = $state->equityIndexLevel;
+
+        return $this->subsystem->calculateOutputGap($state, 0.03, MacroEngine::BASE_NATURAL_RATE, 0.25, 1.0);
+    }
+
+    /**
+     * Modigliani (1971) / Carroll, Otsuka & Slacalek (2011): households hold the board through their
+     * portfolios and pensions, so a bull market spends and a crash saves. Until this channel existed the
+     * output gap counted only the houses, and the equity market could halve without a household noticing.
+     */
+    public function testEquityWealthMovesAggregateDemandInTheDirectionOfTheMarket(): void
+    {
+        $atTrend = $this->gapWithEquityAt(1.00);
+
+        $this->assertLessThan($atTrend, $this->gapWithEquityAt(0.65), 'A crash must subtract from demand.');
+        $this->assertGreaterThan($atTrend, $this->gapWithEquityAt(1.60), 'A bull market must add to it.');
+
+        // Housing is the larger of the two wealth channels, and the elasticities have to keep saying so.
+        $this->assertLessThan(
+            MacroAggregateSubsystem::KALDOR_WEALTH_EFFECT_ELASTICITY,
+            MacroAggregateSubsystem::KALDOR_EQUITY_WEALTH_ELASTICITY,
+            'The MPC out of financial wealth is the smaller one.'
+        );
+    }
+
+    /**
+     * The gap is a deviation from potential, so a valuation households have lived with for years cannot go
+     * on buying extra output. Measured against a fixed opening instead, any lasting difference between how
+     * fast the board compounds and how fast the economy does would accumulate into a permanent demand drift.
+     */
+    public function testAValuationHouseholdsHaveGotUsedToStopsMovingDemand(): void
+    {
+        $state = new MacroState();
+        $state->nominalGdpIndex = 1.0;
+        $state->equityWealthTrend = 1.0;
+        $state->equityIndexLevel = \App\Service\Math\FinancialConstants::INDEX_BASE_LEVEL * 1.60;
+        $state->equityIndexLevelEma = $state->equityIndexLevel;
+
+        // Four horizons of living with it. Nominal GDP is held flat so only the trend can close the gap.
+        for ($i = 0; $i < 4 * 12; $i++) {
+            $this->subsystem->updateExponentialMovingAverages($state, MacroAggregateSubsystem::EQUITY_WEALTH_TREND_HORIZON_YEARS / 12.0);
+            $state->nominalGdpIndex = 1.0;
+        }
+
+        $this->assertEqualsWithDelta(1.60, $state->equityWealthTrend, 0.05, 'The trend settles on the level it has been shown.');
+
+        // Stated on the gap itself, holding every other series still: what the channel reads is the ratio's
+        // distance from its trend and nothing else, so a board 60% richer than households are used to and a
+        // board exactly as rich as they are used to must produce the very same demand.
+        $this->assertEqualsWithDelta(
+            $this->gapWithEquityAt(1.00),
+            $this->gapWithEquityAt(1.60, 1.60),
+            1e-12,
+            'Once it is normal, a 60% richer board moves demand no more than an ordinary one.'
+        );
+        $this->assertNotEqualsWithDelta(
+            $this->gapWithEquityAt(1.00),
+            $this->gapWithEquityAt(1.60),
+            1e-6,
+            'While it is still news, it must move demand.'
+        );
+    }
+
+    /**
+     * A caller that never reports a market -- the simulate command, the headless harness, every unit test
+     * written before this channel existed -- must be left exactly where it was.
+     */
+    public function testAnUnreportedMarketContributesNothing(): void
+    {
+        $state = new MacroState();
+
+        $this->assertEqualsWithDelta(1.0, ($state->equityIndexLevelEma / \App\Service\Math\FinancialConstants::INDEX_BASE_LEVEL) / $state->nominalGdpIndex, 1e-12);
+        $this->assertSame(1.0, $state->equityWealthTrend, 'The opening ratio and its trend are the same number, so the gap is zero.');
     }
 }

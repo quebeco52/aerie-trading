@@ -11,6 +11,34 @@ use App\Service\Macro\MacroState;
  */
 class LaborMarketSubsystem
 {
+    // --- Okun's Law & Diamond-Mortensen-Pissarides Beveridge Curve ---
+    /** Asymptotic frictional lower bound on unemployment (3.2%): search friction keeps even a red-hot economy above ~3%. */
+    public const MIN_FRICTIONAL_UNEMPLOYMENT = 0.032;
+
+    // --- Okun's Law & Diamond-Mortensen-Pissarides Beveridge Curve ---
+    /** Structural Beveridge curve equilibrium constant (k = Natural Unemployment * Natural Vacancies). */
+    public const BEVERIDGE_CURVE_CONSTANT = 0.0018;
+    /** Sensitivity of wage growth to labor market tightness deviations from equilibrium. */
+    public const WAGE_TIGHTNESS_SENSITIVITY = 0.010;
+    /** Annual adjustment speed of nominal wage settlements toward market-clearing equilibrium. */
+    public const WAGE_ADJUSTMENT_SPEED = 2.0;
+    /** Okun's beta: sensitivity of equilibrium unemployment deviation to the GDP output gap. */
+    public const OKUNS_COEFFICIENT = 0.5;
+    /** Annual adjustment speed of employment expansion during economic recoveries (search & matching friction). */
+    public const OKUNS_HIRING_SPEED = 1.5;
+    /** Annual adjustment speed of workforce reduction during economic contractions (rapid labor shedding). */
+    public const OKUNS_FIRING_SPEED = 3.0;
+    /** Annual OU speed of NAIRU scarring drift toward sustained excess unemployment (Blanchard & Summers 1986). */
+    public const NAIRU_HYSTERESIS_SPEED = 0.10;
+    /** Excess unemployment above NAIRU required before structural scarring activates. */
+    public const NAIRU_HYSTERESIS_THRESHOLD = 0.005;
+    /** Structural floor for NAIRU (frictional minimum). */
+    public const MIN_NAIRU = 0.025;
+    /** Structural ceiling for NAIRU (maximum structural deterioration). */
+    public const MAX_NAIRU = 0.08;
+    /** Downward wage adjustment speed as fraction of upward speed (nominal rigidity, Bewley 1999). */
+    public const WAGE_DOWNWARD_RIGIDITY_FACTOR = 0.30;
+
     /**
      * Dynamic Okun's Law (Okun 1962) with Convex Search-Matching Friction (Knotek 2007).
      *
@@ -22,23 +50,23 @@ class LaborMarketSubsystem
      */
     public function calculateUnemployment(MacroState $state, float $dt): void
     {
-        $excessSlack = max(0.0, $state->unemploymentRateEma - $state->nairu - MacroEngine::NAIRU_HYSTERESIS_THRESHOLD);
-        $state->nairu += MacroEngine::NAIRU_HYSTERESIS_SPEED * $excessSlack * $dt;
+        $excessSlack = max(0.0, $state->unemploymentRateEma - $state->nairu - self::NAIRU_HYSTERESIS_THRESHOLD);
+        $state->nairu += self::NAIRU_HYSTERESIS_SPEED * $excessSlack * $dt;
 
         $recovery = max(0.0, $state->nairu - MacroEngine::NATURAL_UNEMPLOYMENT)
             * max(0.0, $state->nairu - $state->unemploymentRateEma) * 0.5;
         $state->nairu -= $recovery * $dt;
-        $state->nairu = max(MacroEngine::MIN_NAIRU, min(MacroEngine::MAX_NAIRU, $state->nairu));
+        $state->nairu = max(self::MIN_NAIRU, min(self::MAX_NAIRU, $state->nairu));
 
         if ($state->outputGap <= 0.0) {
-            $targetUnemployment = $state->nairu - (MacroEngine::OKUNS_COEFFICIENT * $state->outputGap);
+            $targetUnemployment = $state->nairu - (self::OKUNS_COEFFICIENT * $state->outputGap);
         } else {
-            $effectiveRange = max(0.001, $state->nairu - MacroEngine::MIN_FRICTIONAL_UNEMPLOYMENT);
-            $targetUnemployment = MacroEngine::MIN_FRICTIONAL_UNEMPLOYMENT + ($effectiveRange * exp(- (MacroEngine::OKUNS_COEFFICIENT * $state->outputGap) / $effectiveRange));
+            $effectiveRange = max(0.001, $state->nairu - self::MIN_FRICTIONAL_UNEMPLOYMENT);
+            $targetUnemployment = self::MIN_FRICTIONAL_UNEMPLOYMENT + ($effectiveRange * exp(- (self::OKUNS_COEFFICIENT * $state->outputGap) / $effectiveRange));
         }
 
         $unemploymentGap = $targetUnemployment - $state->unemploymentRate;
-        $adjustmentSpeed = $unemploymentGap > 0 ? MacroEngine::OKUNS_FIRING_SPEED : MacroEngine::OKUNS_HIRING_SPEED;
+        $adjustmentSpeed = $unemploymentGap > 0 ? self::OKUNS_FIRING_SPEED : self::OKUNS_HIRING_SPEED;
 
         $state->unemploymentRate += $adjustmentSpeed * $unemploymentGap * $dt;
     }
@@ -73,18 +101,18 @@ class LaborMarketSubsystem
      */
     public function calculateLaborMarketAndWages(MacroState $state, float $tfpGrowthRate, float $dt): void
     {
-        $effectiveUnemployment = max(MacroEngine::MIN_FRICTIONAL_UNEMPLOYMENT, $state->unemploymentRate);
-        $beveridgeConstant = MacroEngine::BEVERIDGE_CURVE_CONSTANT * ($state->nairu / MacroEngine::NATURAL_UNEMPLOYMENT);
+        $effectiveUnemployment = max(self::MIN_FRICTIONAL_UNEMPLOYMENT, $state->unemploymentRate);
+        $beveridgeConstant = self::BEVERIDGE_CURVE_CONSTANT * ($state->nairu / MacroEngine::NATURAL_UNEMPLOYMENT);
         $state->jobVacanciesRate = max(0.01, min(0.12, $beveridgeConstant / $effectiveUnemployment));
         $state->laborTightness = $state->jobVacanciesRate / $effectiveUnemployment;
 
-        $targetWageGrowth = $tfpGrowthRate + $state->tipsBreakevenEma + (MacroEngine::WAGE_TIGHTNESS_SENSITIVITY * ($state->laborTightness - MacroEngine::NATURAL_LABOR_TIGHTNESS));
+        $targetWageGrowth = $tfpGrowthRate + $state->tipsBreakevenEma + (self::WAGE_TIGHTNESS_SENSITIVITY * ($state->laborTightness - MacroEngine::NATURAL_LABOR_TIGHTNESS));
         $targetWageGrowth = max(0.0, min(0.08, $targetWageGrowth));
 
         $wageGap = $targetWageGrowth - $state->wageGrowth;
         $adjustmentSpeed = $wageGap > 0
-            ? MacroEngine::WAGE_ADJUSTMENT_SPEED
-            : MacroEngine::WAGE_ADJUSTMENT_SPEED * MacroEngine::WAGE_DOWNWARD_RIGIDITY_FACTOR;
+            ? self::WAGE_ADJUSTMENT_SPEED
+            : self::WAGE_ADJUSTMENT_SPEED * self::WAGE_DOWNWARD_RIGIDITY_FACTOR;
 
         $state->wageGrowth += $adjustmentSpeed * $wageGap * $dt;
     }

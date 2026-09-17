@@ -12,6 +12,86 @@ use App\Service\Math\MathUtility;
  */
 class CreditFiscalSubsystem
 {
+    // --- INTERBANK LIQUIDITY SPREAD (CIR PROCESS & JUMPS) ---
+    /** Cap on the interbank spread (500 bps): the TED spread's all-time high was 457 bps on 10 Oct 2008. */
+    public const INTERBANK_MAX_SPREAD = 0.05;
+    /** Share of excess IG spread that lifts the interbank spread's mean (~0.4): a 470 bps IG blowout pulls TED toward ~200 bps, a mild recession toward ~90. */
+    public const INTERBANK_CREDIT_COUPLING = 0.40;
+    /** Mean log-size of a panic jump: median 2.7x (1.65x to 4.5x at one sigma), so a 2008-scale 5x freeze is the tail, not the norm. */
+    public const INTERBANK_JUMP_MEAN = 1.00;
+    /** Sigma of the jump log-size; at 0.50 the two-sigma low is exactly 1.0x, so a panic jump never shrinks the spread. */
+    public const INTERBANK_JUMP_VOL = 0.50;
+
+    // --- Sovereign Debt Dynamics (Greenwood-Vayanos 2014) ---
+    /** Bohn (1998, 2008) fiscal reaction: primary surplus response per unit of debt above the neutral threshold (~0.10, the upper end of advanced-economy estimates), which stabilizes debt near 90% against a 2% structural deficit. */
+    public const BOHN_FISCAL_REACTION_SENSITIVITY = 0.10;
+
+    // --- Barro Tax-Smoothing & Automatic Fiscal Stabilizers (Barro 1979) ---
+    /** Countercyclical statutory tax response sensitivity to output gap deviations. */
+    public const FISCAL_STABILIZER_SENSITIVITY = 1.0;
+    /** Institutional legislative adjustment speed of corporate tax rate changes. */
+    public const FISCAL_ADJUSTMENT_SPEED = 0.20;
+    /** Statutory corporate tax rate floor during deep economic recessions. */
+    public const MIN_CORPORATE_TAX_RATE = 0.12;
+    /** Statutory corporate tax rate ceiling during overheating economic booms. */
+    public const MAX_CORPORATE_TAX_RATE = 0.30;
+
+    // --- GOVERNMENT SPENDING & FISCAL APPROPRIATIONS ---
+    /** Counter-cyclical appropriation response: a -3% output gap lifts the spending index ~6 points (discretionary stimulus plus stabilizers). */
+    public const GOVT_COUNTERCYCLICAL_SENSITIVITY = 200.0;
+    /** Mean-reversion speed of government spending toward structural baseline. */
+    public const GOVT_SPENDING_MEAN_REVERSION = 0.30;
+    /** Stochastic volatility of annual budget appropriations, kept below the countercyclical swing so the cycle drives spending. */
+    public const GOVT_SPENDING_VOLATILITY = 0.03;
+    /** Poisson intensity of major geopolitical events triggering spending surges. */
+    public const GEOPOLITICAL_JUMP_PROBABILITY = 0.08;
+    /** Mean log-return magnitude of a geopolitical spending surge. */
+    public const GEOPOLITICAL_JUMP_MEAN = 0.15;
+    /** Volatility of geopolitical jump size. */
+    public const GEOPOLITICAL_JUMP_VOL = 0.08;
+
+    // --- VASICEK ASRF RETAIL DEFAULT RATE ---
+    /** Basel II/III consumer asset correlation factor for retail exposures. */
+    public const RETAIL_ASRF_RHO = 0.12;
+    /** Sensitivity of consumer macro credit Z-score to unemployment rate deviations from natural rate. */
+    public const RETAIL_UNEMPLOYMENT_SENSITIVITY = 40.0;
+    /** Sensitivity of consumer macro credit Z-score to inflation deviations from target. */
+    public const RETAIL_INFLATION_SENSITIVITY = 25.0;
+    /** Sensitivity of consumer macro credit Z-score to debt service and corporate borrowing spread stress. */
+    public const RETAIL_DEBT_SERVICE_SENSITIVITY = 15.0;
+    /** Stochastic volatility of idiosyncratic consumer credit shocks. */
+    public const RETAIL_CREDIT_VOLATILITY = 0.35;
+
+    // --- INTERBANK LIQUIDITY SPREAD (CIR PROCESS & JUMPS) ---
+    /** Floor on the interbank spread (1 bp) keeping the CIR process strictly positive. */
+    public const INTERBANK_MIN_SPREAD = 0.0001;
+    /** Poisson intensity of severe interbank credit freeze/panic events. */
+    public const INTERBANK_JUMP_PROBABILITY = 0.05;
+
+    // --- Sovereign Debt Dynamics (Greenwood-Vayanos 2014) ---
+    /** Baseline structural primary fiscal deficit as a fraction of GDP. */
+    public const SOVEREIGN_STRUCTURAL_DEFICIT = 0.020;
+
+    // --- Speculative-Grade Corporate Default Dynamics (Moody's / Altman) ---
+    /** Basel II/III corporate asset correlation factor for speculative exposures. */
+    public const CORPORATE_DEFAULT_RHO = 0.20;
+    /** Sensitivity of corporate credit Z-score to macroeconomic output gap. */
+    public const CORPORATE_DEFAULT_GAP_SENSITIVITY = 25.0;
+    /** Corporate credit Z per unit of excess HY spread (~5): a 2,000 bps blowout with a -4% gap and 80% SLOOS yields a ~13% default rate. */
+    public const CORPORATE_DEFAULT_SPREAD_SENSITIVITY = 5.0;
+    /** Corporate credit Z per unit of SLOOS net tightening (~1): a 35% credit crunch adds ~0.35 to the systemic factor. */
+    public const CORPORATE_DEFAULT_SLOOS_SENSITIVITY = 1.0;
+
+    // --- Federal Reserve Senior Loan Officer Opinion Survey (SLOOS) ---
+    /** Mean-reversion speed (kappa) of bank lending standards toward fundamental target. */
+    public const SLOOS_KAPPA = 1.80;
+    /** Sensitivity of net tightening percentage to wholesale corporate credit spread widening. */
+    public const SLOOS_CREDIT_SENSITIVITY = 15.0;
+    /** Sensitivity of net tightening percentage to output gap contraction. */
+    public const SLOOS_GAP_SENSITIVITY = 3.0;
+    /** Stochastic diffusion volatility of commercial bank underwriting standards. */
+    public const SLOOS_SIGMA = 0.08;
+
     public function __construct(
         private readonly MathUtility $mathUtility
     ) {}
@@ -60,7 +140,7 @@ class CreditFiscalSubsystem
         // Systemic credit risk coupling (Brunnermeier 2009, Gorton & Metrick 2012):
         // Interbank lending risk premium rises with wholesale corporate credit spreads
         $excessCreditSpread = max(0.0, $state->macroCreditSpread - MacroEngine::BASE_CREDIT_SPREAD);
-        $creditCoupledTheta = MacroEngine::INTERBANK_BASELINE_SPREAD + ($excessCreditSpread * MacroEngine::INTERBANK_CREDIT_COUPLING);
+        $creditCoupledTheta = MacroEngine::INTERBANK_BASELINE_SPREAD + ($excessCreditSpread * self::INTERBANK_CREDIT_COUPLING);
 
         $dW = $this->mathUtility->generateStandardNormal();
         $baseProcess = $this->mathUtility->calculateCIR(
@@ -74,12 +154,12 @@ class CreditFiscalSubsystem
 
         $volatilityRatio = max(1.0, $state->marketVolatilityEma / MacroEngine::MACRO_VOL_BASE_ANCHOR);
         $creditRatio = max(1.0, $state->macroCreditSpreadEma / MacroEngine::BASE_CREDIT_SPREAD);
-        $jumpProbability = min(0.20, MacroEngine::INTERBANK_JUMP_PROBABILITY * $volatilityRatio * (1.0 + 0.5 * ($creditRatio - 1.0)));
+        $jumpProbability = min(0.20, self::INTERBANK_JUMP_PROBABILITY * $volatilityRatio * (1.0 + 0.5 * ($creditRatio - 1.0)));
 
         $jumpData = $this->mathUtility->calculateJumpDiffusion(
             lambda: $jumpProbability,
-            jumpMean: MacroEngine::INTERBANK_JUMP_MEAN,
-            jumpVol: MacroEngine::INTERBANK_JUMP_VOL,
+            jumpMean: self::INTERBANK_JUMP_MEAN,
+            jumpVol: self::INTERBANK_JUMP_VOL,
             dt: $dt
         );
 
@@ -89,8 +169,8 @@ class CreditFiscalSubsystem
         }
 
         $state->interbankLiquiditySpread = max(
-            MacroEngine::INTERBANK_MIN_SPREAD,
-            min(MacroEngine::INTERBANK_MAX_SPREAD, $baseProcess + $jumpAmount)
+            self::INTERBANK_MIN_SPREAD,
+            min(self::INTERBANK_MAX_SPREAD, $baseProcess + $jumpAmount)
         );
     }
 
@@ -105,20 +185,20 @@ class CreditFiscalSubsystem
      */
     public function calculateRetailDefaultRate(MacroState $state, float $dt): void
     {
-        $unemploymentShock = ($state->unemploymentRateEma - $state->nairu) * MacroEngine::RETAIL_UNEMPLOYMENT_SENSITIVITY;
-        $inflationShock = ($state->inflationEma - MacroEngine::TARGET_INFLATION) * MacroEngine::RETAIL_INFLATION_SENSITIVITY;
+        $unemploymentShock = ($state->unemploymentRateEma - $state->nairu) * self::RETAIL_UNEMPLOYMENT_SENSITIVITY;
+        $inflationShock = ($state->inflationEma - MacroEngine::TARGET_INFLATION) * self::RETAIL_INFLATION_SENSITIVITY;
 
         $borrowingSpreadStress = max(0.0, $state->macroCreditSpreadEma - MacroEngine::BASE_CREDIT_SPREAD);
         $interbankStress = max(0.0, $state->interbankLiquiditySpreadEma - MacroEngine::INTERBANK_BASELINE_SPREAD);
-        $debtServiceShock = ($borrowingSpreadStress + $interbankStress) * MacroEngine::RETAIL_DEBT_SERVICE_SENSITIVITY;
+        $debtServiceShock = ($borrowingSpreadStress + $interbankStress) * self::RETAIL_DEBT_SERVICE_SENSITIVITY;
 
         $dW = $this->mathUtility->generateStandardNormal();
-        $macroZ = - ($unemploymentShock + $inflationShock + $debtServiceShock) + ($dW * MacroEngine::RETAIL_CREDIT_VOLATILITY);
+        $macroZ = - ($unemploymentShock + $inflationShock + $debtServiceShock) + ($dW * self::RETAIL_CREDIT_VOLATILITY);
 
         $conditionalPd = $this->mathUtility->calculateVasicekExpectedLoss(
             macroZ: $macroZ,
             pdLra: MacroEngine::RETAIL_DEFAULT_BASELINE,
-            rho: MacroEngine::RETAIL_ASRF_RHO,
+            rho: self::RETAIL_ASRF_RHO,
             lgd: 1.0
         );
 
@@ -136,23 +216,23 @@ class CreditFiscalSubsystem
      */
     public function calculateGovernmentSpending(MacroState $state, float $dt): void
     {
-        $cyclicalTarget = MacroEngine::GOVT_SPENDING_BASELINE - ($state->outputGapEma * MacroEngine::GOVT_COUNTERCYCLICAL_SENSITIVITY);
+        $cyclicalTarget = MacroEngine::GOVT_SPENDING_BASELINE - ($state->outputGapEma * self::GOVT_COUNTERCYCLICAL_SENSITIVITY);
         $targetSpending = max(60.0, min(160.0, $cyclicalTarget));
 
         $dW = $this->mathUtility->generateStandardNormal();
         $baseProcess = $this->mathUtility->calculateSchwartz1Factor(
             currentPrice: $state->governmentSpendingIndex,
-            kappa: MacroEngine::GOVT_SPENDING_MEAN_REVERSION,
+            kappa: self::GOVT_SPENDING_MEAN_REVERSION,
             theta: $targetSpending,
-            sigma: MacroEngine::GOVT_SPENDING_VOLATILITY,
+            sigma: self::GOVT_SPENDING_VOLATILITY,
             dt: $dt,
             dW: $dW
         );
 
         $jumpData = $this->mathUtility->calculateJumpDiffusion(
-            lambda: MacroEngine::GEOPOLITICAL_JUMP_PROBABILITY,
-            jumpMean: MacroEngine::GEOPOLITICAL_JUMP_MEAN,
-            jumpVol: MacroEngine::GEOPOLITICAL_JUMP_VOL,
+            lambda: self::GEOPOLITICAL_JUMP_PROBABILITY,
+            jumpMean: self::GEOPOLITICAL_JUMP_MEAN,
+            jumpVol: self::GEOPOLITICAL_JUMP_VOL,
             dt: $dt
         );
 
@@ -176,10 +256,10 @@ class CreditFiscalSubsystem
      */
     public function calculateDynamicFiscalPolicy(MacroState $state, float $dt): void
     {
-        $targetTaxRate = MacroEngine::TARGET_CORPORATE_TAX_RATE + (MacroEngine::FISCAL_STABILIZER_SENSITIVITY * $state->outputGapEma);
-        $targetTaxRate = max(MacroEngine::MIN_CORPORATE_TAX_RATE, min(MacroEngine::MAX_CORPORATE_TAX_RATE, $targetTaxRate));
+        $targetTaxRate = MacroEngine::TARGET_CORPORATE_TAX_RATE + (self::FISCAL_STABILIZER_SENSITIVITY * $state->outputGapEma);
+        $targetTaxRate = max(self::MIN_CORPORATE_TAX_RATE, min(self::MAX_CORPORATE_TAX_RATE, $targetTaxRate));
 
-        $state->corporateTaxRate += MacroEngine::FISCAL_ADJUSTMENT_SPEED * ($targetTaxRate - $state->corporateTaxRate) * $dt;
+        $state->corporateTaxRate += self::FISCAL_ADJUSTMENT_SPEED * ($targetTaxRate - $state->corporateTaxRate) * $dt;
     }
 
     /**
@@ -200,9 +280,9 @@ class CreditFiscalSubsystem
 
         // Bohn (1998) Fiscal Reaction Function: primary budget surpluses emerge when debt/GDP exceeds neutral threshold
         $excessDebt = max(0.0, $state->sovereignDebtToGdp - MacroEngine::SOVEREIGN_DEBT_NEUTRAL_THRESHOLD);
-        $bohnFiscalAdjustment = MacroEngine::BOHN_FISCAL_REACTION_SENSITIVITY * $excessDebt * $state->nominalGdpIndex;
+        $bohnFiscalAdjustment = self::BOHN_FISCAL_REACTION_SENSITIVITY * $excessDebt * $state->nominalGdpIndex;
 
-        $primaryDeficit = ($govtSpendingFlow - $taxRevenue) + (MacroEngine::SOVEREIGN_STRUCTURAL_DEFICIT * $state->nominalGdpIndex) - $bohnFiscalAdjustment;
+        $primaryDeficit = ($govtSpendingFlow - $taxRevenue) + (self::SOVEREIGN_STRUCTURAL_DEFICIT * $state->nominalGdpIndex) - $bohnFiscalAdjustment;
         $interestCost = $state->yield10yEma * $state->sovereignDebtToGdp;
 
         // Blanchard (2019): Nominal GDP growth includes real potential growth trend (labor + TFP) + cyclical gap + inflation
@@ -235,10 +315,10 @@ class CreditFiscalSubsystem
             excessCreditSpread: $excessCreditSpread,
             dt: $dt,
             dW: $dW,
-            kappa: MacroEngine::SLOOS_KAPPA,
-            creditSensitivity: MacroEngine::SLOOS_CREDIT_SENSITIVITY,
-            gapSensitivity: MacroEngine::SLOOS_GAP_SENSITIVITY,
-            sigma: MacroEngine::SLOOS_SIGMA
+            kappa: self::SLOOS_KAPPA,
+            creditSensitivity: self::SLOOS_CREDIT_SENSITIVITY,
+            gapSensitivity: self::SLOOS_GAP_SENSITIVITY,
+            sigma: self::SLOOS_SIGMA
         );
     }
 
@@ -257,14 +337,14 @@ class CreditFiscalSubsystem
         $baseHySpread = MacroEngine::BASE_CREDIT_SPREAD * MacroEngine::HY_BASE_SPREAD_MULTIPLIER;
         $excessHySpread = max(0.0, $state->highYieldCreditSpread - $baseHySpread);
 
-        $macroZ = ($state->outputGapEma * MacroEngine::CORPORATE_DEFAULT_GAP_SENSITIVITY)
-            - ($excessHySpread * MacroEngine::CORPORATE_DEFAULT_SPREAD_SENSITIVITY)
-            - ($state->sloosTighteningIndexEma * MacroEngine::CORPORATE_DEFAULT_SLOOS_SENSITIVITY);
+        $macroZ = ($state->outputGapEma * self::CORPORATE_DEFAULT_GAP_SENSITIVITY)
+            - ($excessHySpread * self::CORPORATE_DEFAULT_SPREAD_SENSITIVITY)
+            - ($state->sloosTighteningIndexEma * self::CORPORATE_DEFAULT_SLOOS_SENSITIVITY);
 
         $state->corporateDefaultRate = $this->mathUtility->calculateCorporateDefaultRate(
             macroZ: $macroZ,
             baseDefaultRate: MacroEngine::CORPORATE_DEFAULT_BASELINE,
-            rho: MacroEngine::CORPORATE_DEFAULT_RHO
+            rho: self::CORPORATE_DEFAULT_RHO
         );
     }
 }

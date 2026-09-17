@@ -358,6 +358,13 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
             $phaseStart = $now;
         };
 
+        // The equity wealth channel's return leg. Held across ticks rather than read inside the macro step,
+        // because the board's level is struck near the END of a tick from prices the macro step at the TOP
+        // of that same tick helped set: handing back this tick's level would close the loop inside one tick
+        // and make the economy depend on the order two services happened to run in. It stays null until the
+        // first index strike, and the engine treats null as "no market reported" rather than as a crash.
+        $lastEquityIndexLevel = null;
+
         while ($this->keepRunning) {
 
             $tickStartTime = microtime(true);
@@ -372,7 +379,7 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                 $output->writeln("Updating Market Prices... (Day: " . number_format($simDay, 1) . ") [Tick: $tickCount]");
             }
 
-            $macroState = $this->macroEngine->updateMacroState($dt);
+            $macroState = $this->macroEngine->updateMacroState($dt, $lastEquityIndexLevel);
             $lap('macro');
 
             if ($tickCount % $operatorInterval === 0) {
@@ -547,6 +554,12 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                     );
 
                     $etfUpdates[] = $fundUpdate;
+
+                    // The whole board, not the headline thirty: household equity wealth is every listed
+                    // name. Read off the fund's freshly struck price, which is where the level lives.
+                    if ($index === MarketIndex::market()) {
+                        $lastEquityIndexLevel = $fund->getIndexLevel();
+                    }
 
                     // The creation basket is a real order in every constituent, in index weight, and it
                     // pays each name's own impact when it lands next tick. This is the channel that makes

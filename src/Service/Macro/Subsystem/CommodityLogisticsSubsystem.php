@@ -12,6 +12,82 @@ use App\Service\Math\MathUtility;
  */
 class CommodityLogisticsSubsystem
 {
+    // --- Energy Shock Jump-Diffusion (Schwartz 1997 Commodity Dynamics) ---
+    /** Poisson annual jump arrival intensity for geopolitical and OPEC energy supply shocks. */
+    public const ENERGY_JUMP_PROBABILITY = 0.05;
+    /** Mean-reversion speed (kappa) of energy prices reverting to long-run baseline. */
+    public const ENERGY_MEAN_REVERSION = 0.8;
+    /** Schwartz 1-factor log-price volatility (diffusion sigma). */
+    public const ENERGY_VOLATILITY = 0.25;
+    /** Expected mean log-return magnitude of an energy price spike. */
+    public const ENERGY_JUMP_MEAN = 0.20;
+    /** Volatility of energy jump shock magnitude. */
+    public const ENERGY_JUMP_VOL = 0.10;
+
+    // --- Theory of Storage & Commodity Buffer Stocks (Working 1949, Litzenberger-Rabinowitz 1995) ---
+    /** Critical minimum physical buffer stock floor before extreme convenience yield spike. */
+    public const COMMODITY_MIN_BUFFER_STOCK = 50.0;
+    /** Annual mean-reversion speed of physical inventories toward structural baseline. */
+    public const COMMODITY_INVENTORY_REVERSION_SPEED = 0.50;
+    /** Sensitivity of inventory drawdown to economic output gap and geopolitical supply shocks. */
+    public const COMMODITY_INVENTORY_DRAWDOWN_SENSITIVITY = 1.20;
+
+    // --- 2-FACTOR CORRELATED OU INDUSTRIAL COMMODITIES ---
+    /** Mean-reversion speed of short-term supply disruptions (strikes, logistics). */
+    public const METALS_SHORT_TERM_KAPPA = 1.50;
+    /** Mean-reversion speed of long-term industrial metals supercycle equilibrium shifts. */
+    public const METALS_LONG_TERM_KAPPA = 0.20;
+    /** Volatility of short-term supply disruption shocks. */
+    public const METALS_SHORT_TERM_SIGMA = 0.30;
+    /** Volatility of long-term supercycle equilibrium shifts. */
+    public const METALS_LONG_TERM_SIGMA = 0.08;
+    /** Correlation between short-term disruptions and long-term shifts. */
+    public const METALS_RHO = -0.30;
+    /** Sensitivity of long-term metals equilibrium target to the macroeconomic output gap. */
+    public const METALS_OUTPUT_GAP_SENSITIVITY = 0.50;
+
+    // --- 2-FACTOR CORRELATED OU AGRICULTURAL COMMODITIES & WEATHER JUMPS ---
+    /** Mean-reversion speed of short-term agricultural supply disruptions (frost, harvest delays). */
+    public const AGRI_SHORT_TERM_KAPPA = 1.80;
+    /** Mean-reversion speed of long-term agricultural equilibrium supercycles toward baseline. */
+    public const AGRI_LONG_TERM_KAPPA = 0.25;
+    /** Volatility of short-term agricultural supply shocks. */
+    public const AGRI_SHORT_TERM_SIGMA = 0.25;
+    /** Volatility of long-term agricultural equilibrium shifts. */
+    public const AGRI_LONG_TERM_SIGMA = 0.06;
+    /** Correlation between short-term disruptions and long-term agricultural shifts. */
+    public const AGRI_RHO = -0.20;
+    /** Amplitude of annual seasonal harvest cycle price oscillation (percentage of index). */
+    public const AGRI_SEASONALITY_AMPLITUDE = 0.06;
+    /** Poisson intensity of major climate/weather shocks such as droughts or El Niño events. */
+    public const AGRI_WEATHER_JUMP_PROBABILITY = 0.10;
+    /** Mean log-return price jump magnitude resulting from an extreme weather shock. */
+    public const AGRI_WEATHER_JUMP_MEAN = 0.18;
+    /** Volatility of climate jump shock magnitude. */
+    public const AGRI_WEATHER_JUMP_VOL = 0.08;
+
+    // --- COBWEB THEOREM FREIGHT RATE INDEX (BALTIC DRY) ---
+    /** Elasticity of instantaneous shipping demand to macroeconomic output gap. */
+    public const FREIGHT_DEMAND_GAP_SENSITIVITY = 3.5;
+    /** Sensitivity of bulk shipping demand to industrial metals production and raw material flows. */
+    public const FREIGHT_DEMAND_METALS_SENSITIVITY = 0.30;
+    /** Elasticity of desired fleet capacity orders to prevailing freight charter profitability. */
+    public const FREIGHT_SUPPLY_ORDER_ELASTICITY = 0.80;
+    /** Time constant in years for multi-year shipyard shipbuilding capacity adjustments. */
+    public const FREIGHT_SUPPLY_LAG_YEARS = 3.0;
+    /** Inelasticity exponent amplifying freight spot rates when capacity utilization exceeds 1.0. */
+    public const FREIGHT_CAPACITY_INELASTICITY = 2.0;
+    /** Mean-reversion speed of spot charter rates toward capacity-clearing equilibrium. */
+    public const FREIGHT_MEAN_REVERSION = 1.50;
+    /** Stochastic volatility of spot charter market fluctuations. */
+    public const FREIGHT_VOLATILITY = 0.25;
+
+    // --- 3:2:1 Refining Crack Spread & Distillate Margins (Bourgeon et al. 1998) ---
+    /** Mean-reversion speed (kappa) of refining crack margins toward baseline equilibrium. */
+    public const CRACK_SPREAD_KAPPA = 1.50;
+    /** Stochastic volatility of spot crack margins. */
+    public const CRACK_SPREAD_SIGMA = 0.25;
+
     public function __construct(
         private readonly MathUtility $mathUtility
     ) {}
@@ -33,18 +109,18 @@ class CommodityLogisticsSubsystem
         $currentBase = $state->energyBasePrice > 0.0 ? $state->energyBasePrice : $state->energyPriceIndex;
         $baseProcess = $this->mathUtility->calculateSchwartz1Factor(
             currentPrice: $currentBase,
-            kappa: MacroEngine::ENERGY_MEAN_REVERSION,
+            kappa: self::ENERGY_MEAN_REVERSION,
             theta: MacroEngine::ENERGY_BASELINE,
-            sigma: MacroEngine::ENERGY_VOLATILITY,
+            sigma: self::ENERGY_VOLATILITY,
             dt: $dt,
             dW: $dW
         );
         $state->energyBasePrice = max(10.0, min(250.0, $baseProcess));
 
         $jumpData = $this->mathUtility->calculateJumpDiffusion(
-            lambda: MacroEngine::ENERGY_JUMP_PROBABILITY,
-            jumpMean: MacroEngine::ENERGY_JUMP_MEAN,
-            jumpVol: MacroEngine::ENERGY_JUMP_VOL,
+            lambda: self::ENERGY_JUMP_PROBABILITY,
+            jumpMean: self::ENERGY_JUMP_MEAN,
+            jumpVol: self::ENERGY_JUMP_VOL,
             dt: $dt
         );
 
@@ -54,16 +130,16 @@ class CommodityLogisticsSubsystem
         }
 
         // Physical inventory buffer evolution
-        $demandDraw = $state->outputGapEma * MacroEngine::COMMODITY_INVENTORY_DRAWDOWN_SENSITIVITY * 100.0;
+        $demandDraw = $state->outputGapEma * self::COMMODITY_INVENTORY_DRAWDOWN_SENSITIVITY * 100.0;
         $shockDraw = ($jumpData['multiplier'] > 1.0) ? (log($jumpData['multiplier']) * 40.0) : 0.0;
-        $reversionFlow = MacroEngine::COMMODITY_INVENTORY_REVERSION_SPEED * (MacroEngine::COMMODITY_INVENTORY_BASELINE - $state->energyInventoryIndex);
+        $reversionFlow = self::COMMODITY_INVENTORY_REVERSION_SPEED * (MacroEngine::COMMODITY_INVENTORY_BASELINE - $state->energyInventoryIndex);
         $dInventory = ($reversionFlow - $demandDraw - $shockDraw) * $dt;
-        $state->energyInventoryIndex = max(MacroEngine::COMMODITY_MIN_BUFFER_STOCK, min(160.0, $state->energyInventoryIndex + $dInventory));
+        $state->energyInventoryIndex = max(self::COMMODITY_MIN_BUFFER_STOCK, min(160.0, $state->energyInventoryIndex + $dInventory));
 
         // Theory of Storage (Working 1949): Non-linear convenience yield backwardation add-on
         $convenienceYield = $this->mathUtility->calculateConvenienceYield(
             inventoryLevel: $state->energyInventoryIndex,
-            minBufferStock: MacroEngine::COMMODITY_MIN_BUFFER_STOCK
+            minBufferStock: self::COMMODITY_MIN_BUFFER_STOCK
         );
         $conveniencePricePremium = MacroEngine::ENERGY_BASELINE * $convenienceYield;
 
@@ -83,18 +159,18 @@ class CommodityLogisticsSubsystem
     public function calculateIndustrialMetalsIndex(MacroState $state, float $dt): void
     {
         $baselineLog = log(MacroEngine::METALS_BASELINE);
-        $shiftedThetaXi = $baselineLog + ($state->outputGapEma * MacroEngine::METALS_OUTPUT_GAP_SENSITIVITY);
+        $shiftedThetaXi = $baselineLog + ($state->outputGapEma * self::METALS_OUTPUT_GAP_SENSITIVITY);
 
         $result = $this->mathUtility->calculateTwoFactorOU(
             chi: $state->metalsChi,
             xi: $state->metalsXi,
-            kappaChi: MacroEngine::METALS_SHORT_TERM_KAPPA,
-            kappaXi: MacroEngine::METALS_LONG_TERM_KAPPA,
+            kappaChi: self::METALS_SHORT_TERM_KAPPA,
+            kappaXi: self::METALS_LONG_TERM_KAPPA,
             thetaChi: 0.0,
             thetaXi: $shiftedThetaXi,
-            sigChi: MacroEngine::METALS_SHORT_TERM_SIGMA,
-            sigXi: MacroEngine::METALS_LONG_TERM_SIGMA,
-            rho: MacroEngine::METALS_RHO,
+            sigChi: self::METALS_SHORT_TERM_SIGMA,
+            sigXi: self::METALS_LONG_TERM_SIGMA,
+            rho: self::METALS_RHO,
             dt: $dt
         );
 
@@ -117,20 +193,20 @@ class CommodityLogisticsSubsystem
         $result = $this->mathUtility->calculateTwoFactorOU(
             chi: $state->agriChi,
             xi: $state->agriXi,
-            kappaChi: MacroEngine::AGRI_SHORT_TERM_KAPPA,
-            kappaXi: MacroEngine::AGRI_LONG_TERM_KAPPA,
+            kappaChi: self::AGRI_SHORT_TERM_KAPPA,
+            kappaXi: self::AGRI_LONG_TERM_KAPPA,
             thetaChi: 0.0,
             thetaXi: log(MacroEngine::AGRI_BASELINE),
-            sigChi: MacroEngine::AGRI_SHORT_TERM_SIGMA,
-            sigXi: MacroEngine::AGRI_LONG_TERM_SIGMA,
-            rho: MacroEngine::AGRI_RHO,
+            sigChi: self::AGRI_SHORT_TERM_SIGMA,
+            sigXi: self::AGRI_LONG_TERM_SIGMA,
+            rho: self::AGRI_RHO,
             dt: $dt
         );
 
         $jumpData = $this->mathUtility->calculateJumpDiffusion(
-            lambda: MacroEngine::AGRI_WEATHER_JUMP_PROBABILITY,
-            jumpMean: MacroEngine::AGRI_WEATHER_JUMP_MEAN,
-            jumpVol: MacroEngine::AGRI_WEATHER_JUMP_VOL,
+            lambda: self::AGRI_WEATHER_JUMP_PROBABILITY,
+            jumpMean: self::AGRI_WEATHER_JUMP_MEAN,
+            jumpVol: self::AGRI_WEATHER_JUMP_VOL,
             dt: $dt
         );
 
@@ -143,7 +219,7 @@ class CommodityLogisticsSubsystem
         $state->agriXi = $result['xi'];
 
         $timeOfYear = fmod($state->totalTime, 1.0);
-        $seasonalMultiplier = 1.0 + (MacroEngine::AGRI_SEASONALITY_AMPLITUDE * sin(2.0 * M_PI * $timeOfYear));
+        $seasonalMultiplier = 1.0 + (self::AGRI_SEASONALITY_AMPLITUDE * sin(2.0 * M_PI * $timeOfYear));
 
         $spot = exp($state->agriChi + $state->agriXi) * $seasonalMultiplier;
         $state->agriculturalCommodityIndex = max(20.0, min(400.0, $spot));
@@ -161,25 +237,25 @@ class CommodityLogisticsSubsystem
     public function calculateFreightRateIndex(MacroState $state, float $dt): void
     {
         $metalsShift = ($state->industrialMetalsIndexEma - MacroEngine::METALS_BASELINE) / 100.0;
-        $demandFactor = 1.0 + ($state->outputGapEma * MacroEngine::FREIGHT_DEMAND_GAP_SENSITIVITY) + ($metalsShift * MacroEngine::FREIGHT_DEMAND_METALS_SENSITIVITY);
+        $demandFactor = 1.0 + ($state->outputGapEma * self::FREIGHT_DEMAND_GAP_SENSITIVITY) + ($metalsShift * self::FREIGHT_DEMAND_METALS_SENSITIVITY);
         $demand = MacroEngine::FREIGHT_BASELINE * max(0.20, $demandFactor);
 
         $profitabilityRatio = max(0.10, $state->freightRateIndexEma / MacroEngine::FREIGHT_BASELINE);
-        $targetSupply = MacroEngine::FREIGHT_BASELINE * pow($profitabilityRatio, MacroEngine::FREIGHT_SUPPLY_ORDER_ELASTICITY);
+        $targetSupply = MacroEngine::FREIGHT_BASELINE * pow($profitabilityRatio, self::FREIGHT_SUPPLY_ORDER_ELASTICITY);
 
-        $slowEmaWeight = 1.0 - exp(-$dt / MacroEngine::FREIGHT_SUPPLY_LAG_YEARS);
+        $slowEmaWeight = 1.0 - exp(-$dt / self::FREIGHT_SUPPLY_LAG_YEARS);
         $state->freightSupplyEma += $slowEmaWeight * ($targetSupply - $state->freightSupplyEma);
         $supply = max(20.0, $state->freightSupplyEma);
 
         $utilization = $demand / $supply;
-        $equilibriumRate = MacroEngine::FREIGHT_BASELINE * pow($utilization, MacroEngine::FREIGHT_CAPACITY_INELASTICITY);
+        $equilibriumRate = MacroEngine::FREIGHT_BASELINE * pow($utilization, self::FREIGHT_CAPACITY_INELASTICITY);
 
         $dW = $this->mathUtility->generateStandardNormal();
         $newFreight = $this->mathUtility->calculateSchwartz1Factor(
             currentPrice: $state->freightRateIndex,
-            kappa: MacroEngine::FREIGHT_MEAN_REVERSION,
+            kappa: self::FREIGHT_MEAN_REVERSION,
             theta: $equilibriumRate,
-            sigma: MacroEngine::FREIGHT_VOLATILITY,
+            sigma: self::FREIGHT_VOLATILITY,
             dt: $dt,
             dW: $dW
         );
@@ -208,8 +284,8 @@ class CommodityLogisticsSubsystem
             dt: $dt,
             dW: $dW,
             baselineCrack: MacroEngine::CRACK_SPREAD_BASELINE,
-            kappa: MacroEngine::CRACK_SPREAD_KAPPA,
-            sigma: MacroEngine::CRACK_SPREAD_SIGMA
+            kappa: self::CRACK_SPREAD_KAPPA,
+            sigma: self::CRACK_SPREAD_SIGMA
         );
     }
 

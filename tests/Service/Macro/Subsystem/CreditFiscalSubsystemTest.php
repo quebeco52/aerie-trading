@@ -93,7 +93,7 @@ class CreditFiscalSubsystemTest extends TestCase
         $state = new MacroState();
         $state->outputGapEma = -0.08;
         $state->marketVolatilityEma = 0.60;
-        $state->interbankLiquiditySpreadEma = MacroEngine::INTERBANK_MAX_SPREAD;
+        $state->interbankLiquiditySpreadEma = CreditFiscalSubsystem::INTERBANK_MAX_SPREAD;
 
         $this->subsystem->calculateMacroCreditSpread($state);
 
@@ -139,15 +139,15 @@ class CreditFiscalSubsystemTest extends TestCase
 
         $subsystem->calculateInterbankLiquiditySpread($state, 0.25);
 
-        $this->assertEqualsWithDelta(MacroEngine::INTERBANK_MAX_SPREAD, $state->interbankLiquiditySpread, 1e-12);
-        $this->assertEqualsWithDelta(0.05, MacroEngine::INTERBANK_MAX_SPREAD, 1e-12, 'TED record: 457 bps on 10 Oct 2008.');
+        $this->assertEqualsWithDelta(CreditFiscalSubsystem::INTERBANK_MAX_SPREAD, $state->interbankLiquiditySpread, 1e-12);
+        $this->assertEqualsWithDelta(0.05, CreditFiscalSubsystem::INTERBANK_MAX_SPREAD, 1e-12, 'TED record: 457 bps on 10 Oct 2008.');
     }
 
     /** Guards the jump-size calibration: the median panic is well short of 2008, and no panic jump shrinks the spread. */
     public function testInterbankPanicJumpCalibration(): void
     {
-        $medianMultiplier = exp(MacroEngine::INTERBANK_JUMP_MEAN);
-        $twoSigmaLow = exp(MacroEngine::INTERBANK_JUMP_MEAN - 2.0 * MacroEngine::INTERBANK_JUMP_VOL);
+        $medianMultiplier = exp(CreditFiscalSubsystem::INTERBANK_JUMP_MEAN);
+        $twoSigmaLow = exp(CreditFiscalSubsystem::INTERBANK_JUMP_MEAN - 2.0 * CreditFiscalSubsystem::INTERBANK_JUMP_VOL);
 
         $this->assertLessThan(5.0, $medianMultiplier, 'A 5x freeze (2008) must be a tail outcome, not the median jump.');
         $this->assertGreaterThan(2.0, $medianMultiplier, 'A panic jump should still at least double the spread.');
@@ -181,7 +181,7 @@ class CreditFiscalSubsystemTest extends TestCase
         // Bohn (1998) adjustment: higher debt induces primary fiscal surplus, counteracting interest burden
         // dDebt/dt rate of increase must be constrained by the Bohn stabilizer
         $excessDebtAmount = 1.20 - MacroEngine::SOVEREIGN_DEBT_NEUTRAL_THRESHOLD;
-        $expectedBohnSurplus = MacroEngine::BOHN_FISCAL_REACTION_SENSITIVITY * $excessDebtAmount;
+        $expectedBohnSurplus = CreditFiscalSubsystem::BOHN_FISCAL_REACTION_SENSITIVITY * $excessDebtAmount;
         $this->assertGreaterThan(0.0, $expectedBohnSurplus);
     }
 
@@ -300,7 +300,7 @@ class CreditFiscalSubsystemTest extends TestCase
             $subsystem->calculateInterbankLiquiditySpread($state, 0.25);
         }
 
-        $expectedMean = MacroEngine::INTERBANK_BASELINE_SPREAD + (0.030 * MacroEngine::INTERBANK_CREDIT_COUPLING);
+        $expectedMean = MacroEngine::INTERBANK_BASELINE_SPREAD + (0.030 * CreditFiscalSubsystem::INTERBANK_CREDIT_COUPLING);
         $this->assertEqualsWithDelta($expectedMean, $state->interbankLiquiditySpread, 0.0005);
         $this->assertGreaterThan(0.010, $state->interbankLiquiditySpread, 'A 300 bps IG blowout must lift TED past 100 bps.');
     }

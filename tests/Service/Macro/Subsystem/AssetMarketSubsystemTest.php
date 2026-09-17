@@ -148,8 +148,79 @@ class AssetMarketSubsystemTest extends TestCase
     public function testNeutralUserCostMatchesNeutralTenYearPlusMortgageSpread(): void
     {
         $neutralTenYear = MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION + MacroEngine::NS_BASE_TERM_PREMIUM;
-        $expected = $neutralTenYear + MacroEngine::RESIDENTIAL_MORTGAGE_SPREAD + MacroEngine::RESIDENTIAL_DEPRECIATION_TAX_RATE - MacroEngine::TARGET_INFLATION;
+        $expected = $neutralTenYear + AssetMarketSubsystem::RESIDENTIAL_MORTGAGE_SPREAD + AssetMarketSubsystem::RESIDENTIAL_DEPRECIATION_TAX_RATE - MacroEngine::TARGET_INFLATION;
 
-        $this->assertEqualsWithDelta($expected, MacroEngine::RESIDENTIAL_NEUTRAL_USER_COST, 1e-12);
+        $this->assertEqualsWithDelta($expected, AssetMarketSubsystem::RESIDENTIAL_NEUTRAL_USER_COST, 1e-12);
+    }
+
+    /**
+     * Settles the exchange rate against a fixed policy rate, varying only the channel under test.
+     */
+    private function settledFx(array $overrides = []): float
+    {
+        $state = new MacroState();
+        foreach ($overrides as $field => $value) {
+            $state->$field = $value;
+        }
+
+        for ($i = 0; $i < 200; $i++) {
+            $this->subsystem->calculateExchangeRate($state, 0.25);
+        }
+
+        return $state->exchangeRateIndex;
+    }
+
+    /**
+     * Chen & Rogoff (2003) with the importer's sign. The district runs a structural trade deficit and its
+     * output gap is dragged by dearer energy, so a rising import basket is a terms-of-trade LOSS and has to
+     * weaken the currency. Getting this backwards would cushion every energy shock instead of compounding it.
+     */
+    public function testADearerImportBasketWeakensTheCurrency(): void
+    {
+        $neutral = $this->settledFx();
+
+        $this->assertLessThan($neutral, $this->settledFx(['energyPriceIndexEma' => 150.0]), 'Dearer energy must weaken an importer.');
+        $this->assertLessThan($neutral, $this->settledFx(['industrialMetalsIndexEma' => 150.0]), 'Dearer metals must weaken an importer.');
+
+        // Cheaper commodities are the same trade in reverse, so the channel must run both ways.
+        $this->assertGreaterThan($neutral, $this->settledFx(['energyPriceIndexEma' => 70.0]), 'A commodity dividend must strengthen it.');
+
+        // Energy carries the heavier PPI weight, so it must move the currency more than metals do.
+        $energyMove = $neutral - $this->settledFx(['energyPriceIndexEma' => 150.0]);
+        $metalsMove = $neutral - $this->settledFx(['industrialMetalsIndexEma' => 150.0]);
+        $this->assertGreaterThan($metalsMove, $energyMove, 'Energy is the larger share of the import basket.');
+    }
+
+    /**
+     * Ranaldo & Soderlind (2010): the flight that compresses this sovereign's term premium buys its currency
+     * first. One-sided at the same threshold, so ordinary volatility must not move the rate at all.
+     */
+    public function testPanicBidsTheCurrencyOnlyOnceFlightToSafetyStarts(): void
+    {
+        $neutral = $this->settledFx();
+        $threshold = MacroEngine::FLIGHT_TO_SAFETY_VOL_THRESHOLD;
+
+        $this->assertEqualsWithDelta($neutral, $this->settledFx(['marketVolatilityEma' => $threshold]), 1e-9, 'At the threshold the bid is exactly zero.');
+        $this->assertEqualsWithDelta($neutral, $this->settledFx(['marketVolatilityEma' => $threshold - 0.05]), 1e-9, 'Below it, calm does not sell the currency.');
+        $this->assertGreaterThan($neutral, $this->settledFx(['marketVolatilityEma' => 0.50]), 'A panic bids it.');
+        $this->assertGreaterThan(
+            $this->settledFx(['marketVolatilityEma' => 0.40]),
+            $this->settledFx(['marketVolatilityEma' => 0.60]),
+            'A worse panic bids it harder.'
+        );
+    }
+
+    /**
+     * The two channels oppose each other in the crisis that raises both, and neither is allowed to swamp the
+     * rate: an energy shock big enough to cause the panic still leaves the currency weaker on net.
+     */
+    public function testAnEnergyDrivenPanicLeavesTheCurrencyWeakerOnNet(): void
+    {
+        $neutral = $this->settledFx();
+        $stagflationaryPanic = $this->settledFx(['energyPriceIndexEma' => 180.0, 'marketVolatilityEma' => 0.30]);
+
+        $this->assertLessThan($neutral, $stagflationaryPanic, 'The terms-of-trade loss outweighs a mild safe-haven bid.');
+        $this->assertGreaterThan(60.0, $stagflationaryPanic, 'The rate stays inside its floor.');
+        $this->assertLessThan(160.0, $stagflationaryPanic, 'The rate stays inside its ceiling.');
     }
 }

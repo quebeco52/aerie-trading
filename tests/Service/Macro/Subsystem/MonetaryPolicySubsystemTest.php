@@ -213,7 +213,7 @@ class MonetaryPolicySubsystemTest extends TestCase
         // Step 2: dt = 1.1 years -> hold timer reaches 2.1 (>= 2.0 years)
         $state->balanceSheetHoldTimer = 1.0;
         $curveYear2 = $this->subsystem->calculateYieldCurveAndQE($state, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 1.1);
-        $this->assertGreaterThanOrEqual(MacroEngine::BALANCE_SHEET_REINVESTMENT_HOLD_YEARS, $curveYear2['new_hold_timer']);
+        $this->assertGreaterThanOrEqual(MonetaryPolicySubsystem::BALANCE_SHEET_REINVESTMENT_HOLD_YEARS, $curveYear2['new_hold_timer']);
         $this->assertLessThan(0.015, $curveYear2['new_balance_sheet_intensity'], 'Balance sheet runoff (QT) must begin once hold timer expires.');
     }
 
@@ -228,7 +228,7 @@ class MonetaryPolicySubsystemTest extends TestCase
         $curve = $this->subsystem->calculateYieldCurveAndQE($state, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 0.25);
 
         // Curvature beta2 = (SVENSSON_CURVATURE1_TARGET_SCALE * 0.06) + (SVENSSON_CURVATURE1_GAP_SCALE * 0.02)
-        $expectedCurvature = (MacroEngine::SVENSSON_CURVATURE1_TARGET_SCALE * 0.06) + (MacroEngine::SVENSSON_CURVATURE1_GAP_SCALE * 0.02);
+        $expectedCurvature = (MonetaryPolicySubsystem::SVENSSON_CURVATURE1_TARGET_SCALE * 0.06) + (MonetaryPolicySubsystem::SVENSSON_CURVATURE1_GAP_SCALE * 0.02);
         $this->assertEqualsWithDelta($expectedCurvature, $curve['curvature'], 0.0001);
 
         // 2Y yield should price policy hikes above the 0% policy rate
@@ -456,7 +456,7 @@ class MonetaryPolicySubsystemTest extends TestCase
         $curveUnanchored = $this->subsystem->calculateYieldCurve($unanchored, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE);
 
         // The only premium channel that reads the breakeven is the Wright (2011) inflation risk premium.
-        $expectedPremiumChange = MacroEngine::TERM_PREMIUM_IRP_EXPECTATION_SCALE * 0.02;
+        $expectedPremiumChange = MonetaryPolicySubsystem::TERM_PREMIUM_IRP_EXPECTATION_SCALE * 0.02;
         $this->assertEqualsWithDelta(
             $expectedPremiumChange,
             $curveUnanchored['term_premium_10y'] - $curveAnchored['term_premium_10y'],
@@ -465,7 +465,7 @@ class MonetaryPolicySubsystemTest extends TestCase
         );
 
         // Only the model-consistent share of the anchor carries the breakeven; the Kozicki-Tinsley endpoint does not.
-        $levelShift = (1.0 - MacroEngine::KOZICKI_TINSLEY_ENDPOINT_WEIGHT) * (1.0 - MacroEngine::LONG_RUN_INFLATION_ANCHOR_WEIGHT) * 0.02;
+        $levelShift = (1.0 - MonetaryPolicySubsystem::KOZICKI_TINSLEY_ENDPOINT_WEIGHT) * (1.0 - MonetaryPolicySubsystem::LONG_RUN_INFLATION_ANCHOR_WEIGHT) * 0.02;
         $this->assertGreaterThan(
             $curveAnchored['risk_neutral_10y'] + 0.5 * $levelShift,
             $curveUnanchored['risk_neutral_10y'],
@@ -487,7 +487,7 @@ class MonetaryPolicySubsystemTest extends TestCase
 
         $this->assertLessThan(0.0, $curve['term_premium_10y'], 'Restrictive policy plus flight to safety must push the ten-year term premium negative, as ACM shows for 2016-2021.');
         $this->assertGreaterThanOrEqual(
-            MacroEngine::MIN_TERM_PREMIUM_10Y - 0.00001,
+            MonetaryPolicySubsystem::MIN_TERM_PREMIUM_10Y - 0.00001,
             $curve['term_premium_10y'],
             'The term premium must respect the structural floor.'
         );
@@ -497,7 +497,7 @@ class MonetaryPolicySubsystemTest extends TestCase
         $extreme->targetRate = 0.12;
         $extreme->marketVolatilityEma = 1.50;
         $curveExtreme = $this->subsystem->calculateYieldCurve($extreme, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE);
-        $this->assertEqualsWithDelta(MacroEngine::MIN_TERM_PREMIUM_10Y, $curveExtreme['term_premium_10y'], 0.00001, 'Stacked compression channels bottom out at the floor.');
+        $this->assertEqualsWithDelta(MonetaryPolicySubsystem::MIN_TERM_PREMIUM_10Y, $curveExtreme['term_premium_10y'], 0.00001, 'Stacked compression channels bottom out at the floor.');
     }
 
     public function testTermPremiumShockDecaysAndRegimeRevertsToBaselineWithoutInnovations(): void
@@ -513,8 +513,8 @@ class MonetaryPolicySubsystemTest extends TestCase
 
         $subsystem->updateTermPremiumDynamics($state, 1.0);
 
-        $this->assertEqualsWithDelta(0.015 * exp(-MacroEngine::TERM_PREMIUM_SHOCK_KAPPA), $state->termPremiumShock, 0.00001, 'The transitory shock decays at its OU rate toward zero.');
-        $expectedRegime = MacroEngine::NS_BASE_TERM_PREMIUM + (0.020 - MacroEngine::NS_BASE_TERM_PREMIUM) * exp(-MacroEngine::TERM_PREMIUM_REGIME_KAPPA);
+        $this->assertEqualsWithDelta(0.015 * exp(-MonetaryPolicySubsystem::TERM_PREMIUM_SHOCK_KAPPA), $state->termPremiumShock, 0.00001, 'The transitory shock decays at its OU rate toward zero.');
+        $expectedRegime = MacroEngine::NS_BASE_TERM_PREMIUM + (0.020 - MacroEngine::NS_BASE_TERM_PREMIUM) * exp(-MonetaryPolicySubsystem::TERM_PREMIUM_REGIME_KAPPA);
         $this->assertEqualsWithDelta($expectedRegime, $state->termPremiumRegime, 0.00001, 'The regime drifts slowly back toward the structural baseline.');
         $this->assertGreaterThan(0.019, $state->termPremiumRegime, 'An eight-year half-life barely moves the regime in a year.');
     }
@@ -529,8 +529,8 @@ class MonetaryPolicySubsystemTest extends TestCase
         $state = new MacroState();
         $subsystem->updateTermPremiumDynamics($state, 1.0);
 
-        $this->assertEqualsWithDelta(MacroEngine::TERM_PREMIUM_SHOCK_CAP, $state->termPremiumShock, 0.00001);
-        $this->assertEqualsWithDelta(MacroEngine::MAX_TERM_PREMIUM_REGIME, $state->termPremiumRegime, 0.00001);
+        $this->assertEqualsWithDelta(MonetaryPolicySubsystem::TERM_PREMIUM_SHOCK_CAP, $state->termPremiumShock, 0.00001);
+        $this->assertEqualsWithDelta(MonetaryPolicySubsystem::MAX_TERM_PREMIUM_REGIME, $state->termPremiumRegime, 0.00001);
     }
 
     public function testTransitoryTermPremiumShockMovesTheLongEndMoreThanTheTwoYear(): void
@@ -592,7 +592,7 @@ class MonetaryPolicySubsystemTest extends TestCase
             $this->subsystem->updateMarketExpectations($state, 1.0 / 252.0);
         }
         $closed = ($state->perceivedNeutralRate - $start) / (0.055 - $start);
-        $this->assertEqualsWithDelta(1.0 - exp(-3.0 * MacroEngine::KOZICKI_TINSLEY_ADAPTATION_SPEED), $closed, 0.01, 'Kozicki-Tinsley endpoint adapts at its slow learning speed.');
+        $this->assertEqualsWithDelta(1.0 - exp(-3.0 * MonetaryPolicySubsystem::KOZICKI_TINSLEY_ADAPTATION_SPEED), $closed, 0.01, 'Kozicki-Tinsley endpoint adapts at its slow learning speed.');
         $this->assertLessThan(0.5, $closed, 'Three years is not enough to convince the market that neutral has moved.');
         $this->assertEqualsWithDelta(3.0, $state->restrictiveDuration, 0.01, 'The restrictive clock counts the whole stretch above neutral.');
 
@@ -664,7 +664,7 @@ class MonetaryPolicySubsystemTest extends TestCase
         $targetHigh = $this->subsystem->calculateTargetRate($highPremium, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE);
 
         $this->assertEqualsWithDelta(
-            -MacroEngine::TAYLOR_LONG_RATE_OFFSET * 0.010,
+            -MonetaryPolicySubsystem::TAYLOR_LONG_RATE_OFFSET * 0.010,
             $targetHigh - $targetNeutral,
             0.00001,
             'Bernanke (2006): a 100bps term premium is met with ~50bps easier policy.'
@@ -705,7 +705,7 @@ class MonetaryPolicySubsystemTest extends TestCase
 
         $gap = $this->subsystem->calculateLongRateGap($repriced, MacroEngine::BASE_NATURAL_RATE);
         $this->assertGreaterThan(0.0, $gap);
-        $this->assertLessThan(0.015 * MacroEngine::KOZICKI_TINSLEY_ENDPOINT_WEIGHT, $gap, 'Only the share of the endpoint drift that reaches the ten-year counts.');
+        $this->assertLessThan(0.015 * MonetaryPolicySubsystem::KOZICKI_TINSLEY_ENDPOINT_WEIGHT, $gap, 'Only the share of the endpoint drift that reaches the ten-year counts.');
         $this->assertLessThan(
             $this->subsystem->calculateTargetRate($state, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE),
             $this->subsystem->calculateTargetRate($repriced, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE),
@@ -737,5 +737,49 @@ class MonetaryPolicySubsystemTest extends TestCase
             $premiumDriven->recessionProbability,
             'A curve held up only by term premium hides an inverted expected policy path and must read more recessionary.'
         );
+    }
+
+    /**
+     * The inversion clock is armed off the STRUCTURAL slope, which does not exist until the curve has been
+     * fitted. It therefore belongs with the fitted curve and not beside the restrictive-stance clock in
+     * updateMarketExpectations, which runs a step earlier and would hand it the previous tick's curve.
+     */
+    public function testTheInversionClockRunsOffTheCurveItWasJustHanded(): void
+    {
+        $state = new MacroState();
+        $state->policyRate = 0.05;
+        $state->inversionDuration = 0.0;
+
+        $inverted = $this->curveWith($state, 0.03);   // structural 10y under a 5% policy rate
+        $this->subsystem->applyYieldCurve($state, $inverted, 0.25);
+
+        $this->assertLessThan(0.0, $state->structuralSlope, 'A 3% structural long end under a 5% policy rate is inverted.');
+        $this->assertEqualsWithDelta(0.25, $state->inversionDuration, 1e-12, 'The clock accumulates while inverted.');
+
+        $this->subsystem->applyYieldCurve($state, $inverted, 0.25);
+        $this->assertEqualsWithDelta(0.50, $state->inversionDuration, 1e-12, 'And keeps accumulating.');
+
+        // One upward-sloping curve resets it outright: the alarm counts a CONTINUOUS inversion.
+        $this->subsystem->applyYieldCurve($state, $this->curveWith($state, 0.07), 0.25);
+        $this->assertGreaterThan(0.0, $state->structuralSlope);
+        $this->assertSame(0.0, $state->inversionDuration, 'Un-inverting resets the clock rather than pausing it.');
+    }
+
+    /**
+     * A fitted curve whose structural 10y is the given rate, with every other factor left flat.
+     *
+     * @return array<string, float>
+     */
+    private function curveWith(MacroState $state, float $structural10y): array
+    {
+        return [
+            'level' => $structural10y, 'curvature' => 0.0, 'curvature2' => 0.0,
+            'beta1' => $state->policyRate - $structural10y,
+            'base_term_premium' => 0.0, 'long_end_premium' => 0.0,
+            'structural_10y' => $structural10y,
+            'yield_2y' => $state->policyRate, 'yield_5y' => $structural10y,
+            'yield_10y' => $structural10y, 'yield_30y' => $structural10y,
+            'risk_neutral_10y' => $structural10y, 'term_premium_10y' => 0.0,
+        ];
     }
 }
