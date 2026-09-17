@@ -194,7 +194,7 @@ class SemiconductorBusinessModel extends StandardCorporateBusinessModel
         // Crucially, capacity utilization leverage applies to physical fab manufacturing ($foundryWeight),
         // while fabless IP licensing scales independently with tech demand.
         $outputGap = $macroState->outputGapEma;
-        $cuDeviation = ($macroState->capacityUtilizationRateEma - MacroEngine::CU_BASELINE) / 100.0;
+        $cuDeviation = $macroState->capacityUtilizationRateEma - MacroEngine::CU_BASELINE;
         $cuShift = MathUtility::calculateCapacityUtilizationShift(
             $macroState->capacityUtilizationRateEma,
             MacroEngine::CU_BASELINE,

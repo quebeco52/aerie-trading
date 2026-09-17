@@ -3,6 +3,7 @@
 namespace App\Controller;
 
 use App\Entity\Stock;
+use App\Service\Macro\MacroStateProvider;
 use App\Service\Market\PriceChangeFeed;
 use App\Twig\Extension\NumberFormatExtension;
 use App\Repository\EtfRepository;
@@ -24,17 +25,21 @@ class HomeController extends AbstractController
      * Fetches the primary market ETF and a list of all available stocks,
      * calculates their current market capitalization, and sorts them from largest to smallest.
      *
+     * The macro vitals come through MacroStateProvider rather than off the engine, so this page and
+     * /economy describe the same economy: the engine's own cold-Redis opening is its simulation seed and
+     * differs from the snapshot openings on 28 fields, which is the drift the provider exists to end.
+     *
      * @param StockRepository $stockRepository The listed companies shown on the board.
      *
      * @return Response Returns the rendered home page view with market data.
      */
     #[Route('/', name: 'app_home')]
-    public function index(StockRepository $stockRepository, EtfRepository $etfs, \App\Service\Macro\MacroEngine $macroEngine, PriceChangeFeed $priceChangeFeed): Response
+    public function index(StockRepository $stockRepository, EtfRepository $etfs, MacroStateProvider $macroStateProvider, PriceChangeFeed $priceChangeFeed): Response
     {
         $etf = $etfs->findOneByTicker(MarketIndex::benchmark()->value);
         $indices = $this->indexTiles($etfs);
         $stocks = $stockRepository->findAll();
-        $macroState = $macroEngine->getLiveState();
+        $macroState = $macroStateProvider->liveState();
 
         $marketData = $this->buildBaseMarketData($stocks, $priceChangeFeed->changeByTicker($stocks));
         usort($marketData, function ($a, $b) {

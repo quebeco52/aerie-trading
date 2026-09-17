@@ -178,4 +178,53 @@ class MacroStateHydrationTest extends TestCase
             $this->assertSame($viaState->$field, $viaSnapshot->$field, "Readers disagree on {$field}.");
         }
     }
+
+    /**
+     * Three identities tie the curve's stored factors to the tenors they generate, and a reader that
+     * breaks one reports a curve that cannot exist.
+     *
+     * The snapshot broke all three on an empty payload: the rebuild above gave the tenors a policy-rate
+     * anchor but never seeded the Nelson-Siegel level, so the long end decayed to zero -- the flat zero
+     * curve the rebuild exists to prevent -- and beta1, which is derived from the level, came out at
+     * +0.02 when the short end sits BELOW the long end and it has to be negative. The engine's own
+     * openings broke the slope the other way, reporting a 150bp inversion over tenors sloping upward.
+     *
+     * @return array<string, array{callable(): object}>
+     */
+    public static function curveReaderProvider(): array
+    {
+        return [
+            'snapshot opening' => [static fn (): object => MacroStateDTO::fromArray([])],
+            'engine opening'   => [static fn (): object => new MacroState()],
+        ];
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('curveReaderProvider')]
+    public function testTheOpeningCurveSatisfiesItsOwnIdentities(callable $open): void
+    {
+        $curve = $open();
+
+        $this->assertEqualsWithDelta(
+            $curve->policyRate - $curve->nsLevel,
+            $curve->nsBeta1,
+            1e-12,
+            'beta1 is the policy rate under the long-run level, not a free parameter.'
+        );
+        $this->assertEqualsWithDelta(
+            $curve->yield10y - $curve->policyRate,
+            $curve->nsSlope,
+            1e-12,
+            'The reported slope is the 10y-over-policy term spread.'
+        );
+        $this->assertEqualsWithDelta(
+            $curve->yield30y,
+            $curve->nsLevel,
+            1e-12,
+            'The level is the curve asymptote, so the longest tenor opens level with it.'
+        );
+
+        $this->assertGreaterThan(0.0, $curve->nsLevel, 'A long end at zero is a degenerate curve.');
+        $this->assertLessThan(0.0, $curve->nsBeta1, 'An upward curve carries a negative beta1.');
+        $this->assertGreaterThan($curve->policyRate, $curve->yield30y, 'The opening curve slopes upward.');
+    }
 }

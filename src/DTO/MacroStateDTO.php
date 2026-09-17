@@ -264,8 +264,19 @@ readonly class MacroStateDTO
         $args['yield10y'] ??= $resolve('policyRate') + self::HYDRATION_10Y_SPREAD;
         $args['yield30y'] ??= $resolve('policyRate') + self::HYDRATION_30Y_SPREAD;
 
+        // The Nelson-Siegel level is the curve's long-run nominal anchor -- the Fisher sum of the natural
+        // rate and the inflation target -- and it is an INPUT to the curve function, so unlike the tenors
+        // above it cannot be recovered from them: they are that function's outputs. Left at the
+        // constructor's zero it hands the bond desk exactly the flat zero curve the rebuild above exists to
+        // prevent, and beta1, derived from it on the next line, inherits the error with its sign flipped.
+        $args['nsLevel'] ??= MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION;
+
         // Nelson-Siegel beta1 is the short-end spread of the curve, not a free parameter.
         $args['nsBeta1'] ??= $resolve('policyRate') - $resolve('nsLevel');
+
+        // The quoted slope is the 10y-over-policy term spread, read off the curve the same way the engine
+        // reads it, so a rehydrated snapshot does not report a flat curve over yields that are not flat.
+        $args['nsSlope'] ??= $resolve('yield10y') - $resolve('policyRate');
         $args['potentialGdpIndex'] ??= $resolve('nominalGdpIndex') / (1.0 + $resolve('outputGap'));
         $args['highYieldCreditSpread'] ??= $resolve('macroCreditSpread') * MacroEngine::HY_BASE_SPREAD_MULTIPLIER;
 

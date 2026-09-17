@@ -6,6 +6,7 @@ use App\Service\Macro\MacroEngine;
 use App\Service\Macro\MacroState;
 use App\Service\Macro\Subsystem\MacroAggregateSubsystem;
 use App\Service\Math\MathUtility;
+use App\Service\Model\Sector\SemiconductorBusinessModel;
 use PHPUnit\Framework\TestCase;
 
 class MacroAggregateSubsystemTest extends TestCase
@@ -147,6 +148,51 @@ class MacroAggregateSubsystemTest extends TestCase
 
         $this->subsystem->calculateCapacityUtilization($stateOverhang);
         $this->assertLessThan(MacroEngine::CU_BASELINE, $stateOverhang->capacityUtilizationRate);
+    }
+
+    /**
+     * The subsystem publishes utilization as a fraction and the sector models read it through
+     * MathUtility::calculateCapacityUtilizationShift(). Both ends must agree on that scale.
+     *
+     * They did not: the helper divided the gap by 100 a second time, which is correct only for a rate
+     * quoted in whole points. Fed with the fraction the engine actually publishes, every industrial
+     * model's utilization channel was attenuated a hundredfold, and the semiconductor shortage and glut
+     * gates -- set at a three-point gap -- sat two orders of magnitude beyond anything reachable inside
+     * the [0.60, 0.92] clamp. Nothing failed, because each side was self-consistent on its own.
+     */
+    public function testCapacityUtilizationShiftReadsTheSubsystemsOwnScale(): void
+    {
+        $boom = new MacroState();
+        $boom->outputGap = 0.03;
+        $boom->capitalStockOverhang = 0.0;
+        $this->subsystem->calculateCapacityUtilization($boom);
+
+        $gap = $boom->capacityUtilizationRate - MacroEngine::CU_BASELINE;
+        $this->assertEqualsWithDelta(
+            $gap,
+            MathUtility::calculateCapacityUtilizationShift($boom->capacityUtilizationRate, MacroEngine::CU_BASELINE, 1.0),
+            0.0001,
+            'At unit sensitivity the shift is the utilization gap itself, in the units the subsystem publishes'
+        );
+
+        // A three-point gap is what the semiconductor fab-shortage gate is calibrated to, and a 3% output
+        // gap has to clear it -- otherwise the gate is unreachable however hot the economy runs.
+        $this->assertGreaterThan(
+            SemiconductorBusinessModel::BOOM_CAPACITY_UTILIZATION_THRESHOLD,
+            $gap,
+            'A boom must be able to trip the fab shortage gate'
+        );
+
+        $glut = new MacroState();
+        $glut->outputGap = -0.03;
+        $glut->capitalStockOverhang = 0.15;
+        $this->subsystem->calculateCapacityUtilization($glut);
+
+        $this->assertLessThan(
+            SemiconductorBusinessModel::GLUT_CAPACITY_UTILIZATION_THRESHOLD,
+            $glut->capacityUtilizationRate - MacroEngine::CU_BASELINE,
+            'A slump with idle plant must be able to trip the fab glut gate'
+        );
     }
 
     public function testCommodityCostPushPassesThroughToHeadlineInflationWithoutAttenuation(): void

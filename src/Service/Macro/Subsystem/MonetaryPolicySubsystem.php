@@ -313,7 +313,21 @@ class MonetaryPolicySubsystem
      * @param MacroState $state           Current macroeconomic state.
      * @param float      $targetInflation Central bank inflation target.
      * @param float      $naturalRate     Dynamic natural real rate of interest (r*).
-     * @return array<string, float> Sovereign yield curve tenors, NSS factors, risk-neutral rate, and term premium.
+     * @return array{
+     *     level: float,
+     *     curvature: float,
+     *     curvature2: float,
+     *     beta1: float,
+     *     base_term_premium: float,
+     *     long_end_premium: float,
+     *     structural_10y: float,
+     *     yield_2y: float,
+     *     yield_5y: float,
+     *     yield_10y: float,
+     *     yield_30y: float,
+     *     risk_neutral_10y: float,
+     *     term_premium_10y: float
+     * } Sovereign yield curve tenors, NSS factors, risk-neutral rate, and term premium.
      */
     public function calculateYieldCurve(MacroState $state, float $targetInflation, float $naturalRate): array
     {
@@ -399,7 +413,25 @@ class MonetaryPolicySubsystem
      * @param float      $targetInflation Central bank inflation target.
      * @param float      $naturalRate     Dynamic natural real rate of interest (r*).
      * @param float      $dt              Time increment in years.
-     * @return array<string, float> Decomposition containing yields, NSS factors, and QE/QT intensities.
+     * @return array{
+     *     new_balance_sheet_intensity: float,
+     *     new_hold_timer: float,
+     *     new_qe_intensity: float,
+     *     new_qt_intensity: float,
+     *     level: float,
+     *     curvature: float,
+     *     curvature2: float,
+     *     beta1: float,
+     *     base_term_premium: float,
+     *     long_end_premium: float,
+     *     structural_10y: float,
+     *     yield_2y: float,
+     *     yield_5y: float,
+     *     yield_10y: float,
+     *     yield_30y: float,
+     *     risk_neutral_10y: float,
+     *     term_premium_10y: float
+     * } Decomposition containing yields, NSS factors, and QE/QT intensities.
      */
     public function calculateYieldCurveAndQE(MacroState $state, float $targetInflation, float $naturalRate, float $dt): array
     {

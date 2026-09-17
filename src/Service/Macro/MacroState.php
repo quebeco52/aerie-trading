@@ -74,9 +74,13 @@ class MacroState
     public float $agriCostPushLag = 0.0;
 
     public float $nsLevel = 0.0425;
-    public float $nsSlope = -0.0150;
-    public float $nsSlopeEma = -0.0150;
-    public float $structuralSlope = -0.0150;
+    // The reported slope is the 10y-over-policy term spread, not the curve's beta1, so it opens at the
+    // spread these very openings describe: yield10y 3.75% over a 2.50% policy rate. It had opened
+    // inverted by 150bps over a curve sloping the other way, which the engine overwrites on the first
+    // tick but which reaches a reader through the snapshot the ticker persists at start-up.
+    public float $nsSlope = 0.0125;
+    public float $nsSlopeEma = 0.0125;
+    public float $structuralSlope = 0.0125;
     public float $nsCurvature = 0.0;
     public float $nsCurvature2 = 0.0;
     public float $nsBeta1 = -0.0175;

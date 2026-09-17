@@ -195,7 +195,7 @@ class HeavyManufacturingBusinessModel extends StandardCorporateBusinessModel
 
         // Capacity Utilization Overhead Absorption:
         // High industrial capacity utilization improves factory fixed overhead absorption, expanding margins.
-        $cuDeviation = ($macroState->capacityUtilizationRateEma - MacroEngine::CU_BASELINE) / 100.0;
+        $cuDeviation = $macroState->capacityUtilizationRateEma - MacroEngine::CU_BASELINE;
         $cuMarginAdjustment = - ($cuDeviation * self::CU_MARGIN_ABSORPTION_SENSITIVITY);
 
         $effectiveMargin = $actualRevenue > 0 ? ($actualVariableCosts / $actualRevenue) : $realizedVariableMargin;

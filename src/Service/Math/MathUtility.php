@@ -2506,10 +2506,13 @@ class MathUtility
     /**
      * Calculates factory and industrial throughput shifts from Federal Reserve G.17 capacity utilization.
      *
-     * Normalized using percentage point deviations divided by 100 to prevent runaway scaling.
+     * The shift is the utilization gap -- the deviation from the neutral rate -- carried into demand or
+     * overhead absorption at the sector's sensitivity. Both rate and baseline are FRACTIONS as G.17 and
+     * MacroEngine::CU_BASELINE express them (0.785, not 78.5), so their difference is already the gap in
+     * unit terms: 80.5% against a 78.5% neutral is 0.020, or two percentage points of slack absorbed.
      *
-     * @param float $cuRate      Industrial capacity utilization rate in percentage (e.g. 78.5).
-     * @param float $baseline    Neutral capacity utilization baseline (~78.5%).
+     * @param float $cuRate      Industrial capacity utilization rate as a fraction (e.g. 0.785).
+     * @param float $baseline    Neutral capacity utilization baseline as a fraction (~0.785).
      * @param float $sensitivity Sector throughput sensitivity multiplier.
      * @return float Throughput shift bounded in [-0.15, 0.15].
      */
@@ -2518,7 +2521,7 @@ class MathUtility
         float $baseline = MacroEngine::CU_BASELINE,
         float $sensitivity = 0.40
     ): float {
-        $deviation = ($cuRate - $baseline) / 100.0;
+        $deviation = $cuRate - $baseline;
         return max(-0.15, min(0.15, $deviation * $sensitivity));
     }
 

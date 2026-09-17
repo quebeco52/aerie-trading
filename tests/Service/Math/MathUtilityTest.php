@@ -1653,10 +1653,16 @@ class MathUtilityTest extends TestCase
         $this->assertEqualsWithDelta(0.015, $this->mathUtility->calculateBroadMoneyLiquidityShift(0.085, 0.055, 0.50), 0.0001);
 
         // 6. calculateCapacityUtilizationShift
-        // Neutral 78.5 -> 0.0
-        $this->assertEqualsWithDelta(0.0, $this->mathUtility->calculateCapacityUtilizationShift(78.5, 78.5), 0.0001);
-        // Shift to 80.5 (+2.0 points) -> (2.0 / 100) * 0.40 = 0.008 (+0.8%)
-        $this->assertEqualsWithDelta(0.008, $this->mathUtility->calculateCapacityUtilizationShift(80.5, 78.5, 0.40), 0.0001);
+        // Fed G.17 and MacroEngine::CU_BASELINE both express utilization as a FRACTION, so the helper is fed
+        // 0.785 rather than 78.5. Neutral 0.785 -> 0.0
+        $this->assertEqualsWithDelta(0.0, $this->mathUtility->calculateCapacityUtilizationShift(0.785, 0.785), 0.0001);
+        // Shift to 0.805 (+2.0 points of utilization) -> 0.020 * 0.40 = 0.008 (+0.8%)
+        $this->assertEqualsWithDelta(0.008, $this->mathUtility->calculateCapacityUtilizationShift(0.805, 0.785, 0.40), 0.0001);
+        // The live engine clamps utilization to [0.60, 0.92], so the reachable gap spans roughly -0.185 to
+        // +0.135. A boom at the physical ceiling has to clear the sector shock gates, which are set in the
+        // same units (SemiconductorBusinessModel::BOOM_CAPACITY_UTILIZATION_THRESHOLD = 0.030, i.e. 3 points).
+        $this->assertGreaterThan(0.030, $this->mathUtility->calculateCapacityUtilizationShift(0.92, 0.785, 1.0));
+        $this->assertLessThan(-0.030, $this->mathUtility->calculateCapacityUtilizationShift(0.60, 0.785, 1.0));
     }
 
     public function testBlissSlopeDecaySeparatesSlopeLoadingFromCurvatureHump(): void
