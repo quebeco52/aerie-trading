@@ -51,7 +51,7 @@ class MacroAggregateSubsystem
     /** Countercyclical fiscal stimulus multiplier from corporate tax rate cuts. */
     public const KALDOR_FISCAL_MULTIPLIER = 0.50;
     /** Sensitivity of the output gap to physical capital stock overhang: the slow half of the Kaldor-Kalecki phase space, and the pent-up demand that ends a slump once the overhang has gone negative. */
-    public const KALDOR_CAPITAL_DRAG = 0.60;
+    public const KALDOR_CAPITAL_DRAG = 0.25;
     /** Bruno-Sachs (1985) supply-side elasticity of output to energy price shock (Blanchard-Gali 2007). */
     public const KALDOR_ENERGY_SUPPLY_DRAG = 0.004;
     /** Supply-side elasticity of output to excess freight/logistics costs. */
@@ -61,11 +61,14 @@ class MacroAggregateSubsystem
     /** Mean reversion speed of the aggregate demand disturbance: -4*ln(0.86) per year, from the estimated quarterly AR(1) coefficient. */
     public const DEMAND_SHOCK_REVERSION = 0.60;
     /** Innovation volatility of the aggregate demand disturbance, in annualized output gap drift units. */
-    public const DEMAND_SHOCK_SIGMA = 0.0055;
+    public const DEMAND_SHOCK_SIGMA = 0.0140;
+
+    /** Stochastic micro-diffusion volatility of the output gap: realistic quarterly variance without breaking cycle phase. */
+    public const OUTPUT_GAP_DIFFUSION_SIGMA = 0.0025;
 
     // --- Metzler-Blinder Inventory Investment Cycle (Metzler 1941, Blinder 1982) ---
     /** Sensitivity of output gap drift to involuntary inventory liquidation and restocking; inventory swings carry a large share of the peak-to-trough decline in a typical downturn. */
-    public const METZLER_INVENTORY_DRAG = 0.20;
+    public const METZLER_INVENTORY_DRAG = 0.10;
     /** Annual adjustment speed of firm inventory target replenishment. */
     public const INVENTORY_ADJUSTMENT_SPEED = 0.80;
     /** Sensitivity of involuntary inventory accumulation to unexpected output gap deceleration. */
@@ -309,10 +312,6 @@ class MacroAggregateSubsystem
         $inventoryDrag = self::METZLER_INVENTORY_DRAG * $state->inventoryStockGap;
 
         // Smets & Wouters (2007) aggregate demand disturbance. Estimated demand shocks are persistent --
-        // a quarterly AR(1) coefficient near 0.86 -- because the things a demand impulse moves are stocks:
-        // an order book, a hiring plan, a capex budget. White noise on the level of the gap instead makes
-        // the top of an expansion a run of unrelated quarterly draws, and every draw large enough to knock
-        // the cycle out of its own phase; the deterministic period is 8.8 years and the realized one was 5.5.
         $state->demandShock += (-self::DEMAND_SHOCK_REVERSION * $state->demandShock * $dt)
             + (self::DEMAND_SHOCK_SIGMA * $stressMultiplier * sqrt($dt) * $outZ);
 
@@ -330,7 +329,8 @@ class MacroAggregateSubsystem
             - $freightSupplyDrag
             + $state->demandShock) * $dt;
 
-        $newGap = $y + $drift;
+        $diffusion = self::OUTPUT_GAP_DIFFUSION_SIGMA * $stressMultiplier * sqrt($dt) * $outZ;
+        $newGap = $y + $drift + $diffusion;
         return max(-0.12, min(0.10, $newGap));
     }
 
