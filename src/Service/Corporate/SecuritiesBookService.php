@@ -100,15 +100,7 @@ final class SecuritiesBookService
         // that the firm never took.
         $opening = $carryingYield ?? $marketYield;
 
-        // Maturities come back at par and are put to work at the current curve, which walks the blended
-        // carrying yield toward the market. This is why an unrealized loss heals on its own if the firm is
-        // never forced to sell, and it is the whole asymmetry of the mechanism.
-        //
-        // The pace is the book's own, not a constant: a evenly laddered portfolio retires one maturity a
-        // year, so a quarter reinvests 1/(4 x average life) of it, and duration stands in for average life.
-        // A long book therefore stays underwater far longer than a short one, which is the entire reason
-        // duration dispersion decides who survives a hiking cycle and who is still holding the loss when
-        // the depositors arrive.
+        // Portfolio rolldown: roll maturing paper into prevailing market yield paced by effective duration.
         $rolldown = 1.0 / (4.0 * max(1.0, $effectiveDuration));
         $rolled = ($opening * (1.0 - $rolldown)) + ($marketYield * $rolldown);
         $newCarryingYield = max(FinancialConstants::MIN_SECURITIES_CARRYING_YIELD, $rolled);

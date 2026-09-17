@@ -91,7 +91,7 @@
 				{# Filter Pills #}
 				<div class="flex items-center flex-wrap gap-1.5" id="macroCategoryPills">
 					<button class="macro-cat-btn px-3 py-1.5 text-xs font-bold rounded-lg transition-all whitespace-nowrap cursor-pointer bg-primary text-on-primary shadow-md shadow-primary/20" aria-pressed="true" data-category="all">
-						ALL <span class="ml-1 opacity-75 font-mono text-3xs">(21)</span>
+						ALL <span class="ml-1 opacity-75 font-mono text-3xs">(22)</span>
 					</button>
 					<button class="macro-cat-btn px-3 py-1.5 text-xs font-bold rounded-lg transition-all whitespace-nowrap cursor-pointer bg-surface-container text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface" aria-pressed="false" data-category="monetary">
 						MONETARY & YIELDS <span class="ml-1 opacity-75 font-mono text-3xs">(5)</span>
@@ -100,7 +100,7 @@
 						INFLATION & OUTPUT <span class="ml-1 opacity-75 font-mono text-3xs">(4)</span>
 					</button>
 					<button class="macro-cat-btn px-3 py-1.5 text-xs font-bold rounded-lg transition-all whitespace-nowrap cursor-pointer bg-surface-container text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface" aria-pressed="false" data-category="growth">
-						GROWTH & LABOR <span class="ml-1 opacity-75 font-mono text-3xs">(4)</span>
+						GROWTH & LABOR <span class="ml-1 opacity-75 font-mono text-3xs">(5)</span>
 					</button>
 					<button class="macro-cat-btn px-3 py-1.5 text-xs font-bold rounded-lg transition-all whitespace-nowrap cursor-pointer bg-surface-container text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface" aria-pressed="false" data-category="credit">
 						CREDIT & LIQUIDITY <span class="ml-1 opacity-75 font-mono text-3xs">(4)</span>
@@ -262,7 +262,7 @@
 									<h4 class="text-xs font-bold text-on-surface">Labor Market & Wage Dynamics</h4>
 									<span class="text-4xs font-mono text-primary/80 bg-primary/10 px-1.5 py-0.5 rounded border border-primary/20 shrink-0">BLS: UNRATE / JOLTS</span>
 								</div>
-								<p class="text-3xs text-on-surface-variant truncate">Unemployment rate vs structural NAIRU, job vacancies and annual wage growth</p>
+								<p class="text-3xs text-on-surface-variant truncate">Unemployment vs structural NAIRU, vacancies, and wage growth against the expected inflation it is bargained on</p>
 							</div>
 						</div>
 						<div class="flex items-center gap-2 shrink-0">
@@ -278,6 +278,37 @@
 					</div>
 					<div class="chart-canvas-container h-80 md:h-85 w-full relative">
 						<canvas id="macroLaborCreditChart"></canvas>
+					</div>
+				</div>
+
+				{# Chart: Household Wealth Effects #}
+				<div class="chart-card bg-surface-container-low border border-outline-variant/15 rounded-lg p-5 hover:border-outline-variant/30 transition-all flex flex-col justify-between" data-macro-category="growth">
+					<div class="flex items-start justify-between mb-3 gap-2">
+						<div class="flex items-center gap-2.5 min-w-0">
+							<div class="p-2 rounded bg-emerald-500/10 text-emerald-400 shrink-0">
+								<span class="material-symbols-outlined text-lg leading-none">savings</span>
+							</div>
+							<div class="min-w-0">
+								<div class="flex items-center gap-2 flex-wrap">
+									<h4 class="text-xs font-bold text-on-surface">Household Wealth &amp; Aggregate Demand</h4>
+									<span class="text-4xs font-mono text-primary/80 bg-primary/10 px-1.5 py-0.5 rounded border border-primary/20 shrink-0">FED: Z.1 / MPC</span>
+								</div>
+								<p class="text-3xs text-on-surface-variant truncate">Equity capitalisation over income against the level households have got used to, beside housing wealth and the demand both drive</p>
+							</div>
+						</div>
+						<div class="flex items-center gap-2 shrink-0">
+							<div class="hidden sm:flex flex-col items-end text-right">
+								<span class="text-4xs font-semibold uppercase tracking-wide text-on-surface-variant/70">Latest</span>
+								<span class="text-xs font-mono font-bold text-on-surface tabular-nums" id="hud-macroWealthEffectChart">-</span>
+							</div>
+							<span class="text-4xs font-semibold px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant uppercase tracking-wide">Demand</span>
+							<button type="button" class="expand-chart-btn p-1 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface transition-all cursor-pointer" title="Toggle Fullscreen / Expand">
+								<span class="material-symbols-outlined text-[15px] expand-icon">open_in_full</span>
+							</button>
+						</div>
+					</div>
+					<div class="chart-canvas-container h-80 md:h-85 w-full relative">
+						<canvas id="macroWealthEffectChart"></canvas>
 					</div>
 				</div>
 

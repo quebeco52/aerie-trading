@@ -159,16 +159,7 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
         $beta = $this->getOperatingCyclicality($stock);
         $physics['macro_demand_shift'] = $outputGap * $beta * self::MACRO_DEMAND_SCALAR;
 
-        // Tariffs are set by regulatory order, not by a smooth pass-through: frozen between cases while
-        // costs inflate, then stepped when the commission rules. Both the authorized tariff and the cost
-        // base it chases are CUMULATIVE levels, so what reaches price is the gap between them — the
-        // regulatory lag — taken off the same input inflation every other firm passes through.
-        //
-        // Substituting the cumulative tariff level for the parent's quarterly pass-through RATE compared a
-        // level against a rate, and the engine deflates the structural cost base by this very multiplier
-        // (EarningsEngine::generateCapacityAndRevenue): the tariff cancelled out of costs and stayed in
-        // revenue, so a granted order was pure margin. The intended squeeze inverted into a one-way
-        // ratchet that carried a regulated utility's operating margin from 20% past 45%.
+        // Regulatory lag: pricing power reflects authorized tariffs lagging cumulative input cost inflation.
         $physics['pricing_power_multiplier'] = $physics['input_cost_multiplier'] * (1.0 - $this->resolveTariffShortfall($stock));
 
         return $physics;
@@ -238,13 +229,7 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
         // most of it, but only after the true-up lag. The gap between the two is the regulatory-lag squeeze.
         $inputCostDrag = $this->resolveInputCostDrag($stock, $macroState, $streams, $this->resolvePricingPower($stock), $realizedVariableMargin);
 
-        // --- Rate Case Cycle ---
-        // Fuel is recovered automatically through adjustment clauses (above); everything else is not.
-        // Between orders the authorized tariff is FROZEN while wages, O&M and rate base keep inflating, so
-        // the utility earns steadily less than its allowed return — regulatory attrition. Management files
-        // when the gap is worth the cost of a case, waits out the 12 to 18 month lag, and receives an order
-        // granting part of the request. Modelling this as a smooth pass-through hid the whole cycle: a real
-        // utility is squeezed, files, waits, and steps.
+        // Rate case cycle: tariffs remain frozen between regulatory rate cases, resulting in regulatory attrition.
         $this->advanceRateCase($streams, $macroState);
 
         // --- Merchant Spark Spread Crush ---

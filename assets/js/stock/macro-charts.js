@@ -8,6 +8,7 @@ let macroMortgageChartInstance = null;
 let macroRiskChartInstance = null;
 let macroLaborChartInstance = null;
 let macroLaborCreditChartInstance = null;
+let macroWealthEffectChartInstance = null;
 let macroCommoditiesChartInstance = null;
 let macroPropertyChartInstance = null;
 let macroTradeLogisticsChartInstance = null;
@@ -47,7 +48,11 @@ function updateMacroHud(d) {
     setHud('hud-macroRatesChart', `PR: ${last(d.policyRateData).toFixed(2)}% | 10Y: ${last(d.yield10yData).toFixed(2)}%`);
     setHud('hud-macroMortgageChart', `30Y: ${last(d.mortgageYieldData).toFixed(2)}% | vs PR: ${last(d.spread30yData).toFixed(2)}%`);
     setHud('hud-macroRiskChart', `VIX: ${last(d.volData).toFixed(1)}% | ERP: ${last(d.erpData).toFixed(1)}%`);
-    setHud('hud-macroLaborCreditChart', `Unemp: ${last(d.unemploymentData).toFixed(1)}% | Wage: ${last(d.wageGrowthData).toFixed(1)}%`);
+    setHud('hud-macroLaborCreditChart', `Unemp: ${last(d.unemploymentData).toFixed(1)}% | Wage: ${last(d.wageGrowthData).toFixed(1)}% | Real: ${(last(d.wageGrowthData) - last(d.tipsBreakevenData)).toFixed(1)}%`);
+    const lastEquityGap = [...d.equityWealthGapData].reverse().find(v => v !== null && !isNaN(v));
+    setHud('hud-macroWealthEffectChart', lastEquityGap === undefined
+        ? `Equity: - | Housing: ${last(d.housingWealthGapData) >= 0 ? '+' : ''}${last(d.housingWealthGapData).toFixed(1)}%`
+        : `Equity: ${lastEquityGap >= 0 ? '+' : ''}${lastEquityGap.toFixed(1)}% | Housing: ${last(d.housingWealthGapData) >= 0 ? '+' : ''}${last(d.housingWealthGapData).toFixed(1)}%`);
     const lastTed = [...d.interbankSpreadBpsData].reverse().find(v => v !== null);
     setHud('hud-macroInterbankLiquidityChart', lastTed !== undefined ? `TED: ${lastTed.toFixed(0)} bps` : 'TED: -');
     setHud('hud-macroPropertyChart', `CRE: ${last(d.creEmaData).toFixed(1)} | Resi: ${last(d.residentialEmaData).toFixed(1)} | Starts: ${last(d.housingStartsData).toFixed(1)}`);
@@ -92,6 +97,7 @@ export function updateMacroCharts(reports, timeframe = currentMacroTimeframe) {
     let retailDefaultData = [], agriEmaData = [], freightEmaData = [], residentialEmaData = [];
     let interbankSpreadBpsData = [], creditSpreadBpsData = [];
     let jobVacanciesData = [], laborTightnessData = [], wageGrowthData = [];
+    let equityWealthRatioData = [], equityWealthTrendData = [], equityWealthGapData = [], housingWealthGapData = [];
     let naturalRateData = [], termPremiumData = [], riskNeutralData = [], balanceSheetData = [];
     let balanceSheetAssetsData = [];
     let nominalGdpGrowthData = [], realGdpGrowthData = [], potentialGdpGrowthData = [], tfpGrowthData = [];
@@ -190,6 +196,32 @@ export function updateMacroCharts(reports, timeframe = currentMacroTimeframe) {
         agriEmaData.push(parseFloat(report.agricultural_commodity_index_ema || report.agricultural_commodity_index || 100.0));
         freightEmaData.push(parseFloat(report.freight_rate_index_ema || report.freight_rate_index || 100.0));
         residentialEmaData.push(parseFloat(report.residential_property_index_ema || report.residential_property_index || 100.0));
+
+        // Household wealth, as the board's CAPITALISATION over income, taken straight off the engine's own
+        // ratio. Not an index level: a level is a tradable instrument's scale and is restated when that
+        // instrument splits, so it re-bases on a share-count cosmetic that household wealth never had.
+        //
+        // The ratio is currency over an index and so has no meaningful unit of its own. That does not
+        // matter: the gap is measured against the ratio's own trend, so the scale divides out, and the two
+        // level lines below are rebased to the window's own opening for display.
+        const rawWealthRatio = report.equity_wealth_ratio ?? report.equityWealthRatio ?? null;
+        const rawWealthTrend = report.equity_wealth_trend ?? report.equityWealthTrend ?? null;
+        const wealthRatio = rawWealthRatio === null ? 0 : parseFloat(rawWealthRatio);
+        const wealthTrend = rawWealthTrend === null ? 0 : parseFloat(rawWealthTrend);
+
+        // Zero is the engine's sentinel for a market it was never told about, which is not a market worth
+        // nothing: plot a gap rather than a collapse that never happened.
+        if (!(wealthRatio > 0) || !(wealthTrend > 0)) {
+            equityWealthRatioData.push(null);
+            equityWealthTrendData.push(null);
+            equityWealthGapData.push(null);
+        } else {
+            equityWealthRatioData.push(wealthRatio);
+            equityWealthTrendData.push(wealthTrend);
+            equityWealthGapData.push(((wealthRatio / wealthTrend) - 1.0) * 100.0);
+        }
+
+        housingWealthGapData.push((parseFloat(report.residential_property_index_ema || report.residential_property_index || 100.0) / 100.0 - 1.0) * 100.0);
 
         // The interbank columns were added to macro_report in Aug 2026 as NOT NULL, so every report written
         // before that reads 0.0000. The CIR process never drops below INTERBANK_MIN_SPREAD (1 bp), so a
@@ -350,7 +382,8 @@ export function updateMacroCharts(reports, timeframe = currentMacroTimeframe) {
     updateMacroHud({
         inflationData, outputGapData, policyRateData, yield10yData,
         mortgageYieldData, spread30yData, volData, erpData,
-        unemploymentData, wageGrowthData, interbankSpreadBpsData,
+        unemploymentData, wageGrowthData, tipsBreakevenData, interbankSpreadBpsData,
+        equityWealthGapData, housingWealthGapData,
         creEmaData, residentialEmaData, sentimentData, dealActivityData,
         energyPriceData, crackSpreadData, gscpiData, sovereignDebtData,
         termPremiumData, realGdpGrowthData, tfpGrowthData, recessionProbData,
@@ -377,7 +410,11 @@ export function updateMacroCharts(reports, timeframe = currentMacroTimeframe) {
     renderWhenVisible('macroRatesChart', () => renderMacroRatesChart(labels, policyRateData, yield2yData, yield5yData, yield10yData, spread2s10sData, targetRateData));
     renderWhenVisible('macroMortgageChart', () => renderMacroMortgageChart(labels, policyRateData, mortgageYieldData, spread30yData));
     renderWhenVisible('macroRiskChart', () => renderMacroRiskChart(labels, erpData, volData, creditSpreadBpsData, corpBorrowingData));
-    renderWhenVisible('macroLaborCreditChart', () => renderMacroLaborCreditChart(labels, unemploymentData, jobVacanciesData, wageGrowthData, nairuData));
+    renderWhenVisible('macroLaborCreditChart', () => renderMacroLaborCreditChart(labels, unemploymentData, jobVacanciesData, wageGrowthData, nairuData, tipsBreakevenData));
+    // The wealth ratio has no unit, so the level pair is shown relative to where the window opens.
+    const firstWealthRatio = equityWealthRatioData.find(v => v !== null && v > 0);
+    const rebase = (arr) => firstWealthRatio ? arr.map(v => v === null ? null : (v / firstWealthRatio) * 100.0) : arr;
+    renderWhenVisible('macroWealthEffectChart', () => renderMacroWealthEffectChart(labels, rebase(equityWealthRatioData), rebase(equityWealthTrendData), equityWealthGapData, housingWealthGapData, outputGapData));
     renderWhenVisible('macroCommoditiesChart', () => renderMacroCommoditiesChart(labels, energyPriceData, metalsEmaData, agriEmaData, crackSpreadData));
     renderWhenVisible('macroPropertyChart', () => renderMacroPropertyChart(labels, creEmaData, residentialEmaData, housingStartsData));
     renderWhenVisible('macroTradeLogisticsChart', () => renderMacroTradeLogisticsChart(labels, fxEmaData, freightEmaData, gscpiData));
@@ -745,7 +782,7 @@ function renderMacroRiskChart(labels, erpData, volData, creditSpreadBpsData, cor
     });
 }
 
-function renderMacroLaborCreditChart(labels, unemploymentData, jobVacanciesData, wageGrowthData, nairuData) {
+function renderMacroLaborCreditChart(labels, unemploymentData, jobVacanciesData, wageGrowthData, nairuData, tipsBreakevenData) {
     const canvas = document.getElementById('macroLaborCreditChart');
     if (!canvas) return;
     macroLaborCreditChartInstance = destroyChartInstance(macroLaborCreditChartInstance);
@@ -795,6 +832,20 @@ function renderMacroLaborCreditChart(labels, unemploymentData, jobVacanciesData,
                     tension: 0.3,
                     fill: false,
                     pointRadius: labels.length > 50 ? 0 : 2
+                },
+                {
+                    // Wage settlements are indexed to expected inflation one-for-one, so this is the line the
+                    // purple one is bargained against: the distance between them is productivity plus whatever
+                    // the labour market is worth, and a gap that opens is the spiral turning.
+                    label: 'Expected Inflation (Wage Anchor)',
+                    data: tipsBreakevenData,
+                    borderColor: '#c4b5fd',
+                    backgroundColor: '#c4b5fd',
+                    borderWidth: 1.8,
+                    borderDash: [5, 4],
+                    tension: 0.3,
+                    fill: false,
+                    pointRadius: labels.length > 50 ? 0 : 1
                 }
             ]
         },
@@ -2177,6 +2228,116 @@ function renderMacroFaitChart(labels, faitGapData, faitOffsetBpsData, policyRate
     });
 }
 
+function renderMacroWealthEffectChart(labels, ratioData, trendData, equityGapData, housingGapData, outputGapData) {
+    const canvas = document.getElementById('macroWealthEffectChart');
+    if (!canvas) return;
+    macroWealthEffectChartInstance = destroyChartInstance(macroWealthEffectChartInstance);
+    const ctx = canvas.getContext('2d');
+
+    macroWealthEffectChartInstance = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    // The distance between the two right-hand lines, and the only part of household wealth
+                    // that reaches aggregate demand.
+                    label: 'Equity Wealth Gap',
+                    data: equityGapData,
+                    borderColor: '#f472b6',
+                    backgroundColor: 'rgba(244, 114, 182, 0.15)',
+                    borderWidth: 2.2,
+                    tension: 0.25,
+                    fill: true,
+                    spanGaps: false,
+                    yAxisID: 'y',
+                    pointRadius: labels.length > 50 ? 0 : 1.5
+                },
+                {
+                    label: 'Housing Wealth Gap',
+                    data: housingGapData,
+                    borderColor: '#fb923c',
+                    borderWidth: 2,
+                    tension: 0.25,
+                    fill: false,
+                    yAxisID: 'y',
+                    pointRadius: labels.length > 50 ? 0 : 1.5
+                },
+                {
+                    label: 'Output Gap',
+                    data: outputGapData,
+                    borderColor: '#38bdf8',
+                    borderWidth: 2,
+                    tension: 0.25,
+                    fill: false,
+                    yAxisID: 'y',
+                    pointRadius: labels.length > 50 ? 0 : 1
+                },
+                {
+                    label: 'Equity Wealth (Cap / GDP)',
+                    data: ratioData,
+                    borderColor: '#34d399',
+                    borderWidth: 2,
+                    tension: 0.25,
+                    fill: false,
+                    spanGaps: false,
+                    yAxisID: 'y1',
+                    pointRadius: labels.length > 50 ? 0 : 1
+                },
+                {
+                    // What households have got used to. The effect is measured from THIS, not from 100:
+                    // a valuation they have had for years has long since stopped being news.
+                    label: 'Wealth Trend (3Y)',
+                    data: trendData,
+                    borderColor: '#94a3b8',
+                    borderWidth: 1.8,
+                    borderDash: [5, 4],
+                    tension: 0.25,
+                    fill: false,
+                    spanGaps: false,
+                    yAxisID: 'y1',
+                    pointRadius: 0
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+                legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } },
+                tooltip: {
+                    callbacks: {
+                        label: (ctx) => ctx.dataset.yAxisID === 'y1'
+                            ? `${ctx.dataset.label}: ${ctx.raw === null ? 'n/a' : ctx.raw.toFixed(1)}`
+                            : `${ctx.dataset.label}: ${ctx.raw === null ? 'n/a' : ctx.raw.toFixed(2) + '%'}`
+                    }
+                }
+            },
+            scales: {
+                y: {
+                    type: 'linear',
+                    position: 'left',
+                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    ticks: { callback: (val) => val.toFixed(0) + '%' },
+                    title: { display: true, text: 'Deviation from Normal (%)' }
+                },
+                y1: {
+                    type: 'linear',
+                    position: 'right',
+                    grid: { drawOnChartArea: false },
+                    ticks: { callback: (val) => val.toFixed(0) },
+                    title: { display: true, text: 'Wealth Index (100 = window start)' }
+                },
+                x: {
+                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    ticks: { maxTicksLimit: 8 }
+                }
+            }
+        }
+    });
+}
+
 function renderMacroLeadingIndicatorsChart(labels, pmiData, housingStartsData, moneySupplyGrowthData, tradeBalanceData, ppiData) {
     const canvas = document.getElementById('macroLeadingIndicatorsChart');
     if (!canvas) return;
@@ -2289,7 +2450,7 @@ function renderMacroLeadingIndicatorsChart(labels, pmiData, housingStartsData, m
 export function resizeMacroCharts() {
     const instances = [
         macroEconomyChartInstance, macroRatesChartInstance, macroMortgageChartInstance,
-        macroRiskChartInstance, macroLaborChartInstance, macroLaborCreditChartInstance,
+        macroRiskChartInstance, macroLaborChartInstance, macroLaborCreditChartInstance, macroWealthEffectChartInstance,
         macroCommoditiesChartInstance, macroPropertyChartInstance, macroTradeLogisticsChartInstance,
         macroSentimentChartInstance, macroGovtSpendingChartInstance, macroInterbankLiquidityChartInstance,
         macroTermPremiumChartInstance, macroGdpGrowthChartInstance, macroBalanceSheetChartInstance,
@@ -2314,6 +2475,7 @@ export function destroyMacroCharts() {
     macroRiskChartInstance = destroyChartInstance(macroRiskChartInstance);
     macroLaborChartInstance = destroyChartInstance(macroLaborChartInstance);
     macroLaborCreditChartInstance = destroyChartInstance(macroLaborCreditChartInstance);
+    macroWealthEffectChartInstance = destroyChartInstance(macroWealthEffectChartInstance);
     macroCommoditiesChartInstance = destroyChartInstance(macroCommoditiesChartInstance);
     macroPropertyChartInstance = destroyChartInstance(macroPropertyChartInstance);
     macroTradeLogisticsChartInstance = destroyChartInstance(macroTradeLogisticsChartInstance);

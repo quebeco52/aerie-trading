@@ -119,16 +119,7 @@ final class MarginEngine
             + (FinancialConstants::MAINTENANCE_MARGIN_SHORT * $shortMarketValue)
             + $optionRequirement;
 
-        // What is left after the current book is collateralized, geared up by the initial requirement. At a
-        // 50% requirement a dollar of free equity supports two dollars of new position.
-        //
-        // Resting buys come off the top. They are not positions yet, so they do not consume equity, but the
-        // capacity behind them is spoken for: without this the same free equity backs every order placed
-        // against it, and an account can work ten orders it can only afford one of.
-        //
-        // Written contracts enter at their own requirement rather than at the Reg-T half, because that
-        // requirement IS the collateral rule for them. Long contracts are excluded entirely: listed options
-        // have no loan value, so a long position neither consumes capacity nor creates it.
+        // Buying power: free equity above initial requirement scaled by Reg-T initial margin less open buy commitments.
         $initialRequirement = (FinancialConstants::INITIAL_MARGIN_REQUIREMENT * ($longMarketValue + $shortMarketValue))
             + $optionRequirement;
         $buyingPower = max(0.0, ($equity - $initialRequirement) / FinancialConstants::INITIAL_MARGIN_REQUIREMENT - $openBuyCommitment);

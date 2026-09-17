@@ -38,12 +38,7 @@ class CorporateLedgerService
         $conn = $this->entityManager->getConnection();
         $paidAtStr = $paidAt->format('Y-m-d H:i:s');
 
-        // Holdings are user_stocks plus the shares sitting in escrow behind an open SELL, and nothing else.
-        // A SELL has already had its shares removed from user_stocks by the trade engine, so it has to be
-        // added back or the seller is underpaid for shares they still own until the order fills. An open BUY
-        // is deliberately excluded: it has escrowed CASH, not shares, and the user does not own them yet.
-        // Paying on it would let anyone park a limit buy far below market and collect dividends indefinitely
-        // on stock they never bought, with the escrow still refundable on cancel.
+        // Holdings include user_stocks plus escrowed shares from open SELL orders (open BUY orders escrow cash, not shares).
         $conn->executeStatement(
             "INSERT INTO dividend_payment
                  (user_id, asset_type, ticker, shares_held, dividend_per_share, amount, paid_at)
@@ -170,16 +165,7 @@ class CorporateLedgerService
                     ['stock_id' => $stock->getId()]
                 );
 
-                // 2. Settle the fractional remnant in cash, in whichever direction the position runs.
-                //
-                // The share count rounds TOWARD ZERO for both signs, which is what the TRUNCATE below does
-                // and what FLOOR did not: floor rounds toward negative infinity, so a 105-share short at a
-                // 1-for-10 became eleven shares short rather than ten, and the borrower was handed half a
-                // share of extra exposure they never asked for and were never paid for.
-                //
-                // The remnant carries the position's sign, so a long is CREDITED for the fraction bought out
-                // of them and a short is DEBITED for the fraction they have to buy in. Both settle at the
-                // pre-split price, which is the same price the escrow leg below uses.
+                // Settle fractional remnant in cash at pre-split price, rounding toward zero to preserve exposure.
                 foreach ($holdings as $holding) {
                     $qty = (float) $holding['quantity'];
                     $newQty = $qty < 0.0
@@ -197,24 +183,7 @@ class CorporateLedgerService
                     }
                 }
 
-                // 3. Cash out the fractional remnant sitting in ESCROW, on the same terms as the holdings
-                // above and BEFORE the bulk rewrite below reaches it.
-                //
-                // An open order is not idle: a BUY has had limit x quantity debited from cash, and a SELL has
-                // had its shares removed from user_stocks. The rewrite below rescales both legs by FLOOR, so
-                // an order of 15 shares at $2 became 1 share at $20 and $10 of committed cash simply ceased
-                // to exist; an order that floored to zero was cancelled outright by the sweep further down
-                // and lost the whole escrow, because that sweep is raw SQL and refunds nothing. Refunding
-                // limit x (quantity MOD factor) leaves the surviving order holding exactly what it still
-                // needs, so escrow value is conserved across the split and across a later cancel.
-                //
-                // Only those two sides are refunded, because only those two escrow anything. A resting SHORT
-                // locates its borrow and posts its margin at the fill, and a resting COVER is the closing leg
-                // of a position that is already collateralized (TradeExecutionService): neither has committed
-                // a dollar or a share to refund. Falling through to a share valuation on ELSE paid both of
-                // them the remnant at the pre-split price, which is cash created from nothing and parkable —
-                // leave a resting short on a name heading for a reverse split and collect. The dividend
-                // statement at the top of this class already filters to SELL for the same reason.
+                // Refund fractional escrow remnants: return uncommitted cash for BUY orders and credit cash for SELL remnants.
                 $conn->executeStatement(
                     "UPDATE users u
                      INNER JOIN (
@@ -283,13 +252,7 @@ class CorporateLedgerService
                     ['factor' => $splitFactor, 'stock_id' => $stock->getId()]
                 );
 
-                // Executed history is restated too, or the cost basis derived from it is left in pre-split
-                // units against a post-split holding: after a 1-for-10 the same money reads as ten times the
-                // shares at a tenth the price, and the position shows a phantom gain that never happened.
-                // GREATEST(..., 1) rather than 0: an executed trade that floors away takes its whole
-                // consideration out of the basis pool with it, and a position built from orders all smaller
-                // than the factor lost every one of them at once — the cost basis then had no shares to
-                // average over and the page printed no cost at all against a position the holder still held.
+                // Restate executed order history to maintain cost basis consistency post-split.
                 $conn->executeStatement(
                     "UPDATE trade_orders
                      SET quantity = GREATEST(FLOOR(quantity / :factor), 1),
@@ -326,9 +289,7 @@ class CorporateLedgerService
                     ['factor' => $splitFactor, 'ticker' => $stock->getTicker()]
                 );
 
-                // Executed history is restated too, or the cost basis derived from it is left in pre-split
-                // units against a post-split holding: after a 4-for-1 a position bought for $4,000 reads as
-                // having cost $16,000 and the page shows a 75% loss the holder never took.
+                // Restate executed order history to maintain cost basis consistency post-split.
                 $conn->executeStatement(
                     "UPDATE trade_orders
                      SET quantity = IF(quantity > 9223372036854775807 / :factor, 9223372036854775807, quantity * :factor),
@@ -340,12 +301,7 @@ class CorporateLedgerService
                 );
             }
 
-            // The feed is restated with the ledger. Event text carries per-share figures — the quarter's
-            // EPS, the surprise against consensus, the dividend paid — and a share count for buybacks, all
-            // written in the units of their day. Every price and share count above has just been moved to
-            // the new basis, so left alone the feed reads "Q-Earnings: $11.75" one quarter and "$3.56" the
-            // next across a 4-for-1 that changed nothing about the business. EVA and totals are dollar
-            // amounts, not per-share, and are left as they are.
+            // Restate historical event descriptions so per-share metrics (EPS, dividends, prices) reflect post-split scale.
             $this->restateEventDescriptions($conn, $stock, $isReverse ? $splitFactor : 1.0 / $splitFactor);
 
             $conn->commit();

@@ -366,23 +366,7 @@ class MathUtility
         float $sectorZ = 0.0,
         float $sectorVarianceShare = 0.0
     ): float {
-        // Orthogonal three-way variance decomposition: market, sector, idiosyncratic.
-        //
-        // The market loading is beta * marketVol OUTRIGHT, which is the definition of beta and is therefore
-        // exact at every step and at every level of market volatility. It used to be derived the other way
-        // round — an implied correlation beta * marketVol / sigma, clamped below one — which silently
-        // truncated the loading of any name whose instantaneous volatility fell short of what its beta
-        // demanded. Measured against the market factor a configured beta of 1.3 realized 1.19 and, when
-        // market volatility tripled in a crisis, 0.45, while the CAPM drift kept paying the full figure.
-        //
-        // What the Heston state carries is now the IDIOSYNCRATIC volatility, and total volatility is
-        // sqrt((beta * marketVol)^2 + sigma_idio^2) — so a name gets more volatile when the market does,
-        // through its beta, which is the empirical regularity the clamped form could only approximate.
-        //
-        // A sector factor takes a share of the non-market residual: a single common factor makes two banks
-        // correlated only through their betas, so a sector rotation is invisible in prices between earnings
-        // dates. Loadings are square roots of shares that sum to one, so the residual's variance is
-        // unchanged either way.
+        // Three-way orthogonal variance decomposition: systematic market factor, sector factor, and idiosyncratic residual.
         $boundedShare = max(0.0, min(1.0, $sectorVarianceShare));
         $residualVol = max(0.0, $idiosyncraticVolatility);
         $sectorLoading = $residualVol * sqrt($boundedShare);
@@ -393,8 +377,7 @@ class MathUtility
         $sectorDrift = $sectorLoading * $sectorZ * $sqrtDt;
         $idiosyncraticDrift = $idiosyncraticLoading * $w1 * $sqrtDt;
 
-        // The Ito correction is taken on TOTAL variance, since that is the variance of the step being
-        // exponentiated; using the residual alone would leave a high-beta name with an upward bias.
+        // Apply Ito correction to total variance (systematic plus idiosyncratic).
         $totalVariance = ($beta * $marketVol * $beta * $marketVol) + ($residualVol * $residualVol);
 
         $gbmExponent = ($drift + $gravityDrift - 0.5 * $totalVariance) * $dt
@@ -621,12 +604,7 @@ class MathUtility
             $priceMultiplier = exp($jumpSize);
             $shockPct = ($priceMultiplier - 1.0) * 100.0;
 
-            // Variance Jump (Contemporaneous)
-            // Market crashes usually spike volatility harder than market rallies.
-            //
-            // Guarded because the mean is a caller-supplied quantity that is legitimately zero: the per-name
-            // mean is derived from the stock's own volatility, and a name whose volatility state has been
-            // zeroed would divide by it. A zero mean is a jump with no variance component, not a fatal.
+            // Contemporaneous variance jump (crashes spike volatility more than rallies).
             $varJump = 0.0;
             if ($muV > 0.0) {
                 $meanVarJump = $isUpJump ? ($muV * self::VARIANCE_JUMP_UPSIDE_MEAN_SHARE) : $muV;

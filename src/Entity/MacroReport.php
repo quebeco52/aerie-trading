@@ -86,6 +86,16 @@ class MacroReport
     #[ORM\Column(type: Types::DECIMAL, precision: 15, scale: 4)]
     private ?string $nominalGdpIndex = null;
 
+    // The wealth ratio and its trend, NOT the capitalisation they are built from. Capitalisation is a raw
+    // nominal quantity that compounds with the economy forever and so outgrows any fixed-width column; the
+    // ratio divides nominal GDP back out and is stationary. It lives on the wire and in Redis, where it
+    // costs nothing, and only these two reach the history table.
+    #[ORM\Column(type: Types::DECIMAL, precision: 24, scale: 2, nullable: true)]
+    private ?string $equityWealthRatio = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 24, scale: 2, nullable: true)]
+    private ?string $equityWealthTrend = null;
+
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4)]
     private ?string $marketVolatility = null;
 

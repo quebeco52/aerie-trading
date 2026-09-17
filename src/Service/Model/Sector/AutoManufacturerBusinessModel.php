@@ -183,12 +183,7 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
         $policyRate = $macroState->policyRateEma;
         $beta = $this->getOperatingCyclicality($stock);
 
-        // A vehicle is a consumer durable, not industrial capex. The heavy-manufacturing parent reads the cycle
-        // twice (an amplified output gap plus the manufacturing PMI, which leads the same industrial cycle)
-        // and this model then adds household sentiment and financing rates on top, so a mild slowdown
-        // (gap -1%, sentiment -15) produced a -25% volume drop, which is the 2008-09 collapse, not 1991
-        // (-12%) or 2001 (-2%). Demand here is the output gap at the sector's own cyclicality plus the two
-        // household channels; the PMI belongs to the firms that sell machinery, not to their customers.
+        // Model consumer durable demand using lagged output gap and FX demand shift.
         $physics['macro_demand_shift'] = ($this->resolveLaggedOutputGap($stock, $macroState) * $beta)
             + $this->resolveFxDemandShift($macroState);
 
@@ -203,8 +198,7 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
 
         $physics['macro_demand_shift'] -= $ratePenalty;
 
-        // FIX: Tamed the sentiment multiplier from 1.50 to 0.40.
-        // A -40 point drop in sentiment for a 1.75 beta stock now results in a realistic -28% demand drop.
+        // Consumer sentiment impact on demand scaled by beta.
         $sentimentShift = $macroState->sentimentDeviation();
         $physics['macro_demand_shift'] += ($sentimentShift * $beta * 0.40);
 
@@ -277,9 +271,7 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
 
         $apexMacroBoost = $wealthEffect + $qeLiquidityBoost + $veblenInflationPower;
 
-        // Input cost basket on physical manufacturing: energy, metals, ocean freight, components and line payroll,
-        // recovered in transaction prices at the OEM's pricing power. The drag is struck on the blended cost base
-        // and lands entirely on the mass-market fleet, so it is regrossed by that stream's weight below.
+        // Input cost basket drag on manufacturing recovered at pricing power, allocated to mass-market volume.
         $inputCostDrag = $this->resolveInputCostDrag($stock, $macroState, $streams, $pricingPower, $realizedVariableMargin);
         $gscpiShift = max(0.0, $macroState->supplyChainPressureIndexEma - MacroEngine::GSCPI_BASELINE);
         $inflationCostPenalty = ($inputCostDrag / max(0.05, $salesWeight)) + ($gscpiShift * self::SUPPLY_CHAIN_PRESSURE_COST_SCALAR * (1.0 - ($pricingPower * 0.50)));

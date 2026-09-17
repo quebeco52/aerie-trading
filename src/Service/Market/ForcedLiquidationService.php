@@ -245,12 +245,7 @@ final class ForcedLiquidationService
             'required' => $status->maintenanceRequirement,
         ]);
 
-        // Written contracts are bought back FIRST, and the order is not a preference. A written call is
-        // collateralized by stock the account holds, so selling that stock turns a covered position into a
-        // naked one and RAISES the requirement the sale was meant to reduce — a sweep that reached for the
-        // shares first could liquidate an entire account without ever clearing the call. Closing the
-        // contract releases the requirement outright, and it is also the only leg here whose loss is
-        // unbounded, which is the other reason a desk closes it before anything else.
+        // Written contracts are bought back first to eliminate short option assignment and naked margin risk.
         $closed = $this->closeWrittenOptions($user);
 
         if ($closed > 0) {

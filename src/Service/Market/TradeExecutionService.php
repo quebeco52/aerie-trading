@@ -264,12 +264,7 @@ class TradeExecutionService
                             throw new \Exception('Stop orders are for equities and funds.');
                         }
                     } elseif ($action === 'COVER') {
-                        // A resting COVER escrows nothing, for the same reason it is not gated on buying
-                        // power: it is the closing leg of a position that is already collateralized. Holding
-                        // the cash here would do the opposite of what the fill does — the borrow stays open
-                        // while the cash leaves, so equity falls by the full notional while the requirement
-                        // does not move, and the account can be called for placing the one order that would
-                        // have saved it. The purchase is paid for when it fills.
+                        // Resting COVER escrows nothing: closing leg of an already-collateralized position.
                         $held = $userAsset !== null ? (int) $userAsset->getQuantity() : 0;
                         if ($held >= 0 || abs($held) < $quantity) {
                             throw new \Exception('No short position of that size to cover.');
@@ -419,12 +414,7 @@ class TradeExecutionService
             return;
         }
 
-        // Buying power gates new exposure only. COVER closes a borrow: it releases the collateral standing
-        // behind the position, so the maintenance requirement falls by more than the cash the purchase
-        // consumes and the account ends up safer than it started. Gating it would block the one trade that
-        // repairs a distressed short — and since buying power at the Reg-T initial requirement is zero by
-        // construction, it blocked covering on healthy accounts too, which silently disabled every forced
-        // buy-in in ForcedLiquidationService and left the recall leg of a squeeze unable to complete.
+        // Buying power gates new exposure only; COVER closes existing short exposure.
         if (!in_array($action, self::EXPOSURE_INCREASING_ACTIONS, true)) {
             return;
         }
@@ -481,12 +471,7 @@ class TradeExecutionService
         $order->setFilledAt(new \DateTime());
 
         if ($assetType === 'STOCK' || $assetType === 'ETF') {
-            // A cover buys stock and a short sells it, so flow follows the side rather than the label.
-            //
-            // A fund is included because demand for the FUND is what pushes it off its basket. Without this
-            // the fund was a calculated number that no amount of buying could move, which is the same as
-            // saying it had no market of its own — and a fund with no market of its own cannot trade at a
-            // discount, which is the one figure a fund publishes that its basket cannot.
+            // Record order flow by execution direction (buy/cover vs sell/short) for stocks and ETFs.
             $this->orderFlow->record($ticker, self::isBuySide($action) ? (float) $quantity : -(float) $quantity);
         }
     }
@@ -630,14 +615,7 @@ class TradeExecutionService
                 $executionPrice
             );
 
-            // A resting order fills at or better than its limit, never through it. The touch that triggered
-            // this fill was the mid, and the spread and the order's own impact sit on top of it: without
-            // this check a BUY resting at 100 could fill at 100.30 the moment the mid ticked to 100.
-            //
-            // A PLAIN STOP has no such promise and must not be given one. It accepts whatever the book
-            // quotes once it is triggered — that is what a stop is, and refusing the fill here would turn
-            // every stop-loss into an order that silently declines to work in exactly the fast market it
-            // was placed for. It is also what makes a cluster of them cascade.
+            // Enforce limit price cap on resting limit orders, while plain stop orders accept market quote.
             if ($order->hasLimitCap() && !self::limitAllowsFill($order->getAction(), $limitPrice, $quote->executionPrice)) {
                 $this->em->getConnection()->rollBack();
                 return;
@@ -650,13 +628,7 @@ class TradeExecutionService
             $considerationStr = \bcmul(MathUtility::formatDecimal($fillPrice, 4), (string) $quantity, 4);
 
             if ($action === 'COVER') {
-                // Nothing was escrowed when this rested, so the purchase is paid for now. It needs no
-                // funding gate for the same reason the immediate path does not: the cash out and the borrow
-                // released cancel in equity, and the requirement falls by the short's maintenance rate.
-                //
-                // The position is re-checked here rather than trusted from placement: the short can have
-                // been closed by another order, by a buy-in, or by this same order filling in pieces while
-                // this one rested, and covering stock the account no longer owes would open a long.
+                // Process fill for resting COVER: settle consideration and verify existing short position.
                 $held = $userAsset !== null ? (int) $userAsset->getQuantity() : 0;
                 if ($held >= 0 || abs($held) < $quantity) {
                     $this->em->getConnection()->rollBack();
@@ -748,14 +720,7 @@ class TradeExecutionService
     {
         $conn = $this->em->getConnection();
 
-        // Two numbers, not four, because the ticker asks one question per side: has the price fallen to
-        // anything, and has it risen to anything. A buy limit and a SELL STOP are both woken by a fall, and
-        // a sell limit and a BUY STOP are both woken by a rise, so each pair folds into one bound and the
-        // ticker needs no change to see stops at all.
-        //
-        // Every side is counted. This previously asked only about BUY and SELL, so a resting SHORT or
-        // COVER wrote bounds of zero and infinity and was then never checked again — the order rested
-        // forever against a price that had already gone through it.
+        // Price touch trigger bounds: compute upper and lower activation triggers for all resting order types.
         $lowerSql = "SELECT MAX(CASE
                 WHEN order_type IN ('LIMIT', 'STOP_LIMIT') AND action IN ('BUY', 'COVER') THEN limit_price
                 WHEN order_type IN ('STOP', 'STOP_LIMIT') AND action IN ('SELL', 'SHORT') THEN stop_price

@@ -179,16 +179,7 @@ class DebtEngine
         $ebitdaLimit = $metrics['ebitda_limit'];
         $equityLimit = $metrics['equity_limit'];
 
-        // MERTON'S STRUCTURAL MODEL OF DEFAULT
-        // Prices corporate credit spreads dynamically based on Default Probability
-        // The default probability runs to MERTON_HORIZON_YEARS, so the volatility it is struck on has to be
-        // the volatility expected to prevail over that horizon, not today's. Spot volatility here is ratcheted
-        // by every material earnings surprise and capped at MAX_VOLATILITY_MULTIPLIER times baseline, so a
-        // cyclical firm whose earnings routinely surprise sat permanently at 3x its structural volatility.
-        // Carried undiminished through a five-year d2, that alone drove an issuer with a Safe Altman score,
-        // 6x interest coverage and compounding equity to a D rating, which shut it out of the primary market
-        // and defaulted it on the next maturity. Averaging the mean-reverting process over the horizon prices
-        // the shock for as long as it is actually expected to last.
+        // Merton model default probability: average mean-reverting equity volatility over the Merton horizon.
         $spotVolatility = max(0.05, (float) ($stock->getCurrentVolatility() ?? $stock->getVolatility()));
         $structuralVolatility = max(0.05, (float) ($stock->getVolatility() ?: $spotVolatility));
         $equityVolatility = $this->mathUtility->averageMeanRevertingVolatility(
@@ -352,13 +343,7 @@ class DebtEngine
 
         $netDebtCapital = $strategy->getNetDebtCapital($currentDebt, $wholesaleDebt, $treasury);
 
-        // Levered Beta (The Penalty for Greed)
-        // The firm's own signed beta goes into Hamada. Leverage multiplies systematic exposure, so it
-        // amplifies the magnitude and can never flip the sign: a levered hedge is a bigger hedge, not a
-        // market-following asset. The previous max(0.5, abs(beta)) did two ad-hoc jobs at once and did both
-        // badly. abs() erased the very sign that makes an inverse-beta name a hedge, and the 0.5 floor
-        // handed every firm below it an identical cost of equity, so a water utility at 0.15 and an
-        // industrial REIT at 0.50 were discounted at exactly the same rate.
+        // Hamada levered beta: preserves signed beta magnitude while adjusting for capital structure leverage.
         $baseBeta = (float) $stock->getBeta();
 
         // For Beta Levering and WACC weights, we MUST use Market Value of Equity, not Book Value!
@@ -374,17 +359,7 @@ class DebtEngine
         $equityRiskPremium = $macroState->equityRiskPremium;
         $costOfEquity = $this->mathUtility->calculateCAPM($policyRate, $leveredBeta, $equityRiskPremium);
 
-        // Absolute priority. CAPM on its own is happy to hand a negative-beta hedge a required return below
-        // the risk-free rate, which is defensible as portfolio theory and indefensible as a hurdle rate: no
-        // board funds projects below what its own lenders charge. Equity is the junior claim on the same
-        // cash flows, so it cannot require less than the debt ranking above it.
-        //
-        // The floor is the MARGINAL rate the firm would borrow at today, not its blended book cost. A firm
-        // carrying cheap legacy fixed-rate debt has a funding advantage, not less risk, and discounting its
-        // equity at that stale rate would capitalise the advantage twice. Using the current market rate also
-        // makes the floor carry the firm's own credit risk, so a distressed fund is floored at its junk
-        // yield while a fortress utility is floored just over the policy rate. The distress premium below is
-        // added on top of this structural minimum.
+        // Absolute priority hurdle: cost of equity floored at marginal market borrowing rate.
         $costOfEquity = max($debtMetrics->currentMarketRate, $costOfEquity);
 
         // Weighted Average Cost of Capital (WACC)
@@ -458,18 +433,7 @@ class DebtEngine
         $icrBuffer = $strategy->getRequiredIcrBuffer();
         $canIssueDebt = $interestCoverage >= ($minIcr + $icrBuffer);
 
-        // MAINTENANCE LEVERAGE COVENANT (Net Debt / EBITDA)
-        // The cash-flow twin of the D/E limit below, and the test that actually binds a capital-intensive
-        // borrower. Interest coverage is rate-sensitive, so cheap debt keeps it healthy while leverage
-        // compounds; book equity moves far too slowly to register an earnings collapse. This ratio is the
-        // one that reacts to the earnings side, which is why a breach here is what forces deleveraging in
-        // a downturn.
-        //
-        // Struck on funded debt only. Market convention (the frozen-GAAP clause most credit agreements
-        // carry) excludes capitalized operating leases, and including them would oblige us to gross the
-        // rent back into EBITDA to keep numerator and denominator on the same basis.
-        //
-        // A 999.0 sentinel exempts the sector: a bank's binding constraint is its capital ratio, not this.
+        // Maintenance leverage covenant: Net Debt / EBITDA constraint on funded debt.
         $ebitdaCovenantLimit = (float) ($metrics['ebitda_limit'] ?? self::DEFAULT_EBITDA_COVENANT_LIMIT);
         $netDebtToEbitda = $debtMetrics->ebitda > 0.0
             ? min(self::MAX_LEVERAGE_RATIO, $netDebtCapital / $debtMetrics->ebitda)

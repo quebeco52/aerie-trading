@@ -257,19 +257,11 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
      */
     public function getTargetMetrics(Stock $stock, MacroStateDTO $macroState, MathUtility $mathUtility): array
     {
-        // Statutory surplus, not book equity. Underwriting capacity is rationed on the ratio a regulator
-        // computes, and statutory accounting carries the bond portfolio at amortized cost — so a selloff
-        // that has already taken a fifth of the float portfolio does not take any of the capacity with it.
-        // That insulation is real and it is the reason underwriters kept writing through 2022. The mark
-        // still reaches the share price through book equity; it just does not reach the licence to write.
+        // Underwriting capacity is rationed against statutory surplus (amortized-cost equity).
         $equity = $stock->getAmortizedCostEquity();
         $stableMargin = max(0.01, (float) $stock->getOperatingMargin());
 
-        // --- THE CLEAR BALANCE SHEET MATH ---
-        // 1. Capacity Constraint: Revenue must NEVER be reverse-engineered from target EBIT.
-        // It must be mathematically clamped to the firm's physical capital to prevent hyperinflation.
-
-        // Standard Premium-to-Surplus ratio is 1.5x (maintains strong credit ratings).
+        // 1. Capacity Constraint: clamp revenue to physical capital capacity (Kenney ratio = 1.5x).
         $capacityRatio = self::KENNEY_CAPACITY_RATIO;
         // Prevent zombie state: Regulators allow insolvent insurers to operate in runoff using a fraction of their float as implied equity
         $impliedRunoffEquity = (float) $stock->getCustomerDeposits() * self::IMPLIED_RUNOFF_EQUITY;
@@ -277,15 +269,10 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
 
         $taxRate = $macroState->corporateTaxRate;
 
-        // 2. Structural Revenue is anchored strictly to their capacity limit and required policy reserves.
-        // Capacity is the ceiling, not the plan: an underwriter offered a rate its own capital cannot earn
-        // a return on writes less of the book rather than all of it (see resolveWrittenCapacity()).
+        // 2. Structural Revenue anchored to written capacity and solvency limits.
         $targetRevenue = $operatingEquity * $capacityRatio
             * $this->resolveWrittenCapacity($stock, $macroState, $mathUtility, $operatingEquity, $capacityRatio * $stableMargin * (1.0 - $taxRate));
-        // Hard Market Revenue Floor: post-catastrophe pricing power prevents revenue from collapsing
-        // proportionally with surplus. Industry-wide capacity depletion supports premium rates. It doubles
-        // as the runoff lag on a withdrawal: a book of annual treaties cannot be put down faster than it
-        // comes up for renewal, and this floor lets at most 15% of it go in any one quarter.
+        // Hard market floor prevents abrupt revenue collapse following catastrophe-driven surplus drawdown.
         $priorRevenue = (float) $stock->getTotalRevenue();
         $targetSurplusForPriorRevenue = $priorRevenue / $capacityRatio;
         $surplusAdequacy = $targetSurplusForPriorRevenue > 0.0 ? min(1.0, $operatingEquity / $targetSurplusForPriorRevenue) : 1.0;
@@ -293,7 +280,7 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
 
         // 3. The engine requires Baseline ROIC, which implies a specific Asset Turnover.
         // Turnover = Revenue / Invested Capital
-        $impliedTurnover = $targetRevenue / $operatingEquity;
+        $impliedTurnover = $targetRevenue / max(1.0, $operatingEquity);
         $capacityRoic = ($impliedTurnover * $stableMargin) * (1.0 - $taxRate);
         $baselineRoic = $capacityRoic;
 
@@ -301,22 +288,13 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
         if ($ttmRoe !== 0.0) {
             // Apply structural floor locally when deriving baseline capacity return so catastrophe losses do not collapse required underwriting turnover
             $structuralRoe = max(self::MIN_STRUCTURAL_ROE_FLOOR, $ttmRoe);
-            // The blend may only ever LOWER the premium book, never raise it. What comes back from here is
-            // divided by the after-tax underwriting margin to recover a premium turnover, and TTM ROE is a
-            // return on EQUITY that the policyholder float has already levered several times over: blending
-            // it in unclamped writes premium against investment income and defeats the Kenney capacity
-            // constraint struck above. Measured on the reinsurance book, an insurer earning its float yield
-            // on 3x leverage wrote at 1.9x surplus against a 1.5x cap.
+            // Clamp baseline return to capacity ROIC to prevent equity float leverage from distorting premium turnover.
             $baselineRoic = min($capacityRoic, ($capacityRoic * self::BASELINE_ROIC_WEIGHT) + ($structuralRoe * self::TTM_ROIC_WEIGHT));
         }
 
         $saturationPenalty = \App\Service\Math\CorporateMetrics::getInstance()->calculateMarketSaturationPenalty($stock, max(1.0, $equity), $macroState);
         $waccBase = $macroState->policyRate + $macroState->equityRiskPremium;
-        // The cost of capital is a floor under the RETURN, never under the BOOK. Capacity is a balance-sheet
-        // fact: an underwriter whose margin cannot earn its hurdle on the premium its surplus supports does
-        // not answer by writing more of it. Left uncapped this floor re-opened the constraint the blend
-        // above respects — at a 4% underwriting margin the implied turnover came back as 2.1x surplus, and
-        // at 2% as 4.1x, purely because the floor was being divided by a thinner margin downstream.
+        // Cap baseline return at capacity ROIC to prevent margin compression from inflating implied turnover.
         $baselineRoic = min($capacityRoic, max($waccBase, $baselineRoic - $saturationPenalty));
 
         return [
@@ -333,12 +311,7 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
         return [
             'macro_demand_shift' => $outputGap * $beta * self::MACRO_DEMAND_SCALAR, // Highly immune to macro demand
             'pricing_power_multiplier' => $this->resolvePremiumRateLevel($stock, $macroState),
-            // Claims do not get cheaper because the industry cut its rates. The engine deflates the cost
-            // base by this against the pricing multiplier, so leaving it to default to the pricing multiplier
-            // (as every model that carries no separate cost level does) held the combined ratio fixed
-            // whatever the market charged — a soft market that costs an underwriter nothing is not one.
-            // Claim cost inflation itself is not carried here: calculateSectorPhysics already loads
-            // property replacement values onto the loss ratio, and charging it twice would double it.
+            // Neutral input cost multiplier; property/claim inflation is handled directly in loss ratio physics.
             'input_cost_multiplier' => 1.0,
         ];
     }
@@ -942,12 +915,7 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
         $actualTurnover = $bookValuePerShare > 0.0 ? ($revenuePerShare / $bookValuePerShare) : self::KENNEY_CAPACITY_RATIO;
         $effectiveTurnover = min(self::KENNEY_CAPACITY_RATIO, max(self::MIN_WRITTEN_CAPACITY * self::KENNEY_CAPACITY_RATIO, $actualTurnover));
 
-        // An insurer earns on two things and only one of them is premium. Underwriting is the leg that
-        // moves with the book — it is turnover x margin, and it is the volatile half this method exists to
-        // smooth. The float earns whether or not a treaty is signed, so it is carried at the level the
-        // firm's own return anchor implies once full-capacity underwriting is taken out of it: measuring an
-        // insurer on turnover x margin alone priced a reinsurer running 3x investment leverage as if its
-        // investment income did not exist, and then re-rated it every time it wrote a smaller book.
+        // Separate underwriting return from float investment return to preserve investment income capacity.
         $fullCapacityUnderwriting = self::KENNEY_CAPACITY_RATIO * $baselineMargin;
         $investmentLeg = max(0.0, $baselineRoic - $fullCapacityUnderwriting);
 

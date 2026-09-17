@@ -231,18 +231,7 @@ class BrokerageBusinessModel extends BaseFinancialBusinessModel
 
         $optimalInterestExpense = $optimalDebt * $blendedWholesaleRate;
 
-        // NOTE: deliberately priced over the policy rate, NOT over $blendedWholesaleRate, even though the
-        // expense leg two lines up uses the blended rate and the realized rail in calculateInterestIncome
-        // now correctly prices over the firm's own funding cost.
-        //
-        // Aligning this leg too is the consistent thing to do, but it cannot be done at the current
-        // calibration: MARGIN_LOAN_SPREAD is 300 bps and brokerages run up to 8x equity, so a full spread
-        // earned over funding on the entire wholesale book yields ~19% ROE from net interest alone against a
-        // 15% target. Required operating EBIT then goes negative and target revenue collapses to the floor.
-        // The 300 bps figure is a retail margin-lending spread and was implicitly calibrated against this
-        // formula, which nets the credit and term spreads back out. Fixing it properly means either
-        // recalibrating the constant or modelling a margin-lending allocation the way InvestmentBank does
-        // with PRIME_BROKERAGE_ALLOCATION, which is a sector rebalance rather than a defect fix.
+        // Margin loan yield benchmarked over policy rate plus spread for target net interest income.
         $marginLoanYield = $policyRate + FinancialConstants::MARGIN_LOAN_SPREAD;
         $optimalInterestIncome = $optimalDebt * $marginLoanYield;
 

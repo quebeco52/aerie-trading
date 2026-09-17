@@ -471,16 +471,7 @@ final class IndexCommittee
 
         $this->store->store($index, $tick, $tickers, $added, $deleted, $weights, $factors);
 
-        // The restatement. A divisor is what an index uses to absorb a change in its own composition, so
-        // that its level continues to measure prices rather than the committee's decisions. Without it,
-        // admitting a company worth a tenth of the index moves the index a tenth on a day nobody made any
-        // money — and every chart, every return and every passive book reading off it inherits that lie.
-        // A re-weighting is a change in composition on exactly the same footing: a low-volatility index
-        // that restruck its weights without restating would print the rebalance itself as a return.
-        //
-        // With no prior level there is nothing to preserve, so the index OPENS at its base. Stating that
-        // here rather than leaving the first divisor to whoever happens to compute a level first is what
-        // makes the opening a decision instead of an accident of ordering.
+        // Divisor restatement: adjust index divisor to keep index level continuous across composition changes.
         $target = $levelBefore > 0.0 ? $levelBefore : FinancialConstants::INDEX_BASE_LEVEL;
 
         $divisor = $newCap > 0.0 ? $newCap / $target : $previousDivisor;
@@ -585,12 +576,7 @@ final class IndexCommittee
             return $nothing;
         }
 
-        // The weights the fund is actually carrying, which are the ones it struck at the last review left to
-        // drift with prices since — not the weights that review decided. Trading is measured from where the
-        // portfolio IS.
-        //
-        // A member that has gone to zero (a bankrupt shell) drops out of this: it is worth nothing, so it is
-        // neither part of what the fund holds nor something that can be sold for anything.
+        // Drifted portfolio weights: calculate weights from current market prices to measure turnover from actual holdings.
         $held = [];
         $heldTotal = 0.0;
 
@@ -836,13 +822,7 @@ final class IndexCommittee
         for ($pass = 0; $pass < self::CAP_ITERATIONS; $pass++) {
             $changed = false;
 
-            // Rule one: nobody above the single-name cap. What comes off goes pro rata to the names that
-            // still have HEADROOM under it.
-            //
-            // At the cap counts as capped, not as free. A name pinned exactly at the ceiling has no room to
-            // take anything, and letting it into the pool hands it a share of the next redistribution and
-            // pushes it straight back through — which does not converge, it merely gets smaller every pass
-            // until the iteration limit stops it somewhere just over the line.
+            // Single-name cap: redistribute excess weight above cap pro-rata to uncapped names with headroom.
             $excess = 0.0;
             $free = 0.0;
             foreach ($weights as $weight) {

@@ -160,16 +160,7 @@ class Portfolio
     {
         $conn = $this->entityManager->getConnection();
 
-        // Same three components as the bulk sweep, but filtered to one user rather than grouped over all
-        // of them: this runs on every trade, so the escrow leg is an indexed aggregate rather than a
-        // derived table built for the whole roster and then thrown away.
-        //
-        // The escrow CASE has to enumerate the two sides that actually hold something, exactly as
-        // OPEN_ORDER_ESCROW_DETAIL_SQL does, rather than falling through to a share valuation on ELSE.
-        // A resting SHORT and a resting COVER escrow nothing, so valuing them here added an asset the
-        // account does not have — and because this is the path that runs on every trade, placing a short
-        // spiked the account's recorded net worth by the full notional until the next bulk sweep quietly
-        // disagreed with it.
+        // Single-user portfolio snapshot: aggregate held securities and active BUY/SELL order escrows.
         $sql = "
             SELECT (
                 COALESCE((SELECT SUM(us.quantity * s.price) FROM user_stocks us JOIN stocks s ON us.stock_id = s.id WHERE us.user_id = :user_id), 0) +
@@ -194,9 +185,7 @@ class Portfolio
 
         $stockValue = (float) $conn->fetchOne($sql, ['user_id' => $user->getId()]);
 
-        // Borrowed cash is spent but still owed, so it comes straight back out. A short needs no term of
-        // its own: its quantity is negative, so quantity times price already marks the obligation, and its
-        // proceeds are already sitting in the cash balance.
+        // Deduct margin debt; negative short quantities already mark obligation against cash.
         $portfolioValue = (float) $user->getCashBalance() - (float) $user->getMarginDebit() + $stockValue;
 
         $history = new PortfolioHistory();

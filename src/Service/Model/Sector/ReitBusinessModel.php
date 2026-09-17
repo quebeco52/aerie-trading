@@ -289,15 +289,7 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
         $resShift = ($macroState->residentialPropertyIndexEma - 100.0) / 100.0;
         $blendedPropertyShift = ($creShift * self::CRE_INDEX_WEIGHT) + ($resShift * self::RES_INDEX_WEIGHT);
         $housingSupplyShift = MathUtility::calculateHousingStartsShift($macroState->housingStartsIndexEma, sensitivity: self::HOUSING_SUPPLY_COMPETITION_SENSITIVITY);
-        // --- Lease Ladder ---
-        // A landlord cannot reprice its book. Only the leases expiring this quarter reset to market; the
-        // rest are contractually fixed until their own expiry, which is why a REIT lags the property cycle
-        // in both directions. The in-place level persists, so after a boom rents keep catching up for
-        // years, and after a bust in-place rents sit ABOVE market and grind down as space rolls — the
-        // negative re-leasing spread that does the real damage to a landlord.
-        //
-        // The previous term applied market level x turnover, which never converged: in-place rents could
-        // not catch up to a market that had moved, and never carried where they had got to.
+        // Lease ladder: roll in-place rents toward market at the quarterly rollover rate implied by WALT.
         $inPlaceRent = $streams->getPersistedState(self::STATE_IN_PLACE_RENT, $blendedPropertyShift);
         $quarterlyRollover = 1.0 / max(1.0, self::LEASE_WALT_YEARS * 4.0);
         $releasingSpread = max(-self::MAX_RELEASING_SPREAD, min(self::MAX_RELEASING_SPREAD, $blendedPropertyShift - $inPlaceRent));

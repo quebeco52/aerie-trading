@@ -288,16 +288,7 @@ class MarketEngine
             dt: $dt
         );
 
-        // MERTON JUMP COMPENSATION (Merton 1976, Kou 2002)
-        // A drift set to the expected return and then multiplied by e^J does not earn the expected return:
-        // it earns it plus lambda * E[e^J - 1] per unit time. Both Kou processes here are skewed down, so
-        // that term is negative and it was a silent return tax of roughly 4% a year from the name's own jump
-        // and another 5% * beta from the market's. Reversion turned the shortfall into a permanent discount
-        // to fair value that widened with beta — every name traded below its own published fair value, worst
-        // for the high-beta names, and the fundamentalist agents sat structurally long because of it.
-        //
-        // Subtracting the compensator is what makes a jump a change in the SHAPE of returns rather than in
-        // their mean, which is the same principle the variance budget applies to their magnitude.
+        // Merton jump compensation: adjust CAPM drift by the jump arrival compensator to preserve expected return.
         $jumpCompensator = $lambda * $this->mathUtility->kouTruncatedCompensator(
             self::SVJJ_P_UP,
             $dynamicEtaUp,
@@ -354,25 +345,13 @@ class MarketEngine
         // instead of linearly clamping theta, preventing artificial volatility suppression
         $dynamicKappa = self::varianceReversionSpeed($lambda, $kappa);
 
-        // Market-Wide Jump Variance Budget:
-        // The district jump supplies part of a stock's total return variance, so the diffusion has to give up
-        // the same amount. Without this, connecting the systemic jump simply stacked a second source of risk
-        // on an already calibrated baseline and every name in the district got roughly four points more
-        // volatile. The jump changes the SHAPE of returns, adding the crash days a diffusion cannot produce,
-        // never the magnitude. This mirrors the jump variance drag the macro engine applies to its own
-        // volatility process. Exposure enters through the scaled jump computed above, which is exact for a
-        // negative beta where squaring it was not.
+        // Market-wide jump variance budget: deduct systemic jump variance from total diffusion variance.
         $systemicJumpVariance = min(
             $systemicJumpVariance,
             $longTermIdiosyncraticVar * self::MAX_SYSTEMIC_VARIANCE_DRAG_SHARE
         );
 
-        // Idiosyncratic Jump Variance Budget:
-        // The same accounting for the name's own jump, which was the one source of variance nobody was
-        // charging for. It is deducted at the TRUNCATED second moment, which is what the capped draws in
-        // calculateSVJJJumps actually deliver — the plain 2/eta^2 would over-reclaim and leave the diffusion
-        // quieter than the budget intends. The scale was already held to the share above, so this deduction
-        // is within the ceiling by construction and conservation is exact rather than clipped.
+        // Idiosyncratic jump variance budget: deduct stock jump variance at truncated second moment.
         $idiosyncraticJumpVariance = $lambda > 0.0
             ? min(
                 $lambda * $this->mathUtility->kouTruncatedSecondMoment(
@@ -386,15 +365,7 @@ class MarketEngine
             )
             : 0.0;
 
-        // Order-Flow Variance Budget:
-        // The same accounting, for the same reason. The diffusion is a reduced-form stand-in for the order
-        // flow nobody was simulating, so once real flow moves the price the diffusion is modelling it twice
-        // and the name simply gets more volatile. What flow supplies, the diffusion gives back.
-        //
-        // Drawn from MEASURED impact variance rather than an assumed participation rate: a name nobody
-        // trades reclaims nothing and keeps its calibrated diffusion intact, while a heavily traded one
-        // reclaims in proportion to what its flow actually did. An assumption would quietly suppress the
-        // volatility of every untraded name in the market.
+        // Order-flow variance budget: deduct measured impact variance from diffusion variance.
         $impactVariance = min(
             max(0.0, $orderFlowVariance),
             $longTermIdiosyncraticVar * FinancialConstants::MAX_IMPACT_VARIANCE_DRAG_SHARE
@@ -472,24 +443,7 @@ class MarketEngine
         $perceivedFairValue = $fundamentalState['perceived_fair_value'];
         $dynamicReversion = $fundamentalState['dynamic_reversion'];
 
-        // Exact Ornstein-Uhlenbeck Mean Reversion in Log-Space
-        // Using exp(-kappa * dt) mathematically guarantees the price never overshoots the fair value.
-        //
-        // Momentum resists that reversion (Hong & Stein 1999): while information is still diffusing through
-        // the market a strongly trending stock keeps moving with the trend instead of snapping back to its
-        // fundamental anchor. This weight multiplies the DIFFUSED price, so resistance has to be added to it,
-        // not subtracted: the previous signed subtraction made a rallying stock revert faster than a flat one,
-        // which is the opposite of the documented intent. It never fired in production because the trend was
-        // hard-coded to zero at the call site.
-        //
-        // Only the magnitude of the trend matters. A name selling off hard resists being dragged UP to fair
-        // value exactly as a rallying name resists being dragged down, and using the signed trend would let a
-        // falling stock snap to fair value faster the harder it falls.
-        //
-        // Resistance divides the reversion RATE rather than shifting the weight. At the district's tick rate
-        // the weight is already 0.9999, so any constant offset saturates the clamp below and switches
-        // fundamental reversion off entirely for a stock with even a faint trend, cutting the price loose
-        // from its fair value. Dividing the rate is invariant to the tick rate and can only slow reversion.
+        // Ornstein-Uhlenbeck mean reversion in log-space, damped by price momentum magnitude.
         $momentumResistance = 1.0 + (abs($recentPriceTrend) * self::MOMENTUM_REVERSION_RESISTANCE);
         $reversionWeight = max(0.0, min(1.0, exp(-($dynamicReversion / $momentumResistance) * $dt)));
 
@@ -523,16 +477,7 @@ class MarketEngine
         // Calculate Analyst Targets for UI and Sentiment Display
         $analystTargets = $fundamentalState['analyst_targets'];
 
-        // Circuit Breaker: Absolute Maximum Movement per Simulation Step
-        // A guard against mathematical blow-ups, not a market rule: the jumps and the M&A shock are applied
-        // outside it deliberately, since those are the moves it must not swallow.
-        //
-        // The bound is stated for a single trading DAY and scaled by the square root of the step actually
-        // taken, the way a diffusion's own dispersion scales. It used to be a flat +/- 40% per tick, against
-        // a constant named for a quarter and shared with the earnings engine, which uses it correctly on a
-        // per-report basis; at the district's tick rate that flat bound is a 235-sigma move on a typical
-        // name, so the breaker could never fire and was providing reassurance rather than protection.
-        // Working in log space keeps it symmetric, and scaling by sqrt(dt) makes it tick-rate invariant.
+        // Circuit breaker: clamp single-step move symmetrically in log space scaled by sqrt(dt).
         $stepDays = max(0.0, $dt) * FinancialConstants::TRADING_DAYS_PER_YEAR;
         $maxLogMove = log(1.0 + FinancialConstants::MAX_DAILY_PRICE_CIRCUIT_BREAKER) * sqrt($stepDays);
 

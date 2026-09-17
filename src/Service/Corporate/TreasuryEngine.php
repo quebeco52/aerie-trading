@@ -88,18 +88,7 @@ class TreasuryEngine
         $newRetainedStr = \bcsub(\bcadd($currentRetainedStr, $netIncomeStr, 4), $divPaidStr, 4);
         $stock->setRetainedEarnings($newRetainedStr);
 
-        // TOTAL EQUITY (Clean Surplus Accounting)
-        // Equity moves only through earnings, paid-in capital and distributions. It is deliberately NOT
-        // revalued with inflation: US GAAP carries plant at historical cost and never writes it up, so the
-        // old revaluation created book value out of nothing, with no income and no cash behind it. Inflation
-        // now reaches the balance sheet the way it really does, through replacement-cost maintenance CapEx:
-        // the firm spends more cash to replace the same asset, and the plant ledger grows by what it spent.
-        //
-        // Stock-based compensation (ASC 718) is an expense inside net income whose credit side is additional
-        // paid-in capital, not cash: without adding it back here equity fell by a charge that never left the
-        // company, understating book value and invested capital a little more every quarter. It is added to
-        // paid-in capital, not to retained earnings, which is why the retained-earnings roll-forward above
-        // deliberately does not carry it.
+        // Clean surplus equity accounting: roll equity via net income, stock compensation, and net cash spent.
         $currentEquityStr = $this->formatBc($stock->getTotalEquity());
         $stockCompStr = $this->formatBc($ctx->stockCompensation);
         $totalCashSpentStr = $this->formatBc($totalCashSpent);
@@ -176,24 +165,12 @@ class TreasuryEngine
         $haircut = FinancialConstants::EARNING_ASSET_FIRE_SALE_HAIRCUT;
         $shortfall = $cashFloor - $ctx->newTreasury;
 
-        // The rate mark on the book, crystallized by the act of selling. Until this moment it was a
-        // valuation; a buyer pays market value, so the moment the firm has to sell it becomes cash it does
-        // not receive. This is the difference between a bank that can hold to maturity and one that cannot,
-        // and it is the whole reason a solvent institution fails on a funding run rather than on credit.
-        //
-        // Struck against the marked book rather than the earning-asset book, because on an insurer they are
-        // not the same book: a liquidation larger than the bond tranche realizes all of it and no more.
+        // Crystallize unrealized mark-to-market loss/gain on securities sold to meet liquidity shortfall.
         $carriedMark = (float) $stock->getUnrealizedSecuritiesMark();
         $markedBook = max(0.0, min($netBook, $ctx->strategy->resolveSecuritiesBook($stock, $ctx->newTreasury)));
         $markRatio = $markedBook > 0.0 ? max(-1.0, min(1.0, $carriedMark / $markedBook)) : 0.0;
 
-        // Securities go first, because they are what anyone will bid for on the day. They raise the
-        // liquidity haircut less whatever the curve has already done to them; the loans behind them raise
-        // only the haircut, because a loan book is carried at amortized cost and was never marked.
-        //
-        // A book trading below amortized cost therefore raises less per dollar given up, so covering the
-        // same shortfall takes a bigger sale, and the bigger sale realizes more of the mark. That feedback
-        // is what a run actually is: the discount sets the size and the size deepens the loss.
+        // Liquidate liquid securities first before unmarketable amortized loans to cover cash deficit.
         $securitiesRecovery = max(0.05, (1.0 - $haircut) + $markRatio);
         $ceiling = $netBook * FinancialConstants::MAX_QUARTERLY_ASSET_LIQUIDATION_RATIO;
 
@@ -225,16 +202,7 @@ class TreasuryEngine
         $ctx->newTreasury += $proceeds;
         $ctx->assetSaleProceeds += $proceeds;
 
-        // Only the part shareholders have not already been charged for. The available-for-sale mark was
-        // taken to equity when the curve moved and recycling it now is neutral; the held-to-maturity mark
-        // was carried at cost and never reached equity, so recognising it here is a fresh hit to the book.
-        // Booking the whole realized mark would charge the available-for-sale half twice.
-        //
-        // Signed, not floored at zero. A sale into a rally realizes a held-to-maturity GAIN, and the cash
-        // for it arrives in the proceeds above either way — clamping it here credited the asset side
-        // without crediting equity, which is a sale that does not balance. The haircut usually dominates and
-        // the quarter is still a loss, but a book far enough in the money flips the sign, which is why the
-        // entry this feeds fires on a credit as well.
+        // Realized gain/loss on asset liquidation: charge fire-sale haircut and unrecognized held-to-maturity mark.
         $unrecognizedMark = -$realizedMark * FinancialConstants::DEFAULT_HTM_BOOK_SHARE;
         $ctx->assetSaleLoss += ($carryingValueSold * $haircut) + $unrecognizedMark;
 
@@ -277,14 +245,7 @@ class TreasuryEngine
             && $ctx->strategy->supportsUnderleveragedDebtExpansion()
             && !$ctx->health->isSevereNegativeCarry;
 
-        // The leverage covenant gates DISCRETIONARY borrowing only. A breach shuts off expansion and
-        // recapitalisation, which is the whole point of a maintenance test, but it must never reach the
-        // refinancing or emergency-liquidity paths: a firm refused the rollover of debt it already owes
-        // defaults on the spot, and that is a market-access question, not a covenant one.
-        //
-        // This is also the gate that closes the perverse case the covenant exists for. A firm whose EBITDA
-        // has collapsed still carries slow-moving book equity, so isUnderLeveraged reads TRUE and the branch
-        // below would issue debt to recapitalise precisely when cash flow can no longer support any.
+        // Leverage covenant gates discretionary debt expansion while permitting emergency refinancing.
         if (($marginalReturn > $hurdleRate || $isUnderLeveragedForDebt) && $ctx->health->canIssueDebt && $ctx->health->hasLeverageHeadroom) {
             $newBorrowingRate = $ctx->health->rawMetrics->currentMarketRate ?? 0.05;
 
@@ -406,12 +367,7 @@ class TreasuryEngine
         $isHoarder = $hoardStatus['is_hoarder'];
         $isMegaHoarder = $hoardStatus['is_mega_hoarder'];
 
-        // The NPV test is on the MARGINAL return — what the next dollar of plant earns at this scale — the
-        // same figure processDebtExpansion already borrows against. Testing the average return instead let
-        // a firm whose marginal return had fallen below its hurdle keep deploying cash for as long as its
-        // existing plant still earned above it, which for a saturated firm is forever. The hoarder path is
-        // deliberately left on the average: that is Jensen's agency cost of free cash flow, management
-        // spending what it will not return, and it is bounded below by the marginal-return zero check.
+        // Organic capex NPV hurdle: gate capital deployment on marginal return exceeding hurdle rate.
         if ((($marginalReturn > $hurdleRate || $isHoarder) && $excessCash > 0 && !$ctx->health->wantsToPaydownDebt) || $forcedExpansion) {
             $spreadMultiplier = $isHoarder ? 1.0 : min(1.0, max(0.0, ($marginalReturn - $hurdleRate) * 10.0));
 
@@ -748,12 +704,7 @@ class TreasuryEngine
             $ctx->unfundedMaturity -= $maturityFunded;
         }
 
-        // Past the commitment the bank is no longer contractually bound and the money costs what distress
-        // costs. An overdraft is still funded - the cash was already spent, and booking it anywhere but the
-        // liability side would balance the sheet by inventing money - but the firm is now visibly out of
-        // liquidity, so it is flagged into the death-spiral path the equity issuance step already runs on.
-        // A maturity is different: nothing has been spent yet, so past the commitment it stays unfunded and
-        // the default test decides.
+        // Emergency overdraft facility: fund uncommitted overdrafts at penalty distress spread.
         $overCommitment = max(0.0, $overdraft - $drawn);
         if ($overCommitment > 0.0) {
             $this->debtEngine->issueDebt(

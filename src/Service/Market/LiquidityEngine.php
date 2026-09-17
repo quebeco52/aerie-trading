@@ -269,14 +269,7 @@ final class LiquidityEngine
             return $this->quote($asset, $action, $quantity, $midPrice);
         }
 
-        // A corporate issue is not a sovereign one. It trades in a fraction of the size against a fraction
-        // of the buyers, and quoting it at the sovereign's depth would make credit risk free to get into and
-        // out of — which is exactly the property that makes it risky.
-        //
-        // A fund is quoted off its own arbitrage band, not off a constant. Nobody makes a market inside the
-        // price at which the creation arbitrage is free, so the band IS the spread — and because the band
-        // is read off the live basket, a fund whose constituents have become expensive to trade becomes
-        // expensive to trade too, without that being written down anywhere.
+        // Quote spreads: calibrated wider for corporate credit and tied to constituent arbitrage band for ETFs.
         $halfSpread = match (true) {
             $assetType === 'BOND' && $isCorporateIssue => FinancialConstants::CORPORATE_BOND_HALF_SPREAD,
             $assetType === 'BOND' => FinancialConstants::BOND_HALF_SPREAD,

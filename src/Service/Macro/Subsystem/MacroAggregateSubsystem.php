@@ -4,7 +4,6 @@ namespace App\Service\Macro\Subsystem;
 
 use App\Service\Macro\MacroEngine;
 use App\Service\Macro\MacroState;
-use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
 
 /**
@@ -270,25 +269,11 @@ class MacroAggregateSubsystem
 
         $housingWealthEffect = (($state->residentialPropertyIndexEma / MacroEngine::RESIDENTIAL_BASELINE) - 1.0) * self::KALDOR_WEALTH_EFFECT_ELASTICITY;
 
-        // Equity wealth (Modigliani 1971; Carroll, Otsuka & Slacalek 2011). Households hold the board through
-        // their portfolios and pensions, so a bull market spends and a crash saves -- the other half of a
-        // channel that until now only counted the houses.
-        //
-        // Measured as capitalisation over income, the ratio the MPC-out-of-wealth literature is estimated on,
-        // and NOT as an index level: a level grows with nominal GDP forever and would turn a wealth effect
-        // into a permanent and growing demand subsidy. The composite is already divisor-restated for
-        // issuance and splits and normalised to its own base, and nominal GDP opens at 1.0, so the ratio
-        // opens at exactly 1.0 and is stationary whenever equities track the economy.
-        //
-        // Read against the ratio's own trend rather than against its opening, because the gap this feeds is a
-        // deviation from potential: a valuation the households have had for years is one they have long since
-        // adjusted to, and it cannot go on buying extra output forever.
-        //
-        // Smoothed, and fed one tick behind by the ticker, because this is the return leg of the only loop
-        // that runs backwards through the engine: the macro state moves prices, and here prices move the
-        // macro state. The band is what keeps a mania or a wipeout from writing the output gap on its own.
-        $equityWealthGap = max(-0.60, min(0.60, ($this->equityWealthRatio($state) / max(0.01, $state->equityWealthTrend)) - 1.0));
-        $equityWealthEffect = $equityWealthGap * self::KALDOR_EQUITY_WEALTH_ELASTICITY;
+        // Equity wealth effect: deviation of equity market cap-to-GDP ratio from its trend.
+        $equityWealthRatio = $this->equityWealthRatio($state);
+        $equityWealthEffect = ($equityWealthRatio > 0.0 && $state->equityWealthTrend > 0.0)
+            ? max(-0.60, min(0.60, ($equityWealthRatio / $state->equityWealthTrend) - 1.0)) * self::KALDOR_EQUITY_WEALTH_ELASTICITY
+            : 0.0;
         $fxShift = ($state->exchangeRateIndexEma / MacroEngine::EXCHANGE_RATE_BASELINE) - 1.0;
         $netExportDrag = self::KALDOR_FX_ELASTICITY * $fxShift;
 
@@ -491,12 +476,25 @@ class MacroAggregateSubsystem
         $state->inflationEma += $emaWeight * ($state->inflation - $state->inflationEma);
         $state->tipsBreakevenEma += $emaWeight * ($state->tipsBreakeven - $state->tipsBreakevenEma);
         $state->nsSlopeEma += $emaWeight * ($state->nsSlope - $state->nsSlopeEma);
-        $state->equityIndexLevelEma += $emaWeight * ($state->equityIndexLevel - $state->equityIndexLevelEma);
+        // A capitalisation of zero is "no market reported", not a market worth nothing, so the smoothed
+        // series opens on the first real reading instead of averaging its way up from a placeholder.
+        if ($state->equityMarketCap > 0.0) {
+            $state->equityMarketCapEma = $state->equityMarketCapEma > 0.0
+                ? $state->equityMarketCapEma + ($emaWeight * ($state->equityMarketCap - $state->equityMarketCapEma))
+                : $state->equityMarketCap;
+        }
 
         // The trend the wealth effect is measured against, at its own multi-year horizon rather than the
-        // quarter every other series here is smoothed over.
-        $trendWeight = 1.0 - exp(-$dt / self::EQUITY_WEALTH_TREND_HORIZON_YEARS);
-        $state->equityWealthTrend += $trendWeight * ($this->equityWealthRatio($state) - $state->equityWealthTrend);
+        // quarter every other series here is smoothed over. Seeded from the first ratio it is shown: nobody
+        // has got used to a level they have never seen, and a constant opening would be a scale this ratio
+        // does not have.
+        $state->equityWealthRatio = $this->equityWealthRatio($state);
+        if ($state->equityWealthRatio > 0.0) {
+            $trendWeight = 1.0 - exp(-$dt / self::EQUITY_WEALTH_TREND_HORIZON_YEARS);
+            $state->equityWealthTrend = $state->equityWealthTrend > 0.0
+                ? $state->equityWealthTrend + ($trendWeight * ($state->equityWealthRatio - $state->equityWealthTrend))
+                : $state->equityWealthRatio;
+        }
 
         $state->naturalRateEma += $emaWeight * ($state->naturalRate - $state->naturalRateEma);
         $state->jobVacanciesRateEma += $emaWeight * ($state->jobVacanciesRate - $state->jobVacanciesRateEma);
@@ -562,8 +560,11 @@ class MacroAggregateSubsystem
      */
     /**
      * Household equity wealth as a share of income: the whole board's capitalisation over nominal GDP, the
-     * ratio the MPC-out-of-wealth literature is estimated on. Both legs open at their own base, so it opens
-     * at exactly 1.0.
+     * ratio the MPC-out-of-wealth literature is estimated on.
+     *
+     * Carries an arbitrary scale, because capitalisation is currency and nominal GDP is an index. That is
+     * deliberate and costs nothing: the effect reads this against its own trend, and a constant factor
+     * divides straight out of that comparison. Zero means no market has been reported.
      *
      * @param MacroState $state Current macroeconomic state.
      */
@@ -586,8 +587,15 @@ class MacroAggregateSubsystem
 
     private function equityWealthRatio(MacroState $state): float
     {
-        return ($state->equityIndexLevelEma / FinancialConstants::INDEX_BASE_LEVEL)
-            / max(0.01, $state->nominalGdpIndex);
+        // Derived on demand from the capitalisation rather than read off $state->equityWealthRatio, so that
+        // calculateOutputGap() stands on its own. That field is this same number, recorded once a tick for
+        // the history table and the wire; depending on it here would make the channel silent for every
+        // caller that runs the gap without the smoothing step behind it.
+        if ($state->equityMarketCapEma <= 0.0) {
+            return 0.0;
+        }
+
+        return $state->equityMarketCapEma / max(0.01, $state->nominalGdpIndex);
     }
 
     public function calculateCapacityUtilization(MacroState $state): void
@@ -620,7 +628,7 @@ class MacroAggregateSubsystem
         // The gap's distance from its EMA is the EMA horizon times the gap's rate of change (Brown 1963), so
         // dividing it out gives annualized real growth over potential.
         $excessGrowth = ($state->outputGap - $state->outputGapEma) / self::STANDARD_EMA_HORIZON_YEARS;
-        $inventoryDemand = - $state->inventoryStockGap; // Shortfall stimulates orders
+        $inventoryDemand = -$state->inventoryStockGap; // Shortfall stimulates orders
         $sloosStress = max(0.0, $state->sloosTighteningIndexEma);
 
         $drivers = [

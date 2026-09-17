@@ -409,22 +409,28 @@ class MacroEngine
      * Calculates Inflation, Output Gap, Taylor Rule (Short Rate), and the Yield Curve.
      *
      * Everything here runs forward, from the economy to the prices it sets, with one exception: household
-     * equity wealth. The board's own composite level comes back in through $equityIndexLevel so that a bull
-     * market can spend and a crash can save, which is a loop, and it is closed deliberately and visibly --
-     * the caller hands over the level it read on the PREVIOUS tick, never one from this one. Passing null
-     * leaves the last observation standing, so a caller that never reports a market (the simulate command,
-     * the headless harness, the unit tests) keeps the wealth ratio at its opening 1.0 and the channel
-     * contributes exactly nothing.
+     * equity wealth. The board's CAPITALISATION comes back in through $equityMarketCap so that a bull market
+     * can spend and a crash can save, which is a loop, and it is closed deliberately and visibly -- the
+     * caller hands over what it measured on the PREVIOUS tick, never anything from this one.
      *
-     * @param float      $dt               Time increment in years.
-     * @param float|null $equityIndexLevel Whole-board composite level as of the previous tick, or null.
+     * Capitalisation, not an index level. A level is a tradable instrument's scale: the district's funds
+     * split themselves whenever their price runs away, and the index divisor is restated to match, so a
+     * level re-bases on a share-count cosmetic. Household wealth does not. Reading the level once cost this
+     * engine a 73% phantom crash and years of demand drag behind it.
+     *
+     * Passing null leaves the last observation standing, and a caller that never reports a market (the
+     * simulate command, the headless harness, the unit tests) leaves the capitalisation at zero, which the
+     * wealth channel reads as "no market" and contributes exactly nothing for.
+     *
+     * @param float      $dt              Time increment in years.
+     * @param float|null $equityMarketCap Whole-board capitalisation as of the previous tick, or null.
      */
-    public function updateMacroState(float $dt, ?float $equityIndexLevel = null): \App\DTO\MacroStateDTO
+    public function updateMacroState(float $dt, ?float $equityMarketCap = null): \App\DTO\MacroStateDTO
     {
         $state = $this->loadState();
 
-        if ($equityIndexLevel !== null && $equityIndexLevel > 0.0) {
-            $state->equityIndexLevel = $equityIndexLevel;
+        if ($equityMarketCap !== null && $equityMarketCap > 0.0) {
+            $state->equityMarketCap = $equityMarketCap;
         }
 
         // Advance physical simulation time in years

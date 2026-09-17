@@ -32,17 +32,7 @@ final class IndexFundStrategy implements AgentStrategyInterface
 
     public function signal(AgentMarketViewDTO $view, array $positions): float
     {
-        // A fund that tracks an index holds what is IN the index, in the weight the index gives it, and
-        // nothing else. This is the whole of the inclusion effect: the target for a name that has just been
-        // dropped falls by whatever share of indexed money tracked the index that dropped it, the target for
-        // one that has just been added rises by the same, and the population works every position toward its
-        // target on its own. So the trade that moves the price is placed by the same machinery that trades
-        // everything else and is charged the same impact — which is what makes the downward-sloping demand
-        // curve (Shleifer 1986) something the market produces rather than something written into it.
-        //
-        // The multiple is passive ownership relative to size, so it is a REALLOCATION across names and not
-        // a dial on how much passive money exists: it averages to exactly one across the market, whatever
-        // the split between vehicles. A name held by no published index is held by no index fund.
+        // Index tracking target: scale target position by relative passive index ownership multiple.
         if ($view->passiveOwnershipMultiple <= 0.0) {
             return 0.0;
         }

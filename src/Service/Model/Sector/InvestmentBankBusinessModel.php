@@ -200,14 +200,7 @@ class InvestmentBankBusinessModel extends BrokerageBusinessModel
     {
         $wholesaleDebt = (float) $stock->getWholesaleDebt();
 
-        // Effective funding benchmark: prime brokerage margin loans and matched-book repo reprice directly off
-        // the firm's OWN wholesale borrowing cost, so the client-facing asset yield must be built on the same
-        // realized rate DebtEngine charges on the liability side (DebtMetricsDTO::$wholesaleRate), dynamic
-        // credit-spread widening included. Falling back to the static approximation here previously let a
-        // distressed firm keep pricing prime brokerage assets at the calm-market rate while paying the live
-        // blown-out rate on its liabilities -- an unhedgeable negative carry on the wholesale book that only
-        // grew as spreads widened further. Fall back to the static approximation only when no live debt calc
-        // has run yet (see calculateBlendedWholesaleRate()).
+        // Benchmark client asset yield to realized wholesale rate (liability borrowing cost) to preserve spread economics.
         $fundingBenchmark = max(0.0, $realizedWholesaleRate ?? $this->calculateBlendedWholesaleRate($stock, $macroState));
 
         // 1. Institutional Prime Brokerage & Secured Financing (Securities Lending & Margin Debits):

@@ -98,14 +98,7 @@ class MarketConsensusEngine
             
         $signalVariance = max(0.0001, pow($coverage->errorStdDev, 2));
 
-        // The anchor is carried forward WITH the structural base, not frozen at last quarter's dollar size.
-        // Analysts forecast off a firm's disclosed capacity — assets, AUM, store count — and what they carry
-        // from one quarter to the next is their view of the firm relative to that base. Frozen in dollars,
-        // the prior lagged any growing firm by (growth per quarter) x (prior weight / signal weight): at a
-        // sector coverage error of 15% the estimate closed under a quarter of its gap each report, so a
-        // fund compounding its capital at 18% a year sat 12-15% below its own structural revenue forever
-        // and beat every single quarter. The ratio of the two structural figures already carries the
-        // seasonal turn, which is why the seasonal ratio is not applied on top of it.
+        // Roll prior analyst revenue estimate forward with growth in structural capacity.
         $anchor = (float) $stock->getLastAnalystRevenue();
         if ($anchor > 0.0 && $priorExpectedRevenue > 0.0 && $expectedRevenue > 0.0) {
             $rollForward = max(
@@ -126,29 +119,12 @@ class MarketConsensusEngine
             $signalVariance
         );
 
-        // The anchor is the posterior BEFORE the walkdown. The walkdown is a shading of the number analysts
-        // publish so that firms beat by a little (Richardson, Teoh & Wysocki 2004); it is not new
-        // information, and it must not be learned from. Anchored on the shaded figure, each quarter's 1.5%
-        // compounded against the pull of the fresh signal: at a coverage error of 15% the estimate only
-        // closed a quarter of its gap per report, so the standing deficit was 1.5% / 0.23, about 6.5% of
-        // revenue — which at a 40% margin is a 16% earnings beat every quarter, from a bias designed to
-        // produce a small one.
+        // Store pre-walkdown posterior as anchor so walkdown shading does not compound across quarters.
         $stock->setLastAnalystRevenue((string) $analystExpectedRevenue);
 
         $analystExpectedRevenue *= (1.0 - self::ANALYST_WALKDOWN_BIAS);
 
-        // Cost base. The ex-ante margin is the structural cost ratio BEFORE the sector physics move it, so an
-        // estimate built on it alone was blind to the input-cost basket, the pass-through lag and every other
-        // cost term the models apply — and because the consensus anchor remembers revenue and not margin, a
-        // standing cost shock was re-discovered as a fresh miss every quarter for as long as it lasted.
-        // Analysts are not blind to it: input prices are published series and pass-through terms are
-        // disclosed, so the systematic part of the realized ratio is forecastable and only firm-specific
-        // execution is not. The blend is the same visibility device already applied to revenue above.
-        // The estimate anchors on the ratio the firm last REPORTED — a disclosed, public number — and moves
-        // from it toward the realized one by that visibility. Anchoring matters as much as the blend does:
-        // a flat blend against the level would miss a permanently elevated cost base by the same amount
-        // every quarter forever, which is the level-versus-news error in another place. With the anchor a
-        // lasting shock is missed once, when it arrives, and is in the estimate from the next quarter on.
+        // Analyst cost ratio expectation: anchor on last reported ratio and incorporate visible systematic cost shifts.
         $priorCostRatio = $stock->getLastReportedCostRatio();
         $anchorCostRatio = $priorCostRatio !== null
             ? (float) $priorCostRatio

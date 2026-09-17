@@ -71,9 +71,7 @@ class EtfCompositionBuilder
         $factors = $roster === null ? [] : $roster['factors'];
         $targets = $roster === null ? [] : $roster['weights'];
 
-        // The index's OWN eligible universe: its sector if it has one, the whole live board otherwise. The
-        // membership is a cut of this, and the watch list is about who stands near the cut — neither means
-        // anything measured against companies the index was never allowed to hold.
+        // Eligible universe: index sector if applicable, otherwise all live non-bankrupt stocks.
         $sector = $index->sector();
         $capByTicker = [];
         $volByTicker = [];
@@ -105,13 +103,7 @@ class EtfCompositionBuilder
         // rather than the large.
         $rankOf = $this->rankUniverse($index, $capByTicker, $volByTicker);
 
-        // Only what the index carries. An empty membership is a market that has not reconstituted yet, and
-        // there the fund is still its whole universe.
-        //
-        // ADJUSTED capitalisation, not raw: the factor fixed at the last review is what turns a pile of
-        // float caps into the portfolio the committee decided on, and the weights below are shares of the
-        // adjusted total. For a cap-weighted index every factor is one and this is the arithmetic it always
-        // was.
+        // Filter to active constituents and scale by committee weight factors.
         $memberCaps = [];
         $adjustedCaps = [];
         foreach ($capByTicker as $ticker => $cap) {
@@ -145,8 +137,7 @@ class EtfCompositionBuilder
 
             $pieLabels[] = $ticker;
             $pieData[] = $adjustedCap;
-            // Float-adjusted shares CARRYING THE FACTOR, so a live repaint of the pie stays on the basis the
-            // weights were struck on rather than sliding back to whole-company capitalisation as prices tick.
+            // Float-adjusted shares incorporating review weight factor.
             $sharesMap[$ticker] = (float) $stock->getSharesOutstanding()
                 * max(0.0, min(1.0, (float) $stock->getPublicFloatPercentage()))
                 * ($factors[$ticker] ?? 1.0);
@@ -159,15 +150,11 @@ class EtfCompositionBuilder
                 'price' => (float) $stock->getPrice(),
                 'marketCap' => (float) $stock->getPrice() * (float) $stock->getSharesOutstanding(),
                 'floatCap' => $memberCaps[$ticker],
-                // The same capitalisation carrying the weight factor: what the weight above is a share OF.
-                // The live table falls back to this for any name a frame did not carry, so it has to be on
-                // the same footing as the figures the frame does carry, or a weighted index's bars would mix
-                // two different bases in one total.
+                // Capitalization with weight factor for consistent basis.
                 'adjustedCap' => $adjustedCap,
                 'volatility' => $volByTicker[$ticker],
                 'weight' => $weight,
-                // What the review set this name to. The gap against the weight above is the drift a real
-                // fund carries between rebalances rather than trading away for free.
+                // Target review weight; variance reflects drift between index rebalances.
                 'targetWeight' => isset($targets[$ticker]) ? $targets[$ticker] * 100.0 : null,
                 'changePercent' => $changes[$ticker] ?? null,
                 'isNew' => isset($added[$ticker]),
@@ -272,9 +259,7 @@ class EtfCompositionBuilder
 
         return [
             'expenseRatio' => $fund->getExpenseRatio() * 100.0,
-            // Where the fund last traded against what it owns, and how far it is allowed to go before
-            // somebody is paid to close the gap. A fund quoted AT net asset value could show neither, and a
-            // discount is the most informative number a fund ever prints.
+            // NAV premium/discount and arbitrage threshold band.
             'navPremium' => $fund->getNavPremium() * 100.0,
             'arbitrageBand' => $fund->getArbitrageBand() * 100.0,
             'sharesOutstanding' => $fund->getSharesOutstanding(),
@@ -284,22 +269,13 @@ class EtfCompositionBuilder
             'distributionYield' => $price > 0.0 ? ($fund->trailingDistribution() / $price) * 100.0 : 0.0,
             'trailingDistribution' => $fund->trailingDistribution(),
             'lastDistributionAt' => $fund->getLastDistributionAt(),
-            // Income collected and not yet handed over. It is in the price, and it leaves it at the next
-            // distribution — so a holder reading the chart should know it is there.
+            // Undistributed accrued dividend income reflected in share price.
             'accruedIncome' => $fund->getAccruedIncome(),
-            // What the fund has actually charged over its life, per share. This is the honest cost figure:
-            // almost all of it comes out of income before the income is ever distributed, so a holder who
-            // only watched the price would never see it leave.
+            // Cumulative management fees paid per share.
             'feesPaidPerShare' => $fund->getCumulativeFeesPaid(),
-            // What following the index has cost in spread, per share, over the fund's life. A different cost
-            // with a different cause: the fee is what the manager charges, this is what the index's own
-            // turnover costs to track. A cap-weighted fund pays almost none of it, because its weights
-            // maintain themselves; a fund that restrikes its weights every quarter pays it every quarter.
+            // Cumulative index rebalance transaction costs per share.
             'tradingCostsPerShare' => $fund->getCumulativeTradingCosts(),
-            // How far the basket has fallen behind the one index unit a share started with, as a percentage.
-            // This is the fund's cumulative tracking difference and it only ever grows: a fund never buys
-            // back what it sold. Both costs above can land here — the fee only when income failed to cover
-            // it, a rebalance always, because a spread is paid inside the trade.
+            // Cumulative percentage tracking difference versus benchmark basket.
             'trackingDifference' => (1.0 - $fund->getBasketPerShare()) * 100.0,
         ];
     }
@@ -377,8 +353,7 @@ class EtfCompositionBuilder
         $atRisk = [];
         $contenders = [];
 
-        // Walked in rank order rather than in whatever order the repository returned, so both lists read
-        // from the boundary outwards — which is the order the committee will work through them in.
+        // Process universe in rank order to identify boundary buffer breaches.
         $order = $rankOf;
         asort($order);
 

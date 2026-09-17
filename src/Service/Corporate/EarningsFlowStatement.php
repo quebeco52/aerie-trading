@@ -53,23 +53,12 @@ final readonly class EarningsFlowStatement
         $dividends          = max(0.0, (float) ($report['dividend_paid'] ?? 0));
         $buybacks           = max(0.0, (float) ($report['stock_buybacks'] ?? 0));
 
-        // The spine is the statement the report actually published — its own EBITDA, EBIT and pre-tax
-        // income — and each charge is the DIFFERENCE between two of those lines rather than an independently
-        // stored figure. That matters because `operating_costs` holds the cash cost base alone: the
-        // inventory written down to net realizable value, the trade receivable allowance and the credit-loss
-        // level correction are all struck against EBITDA afterwards and appear in none of it. Rebuilding the
-        // waterfall from the cost base therefore drew an EBITDA the firm never earned and walked a different
-        // number down to the bottom of the diagram than the one printed beside it. Deriving each charge from
-        // the spine puts those impairments back where they belong — inside operating costs, which is where
-        // the engine charges them — and guarantees every link conserves by construction.
-        // Each line falls back to the one above it less its own charge, so a report written before these
-        // columns existed still draws the waterfall it always drew.
+        // Income statement waterfall: reconstruct EBITDA, EBIT, and pre-tax income directly from published report lines.
         $ebitdaStored = (float) ($report['ebitda'] ?? ($totalRevenue - (float) ($report['operating_costs'] ?? 0)));
         $ebitStored   = (float) ($report['ebit'] ?? ($ebitdaStored - (float) ($report['depreciation'] ?? 0)));
         $preTaxStored = (float) ($report['pre_tax_income'] ?? ($ebitStored - (float) ($report['interest_expense'] ?? 0)));
 
-        // The income statement narrows. Each charge is bounded by what is left to charge it against, so no
-        // link ever runs negative — a Sankey cannot draw one.
+        // Clamp intermediate income metrics to prevent negative waterfall flows.
         $ebitda = max(0.0, min($totalRevenue, $ebitdaStored));
         $operatingCosts = $totalRevenue - $ebitda;
 

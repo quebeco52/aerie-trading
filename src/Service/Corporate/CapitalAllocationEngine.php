@@ -308,16 +308,7 @@ class CapitalAllocationEngine
             return;
         }
 
-        // RESTRICTED PAYMENTS
-        // Every credit agreement carrying a maintenance leverage test carries a restricted-payments clause
-        // beside it, and the two are one bargain: while leverage is out of compliance the lender's claim on
-        // cash flow ranks ahead of the shareholder's. A buyback is the most discretionary distribution there
-        // is and the first thing that clause stops — it retires the equity cushion sitting underneath debt
-        // that is already too large for the cash flow supporting it.
-        //
-        // This is a separate question from the incurrence test in TreasuryEngine: that one asks whether the
-        // firm may borrow MORE, this one asks whether it may pay cash out. A firm can breach while holding
-        // plenty of cash and a healthy ICR, which is exactly the case the equity ratio waves through.
+        // Restricted payments covenant: block share buybacks when leverage headroom is breached.
         if (!$ctx->health->hasLeverageHeadroom) {
             $ctx->newShares = $ctx->sharesOutstanding;
             return;

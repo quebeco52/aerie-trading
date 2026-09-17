@@ -148,14 +148,7 @@ class EtfTracker
                 $dt
             );
 
-            // 2. Net asset value, and then the price, which is a different number.
-            //
-            // Net asset value is what the fund OWNS. The price is what the fund TRADES at, and the two are
-            // set by different crowds: the basket by everyone trading the constituents, the fund by
-            // everyone trading the fund. They only agree because an authorized participant is paid to make
-            // them agree, and only to within what that trade costs. Quoting the fund AT net asset value —
-            // as this did — made a discount structurally impossible, which threw away the one figure a
-            // fund publishes that its basket cannot.
+            // NAV vs market price: Authorized Participant arbitrage settles price within the arbitrage band.
             $navPerShare = $etf->netAssetValuePerShare($level);
             $band = $this->authorizedParticipant->band($basketHalfSpread);
             $settled = $this->authorizedParticipant->settle(
@@ -357,13 +350,7 @@ class EtfTracker
         float $preSplitPrice
     ): void {
         if ($isReverse) {
-            // Escrowed value that will not survive the FLOOR below, refunded before it is lost: a BUY holds
-            // cash at the limit it committed at, a SELL holds shares valued at the pre-split price. Those
-            // are the only two sides that escrow anything, so they are named rather than left to an ELSE.
-            // An ETF cannot currently be shorted — TradeExecutionService rejects a SHORT on anything but an
-            // equity — so nothing else reaches this statement today, and that is exactly why it should not
-            // depend on staying true: the equivalent ELSE in CorporateLedgerService, where shorting IS
-            // allowed, was paying resting SHORT and COVER orders a refund for escrow they never posted.
+            // Reverse split fractional remnant refund: cash out BUY and SELL escrow remnants before quantity flooring.
             $conn->executeStatement(
                 "UPDATE users u
                  INNER JOIN (

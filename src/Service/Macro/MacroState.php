@@ -126,16 +126,26 @@ class MacroState
     public float $potentialGdpIndex = 1.0;
     public float $nominalGdpIndex = 1.0;
 
-    // The whole-board composite index level, fed back by the ticker one tick behind. It opens at the index's
-    // own base level and nominalGdpIndex opens at 1.0, so a run that never feeds it sits at a wealth ratio of
-    // exactly 1.0 and contributes nothing -- the headless harness and the simulate command are unaffected.
-    public float $equityIndexLevel = \App\Service\Math\FinancialConstants::INDEX_BASE_LEVEL;
-    public float $equityIndexLevelEma = \App\Service\Math\FinancialConstants::INDEX_BASE_LEVEL;
+    // The whole board's capitalisation, in currency, fed back by the ticker one tick behind. NOT an index
+    // level: a level is a tradable instrument's scale and is restated whenever that instrument splits, which
+    // would re-base household wealth on a share-count cosmetic. Zero means no market has been reported yet.
+    public float $equityMarketCap = 0.0;
+    public float $equityMarketCapEma = 0.0;
+
+    // Capitalisation over nominal GDP. Both legs compound with the economy, so unlike the capitalisation
+    // above this is STATIONARY, and it is the one of the two that gets written to macro_report: a raw
+    // nominal quantity outgrows any fixed-width decimal column eventually, and at this board's size
+    // DECIMAL(24,2) would have bought about sixteen hours of continuous running.
+    public float $equityWealthRatio = 0.0;
 
     // What the households have got used to: the wealth ratio's own slow trend, which is what the effect is
-    // measured against. Anchoring to a fixed 1.0 instead would let any lasting gap between how fast the
+    // measured against. Anchoring to a fixed level instead would let any lasting gap between how fast the
     // board compounds and how fast the economy does accumulate into a permanent drift in the output gap.
-    public float $equityWealthTrend = 1.0;
+    //
+    // Seeded from the first ratio ever seen rather than from a constant, because the ratio is capitalisation
+    // over an index and so carries an arbitrary scale. Measuring the gap against this trend divides that
+    // scale out, which is the whole reason the raw capitalisation can be used without a baseline to calibrate.
+    public float $equityWealthTrend = 0.0;
     public float $gdpDeflator = 1.0;
 
     public float $marketVolatility = 0.13;

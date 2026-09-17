@@ -340,23 +340,7 @@ class AssetMarketSubsystem
      */
     public function updateSystemicMarketFactor(MacroState $state, float $dt): void
     {
-        // Systemic Market Factor: the single common driver behind every equity price, built from two
-        // components because one process cannot supply both properties markets actually exhibit.
-        //
-        // An i.i.d. normal draw -- the previous behaviour -- gave the factor no memory at all, so a
-        // market-wide selloff could not mathematically survive into the next tick and no drawdown or rally
-        // ever lasted longer than one. The regime leg fixes that with an AR(1) memory whose persistence is a
-        // decay constant in YEARS, keeping regime length invariant to SIM_TICKS_PER_YEAR.
-        //
-        // Fat tails cannot ride on that leg: at this persistence the AR(1) averages on the order of a hundred
-        // innovations, and the central limit theorem erases their kurtosis entirely (a t(4) innovation with
-        // kurtosis ~11 emerges from the recursion at ~2.8, thinner than a normal). So the crash component is
-        // carried by an independent i.i.d. Student's t shock, where the kurtosis survives.
-        //
-        // Both legs are scaled so integrated annual variance is exactly preserved: the regime leg is divided
-        // by its own autocorrelation inflation (otherwise persistence alone would multiply realised market
-        // volatility roughly twenty-five fold), and the two are then combined in variance shares summing to
-        // one. Persistence and tails therefore change the SHAPE of the market's path, never its magnitude.
+        // Systemic market factor: combined AR(1) persistent regime shock and Student's t heavy-tailed shock.
         $marketFactorPhi = exp(-$dt / MacroEngine::MARKET_FACTOR_DECAY_TAU_YEARS);
         $state->marketZLatent = $this->mathUtility->generatePersistentZ($state->marketZLatent, $marketFactorPhi);
 
@@ -366,14 +350,7 @@ class AssetMarketSubsystem
         $state->marketZ = (sqrt(MacroEngine::MARKET_FACTOR_REGIME_VARIANCE_SHARE) * $regimeShock)
             + (sqrt(1.0 - MacroEngine::MARKET_FACTOR_REGIME_VARIANCE_SHARE) * $tailShock);
 
-        // Market-Wide Jump: the discontinuous component of the common factor.
-        // A fat-tailed diffusion shock alone cannot produce a crash DAY. At this tick rate a day is a sum of
-        // many shocks, and the central limit theorem flattens their kurtosis back toward normal long before a
-        // player sees it -- swapping the market factor's normal draw for a Student's t moves index daily
-        // kurtosis only from about 2.97 to 3.19. Genuine index tail risk has to arrive as a jump that is large
-        // in a single tick and therefore survives aggregation, which is exactly how per-stock tail risk is
-        // already modelled by the SVJJ process. The same Kou double-exponential is reused here, skewed
-        // downward, so the whole district can gap at once rather than only individual firms.
+        // Market-wide jump: discontinuous systemic Poisson jump (Kou double-exponential).
         $systemicJump = $this->mathUtility->calculateSVJJJumps(
             lambda: MacroEngine::SYSTEMIC_JUMP_INTENSITY,
             pUp: MacroEngine::SYSTEMIC_JUMP_PROBABILITY_UP,
@@ -405,20 +382,13 @@ class AssetMarketSubsystem
     {
         $rateDiff = $state->policyRate - self::GLOBAL_BASELINE_RATE;
 
-        // Terms of trade (Chen & Rogoff 2003). The district runs a structural trade deficit and its output
-        // gap is DRAGGED by dearer energy, so it buys its commodities rather than selling them: a rising
-        // import basket is a terms-of-trade loss here and weakens the currency, the opposite sign to the
-        // commodity exporters the effect is usually named for. It is the destabilising direction, and the
-        // one that matters -- a weaker currency raises the price of the very imports that caused it, so an
-        // energy shock reaches domestic prices twice rather than being cushioned.
+        // Terms of trade: commodity import price inflation weakens the currency for a net importer.
         $energyShift = ($state->energyPriceIndexEma / MacroEngine::ENERGY_BASELINE) - 1.0;
         $metalsShift = ($state->industrialMetalsIndexEma / MacroEngine::METALS_BASELINE) - 1.0;
         $importBillShift = (MacroEngine::PPI_ENERGY_WEIGHT * $energyShift) + (MacroEngine::PPI_METALS_WEIGHT * $metalsShift);
         $termsOfTradeShift = self::FX_TERMS_OF_TRADE_SENSITIVITY * $importBillShift;
 
-        // Safe haven (Ranaldo & Soderlind 2010). One-sided, at the same volatility a panic starts bidding
-        // this sovereign's duration: the flight that compresses its term premium is the same flight, and it
-        // has to buy the currency before it can buy the bond.
+        // Safe haven bid: currency appreciation during flight to safety when volatility exceeds threshold.
         $panic = max(0.0, $state->marketVolatilityEma - MacroEngine::FLIGHT_TO_SAFETY_VOL_THRESHOLD);
         $safeHavenBid = self::FX_SAFE_HAVEN_SENSITIVITY * $panic;
 

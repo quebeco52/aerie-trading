@@ -97,12 +97,7 @@ class StockTracker
         // basket no matter how hard anyone traded it.
         $halfSpreads = [];
 
-        // How much passive money each name carries relative to its weight in the market, read once for the
-        // whole tick. Every published index contributes in proportion to the assets that track it, so this
-        // is what decides who receives passive money — not membership of the benchmark alone, which said a
-        // name was either in one index or in nothing. An empty map — a fresh market before its first
-        // reconstitution — means every listed name is held in line with its size, which is what the market
-        // was before there was a membership at all.
+        // Passive ownership weights: assets tracking each index proportional to constituent weight.
         $passiveOwnership = $this->indexCommittee?->passiveOwnership() ?? [];
 
         // The agent books are loaded once for the whole tick and written back once at the end, for the
@@ -226,12 +221,7 @@ class StockTracker
                 currentPrice: (float) $stock->getPrice(),
                 currentVolatility: $currentVol,
                 longTermVolatility: $baselineVol,
-                // Analysts cut their number on a guidance warning, and fair value is what analysts think
-                // the name is worth. Until the report puts the quarter into trailing earnings, the guided
-                // shortfall comes off the figure fair value is struck on — otherwise the warning moved the
-                // price and nothing else, and the reversion pulled it straight back before the report.
-                // The report resets the guided figure and puts the actual quarter in, so there is no
-                // double count: the two hand over.
+                // Fair value EPS basis: deduct guided shortfall from EPS until official quarterly report.
                 earningsPerShare: (float) $stock->getEarningsPerShare()
                     - ($stock->getPreAnnouncedShortfall() / max(1.0, (float) $stock->getSharesOutstanding())),
                 dt: $dt,
@@ -280,14 +270,7 @@ class StockTracker
                 $events[] = $this->eventService->publish($stock, 'SHOCK', "Sudden market shock detected.", $calculation['shock']);
             }
 
-            // ORDER FLOW IMPACT (Almgren & Chriss 2005)
-            // The permanent leg only. The temporary leg was already paid by whoever traded, as slippage on
-            // their own fill, and putting it here would charge it twice and leave it in the quote besides.
-            //
-            // Applied after the diffusion rather than inside it because it is not a random draw: it is a
-            // known quantity of stock that changed hands, and the price it leaves behind is a fact rather
-            // than a distribution. The variance it supplies is handed back through the budget in
-            // MarketEngine, using the EMA maintained below.
+            // Permanent order flow price impact: applied to price and accounted in impact variance EMA.
             $tickFlow = $netOrderFlow[$stock->getTicker()] ?? 0.0;
 
             // The company's own program — a repurchase still being executed, or issued stock still being
@@ -357,15 +340,7 @@ class StockTracker
                 $dividendPaidPerShare += (float) ($generatedEvent['dividend_per_share'] ?? 0.0);
             }
 
-            // The same cash, measured the way an INDEX has to measure it. A fund tracking the index owns the
-            // float-adjusted share count, so what it receives from this payment is the rate times those
-            // shares — the index dividend, in the same units as the capitalisation the level is struck
-            // from. Published per ticker so each index can sum its own members and nothing else.
-            //
-            // Measured here, before the split block below, because the rate was declared against the share
-            // count that is current NOW. A 4-for-1 later in the same tick quarters the rate and quadruples
-            // the count; multiplying one by the other afterwards would quadruple the cash the fund thinks
-            // it received.
+            // Index dividend points: float-adjusted dividend cash per ticker for index point calculations.
             if ($dividendPaidPerShare > 0.0) {
                 $dividendPoints[$stock->getTicker()] = $dividendPaidPerShare
                     * (float) $stock->getSharesOutstanding()
@@ -389,15 +364,7 @@ class StockTracker
                 );
             }
 
-            // REALIZED VOLATILITY
-            // The same return, squared and annualized, as an exponentially weighted mean. This is the
-            // trailing window a volatility screen ranks on, and it is measured here for the same reason the
-            // trend is: before the split block, because a 4-for-1 is not a 75% move.
-            //
-            // It is not the same number as `currentVolatility`. That is the variance process's state — what
-            // the name is about to draw from — and a single jump moves it outright; this is what the tape
-            // printed over the past year. An index that selected on the state rather than the window
-            // reconstituted itself on every volatility spike and traded on every one of them.
+            // Realized variance EMA: annualized trailing window variance tracked for index and screener selection.
             if ($dt > 0.0 && $priceAtTickStart > 0.0 && $currentPriceAfterEarnings > 0.0) {
                 $realizedPhi = exp(-$dt / FinancialConstants::INDEX_TRAILING_VOLATILITY_YEARS);
                 $annualizedTickVariance = ($tickLogReturn * $tickLogReturn) / $dt;
@@ -423,13 +390,7 @@ class StockTracker
             $newShares = $splitResult['shares'];
             $splitEvent = $splitResult['event'] ?? null;
 
-            // A split restates every per-share figure, and fair value is one of them. It was struck at the
-            // top of this tick, on the share count the quarter was reported against, so publishing it
-            // alongside a post-split price compared two different units: a 4-for-1 made the name look 75%
-            // cheap and a 1-for-10 reverse split made it look ten times dear. The fundamentalist and
-            // relative-value agents both saturate at a log gap of 0.4, so either one put a full-commitment
-            // order into the market on a corporate action that moved no money — and the reverse split is
-            // the dangerous direction, because it only ever fires on a name already close to failing.
+            // Restate perceived fair value and analyst targets for corporate stock splits.
             $splitRatio = $preSplitShares > 0.0 ? $newShares / $preSplitShares : 1.0;
             $restateForSplit = $splitRatio > 0.0 && $splitRatio !== 1.0 && is_finite($splitRatio);
 
@@ -444,13 +405,7 @@ class StockTracker
                 );
             }
 
-            // SELL-SIDE PRICE TARGET (Brav & Lehavy 2003; Womack 1996)
-            // The target is carried, not recomputed. One that tracked fair value tick by tick would never
-            // be revised, and a revision is the only part of a target that carries information — the level
-            // is a number everyone can already derive, the CHANGE is the news.
-            //
-            // Struck above fair value because the sell side is systematically optimistic, and restated only
-            // when the case has moved past the band, so most ticks write nothing at all.
+            // Sell-side analyst price targets: infrequent discrete revisions anchored to fair value.
             $analystRevision = $this->reviseAnalystTarget($stock, $perceivedFairValue, $restateForSplit ? $splitRatio : 1.0);
 
             if ($analystRevision !== null) {
@@ -543,16 +498,7 @@ class StockTracker
                 $stockUpdate['market_share'] = round($addressableShare * 100, 2);
             }
 
-            // AGENT FLOW (Brock & Hommes 1997, 1998)
-            // The simulated institutional book reacts to the price that has just been published and its
-            // orders land on the next tick, through the same impact channel and the same variance budget a
-            // player's fill goes through. The one-tick lag is the causality, not a shortcut: a participant
-            // observes a price and then trades.
-            // The return the agents are scored on is the tick's total return, measured BEFORE the split
-            // like the momentum trend above, and the split reaches them as a share ratio: a 4-for-1 is not
-            // a 75% loss. Their books are sized on the structural volume, not today's activity-scaled
-            // depth, so a stressed tape does not grow every book. The volatility handed in only seeds a
-            // book with no history; after that the agents see the realized measure their engine keeps.
+            // Institutional agent flow: agents evaluate market view and generate orders for the subsequent tick.
             $this->agentFlow->trade(new \App\DTO\AgentMarketViewDTO(
                 ticker: $stock->getTicker(),
                 price: $finalPrice,

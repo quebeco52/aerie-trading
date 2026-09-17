@@ -377,12 +377,7 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
 
         $blendedWholesaleRate = ($floatingRatio * ($policyRate + $macroState->interbankLiquiditySpreadEma)) + ((1.0 - $floatingRatio) * $yield5y) + $structuralSpread;
 
-        // --- THE CLEAR BALANCE SHEET MATH ---
-        // We derive the structural asset yield using the bank's ACTUAL deployed leverage (capped at regulatory limits).
-        // This prevents the "Phantom Debt" exploit, where banks operating below max leverage
-        // pocket the theoretical interest expense as pure Net Income, causing ROE to hyper-inflate.
-        // Crucially, this cap ONLY applies to wholesale debt. Customer deposits are market-driven and unconstrained.
-
+        // Derive structural asset yield using actual deployed wholesale leverage capped at regulatory limits.
         $actualWholesaleLeverage = $effectiveEquity > 0 ? ($wholesaleDebt / $effectiveEquity) : 0.0;
         $wholesaleLeverageLimit = $this->getWholesaleLeverageLimit();
 
@@ -400,19 +395,15 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
         $optimalNetIncome = $effectiveEquity * $baselineRoe;
         $optimalEbt = $optimalNetIncome / (1.0 - $taxRate);
 
-        // At optimal leverage, there is no idle cash generating a treasury yield, only fully deployed earning assets.
-        // The target is PRE-provision operating profit: the ROE is earned after the through-the-cycle credit
-        // charge the allowance roll-forward books against EBIT, so the target has to carry that charge too.
+        // Target is pre-provision operating profit, carrying the through-the-cycle credit charge.
         $optimalCreditProvision = $this->resolveThroughTheCycleCreditProvision($stock, $optimalEarningAssets);
         $optimalEbit = $optimalEbt + $optimalInterestExpense + $optimalCreditProvision;
         $structuralAssetYield = $optimalEbit / max(1.0, $optimalEarningAssets);
 
-        // Apply the mathematically pure structural yield to the ACTUAL physical loan book
+        // Apply structural yield to actual physical loan book.
         $targetEbit = $earningAssets * $structuralAssetYield;
-        // ------------------------------------
 
-        // Banks and Credit Services will never shrink their core loan book to zero just because cash yields are high.
-        // We floor the target EBIT based on their core liabilities to guarantee they maintain baseline lending operations.
+        // Floor target EBIT based on core liabilities to maintain baseline lending operations.
         $coreLiabilities = $totalDebt;
         $minLendingEbit = $coreLiabilities * self::MIN_CORE_LENDING_YIELD;
 
@@ -420,9 +411,7 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
 
         $stableMargin = max(0.01, (float) $stock->getOperatingMargin());
 
-        // We derive revenue from target EBIT to hit ROE expectations,
-        // but we MUST cap the gross yield. If margins compress, uncapped
-        // reverse-engineering will cause the bank's loan yields to hyperinflate!
+        // Derive target revenue from EBIT, capping gross yield to prevent margin compression distortion.
         $unboundedRevenue = max(0.0, $targetEbit) / $stableMargin;
         $targetRevenue = min($unboundedRevenue, $earningAssets * self::MAX_GROSS_ASSET_YIELD);
 
@@ -578,14 +567,7 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
         $rawMargin = $realizedVariableMargin + $niiCostAddon;
         $clampedMargin = $this->clampMargin($rawMargin, $minVariableMargin);
 
-        // The credit part of that addon in dollars, so the allowance ledger can be rolled with the same
-        // charge the income statement carried. The curve squeeze is a funding cost, not a credit one.
-        //
-        // Measured against the CLAMPED margin, because the clamp is what the income statement actually got.
-        // In the crisis quarters where the efficiency floor or the cost ceiling binds — the only quarters
-        // where a credit charge is large enough to matter — the raw addon overstates what reached earnings,
-        // and the engine then added the difference back to operating cash flow as a non-cash charge that
-        // never happened.
+        // Scale explicit credit provision by the realized portion of the clamped margin addon.
         $realizedAddon = $clampedMargin - $realizedVariableMargin;
         $addonRealizedShare = abs($niiCostAddon) > 1e-12
             ? max(0.0, min(1.0, $realizedAddon / $niiCostAddon))

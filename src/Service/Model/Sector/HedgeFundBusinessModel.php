@@ -258,15 +258,7 @@ class HedgeFundBusinessModel extends AssetManagementBusinessModel
 
     public function getMacroPhysics(Stock $stock, MacroStateDTO $macroState): array
     {
-        // The root shift is what analysts SEE: the engine folds it into expected revenue, and consensus is
-        // built on expected revenue. This model used to zero it and apply every macro term stream by
-        // stream inside calculateSectorPhysics, where consensus could not see any of it — so through a
-        // whole boom the fund beat its number every quarter by the AUM and directional uplift, each beat
-        // popped the price, and the chart drew a quarterly sawtooth. The uplift is built from published
-        // macro series (output gap, M2, VIX) that every analyst has, so it belongs in the estimate.
-        //
-        // calculateSectorPhysics divides the same shift back out before applying its own per-stream terms,
-        // so the physics is unchanged and nothing is counted twice.
+        // Provide analyst-visible macro shift for consensus; neutralized in calculateSectorPhysics before stream physics.
         return [
             'macro_demand_shift'       => $this->resolveAnalystVisibleMacroShift($stock, $macroState),
             'pricing_power_multiplier' => 1.0,
@@ -311,9 +303,7 @@ class HedgeFundBusinessModel extends AssetManagementBusinessModel
         MacroStateDTO $macroState,
         MathUtility $mathUtility
     ): SectorPhysicsResult {
-        // Expected revenue arrives with the analyst-visible macro shift already inside it (see
-        // getMacroPhysics). The streams apply their own macro terms in full below, so that shift is divided
-        // back out first: the physics runs on the structural base exactly as it always did.
+        // Neutralize analyst macro shift so streams apply idiosyncratic macro terms on the base.
         $structuralRevenue = $expectedRevenue / max(0.25, 1.0 + $this->resolveAnalystVisibleMacroShift($stock, $macroState));
 
         $params = $this->resolveModelParameters($stock, [

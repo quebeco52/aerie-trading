@@ -217,15 +217,7 @@ class EarningsEngine
         // reversal is news: nothing on the street can have anticipated it.
         $reversalDue = $stock->getManagedAccrualBank() * FinancialConstants::EARNINGS_MANAGEMENT_REVERSAL_RATE;
 
-        // Costs already in the base that selling prices have not caught up with. Only the CHANGE is news: a
-        // squeeze the firm has been carrying for a year was disclosed a year ago and sits in every estimate on
-        // the street, and warning on the standing level instead had a firm in a lasting cost shock issue a
-        // guidance cut every single quarter for as long as the shock lasted.
-        //
-        // The change available here is the one booked at the LAST report, not one measured against the quarter
-        // being warned about: the cost stream advances only inside computeActualFinancials, so nothing has
-        // moved it since. Management guides on the squeeze it is carrying INTO the quarter — the most recent
-        // increment it can honestly know. Reading the current quarter would mean reading draws not yet made.
+        // Guidance warns on unrecovered cost increases carried into the quarter relative to prior period.
         $streamState = $stock->getEarningsMomentumZ() ?? [];
         $unrecovered = max(0.0,
             (float) ($streamState[FinancialConstants::STATE_INPUT_COST_LEVEL] ?? 0.0)
@@ -251,12 +243,7 @@ class EarningsEngine
             return [];
         }
 
-        // Sized against STRUCTURAL earnings power, revenue at the operating margin, not against the trailing
-        // print. Kasznik & Lev scale the surprise by price for the same reason: a firm that just broke even
-        // has a trailing figure near zero, and dividing by it turned a trivial accrual reversal into a
-        // hundred-percent miss with the full price reaction behind it, while a firm running a larger loss
-        // warned less because the absolute value grew. The margin is floored so a structurally unprofitable
-        // firm is still measured against its revenue base rather than a near-zero margin.
+        // Shortfall sized against structural quarterly earnings power rather than volatile trailing earnings.
         $structuralMargin = max(FinancialConstants::PREANNOUNCEMENT_MIN_MARGIN_SCALE, (float) $stock->getOperatingMargin());
         $structuralQuarterlyEarnings = max(1.0, $quarterlyRevenue * $structuralMargin);
         $shortfallRatio = $knownShortfall / $structuralQuarterlyEarnings;
@@ -269,15 +256,7 @@ class EarningsEngine
         // which is exactly why managements warn.
         $stock->setPreAnnouncedShortfall($knownShortfall * FinancialConstants::PREANNOUNCEMENT_CONSENSUS_ABSORPTION);
 
-        // A warning is repriced on the day it is issued. The published figure has to BE the move, not a
-        // number beside an unchanged price: every surface that renders an event reads change_percent as a
-        // realized return, so a headline reaction the price never took was simply a false print.
-        //
-        // Priced by the SAME law the report uses — the earnings response coefficient on the surprise, with
-        // the same market dampening — because a shortfall is the same news whether it is disclosed a week
-        // early or on the day. The first version applied its own steeper schedule and punished a warning
-        // about twice as hard as the report would have punished the identical miss; with fair value
-        // unmoved by the warning, the reversion then pulled the price straight back before the report.
+        // Pre-announcement repricing: price reacts on guidance issuance date via earnings response coefficient.
         $currentPrice = (float) $stock->getPrice();
         $annualEps = (float) $stock->getEarningsPerShare();
         $currentPE = $annualEps > 0.0 ? $currentPrice / $annualEps : FinancialConstants::BASELINE_MARKET_PE;
@@ -547,15 +526,7 @@ class EarningsEngine
             $ctx->expectedRevenue = min($maxFinancialCapacity * self::EXPECTED_REVENUE_TAM_HEADROOM, $ctx->structuralRevenue * $ctx->capacityUtilization);
         }
 
-        // INDUSTRY CAPACITY BALANCE (Cournot inverse demand, dominant firms against a competitive fringe)
-        // The capacity above was struck against the firm's own plant alone. It is sold into an industry
-        // whose trend demand does not grow because someone built more: the modelled roster's build beyond
-        // trend, each firm weighted by its addressable share, sets a price level every firm in the industry
-        // realizes, scaled by how substitutable the industry's output is (a branded good is mostly share;
-        // an oil producer sells into a global pool). It lands in EXPECTED revenue, since analysts can count the industry's plant
-        // as well as the firm can, and it is a level struck fresh from the balance every report, never a
-        // rate that accumulates. Unit costs do not move with the industry's price: the level scales the
-        // revenue lines below and the cost base is derived from capacity at a balanced price.
+        // Industry capacity balance: total industry capacity relative to trend demand scales realized price level.
         $industryPriceLevel = $this->resolveIndustryPriceLevel($ctx);
         $ctx->industryPriceLevel = $industryPriceLevel;
         $balancedStructuralRevenue = $ctx->structuralRevenue;
@@ -568,25 +539,14 @@ class EarningsEngine
         // it. Scaling costs by the pricing-power multiplier gave every firm a fixed margin whatever it charged.
         $structuralCosts = $balancedStructuralRevenue * ($inputCostMultiplier / max(0.5, $pricingPowerMultiplier)) * (1.0 - $ctx->stableMargin);
 
-        // Depreciation becomes its own expense line below EBITDA, so it must be carved OUT of the cash cost
-        // base rather than added on top of it. The stock's operatingMargin is its EBIT margin — every seed,
-        // valuation and solvency test reads it that way — so at structural capacity the carve-out is exactly
-        // self-cancelling: revenue - cashCosts - structuralDepreciation == revenue x margin. What changes is
-        // that a utilization swing or a drifting asset base now moves EBIT, which is the whole point: units-of
-        // -production depreciation used to land on EBITDA, where no coverage or solvency test could see it.
+        // Carve structural depreciation out of cash operating costs so EBITDA sits above depreciation and EBIT below.
         $ctx->structuralDepreciation = $this->resolveStructuralDepreciation($ctx);
         $cashStructuralCosts = max(
             $structuralCosts * FinancialConstants::MIN_CASH_COST_SHARE,
             $structuralCosts - $ctx->structuralDepreciation
         );
 
-        // Beveridge Wage-Price Spiral SG&A Squeeze:
-        // When labor tightness causes wage growth above trend (3.5%), the LABOR share of corporate overhead
-        // inflates, squeezing margins for firms that cannot pass costs through via pricing power. The share
-        // is sector-specific (OperatingStrategyInterface::getLaborCostShare): a law firm feels nearly all
-        // of it, a pipeline operator very little.
-        // Signed: wage growth below trend eases payroll just as growth above it inflates it (bounded below so a
-        // deflationary print cannot manufacture a windfall).
+        // Wage-price spiral: excess wage growth above trend inflates the labor-cost share of fixed costs.
         $excessWageGrowth = max(-FinancialConstants::MAX_WAGE_RELIEF, $macroState->wageGrowth - (MacroEngine::TFP_DRIFT + MacroEngine::TARGET_INFLATION));
         $wageInflationFactor = 1.0 + ($strategy->getLaborCostShare() * $excessWageGrowth / max(0.5, $pricingPowerMultiplier));
         $ctx->fixedCosts = $cashStructuralCosts * $fixedCostRatio * $wageInflationFactor;
@@ -738,12 +698,7 @@ class EarningsEngine
         $revenueLogChange = max(-0.50, min(0.50, log(max(0.01, $currentDeseasonalized / max(1.0, $priorDeseasonalized)))));
         $stickyVariableMargin = $this->mathUtility->calculateAsymmetricCostStickiness($realizedVariableMargin, $revenueLogChange);
 
-        // Overtime is measured against the DESEASONALIZED run rate, the same way the inventory trigger and the
-        // working capital cycle read utilization. The raw figure carries the seasonal factor, so a retailer
-        // whose fourth quarter runs at 1.35x paid a twelve-point convex penalty on its cost ratio every
-        // holiday season at exactly structural demand, and a scripted miss followed every year because the
-        // consensus anchor only sees three quarters of a cost-ratio change. Capacity is sized for the peak
-        // the calendar brings every year; overtime is what a firm pays when demand runs past that.
+        // Overtime cost penalty: calculated against deseasonalized capacity utilization above threshold.
         $deseasonalizedUtilization = $ctx->capacityUtilization / max(0.01, $ctx->seasonalFactor);
         $overtimePremium = $this->mathUtility->calculateConvexPenalty(
             $deseasonalizedUtilization - self::CAPACITY_OVERTIME_THRESHOLD,
@@ -878,14 +833,7 @@ class EarningsEngine
         $realizedCostRatio = $ctx->actualRevenue > 0.0
             ? ($ctx->actualVariableCosts / $ctx->actualRevenue)
             : $ctx->realizedVariableMargin;
-        // The run-rate is REBUILT from the revenue and cost ratios rather than deseasonalized from EBIT,
-        // because fixed costs and depreciation do not swing with the quarter. That rebuild starts from the
-        // operating cost base, so every charge struck against EBIT after that base — inventory written down
-        // to net realizable value, the receivable allowance, the credit-loss level correction — has to be
-        // taken out again here. Leaving them out let a firm eating a ten-point margin hit from write-downs
-        // report an unimpaired structural margin to the solvency and spread tests below, which is exactly
-        // the "collapse priced quarters late" this figure exists to prevent. Impairments are not seasonal,
-        // so they come off at face value rather than being scaled by the seasonal factor.
+        // Deseasonalized run-rate EBIT: reconstructed from revenue and cost ratios with non-seasonal impairments deducted.
         $ctx->seasonallyAdjustedEbit = ($ctx->seasonallyAdjustedRevenue * (1.0 - $realizedCostRatio)) - $ctx->fixedCosts - $ctx->quarterlyDepreciation - $ctx->impairmentCharges;
         $ctx->structuralOperatingMargin = $ctx->seasonallyAdjustedEbit / max(1.0, $ctx->seasonallyAdjustedRevenue);
 
@@ -1064,13 +1012,7 @@ class EarningsEngine
             // too large to unwind, so the quarter is reported as it happened.
             $reachableGap = abs($consensus) * FinancialConstants::EARNINGS_MANAGEMENT_MAX_GAP;
 
-            // Propensity is the PROBABILITY this board reaches for the accrual, not a haircut on the entry
-            // it books. Scaling the entry instead meant a firm short by S booked half of S and printed the
-            // miss anyway: measured over twelve quarters across every industry, only 3 of 103 reachable
-            // near-misses ever crossed the line, so the spike just above consensus that this whole method
-            // exists to produce (Burgstahler & Dichev 1997) never formed. An accrual that does not close
-            // the gap buys management nothing and still owes the reversal, which no reporting incentive
-            // would rationalize.
+            // Earnings management: probabilistic accrual borrowed to close small reachable consensus gaps.
             if ($shortfall <= $reachableGap && $this->mathUtility->checkProbability($propensity)) {
                 // Land just above the line rather than exactly on it: an exact match is the one outcome
                 // that never occurs in real reported distributions.
@@ -1120,15 +1062,7 @@ class EarningsEngine
         $saAnnualEpsRaw = ($saQuarterlyNetIncome * 4.0) / $shares;
         $ctx->actualAnnualEpsRaw = $saAnnualEpsRaw;
 
-        // Trailing twelve month earnings are the SUM of the last four reported quarters, not a filter over
-        // them. Smoothing the headline figure here put a multi-year half-life on it, so the P/E a player read
-        // lagged the business by years and a genuine collapse in earnings was invisible on the screener.
-        // Valuation is unaffected: the market engine runs its own Kalman filter against the strategy's
-        // structural EPS and treats this figure as the noisy measurement it is meant to be.
-        //
-        // The history holds absolute net income rather than per-share amounts, because EPS on this entity is
-        // derived from net income over current shares. Buybacks therefore lift trailing EPS and splits divide
-        // it with no restatement of history, exactly as reported accounts behave.
+        // Trailing-twelve-month net income is the sum of the last four reported quarters.
         $history = $stock->getQuarterlyNetIncomeHistory() ?? [];
         if (count($history) < self::TTM_QUARTERS) {
             // First report: seed from the deseasonalized run-rate so the opening trailing figure does not
@@ -1179,12 +1113,7 @@ class EarningsEngine
                 ? 1.0
                 : max(0.20, 1.0 + ($ctx->actualQuarterlyNetIncome / max(1.0, abs($ctx->investedCapital))));
 
-            // Replacement cost (BEA perpetual inventory method): depreciation is measured against what the
-            // plant originally cost, but replacing a worn machine costs today's price. The ratio of the
-            // current capital-goods price level to the vintage the plant was bought at is how far a
-            // maintenance dollar has to stretch. This is the channel through which inflation actually
-            // reaches the balance sheet — the firm spends more cash to stand still — replacing the old
-            // revaluation that simply wrote equity up with no cash and no income behind it.
+            // Replacement cost maintenance capex: scales accounting depreciation by the capital-goods replacement cost ratio.
             $ctx->replacementCostRatio = $this->resolveReplacementCostRatio($ctx);
             $maintenanceCapEx = $ctx->quarterlyDepreciation * $ctx->replacementCostRatio * $cycleCapExModifier * $solvencyFactor;
             if ($ctx->strategy->isFinancial()) {
@@ -1320,13 +1249,7 @@ class EarningsEngine
         $ctx->totalReportedCapex = ($actualAnnualCapEx / 4.0) + $reportedOrganicCapex;
         $ctx->trueQuarterlyFcf = ($trueAnnualFcfPerShare * $ctx->sharesOutstanding) / 4.0;
 
-        // Sloan (1996) accruals: the gap between the profit a firm reports and the cash its operations
-        // produced, scaled by its assets. Sloan's numerator is net income less cash from OPERATIONS. It
-        // used to be measured against free cash flow after capex, which flagged every heavy reinvestor as
-        // low-quality earnings and docked its fair-value multiple for building plant — the opposite of
-        // what the anomaly is about. Now that operating cash flow is a real statement line it is used
-        // directly, and total assets come from the balance sheet where one exists. Until a firm's first
-        // ledger is open, equity plus funding is total assets by identity.
+        // Sloan accruals ratio: difference between reported net income and operating cash flow, scaled by total assets.
         $totalAssets = $this->resolveTotalAssets($ctx);
         // Sloan measures REPORTED earnings against operating cash, so the managed entry belongs in the
         // numerator: steering the headline with accruals is exactly the low-quality earnings the anomaly
@@ -1352,18 +1275,7 @@ class EarningsEngine
         $stock = $ctx->stock;
         $timingDifference = $this->rollForwardTaxDepreciation($ctx);
 
-        // The tax footnote identity: total expense is unchanged, and is split into the part paid this
-        // quarter and the part postponed. Splitting rather than recomputing is what guarantees reported
-        // earnings and EPS are untouched by this rule, which is exactly right — a timing difference moves
-        // cash, never profit.
-        //
-        // The deferred half is bounded by the total expense so cash tax can never turn negative (the firm
-        // does not receive money from the tax authority for buying equipment) and the reversal can never
-        // charge more than double.
-        // A reversal is also bounded by the balance there is to reverse: the firm can only hand back tax it
-        // actually postponed. Without that bound the liability had to be floored at zero AFTER the cash
-        // figure had already been struck against the full reversal, so the extra cash left the company with
-        // no liability released behind it and the sheet stopped balancing by the difference.
+        // Deferred tax timing differences: splits total book tax into current and deferred portions without changing total expense.
         $openingDeferred = max(0.0, (float) $stock->getDeferredTaxLiability());
         $rawDeferred = $timingDifference * $ctx->corporateTaxRate;
         $deferredTax = max(-min($bookTaxExpense, $openingDeferred), min($bookTaxExpense, $rawDeferred));
@@ -1437,14 +1349,7 @@ class EarningsEngine
 
         $annualizedCosts = max(0.0, ($ctx->actualVariableCosts + $ctx->fixedCosts) / max(0.001, $ctx->dt));
 
-        // Written-down stock leaves the books as it turns: the goods are cleared below cost and replaced at
-        // cost, and the replacement is the cash the write-down foretold. Releasing the allowance lifts the
-        // carrying value back toward the cycle's level, and that rise reaches cash through the working
-        // capital build below, with no second pass through earnings. The write-down itself moved no cash;
-        // charging the replacement in the quarter the goods were impaired, as cutting the gross balance did,
-        // paid for stock the firm had not yet cleared and left the sheet showing none of the impairment.
-        // Only stock impaired in EARLIER quarters has had time to turn: this quarter's charge stays in full,
-        // or it would be replaced in the quarter it was written down, which is the timing this exists to fix.
+        // Inventory allowance release: unwinds prior-period inventory allowances as goods turn over.
         $allowance = (float) $stock->getInventoryAllowance();
         $openingAllowance = max(0.0, $allowance - max(0.0, $ctx->inventoryWriteDown));
         if ($openingAllowance > 0.0) {
@@ -1784,25 +1689,7 @@ class EarningsEngine
         $structuralQuarterlyNopat = $ctx->baselineRoic * abs($ctx->investedCapital) / 4.0;
         $plannedGrowthCapEx = $structuralQuarterlyNopat * $reinvestmentRate * $cycleCapExModifier;
 
-        // Plant that grows with the firm's market moves no price: the industry capacity balance charges
-        // nothing for capacity that tracks trend demand, so that tranche clears at the average return.
-        // Anything beyond it is share-taking, and the next unit of THAT earns a marginal return, which is
-        // the structural return less two things a firm growing with its market never pays:
-        //
-        //   - the price cut it imposes on everything it already sells (Cournot, via the Lerner term), and
-        //   - Cobb-Douglas diminishing marginal productivity once its capital has outgrown the market it
-        //     serves, which at a scale ratio of 1.4 is worth more than the price cut is.
-        //
-        // The saturation penalty, the third component, is NOT subtracted here: baselineRoic arrives from
-        // getTargetMetrics already net of it, and charging it again would price the same bloat twice.
-        //
-        // The decay used to be missing on this side, so the two gates were composing the marginal return
-        // from different parts. In practice it is a BACKSTOP rather than a live brake: the Penrose penalty
-        // already inside baselineRoic is quadratic and reaches 0.2 x moat by a scale ratio of 1.0, which
-        // takes the structural return to roughly zero over the same band where the decay first bites — so
-        // the primary NPV gate above has almost always refused already. It is composed here anyway because
-        // the law belongs in one place: if the penalty is ever softened, or moved onto realized margins
-        // where its own docblock says it belongs, this gate does not silently become the loose one.
+        // Marginal return on share-taking capex: structural return less Cournot price haircut and scale diseconomies.
         $shareTakingReturn = $this->corporateMetrics->applyScaleDiseconomies(
             $stock,
             $ctx->baselineRoic - $this->corporateMetrics->calculateCournotPriceHaircut(

@@ -200,13 +200,7 @@ class MergerAndAcquisitionEngine
             return null;
         }
 
-        // REJECTION GATE. Whether a deal fires this tick is a Bernoulli draw with a hazard the firm's state
-        // decides, and that hazard is bounded above by a constant. So the draw is made in two stages: pass a
-        // gate at the ceiling, and only then work out the firm's own hazard and accept with the ratio of the
-        // two. The product is exactly the firm's hazard — this is rejection sampling, not an approximation —
-        // and the second stage is what costs: the debt analysis, the fair-value multiple and the hoarding
-        // test were being computed for every firm on every tick to decide an event that fires about once a
-        // decade per firm. At the ceiling the gate rejects all but a few passes in ten thousand.
+        // Rejection sampling gate: early-reject low-probability acquisition checks before full context initialization.
         if (!$this->mathUtility->checkProbability(self::acquisitionHazardCeiling() * $dt)) {
             return null;
         }
@@ -309,18 +303,9 @@ class MergerAndAcquisitionEngine
         $ctx->isEmpireBuilder = $style === \App\Data\ManagementStyle::EmpireBuilder;
         $ctx->hubrisPremium = $manager->hubrisPremium();
         
-        // Every branch below that sets use_leverage is a DISCRETIONARY leveraged deal, so the Net Debt /
-        // EBITDA covenant has to reach all three or it becomes an accident of which branch matched first.
+        // Discretionary acquisition strategy: empire builders, overvalued stock mergers, and cash hoarders.
         $config = match (true) {
-            // Morck, Shleifer & Vishny (1990): for this manager the deal IS the objective, not a use for
-            // spare capacity, so the branch is read ahead of the hoarding and leverage reads rather than
-            // behind them. Both constants below were already declared and had been unreachable for as long
-            // as the flag above was hardcoded false — this is the branch they were written for.
-            //
-            // It funds itself like the LBO branches below (use_leverage draws on borrowing capacity), so it
-            // answers to the same two lender tests. Hubris is a reason to overpay for a target, not a reason
-            // a bank lends to a firm that cannot service what it already owes. Failing either test does not
-            // stop the empire builder acquiring — it falls through to the cash-funded branches.
+            // Empire builders fund acquisitions via available debt capacity, falling through to cash if covenants bind.
             $ctx->isEmpireBuilder && $ctx->health->canIssueDebt && $ctx->health->hasLeverageHeadroom && $ctx->totalBuyingPower > self::MA_EMPIRE_BUILDER_MIN_POWER => [
                 'prob' => self::MA_EMPIRE_BUILDER_PROB, 'spend' => 0.55, 'type' => $ctx->strategy->getAcquisitionType('CONGLOMERATE EXPANSION'), 'use_leverage' => true, 'use_stock' => false, 'style_priced' => true
             ],
@@ -480,13 +465,7 @@ class MergerAndAcquisitionEngine
         
         $targetMargin = max(0.01, $oldOperatingMargin * (mt_rand(70, 95) / 100.0));
 
-        // Roll's (1986) hubris hypothesis: the winning bidder is the one that most overestimates the target,
-        // and the difference is simply paid. So the price and the thing bought are two separate quantities
-        // here — the business is worth its standalone value and earns on that, while the acquirer's capital
-        // goes out at the price. The overpayment buys no earnings at all: it lands in goodwill, drags the
-        // blended return down by exactly the capital it consumed, and waits for the annual impairment test.
-        // The realised synergy above is drawn independently and is NOT touched, because hubris is an error
-        // in the estimate rather than in the outcome.
+        // Hubris hypothesis: purchase price premium over standalone economic value is capitalized into goodwill.
         $economicValue = $ctx->purchasePrice / (1.0 + max(0.0, $ctx->hubrisPremium));
         $roicOnPricePaid = $effectiveTargetRoic * ($economicValue / max(1.0, $ctx->purchasePrice));
 
@@ -494,21 +473,14 @@ class MergerAndAcquisitionEngine
         
         $ctx->strategy->blendAcquisitionDNA($stock, $oldCapitalBase, $ctx->purchasePrice, $roicOnPricePaid, $totalNewCapital);
 
-        // Goodwill is the premium over the fair value of net identifiable assets. At a no-growth justified
-        // price-to-book of ROIC / hurdle (residual income identity), net assets acquired are the target's
-        // standalone value scaled by hurdle / ROIC and the remainder is goodwill, tested annually for
-        // impairment. Net assets scale with what was bought, never with what was paid — that is what puts
-        // the whole overpayment into goodwill instead of quietly capitalising it as plant.
+        // Goodwill allocation: excess of purchase price over fair value of net identifiable assets.
         $netAssetsAcquired = $economicValue * min(1.0, max(0.01, $ctx->hurdleRate) / max(0.01, $effectiveTargetRoic));
         $ctx->goodwillRecorded = max(0.0, $ctx->purchasePrice - $netAssetsAcquired);
         $stock->setGoodwill((string) ((float) $stock->getGoodwill() + $ctx->goodwillRecorded));
 
         $this->bookAcquiredNetAssets($stock, $ctx->strategy, $netAssetsAcquired);
         
-        // Operating margin blends on the revenue-generating base, which is the business acquired and not the
-        // cheque written for it: overpaying destroys return on capital, it does not make the target's costs
-        // any worse. Both weights therefore run on standalone value, and with no premium this is the
-        // identity it always was.
+        // Blend operating margins based on standalone economic capital of acquirer and target.
         $marginBlendCapital = max(1.0, $oldCapitalBase + $economicValue);
         $blendedMargin = (($oldCapitalBase * $oldOperatingMargin) + ($economicValue * $targetMargin)) / $marginBlendCapital;
         $stock->setOperatingMargin((string) max(0.01, $blendedMargin * (1.0 - self::MA_INDIGESTION_PENALTY)));

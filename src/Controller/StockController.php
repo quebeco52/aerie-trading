@@ -80,10 +80,7 @@ class StockController extends AbstractController
             return $this->json($barAggregator->aggregate($results, count($results)));
         }
 
-        // A range button names a span of SIMULATED TIME, so the row limit behind it has to be derived from
-        // the configured tick rate and the rate history is actually sampled at. The counts here were
-        // hardcoded to a 4,800-row year, a figure the sampler never produces: it caps at 2,400 rows per
-        // year, so every span was off by whatever ratio the configured rate happened to differ by.
+        // Derive row limit for simulated timeframe based on configured history sampling rate.
         $pointsPerYear = \App\Command\MarketTickerCommand::historyPointsPerYear($ticksPerYear);
         $rangeYears = ['3m' => 0.25, '6m' => 0.5, '1y' => 1.0, '3y' => 3.0, '5y' => 5.0, '10y' => 10.0];
 
@@ -116,9 +113,7 @@ class StockController extends AbstractController
                 $tableName = 'bond_history';
                 $foreignKey = 'bond_id';
 
-                // Bonds chart CLEAN, matching what the ticker buffers into Redis for the short ranges.
-                // Charting the dirty price would draw the coupon accrual sawtooth as if it were price
-                // movement, and the series would jump at the join between the buffer and the table.
+                // Chart clean price to align with buffered short-range Redis quotes and exclude coupon sawtooth.
                 $priceColumn = 'clean_price';
             }
         }
@@ -141,13 +136,7 @@ class StockController extends AbstractController
             : '';
 
         $sql = sprintf(
-            // Ordered by SIMULATION time, which is the clock the market is keyed on. `recorded_at` is the
-            // wall clock of whichever container wrote the row, and the two only track each other while the
-            // ticker runs uninterrupted — a restart leaves a gap in one and none in the other. The id
-            // tie-break is not decoration either: many rows share a simulation instant at a fast tick rate
-            // and their order within it is undefined, which scrambles the open and close inside every bar.
-            // Leading with sim_time keeps the idx_*_sim_time backward scan; ordering by id alone cannot use
-            // an index and filesorts the name's whole history on every chart load.
+            // Order by sim_time and id descending using the sim_time index to preserve intra-tick candle order.
             'SELECT id, %s AS price%s, recorded_at FROM %s WHERE %s = :id ORDER BY sim_time DESC, id DESC LIMIT %d',
             $priceColumn,
             $barColumns,
@@ -158,9 +147,7 @@ class StockController extends AbstractController
 
         $stmt = $conn->executeQuery($sql, ['id' => $targetId]);
 
-        // Bucketed rather than decimated. Keeping every Nth row and discarding the rest is right for a line
-        // — it is a subsample of closes — but it throws away the extremes of every dropped bar and leaves
-        // each surviving candle opening nowhere near the previous close. The stream is consumed once.
+        // Aggregate rows into candles via bucketed bar aggregation to preserve price extremes.
         return $this->json($barAggregator->aggregate($stmt->iterateAssociative(), $actualCount));
     }
 
@@ -300,9 +287,7 @@ class StockController extends AbstractController
         $addLink('Pre-Tax Income', 'Goodwill Impairment', $flow->goodwillImpairment);
         $addLink('Pre-Tax Income', 'Net Income', $flow->netIncome);
 
-        // Sources of cash, then what it was spent on. Depreciation appears on both sides on purpose: it is
-        // struck against EBITDA and added straight back, which is exactly how a cash flow statement reads.
-        // The goodwill write-off comes back for the same reason — no money left the company.
+        // Cash sources and uses: add back non-cash depreciation and goodwill impairment.
         $addLink('Net Income', 'Cash Generated', max(0.0, $flow->netIncome));
         $addLink('Depreciation', 'Cash Generated', $flow->depreciation);
         $addLink('Goodwill Impairment', 'Cash Generated', $flow->goodwillImpairment);

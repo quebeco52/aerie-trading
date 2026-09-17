@@ -127,22 +127,12 @@ class InvestmentCompanyBusinessModel extends ConglomerateBusinessModel
         MacroStateDTO $macroState,
         MathUtility $mathUtility
     ): SectorPhysicsResult {
-        // THE PORTFOLIO SPLIT IS READ, NEVER DECLARED. Subsidiaries, listed stakes and treasury are the
-        // whole book, so any two settle the third and a dial for it can only drift. Both that used to sit
-        // here did — one claimed 60% of book against stakes worth 51%, the other left 5% in no sleeve.
-        //
-        // Two are measured: the treasury is a ledger balance the engines rewrite every quarter, and the
-        // listed stakes are priced off the board by AnchorStakeLedger. The consolidated sleeve is the one
-        // thing nothing measures, so it is the residual — the honest way round.
+        // Consolidated sleeve is the residual of invested capital less listed stake values.
         $params = $this->resolveModelParameters($stock, [
             ModelParam::PricingPowerIndex->value => self::PRICING_POWER_INDEX,
         ]);
 
-        // BALANCES, never shares of NAV. These three are assets and assets sum to equity PLUS what is owed,
-        // so a residual struck over equity is short by exactly the leverage — and it decays, until around
-        // 4x the portfolio the consolidated stream vanishes outright. Invested capital already carries the
-        // debt and the deferred tax, so a mark moves it and the stakes identically and the residual is
-        // invariant, which is correct: the subsidiaries did not change. Same base getPlantCapital() uses.
+        // Balances calculated from invested capital and listed values to preserve leverage invariance.
         $treasuryValue = max(0.0, (float) $stock->getCorporateTreasury());
         $listedValue = $this->resolveListedStakeValue($stock);
         $consolidatedValue = max(0.0, $stock->getInvestedCapital() - $listedValue);
@@ -153,9 +143,7 @@ class InvestmentCompanyBusinessModel extends ConglomerateBusinessModel
         $streams = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
         $beta = max(self::MIN_CYCLICAL_BETA_FLOOR, $this->getOperatingCyclicality($stock));
 
-        // Assets to income, each at the rate its KIND of ownership permits. The simplex normalises these,
-        // so the revenue mix inverts the asset mix as a consequence rather than by being entered backwards.
-        // A stream left at zero is never drawn and never reported.
+        // Map assets to income based on ownership type, normalized across active streams.
         $activeWeights = $streams->resolveActiveStreamWeights([
             'wholly_owned'          => $consolidatedValue * self::WHOLLY_OWNED_ASSET_TURNOVER,
             'listed_portfolio'      => $listedValue * self::LISTED_DIVIDEND_YIELD,
@@ -216,9 +204,7 @@ class InvestmentCompanyBusinessModel extends ConglomerateBusinessModel
         $actualRevenue = array_sum($streamRevenues);
         $streams->recordStreamShares($streamRevenues);
 
-        // Only the consolidated subsidiaries buy anything. A dividend received and a coupon clipped have no
-        // cost of goods behind them, so the basket is charged against the operating stream's realized share
-        // rather than against the group's revenue.
+        // Charge input basket against operating revenue only; dividends and coupons carry no COGS.
         $ownedShare = $actualRevenue > 0.0 ? ($streamRevenues['wholly_owned'] ?? 0.0) / $actualRevenue : 0.0;
         $ppiCostDrag = $this->resolveInputCostDrag($stock, $macroState, $streams, $pricingPower, $realizedVariableMargin)
             * max(0.0, $ownedShare);

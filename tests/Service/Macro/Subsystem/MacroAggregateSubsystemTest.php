@@ -371,18 +371,24 @@ class MacroAggregateSubsystemTest extends TestCase
         );
     }
 
+    /** The board's capitalisation in the tests below. Deliberately an absurd number: see gapWithEquityAt(). */
+    private const TEST_MARKET_CAP = 8.6e11;
+
     /**
-     * One step of the output gap with the board at a given multiple of its base level. Passing $trend equal
-     * to that multiple is a board households have become used to; leaving it at 1.0 is one that just got there.
+     * One step of the output gap with the board worth a given multiple of what households are used to.
+     *
+     * The capitalisation is arbitrary on purpose. The effect reads the ratio against its own trend, so a
+     * constant scale divides out and only the multiple can matter; if a test here ever starts caring what
+     * that number is, the scale has leaked back into the channel.
      */
     private function gapWithEquityAt(float $multipleOfTrend, float $trend = 1.0): float
     {
         $state = new MacroState();
         $state->outputGap = 0.0;
         $state->nominalGdpIndex = 1.0;
-        $state->equityWealthTrend = $trend;
-        $state->equityIndexLevel = \App\Service\Math\FinancialConstants::INDEX_BASE_LEVEL * $multipleOfTrend;
-        $state->equityIndexLevelEma = $state->equityIndexLevel;
+        $state->equityWealthTrend = self::TEST_MARKET_CAP * $trend;
+        $state->equityMarketCap = self::TEST_MARKET_CAP * $multipleOfTrend;
+        $state->equityMarketCapEma = $state->equityMarketCap;
 
         return $this->subsystem->calculateOutputGap($state, 0.03, MacroEngine::BASE_NATURAL_RATE, 0.25, 1.0);
     }
@@ -416,9 +422,9 @@ class MacroAggregateSubsystemTest extends TestCase
     {
         $state = new MacroState();
         $state->nominalGdpIndex = 1.0;
-        $state->equityWealthTrend = 1.0;
-        $state->equityIndexLevel = \App\Service\Math\FinancialConstants::INDEX_BASE_LEVEL * 1.60;
-        $state->equityIndexLevelEma = $state->equityIndexLevel;
+        $state->equityWealthTrend = self::TEST_MARKET_CAP;
+        $state->equityMarketCap = self::TEST_MARKET_CAP * 1.60;
+        $state->equityMarketCapEma = $state->equityMarketCap;
 
         // Four horizons of living with it. Nominal GDP is held flat so only the trend can close the gap.
         for ($i = 0; $i < 4 * 12; $i++) {
@@ -426,7 +432,7 @@ class MacroAggregateSubsystemTest extends TestCase
             $state->nominalGdpIndex = 1.0;
         }
 
-        $this->assertEqualsWithDelta(1.60, $state->equityWealthTrend, 0.05, 'The trend settles on the level it has been shown.');
+        $this->assertEqualsWithDelta(1.60, $state->equityWealthTrend / self::TEST_MARKET_CAP, 0.05, 'The trend settles on the level it has been shown.');
 
         // Stated on the gap itself, holding every other series still: what the channel reads is the ratio's
         // distance from its trend and nothing else, so a board 60% richer than households are used to and a
@@ -451,9 +457,19 @@ class MacroAggregateSubsystemTest extends TestCase
      */
     public function testAnUnreportedMarketContributesNothing(): void
     {
-        $state = new MacroState();
+        $unreported = new MacroState();
+        $unreported->outputGap = 0.0;
+        $unreported->nominalGdpIndex = 1.0;
 
-        $this->assertEqualsWithDelta(1.0, ($state->equityIndexLevelEma / \App\Service\Math\FinancialConstants::INDEX_BASE_LEVEL) / $state->nominalGdpIndex, 1e-12);
-        $this->assertSame(1.0, $state->equityWealthTrend, 'The opening ratio and its trend are the same number, so the gap is zero.');
+        $this->assertSame(0.0, $unreported->equityMarketCap, 'Zero is the sentinel for a market never reported.');
+        $this->assertSame(0.0, $unreported->equityWealthTrend, 'And nothing has been got used to yet.');
+
+        // Silent, not merely small: it has to read exactly as a board sitting on its own trend does.
+        $this->assertEqualsWithDelta(
+            $this->gapWithEquityAt(1.00),
+            $this->subsystem->calculateOutputGap($unreported, 0.03, MacroEngine::BASE_NATURAL_RATE, 0.25, 1.0),
+            1e-12,
+            'An unreported market must move demand exactly as much as a board at its trend: not at all.'
+        );
     }
 }

@@ -49,12 +49,7 @@ class PruneHistoryCommand extends Command
         $io->text(sprintf('Simulation stands at year %.4f; downsampling everything before year %.4f.', $now, $cutoff));
 
         try {
-            // Measured in SIMULATED time, because that is the axis the archive is a record of. Pruning by
-            // wall clock made how much market history survived a function of how long the container had been
-            // up: a ticker restarted every day kept nothing, and one left running kept a decade.
-            //
-            // Rows with no simulation time are from before the column existed, or were written by something
-            // other than the ticker. They are older than anything that has one, so they downsample too.
+            // Downsample older records based on simulated time (or missing sim_time) by retention ratio.
             $sql = 'DELETE FROM :table WHERE (sim_time IS NULL OR sim_time < :cutoff) AND id % :ratio != 0';
             
             // Downsample Stocks

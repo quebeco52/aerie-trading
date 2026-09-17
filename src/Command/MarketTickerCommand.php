@@ -274,9 +274,7 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
 
         $dt = 1.0 / $this->ticksPerYear;
 
-        // Where the simulation actually got to, from the database rather than the cache. The option chain is
-        // handed over as a witness: a listed expiry serial proves the clock once stood at least that far, so
-        // a cache that has lost time cannot talk the simulation into living the same weeks twice.
+        // Resume simulation clock using persistent database and option chain state to prevent rewind.
         $furthestSerial = $this->optionChain->furthestListedSerial();
         $clock = $this->simulationClock->resume(
             (int) ($this->redis->get('simulation_tick_count') ?: 0),
@@ -286,8 +284,7 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
 
         $tickCount = $clock->getTickCount();
 
-        // The macro state is cached in Redis and carries its own copy of the clock, so it is corrected to
-        // the authoritative one before the first tick reads it.
+        // Synchronize cached Redis macro clock with authoritative simulation clock.
         $this->macroEngine->alignClock($clock->getTotalTime());
 
         $output->writeln(sprintf(
@@ -358,12 +355,8 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
             $phaseStart = $now;
         };
 
-        // The equity wealth channel's return leg. Held across ticks rather than read inside the macro step,
-        // because the board's level is struck near the END of a tick from prices the macro step at the TOP
-        // of that same tick helped set: handing back this tick's level would close the loop inside one tick
-        // and make the economy depend on the order two services happened to run in. It stays null until the
-        // first index strike, and the engine treats null as "no market reported" rather than as a crash.
-        $lastEquityIndexLevel = null;
+        // Lag equity market cap across ticks to avoid simultaneous feedback loops in macro step.
+        $lastEquityMarketCap = null;
 
         while ($this->keepRunning) {
 
@@ -379,7 +372,7 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                 $output->writeln("Updating Market Prices... (Day: " . number_format($simDay, 1) . ") [Tick: $tickCount]");
             }
 
-            $macroState = $this->macroEngine->updateMacroState($dt, $lastEquityIndexLevel);
+            $macroState = $this->macroEngine->updateMacroState($dt, $lastEquityMarketCap);
             $lap('macro');
 
             if ($tickCount % $operatorInterval === 0) {
@@ -388,14 +381,7 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                 $operatorEvents = [];
             }
 
-            // The option desk re-hedges the move it has just seen, BEFORE the tick drains its order flow.
-            // A desk observes a price and then trades; hedging the move it is itself causing would close an
-            // algebraic loop inside one tick, and whether the market was stable would then depend on how
-            // much open interest happened to be outstanding.
-            //
-            // On the history cadence rather than every tick. The hedge is gamma times the move since the
-            // last one, so it telescopes: one hedge across the bar trades exactly what a hedge on each of
-            // its ticks would have, and the flow still lands inside the same bar.
+            // Re-hedge option inventory on history bar cadence before draining order flow.
             if ($tickCount % $historyInterval === 0) {
                 $this->optionDesk->hedge($stocks);
             }
@@ -410,6 +396,11 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                 $lap('stocks');
                 $stockUpdates = $result['updates'];
                 $totalMarketCap = $result['total_cap'];
+
+                // Household equity wealth is what the board is worth, so it is read here, off the board.
+                // The index funds' levels are quotes on tradable instruments and are restated when those
+                // instruments split; capitalisation is the quantity itself and survives that untouched.
+                $lastEquityMarketCap = $totalMarketCap > 0.0 ? $totalMarketCap : $lastEquityMarketCap;
                 $marketVol = $result['market_vol'];
                 $events = $result['events'];
 
@@ -437,11 +428,7 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
 
                 $lap('events');
 
-                // Every index re-ranks the market on the same quarterly calendar. Passive money follows the
-                // benchmark's membership rather than the whole board, so an addition is bought and a deletion
-                // is sold by the agent population itself — see IndexCommittee for why the inclusion effect is
-                // emergent here rather than scripted. A change is published as an event on the fund, which is
-                // how it reaches the index page and the live feed through the one channel everything uses.
+                // Reconstitute indexes on quarterly calendar and publish membership events.
                 if (IndexCommittee::isReconstitutionTick($tickCount, $this->ticksPerYear)) {
                     foreach (MarketIndex::cases() as $index) {
                         $fund = $indexFunds[$index->value] ?? null;
@@ -449,16 +436,11 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                             $index,
                             $stocks,
                             $tickCount,
-                            // The LEVEL behind the fund's price, not the price. The price carries the
-                            // fund's fee drag and its undistributed income, and restating a divisor
-                            // against those would fold the fund's own costs into the index.
+                            // Pass underlying index level excluding fund fee drag and accrued income.
                             $fund?->getIndexLevel()
                         );
 
-                        // The fund pays for the review before anything else is published about it. A
-                        // re-weighting with no membership change is still a trade — the low-volatility fund
-                        // restrikes every quarter — so the charge is taken above the early exit below, not
-                        // inside the branch that only fires when the roster moved.
+                        // Charge fund rebalancing trading costs before checking membership changes.
                         if ($fund !== null) {
                             $this->fundAccountant->chargeRebalance(
                                 $fund,
@@ -489,18 +471,7 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                     }
                 }
 
-                // Each index is struck on its MEMBERS' float-adjusted capitalisation, not the whole board's
-                // total. An index measures what it actually holds, and it weights on what a passive fund
-                // could actually buy.
-                //
-                // An index whose fund is not on this market (a fund added to the seed after the market was
-                // seeded, before a reset has created it) is not struck at all: the tracker would otherwise
-                // look the missing row up on every tick and have nowhere to write the level.
-                //
-                // Each fund also collects the dividends its members just paid and is charged for the time
-                // just elapsed, and pays out what it has collected once a quarter. An index is a price
-                // index and knows nothing about any of that; a FUND that ignored it would lag the basket it
-                // claims to hold by the whole dividend yield of the market, every year.
+                // Strike each index against constituent float market caps and process quarterly fund distributions.
                 $isDistributionTick = $tickCount > 0
                     && $tickCount % max(1, intdiv($this->ticksPerYear, FinancialConstants::FUND_DISTRIBUTIONS_PER_YEAR)) === 0;
 
@@ -555,12 +526,6 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
 
                     $etfUpdates[] = $fundUpdate;
 
-                    // The whole board, not the headline thirty: household equity wealth is every listed
-                    // name. Read off the fund's freshly struck price, which is where the level lives.
-                    if ($index === MarketIndex::market()) {
-                        $lastEquityIndexLevel = $fund->getIndexLevel();
-                    }
-
                     // The creation basket is a real order in every constituent, in index weight, and it
                     // pays each name's own impact when it lands next tick. This is the channel that makes
                     // money going INTO a fund reach the companies the fund holds instead of stopping at the
@@ -583,14 +548,7 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
 
                 $lap('etfs');
 
-                // The bond desk. Coupons, redemptions and the mark all happen inside the same tick
-                // transaction as the equity book, so a crash mid-tick cannot leave a coupon credited
-                // against a mark that was rolled back. The ladder is revalued and written on the history
-                // cadence, in bulk, and quotes its last mark on the ticks between; the working set is
-                // reloaded right after the flush, so no entity outlives the mark it was loaded with.
-                // What each issuer's credit costs right now, taken off the working set the tick already
-                // holds. Handing it to the tracker keeps the corporate ladder from loading a company per
-                // bond just to read one number off it.
+                // Bond desk coupon/redemption processing, revaluing ladder on history cadence with live issuer spreads.
                 $issuerSpreads = [];
                 foreach ($stocks as $issuer) {
                     $issuerId = $issuer->getId();
@@ -647,13 +605,7 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                     }
                 }
 
-                // The option desk's own sweep: settle what has expired, list what the market has moved into,
-                // mark the chain, rebuild the public's book and re-measure what the desk is short.
-                //
-                // One SLICE of the market per pass, on its own slow interval. A full pass rewrites every
-                // listed contract in the market, and wiring that to the history tick put forty-five thousand
-                // option UPDATEs a second through the database for a mark nothing reads at that resolution.
-                // See OptionDeskService for why nothing downstream wants it fresher.
+                // Sweep option chain in staggered slices to settle expiries, list strikes, and update Greeks.
                 if (OptionDeskService::isSweepTick($tickCount, $optionSweepInterval)) {
                     $sweepResult = $this->optionDesk->sweep(
                         $stocks,
@@ -671,13 +623,7 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
 
                 $allUpdates = array_merge($stockUpdates, $etfUpdates, $bondResult['updates']);
 
-                // What goes out on the wire. The bond ladder is only re-marked on the history tick, so on
-                // every other tick its quotes are byte-for-byte what the browser already holds — and they
-                // were two thirds of a payload that every connected browser received fifty times a second.
-                // The chart buffer below still takes bonds on every tick: the short-range chart and the
-                // change figure count buffer entries as ticks, and thinning one asset class would silently
-                // stretch its month. The limit-order check follows the wire, since a mark that has not
-                // moved cannot have crossed a resting price.
+                // Publish changed asset quotes to websocket wire, omitting static bond quotes between history ticks.
                 $published = $isHistoryTick
                     ? $allUpdates
                     : array_merge($stockUpdates, $etfUpdates);
@@ -823,9 +769,7 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
 
                     $pipeline->lPush($cacheKey, $point);
 
-                    // Trimming is idempotent, so once per bar keeps the buffer within a handful of entries
-                    // of its size at half the commands; a trim on every push doubled the pipeline for
-                    // nothing the reader could see.
+                    // Trim buffer once per history bar to cap list size efficiently.
                     if ($isHistoryTick) {
                         $pipeline->lTrim($cacheKey, 0, $redisBufferSize - 1);
                     }
@@ -834,12 +778,7 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                 $pipeline->exec();
                 $lap('chart buffers');
 
-                // Glasswater Row reconstitution: once a simulated quarter the street's roster is
-                // re-ranked and frozen (DistrictRoster). Promotions and evictions are ordinary stock
-                // events, so they reach the stock page, the district's event cards and the live
-                // feed through the one channel everything else uses. The district page reloads its
-                // frame when it sees the `district` key. Flushed here because the publisher only
-                // persists and this tick may not otherwise flush.
+                // Glasswater Row quarterly reconstitution: re-rank roster and publish promotion/eviction events.
                 $districtReconstitution = null;
                 if (DistrictRoster::isReconstitutionTick($tickCount, $this->ticksPerYear)) {
                     $districtReconstitution = $this->districtRoster->reconstitute($stocks, $tickCount);
@@ -957,9 +896,7 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                     array_slice($phases, 0, self::LAG_PHASES_SHOWN, true)
                 ));
 
-                // How many entities the unit of work is carrying. A flush that is slow because the identity
-                // map has filled up looks exactly like a flush that is slow because the tick genuinely wrote
-                // a lot, and the two have opposite fixes; this is the number that tells them apart.
+                // Measure identity map size to distinguish flush overhead from write volume.
                 $managed = $this->entityManager->getUnitOfWork()->size();
                 $written = $this->flushProfiler->summary();
                 $wrote = $written === '' ? 'wrote nothing' : $written;
@@ -967,12 +904,7 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                 $output->writeln("<comment>⚠️ Lag Spike: Tick {$tickCount} took too long! Dropped behind by " . round($overtimeMs, 2) . "ms ({$breakdown} | map {$managed} | {$wrote})</comment>");
             }
 
-            // STEADY STATE, not spikes. The warning above only ever fires on the overruns, so the log shows
-            // the tail of the distribution and never its middle — and a subsystem that is slow on every
-            // single tick never appears in it at all.
-            //
-            // The `opt:` entries are STAGES OF `options`, not phases beside it, so the list does not sum to
-            // the tick: the measured mean on the line above is the total.
+            // Track steady-state execution time distribution across phase windows.
             $executionMs = $executionTimeSec * 1000.0;
             $windowTicks++;
             $windowTotalMs += $executionMs;

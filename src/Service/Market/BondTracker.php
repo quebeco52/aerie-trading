@@ -120,12 +120,7 @@ class BondTracker
                 continue;
             }
 
-            // The whole ladder is remarked on the slower cadence. Its drivers — the curve and each issuer's
-            // credit — move far slower than a tick, and the ladder is large enough that revaluing all of
-            // it every tick was a measurable share of the tick budget for a price that had not meaningfully
-            // changed. Coupons and maturity above are NOT on that cadence: those are dates, and a date
-            // cannot be approximately reached. An issue never marked in this process — the first pass after
-            // a start, or one listed since the last mark — is valued now rather than quoted from nothing.
+            // Remark bond ladder periodically, revaluing newly listed or uninitialized bonds immediately.
             $ticker = $bond->getTicker();
             $struck = $mark || !isset($this->lastMarks[$ticker]);
 
