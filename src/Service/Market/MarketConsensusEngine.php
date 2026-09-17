@@ -22,10 +22,6 @@ use App\Service\Math\MathUtility;
 class MarketConsensusEngine
 {
     // --- Analyst Bias & Noise ---
-    /** Default analyst error noise σ used when no profile is provided. */
-    public const DEFAULT_ERROR_STD_DEV = 0.06;
-    /** Default base visibility fraction when no profile is provided. */
-    public const DEFAULT_BASE_VISIBILITY = 0.20;
     /** Walk-down bias fraction applied to consensus so beat rate aligns with empirical ~70% (Richardson et al. 2004). */
     public const ANALYST_WALKDOWN_BIAS = 0.015;
 

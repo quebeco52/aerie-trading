@@ -53,6 +53,22 @@ trait StandardTreasuryTrait
         return max(0.0, $macroState->policyRateEma - MacroEngine::CASH_YIELD_SPREAD);
     }
 
+    /** An operating company's treasury is cash and money-market paper. Nothing in it has duration to mark. */
+    public function resolveSecuritiesBook(Stock $stock, ?float $currentTreasury = null): float
+    {
+        return 0.0;
+    }
+
+    public function getSecuritiesFloatingShare(Stock $stock): float
+    {
+        return 0.0;
+    }
+
+    public function getDefaultSecuritiesDuration(): float
+    {
+        return 0.0;
+    }
+
     /** Cash is deployed on the firm's own judgement of returns, never automatically. */
     public function deploysFundingIntoEarningAssets(): bool
     {

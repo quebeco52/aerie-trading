@@ -37,6 +37,13 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
     public function getMoatSpread(): float { return 0.005; }
 
     // --- Portfolio & Asset Yield Architecture ---
+    /**
+     * A thirty-year mortgage book, priced off the long end and funded overnight. Longer than a deposit
+     * bank's loan book by the whole of the difference between the two businesses, which is why a shadow
+     * bank is the first thing a hiking cycle breaks.
+     */
+    public const ASSET_DURATION_YEARS = 8.0;
+
     /** Yield spread over 30Y mortgage benchmark earned on mortgage portfolio assets. */
     public const MORTGAGE_PORTFOLIO_SPREAD = 0.0225;
     /** Yield spread over base policy rate (SOFR) earned on direct lending private credit loans. */

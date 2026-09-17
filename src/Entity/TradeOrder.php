@@ -21,6 +21,18 @@ class TradeOrder
     /** Withdrawn before filling, by the trader or by a liquidation; escrow released, no execution. */
     public const STATUS_CANCELLED = 'CANCELLED';
 
+    /** Fills now, at whatever the book quotes. */
+    public const TYPE_MARKET = 'MARKET';
+    /** Rests until the price comes to it, and never fills through its price. */
+    public const TYPE_LIMIT = 'LIMIT';
+    /** Rests until the price goes THROUGH its trigger, then becomes a market order and takes what it gets. */
+    public const TYPE_STOP = 'STOP';
+    /** Triggers like a stop and then rests like a limit: protection against the gap a plain stop would sell into. */
+    public const TYPE_STOP_LIMIT = 'STOP_LIMIT';
+
+    /** Every type an order may be placed as. */
+    public const VALID_TYPES = [self::TYPE_MARKET, self::TYPE_LIMIT, self::TYPE_STOP, self::TYPE_STOP_LIMIT];
+
     #[ORM\Id]
     #[ORM\GeneratedValue]
     #[ORM\Column]
@@ -39,8 +51,8 @@ class TradeOrder
     #[ORM\Column(length: 10)]
     private ?string $action = null; // 'BUY' or 'SELL'
 
-    #[ORM\Column(length: 10)]
-    private ?string $orderType = null; // 'MARKET' or 'LIMIT'
+    #[ORM\Column(length: 20)]
+    private ?string $orderType = null; // one of the TYPE_* constants
 
     #[ORM\Column(type: Types::BIGINT)]
     private int|string|null $quantity = null;
@@ -68,6 +80,16 @@ class TradeOrder
     #[ORM\Column(type: Types::DECIMAL, precision: 18, scale: 4, nullable: true)]
     private ?string $impactCost = null;
 
+    /**
+     * Price at which a stop becomes live, in the direction the market has to move to reach it.
+     *
+     * Distinct from the limit price because a stop-limit needs both and they mean opposite things: the stop
+     * is the price that WAKES the order and the limit is the worst price it will then accept. Null on an
+     * order that is not a stop.
+     */
+    #[ORM\Column(type: Types::DECIMAL, precision: 18, scale: 4, nullable: true)]
+    private ?string $stopPrice = null;
+
     #[ORM\Column(length: 20)]
     private ?string $status = self::STATUS_OPEN;
 
@@ -85,6 +107,34 @@ class TradeOrder
     public function getId(): ?int
     {
         return $this->id;
+    }
+
+    public function getStopPrice(): ?string
+    {
+        return $this->stopPrice;
+    }
+
+    public function setStopPrice(?string $stopPrice): static
+    {
+        $this->stopPrice = $stopPrice;
+        return $this;
+    }
+
+    /** Whether this order waits for the price to move THROUGH a trigger rather than come to a limit. */
+    public function isStop(): bool
+    {
+        return $this->orderType === self::TYPE_STOP || $this->orderType === self::TYPE_STOP_LIMIT;
+    }
+
+    /**
+     * Whether a fill is capped at the limit price.
+     *
+     * False for a plain stop, and that is the whole difference between the two: a stop accepts whatever the
+     * book gives it, which is why one can fill far through its trigger and why a cluster of them cascades.
+     */
+    public function hasLimitCap(): bool
+    {
+        return $this->orderType === self::TYPE_LIMIT || $this->orderType === self::TYPE_STOP_LIMIT;
     }
 
     public function getUser(): ?User

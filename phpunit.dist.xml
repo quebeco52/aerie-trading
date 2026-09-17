@@ -77,6 +77,14 @@
             <file>tests/Service/Market/HistorySimTimeTest.php</file>
             <file>tests/Service/Corporate/MergerAndAcquisitionGateTest.php</file>
             <file>tests/Service/Corporate/Holdings/AnchorStakeLedgerTest.php</file>
+            <file>tests/Service/Corporate/SecuritiesBookServiceTest.php</file>
+            <file>tests/Service/Corporate/SecuritiesEquityDisclosureTest.php</file>
+            <file>tests/Service/Corporate/SecuritiesMarkIsNotIncomeTest.php</file>
+            <file>tests/Service/Corporate/SecuritiesForcedSaleTest.php</file>
+            <file>tests/Service/Market/Agent/AttentionRetailStrategyTest.php</file>
+            <file>tests/Service/Market/StopOrderTriggerTest.php</file>
+            <file>tests/Service/Market/AnalystPriceTargetTest.php</file>
+            <file>tests/Service/Market/AuthorizedParticipantTest.php</file>
             <file>tests/Service/View/CompanySnapshotNavTest.php</file>
             <file>tests/Service/View/AnchorPortfolioBuilderTest.php</file>
             <directory>tests/Support</directory>

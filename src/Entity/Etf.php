@@ -76,6 +76,39 @@ class Etf
     #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 8, options: ['default' => '0.00000000'])]
     private string $cumulativeTradingCosts = '0.00000000';
 
+    /**
+     * Fund shares in issue. Creations and redemptions are the only things that move it.
+     *
+     * A fund's size is what decides how much a given order moves its price away from the basket: the same
+     * ticket is a rounding error to a large fund and a squeeze on a small one. Nothing per-share is
+     * restated when this changes — a creation brings its own assets with it, which is exactly what makes it
+     * different from a split.
+     */
+    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, options: ['default' => '250000000.0000'])]
+    private string $sharesOutstanding = '250000000.0000';
+
+    /**
+     * Half-width of the band an authorized participant tolerates before arbitraging the fund back to its
+     * basket, as a fraction of net asset value.
+     *
+     * Published because it is what the fund costs to trade: nobody quotes inside the price at which the
+     * arbitrage itself is free. It widens when the constituents become expensive to trade, which is the
+     * whole reason a bond fund and an equity fund behave differently in the same week of stress.
+     */
+    #[ORM\Column(type: 'float', options: ['default' => 0.0])]
+    private float $arbitrageBand = 0.0;
+
+    /**
+     * How far the fund's last traded price sat from its net asset value, as a fraction. Positive is a
+     * premium.
+     *
+     * The number the fund is actually judged on. A fund quoted AT net asset value by construction cannot
+     * trade at a discount, and a bond fund at a double-digit discount in a stressed market is not a bug in
+     * the fund — it is the most informative thing the fund ever prints.
+     */
+    #[ORM\Column(type: 'float', options: ['default' => 0.0])]
+    private float $navPremium = 0.0;
+
     /** The last four distributions per share, newest first. A trailing yield is a real factsheet figure and it cannot be derived from a single payment. */
     #[ORM\Column(type: Types::JSON, nullable: true)]
     private ?array $recentDistributions = null;
@@ -87,6 +120,51 @@ class Etf
     public function __construct()
     {
         $this->updatedAt = new \DateTime();
+    }
+
+    public function getSharesOutstanding(): float
+    {
+        return (float) $this->sharesOutstanding;
+    }
+
+    public function setSharesOutstanding(float $sharesOutstanding): self
+    {
+        $this->sharesOutstanding = number_format(max(0.0, $sharesOutstanding), 4, '.', '');
+        return $this;
+    }
+
+    public function getArbitrageBand(): float
+    {
+        return $this->arbitrageBand;
+    }
+
+    public function setArbitrageBand(float $arbitrageBand): self
+    {
+        $this->arbitrageBand = max(0.0, $arbitrageBand);
+        return $this;
+    }
+
+    public function getNavPremium(): float
+    {
+        return $this->navPremium;
+    }
+
+    public function setNavPremium(float $navPremium): self
+    {
+        $this->navPremium = $navPremium;
+        return $this;
+    }
+
+    /** What one share of the portfolio is worth: the basket it still owns, plus the income it is holding. */
+    public function netAssetValuePerShare(float $indexLevel): float
+    {
+        return ($indexLevel * $this->getBasketPerShare()) + $this->getAccruedIncome();
+    }
+
+    /** The whole fund, at net asset value. What a creation is measured against. */
+    public function netAssets(float $indexLevel): float
+    {
+        return $this->netAssetValuePerShare($indexLevel) * $this->getSharesOutstanding();
     }
 
     public function getId(): ?int

@@ -41,7 +41,9 @@ class TreasuryEngine
         private CorporateMetrics $corporateMetrics,
         private DebtEngine $debtEngine,
         private CapExEngine $capExEngine,
-        private MathUtility $mathUtility
+        private MathUtility $mathUtility,
+        /** Investment securities mark. Defaulted so a harness or a unit test builds an engine without wiring the curve. */
+        private SecuritiesBookService $securitiesBook = new SecuritiesBookService(new \App\Service\Market\BondPricingEngine(new MathUtility()))
     ) {}
 
     /**
@@ -134,7 +136,7 @@ class TreasuryEngine
         // Earning assets sold below carrying value this quarter: the discount is a loss the shareholders
         // bear, taken to equity as other comprehensive loss (the securities were never in earnings) so
         // the book that shrank and the claims on it move together.
-        if ($ctx->assetSaleLoss > 0.0) {
+        if ($ctx->assetSaleLoss !== 0.0) {
             $lossStr = $this->formatBc($ctx->assetSaleLoss);
             $stock->setTotalEquity(\bcsub($this->formatBc($stock->getTotalEquity()), $lossStr, 4));
             $stock->setRetainedEarnings(\bcsub($this->formatBc($stock->getRetainedEarnings()), $lossStr, 4));
@@ -173,22 +175,68 @@ class TreasuryEngine
 
         $haircut = FinancialConstants::EARNING_ASSET_FIRE_SALE_HAIRCUT;
         $shortfall = $cashFloor - $ctx->newTreasury;
-        $carryingValueSold = min(
-            $netBook * FinancialConstants::MAX_QUARTERLY_ASSET_LIQUIDATION_RATIO,
-            $shortfall / (1.0 - $haircut)
+
+        // The rate mark on the book, crystallized by the act of selling. Until this moment it was a
+        // valuation; a buyer pays market value, so the moment the firm has to sell it becomes cash it does
+        // not receive. This is the difference between a bank that can hold to maturity and one that cannot,
+        // and it is the whole reason a solvent institution fails on a funding run rather than on credit.
+        //
+        // Struck against the marked book rather than the earning-asset book, because on an insurer they are
+        // not the same book: a liquidation larger than the bond tranche realizes all of it and no more.
+        $carriedMark = (float) $stock->getUnrealizedSecuritiesMark();
+        $markedBook = max(0.0, min($netBook, $ctx->strategy->resolveSecuritiesBook($stock, $ctx->newTreasury)));
+        $markRatio = $markedBook > 0.0 ? max(-1.0, min(1.0, $carriedMark / $markedBook)) : 0.0;
+
+        // Securities go first, because they are what anyone will bid for on the day. They raise the
+        // liquidity haircut less whatever the curve has already done to them; the loans behind them raise
+        // only the haircut, because a loan book is carried at amortized cost and was never marked.
+        //
+        // A book trading below amortized cost therefore raises less per dollar given up, so covering the
+        // same shortfall takes a bigger sale, and the bigger sale realizes more of the mark. That feedback
+        // is what a run actually is: the discount sets the size and the size deepens the loss.
+        $securitiesRecovery = max(0.05, (1.0 - $haircut) + $markRatio);
+        $ceiling = $netBook * FinancialConstants::MAX_QUARTERLY_ASSET_LIQUIDATION_RATIO;
+
+        $securitiesSold = min($markedBook, $ceiling, $shortfall / $securitiesRecovery);
+        $raisedOnSecurities = $securitiesSold * $securitiesRecovery;
+        $loansSold = min(
+            max(0.0, $ceiling - $securitiesSold),
+            max(0.0, $shortfall - $raisedOnSecurities) / (1.0 - $haircut)
         );
+
+        $carryingValueSold = $securitiesSold + $loansSold;
         if ($carryingValueSold <= 0.0) {
             return;
         }
 
-        $proceeds = $carryingValueSold * (1.0 - $haircut);
+        $realizedMark = $this->securitiesBook->realizeOnSale($carriedMark, $markedBook, $securitiesSold);
+
+        $proceeds = max(0.0, ($carryingValueSold * (1.0 - $haircut)) + $realizedMark);
         $retained = 1.0 - ($carryingValueSold / $netBook);
         $stock->setEarningAssets((string) ($grossBook * $retained));
         $stock->setCreditLossAllowance((string) ($allowance * $retained));
 
+        if ($realizedMark !== 0.0) {
+            $stock->setUnrealizedSecuritiesMark(
+                \App\Service\Math\MathUtility::formatDecimal($carriedMark - $realizedMark, 4)
+            );
+        }
+
         $ctx->newTreasury += $proceeds;
         $ctx->assetSaleProceeds += $proceeds;
-        $ctx->assetSaleLoss += $carryingValueSold - $proceeds;
+
+        // Only the part shareholders have not already been charged for. The available-for-sale mark was
+        // taken to equity when the curve moved and recycling it now is neutral; the held-to-maturity mark
+        // was carried at cost and never reached equity, so recognising it here is a fresh hit to the book.
+        // Booking the whole realized mark would charge the available-for-sale half twice.
+        //
+        // Signed, not floored at zero. A sale into a rally realizes a held-to-maturity GAIN, and the cash
+        // for it arrives in the proceeds above either way — clamping it here credited the asset side
+        // without crediting equity, which is a sale that does not balance. The haircut usually dominates and
+        // the quarter is still a loss, but a book far enough in the money flips the sign, which is why the
+        // entry this feeds fires on a credit as well.
+        $unrecognizedMark = -$realizedMark * FinancialConstants::DEFAULT_HTM_BOOK_SHARE;
+        $ctx->assetSaleLoss += ($carryingValueSold * $haircut) + $unrecognizedMark;
 
         if ($proceeds > 500_000_000.0) {
             $amtB = number_format($proceeds / 1_000_000_000, 2);

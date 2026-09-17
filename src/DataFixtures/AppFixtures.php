@@ -51,6 +51,11 @@ class AppFixtures extends Fixture
 
             $etf->setDescription(\App\Data\StockInfo::DESCRIPTIONS[$etfData['ticker']] ?? null);
             $etf->setExpenseRatio((float) ($etfData['expense_ratio'] ?? 0.0));
+            // Only on a fund that has never had a share count. Creations and redemptions move it after
+            // that, and a reseed is not a liquidation — see the note on its other books above.
+            if ($etf->getSharesOutstanding() <= 0.0) {
+                $etf->setSharesOutstanding(\App\Service\Math\FinancialConstants::ETF_SEED_SHARES_OUTSTANDING);
+            }
 
             $manager->persist($etf);
         }

@@ -34,6 +34,17 @@ final class MarketResetCompletenessTest extends TestCase
     ];
 
     /**
+     * Columns of the fund the reset deliberately leaves alone.
+     *
+     * @var array<string, string>
+     */
+    private const FUND_INTENTIONALLY_PRESERVED = [
+        'id'         => 'Primary key; the reset updates rows in place.',
+        'ticker'     => 'Row identity — the WHERE key.',
+        'updated_at' => 'Written by the statement itself, not carried over.',
+    ];
+
+    /**
      * @return array<string, string> column name => property name
      */
     private function stockColumns(): array
@@ -41,6 +52,25 @@ final class MarketResetCompletenessTest extends TestCase
         $columns = [];
 
         foreach ((new ReflectionClass(Stock::class))->getProperties() as $property) {
+            foreach ($property->getAttributes(Column::class) as $attribute) {
+                $arguments = $attribute->getArguments();
+                $columns[$arguments['name'] ?? $this->toSnakeCase($property->getName())] = $property->getName();
+            }
+        }
+
+        ksort($columns);
+
+        return $columns;
+    }
+
+    /**
+     * @return array<string, string> column name => property name
+     */
+    private function fundColumns(): array
+    {
+        $columns = [];
+
+        foreach ((new ReflectionClass(\App\Entity\Etf::class))->getProperties() as $property) {
             foreach ($property->getAttributes(Column::class) as $attribute) {
                 $arguments = $attribute->getArguments();
                 $columns[$arguments['name'] ?? $this->toSnakeCase($property->getName())] = $property->getName();
@@ -134,4 +164,45 @@ final class MarketResetCompletenessTest extends TestCase
             implode(', ', $stale)
         ));
     }
+
+    /**
+     * @return list<string>
+     */
+    private function fundResetAssignedColumns(): array
+    {
+        $source = (string) file_get_contents(dirname(__DIR__, 2) . '/src/Command/MarketResetCommand.php');
+
+        $this->assertSame(
+            1,
+            preg_match('/UPDATE etfs\s+SET(.*?)WHERE ticker = :ticker/s', $source, $statement),
+            'Could not find the fund reset UPDATE — if the reset was restructured, update this test with it.'
+        );
+
+        preg_match_all('/^\s*([a-z_]+)\s*=/m', $statement[1], $assignments);
+
+        return $assignments[1];
+    }
+
+    /**
+     * The same guard, for the fund.
+     *
+     * The reset already reopens a fund's books by hand-listed SQL, and it had been missing
+     * `cumulative_trading_costs` since that column was added: a new market opened with the rebalance
+     * spread of the old one already charged against it. A column added to Etf and not to the statement is
+     * the same failure, and nothing was checking for it.
+     */
+    public function testResetWritesEveryPersistedFundColumn(): void
+    {
+        $missing = array_diff(
+            array_keys($this->fundColumns()),
+            $this->fundResetAssignedColumns(),
+            array_keys(self::FUND_INTENTIONALLY_PRESERVED)
+        );
+
+        $this->assertSame([], array_values($missing), sprintf(
+            "app:market-reset does not clear these Etf columns, so the old market's fund books survive into the new one: %s",
+            implode(', ', $missing)
+        ));
+    }
+
 }

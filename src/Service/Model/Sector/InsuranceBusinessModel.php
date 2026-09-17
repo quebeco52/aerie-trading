@@ -187,8 +187,6 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
     public const DEFAULT_POLICY_RATE_FALLBACK = 0.02;
     /** Default 10Y Treasury spread over policy rate. */
     public const DEFAULT_10Y_SPREAD       = 0.01;
-    /** Default Equity Risk Premium (ERP) fallback when macroeconomic data is absent. */
-    public const DEFAULT_ERP_FALLBACK     = 0.045;
     /** Equity market return sensitivity to macroeconomic output gaps. */
     public const EQUITY_RETURN_GAP_MULT   = 1.50;
     /** Weight allocated to short-term T-Bills and liquid cash in float portfolios. */
@@ -197,8 +195,6 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
     public const FLOAT_BOND_WEIGHT        = 0.75;
     /** Weight allocated to public growth equities in float portfolios. */
     public const FLOAT_EQUITY_WEIGHT      = 0.10;
-    /** Quarterly volatility of the float equity tranche (annual equity vol ~20% ÷ sqrt(4) = ~10%). */
-    public const EQUITY_PORTFOLIO_VOL     = 0.10;
     /** VIX threshold above which catastrophe-correlated equity portfolio losses begin. Market panic = equity crashes. */
     public const CATASTROPHE_VIX_THRESHOLD = 0.25;
     /** Sensitivity of equity portfolio drag to VIX above threshold. A VIX of 0.85 (COVID) causes ~18% tranche drag. */
@@ -207,16 +203,12 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
     // --- Valuation & Fair Value Weights ---
     /** Weight given to book value in profitable quarters (50% Book / 35% Earnings / 15% DDM). */
     public const FAIR_VALUE_BOOK_POS_EPS        = 0.50;
-    /** Weight given to book value in catastrophe loss quarters (100% Book Value anchor). */
-    public const FAIR_VALUE_BOOK_NEG_EPS        = 1.00;
     /** Weight given to Dividend Discount Model yield support when blending insurance fair value. */
     public const FAIR_VALUE_DDM_WEIGHT          = 0.15;
     /** Franchise floor multiplier applied to revenue floor value for sticky premium & float franchise. */
     public const PREMIUM_FRANCHISE_FLOOR_MULT   = 0.70;
 
     // --- Passive Liability Growth & Float Expansion ---
-    /** Default annual inflation rate fallback for systemic float growth calculations. */
-    public const DEFAULT_INFLATION_FALLBACK = 0.02;
     /** Baseline structural annual economic growth addition for insurance float expansion. */
     public const BASE_ECONOMIC_GROWTH_ADD = 0.02;
     /** Output gap multiplier scaling systemic float growth during economic expansions. */
@@ -251,10 +243,8 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
     public const CAPACITY_MODIFIER_CEILING    = 2.50;
     /** Minimum allowable capacity modifier floor during severe wholesale debt distress. */
     public const CAPACITY_MODIFIER_FLOOR      = 0.01;
-    /** Base exponential decay rate applied to wholesale leverage utilization. */
-    public const CAPACITY_BASE_DECAY_RATE     = 0.50;
-    /** Multiplier scaling capacity decay sensitivity to wholesale debt utilization. */
-    public const CAPACITY_UTIL_DECAY_MULT     = 1.50;
+    /** Macaulay duration of the long bond tranche of float, matched against liabilities an insurer pays out over decades. */
+    public const DEFAULT_FLOAT_BOND_DURATION_YEARS = 7.0;
 
     /**
      * Reverse engineers the required operating metrics based on Balance Sheet Capacity.
@@ -267,7 +257,12 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
      */
     public function getTargetMetrics(Stock $stock, MacroStateDTO $macroState, MathUtility $mathUtility): array
     {
-        $equity = (float) $stock->getTotalEquity();
+        // Statutory surplus, not book equity. Underwriting capacity is rationed on the ratio a regulator
+        // computes, and statutory accounting carries the bond portfolio at amortized cost — so a selloff
+        // that has already taken a fifth of the float portfolio does not take any of the capacity with it.
+        // That insulation is real and it is the reason underwriters kept writing through 2022. The mark
+        // still reaches the share price through book equity; it just does not reach the licence to write.
+        $equity = $stock->getAmortizedCostEquity();
         $stableMargin = max(0.01, (float) $stock->getOperatingMargin());
 
         // --- THE CLEAR BALANCE SHEET MATH ---
@@ -857,6 +852,47 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
         $bondShare         = self::FLOAT_BOND_WEIGHT / $totalFixedWeight;
 
         return $fixedIncomeWeight * (($liquidityShare * $liquidityReturn) + ($bondShare * $bondReturn));
+    }
+
+    /**
+     * The long-duration bond tranche of investable float.
+     *
+     * Struck on the same allocation calculateInterestIncome() earns the coupon on, so the book that is
+     * marked and the book that pays are one book. The liquidity tranche is bills and the equity tranche is
+     * already stochastic in the income function; neither belongs to the curve, so neither is marked here.
+     */
+    public function resolveSecuritiesBook(Stock $stock, ?float $currentTreasury = null): float
+    {
+        $params = $this->resolveModelParameters($stock, [
+            ModelParam::FloatEquityWeight->value => self::FLOAT_EQUITY_WEIGHT,
+        ]);
+
+        $cash = $currentTreasury ?? (float) $stock->getCorporateTreasury();
+        $investableFloat = min($cash, (float) $stock->getCustomerDeposits());
+
+        if ($investableFloat <= 0.0) {
+            return 0.0;
+        }
+
+        $fixedIncomeWeight = max(0.0, 1.0 - $params[ModelParam::FloatEquityWeight]);
+        $totalFixedWeight  = max(0.01, self::FLOAT_LIQUIDITY_WEIGHT + self::FLOAT_BOND_WEIGHT);
+
+        return $investableFloat * $fixedIncomeWeight * (self::FLOAT_BOND_WEIGHT / $totalFixedWeight);
+    }
+
+    /** A float portfolio is fixed-coupon paper. It owns every move in the curve. */
+    public function getSecuritiesFloatingShare(Stock $stock): float
+    {
+        return 0.0;
+    }
+
+    /**
+     * Long. An insurer matches assets to liabilities it will not pay for decades, so the bond tranche is
+     * bought at the long end and is the most rate-sensitive book on the board.
+     */
+    public function getDefaultSecuritiesDuration(): float
+    {
+        return self::DEFAULT_FLOAT_BOND_DURATION_YEARS;
     }
 
     public function getDebtExpansionAggressiveness(float $spreadMultiplier, float $totalDebt = 0.0, float $customerDeposits = 0.0, float $targetOperatingCash = 0.0, float $currentTreasury = 0.0): DebtExpansionAppetiteDTO

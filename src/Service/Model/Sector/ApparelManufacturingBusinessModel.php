@@ -139,18 +139,12 @@ class ApparelManufacturingBusinessModel extends StandardCorporateBusinessModel
     // --- Plant Modernization & Asset Depreciation Physics ---
     /** Quarterly efficiency decay rate per unit of underinvestment below replacement CapEx for specialized manufacturing plant and equipment. */
     public const PLANT_DECAY_RATE = 0.025;
-    /** Backward compatibility alias for plant decay rate. */
-    public const LOOM_DECAY_RATE = self::PLANT_DECAY_RATE;
     /** Quarterly efficiency gain scalar per unit of logarithmic overinvestment into automated cutting, sewing, and weaving infrastructure. */
     public const PLANT_MODERNIZATION_GAIN = 0.012;
-    /** Backward compatibility alias for plant modernization gain. */
-    public const LOOM_MODERNIZATION_GAIN = self::PLANT_MODERNIZATION_GAIN;
     /** Structural minimum operating margin floor under severe industrial equipment mechanical degradation. */
     public const MIN_OPERATING_MARGIN_FLOOR = 0.08;
     /** Structural maximum operating margin ceiling for fully modernized, automated apparel manufacturing facilities. */
     public const MAX_OPERATING_MARGIN_CEILING = 0.32;
-    /** Operating margin mean reversion speed for apparel manufacturing economics. */
-    public const APPAREL_REVERSION_SPEED = 0.15;
 
     public function getReversionSpeed(): float
     {

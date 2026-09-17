@@ -114,7 +114,9 @@ class EarningsEngine
         /** Zero-sum industry share ledger; null (unit tests, harnesses) means every firm's gain comes from a larger market. */
         private ?IndustryShareLedger $industryShareLedger = null,
         /** Listed anchor stakes. Required, not optional: a sphere with no ledger would silently never open a plant ledger either. Holds only a per-tick price map, so a harness builds one free. */
-        private AnchorStakeLedger $anchorStakes = new AnchorStakeLedger()
+        private AnchorStakeLedger $anchorStakes = new AnchorStakeLedger(),
+        /** Investment securities mark. Defaulted so a harness or a unit test builds an engine without wiring the curve. */
+        private SecuritiesBookService $securitiesBook = new SecuritiesBookService(new \App\Service\Market\BondPricingEngine(new MathUtility()))
     ) {}
 
     public function calculate(Stock $stock, \App\DTO\MacroStateDTO $macroState, int $tickCount = 0, int $ticksPerYear = 252): ?array
@@ -140,6 +142,11 @@ class EarningsEngine
         // Remarked before anything is struck on the balance sheet, because everything downstream is struck
         // ON it: a portfolio worth more carries more invested capital and upstreams more in dividends.
         $this->anchorStakes->markToMarket($stock, $strategy->getEffectiveTaxRate($macroState->corporateTaxRate));
+
+        // The curve moved under the securities book too, and for the same reason it is struck here: the
+        // mark is a balance-sheet fact every downstream valuation reads, not an earnings one. It reaches
+        // equity through other comprehensive income and never touches EBIT, EPS or the surprise.
+        $this->rollForwardSecuritiesBook($ctx);
 
         $this->initializeContext($ctx);
         // Assets finished this quarter leave construction in progress; the ledger roll-forward below moves
@@ -1489,6 +1496,48 @@ class EarningsEngine
         $ctx->ebitda -= $totalCharge;
         $ctx->ebit -= $totalCharge;
         $ctx->impairmentCharges += $totalCharge;
+    }
+
+    /**
+     * Remarks the investment securities book against the curve (ASC 320).
+     *
+     * Available-for-sale moves total equity now; held-to-maturity is disclosed on the report and stays out
+     * of reported equity until a sale recognises it. Neither reaches earnings. The distinction is the whole
+     * mechanism: a firm can carry an intact capital ratio and a hollowed-out balance sheet at the same time,
+     * and only a forced sale collapses the two back together.
+     */
+    private function rollForwardSecuritiesBook(EarningsSimulationContext $ctx): void
+    {
+        $stock = $ctx->stock;
+        $book = $ctx->strategy->resolveSecuritiesBook($stock);
+        $opening = (float) $stock->getUnrealizedSecuritiesMark();
+
+        if ($book <= 0.0 && $opening === 0.0) {
+            return;
+        }
+
+        $mark = $this->securitiesBook->roll(
+            bookValue: $book,
+            openingMark: $opening,
+            carryingYield: $stock->getSecuritiesCarryingYield(),
+            curve: $ctx->macroState->sovereignCurve(),
+            duration: $stock->getSecuritiesDuration() ?? FinancialConstants::DEFAULT_SECURITIES_DURATION_YEARS,
+            floatingShare: $ctx->strategy->getSecuritiesFloatingShare($stock),
+            fallbackYield: $ctx->macroState->yield10yEma,
+        );
+
+        $stock->setSecuritiesCarryingYield($mark->carryingYield);
+        $stock->setUnrealizedSecuritiesMark(MathUtility::formatDecimal($mark->totalMark, 4));
+
+        if ($mark->afsEquityDelta !== 0.0) {
+            // Other comprehensive income is inside total equity and outside retained earnings, which is why
+            // this is a bcadd on the balance sheet and not a line in the income statement.
+            $stock->setTotalEquity(
+                \bcadd($stock->getTotalEquity(), MathUtility::formatDecimal($mark->afsEquityDelta, 4), 4)
+            );
+        }
+
+        $ctx->unrealizedSecuritiesMark = $mark->totalMark;
     }
 
     /**

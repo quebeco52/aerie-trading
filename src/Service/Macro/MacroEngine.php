@@ -109,8 +109,6 @@ class MacroEngine
     public const WAGE_TIGHTNESS_SENSITIVITY = 0.010;
     /** Annual adjustment speed of nominal wage settlements toward market-clearing equilibrium. */
     public const WAGE_ADJUSTMENT_SPEED = 2.0;
-    /** Wage-push inflation transmission passing excess wage growth into headline services inflation. */
-    public const WAGE_INFLATION_TRANSMISSION = 0.10;
     /** Okun's beta: sensitivity of equilibrium unemployment deviation to the GDP output gap. */
     public const OKUNS_COEFFICIENT = 0.5;
     /** Annual adjustment speed of employment expansion during economic recoveries (search & matching friction). */
@@ -271,8 +269,6 @@ class MacroEngine
     public const SVENSSON_LAMBDA_2 = 0.15;
     /** Sensitivity of secondary curvature (beta3) to quantitative tightening and long-term fiscal deficits. */
     public const SVENSSON_CURVATURE2_FISCAL_SCALE = 0.02;
-    /** Sensitivity of beta3 secondary curvature to central bank balance sheet (positive QT steepens, negative QE suppresses). */
-    public const SVENSSON_CURVATURE2_BS_SCALE = 0.40;
     /** Wright (2011) IRP: term premium sensitivity to excess inflation expectations above target. Kept modest: the 2022 episode showed breakevens near 3% adding little premium once expectations are anchored. */
     public const TERM_PREMIUM_IRP_EXPECTATION_SCALE = 0.20;
     /** Safe-haven flight to safety: financial market panic compresses sovereign term premium (Campbell et al. 2020). */
@@ -327,8 +323,6 @@ class MacroEngine
     // --- New Keynesian Phillips Curve Dynamics ---
     /** Adaptive unanchoring weight of inflation expectations to sustained trend deviations. */
     public const INFLATION_ADAPTIVE_EXPECTATIONS_WEIGHT = 0.25;
-    /** Phillips curve slope: sensitivity of headline inflation to the output gap. */
-    public const PHILLIPS_SLOPE = 0.25;
     /** Speed of inflation expectations mean-reverting toward central bank target (anchored expectations). */
     public const INFLATION_MEAN_REVERSION = 0.75;
     /** Maximum asymptotic output gap capacity ceiling where supply bottlenecks bind (Benigno & Eggertsson 2023). */
@@ -425,8 +419,6 @@ class MacroEngine
     // --- Central Bank Balance Sheet (QE & QT) ---
     /** Policy rate threshold below which QE bond purchases can be initiated during recessions. */
     public const QE_ACTIVATION_RATE_THRESHOLD = 0.025;
-    /** Proximity threshold to Zero Lower Bound required before activating QE asset purchases. */
-    public const QE_ACTIVATION_ZLB_THRESHOLD = 0.60;
     /** Negative output gap threshold below which central bank initiates QE bond purchases. */
     public const QE_ACTIVATION_GAP_THRESHOLD = -0.005;
     /** Ten-year yield suppression under full-scale QE (~100bps): Gagnon et al. (2011) and Bonis-Ihrig-Wei (2017) put the whole QE1-QE3 stock near 100bps at its 2013 peak. */
@@ -447,8 +439,6 @@ class MacroEngine
     public const QT_MAX_INTENSITY = 0.005;
     /** Sensitivity multiplier scaling QT bond runoff with economic overheating. */
     public const QT_SEVERITY_MULTIPLIER = 0.40;
-    /** Nelson-Siegel level weighting on target inflation vs expected inflation. */
-    public const INFLATION_LEVEL_WEIGHT = 0.5;
 
     // --- MUNDELL-FLEMING OPEN ECONOMY (IS-LM-BOP) ---
     /** G7 average policy rate proxy for Uncovered Interest Parity (UIP) baseline. */

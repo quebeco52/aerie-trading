@@ -62,6 +62,33 @@ class TradeExecutionService
     }
 
     /**
+     * Whether a fill at this price respects the order's limit.
+     *
+     * A buy never pays more than its limit and a sell never accepts less. One place for it because the
+     * placement path and the resting path were each spelling it out, and they must not drift apart.
+     */
+    private static function limitAllowsFill(string $action, float $limitPrice, float $executionPrice): bool
+    {
+        return self::isBuySide($action)
+            ? $limitPrice >= $executionPrice
+            : $limitPrice <= $executionPrice;
+    }
+
+    /**
+     * Whether the market has gone through this stop's trigger.
+     *
+     * A stop is armed on the far side of the market from a limit: a sell stop sits BELOW the price and
+     * fires when it falls to it, which is the opposite of a sell limit. Getting this backwards turns every
+     * stop-loss into a take-profit.
+     */
+    private static function stopIsTriggered(string $action, float $stopPrice, float $currentPrice): bool
+    {
+        return self::isBuySide($action)
+            ? $currentPrice >= $stopPrice
+            : $currentPrice <= $stopPrice;
+    }
+
+    /**
      * Places one order and reports which asset class it was filled in.
      *
      * The class comes back because the units differ by it — an option order is counted in contracts of a
@@ -70,7 +97,7 @@ class TradeExecutionService
      *
      * @return string The asset class filled: STOCK, ETF, BOND or OPTION.
      */
-    public function executeOrder(User $user, string $ticker, string $action, string $orderType, int $quantity, ?string $limitPrice = null): string
+    public function executeOrder(User $user, string $ticker, string $action, string $orderType, int $quantity, ?string $limitPrice = null, ?string $stopPrice = null): string
     {
         if ($quantity <= 0) {
             throw new \Exception('Invalid quantity.');
@@ -83,8 +110,22 @@ class TradeExecutionService
             throw new \Exception('Invalid order action.');
         }
 
-        if ($orderType === 'LIMIT') {
+        if (!in_array($orderType, TradeOrder::VALID_TYPES, true)) {
+            throw new \Exception('Invalid order type.');
+        }
+
+        // A stop needs the price that wakes it; a stop-limit needs that AND the worst price it will accept
+        // once awake. They are different numbers and an order carrying only one of them is not placeable.
+        if ($orderType === TradeOrder::TYPE_LIMIT || $orderType === TradeOrder::TYPE_STOP_LIMIT) {
             $limitPrice = $this->validateLimitPrice($limitPrice);
+        } else {
+            $limitPrice = null;
+        }
+
+        if ($orderType === TradeOrder::TYPE_STOP || $orderType === TradeOrder::TYPE_STOP_LIMIT) {
+            $stopPrice = $this->validateLimitPrice($stopPrice);
+        } else {
+            $stopPrice = null;
         }
 
         $this->em->getConnection()->beginTransaction();
@@ -109,7 +150,7 @@ class TradeExecutionService
             // than at the controller keeps one front door: a player types a symbol, and what happens next is
             // a property of the symbol.
             if ($asset->entity instanceof OptionContract) {
-                if ($orderType !== 'MARKET') {
+                if ($orderType !== TradeOrder::TYPE_MARKET) {
                     throw new \Exception('Listed options trade at market. A resting option order is not supported yet.');
                 }
 
@@ -149,7 +190,9 @@ class TradeExecutionService
             }
 
             $quote = $this->liquidityEngine->quoteAsset(
-                $stock,
+                // The instrument itself, so a fund is quoted off its own arbitrage band rather than a
+                // market-wide constant.
+                $asset->entity instanceof \App\Entity\Etf ? $asset->entity : $stock,
                 $assetType,
                 $action,
                 $quantity,
@@ -169,26 +212,38 @@ class TradeExecutionService
             $order->setOrderType($orderType);
             $order->setQuantity($quantity);
             $order->setLimitPrice($limitPrice);
+            $order->setStopPrice($stopPrice);
 
-            if ($orderType === 'MARKET') {
+            if ($orderType === TradeOrder::TYPE_MARKET) {
                 // Execute immediately at market price
                 $userAsset = $this->settlePosition($user, $asset, $userAsset, $action, $quantity, $totalValueStr, $stock);
 
                 $this->recordFill($order, $quote, $quantity, $action, $asset->ticker(), $assetType);
                 $this->em->persist($order);
 
-            } else if ($orderType === 'LIMIT') {
+            } else {
                 // Check if it crosses immediately
                 $shouldFillImmediately = false;
-                $limitPriceFloat = (float) $limitPrice;
 
-                // Tested against the price the order would actually fill at, not against mid. A limit is a
-                // promise about the worst price the trader will accept, and crossing on mid would break it
-                // the moment the spread or the order's own impact pushed the fill through the limit.
-                if (self::isBuySide($action) && $limitPriceFloat >= $quote->executionPrice) {
-                    $shouldFillImmediately = true;
-                } elseif (!self::isBuySide($action) && $limitPriceFloat <= $quote->executionPrice) {
-                    $shouldFillImmediately = true;
+                if ($order->isStop()) {
+                    // A stop is armed in the direction the market has to move to reach it, so a stop already
+                    // on the wrong side of the market is one the market has ALREADY moved through. Real
+                    // desks trigger it on entry rather than parking it, and parking it here would hide a
+                    // live order behind a trigger that can never fire again.
+                    $stopFloat = (float) $stopPrice;
+                    $triggered = self::isBuySide($action)
+                        ? $quote->midPrice >= $stopFloat
+                        : $quote->midPrice <= $stopFloat;
+
+                    // A triggered stop-limit is still bound by its limit; a triggered plain stop is not.
+                    $shouldFillImmediately = $triggered && (
+                        !$order->hasLimitCap() || $this->limitAllowsFill($action, (float) $limitPrice, $quote->executionPrice)
+                    );
+                } else {
+                    // Tested against the price the order would actually fill at, not against mid. A limit is
+                    // a promise about the worst price the trader will accept, and crossing on mid would break
+                    // it the moment the spread or the order's own impact pushed the fill through the limit.
+                    $shouldFillImmediately = $this->limitAllowsFill($action, (float) $limitPrice, $quote->executionPrice);
                 }
 
                 if ($shouldFillImmediately) {
@@ -197,10 +252,17 @@ class TradeExecutionService
                     $this->recordFill($order, $quote, $quantity, $action, $asset->ticker(), $assetType);
                 } else {
                     // Escrow and save as OPEN
-                    if ($action === 'BUY') {
+                    if ($action === 'BUY' && !$order->isStop()) {
                         $escrowCashStr = \bcmul((string) $limitPrice, $quantityStr, 4);
                         $this->requireFunding($user, (float) $escrowCashStr, $action);
                         $this->cashLedger->debit($user, $escrowCashStr);
+                    } elseif ($action === 'BUY') {
+                        // A buy stop escrows nothing, for the same reason a resting short does not: it may
+                        // never trigger, and a stop has no fill price to reserve against anyway — it takes
+                        // what the book gives it. Buying power is checked when it actually fires.
+                        if ($stock === null && $assetType !== 'ETF') {
+                            throw new \Exception('Stop orders are for equities and funds.');
+                        }
                     } elseif ($action === 'COVER') {
                         // A resting COVER escrows nothing, for the same reason it is not gated on buying
                         // power: it is the closing leg of a position that is already collateralized. Holding
@@ -225,7 +287,7 @@ class TradeExecutionService
                         }
                     } else { // SELL
                         if (!$userAsset || $userAsset->getQuantity() < $quantity) {
-                            throw new \Exception('Insufficient shares for limit order.');
+                            throw new \Exception('Insufficient shares for a resting sell order.');
                         }
                         $this->assetResolver->removeFromHolding($userAsset, $quantity);
                     }
@@ -233,8 +295,6 @@ class TradeExecutionService
                 }
                 
                 $this->em->persist($order);
-            } else {
-                throw new \Exception('Invalid order type.');
             }
 
             $this->em->persist($user);
@@ -243,7 +303,7 @@ class TradeExecutionService
             $this->em->flush();
             $this->em->getConnection()->commit();
 
-            if ($orderType === 'LIMIT' && $order->getStatus() === TradeOrder::STATUS_OPEN) {
+            if ($order->getStatus() === TradeOrder::STATUS_OPEN) {
                 $this->updateRedisBounds($ticker);
             }
 
@@ -375,6 +435,24 @@ class TradeExecutionService
     }
 
     /**
+     * The same funding test as requireFunding(), asked rather than enforced.
+     *
+     * A resting order that fires into an account that can no longer pay for it is not an error to report to
+     * anybody — the trader placed it correctly and the world moved. It stays open and tries again, which is
+     * how the SHORT and COVER legs already behave when their own preconditions have gone against them.
+     */
+    private function hasFunding(User $user, float $notional): bool
+    {
+        try {
+            $this->requireFunding($user, $notional, 'BUY');
+
+            return true;
+        } catch (\Throwable) {
+            return false;
+        }
+    }
+
+    /**
      * Moves a name's total short interest, which is what prices its borrow for everyone.
      *
      * @param int $delta Shares added to (positive) or removed from (negative) the total.
@@ -402,8 +480,13 @@ class TradeExecutionService
         $order->setStatus(TradeOrder::STATUS_FILLED);
         $order->setFilledAt(new \DateTime());
 
-        if ($assetType === 'STOCK') {
+        if ($assetType === 'STOCK' || $assetType === 'ETF') {
             // A cover buys stock and a short sells it, so flow follows the side rather than the label.
+            //
+            // A fund is included because demand for the FUND is what pushes it off its basket. Without this
+            // the fund was a calculated number that no amount of buying could move, which is the same as
+            // saying it had no market of its own — and a fund with no market of its own cannot trade at a
+            // discount, which is the one figure a fund publishes that its basket cannot.
             $this->orderFlow->record($ticker, self::isBuySide($action) ? (float) $quantity : -(float) $quantity);
         }
     }
@@ -452,12 +535,14 @@ class TradeExecutionService
             $ticker = $order->getTicker();
             $quantity = $order->getQuantity();
 
-            if ($order->getAction() === 'BUY') {
-                // Refund cash, paying down the borrowing it was drawn from first.
+            if ($order->getAction() === 'BUY' && !$order->isStop()) {
+                // Refund cash, paying down the borrowing it was drawn from first. A BUY STOP is excluded
+                // because it never escrowed any: refunding a limit price it does not carry would credit the
+                // account for an order it was never charged for, and on a plain stop that price is null.
                 $this->cashLedger->credit($user, \bcmul((string) $order->getLimitPrice(), (string) $quantity, 4));
             } elseif ($order->getAction() === 'SELL') {
-                // Refund the escrowed shares. A resting SHORT and a resting COVER escrowed nothing, so
-                // there is nothing to give back and no branch for either.
+                // Refund the escrowed shares. A resting SHORT, a resting COVER and a buy stop escrowed
+                // nothing, so there is nothing to give back and no branch for any of them.
                 $asset = $this->assetResolver->resolve($ticker);
                 if ($asset === null) {
                     throw new \Exception('Asset not found.');
@@ -490,14 +575,11 @@ class TradeExecutionService
         $openOrders = $this->em->getRepository(TradeOrder::class)->findOpenByTicker($ticker);
 
         foreach ($openOrders as $order) {
-            $limitPrice = (float) $order->getLimitPrice();
-            $shouldFill = false;
+            $action = $order->getAction();
 
-            if (self::isBuySide($order->getAction()) && $currentPrice <= $limitPrice) {
-                $shouldFill = true;
-            } elseif (!self::isBuySide($order->getAction()) && $currentPrice >= $limitPrice) {
-                $shouldFill = true;
-            }
+            $shouldFill = $order->isStop()
+                ? self::stopIsTriggered($action, (float) $order->getStopPrice(), $currentPrice)
+                : self::limitAllowsFill($action, (float) $order->getLimitPrice(), $currentPrice);
 
             if ($shouldFill) {
                 $this->fillOpenOrder($order, $currentPrice);
@@ -540,16 +622,23 @@ class TradeExecutionService
             }
 
             $stock = $asset->entity instanceof Stock ? $asset->entity : null;
-            $quote = $this->liquidityEngine->quoteAsset($stock, $asset->type, $order->getAction(), $quantity, $executionPrice);
+            $quote = $this->liquidityEngine->quoteAsset(
+                $asset->entity instanceof \App\Entity\Etf ? $asset->entity : $stock,
+                $asset->type,
+                $order->getAction(),
+                $quantity,
+                $executionPrice
+            );
 
             // A resting order fills at or better than its limit, never through it. The touch that triggered
             // this fill was the mid, and the spread and the order's own impact sit on top of it: without
             // this check a BUY resting at 100 could fill at 100.30 the moment the mid ticked to 100.
-            if (self::isBuySide($order->getAction()) && $quote->executionPrice > $limitPrice) {
-                $this->em->getConnection()->rollBack();
-                return;
-            }
-            if (!self::isBuySide($order->getAction()) && $quote->executionPrice < $limitPrice) {
+            //
+            // A PLAIN STOP has no such promise and must not be given one. It accepts whatever the book
+            // quotes once it is triggered — that is what a stop is, and refusing the fill here would turn
+            // every stop-loss into an order that silently declines to work in exactly the fast market it
+            // was placed for. It is also what makes a cluster of them cascade.
+            if ($order->hasLimitCap() && !self::limitAllowsFill($order->getAction(), $limitPrice, $quote->executionPrice)) {
                 $this->em->getConnection()->rollBack();
                 return;
             }
@@ -580,6 +669,18 @@ class TradeExecutionService
                     $this->adjustShortInterest($stock, -$quantity);
                 }
 
+                $this->assetResolver->addToHolding($user, $asset, $userAsset, $quantity);
+
+            } elseif ($action === 'BUY' && $order->isStop()) {
+                // A buy stop escrowed nothing, so it is paid for now and buying power is checked now. The
+                // account can have spent the money while this rested, and a stop that fires into an
+                // unfunded account does not get to buy on credit: it stays open and tries again.
+                if (!$this->hasFunding($user, (float) $considerationStr)) {
+                    $this->em->getConnection()->rollBack();
+                    return;
+                }
+
+                $this->cashLedger->debit($user, $considerationStr);
                 $this->assetResolver->addToHolding($user, $asset, $userAsset, $quantity);
 
             } elseif ($action === 'BUY') {
@@ -645,20 +746,35 @@ class TradeExecutionService
 
     private function updateRedisBounds(string $ticker): void
     {
-        // Finds the highest BUY limit and lowest SELL limit
         $conn = $this->em->getConnection();
-        
-        $sqlBuy = "SELECT MAX(limit_price) as max_buy FROM trade_orders WHERE ticker = :ticker AND action = 'BUY' AND status = 'OPEN'";
-        $buyResult = $conn->executeQuery($sqlBuy, ['ticker' => $ticker])->fetchOne();
-        $highestBuy = $buyResult ? (float)$buyResult : 0.0;
 
-        $sqlSell = "SELECT MIN(limit_price) as min_sell FROM trade_orders WHERE ticker = :ticker AND action = 'SELL' AND status = 'OPEN'";
-        $sellResult = $conn->executeQuery($sqlSell, ['ticker' => $ticker])->fetchOne();
-        $lowestSell = $sellResult ? (float)$sellResult : 999999999.0;
+        // Two numbers, not four, because the ticker asks one question per side: has the price fallen to
+        // anything, and has it risen to anything. A buy limit and a SELL STOP are both woken by a fall, and
+        // a sell limit and a BUY STOP are both woken by a rise, so each pair folds into one bound and the
+        // ticker needs no change to see stops at all.
+        //
+        // Every side is counted. This previously asked only about BUY and SELL, so a resting SHORT or
+        // COVER wrote bounds of zero and infinity and was then never checked again — the order rested
+        // forever against a price that had already gone through it.
+        $lowerSql = "SELECT MAX(CASE
+                WHEN order_type IN ('LIMIT', 'STOP_LIMIT') AND action IN ('BUY', 'COVER') THEN limit_price
+                WHEN order_type IN ('STOP', 'STOP_LIMIT') AND action IN ('SELL', 'SHORT') THEN stop_price
+            END) FROM trade_orders WHERE ticker = :ticker AND status = 'OPEN'";
+        $lowerResult = $conn->executeQuery($lowerSql, ['ticker' => $ticker])->fetchOne();
+        $touchFromAbove = $lowerResult !== null && $lowerResult !== false ? (float) $lowerResult : 0.0;
 
+        $upperSql = "SELECT MIN(CASE
+                WHEN order_type IN ('LIMIT', 'STOP_LIMIT') AND action IN ('SELL', 'SHORT') THEN limit_price
+                WHEN order_type IN ('STOP', 'STOP_LIMIT') AND action IN ('BUY', 'COVER') THEN stop_price
+            END) FROM trade_orders WHERE ticker = :ticker AND status = 'OPEN'";
+        $upperResult = $conn->executeQuery($upperSql, ['ticker' => $ticker])->fetchOne();
+        $touchFromBelow = $upperResult !== null && $upperResult !== false ? (float) $upperResult : 999999999.0;
+
+        // The keys keep their names: the ticker reads 'buy' as "dispatch if the price fell to here" and
+        // 'sell' as "dispatch if it rose to here", which is what both now mean for every order type.
         $this->redis->set("limit_bounds:$ticker", json_encode([
-            'buy' => $highestBuy,
-            'sell' => $lowestSell
+            'buy' => $touchFromAbove,
+            'sell' => $touchFromBelow
         ]));
     }
 

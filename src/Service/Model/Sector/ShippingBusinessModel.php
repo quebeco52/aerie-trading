@@ -86,12 +86,8 @@ class ShippingBusinessModel extends StandardCorporateBusinessModel
     public const REVENUE_VARIANCE_SCALAR   = 0.25;
     /** Positive output gap threshold triggering exponential spot rate boom multipliers. */
     public const SPOT_BOOM_GAP_THRESHOLD   = 0.015;
-    /** Output gap multiplier scaling spot freight rate surges during global trade booms. */
-    public const SPOT_BOOM_RATE_MULT       = 4.00;
     /** Negative output gap threshold triggering vessel capacity glut penalties. */
     public const SPOT_GLUT_GAP_THRESHOLD   = -0.015;
-    /** Output gap multiplier scaling rate collapses during trade slowdowns and capacity gluts. */
-    public const SPOT_GLUT_RATE_MULT       = 3.00;
     /** Continuous global trade elasticity scalar scaling spot freight rates smoothly with output gap. */
     public const CONTINUOUS_SPOT_RATE_SCALAR = 3.50;
 

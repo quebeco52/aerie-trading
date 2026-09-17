@@ -1086,4 +1086,70 @@ class TradeExecutionServiceTest extends TestCase
         $this->service->executeOrder($user, 'APEX', 'SHORT', 'MARKET', 60);
         $this->assertSame(['APEX' => -60.0], $this->orderFlow->drain());
     }
+
+    /**
+     * The ticker only checks a ticker whose Redis bounds the price has reached, so an order type missing
+     * from these two queries is an order that rests forever against a price that has already gone through
+     * it. That is not hypothetical: SHORT and COVER were both absent, so a resting short wrote bounds of
+     * zero and infinity and was never looked at again.
+     */
+    public function testTheRestingOrderBoundsCoverEverySideAndBothStopDirections(): void
+    {
+        $queries = [];
+
+        $result = $this->createStub(\Doctrine\DBAL\Result::class);
+        $result->method('fetchOne')->willReturn(null);
+
+        $connection = $this->createStub(Connection::class);
+        $connection->method('isTransactionActive')->willReturn(true);
+        $connection->method('executeQuery')->willReturnCallback(
+            function (string $sql) use (&$queries, $result) {
+                $queries[] = preg_replace('/\s+/', ' ', $sql);
+
+                return $result;
+            }
+        );
+
+        $em = $this->createStub(EntityManagerInterface::class);
+        $em->method('getConnection')->willReturn($connection);
+
+        $written = [];
+        $redis = $this->createStub(\Redis::class);
+        $redis->method('set')->willReturnCallback(
+            function (string $key, mixed $value) use (&$written): bool {
+                $written[$key] = $value;
+
+                return true;
+            }
+        );
+
+        $service = clone $this->service;
+        (new \ReflectionProperty(TradeExecutionService::class, 'em'))->setValue($service, $em);
+        (new \ReflectionProperty(TradeExecutionService::class, 'redis'))->setValue($service, $redis);
+
+        (new \ReflectionMethod(TradeExecutionService::class, 'updateRedisBounds'))->invoke($service, 'APEX');
+
+        self::assertCount(2, $queries, 'One bound per side, which is all the ticker asks about.');
+        $all = implode(' | ', $queries);
+
+        foreach (['BUY', 'SELL', 'SHORT', 'COVER'] as $action) {
+            self::assertStringContainsString("'{$action}'", $all, "{$action} orders are never checked.");
+        }
+
+        foreach (['LIMIT', 'STOP', 'STOP_LIMIT'] as $type) {
+            self::assertStringContainsString("'{$type}'", $all, "{$type} orders are never checked.");
+        }
+
+        // A fall wakes buy limits and sell stops; a rise wakes sell limits and buy stops. Each bound has to
+        // read the trigger column that belongs to it, or a stop is compared against a price it never had.
+        [$lower, $upper] = $queries;
+        self::assertStringContainsString('MAX(', $lower);
+        self::assertStringContainsString('MIN(', $upper);
+
+        self::assertEquals(
+            ['buy' => 0.0, 'sell' => 999999999.0],
+            json_decode((string) ($written['limit_bounds:APEX'] ?? ''), true),
+            'An empty book is written, not skipped: the ticker treats a missing key as "check anyway".'
+        );
+    }
 }

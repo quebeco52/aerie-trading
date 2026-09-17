@@ -9,7 +9,7 @@ import { formatCurrency } from '../js/utils/formatters.js';
  * Submission locks the button, so a slow round-trip plus a second click cannot place two orders.
  */
 export default class extends Controller {
-    static targets = ['limitGroup', 'limitPrice', 'quantity', 'estimate', 'submit'];
+    static targets = ['limitGroup', 'limitPrice', 'stopGroup', 'stopPrice', 'quantity', 'estimate', 'submit'];
     static values = {
         ticker: String,
         /** Last traded price, refreshed from the market stream for as long as the page is open. */
@@ -38,15 +38,19 @@ export default class extends Controller {
         if (!Number.isFinite(price)) return;
 
         this.priceValue = price;
-        // A limit order is priced by the trader, so a new quote does not move its estimate.
-        if (this.orderType === 'MARKET') this.render();
+        // A limit is priced by the trader, so a new quote does not move its estimate. A plain stop has
+        // no price of its own — it takes what the book gives it — so its estimate DOES follow the quote.
+        if (this.orderType === 'MARKET' || this.orderType === 'STOP') this.render();
     }
 
-    /** Shows or hides the limit price field to match the selected order type. */
+    /** Shows the price fields the selected order type actually uses. */
     onOrderTypeChange() {
-        const isLimit = this.orderType === 'LIMIT';
+        const type = this.orderType;
         if (this.hasLimitGroupTarget) {
-            this.limitGroupTarget.classList.toggle('hidden', !isLimit);
+            this.limitGroupTarget.classList.toggle('hidden', type !== 'LIMIT' && type !== 'STOP_LIMIT');
+        }
+        if (this.hasStopGroupTarget) {
+            this.stopGroupTarget.classList.toggle('hidden', type !== 'STOP' && type !== 'STOP_LIMIT');
         }
         this.render();
     }
@@ -55,12 +59,26 @@ export default class extends Controller {
         return this.element.querySelector('input[name="orderType"]:checked')?.value || 'MARKET';
     }
 
-    /** The price this order would transact at: the trader's limit, or the live quote. */
+    /**
+     * The price this order would transact at: the trader's limit, the trigger a plain stop would fire at,
+     * or the live quote.
+     *
+     * A plain stop is estimated at its trigger, which is the closest honest figure available before it
+     * fires — the actual fill can be worse, and on a fast tape usually is.
+     */
     get effectivePrice() {
-        if (this.orderType === 'LIMIT' && this.hasLimitPriceTarget && this.limitPriceTarget.value) {
+        const type = this.orderType;
+
+        if ((type === 'LIMIT' || type === 'STOP_LIMIT') && this.hasLimitPriceTarget && this.limitPriceTarget.value) {
             const limit = parseFloat(this.limitPriceTarget.value);
             if (Number.isFinite(limit)) return limit;
         }
+
+        if (type === 'STOP' && this.hasStopPriceTarget && this.stopPriceTarget.value) {
+            const stop = parseFloat(this.stopPriceTarget.value);
+            if (Number.isFinite(stop)) return stop;
+        }
+
         return this.priceValue;
     }
 

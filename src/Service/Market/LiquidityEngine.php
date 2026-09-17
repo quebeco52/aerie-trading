@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Service\Market;
 
 use App\DTO\ExecutionQuoteDTO;
+use App\Entity\Etf;
 use App\Entity\Stock;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
@@ -262,18 +263,24 @@ final class LiquidityEngine
      *
      * @param string $assetType 'STOCK', 'ETF' or 'BOND'.
      */
-    public function quoteAsset(Stock|null $stock, string $assetType, string $action, int $quantity, float $midPrice, bool $isCorporateIssue = false): ExecutionQuoteDTO
+    public function quoteAsset(Stock|Etf|null $asset, string $assetType, string $action, int $quantity, float $midPrice, bool $isCorporateIssue = false): ExecutionQuoteDTO
     {
-        if ($assetType === 'STOCK' && $stock instanceof Stock) {
-            return $this->quote($stock, $action, $quantity, $midPrice);
+        if ($assetType === 'STOCK' && $asset instanceof Stock) {
+            return $this->quote($asset, $action, $quantity, $midPrice);
         }
 
         // A corporate issue is not a sovereign one. It trades in a fraction of the size against a fraction
         // of the buyers, and quoting it at the sovereign's depth would make credit risk free to get into and
         // out of — which is exactly the property that makes it risky.
+        //
+        // A fund is quoted off its own arbitrage band, not off a constant. Nobody makes a market inside the
+        // price at which the creation arbitrage is free, so the band IS the spread — and because the band
+        // is read off the live basket, a fund whose constituents have become expensive to trade becomes
+        // expensive to trade too, without that being written down anywhere.
         $halfSpread = match (true) {
             $assetType === 'BOND' && $isCorporateIssue => FinancialConstants::CORPORATE_BOND_HALF_SPREAD,
             $assetType === 'BOND' => FinancialConstants::BOND_HALF_SPREAD,
+            $asset instanceof Etf => max(FinancialConstants::ETF_HALF_SPREAD, $asset->getArbitrageBand() * FinancialConstants::ETF_QUOTE_BAND_SHARE),
             default => FinancialConstants::ETF_HALF_SPREAD,
         };
 

@@ -23,6 +23,16 @@ class EtfHistory
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 2)]
     private string $price;
 
+    /**
+     * Net asset value per share at the same instant, or null for rows written before the fund had one.
+     *
+     * Stored beside the price rather than derived, because the premium or discount between them is the
+     * series worth charting and it cannot be reconstructed later: the basket has moved on, and the fee
+     * ratchet means the fund does not own the same basket it owned then.
+     */
+    #[ORM\Column(type: Types::DECIMAL, precision: 12, scale: 4, nullable: true)]
+    private ?string $nav = null;
+
     #[ORM\Column(type: Types::DATETIME_MUTABLE)]
     private \DateTime $recordedAt;
 
@@ -59,6 +69,18 @@ class EtfHistory
     public function setPrice(string $price): static
     {
         $this->price = $price;
+
+        return $this;
+    }
+
+    public function getNav(): ?string
+    {
+        return $this->nav;
+    }
+
+    public function setNav(?string $nav): static
+    {
+        $this->nav = $nav;
 
         return $this;
     }

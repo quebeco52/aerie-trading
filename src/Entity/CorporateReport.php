@@ -147,6 +147,14 @@ class CorporateReport
     #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, nullable: true)]
     private ?string $netChargeOffs = null;
 
+    /**
+     * Mark on the investment securities book against amortized cost (ASC 320); negative is a loss. The
+     * available-for-sale share is already inside total equity; the held-to-maturity share is disclosed here
+     * and nowhere else, which is the gap between what this filing reports and what the firm is worth.
+     */
+    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, nullable: true)]
+    private ?string $unrealizedSecuritiesMark = null;
+
     /** Cash deployed into new earning assets, net of assets sold: the investing flow of a lender. */
     #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, nullable: true)]
     private ?string $netLoanOriginations = null;
@@ -940,6 +948,17 @@ class CorporateReport
     public function setCreditLossProvision(?string $creditLossProvision): static
     {
         $this->creditLossProvision = $creditLossProvision;
+        return $this;
+    }
+
+    public function getUnrealizedSecuritiesMark(): ?string
+    {
+        return $this->unrealizedSecuritiesMark;
+    }
+
+    public function setUnrealizedSecuritiesMark(?string $unrealizedSecuritiesMark): static
+    {
+        $this->unrealizedSecuritiesMark = $unrealizedSecuritiesMark;
         return $this;
     }
 

@@ -217,6 +217,65 @@ final class IndexCommittee
     }
 
     /**
+     * What one index unit of this basket costs to get into and out of: the members' half-spreads, weighted
+     * the way the fund actually holds them.
+     *
+     * This is what sets how far the fund tracking it may drift before an authorized participant bothers to
+     * close the gap. It is read off the live book rather than assumed, which is why a fund whose
+     * constituents have seized up is allowed to trade at a discount and a fund of liquid mega-caps is not —
+     * the difference between an equity fund and a credit fund in a stressed week, with neither written down
+     * anywhere.
+     *
+     * @param array<string, float> $capByTicker        Float-adjusted capitalisation per ticker, the weights.
+     * @param array<string, float> $halfSpreadByTicker Half-spread per ticker, as a fraction.
+     */
+    public function memberWeightedHalfSpread(MarketIndex $index, array $capByTicker, array $halfSpreadByTicker): float
+    {
+        $roster = $this->store->current($index);
+        $tickers = $roster !== null ? $roster['tickers'] : array_keys($capByTicker);
+
+        $weighted = 0.0;
+        $total = 0.0;
+
+        foreach ($tickers as $ticker) {
+            $weight = ($capByTicker[$ticker] ?? 0.0) * ($roster['factors'][$ticker] ?? 1.0);
+
+            if ($weight <= 0.0) {
+                continue;
+            }
+
+            $weighted += $weight * ($halfSpreadByTicker[$ticker] ?? 0.0);
+            $total += $weight;
+        }
+
+        return $total > 0.0 ? $weighted / $total : 0.0;
+    }
+
+    /**
+     * Index weight per member, normalized to one. What a creation basket is split along.
+     *
+     * @param array<string, float> $capByTicker Float-adjusted capitalisation per ticker.
+     * @return array<string, float>
+     */
+    public function memberWeights(MarketIndex $index, array $capByTicker): array
+    {
+        $roster = $this->store->current($index);
+        $tickers = $roster !== null ? $roster['tickers'] : array_keys($capByTicker);
+
+        $weights = [];
+
+        foreach ($tickers as $ticker) {
+            $weight = ($capByTicker[$ticker] ?? 0.0) * ($roster['factors'][$ticker] ?? 1.0);
+
+            if ($weight > 0.0) {
+                $weights[$ticker] = $weight;
+            }
+        }
+
+        return $weights;
+    }
+
+    /**
      * Sums a per-ticker quantity over the index's members, each carrying the factor fixed at the last
      * review.
      *

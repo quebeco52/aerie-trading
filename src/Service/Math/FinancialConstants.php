@@ -437,6 +437,22 @@ class FinancialConstants
     /** Share of the gap between the credit-loss allowance and its lifetime target closed each quarter, in either direction, so a build or release is a path and not a cliff. */
     public const CREDIT_ALLOWANCE_CONVERGENCE_RATIO = 0.25;
 
+    // --- Investment Securities & AOCI (ASC 320 / Basel III) ---
+    /** Convexity of a plain fixed-coupon book at the durations financials run; the second-order term that makes a rally worth more than the selloff cost. */
+    public const SECURITIES_BOOK_CONVEXITY = 0.45;
+    /** Share of a financial's securities book carried as held-to-maturity: disclosed at amortized cost, never marked through equity. */
+    public const DEFAULT_HTM_BOOK_SHARE = 0.40;
+    /** Floor on the carrying yield, so a book struck at the zero bound still discounts rather than dividing by nothing. */
+    public const MIN_SECURITIES_CARRYING_YIELD = 0.001;
+    /** Cap on the mark as a share of the book. Past this the duration approximation is extrapolation, not a price. */
+    public const MAX_SECURITIES_MARK_RATIO = 0.35;
+    /** Share of a lender's earning assets held as investment securities rather than loans. Only this part is marked: ASC 320 remarks securities, while ASC 310 carries loans at amortized cost, and the loan book's own rate risk is already charged as the NIM squeeze. */
+    public const SECURITIES_SHARE_OF_EARNING_ASSETS = 0.22;
+    /** Default portfolio duration in years for a financial with no seeded figure; the middle of the range large lenders run. */
+    public const DEFAULT_SECURITIES_DURATION_YEARS = 4.5;
+    /** Balance-sheet size above which an institution loses the AOCI filter and marks its capital to the curve. The advanced-approaches rule in form, set to this district's scale rather than a US figure: it takes the systemically important lenders and leaves the mid-tier the election. */
+    public const AOCI_FILTER_SIZE_THRESHOLD = 1_500_000_000_000.0;
+
     // --- Equity Issuance & TAM Scaling Limits ---
     /** Maximum fraction of market capitalization that can be raised in a distressed emergency equity offering (25%). */
     public const MAX_EMERGENCY_EQUITY_RAISE_RATIO = 0.25;
@@ -505,7 +521,7 @@ class FinancialConstants
     public const MAX_ORDER_ADV_MULTIPLE = 2.00;
     /** Ceiling on the price move one tick's net order flow may leave behind, as a log return; the impact law is a per-order measurement and a tick's aggregate is not bounded by the per-order size cap. */
     public const MAX_TICK_IMPACT_LOG_RETURN = 0.2624;
-    /** Flat half-spread on a broad index ETF. Creation and redemption keep it pinned to the basket, so it quotes tighter than any single constituent. */
+    /** Floor on a fund's half-spread. Creation and redemption keep a broad fund close to its basket, so it quotes tighter than any single constituent — but never tighter than this. */
     public const ETF_HALF_SPREAD = 0.0001;
     /** Flat half-spread on a sovereign bond, the deepest instrument on the desk. */
     public const BOND_HALF_SPREAD = 0.00005;
@@ -740,4 +756,42 @@ class FinancialConstants
     public const AGENT_RELATIVE_VALUE_SHARE = 0.15;
     /** Conviction per unit of log mispricing RELATIVE to the market's average mispricing; on the fundamentalist's scale, fully committed at roughly a 40% gap to the average name. */
     public const AGENT_RELATIVE_VALUE_GAIN = 2.50;
+
+    // --- Attention-Driven Retail (Barber & Odean 2008, "All That Glitters") ---
+    /** Share of agent capital retail holds in a name nobody is talking about; the book it sits on between episodes. */
+    public const AGENT_RETAIL_BASE_SHARE = 0.10;
+    /** Most retail adds to a name on top of the base share when its attention score saturates. Bounded because attention buying is an episode, not a regime. */
+    public const AGENT_RETAIL_MAX_ATTENTION_TILT = 0.35;
+    /** Standard deviations of one tick's move at which the extreme-return leg of attention saturates. Barber & Odean rank on the previous day's return, at either sign. */
+    public const AGENT_RETAIL_RETURN_SIGMA = 2.50;
+    /** Multiple of expected volume at which the abnormal-volume leg saturates; the paper's own sort is on volume far above a name's normal. Must stay above one: at or below it, every ordinary tick would read as an attention episode. */
+    public const AGENT_RETAIL_VOLUME_MULTIPLE = 3.00;
+    /** Attention contributed by a name being in the news at all, before any move or volume. News is the third of the paper's three sorts and the only one that is not a market statistic. */
+    public const AGENT_RETAIL_NEWS_ATTENTION = 0.50;
+
+    // --- Sell-Side Price Targets (Brav & Lehavy 2003) ---
+    /** How far above fair value the published twelve-month target is set. Targets are systematically optimistic; Brav & Lehavy measure them around 28% above price, and with price near fair value on average this lands in the same place. */
+    public const ANALYST_TARGET_OPTIMISM = 0.25;
+    /** How far the case has to move before the published target is restated. Targets are sticky and revised in steps; without a band the target would track the price continuously and a revision would never be news. */
+    public const ANALYST_TARGET_REVISION_THRESHOLD = 0.10;
+    /** Target-over-price above which the published rating reads Outperform. */
+    public const ANALYST_RATING_OUTPERFORM = 1.15;
+    /** Target-over-price below which it reads Underperform. Asymmetric against the threshold above on purpose: the sell side downgrades late and reluctantly. */
+    public const ANALYST_RATING_UNDERPERFORM = 0.98;
+
+    // --- ETF Creation, Redemption and the Arbitrage Band (Petajisto 2017; Madhavan 2016) ---
+    /** Fee an authorized participant is charged for one creation or redemption, as a fraction of the basket. Part of the round trip it has to earn back before arbitraging a deviation is worth doing. */
+    public const ETF_CREATION_FEE = 0.0010;
+    /** Multiple of the basket's own half-spread an AP must cover to get in and out of every constituent. Two sides of a round trip plus the impact of doing it in size. */
+    public const ETF_BASKET_ROUND_TRIP_MULTIPLE = 2.50;
+    /** Widest the no-arbitrage band may open, however illiquid the basket becomes. Past this the fund is not tracking anything and quoting one is a fiction. */
+    public const ETF_MAX_ARBITRAGE_BAND = 0.08;
+    /** Premium, as a fraction of net assets, created by net demand equal to the fund's entire net assets in one tick. The linear pressure the fund's own order flow exerts before an AP steps in. */
+    public const ETF_FLOW_PRESSURE = 0.50;
+    /** Share of a standing premium or discount that survives one tick absent any flow. Deviations are transient: the AP community closes them, and what is left decays rather than compounding. */
+    public const ETF_PREMIUM_PERSISTENCE = 0.60;
+    /** Share of the arbitrage band a market maker quotes the fund inside. Below one because a maker sits inside the arbitrage, not at it — quoting AT the band would mean the creation trade never pays. */
+    public const ETF_QUOTE_BAND_SHARE = 0.35;
+    /** Shares a fund is seeded with, so a creation has a book to be measured against on the first tick. */
+    public const ETF_SEED_SHARES_OUTSTANDING = 250_000_000.0;
 }

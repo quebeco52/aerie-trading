@@ -22,13 +22,9 @@ class ShockEvent
     // --- Systemic Macroeconomic Events (Published against the LBI index) ---
     /** Central bank emergency Quantitative Easing and asset purchases during contraction near zero lower bound. */
     public const TITAN_INTERVENTION = 'titan_intervention';
-    /** Descriptive alias for central bank quantitative easing expansion. */
-    public const QUANTITATIVE_EASING_EXPANSION = self::TITAN_INTERVENTION;
 
     /** Cyclical valuation bottom and counter-cyclical institutional equity buying driven by deep-value ERP. */
     public const SOVEREIGN_WEALTH_DEPLOYMENT = 'sovereign_wealth_deployment';
-    /** Descriptive alias for cyclical deep-value equity valuation inflection. */
-    public const CYCLICAL_VALUATION_INFLECTION = self::SOVEREIGN_WEALTH_DEPLOYMENT;
 
     /** Wholesale interbank lending freeze driven by severe counterparty liquidity spread blowout. */
     public const SYSTEMIC_LIQUIDITY_FREEZE = 'systemic_liquidity_freeze';

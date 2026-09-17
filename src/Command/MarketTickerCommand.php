@@ -173,6 +173,10 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
         private IndexCommittee $indexCommittee,
         private IndexFundAccountant $fundAccountant,
         private \Symfony\Component\Messenger\MessageBusInterface $messageBus,
+        /** Splits a creation basket over the names it is made of. */
+        private \App\Service\Market\AuthorizedParticipant $authorizedParticipant,
+        /** Where a creation basket is posted, so it lands on the constituents next tick like any other order. */
+        private \App\Service\Market\Flow\OrderFlowStoreInterface $orderFlow,
 
         private int $tickIntervalUs,
         private int $ticksPerYear,
@@ -493,6 +497,12 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                 $isDistributionTick = $tickCount > 0
                     && $tickCount % max(1, intdiv($this->ticksPerYear, FinancialConstants::FUND_DISTRIBUTIONS_PER_YEAR)) === 0;
 
+                // Prices as the tick has just published them, for splitting a creation basket into shares.
+                $memberPrices = [];
+                foreach ($result['updates'] as $publishedUpdate) {
+                    $memberPrices[$publishedUpdate['ticker']] = (float) $publishedUpdate['price'];
+                }
+
                 $etfUpdates = [];
                 foreach (MarketIndex::cases() as $index) {
                     if (!isset($indexFunds[$index->value])) {
@@ -520,15 +530,42 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                         }
                     }
 
-                    $etfUpdates[] = $this->etfTracker->updateIndex(
+                    // What the players did to the FUND this tick, and what its basket costs to trade.
+                    // The first pushes the fund off its net asset value; the second decides how far it is
+                    // allowed to go before an authorized participant closes the gap.
+                    $fundFlowShares = (float) ($result['fund_flow'][$index->value] ?? 0.0);
+                    $fundUpdate = $this->etfTracker->updateIndex(
                         $this->indexCommittee->memberCapitalisation($index, $result['float_caps']),
                         $isHistoryTick,
                         $index->value,
                         $fund,
                         $macroState->totalTime,
                         $this->indexCommittee->memberDividendPoints($index, $result['dividend_points']),
-                        $dt
+                        $dt,
+                        $fundFlowShares * (float) $fund->getPrice(),
+                        $this->indexCommittee->memberWeightedHalfSpread($index, $result['float_caps'], $result['half_spreads'])
                     );
+
+                    $etfUpdates[] = $fundUpdate;
+
+                    // The creation basket is a real order in every constituent, in index weight, and it
+                    // pays each name's own impact when it lands next tick. This is the channel that makes
+                    // money going INTO a fund reach the companies the fund holds instead of stopping at the
+                    // fund — the other half of the index inclusion effect, and the reason a fund is worth
+                    // having in the market rather than beside it.
+                    $creationValue = (float) ($fundUpdate['creation_value'] ?? 0.0);
+
+                    if ($creationValue !== 0.0) {
+                        $basket = $this->authorizedParticipant->basketOrders(
+                            $creationValue,
+                            $this->indexCommittee->memberWeights($index, $result['float_caps']),
+                            $memberPrices
+                        );
+
+                        foreach ($basket as $memberTicker => $shares) {
+                            $this->orderFlow->record($memberTicker, $shares);
+                        }
+                    }
                 }
 
                 $lap('etfs');

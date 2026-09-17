@@ -30,7 +30,9 @@ class EtfTracker
         private EntityManagerInterface $entityManager,
         private MarketEventPublisher $marketEvent,
         private \Redis $redis,
-        private IndexFundAccountant $accountant
+        private IndexFundAccountant $accountant,
+        /** The arbitrage that keeps the fund near its basket, and the band inside which it does not bother. */
+        private AuthorizedParticipant $authorizedParticipant = new AuthorizedParticipant()
     ) {
     }
 
@@ -88,7 +90,12 @@ class EtfTracker
      *                               the capitalisation. Divided by the same divisor, it is the index
      *                               dividend, and it is what the fund actually collects.
      * @param float  $dt             Elapsed simulated time in years, over which the fee accrues.
-     * @return array{ticker: string, price: float, name: string, is_etf: bool}
+     * @param float  $netFlowValue   Net demand for FUND shares this tick, in currency; positive is buying.
+     *                               What pushes the fund's price away from the basket it holds.
+     * @param float  $basketHalfSpread Weighted average half-spread of the constituents. Sets the width of
+     *                               the band an authorized participant will tolerate before arbitraging,
+     *                               so a basket that becomes expensive to trade lets the fund drift.
+     * @return array{ticker: string, price: float, nav: float, premium: float, creation_value: float, name: string, is_etf: bool}
      */
     public function updateIndex(
         float $totalMarketCap,
@@ -97,7 +104,9 @@ class EtfTracker
         ?Etf $etf = null,
         ?float $simTime = null,
         float $dividendPoints = 0.0,
-        float $dt = 0.0
+        float $dt = 0.0,
+        float $netFlowValue = 0.0,
+        float $basketHalfSpread = 0.0
     ): array {
 
         if ($etf === null) {
@@ -122,7 +131,12 @@ class EtfTracker
         }
 
         $level = ($divisor > 0) ? ($totalMarketCap / (float) $divisor) : FinancialConstants::INDEX_BASE_LEVEL;
+
+        // With no fund attached there is only the index: no books, no shares, nothing to trade away from.
         $price = $level;
+        $navPerShare = $level;
+        $premium = 0.0;
+        $creationValue = 0.0;
 
         if ($etf) {
             // 1. The fund's own books, before anything is priced off them: the fee it owes for the time
@@ -134,9 +148,40 @@ class EtfTracker
                 $dt
             );
 
-            $price = ($level * $etf->getBasketPerShare()) + $etf->getAccruedIncome();
+            // 2. Net asset value, and then the price, which is a different number.
+            //
+            // Net asset value is what the fund OWNS. The price is what the fund TRADES at, and the two are
+            // set by different crowds: the basket by everyone trading the constituents, the fund by
+            // everyone trading the fund. They only agree because an authorized participant is paid to make
+            // them agree, and only to within what that trade costs. Quoting the fund AT net asset value —
+            // as this did — made a discount structurally impossible, which threw away the one figure a
+            // fund publishes that its basket cannot.
+            $navPerShare = $etf->netAssetValuePerShare($level);
+            $band = $this->authorizedParticipant->band($basketHalfSpread);
+            $settled = $this->authorizedParticipant->settle(
+                $etf->getNavPremium(),
+                $netFlowValue,
+                $navPerShare * $etf->getSharesOutstanding(),
+                $band
+            );
 
-            // 2. Process ETF Splits
+            $premium = $settled['premium'];
+            $creationValue = $settled['creationValue'];
+
+            // A creation is paid for in basket and issues shares against it, so the fund gets bigger and
+            // every per-share figure is untouched. That is the whole difference between this and a split,
+            // which issues shares against nothing and has to restate all of them.
+            if ($creationValue !== 0.0 && $navPerShare > 0.0) {
+                $etf->setSharesOutstanding(
+                    max(0.0, $etf->getSharesOutstanding() + ($creationValue / $navPerShare))
+                );
+            }
+
+            $etf->setArbitrageBand($band);
+            $etf->setNavPremium($premium);
+            $price = $navPerShare * (1.0 + $premium);
+
+            // 3. Process ETF Splits
             if ($price >= 400.0) {
                 $splitFactor = 1;
                 while ($price >= 400.0 && $splitFactor <= 1000000) {
@@ -152,6 +197,9 @@ class EtfTracker
                 $etf->setAccruedIncome($etf->getAccruedIncome() / $splitFactor);
                 $etf->setCumulativeFeesPaid($etf->getCumulativeFeesPaid() / $splitFactor);
                 $etf->setCumulativeTradingCosts($etf->getCumulativeTradingCosts() / $splitFactor);
+                // Shares go the other way: the fund is the same size and there are more claims on it.
+                $etf->setSharesOutstanding($etf->getSharesOutstanding() * $splitFactor);
+                $navPerShare /= $splitFactor;
                 $this->executeEtfSplit($etf, $splitFactor, 'forward', $price * $splitFactor);
                 
             } elseif ($price < 25.0 && $price > 0) {
@@ -167,16 +215,22 @@ class EtfTracker
                 $etf->setAccruedIncome($etf->getAccruedIncome() * $splitFactor);
                 $etf->setCumulativeFeesPaid($etf->getCumulativeFeesPaid() * $splitFactor);
                 $etf->setCumulativeTradingCosts($etf->getCumulativeTradingCosts() * $splitFactor);
+                $etf->setSharesOutstanding($etf->getSharesOutstanding() / $splitFactor);
+                $navPerShare *= $splitFactor;
                 $this->executeEtfSplit($etf, $splitFactor, 'reverse', $preSplitPrice);
             }
 
-            // 3. Persist the updated price
+            // 4. Persist the updated price
             $etf->setPrice((string) $price);
 
             if ($recordHistory) {
                 $history = new EtfHistory();
                 $history->setEtf($etf);
                 $history->setPrice((string) $price);
+                // The premium is the difference between these two and it has to be archived as two numbers:
+                // the basket has moved on by the next tick, and the fee ratchet means the fund no longer
+                // owns the basket it owned when this row was written.
+                $history->setNav((string) round($navPerShare, 4));
 
                 // Null when the caller is not the ticker: an honest "written outside the simulation clock"
                 // rather than a zero that would sort the row before the beginning of time.
@@ -189,6 +243,12 @@ class EtfTracker
         return [
             'ticker' => $ticker,
             'price' => round($price, 2),
+            'nav' => round($navPerShare, 4),
+            'premium' => round($premium, 6),
+            // The basket the authorized participant had to trade, in currency. The caller pushes it into
+            // the constituents' order flow, which is what makes money going into a fund reach what the
+            // fund holds instead of stopping at the fund.
+            'creation_value' => $creationValue,
             'name' => $etf ? $etf->getName() : 'Market Index',
             'is_etf' => true
         ];

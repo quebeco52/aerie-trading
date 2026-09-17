@@ -427,6 +427,26 @@
 												Limit
 											</div>
 										</label>
+										<label class="flex-1 cursor-pointer">
+											<input type="radio" name="orderType" value="STOP" class="peer sr-only" data-action="change->trade-form#onOrderTypeChange">
+											<div class="py-1 text-center text-xs font-bold uppercase tracking-wider rounded text-on-surface-variant peer-checked:bg-surface-container-high peer-checked:text-primary transition-all">
+												Stop
+											</div>
+										</label>
+										<label class="flex-1 cursor-pointer">
+											<input type="radio" name="orderType" value="STOP_LIMIT" class="peer sr-only" data-action="change->trade-form#onOrderTypeChange">
+											<div class="py-1 text-center text-3xs font-bold uppercase tracking-wider rounded text-on-surface-variant peer-checked:bg-surface-container-high peer-checked:text-primary transition-all leading-4 py-[3px]">
+												Stop Limit
+											</div>
+										</label>
+									</div>
+
+									<div id="stop-price-group" class="hidden space-y-1" data-trade-form-target="stopGroup">
+										<label for="stopPrice" class="text-sm font-semibold text-on-surface-variant">Stop Price ($)</label>
+										<input type="number" step="0.01" min="0.01" id="stopPrice" name="stopPrice" placeholder="{{ asset.price|number_format(2, '.', '') }}" class="w-full bg-surface-container-lowest border border-outline-variant/25 rounded px-3 py-1.5 text-sm font-mono tabular-nums text-on-surface focus:ring-1 focus:ring-primary outline-none" data-trade-form-target="stopPrice" data-action="input->trade-form#render">
+										<p class="text-3xs text-on-surface-variant/80 leading-4">
+											A sell stop sits below the market and fires when the price falls to it. A plain stop then takes whatever the book quotes, which on a fast tape can be well through the trigger.
+										</p>
 									</div>
 
 									<div id="limit-price-group" class="hidden space-y-1" data-trade-form-target="limitGroup">
@@ -697,6 +717,28 @@
 										<dt class="text-sm font-semibold text-on-surface-variant">Passive money</dt>
 										<dd class="font-bold text-on-surface font-mono tabular-nums">{{ indexFacts.carriesPassiveBook ? 'tracks this index' : 'benchmark only' }}</dd>
 									</div>
+									{% if indexFacts.navPremium is not null %}
+										<div class="py-2 flex justify-between items-center">
+											<dt class="group relative cursor-help text-sm font-semibold text-on-surface-variant" tabindex="0">
+												<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Premium to NAV</span>
+												{{ _self.tooltip('What the fund trades at against what it owns. The two are set by different crowds and only agree because an authorized participant is paid to make them agree — and only to within what that trade costs. Past the band below, creating or redeeming shares turns a profit and somebody closes the gap.', 'left', 'w-72') }}
+											</dt>
+											<dd class="font-bold font-mono tabular-nums {{ indexFacts.navPremium >= 0 ? 'text-on-surface' : 'text-on-surface-variant' }}">
+												{{ indexFacts.navPremium >= 0 ? '+' : '' }}{{ indexFacts.navPremium|number_format(3) }}%
+											</dd>
+										</div>
+										<div class="py-2 flex justify-between items-center">
+											<dt class="group relative cursor-help text-sm font-semibold text-on-surface-variant" tabindex="0">
+												<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Arbitrage band</span>
+												{{ _self.tooltip('How far the fund may drift from its basket before the arbitrage pays. It is the round-trip cost of assembling the basket, read off the live book — so a fund whose constituents have become expensive to trade is allowed to drift further, which is why a credit fund and an equity fund behave differently in the same stressed week.', 'left', 'w-72') }}
+											</dt>
+											<dd class="font-bold text-on-surface font-mono tabular-nums">±{{ indexFacts.arbitrageBand|number_format(3) }}%</dd>
+										</div>
+										<div class="py-2 flex justify-between items-center">
+											<dt class="text-sm font-semibold text-on-surface-variant">Shares in issue</dt>
+											<dd class="font-bold text-on-surface font-mono tabular-nums">{{ indexFacts.sharesOutstanding|format_large('') }}</dd>
+										</div>
+									{% endif %}
 									{% if indexFacts.expenseRatio is not null %}
 										<div class="py-2 flex justify-between items-center">
 											<dt class="group relative cursor-help text-sm font-semibold text-on-surface-variant" tabindex="0">
@@ -2130,10 +2172,15 @@
 									{% for order in openOrders %}
 										<tr>
 											<td class="py-2.5 text-xs text-on-surface-variant font-mono">{{ order.createdAt|date('Y-m-d H:i') }}</td>
-											<td class="py-2.5 font-bold {{ order.action == 'BUY' ? 'text-secondary' : 'text-primary' }}">{{ order.action }}</td>
+											<td class="py-2.5 font-bold {{ order.action == 'BUY' ? 'text-secondary' : 'text-primary' }}">
+												{{ order.action }}
+												{% if order.stop %}<span class="ml-1 text-3xs font-mono uppercase text-on-surface-variant">{{ order.orderType == 'STOP_LIMIT' ? 'stop lmt' : 'stop' }}</span>{% endif %}
+											</td>
 											<td class="py-2.5 text-right font-mono tabular-nums text-on-surface">{{ order.quantity|number_format }}</td>
-											<td class="py-2.5 text-right font-mono tabular-nums font-bold text-on-surface">${{ order.limitPrice|number_format(2) }}</td>
-											<td class="py-2.5 text-right font-mono tabular-nums text-on-surface-variant">${{ (order.limitPrice * order.quantity)|number_format(2) }}</td>
+											{# A stop has no limit until it fires; what it rests on is its trigger. #}
+											{% set restingPrice = order.stop ? order.stopPrice : order.limitPrice %}
+											<td class="py-2.5 text-right font-mono tabular-nums font-bold text-on-surface">${{ restingPrice|number_format(2) }}</td>
+											<td class="py-2.5 text-right font-mono tabular-nums text-on-surface-variant">${{ (restingPrice * order.quantity)|number_format(2) }}</td>
 											<td class="py-2.5 text-right">
 												<form action="/trade/cancel/{{ order.id }}" method="POST" class="inline">
 													<input type="hidden" name="_token" value="{{ csrf_token('cancel_trade_' ~ order.id) }}">
@@ -2148,7 +2195,7 @@
 							</table>
 						</div>
 					{% else %}
-						<p class="py-6 text-center text-xs text-on-surface-variant">No open limit orders for {{ asset.ticker }}.</p>
+						<p class="py-6 text-center text-xs text-on-surface-variant">No resting orders for {{ asset.ticker }}.</p>
 					{% endif %}
 				</div>
 

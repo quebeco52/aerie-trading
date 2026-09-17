@@ -63,10 +63,6 @@ class MergerAndAcquisitionEngine
     /** Most of a target's net identifiable assets that can be trade cycle rather than plant. */
     public const MA_MAX_WORKING_CAPITAL_SHARE = 0.90;
     
-    /** Loss given default for financials. */
-    public const MA_LGD_FINANCIAL = 0.30;
-    /** Loss given default for corporates. */
-    public const MA_LGD_CORPORATE = 0.40;
     /** Maturity used in Merton's distance to default calculation. */
     public const MA_MERTON_MATURITY = 5.0;
 

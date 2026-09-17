@@ -169,7 +169,12 @@ class MarketSimulateCommand extends Command
                     $fund,
                     $macroState->totalTime,
                     $this->indexCommittee->memberDividendPoints($index, $result['dividend_points']),
-                    $dt
+                    $dt,
+                    // A fast-forward has no players in it, so there is no fund flow to push the price off
+                    // the basket — but the band is still struck on the live basket, so the fund quotes what
+                    // it would actually cost to trade rather than a market-wide constant.
+                    0.0,
+                    $this->indexCommittee->memberWeightedHalfSpread($index, $result['float_caps'], $result['half_spreads'])
                 );
             }
 

@@ -108,8 +108,6 @@ class ChemicalBusinessModel extends StandardCorporateBusinessModel
     public const BASE_PETRO_OUTPUT_GAP_SCALAR = 1.60;
     /** Sensitivity of base petrochemical revenue to industrial metals demand index. */
     public const BASE_PETRO_METALS_SCALAR = 0.60;
-    /** Sensitivity of agrochemical revenue to the agricultural commodity price index. */
-    public const AGRI_COMMODITY_SCALAR = 0.70;
     /** Weight of cyclical industrial demand in aggregate macroeconomic demand shift. */
     public const INDUSTRIAL_DEMAND_WEIGHT = 0.70;
     /** Weight of agricultural commodity shift in aggregate macroeconomic demand shift. */
@@ -162,8 +160,6 @@ class ChemicalBusinessModel extends StandardCorporateBusinessModel
     public const MIN_OPERATING_MARGIN_FLOOR = 0.05;
     /** Structural maximum operating margin ceiling for optimized chemical manufacturing plants. */
     public const MAX_OPERATING_MARGIN_CEILING = 0.30;
-    /** Operating margin mean reversion speed for chemical manufacturing economics. */
-    public const CHEMICAL_REVERSION_SPEED = 0.12;
 
     // --- Valuation, Growth & CapEx Rails ---
     /** Multiplier scaling heavy continuous chemical synthesis and cracking plant capital expenditure cycles. */

@@ -1,0 +1,101 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Service\Market\Agent;
+
+use App\DTO\AgentMarketViewDTO;
+use App\Service\Math\FinancialConstants;
+
+/**
+ * Buys whatever it has just noticed.
+ *
+ * Barber & Odean (2008), *All That Glitters: The Effect of Attention and News on the Buying Behavior of
+ * Individual and Institutional Investors*. Individuals are net buyers of attention-grabbing stocks — ones
+ * with abnormal volume, an extreme return, or news — and the finding that matters is the ASYMMETRY. An
+ * individual chooses what to buy from thousands of names and can only sell the handful they already own,
+ * so attention drives purchases and barely touches sales. A signal symmetric in the sign of the return
+ * would be a different model and worth very little.
+ *
+ * Note that the return leg is on the ABSOLUTE move. Big losers grab attention exactly as big winners do,
+ * and the paper finds retail buying into both. That is what separates this from momentum, which it would
+ * otherwise quietly duplicate.
+ *
+ * Every other participant in this market is some kind of sophisticated: six strategies, all with a view.
+ * This is the one that is wrong on purpose, and without someone to be wrong the informed money has nobody
+ * to be right against.
+ *
+ * Outside the discrete-choice switching. Retail is a persistent population rather than a belief selected
+ * on last quarter's profit, and putting it in the Brock-Hommes choice would let it be competed out of
+ * existence — the one thing retail flow empirically never does.
+ */
+final class AttentionRetailStrategy implements AgentStrategyInterface
+{
+    public function identifier(): string
+    {
+        return 'attention_retail';
+    }
+
+    public function signal(AgentMarketViewDTO $view, array $positions): float
+    {
+        return max(0.0, min(
+            1.0,
+            FinancialConstants::AGENT_RETAIL_BASE_SHARE
+                + (FinancialConstants::AGENT_RETAIL_MAX_ATTENTION_TILT * $this->attention($view))
+        ));
+    }
+
+    /**
+     * How hard this name is to miss today, in [0, 1].
+     *
+     * The two market legs are combined with a max rather than a sum because they are one episode observed
+     * two ways: a name that just moved three sigma is also, almost always, a name trading three times its
+     * normal volume, and adding them would count that episode twice. News is genuinely separate
+     * information and adds on top.
+     */
+    private function attention(AgentMarketViewDTO $view): float
+    {
+        $market = max($this->extremeReturnLeg($view), $this->abnormalVolumeLeg($view));
+        $news = $view->hasNews ? FinancialConstants::AGENT_RETAIL_NEWS_ATTENTION : 0.0;
+
+        return min(1.0, $market + $news);
+    }
+
+    /** The move, in units of what this name normally does over one tick. */
+    private function extremeReturnLeg(AgentMarketViewDTO $view): float
+    {
+        if ($view->dt <= 0.0 || $view->annualizedVolatility <= 0.0) {
+            return 0.0;
+        }
+
+        // Standardized per name, not in raw percent: a 3% day is unremarkable for a speculative small cap
+        // and front-page news for a utility, and attention is about the second reading.
+        $tickSigma = $view->annualizedVolatility * sqrt($view->dt);
+        $saturation = $tickSigma * FinancialConstants::AGENT_RETAIL_RETURN_SIGMA;
+
+        if ($saturation <= 0.0) {
+            return 0.0;
+        }
+
+        return min(1.0, abs($view->logReturn) / $saturation);
+    }
+
+    /**
+     * Volume above what the name normally prints, which is the paper's primary sort.
+     *
+     * The headroom is the saturation multiple less the ordinary tick it is measured from, and the multiple
+     * is above one by definition — a saturation point at or below normal volume would mean every tick was
+     * an attention episode.
+     */
+    private function abnormalVolumeLeg(AgentMarketViewDTO $view): float
+    {
+        $headroom = FinancialConstants::AGENT_RETAIL_VOLUME_MULTIPLE - 1.0;
+
+        return max(0.0, min(1.0, ($view->abnormalVolume - 1.0) / $headroom));
+    }
+
+    public function competesForCapital(): bool
+    {
+        return false;
+    }
+}

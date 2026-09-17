@@ -324,6 +324,17 @@ class MarketResetCommand extends Command
                     earning_assets = NULL,
                     credit_loss_allowance = 0.0000,
                     listed_stakes_carrying = NULL,
+                    -- Rate risk needs a cross-section or every lender lives and dies together: the seed
+                    -- names a duration where a book is distinctive and the rest take the model default.
+                    -- The carrying yield opens null so the first report strikes it at the prevailing curve
+                    -- and the book starts marked flat rather than carrying a loss it never took.
+                    -- Coverage is re-initiated on the first tick of the new market. A target carried over
+                    -- would be a standing opinion about a company that no longer exists.
+                    analyst_price_target = NULL,
+                    securities_duration = :securities_duration,
+                    securities_carrying_yield = NULL,
+                    unrealized_securities_mark = 0.0000,
+                    aoci_filtered = :aoci_filtered,
                     asset_turnover = NULL,
                     lifecycle_stage = NULL,
                     inflation_pass_through = NULL,
@@ -392,6 +403,17 @@ class MarketResetCommand extends Command
                     'roic_ttm' => $isFinancial ? 0.10 : ($stockData['baseline_roic'] ?? 0.10),
                     'historical_rate' => $stockData['historical_fixed_rate'] ?? 0.0400,
                     'credit_spread' => $stockData['credit_spread'] ?? 0.0100,
+                    'securities_duration' => (float) ($stockData['securities_duration'] ?? $strategy->getDefaultSecuritiesDuration()),
+                    'aoci_filtered' => (int) (bool) ($stockData['aoci_filtered'] ?? (
+                        // The filter is an election the largest institutions do not get. Sized rather than
+                        // listed per firm, so the dispersion maintains itself as the seed changes: a bank big
+                        // enough to be systemically important marks its capital to the curve, and a small one
+                        // does not. Without the split every lender would react to rates identically.
+                        ((float) ($stockData['total_equity'] ?? 0.0)
+                            + (float) ($stockData['wholesale_debt'] ?? 0.0)
+                            + (float) ($stockData['customer_deposits'] ?? 0.0))
+                        < FinancialConstants::AOCI_FILTER_SIZE_THRESHOLD
+                    )),
                     'last_dividend' => $startingDividend,
                     'name' => $stockData['name'],
                     'sector' => $stockData['sector'],
@@ -449,6 +471,7 @@ class MarketResetCommand extends Command
                 'price' => $etfData['price'],
                 'description' => \App\Data\StockInfo::DESCRIPTIONS[$etfData['ticker']] ?? null,
                 'expense_ratio' => $etfData['expense_ratio'] ?? 0.0,
+                'seed_shares' => FinancialConstants::ETF_SEED_SHARES_OUTSTANDING,
                 'ticker' => $etfData['ticker']
             ];
 
@@ -459,8 +482,8 @@ class MarketResetCommand extends Command
 
             if ($exists === false) {
                 $conn->executeStatement(
-                    'INSERT INTO etfs (ticker, name, price, description, expense_ratio, basket_per_share, accrued_income, cumulative_fees_paid, recent_distributions, last_distribution_at, updated_at)
-                     VALUES (:ticker, :name, :price, :description, :expense_ratio, 1, 0, 0, NULL, NULL, NOW())',
+                    'INSERT INTO etfs (ticker, name, price, description, expense_ratio, basket_per_share, accrued_income, cumulative_fees_paid, cumulative_trading_costs, shares_outstanding, nav_premium, arbitrage_band, recent_distributions, last_distribution_at, updated_at)
+                     VALUES (:ticker, :name, :price, :description, :expense_ratio, 1, 0, 0, 0, :seed_shares, 0, 0, NULL, NULL, NOW())',
                     $params
                 );
                 continue;
@@ -480,6 +503,10 @@ class MarketResetCommand extends Command
                         basket_per_share = 1,
                         accrued_income = 0,
                         cumulative_fees_paid = 0,
+                        cumulative_trading_costs = 0,
+                        shares_outstanding = :seed_shares,
+                        nav_premium = 0,
+                        arbitrage_band = 0,
                         recent_distributions = NULL,
                         last_distribution_at = NULL
                   WHERE ticker = :ticker',

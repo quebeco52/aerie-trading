@@ -112,6 +112,8 @@ class EarningsSimulationContext
     public float $netLoanOriginations = 0.0;
     /** Loss realized on earning assets sold below carrying value, booked to equity as other comprehensive loss. */
     public float $assetSaleLoss = 0.0;
+    /** Mark carried on the investment securities book after this quarter's roll (ASC 320); negative is a loss. Not income. */
+    public float $unrealizedSecuritiesMark = 0.0;
     /** Quarterly net cash from operations (net income + D&A - working capital build). */
     public float $operatingCashFlow = 0.0;
     /** Quarterly net cash from investing (negative = net investment). */

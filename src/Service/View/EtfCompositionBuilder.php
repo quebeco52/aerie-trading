@@ -261,6 +261,10 @@ class EtfCompositionBuilder
                 'feesPaidPerShare' => null,
                 'tradingCostsPerShare' => null,
                 'trackingDifference' => null,
+                'navPremium' => null,
+                'arbitrageBand' => null,
+                'sharesOutstanding' => null,
+                'netAssets' => null,
             ];
         }
 
@@ -268,6 +272,15 @@ class EtfCompositionBuilder
 
         return [
             'expenseRatio' => $fund->getExpenseRatio() * 100.0,
+            // Where the fund last traded against what it owns, and how far it is allowed to go before
+            // somebody is paid to close the gap. A fund quoted AT net asset value could show neither, and a
+            // discount is the most informative number a fund ever prints.
+            'navPremium' => $fund->getNavPremium() * 100.0,
+            'arbitrageBand' => $fund->getArbitrageBand() * 100.0,
+            'sharesOutstanding' => $fund->getSharesOutstanding(),
+            'netAssets' => $price > 0.0 && $fund->getNavPremium() > -1.0
+                ? ($price / (1.0 + $fund->getNavPremium())) * $fund->getSharesOutstanding()
+                : 0.0,
             'distributionYield' => $price > 0.0 ? ($fund->trailingDistribution() / $price) * 100.0 : 0.0,
             'trailingDistribution' => $fund->trailingDistribution(),
             'lastDistributionAt' => $fund->getLastDistributionAt(),

@@ -79,6 +79,11 @@ class MarketSeedCommand extends Command
             // — the basket it still owns and the income it is holding — are NOT touched here: those are
             // accumulated history, and a reseed is not a liquidation.
             $etf->setExpenseRatio((float) ($etfData['expense_ratio'] ?? 0.0));
+            // Only on a fund that has never had a share count. Creations and redemptions move it after
+            // that, and a reseed is not a liquidation — see the note on its other books above.
+            if ($etf->getSharesOutstanding() <= 0.0) {
+                $etf->setSharesOutstanding(\App\Service\Math\FinancialConstants::ETF_SEED_SHARES_OUTSTANDING);
+            }
             $this->entityManager->persist($etf);
         }
 
@@ -172,6 +177,22 @@ class MarketSeedCommand extends Command
                 $stock->setTotalRevenue((string) $revenue);
 
                 $debtHealth = $this->debtEngine->analyzeDebtHealth($stock, $dummyMacro, $revenue, $margin);
+
+                // Rate risk needs a cross-section or every lender lives and dies together. The seed names a
+                // duration where a firm's book is distinctive; the rest take their model's. The AOCI
+                // election is likewise per firm: it decides whether a capital ratio reacts to the curve at
+                // all, and a board where everyone elected the same way has no dispersion in who survives.
+                $stock->setSecuritiesDuration((float) ($stockData['securities_duration'] ?? $strategy->getDefaultSecuritiesDuration()));
+                $stock->setAociFiltered((bool) ($stockData['aoci_filtered'] ?? (
+                    // The filter is an election the largest institutions do not get. Sized rather than
+                    // listed per firm, so the dispersion maintains itself as the seed changes: a bank big
+                    // enough to be systemically important marks its capital to the curve, and a small one
+                    // does not. Without the split every lender would react to rates identically.
+                    ((float) ($stockData['total_equity'] ?? 0.0)
+                        + (float) ($stockData['wholesale_debt'] ?? 0.0)
+                        + (float) ($stockData['customer_deposits'] ?? 0.0))
+                    < FinancialConstants::AOCI_FILTER_SIZE_THRESHOLD
+                )));
 
                 if ($isFinancial) {
                     $netIncome = ((float) ($stockData['total_equity'] ?? 0.0)) * (float) $stock->getBaselineRoe();

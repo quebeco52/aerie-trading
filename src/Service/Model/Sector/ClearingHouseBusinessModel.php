@@ -107,8 +107,6 @@ class ClearingHouseBusinessModel extends BaseFinancialBusinessModel
     public const RECESSION_GDP_MULT      = 0.30;
     /** Sensitivity scalar translating VIX shifts into customer margin pool expansion/contraction. */
     public const VIX_POOL_GROWTH_SCALAR  = 0.50;
-    /** Maximum allowable quarterly expansion or contraction of customer margin pools. */
-    public const MAX_POOL_CHANGE_CLAMP   = 0.15;
     /** Standard deviation of random noise applied to quarterly margin pool growth. */
     public const POOL_GROWTH_NOISE_STD   = 0.01;
     /** Threshold percentage change in customer deposits required to trigger margin pool lore. */

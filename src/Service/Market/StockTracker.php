@@ -69,7 +69,7 @@ class StockTracker
      * @param bool    $recordHistory Whether to persist the new prices to the stock history table.
      * @param MacroStateDTO|null $macroState    The current state of the macroeconomic cycle.
      * 
-     * @return array{updates: array<mixed>, total_cap: float, float_caps: array<string, float>, dividend_points: array<string, float>, events: array<mixed>, market_vol: float, history: array<mixed>}
+     * @return array{updates: array<mixed>, total_cap: float, float_caps: array<string, float>, half_spreads: array<string, float>, fund_flow: array<string, float>, dividend_points: array<string, float>, events: array<mixed>, market_vol: float, history: array<mixed>}
      */
     public function updateStocks(array $stocks, float $dt, bool $recordHistory, ?\App\DTO\MacroStateDTO $macroState = null, int $tickCount = 0, int $ticksPerYear = 252): array
     {
@@ -90,6 +90,12 @@ class StockTracker
         // rather than per stock: it is one round trip, and a quantity that has already moved the price must
         // not be able to move it again on the next tick.
         $netOrderFlow = $this->orderFlow->drain();
+
+        // Half-spread per name, and whatever flow no listed company claimed. The drain empties the store,
+        // so anything the equity loop does not consume has to be handed on rather than dropped — that
+        // leftover is the funds' own order flow, and dropping it would leave every fund pinned to its
+        // basket no matter how hard anyone traded it.
+        $halfSpreads = [];
 
         // How much passive money each name carries relative to its weight in the market, read once for the
         // whole tick. Every published index contributes in proportion to the assets that track it, so this
@@ -438,6 +444,19 @@ class StockTracker
                 );
             }
 
+            // SELL-SIDE PRICE TARGET (Brav & Lehavy 2003; Womack 1996)
+            // The target is carried, not recomputed. One that tracked fair value tick by tick would never
+            // be revised, and a revision is the only part of a target that carries information — the level
+            // is a number everyone can already derive, the CHANGE is the news.
+            //
+            // Struck above fair value because the sell side is systematically optimistic, and restated only
+            // when the case has moved past the band, so most ticks write nothing at all.
+            $analystRevision = $this->reviseAnalystTarget($stock, $perceivedFairValue, $restateForSplit ? $splitRatio : 1.0);
+
+            if ($analystRevision !== null) {
+                $events[] = $analystRevision;
+            }
+
             // Always update the price
             $stock->setPrice((string) $finalPrice);
 
@@ -462,7 +481,19 @@ class StockTracker
 
             // Shares printed this tick. The players' own fills are prints too, so they are added rather than
             // assumed away: a name nobody but the players trades still shows the volume they generated.
+            // What it costs to get in and out of this name. Published per ticker as well as on the wire,
+            // because a fund's arbitrage band is the weighted average of its constituents' — an expensive
+            // basket is what lets a fund drift from it.
+            $halfSpread = $this->liquidityEngine->halfSpreadFraction($stock);
+            $halfSpreads[$stock->getTicker()] = $halfSpread;
+
             $tickVolume = $this->liquidityEngine->simulateTickVolume($stock, $dt, abs($tickFlow));
+
+            // What the name prints on an ordinary tick, which is what makes the realized figure abnormal
+            // or not. The level alone is a size statistic: a mega-cap always prints more than a micro-cap
+            // and neither fact is news.
+            $expectedTickVolume = $this->liquidityEngine->averageDailyVolume($stock)
+                * $dt * FinancialConstants::TRADING_DAYS_PER_YEAR;
 
             // Determine if a fundamental corporate event occurred this tick
             $isFundamentalTick = !empty($generatedEvents) || $maResult || (isset($divestResult) && $divestResult);
@@ -488,10 +519,12 @@ class StockTracker
                 'debt_ratio' => (float) $stock->getDebtToEquityRatio(),
                 'credit_rating' => $stock->getCreditRating(),
                 'analyst_targets' => array_map(static fn (float $target): float => round($target, 2), $analystTargets),
+                'analyst_price_target' => $stock->getAnalystPriceTarget() !== null ? round((float) $stock->getAnalystPriceTarget(), 2) : null,
+                'analyst_rating' => $stock->getAnalystRating(),
                 'perceived_fair_value' => round($perceivedFairValue, 2),
                 'volume' => round($tickVolume),
                 'adv_shares' => round($this->liquidityEngine->averageDailyVolume($stock)),
-                'spread_bps' => round($this->liquidityEngine->halfSpreadFraction($stock) * 20000.0, 2),
+                'spread_bps' => round($halfSpread * 20000.0, 2),
                 'is_bankrupt' => false,
             ];
 
@@ -534,7 +567,12 @@ class StockTracker
                 splitRatio: $splitRatio,
                 passiveOwnershipMultiple: $passiveOwnership === []
                     ? 1.0
-                    : ($passiveOwnership[$stock->getTicker()] ?? 0.0)
+                    : ($passiveOwnership[$stock->getTicker()] ?? 0.0),
+                // What attention-driven retail sorts on (Barber & Odean 2008): how hard this name is
+                // trading relative to its own normal, and whether anything happened to it. Both are
+                // already computed above for other reasons, so neither costs a second pass.
+                abnormalVolume: $expectedTickVolume > 0.0 ? ($tickVolume / $expectedTickVolume) : 1.0,
+                hasNews: $isFundamentalTick
             ));
 
             $stockUpdates[] = $stockUpdate;
@@ -556,9 +594,67 @@ class StockTracker
             'history' => $historyData,
             'total_cap' => $totalMarketCap,
             'float_caps' => $floatAdjustedCaps,
+            'half_spreads' => $halfSpreads,
+            'fund_flow' => array_diff_key($netOrderFlow, $halfSpreads),
             'dividend_points' => $dividendPoints,
             'events' => $events,
             'market_vol' => $marketVol
         ];
     }
+
+    /**
+     * Restates the published price target when the case for it has moved past the revision band.
+     *
+     * Returns the revision as a market event, or null on the overwhelming majority of ticks where the
+     * standing target still stands. A split restates the target like every other per-share figure, and does
+     * so silently: a four-for-one is not a seventy-five percent downgrade.
+     *
+     * @param float $splitRatio New shares per old share this tick; 1.0 when nothing happened.
+     * @return array<string, mixed>|null
+     */
+    private function reviseAnalystTarget(Stock $stock, float $perceivedFairValue, float $splitRatio): ?array
+    {
+        if ($perceivedFairValue <= 0.0) {
+            return null;
+        }
+
+        $standing = $stock->getAnalystPriceTarget() !== null ? (float) $stock->getAnalystPriceTarget() : null;
+
+        if ($standing !== null && $splitRatio > 0.0 && $splitRatio !== 1.0) {
+            $standing /= $splitRatio;
+            $stock->setAnalystPriceTarget((string) $standing);
+        }
+
+        $fresh = $perceivedFairValue * (1.0 + FinancialConstants::ANALYST_TARGET_OPTIMISM);
+
+        // Nobody has covered this name before. Initiating coverage is not a revision of anything.
+        if ($standing === null || $standing <= 0.0) {
+            $stock->setAnalystPriceTarget((string) $fresh);
+
+            return null;
+        }
+
+        $drift = ($fresh - $standing) / $standing;
+
+        if (abs($drift) < FinancialConstants::ANALYST_TARGET_REVISION_THRESHOLD) {
+            return null;
+        }
+
+        $stock->setAnalystPriceTarget((string) $fresh);
+
+        $direction = $drift > 0.0 ? 'raised' : 'cut';
+        $from = number_format($standing, 2);
+        $to = number_format($fresh, 2);
+
+        // The revision itself carries no shock. It is a statement about what the name is worth, and what it
+        // is worth has already reached the price through the fair value the target was struck on; pricing
+        // it again here would pay for the same information twice.
+        return $this->eventService->publish(
+            $stock,
+            'ANALYST',
+            "Sell-side {$direction} its price target on {$stock->getTicker()} to \${$to} from \${$from}.",
+            0.0
+        );
+    }
+
 }

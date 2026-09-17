@@ -22,12 +22,11 @@ class StockPagePantherTest extends BasePantherTestCase
         $client->executeScript("document.querySelector('button.range-btn[data-range=\"max\"]').click()");
         $this->assertSelectorExists('.range-btn[data-range="max"]');
 
-        // Click Macro tab
-        $client->executeScript("document.querySelector('button[data-tab=\"macro\"]').click()");
-        $client->waitFor('#stock-tab-content-macro:not(.hidden)', 2);
+        // Click Constituents tab
+        $client->executeScript("document.querySelector('button[data-tab=\"constituents\"]').click()");
+        $client->waitFor('#stock-tab-content-constituents:not(.hidden)', 2);
 
-        $this->assertSelectorExists('#macroEconomyChart');
-        $this->assertSelectorExists('#macroRatesChart');
+        $this->assertSelectorExists('#stock-tab-content-constituents table');
 
         // Click Order Depth tab
         $client->executeScript("document.querySelector('button[data-tab=\"orders\"]').click()");

@@ -101,6 +101,13 @@ class EarningsReportSubscriber implements EventSubscriberInterface
         $report->setNetChargeOffs($hasEarningAssets ? \App\Service\Math\MathUtility::formatDecimal($ctx->netChargeOffs, 4) : null);
         $report->setNetLoanOriginations($hasEarningAssets ? \App\Service\Math\MathUtility::formatDecimal($ctx->netLoanOriginations, 4) : null);
         $report->setAssetSaleLoss($hasEarningAssets ? \App\Service\Math\MathUtility::formatDecimal($ctx->assetSaleLoss, 4) : null);
+        // Disclosed whenever the firm carries a book, including the quarter the mark returns to zero: a
+        // disclosure that vanishes when the loss heals reads as a filing that stopped mentioning it.
+        $report->setUnrealizedSecuritiesMark(
+            $ctx->strategy->resolveSecuritiesBook($stock) > 0.0 || $ctx->unrealizedSecuritiesMark !== 0.0
+                ? \App\Service\Math\MathUtility::formatDecimal($ctx->unrealizedSecuritiesMark, 4)
+                : null
+        );
         $report->setCustomerDeposits($ctx->strategy->isFinancial() ? $stock->getCustomerDeposits() : null);
         $report->setCet1Ratio(
             $ctx->strategy instanceof \App\Service\Model\Sector\CommercialBankBusinessModel

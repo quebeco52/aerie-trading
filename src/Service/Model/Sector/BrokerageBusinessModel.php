@@ -36,8 +36,6 @@ class BrokerageBusinessModel extends BaseFinancialBusinessModel
 
 
     // --- Loss Provisions & Analyst Coverage ---
-    /** Loss provision z-factor for margin credit defaults. */
-    public const LOSS_PROVISION_Z_FACTOR    = 0.005;
     /** Base coverage visibility for brokerages. */
     public const BASE_COVERAGE_VISIBILITY = 0.30;
     /** Base coverage error for brokerages. */

@@ -140,8 +140,6 @@ class AssetManagementBusinessModel extends BaseFinancialBusinessModel
     public const M2_AUM_INFLOW_SENSITIVITY = 0.35;
 
     // --- Seed Capital & Co-Investment Volatility ---
-    /** Quarterly volatility of the 40% equity seed capital tranche in the treasury co-investment portfolio. */
-    public const SEED_EQUITY_VOL           = 0.10;
     /** VIX threshold above which market panic drags seed capital co-investment returns. */
     public const SEED_VIX_THRESHOLD        = 0.25;
     /** Sensitivity of seed equity co-investment drag to elevated VIX above threshold. */

@@ -223,8 +223,6 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
     public const DEBT_EXPANSION_BASE_AGGR = 0.02;
     /** Multiplier applied to spread to adjust debt expansion aggressiveness. */
     public const DEBT_EXPANSION_AGGR_MULT = 0.20;
-    /** Structural baseline of wholesale debt banks target. */
-    public const WHOLESALE_TARGET_RATIO = 0.10;
     /** Maximum probability boost for urgent wholesale funding. */
     public const WHOLESALE_URGENCY_PROB_BOOST = 0.80;
     /** Maximum aggressiveness boost for urgent wholesale funding. */
@@ -241,8 +239,6 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
     public const BUYBACK_MEGA_HOARDER_LIMIT = 0.30;
     /** Maximum buyback spend ratio of excess cash for hoarders. */
     public const BUYBACK_HOARDER_LIMIT = 0.10;
-    /** Minimum fraction of debt issued allocated to organic capex. */
-    public const ORGANIC_CAPEX_DEBT_MULT = 0.95;
     /** Minimum ratio of target leverage before the bank is considered under-leveraged and triggers aggressive buybacks to defend ROE. */
     public const UNDER_LEVERAGED_TOLERANCE = 0.35;
 
@@ -275,14 +271,6 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
     public const ROE_CLAMP_MAX = 1.0;
     /** Minimum clamped ROE reported to the stock. */
     public const ROE_CLAMP_MIN = -0.50;
-    /** Maximum probability cap when issuing debt to close wholesale gap. */
-    public const WHOLESALE_GAP_PROB_CAP = 0.90;
-    /** Multiplier applied to wholesale gap ratio to boost expansion probability. */
-    public const WHOLESALE_GAP_PROB_BOOST_MULT = 0.30;
-    /** Maximum aggressiveness cap when issuing debt to close wholesale gap. */
-    public const WHOLESALE_GAP_AGGR_CAP = 0.35;
-    /** Multiplier applied to wholesale gap ratio to boost expansion aggressiveness. */
-    public const WHOLESALE_GAP_AGGR_BOOST_MULT = 0.15;
     /** Minimum base expansion probability floor. */
     public const DEBT_EXPANSION_PROB_MIN = 0.05;
     /** Minimum base expansion aggressiveness floor. */
@@ -924,6 +912,47 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
         return new DebtExpansionAppetiteDTO(probability: min(self::DEBT_EXPANSION_PROB_MAX, max(self::DEBT_EXPANSION_PROB_MIN, $baseProb)), aggressiveness: min(self::DEBT_EXPANSION_AGGR_MAX, max(self::DEBT_EXPANSION_AGGR_MIN, $baseAggr)));
     }
 
+    /**
+     * The investment securities portfolio alone, not the whole earning-asset book.
+     *
+     * This is the line where the two halves of a bank's rate risk divide, and getting it wrong doubles the
+     * charge. ASC 320 remarks SECURITIES through equity; ASC 310 carries LOANS at amortized cost and never
+     * marks them, which is why a loan book's rate exposure surfaces as compressed margin rather than as a
+     * writedown — and the NIM squeeze above is already charging exactly that. Marking the loans here as
+     * well would bill the same duration gap twice, once as a stock and once as a flow.
+     *
+     * Reserves at the central bank are excluded for the same reason: cash carries no duration, and marking
+     * it would price the one asset a bank holds precisely because it does not move.
+     */
+    public function resolveSecuritiesBook(Stock $stock, ?float $currentTreasury = null): float
+    {
+        return max(0.0, $this->resolveEarningAssets($stock, $currentTreasury))
+            * FinancialConstants::SECURITIES_SHARE_OF_EARNING_ASSETS;
+    }
+
+    /**
+     * The same natural hedge the NIM squeeze credits, read the same way.
+     *
+     * Floating-rate assets reprice, and the model's existing view is that they offset the gap at
+     * FLOATING_HEDGE_EFFICIENCY rather than one-for-one. Marking the book against an unhedged duration
+     * while charging the margin against a hedged one would have the two halves of the same gap disagree.
+     */
+    public function getSecuritiesFloatingShare(Stock $stock): float
+    {
+        return max(0.0, min(1.0, (float) $stock->getFloatingDebtRatio() * self::FLOATING_HEDGE_EFFICIENCY));
+    }
+
+    /**
+     * The same asset-side duration the NIM squeeze is struck against, resolved late so a subclass with a
+     * longer book (a thirty-year mortgage lender) marks its own. The squeeze itself still reads self:: and
+     * so still uses the deposit bank's figure — deliberately, because re-pointing it would move a margin
+     * calibration that has nothing to do with this mark.
+     */
+    public function getDefaultSecuritiesDuration(): float
+    {
+        return static::ASSET_DURATION_YEARS;
+    }
+
     public function isUnderLeveraged(float $currentDebtRatio, float $targetDebtTolerance, float $interestCoverage, float $minIcr, float $costOfEquity, float $effectiveCostOfDebt): bool
     {
         return $currentDebtRatio < ($targetDebtTolerance * self::UNDER_LEVERAGED_TOLERANCE);
@@ -952,12 +981,16 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
             return 1.0;
         }
 
-        $totalEquity = (float) $stock->getTotalEquity();
-        if ($totalEquity <= 0.0) {
+        // Regulatory capital, not book equity. A bank that elects the Basel III AOCI filter adds the
+        // available-for-sale mark back before computing the ratio, which is how an institution can report
+        // an intact CET1 through a selloff that has already taken its economic capital. A bank that does
+        // not elect the filter takes the hit in the quarter the curve moves.
+        $regulatoryEquity = $stock->getRegulatoryEquity();
+        if ($regulatoryEquity <= 0.0) {
             return 0.0;
         }
 
-        return $totalEquity / $rwa;
+        return $regulatoryEquity / $rwa;
     }
 
     /**

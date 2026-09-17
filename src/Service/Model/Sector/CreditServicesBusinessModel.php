@@ -130,10 +130,6 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
     public const MIN_EFFICIENCY_RATIO        = 0.50;
 
     // --- NIM Squeeze & Yield Curve Inversion ---
-    /** Default 10Y Treasury yield fallback when macroeconomic yield curve data is missing. */
-    public const DEFAULT_10Y_YIELD_FALLBACK = 0.04;
-    /** Default 2Y Treasury yield fallback when macroeconomic yield curve data is missing. */
-    public const DEFAULT_2Y_YIELD_FALLBACK  = 0.03;
     /** Baseline spread buffer before NIM squeeze compression begins. */
     public const NIM_SPREAD_BUFFER          = 0.005;
     /** Linear sensitivity scalar for spread compression when yield curve flattens. */
@@ -150,6 +146,16 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
     public const LORE_ELEVATED_DEFAULT_Z    = -1.50;
     /** Benign z-score threshold triggering reserve release event lore. */
     public const LORE_RESERVE_RELEASE_Z     = 2.00;
+
+    /**
+     * A card issuer's receivables revolve and reprice at will, so the book carries almost no duration; what
+     * it does hold is short-dated liquidity against settlement. Inheriting a deposit bank's four-and-a-half
+     * year book would have priced a revolving credit line as though it were a mortgage.
+     */
+    public function getDefaultSecuritiesDuration(): float
+    {
+        return 2.0;
+    }
 
     public function getMacroPhysics(Stock $stock, \App\DTO\MacroStateDTO $macroState): array
     {

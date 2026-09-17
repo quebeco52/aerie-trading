@@ -104,9 +104,22 @@ function updateAnalystTargets(stockUpdate, newPrice) {
     const incomeTarget = stockUpdate.analyst_targets.income_analyst;
     const valueTarget = stockUpdate.analyst_targets.value_analyst;
 
-    const compositeTarget = stockUpdate.perceived_fair_value !== undefined
-        ? parseFloat(stockUpdate.perceived_fair_value)
-        : Math.max(growthTarget, incomeTarget, valueTarget);
+    // A bankrupt shell publishes an empty target set, which is truthy and has none of these keys.
+    if (![growthTarget, incomeTarget, valueTarget].every(Number.isFinite)) return;
+
+    /**
+     * The PUBLISHED target: a standing figure revised in steps, and the same number the page was rendered
+     * with. Recomputing it here from fair value made it tick continuously and drop by the optimism premium
+     * on the first frame after load, which is the live quote wearing an analyst's name that a sticky target
+     * exists to avoid. The three desk targets below stay live, because each of those is one analyst's own
+     * arithmetic rather than anybody's published call.
+     */
+    const published = stockUpdate.analyst_price_target;
+    const compositeTarget = Number.isFinite(published)
+        ? published
+        : (stockUpdate.perceived_fair_value !== undefined
+            ? parseFloat(stockUpdate.perceived_fair_value)
+            : Math.max(growthTarget, incomeTarget, valueTarget));
 
     /**
      * A target within 5% of the last price is not a call in either direction; outside that band
@@ -140,18 +153,23 @@ function updateAnalystTargets(stockUpdate, newPrice) {
     if (valueEl) valueEl.textContent = '$' + valueTarget.toFixed(2);
 
     if (badgeEl) {
-        const isOutperform = compositeTarget > (newPrice * 1.05);
-        const isUnderperform = compositeTarget < (newPrice * 0.95);
+        // The rating the server published, struck on the standing target against the live price with the
+        // sell side's asymmetric bands. Re-deriving it here on a symmetric 5% band had the badge disagree
+        // with the number printed directly beneath it.
+        const rating = stockUpdate.analyst_rating
+            || (compositeTarget > (newPrice * 1.05)
+                ? 'Outperform'
+                : (compositeTarget < (newPrice * 0.95) ? 'Underperform' : 'Neutral'));
 
-        badgeEl.textContent = isOutperform ? 'Outperform' : (isUnderperform ? 'Underperform' : 'Neutral');
+        badgeEl.textContent = rating;
         badgeEl.classList.remove(
             'text-secondary', 'bg-secondary/10',
             'text-tertiary', 'bg-tertiary/10',
             'text-on-surface-variant', 'bg-on-surface-variant/10'
         );
-        if (isOutperform) {
+        if (rating === 'Outperform') {
             badgeEl.classList.add('text-secondary', 'bg-secondary/10');
-        } else if (isUnderperform) {
+        } else if (rating === 'Underperform') {
             badgeEl.classList.add('text-tertiary', 'bg-tertiary/10');
         } else {
             badgeEl.classList.add('text-on-surface-variant', 'bg-on-surface-variant/10');

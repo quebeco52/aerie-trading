@@ -76,8 +76,6 @@ class HedgeFundBusinessModel extends AssetManagementBusinessModel
     public const QUANT_ALPHA_VOLATILITY_SCALAR = 1.80;
 
     // --- The "2 and 20" Fee Physics ---
-    /** Baseline annual management fee rate (~2% of AUM) used to infer implied AUM capacity. */
-    public const BASE_MANAGEMENT_FEE_RATE = 0.02;
     /** Carried interest / performance incentive fee rate (~20% on excess alpha). */
     public const INCENTIVE_FEE_RATE = 0.20;
     /** Alpha Z-score hurdle threshold above which incentive fees crystallize. */

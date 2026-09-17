@@ -60,6 +60,16 @@ final readonly class AgentMarketViewDTO
          * company counted, so every listed company was something a passive fund held.
          */
         public float $passiveOwnershipMultiple = 1.0,
+        /**
+         * Shares printed this tick over what the name normally prints in the same span. One is an ordinary
+         * tick; three is a name being traded three times as hard as usual.
+         *
+         * Abnormal volume rather than volume, because the level is a size statistic and the ratio is an
+         * attention one: a mega-cap always prints more than a micro-cap and neither fact is news.
+         */
+        public float $abnormalVolume = 1.0,
+        /** Whether the name carried a corporate event this tick — earnings, a shock, a deal. The one attention sort that is not a market statistic. */
+        public bool $hasNews = false,
     ) {}
 
     /**
@@ -82,6 +92,8 @@ final readonly class AgentMarketViewDTO
             $this->splitRatio,
             $marketLogMispricing,
             $this->passiveOwnershipMultiple,
+            $this->abnormalVolume,
+            $this->hasNews,
         );
     }
 
@@ -104,6 +116,8 @@ final readonly class AgentMarketViewDTO
             $this->splitRatio,
             $this->marketLogMispricing,
             $this->passiveOwnershipMultiple,
+            $this->abnormalVolume,
+            $this->hasNews,
         );
     }
 

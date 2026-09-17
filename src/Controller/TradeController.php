@@ -34,6 +34,7 @@ class TradeController extends AbstractController
         $orderType = $request->request->get('orderType', 'MARKET');
         $quantity = (int) $request->request->get('quantity');
         $limitPrice = $request->request->get('limitPrice') ?: null;
+        $stopPrice = $request->request->get('stopPrice') ?: null;
 
         $csrfToken = $request->request->get('_token');
         if (!$this->isCsrfTokenValid('execute_trade', $csrfToken)) {
@@ -47,7 +48,7 @@ class TradeController extends AbstractController
         }
 
         try {
-            $assetType = $tradeExecutionService->executeOrder($user, $ticker, $action, $orderType, $quantity, $limitPrice);
+            $assetType = $tradeExecutionService->executeOrder($user, $ticker, $action, $orderType, $quantity, $limitPrice, $stopPrice);
             $verb = match ($action) {
                 'SHORT' => 'Sold short',
                 'COVER' => 'Covered',

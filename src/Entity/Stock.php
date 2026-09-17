@@ -251,9 +251,52 @@ class Stock
     #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, options: ['default' => '0.0000'])]
     private string $creditLossAllowance = '0.0000';
 
+    /**
+     * @var string|null The published twelve-month sell-side price target. Null until the first one is struck.
+     *
+     * Carried rather than recomputed, because a target that tracked fair value continuously would never be
+     * revised and a revision is the only part of a target that carries information (Womack 1996). It moves
+     * in steps, when the case for it has moved far enough to be worth restating.
+     */
+    #[ORM\Column(type: Types::DECIMAL, precision: 12, scale: 4, nullable: true)]
+    private ?string $analystPriceTarget = null;
+
     /** @var string|null What a sphere's listed anchor stakes sit at on the balance sheet, remarked at every report. Null for the firms that hold none. */
     #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, nullable: true)]
     private ?string $listedStakesCarrying = null;
+
+    /**
+     * @var float|null Macaulay duration in years of the firm's investment securities book. Null falls back to
+     *                 the sector default. Seeded per firm on purpose: rate risk without a cross-section is a
+     *                 market where every lender lives or dies together.
+     */
+    #[ORM\Column(type: 'float', nullable: true)]
+    private ?float $securitiesDuration = null;
+
+    /**
+     * @var float|null Blended yield the securities book is carried at, walked toward the curve as maturities
+     *                 are reinvested. Null until the first report strikes it at the prevailing curve.
+     */
+    #[ORM\Column(type: 'float', nullable: true)]
+    private ?float $securitiesCarryingYield = null;
+
+    /**
+     * @var string Mark on the whole securities book against amortized cost (ASC 320); negative is a loss. The
+     *             available-for-sale share of it is already inside total equity; the held-to-maturity share is
+     *             disclosed here and nowhere else, which is how a firm stays adequately capitalized on every
+     *             published figure until the quarter it is forced to sell.
+     */
+    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, options: ['default' => '0.0000'])]
+    private string $unrealizedSecuritiesMark = '0.0000';
+
+    /**
+     * @var bool Whether this institution elects to filter accumulated other comprehensive income out of
+     *           regulatory capital (Basel III). A firm-level election, not a market-wide constant: it is the
+     *           difference between a capital ratio that reacts to the curve and one that does not react at all
+     *           until the securities are sold.
+     */
+    #[ORM\Column(type: 'boolean', options: ['default' => true])]
+    private bool $aociFiltered = true;
 
 
     // CORPORATE POLICY & MARKET PHYSICS
@@ -1045,10 +1088,148 @@ class Stock
         return $this;
     }
 
+    public function getAnalystPriceTarget(): ?string
+    {
+        return $this->analystPriceTarget;
+    }
+
+    public function setAnalystPriceTarget(?string $analystPriceTarget): self
+    {
+        $this->analystPriceTarget = $analystPriceTarget === null
+            ? null
+            : self::cleanBcStr($analystPriceTarget, 4);
+        return $this;
+    }
+
+    /**
+     * The published rating, which is a function of the STANDING target against today's price.
+     *
+     * So it can change without anybody revising anything: a name that rallies into its target is downgraded
+     * by the rally itself, which is how a sell-side rating actually behaves. The bands are asymmetric
+     * because the sell side downgrades late and reluctantly.
+     */
+    public function getAnalystRating(): string
+    {
+        $target = (float) ($this->analystPriceTarget ?? 0.0);
+        $price = (float) $this->price;
+
+        if ($target <= 0.0 || $price <= 0.0) {
+            return 'Neutral';
+        }
+
+        return match (true) {
+            $target > $price * \App\Service\Math\FinancialConstants::ANALYST_RATING_OUTPERFORM => 'Outperform',
+            $target < $price * \App\Service\Math\FinancialConstants::ANALYST_RATING_UNDERPERFORM => 'Underperform',
+            default => 'Neutral',
+        };
+    }
+
     /** Whether the earning-asset ledger a balance-sheet business carries has been opened. */
     public function hasEarningAssetLedger(): bool
     {
         return $this->earningAssets !== null;
+    }
+
+    public function getSecuritiesDuration(): ?float
+    {
+        return $this->securitiesDuration;
+    }
+
+    public function setSecuritiesDuration(?float $securitiesDuration): self
+    {
+        $this->securitiesDuration = $securitiesDuration === null ? null : max(0.0, $securitiesDuration);
+        return $this;
+    }
+
+    public function getSecuritiesCarryingYield(): ?float
+    {
+        return $this->securitiesCarryingYield;
+    }
+
+    public function setSecuritiesCarryingYield(?float $securitiesCarryingYield): self
+    {
+        $this->securitiesCarryingYield = $securitiesCarryingYield;
+        return $this;
+    }
+
+    public function getUnrealizedSecuritiesMark(): string
+    {
+        return $this->unrealizedSecuritiesMark;
+    }
+
+    public function setUnrealizedSecuritiesMark(string $unrealizedSecuritiesMark): self
+    {
+        $this->unrealizedSecuritiesMark = self::cleanBcStr($unrealizedSecuritiesMark, 4);
+        return $this;
+    }
+
+    public function isAociFiltered(): bool
+    {
+        return $this->aociFiltered;
+    }
+
+    public function setAociFiltered(bool $aociFiltered): self
+    {
+        $this->aociFiltered = $aociFiltered;
+        return $this;
+    }
+
+    /**
+     * The available-for-sale share of the securities mark: the part that IS in reported total equity and on
+     * the asset side, and therefore the part every published book-value figure already reflects.
+     */
+    public function getRecognizedSecuritiesMark(): float
+    {
+        return (float) $this->unrealizedSecuritiesMark * (1.0 - \App\Service\Math\FinancialConstants::DEFAULT_HTM_BOOK_SHARE);
+    }
+
+    /**
+     * The held-to-maturity share of the securities mark: the part that is NOT in reported total equity.
+     *
+     * Reported equity already carries the available-for-sale mark, so this is the whole of what a reader of
+     * the balance sheet is missing, and adding it to total equity gives economic equity.
+     */
+    public function getUnrecognizedSecuritiesMark(): float
+    {
+        return (float) $this->unrealizedSecuritiesMark * \App\Service\Math\FinancialConstants::DEFAULT_HTM_BOOK_SHARE;
+    }
+
+    /**
+     * Total equity with the undisclosed held-to-maturity mark folded in: what the firm is actually worth
+     * rather than what it reports being worth.
+     */
+    public function getEconomicEquity(): float
+    {
+        return (float) $this->totalEquity + $this->getUnrecognizedSecuritiesMark();
+    }
+
+    /**
+     * Common equity as a regulator counts it.
+     *
+     * Basel III lets an institution elect to filter accumulated other comprehensive income out of tier 1
+     * capital, and requires others to include it. That election is the difference between a capital ratio
+     * that reacts to the curve and one that does not react at all until the securities are sold — it is a
+     * firm-level choice and not a market-wide constant, which is why it is a column.
+     *
+     * Held-to-maturity never enters, because it is not in reported equity to begin with.
+     */
+    public function getRegulatoryEquity(): float
+    {
+        return $this->aociFiltered ? $this->getAmortizedCostEquity() : (float) $this->totalEquity;
+    }
+
+    /**
+     * Equity with the securities book put back at amortized cost: what a reader who does not mark the
+     * portfolio sees.
+     *
+     * This is statutory surplus for an insurer. Statutory accounting carries bonds at amortized cost, which
+     * is exactly why property and casualty underwriters went on writing business through the 2022 selloff
+     * while their economic capital was falling — the ratio their capacity is rationed by never moved. It is
+     * also the arithmetic behind the Basel AOCI filter, which is the same idea wearing a different name.
+     */
+    public function getAmortizedCostEquity(): float
+    {
+        return (float) $this->totalEquity - $this->getRecognizedSecuritiesMark();
     }
 
     /**
@@ -1662,6 +1843,10 @@ class Stock
             + max(0.0, (float) ($this->listedStakesCarrying ?? 0.0))
             + (float) $this->cipBalance
             + (float) $this->goodwill
+            // Available-for-sale securities are carried at fair value, so the mark sits on the asset side
+            // as well as in equity. Held-to-maturity is at amortized cost and is deliberately absent here:
+            // that omission IS the unrecognised hole, and getEconomicEquity() is where it surfaces.
+            + $this->getRecognizedSecuritiesMark()
             + max(0.0, $leaseLiability);
     }
 

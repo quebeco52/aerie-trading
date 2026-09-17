@@ -23,14 +23,6 @@ use App\Service\Market\MarketEngine;
  */
 class CompanySnapshotBuilder
 {
-    // --- Analyst Consensus ---
-
-    /** Upside over the traded price above which the consensus reads as a buy rather than as fair. */
-    private const OUTPERFORM_THRESHOLD = 1.05;
-
-    /** Downside below the traded price under which the consensus reads as a sell. */
-    private const UNDERPERFORM_THRESHOLD = 0.95;
-
     /** Quarters in a year: lastDividend is one Lintner step, and a yield is an annual rate. */
     private const DIVIDEND_PERIODS_PER_YEAR = 4.0;
 
@@ -165,11 +157,16 @@ class CompanySnapshotBuilder
             ? $fairValue
             : max($targets['growth_analyst'], $targets['income_analyst'], $targets['value_analyst']);
 
-        $targets['rating'] = match (true) {
-            $targets['consensus'] > $price * self::OUTPERFORM_THRESHOLD => 'Outperform',
-            $targets['consensus'] < $price * self::UNDERPERFORM_THRESHOLD => 'Underperform',
-            default => 'Neutral',
-        };
+        // The PUBLISHED target, which is a standing figure revised in steps, not the fair value recomputed
+        // for this page view. A reader who refreshes twice must see the same target both times, or the
+        // number is a live quote wearing an analyst's name and a revision means nothing.
+        $published = $stock->getAnalystPriceTarget();
+
+        if ($published !== null && (float) $published > 0.0) {
+            $targets['consensus'] = (float) $published;
+        }
+
+        $targets['rating'] = $stock->getAnalystRating();
         $targets['upside_pct'] = $price > 0.0 ? (($targets['consensus'] - $price) / $price) * 100.0 : 0.0;
 
         return $targets;

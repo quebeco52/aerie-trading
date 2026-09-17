@@ -84,8 +84,6 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
     public const MAX_CAP_RATE_CLAMP         = 0.15;
     /** Maximum spread buffer above 10-year Treasury yield allowed for market cap rates. */
     public const CAP_RATE_CEILING_SPREAD    = 0.12;
-    /** Default annual property depreciation rate for real estate asset write-offs. */
-    public const DEFAULT_DEPRECIATION_RATE  = 0.05;
 
     // --- EBIT Yield & ROIC Blending ---
     /** Weight of target net operating income yield when blending with historical ROIC. */
