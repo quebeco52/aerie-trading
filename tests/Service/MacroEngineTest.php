@@ -1068,8 +1068,13 @@ class MacroEngineTest extends TestCase
         $aggregateSubsystem->calculateTotalFactorProductivity($state, 0.25);
 
         $this->assertLessThan(120.0, $state->totalFactorProductivityIndex, 'TFP index can and should contract during deep recessions with negative innovation shocks.');
-        $minAllowedTfp = 120.0 * exp(MacroEngine::MIN_TFP_GROWTH_RATE * 0.25);
-        $this->assertGreaterThanOrEqual($minAllowedTfp, $state->totalFactorProductivityIndex, 'TFP contraction must be bounded by structural MIN_TFP_GROWTH_RATE floor.');
+
+        // MIN_TFP_GROWTH_RATE floors the trend GROWTH RATE, and cannot also floor the realized path: a
+        // single log increment is a rate scaled by dt plus an innovation scaled by sqrt(dt), so a band in
+        // annual rate units is narrower than the innovation it would be clipping and biases the drift onto
+        // its own midpoint. A three-sigma quarter must therefore land below that band, not on it.
+        $rateFloorOverTheQuarter = 120.0 * exp(MacroEngine::MIN_TFP_GROWTH_RATE * 0.25);
+        $this->assertLessThan($rateFloorOverTheQuarter, $state->totalFactorProductivityIndex, 'A three-sigma innovation must reach the index at full size, not be clipped to the annual growth-rate band.');
     }
 
     public function testExchangeRateAppreciationDragsDownOutputGap(): void
@@ -1447,7 +1452,7 @@ class MacroEngineTest extends TestCase
         $baselineDeterministicTfp = 100.0 * exp(MacroEngine::TFP_DRIFT * 0.25);
         $this->assertGreaterThan($baselineDeterministicTfp, $boomState->totalFactorProductivityIndex, 'Positive innovation shock and expansion must accelerate TFP accumulation.');
 
-        // 2. Severe recession + negative productivity shock leads to contraction bounded by MIN_TFP_GROWTH_RATE
+        // 2. Severe recession + negative productivity shock: the contraction arrives at its drawn size
         $slumpState = new \App\Service\Macro\MacroState();
         $slumpState->totalFactorProductivityIndex = 100.0;
         $slumpState->outputGapEma = -0.05; // 5% recession
@@ -1455,8 +1460,10 @@ class MacroEngineTest extends TestCase
         $this->aggregateSubsystem->calculateTotalFactorProductivity($slumpState, 0.25);
 
         $this->assertLessThan(100.0, $slumpState->totalFactorProductivityIndex, 'TFP can and should contract during severe recessions with negative shocks.');
-        $minAllowedTfp = 100.0 * exp(MacroEngine::MIN_TFP_GROWTH_RATE * 0.25);
-        $this->assertGreaterThanOrEqual($minAllowedTfp, $slumpState->totalFactorProductivityIndex, 'TFP contraction must be bounded by structural MIN_TFP_GROWTH_RATE.');
+
+        // As above: the annual growth-rate band bounds the trend rate, never the realized increment.
+        $rateFloorOverTheQuarter = 100.0 * exp(MacroEngine::MIN_TFP_GROWTH_RATE * 0.25);
+        $this->assertLessThan($rateFloorOverTheQuarter, $slumpState->totalFactorProductivityIndex, 'A three-sigma innovation must reach the index at full size, not be clipped to the annual growth-rate band.');
     }
 
     public function testNaturalRateEvolvesDynamicallyDuringFullMacroUpdate(): void

@@ -17,20 +17,29 @@ use PHPUnit\Framework\TestCase;
  */
 final class HistorySamplingRateTest extends TestCase
 {
-    /** Below the target, every tick is recorded and the rate is the tick rate itself. */
-    public function testFineTickRatesRecordEveryTick(): void
+    /** Below the target a bar cannot be finer than a tick, so the rate is the tick rate itself. */
+    public function testTickRatesBelowTheTargetRecordEveryTick(): void
     {
-        $this->assertSame(3600, MarketTickerCommand::historyPointsPerYear(3600));
         $this->assertSame(252, MarketTickerCommand::historyPointsPerYear(252));
+        $this->assertSame(720, MarketTickerCommand::historyPointsPerYear(720));
     }
 
-    /** Above it, sampling thins out toward the target rather than growing without bound. */
-    public function testCoarseTickRatesSampleDownTowardTheTarget(): void
+    /**
+     * Above it the rate is the target exactly, at any tick rate.
+     *
+     * 3,600 is the case that used to escape: the quotient is 1.5, the old cadence truncated it to a bar
+     * every tick, and the ticker wrote half as many rows again as the target asks for while running the
+     * flush, the bond mark and the reload on every one of them.
+     */
+    public function testTickRatesAboveTheTargetSampleDownToItExactly(): void
     {
-        $points = MarketTickerCommand::historyPointsPerYear(54000);
-
-        $this->assertLessThanOrEqual(MarketTickerCommand::TARGET_HISTORY_POINTS_PER_YEAR * 2, $points);
-        $this->assertGreaterThanOrEqual(MarketTickerCommand::TARGET_HISTORY_POINTS_PER_YEAR, $points);
+        foreach ([2401, 3600, 7000, 7200, 14400, 54000, 864000] as $ticksPerYear) {
+            $this->assertSame(
+                MarketTickerCommand::TARGET_HISTORY_POINTS_PER_YEAR,
+                MarketTickerCommand::historyPointsPerYear($ticksPerYear),
+                "Sampling overshoots the target at {$ticksPerYear} ticks/year."
+            );
+        }
     }
 
     /** Never zero, whatever the configuration, since it is used as a divisor and a LIMIT. */
@@ -41,16 +50,54 @@ final class HistorySamplingRateTest extends TestCase
         }
     }
 
-    /** It matches what the ticker loop actually writes: one row every historyInterval ticks. */
-    public function testRateMatchesTheTickerWriteInterval(): void
+    /**
+     * It matches what the ticker loop actually writes, counted off the loop's own predicate.
+     *
+     * The rate is what the chart's row LIMITs are derived from, so a rate that disagrees with the write
+     * cadence silently mis-scales every range button on the stock page. Counting bars rather than asserting
+     * an interval is the only form of this test that survives a rational grid.
+     */
+    public function testRateMatchesWhatTheTickerActuallyWrites(): void
     {
-        foreach ([252, 3600, 14400, 54000] as $ticksPerYear) {
-            $interval = MarketTickerCommand::historyIntervalTicks($ticksPerYear);
+        foreach ([252, 720, 3600, 7200, 14400, 54000] as $ticksPerYear) {
+            $bars = 0;
+
+            for ($tick = 1; $tick <= $ticksPerYear; $tick++) {
+                if (MarketTickerCommand::isHistoryTick($tick, $ticksPerYear)) {
+                    $bars++;
+                }
+            }
 
             $this->assertSame(
-                intdiv($ticksPerYear, $interval),
                 MarketTickerCommand::historyPointsPerYear($ticksPerYear),
-                "Sampling rate disagrees with the ticker's own write interval at {$ticksPerYear} ticks/year."
+                $bars,
+                "Sampling rate disagrees with the ticker's own write cadence at {$ticksPerYear} ticks/year."
+            );
+        }
+    }
+
+    /**
+     * The tick rate is a resolution knob: it may not decide which jobs a tick does.
+     *
+     * Every heavy job in the loop — the flush, the tick-column write, the bond mark, the working-set
+     * reload — hangs off the bar flag, so a tick rate that drives the flag to true on every tick turns a
+     * periodic bar job into a per-tick one. That is exactly what 3,600 did.
+     */
+    public function testNoTickRateTurnsEveryTickIntoABar(): void
+    {
+        foreach ([2401, 3000, 3600, 4800, 7000] as $ticksPerYear) {
+            $bars = 0;
+
+            for ($tick = 1; $tick <= $ticksPerYear; $tick++) {
+                if (MarketTickerCommand::isHistoryTick($tick, $ticksPerYear)) {
+                    $bars++;
+                }
+            }
+
+            $this->assertLessThan(
+                $ticksPerYear,
+                $bars,
+                "Every tick closes a bar at {$ticksPerYear} ticks/year; the bar cadence has collapsed."
             );
         }
     }

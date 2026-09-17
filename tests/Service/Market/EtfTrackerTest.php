@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Tests\Service\Market;
 
 use App\Entity\Etf;
-use App\Entity\EtfHistory;
 use App\Service\Event\MarketEventPublisher;
 use App\Service\Market\EtfTracker;
 use Doctrine\DBAL\Connection;
@@ -84,27 +83,83 @@ class EtfTrackerTest extends TestCase
         $this->assertSame('100', $etf->getPrice());
     }
 
-    public function testUpdateIndexPersistsHistoryWhenRequested(): void
+    /**
+     * The bar's row goes to the table as data, never as a managed entity.
+     *
+     * Four EtfHistory objects a bar is nothing to write and a great deal for the unit of work to carry: it
+     * walked them on every flush and held them in the identity map until the next working-set reload. The
+     * assertion is therefore on the statement AND on the absence of a persist, because passing the first
+     * while failing the second is exactly the state this replaced.
+     */
+    public function testUpdateIndexWritesHistoryAsDataRatherThanAnEntity(): void
     {
         $etf = new Etf();
         $etf->setTicker('LBI');
         $etf->setName('Skein Lakebird 30 ETF');
         $etf->setPrice('100.00');
+        self::giveId($etf, 7);
 
         $this->redisMock->expects($this->once())->method('get')->with('market_index_divisor:LBI')->willReturn('10000000'); // 10M divisor
 
-        $this->emMock->expects($this->once())
-            ->method('persist')
-            ->with($this->callback(function (mixed $entity) use ($etf) {
-                return $entity instanceof EtfHistory
-                    && $entity->getEtf() === $etf
-                    && $entity->getPrice() === '110';
-            }));
+        $this->emMock->expects($this->never())->method('persist');
+
+        $written = [];
+        $this->connectionMock->method('executeStatement')->willReturnCallback(
+            function (string $sql, array $params = []) use (&$written): int {
+                $written[] = [$sql, $params];
+
+                return 1;
+            }
+        );
 
         $totalMarketCap = 1_100_000_000.0; // $1.1B -> $110 price
         $result = $this->tracker->updateIndex($totalMarketCap, true, 'LBI', $etf);
 
         $this->assertSame(110.0, $result['price']);
+
+        // Nothing is written until the bar closes, so the insert is one statement for every fund.
+        $this->assertSame([], $written);
+
+        $this->tracker->recordHistory();
+
+        $this->assertCount(1, $written);
+        $this->assertStringContainsString('INSERT INTO etf_history', $written[0][0]);
+        $this->assertSame(7, $written[0][1][0]);
+        $this->assertSame('110', $written[0][1][1]);
+    }
+
+    /** A second call has nothing left to write rather than writing the bar twice. */
+    public function testRecordHistoryDrainsItsBuffer(): void
+    {
+        $etf = new Etf();
+        $etf->setTicker('LBI');
+        $etf->setName('Skein Lakebird 30 ETF');
+        $etf->setPrice('100.00');
+        self::giveId($etf, 7);
+
+        $this->redisMock->method('get')->willReturn('10000000');
+
+        $written = 0;
+        $this->connectionMock->method('executeStatement')->willReturnCallback(
+            function () use (&$written): int {
+                $written++;
+
+                return 1;
+            }
+        );
+
+        $this->tracker->updateIndex(1_100_000_000.0, true, 'LBI', $etf);
+        $this->tracker->recordHistory();
+        $this->tracker->recordHistory();
+
+        $this->assertSame(1, $written);
+    }
+
+    /** Doctrine assigns the identifier; a test fund needs one to be written as a foreign key. */
+    private static function giveId(Etf $etf, int $id): void
+    {
+        $property = new \ReflectionProperty(Etf::class, 'id');
+        $property->setValue($etf, $id);
     }
 
     // --- The Fund Versus Its Index ---

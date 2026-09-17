@@ -472,4 +472,141 @@ class MacroAggregateSubsystemTest extends TestCase
             'An unreported market must move demand exactly as much as a board at its trend: not at all.'
         );
     }
+
+    /**
+     * TFP_DRIFT is a promise about the productivity index, and the index has to keep it.
+     *
+     * The index is a log random walk: a drift scaled by dt, an innovation scaled by sqrt(dt), and rare
+     * Schumpeterian breakthroughs. Those two scalings are the trap. A bound written in annual rate units
+     * is narrower than one standard deviation of the innovation by a factor of sqrt(1/dt), so clipping the
+     * increment rather than the rate clips nearly every step, and realized growth stops answering to
+     * TFP_DRIFT and settles on the midpoint of the bounds instead. That is not a rounding error: at the
+     * production 3600 ticks/year it delivered 1.02%/yr against the 1.50% asked for, cut the index's
+     * volatility from 2.2% to 0.07% and swallowed the jumps whole, leaving a straight line where a
+     * stochastic process belongs.
+     *
+     * So both moments are asserted at two timesteps an order of magnitude apart: what the index delivers
+     * must be what the constants say, and must not depend on how finely the clock is ticked.
+     */
+    public function testTheProductivityIndexDeliversTheDriftAndVolatilityItIsParameterisedWith(): void
+    {
+        // The breakthrough jumps are not Merton-compensated, so they carry their own arrival-weighted drift.
+        $expectedGrowth = MacroEngine::TFP_DRIFT
+            + (MacroAggregateSubsystem::TFP_JUMP_PROBABILITY * MacroAggregateSubsystem::TFP_JUMP_MEAN);
+
+        foreach ([[3600, 4, 80], [252, 10, 300]] as [$ticksPerYear, $seeds, $years]) {
+            $annualGrowth = [];
+            for ($seed = 1; $seed <= $seeds; $seed++) {
+                mt_srand($seed * 7919);
+                $subsystem = new MacroAggregateSubsystem(new MathUtility());
+                $state = new MacroState();
+                $state->totalFactorProductivityIndex = 100.0;
+                $state->outputGapEma = 0.0;
+
+                for ($year = 0; $year < $years; $year++) {
+                    $opening = $state->totalFactorProductivityIndex;
+                    for ($tick = 0; $tick < $ticksPerYear; $tick++) {
+                        $subsystem->calculateTotalFactorProductivity($state, 1.0 / $ticksPerYear);
+                    }
+                    $annualGrowth[] = log($state->totalFactorProductivityIndex / $opening);
+                }
+            }
+
+            $mean = array_sum($annualGrowth) / count($annualGrowth);
+            $realizedVolatility = sqrt(
+                array_sum(array_map(static fn (float $g): float => ($g - $mean) ** 2, $annualGrowth))
+                / count($annualGrowth)
+            );
+
+            $this->assertEqualsWithDelta(
+                $expectedGrowth,
+                $mean,
+                0.0035,
+                sprintf(
+                    'At %d ticks/year the index grew %.3f%%/yr, not the %.3f%% it is parameterized for.',
+                    $ticksPerYear,
+                    $mean * 100,
+                    $expectedGrowth * 100
+                )
+            );
+
+            $this->assertEqualsWithDelta(
+                MacroAggregateSubsystem::TFP_VOLATILITY,
+                $realizedVolatility,
+                0.006,
+                sprintf(
+                    'At %d ticks/year the index realized %.4f volatility against a TFP_VOLATILITY of %.4f.',
+                    $ticksPerYear,
+                    $realizedVolatility,
+                    MacroAggregateSubsystem::TFP_VOLATILITY
+                )
+            );
+        }
+    }
+
+    /**
+     * A demand disturbance has to outlive the tick that drew it. The gap used to take an independent
+     * N(0, sigma) draw on its own level every tick, so at 3600 ticks a year the top of an expansion was a
+     * run of unrelated draws and the realized cycle ran at 5.5 years against a deterministic 8.8.
+     */
+    public function testDemandDisturbanceDecaysAtItsReversionSpeedRatherThanPerTick(): void
+    {
+        $draws = new class extends MathUtility {
+            public int $calls = 0;
+            public function generateStandardNormal(): float
+            {
+                // One unit innovation on the first tick, silence afterwards.
+                return $this->calls++ === 0 ? 1.0 : 0.0;
+            }
+        };
+        $subsystem = new MacroAggregateSubsystem($draws);
+
+        $state = new MacroState();
+        $state->outputGap = 0.0;
+        $dt = 1.0 / 3600.0;
+
+        $state->outputGap = $subsystem->calculateOutputGap($state, 0.03, MacroEngine::BASE_NATURAL_RATE, $dt, 1.0);
+        $impulse = $state->demandShock;
+
+        $this->assertGreaterThan(0.0, $impulse, 'The innovation must land on the disturbance.');
+        $this->assertEqualsWithDelta(
+            MacroAggregateSubsystem::DEMAND_SHOCK_SIGMA * sqrt($dt),
+            $impulse,
+            1e-9,
+            'A unit innovation scales by sigma * sqrt(dt).'
+        );
+
+        // Half a reversion half-life later the disturbance must still be most of the way there.
+        $halfLifeTicks = (int) round((log(2.0) / MacroAggregateSubsystem::DEMAND_SHOCK_REVERSION) * 3600.0);
+        for ($i = 0; $i < $halfLifeTicks; $i++) {
+            $state->outputGap = $subsystem->calculateOutputGap($state, 0.03, MacroEngine::BASE_NATURAL_RATE, $dt, 1.0);
+        }
+
+        $this->assertEqualsWithDelta(
+            0.5 * $impulse,
+            $state->demandShock,
+            0.02 * $impulse,
+            'After one half-life the disturbance must retain half the impulse, not have been redrawn away.'
+        );
+    }
+
+    /** The disturbance is a demand impulse in gap-drift units, so it moves the gap alongside the other Kaldor terms. */
+    public function testDemandDisturbanceEntersTheGapAsADriftImpulse(): void
+    {
+        $neutral = new MacroState();
+        $neutral->outputGap = 0.0;
+        $neutral->inflation = MacroEngine::TARGET_INFLATION;
+        $neutral->policyRate = MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION;
+
+        $shocked = clone $neutral;
+        $shocked->demandShock = 0.01;
+
+        $dt = 0.25;
+        $baseGap = $this->subsystem->calculateOutputGap($neutral, 0.03, MacroEngine::BASE_NATURAL_RATE, $dt, 1.0);
+        $shockedGap = $this->subsystem->calculateOutputGap($shocked, 0.03, MacroEngine::BASE_NATURAL_RATE, $dt, 1.0);
+
+        // The disturbance is stepped before the drift reads it, so the tick applies the already-decayed level.
+        $applied = 0.01 * (1.0 - (MacroAggregateSubsystem::DEMAND_SHOCK_REVERSION * $dt));
+        $this->assertEqualsWithDelta($applied * $dt, $shockedGap - $baseGap, 1e-9);
+    }
 }

@@ -63,17 +63,25 @@ class PriceBarAggregatorTest extends TestCase
     }
 
     /**
-     * The tick rate this project actually runs at writes one history row per tick, which is a bar with no
-     * range at all. If this ever fails the candle chart is back to drawing dojis.
+     * The tick rate this project actually runs at writes rows spanning one or two ticks, which is a bar
+     * with no usable range of its own. If this ever fails the candle chart is back to drawing dojis.
      */
     public function testTheConfiguredTickRateWritesSingleTickRowsWithNoRangeOfTheirOwn(): void
     {
         $ticksPerYear = 3600;
+        $singleTickRows = 0;
 
-        self::assertSame(
-            1,
-            MarketTickerCommand::historyIntervalTicks($ticksPerYear),
-            'One row per tick — the stored row cannot carry a range, so the bar has to be built on read.'
+        for ($tick = 2; $tick <= 1000; $tick++) {
+            if (MarketTickerCommand::isHistoryTick($tick, $ticksPerYear)
+                && MarketTickerCommand::isHistoryTick($tick - 1, $ticksPerYear)) {
+                $singleTickRows++;
+            }
+        }
+
+        self::assertGreaterThan(
+            0,
+            $singleTickRows,
+            'A stored row can span a single tick and cannot carry a range, so the bar has to be built on read.'
         );
     }
 
@@ -202,7 +210,7 @@ class PriceBarAggregatorTest extends TestCase
     {
         $bars = $this->aggregator->aggregate($this->rows($this->sawtooth(70)), 70);
 
-        self::assertSame((int) ceil(70 / PriceBarAggregator::MIN_ROWS_PER_BAR), count($bars));
+        self::assertCount((int) ceil(70 / PriceBarAggregator::MIN_ROWS_PER_BAR), $bars);
         foreach ($bars as $bar) {
             self::assertGreaterThan($bar['low_price'], $bar['high_price']);
         }

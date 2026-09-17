@@ -102,13 +102,32 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
     /** History bars between events that should happen a given number of times a simulated year. */
     private static function intervalBars(int $ticksPerYear, int $perYear): int
     {
-        return max(1, (int) round(($ticksPerYear / $perYear) / self::historyIntervalTicks($ticksPerYear)));
+        return max(1, (int) round(self::historyPointsPerYear($ticksPerYear) / $perYear));
     }
 
     /** Whether a history bar re-reads the working set. */
     public static function isReloadBar(int $bar, int $ticksPerYear): bool
     {
         return $bar % self::reloadIntervalBars($ticksPerYear) === 0;
+    }
+
+    /**
+     * Whether a TICK re-reads the working set: the bar-counted job, addressed the way the loop has it.
+     *
+     * The loop holds a tick count, not a bar index, and asking it to carry one was a mistake that cost a
+     * crash loop: `$bar` is a natural name for the open/high/low accumulator too, the history-row insert
+     * reassigned it four hundred lines further down, and the reload below then received an array. Nothing
+     * caught it — PHPStan reads the loop body as too complex to track a local through, and the loop itself
+     * has no test, so the first thing to notice was the ticker restarting in production.
+     *
+     * Deriving the bar inside these wrappers is a multiply and an integer division against a job that
+     * clears the identity map and re-hydrates four hundred entities. The name cannot collide with anything
+     * because it no longer exists.
+     */
+    public static function isReloadTick(int $tickCount, int $ticksPerYear): bool
+    {
+        return self::isHistoryTick($tickCount, $ticksPerYear)
+            && self::isReloadBar(self::barIndex($tickCount, $ticksPerYear), $ticksPerYear);
     }
 
     /**
@@ -126,14 +145,19 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
         return $bar % $bars === intdiv($bars, 2);
     }
 
-    /** Ticks between price history rows: one per tick until the tick rate outruns the target sampling rate. */
-    public static function historyIntervalTicks(int $ticksPerYear): int
+    /** Whether a TICK samples the bond ladder: see isReloadTick() for why this is addressed by tick. */
+    public static function isBondHistoryTick(int $tickCount, int $ticksPerYear): bool
     {
-        return max(1, (int) ($ticksPerYear / self::TARGET_HISTORY_POINTS_PER_YEAR));
+        return self::isHistoryTick($tickCount, $ticksPerYear)
+            && self::isBondHistoryBar(self::barIndex($tickCount, $ticksPerYear), $ticksPerYear);
     }
 
     /**
-     * Price history rows actually written per simulated year at a given tick rate.
+     * Price history rows written per simulated year at a given tick rate.
+     *
+     * The target, or the tick rate itself when that is the coarser of the two — a bar cannot be finer than
+     * a tick. This is the whole of the sampling rule; the grid below is derived from it rather than the
+     * other way round.
      *
      * Anything converting a chart range into a row LIMIT has to ask this rather than assume a tick rate:
      * the range buttons used to carry hardcoded row counts that only matched a 4,800-tick year, so every
@@ -141,7 +165,36 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
      */
     public static function historyPointsPerYear(int $ticksPerYear): int
     {
-        return max(1, (int) ($ticksPerYear / self::historyIntervalTicks($ticksPerYear)));
+        return max(1, min(self::TARGET_HISTORY_POINTS_PER_YEAR, $ticksPerYear));
+    }
+
+    /**
+     * History bars closed by a given tick.
+     *
+     * THE BAR GRID IS RATIONAL, NOT A WHOLE NUMBER OF TICKS. Spacing bars by dividing the tick rate by the
+     * target and truncating only lands on the target when one divides the other, and truncation is biased
+     * toward writing too many at every rate where it does not: 7,000 ticks a year wants a bar every 2.9
+     * ticks and gets one every 2, which is 3,500 rows against a target of 2,400. At 3,600 the quotient is
+     * 1.5, truncation reached the floor of 1, and a bar closed on EVERY tick — with the flush, the bond
+     * mark, the tick-column write and the working-set reload all riding a flag that is never meant to be
+     * true every tick. The tick rate is a resolution knob and nothing more; it must not decide which jobs
+     * the ticker does.
+     *
+     * Counting bars rather than spacing them spreads the remainder evenly and closes exactly
+     * historyPointsPerYear() of them per simulated year at any tick rate. It is a pure function of the tick
+     * count, so it survives a restart with no accumulator to carry, and it is exact wherever the target
+     * does divide the rate: at 14,400 this is still every sixth tick to the tick.
+     */
+    public static function barIndex(int $tickCount, int $ticksPerYear): int
+    {
+        return intdiv(max(0, $tickCount) * self::historyPointsPerYear($ticksPerYear), max(1, $ticksPerYear));
+    }
+
+    /** Whether a tick closes a history bar: the tick the bar count rolls over on. */
+    public static function isHistoryTick(int $tickCount, int $ticksPerYear): bool
+    {
+        return $tickCount <= 0
+            || self::barIndex($tickCount, $ticksPerYear) > self::barIndex($tickCount - 1, $ticksPerYear);
     }
 
     private bool $keepRunning = true;
@@ -293,7 +346,6 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
             $clock->getTotalTime()
         ));
 
-        $historyInterval = self::historyIntervalTicks($this->ticksPerYear);
         $operatorInterval = (int) max(1, $this->ticksPerYear / 24);  // Operator audits once a game "month"
         $snapshotInterval = (int) max(1, $this->ticksPerYear / 52);  // Snapshots once a game "week"
         $quarterlyInterval = (int) max(1, $this->ticksPerYear / 4);   // Snapshots once a game "quarter"
@@ -381,15 +433,15 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                 $operatorEvents = [];
             }
 
+            $isHistoryTick = self::isHistoryTick($tickCount, $this->ticksPerYear);
+
             // Re-hedge option inventory on history bar cadence before draining order flow.
-            if ($tickCount % $historyInterval === 0) {
+            if ($isHistoryTick) {
                 $this->optionDesk->hedge($stocks);
             }
 
             try {
                 $this->entityManager->beginTransaction();
-
-                $isHistoryTick = ($tickCount % $historyInterval === 0);
 
                 $lap('operator+hedge');
                 $result = $this->stockTracker->updateStocks($stocks, $dt, $isHistoryTick, $macroState, $tickCount, $this->ticksPerYear);
@@ -559,8 +611,7 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
 
                 // Marked on the history cadence, but only sampled into bond_history once a trading day:
                 // see BOND_HISTORY_POINTS_PER_YEAR.
-                $isBondHistoryTick = $isHistoryTick
-                    && self::isBondHistoryBar(intdiv($tickCount, $historyInterval), $this->ticksPerYear);
+                $isBondHistoryTick = self::isBondHistoryTick($tickCount, $this->ticksPerYear);
 
                 $bondResult = $this->bondTracker->updateBonds(
                     $bonds,
@@ -728,11 +779,15 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                     // Empty on nine bars in ten: the ladder is sampled once a trading day, so this is a
                     // two-hundred-row insert a tenth as often rather than on every bar.
                     $this->bondTracker->recordHistory($bondResult['history']);
+
+                    // The funds' own rows, accrued during the ETF phase above and written here as data for
+                    // the same reason the two lines above are: see EtfTracker::recordHistory().
+                    $this->etfTracker->recordHistory();
                     $lap('history rows');
 
                     // Once a trading day, not every bar: see reloadIntervalBars(). Everything the tick
                     // itself changed has just been flushed, so nothing is lost to the clear.
-                    if (self::isReloadBar(intdiv($tickCount, $historyInterval), $this->ticksPerYear)) {
+                    if (self::isReloadTick($tickCount, $this->ticksPerYear)) {
                         $this->entityManager->clear();
                         $stocks = $this->entityManager->getRepository(Stock::class)->findAll();
                         $indexFunds = $this->loadIndexFunds();

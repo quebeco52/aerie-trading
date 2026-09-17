@@ -241,8 +241,8 @@ final class OptionChainService
             return 0;
         }
 
-        $existing = $this->existingTickers(array_keys($listable));
         $serials = self::listedSerials($currentTime);
+        $existing = $this->existingTickers(array_keys($listable), $serials);
         $stamp = (new \DateTime())->format('Y-m-d H:i:s');
         $rows = [];
 
@@ -311,16 +311,29 @@ final class OptionChainService
      * ticker restarted against a half-old stack) puts the grid back over serials whose contracts are still
      * sitting in the table, settled. Asking whether the name is taken costs the same query and does not care.
      *
+     * SCOPED TO THE SERIALS BEING LISTED, which is not the same compromise. Filtering on status would give up
+     * the guard above outright; filtering on the serials the caller is about to write cannot, because every
+     * candidate symbol carries one of them by construction, so a settled contract on a rewound serial is
+     * still in the answer. What it drops is the twelve years of retired months that share nothing with this
+     * pass — the table keeps every contract it ever listed, so an unscoped read was pulling tens of thousands
+     * of dead symbols through PDO and into a hash map, every sweep, to compare them against the few hundred
+     * the front months actually contain.
+     *
      * @param array<int, int> $stockIds
+     * @param array<int, int> $serials  The expiry serials this pass may write.
      * @return array<string, true>
      */
-    private function existingTickers(array $stockIds): array
+    private function existingTickers(array $stockIds, array $serials): array
     {
+        if ($serials === []) {
+            return [];
+        }
+
         return array_fill_keys(
             $this->em->getConnection()->fetchFirstColumn(
-                'SELECT ticker FROM option_contracts WHERE stock_id IN (:stocks)',
-                ['stocks' => $stockIds],
-                ['stocks' => ArrayParameterType::INTEGER]
+                'SELECT ticker FROM option_contracts WHERE stock_id IN (:stocks) AND expiry_serial IN (:serials)',
+                ['stocks' => $stockIds, 'serials' => array_values($serials)],
+                ['stocks' => ArrayParameterType::INTEGER, 'serials' => ArrayParameterType::INTEGER]
             ),
             true
         );

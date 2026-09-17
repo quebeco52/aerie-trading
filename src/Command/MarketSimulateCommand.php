@@ -178,6 +178,12 @@ class MarketSimulateCommand extends Command
                 );
             }
 
+            // The funds' history rows are buffered by the call above and written as data, so the
+            // fast-forward has to drain them exactly as the ticker does.
+            if ($isHistoryTick) {
+                $this->etfTracker->recordHistory();
+            }
+
             if ($macroState->eventType !== null) {
                 $lbi = $indexFunds[MarketIndex::benchmark()->value] ?? null;
                 if ($lbi) {

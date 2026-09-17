@@ -52,8 +52,10 @@ class MonetaryPolicySubsystem
     public const TAYLOR_INFLATION_WEIGHT = 0.50;
     /** Canonical Taylor (1993) weight on the output gap in the Taylor Rule. */
     public const TAYLOR_OUTPUT_GAP_WEIGHT = 0.50;
-    /** Non-linear scaling factor amplifying rate cuts during deep recessions. */
-    public const TAYLOR_RECESSION_SCALE = 35.0;
+    /** Non-linear scaling factor amplifying rate cuts during recessions: a -1.4% gap doubles the weight on the real economy. */
+    public const TAYLOR_RECESSION_SCALE = 70.0;
+    /** Ceiling on that recession boost: at a severe gap the rule reaches the Yellen (2012) balanced-approach weight of 1.0 and beyond, while a boom is still met with the standard 0.5. */
+    public const TAYLOR_RECESSION_MAX_BOOST = 2.00;
     /** Bernanke (2015) blend: weight on realized core inflation (EMA) in the Taylor Rule inflation measure. */
     public const TAYLOR_INFLATION_CORE_WEIGHT = 0.70;
     /** Bernanke (2015) blend: weight on forward inflation expectations (TIPS breakeven) in the Taylor Rule inflation measure. */
@@ -197,10 +199,14 @@ class MonetaryPolicySubsystem
             ? $state->outputGap
             : $state->outputGapEma;
 
-        // Smooth asymmetric output gap weighting: continuous bounded multiplier preventing panic cliff drops
+        // Smooth asymmetric output gap weighting: continuous bounded multiplier preventing panic cliff drops.
+        // Cukierman & Muscatelli (2008) find the reaction function is recession-averse rather than symmetric,
+        // and the boost has to reach the balanced-approach weight to matter: capped at half a Taylor weight it
+        // saturated at a gap of -1.4%, so the rule met a mild slowdown and a severe one with the same lean, and
+        // policy stayed restrictive for ten quarters into a downturn while sticky inflation unwound.
         if ($cyclicalGap < 0.0) {
             $gapWeight = self::TAYLOR_OUTPUT_GAP_WEIGHT
-                * (1.0 + min(0.50, abs($cyclicalGap) * self::TAYLOR_RECESSION_SCALE));
+                * (1.0 + min(self::TAYLOR_RECESSION_MAX_BOOST, abs($cyclicalGap) * self::TAYLOR_RECESSION_SCALE));
         } else {
             $gapWeight = self::TAYLOR_OUTPUT_GAP_WEIGHT;
         }

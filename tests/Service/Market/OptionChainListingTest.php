@@ -31,13 +31,17 @@ class OptionChainListingTest extends TestCase
     /** @var list<string> Every SQL the listing read its existing symbols with. */
     private array $lookups = [];
 
+    /** @var list<array<string, mixed>> The bound parameters of each of those reads. */
+    private array $lookupParams = [];
+
     /** @param array<int, string> $existing */
     private function service(array $existing = []): OptionChainService
     {
         $connection = $this->createStub(Connection::class);
         $connection->method('fetchFirstColumn')->willReturnCallback(
-            function (string $sql) use ($existing): array {
+            function (string $sql, array $params = []) use ($existing): array {
                 $this->lookups[] = $sql;
+                $this->lookupParams[] = $params;
 
                 return $existing;
             }
@@ -166,6 +170,56 @@ class OptionChainListingTest extends TestCase
         // And the reason it saw them: the lookup does not filter on status.
         $this->assertCount(1, $this->lookups);
         $this->assertStringNotContainsString('status', $this->lookups[0]);
+    }
+
+    /**
+     * The dedupe read is scoped to the serials the pass may actually write.
+     *
+     * The table keeps every contract the desk has ever listed, so an unscoped read grew without bound: by
+     * the twelfth simulated year it was dragging tens of thousands of retired symbols through PDO and into
+     * a hash map on every sweep, to compare them against the few hundred the front months contain. Scoping
+     * to the listed serials is the one filter that costs the guard above nothing — every candidate symbol
+     * carries one of those serials by construction, so a settled contract on a rewound serial is still in
+     * the answer. Filtering on status would not be, which is why it is the serials and not the status.
+     */
+    public function testTheDedupeReadOnlyLooksAtTheSerialsBeingListed(): void
+    {
+        $stock = $this->listable('AAA', 1);
+        $currentTime = 2.0;
+
+        $this->service()->listChains([$stock], $currentTime);
+
+        $this->assertCount(1, $this->lookups);
+        $this->assertStringContainsString('expiry_serial IN (:serials)', $this->lookups[0]);
+        $this->assertSame(
+            OptionChainService::listedSerials($currentTime),
+            array_values($this->lookupParams[0]['serials']),
+            'The read must cover exactly the serials the pass can write — no fewer, or a rewind duplicates a symbol.'
+        );
+    }
+
+    /** Every symbol the pass is about to write carries one of the serials it just asked about. */
+    public function testEverySymbolWrittenBelongsToAQueriedSerial(): void
+    {
+        $stock = $this->listable('AAA', 1);
+        $currentTime = 2.0;
+
+        $this->service()->listChains([$stock], $currentTime);
+
+        $queried = array_values($this->lookupParams[0]['serials']);
+        $columns = count(OptionChainService::LISTING_COLUMNS);
+        $serialIndex = array_search('expiry_serial', OptionChainService::LISTING_COLUMNS, true);
+        $this->assertIsInt($serialIndex);
+
+        $written = 0;
+        foreach ($this->sent as [, $params]) {
+            for ($offset = 0; $offset < count($params); $offset += $columns) {
+                $this->assertContains($params[$offset + $serialIndex], $queried);
+                $written++;
+            }
+        }
+
+        $this->assertGreaterThan(0, $written, 'The pass wrote nothing, so the guard proves nothing.');
     }
 
     public function testANameThatFailsTheListingStandardIsNeverWritten(): void

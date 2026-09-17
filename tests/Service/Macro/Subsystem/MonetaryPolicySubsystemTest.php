@@ -782,4 +782,43 @@ class MonetaryPolicySubsystemTest extends TestCase
             'risk_neutral_10y' => $structural10y, 'term_premium_10y' => 0.0,
         ];
     }
+
+    /**
+     * The recession boost is what makes the reaction function recession-averse rather than symmetric
+     * (Cukierman & Muscatelli 2008). Capped at half a Taylor weight it saturated at a -1.4% gap, so a mild
+     * slowdown and a severe one drew the same lean and policy stayed restrictive deep into a downturn.
+     */
+    public function testRecessionBoostScalesWithDepthAndLeavesBoomsOnTheStandardWeight(): void
+    {
+        $targetFor = function (float $gap): float {
+            $state = new MacroState();
+            $state->inflation = MacroEngine::TARGET_INFLATION;
+            $state->inflationEma = MacroEngine::TARGET_INFLATION;
+            $state->tipsBreakeven = MacroEngine::TARGET_INFLATION;
+            $state->supercoreInflationEma = MacroEngine::TARGET_INFLATION;
+            $state->coreGoodsInflationEma = MacroEngine::TARGET_INFLATION;
+            $state->outputGap = $gap;
+            $state->outputGapEma = $gap;
+
+            return $this->subsystem->calculateTargetRate($state, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE);
+        };
+
+        $neutral = $targetFor(0.0);
+
+        // A boom is met with the canonical Taylor weight, unchanged.
+        $boomWeight = ($targetFor(0.02) - $neutral) / 0.02;
+        $this->assertEqualsWithDelta(MonetaryPolicySubsystem::TAYLOR_OUTPUT_GAP_WEIGHT, $boomWeight, 0.01);
+
+        // A mild slowdown leans harder than the canonical weight but short of the balanced-approach 1.0.
+        $mildWeight = ($neutral - $targetFor(-0.005)) / 0.005;
+        $this->assertGreaterThan(MonetaryPolicySubsystem::TAYLOR_OUTPUT_GAP_WEIGHT, $mildWeight);
+        $this->assertLessThan(1.0, $mildWeight);
+
+        // A severe recession reaches the Yellen (2012) balanced-approach weight or beyond.
+        $severeWeight = ($neutral - $targetFor(-0.03)) / 0.03;
+        $this->assertGreaterThanOrEqual(1.0, $severeWeight);
+
+        // And it keeps scaling with depth between the two, rather than saturating at a shallow gap.
+        $this->assertGreaterThan($mildWeight, $severeWeight);
+    }
 }

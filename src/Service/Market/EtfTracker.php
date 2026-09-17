@@ -3,7 +3,6 @@
 namespace App\Service\Market;
 
 use App\Entity\Etf;
-use App\Entity\EtfHistory;
 use App\Service\Math\FinancialConstants;
 use Doctrine\ORM\EntityManagerInterface;
 use App\Service\Event\MarketEventPublisher;
@@ -46,6 +45,13 @@ class EtfTracker
     }
 
     /** The divisor an index level is currently struck on, or null before one has been set. */
+    /**
+     * History rows accrued this bar, awaiting recordHistory().
+     *
+     * @var array<int, array<string, mixed>>
+     */
+    private array $pendingHistory = [];
+
     public function currentDivisor(string $ticker): ?float
     {
         $divisor = $this->redis->get(self::divisorKey($ticker));
@@ -216,20 +222,18 @@ class EtfTracker
             // 4. Persist the updated price
             $etf->setPrice((string) $price);
 
-            if ($recordHistory) {
-                $history = new EtfHistory();
-                $history->setEtf($etf);
-                $history->setPrice((string) $price);
-                // The premium is the difference between these two and it has to be archived as two numbers:
-                // the basket has moved on by the next tick, and the fee ratchet means the fund no longer
-                // owns the basket it owned when this row was written.
-                $history->setNav((string) round($navPerShare, 4));
-
-                // Null when the caller is not the ticker: an honest "written outside the simulation clock"
-                // rather than a zero that would sort the row before the beginning of time.
-                $history->setSimTime($simTime);
-
-                $this->entityManager->persist($history);
+            if ($recordHistory && $etf->getId() !== null) {
+                $this->pendingHistory[] = [
+                    'etf_id' => $etf->getId(),
+                    'price' => (string) $price,
+                    // The premium is the difference between these two and it has to be archived as two
+                    // numbers: the basket has moved on by the next tick, and the fee ratchet means the fund
+                    // no longer owns the basket it owned when this row was written.
+                    'nav' => (string) round($navPerShare, 4),
+                    // Null when the caller is not the ticker: an honest "written outside the simulation
+                    // clock" rather than a zero that would sort the row before the beginning of time.
+                    'sim_time' => $simTime,
+                ];
             }
         }
 
@@ -439,5 +443,43 @@ class EtfTracker
             }
             $this->redis->lPush($cacheKey, json_encode($point));
         }
+    }
+
+    /**
+     * Writes the bar's history rows in one statement, matching the stock and bond history inserts.
+     *
+     * THE ROW IS DATA, NOT AN ENTITY. A fund's history used to be persisted as a managed EtfHistory, which
+     * is four objects a bar that the unit of work then had to walk on every flush and hold in the identity
+     * map until the next working-set reload threw it away. Four rows is nothing to write and a great deal to
+     * track: the flush was computing changesets over a map that grew all bar for the sake of four inserts it
+     * could have sent itself. Bonds and stocks already wrote theirs this way; this is the last of the three
+     * to stop going through Doctrine.
+     */
+    public function recordHistory(): void
+    {
+        if ($this->pendingHistory === []) {
+            return;
+        }
+
+        $now = (new \DateTime())->format('Y-m-d H:i:s');
+        $values = [];
+        $params = [];
+
+        foreach ($this->pendingHistory as $row) {
+            $values[] = '(?, ?, ?, ?, ?)';
+            $params[] = $row['etf_id'];
+            $params[] = $row['price'];
+            $params[] = $row['nav'];
+            $params[] = $now;
+            $params[] = $row['sim_time'];
+        }
+
+        $this->pendingHistory = [];
+
+        $this->entityManager->getConnection()->executeStatement(
+            'INSERT INTO etf_history (etf_id, price, nav, recorded_at, sim_time) VALUES '
+            . implode(', ', $values),
+            $params
+        );
     }
 }

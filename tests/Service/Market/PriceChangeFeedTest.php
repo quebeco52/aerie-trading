@@ -7,6 +7,7 @@ namespace App\Tests\Service\Market;
 use App\Entity\Stock;
 use App\Entity\StockHistory;
 use App\Repository\StockHistoryRepository;
+use App\Command\MarketTickerCommand;
 use App\Service\Market\PriceChangeFeed;
 use Doctrine\ORM\EntityManagerInterface;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
@@ -213,7 +214,14 @@ class PriceChangeFeedTest extends TestCase
 
     public function testOneLookbackIsOneMonthOfHistoryRowsAtTheConfiguredRate(): void
     {
-        $this->assertSame(300, $this->feed->historyRowsPerLookback());
+        // A month of BARS, not of ticks. At 3,600 ticks a year the board writes 2,400 rows — the sampling
+        // target, which is coarser than the tick rate — so a month on file is two hundred of them. Reading
+        // a row count off the tick rate instead asks for three hundred and silently walks past the window.
+        $this->assertSame(
+            (int) ceil(MarketTickerCommand::historyPointsPerYear(self::TICKS_PER_YEAR) * PriceChangeFeed::LOOKBACK_YEARS),
+            $this->feed->historyRowsPerLookback()
+        );
+        $this->assertSame(200, $this->feed->historyRowsPerLookback());
     }
 
     public function testAColdBufferFallsBackToTheOldestPersistedCloseInTheLookback(): void
@@ -240,7 +248,7 @@ class PriceChangeFeedTest extends TestCase
     public function testTheFallbackAsksForExactlyOneLookbackOfRows(): void
     {
         $this->redis->method('exec')->willReturn([false]);
-        $this->repository->expects($this->once())->method('findRecentPrices')->with($this->anything(), 300)->willReturn([]);
+        $this->repository->expects($this->once())->method('findRecentPrices')->with($this->anything(), $this->feed->historyRowsPerLookback())->willReturn([]);
 
         $this->feed->changeByTicker([$this->makeStock('LAKE', 125.0)]);
     }

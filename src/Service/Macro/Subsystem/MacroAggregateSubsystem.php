@@ -50,18 +50,22 @@ class MacroAggregateSubsystem
     public const KALDOR_CREDIT_FRICTION_DRAG = 0.25;
     /** Countercyclical fiscal stimulus multiplier from corporate tax rate cuts. */
     public const KALDOR_FISCAL_MULTIPLIER = 0.50;
-    /** Sensitivity of the output gap to physical capital stock overhang (excess capacity drags down growth). */
-    public const KALDOR_CAPITAL_DRAG = 0.15;
+    /** Sensitivity of the output gap to physical capital stock overhang: the slow half of the Kaldor-Kalecki phase space, and the pent-up demand that ends a slump once the overhang has gone negative. */
+    public const KALDOR_CAPITAL_DRAG = 0.60;
     /** Bruno-Sachs (1985) supply-side elasticity of output to energy price shock (Blanchard-Gali 2007). */
     public const KALDOR_ENERGY_SUPPLY_DRAG = 0.004;
     /** Supply-side elasticity of output to excess freight/logistics costs. */
     public const KALDOR_FREIGHT_SUPPLY_DRAG = 0.002;
-    /** Stochastic diffusion volatility of the macroeconomic output gap. */
-    public const OUTPUT_GAP_DIFFUSION_SIGMA = 0.010;
+
+    // --- Aggregate Demand Disturbance (Smets-Wouters 2007) ---
+    /** Mean reversion speed of the aggregate demand disturbance: -4*ln(0.86) per year, from the estimated quarterly AR(1) coefficient. */
+    public const DEMAND_SHOCK_REVERSION = 0.60;
+    /** Innovation volatility of the aggregate demand disturbance, in annualized output gap drift units. */
+    public const DEMAND_SHOCK_SIGMA = 0.0055;
 
     // --- Metzler-Blinder Inventory Investment Cycle (Metzler 1941, Blinder 1982) ---
-    /** Sensitivity of output gap drift to involuntary inventory liquidation and restocking. */
-    public const METZLER_INVENTORY_DRAG = 0.08;
+    /** Sensitivity of output gap drift to involuntary inventory liquidation and restocking; inventory swings carry a large share of the peak-to-trough decline in a typical downturn. */
+    public const METZLER_INVENTORY_DRAG = 0.20;
     /** Annual adjustment speed of firm inventory target replenishment. */
     public const INVENTORY_ADJUSTMENT_SPEED = 0.80;
     /** Sensitivity of involuntary inventory accumulation to unexpected output gap deceleration. */
@@ -190,10 +194,14 @@ class MacroAggregateSubsystem
         );
 
         $jumpExponent = (float) ($jumpData['exponent'] ?? 0.0);
-        $logIncrement = ($clampedTrendGrowthRate * $dt) + $innovationDiffusion + $jumpExponent;
-        $clampedLogIncrement = max(MacroEngine::MIN_TFP_GROWTH_RATE * $dt, min(self::MAX_TFP_GROWTH_RATE * $dt, $logIncrement));
 
-        $state->totalFactorProductivityIndex = max(1.0, $currentTfp * exp($clampedLogIncrement));
+        // The growth rate is bounded above; the increment must not be bounded again. A per-year band
+        // scaled by dt is far narrower than an innovation scaled by sqrt(dt) -- at 3600 ticks/year by a
+        // factor of 26 -- so clipping here pins realized growth to the band's midpoint and takes the
+        // diffusion and the breakthrough jumps down with it.
+        $logIncrement = ($clampedTrendGrowthRate * $dt) + $innovationDiffusion + $jumpExponent;
+
+        $state->totalFactorProductivityIndex = max(1.0, $currentTfp * exp($logIncrement));
 
         return $clampedTrendGrowthRate;
     }
@@ -223,7 +231,7 @@ class MacroAggregateSubsystem
      * Kaldor (1940) Non-Linear Business Cycle with Modigliani Wealth Effect & Marshall-Lerner FX Drag.
      *
      * Solves continuous macroeconomic aggregate demand dynamics:
-     *   dy = [Momentum - CubicCapacity - RealRateDrag + FiscalStimulus - CapitalOverhang + WealthEffect - FxDrag] * dt + sigma * dW
+     *   dy = [Momentum - CubicCapacity - RealRateDrag + FiscalStimulus - CapitalOverhang + WealthEffect - FxDrag + DemandShock] * dt
      *
      * @param MacroState $state            Current macroeconomic state.
      * @param float      $yield5y          5-Year Treasury yield benchmark for business borrowing.
@@ -300,6 +308,14 @@ class MacroAggregateSubsystem
         );
         $inventoryDrag = self::METZLER_INVENTORY_DRAG * $state->inventoryStockGap;
 
+        // Smets & Wouters (2007) aggregate demand disturbance. Estimated demand shocks are persistent --
+        // a quarterly AR(1) coefficient near 0.86 -- because the things a demand impulse moves are stocks:
+        // an order book, a hiring plan, a capex budget. White noise on the level of the gap instead makes
+        // the top of an expansion a run of unrelated quarterly draws, and every draw large enough to knock
+        // the cycle out of its own phase; the deterministic period is 8.8 years and the realized one was 5.5.
+        $state->demandShock += (-self::DEMAND_SHOCK_REVERSION * $state->demandShock * $dt)
+            + (self::DEMAND_SHOCK_SIGMA * $stressMultiplier * sqrt($dt) * $outZ);
+
         $drift = ($momentum
             - $cubicConstraint
             - $monetaryDrag
@@ -311,10 +327,10 @@ class MacroAggregateSubsystem
             + $equityWealthEffect
             - $netExportDrag
             - $energySupplyDrag
-            - $freightSupplyDrag) * $dt;
-        $volatility = self::OUTPUT_GAP_DIFFUSION_SIGMA * $stressMultiplier * sqrt($dt) * $outZ;
+            - $freightSupplyDrag
+            + $state->demandShock) * $dt;
 
-        $newGap = $y + $drift + $volatility;
+        $newGap = $y + $drift;
         return max(-0.12, min(0.10, $newGap));
     }
 

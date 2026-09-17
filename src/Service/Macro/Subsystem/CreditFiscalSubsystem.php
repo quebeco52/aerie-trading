@@ -40,7 +40,7 @@ class CreditFiscalSubsystem
     /** Counter-cyclical appropriation response: a -3% output gap lifts the spending index ~6 points (discretionary stimulus plus stabilizers). */
     public const GOVT_COUNTERCYCLICAL_SENSITIVITY = 200.0;
     /** Mean-reversion speed of government spending toward structural baseline. */
-    public const GOVT_SPENDING_MEAN_REVERSION = 0.30;
+    public const GOVT_SPENDING_MEAN_REVERSION = 0.40;
     /** Stochastic volatility of annual budget appropriations, kept below the countercyclical swing so the cycle drives spending. */
     public const GOVT_SPENDING_VOLATILITY = 0.03;
     /** Poisson intensity of major geopolitical events triggering spending surges. */

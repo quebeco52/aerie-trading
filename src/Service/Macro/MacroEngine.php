@@ -111,9 +111,9 @@ class MacroEngine
 
     // --- New Keynesian Phillips Curve Dynamics ---
     /** Maximum asymptotic output gap capacity ceiling where supply bottlenecks bind (Benigno & Eggertsson 2023). */
-    public const PHILLIPS_MAX_CAPACITY = 0.08;
+    public const PHILLIPS_MAX_CAPACITY = 0.11;
     /** Base slope sensitivity of convex Phillips curve to output gap capacity. */
-    public const PHILLIPS_CONVEX_KAPPA = 0.020;
+    public const PHILLIPS_CONVEX_KAPPA = 0.012;
     /** Downward nominal rigidity factor dampening deflationary pressure during recessions (Bewley 1999). */
     public const PHILLIPS_DOWNWARD_RIGIDITY_FACTOR = 0.35;
     /** Weight of supercore services inflation in headline PCE/CPI basket (Shapiro 2022). */
@@ -338,8 +338,7 @@ class MacroEngine
         private readonly AssetMarketSubsystem $assetSubsystem,
         private readonly CreditFiscalSubsystem $creditFiscalSubsystem,
         private readonly ?LoggerInterface $logger = null,
-    ) {
-    }
+    ) {}
 
     private function loadState(): MacroState
     {
@@ -576,27 +575,27 @@ class MacroEngine
 
         $eventType = match (true) {
             $state->interbankLiquiditySpread >= self::SYSTEMIC_LIQUIDITY_FREEZE_SPREAD
-                => ShockEvent::SYSTEMIC_LIQUIDITY_FREEZE,
+            => ShockEvent::SYSTEMIC_LIQUIDITY_FREEZE,
 
             $state->highYieldCreditSpread >= self::SYSTEMIC_CREDIT_SEIZURE_SPREAD
-                => ShockEvent::CREDIT_MARKET_SEIZURE,
+            => ShockEvent::CREDIT_MARKET_SEIZURE,
 
             // The backstop only reads as a backstop if it arrives while conditions are actually stressed.
             $state->qeIntensity >= self::SYSTEMIC_INTERVENTION_QE_INTENSITY && $state->outputGapEma < 0.0
-                => ShockEvent::TITAN_INTERVENTION,
+            => ShockEvent::TITAN_INTERVENTION,
 
             $state->recessionProbability >= self::SYSTEMIC_RECESSION_DECLARE_PROBABILITY
                 && $state->outputGap <= self::SYSTEMIC_RECESSION_DECLARE_GAP
-                => ShockEvent::RECESSION_DECLARED,
+            => ShockEvent::RECESSION_DECLARED,
 
             $state->inversionDuration >= self::SYSTEMIC_INVERSION_ALARM_YEARS
-                => ShockEvent::YIELD_CURVE_INVERSION_ALARM,
+            => ShockEvent::YIELD_CURVE_INVERSION_ALARM,
 
             // Deep value with the cycle already turning: capital steps in as the gap closes from below.
             $state->equityRiskPremium >= self::SYSTEMIC_DEPLOYMENT_ERP_THRESHOLD
                 && $state->outputGapEma < 0.0
                 && $state->outputGap > $state->outputGapEma
-                => ShockEvent::SOVEREIGN_WEALTH_DEPLOYMENT,
+            => ShockEvent::SOVEREIGN_WEALTH_DEPLOYMENT,
 
             default => null,
         };
@@ -622,4 +621,3 @@ class MacroEngine
         $this->snapshotRecorder->recordSnapshot($macroState, $conn);
     }
 }
-
