@@ -1290,9 +1290,9 @@ class MacroEngineTest extends TestCase
         $this->assertGreaterThanOrEqual(MacroEngine::MIN_NATURAL_RATE, $stagnationState->naturalRate, 'Natural real rate must respect statutory floor.');
     }
 
-    public function testQuantitativeTighteningActivatesDuringOverheating(): void
+    public function testQuantitativeTighteningRunsOffAPortfolioAndNeverGoesNetShort(): void
     {
-        // Overheating expansion: output gap +2.5% (> 1.0%), inflation 3.5% (> 2.5%)
+        // Overheating expansion: output gap +2.5% (> 1.0%), inflation 3.5% (> 2.2%)
         $overheatingState = new \App\Service\Macro\MacroState();
         $overheatingState->outputGap = 0.025;
         $overheatingState->inflation = 0.035;
@@ -1300,12 +1300,89 @@ class MacroEngineTest extends TestCase
         $overheatingState->tipsBreakeven = 0.030;
         $overheatingState->balanceSheetIntensity = 0.0;
 
-        $yieldData = $this->monetarySubsystem->calculateYieldCurveAndQE($overheatingState, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 1.0);
+        $noPortfolio = $this->monetarySubsystem->calculateBalanceSheetOperations($overheatingState, 1.0);
 
-        // Balance sheet intensity should be negative (QT active)
-        $this->assertLessThan(0.0, $yieldData['new_balance_sheet_intensity'], 'Central bank balance sheet intensity must turn negative (QT) during economic overheating.');
-        $this->assertGreaterThan(0.0, $yieldData['new_qt_intensity'], 'QT intensity must be positive during overheating.');
-        $this->assertEquals(0.0, $yieldData['new_qe_intensity'], 'QE asset purchases must be inactive during overheating.');
+        // A bank that never bought anything has nothing to sell. Letting the intensity go negative here made it
+        // net short duration -- a 60bp+ lift on the thirty-year out of a portfolio that was never acquired.
+        $this->assertEquals(0.0, $noPortfolio['new_balance_sheet_intensity'], 'Overheating must not create a tightening position from a zero balance sheet.');
+        $this->assertEquals(0.0, $noPortfolio['new_qt_intensity'], 'QT intensity requires a portfolio to run off.');
+
+        // With a portfolio in hand, the same overheating runs it down toward zero without overshooting.
+        $withPortfolio = clone $overheatingState;
+        $withPortfolio->balanceSheetIntensity = 0.008;
+        $withPortfolio->balanceSheetHoldTimer = 0.0;
+
+        $runoff = $this->monetarySubsystem->calculateBalanceSheetOperations($withPortfolio, 0.25);
+
+        $this->assertLessThan(0.008, $runoff['new_balance_sheet_intensity'], 'Overheating must cut the reinvestment hold short and start the runoff.');
+        $this->assertGreaterThan(0.0, $runoff['new_balance_sheet_intensity'], 'A quarter of runoff must not empty the whole portfolio.');
+        $this->assertGreaterThan(0.0, $runoff['new_qt_intensity'], 'QT intensity reports the portfolio being unwound.');
+
+        // Runoff is monotone to zero and stops there, however long the overheating lasts.
+        $state = clone $withPortfolio;
+        for ($i = 0; $i < 200; $i++) {
+            $step = $this->monetarySubsystem->calculateBalanceSheetOperations($state, 0.25);
+            $this->assertGreaterThanOrEqual(0.0, $step['new_balance_sheet_intensity'], 'The balance sheet is a stock and can never go net short.');
+            $this->assertLessThanOrEqual($state->balanceSheetIntensity + 1e-12, $step['new_balance_sheet_intensity'], 'Runoff must be monotone while overheating persists.');
+            $state->balanceSheetIntensity = $step['new_balance_sheet_intensity'];
+            $state->balanceSheetHoldTimer = $step['new_hold_timer'];
+        }
+        $this->assertEqualsWithDelta(0.0, $state->balanceSheetIntensity, 1e-6, 'A sustained runoff settles at zero, not below it.');
+    }
+
+    public function testBalanceSheetHoldsThroughReinvestmentThenRunsOff(): void
+    {
+        // Purchases first: a deep recession at the lower bound.
+        $state = new \App\Service\Macro\MacroState();
+        $state->outputGap = -0.025;
+        $state->inflation = 0.010;
+        $state->policyRate = 0.002;
+        $state->tipsBreakeven = 0.015;
+
+        for ($i = 0; $i < 8; $i++) {
+            $step = $this->monetarySubsystem->calculateBalanceSheetOperations($state, 0.25);
+            $state->balanceSheetIntensity = $step['new_balance_sheet_intensity'];
+            $state->balanceSheetHoldTimer = $step['new_hold_timer'];
+        }
+        $peak = $state->balanceSheetIntensity;
+        $this->assertGreaterThan(0.0, $peak, 'QE must build a portfolio during a lower-bound recession.');
+
+        // Recovery with no overheating: the stock is held through the reinvestment window, then shed.
+        $state->outputGap = 0.002;
+        $state->inflation = 0.019;
+        $state->policyRate = 0.02;
+
+        $step = $this->monetarySubsystem->calculateBalanceSheetOperations($state, 0.25);
+        $this->assertEqualsWithDelta($peak, $step['new_balance_sheet_intensity'], 1e-9, 'The reinvestment hold keeps the portfolio flat.');
+        $this->assertEquals(0.0, $step['new_qt_intensity'], 'Holding is not runoff.');
+
+        $state->balanceSheetHoldTimer = \App\Service\Macro\Subsystem\MonetaryPolicySubsystem::BALANCE_SHEET_REINVESTMENT_HOLD_YEARS;
+        $step = $this->monetarySubsystem->calculateBalanceSheetOperations($state, 0.25);
+        $this->assertLessThan($peak, $step['new_balance_sheet_intensity'], 'Once the hold expires the portfolio runs off.');
+        $this->assertGreaterThan(0.0, $step['new_qt_intensity'], 'Passive runoff still reports QT intensity.');
+    }
+
+    public function testOverheatingAcceleratesRunoffWithoutChangingItsFloor(): void
+    {
+        $base = new \App\Service\Macro\MacroState();
+        $base->balanceSheetIntensity = 0.008;
+        $base->balanceSheetHoldTimer = \App\Service\Macro\Subsystem\MonetaryPolicySubsystem::BALANCE_SHEET_REINVESTMENT_HOLD_YEARS;
+        $base->policyRate = 0.035;
+        $base->tipsBreakeven = 0.02;
+
+        $calm = clone $base;
+        $calm->outputGap = 0.0;
+        $calm->inflation = 0.02;
+
+        $hot = clone $base;
+        $hot->outputGap = 0.030;
+        $hot->inflation = 0.040;
+
+        $calmStep = $this->monetarySubsystem->calculateBalanceSheetOperations($calm, 0.25);
+        $hotStep = $this->monetarySubsystem->calculateBalanceSheetOperations($hot, 0.25);
+
+        $this->assertLessThan($calmStep['new_balance_sheet_intensity'], $hotStep['new_balance_sheet_intensity'], 'Overheating must shed duration faster than a passive runoff.');
+        $this->assertGreaterThan(0.0, $hotStep['new_balance_sheet_intensity'], 'Faster is not unbounded: the floor is still zero.');
     }
 
     public function testACMTermPremiumDecompositionIntegrity(): void

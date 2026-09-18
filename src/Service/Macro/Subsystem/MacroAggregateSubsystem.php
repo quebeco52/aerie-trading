@@ -61,7 +61,7 @@ class MacroAggregateSubsystem
     /** Mean reversion speed of the aggregate demand disturbance: -4*ln(0.86) per year, from the estimated quarterly AR(1) coefficient. */
     public const DEMAND_SHOCK_REVERSION = 0.60;
     /** Innovation volatility of the aggregate demand disturbance, in annualized output gap drift units. */
-    public const DEMAND_SHOCK_SIGMA = 0.0140;
+    public const DEMAND_SHOCK_SIGMA = 0.010;
 
     /** Stochastic micro-diffusion volatility of the output gap: realistic quarterly variance without breaking cycle phase. */
     public const OUTPUT_GAP_DIFFUSION_SIGMA = 0.0025;

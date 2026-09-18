@@ -196,25 +196,44 @@ class MonetaryPolicySubsystemTest extends TestCase
 
     public function testBalanceSheetReinvestmentHoldPeriodBeforeQt(): void
     {
-        // Central bank starts with balance sheet intensity from prior QE
+        // Central bank starts with a portfolio from prior QE, in a calm economy that trips neither QT threshold
+        // (QT_ACTIVATION_GAP_THRESHOLD 1.0%, QT_ACTIVATION_INFLATION_THRESHOLD 2.2%), so only the clock can end
+        // the reinvestment phase.
         $state = new MacroState();
         $state->policyRate = 0.03;
-        $state->balanceSheetIntensity = 0.015;
+        $state->balanceSheetIntensity = 0.008;
         $state->balanceSheetHoldTimer = 0.0;
-        // Overheating economy meets QT activation criteria (gap > 0.015, inflation > 0.030)
-        $state->outputGap = 0.025;
-        $state->inflation = 0.035;
+        $state->outputGap = 0.005;
+        $state->inflation = 0.020;
 
-        // Step 1: dt = 1.0 year -> hold timer becomes 1.0 (< 2.0 years)
+        // Step 1: dt = 1.0 year -> hold timer becomes 1.0 (< BALANCE_SHEET_REINVESTMENT_HOLD_YEARS)
         $curveYear1 = $this->subsystem->calculateYieldCurveAndQE($state, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 1.0);
         $this->assertEqualsWithDelta(1.0, $curveYear1['new_hold_timer'], 0.01);
-        $this->assertEqualsWithDelta(0.015, $curveYear1['new_balance_sheet_intensity'], 0.001, 'Balance sheet must remain held during reinvestment phase.');
+        $this->assertEqualsWithDelta(0.008, $curveYear1['new_balance_sheet_intensity'], 0.001, 'Balance sheet must remain held during reinvestment phase.');
 
-        // Step 2: dt = 1.1 years -> hold timer reaches 2.1 (>= 2.0 years)
+        // Step 2: the clock crosses the hold window and passive runoff starts
         $state->balanceSheetHoldTimer = 1.0;
         $curveYear2 = $this->subsystem->calculateYieldCurveAndQE($state, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 1.1);
         $this->assertGreaterThanOrEqual(MonetaryPolicySubsystem::BALANCE_SHEET_REINVESTMENT_HOLD_YEARS, $curveYear2['new_hold_timer']);
-        $this->assertLessThan(0.015, $curveYear2['new_balance_sheet_intensity'], 'Balance sheet runoff (QT) must begin once hold timer expires.');
+        $this->assertLessThan(0.008, $curveYear2['new_balance_sheet_intensity'], 'Balance sheet runoff (QT) must begin once hold timer expires.');
+        $this->assertGreaterThanOrEqual(0.0, $curveYear2['new_balance_sheet_intensity'], 'Runoff stops at zero; the bank cannot go net short.');
+    }
+
+    public function testOverheatingEndsTheReinvestmentHoldEarly(): void
+    {
+        // Same portfolio and the same fresh hold clock, but an economy past both QT thresholds. The Fed reinvested
+        // for three years after QE3 and for three months after the 2021 round: inflation, not the clock, decided.
+        $state = new MacroState();
+        $state->policyRate = 0.03;
+        $state->balanceSheetIntensity = 0.008;
+        $state->balanceSheetHoldTimer = 0.0;
+        $state->outputGap = 0.025;
+        $state->inflation = 0.035;
+
+        $step = $this->subsystem->calculateBalanceSheetOperations($state, 0.25);
+
+        $this->assertLessThan(0.008, $step['new_balance_sheet_intensity'], 'Overheating must end the reinvestment hold before the clock does.');
+        $this->assertGreaterThan(0.0, $step['new_qt_intensity'], 'The portfolio being unwound is what QT intensity reports.');
     }
 
     public function testSvenssonCurvatureScalingReflectsDieboldLiEmpiricalCalibration(): void
