@@ -72,8 +72,8 @@ class MacroEngine
     public const MACRO_VOL_BASE_ANCHOR            = 0.15;
 
     // --- SVJJ Stochastic Volatility & Contemporaneous Jumps (Duffie, Pan, & Singleton 2000) ---
-    /** Mean exponential jump size added directly to instantaneous variance (mu_v). */
-    public const SVJJ_MU_V = 0.05;
+    /** Mean variance jump (mu_v): a downside jump lifts vol from the 15% anchor to ~19%. Sized so the jumps fund about a fifth of long-run variance, leaving the diffusion an anchor of its own well clear of the 8% floor; at 0.05 they funded 73% of it and the diffusive anchor sat BELOW that floor. */
+    public const SVJJ_MU_V = 0.015;
 
     // --- Taylor Rule & The Evans Rule (Forward Guidance) ---
     /** Evans Rule forward guidance: Unemployment threshold required before lifting off from ZLB. */

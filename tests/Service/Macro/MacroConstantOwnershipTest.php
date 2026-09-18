@@ -113,21 +113,31 @@ class MacroConstantOwnershipTest extends TestCase
      * reader is reaching across a boundary for a parameter that is supposed to be private to an equation.
      *
      * A subsystem's own test is not another file for this purpose -- a dial the test asserts on is still
-     * that subsystem's dial, and naming it there is the point.
+     * that subsystem's dial, and naming it there is the point. That covers the test named after the class
+     * and any other test written against that one subsystem: a calibration invariant belongs in the suite
+     * that runs calibration invariants, not in the class-named unit test, and MacroVolatilityAnchorTest
+     * asserting on AssetMarketSubsystem's variance dials is the rule working rather than failing.
+     *
+     * The exemption is only ever extended to a file under tests/ that names exactly ONE subsystem. A test
+     * reaching into a second subsystem is crossing the boundary this guards, and anything in src/ is
+     * checked strictly whatever it names.
      */
     public function testASubsystemsOwnConstantIsNotReadFromOutsideIt(): void
     {
+        $subsystemNames = array_keys($this->subsystemSources());
+
         $leaked = [];
-        foreach ($this->subsystemSources() as $subsystem => $_) {
-            $ownTest = sprintf('%sTest.php', $subsystem);
+        foreach ($subsystemNames as $subsystem) {
             /** @var class-string $class */
             $class = 'App\\Service\\Macro\\Subsystem\\' . $subsystem;
             foreach (array_keys((new \ReflectionClass($class))->getConstants()) as $name) {
                 foreach ($this->otherSources() as $path) {
-                    if (basename($path) === $ownTest) {
+                    $source = (string) file_get_contents($path);
+
+                    if ($this->isDedicatedTestFor($path, $source, $subsystem, $subsystemNames)) {
                         continue;
                     }
-                    if (preg_match('/' . $subsystem . '::' . $name . '\b/', (string) file_get_contents($path)) === 1) {
+                    if (preg_match('/' . $subsystem . '::' . $name . '\b/', $source) === 1) {
                         $leaked[] = sprintf('%s::%s is read by %s', $subsystem, $name, basename($path));
                     }
                 }
@@ -139,5 +149,33 @@ class MacroConstantOwnershipTest extends TestCase
             $leaked,
             "Shared parameters belong on MacroEngine:\n  " . implode("\n  ", $leaked)
         );
+    }
+
+    /**
+     * Whether this file is a test written against this one subsystem, and so allowed to name its dials.
+     *
+     * @param  list<string> $subsystemNames Every subsystem short class name.
+     */
+    private function isDedicatedTestFor(string $path, string $source, string $subsystem, array $subsystemNames): bool
+    {
+        if (basename($path) === sprintf('%sTest.php', $subsystem)) {
+            return true;
+        }
+
+        if (!str_contains($path, '/tests/')) {
+            return false;
+        }
+
+        // Dedicated means it reaches into this subsystem and no other.
+        foreach ($subsystemNames as $other) {
+            if ($other === $subsystem) {
+                continue;
+            }
+            if (preg_match('/\b' . $other . '::/', $source) === 1) {
+                return false;
+            }
+        }
+
+        return preg_match('/\b' . $subsystem . '::/', $source) === 1;
     }
 }

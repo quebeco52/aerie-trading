@@ -42,8 +42,12 @@ class AssetMarketSubsystem
     public const MACRO_VOL_MAX_BASELINE           = 0.45;
     /** Mean-reversion speed (kappa) of the continuous macroeconomic variance process. */
     public const MACRO_VOL_KAPPA                  = 2.0;
-    /** Volatility of volatility (sigma) in the macroeconomic variance diffusion. */
-    public const MACRO_VOL_SIGMA                  = 0.30;
+    /** Failsafe floor on realized equity volatility (8%), below the calmest stretch of the cycle. It catches a numerically degenerate variance draw and nothing else: if the process rests on it the parameters above are wrong, because a clamp that binds is setting the level this class claims to anchor. */
+    public const MACRO_VOL_FLOOR                  = 0.08;
+    /** Failsafe ceiling on realized equity volatility (80%), above the 2008 VIX peak. */
+    public const MACRO_VOL_CEILING                = 0.80;
+    /** Volatility of volatility (sigma) in the macroeconomic variance diffusion. Kept under sqrt(2 * kappa * theta) measured on the JUMP-ADJUSTED anchor (~0.26), so the Feller condition holds and the variance stays strictly positive. Above it the stationary density piles onto the 8% clamp, and the clamp -- not this anchor -- sets the realized level. */
+    public const MACRO_VOL_SIGMA                  = 0.15;
 
     // --- SVJJ Stochastic Volatility & Contemporaneous Jumps (Duffie, Pan, & Singleton 2000) ---
     /** Annual Poisson arrival intensity of market-wide volatility jump shocks. */
@@ -322,14 +326,39 @@ class AssetMarketSubsystem
             dt: $dt
         );
 
-        $expectedVarJump = (self::SVJJ_P_UP * MacroEngine::SVJJ_MU_V * 0.5) + ((1.0 - self::SVJJ_P_UP) * MacroEngine::SVJJ_MU_V);
-        $jumpVarianceDrag = (self::SVJJ_LAMBDA * $expectedVarJump) / 3.0;
-        $adjustedTheta = max(0.0001, $longTermVar - $jumpVarianceDrag);
+        $adjustedTheta = max(0.0001, $longTermVar - self::jumpVarianceDrag());
 
         $nextVar = $this->mathUtility->calculateQEVarianceStep($currentVar, $adjustedTheta, self::MACRO_VOL_KAPPA, self::MACRO_VOL_SIGMA, $dt);
         $nextVar += $jumpData['var_jump'];
 
-        return max(0.08, min(0.80, sqrt($nextVar)));
+        return max(self::MACRO_VOL_FLOOR, min(self::MACRO_VOL_CEILING, sqrt($nextVar)));
+    }
+
+    /**
+     * Long-run variance the SVJJ jumps supply, which the diffusion's anchor must give back.
+     *
+     * The jumps are additive: for dv = kappa*(theta_adj - v)dt + sigma*sqrt(v)dW + dJ with arrivals at
+     * lambda and mean size m, the stationary mean is theta_adj + lambda*m/kappa. So a process that is to
+     * revert to MACRO_VOL_BASE_ANCHOR has to be handed an anchor lower by exactly lambda*m/kappa, and the
+     * divisor is the mean-reversion speed and nothing else. A bare 3.0 stood here, leaving a third of the
+     * jump variance uncompensated: the series reverted to 16.8% against a 15% anchor, and nothing measured
+     * it because the MACRO_VOL_FLOOR clamp absorbed the rest.
+     *
+     * The mean size is the jump's own asymmetry -- a crash spikes variance harder than a rally, at the share
+     * MathUtility applies when it draws one -- so the two must be read off the same constant or the
+     * compensation silently desynchronizes from the thing it compensates for.
+     *
+     * Exposed because App\Tests\Financial\MacroVolatilityAnchorTest asserts the round trip against it.
+     * A test that recomputed this from the constants would prove only that it agrees with itself.
+     *
+     * @return float Variance per unit time the jump process contributes in the long run.
+     */
+    public static function jumpVarianceDrag(): float
+    {
+        $meanVarianceJump = (self::SVJJ_P_UP * MacroEngine::SVJJ_MU_V * MathUtility::VARIANCE_JUMP_UPSIDE_MEAN_SHARE)
+            + ((1.0 - self::SVJJ_P_UP) * MacroEngine::SVJJ_MU_V);
+
+        return (self::SVJJ_LAMBDA * $meanVarianceJump) / self::MACRO_VOL_KAPPA;
     }
 
     /**
