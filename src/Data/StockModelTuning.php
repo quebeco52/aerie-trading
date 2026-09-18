@@ -398,6 +398,32 @@ class StockModelTuning
             ModelParam::OperatingCyclicality->value => 1.25, // Moderately high cyclicality driven by mortgage rates and building permits
         ],
 
+        // --- Wren Access Systems (WREN) ---
+        // Locks, cylinders and automated entrances (Assa Abloy archetype), and the counterweight to NUTH in
+        // the same industry: Nuthatch sells into the building permit, Wren sells into the door that is
+        // already hung. A lock is replaced because it failed, was rekeyed or fell out of code, none of
+        // which waits for a construction cycle, so the aftermarket carries the majority of the book and
+        // the cyclicality sits below the sector rather than above it.
+        'WREN' => [
+            ModelParam::OemEquipmentWeight->value   => 0.45, // Entrance automation, door hardware & access control fitted into new build
+            ModelParam::AftermarketMroWeight->value => 0.55, // Cylinders, credentials, rekeying & service on a century of installed doors
+            ModelParam::PricingPowerIndex->value    => 0.85, // Specified into building codes and insurance terms; the hardware is a rounding error against the opening it secures
+            ModelParam::OperatingCyclicality->value => 0.85, // Replacement-driven and non-discretionary: security spend survives the downturn that stops the build
+        ],
+
+        // --- Chough Mining Systems (CHUF) ---
+        // Underground drill rigs, loaders and rock excavation automation (Epiroc archetype). Sits against
+        // BUZT, which moves earth in daylight, and against SNDR, which sells the carbide that Chough's rigs
+        // consume. Its aftermarket is not a service contract but a consumption rate: a mine that is still
+        // producing is still wearing out bits, hoses and booms whatever the capital budget says, which is
+        // what keeps the stream running through a cycle that stops new rig orders outright.
+        'CHUF' => [
+            ModelParam::OemEquipmentWeight->value   => 0.35, // Teleremote drill rigs, underground loaders & haulage
+            ModelParam::AftermarketMroWeight->value => 0.65, // Rock drilling consumables, rebuilds & automation service on the installed fleet
+            ModelParam::PricingPowerIndex->value    => 0.80, // An idle stope costs more per shift than the rig; availability is priced, not iron
+            ModelParam::OperatingCyclicality->value => 0.95, // Consumption-led rather than capex-led, so it tracks ore output instead of mine investment
+        ],
+
         // --- Crossbill Precision Tooling (CBIL) ---
         // Operates as an industrial tollbooth with incredibly high margins and ROIC due to absolute quality control.
         // Extremely insulated from typical manufacturing boom/bust.
@@ -449,6 +475,18 @@ class StockModelTuning
             ModelParam::ForeignMilitarySalesWeight->value => 0.20,
         ],
 
+        // --- Ptarmigan Land Systems (PTAR) ---
+        // Tracked combat vehicles and artillery natures sold abroad (Hagglunds / Bofors archetype). The
+        // mirror image of GRIP: where the aircraft prime lives on domestic cost-plus, Ptarmigan lives on
+        // export campaigns, so its book is won and lost on foreign procurement rather than guaranteed by
+        // the territorial budget. Ammunition is a consumable, which is why the fixed-price development
+        // sleeve stays small: the money is in refilling magazines, not in designing new ones.
+        'PTAR' => [
+            ModelParam::CostPlusWeight->value             => 0.30,
+            ModelParam::FixedPriceDevWeight->value        => 0.15,
+            ModelParam::ForeignMilitarySalesWeight->value => 0.55,
+        ],
+
         // --- Bird Watch Security (WATCH) ---
         // Premier domestic physical asset protection & municipal security retainers.
         'WATCH' => [
@@ -476,6 +514,16 @@ class StockModelTuning
             ModelParam::ContractCharterWeight->value => 0.25,
         ],
 
+        // --- Gannet Ro-Ro Lines (GANN) ---
+        // Deep-sea vehicle carriers and ro-pax tonnage on multi-year contracts of affreightment (Wallenius
+        // Wilhelmsen / Stena archetype). Deliberately the inverse of ALBT's spot book: the same freight
+        // cycle reaches both, but Albatross takes it in the quarter it happens and Gannet takes it when a
+        // contract is renewed. Without a name carrying cover, the spot cycle has nothing to be read against.
+        'GANN' => [
+            ModelParam::SpotCharterWeight->value     => 0.25,
+            ModelParam::ContractCharterWeight->value => 0.75,
+        ],
+
         // --- Canvasback Logistics (CANV) ---
         // Integrated freight & last-mile delivery provider. Skewed toward dedicated enterprise contracts & 3PL.
         'CANV' => [
@@ -497,6 +545,20 @@ class StockModelTuning
             ModelParam::IndustrialCarloadsWeight->value => 0.15,
             ModelParam::BulkCommoditiesWeight->value    => 0.10,
             ModelParam::PricingPowerIndex->value        => 0.80,
+        ],
+
+        // --- Redwing Ore Line (REDW) ---
+        // The heavy-haul line off the northern orefields to the ice-free quays: ore, then timber and
+        // finished steel on the return working. A pure freight hauler, so the commuter sleeve KSTL runs at
+        // half its network is zero here and the other three account for the whole line. That makes it the
+        // board's one railway whose revenue answers to mining output rather than to employment, and the
+        // rail leg of the same cycle WING, CNDR and FULM are already exposed to.
+        'REDW' => [
+            ModelParam::SubscriptionWeight->value       => 0.00, // No passenger franchise: the line exists for the orefields
+            ModelParam::BulkCommoditiesWeight->value    => 0.60, // Unit ore trains under long-term tonnage agreements
+            ModelParam::IndustrialCarloadsWeight->value => 0.30, // Timber, pellets and finished steel
+            ModelParam::IntermodalFreightWeight->value  => 0.10, // Containerised backhaul on otherwise empty returns
+            ModelParam::PricingPowerIndex->value        => 0.75, // A single-track monopoly on the corridor, bounded by what the mine can bear
         ],
 
         // =====================================================================
