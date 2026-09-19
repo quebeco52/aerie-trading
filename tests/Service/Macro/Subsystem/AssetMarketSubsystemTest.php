@@ -45,7 +45,7 @@ class AssetMarketSubsystemTest extends TestCase
         $state->residentialPropertyIndex = 100.0;
 
         $this->subsystem->calculateCommercialPropertyIndex($state, 0.25);
-        $this->subsystem->calculateResidentialPropertyIndex($state, 0.25);
+        $this->subsystem->calculateResidentialPropertyIndex($state, MacroEngine::TARGET_INFLATION, 0.25);
 
         $this->assertGreaterThan(0.0, $state->commercialPropertyIndex);
         $this->assertGreaterThan(0.0, $state->residentialPropertyIndex);
@@ -116,7 +116,7 @@ class AssetMarketSubsystemTest extends TestCase
         $stateBoom->sloosTighteningIndexEma = 0.0;
         $stateBoom->housingStartsIndex = 100.0;
 
-        $this->subsystem->calculateHousingStarts($stateBoom, $dt);
+        $this->subsystem->calculateHousingStarts($stateBoom, MacroEngine::TARGET_INFLATION, $dt);
         $this->assertGreaterThan(100.0, $stateBoom->housingStartsIndex, 'High Tobin Q and affordable mortgage finance must stimulate housing starts');
     }
 
@@ -137,9 +137,9 @@ class AssetMarketSubsystemTest extends TestCase
         $dearerTenYear = clone $base;
         $dearerTenYear->yield10yEma = 0.060;
 
-        $this->subsystem->calculateResidentialPropertyIndex($base, 0.25);
-        $this->subsystem->calculateResidentialPropertyIndex($steeperLongEnd, 0.25);
-        $this->subsystem->calculateResidentialPropertyIndex($dearerTenYear, 0.25);
+        $this->subsystem->calculateResidentialPropertyIndex($base, MacroEngine::TARGET_INFLATION, 0.25);
+        $this->subsystem->calculateResidentialPropertyIndex($steeperLongEnd, MacroEngine::TARGET_INFLATION, 0.25);
+        $this->subsystem->calculateResidentialPropertyIndex($dearerTenYear, MacroEngine::TARGET_INFLATION, 0.25);
 
         $this->assertEqualsWithDelta($base->residentialPropertyIndex, $steeperLongEnd->residentialPropertyIndex, 1e-9, 'The 30Y yield must not enter the mortgage rate.');
         $this->assertLessThan($base->residentialPropertyIndex, $dearerTenYear->residentialPropertyIndex, 'A dearer 10Y raises the mortgage user cost and lowers fundamental home prices.');
@@ -222,5 +222,43 @@ class AssetMarketSubsystemTest extends TestCase
         $this->assertLessThan($neutral, $stagflationaryPanic, 'The terms-of-trade loss outweighs a mild safe-haven bid.');
         $this->assertGreaterThan(60.0, $stagflationaryPanic, 'The rate stays inside its floor.');
         $this->assertLessThan(160.0, $stagflationaryPanic, 'The rate stays inside its ceiling.');
+    }
+
+    /** The user cost subtracts EXPECTED inflation: a headline spike with expectations anchored leaves home prices alone. */
+    public function testAHeadlineSpikeWithAnchoredExpectationsDoesNotMoveHomePrices(): void
+    {
+        $calm = $this->neutralHousingState();
+        $spiked = $this->neutralHousingState();
+        $spiked->inflation = 0.06;
+        $spiked->inflationEma = 0.05;
+
+        $this->subsystem->calculateResidentialPropertyIndex($calm, MacroEngine::TARGET_INFLATION, 0.25);
+        $this->subsystem->calculateResidentialPropertyIndex($spiked, MacroEngine::TARGET_INFLATION, 0.25);
+
+        $this->assertEqualsWithDelta($calm->residentialPropertyIndex, $spiked->residentialPropertyIndex, 1e-9);
+    }
+
+    /** Higher expected inflation lowers the real cost of owning and lifts fundamental home prices. */
+    public function testHigherExpectedInflationLowersTheUserCostAndLiftsHomePrices(): void
+    {
+        $anchored = $this->neutralHousingState();
+        $unanchored = $this->neutralHousingState();
+
+        $this->subsystem->calculateResidentialPropertyIndex($anchored, MacroEngine::TARGET_INFLATION, 0.25);
+        $this->subsystem->calculateResidentialPropertyIndex($unanchored, 0.03, 0.25);
+
+        $this->assertGreaterThan($anchored->residentialPropertyIndex, $unanchored->residentialPropertyIndex);
+    }
+
+    private function neutralHousingState(): MacroState
+    {
+        $state = new MacroState();
+        $state->yield10yEma = 0.040;
+        $state->unemploymentRateEma = $state->nairu;
+        $state->inflationEma = MacroEngine::TARGET_INFLATION;
+        $state->outputGapEma = 0.0;
+        $state->residentialPropertyIndex = 100.0;
+
+        return $state;
     }
 }

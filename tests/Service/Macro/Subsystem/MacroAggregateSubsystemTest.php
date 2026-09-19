@@ -47,7 +47,7 @@ class MacroAggregateSubsystemTest extends TestCase
         $state->policyRate = 0.02;
         $state->wageGrowth = 0.035;
 
-        $newGap = $this->subsystem->calculateOutputGap($state, 0.03, MacroEngine::BASE_NATURAL_RATE, 0.25, 1.0);
+        $newGap = $this->subsystem->calculateOutputGap($state, 0.03, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0);
         $newInflation = $this->subsystem->calculateInflation($state, MacroEngine::TARGET_INFLATION, 1.0, 0.25);
 
         $this->assertGreaterThan(-0.12, $newGap);
@@ -92,7 +92,7 @@ class MacroAggregateSubsystemTest extends TestCase
         $state->outputGapEma = 0.02; // Sharp deceleration from +2% to -2%
         $state->inventoryStockGap = 0.0;
 
-        $updatedGap = $this->subsystem->calculateOutputGap($state, 0.035, MacroEngine::BASE_NATURAL_RATE, 0.25, 1.0);
+        $updatedGap = $this->subsystem->calculateOutputGap($state, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0);
 
         // Decelerating demand causes involuntary inventory accumulation (+gap)
         $this->assertGreaterThan(0.0, $state->inventoryStockGap, 'Demand slowdown must induce involuntary inventory overhang');
@@ -323,8 +323,8 @@ class MacroAggregateSubsystemTest extends TestCase
         $highEra->termPremiumRegime = 0.020;
         $fiveYearInHighEra = $baseline->policyRate + 0.020 * $scale5y;
 
-        $gapBaseline = $this->subsystem->calculateOutputGap($baseline, $neutral5y, MacroEngine::BASE_NATURAL_RATE, 0.25, 1.0);
-        $gapHighEra = $this->subsystem->calculateOutputGap($highEra, $fiveYearInHighEra, MacroEngine::BASE_NATURAL_RATE, 0.25, 1.0);
+        $gapBaseline = $this->subsystem->calculateOutputGap($baseline, $neutral5y, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0);
+        $gapHighEra = $this->subsystem->calculateOutputGap($highEra, $fiveYearInHighEra, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0);
 
         $this->assertLessThan($gapBaseline, $gapHighEra, 'The neutral is structural: a premium era that lifts the five-year is a real tightening of business borrowing, which the Taylor rule long-rate offset, not the IS curve, is there to lean against.');
     }
@@ -340,8 +340,8 @@ class MacroAggregateSubsystemTest extends TestCase
         $stimulus = clone $baseline;
         $stimulus->governmentSpendingIndexEma = MacroEngine::GOVT_SPENDING_BASELINE * 1.10;
 
-        $gapBaseline = $this->subsystem->calculateOutputGap($baseline, 0.035, MacroEngine::BASE_NATURAL_RATE, 0.25, 1.0);
-        $gapStimulus = $this->subsystem->calculateOutputGap($stimulus, 0.035, MacroEngine::BASE_NATURAL_RATE, 0.25, 1.0);
+        $gapBaseline = $this->subsystem->calculateOutputGap($baseline, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0);
+        $gapStimulus = $this->subsystem->calculateOutputGap($stimulus, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0);
 
         $expectedImpulse = MacroAggregateSubsystem::KALDOR_GOVT_SPENDING_MULTIPLIER * 0.10 * 0.25;
         $this->assertEqualsWithDelta(
@@ -377,9 +377,9 @@ class MacroAggregateSubsystemTest extends TestCase
         $shortfall = clone $neutral;
         $shortfall->capitalStockOverhang = -$overhang;
 
-        $gapNeutral = $this->subsystem->calculateOutputGap($neutral, 0.035, MacroEngine::BASE_NATURAL_RATE, 0.25, 1.0);
-        $gapExcess = $this->subsystem->calculateOutputGap($excess, 0.035, MacroEngine::BASE_NATURAL_RATE, 0.25, 1.0);
-        $gapShortfall = $this->subsystem->calculateOutputGap($shortfall, 0.035, MacroEngine::BASE_NATURAL_RATE, 0.25, 1.0);
+        $gapNeutral = $this->subsystem->calculateOutputGap($neutral, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0);
+        $gapExcess = $this->subsystem->calculateOutputGap($excess, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0);
+        $gapShortfall = $this->subsystem->calculateOutputGap($shortfall, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0);
 
         $this->assertEqualsWithDelta(
             -MacroAggregateSubsystem::KALDOR_CAPITAL_DRAG * $overhang * 0.25,
@@ -440,7 +440,7 @@ class MacroAggregateSubsystemTest extends TestCase
         $state->equityMarketCap = self::TEST_MARKET_CAP * $multipleOfTrend;
         $state->equityMarketCapEma = $state->equityMarketCap;
 
-        return $this->subsystem->calculateOutputGap($state, 0.03, MacroEngine::BASE_NATURAL_RATE, 0.25, 1.0);
+        return $this->subsystem->calculateOutputGap($state, 0.03, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0);
     }
 
     /**
@@ -517,7 +517,7 @@ class MacroAggregateSubsystemTest extends TestCase
         // Silent, not merely small: it has to read exactly as a board sitting on its own trend does.
         $this->assertEqualsWithDelta(
             $this->gapWithEquityAt(1.00),
-            $this->subsystem->calculateOutputGap($unreported, 0.03, MacroEngine::BASE_NATURAL_RATE, 0.25, 1.0),
+            $this->subsystem->calculateOutputGap($unreported, 0.03, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0),
             1e-12,
             'An unreported market must move demand exactly as much as a board at its trend: not at all.'
         );
@@ -615,7 +615,7 @@ class MacroAggregateSubsystemTest extends TestCase
         $state->outputGap = 0.0;
         $dt = 1.0 / 3600.0;
 
-        $state->outputGap = $subsystem->calculateOutputGap($state, 0.03, MacroEngine::BASE_NATURAL_RATE, $dt, 1.0);
+        $state->outputGap = $subsystem->calculateOutputGap($state, 0.03, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, $dt, 1.0);
         $impulse = $state->demandShock;
 
         $this->assertGreaterThan(0.0, $impulse, 'The innovation must land on the disturbance.');
@@ -629,7 +629,7 @@ class MacroAggregateSubsystemTest extends TestCase
         // Half a reversion half-life later the disturbance must still be most of the way there.
         $halfLifeTicks = (int) round((log(2.0) / MacroAggregateSubsystem::DEMAND_SHOCK_REVERSION) * 3600.0);
         for ($i = 0; $i < $halfLifeTicks; $i++) {
-            $state->outputGap = $subsystem->calculateOutputGap($state, 0.03, MacroEngine::BASE_NATURAL_RATE, $dt, 1.0);
+            $state->outputGap = $subsystem->calculateOutputGap($state, 0.03, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, $dt, 1.0);
         }
 
         $this->assertEqualsWithDelta(
@@ -652,11 +652,95 @@ class MacroAggregateSubsystemTest extends TestCase
         $shocked->demandShock = 0.01;
 
         $dt = 0.25;
-        $baseGap = $this->subsystem->calculateOutputGap($neutral, 0.03, MacroEngine::BASE_NATURAL_RATE, $dt, 1.0);
-        $shockedGap = $this->subsystem->calculateOutputGap($shocked, 0.03, MacroEngine::BASE_NATURAL_RATE, $dt, 1.0);
+        $baseGap = $this->subsystem->calculateOutputGap($neutral, 0.03, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, $dt, 1.0);
+        $shockedGap = $this->subsystem->calculateOutputGap($shocked, 0.03, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, $dt, 1.0);
 
         // The disturbance is stepped before the drift reads it, so the tick applies the already-decayed level.
         $applied = 0.01 * (1.0 - (MacroAggregateSubsystem::DEMAND_SHOCK_REVERSION * $dt));
         $this->assertEqualsWithDelta($applied * $dt, $shockedGap - $baseGap, 1e-9);
+    }
+
+    /**
+     * The IS curve deflates the borrowing cost by EXPECTED inflation, not current headline. A commodity spike
+     * that lifts headline while expectations hold is a supply shock, and must not read as a real-rate cut.
+     */
+    public function testAHeadlineSpikeWithAnchoredExpectationsDoesNotEaseTheRealBorrowingRate(): void
+    {
+        $calm = $this->neutralBorrowingState();
+        $spiked = $this->neutralBorrowingState();
+        $spiked->inflation = 0.06;
+
+        $gapCalm = $this->subsystem->calculateOutputGap($calm, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0);
+        $gapSpiked = $this->subsystem->calculateOutputGap($spiked, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0);
+
+        $this->assertEqualsWithDelta($gapCalm, $gapSpiked, 1e-12, 'Headline inflation has no place in the ex-ante real rate.');
+    }
+
+    /** A rise in short-horizon expectations lowers the real policy leg and lifts demand; the fixed-rate leg is unmoved. */
+    public function testHigherExpectedInflationLowersTheRealPolicyLegOnly(): void
+    {
+        $state = $this->neutralBorrowingState();
+
+        $gapAnchored = $this->subsystem->calculateOutputGap($state, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0);
+        $gapUnanchored = $this->subsystem->calculateOutputGap($state, 0.035, MacroEngine::BASE_NATURAL_RATE, 0.03, 0.25, 1.0);
+
+        // One percentage point of expected inflation on a 0.50 policy leg is 50bps of real easing, through the drag coefficient over a quarter.
+        $expectedLift = MacroAggregateSubsystem::KALDOR_MONETARY_DRAG * MacroAggregateSubsystem::BORROWING_POLICY_WEIGHT * 0.01 * 0.25;
+        $this->assertEqualsWithDelta($expectedLift, $gapUnanchored - $gapAnchored, 1e-9);
+    }
+
+    /** The fixed-rate leg is the real five-year: the breakeven deflates it, so a higher breakeven at the same nominal yield is easier money. */
+    public function testAHigherBreakevenAtTheSameNominalFiveYearIsEasierMoney(): void
+    {
+        $anchored = $this->neutralBorrowingState();
+        $repriced = $this->neutralBorrowingState();
+        $repriced->tipsBreakeven = 0.03;
+
+        $gapAnchored = $this->subsystem->calculateOutputGap($anchored, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0);
+        $gapRepriced = $this->subsystem->calculateOutputGap($repriced, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0);
+
+        $expectedLift = MacroAggregateSubsystem::KALDOR_MONETARY_DRAG * MacroAggregateSubsystem::BORROWING_YIELD5Y_WEIGHT * 0.01 * 0.25;
+        $this->assertEqualsWithDelta($expectedLift, $gapRepriced - $gapAnchored, 1e-9);
+    }
+
+    /** A state with every demand channel at its baseline, so only the borrowing-cost terms can move the gap. */
+    private function neutralBorrowingState(): MacroState
+    {
+        $state = new MacroState();
+        $state->outputGap = 0.0;
+        $state->outputGapEma = 0.0;
+        $state->inflation = MacroEngine::TARGET_INFLATION;
+        $state->tipsBreakeven = MacroEngine::TARGET_INFLATION;
+        $state->policyRate = MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION;
+        $state->naturalRate = MacroEngine::BASE_NATURAL_RATE;
+        $state->corporateTaxRate = MacroEngine::TARGET_CORPORATE_TAX_RATE;
+        $state->macroCreditSpreadEma = MacroEngine::BASE_CREDIT_SPREAD;
+        $state->interbankLiquiditySpreadEma = MacroEngine::INTERBANK_BASELINE_SPREAD;
+        $state->governmentSpendingIndexEma = MacroEngine::GOVT_SPENDING_BASELINE;
+        $state->residentialPropertyIndexEma = MacroEngine::RESIDENTIAL_BASELINE;
+        $state->exchangeRateIndexEma = MacroEngine::EXCHANGE_RATE_BASELINE;
+        $state->energyPriceIndexEma = MacroEngine::ENERGY_BASELINE;
+        $state->freightRateIndexEma = MacroEngine::FREIGHT_BASELINE;
+        $state->capitalStockOverhang = 0.0;
+        $state->inventoryStockGap = 0.0;
+        $state->demandShock = 0.0;
+
+        return $state;
+    }
+
+    /** The risk premium inside the breakeven is not expected inflation: a breakeven lifted only by the premium leaves the real five-year unchanged. */
+    public function testTheInflationRiskPremiumDoesNotEaseTheRealFiveYear(): void
+    {
+        $anchored = $this->neutralBorrowingState();
+
+        $stressed = $this->neutralBorrowingState();
+        $stressed->inflationEma = 0.03; // 1pp of excess inflation adds TIPS_INFLATION_RISK_PREMIUM_SCALE x 1pp of premium.
+        $premium = 0.01 * MacroAggregateSubsystem::TIPS_INFLATION_RISK_PREMIUM_SCALE;
+        $stressed->tipsBreakeven = MacroEngine::TARGET_INFLATION + $premium;
+
+        $gapAnchored = $this->subsystem->calculateOutputGap($anchored, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0);
+        $gapStressed = $this->subsystem->calculateOutputGap($stressed, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0);
+
+        $this->assertEqualsWithDelta($gapAnchored, $gapStressed, 1e-12, 'A breakeven lifted only by its risk premium must not read as easier money.');
     }
 }

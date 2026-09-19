@@ -1825,14 +1825,16 @@ class MathUtilityTest extends TestCase
     }
 
     /**
-     * Vayanos-Vila duration extraction: the premium shift is linear in tenor and flips sign between QE and QT.
+     * Vayanos-Vila duration extraction: the premium shift follows the ACM duration scale and flips sign between QE and QT.
      */
     public function testPreferredHabitatShiftScalesWithTenorAndFlipsBetweenQeAndQt(): void
     {
-        // Delta TP(tau) = -lambda * (tau / 10) * intensity, so the ten-year is the unit of measure.
+        // Delta TP(tau) = -lambda * durationScale(tau) * intensity, so the ten-year is the unit of measure.
         $this->assertEqualsWithDelta(-0.005, $this->mathUtility->calculatePreferredHabitatTermPremiumShift(0.005, 10.0), 0.0000001, 'QE must suppress the ten-year premium one-for-one with intensity.');
-        $this->assertEqualsWithDelta(-0.001, $this->mathUtility->calculatePreferredHabitatTermPremiumShift(0.005, 2.0), 0.0000001, 'The two-year absorbs a fifth of the ten-year shift.');
-        $this->assertEqualsWithDelta(-0.015, $this->mathUtility->calculatePreferredHabitatTermPremiumShift(0.005, 30.0), 0.0000001, 'The thirty-year absorbs three times the ten-year shift.');
+        $this->assertEqualsWithDelta(-0.005 * MathUtility::calculateTermPremiumDurationScale(2.0), $this->mathUtility->calculatePreferredHabitatTermPremiumShift(0.005, 2.0), 0.0000001, 'The two-year absorbs under a third of the ten-year shift, the same share of the premium it carries.');
+        $this->assertLessThan(-0.0014, $this->mathUtility->calculatePreferredHabitatTermPremiumShift(0.005, 2.0), 'and more than the linear fifth it used to.');
+        $this->assertEqualsWithDelta(-0.005 * MathUtility::calculateTermPremiumDurationScale(30.0), $this->mathUtility->calculatePreferredHabitatTermPremiumShift(0.005, 30.0), 0.0000001, 'The thirty-year absorbs half again the ten-year shift (Gagnon et al. 2011), not three times it.');
+        $this->assertEqualsWithDelta(-0.0075, $this->mathUtility->calculatePreferredHabitatTermPremiumShift(0.005, 30.0), 0.0001);
 
         // QT extracts negative duration: the same magnitude steepens instead of compressing.
         $this->assertEqualsWithDelta(

@@ -1800,9 +1800,10 @@ class MathUtility
      *
      * When the central bank expands its balance sheet via Quantitative Easing (QE), it extracts net duration
      * from the market, reducing the duration risk absorbed by private arbitrageurs and compressing term premia.
-     * The effect scales proportionally with bond maturity/tenor duration.
+     * The effect scales with the same saturating duration law as the premium it offsets: Gagnon et al. (2011)
+     * find the thirty-year LSAP effect at or below the ten-year's, not three times it.
      *
-     * Formula: Delta TP(tau) = - lambda_habitat * (tau / 10.0) * balanceSheetIntensity
+     * Formula: Delta TP(tau) = - lambda_habitat * durationScale(tau) * balanceSheetIntensity
      *
      * @param float $balanceSheetIntensity Positive for QE (yield suppression), negative for QT (steepening).
      * @param float $tau                   Bond tenor maturity in years (e.g. 2.0, 5.0, 10.0, 30.0).
@@ -1814,7 +1815,7 @@ class MathUtility
         float $tau,
         float $habitatSensitivity = 1.0
     ): float {
-        $durationWeight = $tau / 10.0;
+        $durationWeight = self::calculateTermPremiumDurationScale($tau);
         return -$balanceSheetIntensity * $durationWeight * $habitatSensitivity;
     }
 

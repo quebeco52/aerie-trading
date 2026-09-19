@@ -163,7 +163,7 @@ class TradingEconomicsIndicatorsTest extends TestCase
         $boomState->sloosTighteningIndexEma = 0.0;
         $boomState->housingStartsIndex = 100.0;
 
-        $this->assetMarketSubsystem->calculateHousingStarts($boomState, $dt);
+        $this->assetMarketSubsystem->calculateHousingStarts($boomState, MacroEngine::TARGET_INFLATION, $dt);
 
         $this->assertGreaterThan(
             100.0,
@@ -184,7 +184,7 @@ class TradingEconomicsIndicatorsTest extends TestCase
         $slumpState->sloosTighteningIndexEma = 0.40; // 40% net banks tightening mortgages
         $slumpState->housingStartsIndex = 100.0;
 
-        $this->assetMarketSubsystem->calculateHousingStarts($slumpState, $dt);
+        $this->assetMarketSubsystem->calculateHousingStarts($slumpState, MacroEngine::TARGET_INFLATION, $dt);
 
         $this->assertLessThan(
             100.0,

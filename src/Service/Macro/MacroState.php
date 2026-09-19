@@ -104,6 +104,7 @@ class MacroState
     public float $riskNeutral10y = 0.0250;
     public float $riskNeutral10yEma = 0.0250;
     public float $termPremiumShock = 0.0;
+    public float $expectedPathShock = 0.0;
     public float $termPremiumRegime = MacroEngine::NS_BASE_TERM_PREMIUM;
     public float $perceivedNeutralRate = MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION;
     public float $restrictiveDuration = 0.0;

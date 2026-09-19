@@ -246,8 +246,8 @@ class FinancialInvariantTest extends TestCase
             ->withInventoryGap(0.05) // Significant 5% inventory overhang
             ->build();
 
-        $gapClean = $aggregateSubsystem->calculateOutputGap($stateClean, 0.035, MacroEngine::BASE_NATURAL_RATE, 0.25, 1.0);
-        $gapOverhang = $aggregateSubsystem->calculateOutputGap($stateOverhang, 0.035, MacroEngine::BASE_NATURAL_RATE, 0.25, 1.0);
+        $gapClean = $aggregateSubsystem->calculateOutputGap($stateClean, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0);
+        $gapOverhang = $aggregateSubsystem->calculateOutputGap($stateOverhang, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0);
 
         // Invariant: Inventory overhang acts as an explicit drag on production ($gapOverhang < $gapClean)
         $this->assertLessThan(
@@ -389,7 +389,7 @@ class FinancialInvariantTest extends TestCase
         $maxGap = -1.0;
 
         for ($quarter = 0; $quarter < 40; $quarter++) {
-            $newGap = $aggregateSubsystem->calculateOutputGap($state, 0.040, MacroEngine::BASE_NATURAL_RATE, 0.25, 1.0);
+            $newGap = $aggregateSubsystem->calculateOutputGap($state, 0.040, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0);
             $state->outputGap = $newGap;
             $state->outputGapEma += 0.25 * ($newGap - $state->outputGapEma);
 
@@ -518,9 +518,9 @@ class FinancialInvariantTest extends TestCase
         $stateExpensiveEnergy = clone $stateNeutral;
         $stateExpensiveEnergy->energyPriceIndexEma = 125.0; // 25% energy cost spike
 
-        $gapNeutral = $aggregate->calculateOutputGap($stateNeutral, 0.040, MacroEngine::BASE_NATURAL_RATE, 0.25, 1.0);
-        $gapDividend = $aggregate->calculateOutputGap($stateCheapEnergy, 0.040, MacroEngine::BASE_NATURAL_RATE, 0.25, 1.0);
-        $gapDrag = $aggregate->calculateOutputGap($stateExpensiveEnergy, 0.040, MacroEngine::BASE_NATURAL_RATE, 0.25, 1.0);
+        $gapNeutral = $aggregate->calculateOutputGap($stateNeutral, 0.040, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0);
+        $gapDividend = $aggregate->calculateOutputGap($stateCheapEnergy, 0.040, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0);
+        $gapDrag = $aggregate->calculateOutputGap($stateExpensiveEnergy, 0.040, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0);
 
         // Invariant: Cheap energy must act as a positive supply dividend ($gapDividend > $gapNeutral)
         $this->assertGreaterThan(
@@ -559,8 +559,8 @@ class FinancialInvariantTest extends TestCase
         $stateEasedMoney = clone $stateTightMoney;
         $stateEasedMoney->policyRate = 0.015;
 
-        $gapTight = $aggregate->calculateOutputGap($stateTightMoney, 0.045, MacroEngine::BASE_NATURAL_RATE, 0.25, 1.0);
-        $gapEased = $aggregate->calculateOutputGap($stateEasedMoney, 0.025, MacroEngine::BASE_NATURAL_RATE, 0.25, 1.0);
+        $gapTight = $aggregate->calculateOutputGap($stateTightMoney, 0.045, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0);
+        $gapEased = $aggregate->calculateOutputGap($stateEasedMoney, 0.025, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0);
 
         // Invariant: Monetary policy easing must produce a significant positive aggregate demand boost
         $this->assertGreaterThan(
@@ -763,7 +763,7 @@ class FinancialInvariantTest extends TestCase
 
         $minGap = 0.0;
         for ($quarter = 0; $quarter < 12; $quarter++) {
-            $newGap = $aggregate->calculateOutputGap($state, 0.045, MacroEngine::BASE_NATURAL_RATE, 0.25, 1.0);
+            $newGap = $aggregate->calculateOutputGap($state, 0.045, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0);
             $state->outputGap = $newGap;
             $state->outputGapEma += 0.25 * ($newGap - $state->outputGapEma);
             $minGap = min($minGap, $newGap);

@@ -244,15 +244,14 @@ class AssetMarketSubsystem
      *
      * Calculates fundamental home prices from user cost of housing capital (mortgage rate + taxes - expected inflation)
      * and household real disposable income affordability, with sticky physical mean reversion.
-     * The 30Y fixed mortgage is priced off the 10Y sovereign: prepayment shortens its effective duration to ~7 years.
      *
-     * @param MacroState $state Current macroeconomic state.
-     * @param float      $dt    Time increment in years.
+     * @param MacroState $state             Current macroeconomic state.
+     * @param float      $expectedInflation Expected inflation (MonetaryPolicySubsystem::calculateExpectedInflation), the same measure the Taylor rule and IS curve use.
+     * @param float      $dt                Time increment in years.
      */
-    public function calculateResidentialPropertyIndex(MacroState $state, float $dt): void
+    public function calculateResidentialPropertyIndex(MacroState $state, float $expectedInflation, float $dt): void
     {
-        $mortgageRate = $state->yield10yEma + self::RESIDENTIAL_MORTGAGE_SPREAD;
-        $userCost = max(0.015, $mortgageRate + self::RESIDENTIAL_DEPRECIATION_TAX_RATE - $state->inflationEma);
+        $userCost = $this->housingUserCost($state, $expectedInflation);
 
         $excessUnemployment = $state->unemploymentRateEma - $state->nairu;
         $laborFactor = 1.0 - ($excessUnemployment * self::RESIDENTIAL_UNEMPLOYMENT_SENSITIVITY);
@@ -567,23 +566,35 @@ class AssetMarketSubsystem
     }
 
     /**
+     * Jorgenson (1963) user cost of owning: mortgage rate plus depreciation and tax, less EXPECTED house-price
+     * inflation. Realized inflation is not an expectation, so a commodity spike does not make owning cheaper.
+     * The 30Y fixed mortgage is priced off the 10Y: prepayment shortens its effective duration to ~7 years.
+     */
+    private function housingUserCost(MacroState $state, float $expectedInflation): float
+    {
+        $mortgageRate = $state->yield10yEma + self::RESIDENTIAL_MORTGAGE_SPREAD;
+
+        return max(0.015, $mortgageRate + self::RESIDENTIAL_DEPRECIATION_TAX_RATE - $expectedInflation);
+    }
+
+    /**
      * Poterba (1984) / Topel-Rosen (1988) Tobin's Q Housing Investment Dynamics.
      *
      * Computes residential construction volume (Housing Starts) driven by the ratio of asset market home prices
      * to physical replacement costs, discounted by mortgage user costs and bank lending standards.
      *
-     * @param MacroState $state Current macroeconomic state.
-     * @param float      $dt    Time increment in years.
+     * @param MacroState $state             Current macroeconomic state.
+     * @param float      $expectedInflation Expected inflation, as for calculateResidentialPropertyIndex().
+     * @param float      $dt                Time increment in years.
      */
-    public function calculateHousingStarts(MacroState $state, float $dt): void
+    public function calculateHousingStarts(MacroState $state, float $expectedInflation, float $dt): void
     {
         $residentialPriceRatio = $state->residentialPropertyIndex / MacroEngine::RESIDENTIAL_BASELINE;
         $metalsCostRatio = $state->industrialMetalsIndex / MacroEngine::METALS_BASELINE;
         $laborCostRatio = 1.0 + $state->wageGrowth;
         $replacementCostRatio = (0.50 * $metalsCostRatio) + (0.50 * $laborCostRatio);
 
-        $mortgageRate = $state->yield10yEma + self::RESIDENTIAL_MORTGAGE_SPREAD;
-        $userCost = max(0.015, $mortgageRate + self::RESIDENTIAL_DEPRECIATION_TAX_RATE - $state->inflationEma);
+        $userCost = $this->housingUserCost($state, $expectedInflation);
 
         $dW = $this->mathUtility->generateStandardNormal();
 

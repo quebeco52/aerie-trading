@@ -43,6 +43,14 @@ class MonetaryPolicySubsystem
     /** Ceiling of the structural term premium regime (the early 1990s era). */
     public const MAX_TERM_PREMIUM_REGIME = 0.025;
 
+    // --- Diebold-Li (2006) Expected-Path Innovation ---
+    /** Mean reversion of the curvature factor's own innovation (half-life ~7 months): Diebold-Li estimate curvature as the least persistent Nelson-Siegel factor, a monthly AR(1) near 0.9. */
+    public const EXPECTED_PATH_SHOCK_KAPPA = 1.2;
+    /** Annual volatility of that innovation, in curvature units: the 2Y carries 0.29 of it, the 10Y 0.14. Measured over 8 seeds x 60y it takes the 2Y's quarterly change from 24 to 48bps (real ~50) and the 10Y's from 35 to 40, so the vol term structure slopes down past the belly as every real curve does. */
+    public const EXPECTED_PATH_SHOCK_SIGMA = 0.030;
+    /** Cap on the innovation (~2 stationary sd, ~120bps at the 2Y): a repricing of the next few years of policy, never a regime change, so the 2Y stays within the band it holds at the lower bound. */
+    public const EXPECTED_PATH_SHOCK_CAP = 0.04;
+
     // --- Central Bank Balance Sheet (QE & QT) ---
     /** Minimum reinvestment hold period (years) after QE ends before QT runoff can begin (Bernanke 2020). */
     public const BALANCE_SHEET_REINVESTMENT_HOLD_YEARS = 1.5;
@@ -158,6 +166,33 @@ class MonetaryPolicySubsystem
     ) {}
 
     /**
+     * Short-horizon inflation expectation: the Bernanke (2015) blend of realized core inflation with the
+     * forward-looking TIPS breakeven (Shapiro 2022 sectoral core).
+     *
+     * This is the inflation measure the Taylor rule responds to, and the same measure the IS curve deflates
+     * the policy-rate leg of the borrowing cost with: the central bank and the borrowers it acts on look at
+     * one expected inflation rate, so the real stance the bank thinks it has set is the one demand feels.
+     * Headline is deliberately absent -- a commodity spike is not an expectation.
+     *
+     * @param MacroState $state           Current macroeconomic state.
+     * @param float      $targetInflation Statutory central bank target inflation.
+     * @return float Expected inflation over the policy horizon.
+     */
+    public function calculateExpectedInflation(MacroState $state, float $targetInflation): float
+    {
+        $coreWeight = MacroEngine::INFLATION_WEIGHT_SUPERCORE + MacroEngine::INFLATION_WEIGHT_GOODS;
+        if ($coreWeight > 0 && ($state->supercoreInflationEma !== $targetInflation || $state->coreGoodsInflationEma !== $targetInflation)) {
+            $coreInflation = ((MacroEngine::INFLATION_WEIGHT_SUPERCORE * $state->supercoreInflationEma)
+                + (MacroEngine::INFLATION_WEIGHT_GOODS * $state->coreGoodsInflationEma)) / $coreWeight;
+        } else {
+            $coreInflation = $state->inflationEma;
+        }
+
+        return (self::TAYLOR_INFLATION_CORE_WEIGHT * $coreInflation)
+            + (self::TAYLOR_INFLATION_ANCHOR_WEIGHT * $state->tipsBreakeven);
+    }
+
+    /**
      * Taylor (1993) Monetary Policy Rule with Evans (2012) Forward Guidance.
      *
      * Computes the central bank's nominal policy rate target:
@@ -183,17 +218,7 @@ class MonetaryPolicySubsystem
         $faitOffset = min(0.0, self::FAIT_MAKEUP_COEFFICIENT * $state->cumulativeInflationGap);
         $faitOffset = max(-self::FAIT_MAX_TARGET_OFFSET, $faitOffset);
 
-        // Shapiro (2022) / Bernanke (2015): Blend core inflation measures with forward-looking expectations (TIPS breakeven)
-        $coreWeight = MacroEngine::INFLATION_WEIGHT_SUPERCORE + MacroEngine::INFLATION_WEIGHT_GOODS;
-        if ($coreWeight > 0 && ($state->supercoreInflationEma !== $targetInflation || $state->coreGoodsInflationEma !== $targetInflation)) {
-            $coreInflation = ((MacroEngine::INFLATION_WEIGHT_SUPERCORE * $state->supercoreInflationEma)
-                + (MacroEngine::INFLATION_WEIGHT_GOODS * $state->coreGoodsInflationEma)) / $coreWeight;
-        } else {
-            $coreInflation = $state->inflationEma;
-        }
-
-        $inflationMeasure = (self::TAYLOR_INFLATION_CORE_WEIGHT * $coreInflation)
-            + (self::TAYLOR_INFLATION_ANCHOR_WEIGHT * $state->tipsBreakeven);
+        $inflationMeasure = $this->calculateExpectedInflation($state, $targetInflation);
 
         // Clarida, Galí & Gertler (1998, 2000): Taylor rule responds to the cyclical trend (EMA)
         // to prevent stochastic tick diffusion from causing erratic swings in the policy stance.
@@ -422,11 +447,21 @@ class MonetaryPolicySubsystem
      * near-zero and negative premia of the 2010s. The fast factor reverts to zero, the slow factor to the
      * long-run baseline, and both use the exact OU discretization so the process is tick-rate invariant.
      *
+     * Alongside the premium, the expected-path innovation of Diebold & Li (2006): the curvature factor carries
+     * a shock of its own, the market repricing the next few years of policy on news between meetings. It is
+     * expectations, not premium, so it lives on the curve's beta2 rather than in the premium above.
+     *
      * @param MacroState $state Current macroeconomic state.
      * @param float      $dt    Time increment in years.
      */
     public function updateTermPremiumDynamics(MacroState $state, float $dt): void
     {
+        // Exact OU step (theta 0): decay, then the stationary-consistent innovation variance over dt.
+        $pathDecay = exp(-self::EXPECTED_PATH_SHOCK_KAPPA * $dt);
+        $pathVariance = (self::EXPECTED_PATH_SHOCK_SIGMA ** 2 / (2.0 * self::EXPECTED_PATH_SHOCK_KAPPA)) * (1.0 - exp(-2.0 * self::EXPECTED_PATH_SHOCK_KAPPA * $dt));
+        $nextPathShock = ($state->expectedPathShock * $pathDecay) + (sqrt($pathVariance) * $this->mathUtility->generateStandardNormal());
+        $state->expectedPathShock = max(-self::EXPECTED_PATH_SHOCK_CAP, min(self::EXPECTED_PATH_SHOCK_CAP, $nextPathShock));
+
         $factors = $this->mathUtility->calculateTwoFactorOU(
             chi: $state->termPremiumShock,
             xi: $state->termPremiumRegime,
@@ -519,10 +554,13 @@ class MonetaryPolicySubsystem
             + (self::KOZICKI_TINSLEY_ENDPOINT_WEIGHT * $state->perceivedNeutralRate);
         $nsBeta1 = $state->policyRate - $level;
 
-        // Diebold-Li (2006) Curvature beta2: forward monetary tightening/easing expectations
+        // Diebold-Li (2006) Curvature beta2: forward monetary tightening/easing expectations, plus the factor's
+        // own innovation. The curvature loading is zero at maturity zero and fades past the belly, so a
+        // repricing of the next few years of policy moves neither today's rate nor the long-run anchor.
         $monetaryStanceGap = $state->targetRate - $state->policyRate;
         $nsBeta2 = (self::SVENSSON_CURVATURE1_TARGET_SCALE * $monetaryStanceGap)
-            + (self::SVENSSON_CURVATURE1_GAP_SCALE * $state->outputGap);
+            + (self::SVENSSON_CURVATURE1_GAP_SCALE * $state->outputGap)
+            + $state->expectedPathShock;
 
         $fiscalShift = ($state->governmentSpendingIndexEma / MacroEngine::GOVT_SPENDING_BASELINE) - 1.0;
         $excessDebt = max(0.0, $state->sovereignDebtToGdpEma - MacroEngine::SOVEREIGN_DEBT_NEUTRAL_THRESHOLD);

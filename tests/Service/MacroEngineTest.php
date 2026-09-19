@@ -883,9 +883,9 @@ class MacroEngineTest extends TestCase
         $dt = 0.25;
         $stressMultiplier = 1.0;
 
-        $gapNeutral = $aggregateSubsystem->calculateOutputGap($stateNeutral, $neutral5yYield, MacroEngine::BASE_NATURAL_RATE, $dt, $stressMultiplier);
-        $gapCrash   = $aggregateSubsystem->calculateOutputGap($stateCrash, $neutral5yYield, MacroEngine::BASE_NATURAL_RATE, $dt, $stressMultiplier);
-        $gapBoom    = $aggregateSubsystem->calculateOutputGap($stateBoom, $neutral5yYield, MacroEngine::BASE_NATURAL_RATE, $dt, $stressMultiplier);
+        $gapNeutral = $aggregateSubsystem->calculateOutputGap($stateNeutral, $neutral5yYield, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, $dt, $stressMultiplier);
+        $gapCrash   = $aggregateSubsystem->calculateOutputGap($stateCrash, $neutral5yYield, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, $dt, $stressMultiplier);
+        $gapBoom    = $aggregateSubsystem->calculateOutputGap($stateBoom, $neutral5yYield, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, $dt, $stressMultiplier);
 
         // 3. Assert: 
         // Neutral economy: output gap is 0, so neutral drift is 0.0:
@@ -1087,8 +1087,8 @@ class MacroEngineTest extends TestCase
 
         $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
 
-        $gapStrongFx = $this->aggregateSubsystem->calculateOutputGap($stateStrongFx, 0.05, 0.02, 0.25, 1.0);
-        $gapNeutralFx = $this->aggregateSubsystem->calculateOutputGap($stateNeutralFx, 0.05, 0.02, 0.25, 1.0);
+        $gapStrongFx = $this->aggregateSubsystem->calculateOutputGap($stateStrongFx, 0.05, 0.02, MacroEngine::TARGET_INFLATION, 0.25, 1.0);
+        $gapNeutralFx = $this->aggregateSubsystem->calculateOutputGap($stateNeutralFx, 0.05, 0.02, MacroEngine::TARGET_INFLATION, 0.25, 1.0);
 
         $this->assertLessThan($gapNeutralFx, $gapStrongFx, 'Marshall-Lerner condition: Strong FX must drag down output gap.');
     }
@@ -1680,8 +1680,8 @@ class MacroEngineTest extends TestCase
         $stateCrisis->macroCreditSpreadEma = 0.06;
         $stateCrisis->interbankLiquiditySpreadEma = 0.015;
 
-        $gapBaseline = $this->aggregateSubsystem->calculateOutputGap($stateBaseline, $yield5y, $naturalRate, $dt, $stressMultiplier);
-        $gapCrisis   = $this->aggregateSubsystem->calculateOutputGap($stateCrisis, $yield5y, $naturalRate, $dt, $stressMultiplier);
+        $gapBaseline = $this->aggregateSubsystem->calculateOutputGap($stateBaseline, $yield5y, $naturalRate, MacroEngine::TARGET_INFLATION, $dt, $stressMultiplier);
+        $gapCrisis   = $this->aggregateSubsystem->calculateOutputGap($stateCrisis, $yield5y, $naturalRate, MacroEngine::TARGET_INFLATION, $dt, $stressMultiplier);
 
         $this->assertLessThan(
             $gapBaseline,
@@ -1702,8 +1702,8 @@ class MacroEngineTest extends TestCase
         $stateShock = clone $stateNormal;
         $stateShock->energyPriceShock = 100.0; // 100% price surge
 
-        $gapNormal = $this->aggregateSubsystem->calculateOutputGap($stateNormal, $yield5y, MacroEngine::BASE_NATURAL_RATE, $dt, $stressMultiplier);
-        $gapShock  = $this->aggregateSubsystem->calculateOutputGap($stateShock, $yield5y, MacroEngine::BASE_NATURAL_RATE, $dt, $stressMultiplier);
+        $gapNormal = $this->aggregateSubsystem->calculateOutputGap($stateNormal, $yield5y, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, $dt, $stressMultiplier);
+        $gapShock  = $this->aggregateSubsystem->calculateOutputGap($stateShock, $yield5y, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, $dt, $stressMultiplier);
 
         $this->assertLessThan($gapNormal, $gapShock, 'Supply-side stagflation: energy price spike must drag down output gap.');
 

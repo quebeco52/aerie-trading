@@ -79,10 +79,10 @@ class MacroAggregateSubsystem
     public const INVENTORY_CYCLICAL_DEMAND_SENSITIVITY = 0.80;
 
     // --- Effective Corporate Borrowing Cost Weights ---
-    /** Weight assigned to the short-term policy rate in aggregate corporate borrowing cost. */
-    public const BORROWING_POLICY_WEIGHT = 0.70;
-    /** Weight assigned to the 5-year benchmark Treasury yield in aggregate corporate borrowing cost. */
-    public const BORROWING_YIELD5Y_WEIGHT = 0.30;
+    /** Floating-rate share of private borrowing (bank and leveraged loans, revolvers, cards) priced off the policy rate; roughly half in an economy with a bond market and fixed-rate mortgages. */
+    public const BORROWING_POLICY_WEIGHT = 0.50;
+    /** Fixed-rate share (corporate bonds, mortgages, auto and term loans) priced off the 5-year benchmark; measured 2026-09-19 the mix moves only the cycle period, not its shape. */
+    public const BORROWING_YIELD5Y_WEIGHT = 0.50;
 
     // --- Forward-Looking TIPS Breakeven & Phillips Expectations ---
     /** Weight on anchored central bank target in TIPS breakeven inflation expectation. */
@@ -238,21 +238,25 @@ class MacroAggregateSubsystem
      * Solves continuous macroeconomic aggregate demand dynamics:
      *   dy = [Momentum - CubicCapacity - RealRateDrag + FiscalStimulus - CapitalOverhang + WealthEffect - FxDrag + DemandShock] * dt
      *
-     * @param MacroState $state            Current macroeconomic state.
-     * @param float      $yield5y          5-Year Treasury yield benchmark for business borrowing.
-     * @param float      $naturalRate      Dynamic natural real rate of interest (r*).
-     * @param float      $dt               Time increment in years.
-     * @param float      $stressMultiplier Non-linear crisis volatility multiplier.
+     * @param MacroState $state             Current macroeconomic state.
+     * @param float      $yield5y           5-Year Treasury yield benchmark for business borrowing.
+     * @param float      $naturalRate       Dynamic natural real rate of interest (r*).
+     * @param float      $expectedInflation Short-horizon expected inflation, the Taylor rule's own measure (MonetaryPolicySubsystem::calculateExpectedInflation).
+     * @param float      $dt                Time increment in years.
+     * @param float      $stressMultiplier  Non-linear crisis volatility multiplier.
      * @return float Updated cyclical output gap bounded between -12% and +10%.
      */
-    public function calculateOutputGap(MacroState $state, float $yield5y, float $naturalRate, float $dt, float $stressMultiplier): float
+    public function calculateOutputGap(MacroState $state, float $yield5y, float $naturalRate, float $expectedInflation, float $dt, float $stressMultiplier): float
     {
         $y = $state->outputGap;
         $outZ = $this->mathUtility->generateStandardNormal();
 
-        $borrowingPolicy = (self::BORROWING_POLICY_WEIGHT * $state->policyRate)
-            + (self::BORROWING_YIELD5Y_WEIGHT * $yield5y);
-        $realRate = $borrowingPolicy - $state->inflation;
+        // Ex-ante real borrowing cost (Curdia & Woodford 2010, Eq. 14): each leg deflated by the inflation
+        // expected over its own horizon. The breakeven carries a risk premium that is not an expectation, so
+        // the five-year leg strips it. Headline is not used: a commodity spike is not a real-rate cut.
+        $expectedInflation5y = $state->tipsBreakeven - $this->inflationRiskPremium($state, MacroEngine::TARGET_INFLATION);
+        $realRate = (self::BORROWING_POLICY_WEIGHT * ($state->policyRate - $expectedInflation))
+            + (self::BORROWING_YIELD5Y_WEIGHT * ($yield5y - $expectedInflation5y));
 
         $neutral5yDurationScale = MathUtility::calculateTermPremiumDurationScale(5.0, MacroEngine::TERM_PREMIUM_DURATION_HORIZON_YEARS);
         // The neutral benchmark is structural: a high-premium era really does tighten business borrowing, and it is
@@ -261,6 +265,7 @@ class MacroAggregateSubsystem
 
         $neutralBorrowingPolicy = (self::BORROWING_POLICY_WEIGHT * ($naturalRate + MacroEngine::TARGET_INFLATION))
             + (self::BORROWING_YIELD5Y_WEIGHT * $neutral5yYield);
+        // At neutral, expectations sit on the target on both legs.
         $neutralRealRate = $neutralBorrowingPolicy - MacroEngine::TARGET_INFLATION;
 
         // Pure risk-free real monetary policy transmission stance (Curdia & Woodford 2010 Eq. 14)
@@ -279,12 +284,7 @@ class MacroAggregateSubsystem
         $fiscalStimulus = (self::KALDOR_FISCAL_MULTIPLIER * (MacroEngine::TARGET_CORPORATE_TAX_RATE - $state->corporateTaxRate))
             + (self::KALDOR_GOVT_SPENDING_MULTIPLIER * $spendingShift);
         // Excess capacity dampens investment hard; a capital SHORTFALL does not summon construction at the
-        // same rate, because investment is irreversible and the firms that would build are the ones whose
-        // balance sheets the slump just impaired (Bertola & Caballero 1994). Read as one linear coefficient
-        // the term is a spring: measured over 960 simulated years the overhang's minimum doubled as busts
-        // deepened (-0.84% to -1.72%) while its maximum barely moved, so every unit of pain was stored and
-        // paid straight back into the next boom -- which is why a one-sided credit drag made the cycle
-        // bigger on BOTH sides rather than left-skewed.
+        // same rate (Bertola & Caballero 1994).
         $capitalDrag = $state->capitalStockOverhang >= 0.0
             ? self::KALDOR_CAPITAL_DRAG * $state->capitalStockOverhang
             : self::KALDOR_CAPITAL_REBOUND_DRAG * $state->capitalStockOverhang;
@@ -445,11 +445,7 @@ class MacroAggregateSubsystem
             downwardRigidityFactor: MacroEngine::PHILLIPS_DOWNWARD_RIGIDITY_FACTOR
         );
 
-        // Pflueger & Viceira (2011): Inflation Risk Premium (IRP) reflects upside inflation uncertainty
-        // driven by actual inflation deviations above target and cost-push supply shocks, not equity market crash panic.
-        $excessInflation = max(0.0, $state->inflationEma - $targetInflation);
-        $costPushStress = $state->energyCostPushLag + $state->agriCostPushLag;
-        $inflationRiskPremium = ($excessInflation + $costPushStress) * self::TIPS_INFLATION_RISK_PREMIUM_SCALE;
+        $inflationRiskPremium = $this->inflationRiskPremium($state, $targetInflation);
 
         $fundamentalBreakeven = (self::TIPS_TARGET_WEIGHT * $targetInflation)
             + (self::TIPS_TREND_WEIGHT * $state->inflationEma)
@@ -457,6 +453,18 @@ class MacroAggregateSubsystem
             + $inflationRiskPremium;
 
         return max(-0.01, min(0.15, $fundamentalBreakeven));
+    }
+
+    /**
+     * Pflueger & Viceira (2011) inflation risk premium: upside inflation uncertainty from realized inflation above
+     * target and cost-push supply shocks. Part of the breakeven, not of expected inflation.
+     */
+    private function inflationRiskPremium(MacroState $state, float $targetInflation): float
+    {
+        $excessInflation = max(0.0, $state->inflationEma - $targetInflation);
+        $costPushStress = $state->energyCostPushLag + $state->agriCostPushLag;
+
+        return ($excessInflation + $costPushStress) * self::TIPS_INFLATION_RISK_PREMIUM_SCALE;
     }
 
     /**

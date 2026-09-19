@@ -85,6 +85,79 @@ class YieldCurveRealismTest extends TestCase
         $this->assertGreaterThan(0.0, array_sum($thirtyOverTen) / $count, 'the long end keeps rising past ten years');
     }
 
+    /**
+     * Yield volatility falls with maturity past the belly: real quarterly changes run ~50bps at the 2Y and
+     * ~45bps at the 30Y. Before the expected-path innovation the engine's 2Y moved half as much as its 30Y.
+     * The 2Y/10Y co-movement is bounded near 0.7 by the factor structure (the ten-year's premium shock is
+     * mostly its own), against ~0.9 in the data; the bound here guards against it falling back.
+     */
+    public function testTheVolatilityTermStructureSlopesDownPastTheBelly(): void
+    {
+        mt_srand(20260919);
+        $mathUtility = new MathUtility();
+        $engine = new MacroEngine(
+            $mathUtility,
+            $this->inMemoryRedis(),
+            new MacroSnapshotRecorder(),
+            new MonetaryPolicySubsystem($mathUtility),
+            new LaborMarketSubsystem(),
+            new MacroAggregateSubsystem($mathUtility),
+            new CommodityLogisticsSubsystem($mathUtility),
+            new AssetMarketSubsystem($mathUtility),
+            new CreditFiscalSubsystem($mathUtility),
+        );
+
+        $quarterTicks = intdiv(self::TICKS_PER_YEAR, 4);
+        $dt = 1.0 / self::TICKS_PER_YEAR;
+        $twos = [];
+        $tens = [];
+        $thirties = [];
+        for ($tick = 1; $tick <= self::YEARS * self::TICKS_PER_YEAR; $tick++) {
+            $macro = $engine->updateMacroState($dt);
+            if ($tick < self::BURN_IN_YEARS * self::TICKS_PER_YEAR || $tick % $quarterTicks !== 0) {
+                continue;
+            }
+            $twos[] = $macro->yield2y;
+            $tens[] = $macro->yield10y;
+            $thirties[] = $macro->yield30y;
+        }
+
+        $changes = static function (array $series): array {
+            $deltas = [];
+            for ($i = 1; $i < count($series); $i++) {
+                $deltas[] = $series[$i] - $series[$i - 1];
+            }
+
+            return $deltas;
+        };
+        $stdDev = static function (array $values): float {
+            $mean = array_sum($values) / count($values);
+            $variance = 0.0;
+            foreach ($values as $value) {
+                $variance += ($value - $mean) ** 2;
+            }
+
+            return sqrt($variance / count($values));
+        };
+
+        $d2 = $changes($twos);
+        $d10 = $changes($tens);
+        $d30 = $changes($thirties);
+
+        $this->assertGreaterThan($stdDev($d10), $stdDev($d2), 'the two-year is the most volatile tenor');
+        $this->assertGreaterThan(0.9 * $stdDev($d30), $stdDev($d10), 'and the long end is no more volatile than the ten-year');
+        $this->assertGreaterThan(0.0035, $stdDev($d2), 'the two-year moves like a market, not like a policy rate');
+
+        $mean2 = array_sum($d2) / count($d2);
+        $mean10 = array_sum($d10) / count($d10);
+        $covariance = 0.0;
+        for ($i = 0; $i < count($d2); $i++) {
+            $covariance += ($d2[$i] - $mean2) * ($d10[$i] - $mean10);
+        }
+        $correlation = $covariance / (count($d2) * $stdDev($d2) * $stdDev($d10));
+        $this->assertGreaterThan(0.60, $correlation, 'the two-year and ten-year move together');
+    }
+
     /** The bootstrap's Redis stand-in forgets everything; the engine needs its state back each tick. */
     private function inMemoryRedis(): \Redis
     {

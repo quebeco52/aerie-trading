@@ -290,9 +290,11 @@ class MonetaryPolicySubsystemTest extends TestCase
         $this->assertLessThan(0.0, $shift10y);
         $this->assertLessThan(0.0, $shift30y);
 
-        // 30Y duration extraction must be 3x greater than 10Y and 15x greater than 2Y
-        $this->assertEqualsWithDelta(3.0 * $shift10y, $shift30y, 0.0001);
-        $this->assertEqualsWithDelta(5.0 * $shift2y, $shift10y, 0.0001);
+        // The shift follows the ACM duration scale the premium itself uses: the 30Y carries half again the
+        // 10Y's extraction (Gagnon et al. 2011), the 2Y under a third of it.
+        $this->assertEqualsWithDelta(MathUtility::calculateTermPremiumDurationScale(30.0) * $shift10y, $shift30y, 0.0001);
+        $this->assertEqualsWithDelta(MathUtility::calculateTermPremiumDurationScale(2.0) * $shift10y, $shift2y, 0.0001);
+        $this->assertGreaterThan(0.35 * $shift10y, $shift2y, 'Shifts are negative: the two-year suppression is the smaller magnitude.');
         $this->assertEqualsWithDelta(-0.020, $shift10y, 0.0001, '10Y yield suppression under 200bps QE intensity must be exactly -200bps');
     }
 
@@ -839,5 +841,111 @@ class MonetaryPolicySubsystemTest extends TestCase
 
         // And it keeps scaling with depth between the two, rather than saturating at a shallow gap.
         $this->assertGreaterThan($mildWeight, $severeWeight);
+    }
+
+    /** The Bernanke (2015) blend: 70% sectoral core, 30% breakeven -- the one expected-inflation measure both the Taylor rule and the IS curve use. */
+    public function testExpectedInflationBlendsSectoralCoreWithTheBreakeven(): void
+    {
+        $state = new MacroState();
+        $state->supercoreInflationEma = 0.04;
+        $state->coreGoodsInflationEma = 0.01;
+        $state->tipsBreakeven = 0.025;
+        $state->inflation = 0.09; // Headline must not enter.
+        $state->inflationEma = 0.09;
+
+        $coreWeight = MacroEngine::INFLATION_WEIGHT_SUPERCORE + MacroEngine::INFLATION_WEIGHT_GOODS;
+        $core = ((MacroEngine::INFLATION_WEIGHT_SUPERCORE * 0.04) + (MacroEngine::INFLATION_WEIGHT_GOODS * 0.01)) / $coreWeight;
+        $expected = (MonetaryPolicySubsystem::TAYLOR_INFLATION_CORE_WEIGHT * $core)
+            + (MonetaryPolicySubsystem::TAYLOR_INFLATION_ANCHOR_WEIGHT * 0.025);
+
+        $this->assertEqualsWithDelta($expected, $this->subsystem->calculateExpectedInflation($state, MacroEngine::TARGET_INFLATION), 1e-12);
+    }
+
+    /** Before the sectoral baskets have moved off the target the blend falls back to the headline EMA, as the Taylor rule always has. */
+    public function testExpectedInflationFallsBackToTheHeadlineEmaOnAColdStart(): void
+    {
+        $state = new MacroState();
+        $state->supercoreInflationEma = MacroEngine::TARGET_INFLATION;
+        $state->coreGoodsInflationEma = MacroEngine::TARGET_INFLATION;
+        $state->inflationEma = 0.03;
+        $state->tipsBreakeven = 0.02;
+
+        $expected = (MonetaryPolicySubsystem::TAYLOR_INFLATION_CORE_WEIGHT * 0.03)
+            + (MonetaryPolicySubsystem::TAYLOR_INFLATION_ANCHOR_WEIGHT * 0.02);
+
+        $this->assertEqualsWithDelta($expected, $this->subsystem->calculateExpectedInflation($state, MacroEngine::TARGET_INFLATION), 1e-12);
+    }
+
+    /** Diebold-Li (2006): a repricing of the expected path is expectations, not premium, and cannot move today's rate. */
+    public function testExpectedPathShockRepricesTheBellyAndLeavesThePremiumAlone(): void
+    {
+        $calm = new MacroState();
+        $calm->policyRate = 0.03;
+        $calm->targetRate = 0.03;
+        $calm->tipsBreakeven = MacroEngine::TARGET_INFLATION;
+        $calm->outputGap = 0.0;
+
+        $hawkish = clone $calm;
+        $hawkish->expectedPathShock = 0.02;
+
+        $curveCalm = $this->subsystem->calculateYieldCurve($calm, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE);
+        $curveHawkish = $this->subsystem->calculateYieldCurve($hawkish, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE);
+
+        $lambda = MacroEngine::SVENSSON_LAMBDA_1;
+        $loading = static fn (float $tau): float => ((1.0 - exp(-$lambda * $tau)) / ($lambda * $tau)) - exp(-$lambda * $tau);
+
+        $move2y = $curveHawkish['yield_2y'] - $curveCalm['yield_2y'];
+        $move10y = $curveHawkish['yield_10y'] - $curveCalm['yield_10y'];
+        $this->assertEqualsWithDelta(0.02 * $loading(2.0), $move2y, 0.00001, 'The two-year carries the curvature loading of the shock (~0.29).');
+        $this->assertEqualsWithDelta(0.02 * $loading(10.0), $move10y, 0.00001, 'The ten-year carries under half as much (~0.14).');
+
+        $this->assertEqualsWithDelta($curveCalm['term_premium_10y'], $curveHawkish['term_premium_10y'], 1e-9, 'The premium is untouched: the shock is all expectations.');
+        $this->assertEqualsWithDelta($move10y, $curveHawkish['risk_neutral_10y'] - $curveCalm['risk_neutral_10y'], 1e-9, 'The whole ten-year move lands in the expected policy path.');
+
+        $overnightCalm = $this->subsystem->calculateSvenssonTenor(0.001, $curveCalm['level'], $curveCalm['beta1'], $curveCalm['curvature'], $curveCalm['curvature2'], $calm);
+        $overnightHawkish = $this->subsystem->calculateSvenssonTenor(0.001, $curveHawkish['level'], $curveHawkish['beta1'], $curveHawkish['curvature'], $curveHawkish['curvature2'], $hawkish);
+        $this->assertEqualsWithDelta($overnightCalm, $overnightHawkish, 0.00001, 'Today\'s rate is known; the repricing cannot move the front of the curve.');
+    }
+
+    public function testExpectedPathShockLoadsTheShortEndHarderThanTheLongEnd(): void
+    {
+        $calm = new MacroState();
+        $calm->policyRate = 0.03;
+        $calm->targetRate = 0.03;
+        $calm->tipsBreakeven = MacroEngine::TARGET_INFLATION;
+
+        $dovish = clone $calm;
+        $dovish->expectedPathShock = -0.02;
+
+        $curveCalm = $this->subsystem->calculateYieldCurve($calm, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE);
+        $curveDovish = $this->subsystem->calculateYieldCurve($dovish, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE);
+
+        $moves = [];
+        foreach (['yield_2y', 'yield_5y', 'yield_10y', 'yield_30y'] as $tenor) {
+            $moves[$tenor] = abs($curveDovish[$tenor] - $curveCalm[$tenor]);
+        }
+
+        $this->assertGreaterThan($moves['yield_5y'], $moves['yield_2y'], 'The belly repricing bites hardest at the two-year.');
+        $this->assertGreaterThan($moves['yield_10y'], $moves['yield_5y']);
+        $this->assertGreaterThan($moves['yield_30y'], $moves['yield_10y']);
+        $this->assertLessThan(0.2 * $moves['yield_2y'], $moves['yield_30y'], 'The thirty-year carries about a sixth of the two-year move: the long-run anchor is not in question.');
+    }
+
+    public function testExpectedPathShockDecaysAtItsOwnRateAndIsCapped(): void
+    {
+        $quiet = new class extends MathUtility {
+            public function generateStandardNormal(): float { return 0.0; }
+        };
+        $state = new MacroState();
+        $state->expectedPathShock = 0.03;
+        (new MonetaryPolicySubsystem($quiet))->updateTermPremiumDynamics($state, 1.0);
+        $this->assertEqualsWithDelta(0.03 * exp(-MonetaryPolicySubsystem::EXPECTED_PATH_SHOCK_KAPPA), $state->expectedPathShock, 0.00001, 'Without news the repricing fades at its OU rate, a half-life of months rather than years.');
+
+        $extreme = new class extends MathUtility {
+            public function generateStandardNormal(): float { return 40.0; }
+        };
+        $state = new MacroState();
+        (new MonetaryPolicySubsystem($extreme))->updateTermPremiumDynamics($state, 1.0);
+        $this->assertEqualsWithDelta(MonetaryPolicySubsystem::EXPECTED_PATH_SHOCK_CAP, $state->expectedPathShock, 0.00001, 'A repricing is capped: it is never a regime change.');
     }
 }

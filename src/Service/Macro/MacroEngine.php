@@ -475,7 +475,8 @@ class MacroEngine
         $this->aggregateSubsystem->updateCapitalStockOverhang($state, $dt);
 
         $stressMultiplier = 1.0 + (abs($state->outputGap) * self::STRESS_MULTIPLIER_GAP_SENSITIVITY);
-        $state->outputGap = $this->aggregateSubsystem->calculateOutputGap($state, $state->yield5y, $state->naturalRate, $dt, $stressMultiplier);
+        $expectedInflation = $this->monetarySubsystem->calculateExpectedInflation($state, self::TARGET_INFLATION);
+        $state->outputGap = $this->aggregateSubsystem->calculateOutputGap($state, $state->yield5y, $state->naturalRate, $expectedInflation, $dt, $stressMultiplier);
 
         $this->aggregateSubsystem->calculateCapacityUtilization($state);
         $this->commoditySubsystem->calculateEnergyShock($state, $dt);
@@ -489,8 +490,8 @@ class MacroEngine
         $this->commoditySubsystem->calculateAgriculturalCommodityIndex($state, $dt);
         $this->commoditySubsystem->calculateFreightRateIndex($state, $dt);
         $this->commoditySubsystem->calculateSupplyChainPressureIndex($state);
-        $this->assetSubsystem->calculateResidentialPropertyIndex($state, $dt);
-        $this->assetSubsystem->calculateHousingStarts($state, $dt);
+        $this->assetSubsystem->calculateResidentialPropertyIndex($state, $expectedInflation, $dt);
+        $this->assetSubsystem->calculateHousingStarts($state, $expectedInflation, $dt);
 
         $stressMultiplier = 1.0 + (abs($state->outputGap) * self::STRESS_MULTIPLIER_GAP_SENSITIVITY);
         $state->inflation = $this->aggregateSubsystem->calculateInflation($state, self::TARGET_INFLATION, $stressMultiplier, $dt);
