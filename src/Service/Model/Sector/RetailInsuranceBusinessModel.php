@@ -74,7 +74,7 @@ class RetailInsuranceBusinessModel extends InsuranceBusinessModel
         // Independent stream Z-scores
         $pcZ    = $streams->generateZ('property_casualty_premiums', 0.25);
         $lifeZ  = $streams->generateZ('life_insurance_premiums', 0.50);
-        $claimZ = $streams->generateExogenousZ('claim', 0.05);
+        $claimZ = $this->resolveClaimZ($streams, $macroState, self::CATASTROPHE_MACRO_LOADING);
 
         // Life & Annuities spreads benefit from a steep yield curve (spread over guaranteed crediting rates)
         $yield10y = $macroState->yield10yEma;
@@ -154,6 +154,7 @@ class RetailInsuranceBusinessModel extends InsuranceBusinessModel
     public function getOperatingMacroFields(): array
     {
         return [
+            'catastrophe_loss_index_ema',
             'inflation_ema',
             'market_volatility_ema',
             'nominal_gdp_index',

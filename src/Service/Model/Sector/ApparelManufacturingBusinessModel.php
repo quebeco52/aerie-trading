@@ -125,6 +125,8 @@ class ApparelManufacturingBusinessModel extends StandardCorporateBusinessModel
     // --- Trade Physics ---
     /** Sensitivity of contract textile export and domestic mill volumes to trade balance shifts. */
     public const TRADE_BALANCE_SENSITIVITY = 1.00;
+    /** Export volume per unit of the foreign bloc's output gap: the customers-abroad half of the trade term. */
+    public const FOREIGN_DEMAND_SENSITIVITY = 1.00;
 
     // --- Tail Risk & Shock Thresholds ---
     /** Negative z-score threshold triggering severe agricultural/raw fiber supply chain disruption. */
@@ -291,7 +293,8 @@ class ApparelManufacturingBusinessModel extends StandardCorporateBusinessModel
         // Currency FX Export Competitiveness & Global Trade: A weaker currency and positive trade balance boost textile exports.
         $fxShift = ($macroState->exchangeRateIndexEma - FinancialConstants::FX_INDEX_BASE) / FinancialConstants::FX_INDEX_BASE;
         $contractFxBonus = $fxShift * self::CONTRACT_FX_EXPORT_SCALAR;
-        $tradeShift = MathUtility::calculateTradeBalanceShift($macroState->tradeBalanceToGdpEma, sensitivity: self::TRADE_BALANCE_SENSITIVITY);
+        $tradeShift = MathUtility::calculateTradeBalanceShift($macroState->tradeBalanceToGdpEma, sensitivity: self::TRADE_BALANCE_SENSITIVITY)
+            + MathUtility::calculateForeignDemandShift($macroState->foreignOutputGapEma, sensitivity: self::FOREIGN_DEMAND_SENSITIVITY);
 
         // Output gap drives non-linear supply chain ordering contractions and inventory markdown pressures
         $outputGap = $macroState->outputGapEma;
@@ -386,6 +389,7 @@ class ApparelManufacturingBusinessModel extends StandardCorporateBusinessModel
             'consumer_sentiment_index_ema',
             'energy_cost_push_lag',
             'exchange_rate_index_ema',
+            'foreign_output_gap_ema',
             'freight_rate_index_ema',
             'inventory_stock_gap_ema',
             'output_gap_ema',

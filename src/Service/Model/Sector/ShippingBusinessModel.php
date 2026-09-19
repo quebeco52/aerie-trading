@@ -94,6 +94,8 @@ class ShippingBusinessModel extends StandardCorporateBusinessModel
     // --- Global Trade & Supply Chain Pressure Transmission ---
     /** Sensitivity of maritime container and bulk freight demand to trade balance shifts. */
     public const TRADE_BALANCE_SENSITIVITY = 1.50;
+    /** Export volume per unit of the foreign bloc's output gap: the customers-abroad half of the trade term. */
+    public const FOREIGN_DEMAND_SENSITIVITY = 3.00;
     /** Spot freight rate surge multiplier per unit of NY Fed global supply chain pressure. */
     public const GSCPI_FREIGHT_BOOST_SCALAR = 0.10;
 
@@ -142,7 +144,8 @@ class ShippingBusinessModel extends StandardCorporateBusinessModel
     public function getMacroPhysics(Stock $stock, \App\DTO\MacroStateDTO $macroState): array
     {
         $outputGap = $this->resolveLaggedOutputGap($stock, $macroState);
-        $tradeShift = MathUtility::calculateTradeBalanceShift($macroState->tradeBalanceToGdpEma, sensitivity: self::TRADE_BALANCE_SENSITIVITY);
+        $tradeShift = MathUtility::calculateTradeBalanceShift($macroState->tradeBalanceToGdpEma, sensitivity: self::TRADE_BALANCE_SENSITIVITY)
+            + MathUtility::calculateForeignDemandShift($macroState->foreignOutputGapEma, sensitivity: self::FOREIGN_DEMAND_SENSITIVITY);
         $beta = $this->getOperatingCyclicality($stock);
 
         // Extreme sensitivity to global economic momentum and trade volume
@@ -183,7 +186,8 @@ class ShippingBusinessModel extends StandardCorporateBusinessModel
         $outputGap = $macroState->outputGapEma;
         $freightShift = ($macroState->freightRateIndexEma - 100.0) / 100.0;
         $metalsShift = ($macroState->industrialMetalsIndexEma - 100.0) / 100.0;
-        $tradeShift = MathUtility::calculateTradeBalanceShift($macroState->tradeBalanceToGdpEma, sensitivity: self::TRADE_BALANCE_SENSITIVITY);
+        $tradeShift = MathUtility::calculateTradeBalanceShift($macroState->tradeBalanceToGdpEma, sensitivity: self::TRADE_BALANCE_SENSITIVITY)
+            + MathUtility::calculateForeignDemandShift($macroState->foreignOutputGapEma, sensitivity: self::FOREIGN_DEMAND_SENSITIVITY);
         $gscpiShift = max(0.0, $macroState->supplyChainPressureIndexEma - MacroEngine::GSCPI_BASELINE);
         $spotRateMultiplier = ($outputGap * self::CONTINUOUS_SPOT_RATE_SCALAR) + ($freightShift * 0.50) + ($metalsShift * 0.15) + $tradeShift + ($gscpiShift * self::GSCPI_FREIGHT_BOOST_SCALAR);
         $eventType = null;
@@ -292,6 +296,7 @@ class ShippingBusinessModel extends StandardCorporateBusinessModel
         return [
             'energy_cost_push_lag',
             'exchange_rate_index_ema',
+            'foreign_output_gap_ema',
             'freight_rate_index_ema',
             'industrial_metals_index_ema',
             'output_gap_ema',

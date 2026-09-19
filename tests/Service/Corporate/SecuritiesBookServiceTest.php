@@ -34,7 +34,7 @@ class SecuritiesBookServiceTest extends TestCase
     }
 
     /** A fitted curve at a policy rate and a long-run level, the two factors the term structure is built on. */
-    private function macro(float $policyRate, float $level): MacroStateDTO
+    private function macro(float $policyRate, float $level, float $baseTermPremium = 0.0125, float $sovereignSpread = 0.0): MacroStateDTO
     {
         return new MacroStateDTO(
             policyRate: $policyRate,
@@ -43,7 +43,9 @@ class SecuritiesBookServiceTest extends TestCase
             yield10yEma: $level,
             nsLevel: $level,
             nsBeta1: $policyRate - $level,
-            nsBaseTermPremium: 0.0125,
+            nsBaseTermPremium: $baseTermPremium,
+            sovereignRiskSpread: $sovereignSpread,
+            sovereignRiskSpreadEma: $sovereignSpread,
         );
     }
 
@@ -299,5 +301,34 @@ class SecuritiesBookServiceTest extends TestCase
     {
         self::assertSame(0.0, $this->service->realizeOnSale(-20_000_000_000.0, 0.0, 1_000.0));
         self::assertSame(0.0, $this->service->realizeOnSale(-20_000_000_000.0, self::BOOK, 0.0));
+    }
+
+    /**
+     * A 100 bps sovereign risk spread widening lifts the sovereign term premium and marks
+     * the available-for-sale (AFS) bond portfolio down by its duration-scaled magnitude.
+     */
+    public function testSovereignRiskSpreadProducesExpectedAfsMark(): void
+    {
+        $duration = 5.0;
+        $baselineMacro = $this->macro(0.03, 0.0425, 0.0125);
+        $opened = $this->roll($baselineMacro, $duration);
+
+        // 100 bps sovereign risk premium widening on the curve
+        $stressedMacro = $this->macro(0.03, 0.0425, 0.0125 + 0.0100, 0.0100);
+
+        $mark = $this->roll($stressedMacro, $duration, carryingYield: $opened->carryingYield);
+
+        // For a 5y duration book, a ~100bps term premium widening generates a ~-3% markdown after NS duration weighting and quarterly rolldown
+        $ratio = $mark->totalMark / self::BOOK;
+        self::assertLessThan(0.0, $ratio, 'Sovereign spread widening must mark the sovereign securities book down.');
+        self::assertLessThan(-0.02, $ratio, 'A 100bps widening on a 5y duration book must mark down more than 2%.');
+        self::assertGreaterThan(-0.05, $ratio, 'A 100bps widening on a 5y duration book cannot exceed roughly 5% markdown.');
+        self::assertLessThan(0.0, $mark->afsMark, 'AFS mark must be negative when sovereign spread widens.');
+        self::assertEqualsWithDelta(
+            $mark->totalMark * (1.0 - FinancialConstants::DEFAULT_HTM_BOOK_SHARE),
+            $mark->afsMark,
+            1e-6,
+            'AFS mark reflects the non-HTM tranche share of the markdown.'
+        );
     }
 }

@@ -312,7 +312,7 @@ class ClearingHouseBusinessModel extends BaseFinancialBusinessModel
         return $ownCash * $cashYield;
     }
 
-    public function calculateInterestExpenseAndWholesaleRate(Stock $stock, float $blendedFixedRate, float $floatingInterestRate, float $currentMarketFixedRate, float $policyRate, float $equityLimit, float $totalEquity, float $debt): InterestExpenseDTO
+    public function calculateInterestExpenseAndWholesaleRate(Stock $stock, float $blendedFixedRate, float $floatingInterestRate, float $currentMarketFixedRate, float $policyRate, float $equityLimit, float $totalEquity, float $debt, ?\App\DTO\MacroStateDTO $macroState = null): InterestExpenseDTO
     {
         $corporateDebt = (float) $stock->getWholesaleDebt();
         $floatingRatio = (float) $stock->getFloatingDebtRatio();

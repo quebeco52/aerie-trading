@@ -35,13 +35,14 @@ class MacroEngineTest extends TestCase
     {
         // Use a partial mock so the actual math methods run, but we can control randomness
         $this->mathUtilityMock = $this->getMockBuilder(MathUtility::class)
-            ->onlyMethods(['generateStandardNormal', 'checkProbability'])
+            // Storm arrivals are a Poisson count, mocked to zero so a neutral tick stays neutral.
+            ->onlyMethods(['generateStandardNormal', 'checkProbability', 'generatePoissonCount'])
             ->getMock();
         $this->redisMock = $this->createMock(\Redis::class);
 
         $this->snapshotRecorder = new MacroSnapshotRecorder();
         $this->monetarySubsystem = new MonetaryPolicySubsystem($this->mathUtilityMock);
-        $this->laborSubsystem = new LaborMarketSubsystem();
+        $this->laborSubsystem = new LaborMarketSubsystem($this->mathUtilityMock);
         $this->aggregateSubsystem = new MacroAggregateSubsystem($this->mathUtilityMock);
         $this->commoditySubsystem = new CommodityLogisticsSubsystem($this->mathUtilityMock);
         $this->assetSubsystem = new AssetMarketSubsystem($this->mathUtilityMock);
@@ -222,6 +223,9 @@ class MacroEngineTest extends TestCase
         $existingState = [
             'output_gap' => 0.04,
             'output_gap_ema' => 0.04,
+            // Metals clear on world demand; the district's boom is its weighted share of it, as the EMA barrier will publish it.
+            'global_demand_gap' => 0.04 * MacroEngine::DOMESTIC_DEMAND_WEIGHT,
+            'global_demand_gap_ema' => 0.04 * MacroEngine::DOMESTIC_DEMAND_WEIGHT,
             'industrial_metals_index' => 100.0,
             'industrial_metals_index_ema' => 100.0,
             'metals_chi' => 0.0,
@@ -1733,7 +1737,7 @@ class MacroEngineTest extends TestCase
 
     public function testNairuHysteresisScarsAfterDeepRecession(): void
     {
-        $laborSubsystem = new \App\Service\Macro\Subsystem\LaborMarketSubsystem();
+        $laborSubsystem = new \App\Service\Macro\Subsystem\LaborMarketSubsystem($this->mathUtilityMock);
 
         $state = new \App\Service\Macro\MacroState();
         $state->nairu = 0.04;
@@ -1751,7 +1755,7 @@ class MacroEngineTest extends TestCase
 
     public function testNairuRecoveryDuringTightLaborMarket(): void
     {
-        $laborSubsystem = new \App\Service\Macro\Subsystem\LaborMarketSubsystem();
+        $laborSubsystem = new \App\Service\Macro\Subsystem\LaborMarketSubsystem($this->mathUtilityMock);
 
         $state = new \App\Service\Macro\MacroState();
         $state->nairu = 0.06; // Scarred from prior downturn
@@ -1769,7 +1773,7 @@ class MacroEngineTest extends TestCase
 
     public function testDownwardWageRigidity(): void
     {
-        $laborSubsystem = new \App\Service\Macro\Subsystem\LaborMarketSubsystem();
+        $laborSubsystem = new \App\Service\Macro\Subsystem\LaborMarketSubsystem($this->mathUtilityMock);
         $dt = 0.25;
         $tfpGrowth = MacroEngine::TFP_DRIFT;
 
@@ -2162,6 +2166,24 @@ class MacroEngineTest extends TestCase
         $this->assertEquals(0.15, MacroEngine::CAPITAL_OVERHANG_MAX);
         $this->assertEquals(10.0, MacroEngine::STRESS_MULTIPLIER_GAP_SENSITIVITY);
     }
+
+
+    public function testAWorkStoppageDrainsTheStruckSectorsDemandFactorOnly(): void
+    {
+        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
+
+        $state = new \App\Service\Macro\MacroState();
+        foreach (array_keys(\App\Data\Sectors::MACRO_SECTORS) as $sector) {
+            $state->sectorDemandZ[$sector] = 0.0;
+        }
+        $state->strikeSector = 'Industrials';
+        $state->strikeRemainingYears = 0.10;
+
+        $dt = 0.05;
+        $update = new \ReflectionMethod(MacroEngine::class, 'updateSectorFactors');
+        $update->invokeArgs($this->engine, [$state, $dt]);
+
+        $this->assertEqualsWithDelta(-MacroEngine::STRIKE_SECTOR_DEMAND_LOSS_PER_YEAR * $dt, $state->sectorDemandZ['Industrials'], 1e-9, 'Lost output is a flow out of the struck sector for as long as the stoppage runs.');
+        $this->assertSame(0.0, $state->sectorDemandZ['Energy'], 'Every other sector is untouched.');
+    }
 }
-
-

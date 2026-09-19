@@ -743,4 +743,77 @@ class MacroAggregateSubsystemTest extends TestCase
 
         $this->assertEqualsWithDelta($gapAnchored, $gapStressed, 1e-12, 'A breakeven lifted only by its risk premium must not read as easier money.');
     }
+
+
+    /** Baker, Bloom & Davis (2016): a doubling of policy uncertainty is a demand drag; a quiet regime is a mild tailwind. */
+    public function testPolicyUncertaintyDragsDemandInLogs(): void
+    {
+        $neutral = new MacroState();
+        $doubled = new MacroState();
+        $doubled->policyUncertaintyIndexEma = 2.0 * MacroEngine::EPU_BASELINE;
+        $halved = new MacroState();
+        $halved->policyUncertaintyIndexEma = 0.5 * MacroEngine::EPU_BASELINE;
+
+        $dt = 0.25;
+        $gapNeutral = $this->subsystem->calculateOutputGap($neutral, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, $dt, 1.0);
+        $gapDoubled = $this->subsystem->calculateOutputGap($doubled, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, $dt, 1.0);
+        $gapHalved = $this->subsystem->calculateOutputGap($halved, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, $dt, 1.0);
+
+        $expected = MacroAggregateSubsystem::KALDOR_EPU_DRAG * log(2.0) * $dt;
+        $this->assertEqualsWithDelta(-$expected, $gapDoubled - $gapNeutral, 1e-9, 'A doubling of the index takes the drag off demand over the quarter.');
+        $this->assertEqualsWithDelta($expected, $gapHalved - $gapNeutral, 1e-9, 'and a halving gives the same amount back: the drag is symmetric in logs.');
+    }
+
+
+    /** Noy (2009): destruction is a supply loss on impact; an average year is no drag at all. */
+    public function testCatastropheLossesDragOutputOnlyAboveAnAverageYear(): void
+    {
+        $average = new MacroState();
+        $quiet = new MacroState();
+        $quiet->catastropheLossIndexEma = 0.2;
+        $stormy = new MacroState();
+        $stormy->catastropheLossIndexEma = 3.0;
+
+        $dt = 0.25;
+        $gapAverage = $this->subsystem->calculateOutputGap($average, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, $dt, 1.0);
+        $gapQuiet = $this->subsystem->calculateOutputGap($quiet, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, $dt, 1.0);
+        $gapStormy = $this->subsystem->calculateOutputGap($stormy, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, $dt, 1.0);
+
+        $this->assertEqualsWithDelta($gapAverage, $gapQuiet, 1e-12, 'A quiet season is not a boom.');
+        $this->assertEqualsWithDelta(-MacroAggregateSubsystem::KALDOR_CATASTROPHE_DRAG * 2.0 * $dt, $gapStormy - $gapAverage, 1e-9);
+    }
+
+
+    /** Obstfeld & Rogoff (1996): the foreign bloc's boom is the district's exports. */
+    public function testAForeignBoomLiftsDemandThroughExports(): void
+    {
+        $home = new MacroState();
+        $abroad = new MacroState();
+        $abroad->foreignOutputGapEma = 0.03;
+
+        $dt = 0.25;
+        $gapHome = $this->subsystem->calculateOutputGap($home, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, $dt, 1.0);
+        $gapAbroad = $this->subsystem->calculateOutputGap($abroad, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, $dt, 1.0);
+
+        $this->assertEqualsWithDelta(MacroAggregateSubsystem::KALDOR_FOREIGN_DEMAND * 0.03 * $dt, $gapAbroad - $gapHome, 1e-9);
+    }
+
+
+    /** Drehmann, Juselius & Korinek (2017): service below its average is borrowing that lifts demand; above it, repayment that drags. */
+    public function testHouseholdDebtServiceMovesDemandBothWaysAroundItsAverage(): void
+    {
+        $neutral = new MacroState();
+        $carried = new MacroState();
+        $carried->householdDebtServiceGap = -0.02;
+        $repaying = new MacroState();
+        $repaying->householdDebtServiceGap = 0.02;
+
+        $dt = 0.25;
+        $gapNeutral = $this->subsystem->calculateOutputGap($neutral, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, $dt, 1.0);
+        $gapCarried = $this->subsystem->calculateOutputGap($carried, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, $dt, 1.0);
+        $gapRepaying = $this->subsystem->calculateOutputGap($repaying, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, $dt, 1.0);
+
+        $this->assertEqualsWithDelta(MacroAggregateSubsystem::KALDOR_HOUSEHOLD_DEBT_SERVICE * 0.02 * $dt, $gapCarried - $gapNeutral, 1e-9, 'Two points of service below average is borrowing that adds a point a year.');
+        $this->assertEqualsWithDelta(-MacroAggregateSubsystem::KALDOR_HOUSEHOLD_DEBT_SERVICE * 0.02 * $dt, $gapRepaying - $gapNeutral, 1e-9, 'Two points over it take a point a year off demand.');
+    }
 }

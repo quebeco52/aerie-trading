@@ -162,4 +162,46 @@ class UtilityBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta(100_000_000.0 * 4.0 * UtilityBusinessModel::GRID_HARDENING_CAPEX_RATIO, $rebuilding->scheduledCapex, 1.0);
     }
 
+
+    /** The fuel behind the spark spread is gas: a gas squeeze with oil flat crushes merchant margins; an oil move with gas flat does not touch the spread. */
+    public function testAGasSqueezeCrushesTheSparkSpreadWhileOilAloneDoesNot(): void
+    {
+        $model = new UtilityBusinessModel();
+        $run = function (float $gasIndexEma, float $energyLag) use ($model): float {
+            $stock = new Stock();
+            $stock->setTicker('UTIL');
+            $stock->setBeta('0.5');
+            $math = $this->createStub(MathUtility::class);
+            $math->method('generateStandardNormal')->willReturn(0.0);
+            $macro = new MacroStateDTO(inflationEma: 0.02, naturalGasPriceIndexEma: $gasIndexEma, energyCostPushLag: $energyLag);
+
+            return $model->computeActualFinancials($stock, 100_000_000.0, 0.40, 20_000_000.0, 0.10, $macro, $math)->clampedMargin;
+        };
+
+        $calm = $run(100.0, 0.0);
+        $gasSqueeze = $run(150.0, 0.0);
+        $this->assertGreaterThan($calm, $gasSqueeze, 'A 50% gas spike raises the utility cost ratio through the spark spread and the fuel basket.');
+    }
+
+
+    public function testADistrictStormOpensTheGridLiabilityRegimeWithoutAFailureOfItsOwn(): void
+    {
+        $model = new UtilityBusinessModel();
+        $regimeKey = StreamContext::REGIME_STATE_PREFIX . UtilityBusinessModel::REGIME_INFRASTRUCTURE_LIABILITY;
+
+        $run = function (float $burden) use ($model): array {
+            $stock = new Stock();
+            $stock->setTicker('UTIL');
+            $stock->setBeta('0.5');
+            $math = $this->getMockBuilder(MathUtility::class)->onlyMethods(['generatePersistentZ', 'checkProbability'])->getMock();
+            $math->method('generatePersistentZ')->willReturn(0.0);
+            $math->method('checkProbability')->willReturn(false);
+            $macro = new MacroStateDTO(inflationEma: 0.02, catastropheLossIndexEma: $burden);
+
+            return $model->computeActualFinancials($stock, 100_000_000.0, 0.40, 20_000_000.0, 0.10, $macro, $math)->streamZ;
+        };
+
+        $this->assertArrayNotHasKey($regimeKey, array_filter($run(1.0)));
+        $this->assertGreaterThan(0.0, $run(UtilityBusinessModel::CATASTROPHE_GRID_DAMAGE_THRESHOLD)[$regimeKey] ?? 0.0, 'District storm damage opens the hardening regime with the utility\'s own event draw flat.');
+    }
 }

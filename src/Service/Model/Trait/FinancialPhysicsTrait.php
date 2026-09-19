@@ -8,6 +8,7 @@ use App\DTO\InterestExpenseDTO;
 use App\DTO\DebtExpansionAppetiteDTO;
 use App\DTO\DebtCostDTO;
 
+use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Math\FinancialConstants;
 
@@ -110,7 +111,7 @@ trait FinancialPhysicsTrait
 
     public function processPassiveLiabilityGrowth(Stock $stock, \App\DTO\MacroStateDTO $macroState, array &$state, \App\Service\Math\MathUtility $mathUtility): void {}
 
-    public function calculateInterestExpenseAndWholesaleRate(Stock $stock, float $blendedFixedRate, float $floatingInterestRate, float $currentMarketFixedRate, float $policyRate, float $equityLimit, float $totalEquity, float $debt): InterestExpenseDTO
+    public function calculateInterestExpenseAndWholesaleRate(Stock $stock, float $blendedFixedRate, float $floatingInterestRate, float $currentMarketFixedRate, float $policyRate, float $equityLimit, float $totalEquity, float $debt, ?\App\DTO\MacroStateDTO $macroState = null): InterestExpenseDTO
     {
         $floatingRatio = (float) $stock->getFloatingDebtRatio();
         $interestExpense = ($debt * (1.0 - $floatingRatio) * $blendedFixedRate) + ($debt * $floatingRatio * $floatingInterestRate);
@@ -248,10 +249,13 @@ trait FinancialPhysicsTrait
         return $bookValuePerShare * $structuralRoic;
     }
 
-    public function getRegulatoryDividendCap(Stock $stock, float $currentTreasury): ?float
+    public function getRegulatoryDividendCap(Stock $stock, float $currentTreasury, ?MacroStateDTO $macroState = null): ?float
     {
         $industry = $stock->getIndustry() ?: 'General';
         $equityLimit = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['equity_limit'] ?? 10.0;
+        if ($macroState !== null && $macroState->countercyclicalBufferRateEma > 0.0) {
+            $equityLimit = \App\Service\Math\MathUtility::calculateBufferedLeverageLimit($equityLimit, $macroState->countercyclicalBufferRateEma);
+        }
         $leverageRatio = (float) $stock->getDebtToEquityRatio();
         $leverageOvershoot = $leverageRatio / $equityLimit;
 
@@ -266,15 +270,18 @@ trait FinancialPhysicsTrait
         return null;
     }
 
-    public function checkBuybackRegulatoryLockout(Stock $stock, float $currentTreasury): ?bool
+    public function checkBuybackRegulatoryLockout(Stock $stock, float $currentTreasury, ?MacroStateDTO $macroState = null): ?bool
     {
-        $regulatoryCap = $this->getRegulatoryDividendCap($stock, $currentTreasury);
+        $regulatoryCap = $this->getRegulatoryDividendCap($stock, $currentTreasury, $macroState);
         if ($regulatoryCap !== null && $regulatoryCap <= 0.0) {
             return true;
         }
 
         $industry = $stock->getIndustry() ?: 'General';
         $equityLimit = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['equity_limit'] ?? 10.0;
+        if ($macroState !== null && $macroState->countercyclicalBufferRateEma > 0.0) {
+            $equityLimit = \App\Service\Math\MathUtility::calculateBufferedLeverageLimit($equityLimit, $macroState->countercyclicalBufferRateEma);
+        }
         $buybackLockoutThreshold = max(1.0, $equityLimit - 1.0) + 0.5;
 
         if ((float) $stock->getDebtToEquityRatio() > $buybackLockoutThreshold) {

@@ -175,6 +175,41 @@ class AssetManagementBusinessModelTest extends TestCase
         $this->assertLessThan(80_000_000.0, $result->streamRevenue['base_fee'], 'Institutional redemptions must erode base AUM management fee revenue.');
     }
 
+    public function testBaseFeeRevenueMarksToTheEquityMarketLevelAgainstItsTrend(): void
+    {
+        $model = new AssetManagementBusinessModel();
+        $stock = new Stock();
+        $stock->setTicker('SHRK');
+        $stock->setBeta('1.0');
+
+        $mathMock = $this->createStub(MathUtility::class);
+        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+
+        $run = function (\App\DTO\MacroStateDTO $macro) use ($model, $stock, $mathMock): float {
+            return $model->computeActualFinancials(
+                $stock,
+                expectedRevenue: 100_000_000.0,
+                realizedVariableMargin: 0.30,
+                fixedCosts: 20_000_000.0,
+                baselineVol: 0.0,
+                macroState: $macro,
+                mathUtility: $mathMock
+            )->streamRevenue['base_fee'];
+        };
+
+        // No market reported: both wealth fields at zero, the term is silent and the base fee is the plain 80M.
+        $noMarket = $run(new \App\DTO\MacroStateDTO(outputGapEma: 0.0));
+        $this->assertEqualsWithDelta(80_000_000.0, $noMarket, 1.0);
+
+        // A market 20% above its three-year trend lifts assets, and fees, by 20% x the level beta.
+        $bull = $run(new \App\DTO\MacroStateDTO(outputGapEma: 0.0, equityWealthRatio: 1.20, equityWealthTrend: 1.00));
+        $this->assertEqualsWithDelta(80_000_000.0 * (1.0 + (0.20 * AssetManagementBusinessModel::AUM_MARKET_LEVEL_BETA)), $bull, 1.0);
+
+        // A crash beyond the cap is clamped, so the fee base cannot be wiped out by a single mark.
+        $crash = $run(new \App\DTO\MacroStateDTO(outputGapEma: 0.0, equityWealthRatio: 0.20, equityWealthTrend: 1.00));
+        $this->assertEqualsWithDelta(80_000_000.0 * (1.0 - (AssetManagementBusinessModel::AUM_MARKET_LEVEL_DEVIATION_CAP * AssetManagementBusinessModel::AUM_MARKET_LEVEL_BETA)), $crash, 1.0);
+    }
+
     public function testSupportsUnderleveragedDebtExpansion(): void
     {
         $assetManagerModel = new AssetManagementBusinessModel();
@@ -192,5 +227,34 @@ class AssetManagementBusinessModelTest extends TestCase
         // 85% of 1.0 (default) is 0.85
         $this->assertTrue($peModel->isUnderLeveraged(0.80, 1.0, 5.0, 1.05, 0.12, 0.05));
         $this->assertFalse($peModel->isUnderLeveraged(0.90, 1.0, 5.0, 1.05, 0.12, 0.05));
+    }
+
+
+    public function testMoneyFundMigrationIsFeeEarningInflow(): void
+    {
+        $model = new AssetManagementBusinessModel();
+        $stock = new Stock();
+        $stock->setTicker('SHRK');
+        $stock->setBeta('1.0');
+
+        $mathMock = $this->createStub(MathUtility::class);
+        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+
+        $run = function (float $share, float $shareEma) use ($model, $stock, $mathMock): float {
+            return $model->computeActualFinancials(
+                $stock,
+                expectedRevenue: 100_000_000.0,
+                realizedVariableMargin: 0.30,
+                fixedCosts: 20_000_000.0,
+                baselineVol: 0.0,
+                macroState: new \App\DTO\MacroStateDTO(outputGapEma: 0.0, moneyMarketFundShare: $share, moneyMarketFundShareEma: $shareEma),
+                mathUtility: $mathMock
+            )->streamRevenue['base_fee'];
+        };
+
+        $steady = $run(0.15, 0.15);
+        $migrating = $run(0.1625, 0.15);
+        $this->assertEqualsWithDelta(80_000_000.0 * 0.0125 * AssetManagementBusinessModel::MMF_AUM_INFLOW_SENSITIVITY, $migrating - $steady, 1.0);
+        $this->assertEqualsWithDelta($steady, $run(0.14, 0.15), 1.0, 'Share flowing back to deposits is not a fee-earning inflow.');
     }
 }

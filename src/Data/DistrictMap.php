@@ -610,7 +610,7 @@ class DistrictMap
         'rate-council' => [
             'label' => 'The Rate Council',
             'short_label' => 'RATES',
-            'fields' => ['policy_rate_ema', 'yield_2y_ema', 'yield_5y_ema', 'yield_10y_ema', 'yield_30y_ema', 'ns_slope', 'ns_slope_ema', 'money_supply_growth_ema'],
+            'fields' => ['policy_rate_ema', 'yield_2y_ema', 'yield_5y_ema', 'yield_10y_ema', 'yield_30y_ema', 'ns_slope', 'ns_slope_ema', 'money_supply_growth_ema', 'system_deposit_beta_ema', 'money_market_fund_share_ema'],
             'readouts' => [
                 ['field' => 'policy_rate_ema', 'label' => 'POLICY', 'unit' => self::UNIT_PERCENT],
                 ['field' => 'yield_10y_ema', 'label' => '10Y', 'unit' => self::UNIT_PERCENT],
@@ -625,7 +625,7 @@ class DistrictMap
         'credit-registry' => [
             'label' => 'The Credit Registry',
             'short_label' => 'CREDIT',
-            'fields' => ['macro_credit_spread', 'macro_credit_spread_ema', 'high_yield_credit_spread_ema', 'interbank_liquidity_spread_ema', 'corporate_default_rate_ema', 'retail_default_rate_ema', 'sloos_tightening_index_ema', 'recession_probability_ema'],
+            'fields' => ['macro_credit_spread', 'macro_credit_spread_ema', 'high_yield_credit_spread_ema', 'interbank_liquidity_spread_ema', 'corporate_default_rate_ema', 'retail_default_rate_ema', 'sloos_tightening_index_ema', 'recession_probability_ema', 'sovereign_risk_spread_ema', 'sovereign_debt_to_gdp_ema', 'household_debt_to_income_ema', 'household_debt_service_ratio_ema', 'household_debt_service_gap', 'credit_to_gdp_gap_ema', 'countercyclical_buffer_rate_ema'],
             'readouts' => [
                 ['field' => 'macro_credit_spread_ema', 'label' => 'IG', 'unit' => self::UNIT_PERCENT],
                 ['field' => 'high_yield_credit_spread_ema', 'label' => 'HY', 'unit' => self::UNIT_PERCENT],
@@ -635,6 +635,10 @@ class DistrictMap
                 ['field' => 'interbank_liquidity_spread_ema', 'op' => self::OP_GTE, 'value' => 0.0100],
                 // MacroEngine::SYSTEMIC_CREDIT_SEIZURE_SPREAD — a high-yield credit seizure.
                 ['field' => 'high_yield_credit_spread_ema', 'op' => self::OP_GTE, 'value' => 0.1000],
+                // MacroEngine::SYSTEMIC_SOVEREIGN_STRESS_SPREAD — the sovereign re-rated.
+                ['field' => 'sovereign_risk_spread_ema', 'op' => self::OP_GTE, 'value' => 0.0150],
+                // MacroEngine::HOUSEHOLD_DSR_STRESS_MARGIN — debt service past the deleveraging line over its own average.
+                ['field' => 'household_debt_service_gap', 'op' => self::OP_GTE, 'value' => 0.020],
                 // MacroEngine::SYSTEMIC_RECESSION_DECLARE_PROBABILITY — a declared recession probability.
                 ['field' => 'recession_probability_ema', 'op' => self::OP_GTE, 'value' => 0.50],
             ],
@@ -672,7 +676,7 @@ class DistrictMap
         'land-registry' => [
             'label' => 'The Land Registry',
             'short_label' => 'LAND',
-            'fields' => ['commercial_property_index_ema', 'residential_property_index_ema', 'housing_starts_index_ema'],
+            'fields' => ['commercial_property_index_ema', 'residential_property_index_ema', 'housing_starts_index_ema', 'catastrophe_loss_index_ema'],
             'readouts' => [
                 ['field' => 'commercial_property_index_ema', 'label' => 'CRE', 'unit' => self::UNIT_INDEX],
                 ['field' => 'residential_property_index_ema', 'label' => 'RESI', 'unit' => self::UNIT_INDEX],
@@ -682,12 +686,14 @@ class DistrictMap
                 // invents rather than borrows, because no such constant exists anywhere in the simulation.
                 ['field' => 'commercial_property_index_ema', 'op' => self::OP_INDEX_DROP, 'value' => self::LAND_REGISTRY_PROPERTY_STRESS_DROP],
                 ['field' => 'residential_property_index_ema', 'op' => self::OP_INDEX_DROP, 'value' => self::LAND_REGISTRY_PROPERTY_STRESS_DROP],
+                // InsuranceBusinessModel::CAT_HARD_MARKET_THRESHOLD — a storm season that hardens every carrier.
+                ['field' => 'catastrophe_loss_index_ema', 'op' => self::OP_GTE, 'value' => 3.0],
             ],
         ],
         'commodity-exchange' => [
             'label' => 'The Commodity Exchange',
             'short_label' => 'COMMODITY',
-            'fields' => ['energy_cost_push_lag', 'industrial_metals_index_ema', 'agricultural_commodity_index_ema', 'refining_crack_spread_ema'],
+            'fields' => ['energy_cost_push_lag', 'natural_gas_price_index_ema', 'industrial_metals_index_ema', 'agricultural_commodity_index_ema', 'refining_crack_spread_ema'],
             'readouts' => [
                 ['field' => 'industrial_metals_index_ema', 'label' => 'METALS', 'unit' => self::UNIT_INDEX],
                 ['field' => 'agricultural_commodity_index_ema', 'label' => 'AGRI', 'unit' => self::UNIT_INDEX],
@@ -701,7 +707,7 @@ class DistrictMap
         'freight-authority' => [
             'label' => 'The Freight Authority',
             'short_label' => 'FREIGHT',
-            'fields' => ['freight_rate_index_ema', 'supply_chain_pressure_index_ema', 'trade_balance_to_gdp_ema'],
+            'fields' => ['freight_rate_index_ema', 'supply_chain_pressure_index_ema', 'trade_balance_to_gdp_ema', 'foreign_output_gap_ema', 'global_demand_gap_ema'],
             'readouts' => [
                 ['field' => 'freight_rate_index_ema', 'label' => 'FREIGHT', 'unit' => self::UNIT_INDEX],
                 ['field' => 'supply_chain_pressure_index_ema', 'label' => 'GSCPI', 'unit' => self::UNIT_INDEX],
@@ -728,9 +734,10 @@ class DistrictMap
         'works-ministry' => [
             'label' => 'The Works Ministry',
             'short_label' => 'WORKS',
-            'fields' => ['government_spending_index_ema'],
+            'fields' => ['government_spending_index_ema', 'reimbursement_rate_growth', 'policy_uncertainty_index_ema'],
             'readouts' => [
                 ['field' => 'government_spending_index_ema', 'label' => 'SPEND', 'unit' => self::UNIT_INDEX],
+                ['field' => 'policy_uncertainty_index_ema', 'label' => 'EPU', 'unit' => self::UNIT_INDEX],
             ],
             // No stress_rules — GOVT_SPENDING_BASELINE is a baseline, not a distress level, and no
             // other constant in the simulation treats government spending as a crisis signal.

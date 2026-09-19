@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace App\Service\Model\Strategy;
 
+use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
+use App\Service\Math\MathUtility;
 
 interface CapitalAllocationStrategyInterface
 {
@@ -12,8 +14,8 @@ interface CapitalAllocationStrategyInterface
     public function calculateOrganicCapexSpend(float $organicSpend, float $debtIssued): float;
     public function getSustainableDividendBase(Stock $stock, float $quarterlyEps, float $investedCapital, float $depRate): float;
     public function getMaxOrganicGrowthSpeed(bool $isHoarder, bool $isMegaHoarder): float;
-    public function getRegulatoryDividendCap(Stock $stock, float $currentTreasury): ?float;
-    public function checkBuybackRegulatoryLockout(Stock $stock, float $currentTreasury): ?bool;
+    public function getRegulatoryDividendCap(Stock $stock, float $currentTreasury, ?MacroStateDTO $macroState = null): ?float;
+    public function checkBuybackRegulatoryLockout(Stock $stock, float $currentTreasury, ?MacroStateDTO $macroState = null): ?bool;
 
     /**
      * The share of the firm's capital it currently has no way to put to work at its hurdle, which the
@@ -23,7 +25,7 @@ interface CapitalAllocationStrategyInterface
      * to write at the rate on offer, and the surplus behind the business it declines is redundant that
      * quarter however unsaturated its market is.
      */
-    public function getUndeployableCapitalShare(Stock $stock, \App\DTO\MacroStateDTO $macroState, \App\Service\Math\MathUtility $mathUtility): float;
+    public function getUndeployableCapitalShare(Stock $stock, MacroStateDTO $macroState, MathUtility $mathUtility): float;
 
     /**
      * How far below intrinsic book the market prices the firm — the accretion a repurchase captures

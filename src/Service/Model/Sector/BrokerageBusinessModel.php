@@ -308,8 +308,10 @@ class BrokerageBusinessModel extends BaseFinancialBusinessModel
         // Brokerages hold uninvested client deposit sweeps and earn NII spread over pass-through deposit rates.
         $operatingBase = $this->getOperatingBase($stock);
         $sweepBalances = max(0.0, $operatingBase * self::CLIENT_SWEEP_BASE_RATIO);
+        // Sweep pass-through is the brokerage's floor; when the whole system reprices deposits faster, clients get that.
+        $sweepBeta = max(self::SWEEP_DEPOSIT_BETA, $macroState->systemDepositBetaEma);
         $clientDepositRate = $policyRate > self::SWEEP_RATE_BUFFER
-            ? ($policyRate - self::SWEEP_RATE_BUFFER) * self::SWEEP_DEPOSIT_BETA
+            ? ($policyRate - self::SWEEP_RATE_BUFFER) * $sweepBeta
             : 0.001;
         $sweepSpreadYield = max(0.0, $policyRate - $clientDepositRate);
         $sweepInterest = $sweepBalances * $sweepSpreadYield;
@@ -323,7 +325,7 @@ class BrokerageBusinessModel extends BaseFinancialBusinessModel
         return $marginInterest + $sweepInterest + $cashInterest;
     }
 
-    public function calculateInterestExpenseAndWholesaleRate(Stock $stock, float $blendedFixedRate, float $floatingInterestRate, float $currentMarketFixedRate, float $policyRate, float $equityLimit, float $totalEquity, float $debt): InterestExpenseDTO
+    public function calculateInterestExpenseAndWholesaleRate(Stock $stock, float $blendedFixedRate, float $floatingInterestRate, float $currentMarketFixedRate, float $policyRate, float $equityLimit, float $totalEquity, float $debt, ?\App\DTO\MacroStateDTO $macroState = null): InterestExpenseDTO
     {
         $floatingRatio = (float) $stock->getFloatingDebtRatio();
 
@@ -390,6 +392,7 @@ class BrokerageBusinessModel extends BaseFinancialBusinessModel
             'money_supply_growth_ema',
             'output_gap_ema',
             'policy_rate_ema',
+            'system_deposit_beta_ema',
             'yield_5y_ema',
         ];
     }

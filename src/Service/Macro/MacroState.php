@@ -32,6 +32,8 @@ class MacroState
     public float $energyPriceIndexEma = 90.0;
     public float $energyPriceShock = 0.0;
     public float $energyBasePrice = 90.0;
+    // Productive energy capacity, lagging price: the supply leg of the energy cobweb.
+    public float $energySupplyEma = MacroEngine::ENERGY_BASELINE;
     // Sentiment is built DOWN from SENTIMENT_BASELINE by one-sided penalties, so that constant is a ceiling
     // and never the series' mean; the measured resting level is SENTIMENT_TREND_LEVEL. The 108.0 here opened
     // the economy eight points above even the ceiling, a reading only a strong boom reaches.
@@ -225,6 +227,66 @@ class MacroState
     public float $moneySupplyGrowth = MacroEngine::M2_BASE_GROWTH;
     public float $moneySupplyGrowthEma = MacroEngine::M2_BASE_GROWTH;
 
+    // Administered healthcare prices: an annual step, not a diffusion.
+    public float $reimbursementRateIndex = 100.0;
+    public float $reimbursementRateIndexEma = 100.0;
+    public float $reimbursementRateGrowth = MacroEngine::TARGET_INFLATION - MacroEngine::REIMBURSEMENT_PRODUCTIVITY_OFFSET;
+
+    // Household balance sheet: leverage, the service it demands, the credit gap and the buffer regulators set on it.
+    public float $householdDebtToIncome = MacroEngine::HOUSEHOLD_DEBT_TO_INCOME_BASELINE;
+    public float $householdDebtToIncomeEma = MacroEngine::HOUSEHOLD_DEBT_TO_INCOME_BASELINE;
+    public float $householdDebtServiceRatio = MacroEngine::HOUSEHOLD_DSR_NEUTRAL;
+    public float $householdDebtServiceRatioEma = MacroEngine::HOUSEHOLD_DSR_NEUTRAL;
+    // The ratio's own long-run average (Drehmann & Juselius 2012), which every consumer measures it against.
+    // Zero means no service has been computed yet: the trend starts at the first observation so a cold start is silent.
+    public float $householdDebtServiceTrend = 0.0;
+    public float $householdDebtServiceGap = 0.0;
+    public float $creditToGdpTrend = MacroEngine::HOUSEHOLD_DEBT_TO_INCOME_BASELINE;
+    public float $creditToGdpGap = 0.0;
+    public float $creditToGdpGapEma = 0.0;
+    public float $countercyclicalBufferRate = 0.0;
+    public float $countercyclicalBufferRateEma = 0.0;
+
+    // Foreign bloc: its output gap, the policy rate its Taylor rule sets, and the global demand composite.
+    public float $foreignOutputGap = 0.0;
+    public float $foreignOutputGapEma = 0.0;
+    public float $foreignPolicyRate = MacroEngine::GLOBAL_BASELINE_RATE;
+    public float $foreignPolicyRateEma = MacroEngine::GLOBAL_BASELINE_RATE;
+    public float $globalDemandGap = 0.0;
+    public float $globalDemandGapEma = 0.0;
+
+    // Physical catastrophes: recent insured loss burden (1.0 = an average year) and the last headline storm.
+    public float $catastropheLossIndex = 1.0;
+    public float $catastropheLossIndexEma = 1.0;
+    public float $lastCatastropheAt = -1.0;
+    public float $lastCatastropheSeverity = 0.0;
+
+    // Natural gas: the oil index times a mean-reverting gas-to-oil ratio, with a winter premium.
+    public float $naturalGasPriceIndex = MacroEngine::NATURAL_GAS_BASELINE;
+    public float $naturalGasPriceIndexEma = MacroEngine::NATURAL_GAS_BASELINE;
+    public float $gasOilRatioLog = 0.0;
+
+    // Deposits channel: the system deposit beta and the money-market share it drives.
+    public float $systemDepositBeta = MacroEngine::SYSTEM_DEPOSIT_BETA_BASE;
+    public float $systemDepositBetaEma = MacroEngine::SYSTEM_DEPOSIT_BETA_BASE;
+    public float $moneyMarketFundShare = MacroEngine::MMF_SHARE_BASE;
+    public float $moneyMarketFundShareEma = MacroEngine::MMF_SHARE_BASE;
+
+    // Sovereign risk: the fiscal premium the market charges over the risk-free level, and the deficit it reads.
+    public float $sovereignRiskSpread = 0.0;
+    public float $sovereignRiskSpreadEma = 0.0;
+    public float $primaryDeficitToGdp = 0.0;
+
+    // Policy uncertainty (BBD-style index) and the fixed-term election calendar it peaks on.
+    public float $policyUncertaintyIndex = MacroEngine::EPU_BASELINE;
+    public float $policyUncertaintyIndexEma = MacroEngine::EPU_BASELINE;
+    public float $lastElectionAt = -1.0;
+
+    // Work stoppage in progress: the struck macro sector, time left, and the tick it began (for the event pulse).
+    public ?string $strikeSector = null;
+    public float $strikeRemainingYears = 0.0;
+    public float $strikeStartedAt = -1.0;
+
     /**
      * Initializes the MacroState from a decoded JSON array payload.
      *
@@ -254,7 +316,7 @@ class MacroState
             $state->$field = match ($field) {
                 'sectorZ', 'sectorDemandZ' => is_array($data[$key]) ? array_map('floatval', $data[$key]) : [],
                 'qeActive', 'qtActive' => (bool) $data[$key],
-                'eventType' => (string) $data[$key],
+                'eventType', 'strikeSector' => (string) $data[$key],
                 default => (float) $data[$key],
             };
         }

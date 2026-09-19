@@ -268,7 +268,7 @@ class DebtEngine
 
         // Customer Deposits & Leverage Physics
         $strategy = \App\Data\Sectors::getBusinessModelStrategy($businessModel);
-        $expenseMetrics = $strategy->calculateInterestExpenseAndWholesaleRate($stock, $blendedFixedRate, $floatingInterestRate, $currentMarketFixedRate, $policyRate, $equityLimit, $totalEquity, $debt);
+        $expenseMetrics = $strategy->calculateInterestExpenseAndWholesaleRate($stock, $blendedFixedRate, $floatingInterestRate, $currentMarketFixedRate, $policyRate, $equityLimit, $totalEquity, $debt, $macroState);
         $interestExpense = $expenseMetrics->interestExpense;
         $wholesaleRate = $expenseMetrics->wholesaleRate;
 

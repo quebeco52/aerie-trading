@@ -5,6 +5,7 @@ namespace App\Tests\Service\Macro\Subsystem;
 use App\Service\Macro\MacroEngine;
 use App\Service\Macro\MacroState;
 use App\Service\Macro\Subsystem\LaborMarketSubsystem;
+use App\Service\Math\MathUtility;
 use PHPUnit\Framework\TestCase;
 
 class LaborMarketSubsystemTest extends TestCase
@@ -13,7 +14,7 @@ class LaborMarketSubsystemTest extends TestCase
 
     protected function setUp(): void
     {
-        $this->subsystem = new LaborMarketSubsystem();
+        $this->subsystem = new LaborMarketSubsystem(new MathUtility());
     }
 
     public function testOkunUnemploymentRisesInRecession(): void
@@ -189,5 +190,75 @@ class LaborMarketSubsystemTest extends TestCase
         $this->assertEqualsWithDelta(0.08, $this->convergedWageGrowth($headroom), 1e-6, 'The ceiling is reached exactly at its headroom.');
         $this->assertEqualsWithDelta(0.08, $this->convergedWageGrowth(0.12), 1e-6, 'Beyond it, nominal wage growth stops rising.');
         $this->assertLessThan(0.0, $this->convergedWageGrowth(0.12) - 0.12, 'Past the ceiling, real pay falls.');
+    }
+
+
+    // --- Work Stoppages ---
+
+    private function scriptedStoppages(bool $arrives, float $uniform, float $duration): LaborMarketSubsystem
+    {
+        $math = new class ($arrives, $uniform, $duration) extends MathUtility {
+            public function __construct(private readonly bool $arrives, private readonly float $uniform, private readonly float $duration) { parent::__construct(); }
+            public function checkProbability(float $probability): bool { return $this->arrives; }
+            public function generateUniform(): float { return $this->uniform; }
+            public function generateExponential(float $rate = 1.0): float { return $this->duration; }
+        };
+
+        return new LaborMarketSubsystem($math);
+    }
+
+    public function testAStoppageStrikesOneMacroSectorAndRunsItsDrawnDuration(): void
+    {
+        $subsystem = $this->scriptedStoppages(arrives: true, uniform: 0.5, duration: 0.10);
+        $state = new MacroState();
+        $state->totalTime = 2.0;
+
+        $subsystem->advanceWorkStoppages($state, 0.01);
+
+        $this->assertNotNull($state->strikeSector);
+        $this->assertArrayHasKey($state->strikeSector, \App\Data\Sectors::MACRO_SECTORS, 'The struck sector is one of the macro sectors the sector factor is drawn for.');
+        $this->assertEqualsWithDelta(0.10, $state->strikeRemainingYears, 1e-9);
+        $this->assertSame(2.0, $state->strikeStartedAt, 'The start tick is recorded so the district event fires once.');
+
+        // Runs down with the clock, and no second stoppage starts while one is on.
+        $subsystem->advanceWorkStoppages($state, 0.05);
+        $this->assertEqualsWithDelta(0.05, $state->strikeRemainingYears, 1e-9);
+        $this->assertNotNull($state->strikeSector);
+
+        $subsystem->advanceWorkStoppages($state, 0.05);
+        $this->assertNull($state->strikeSector, 'The stoppage ends when its duration is spent.');
+        $this->assertSame(0.0, $state->strikeRemainingYears);
+    }
+
+    public function testNoStoppageStartsWithoutAnArrival(): void
+    {
+        $subsystem = $this->scriptedStoppages(arrives: false, uniform: 0.5, duration: 0.10);
+        $state = new MacroState();
+
+        $subsystem->advanceWorkStoppages($state, 0.25);
+
+        $this->assertNull($state->strikeSector);
+    }
+
+    public function testAHeadlineSettlementLiftsTheWageTargetWhileTheStoppageRuns(): void
+    {
+        $calm = new MacroState();
+        $calm->unemploymentRate = MacroEngine::NATURAL_UNEMPLOYMENT;
+        $calm->wageGrowth = 0.035;
+
+        $struck = new MacroState();
+        $struck->unemploymentRate = MacroEngine::NATURAL_UNEMPLOYMENT;
+        $struck->wageGrowth = 0.035;
+        $struck->strikeSector = 'Industrials';
+
+        $this->subsystem->calculateLaborMarketAndWages($calm, 0.015, 0.25);
+        $this->subsystem->calculateLaborMarketAndWages($struck, 0.015, 0.25);
+
+        $this->assertGreaterThan($calm->wageGrowth, $struck->wageGrowth, 'A settlement above trend spills into the economy-wide wage target.');
+        $this->assertLessThan(
+            LaborMarketSubsystem::STRIKE_WAGE_SETTLEMENT_BUMP,
+            $struck->wageGrowth - $calm->wageGrowth,
+            'One quarter of a stoppage moves wages by only part of the settlement premium: the target adjusts at the wage speed, not at once.'
+        );
     }
 }

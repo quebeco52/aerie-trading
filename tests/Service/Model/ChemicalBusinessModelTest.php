@@ -322,4 +322,31 @@ class ChemicalBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta(-0.10 * ChemicalBusinessModel::FX_REVENUE_EXPOSURE, $strong - $flat, 1e-9);
         $this->assertLessThan(0.0, $strong - $flat, 'A stronger domestic currency prices exports out of foreign markets.');
     }
+
+
+    /** Half the cracker feedstock is ethane: a gas spike alone squeezes base chemicals by half of what an equal oil spike does. */
+    public function testAGasSpikeSqueezesFeedstockByTheEthaneShare(): void
+    {
+        $model = new ChemicalBusinessModel();
+        $run = function (float $gasIndexEma, float $energyLag) use ($model): float {
+            $stock = new Stock();
+            $stock->setTicker('FULM');
+            $stock->setBeta('1.0');
+            // Partial mock: draws and the weather dice are scripted flat, the jump and mix maths stay real.
+            $math = $this->getMockBuilder(MathUtility::class)->onlyMethods(['generateStandardNormal', 'generatePersistentZ', 'checkProbability'])->getMock();
+            $math->method('generateStandardNormal')->willReturn(0.0);
+            $math->method('generatePersistentZ')->willReturn(0.0);
+            $math->method('checkProbability')->willReturn(false);
+            $macro = new MacroStateDTO(outputGapEma: -0.01, naturalGasPriceIndexEma: $gasIndexEma, energyCostPushLag: $energyLag);
+
+            return $model->computeActualFinancials($stock, 100_000_000.0, 0.40, 20_000_000.0, 0.10, $macro, $math)->clampedMargin;
+        };
+
+        $calm = $run(100.0, 0.0);
+        $gasOnly = $run(140.0, 0.0);
+        $oilOnly = $run(100.0, 0.40 * \App\Service\Macro\MacroEngine::ENERGY_COST_PUSH_TRANSMISSION);
+
+        $this->assertGreaterThan($calm, $gasOnly, 'A gas spike squeezes the ethane crackers.');
+        $this->assertEqualsWithDelta($oilOnly - $calm, $gasOnly - $calm, 1e-6, 'and an equal oil spike squeezes the naphtha crackers by the same amount: the feedstock is half and half.');
+    }
 }

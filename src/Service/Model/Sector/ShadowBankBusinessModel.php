@@ -84,6 +84,10 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
     public const PROVISION_REVERSAL_SCALE  = 0.020;
     /** Lifetime-loss multiplier per unit of IG spread widening on a leveraged private-credit book: +300bps lifts the reserve target ~0.30x. */
     public const CECL_RESERVE_SPREAD_SENSITIVITY = 10.0;
+    /** Direct lending origination volume surge per unit of countercyclical capital buffer (CCyB) binding on regulated banks. */
+    public const CCYB_ARBITRAGE_SENSITIVITY = 4.0;
+    /** Direct lending and mortgage provision sensitivity to elevated household debt service ratio stress above neutral. */
+    public const SHOCK_WEIGHT_DSR_DEFAULT = 0.15;
     /** Structural minimum operating cost-to-revenue ratio for non-bank lending operations. */
     public const MIN_EFFICIENCY_RATIO      = 0.45;
     /** Upper clamp for realized variable margin. */
@@ -293,9 +297,10 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
         $directLendingRateBonus = max(0.0, ($policyRate - 0.03) * 1.5);
         $sloosDirectLendingBoost = max(0.0, $macroState->sloosTighteningIndexEma) * self::SLOOS_PRIVATE_CREDIT_EXPANSION;
         $m2Shift = MathUtility::calculateBroadMoneyLiquidityShift($macroState->moneySupplyGrowthEma, sensitivity: self::M2_SHADOW_LIQUIDITY_SENSITIVITY);
+        $ccybArbitrageBoost = max(0.0, $macroState->countercyclicalBufferRateEma) * self::CCYB_ARBITRAGE_SENSITIVITY;
 
         $mortgageRevenue = max(0.0, $expectedRevenue * $mortgageWeight * (1.0 + ($originationZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR * 1.5)) - $mortgageRateDrag + $propertyOriginationBoost + $housingStartsShift));
-        $lendingRevenue  = max(0.0, $expectedRevenue * $lendingWeight * (1.0 + ($lendingZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR * 0.8)) + $directLendingRateBonus + $sloosDirectLendingBoost + $m2Shift));
+        $lendingRevenue  = max(0.0, $expectedRevenue * $lendingWeight * (1.0 + ($lendingZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR * 0.8)) + $directLendingRateBonus + $sloosDirectLendingBoost + $m2Shift + $ccybArbitrageBoost));
         
         $streamRevenues = [
             'origination_fees' => $mortgageRevenue,
@@ -310,11 +315,16 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
         $outputGap = $macroState->outputGapEma;
         $retailDefaultShift = MathUtility::excessOverBaseline($macroState->retailDefaultRateEma, MacroEngine::RETAIL_DEFAULT_BASELINE);
         $corporateDefaultShift = MathUtility::excessOverBaseline($macroState->corporateDefaultRateEma, MacroEngine::CORPORATE_DEFAULT_BASELINE);
+        $dsrShift = max(0.0, $macroState->householdDebtServiceGap) / MacroEngine::HOUSEHOLD_DSR_NEUTRAL;
         $creShift = ($macroState->commercialPropertyIndexEma - 100.0) / 100.0;
         
         $propertyDrag = ($creShift < 0.0 ? abs($creShift) * 0.05 : 0.0) + ($residentialShift < 0.0 ? abs($residentialShift) * 0.05 : 0.0);
         $corporateLendingDrag = $corporateDefaultShift * self::SHOCK_WEIGHT_CORPORATE_DEFAULT * $lendingWeight;
-        $macroDefaultDrag = ($outputGap < 0.0 ? abs($outputGap) * self::MACRO_DEFAULT_SCALAR : 0.0) + ($retailDefaultShift * 0.10) + $propertyDrag + $corporateLendingDrag;
+        $macroDefaultDrag = ($outputGap < 0.0 ? abs($outputGap) * self::MACRO_DEFAULT_SCALAR : 0.0)
+            + ($retailDefaultShift * 0.10)
+            + ($dsrShift * self::SHOCK_WEIGHT_DSR_DEFAULT)
+            + $propertyDrag
+            + $corporateLendingDrag;
 
         // The forward-looking CECL reserve (spreads, recession forecast) moves the allowance TARGET through
         // getForwardCreditLossMultiplier(); the ledger roll-forward books the build once. Not a margin term.
@@ -383,10 +393,14 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
         return [
             'commercial_property_index_ema',
             'corporate_default_rate_ema',
+            'countercyclical_buffer_rate_ema',
+            'household_debt_service_gap',
             'housing_starts_index_ema',
             'inflation_ema',
             'interbank_liquidity_spread_ema',
             'macro_credit_spread_ema',
+            'money_market_fund_share',
+            'money_market_fund_share_ema',
             'money_supply_growth_ema',
             'output_gap_ema',
             'policy_rate_ema',

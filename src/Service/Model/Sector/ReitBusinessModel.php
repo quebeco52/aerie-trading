@@ -121,6 +121,8 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
 
     /** Fraction of excess CPI inflation captured via contractual rent escalators. */
     public const RENT_ESCALATOR_CAPTURE         = 0.80;
+    /** Rent roll lost per unit of district catastrophe burden above an average year: damaged space earns nothing until repaired. */
+    public const CATASTROPHE_VACANCY_SENSITIVITY = 0.02;
     /** Z-score threshold below which elevated tenant defaults and vacancies trigger margin penalties. */
     public const VACANCY_Z_THRESHOLD            = -1.50;
     /** Scalar applied to tenant default Z-score severity to determine vacancy margin loss. */
@@ -147,6 +149,8 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
     public const CORP_DEFAULT_VACANCY_SCALAR = 0.04;
     /** Vacancy and rent loss drag from excess retail default rate spikes. */
     public const RETAIL_DEFAULT_VACANCY_SCALAR = 0.03;
+    /** Vacancy and rent loss drag from elevated household debt service ratio stress on residential/retail tenants. */
+    public const DSR_TENANT_DEFAULT_SCALAR = 0.15;
 
     // --- Event Lore Thresholds ---
     /** Severe tenant default Z-score triggering catastrophic commercial bankruptcy lore. */
@@ -298,9 +302,11 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
 
         // Only the mark-to-market captured on the expiring slice reaches revenue this quarter.
         $marketLeaseReversion = ($rolledInPlaceRent - $inPlaceRent) - ($housingSupplyShift * 0.03);
+        // Storm damage takes space off the rent roll until it is repaired.
+        $catastropheVacancy = max(0.0, $macroState->catastropheLossIndexEma - 1.0) * self::CATASTROPHE_VACANCY_SENSITIVITY;
 
         // --- Clamped Revenue Streams ---
-        $leaseRevenue       = max(0.0, $expectedRevenue * $leaseWeight * (1.0 + $leaseShock + $rentEscalator + $marketLeaseReversion));
+        $leaseRevenue       = max(0.0, $expectedRevenue * $leaseWeight * (1.0 + $leaseShock + $rentEscalator + $marketLeaseReversion - $catastropheVacancy));
         // Contractual escalators and market rent reversion reprice the same square footage: pure price, no operating cost.
         $priceRevenue       = max(0.0, $expectedRevenue * $leaseWeight * ($rentEscalator + $marketLeaseReversion));
         $hospitalityRevenue = max(0.0, $expectedRevenue * $hospitalityWeight * (1.0 + $hospitalityShock + ($creShift * 0.25)));
@@ -343,7 +349,10 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
 
         $corpDefaultShift = MathUtility::excessOverBaseline($macroState->corporateDefaultRateEma, MacroEngine::CORPORATE_DEFAULT_BASELINE);
         $retailDefaultShift = MathUtility::excessOverBaseline($macroState->retailDefaultRateEma, MacroEngine::RETAIL_DEFAULT_BASELINE);
-        $macroTenantDefaultDrag = ($corpDefaultShift * self::CORP_DEFAULT_VACANCY_SCALAR) + ($retailDefaultShift * self::RETAIL_DEFAULT_VACANCY_SCALAR);
+        $dsrShift = max(0.0, $macroState->householdDebtServiceGap) / MacroEngine::HOUSEHOLD_DSR_NEUTRAL;
+        $macroTenantDefaultDrag = ($corpDefaultShift * self::CORP_DEFAULT_VACANCY_SCALAR)
+            + ($retailDefaultShift * self::RETAIL_DEFAULT_VACANCY_SCALAR)
+            + ($dsrShift * self::DSR_TENANT_DEFAULT_SCALAR);
 
         // Mortgage and unsecured note costs reach FFO through DebtEngine's maturity wall
         // (getDebtMaturityRolloverRate), below NOI. They are not a property operating cost.
@@ -524,11 +533,13 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
     public function getOperatingMacroFields(): array
     {
         return [
+            'catastrophe_loss_index_ema',
             'commercial_property_index_ema',
             'corporate_default_rate_ema',
             'energy_cost_push_lag',
             'exchange_rate_index_ema',
             'housing_starts_index_ema',
+            'household_debt_service_gap',
             'inflation_ema',
             'output_gap_ema',
             'producer_price_inflation_ema',

@@ -72,6 +72,8 @@ class ResortsCasinosBusinessModel extends StandardCorporateBusinessModel
     public const MIN_BETA_PRICING_POWER_FLOOR = 0.40;
     /** Scalar for how aggressively consumer sentiment shifts drive macro demand. */
     public const SENTIMENT_SENSITIVITY_SCALAR = 0.25;
+    /** Visitor volume per unit of the foreign bloc's output gap: inbound tourism and convention traffic. */
+    public const FOREIGN_DEMAND_SENSITIVITY = 1.00;
     /** Scalar for how much variable margins compress via promotional comps when sentiment drops. */
     public const PROMOTIONAL_COMP_DRAG_SCALAR = 0.15;
 
@@ -146,7 +148,10 @@ class ResortsCasinosBusinessModel extends StandardCorporateBusinessModel
         $sentimentShift = $macroState->sentimentDeviation();
         $beta = $this->getOperatingCyclicality($stock);
 
-        $physics['macro_demand_shift'] += ($sentimentShift * $beta * self::SENTIMENT_SENSITIVITY_SCALAR) + $this->resolveFxDemandShift($macroState);
+        // Visitors fly in: the foreign bloc's cycle fills the rooms the district's own does not.
+        $physics['macro_demand_shift'] += ($sentimentShift * $beta * self::SENTIMENT_SENSITIVITY_SCALAR)
+            + MathUtility::calculateForeignDemandShift($macroState->foreignOutputGapEma, sensitivity: self::FOREIGN_DEMAND_SENSITIVITY)
+            + $this->resolveFxDemandShift($macroState);
 
         return $physics;
     }
@@ -333,6 +338,7 @@ class ResortsCasinosBusinessModel extends StandardCorporateBusinessModel
             'consumer_sentiment_index_ema',
             'energy_cost_push_lag',
             'exchange_rate_index_ema',
+            'foreign_output_gap_ema',
             'inflation_ema',
             'output_gap_ema',
             'producer_price_inflation_ema',

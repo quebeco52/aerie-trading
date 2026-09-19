@@ -199,4 +199,24 @@ class BrokerageBusinessModelTest extends TestCase
             'Elevated capital markets deal activity must boost brokerage advisory and underwriting revenue.'
         );
     }
+
+
+    /** The sweep beta is a floor: when the system passes more through, clients get the system rate. */
+    public function testClientSweepPassThroughFollowsTheSystemDepositBetaAboveItsFloor(): void
+    {
+        $stock = new Stock();
+        $stock->setWholesaleDebt('10000000');
+        $stock->setCorporateTreasury('2000000');
+        $stock->setTotalEquity('10000000');
+        $stock->setTotalRevenue('5000000');
+
+        $lowBeta = MacroStateDTO::fromArray(['policy_rate_ema' => 0.05, 'corporate_tax_rate' => 0.21, 'system_deposit_beta_ema' => 0.10]);
+        $highBeta = MacroStateDTO::fromArray(['policy_rate_ema' => 0.05, 'corporate_tax_rate' => 0.21, 'system_deposit_beta_ema' => 0.40]);
+
+        $this->assertGreaterThan(
+            $this->model->calculateInterestIncome($stock, $highBeta, $this->mathUtility),
+            $this->model->calculateInterestIncome($stock, $lowBeta, $this->mathUtility),
+            'A system beta above the sweep floor costs the brokerage sweep spread.'
+        );
+    }
 }

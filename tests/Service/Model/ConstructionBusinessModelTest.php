@@ -218,5 +218,21 @@ class ConstructionBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta($clean->clampedMargin, $after->clampedMargin, 1e-9, 'costs return to baseline once the regime exits');
     }
 
-}
 
+    /** Hallegatte (2008): reconstruction after a storm season is civil work, booked through the infrastructure backlog. */
+    public function testAStormSeasonBooksReconstructionIntoTheCivilBacklog(): void
+    {
+        $run = function (float $burden): float {
+            $stock = new Stock();
+            $stock->setTicker('GEN_CONST');
+            $stock->setBeta('1.0');
+            $math = $this->createStub(MathUtility::class);
+            $math->method('generatePersistentZ')->willReturn(0.0);
+            $macro = new MacroStateDTO(outputGapEma: 0.0, policyRateEma: \App\Service\Macro\MacroEngine::BASE_NATURAL_RATE, inflationEma: 0.02, catastropheLossIndexEma: $burden);
+
+            return $this->model->computeActualFinancials($stock, 100_000_000.0, 0.40, 20_000_000.0, 0.10, $macro, $math)->streamRevenue['civil_infrastructure'];
+        };
+
+        $this->assertGreaterThan($run(1.0), $run(3.0), 'A season at three times the average burden lifts civil orders.');
+    }
+}

@@ -1393,6 +1393,11 @@ class MathUtilityTest extends TestCase
         $this->assertEqualsWithDelta($floor, $trough, 0.5, 'A 2008-type freeze bottoms at the capped log range, not at the hard floor.');
         $this->assertGreaterThan(140.0, $peak, 'A 2007/2021-type boom runs about 1.5x baseline.');
         $this->assertLessThan($ceiling, $peak, 'and does not need the cap to stay within a recorded cycle.');
+
+        // Policy uncertainty (Bonaime, Gulen & Ion 2018): boards defer deals while the regime is in question.
+        $settled = $this->mathUtility->calculateCapitalMarketsDealIndexStep(100.0, 0.045, 0.043, 0.15, 0.25, 0.0, policyUncertaintyIndex: MacroEngine::EPU_BASELINE);
+        $contested = $this->mathUtility->calculateCapitalMarketsDealIndexStep(100.0, 0.045, 0.043, 0.15, 0.25, 0.0, policyUncertaintyIndex: 2.0 * MacroEngine::EPU_BASELINE);
+        $this->assertLessThan($settled, $contested, 'A doubling of policy uncertainty lowers the deal-flow target with valuations and credit unchanged.');
         $this->assertLessThan(2.8, $peak / $trough, 'Peak-to-trough deal volume stays near the 2.2x of the widest recorded cycle.');
     }
 
@@ -1541,6 +1546,34 @@ class MathUtilityTest extends TestCase
         );
         $this->assertLessThan(100.0, $slumpStarts, 'High mortgage rates and tight bank lending must depress housing starts.');
         $this->assertGreaterThanOrEqual(40.0, $slumpStarts);
+
+        // Credit gap availability: positive credit expansion stimulates housing starts at the sensitivity the caller sets
+        $params['creditGapSens'] = \App\Service\Macro\Subsystem\AssetMarketSubsystem::HOUSING_STARTS_CREDIT_GAP_SENSITIVITY;
+        $creditBoomStarts = $this->mathUtility->calculateTobinsQHousingStarts(
+            currentStarts: 100.0,
+            residentialPriceRatio: 1.00,
+            replacementCostRatio: 1.00,
+            userCost: 0.050,
+            neutralUserCost: 0.050,
+            sloosTightening: 0.0,
+            dt: 0.25,
+            dW: 0.0,
+            params: $params,
+            creditGap: 0.05
+        );
+        $neutralStarts = $this->mathUtility->calculateTobinsQHousingStarts(
+            currentStarts: 100.0,
+            residentialPriceRatio: 1.00,
+            replacementCostRatio: 1.00,
+            userCost: 0.050,
+            neutralUserCost: 0.050,
+            sloosTightening: 0.0,
+            dt: 0.25,
+            dW: 0.0,
+            params: $params,
+            creditGap: 0.0
+        );
+        $this->assertGreaterThan($neutralStarts, $creditBoomStarts, 'Positive credit-to-GDP gap must stimulate housing starts.');
     }
 
     public function testCalculateBroadMoneyGrowth(): void
@@ -2174,5 +2207,66 @@ class MathUtilityTest extends TestCase
         $this->assertGreaterThan(1.0, $this->mathUtility->calculateCournotPriceLevel(0.8, 1.25));
         $this->assertSame(1.0, $this->mathUtility->calculateCournotPriceLevel(0.0, 1.25));
         $this->assertSame(1.0, $this->mathUtility->calculateCournotPriceLevel(1.2, 0.0));
+    }
+
+
+    public function testGeneratePoissonCountRecoversItsMean(): void
+    {
+        mt_srand(20260919);
+        $this->assertSame(0, $this->mathUtility->generatePoissonCount(0.0));
+
+        $total = 0;
+        $draws = 20000;
+        for ($i = 0; $i < $draws; $i++) {
+            $total += $this->mathUtility->generatePoissonCount(2.0);
+        }
+        $this->assertEqualsWithDelta(2.0, $total / $draws, 0.05, 'Knuth\'s method delivers the parameterised mean.');
+
+        $anyMultiple = false;
+        for ($i = 0; $i < 2000; $i++) {
+            if ($this->mathUtility->generatePoissonCount(2.0) > 1) {
+                $anyMultiple = true;
+                break;
+            }
+        }
+        $this->assertTrue($anyMultiple, 'Unlike the Bernoulli gate, more than one event can land in one interval.');
+    }
+
+    public function testGenerateParetoSeverityRecoversItsMeanAndRespectsTheCap(): void
+    {
+        mt_srand(20260919);
+        $scale = 1.0;
+        $alpha = 3.0; // finite variance, so the sample mean converges quickly
+        $total = 0.0;
+        $draws = 20000;
+        for ($i = 0; $i < $draws; $i++) {
+            $severity = $this->mathUtility->generateParetoSeverity($scale, $alpha, 1000.0);
+            $this->assertGreaterThanOrEqual($scale, $severity, 'A Pareto draw never falls below its scale.');
+            $this->assertLessThanOrEqual(1000.0, $severity);
+            $total += $severity;
+        }
+        $this->assertEqualsWithDelta($scale * $alpha / ($alpha - 1.0), $total / $draws, 0.03, 'The inverse-CDF draw delivers the Pareto mean scale x alpha / (alpha - 1).');
+
+        for ($i = 0; $i < 2000; $i++) {
+            $this->assertLessThanOrEqual(2.0, $this->mathUtility->generateParetoSeverity($scale, 1.1, 2.0), 'The cap truncates the tail.');
+        }
+    }
+
+
+    public function testCalculateForeignDemandShiftIsTheMirrorOfTheTradeShift(): void
+    {
+        $this->assertEqualsWithDelta(0.06, MathUtility::calculateForeignDemandShift(0.03, 2.0), 1e-12);
+        $this->assertEqualsWithDelta(-0.06, MathUtility::calculateForeignDemandShift(-0.03, 2.0), 1e-12);
+        $this->assertSame(0.20, MathUtility::calculateForeignDemandShift(0.50, 2.0), 'Bounded like the trade shift.');
+        $this->assertSame(0.0, MathUtility::calculateForeignDemandShift(0.0), 'A bloc at trend asks for nothing extra.');
+    }
+
+    /** A capital buffer is an add-on to the equity share a leverage cap implies, so it lowers the cap and never raises it. */
+    public function testABufferedLeverageLimitIsTheCapTheRaisedEquityShareAllows(): void
+    {
+        $this->assertEqualsWithDelta(10.0, MathUtility::calculateBufferedLeverageLimit(10.0, 0.0), 1e-12, 'No buffer, no change.');
+        $this->assertEqualsWithDelta(1.0 / ((1.0 / 11.0) + 0.025) - 1.0, MathUtility::calculateBufferedLeverageLimit(10.0, 0.025), 1e-12);
+        $this->assertLessThan(10.0, MathUtility::calculateBufferedLeverageLimit(10.0, 0.01));
+        $this->assertGreaterThan(MathUtility::calculateBufferedLeverageLimit(10.0, 0.025), MathUtility::calculateBufferedLeverageLimit(10.0, 0.01), 'A bigger buffer binds harder.');
     }
 }

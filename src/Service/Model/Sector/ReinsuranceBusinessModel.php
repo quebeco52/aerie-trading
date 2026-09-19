@@ -26,6 +26,10 @@ use App\Service\Event\ShockEvent;
  */
 class ReinsuranceBusinessModel extends InsuranceBusinessModel
 {
+    // --- District Catastrophe Exposure ---
+    /** A reinsurer holds the tail every primary carrier cedes, so it carries the district burden in full. */
+    public const REINSURANCE_CATASTROPHE_MACRO_LOADING = 1.0;
+
     // --- Operating Cyclicality & Demand Structure ---
     /** Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Treaty volume follows primary premiums with a lag. */
     public const OPERATING_CYCLICALITY = 0.80;
@@ -88,7 +92,7 @@ class ReinsuranceBusinessModel extends InsuranceBusinessModel
         // Independent stream Z-scores
         $treatyZ  = $streams->generateZ('treaty_reinsurance', 0.30);
         $catBondZ = $streams->generateZ('catastrophe_bonds', 0.15);
-        $claimZ   = $streams->generateExogenousZ('claim', 0.05);
+        $claimZ   = $this->resolveClaimZ($streams, $macroState, self::REINSURANCE_CATASTROPHE_MACRO_LOADING);
 
         // Catastrophe Risk Beta & Combined Ratio Shock
         $frequencyBeta = self::CATASTROPHE_Z_THRESHOLD / min(-0.1, $catThreshold);
@@ -173,6 +177,7 @@ class ReinsuranceBusinessModel extends InsuranceBusinessModel
     public function getOperatingMacroFields(): array
     {
         return [
+            'catastrophe_loss_index_ema',
             'inflation_ema',
             'market_volatility_ema',
             'nominal_gdp_index',

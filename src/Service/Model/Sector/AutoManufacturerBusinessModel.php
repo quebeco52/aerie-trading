@@ -125,6 +125,9 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
     /** Drag on auto loans during negative consumer sentiment regimes. */
     public const MACRO_DEFAULT_SCALAR = 0.25;
 
+    /** Credit provision loss weight for elevated household debt service ratio stress on auto financing. */
+    public const SHOCK_WEIGHT_DSR_DEFAULT = 0.08;
+
     /** Baseline credit spread above which CECL forward provisioning accelerates, the macro through-the-cycle IG spread. */
     public const CECL_BASELINE_CREDIT_SPREAD = MacroEngine::BASE_CREDIT_SPREAD;
 
@@ -280,7 +283,11 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
         $sentimentShift = $macroState->sentimentDeviation();
         $retailDefaultShift = MathUtility::excessOverBaseline($macroState->retailDefaultRateEma, MacroEngine::RETAIL_DEFAULT_BASELINE);
         $corporateDefaultShift = MathUtility::excessOverBaseline($macroState->corporateDefaultRateEma, MacroEngine::CORPORATE_DEFAULT_BASELINE);
-        $macroDefaultDrag = ($sentimentShift < 0.0 ? abs($sentimentShift) * self::MACRO_DEFAULT_SCALAR : 0.0) + ($retailDefaultShift * 0.05) + ($corporateDefaultShift * 0.02);
+        $dsrShift = max(0.0, $macroState->householdDebtServiceGap) / MacroEngine::HOUSEHOLD_DSR_NEUTRAL;
+        $macroDefaultDrag = ($sentimentShift < 0.0 ? abs($sentimentShift) * self::MACRO_DEFAULT_SCALAR : 0.0)
+            + ($retailDefaultShift * 0.05)
+            + ($corporateDefaultShift * 0.02)
+            + ($dsrShift * self::SHOCK_WEIGHT_DSR_DEFAULT);
 
         $creditSpread = $macroState->macroCreditSpread;
         $ceclDrag = $creditSpread > self::CECL_BASELINE_CREDIT_SPREAD
@@ -379,6 +386,7 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
             'energy_cost_push_lag',
             'exchange_rate_index_ema',
             'freight_rate_index_ema',
+            'household_debt_service_gap',
             'industrial_metals_index_ema',
             'inflation_ema',
             'macro_credit_spread',

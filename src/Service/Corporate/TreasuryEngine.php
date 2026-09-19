@@ -456,7 +456,7 @@ class TreasuryEngine
             return;
         }
 
-        $regulatoryCap = $ctx->strategy->getRegulatoryDividendCap($stock, $ctx->newTreasury);
+        $regulatoryCap = $ctx->strategy->getRegulatoryDividendCap($stock, $ctx->newTreasury, $ctx->macroState);
         if ($regulatoryCap !== null && $regulatoryCap <= 0.0) {
             return; // Capital-constrained: the regulator has the balance sheet frozen, not just the dividend.
         }

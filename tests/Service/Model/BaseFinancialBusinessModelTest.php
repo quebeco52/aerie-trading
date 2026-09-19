@@ -55,7 +55,7 @@ class BaseFinancialBusinessModelTest extends TestCase
                 return ['baseline_roic' => 0.12, 'invested_capital' => 1000.0];
             }
 
-            public function calculateInterestExpenseAndWholesaleRate(Stock $stock, float $blendedFixedRate, float $floatingInterestRate, float $currentMarketFixedRate, float $policyRate, float $equityLimit, float $totalEquity, float $debt): \App\DTO\InterestExpenseDTO
+            public function calculateInterestExpenseAndWholesaleRate(Stock $stock, float $blendedFixedRate, float $floatingInterestRate, float $currentMarketFixedRate, float $policyRate, float $equityLimit, float $totalEquity, float $debt, ?\App\DTO\MacroStateDTO $macroState = null): \App\DTO\InterestExpenseDTO
             {
                 return new \App\DTO\InterestExpenseDTO(interestExpense: 50.0, wholesaleRate: 0.05);
             }

@@ -97,6 +97,8 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
     public const REVENUE_VARIANCE_SCALAR = 0.15;
     /** LGD (Loss-Given-Default) multiplier: collateralized loans suffer lower realized losses than unsecured credit. */
     public const MACRO_DEFAULT_LGD_DRAG  = 0.040;
+    /** Credit provision loss weight for elevated household debt service ratio stress above neutral. */
+    public const SHOCK_WEIGHT_DSR_DEFAULT = 0.15;
     /** Maximum quarterly reserve release clamp (4% of revenue — avoids unlimited reversal). */
     public const MAX_PROVISION_REVERSAL  = 0.04;
 
@@ -133,6 +135,8 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
     public const SHOCK_WEIGHT_CORPORATE_DEFAULT   = 0.040;
     /** Sensitivity of NII loan origination volume to net percentage of domestic banks tightening standards (SLOOS). */
     public const SLOOS_NII_ORIGINATION_SENSITIVITY = 0.20;
+    /** Origination volume per unit of the household credit-to-GDP gap: a credit boom writes its own loans (Borio & Lowe 2002). */
+    public const CREDIT_GAP_ORIGINATION_SENSITIVITY = 0.50;
 
     // --- Housing Mortgage & M2 Money Supply Transmission ---
     /** Sensitivity of residential purchase and construction mortgage origination volume to housing starts. */
@@ -179,8 +183,10 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
     public const MAX_DEPOSIT_BETA              = 0.70;
     /** Lower bound: regulatory and reputational floor — banks always pay some yield. */
     public const MIN_DEPOSIT_BETA              = 0.10;
-    /** Market-average beta baseline: normalizes competitive advantage to 1.0 at the sector mean. */
-    public const DEPOSIT_BETA_NORMALIZATION_BASELINE = 0.20;
+    /** Market-average beta baseline: normalizes competitive advantage to 1.0 at the sector mean, and is the level the system deposit beta scales the firm's own beta from. */
+    public const DEPOSIT_BETA_NORMALIZATION_BASELINE = MacroEngine::SYSTEM_DEPOSIT_BETA_BASE;
+    /** Deposit outflow per unit of money-market share gained this quarter: the migrating share leaves the deposit base, which is the 1 - base share remainder (Drechsler, Savov & Schnabl 2017). */
+    public const MMF_MIGRATION_DEPOSIT_DRAG = 1.2;
 
     // --- Hoarding & Deposit Flight ---
     /** Fraction of total debt held as idle excess cash before the bank is flagged as a hoarder. */
@@ -373,7 +379,7 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
         // Calculate what the bank MUST pay depositors to keep them from fleeing.
         $depositRatio = $totalDebt > 0 ? ($customerDeposits / $totalDebt) : 0.0;
         $depositBeta = $this->calculateDepositBeta($totalDebt, $equity, $equityLimit, $customerDeposits);
-        $depositRate = max(0.001, $policyRate * $depositBeta);
+        $depositRate = max(0.001, $policyRate * $depositBeta * $this->resolveSystemDepositBetaScale($macroState));
 
         $blendedWholesaleRate = ($floatingRatio * ($policyRate + $macroState->interbankLiquiditySpreadEma)) + ((1.0 - $floatingRatio) * $yield5y) + $structuralSpread;
 
@@ -482,9 +488,10 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
         $sloosOriginationDrag = $macroState->sloosTighteningIndexEma * self::SLOOS_NII_ORIGINATION_SENSITIVITY;
         $housingMortgageBoost = MathUtility::calculateHousingStartsShift($macroState->housingStartsIndexEma, sensitivity: self::HOUSING_MORTGAGE_ORIGINATION_SENSITIVITY);
         $m2LiquidityBoost = MathUtility::calculateBroadMoneyLiquidityShift($macroState->moneySupplyGrowthEma, sensitivity: self::M2_DEPOSIT_GROWTH_SENSITIVITY);
+        $creditBoomBoost = $macroState->creditToGdpGapEma * self::CREDIT_GAP_ORIGINATION_SENSITIVITY;
 
         $niiRevenue = max(0.0, $expectedRevenue * $niiWeight
-            * (1.0 + ($revenueZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) - $sloosOriginationDrag + $housingMortgageBoost + $m2LiquidityBoost));
+            * (1.0 + ($revenueZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) - $sloosOriginationDrag + $housingMortgageBoost + $m2LiquidityBoost + $creditBoomBoost));
         $feeRevenue = max(0.0, $expectedRevenue * $feeWeight
             * (1.0 + ($feeZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + ($outputGap * self::SECTOR_SHOCK_FEE_OUTPUT_GAP_MULT)));
 
@@ -526,6 +533,7 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
         $sentimentShift = $macroState->sentimentDeviation();
         $retailDefaultShift = MathUtility::excessOverBaseline($macroState->retailDefaultRateEma, MacroEngine::RETAIL_DEFAULT_BASELINE);
         $corporateDefaultShift = MathUtility::excessOverBaseline($macroState->corporateDefaultRateEma, MacroEngine::CORPORATE_DEFAULT_BASELINE);
+        $dsrShift = max(0.0, $macroState->householdDebtServiceGap) / MacroEngine::HOUSEHOLD_DSR_NEUTRAL;
 
         $creShift = ($macroState->commercialPropertyIndexEma - self::INDEX_NORMALIZATION_BASE) / self::INDEX_NORMALIZATION_BASE;
         $residentialShift = ($macroState->residentialPropertyIndexEma - self::INDEX_NORMALIZATION_BASE) / self::INDEX_NORMALIZATION_BASE;
@@ -534,6 +542,7 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
         $macroDefaultDrag = ($sentimentShift < 0.0 ? abs($sentimentShift) * self::MACRO_DEFAULT_LGD_DRAG : 0.0)
             + ($retailDefaultShift * self::SHOCK_WEIGHT_RETAIL_DEFAULT)
             + ($corporateDefaultShift * self::SHOCK_WEIGHT_CORPORATE_DEFAULT)
+            + ($dsrShift * self::SHOCK_WEIGHT_DSR_DEFAULT)
             + $propertyDrag;
 
         // Clamp reserve release to MAX_PROVISION_REVERSAL to avoid unbounded write-backs
@@ -744,6 +753,20 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
         ];
     }
 
+    /**
+     * How far the system's deposit pass-through sits from the level the firm's beta is normalised to. The
+     * firm's beta is its structural franchise; the system's is the rate cycle (Drechsler, Savov & Schnabl
+     * 2017), and the deposit rate is the product. Without a macro reading the scale is one.
+     */
+    private function resolveSystemDepositBetaScale(?\App\DTO\MacroStateDTO $macroState): float
+    {
+        if ($macroState === null) {
+            return 1.0;
+        }
+
+        return max(0.25, min(3.0, $macroState->systemDepositBetaEma / self::DEPOSIT_BETA_NORMALIZATION_BASELINE));
+    }
+
     public function calculateDepositBeta(float $totalDebt, float $equity, float $equityLimit, float $customerDeposits): float
     {
         $utilization = $equity > 0.0 ? ($totalDebt / ($equity * $equityLimit)) : 1.0;
@@ -767,7 +790,7 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
         return max(0.0, min($spendCap, $retainedEarningsThisQuarter));
     }
 
-    public function calculateInterestExpenseAndWholesaleRate(Stock $stock, float $blendedFixedRate, float $floatingInterestRate, float $currentMarketFixedRate, float $policyRate, float $equityLimit, float $totalEquity, float $debt): InterestExpenseDTO
+    public function calculateInterestExpenseAndWholesaleRate(Stock $stock, float $blendedFixedRate, float $floatingInterestRate, float $currentMarketFixedRate, float $policyRate, float $equityLimit, float $totalEquity, float $debt, ?\App\DTO\MacroStateDTO $macroState = null): InterestExpenseDTO
     {
         $floatingRatio = (float) $stock->getFloatingDebtRatio();
         $customerDeposits = (float) $stock->getCustomerDeposits();
@@ -777,9 +800,10 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
         $wholesaleInterest = ($wholesaleDebt * (1.0 - $floatingRatio) * $blendedFixedRate) + ($wholesaleDebt * $floatingRatio * $floatingInterestRate);
         $wholesaleRate = $wholesaleDebt > 0 ? ($wholesaleInterest / $wholesaleDebt) : $currentMarketFixedRate;
 
-        // Deposits are cheap, but the bank must pay an APY to prevent capital flight.
+        // Deposits are cheap, but the bank must pay an APY to prevent capital flight, and how much of the
+        // policy rate the whole system passes through moves with the level of rates.
         $depositBeta = $this->calculateDepositBeta($debt, $totalEquity, $equityLimit, $customerDeposits);
-        $depositRate = max(0.001, $policyRate * $depositBeta);
+        $depositRate = max(0.001, $policyRate * $depositBeta * $this->resolveSystemDepositBetaScale($macroState));
         $depositInterest = $customerDeposits * $depositRate;
 
         return new InterestExpenseDTO(interestExpense: $wholesaleInterest + $depositInterest, wholesaleRate: $wholesaleRate);
@@ -831,11 +855,14 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
 
         $realGdpGrowth = self::LIABILITY_BASE_GDP_GROWTH + ($outputGap > 0.0 ? $outputGap * self::LIABILITY_GDP_POSITIVE_GAP_MULT : $outputGap * self::LIABILITY_GDP_NEGATIVE_GAP_MULT);
         $depositApyBeta = $this->calculateDepositBeta($totalDebt, $equity, $equityLimit, $currentLiabilities);
-        $state['bank_apy'] = max(0.001, $policyRate * $depositApyBeta);
+        $state['bank_apy'] = max(0.001, $policyRate * $depositApyBeta * $this->resolveSystemDepositBetaScale($macroState));
 
         // Yield Flight Penalty: If Money Market funds yield much higher than the bank's APY, depositors flee.
         $yieldFlightPenalty = max(0.0, max(0.0, $policyRate - self::YIELD_FLIGHT_POLICY_RATE_OFFSET) - $state['bank_apy']) * 1.0;
-        $systemicGrowthQuarterly = ($inflation + $realGdpGrowth - $yieldFlightPenalty) / self::ANNUALIZATION_FACTOR;
+        // System-wide migration into money funds (the deposits channel) leaves every deposit base, on top of
+        // the firm's own yield-flight above; the smoothed share lags the level by about a quarter's move.
+        $mmfOutflowQuarterly = max(0.0, $macroState->moneyMarketFundShare - $macroState->moneyMarketFundShareEma) * self::MMF_MIGRATION_DEPOSIT_DRAG;
+        $systemicGrowthQuarterly = (($inflation + $realGdpGrowth - $yieldFlightPenalty) / self::ANNUALIZATION_FACTOR) - $mmfOutflowQuarterly;
 
         $betaSensitivity = max(self::LIABILITY_BETA_SENSITIVITY_MIN, min(self::LIABILITY_BETA_SENSITIVITY_MAX, $this->getOperatingCyclicality($stock)));
 
@@ -976,13 +1003,15 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
     }
 
     /**
-     * Implements Basel III Capital Conservation Buffer (CCB) dividend restrictions.
+     * Implements Basel III Capital Conservation Buffer (CCB) and Countercyclical Capital Buffer (CCyB) dividend restrictions.
      */
-    public function getRegulatoryDividendCap(Stock $stock, float $currentTreasury): ?float
+    public function getRegulatoryDividendCap(Stock $stock, float $currentTreasury, ?\App\DTO\MacroStateDTO $macroState = null): ?float
     {
         $cet1Ratio = $this->calculateCet1Ratio($stock, $currentTreasury);
+        $ccyb = $macroState !== null ? $macroState->countercyclicalBufferRateEma : 0.0;
+        $requiredCet1 = self::BASEL_CCB_CET1_RATIO + $ccyb;
 
-        if ($cet1Ratio < self::BASEL_CCB_CET1_RATIO) {
+        if ($cet1Ratio < $requiredCet1) {
             return 0.0;
         }
 
@@ -1001,10 +1030,14 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
             'commercial_property_index_ema',
             'consumer_sentiment_index_ema',
             'corporate_default_rate_ema',
+            'credit_to_gdp_gap_ema',
+            'household_debt_service_gap',
             'housing_starts_index_ema',
             'inflation_ema',
             'interbank_liquidity_spread_ema',
             'macro_credit_spread_ema',
+            'money_market_fund_share',
+            'money_market_fund_share_ema',
             'money_supply_growth_ema',
             'output_gap_ema',
             'policy_rate_ema',
@@ -1012,6 +1045,7 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
             'residential_property_index_ema',
             'retail_default_rate_ema',
             'sloos_tightening_index_ema',
+            'system_deposit_beta_ema',
             'yield_10y_ema',
             'yield_2y_ema',
         ];

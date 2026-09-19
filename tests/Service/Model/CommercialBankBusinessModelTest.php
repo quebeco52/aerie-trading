@@ -8,6 +8,7 @@ use App\Data\ModelParam;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
+use App\Service\Macro\MacroEngine;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\CommercialBankBusinessModel;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
@@ -420,6 +421,29 @@ class CommercialBankBusinessModelTest extends TestCase
         $this->assertSame(0.0, $divCap);
     }
 
+    public function testCountercyclicalCapitalBufferHaltsDividendsWhenActivated(): void
+    {
+        $bank = new Stock();
+        $bank->setTicker('CCYB_BANK');
+        $bank->setTotalEquity('7500000000'); // $7.5B
+        $bank->setCustomerDeposits('80000000000'); // $80B
+        $bank->setWholesaleDebt('10000000000'); // $10B
+        $bank->setCorporateTreasury('5000000000'); // $5B
+
+        // CET1 = 7.5B / 92.5B = ~8.11% (> 7.0% CCB, but < 7.0% + 2.0% CCyB = 9.0%)
+        $cet1 = $this->model->calculateCet1Ratio($bank);
+        $this->assertGreaterThan(CommercialBankBusinessModel::BASEL_CCB_CET1_RATIO, $cet1);
+
+        $neutralMacro = new \App\DTO\MacroStateDTO(countercyclicalBufferRateEma: 0.0);
+        $ccybMacro = new \App\DTO\MacroStateDTO(countercyclicalBufferRateEma: 0.020);
+
+        // Under neutral macro, bank meets CCB and distributions are permitted
+        $this->assertSame(1.0, $this->model->getRegulatoryDividendCap($bank, 5_000_000_000.0, $neutralMacro));
+
+        // When macro countercyclical buffer activates (+200bps), required CET1 rises to 9.0% and halts dividends
+        $this->assertSame(0.0, $this->model->getRegulatoryDividendCap($bank, 5_000_000_000.0, $ccybMacro));
+    }
+
     public function testInsolventBankTriggersBankSeizureShockEvent(): void
     {
         $bank = new Stock();
@@ -762,5 +786,60 @@ class CommercialBankBusinessModelTest extends TestCase
         $this->assertGreaterThanOrEqual(0.0, $result->netChargeOffs);
         $this->assertLessThan(44_100_000_000.0 * 0.05, $result->netChargeOffs, 'a quarter of charge-offs is a small fraction of the book');
         $this->assertTrue(is_finite($result->creditLossProvision));
+    }
+
+
+    // --- Deposits Channel ---
+
+    /** Drechsler, Savov & Schnabl (2017): what the bank pays depositors is its own franchise beta scaled by how far the system is passing rates through. */
+    public function testDepositInterestFollowsTheSystemDepositBeta(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('LAKE');
+        $stock->setCustomerDeposits('1000.0');
+        $stock->setWholesaleDebt('0.0');
+        $stock->setFloatingDebtRatio('0.0');
+
+        $neutralSystem = MacroStateDTO::fromArray(['system_deposit_beta_ema' => MacroEngine::SYSTEM_DEPOSIT_BETA_BASE]);
+        $tightSystem = MacroStateDTO::fromArray(['system_deposit_beta_ema' => 2.0 * MacroEngine::SYSTEM_DEPOSIT_BETA_BASE]);
+
+        $withoutMacro = $this->model->calculateInterestExpenseAndWholesaleRate($stock, 0.05, 0.05, 0.05, 0.05, 15.0, 100.0, 1000.0);
+        $neutral = $this->model->calculateInterestExpenseAndWholesaleRate($stock, 0.05, 0.05, 0.05, 0.05, 15.0, 100.0, 1000.0, $neutralSystem);
+        $tight = $this->model->calculateInterestExpenseAndWholesaleRate($stock, 0.05, 0.05, 0.05, 0.05, 15.0, 100.0, 1000.0, $tightSystem);
+
+        $this->assertEqualsWithDelta($withoutMacro->interestExpense, $neutral->interestExpense, 1e-9, 'At the normalisation level the system scale is one, so a caller without a macro reading gets the same answer.');
+        $this->assertEqualsWithDelta(2.0 * $neutral->interestExpense, $tight->interestExpense, 1e-9, 'A system passing twice as much through doubles the deposit interest on the same franchise.');
+    }
+
+    public function testMoneyFundMigrationDrainsTheDepositBase(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('LAKE');
+        $stock->setTotalEquity('100.0');
+        $stock->setIndustry('Banks - Regional');
+
+        $mathMock = $this->createStub(MathUtility::class);
+        $mathMock->method('generateStandardNormal')->willReturn(0.0);
+
+        $run = function (float $share, float $shareEma) use ($stock, $mathMock): float {
+            $macro = MacroStateDTO::fromArray([
+                'inflation_ema' => 0.02,
+                'output_gap_ema' => 0.0,
+                'policy_rate_ema' => 0.05,
+                'money_market_fund_share' => $share,
+                'money_market_fund_share_ema' => $shareEma,
+            ]);
+            $state = ['customerDeposits' => 1000.0, 'wholesaleDebt' => 200.0, 'treasury' => 50.0];
+            $this->model->processPassiveLiabilityGrowth($stock, $macro, $state, $mathMock);
+
+            return $state['customerDeposits'];
+        };
+
+        $steady = $run(MacroEngine::MMF_SHARE_BASE, MacroEngine::MMF_SHARE_BASE);
+        $migrating = $run(MacroEngine::MMF_SHARE_BASE + 0.0125, MacroEngine::MMF_SHARE_BASE);
+
+        $this->assertLessThan($steady, $migrating, 'A quarter in which money funds gain share is a quarter deposits leave.');
+        // At least the migrating share of the base; a bank paying below the market beta loses more than its share.
+        $this->assertGreaterThanOrEqual(1000.0 * 0.0125 * CommercialBankBusinessModel::MMF_MIGRATION_DEPOSIT_DRAG - 0.5, $steady - $migrating);
     }
 }

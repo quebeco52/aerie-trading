@@ -75,6 +75,8 @@ class LuxuryBusinessModel extends StandardCorporateBusinessModel
     // --- Veblen Pricing & Macro Physics ---
     /** Macroeconomic demand shift sensitivity to global output gaps for elite luxury goods. */
     public const MACRO_DEMAND_SCALAR       = 0.70;
+    /** Luxury volume per unit of the foreign bloc's output gap: the travelling and overseas client book. */
+    public const FOREIGN_DEMAND_SENSITIVITY = 1.50;
     /** Sensitivity of high-net-worth luxury demand to broad money supply (M2) growth liquidity. */
     public const M2_LIQUIDITY_SENSITIVITY  = 0.40;
 
@@ -124,7 +126,9 @@ class LuxuryBusinessModel extends StandardCorporateBusinessModel
         $resShift = ($macroState->residentialPropertyIndexEma - 100.0) / 100.0; // Wealth effect from property
         $m2Shift = MathUtility::calculateBroadMoneyLiquidityShift($macroState->moneySupplyGrowthEma, MacroEngine::M2_BASE_GROWTH, self::M2_LIQUIDITY_SENSITIVITY);
 
-        $blendedMacroShift = ($outputGap * 0.35) + ($sentimentShift * 0.45) + ($resShift * 0.20) + $m2Shift + $this->resolveFxDemandShift($macroState);
+        // The ultra-wealthy buyer is as often abroad as at home: the foreign bloc's cycle is half the client book.
+        $foreignShift = MathUtility::calculateForeignDemandShift($macroState->foreignOutputGapEma, sensitivity: self::FOREIGN_DEMAND_SENSITIVITY);
+        $blendedMacroShift = ($outputGap * 0.35) + ($sentimentShift * 0.45) + ($resShift * 0.20) + $m2Shift + $foreignShift + $this->resolveFxDemandShift($macroState);
 
         // Luxury goods benefit from Veblen pricing power: list prices outrun expected inflation (PRICING_ELASTICITY),
         // and the engine books the gap between price and input cost as margin.
@@ -253,6 +257,7 @@ class LuxuryBusinessModel extends StandardCorporateBusinessModel
         return [
             'consumer_sentiment_index_ema',
             'exchange_rate_index_ema',
+            'foreign_output_gap_ema',
             'freight_rate_index_ema',
             'money_supply_growth_ema',
             'output_gap_ema',

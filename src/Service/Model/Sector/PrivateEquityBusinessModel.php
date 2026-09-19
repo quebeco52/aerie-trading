@@ -50,8 +50,10 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
     public const CARRY_LEVERAGE_AMPLIFIER_SCALAR = 0.80;
 
     // --- Cost of Debt & LBO Elasticity ---
-    /** Baseline macro credit spread for normal LBO conditions, the macro through-the-cycle IG spread. */
-    public const LBO_CREDIT_SPREAD_BASELINE = MacroEngine::BASE_CREDIT_SPREAD;
+    /** Through-the-cycle high-yield spread (~430 bps): LBO debt is leveraged loans and HY bonds, priced off HY not IG (Axelson, Jenkinson, Stromberg & Weisbach 2013). */
+    public const LBO_CREDIT_SPREAD_BASELINE = MacroEngine::BASE_CREDIT_SPREAD * MacroEngine::HY_BASE_SPREAD_MULTIPLIER;
+    /** The sponsor's OWN through-the-cycle funding spread (IG): the management company borrows as a corporate, not as a buyout target. */
+    public const SPONSOR_CREDIT_SPREAD_BASELINE = MacroEngine::BASE_CREDIT_SPREAD;
     /** Baseline policy rate (~4.5%) threshold above which LBO financing becomes distressed. */
     public const LBO_RATE_FREEZE_THRESHOLD  = 0.045;
     /** Elasticity scalar: How LBO multiples compress and exits freeze as total Cost of Debt rises. */
@@ -252,8 +254,9 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
             ModelParam::CarriedInterestWeight->value => 0.65,
         ]);
 
-        // Credit cycle pricing power: LBO multiples compress when the Cost of Debt spikes.
-        $lboCostOfDebt = $macroState->policyRateEma + $macroState->macroCreditSpreadEma;
+        // Credit cycle pricing power: LBO multiples compress when the Cost of Debt spikes. Buyout debt is
+        // speculative grade, so the spread that prices it is the high-yield tranche.
+        $lboCostOfDebt = $macroState->policyRateEma + $macroState->highYieldCreditSpreadEma;
         $baselineCostOfDebt = self::LBO_RATE_FREEZE_THRESHOLD + self::LBO_CREDIT_SPREAD_BASELINE;
         $debtCostDelta = max(0.0, $lboCostOfDebt - $baselineCostOfDebt);
         $sloosLboDrag = max(0.0, $macroState->sloosTighteningIndexEma) * self::SLOOS_LBO_GATING_SCALAR;
@@ -305,8 +308,8 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
         $dealFlowMultiplier = ($outputGap > 0.0 ? ($outputGap * self::DEAL_FLOW_BOOM_MULT) : ($outputGap * self::DEAL_FLOW_BUST_MULT))
             + ($dealActivityShift * self::DEAL_ACTIVITY_EXIT_SCALAR);
 
-        // 3. Cost of Debt LBO Elasticity (Multiple Compression)
-        $creditSpread = $macroState->macroCreditSpreadEma;
+        // 3. Cost of Debt LBO Elasticity (Multiple Compression): buyout debt is priced off the HY tranche.
+        $creditSpread = $macroState->highYieldCreditSpreadEma;
         $policyRate   = $macroState->policyRateEma;
 
         $lboCostOfDebt = $policyRate + $creditSpread;
@@ -521,10 +524,11 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
     {
         $baseCapacity = parent::calculateDebtExpansionCapacity($equity, $totalDebt, $wholesaleDebt, $health, $newBorrowingRate, $ebit, $depreciation);
 
-        $firmCreditSpread = $health->rawMetrics->dynamicSpread ?? self::LBO_CREDIT_SPREAD_BASELINE;
+        $firmCreditSpread = $health->rawMetrics->dynamicSpread ?? self::SPONSOR_CREDIT_SPREAD_BASELINE;
 
-        // Gate capacity using the firm's specific credit standing versus normal LBO baselines
-        $spreadFreezeDrag = max(0.0, ($firmCreditSpread - self::LBO_CREDIT_SPREAD_BASELINE) * self::HURDLE_CREDIT_SPREAD_SCALAR);
+        // Gate capacity on the sponsor's own credit standing against its corporate (IG) baseline; the HY
+        // baseline prices the portfolio companies' debt, not the management company's.
+        $spreadFreezeDrag = max(0.0, ($firmCreditSpread - self::SPONSOR_CREDIT_SPREAD_BASELINE) * self::HURDLE_CREDIT_SPREAD_SCALAR);
 
         if ($spreadFreezeDrag > self::DEBT_GATE_LBO_DRAG_THRESHOLD) {
             $baseCapacity *= self::DEBT_GATE_DROUGHT_SCALAR;
@@ -554,7 +558,7 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
     {
         return [
             'deal_activity_index_ema',
-            'macro_credit_spread_ema',
+            'high_yield_credit_spread_ema',
             'market_volatility_ema',
             'output_gap_ema',
             'policy_rate_ema',

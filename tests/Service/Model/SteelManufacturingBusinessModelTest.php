@@ -125,4 +125,55 @@ class SteelManufacturingBusinessModelTest extends TestCase
         // (10 * 0.60) + (40 * 0.40) = 6 + 16 = 22.0
         $this->assertEqualsWithDelta(22.0, $boomValue, 0.01);
     }
+
+    public function testImportDumpingUnderForeignSlowdownAndStrongFx(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('STLD');
+        $stock->setBeta('1.0');
+
+        $neutralMacro = new MacroStateDTO(
+            outputGapEma: 0.0,
+            foreignOutputGapEma: 0.0,
+            exchangeRateIndexEma: 100.0,
+            industrialMetalsIndexEma: 100.0
+        );
+
+        $dumpingMacro = new MacroStateDTO(
+            outputGapEma: 0.0,
+            foreignOutputGapEma: -0.04, // Foreign recession (-4%)
+            exchangeRateIndexEma: 115.0, // Strong currency (+15% FX strength)
+            industrialMetalsIndexEma: 100.0
+        );
+
+        $mathMock = $this->createStub(MathUtility::class);
+        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+
+        $neutralResult = $this->model->computeActualFinancials(
+            $stock,
+            expectedRevenue: 100_000_000.0,
+            realizedVariableMargin: 0.35,
+            fixedCosts: 20_000_000.0,
+            baselineVol: 0.10,
+            macroState: $neutralMacro,
+            mathUtility: $mathMock
+        );
+
+        $dumpingResult = $this->model->computeActualFinancials(
+            $stock,
+            expectedRevenue: 100_000_000.0,
+            realizedVariableMargin: 0.35,
+            fixedCosts: 20_000_000.0,
+            baselineVol: 0.10,
+            macroState: $dumpingMacro,
+            mathUtility: $mathMock
+        );
+
+        // Spot HRC revenue drops significantly due to export loss and foreign dumping
+        $this->assertLessThan(
+            $neutralResult->streamRevenue['spot_hrc_market'],
+            $dumpingResult->streamRevenue['spot_hrc_market'],
+            'Foreign recession combined with strong domestic currency must compress spot steel revenue via import dumping.'
+        );
+    }
 }

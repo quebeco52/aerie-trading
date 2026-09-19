@@ -116,8 +116,12 @@ class AssetManagementBusinessModel extends BaseFinancialBusinessModel
     public const PERFORMANCE_FEE_WEIGHT    = 0.20;
 
     // --- AUM Market Beta & Performance Fees ---
-    /** Sensitivity of AUM management fee base to macroeconomic output gap (market appreciation/depreciation). */
+    /** Sensitivity of AUM management fee base to the output gap: the net-flow half of AUM, since clients add money in expansions and redeem in slumps. */
     public const AUM_MARKET_BETA_SCALAR    = 0.40;
+    /** AUM beta to the equity market's level against its three-year trend: the mark-to-market half. Under one because a manager's book is only part equities (roughly half at the large diversified houses per their AUM-mix disclosures). */
+    public const AUM_MARKET_LEVEL_BETA     = 0.60;
+    /** Cap on the market-level deviation the fee base reacts to, the same clamp the household wealth channel applies in the IS curve. */
+    public const AUM_MARKET_LEVEL_DEVIATION_CAP = 0.60;
     /** Z-score threshold above which strong fund alpha crystallizes outsized performance fees / carried interest. */
     public const PERFORMANCE_FEE_Z_FLOOR   = 1.50;
     /** Revenue bonus scalar applied per z-unit above the performance fee threshold. */
@@ -138,6 +142,8 @@ class AssetManagementBusinessModel extends BaseFinancialBusinessModel
     // --- Broad Money Supply & AUM Inflows ---
     /** Sensitivity of institutional and retail AUM fund inflows to broad money supply (M2) expansion. */
     public const M2_AUM_INFLOW_SENSITIVITY = 0.35;
+    /** Base-fee lift per unit of money-market share gained this quarter: the migrating cash lands in the manager's money funds (2022-23: +5 points of share, +27% money-fund assets). */
+    public const MMF_AUM_INFLOW_SENSITIVITY = 1.5;
 
     // --- Seed Capital & Co-Investment Volatility ---
     /** VIX threshold above which market panic drags seed capital co-investment returns. */
@@ -339,6 +345,15 @@ class AssetManagementBusinessModel extends BaseFinancialBusinessModel
         $outputGap = $macroState->outputGapEma;
         $aumMarketBeta = $outputGap * $this->getOperatingCyclicality($stock) * $aumBetaScalar;
         $m2InflowBoost = MathUtility::calculateBroadMoneyLiquidityShift($macroState->moneySupplyGrowthEma, sensitivity: self::M2_AUM_INFLOW_SENSITIVITY);
+        // Deposits channel: cash leaving bank deposits for money funds is fee-earning AUM while it migrates.
+        $mmfInflowBoost = max(0.0, $macroState->moneyMarketFundShare - $macroState->moneyMarketFundShareEma) * self::MMF_AUM_INFLOW_SENSITIVITY;
+        // Mark-to-market: fee revenue is a percentage of assets, so the equity market's level against its own
+        // trend moves the base directly. A run with no reported market leaves both fields at zero and the term silent.
+        $marketLevelShift = 0.0;
+        if ($macroState->equityWealthTrend > 0.0) {
+            $marketLevelDeviation = ($macroState->equityWealthRatio / $macroState->equityWealthTrend) - 1.0;
+            $marketLevelShift = max(-self::AUM_MARKET_LEVEL_DEVIATION_CAP, min(self::AUM_MARKET_LEVEL_DEVIATION_CAP, $marketLevelDeviation)) * self::AUM_MARKET_LEVEL_BETA;
+        }
 
         // 2. Asymmetric Performance Fees & Institutional Redemptions (Incentive Fee Stream):
         // Strong alpha quarters crystallize outsized performance fees / carried interest.
@@ -355,7 +370,7 @@ class AssetManagementBusinessModel extends BaseFinancialBusinessModel
 
         // Blended dual-stream revenue
         $baseRevenue = max(0.0, $expectedRevenue * $baseWeight
-            * (1.0 + ($baseFeeZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + $aumMarketBeta - $baseRedemptionAttrition + $m2InflowBoost));
+            * (1.0 + ($baseFeeZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + $aumMarketBeta + $marketLevelShift - $baseRedemptionAttrition + $m2InflowBoost + $mmfInflowBoost));
         $perfRevenue = max(0.0, $expectedRevenue * $perfWeight
             * (1.0 + ($alphaZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + $alphaFeeBonus));
         
@@ -503,7 +518,11 @@ class AssetManagementBusinessModel extends BaseFinancialBusinessModel
     public function getOperatingMacroFields(): array
     {
         return [
+            'equity_wealth_ratio',
+            'equity_wealth_trend',
             'market_volatility_ema',
+            'money_market_fund_share',
+            'money_market_fund_share_ema',
             'money_supply_growth_ema',
             'output_gap_ema',
             'policy_rate_ema',

@@ -467,9 +467,23 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                             'inversion_months' => number_format($macroState->inversionDuration * 12.0, 1),
                             'erp_pct' => number_format($macroState->equityRiskPremium * 100.0, 2),
                             'qe_intensity_pct' => number_format($macroState->qeIntensity * 100.0, 2),
+                            'strike_sector' => $macroState->strikeSector ?? 'the district',
+                            'epu_index' => number_format($macroState->policyUncertaintyIndexEma, 0),
+                            'sovereign_spread_bps' => number_format($macroState->sovereignRiskSpread * 10000.0, 0),
+                            'debt_to_gdp_pct' => number_format($macroState->sovereignDebtToGdp * 100.0, 0),
+                            'cat_severity' => number_format($macroState->lastCatastropheSeverity, 1),
+                            'dsr_pct' => number_format($macroState->householdDebtServiceRatio * 100.0, 1),
+                            'debt_to_income_pct' => number_format($macroState->householdDebtToIncome * 100.0, 0),
                         ];
                         $desc = $this->narrativeEngine->generateLore($macroState->eventType, $macroContext);
-                        $shockPct = in_array($macroState->eventType, [\App\Service\Event\ShockEvent::TITAN_INTERVENTION, \App\Service\Event\ShockEvent::SOVEREIGN_WEALTH_DEPLOYMENT]) ? 5.0 : -5.0;
+                        $shockPct = match ($macroState->eventType) {
+                                \App\Service\Event\ShockEvent::TITAN_INTERVENTION, \App\Service\Event\ShockEvent::SOVEREIGN_WEALTH_DEPLOYMENT => 5.0,
+                                \App\Service\Event\ShockEvent::ELECTION_HELD => 0.0,
+                                \App\Service\Event\ShockEvent::NATURAL_CATASTROPHE => -2.0,
+                                \App\Service\Event\ShockEvent::HOUSEHOLD_DELEVERAGING => -3.0,
+                                \App\Service\Event\ShockEvent::SECTOR_STRIKE => -1.0,
+                                default => -5.0,
+                            };
                         $events[] = $this->marketEvent->publish($benchmarkFund, 'SHOCK', $desc, $shockPct);
                     }
                 }

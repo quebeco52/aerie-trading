@@ -948,4 +948,113 @@ class MonetaryPolicySubsystemTest extends TestCase
         (new MonetaryPolicySubsystem($extreme))->updateTermPremiumDynamics($state, 1.0);
         $this->assertEqualsWithDelta(MonetaryPolicySubsystem::EXPECTED_PATH_SHOCK_CAP, $state->expectedPathShock, 0.00001, 'A repricing is capped: it is never a regime change.');
     }
+
+
+    /**
+     * Pensions and insurers are the marginal buyer past ten years. Below the neutral long-end level they
+     * add nothing; above it their duration demand takes a quarter of the excess back out of the thirty-year.
+     */
+    public function testLiabilityDrivenDemandCompressesTheLongEndOnlyAboveItsHurdle(): void
+    {
+        $scale30y = MathUtility::calculateTermPremiumDurationScale(30.0, MacroEngine::TERM_PREMIUM_DURATION_HORIZON_YEARS);
+        $hurdle = MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION + (MacroEngine::NS_BASE_TERM_PREMIUM * $scale30y);
+
+        $build = static function (float $yield30yEma): MacroState {
+            $state = new MacroState();
+            $state->policyRate = MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION;
+            $state->targetRate = $state->policyRate;
+            $state->tipsBreakeven = MacroEngine::TARGET_INFLATION;
+            $state->outputGap = 0.0;
+            $state->marketVolatilityEma = 0.15;
+            $state->yield30yEma = $yield30yEma;
+
+            return $state;
+        };
+
+        $atHurdle = $this->subsystem->calculateYieldCurve($build($hurdle), MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE);
+        $belowHurdle = $this->subsystem->calculateYieldCurve($build($hurdle - 0.02), MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE);
+        $aboveHurdle = $this->subsystem->calculateYieldCurve($build($hurdle + 0.02), MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE);
+
+        $tensThirties = static fn (array $curve): float => $curve['yield_30y'] - $curve['yield_10y'];
+
+        $this->assertEqualsWithDelta($tensThirties($atHurdle), $tensThirties($belowHurdle), 1e-9, 'Below the hurdle there is no habitat bid to price.');
+        $expectedCompression = 0.02 * MonetaryPolicySubsystem::HABITAT_LONG_END_DEMAND_SENSITIVITY * ($scale30y - 1.0);
+        $this->assertEqualsWithDelta($expectedCompression, $tensThirties($atHurdle) - $tensThirties($aboveHurdle), 0.0002, 'Two hundred basis points of excess long yield draws in enough duration demand to flatten 10s30s by a quarter of it.');
+        $this->assertEqualsWithDelta($atHurdle['yield_10y'], $aboveHurdle['yield_10y'], 1e-9, 'The bid is for the long end only; the ten-year is untouched.');
+    }
+
+
+    /** Laubach (2009): the fiscal premium is a level the ten-year carries in full and the two-year by its duration share, and it is premium, not expectations. */
+    public function testTheSovereignRiskPremiumLiftsTheLongEndAsTermPremiumNotExpectations(): void
+    {
+        $sound = new MacroState();
+        $sound->policyRate = MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION;
+        $sound->targetRate = $sound->policyRate;
+        $sound->tipsBreakeven = MacroEngine::TARGET_INFLATION;
+        $sound->outputGap = 0.0;
+        $sound->marketVolatilityEma = 0.15;
+
+        $stressed = clone $sound;
+        $stressed->sovereignRiskSpreadEma = 0.01;
+
+        $curveSound = $this->subsystem->calculateYieldCurve($sound, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE);
+        $curveStressed = $this->subsystem->calculateYieldCurve($stressed, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE);
+
+        $scale2y = MathUtility::calculateTermPremiumDurationScale(2.0, MacroEngine::TERM_PREMIUM_DURATION_HORIZON_YEARS);
+        $this->assertEqualsWithDelta(0.01, $curveStressed['yield_10y'] - $curveSound['yield_10y'], 0.0002, 'The ten-year carries the whole premium.');
+        $this->assertEqualsWithDelta(0.01 * $scale2y, $curveStressed['yield_2y'] - $curveSound['yield_2y'], 0.0002, 'The two-year carries its duration share of it.');
+        $this->assertEqualsWithDelta(0.01, $curveStressed['term_premium_10y'] - $curveSound['term_premium_10y'], 0.0002, 'and it is booked as term premium');
+        $this->assertEqualsWithDelta($curveSound['risk_neutral_10y'], $curveStressed['risk_neutral_10y'], 1e-9, 'not as an expected policy path.');
+        $this->assertEqualsWithDelta(0.01, $curveStressed['base_term_premium'] - $curveSound['base_term_premium'], 1e-9, 'The desk prices off the same premium the curve was fitted with.');
+    }
+
+
+    // --- Deposits Channel ---
+
+    private function settledDepositChannel(float $policyRateEma): MacroState
+    {
+        $state = new MacroState();
+        $state->policyRateEma = $policyRateEma;
+        for ($i = 0; $i < 3000; $i++) {
+            $this->subsystem->calculateDepositChannel($state, 0.01);
+        }
+
+        return $state;
+    }
+
+    /** Drechsler, Savov & Schnabl (2017): the deposit beta rises with the level of rates and vanishes at the lower bound. */
+    public function testTheSystemDepositBetaRisesWithTheLevelOfRates(): void
+    {
+        $neutral = $this->settledDepositChannel(MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION);
+        $tight = $this->settledDepositChannel(0.05);
+        $floor = $this->settledDepositChannel(0.0);
+
+        $this->assertEqualsWithDelta(MacroEngine::SYSTEM_DEPOSIT_BETA_BASE, $neutral->systemDepositBeta, 0.01, 'At the neutral rate the system beta is the level the bank model is normalised to.');
+        $expectedTight = MacroEngine::SYSTEM_DEPOSIT_BETA_BASE + MonetaryPolicySubsystem::DEPOSIT_BETA_RATE_SENSITIVITY * (0.05 - (MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION));
+        $this->assertEqualsWithDelta($expectedTight, $tight->systemDepositBeta, 0.01, 'A 5% policy rate passes a good deal more through: the beta rises with the level.');
+        $this->assertGreaterThan(0.25, $tight->systemDepositBeta);
+        $this->assertEqualsWithDelta(MonetaryPolicySubsystem::DEPOSIT_BETA_FLOOR, $floor->systemDepositBeta, 0.01, 'At the lower bound there is nothing to pass through.');
+    }
+
+    public function testMoneyFundsGainShareOnlyWhenTheDepositSpreadOpens(): void
+    {
+        $neutral = $this->settledDepositChannel(MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION);
+        $tight = $this->settledDepositChannel(0.05);
+        $floor = $this->settledDepositChannel(0.0);
+
+        $this->assertEqualsWithDelta(MacroEngine::MMF_SHARE_BASE, $neutral->moneyMarketFundShare, 0.005, 'At the neutral spread the share sits at its base.');
+        $this->assertGreaterThan($neutral->moneyMarketFundShare + 0.03, $tight->moneyMarketFundShare, 'A wide deposit spread pulls several points of liquid assets into money funds.');
+        $this->assertLessThan($neutral->moneyMarketFundShare, $floor->moneyMarketFundShare, 'and a decade at the lower bound sends them back.');
+        $this->assertGreaterThanOrEqual(MonetaryPolicySubsystem::MIN_MMF_SHARE, $floor->moneyMarketFundShare);
+    }
+
+    public function testDepositsRepriceOverQuartersNotTicks(): void
+    {
+        $state = new MacroState();
+        $state->policyRateEma = 0.05;
+        $this->subsystem->calculateDepositChannel($state, 1.0 / 252.0);
+
+        $this->assertGreaterThan(MacroEngine::SYSTEM_DEPOSIT_BETA_BASE, $state->systemDepositBeta);
+        $this->assertLessThan(MacroEngine::SYSTEM_DEPOSIT_BETA_BASE + 0.002, $state->systemDepositBeta, 'One trading day moves the system beta by a fraction of a point.');
+    }
 }

@@ -276,8 +276,9 @@ class DistrictConduitTopologyTest extends TestCase
             'hedge_fund' => ['hedge_fund', ['rate-council', 'credit-registry', 'exchange-floor']],
             'distressed_debt' => ['distressed_debt', ['rate-council', 'credit-registry', 'exchange-floor']],
             'insurance' => ['insurance', ['rate-council', 'exchange-floor', 'land-registry', 'statistical-office']],
-            'reinsurance' => ['reinsurance', ['rate-council', 'exchange-floor', 'statistical-office']],
-            'retail_insurance' => ['retail_insurance', ['rate-council', 'exchange-floor', 'statistical-office']],
+            // Every carrier now reads the district catastrophe burden the Land Registry publishes.
+            'reinsurance' => ['reinsurance', ['rate-council', 'exchange-floor', 'land-registry', 'statistical-office']],
+            'retail_insurance' => ['retail_insurance', ['rate-council', 'exchange-floor', 'land-registry', 'statistical-office']],
             'financial_data' => ['financial_data', ['credit-registry', 'exchange-floor']],
         ];
     }

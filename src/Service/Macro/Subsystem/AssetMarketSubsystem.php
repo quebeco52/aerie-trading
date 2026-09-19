@@ -13,15 +13,13 @@ use App\Service\Math\MathUtility;
 class AssetMarketSubsystem
 {
     // --- JORGENSON USER COST RESIDENTIAL REAL ESTATE ---
-    /** Prime 30Y fixed mortgage spread over the 10Y sovereign (~170 bps): prepayment duration prices mortgages off the ten-year, not the thirty. */
-    public const RESIDENTIAL_MORTGAGE_SPREAD = 0.017;
     /** Structural property tax, insurance, and maintenance depreciation rate. */
     public const RESIDENTIAL_DEPRECIATION_TAX_RATE = 0.025;
 
     // --- JORGENSON USER COST RESIDENTIAL REAL ESTATE ---
     /** Equilibrium user cost of housing: neutral 10Y (r* + target + base premium) + mortgage spread + carry costs - target inflation. */
     public const RESIDENTIAL_NEUTRAL_USER_COST = MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION + MacroEngine::NS_BASE_TERM_PREMIUM
-        + self::RESIDENTIAL_MORTGAGE_SPREAD + self::RESIDENTIAL_DEPRECIATION_TAX_RATE - MacroEngine::TARGET_INFLATION;
+        + MacroEngine::RESIDENTIAL_MORTGAGE_SPREAD + self::RESIDENTIAL_DEPRECIATION_TAX_RATE - MacroEngine::TARGET_INFLATION;
 
     // --- Sector Demand Factor ---
     /** Campbell-Cochrane (1999) habit formation risk aversion sensitivity to output gap deviations. */
@@ -36,6 +34,8 @@ class AssetMarketSubsystem
     public const MACRO_VOL_CREDIT_SENSITIVITY     = 10.0;
     /** Sensitivity of exponential baseline volatility to yield curve slope (flattening/inversion increases vol). */
     public const MACRO_VOL_SLOPE_SENSITIVITY      = 8.0;
+    /** Sensitivity of the baseline volatility anchor to the log policy-uncertainty index: a doubling lifts the anchor ~11% (Pastor & Veronesi 2013 political uncertainty premium; the BBD index co-moves with the VIX). Enters the anchor, so it is budgeted against the jump compensation like the other drivers. */
+    public const MACRO_VOL_EPU_SENSITIVITY        = 0.15;
     /** Lower clamp for baseline volatility during extreme Goldilocks expansions. */
     public const MACRO_VOL_MIN_BASELINE           = 0.10;
     /** Upper clamp for macro-driven baseline volatility to prevent infinite variance explosion. */
@@ -79,9 +79,23 @@ class AssetMarketSubsystem
     /** Stochastic diffusion volatility (sigma) of consumer animal spirits. */
     public const ANIMAL_SPIRITS_VOLATILITY = 2.5;
 
+    // --- Foreign Bloc (two-country Mundell-Fleming, Obstfeld & Rogoff 1996) ---
+    /** Mean reversion of the foreign output gap (half-life ~2 years, a cycle of the same length as the district's). */
+    public const FOREIGN_GAP_REVERSION = 0.35;
+    /** Annual diffusion of the foreign gap: a stationary spread of ~1.4%, the domestic gap's own. */
+    public const FOREIGN_GAP_SIGMA = 0.012;
+    /** Share of the district's cycle that reaches the foreign bloc's demand: the district's imports are a small part of the world's exports. */
+    public const FOREIGN_IMPORT_SPILLOVER = 0.15;
+    /** The foreign central bank's Taylor (1993) output coefficient; its inflation is taken as anchored, so the gap is all it reacts to. */
+    public const FOREIGN_TAYLOR_GAP_COEFF = 0.50;
+    /** Time constant (years) over which the foreign policy rate reaches its rule. */
+    public const FOREIGN_POLICY_ADJUSTMENT_YEARS = 0.50;
+    /** Bounds on the foreign gap. */
+    public const MAX_FOREIGN_GAP = 0.10;
+    /** Bounds on the foreign policy rate. */
+    public const MAX_FOREIGN_POLICY_RATE = 0.10;
+
     // --- MUNDELL-FLEMING OPEN ECONOMY (IS-LM-BOP) ---
-    /** G7 average policy rate proxy for Uncovered Interest Parity (UIP) baseline. */
-    public const GLOBAL_BASELINE_RATE = 0.025;
     /** UIP sensitivity: exchange rate response to domestic-foreign interest rate differential. */
     public const UIP_SENSITIVITY = 3.0;
     /** Mean-reversion speed of exchange rate toward purchasing power parity equilibrium. */
@@ -92,6 +106,14 @@ class AssetMarketSubsystem
     public const FX_TERMS_OF_TRADE_SENSITIVITY = 0.30;
     /** Safe-haven FX elasticity (Ranaldo-Soderlind 2010): panic bids the reserve currency ~6% at 50% equity vol. */
     public const FX_SAFE_HAVEN_SENSITIVITY = 0.25;
+    /** Log depreciation per unit of sovereign risk spread: fiscal risk sells the currency (Alesina & Perotti 1995; Della Corte, Sarno, Schmeling & Wagner 2022 on sovereign risk and currency returns). A 100 bps premium costs ~2%. */
+    public const FX_FISCAL_RISK_SENSITIVITY = 2.0;
+
+    // --- Physical Catastrophes ---
+    /** Sentiment index points lost per unit of catastrophe burden above an average year (a season of storms is a few points of confidence, not a recession). */
+    public const SENTIMENT_CATASTROPHE_MULTIPLIER = 3.0;
+    /** Share of the housing stock's fundamental value destroyed per unit of excess catastrophe burden; rebuilt through the housing-starts channel. */
+    public const CATASTROPHE_PROPERTY_DAMAGE_SHARE = 0.01;
 
     // --- DIPASQUALE-WHEATON COMMERCIAL REAL ESTATE (2-QUADRANT) ---
     /** Baseline commercial property index (neutral valuation). */
@@ -190,6 +212,8 @@ class AssetMarketSubsystem
     public const HOUSING_STARTS_USER_COST_SENSITIVITY = 300.0;
     /** Sensitivity of housing construction orders to bank mortgage lending standards tightening (SLOOS). */
     public const HOUSING_STARTS_SLOOS_SENSITIVITY = 25.0;
+    /** Sensitivity of housing starts to aggregate private sector credit-to-GDP gap availability. */
+    public const HOUSING_STARTS_CREDIT_GAP_SENSITIVITY = 30.0;
     /** Mean-reversion speed (kappa) of housing construction volume toward equilibrium capacity. */
     public const HOUSING_STARTS_KAPPA = 1.5;
     /** Stochastic diffusion volatility of new housing starts. */
@@ -259,7 +283,9 @@ class AssetMarketSubsystem
         $demandMultiplier = max(self::RESIDENTIAL_MIN_LABOR_FACTOR, min(self::RESIDENTIAL_MAX_LABOR_FACTOR, $laborFactor * $incomeFactor));
 
         $affordabilityFactor = (self::RESIDENTIAL_NEUTRAL_USER_COST / $userCost) * $demandMultiplier;
-        $fundamentalPrice = MacroEngine::RESIDENTIAL_BASELINE * max(0.30, min(2.50, $affordabilityFactor));
+        // Storm damage takes stock out of the market; the starts channel puts it back.
+        $damageFactor = 1.0 - (self::CATASTROPHE_PROPERTY_DAMAGE_SHARE * max(0.0, $state->catastropheLossIndexEma - 1.0));
+        $fundamentalPrice = MacroEngine::RESIDENTIAL_BASELINE * max(0.30, min(2.50, $affordabilityFactor * max(0.5, $damageFactor)));
 
         $dW = $this->mathUtility->generateStandardNormal();
         $newIndex = $this->mathUtility->calculateSchwartz1Factor(
@@ -304,9 +330,11 @@ class AssetMarketSubsystem
         $currentMarketVol = $state->marketVolatility;
 
         $spreadDeviation = max(0.0, $state->macroCreditSpread - MacroEngine::BASE_CREDIT_SPREAD);
+        $policyUncertaintyLog = log(max(1.0, $state->policyUncertaintyIndexEma) / MacroEngine::EPU_BASELINE);
         $macroDriver = (-$state->outputGap * self::MACRO_VOL_OUTPUT_GAP_SENSITIVITY)
             + ($spreadDeviation * self::MACRO_VOL_CREDIT_SENSITIVITY)
-            + (-min(0.0, $state->structuralSlope) * self::MACRO_VOL_SLOPE_SENSITIVITY);
+            + (-min(0.0, $state->structuralSlope) * self::MACRO_VOL_SLOPE_SENSITIVITY)
+            + ($policyUncertaintyLog * self::MACRO_VOL_EPU_SENSITIVITY);
 
         $longTermVol = min(
             self::MACRO_VOL_MAX_BASELINE,
@@ -408,7 +436,7 @@ class AssetMarketSubsystem
      */
     public function calculateExchangeRate(MacroState $state, float $dt): void
     {
-        $rateDiff = $state->policyRate - self::GLOBAL_BASELINE_RATE;
+        $rateDiff = $state->policyRate - $state->foreignPolicyRate;
 
         // Terms of trade: commodity import price inflation weakens the currency for a net importer.
         $energyShift = ($state->energyPriceIndexEma / MacroEngine::ENERGY_BASELINE) - 1.0;
@@ -420,8 +448,11 @@ class AssetMarketSubsystem
         $panic = max(0.0, $state->marketVolatilityEma - MacroEngine::FLIGHT_TO_SAFETY_VOL_THRESHOLD);
         $safeHavenBid = self::FX_SAFE_HAVEN_SENSITIVITY * $panic;
 
+        // Fiscal risk sells the currency: a premium on the sovereign is not carry, it is default and inflation risk.
+        $fiscalRiskDiscount = self::FX_FISCAL_RISK_SENSITIVITY * $state->sovereignRiskSpreadEma;
+
         $targetFx = MacroEngine::EXCHANGE_RATE_BASELINE * exp(
-            (self::UIP_SENSITIVITY * $rateDiff) - $termsOfTradeShift + $safeHavenBid
+            (self::UIP_SENSITIVITY * $rateDiff) - $termsOfTradeShift + $safeHavenBid - $fiscalRiskDiscount
         );
 
         $dW = $this->mathUtility->generateStandardNormal();
@@ -464,8 +495,9 @@ class AssetMarketSubsystem
         $ratePenalty = $excessYield * self::SENTIMENT_RATE_MULTIPLIER;
 
         $gasPanic = max(0.0, $state->energyPriceShock) * self::SENTIMENT_ENERGY_PANIC_SCALE;
+        $disasterPenalty = max(0.0, $state->catastropheLossIndexEma - 1.0) * self::SENTIMENT_CATASTROPHE_MULTIPLIER;
 
-        $fundamentalSentiment = MacroEngine::SENTIMENT_BASELINE - $miseryPenalty - $momentumPenalty - $fearPenalty - $ratePenalty - $gasPanic;
+        $fundamentalSentiment = MacroEngine::SENTIMENT_BASELINE - $miseryPenalty - $momentumPenalty - $fearPenalty - $ratePenalty - $gasPanic - $disasterPenalty;
         if ($state->outputGap > 0.0) {
             $fundamentalSentiment += ($state->outputGap * self::SENTIMENT_EXPANSION_MULTIPLIER);
         } else {
@@ -536,8 +568,41 @@ class AssetMarketSubsystem
             dt: $dt,
             dW: $dW,
             kappa: self::DEAL_ACTIVITY_KAPPA,
-            sigma: self::DEAL_ACTIVITY_SIGMA
+            sigma: self::DEAL_ACTIVITY_SIGMA,
+            policyUncertaintyIndex: $state->policyUncertaintyIndexEma
         );
+    }
+
+    /**
+     * The foreign bloc: an output gap of its own, the policy rate its Taylor rule sets on it, and the global
+     * demand composite the district's commodities actually clear against.
+     *
+     * Two-country Mundell-Fleming (Obstfeld & Rogoff 1996 for the structure): the foreign gap is a mean-
+     * reverting disturbance whose mean the district's own cycle shifts a little (its imports are the bloc's
+     * exports), the foreign central bank follows a Taylor rule on that gap with anchored inflation, and world
+     * demand for metals, freight and fuel is the weighted pair. Everything else -- the currency through the
+     * rate differential, the trade balance through foreign absorption, exports through the IS curve -- reads
+     * these three series.
+     *
+     * @param MacroState $state Current macroeconomic state.
+     * @param float      $dt    Time increment in years.
+     */
+    public function calculateForeignEconomy(MacroState $state, float $dt): void
+    {
+        $meanGap = self::FOREIGN_IMPORT_SPILLOVER * $state->outputGapEma;
+        $innovation = self::FOREIGN_GAP_SIGMA * sqrt($dt) * $this->mathUtility->generateStandardNormal();
+        $state->foreignOutputGap += (self::FOREIGN_GAP_REVERSION * ($meanGap - $state->foreignOutputGap) * $dt) + $innovation;
+        $state->foreignOutputGap = max(-self::MAX_FOREIGN_GAP, min(self::MAX_FOREIGN_GAP, $state->foreignOutputGap));
+
+        $ruleRate = MacroEngine::GLOBAL_BASELINE_RATE + (self::FOREIGN_TAYLOR_GAP_COEFF * $state->foreignOutputGapEma);
+        $state->foreignPolicyRate = $this->mathUtility->calculateDistributedLag(
+            currentLaggedValue: $state->foreignPolicyRate,
+            targetValue: max(0.0, min(self::MAX_FOREIGN_POLICY_RATE, $ruleRate)),
+            dt: $dt,
+            lagTimeConstant: self::FOREIGN_POLICY_ADJUSTMENT_YEARS
+        );
+
+        $state->globalDemandGap = (MacroEngine::DOMESTIC_DEMAND_WEIGHT * $state->outputGapEma) + ((1.0 - MacroEngine::DOMESTIC_DEMAND_WEIGHT) * $state->foreignOutputGapEma);
     }
 
     /**
@@ -555,9 +620,11 @@ class AssetMarketSubsystem
         $fxDeviation = ($state->exchangeRateIndex / MacroEngine::EXCHANGE_RATE_BASELINE) - 1.0;
         $cyclicalAbsorption = $state->outputGap;
 
+        // Foreign absorption is the mirror of the district's own: their boom is our exports.
         $targetTradeBalance = MacroEngine::TRADE_BALANCE_BASELINE
             - (self::TRADE_BALANCE_FX_ELASTICITY * $fxDeviation)
-            - (self::TRADE_BALANCE_GAP_ELASTICITY * $cyclicalAbsorption);
+            - (self::TRADE_BALANCE_GAP_ELASTICITY * $cyclicalAbsorption)
+            + (self::TRADE_BALANCE_GAP_ELASTICITY * $state->foreignOutputGap);
 
         $targetTradeBalance = max(self::MIN_TRADE_BALANCE, min(self::MAX_TRADE_BALANCE, $targetTradeBalance));
 
@@ -572,7 +639,7 @@ class AssetMarketSubsystem
      */
     private function housingUserCost(MacroState $state, float $expectedInflation): float
     {
-        $mortgageRate = $state->yield10yEma + self::RESIDENTIAL_MORTGAGE_SPREAD;
+        $mortgageRate = $state->yield10yEma + MacroEngine::RESIDENTIAL_MORTGAGE_SPREAD;
 
         return max(0.015, $mortgageRate + self::RESIDENTIAL_DEPRECIATION_TAX_RATE - $expectedInflation);
     }
@@ -603,6 +670,7 @@ class AssetMarketSubsystem
             'qSens' => self::HOUSING_STARTS_Q_SENSITIVITY,
             'costSens' => self::HOUSING_STARTS_USER_COST_SENSITIVITY,
             'sloosSens' => self::HOUSING_STARTS_SLOOS_SENSITIVITY,
+            'creditGapSens' => self::HOUSING_STARTS_CREDIT_GAP_SENSITIVITY,
             'kappa' => self::HOUSING_STARTS_KAPPA,
             'sigma' => self::HOUSING_STARTS_SIGMA,
             'min' => self::MIN_HOUSING_STARTS,
@@ -618,7 +686,8 @@ class AssetMarketSubsystem
             sloosTightening: $state->sloosTighteningIndexEma,
             dt: $dt,
             dW: $dW,
-            params: $params
+            params: $params,
+            creditGap: $state->creditToGdpGapEma
         );
     }
 }

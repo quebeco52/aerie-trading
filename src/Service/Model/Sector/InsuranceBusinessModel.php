@@ -122,9 +122,13 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
     /** Years for a change in an underwriter's capital to reach the rates it is quoted: statutory filings, rating reviews and annual renewal dates all sit between the two, and that delay is what turns the capacity cycle into a cycle rather than a level. */
     public const CAPACITY_OBSERVATION_LAG_YEARS = 1.50;
 
-    // --- Catastrophe Seasonality ---
-    /** Relative catastrophe frequency by calendar quarter [Q1..Q4], summing to 4.0: Q3 carries the Atlantic wind season, Q1 the winter freeze and storm peak. */
-    public const CATASTROPHE_SEASONALITY = [0.80, 0.70, 1.90, 0.60];
+    // --- Catastrophe Seasonality & District Losses ---
+    /** Relative catastrophe frequency by calendar quarter, the same calendar the district loss process draws on. */
+    public const CATASTROPHE_SEASONALITY = MacroEngine::CATASTROPHE_SEASONALITY;
+    /** Claim z-score lost per standard deviation of district catastrophe burden: a primary carrier holds a diversified book, so a district year at three times the average burden reaches its catastrophe threshold on its own. Additive to the firm's draw, so the calibrated frequency in an average year is unchanged. */
+    public const CATASTROPHE_MACRO_LOADING = 0.75;
+    /** District loss burden (average-year units, smoothed) at which the market hardens for every carrier, capital shock or not (the 1992, 2005 and 2017 seasons). */
+    public const CAT_HARD_MARKET_THRESHOLD = 3.0;
     /** Minor variable cost reduction during exceptionally benign underwriting environments. */
     public const BENIGN_CLAIM_BONUS       = -0.08;
     /** Cummins & Danzon (1997) soft-market underwriting combined ratio compression sensitivity to high float yields. */
@@ -426,11 +430,29 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
      * and the retail carrier — the two listed underwriters — could never enter the regime at all, and the
      * uplift getMacroPhysics() reads off it was permanently zero for both.
      */
+    /**
+     * The claim draw every carrier shares in: its own exogenous AR(1) draw, less the district catastrophe
+     * burden standardised and scaled by how much of that burden this kind of book holds. The macro term is
+     * additive rather than a variance-preserving blend so an average district year leaves the firm's
+     * calibrated claim frequency exactly where it was.
+     */
+    protected function resolveClaimZ(StreamContext $streams, MacroStateDTO $macroState, float $macroLoading): float
+    {
+        $idiosyncraticZ = $streams->generateExogenousZ('claim', 0.05);
+        $districtBurdenZ = ($macroState->catastropheLossIndexEma - 1.0) / MacroEngine::CATASTROPHE_LOSS_INDEX_SD;
+
+        return $idiosyncraticZ - ($macroLoading * $districtBurdenZ);
+    }
+
     protected function advanceUnderwritingCycle(StreamContext $streams, Stock $stock, MacroStateDTO $macroState, float $surplusDeficitRatio, float $claimZ): void
     {
         $streams->evolveRegime(self::REGIME_HARD_MARKET, 0.0, self::HARD_MARKET_EXIT_HAZARD);
 
-        if ($surplusDeficitRatio >= self::HARD_MARKET_ONSET_SURPLUS_DEFICIT || $claimZ < self::REINSURANCE_ATTACHMENT_Z) {
+        if (
+            $surplusDeficitRatio >= self::HARD_MARKET_ONSET_SURPLUS_DEFICIT
+            || $claimZ < self::REINSURANCE_ATTACHMENT_Z
+            || $macroState->catastropheLossIndexEma >= self::CAT_HARD_MARKET_THRESHOLD
+        ) {
             $streams->startRegime(self::REGIME_HARD_MARKET);
         }
 
@@ -519,9 +541,10 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
         $momentum = $stock->getEarningsMomentumZ() ?? [];
         $streams = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
 
-        // Premium volume loads on the firm and sector demand factors; claims are exogenous and near i.i.d.
+        // Premium volume loads on the firm and sector demand factors; claims are exogenous and near i.i.d.,
+        // shifted by the district's own storm season so every carrier is hit by the same one.
         $revenueZ = $streams->generateZ('revenue', 0.25);
-        $claimZ   = $streams->generateExogenousZ('claim', 0.05);
+        $claimZ   = $this->resolveClaimZ($streams, $macroState, self::CATASTROPHE_MACRO_LOADING);
 
         $actualRevenue = $expectedRevenue * (1.0 + ($revenueZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)));
 
@@ -778,7 +801,7 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
         return $isMegaHoarder ? $excessCash * self::MEGA_BUYBACK_CASH_SHARE : min($excessCash * self::STANDARD_BUYBACK_SHARE, $retainedEarningsThisQuarter * self::MAX_RETAINED_BUYBACK_MULT);
     }
 
-    public function calculateInterestExpenseAndWholesaleRate(Stock $stock, float $blendedFixedRate, float $floatingInterestRate, float $currentMarketFixedRate, float $policyRate, float $equityLimit, float $totalEquity, float $debt): InterestExpenseDTO
+    public function calculateInterestExpenseAndWholesaleRate(Stock $stock, float $blendedFixedRate, float $floatingInterestRate, float $currentMarketFixedRate, float $policyRate, float $equityLimit, float $totalEquity, float $debt, ?\App\DTO\MacroStateDTO $macroState = null): InterestExpenseDTO
     {
         $corporateDebt = (float) $stock->getWholesaleDebt();
         $floatingRatio = (float) $stock->getFloatingDebtRatio();
@@ -979,7 +1002,7 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
     public function getDistressEquityThreshold(): float { return self::DISTRESS_EQUITY_THRESHOLD; }
     public function getWarningEquityThreshold(): float { return self::WARNING_EQUITY_THRESHOLD; }
 
-    public function getRegulatoryDividendCap(Stock $stock, float $currentTreasury): ?float
+    public function getRegulatoryDividendCap(Stock $stock, float $currentTreasury, ?MacroStateDTO $macroState = null): ?float
     {
         $equity = (float) $stock->getTotalEquity();
         $totalDebt = (float) $stock->getTotalDebt();
@@ -994,7 +1017,7 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
             return 0.0;
         }
 
-        return parent::getRegulatoryDividendCap($stock, $currentTreasury);
+        return parent::getRegulatoryDividendCap($stock, $currentTreasury, $macroState);
     }
 
     /**
@@ -1006,6 +1029,7 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
     public function getOperatingMacroFields(): array
     {
         return [
+            'catastrophe_loss_index_ema',
             'commercial_property_index_ema',
             'inflation_ema',
             'market_volatility_ema',

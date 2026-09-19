@@ -11,8 +11,14 @@ class TradeFlowPantherTest extends BasePantherTestCase
         $client = static::createPantherClient();
         $this->loginUser($client);
 
-        // Navigate to LAKE stock page
-        $client->request('GET', '/stock/LAKE');
+        // Pick an active listed stock
+        $client->request('GET', '/screener');
+        $crawler = $client->waitFor('table tbody tr a[href^="/stock/"]', 3);
+        $stockLink = $crawler->filter('table tbody tr a[href^="/stock/"]:not([href="/stock/LBI"]):not([href="/stock/LSD"])')->first();
+        $stockUrl = $stockLink->count() > 0 ? $stockLink->attr('href') : '/stock/SWAN';
+
+        // Navigate to active stock page
+        $client->request('GET', $stockUrl);
 
         $this->assertSelectorExists('#mainChartContainer');
         $this->assertSelectorExists('form[action="/trade/execute"]');
@@ -32,7 +38,7 @@ class TradeFlowPantherTest extends BasePantherTestCase
         $this->assertSelectorExists('body');
 
         // Test Limit order toggle and placement
-        $client->request('GET', '/stock/LAKE');
+        $client->request('GET', $stockUrl);
         $client->executeScript("
             const limitRadio = document.querySelector('input[name=\"orderType\"][value=\"LIMIT\"]');
             if (limitRadio) {

@@ -96,6 +96,8 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
     public const MACRO_DEFAULT_SCALAR      = 0.35;
     /** Macro default scalar translating elevated unemployment rates into revolving credit card charge-offs. */
     public const UNEMPLOYMENT_CHARGE_OFF_SCALAR = 0.50;
+    /** Credit provision loss weight for elevated household debt service ratio stress above neutral. */
+    public const SHOCK_WEIGHT_DSR_DEFAULT  = 0.20;
     /** Severe credit z-score threshold triggering elevated unsecured default provisions. */
     public const CREDIT_STRESS_Z_THRESHOLD = -1.50;
     /** Loss provision multiplier applied to credit stress severity. */
@@ -124,6 +126,8 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
     public const CECL_RESERVE_RECESSION_SENSITIVITY = 0.75;
     /** Sensitivity of revolving credit loan origination volume drag to commercial bank credit tightening (SLOOS). */
     public const SLOOS_LENDING_DRAG_SENSITIVITY = 0.15;
+    /** Card balances per unit of the household credit-to-GDP gap: revolving credit rides the same boom. */
+    public const CREDIT_GAP_LENDING_SENSITIVITY = 0.50;
 
     // --- Structural Efficiency Floor ---
     /** Minimum cost-to-revenue ratio: even at perfect NIM, structural fixed costs (personnel, compliance, tech) prevent margin going below 50%. */
@@ -203,8 +207,9 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
         // Blended dual-stream revenue (Lending vs. Payment Network Interchange)
         // Bank credit tightening (SLOOS) gates unsecured credit card line extensions and origination volume
         $sloosLendingDrag = max(0.0, $macroState->sloosTighteningIndexEma) * self::SLOOS_LENDING_DRAG_SENSITIVITY;
+        $creditBoomBoost = $macroState->creditToGdpGapEma * self::CREDIT_GAP_LENDING_SENSITIVITY;
         $lendingRevenue = max(0.0, $expectedRevenue * $lendingWeight
-            * max(0.0, 1.0 - $sloosLendingDrag)
+            * max(0.0, 1.0 - $sloosLendingDrag + $creditBoomBoost)
             * (1.0 + ($lendingZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR))));
         $networkRevenue = max(0.0, $expectedRevenue * $networkWeight
             * (1.0 + ($swipeZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + $inflationBonus));
@@ -224,9 +229,11 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
         $sentimentShift = $macroState->sentimentDeviation();
         $retailDefaultShift = MathUtility::excessOverBaseline($macroState->retailDefaultRateEma, MacroEngine::RETAIL_DEFAULT_BASELINE);
         $unemploymentShift = MathUtility::excessOverBaseline($macroState->unemploymentRateEma, MacroEngine::NATURAL_UNEMPLOYMENT);
+        $dsrShift = max(0.0, $macroState->householdDebtServiceGap) / MacroEngine::HOUSEHOLD_DSR_NEUTRAL;
         $macroDefaultDrag = ($sentimentShift < 0.0 ? abs($sentimentShift) * self::MACRO_DEFAULT_SCALAR : 0.0)
             + ($retailDefaultShift * 0.15)
-            + ($unemploymentShift * self::UNEMPLOYMENT_CHARGE_OFF_SCALAR * 0.10);
+            + ($unemploymentShift * self::UNEMPLOYMENT_CHARGE_OFF_SCALAR * 0.10)
+            + ($dsrShift * self::SHOCK_WEIGHT_DSR_DEFAULT);
 
         if ($defaultZ < self::CREDIT_STRESS_Z_THRESHOLD) {
             $provisionShock = abs($defaultZ) * self::LOSS_PROVISION_SCALAR;
@@ -385,7 +392,7 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
         return $excessCash * $this->calculateCashYield($macroState);
     }
 
-    public function calculateInterestExpenseAndWholesaleRate(Stock $stock, float $blendedFixedRate, float $floatingInterestRate, float $currentMarketFixedRate, float $policyRate, float $equityLimit, float $totalEquity, float $debt): InterestExpenseDTO
+    public function calculateInterestExpenseAndWholesaleRate(Stock $stock, float $blendedFixedRate, float $floatingInterestRate, float $currentMarketFixedRate, float $policyRate, float $equityLimit, float $totalEquity, float $debt, ?\App\DTO\MacroStateDTO $macroState = null): InterestExpenseDTO
     {
         $floatingRatio = (float) $stock->getFloatingDebtRatio();
         $customerDeposits = (float) $stock->getCustomerDeposits(); // High yield savings sweeps
@@ -471,9 +478,13 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
     {
         return [
             'consumer_sentiment_index_ema',
+            'credit_to_gdp_gap_ema',
+            'household_debt_service_gap',
             'inflation_ema',
             'interbank_liquidity_spread_ema',
             'macro_credit_spread_ema',
+            'money_market_fund_share',
+            'money_market_fund_share_ema',
             'output_gap_ema',
             'policy_rate_ema',
             'recession_probability_ema',

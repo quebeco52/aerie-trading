@@ -109,6 +109,8 @@ class LogisticsBusinessModel extends StandardCorporateBusinessModel
     public const PMI_FREIGHT_SENSITIVITY = 0.45;
     /** Sensitivity of overland and intermodal freight to merchandise trade balance shifts. */
     public const TRADE_BALANCE_SENSITIVITY = 1.00;
+    /** Export volume per unit of the foreign bloc's output gap: the customers-abroad half of the trade term. */
+    public const FOREIGN_DEMAND_SENSITIVITY = 1.00;
     /** Sensitivity of spot freight brokerage surge demand to global supply chain pressure. */
     public const GSCPI_SPOT_SURGE_SENSITIVITY = 0.08;
 
@@ -116,7 +118,8 @@ class LogisticsBusinessModel extends StandardCorporateBusinessModel
     {
         $outputGap = $this->resolveLaggedOutputGap($stock, $macroState);
         $pmiShift = MathUtility::calculatePmiDemandShift($macroState->manufacturingPmiEma, sensitivity: self::PMI_FREIGHT_SENSITIVITY);
-        $tradeShift = MathUtility::calculateTradeBalanceShift($macroState->tradeBalanceToGdpEma, sensitivity: self::TRADE_BALANCE_SENSITIVITY);
+        $tradeShift = MathUtility::calculateTradeBalanceShift($macroState->tradeBalanceToGdpEma, sensitivity: self::TRADE_BALANCE_SENSITIVITY)
+            + MathUtility::calculateForeignDemandShift($macroState->foreignOutputGapEma, sensitivity: self::FOREIGN_DEMAND_SENSITIVITY);
         $beta = $this->getOperatingCyclicality($stock);
 
         return [
@@ -215,6 +218,7 @@ class LogisticsBusinessModel extends StandardCorporateBusinessModel
     {
         return [
             'energy_cost_push_lag',
+            'foreign_output_gap_ema',
             'freight_rate_index_ema',
             'manufacturing_pmi_ema',
             'output_gap_ema',

@@ -36,7 +36,7 @@ class SteelManufacturingBusinessModel extends StandardCorporateBusinessModel
 
     // --- Input Cost Basket ---
     /** Shares of the variable cost base bought in tracked input markets (energy, metals, agri, freight, wholesale goods, variable payroll). */
-    public const INPUT_COST_EXPOSURES = ['energy' => 0.30, 'metals' => 0.35, 'freight' => 0.05, 'ppi' => 0.05, 'labor' => 0.15];
+    public const INPUT_COST_EXPOSURES = ['energy' => 0.15, 'gas' => 0.15, 'metals' => 0.35, 'freight' => 0.05, 'ppi' => 0.05, 'labor' => 0.15];
     /** Blast furnaces and electric arc furnaces are price takers on ore, scrap and power: raw inputs reprice at spot. */
     public const PRICING_POWER_INDEX = 0.40;
 
@@ -67,6 +67,10 @@ class SteelManufacturingBusinessModel extends StandardCorporateBusinessModel
     public const SPOT_VARIANCE_SCALAR     = 0.60;
     /** Sensitivity of steel mill order demand to manufacturing PMI survey shifts. */
     public const PMI_DEMAND_SENSITIVITY   = 0.50;
+    /** Spot tonnage per unit of the foreign bloc's output gap: export orders, which fall away first when the world slows. */
+    public const FOREIGN_DEMAND_SENSITIVITY = 1.50;
+    /** Share of spot order volume exposed to foreign currency competition and overseas steel dumping. */
+    public const FX_REVENUE_EXPOSURE = 0.20;
     /** Sensitivity of blast furnace fixed cost absorption to industrial capacity utilization. */
     public const CU_MARGIN_ABSORPTION_SENSITIVITY = 0.12;
 
@@ -146,12 +150,17 @@ class SteelManufacturingBusinessModel extends StandardCorporateBusinessModel
         $pmiShift = MathUtility::calculatePmiDemandShift($macroState->manufacturingPmiEma, MacroEngine::PMI_BASELINE, self::PMI_DEMAND_SENSITIVITY);
         $macroBoost = ($macroState->outputGapEma * 1.2 * $beta) + ($pmiShift * $beta);
         $metalsShift = ($macroState->industrialMetalsIndexEma - 100.0) / 100.0;
+        // Export tonnage clears in the spot market: foreign economic activity expands orders,
+        // while a foreign slowdown combined with a strong domestic currency invites foreign import dumping.
+        $foreignShift = MathUtility::calculateForeignDemandShift($macroState->foreignOutputGapEma, sensitivity: self::FOREIGN_DEMAND_SENSITIVITY);
+        $fxShift = $this->resolveFxDemandShift($macroState, self::FX_REVENUE_EXPOSURE);
+        $importDumpingShift = $foreignShift + $fxShift;
 
         $contractZ = $streams->generateZ('contracted_oem_steel', 0.35);
         $spotZ     = $streams->generateZ('spot_hrc_market', 0.15);
 
         $contractRevenue = max(0.0, $expectedRevenue * $contractWeight * (1.0 + ($contractZ * ($baselineVol * self::CONTRACT_VARIANCE_SCALAR)) + ($macroBoost * 0.5)));
-        $spotRevenue     = max(0.0, $expectedRevenue * $spotWeight     * (1.0 + ($spotZ     * ($baselineVol * self::SPOT_VARIANCE_SCALAR)) + ($metalsShift * 0.50) + ($macroBoost * 0.5)));
+        $spotRevenue     = max(0.0, $expectedRevenue * $spotWeight     * (1.0 + ($spotZ     * ($baselineVol * self::SPOT_VARIANCE_SCALAR)) + ($metalsShift * 0.50) + ($macroBoost * 0.5) + $importDumpingShift));
         // Hot-rolled coil repricing on the same tonnage is price: the mill's variable cost per tonne does not follow the spot quote.
         $priceRevenue    = $expectedRevenue * $spotWeight * ($metalsShift * 0.50);
 
@@ -227,9 +236,11 @@ class SteelManufacturingBusinessModel extends StandardCorporateBusinessModel
             'capacity_utilization_rate_ema',
             'energy_cost_push_lag',
             'exchange_rate_index_ema',
+            'foreign_output_gap_ema',
             'freight_rate_index_ema',
             'industrial_metals_index_ema',
             'manufacturing_pmi_ema',
+            'natural_gas_price_index_ema',
             'output_gap_ema',
             'producer_price_inflation_ema',
             'tips_breakeven_ema',

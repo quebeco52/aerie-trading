@@ -471,4 +471,50 @@ class BiotechBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta(71_050_000.0, $result->streamRevenue['commercial_therapeutics'], 1.0);
         $this->assertEqualsWithDelta(31_350_000.0, $result->streamRevenue['pipeline_licensing_milestones'], 1.0);
     }
+
+    public function testReimbursementRateGrowthLiftsCommercialTherapeuticsRevenue(): void
+    {
+        $model = new BiotechBusinessModel();
+        $stock = $this->makeStock();
+
+        $mathBaseline = $this->mockMath([0.0, 0.0], [false]);
+        $baseResult = $model->computeActualFinancials(
+            $stock,
+            expectedRevenue: self::EXPECTED_REVENUE,
+            realizedVariableMargin: 0.20,
+            fixedCosts: self::FIXED_COSTS,
+            baselineVol: self::BASELINE_VOL,
+            macroState: new MacroStateDTO(), // Baseline reimbursementRateGrowth (0.012)
+            mathUtility: $mathBaseline
+        );
+
+        $mathUplift = $this->mockMath([0.0, 0.0], [false]);
+        $upliftResult = $model->computeActualFinancials(
+            $stock,
+            expectedRevenue: self::EXPECTED_REVENUE,
+            realizedVariableMargin: 0.20,
+            fixedCosts: self::FIXED_COSTS,
+            baselineVol: self::BASELINE_VOL,
+            macroState: new MacroStateDTO(reimbursementRateGrowth: 0.04), // +4% reimbursement update vs 1.2% baseline
+            mathUtility: $mathUplift
+        );
+
+        // Branded commercial stream expands with reimbursement rate growth above baseline (+2.8%)
+        $this->assertGreaterThan(
+            $baseResult->streamRevenue['commercial_therapeutics'],
+            $upliftResult->streamRevenue['commercial_therapeutics']
+        );
+        $expectedUplift = 1.0 + (0.04 - (0.02 - 0.008));
+        $this->assertEqualsWithDelta(
+            $baseResult->streamRevenue['commercial_therapeutics'] * $expectedUplift,
+            $upliftResult->streamRevenue['commercial_therapeutics'],
+            1.0
+        );
+        // Pipeline milestone licensing stream is unaffected by healthcare reimbursement updates
+        $this->assertEqualsWithDelta(
+            $baseResult->streamRevenue['pipeline_licensing_milestones'],
+            $upliftResult->streamRevenue['pipeline_licensing_milestones'],
+            1.0
+        );
+    }
 }

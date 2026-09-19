@@ -30,10 +30,20 @@ class ShockEvent
     public const SYSTEMIC_LIQUIDITY_FREEZE = 'systemic_liquidity_freeze';
     /** Speculative-grade corporate debt market freeze triggered by high-yield spread widening. */
     public const CREDIT_MARKET_SEIZURE = 'credit_market_seizure';
+    /** The sovereign's fiscal position has been re-rated: its risk premium crossed the downgrade level. */
+    public const SOVEREIGN_DOWNGRADE = 'sovereign_downgrade';
     /** Formal technical recession declaration based on negative GDP output gap and elevated recession probability. */
     public const RECESSION_DECLARED = 'recession_declared';
     /** Sustained sovereign yield curve inversion alarm exceeding historical warning duration. */
     public const YIELD_CURVE_INVERSION_ALARM = 'yield_curve_inversion_alarm';
+    /** Households past the debt-service warning line are paying down debt: the bust after a credit boom. */
+    public const HOUSEHOLD_DELEVERAGING = 'household_deleveraging';
+    /** A storm or other physical catastrophe large enough to make district news has struck. */
+    public const NATURAL_CATASTROPHE = 'natural_catastrophe';
+    /** A scheduled district election has been held; the policy regime is settled for another term. */
+    public const ELECTION_HELD = 'election_held';
+    /** A work stoppage has begun in one macro sector: lost output for that sector for as long as it runs. */
+    public const SECTOR_STRIKE = 'sector_strike';
 
     // Sector-Specific Shocks
     public const VOLATILITY_SURGE = 'volatility_surge';

@@ -191,5 +191,103 @@ class SystemicEventTest extends TestCase
             'Restored state must maintain cooldown and not fire on consecutive ticks.'
         );
     }
-}
 
+
+    public function testAWorkStoppageIsReportedOnTheTickItBeginsAndNotAfter(): void
+    {
+        $state = new MacroState();
+        $state->totalTime = 2.5;
+        $state->strikeSector = 'Industrials';
+        $state->strikeRemainingYears = 0.10;
+        $state->strikeStartedAt = 2.5;
+
+        $this->assertSame(ShockEvent::SECTOR_STRIKE, $this->fire($state));
+
+        $state->eventCooldownTimer = 0.0;
+        $state->totalTime += 1.0 / self::TICKS_PER_YEAR;
+        $this->assertNull($this->fire($state), 'A stoppage already under way is old news.');
+    }
+
+    public function testAFundingFreezeOutranksAWorkStoppage(): void
+    {
+        $state = new MacroState();
+        $state->totalTime = 2.5;
+        $state->strikeSector = 'Industrials';
+        $state->strikeStartedAt = 2.5;
+        $state->interbankLiquiditySpread = MacroEngine::SYSTEMIC_LIQUIDITY_FREEZE_SPREAD + 0.005;
+
+        $this->assertSame(ShockEvent::SYSTEMIC_LIQUIDITY_FREEZE, $this->fire($state));
+    }
+
+
+    public function testAnElectionIsReportedOnTheDayAndOutranksAStoppage(): void
+    {
+        $state = new MacroState();
+        $state->totalTime = 4.0;
+        $state->lastElectionAt = 4.0;
+        $state->strikeSector = 'Industrials';
+        $state->strikeStartedAt = 4.0;
+
+        $this->assertSame(ShockEvent::ELECTION_HELD, $this->fire($state));
+
+        $state->eventCooldownTimer = 0.0;
+        $state->totalTime += 1.0 / self::TICKS_PER_YEAR;
+        $this->assertNull($this->fire($state), 'Yesterday\'s election is not today\'s news.');
+    }
+
+
+    public function testASovereignDowngradeIsReportedBelowACreditSeizureAndAboveARecession(): void
+    {
+        $state = new MacroState();
+        $state->sovereignRiskSpread = MacroEngine::SYSTEMIC_SOVEREIGN_STRESS_SPREAD + 0.005;
+        $state->recessionProbability = 0.9;
+        $state->outputGap = -0.05;
+        $this->assertSame(ShockEvent::SOVEREIGN_DOWNGRADE, $this->fire($state));
+
+        $state->eventCooldownTimer = 0.0;
+        $state->highYieldCreditSpread = MacroEngine::SYSTEMIC_CREDIT_SEIZURE_SPREAD + 0.02;
+        $this->assertSame(ShockEvent::CREDIT_MARKET_SEIZURE, $this->fire($state));
+    }
+
+
+    public function testAHeadlineStormIsReportedBelowARecessionAndOnlyOnTheDay(): void
+    {
+        $state = new MacroState();
+        $state->totalTime = 3.0;
+        $state->lastCatastropheAt = 3.0;
+        $state->lastCatastropheSeverity = 2.0;
+        $this->assertSame(ShockEvent::NATURAL_CATASTROPHE, $this->fire($state));
+
+        $state->eventCooldownTimer = 0.0;
+        $state->recessionProbability = 0.9;
+        $state->outputGap = -0.05;
+        $this->assertSame(ShockEvent::RECESSION_DECLARED, $this->fire($state), 'A declared recession outranks a storm.');
+
+        $state->eventCooldownTimer = 0.0;
+        $state->recessionProbability = 0.1;
+        $state->outputGap = 0.0;
+        $state->totalTime += 1.0 / self::TICKS_PER_YEAR;
+        $this->assertNull($this->fire($state), 'Yesterday\'s storm is not today\'s news.');
+    }
+
+
+    public function testHouseholdDeleveragingIsReportedBelowAStormAndOnlyWhileCreditContracts(): void
+    {
+        $state = new MacroState();
+        $state->householdDebtServiceGap = MacroEngine::HOUSEHOLD_DSR_STRESS_MARGIN + 0.01;
+        $state->householdDebtToIncome = 1.20;
+        $state->householdDebtToIncomeEma = 1.25;
+        $this->assertSame(ShockEvent::HOUSEHOLD_DELEVERAGING, $this->fire($state));
+
+        $state->eventCooldownTimer = 0.0;
+        $state->totalTime = 3.0;
+        $state->lastCatastropheAt = 3.0;
+        $state->lastCatastropheSeverity = 2.0;
+        $this->assertSame(ShockEvent::NATURAL_CATASTROPHE, $this->fire($state), 'A headline storm outranks the credit cycle turning.');
+
+        $state->eventCooldownTimer = 0.0;
+        $state->lastCatastropheAt = -1.0;
+        $state->householdDebtToIncome = 1.30;
+        $this->assertNull($this->fire($state), 'A burden households are still borrowing into is not yet a deleveraging.');
+    }
+}

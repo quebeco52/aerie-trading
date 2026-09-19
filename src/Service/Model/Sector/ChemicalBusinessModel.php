@@ -38,6 +38,8 @@ class ChemicalBusinessModel extends StandardCorporateBusinessModel
     // --- Input Cost Basket ---
     /** Shares of the variable cost base bought in tracked input markets (energy, metals, agri, freight, wholesale goods, variable payroll). */
     public const INPUT_COST_EXPOSURES = ['ppi' => 0.15, 'labor' => 0.15, 'freight' => 0.05];
+    /** Share of cracker feedstock that is gas-linked (ethane) rather than oil-linked (naphtha); the feedstock squeeze blends the two. */
+    public const GAS_FEEDSTOCK_SHARE = 0.50;
     /** Base petrochemicals clear at the marginal cracker's cost and take the price they are given; the specialty and agrochemical books carry the formulation power. */
     public const PRICING_POWER_INDEX = 0.40;
 
@@ -296,11 +298,13 @@ class ChemicalBusinessModel extends StandardCorporateBusinessModel
         $streams->recordStreamShares($streamRevenues);
 
         // --- Feedstock Margin Squeeze (Crack Spreads) ---
-        // Hydrocarbon cracking (ethane, naphtha, natural gas).
-        // When energyPriceIndexEma spikes, variable costs explode.
+        // Hydrocarbon cracking: half the feedstock is gas-linked (ethane), half oil-linked (naphtha), so the
+        // squeeze is the blend of the two and a gas spike alone reaches only the ethane crackers.
         $outputGap = $macroState->outputGapEma;
         $agriShift = ($macroState->agriculturalCommodityIndexEma - 100.0) / 100.0;
-        $energyInflation = max(0.0, $macroState->energyCostPushLag / MacroEngine::ENERGY_COST_PUSH_TRANSMISSION);
+        $oilFeedstockInflation = $macroState->energyCostPushLag / MacroEngine::ENERGY_COST_PUSH_TRANSMISSION;
+        $gasFeedstockInflation = ($macroState->naturalGasPriceIndexEma - MacroEngine::NATURAL_GAS_BASELINE) / MacroEngine::NATURAL_GAS_BASELINE;
+        $energyInflation = max(0.0, (self::GAS_FEEDSTOCK_SHARE * $gasFeedstockInflation) + ((1.0 - self::GAS_FEEDSTOCK_SHARE) * $oilFeedstockInflation));
 
         // Asymmetric Pass-Through:
         // Specialty chemicals pass through ~95% (scaled by pricing power)
@@ -391,6 +395,7 @@ class ChemicalBusinessModel extends StandardCorporateBusinessModel
             'freight_rate_index_ema',
             'industrial_metals_index_ema',
             'manufacturing_pmi',
+            'natural_gas_price_index_ema',
             'output_gap_ema',
             'producer_price_inflation_ema',
             'refining_crack_spread',

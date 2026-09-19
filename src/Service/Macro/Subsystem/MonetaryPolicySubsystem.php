@@ -104,6 +104,8 @@ class MonetaryPolicySubsystem
     public const SVENSSON_CURVATURE2_FISCAL_SCALE = 0.02;
     /** Safe-haven flight to safety: financial market panic compresses sovereign term premium (Campbell et al. 2020). */
     public const FLIGHT_TO_SAFETY_SENSITIVITY = 0.015;
+    /** Liability-driven long-end demand (Vayanos & Vila 2021 habitat investors; Greenwood & Vissing-Jorgensen 2018): pensions and insurers buy duration once the thirty-year clears the hurdle their liabilities are discounted at, and that demand comes out of the long-end premium. Loads through the half-again duration scale, so a quarter of the excess reaches the thirty-year; read one tick stale off the smoothed thirty-year. */
+    public const HABITAT_LONG_END_DEMAND_SENSITIVITY = 0.50;
     /** Restrictive stance term premium compression (ACM 2013): the premium is squeezed as the stance tightens, matching the near-zero ACM premium of 2023. With the Bliss slope decay the inversion itself comes from expected cuts, so this only needs to trim, not erase. */
     public const TERM_PREMIUM_TIGHTENING_COMPRESSION = 0.45;
     /** Annual attenuation speed at which tightening compression fades over a long restrictive phase (half-life ~2.8 years, so a normal two-year peak keeps most of it), as the market accepts higher-for-longer and demands the full premium again. Keyed to the restrictive-stance clock, not the sign of the slope, so a flat curve cannot keep resetting it. */
@@ -144,6 +146,24 @@ class MonetaryPolicySubsystem
     // --- Sovereign Debt Dynamics (Greenwood-Vayanos 2014) ---
     /** Long-end term premium sensitivity per unit excess debt/GDP above neutral threshold. */
     public const SOVEREIGN_DEBT_YIELD_SENSITIVITY = 0.01;
+
+    // --- Deposits Channel (Drechsler, Savov & Schnabl 2017) ---
+    /** Deposit beta at the effective lower bound: banks pass almost nothing through when there is nothing to pass. */
+    public const DEPOSIT_BETA_FLOOR = 0.05;
+    /** Deposit beta per unit of policy rate, rising with the level as DSS document: the line is anchored so the base beta is paid at the neutral nominal rate, which puts it near 0.30 at 5.25% (the cumulative betas of the 2022-23 cycle) and at the floor below 1%. */
+    public const DEPOSIT_BETA_RATE_SENSITIVITY = 6.0;
+    /** Ceiling on the system deposit beta; even in the 1980s banks kept a third of the rate. */
+    public const MAX_SYSTEM_DEPOSIT_BETA = 0.60;
+    /** Time constant (years) of deposit repricing: banks lag the policy rate by about three quarters. */
+    public const DEPOSIT_REPRICING_YEARS = 0.75;
+    /** Money-market share per unit of deposit spread beyond the neutral spread (the neutral rate less the base beta's share of it): the 2022-23 cycle moved ~5 points of share on ~100 bps of extra spread. */
+    public const MMF_SPREAD_SENSITIVITY = 5.0;
+    /** Time constant (years) of household migration between deposits and money funds: a slow reallocation, not a run. */
+    public const MMF_MIGRATION_YEARS = 1.0;
+    /** Floor on the money-market share: a residual institutional base survives a decade at the lower bound. */
+    public const MIN_MMF_SHARE = 0.05;
+    /** Ceiling on the money-market share. */
+    public const MAX_MMF_SHARE = 0.40;
 
     // --- Monetarist M2 Broad Money Supply Dynamics (Friedman-Schwartz, Brunner-Meltzer) ---
     /** Sensitivity of broad M2 money growth to central bank QE/QT balance sheet operations. */
@@ -537,7 +557,9 @@ class MonetaryPolicySubsystem
         $rawTighteningCompression = self::TERM_PREMIUM_TIGHTENING_COMPRESSION * max(0.0, $state->policyRate - ($naturalRate + MacroEngine::TARGET_INFLATION));
         $compressionDecay = exp(-self::TERM_PREMIUM_COMPRESSION_DECAY_RATE * $state->restrictiveDuration);
         $restrictiveCompression = $rawTighteningCompression * $compressionDecay;
-        $structuralTermPremium = $state->termPremiumRegime + $state->termPremiumShock;
+        // The fiscal premium (Laubach 2009) is a level every tenor carries through the duration-scaled premium:
+        // the ten-year in full, the two-year its duration share, as a sovereign CDS curve slopes up.
+        $structuralTermPremium = $state->termPremiumRegime + $state->termPremiumShock + $state->sovereignRiskSpreadEma;
         $totalBaseTermPremium = max(self::MIN_TERM_PREMIUM_10Y, $structuralTermPremium + $inflationRiskPremium + $cyclicalTermPremium - $flightToSafetyShift - $restrictiveCompression);
 
         // Long-term asymptotic yield level beta0 (Nelson-Siegel 1987, Diebold-Li 2006): the risk-neutral
@@ -570,7 +592,12 @@ class MonetaryPolicySubsystem
         // Past the ten-year point only the structural regime keeps earning duration compensation; the transitory
         // shock, the inflation risk premium and the cyclical terms shift the whole long end together, so the
         // 10s30s spread stays stable through a tantrum instead of amplifying it half again.
-        $longEndPremium = max(0.0, $state->termPremiumRegime);
+        // Liability-driven investors are the marginal buyer past ten years: once the thirty-year runs above the
+        // neutral long-end level, their demand takes part of the excess back out of the long-end premium.
+        $scale30y = MathUtility::calculateTermPremiumDurationScale(30.0, MacroEngine::TERM_PREMIUM_DURATION_HORIZON_YEARS);
+        $longEndHurdle = $naturalRate + $targetInflation + (MacroEngine::NS_BASE_TERM_PREMIUM * $scale30y);
+        $habitatDemandShift = self::HABITAT_LONG_END_DEMAND_SENSITIVITY * max(0.0, $state->yield30yEma - $longEndHurdle);
+        $longEndPremium = max(0.0, $state->termPremiumRegime - $habitatDemandShift);
 
         $yield2y  = $this->calculateSvenssonTenor(2.0, $level, $nsBeta1, $nsBeta2, $nsBeta3, $state, $totalBaseTermPremium, $longEndPremium);
         $yield5y  = $this->calculateSvenssonTenor(5.0, $level, $nsBeta1, $nsBeta2, $nsBeta3, $state, $totalBaseTermPremium, $longEndPremium);
@@ -733,6 +760,43 @@ class MonetaryPolicySubsystem
             balanceSheetIntensity: $state->balanceSheetIntensity,
             habitatSensitivity: MacroEngine::PREFERRED_HABITAT_DURATION_SENSITIVITY,
             effectiveLowerBound: MacroEngine::EFFECTIVE_LOWER_BOUND
+        );
+    }
+
+    /**
+     * The deposits channel (Drechsler, Savov & Schnabl 2017): banks' market power over deposits means the
+     * deposit rate follows the policy rate only in part, and the part grows with the level of rates. The
+     * spread that opens is what money-market funds compete on, so household liquid assets migrate toward
+     * them as rates rise and drift back at the lower bound. Both move slowly: deposits reprice over a few
+     * quarters and households reallocate over about a year.
+     *
+     * @param MacroState $state Current macroeconomic state.
+     * @param float      $dt    Time increment in years.
+     */
+    public function calculateDepositChannel(MacroState $state, float $dt): void
+    {
+        $policyRate = max(0.0, $state->policyRateEma);
+        $neutralRate = MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION;
+
+        // The pass-through line runs through the base beta at the neutral rate, so the bank model's normalisation holds there.
+        $targetBeta = MacroEngine::SYSTEM_DEPOSIT_BETA_BASE + (self::DEPOSIT_BETA_RATE_SENSITIVITY * ($policyRate - $neutralRate));
+        $targetBeta = max(self::DEPOSIT_BETA_FLOOR, min(self::MAX_SYSTEM_DEPOSIT_BETA, $targetBeta));
+        $state->systemDepositBeta = $this->mathUtility->calculateDistributedLag(
+            currentLaggedValue: $state->systemDepositBeta,
+            targetValue: $targetBeta,
+            dt: $dt,
+            lagTimeConstant: self::DEPOSIT_REPRICING_YEARS
+        );
+
+        $depositSpread = $policyRate * (1.0 - $state->systemDepositBeta);
+        $neutralSpread = $neutralRate * (1.0 - MacroEngine::SYSTEM_DEPOSIT_BETA_BASE);
+        $targetShare = MacroEngine::MMF_SHARE_BASE + (self::MMF_SPREAD_SENSITIVITY * ($depositSpread - $neutralSpread));
+        $targetShare = max(self::MIN_MMF_SHARE, min(self::MAX_MMF_SHARE, $targetShare));
+        $state->moneyMarketFundShare = $this->mathUtility->calculateDistributedLag(
+            currentLaggedValue: $state->moneyMarketFundShare,
+            targetValue: $targetShare,
+            dt: $dt,
+            lagTimeConstant: self::MMF_MIGRATION_YEARS
         );
     }
 

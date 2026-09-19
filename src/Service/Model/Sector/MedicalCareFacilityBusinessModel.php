@@ -47,7 +47,7 @@ class MedicalCareFacilityBusinessModel extends StandardCorporateBusinessModel
     /** Elasticity of fee and rate pricing to services (supercore) inflation. Reimbursement follows medical services inflation, capped by payer contracts. */
     public const PRICING_ELASTICITY = 0.60;
     /** Services price off core services inflation ex-housing, not goods breakevens. */
-    public const PRICING_INFLATION_BASIS = 'supercore_inflation_ema';
+    public const PRICING_INFLATION_BASIS = 'reimbursement_rate_growth';
 
     /**
      * Calendar-quarter revenue seasonality [Q1, Q2, Q3, Q4] summing to 4.0: Q1 flu season admissions.
@@ -288,7 +288,7 @@ class MedicalCareFacilityBusinessModel extends StandardCorporateBusinessModel
             'inflation_ema',
             'output_gap_ema',
             'producer_price_inflation_ema',
-            'supercore_inflation_ema',
+            'reimbursement_rate_growth',
             'tips_breakeven_ema',
             'unemployment_rate_ema',
             'wage_growth_ema',

@@ -73,6 +73,8 @@ class MerchantHouseBusinessModel extends ConglomerateBusinessModel
 
     /** Sensitivity of throughput to the trade balance: an economy importing more moves more tonnage across the merchant's wharves. */
     public const MERCHANT_TRADE_SENSITIVITY = 0.80;
+    /** Cargo volume per unit of the foreign bloc's output gap: the corridors run both ways, and the far end is most of them. */
+    public const MERCHANT_FOREIGN_SENSITIVITY = 2.00;
 
     // --- Trading Spread ---
     /** Gross spread widening per unit of physical backwardation (Kaldor-Working convenience yield). Scarcity is the merchant's margin: whoever holds the barrel when nobody else can deliver names the price. */
@@ -149,7 +151,7 @@ class MerchantHouseBusinessModel extends ConglomerateBusinessModel
             $macroState->tradeBalanceToGdpEma,
             MacroEngine::TRADE_BALANCE_BASELINE,
             self::MERCHANT_TRADE_SENSITIVITY
-        );
+        ) + MathUtility::calculateForeignDemandShift($macroState->foreignOutputGapEma, self::MERCHANT_FOREIGN_SENSITIVITY);
         $merchantSurge = $priceLift + $volumeShift;
 
         // --- Tollbooth & Float: the parent's physics, unchanged ---
@@ -284,6 +286,7 @@ class MerchantHouseBusinessModel extends ConglomerateBusinessModel
             'energy_inventory_index_ema',
             'energy_price_index_ema',
             'exchange_rate_index_ema',
+            'foreign_output_gap_ema',
             'industrial_metals_index_ema',
             'macro_credit_spread',
             'macro_credit_spread_ema',

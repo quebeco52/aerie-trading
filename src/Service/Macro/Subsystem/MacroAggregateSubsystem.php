@@ -58,6 +58,14 @@ class MacroAggregateSubsystem
     public const KALDOR_ENERGY_SUPPLY_DRAG = 0.004;
     /** Supply-side elasticity of output to excess freight/logistics costs. */
     public const KALDOR_FREIGHT_SUPPLY_DRAG = 0.002;
+    /** Demand per unit of household debt-service gap (Juselius & Drehmann 2015; Drehmann, Juselius & Korinek 2017): new borrowing lifts spending while service is below its average, and the service on the stock takes it back two to three years later; a point of income in extra service costs half a point of demand a year. */
+    public const KALDOR_HOUSEHOLD_DEBT_SERVICE = 0.50;
+    /** Demand from the foreign bloc's cycle: export volume per unit of foreign output gap (an export share of GDP near a fifth times an income elasticity of trade above one, Obstfeld & Rogoff 1996). */
+    public const KALDOR_FOREIGN_DEMAND = 0.08;
+    /** Output lost per unit of catastrophe loss burden above an average year (Noy 2009; Hsiang & Jina 2014 give the sign): a year at twice the average burden costs ~0.4pp of output, before the rebuild the construction stream books. */
+    public const KALDOR_CATASTROPHE_DRAG = 0.004;
+    /** Demand drag per log unit of policy uncertainty: a doubling of the index takes about a point a year off demand growth, the order of the ~1% output loss Baker, Bloom & Davis attribute to the 2006-2011 rise (investment −6%, employment −2.3m). Two-sided in logs, as the index is. */
+    public const KALDOR_EPU_DRAG = 0.015;
 
     // --- Aggregate Demand Disturbance (Smets-Wouters 2007) ---
     /** Mean reversion speed of the aggregate demand disturbance: -4*ln(0.86) per year, from the estimated quarterly AR(1) coefficient. */
@@ -297,7 +305,8 @@ class MacroAggregateSubsystem
             ? max(-0.60, min(0.60, ($equityWealthRatio / $state->equityWealthTrend) - 1.0)) * self::KALDOR_EQUITY_WEALTH_ELASTICITY
             : 0.0;
         $fxShift = ($state->exchangeRateIndexEma / MacroEngine::EXCHANGE_RATE_BASELINE) - 1.0;
-        $netExportDrag = self::KALDOR_FX_ELASTICITY * $fxShift;
+        // Net exports: the currency's price effect, less the foreign bloc's demand for what the district sells.
+        $netExportDrag = (self::KALDOR_FX_ELASTICITY * $fxShift) - (self::KALDOR_FOREIGN_DEMAND * $state->foreignOutputGapEma);
 
         // Symmetric supply shocks (Bruno-Sachs 1985 & Blanchard-Gali 2007): below baseline is cost dividend
         $energyShock = $state->energyPriceShock != 0.0
@@ -309,6 +318,15 @@ class MacroAggregateSubsystem
         $freightRate = $state->freightRateIndexEma > 0.0 ? $state->freightRateIndexEma : $state->freightRateIndex;
         $freightSupplyShift = ($freightRate - MacroEngine::FREIGHT_BASELINE) / MacroEngine::FREIGHT_BASELINE;
         $freightSupplyDrag = $freightSupplyShift * self::KALDOR_FREIGHT_SUPPLY_DRAG;
+
+        // Drehmann, Juselius & Korinek (2017): borrowing boosts demand now and the service on it drags later; the gap carries both.
+        $householdDeleveragingDrag = self::KALDOR_HOUSEHOLD_DEBT_SERVICE * $state->householdDebtServiceGap;
+
+        // Physical destruction is a supply shock on impact; the rebuild is demand the builders book later.
+        $catastropheSupplyDrag = self::KALDOR_CATASTROPHE_DRAG * max(0.0, $state->catastropheLossIndexEma - 1.0);
+
+        // Baker, Bloom & Davis (2016): firms defer irreversible investment while the policy regime is in question.
+        $policyUncertaintyDrag = self::KALDOR_EPU_DRAG * log(max(1.0, $state->policyUncertaintyIndexEma) / MacroEngine::EPU_BASELINE);
 
         // Metzler (1941) & Blinder (1982) Inventory Investment Cycle Step
         $state->inventoryStockGap = $this->mathUtility->calculateInventoryCycleStep(
@@ -338,6 +356,9 @@ class MacroAggregateSubsystem
             - $netExportDrag
             - $energySupplyDrag
             - $freightSupplyDrag
+            - $policyUncertaintyDrag
+            - $catastropheSupplyDrag
+            - $householdDeleveragingDrag
             + $state->demandShock) * $dt;
 
         $diffusion = self::OUTPUT_GAP_DIFFUSION_SIGMA * $stressMultiplier * sqrt($dt) * $outZ;
@@ -583,6 +604,20 @@ class MacroAggregateSubsystem
         $state->tradeBalanceToGdpEma += $emaWeight * ($state->tradeBalanceToGdp - $state->tradeBalanceToGdpEma);
         $state->housingStartsIndexEma += $emaWeight * ($state->housingStartsIndex - $state->housingStartsIndexEma);
         $state->moneySupplyGrowthEma += $emaWeight * ($state->moneySupplyGrowth - $state->moneySupplyGrowthEma);
+        $state->reimbursementRateIndexEma += $emaWeight * ($state->reimbursementRateIndex - $state->reimbursementRateIndexEma);
+        $state->policyUncertaintyIndexEma += $emaWeight * ($state->policyUncertaintyIndex - $state->policyUncertaintyIndexEma);
+        $state->sovereignRiskSpreadEma += $emaWeight * ($state->sovereignRiskSpread - $state->sovereignRiskSpreadEma);
+        $state->systemDepositBetaEma += $emaWeight * ($state->systemDepositBeta - $state->systemDepositBetaEma);
+        $state->naturalGasPriceIndexEma += $emaWeight * ($state->naturalGasPriceIndex - $state->naturalGasPriceIndexEma);
+        $state->catastropheLossIndexEma += $emaWeight * ($state->catastropheLossIndex - $state->catastropheLossIndexEma);
+        $state->foreignOutputGapEma += $emaWeight * ($state->foreignOutputGap - $state->foreignOutputGapEma);
+        $state->householdDebtToIncomeEma += $emaWeight * ($state->householdDebtToIncome - $state->householdDebtToIncomeEma);
+        $state->householdDebtServiceRatioEma += $emaWeight * ($state->householdDebtServiceRatio - $state->householdDebtServiceRatioEma);
+        $state->creditToGdpGapEma += $emaWeight * ($state->creditToGdpGap - $state->creditToGdpGapEma);
+        $state->countercyclicalBufferRateEma += $emaWeight * ($state->countercyclicalBufferRate - $state->countercyclicalBufferRateEma);
+        $state->foreignPolicyRateEma += $emaWeight * ($state->foreignPolicyRate - $state->foreignPolicyRateEma);
+        $state->globalDemandGapEma += $emaWeight * ($state->globalDemandGap - $state->globalDemandGapEma);
+        $state->moneyMarketFundShareEma += $emaWeight * ($state->moneyMarketFundShare - $state->moneyMarketFundShareEma);
     }
 
     /**

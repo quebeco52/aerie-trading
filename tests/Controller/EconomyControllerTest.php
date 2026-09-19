@@ -19,6 +19,13 @@ class EconomyControllerTest extends WebTestCase
         $this->assertSelectorExists('#macro-yield');
         $this->assertSelectorExists('#macroChartsGrid');
         $this->assertSelectorExists('#macroChartsGrid .chart-card canvas');
+        $this->assertCount(25, $client->getCrawler()->filter('#macroChartsGrid .chart-card'));
+        $this->assertSelectorExists('#macroHouseholdCreditChart');
+        $this->assertSelectorExists('#macroGlobalCycleChart');
+        $this->assertSelectorExists('#macroBankingLiquidityChart');
+        $this->assertSelectorTextContains('#macroCategoryPills', '(25)');
+        $this->assertSelectorTextContains('#macroCategoryPills', '(6)');
+        $this->assertSelectorTextContains('#macroCategoryPills', '(5)');
         $this->assertSelectorExists('[data-macro-timeframe="10Y"]');
     }
 

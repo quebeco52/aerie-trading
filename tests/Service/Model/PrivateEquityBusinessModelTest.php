@@ -63,7 +63,7 @@ class PrivateEquityBusinessModelTest extends TestCase
         // Normal macro conditions (cost of debt below threshold)
         $normalMacro = MacroStateDTO::fromArray([
             'policy_rate_ema' => 0.03,
-            'macro_credit_spread_ema' => 0.015,
+            'high_yield_credit_spread_ema' => PrivateEquityBusinessModel::LBO_CREDIT_SPREAD_BASELINE,
         ]);
         $normalPhysics = $this->model->getMacroPhysics($stock, $normalMacro);
         $this->assertEqualsWithDelta(1.0, $normalPhysics['pricing_power_multiplier'], 0.001);
@@ -73,11 +73,34 @@ class PrivateEquityBusinessModelTest extends TestCase
         // Blended (35% mgmt + 65% carry) = 0.35*1.0 + 0.65*0.85 = 0.35 + 0.5525 = 0.9025
         $highCoDMacro = MacroStateDTO::fromArray([
             'policy_rate_ema' => PrivateEquityBusinessModel::LBO_RATE_FREEZE_THRESHOLD + 0.010,
-            'macro_credit_spread_ema' => PrivateEquityBusinessModel::LBO_CREDIT_SPREAD_BASELINE + 0.010,
+            'high_yield_credit_spread_ema' => PrivateEquityBusinessModel::LBO_CREDIT_SPREAD_BASELINE + 0.010,
         ]);
         $distressedPhysics = $this->model->getMacroPhysics($stock, $highCoDMacro);
         $this->assertLessThan(1.0, $distressedPhysics['pricing_power_multiplier']);
         $this->assertEqualsWithDelta(0.9025, $distressedPhysics['pricing_power_multiplier'], 0.001);
+    }
+
+    public function testLboDebtIsPricedOffTheHighYieldTrancheNotInvestmentGrade(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('PE_CORP');
+
+        // A 150 bps IG widening with HY unchanged is not a buyout financing shock: LBO debt is speculative grade.
+        $igOnlyMacro = MacroStateDTO::fromArray([
+            'policy_rate_ema' => 0.03,
+            'macro_credit_spread_ema' => MacroEngine::BASE_CREDIT_SPREAD + 0.015,
+            'high_yield_credit_spread_ema' => PrivateEquityBusinessModel::LBO_CREDIT_SPREAD_BASELINE,
+        ]);
+        $this->assertEqualsWithDelta(1.0, $this->model->getMacroPhysics($stock, $igOnlyMacro)['pricing_power_multiplier'], 0.001);
+
+        // The same 150 bps on the HY tranche, above a policy rate already at the freeze threshold, compresses multiples.
+        $hyMacro = MacroStateDTO::fromArray([
+            'policy_rate_ema' => PrivateEquityBusinessModel::LBO_RATE_FREEZE_THRESHOLD,
+            'macro_credit_spread_ema' => MacroEngine::BASE_CREDIT_SPREAD,
+            'high_yield_credit_spread_ema' => PrivateEquityBusinessModel::LBO_CREDIT_SPREAD_BASELINE + 0.015,
+        ]);
+        $expectedCarryMultiple = 1.0 - (0.015 * PrivateEquityBusinessModel::LBO_COST_OF_DEBT_ELASTICITY);
+        $this->assertEqualsWithDelta(0.35 + (0.65 * $expectedCarryMultiple), $this->model->getMacroPhysics($stock, $hyMacro)['pricing_power_multiplier'], 0.001);
     }
 
     public function testCalculateSectorPhysicsCarriedInterestHurdleMiss(): void
@@ -91,7 +114,7 @@ class PrivateEquityBusinessModelTest extends TestCase
         $severeMacro = MacroStateDTO::fromArray([
             'output_gap_ema' => -0.05,
             'policy_rate_ema' => 0.05,
-            'macro_credit_spread_ema' => 0.04,
+            'high_yield_credit_spread_ema' => 0.12,
         ]);
 
         $mathMock = $this->createStub(MathUtility::class);
@@ -124,7 +147,7 @@ class PrivateEquityBusinessModelTest extends TestCase
         // High policy rate creates rescue capital drag
         $highRateMacro = MacroStateDTO::fromArray([
             'policy_rate_ema' => 0.065, // 200bps above 4.5% threshold
-            'macro_credit_spread_ema' => 0.02,
+            'high_yield_credit_spread_ema' => PrivateEquityBusinessModel::LBO_CREDIT_SPREAD_BASELINE,
             'output_gap_ema' => 0.0,
         ]);
 
@@ -284,14 +307,14 @@ class PrivateEquityBusinessModelTest extends TestCase
         $baselineMacro = MacroStateDTO::fromArray([
             'output_gap_ema' => 0.0,
             'policy_rate_ema' => 0.03,
-            'macro_credit_spread_ema' => 0.015,
+            'high_yield_credit_spread_ema' => PrivateEquityBusinessModel::LBO_CREDIT_SPREAD_BASELINE,
             'deal_activity_index_ema' => MacroEngine::DEAL_ACTIVITY_BASELINE,
         ]);
 
         $hotDealMacro = MacroStateDTO::fromArray([
             'output_gap_ema' => 0.0,
             'policy_rate_ema' => 0.03,
-            'macro_credit_spread_ema' => 0.015,
+            'high_yield_credit_spread_ema' => PrivateEquityBusinessModel::LBO_CREDIT_SPREAD_BASELINE,
             'deal_activity_index_ema' => MacroEngine::DEAL_ACTIVITY_BASELINE * 1.5,
         ]);
 

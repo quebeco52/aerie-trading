@@ -26,6 +26,18 @@ class CreditFiscalSubsystem
     /** Bohn (1998, 2008) fiscal reaction: primary surplus response per unit of debt above the neutral threshold (~0.10, the upper end of advanced-economy estimates), which stabilizes debt near 90% against a 2% structural deficit. */
     public const BOHN_FISCAL_REACTION_SENSITIVITY = 0.10;
 
+    // --- Sovereign Risk Premium (Laubach 2009) ---
+    /** Debt-to-GDP above which the market prices fiscal risk (Reinhart & Rogoff 2010's 90% line). Deliberately above the 70% the Bohn reaction defends: the engine's own steady state runs 85-90%, and a premium charged for that normal state was measured to lift IG 30 bps and 2s10s 45 bps everywhere. */
+    public const SOVEREIGN_RISK_DEBT_THRESHOLD = 0.90;
+    /** Long yield per unit of debt-to-GDP above the risk threshold: 3-4 bps per percentage point (Laubach 2009; Engen & Hubbard 2004), so 0.035 per unit. Laubach's deficit coefficient is for PROJECTED structural deficits; the engine's primary deficit is cyclical, so it is published but not priced. */
+    public const LAUBACH_DEBT_YIELD_SENSITIVITY = 0.035;
+    /** Time constant (years) over which the market reprices the fiscal position: a projection revises over budget rounds, not ticks. */
+    public const SOVEREIGN_RISK_REPRICING_YEARS = 0.5;
+    /** Cap on the sovereign risk spread (600 bps): the level at which an advanced sovereign lost market access in 2011. */
+    public const MAX_SOVEREIGN_RISK_SPREAD = 0.06;
+    /** Share of the sovereign spread that passes into the corporate IG base (Durbin & Ng 2005 sovereign ceiling; Almeida et al. 2017 find about half). */
+    public const SOVEREIGN_CEILING_PASSTHROUGH = 0.50;
+
     // --- Barro Tax-Smoothing & Automatic Fiscal Stabilizers (Barro 1979) ---
     /** Countercyclical statutory tax response sensitivity to output gap deviations. */
     public const FISCAL_STABILIZER_SENSITIVITY = 1.0;
@@ -82,6 +94,78 @@ class CreditFiscalSubsystem
     /** Corporate credit Z per unit of SLOOS net tightening (~1): a 35% credit crunch adds ~0.35 to the systemic factor. */
     public const CORPORATE_DEFAULT_SLOOS_SENSITIVITY = 1.0;
 
+    // --- Economic Policy Uncertainty (Baker, Bloom & Davis 2016) ---
+    /** Length of the fixed electoral term in years; the clock is derived from simulation time, never stored. */
+    public const ELECTION_TERM_YEARS = 4.0;
+    /** Log lift of the index at the election, ramping in over the final year of the term (Julio & Yook 2012 locate the investment cut in the election year; the BBD index rises a quarter or so into a presidential vote). */
+    public const EPU_ELECTION_LIFT = 0.25;
+    /** Log lift per unit of recession probability above its unconditional level: the index roughly doubled through 2008-2011 as policy responses were debated. */
+    public const EPU_STRESS_LIFT = 1.0;
+    /** Unconditional recession probability the stress lift measures from (the probit intercept's ~15%). */
+    public const EPU_STRESS_PROBABILITY_FLOOR = 0.15;
+    /** Mean reversion of the log index (half-life ~5 months, the ~0.88 monthly autocorrelation of the BBD series). */
+    public const EPU_MEAN_REVERSION = 1.5;
+    /** Annual log volatility, giving a stationary log spread of ~0.32 around the level the calendar and the cycle set. */
+    public const EPU_VOLATILITY = 0.55;
+    /** Arrivals per year of unscheduled policy shocks (debt-ceiling standoffs, referendums, trade rulings). */
+    public const EPU_JUMP_PROBABILITY = 0.50;
+    /** Mean log size of an unscheduled policy shock. */
+    public const EPU_JUMP_MEAN = 0.20;
+    /** Log volatility of an unscheduled policy shock. */
+    public const EPU_JUMP_VOL = 0.10;
+    /** Floor of the index: even a quiet mid-term carries a third of average uncertainty. */
+    public const MIN_EPU = 30.0;
+    /** Ceiling of the index: the BBD US series peaked near four times its mean in 2020. */
+    public const MAX_EPU = 400.0;
+
+    // --- Administered Healthcare Prices (CMS market-basket update) ---
+    /** Reimbursement update cut per unit of sovereign debt above the neutral threshold: the sequester that a fiscal correction imposes on administered prices (Budget Control Act 2011 took 2% off Medicare payments). */
+    public const REIMBURSEMENT_FISCAL_CUT_SENSITIVITY = 0.02;
+    /** Floor on the annual update: administered prices are held, not cut, in a deflationary year. */
+    public const REIMBURSEMENT_MIN_UPDATE = 0.0;
+
+    // --- Household Credit Cycle (Mian & Sufi 2018; BIS DSR; Basel III CCyB) ---
+    /** Share of household debt that is mortgage debt (~70% in the US), priced off the mortgage rate; the rest is consumer credit priced off the policy rate. */
+    public const HOUSEHOLD_MORTGAGE_DEBT_SHARE = 0.70;
+    /** Spread of consumer credit (cards, auto, personal) over the policy rate. */
+    public const CONSUMER_CREDIT_SPREAD = 0.08;
+    /** Average remaining maturity of the household debt stock (years) in the BIS debt-service ratio annuity (Drehmann, Illes, Juselius & Santos 2015 use 18). */
+    public const DSR_AVERAGE_MATURITY_YEARS = 18.0;
+    /** Time constant (years) of the ratio's long-run average: Drehmann & Juselius (2012, 2014) read the DSR as its deviation from a 15-year moving average. */
+    public const DSR_TREND_HORIZON_YEARS = 15.0;
+    /** Annual credit growth per unit of house-price deviation from baseline: collateral values drive borrowing (Mian & Sufi 2011 home-equity channel). */
+    public const CREDIT_GROWTH_HOUSE_PRICE = 0.10;
+    /** Annual credit growth lost per unit of the SLOOS tightening index: credit supply gates the boom. */
+    public const CREDIT_GROWTH_SLOOS = 0.10;
+    /** Annual credit growth lost per unit of the effective household rate above its neutral level. */
+    public const CREDIT_GROWTH_RATE = 1.00;
+    /** Annual credit growth per unit of output gap: incomes and confidence borrow. */
+    public const CREDIT_GROWTH_GAP = 0.50;
+    /** Annual reversion of leverage toward its baseline per unit of relative excess: amortisation outrunning new borrowing once the boom fades. */
+    public const CREDIT_MEAN_REVERSION = 0.05;
+    /** Annual log volatility of the leverage ratio. */
+    public const CREDIT_GROWTH_SIGMA = 0.01;
+    /** Extra annual credit contraction per unit of debt-service gap above the warning line: households repay when the service bites (Mian & Sufi 2018). */
+    public const DELEVERAGING_SPEED = 0.50;
+    /** Bounds on household debt to income. */
+    public const MIN_HOUSEHOLD_DEBT_TO_INCOME = 0.40;
+    /** Upper bound on household debt to income. */
+    public const MAX_HOUSEHOLD_DEBT_TO_INCOME = 2.50;
+    /** Time constant (years) of the one-sided credit trend: the stand-in for the Basel one-sided HP filter (lambda 400,000), whose trend has a multi-decade half-life. */
+    public const CREDIT_TREND_HORIZON_YEARS = 10.0;
+    /** Credit-to-GDP gap at which the countercyclical buffer starts to build (Basel III: 2 percentage points). */
+    public const CCYB_GAP_FLOOR = 0.02;
+    /** Credit-to-GDP gap at which the buffer reaches its maximum (Basel III: 10 percentage points). */
+    public const CCYB_GAP_CEILING = 0.10;
+    /** Maximum countercyclical capital buffer (Basel III: 2.5% of risk-weighted assets). */
+    public const MAX_CCYB = 0.025;
+    /** Phase-in time (years) of a buffer decision: Basel gives banks twelve months. */
+    public const CCYB_PHASE_IN_YEARS = 1.0;
+    /** Retail default z-score per unit of debt-service gap (ratio over its long-run average): a point of income more in debt service is ~0.3 z of stress. */
+    public const RETAIL_DSR_SENSITIVITY = 30.0;
+    /** How the buffer reads to lending standards: a unit of buffer is worth this much excess credit spread in the SLOOS response. */
+    public const SLOOS_CCYB_SPREAD_EQUIVALENT = 0.50;
+
     // --- Federal Reserve Senior Loan Officer Opinion Survey (SLOOS) ---
     /** Mean-reversion speed (kappa) of bank lending standards toward fundamental target. */
     public const SLOOS_KAPPA = 1.80;
@@ -110,8 +194,12 @@ class CreditFiscalSubsystem
     {
         $interbankStress = max(0.0, $state->interbankLiquiditySpreadEma - MacroEngine::INTERBANK_BASELINE_SPREAD);
 
+        // Sovereign ceiling: a corporate is rarely priced inside its own sovereign, so part of the fiscal premium
+        // lifts the whole investment-grade base before the cycle scales it.
+        $baseIgSpread = MacroEngine::BASE_CREDIT_SPREAD + (self::SOVEREIGN_CEILING_PASSTHROUGH * $state->sovereignRiskSpreadEma);
+
         $trancheSpreads = $this->mathUtility->calculateDualTrancheCreditSpreads(
-            baseIgSpread: MacroEngine::BASE_CREDIT_SPREAD,
+            baseIgSpread: $baseIgSpread,
             outputGapEma: $state->outputGapEma,
             marketVolEma: $state->marketVolatilityEma,
             interbankStress: $interbankStress,
@@ -190,7 +278,9 @@ class CreditFiscalSubsystem
 
         $borrowingSpreadStress = max(0.0, $state->macroCreditSpreadEma - MacroEngine::BASE_CREDIT_SPREAD);
         $interbankStress = max(0.0, $state->interbankLiquiditySpreadEma - MacroEngine::INTERBANK_BASELINE_SPREAD);
-        $debtServiceShock = ($borrowingSpreadStress + $interbankStress) * self::RETAIL_DEBT_SERVICE_SENSITIVITY;
+        // Debt service is what a household actually pays: the spreads on new borrowing plus the burden on the stock.
+        $debtServiceShock = (($borrowingSpreadStress + $interbankStress) * self::RETAIL_DEBT_SERVICE_SENSITIVITY)
+            + ($state->householdDebtServiceGap * self::RETAIL_DSR_SENSITIVITY);
 
         $dW = $this->mathUtility->generateStandardNormal();
         $macroZ = - ($unemploymentShock + $inflationShock + $debtServiceShock) + ($dW * self::RETAIL_CREDIT_VOLATILITY);
@@ -283,6 +373,7 @@ class CreditFiscalSubsystem
         $bohnFiscalAdjustment = self::BOHN_FISCAL_REACTION_SENSITIVITY * $excessDebt * $state->nominalGdpIndex;
 
         $primaryDeficit = ($govtSpendingFlow - $taxRevenue) + (self::SOVEREIGN_STRUCTURAL_DEFICIT * $state->nominalGdpIndex) - $bohnFiscalAdjustment;
+        $state->primaryDeficitToGdp = $primaryDeficit / max(0.1, $state->nominalGdpIndex);
         $interestCost = $state->yield10yEma * $state->sovereignDebtToGdp;
 
         // Blanchard (2019): Nominal GDP growth includes real potential growth trend (labor + TFP) + cyclical gap + inflation
@@ -293,6 +384,185 @@ class CreditFiscalSubsystem
         $dDebt = ($primaryDeficit / max(0.1, $state->nominalGdpIndex)) + $interestCost - $growthErosion;
         $state->sovereignDebtToGdp += $dDebt * $dt;
         $state->sovereignDebtToGdp = max(0.20, min(2.50, $state->sovereignDebtToGdp));
+    }
+
+    /**
+     * The household credit cycle (Mian & Sufi 2018) with the BIS debt-service ratio and the Basel III buffer.
+     *
+     * Leverage builds on collateral values, easy standards, cheap money and incomes, and unwinds through
+     * amortisation and, past the warning line, deleveraging. The debt-service ratio is the BIS annuity
+     * (Drehmann, Illes, Juselius & Santos 2015): the stock times the instalment its effective rate implies
+     * over the average remaining maturity, read against its own 15-year average (Drehmann & Juselius 2012),
+     * so a cold start and a slow drift in leverage are silent. The credit-to-GDP gap is the stock against a slow one-sided trend
+     * (the Basel filter's stand-in), and the countercyclical buffer maps that gap onto the 0-2.5% Basel
+     * schedule with a year's phase-in. The ratio reaches the retail default rate, the IS curve and, through
+     * the buffer, lending standards; the gap reaches the lenders' order books.
+     *
+     * @param MacroState $state Current macroeconomic state.
+     * @param float      $dt    Time increment in years.
+     */
+    public function calculateHouseholdCredit(MacroState $state, float $dt): void
+    {
+        $mortgageRate = $state->yield10yEma + MacroEngine::RESIDENTIAL_MORTGAGE_SPREAD;
+        $revolvingRate = max(0.0, $state->policyRateEma) + self::CONSUMER_CREDIT_SPREAD;
+        $effectiveRate = (self::HOUSEHOLD_MORTGAGE_DEBT_SHARE * $mortgageRate) + ((1.0 - self::HOUSEHOLD_MORTGAGE_DEBT_SHARE) * $revolvingRate);
+        $neutralRate = (self::HOUSEHOLD_MORTGAGE_DEBT_SHARE * (MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION + MacroEngine::NS_BASE_TERM_PREMIUM + MacroEngine::RESIDENTIAL_MORTGAGE_SPREAD))
+            + ((1.0 - self::HOUSEHOLD_MORTGAGE_DEBT_SHARE) * (MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION + self::CONSUMER_CREDIT_SPREAD));
+
+        $housePriceLift = ($state->residentialPropertyIndexEma / MacroEngine::RESIDENTIAL_BASELINE) - 1.0;
+        $relativeExcess = ($state->householdDebtToIncome - MacroEngine::HOUSEHOLD_DEBT_TO_INCOME_BASELINE) / MacroEngine::HOUSEHOLD_DEBT_TO_INCOME_BASELINE;
+        $excessDsr = max(0.0, $state->householdDebtServiceGap - MacroEngine::HOUSEHOLD_DSR_STRESS_MARGIN);
+
+        $growth = (self::CREDIT_GROWTH_HOUSE_PRICE * $housePriceLift)
+            - (self::CREDIT_GROWTH_SLOOS * $state->sloosTighteningIndexEma)
+            - (self::CREDIT_GROWTH_RATE * ($effectiveRate - $neutralRate))
+            + (self::CREDIT_GROWTH_GAP * $state->outputGapEma)
+            - (self::CREDIT_MEAN_REVERSION * $relativeExcess)
+            - (self::DELEVERAGING_SPEED * $excessDsr);
+        $noise = self::CREDIT_GROWTH_SIGMA * sqrt($dt) * $this->mathUtility->generateStandardNormal();
+
+        $state->householdDebtToIncome = max(self::MIN_HOUSEHOLD_DEBT_TO_INCOME, min(self::MAX_HOUSEHOLD_DEBT_TO_INCOME, $state->householdDebtToIncome * exp(($growth * $dt) + $noise)));
+
+        // BIS debt-service ratio: the instalment on the stock over its average remaining maturity.
+        $annuityFactor = $effectiveRate > 0.0
+            ? $effectiveRate / (1.0 - ((1.0 + $effectiveRate) ** (-self::DSR_AVERAGE_MATURITY_YEARS)))
+            : 1.0 / self::DSR_AVERAGE_MATURITY_YEARS;
+        $state->householdDebtServiceRatio = $state->householdDebtToIncome * $annuityFactor;
+
+        // The service gap: the ratio against its own long-run average, started at the first observation.
+        if ($state->householdDebtServiceTrend <= 0.0) {
+            $state->householdDebtServiceTrend = $state->householdDebtServiceRatio;
+        }
+        $state->householdDebtServiceTrend = $this->mathUtility->calculateDistributedLag(
+            currentLaggedValue: $state->householdDebtServiceTrend,
+            targetValue: $state->householdDebtServiceRatio,
+            dt: $dt,
+            lagTimeConstant: self::DSR_TREND_HORIZON_YEARS
+        );
+        $state->householdDebtServiceGap = $state->householdDebtServiceRatio - $state->householdDebtServiceTrend;
+
+        // Credit-to-GDP gap against a slow one-sided trend, and the Basel buffer it maps to.
+        $state->creditToGdpTrend = $this->mathUtility->calculateDistributedLag(
+            currentLaggedValue: $state->creditToGdpTrend,
+            targetValue: $state->householdDebtToIncome,
+            dt: $dt,
+            lagTimeConstant: self::CREDIT_TREND_HORIZON_YEARS
+        );
+        $state->creditToGdpGap = $state->householdDebtToIncome - $state->creditToGdpTrend;
+
+        $bufferPosition = max(0.0, min(1.0, ($state->creditToGdpGapEma - self::CCYB_GAP_FLOOR) / (self::CCYB_GAP_CEILING - self::CCYB_GAP_FLOOR)));
+        $state->countercyclicalBufferRate = $this->mathUtility->calculateDistributedLag(
+            currentLaggedValue: $state->countercyclicalBufferRate,
+            targetValue: self::MAX_CCYB * $bufferPosition,
+            dt: $dt,
+            lagTimeConstant: self::CCYB_PHASE_IN_YEARS
+        );
+    }
+
+    /**
+     * Sovereign risk premium (Laubach 2009): the fiscal position priced into the long end.
+     *
+     * One-sided on the debt stock above the level at which an advanced sovereign is re-rated. The premium is
+     * a level the whole curve carries (it enters the term premium, the corporate IG base through the
+     * sovereign ceiling, and the currency), repriced over budget rounds rather than ticks. At the seeded
+     * 60% debt it is zero, and it stays zero through the 85-90% the fiscal reaction settles at.
+     *
+     * @param MacroState $state Current macroeconomic state.
+     * @param float      $dt    Time increment in years.
+     */
+    public function calculateSovereignRiskSpread(MacroState $state, float $dt): void
+    {
+        $excessDebt = max(0.0, $state->sovereignDebtToGdpEma - self::SOVEREIGN_RISK_DEBT_THRESHOLD);
+        $target = min(self::MAX_SOVEREIGN_RISK_SPREAD, self::LAUBACH_DEBT_YIELD_SENSITIVITY * $excessDebt);
+
+        $state->sovereignRiskSpread = $this->mathUtility->calculateDistributedLag(
+            currentLaggedValue: $state->sovereignRiskSpread,
+            targetValue: $target,
+            dt: $dt,
+            lagTimeConstant: self::SOVEREIGN_RISK_REPRICING_YEARS
+        );
+    }
+
+    /**
+     * Economic policy uncertainty (Baker, Bloom & Davis 2016) on a fixed-term election calendar.
+     *
+     * A log mean-reverting index whose level is set by two things the record ties it to: the calendar, since
+     * uncertainty about the policy regime builds into a scheduled election and resolves after it (Julio &
+     * Yook 2012), and the cycle, since a downturn brings the policy response itself into question. Unscheduled
+     * shocks arrive as jumps. The election is derived from simulation time -- a term of ELECTION_TERM_YEARS --
+     * so nothing about the calendar is stored, only the tick the last vote fell on, for the event pulse.
+     *
+     * @param MacroState $state Current macroeconomic state.
+     * @param float      $dt    Time increment in years.
+     */
+    public function calculatePolicyUncertainty(MacroState $state, float $dt): void
+    {
+        $term = self::ELECTION_TERM_YEARS;
+        $yearsToElection = $term - fmod($state->totalTime, $term);
+        $electionProximity = max(0.0, 1.0 - $yearsToElection);
+        $recessionExcess = max(0.0, $state->recessionProbabilityEma - self::EPU_STRESS_PROBABILITY_FLOOR);
+
+        // The index is normalised to average its baseline, as the published series is, so the calendar lift is
+        // taken relative to its term average (a one-year ramp averages 0.5 / term) and the jumps are compensated
+        // by their stationary log contribution (lambda x mean size / kappa). Only the cycle lifts the mean.
+        $averageElectionProximity = 0.5 / $term;
+        $jumpLogCompensator = self::EPU_JUMP_PROBABILITY * self::EPU_JUMP_MEAN / self::EPU_MEAN_REVERSION;
+
+        $target = MacroEngine::EPU_BASELINE * exp(
+            (self::EPU_ELECTION_LIFT * ($electionProximity - $averageElectionProximity))
+            + (self::EPU_STRESS_LIFT * $recessionExcess)
+            - $jumpLogCompensator
+        );
+
+        $baseProcess = $this->mathUtility->calculateSchwartz1Factor(
+            currentPrice: max(self::MIN_EPU, $state->policyUncertaintyIndex),
+            kappa: self::EPU_MEAN_REVERSION,
+            theta: $target,
+            sigma: self::EPU_VOLATILITY,
+            dt: $dt,
+            dW: $this->mathUtility->generateStandardNormal()
+        );
+
+        $jumpData = $this->mathUtility->calculateJumpDiffusion(
+            lambda: self::EPU_JUMP_PROBABILITY,
+            jumpMean: self::EPU_JUMP_MEAN,
+            jumpVol: self::EPU_JUMP_VOL,
+            dt: $dt
+        );
+
+        $state->policyUncertaintyIndex = max(self::MIN_EPU, min(self::MAX_EPU, $baseProcess * $jumpData['multiplier']));
+
+        if (floor($state->totalTime / $term) > floor(($state->totalTime - $dt) / $term)) {
+            $state->lastElectionAt = $state->totalTime;
+        }
+    }
+
+    /**
+     * Administered healthcare price update (the CMS market-basket rule).
+     *
+     * Hospital reimbursement is an administered price: reset once a year to the inflation the payer observes
+     * at the update, less a statutory productivity offset (ACA s.3401), less a sequester that scales with the
+     * sovereign's excess debt. It is a step function, not a diffusion -- between updates the rate is flat
+     * whatever inflation does, which is why a hospital's margin is squeezed through an inflation spike and
+     * repaired a year later.
+     *
+     * @param MacroState $state Current macroeconomic state.
+     * @param float      $dt    Time increment in years.
+     */
+    public function calculateReimbursementRate(MacroState $state, float $dt): void
+    {
+        $crossedYearEnd = floor($state->totalTime) > floor($state->totalTime - $dt);
+        if (!$crossedYearEnd) {
+            return;
+        }
+
+        $excessDebt = max(0.0, $state->sovereignDebtToGdpEma - MacroEngine::SOVEREIGN_DEBT_NEUTRAL_THRESHOLD);
+        $update = $state->inflationEma
+            - MacroEngine::REIMBURSEMENT_PRODUCTIVITY_OFFSET
+            - (self::REIMBURSEMENT_FISCAL_CUT_SENSITIVITY * $excessDebt);
+
+        $state->reimbursementRateGrowth = max(self::REIMBURSEMENT_MIN_UPDATE, $update);
+        $state->reimbursementRateIndex *= 1.0 + $state->reimbursementRateGrowth;
     }
 
     /**
@@ -307,12 +577,14 @@ class CreditFiscalSubsystem
     public function calculateSloosCreditStandards(MacroState $state, float $dt): void
     {
         $excessCreditSpread = max(0.0, $state->macroCreditSpread - MacroEngine::BASE_CREDIT_SPREAD);
+        // A countercyclical buffer is capital banks must hold against the loans they write: it tightens standards like a spread would.
+        $bufferTightening = self::SLOOS_CCYB_SPREAD_EQUIVALENT * $state->countercyclicalBufferRateEma;
         $dW = $this->mathUtility->generateStandardNormal();
 
         $state->sloosTighteningIndex = $this->mathUtility->calculateSloosCreditStandards(
             currentSloos: $state->sloosTighteningIndex,
             outputGap: $state->outputGapEma,
-            excessCreditSpread: $excessCreditSpread,
+            excessCreditSpread: $excessCreditSpread + $bufferTightening,
             dt: $dt,
             dW: $dW,
             kappa: self::SLOOS_KAPPA,

@@ -6,6 +6,7 @@ namespace App\Tests\Service\Model;
 
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
+use App\Service\Macro\MacroEngine;
 use App\Service\Model\Sector\ShippingBusinessModel;
 use App\DTO\StreamContext;
 use App\Service\Event\ShockEvent;
@@ -165,4 +166,21 @@ class ShippingBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta($clean->actualRevenue, $after->actualRevenue, $clean->actualRevenue * 0.01, 'back to baseline within mix-drift tolerance');
     }
 
+
+    /** The world's cycle, not only the district's, fills the ships. */
+    public function testAForeignBoomLiftsShippingDemandWithTheDistrictFlat(): void
+    {
+        $model = new ShippingBusinessModel();
+        $stock = new Stock();
+        $stock->setTicker('SHIP');
+        $stock->setBeta('1.2');
+
+        $home = new MacroStateDTO(outputGapEma: 0.0, tradeBalanceToGdpEma: MacroEngine::TRADE_BALANCE_BASELINE);
+        $abroad = new MacroStateDTO(outputGapEma: 0.0, tradeBalanceToGdpEma: MacroEngine::TRADE_BALANCE_BASELINE, foreignOutputGapEma: 0.03);
+
+        $shiftHome = $model->getMacroPhysics($stock, $home)['macro_demand_shift'];
+        $shiftAbroad = $model->getMacroPhysics($stock, $abroad)['macro_demand_shift'];
+
+        $this->assertEqualsWithDelta(0.03 * ShippingBusinessModel::FOREIGN_DEMAND_SENSITIVITY, $shiftAbroad - $shiftHome, 1e-9);
+    }
 }

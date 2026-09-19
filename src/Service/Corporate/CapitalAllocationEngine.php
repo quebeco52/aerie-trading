@@ -167,7 +167,7 @@ class CapitalAllocationEngine
 
         $isRegulatoryDividendHalt = false;
         
-        $regulatoryCap = $ctx->strategy->getRegulatoryDividendCap($stock, $ctx->newTreasury);
+        $regulatoryCap = $ctx->strategy->getRegulatoryDividendCap($stock, $ctx->newTreasury, $ctx->macroState);
         if ($regulatoryCap !== null) {
             if ($regulatoryCap <= 0.0) {
                 $isRegulatoryDividendHalt = true;
@@ -303,7 +303,7 @@ class CapitalAllocationEngine
         $stock = $ctx->stock;
         $canEasilyCoverDebt = $ctx->excessCash > ((float) $stock->getTotalDebt() * 2.0);
 
-        if ($ctx->strategy->checkBuybackRegulatoryLockout($stock, $ctx->newTreasury)) {
+        if ($ctx->strategy->checkBuybackRegulatoryLockout($stock, $ctx->newTreasury, $ctx->macroState)) {
             $ctx->newShares = $ctx->sharesOutstanding;
             return;
         }

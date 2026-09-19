@@ -98,6 +98,8 @@ class ComputerHardwareBusinessModel extends StandardCorporateBusinessModel
     // --- Trade Balance & PPI Transmission ---
     /** Sensitivity of global IT hardware trade flows to merchandise trade balance shifts. */
     public const TRADE_BALANCE_SENSITIVITY = 1.20;
+    /** Export volume per unit of the foreign bloc's output gap: the customers-abroad half of the trade term. */
+    public const FOREIGN_DEMAND_SENSITIVITY = 1.00;
     /** Component supply agreements fix bill-of-materials prices for about a quarter before spot moves reach the line. */
     public const INPUT_COST_LAG_YEARS = 0.25;
 
@@ -162,7 +164,8 @@ class ComputerHardwareBusinessModel extends StandardCorporateBusinessModel
 
         $sentimentShift = $macroState->sentimentDeviation();
 
-        $tradeShift = MathUtility::calculateTradeBalanceShift($macroState->tradeBalanceToGdpEma, sensitivity: self::TRADE_BALANCE_SENSITIVITY);
+        $tradeShift = MathUtility::calculateTradeBalanceShift($macroState->tradeBalanceToGdpEma, sensitivity: self::TRADE_BALANCE_SENSITIVITY)
+            + MathUtility::calculateForeignDemandShift($macroState->foreignOutputGapEma, sensitivity: self::FOREIGN_DEMAND_SENSITIVITY);
         // Metzler inventory cycle: a channel overhang (positive gap) means distributors destock before reordering.
         $inventoryCycleShift = -$macroState->inventoryStockGapEma * self::INVENTORY_CYCLE_SENSITIVITY;
         $enterpriseMacroVolumeShock = ($macroState->outputGapEma * $macroSensitivityMultiplier * $this->getOperatingCyclicality($stock)) + $this->resolveFxDemandShift($macroState) + ($tradeShift * 0.50) + $inventoryCycleShift;
@@ -279,6 +282,7 @@ class ComputerHardwareBusinessModel extends StandardCorporateBusinessModel
             'consumer_sentiment_index_ema',
             'energy_cost_push_lag',
             'exchange_rate_index_ema',
+            'foreign_output_gap_ema',
             'freight_rate_index_ema',
             'industrial_metals_index_ema',
             'inventory_stock_gap_ema',

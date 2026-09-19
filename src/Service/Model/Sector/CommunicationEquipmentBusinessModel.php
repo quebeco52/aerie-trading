@@ -61,6 +61,8 @@ class CommunicationEquipmentBusinessModel extends StandardCorporateBusinessModel
     public const CONSUMER_FX_REVENUE_EXPOSURE = 0.15;
     /** Sensitivity of network equipment export flows to merchandise trade balance shifts. */
     public const TRADE_BALANCE_SENSITIVITY = 1.00;
+    /** Export volume per unit of the foreign bloc's output gap: the customers-abroad half of the trade term. */
+    public const FOREIGN_DEMAND_SENSITIVITY = 1.00;
 
     // --- Labor Intensity ---
     /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze. Radio and baseband R&D engineering dominates overhead; assembly is contract-manufactured. */
@@ -232,7 +234,8 @@ class CommunicationEquipmentBusinessModel extends StandardCorporateBusinessModel
         // means operators digest what they built before ordering more. Tenders are global, so the currency and
         // merchandise trade flows move the order book too.
         $overhangDrag = $macroState->capitalStockOverhangEma * self::CAPITAL_OVERHANG_SCALAR;
-        $tradeShift = MathUtility::calculateTradeBalanceShift($macroState->tradeBalanceToGdpEma, sensitivity: self::TRADE_BALANCE_SENSITIVITY);
+        $tradeShift = MathUtility::calculateTradeBalanceShift($macroState->tradeBalanceToGdpEma, sensitivity: self::TRADE_BALANCE_SENSITIVITY)
+            + MathUtility::calculateForeignDemandShift($macroState->foreignOutputGapEma, sensitivity: self::FOREIGN_DEMAND_SENSITIVITY);
         $carrierCapexShift = ($this->resolveLaggedOutputGap($stock, $macroState) * self::CARRIER_CAPEX_GDP_SENSITIVITY * $beta)
             - $overhangDrag
             + $this->resolveFxDemandShift($macroState)
@@ -401,6 +404,7 @@ class CommunicationEquipmentBusinessModel extends StandardCorporateBusinessModel
             'consumer_sentiment_index_ema',
             'energy_cost_push_lag',
             'exchange_rate_index_ema',
+            'foreign_output_gap_ema',
             'freight_rate_index_ema',
             'industrial_metals_index_ema',
             'inventory_stock_gap_ema',

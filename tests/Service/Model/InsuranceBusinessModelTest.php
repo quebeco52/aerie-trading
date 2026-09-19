@@ -6,6 +6,7 @@ namespace App\Tests\Service\Model;
 
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
+use App\DTO\StreamContext;
 use App\Service\Model\Sector\InsuranceBusinessModel;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\TestCase;
@@ -577,6 +578,60 @@ class InsuranceBusinessModelTest extends TestCase
 
         return $stock;
     }
+
+
+    // --- District Catastrophes ---
+
+    /** One district storm season is the same claim for every carrier: the burden shifts each firm's claim draw, so all three books lose together. */
+    public function testADistrictStormSeasonRaisesClaimsForEveryCarrierAtOnce(): void
+    {
+        $carriers = [
+            new InsuranceBusinessModel(),
+            new \App\Service\Model\Sector\ReinsuranceBusinessModel(),
+            new \App\Service\Model\Sector\RetailInsuranceBusinessModel(),
+        ];
+
+        foreach ($carriers as $carrier) {
+            $run = function (float $burden) use ($carrier): float {
+                $stock = new Stock();
+                $stock->setTicker('CARR');
+                $stock->setBeta('0.6');
+                $stock->setTotalEquity('60000000000');
+                $math = $this->getMockBuilder(MathUtility::class)->onlyMethods(['generateStandardNormal', 'generatePersistentZ', 'checkProbability'])->getMock();
+                $math->method('generateStandardNormal')->willReturn(0.0);
+                $math->method('generatePersistentZ')->willReturn(0.0);
+                $math->method('checkProbability')->willReturn(false);
+                $macro = new \App\DTO\MacroStateDTO(inflationEma: 0.02, policyRateEma: 0.03, yield10yEma: 0.04, catastropheLossIndexEma: $burden);
+
+                return $carrier->computeActualFinancials($stock, 50_000_000_000.0, 0.60, 2_000_000_000.0, 0.15, $macro, $math)->actualVariableCosts;
+            };
+
+            $averageYear = $run(1.0);
+            $stormSeason = $run(1.0 + 3.0 * \App\Service\Macro\MacroEngine::CATASTROPHE_LOSS_INDEX_SD);
+            $this->assertGreaterThan($averageYear, $stormSeason, sprintf('%s must pay more claims in a district storm season with its own draw flat.', $carrier::class));
+        }
+    }
+
+    public function testADistrictStormSeasonHardensTheMarketForAWellCapitalisedCarrier(): void
+    {
+        $model = new InsuranceBusinessModel();
+        $regimeKey = StreamContext::REGIME_STATE_PREFIX . InsuranceBusinessModel::REGIME_HARD_MARKET;
+
+        $run = function (float $burden) use ($model): array {
+            $stock = new Stock();
+            $stock->setTicker('CARR');
+            $stock->setBeta('0.6');
+            $stock->setTotalEquity('200000000000'); // far above the Kenney target: no capital trigger
+            $math = $this->getMockBuilder(MathUtility::class)->onlyMethods(['generateStandardNormal', 'generatePersistentZ', 'checkProbability'])->getMock();
+            $math->method('generateStandardNormal')->willReturn(0.0);
+            $math->method('generatePersistentZ')->willReturn(0.0);
+            $math->method('checkProbability')->willReturn(false);
+            $macro = new \App\DTO\MacroStateDTO(inflationEma: 0.02, policyRateEma: 0.03, yield10yEma: 0.04, catastropheLossIndexEma: $burden);
+
+            return $model->computeActualFinancials($stock, 50_000_000_000.0, 0.60, 2_000_000_000.0, 0.15, $macro, $math)->streamZ;
+        };
+
+        $this->assertArrayNotHasKey($regimeKey, array_filter($run(1.0)), 'An average year with ample capital starts no hard market.');
+        $this->assertGreaterThan(0.0, $run(InsuranceBusinessModel::CAT_HARD_MARKET_THRESHOLD)[$regimeKey] ?? 0.0, 'A district storm season hardens the market whatever the carrier\'s own capital.');
+    }
 }
-
-

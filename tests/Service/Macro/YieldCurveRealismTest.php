@@ -27,40 +27,46 @@ class YieldCurveRealismTest extends TestCase
     private const BURN_IN_YEARS = 5;
     private const TICKS_PER_YEAR = 252;
 
+    /** Three seeds pooled: a forty-year path is one draw of the cycle, and its mean slope moves a fifth of a percent seed to seed. */
+    private const SPREAD_SEEDS = [20260909, 20260918, 4711];
+
     public function testTwoTenSpreadDistributionMatchesTheHistoricalRecord(): void
     {
-        mt_srand(20260909);
-        $mathUtility = new MathUtility();
-        $engine = new MacroEngine(
-            $mathUtility,
-            $this->inMemoryRedis(),
-            new MacroSnapshotRecorder(),
-            new MonetaryPolicySubsystem($mathUtility),
-            new LaborMarketSubsystem(),
-            new MacroAggregateSubsystem($mathUtility),
-            new CommodityLogisticsSubsystem($mathUtility),
-            new AssetMarketSubsystem($mathUtility),
-            new CreditFiscalSubsystem($mathUtility),
-        );
-
         $spreads = [];
         $tenOverPolicy = [];
         $twoOverPolicy = [];
         $thirtyOverTen = [];
         $inverted = 0;
         $dt = 1.0 / self::TICKS_PER_YEAR;
-        for ($tick = 0; $tick < self::YEARS * self::TICKS_PER_YEAR; $tick++) {
-            $macro = $engine->updateMacroState($dt);
-            if ($tick < self::BURN_IN_YEARS * self::TICKS_PER_YEAR) {
-                continue;
-            }
-            $spread = $macro->yield10y - $macro->yield2y;
-            $spreads[] = $spread;
-            $tenOverPolicy[] = $macro->yield10y - $macro->policyRate;
-            $twoOverPolicy[] = $macro->yield2y - $macro->policyRate;
-            $thirtyOverTen[] = $macro->yield30y - $macro->yield10y;
-            if ($spread < 0.0) {
-                $inverted++;
+
+        foreach (self::SPREAD_SEEDS as $seed) {
+            mt_srand($seed);
+            $mathUtility = new MathUtility();
+            $engine = new MacroEngine(
+                $mathUtility,
+                $this->inMemoryRedis(),
+                new MacroSnapshotRecorder(),
+                new MonetaryPolicySubsystem($mathUtility),
+                new LaborMarketSubsystem($mathUtility),
+                new MacroAggregateSubsystem($mathUtility),
+                new CommodityLogisticsSubsystem($mathUtility),
+                new AssetMarketSubsystem($mathUtility),
+                new CreditFiscalSubsystem($mathUtility),
+            );
+
+            for ($tick = 0; $tick < self::YEARS * self::TICKS_PER_YEAR; $tick++) {
+                $macro = $engine->updateMacroState($dt);
+                if ($tick < self::BURN_IN_YEARS * self::TICKS_PER_YEAR) {
+                    continue;
+                }
+                $spread = $macro->yield10y - $macro->yield2y;
+                $spreads[] = $spread;
+                $tenOverPolicy[] = $macro->yield10y - $macro->policyRate;
+                $twoOverPolicy[] = $macro->yield2y - $macro->policyRate;
+                $thirtyOverTen[] = $macro->yield30y - $macro->yield10y;
+                if ($spread < 0.0) {
+                    $inverted++;
+                }
             }
         }
 
@@ -100,7 +106,7 @@ class YieldCurveRealismTest extends TestCase
             $this->inMemoryRedis(),
             new MacroSnapshotRecorder(),
             new MonetaryPolicySubsystem($mathUtility),
-            new LaborMarketSubsystem(),
+            new LaborMarketSubsystem($mathUtility),
             new MacroAggregateSubsystem($mathUtility),
             new CommodityLogisticsSubsystem($mathUtility),
             new AssetMarketSubsystem($mathUtility),

@@ -25,6 +25,9 @@ let macroCreditCliffChartInstance = null;
 let macroInventoryCycleChartInstance = null;
 let macroFaitChartInstance = null;
 let macroLeadingIndicatorsChartInstance = null;
+let macroHouseholdCreditChartInstance = null;
+let macroGlobalCycleChartInstance = null;
+let macroBankingLiquidityChartInstance = null;
 
 let currentMacroReports = [];
 let currentMacroTimeframe = '10Y';
@@ -57,9 +60,9 @@ function updateMacroHud(d) {
     setHud('hud-macroInterbankLiquidityChart', lastTed !== undefined ? `TED: ${lastTed.toFixed(0)} bps` : 'TED: -');
     setHud('hud-macroPropertyChart', `CRE: ${last(d.creEmaData).toFixed(1)} | Resi: ${last(d.residentialEmaData).toFixed(1)} | Starts: ${last(d.housingStartsData).toFixed(1)}`);
     setHud('hud-macroSentimentChart', `Sent: ${last(d.sentimentData).toFixed(0)} | M&A: ${last(d.dealActivityData).toFixed(0)}`);
-    setHud('hud-macroCommoditiesChart', `Energy: ${last(d.energyPriceData).toFixed(1)} | Crack: $${last(d.crackSpreadData).toFixed(1)}`);
+    setHud('hud-macroCommoditiesChart', `Energy: ${last(d.energyPriceData).toFixed(1)} | Gas: ${last(d.naturalGasPriceData).toFixed(1)} | Crack: $${last(d.crackSpreadData).toFixed(1)}`);
     setHud('hud-macroTradeLogisticsChart', `FX: ${last(d.fxEmaData).toFixed(1)} | Freight: ${last(d.freightEmaData).toFixed(1)} | GSCPI: ${last(d.gscpiData) >= 0 ? '+' : ''}${last(d.gscpiData).toFixed(2)}σ`);
-    setHud('hud-macroGovtSpendingChart', `Debt/GDP: ${last(d.sovereignDebtData).toFixed(1)}%`);
+    setHud('hud-macroGovtSpendingChart', `Debt: ${last(d.sovereignDebtData).toFixed(1)}% | Spread: ${last(d.sovereignRiskSpreadData).toFixed(0)} bps | Deficit: ${last(d.primaryDeficitData) >= 0 ? '+' : ''}${last(d.primaryDeficitData).toFixed(1)}%`);
     setHud('hud-macroTermPremiumChart', `10Y: ${last(d.yield10yData).toFixed(2)}% | Term: ${last(d.termPremiumData) >= 0 ? '+' : ''}${last(d.termPremiumData).toFixed(2)}%`);
     setHud('hud-macroGdpGrowthChart', `Real: ${last(d.realGdpGrowthData) >= 0 ? '+' : ''}${last(d.realGdpGrowthData).toFixed(1)}% | Rec: ${last(d.recessionProbData).toFixed(0)}%`);
     setHud('hud-macroBalanceSheetChart', `Stock: ${last(d.slicedAssetStock).toFixed(1)} | QE/QT: ${last(d.balanceSheetData) >= 0 ? '+' : ''}${last(d.balanceSheetData).toFixed(0)} bps`);
@@ -70,6 +73,9 @@ function updateMacroHud(d) {
     setHud('hud-macroInventoryCycleChart', `Overhang: ${last(d.inventoryStockGapData) >= 0 ? '+' : ''}${last(d.inventoryStockGapData).toFixed(1)}% | CU: ${last(d.capacityUtilizationData).toFixed(1)}%`);
     setHud('hud-macroFaitChart', `Cum Gap: ${last(d.faitCumulativeGapData) >= 0 ? '+' : ''}${last(d.faitCumulativeGapData).toFixed(0)} bps`);
     setHud('hud-macroLeadingIndicatorsChart', `PMI: ${last(d.pmiData).toFixed(1)} | Starts: ${last(d.housingStartsData).toFixed(0)} | M2: ${last(d.moneySupplyGrowthData) >= 0 ? '+' : ''}${last(d.moneySupplyGrowthData).toFixed(1)}% | Trade: ${last(d.tradeBalanceData) >= 0 ? '+' : ''}${last(d.tradeBalanceData).toFixed(1)}%`);
+    setHud('hud-macroHouseholdCreditChart', `DSR: ${last(d.householdDsrData).toFixed(1)}% | DTI: ${last(d.householdDtiData).toFixed(1)}% | CCyB: ${last(d.ccybRateData).toFixed(2)}% | Gap: ${last(d.creditToGdpGapData) >= 0 ? '+' : ''}${last(d.creditToGdpGapData).toFixed(1)}%`);
+    setHud('hud-macroGlobalCycleChart', `Dom: ${last(d.outputGapData) >= 0 ? '+' : ''}${last(d.outputGapData).toFixed(1)}% | For: ${last(d.foreignOutputGapData) >= 0 ? '+' : ''}${last(d.foreignOutputGapData).toFixed(1)}% | Global: ${last(d.globalDemandGapData) >= 0 ? '+' : ''}${last(d.globalDemandGapData).toFixed(1)}% | For Rate: ${last(d.foreignPolicyRateData).toFixed(2)}%`);
+    setHud('hud-macroBankingLiquidityChart', `Beta: ${last(d.depositBetaData).toFixed(1)}% | MMF: ${last(d.mmfShareData).toFixed(1)}% | Spread: ${last(d.interbankSpreadBpsData) !== null && !isNaN(last(d.interbankSpreadBpsData)) ? last(d.interbankSpreadBpsData).toFixed(0) + ' bps' : '-'}`);
 }
 
 export function updateMacroCharts(reports, timeframe = currentMacroTimeframe) {
@@ -112,6 +118,10 @@ export function updateMacroCharts(reports, timeframe = currentMacroTimeframe) {
     let corporateDefaultPctData = [], corporateDefaultBpsData = [];
     let sloosData = [], dealActivityData = [];
     let pmiData = [], ppiData = [], tradeBalanceData = [], housingStartsData = [], moneySupplyGrowthData = [];
+    let naturalGasPriceData = [], sovereignRiskSpreadData = [], primaryDeficitData = [];
+    let householdDsrData = [], householdDtiData = [], creditToGdpGapData = [], ccybRateData = [];
+    let foreignOutputGapData = [], foreignPolicyRateData = [], globalDemandGapData = [];
+    let depositBetaData = [], mmfShareData = [];
 
     const slicedReports = reports.slice(-limit);
     let qCount = slicedReports.length;
@@ -377,6 +387,42 @@ export function updateMacroCharts(reports, timeframe = currentMacroTimeframe) {
 
         let rawM2 = report.money_supply_growth_ema ?? report.money_supply_growth ?? report.moneySupplyGrowthEma ?? report.moneySupplyGrowth ?? 0.045;
         moneySupplyGrowthData.push(parseFloat(rawM2) * 100);
+
+        let rawNg = report.natural_gas_price_index_ema ?? report.natural_gas_price_index ?? report.naturalGasPriceIndexEma ?? report.naturalGasPriceIndex ?? 100.0;
+        naturalGasPriceData.push(parseFloat(rawNg));
+
+        let rawSovSpread = report.sovereign_risk_spread_ema ?? report.sovereign_risk_spread ?? report.sovereignRiskSpreadEma ?? report.sovereignRiskSpread ?? 0.0;
+        sovereignRiskSpreadData.push(parseFloat(rawSovSpread) * 10000);
+
+        let rawPrimDef = report.primary_deficit_to_gdp ?? report.primaryDeficitToGdp ?? 0.0;
+        primaryDeficitData.push(parseFloat(rawPrimDef) * 100);
+
+        let rawDsr = report.household_debt_service_ratio_ema ?? report.household_debt_service_ratio ?? report.householdDebtServiceRatioEma ?? report.householdDebtServiceRatio ?? 0.106;
+        householdDsrData.push(parseFloat(rawDsr) * 100);
+
+        let rawDti = report.household_debt_to_income_ema ?? report.household_debt_to_income ?? report.householdDebtToIncomeEma ?? report.householdDebtToIncome ?? 1.0;
+        householdDtiData.push(parseFloat(rawDti) * 100);
+
+        let rawCreditGap = report.credit_to_gdp_gap_ema ?? report.credit_to_gdp_gap ?? report.creditToGdpGapEma ?? report.creditToGdpGap ?? 0.0;
+        creditToGdpGapData.push(parseFloat(rawCreditGap) * 100);
+
+        let rawCcyb = report.countercyclical_buffer_rate_ema ?? report.countercyclical_buffer_rate ?? report.countercyclicalBufferRateEma ?? report.countercyclicalBufferRate ?? 0.0;
+        ccybRateData.push(parseFloat(rawCcyb) * 100);
+
+        let rawForGap = report.foreign_output_gap_ema ?? report.foreign_output_gap ?? report.foreignOutputGapEma ?? report.foreignOutputGap ?? 0.0;
+        foreignOutputGapData.push(parseFloat(rawForGap) * 100);
+
+        let rawForRate = report.foreign_policy_rate_ema ?? report.foreign_policy_rate ?? report.foreignPolicyRateEma ?? report.foreignPolicyRate ?? 0.025;
+        foreignPolicyRateData.push(parseFloat(rawForRate) * 100);
+
+        let rawGlobGap = report.global_demand_gap_ema ?? report.global_demand_gap ?? report.globalDemandGapEma ?? report.globalDemandGap ?? 0.0;
+        globalDemandGapData.push(parseFloat(rawGlobGap) * 100);
+
+        let rawBeta = report.system_deposit_beta_ema ?? report.system_deposit_beta ?? report.systemDepositBetaEma ?? report.systemDepositBeta ?? 0.20;
+        depositBetaData.push(parseFloat(rawBeta) * 100);
+
+        let rawMmf = report.money_market_fund_share_ema ?? report.money_market_fund_share ?? report.moneyMarketFundShareEma ?? report.moneyMarketFundShare ?? 0.15;
+        mmfShareData.push(parseFloat(rawMmf) * 100);
     });
 
     updateMacroHud({
@@ -392,7 +438,11 @@ export function updateMacroCharts(reports, timeframe = currentMacroTimeframe) {
         highYieldSpreadBpsData, creditCliffRatioData,
         inventoryStockGapData, faitCumulativeGapData,
         capacityUtilizationData, fxEmaData, freightEmaData,
-        pmiData, ppiData, tradeBalanceData, housingStartsData, moneySupplyGrowthData
+        pmiData, ppiData, tradeBalanceData, housingStartsData, moneySupplyGrowthData,
+        naturalGasPriceData, sovereignRiskSpreadData, primaryDeficitData,
+        householdDsrData, householdDtiData, creditToGdpGapData, ccybRateData,
+        foreignOutputGapData, foreignPolicyRateData, globalDemandGapData,
+        depositBetaData, mmfShareData
     });
 
     ['5Y', '10Y', '25Y'].forEach(tf => {
@@ -415,11 +465,11 @@ export function updateMacroCharts(reports, timeframe = currentMacroTimeframe) {
     const firstWealthRatio = equityWealthRatioData.find(v => v !== null && v > 0);
     const rebase = (arr) => firstWealthRatio ? arr.map(v => v === null ? null : (v / firstWealthRatio) * 100.0) : arr;
     renderWhenVisible('macroWealthEffectChart', () => renderMacroWealthEffectChart(labels, rebase(equityWealthRatioData), rebase(equityWealthTrendData), equityWealthGapData, housingWealthGapData, outputGapData));
-    renderWhenVisible('macroCommoditiesChart', () => renderMacroCommoditiesChart(labels, energyPriceData, metalsEmaData, agriEmaData, crackSpreadData));
+    renderWhenVisible('macroCommoditiesChart', () => renderMacroCommoditiesChart(labels, energyPriceData, metalsEmaData, agriEmaData, crackSpreadData, naturalGasPriceData));
     renderWhenVisible('macroPropertyChart', () => renderMacroPropertyChart(labels, creEmaData, residentialEmaData, housingStartsData));
     renderWhenVisible('macroTradeLogisticsChart', () => renderMacroTradeLogisticsChart(labels, fxEmaData, freightEmaData, gscpiData));
     renderWhenVisible('macroSentimentChart', () => renderMacroSentimentChart(labels, sentimentData, retailDefaultData, dealActivityData, corporateDefaultPctData));
-    renderWhenVisible('macroGovtSpendingChart', () => renderMacroGovtSpendingChart(labels, govtSpendingEmaData, sovereignDebtData));
+    renderWhenVisible('macroGovtSpendingChart', () => renderMacroGovtSpendingChart(labels, govtSpendingEmaData, sovereignDebtData, sovereignRiskSpreadData, primaryDeficitData));
     renderWhenVisible('macroInterbankLiquidityChart', () => renderMacroInterbankLiquidityChart(labels, interbankSpreadBpsData, creditSpreadBpsData));
     renderWhenVisible('macroTermPremiumChart', () => renderMacroTermPremiumChart(labels, yield10yData, riskNeutralData, termPremiumData, naturalRateData));
     renderWhenVisible('macroGdpGrowthChart', () => renderMacroGdpGrowthChart(labels, nominalGdpGrowthData, realGdpGrowthData, potentialGdpGrowthData, tfpGrowthData, recessionProbData));
@@ -431,6 +481,9 @@ export function updateMacroCharts(reports, timeframe = currentMacroTimeframe) {
     renderWhenVisible('macroInventoryCycleChart', () => renderMacroInventoryCycleChart(labels, inventoryStockGapData, outputGapData, energyBufferData, capacityUtilizationData));
     renderWhenVisible('macroFaitChart', () => renderMacroFaitChart(labels, faitCumulativeGapData, faitOffsetBpsData, policyRateData, targetRateData));
     renderWhenVisible('macroLeadingIndicatorsChart', () => renderMacroLeadingIndicatorsChart(labels, pmiData, housingStartsData, moneySupplyGrowthData, tradeBalanceData, ppiData));
+    renderWhenVisible('macroHouseholdCreditChart', () => renderMacroHouseholdCreditChart(labels, householdDsrData, householdDtiData, creditToGdpGapData, ccybRateData));
+    renderWhenVisible('macroGlobalCycleChart', () => renderMacroGlobalCycleChart(labels, outputGapData, foreignOutputGapData, globalDemandGapData, foreignPolicyRateData));
+    renderWhenVisible('macroBankingLiquidityChart', () => renderMacroBankingLiquidityChart(labels, depositBetaData, mmfShareData, interbankSpreadBpsData));
 }
 
 function renderMacroEconomyChart(labels, inflationData, outputGapData, capitalOverhangData, tipsBreakevenData) {
@@ -1183,7 +1236,7 @@ function renderMacroBalanceSheetChart(labels, balanceSheetAssetsData, balanceShe
     });
 }
 
-function renderMacroCommoditiesChart(labels, energyPriceData, metalsEmaData, agriEmaData, crackSpreadData = []) {
+function renderMacroCommoditiesChart(labels, energyPriceData, metalsEmaData, agriEmaData, crackSpreadData = [], naturalGasPriceData = []) {
     const canvas = document.getElementById('macroCommoditiesChart');
     if (!canvas) return;
     macroCommoditiesChartInstance = destroyChartInstance(macroCommoditiesChartInstance);
@@ -1221,6 +1274,20 @@ function renderMacroCommoditiesChart(labels, energyPriceData, metalsEmaData, agr
             yAxisID: 'y'
         }
     ];
+
+    if (naturalGasPriceData && naturalGasPriceData.length > 0) {
+        datasets.push({
+            label: 'Natural Gas Index',
+            data: naturalGasPriceData,
+            borderColor: '#06b6d4',
+            backgroundColor: 'rgba(6, 182, 212, 0.15)',
+            borderWidth: 1.8,
+            borderDash: [3, 2],
+            tension: 0.2,
+            pointRadius: labels.length > 50 ? 0 : 2,
+            yAxisID: 'y'
+        });
+    }
 
     if (crackSpreadData && crackSpreadData.length > 0) {
         datasets.push({
@@ -1530,42 +1597,73 @@ function renderMacroSentimentChart(labels, sentimentData, retailDefaultData, dea
     });
 }
 
-function renderMacroGovtSpendingChart(labels, govtSpendingEmaData, sovereignDebtData) {
+function renderMacroGovtSpendingChart(labels, govtSpendingEmaData, sovereignDebtData, sovereignRiskSpreadData = [], primaryDeficitData = []) {
     const canvas = document.getElementById('macroGovtSpendingChart');
     if (!canvas) return;
     macroGovtSpendingChartInstance = destroyChartInstance(macroGovtSpendingChartInstance);
     const ctx = canvas.getContext('2d');
 
+    const datasets = [
+        {
+            type: 'line',
+            label: 'Fiscal Spending Index',
+            data: govtSpendingEmaData,
+            borderColor: '#34d399',
+            backgroundColor: 'rgba(52, 211, 153, 0.15)',
+            borderWidth: 2,
+            tension: 0.2,
+            fill: true,
+            yAxisID: 'y',
+            pointRadius: labels.length > 50 ? 0 : 2
+        },
+        {
+            type: 'line',
+            label: 'Sovereign Debt-to-GDP',
+            data: sovereignDebtData,
+            borderColor: '#f43f5e',
+            backgroundColor: 'rgba(244, 63, 94, 0.08)',
+            borderWidth: 2.2,
+            borderDash: [5, 4],
+            tension: 0.2,
+            fill: false,
+            yAxisID: 'y',
+            pointRadius: labels.length > 50 ? 0 : 2
+        }
+    ];
+
+    if (sovereignRiskSpreadData && sovereignRiskSpreadData.length > 0) {
+        datasets.push({
+            type: 'line',
+            label: 'Sovereign Risk Spread (bps)',
+            data: sovereignRiskSpreadData,
+            borderColor: '#a855f7',
+            backgroundColor: 'rgba(168, 85, 247, 0.15)',
+            borderWidth: 2,
+            tension: 0.2,
+            yAxisID: 'y1',
+            pointRadius: labels.length > 50 ? 0 : 1.5
+        });
+    }
+
+    if (primaryDeficitData && primaryDeficitData.length > 0) {
+        datasets.push({
+            type: 'line',
+            label: 'Primary Deficit (% GDP)',
+            data: primaryDeficitData,
+            borderColor: '#f59e0b',
+            backgroundColor: 'rgba(245, 158, 11, 0.15)',
+            borderWidth: 1.8,
+            borderDash: [3, 3],
+            tension: 0.2,
+            yAxisID: 'yDeficit',
+            pointRadius: labels.length > 50 ? 0 : 1.5
+        });
+    }
+
     macroGovtSpendingChartInstance = new Chart(ctx, {
         data: {
             labels: labels,
-            datasets: [
-                {
-                    type: 'line',
-                    label: 'Fiscal Spending Index',
-                    data: govtSpendingEmaData,
-                    borderColor: '#34d399',
-                    backgroundColor: 'rgba(52, 211, 153, 0.15)',
-                    borderWidth: 2,
-                    tension: 0.2,
-                    fill: true,
-                    yAxisID: 'y',
-                    pointRadius: labels.length > 50 ? 0 : 2
-                },
-                {
-                    type: 'line',
-                    label: 'Sovereign Debt-to-GDP',
-                    data: sovereignDebtData,
-                    borderColor: '#f43f5e',
-                    backgroundColor: 'rgba(244, 63, 94, 0.08)',
-                    borderWidth: 2.2,
-                    borderDash: [5, 4],
-                    tension: 0.2,
-                    fill: false,
-                    yAxisID: 'y1',
-                    pointRadius: labels.length > 50 ? 0 : 2
-                }
-            ]
+            datasets: datasets
         },
         options: {
             responsive: true,
@@ -1575,9 +1673,18 @@ function renderMacroGovtSpendingChart(labels, govtSpendingEmaData, sovereignDebt
                 legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } },
                 tooltip: {
                     callbacks: {
-                        label: (ctx) => ctx.dataset.yAxisID === 'y1'
-                            ? `${ctx.dataset.label}: ${ctx.raw.toFixed(1)}%`
-                            : `${ctx.dataset.label}: ${ctx.raw.toFixed(1)} pts`
+                        label: (ctx) => {
+                            if (ctx.dataset.label.includes('Spread')) {
+                                return `${ctx.dataset.label}: ${ctx.raw !== null ? ctx.raw.toFixed(0) + ' bps' : 'N/A'}`;
+                            }
+                            if (ctx.dataset.label.includes('Deficit')) {
+                                return `${ctx.dataset.label}: ${ctx.raw !== null ? (ctx.raw >= 0 ? '+' : '') + ctx.raw.toFixed(2) + '%' : 'N/A'}`;
+                            }
+                            if (ctx.dataset.label.includes('Debt')) {
+                                return `${ctx.dataset.label}: ${ctx.raw !== null ? ctx.raw.toFixed(1) + '%' : 'N/A'}`;
+                            }
+                            return `${ctx.dataset.label}: ${ctx.raw !== null ? ctx.raw.toFixed(1) + ' pts' : 'N/A'}`;
+                        }
                     }
                 }
             },
@@ -1587,16 +1694,23 @@ function renderMacroGovtSpendingChart(labels, govtSpendingEmaData, sovereignDebt
                     display: true,
                     position: 'left',
                     grid: { color: 'rgba(255, 255, 255, 0.05)' },
-                    ticks: { callback: (val) => val },
-                    title: { display: true, text: 'Spending Index' }
+                    ticks: { callback: (val) => val.toFixed(0) },
+                    title: { display: true, text: 'Spending Index & Debt (% / pts)' }
                 },
                 y1: {
                     type: 'linear',
                     display: true,
                     position: 'right',
                     grid: { drawOnChartArea: false },
-                    ticks: { callback: (val) => val.toFixed(0) + '%' },
-                    title: { display: true, text: 'Debt / GDP (%)' }
+                    suggestedMin: 0,
+                    ticks: { callback: (val) => val.toFixed(0) + ' bps' },
+                    title: { display: true, text: 'Sovereign Spread (bps)' }
+                },
+                yDeficit: {
+                    type: 'linear',
+                    display: false,
+                    position: 'right',
+                    grid: { drawOnChartArea: false }
                 },
                 x: {
                     grid: { color: 'rgba(255, 255, 255, 0.05)' },
@@ -2447,6 +2561,288 @@ function renderMacroLeadingIndicatorsChart(labels, pmiData, housingStartsData, m
     });
 }
 
+function renderMacroHouseholdCreditChart(labels, householdDsrData, householdDtiData, creditToGdpGapData, ccybRateData) {
+    const canvas = document.getElementById('macroHouseholdCreditChart');
+    if (!canvas) return;
+    macroHouseholdCreditChartInstance = destroyChartInstance(macroHouseholdCreditChartInstance);
+    const ctx = canvas.getContext('2d');
+
+    macroHouseholdCreditChartInstance = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    type: 'bar',
+                    label: 'Credit-to-GDP Gap (%)',
+                    data: creditToGdpGapData,
+                    backgroundColor: creditToGdpGapData.map(v => v >= 0 ? 'rgba(245, 158, 11, 0.35)' : 'rgba(14, 165, 233, 0.35)'),
+                    borderColor: creditToGdpGapData.map(v => v >= 0 ? '#f59e0b' : '#0ea5e9'),
+                    borderWidth: 1,
+                    borderRadius: 2,
+                    barPercentage: 0.65,
+                    categoryPercentage: 0.85,
+                    yAxisID: 'y'
+                },
+                {
+                    type: 'line',
+                    label: 'Debt Service Ratio (DSR %)',
+                    data: householdDsrData,
+                    borderColor: '#38bdf8',
+                    backgroundColor: 'rgba(56, 189, 248, 0.15)',
+                    borderWidth: 2.2,
+                    tension: 0.25,
+                    pointRadius: labels.length > 50 ? 0 : 2,
+                    yAxisID: 'y'
+                },
+                {
+                    type: 'line',
+                    label: 'Basel III CCyB Buffer (%)',
+                    data: ccybRateData,
+                    borderColor: '#c084fc',
+                    backgroundColor: 'rgba(192, 132, 252, 0.15)',
+                    borderWidth: 2,
+                    borderDash: [4, 4],
+                    stepped: 'before',
+                    pointRadius: labels.length > 50 ? 0 : 1,
+                    yAxisID: 'y'
+                },
+                {
+                    type: 'line',
+                    label: 'Household Debt-to-Income (%)',
+                    data: householdDtiData,
+                    borderColor: '#f43f5e',
+                    backgroundColor: 'rgba(244, 63, 94, 0.08)',
+                    borderWidth: 2,
+                    tension: 0.25,
+                    pointRadius: labels.length > 50 ? 0 : 1.5,
+                    yAxisID: 'y1'
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+                legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } },
+                tooltip: {
+                    callbacks: {
+                        label: (ctx) => `${ctx.dataset.label}: ${ctx.raw !== null ? (ctx.raw >= 0 && ctx.dataset.label.includes('Gap') ? '+' : '') + ctx.raw.toFixed(2) + '%' : 'N/A'}`
+                    }
+                }
+            },
+            scales: {
+                y: {
+                    type: 'linear',
+                    position: 'left',
+                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    ticks: { callback: (val) => val.toFixed(1) + '%' },
+                    title: { display: true, text: 'DSR, CCyB & Credit Gap (%)' }
+                },
+                y1: {
+                    type: 'linear',
+                    position: 'right',
+                    grid: { drawOnChartArea: false },
+                    ticks: { callback: (val) => val.toFixed(0) + '%' },
+                    title: { display: true, text: 'Debt-to-Income (%)' }
+                },
+                x: {
+                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    ticks: { maxTicksLimit: 8 }
+                }
+            }
+        }
+    });
+}
+
+function renderMacroGlobalCycleChart(labels, outputGapData, foreignOutputGapData, globalDemandGapData, foreignPolicyRateData) {
+    const canvas = document.getElementById('macroGlobalCycleChart');
+    if (!canvas) return;
+    macroGlobalCycleChartInstance = destroyChartInstance(macroGlobalCycleChartInstance);
+    const ctx = canvas.getContext('2d');
+
+    macroGlobalCycleChartInstance = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    type: 'bar',
+                    label: 'Global Demand Gap (%)',
+                    data: globalDemandGapData,
+                    backgroundColor: globalDemandGapData.map(v => v >= 0 ? 'rgba(45, 212, 191, 0.35)' : 'rgba(244, 63, 94, 0.35)'),
+                    borderColor: globalDemandGapData.map(v => v >= 0 ? '#2dd4bf' : '#f43f5e'),
+                    borderWidth: 1,
+                    borderRadius: 2,
+                    barPercentage: 0.65,
+                    categoryPercentage: 0.85,
+                    yAxisID: 'y'
+                },
+                {
+                    type: 'line',
+                    label: 'Domestic Output Gap (%)',
+                    data: outputGapData,
+                    borderColor: '#34d399',
+                    backgroundColor: 'rgba(52, 211, 153, 0.15)',
+                    borderWidth: 2.2,
+                    tension: 0.25,
+                    pointRadius: labels.length > 50 ? 0 : 2,
+                    yAxisID: 'y'
+                },
+                {
+                    type: 'line',
+                    label: 'Foreign Output Gap (%)',
+                    data: foreignOutputGapData,
+                    borderColor: '#38bdf8',
+                    backgroundColor: 'rgba(56, 189, 248, 0.15)',
+                    borderWidth: 2,
+                    borderDash: [4, 4],
+                    tension: 0.25,
+                    pointRadius: labels.length > 50 ? 0 : 1.5,
+                    yAxisID: 'y'
+                },
+                {
+                    type: 'line',
+                    label: 'Foreign Policy Rate (%)',
+                    data: foreignPolicyRateData,
+                    borderColor: '#fb923c',
+                    backgroundColor: 'rgba(251, 146, 60, 0.15)',
+                    borderWidth: 1.8,
+                    tension: 0.25,
+                    pointRadius: labels.length > 50 ? 0 : 1.5,
+                    yAxisID: 'y1'
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+                legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } },
+                tooltip: {
+                    callbacks: {
+                        label: (ctx) => `${ctx.dataset.label}: ${ctx.raw !== null ? (ctx.raw >= 0 && ctx.dataset.yAxisID === 'y' ? '+' : '') + ctx.raw.toFixed(2) + '%' : 'N/A'}`
+                    }
+                }
+            },
+            scales: {
+                y: {
+                    type: 'linear',
+                    position: 'left',
+                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    ticks: { callback: (val) => (val >= 0 ? '+' : '') + val.toFixed(1) + '%' },
+                    title: { display: true, text: 'Cyclical Gaps (%)' }
+                },
+                y1: {
+                    type: 'linear',
+                    position: 'right',
+                    suggestedMin: 0,
+                    grid: { drawOnChartArea: false },
+                    ticks: { callback: (val) => val.toFixed(1) + '%' },
+                    title: { display: true, text: 'Foreign Rate (%)' }
+                },
+                x: {
+                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    ticks: { maxTicksLimit: 8 }
+                }
+            }
+        }
+    });
+}
+
+function renderMacroBankingLiquidityChart(labels, depositBetaData, mmfShareData, interbankSpreadBpsData) {
+    const canvas = document.getElementById('macroBankingLiquidityChart');
+    if (!canvas) return;
+    macroBankingLiquidityChartInstance = destroyChartInstance(macroBankingLiquidityChartInstance);
+    const ctx = canvas.getContext('2d');
+
+    macroBankingLiquidityChartInstance = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    type: 'line',
+                    label: 'System Deposit Beta (%)',
+                    data: depositBetaData,
+                    borderColor: '#06b6d4',
+                    backgroundColor: 'rgba(6, 182, 212, 0.15)',
+                    borderWidth: 2.2,
+                    tension: 0.25,
+                    pointRadius: labels.length > 50 ? 0 : 2,
+                    yAxisID: 'y'
+                },
+                {
+                    type: 'line',
+                    label: 'Money Market Fund Share (% Deposits)',
+                    data: mmfShareData,
+                    borderColor: '#a855f7',
+                    backgroundColor: 'rgba(168, 85, 247, 0.15)',
+                    borderWidth: 2,
+                    tension: 0.25,
+                    pointRadius: labels.length > 50 ? 0 : 1.5,
+                    yAxisID: 'y'
+                },
+                {
+                    type: 'line',
+                    label: 'Interbank Liquidity Spread (bps)',
+                    data: interbankSpreadBpsData,
+                    borderColor: '#f43f5e',
+                    backgroundColor: 'rgba(244, 63, 94, 0.10)',
+                    borderWidth: 1.8,
+                    borderDash: [4, 4],
+                    tension: 0.2,
+                    pointRadius: labels.length > 50 ? 0 : 1,
+                    yAxisID: 'y1'
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+                legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } },
+                tooltip: {
+                    callbacks: {
+                        label: (ctx) => {
+                            if (ctx.dataset.yAxisID === 'y1') {
+                                return `${ctx.dataset.label}: ${ctx.raw !== null ? ctx.raw.toFixed(0) + ' bps' : 'N/A'}`;
+                            }
+                            return `${ctx.dataset.label}: ${ctx.raw !== null ? ctx.raw.toFixed(1) + '%' : 'N/A'}`;
+                        }
+                    }
+                }
+            },
+            scales: {
+                y: {
+                    type: 'linear',
+                    position: 'left',
+                    suggestedMin: 0,
+                    suggestedMax: 100,
+                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    ticks: { callback: (val) => val.toFixed(0) + '%' },
+                    title: { display: true, text: 'Deposit Beta & MMF Share (%)' }
+                },
+                y1: {
+                    type: 'linear',
+                    position: 'right',
+                    grid: { drawOnChartArea: false },
+                    suggestedMin: 0,
+                    ticks: { callback: (val) => val.toFixed(0) + ' bps' },
+                    title: { display: true, text: 'Interbank Spread (bps)' }
+                },
+                x: {
+                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    ticks: { maxTicksLimit: 8 }
+                }
+            }
+        }
+    });
+}
+
 export function resizeMacroCharts() {
     const instances = [
         macroEconomyChartInstance, macroRatesChartInstance, macroMortgageChartInstance,
@@ -2457,7 +2853,8 @@ export function resizeMacroCharts() {
         macroFciChartInstance, macroCostPushChartInstance,
         macroSectoralInflationChartInstance, macroCreditCliffChartInstance,
         macroInventoryCycleChartInstance, macroFaitChartInstance,
-        macroLeadingIndicatorsChartInstance
+        macroLeadingIndicatorsChartInstance,
+        macroHouseholdCreditChartInstance, macroGlobalCycleChartInstance, macroBankingLiquidityChartInstance
     ];
     instances.forEach(c => {
         if (c) {
@@ -2492,4 +2889,7 @@ export function destroyMacroCharts() {
     macroInventoryCycleChartInstance = destroyChartInstance(macroInventoryCycleChartInstance);
     macroFaitChartInstance = destroyChartInstance(macroFaitChartInstance);
     macroLeadingIndicatorsChartInstance = destroyChartInstance(macroLeadingIndicatorsChartInstance);
+    macroHouseholdCreditChartInstance = destroyChartInstance(macroHouseholdCreditChartInstance);
+    macroGlobalCycleChartInstance = destroyChartInstance(macroGlobalCycleChartInstance);
+    macroBankingLiquidityChartInstance = destroyChartInstance(macroBankingLiquidityChartInstance);
 }

@@ -422,6 +422,41 @@ class MathUtility
     }
 
     /**
+     * Number of Poisson arrivals over an interval with the given mean (Knuth's product-of-uniforms method,
+     * exact for the small means a tick produces). Unlike the Bernoulli gate the jump helpers use, more than
+     * one event can land in a tick.
+     */
+    public function generatePoissonCount(float $mean): int
+    {
+        if ($mean <= 0.0) {
+            return 0;
+        }
+
+        $limit = exp(-$mean);
+        $count = 0;
+        $product = 1.0;
+        do {
+            $count++;
+            $product *= $this->generateUniform();
+        } while ($product > $limit);
+
+        return $count - 1;
+    }
+
+    /**
+     * A single-parameter Pareto severity (Klugman, Panjer & Willmot, Loss Models): inverse-CDF draw
+     * scale x U^(-1/alpha), truncated at a cap so a finite portfolio has a finite worst case. With alpha
+     * between one and two the mean exists (scale x alpha / (alpha - 1)) but the untruncated variance does not,
+     * which is what an insured-catastrophe tail looks like.
+     */
+    public function generateParetoSeverity(float $scale, float $alpha, float $cap): float
+    {
+        $u = max(0.0000001, 1.0 - $this->generateUniform());
+
+        return min($cap, max(0.0, $scale) * ($u ** (-1.0 / max(0.01, $alpha))));
+    }
+
+    /**
      * Andersen's Quadratic-Exponential (QE) Discretization Scheme (2008).
      * Calculates the next variance state strictly positively, without bias.
      *
@@ -740,6 +775,24 @@ class MathUtility
     public static function excessOverBaseline(float $value, float $baseline): float
     {
         return max(0.0, ($value - $baseline) / max(1e-9, abs($baseline)));
+    }
+
+    /**
+     * A leverage (debt-to-equity) limit with a capital buffer added to the equity it implies.
+     *
+     * A debt-to-equity cap L is a minimum equity share of assets 1/(1+L). Basel III's countercyclical buffer
+     * is an add-on to that minimum, so the buffered cap is the leverage that the raised share allows:
+     * L' = 1 / (1/(1+L) + b) - 1. At L = 10 the full 2.5% buffer takes the cap to 7.6.
+     *
+     * @param float $leverageLimit Debt-to-equity cap without the buffer.
+     * @param float $capitalBuffer Buffer as a share of assets (0 to 0.025 under Basel III).
+     * @return float Debt-to-equity cap with the buffer, never above the unbuffered cap.
+     */
+    public static function calculateBufferedLeverageLimit(float $leverageLimit, float $capitalBuffer): float
+    {
+        $equityShare = 1.0 / (1.0 + max(0.0, $leverageLimit));
+
+        return max(0.0, (1.0 / ($equityShare + max(0.0, $capitalBuffer))) - 1.0);
     }
 
     /**
@@ -2150,6 +2203,7 @@ class MathUtility
      * @param float $dW                 Standard normal random shock.
      * @param float $kappa              Speed of adjustment toward fundamental deal capacity.
      * @param float $sigma              Stochastic deal volatility.
+     * @param float $policyUncertaintyIndex Policy-uncertainty index (BBD scale, 100 neutral); boards defer deals while the regime is in question.
      * @return float Updated deal activity index clamped between 20.0 and 250.0.
      */
     public function calculateCapitalMarketsDealIndexStep(
@@ -2160,16 +2214,19 @@ class MathUtility
         float $dt,
         float $dW,
         float $kappa = 1.60,
-        float $sigma = 0.15
+        float $sigma = 0.15,
+        float $policyUncertaintyIndex = MacroEngine::EPU_BASELINE
     ): float {
         $erpExcess = ($equityRiskPremium - MacroEngine::BASE_EQUITY_RISK_PREMIUM) / 0.015;
         // 500 bps is one cycle-standard-deviation of HY OAS (2000-2024), so a 2008-type +1,500 bps reads as three units of stress.
         $hyExcess = ($hyCreditSpread - (MacroEngine::BASE_CREDIT_SPREAD * MacroEngine::HY_BASE_SPREAD_MULTIPLIER)) / 0.050;
         $volExcess = ($marketVolatility - MacroEngine::MACRO_VOL_BASE_ANCHOR) / 0.06;
+        $epuExcess = log(max(1.0, $policyUncertaintyIndex) / MacroEngine::EPU_BASELINE) / MacroEngine::EPU_CYCLE_LOG_SD;
 
         $stressExponent = - (MacroEngine::DEAL_ACTIVITY_ERP_BETA * $erpExcess)
             - (MacroEngine::DEAL_ACTIVITY_HY_BETA * $hyExcess)
-            - (MacroEngine::DEAL_ACTIVITY_VOL_BETA * $volExcess);
+            - (MacroEngine::DEAL_ACTIVITY_VOL_BETA * $volExcess)
+            - (MacroEngine::DEAL_ACTIVITY_EPU_BETA * $epuExcess);
         $targetIndex = MacroEngine::DEAL_ACTIVITY_BASELINE * exp(max(-MacroEngine::DEAL_ACTIVITY_LOG_RANGE, min(MacroEngine::DEAL_ACTIVITY_LOG_RANGE, $stressExponent)));
 
         $drift = $kappa * ($targetIndex - $currentDealIndex) * $dt;
@@ -2260,7 +2317,8 @@ class MathUtility
      * @param float $sloosTightening      SLOOS bank mortgage credit tightening percentage.
      * @param float $dt                   Time step in years.
      * @param float $dW                   Standard normal random shock.
-     * @param array{baseline: float, qSens: float, costSens: float, sloosSens: float, kappa: float, sigma: float, min: float, max: float} $params Calibration parameters.
+     * @param array{baseline: float, qSens: float, costSens: float, sloosSens: float, kappa: float, sigma: float, min: float, max: float, creditGapSens?: float} $params Calibration parameters.
+     * @param float $creditGap            Excess credit-to-GDP gap relative to trend.
      * @return float Updated housing starts index.
      */
     public function calculateTobinsQHousingStarts(
@@ -2272,7 +2330,8 @@ class MathUtility
         float $sloosTightening,
         float $dt,
         float $dW,
-        array $params
+        array $params,
+        float $creditGap = 0.0
     ): float {
         $effectiveCost = max(0.20, $replacementCostRatio);
         $tobinsQ = $residentialPriceRatio / $effectiveCost;
@@ -2280,11 +2339,13 @@ class MathUtility
 
         $userCostExcess = $userCost - $neutralUserCost;
         $creditDrag = max(0.0, $sloosTightening);
+        $creditGapSens = $params['creditGapSens'] ?? 0.0;
 
         $targetStarts = $params['baseline']
             + ($params['qSens'] * $qExcess)
             - ($params['costSens'] * $userCostExcess)
-            - ($params['sloosSens'] * $creditDrag);
+            - ($params['sloosSens'] * $creditDrag)
+            + ($creditGapSens * $creditGap);
 
         $clampedTarget = max($params['min'], min($params['max'], $targetStarts));
 
@@ -2454,6 +2515,19 @@ class MathUtility
      * @param float $sensitivity  Trade volume elasticity multiplier.
      * @return float Trade volume shift bounded in [-0.20, 0.20].
      */
+    /**
+     * Export demand shift from the foreign bloc's cycle: the mirror of the trade-balance shift, for the firms
+     * whose customers are abroad. Bounded like it.
+     *
+     * @param float $foreignOutputGap Foreign output gap (fraction).
+     * @param float $sensitivity      Export volume elasticity to the foreign gap.
+     * @return float Volume shift bounded in [-0.20, 0.20].
+     */
+    public static function calculateForeignDemandShift(float $foreignOutputGap, float $sensitivity = 2.0): float
+    {
+        return max(-0.20, min(0.20, $foreignOutputGap * $sensitivity));
+    }
+
     public static function calculateTradeBalanceShift(
         float $tradeBalance,
         float $baseline = MacroEngine::TRADE_BALANCE_BASELINE,

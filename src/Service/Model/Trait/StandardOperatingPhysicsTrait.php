@@ -104,8 +104,9 @@ trait StandardOperatingPhysicsTrait
     public const MAX_INPUT_COST_DRAG = 0.50;
 
     /**
-     * Shares of the VARIABLE cost base bought in each tracked input market. Channels: energy, metals, agri,
-     * freight, ppi (wholesale intermediate goods) and labor (variable payroll). Shares need not sum to one;
+     * Shares of the VARIABLE cost base bought in each tracked input market. Channels: energy (oil-linked),
+     * gas (natural gas and the power priced off it), metals, agri, freight, ppi (wholesale intermediate
+     * goods) and labor (variable payroll). Shares need not sum to one;
      * the remainder is bought at prices no macro index tracks. Sector models declare INPUT_COST_EXPOSURES.
      *
      * @return array<string, float>
@@ -205,6 +206,7 @@ trait StandardOperatingPhysicsTrait
     {
         return [
             'energy'  => $macroState->energyCostPushLag / \App\Service\Macro\MacroEngine::ENERGY_COST_PUSH_TRANSMISSION,
+            'gas'     => ($macroState->naturalGasPriceIndexEma - 100.0) / 100.0,
             'metals'  => ($macroState->industrialMetalsIndexEma - 100.0) / 100.0,
             'agri'    => ($macroState->agriculturalCommodityIndexEma - 100.0) / 100.0,
             'freight' => ($macroState->freightRateIndexEma - 100.0) / 100.0,
@@ -275,9 +277,10 @@ trait StandardOperatingPhysicsTrait
         $basis = defined('static::PRICING_INFLATION_BASIS') ? (string) static::PRICING_INFLATION_BASIS : 'tips_breakeven_ema';
 
         return match ($basis) {
-            'supercore_inflation_ema' => $macroState->supercoreInflationEma,
-            'inflation_ema'           => $macroState->inflationEma,
-            default                   => $macroState->tipsBreakevenEma,
+            'supercore_inflation_ema'   => $macroState->supercoreInflationEma,
+            'inflation_ema'             => $macroState->inflationEma,
+            'reimbursement_rate_growth' => $macroState->reimbursementRateGrowth,
+            default                     => $macroState->tipsBreakevenEma,
         };
     }
 

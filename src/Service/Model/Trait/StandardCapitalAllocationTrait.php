@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service\Model\Trait;
 
+use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Math\FinancialConstants;
 
@@ -39,12 +40,12 @@ trait StandardCapitalAllocationTrait
             : FinancialConstants::STD_STANDARD_GROWTH_LIMIT;
     }
 
-    public function getRegulatoryDividendCap(Stock $stock, float $currentTreasury): ?float
+    public function getRegulatoryDividendCap(Stock $stock, float $currentTreasury, ?MacroStateDTO $macroState = null): ?float
     {
         return null;
     }
 
-    public function checkBuybackRegulatoryLockout(Stock $stock, float $currentTreasury): ?bool
+    public function checkBuybackRegulatoryLockout(Stock $stock, float $currentTreasury, ?MacroStateDTO $macroState = null): ?bool
     {
         return null;
     }

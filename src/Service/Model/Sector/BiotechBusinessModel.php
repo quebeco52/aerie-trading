@@ -200,6 +200,10 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
     /** Valuation discount on the earnings multiple while clinical trial funding keeps FCF negative. */
     public const NEGATIVE_FCF_VAL_DISCOUNT = 0.88;
 
+    // --- Reimbursement Pricing Power ---
+    /** Reimbursement rate update basis for marketed branded therapeutics: commercial payers follow CMS administered pricing updates. */
+    public const PRICING_INFLATION_BASIS = 'reimbursement_rate_growth';
+
     public function getReversionSpeed(): float
     {
         return 0.15;
@@ -325,8 +329,10 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
         $knownShift = $streams->getPersistedState(self::STATE_KNOWN_COMMERCIAL_SHIFT, 0.0);
         $baseRevenue = $expectedRevenue / max(0.1, 1.0 + $knownShift);
 
-        $establishedRevenue = max(0.0, $baseRevenue * $establishedWeight * $commercialMultiplier * (1.0 + ($establishedZ * ($baselineVol * self::COMMERCIAL_VARIANCE_SCALAR))));
-        $pipelineRevenue    = max(0.0, $baseRevenue * $pipelineWeight    * (1.0 + ($pipelineZ    * ($baselineVol * self::PIPELINE_VARIANCE_SCALAR))));
+        $reimbursementBaseline = \App\Service\Macro\MacroEngine::TARGET_INFLATION - \App\Service\Macro\MacroEngine::REIMBURSEMENT_PRODUCTIVITY_OFFSET;
+        $reimbursementShift    = $macroState->reimbursementRateGrowth - $reimbursementBaseline;
+        $establishedRevenue    = max(0.0, $baseRevenue * $establishedWeight * $commercialMultiplier * (1.0 + ($establishedZ * ($baselineVol * self::COMMERCIAL_VARIANCE_SCALAR)) + $reimbursementShift));
+        $pipelineRevenue       = max(0.0, $baseRevenue * $pipelineWeight    * (1.0 + ($pipelineZ    * ($baselineVol * self::PIPELINE_VARIANCE_SCALAR))));
 
         $preEventPipelineRevenue = $pipelineRevenue;
         $preErosionEstablished   = $erosionFactor > 0.0 ? ($establishedRevenue / $erosionFactor) : $establishedRevenue;
@@ -550,6 +556,7 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
         return [
             'energy_cost_push_lag',
             'producer_price_inflation_ema',
+            'reimbursement_rate_growth',
             'wage_growth_ema',
         ];
     }

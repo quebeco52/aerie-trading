@@ -335,6 +335,61 @@ class NarrativeEngine
                     "Yield curve warning: Sustained negative term spread signaled tight monetary conditions and economic deceleration ahead.",
                 ]
             ),
+            ShockEvent::HOUSEHOLD_DELEVERAGING => $this->getRandomPhrase(
+                isset($context['dsr_pct']) ? [
+                    "Household deleveraging: With debt service at {$context['dsr_pct']}% of income" . (isset($context['debt_to_income_pct']) ? " on debt of {$context['debt_to_income_pct']}% of income" : "") . ", households are repaying rather than spending.",
+                    "Credit cycle turns: Debt service reached {$context['dsr_pct']}% of income and household borrowing is now contracting, the bust that follows a credit boom.",
+                    "Consumers pull back: Servicing debt at {$context['dsr_pct']}% of income, households cut spending to pay it down; lenders' order books thin.",
+                ] : [
+                    "Household deleveraging: Debt service past the warning line, households are repaying rather than spending.",
+                    "Credit cycle turns: Household borrowing is contracting, the bust that follows a credit boom.",
+                    "Consumers pull back: Households cut spending to pay down debt; lenders' order books thin.",
+                ]
+            ),
+            ShockEvent::NATURAL_CATASTROPHE => $this->getRandomPhrase(
+                isset($context['cat_severity']) ? [
+                    "Natural catastrophe: A storm struck the district with insured losses of {$context['cat_severity']}x an average year's, hitting carriers, landlords and the grid at once.",
+                    "Disaster declared: Physical damage across the district ran to {$context['cat_severity']}x an average year's insured losses; rebuilding contracts will follow the claims.",
+                    "Catastrophe losses mount: A single event cost {$context['cat_severity']}x a normal year's claims, and every underwriter in the district is exposed to the same one.",
+                ] : [
+                    "Natural catastrophe: A storm struck the district, hitting carriers, landlords and the grid at once.",
+                    "Disaster declared: Physical damage across the district ran to a multiple of an average year's insured losses.",
+                    "Catastrophe losses mount: A single event cost a normal year's claims, and every underwriter is exposed to the same one.",
+                ]
+            ),
+            ShockEvent::SOVEREIGN_DOWNGRADE => $this->getRandomPhrase(
+                isset($context['sovereign_spread_bps']) ? [
+                    "Sovereign downgrade: Rating agencies cut the district's credit standing as the fiscal risk premium on its bonds reached {$context['sovereign_spread_bps']} bps" . (isset($context['debt_to_gdp_pct']) ? " with debt at {$context['debt_to_gdp_pct']}% of GDP" : "") . ".",
+                    "Fiscal re-rating: The sovereign risk premium widened to {$context['sovereign_spread_bps']} bps, lifting every borrower's cost of funds through the sovereign ceiling.",
+                    "Debt sustainability warning: Investors demanded {$context['sovereign_spread_bps']} bps over the risk-free level to hold district debt, and the currency sold off with it.",
+                ] : [
+                    "Sovereign downgrade: Rating agencies cut the district's credit standing as the fiscal risk premium on its bonds widened sharply.",
+                    "Fiscal re-rating: The sovereign risk premium widened, lifting every borrower's cost of funds through the sovereign ceiling.",
+                    "Debt sustainability warning: Investors demanded a rising premium to hold district debt, and the currency sold off with it.",
+                ]
+            ),
+            ShockEvent::ELECTION_HELD => $this->getRandomPhrase(
+                isset($context['epu_index']) ? [
+                    "District election held: Voters returned a government for a fresh term, with the policy-uncertainty index at {$context['epu_index']} into the vote.",
+                    "Polls closed: A new legislative term begins, resolving a campaign that had lifted policy uncertainty to {$context['epu_index']}.",
+                    "Election result declared: Boards that had deferred decisions through a campaign at {$context['epu_index']} on the uncertainty index now know the regime they face.",
+                ] : [
+                    "District election held: Voters returned a government for a fresh term.",
+                    "Polls closed: A new legislative term begins, resolving the campaign's policy uncertainty.",
+                    "Election result declared: Boards that had deferred decisions through the campaign now know the regime they face.",
+                ]
+            ),
+            ShockEvent::SECTOR_STRIKE => $this->getRandomPhrase(
+                isset($context['strike_sector']) ? [
+                    "Work stoppage: Unions across the {$context['strike_sector']} sector walked out, halting output at the district's largest employers in the industry.",
+                    "Strike action: A sector-wide stoppage in {$context['strike_sector']} shut production lines and service desks pending a settlement.",
+                    "Labor dispute: {$context['strike_sector']} employers face a coordinated walkout, with lost output mounting until a wage settlement is reached.",
+                ] : [
+                    "Work stoppage: A sector-wide walkout halted output at several of the district's largest employers.",
+                    "Strike action: A coordinated stoppage shut production lines and service desks pending a settlement.",
+                    "Labor dispute: Employers face a sector-wide walkout, with lost output mounting until a wage settlement is reached.",
+                ]
+            ),
             ShockEvent::TITAN_INTERVENTION => $this->getRandomPhrase(
                 isset($context['qe_intensity_pct']) ? [
                     "Central bank Quantitative Easing: Monetary authority expanded asset purchases (QE intensity: {$context['qe_intensity_pct']}%) to compress bond yields and inject liquidity" . (isset($context['output_gap_pct']) ? " amid negative output gap ({$context['output_gap_pct']}%)" : "") . ".",

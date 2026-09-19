@@ -9,6 +9,7 @@ use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\EventDispatcher\EventSubscriberInterface;
 use App\Data\MacroFieldCatalog;
 use App\Data\Sectors;
+use App\Service\Model\Sector\PrivateEquityBusinessModel;
 
 class EarningsReportSubscriber implements EventSubscriberInterface
 {
@@ -452,9 +453,9 @@ class EarningsReportSubscriber implements EventSubscriberInterface
                 } elseif (in_array($streamKey, ['carried_interest', 'principal_investments'])) {
                     $drivers[] = [
                         'label'  => 'LBO Exit & Performance Hurdle Realization',
-                        'impact' => round(($macro->outputGapEma * 1.10) - (($macro->macroCreditSpreadEma - 0.02) * 2.0), 4),
+                        'impact' => round(($macro->outputGapEma * 1.10) - (($macro->highYieldCreditSpreadEma - PrivateEquityBusinessModel::LBO_CREDIT_SPREAD_BASELINE) * 0.60), 4),
                         'type'   => 'macro',
-                        'fields' => ['macro_credit_spread_ema', 'output_gap_ema'],
+                        'fields' => ['high_yield_credit_spread_ema', 'output_gap_ema'],
                     ];
                 }
                 break;
@@ -642,7 +643,6 @@ class EarningsReportSubscriber implements EventSubscriberInterface
                 break;
 
             case 'commodity':
-            case 'steel_manufacturing':
                 $metalsShift = ($macro->industrialMetalsIndexEma - 100.0) / 100.0;
                 $drivers[] = [
                     'label'  => 'Industrial Metals Benchmark Price',
@@ -667,13 +667,47 @@ class EarningsReportSubscriber implements EventSubscriberInterface
                 }
                 break;
 
+            case 'steel_manufacturing':
+                $metalsShift = ($macro->industrialMetalsIndexEma - 100.0) / 100.0;
+                $drivers[] = [
+                    'label'  => 'Industrial Metals Benchmark Price',
+                    'impact' => round($metalsShift * 0.50, 4),
+                    'type'   => 'macro',
+                    'fields' => ['industrial_metals_index_ema'],
+                ];
+                $drivers[] = [
+                    'label'  => 'Global & Domestic Steel Demand',
+                    'impact' => round(($macro->outputGapEma * 1.20 * $beta) + ($macro->foreignOutputGapEma * 0.75), 4),
+                    'type'   => 'macro',
+                    'fields' => ['output_gap_ema', 'foreign_output_gap_ema'],
+                ];
+                $fxDumping = (($macro->exchangeRateIndexEma - 100.0) / 100.0) - $macro->foreignOutputGapEma;
+                if (abs($fxDumping) >= 0.01) {
+                    $drivers[] = [
+                        'label'  => 'FX Strength & Import Competition',
+                        'impact' => round(-$fxDumping * 0.30, 4),
+                        'type'   => 'macro',
+                        'fields' => ['exchange_rate_index_ema', 'foreign_output_gap_ema'],
+                    ];
+                }
+                $gasCost = ($macro->naturalGasPriceIndexEma - 100.0) / 100.0;
+                if (abs($gasCost) >= 0.01) {
+                    $drivers[] = [
+                        'label'  => 'Natural Gas Smelting Cost',
+                        'impact' => round(-$gasCost * 0.15, 4),
+                        'type'   => 'macro',
+                        'fields' => ['natural_gas_price_index_ema'],
+                    ];
+                }
+                break;
+
             case 'biotech':
                 if ($streamKey === 'commercial_therapeutics') {
                     $drivers[] = [
-                        'label'  => 'Biologic Prescription Demand & Pricing',
-                        'impact' => round(($macro->inflationEma - 0.02) * 0.50, 4),
+                        'label'  => 'Healthcare Reimbursement Rate Update',
+                        'impact' => round(($macro->reimbursementRateGrowth - (0.02 - 0.008)) * 1.0, 4),
                         'type'   => 'macro',
-                        'fields' => ['inflation_ema'],
+                        'fields' => ['reimbursement_rate_growth'],
                     ];
                 } elseif ($streamKey === 'pipeline_licensing_milestones') {
                     // Idiosyncratic, not macro: this is struck off the company's own asset

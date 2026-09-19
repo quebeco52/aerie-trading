@@ -91,7 +91,7 @@
 				{# Filter Pills #}
 				<div class="flex items-center flex-wrap gap-1.5" id="macroCategoryPills">
 					<button class="macro-cat-btn px-3 py-1.5 text-xs font-bold rounded-lg transition-all whitespace-nowrap cursor-pointer bg-primary text-on-primary shadow-md shadow-primary/20" aria-pressed="true" data-category="all">
-						ALL <span class="ml-1 opacity-75 font-mono text-3xs">(22)</span>
+						ALL <span class="ml-1 opacity-75 font-mono text-3xs">(25)</span>
 					</button>
 					<button class="macro-cat-btn px-3 py-1.5 text-xs font-bold rounded-lg transition-all whitespace-nowrap cursor-pointer bg-surface-container text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface" aria-pressed="false" data-category="monetary">
 						MONETARY & YIELDS <span class="ml-1 opacity-75 font-mono text-3xs">(5)</span>
@@ -103,10 +103,10 @@
 						GROWTH & LABOR <span class="ml-1 opacity-75 font-mono text-3xs">(5)</span>
 					</button>
 					<button class="macro-cat-btn px-3 py-1.5 text-xs font-bold rounded-lg transition-all whitespace-nowrap cursor-pointer bg-surface-container text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface" aria-pressed="false" data-category="credit">
-						CREDIT & LIQUIDITY <span class="ml-1 opacity-75 font-mono text-3xs">(4)</span>
+						CREDIT & LIQUIDITY <span class="ml-1 opacity-75 font-mono text-3xs">(6)</span>
 					</button>
 					<button class="macro-cat-btn px-3 py-1.5 text-xs font-bold rounded-lg transition-all whitespace-nowrap cursor-pointer bg-surface-container text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface" aria-pressed="false" data-category="assets">
-						REAL ASSETS & TRADE <span class="ml-1 opacity-75 font-mono text-3xs">(4)</span>
+						REAL ASSETS & TRADE <span class="ml-1 opacity-75 font-mono text-3xs">(5)</span>
 					</button>
 				</div>
 
@@ -414,10 +414,10 @@
 							</div>
 							<div class="min-w-0">
 								<div class="flex items-center gap-2 flex-wrap">
-									<h4 class="text-xs font-bold text-on-surface">Commodity Indices & 3:2:1 Refining Crack Spread</h4>
-									<span class="text-4xs font-mono text-primary/80 bg-primary/10 px-1.5 py-0.5 rounded border border-primary/20 shrink-0">CME: WTI / LME Metals</span>
+									<h4 class="text-xs font-bold text-on-surface">Commodity Indices, Natural Gas & 3:2:1 Crack Spread</h4>
+									<span class="text-4xs font-mono text-primary/80 bg-primary/10 px-1.5 py-0.5 rounded border border-primary/20 shrink-0">CME: WTI, NG / LME</span>
 								</div>
-								<p class="text-3xs text-on-surface-variant truncate">Energy, metals & agriculture spot prices vs petroleum refining crack spread ($/bbl)</p>
+								<p class="text-3xs text-on-surface-variant truncate">Crude oil, natural gas, metals & agriculture spot indices vs refining crack spread ($/bbl)</p>
 							</div>
 						</div>
 						<div class="flex items-center gap-2 shrink-0">
@@ -476,10 +476,10 @@
 							</div>
 							<div class="min-w-0">
 								<div class="flex items-center gap-2 flex-wrap">
-									<h4 class="text-xs font-bold text-on-surface">Fiscal Policy & Sovereign Debt Dynamics</h4>
-									<span class="text-4xs font-mono text-primary/80 bg-primary/10 px-1.5 py-0.5 rounded border border-primary/20 shrink-0">US TREASURY / CBO</span>
+									<h4 class="text-xs font-bold text-on-surface">Fiscal Stance, Sovereign Debt & Risk Premium</h4>
+									<span class="text-4xs font-mono text-primary/80 bg-primary/10 px-1.5 py-0.5 rounded border border-primary/20 shrink-0">TREASURY / CBO: FISCAL</span>
 								</div>
-								<p class="text-3xs text-on-surface-variant truncate">Public expenditure index vs cumulative sovereign debt-to-GDP accumulation</p>
+								<p class="text-3xs text-on-surface-variant truncate">Fiscal spending index, sovereign debt, primary deficit & Laubach debt risk spread</p>
 							</div>
 						</div>
 						<div class="flex items-center gap-2 shrink-0">
@@ -805,6 +805,99 @@
 					</div>
 					<div class="chart-canvas-container h-80 md:h-85 w-full relative">
 						<canvas id="macroLeadingIndicatorsChart"></canvas>
+					</div>
+				</div>
+
+				{# Chart 22: Household Credit Cycle & Macroprudential Buffers (BIS, BCBS Basel III) #}
+				<div class="chart-card bg-surface-container-low border border-outline-variant/15 rounded-lg p-5 hover:border-outline-variant/30 transition-all flex flex-col justify-between" data-macro-category="credit">
+					<div class="flex items-start justify-between mb-3 gap-2">
+						<div class="flex items-center gap-2.5 min-w-0">
+							<div class="p-2 rounded bg-indigo-500/10 text-indigo-400 shrink-0">
+								<span class="material-symbols-outlined text-lg leading-none">account_balance</span>
+							</div>
+							<div class="min-w-0">
+								<div class="flex items-center gap-2 flex-wrap">
+									<h4 class="text-xs font-bold text-on-surface">Household Credit Cycle & Macroprudential Buffers</h4>
+									<span class="text-4xs font-mono text-primary/80 bg-primary/10 px-1.5 py-0.5 rounded border border-primary/20 shrink-0">BIS: CREDIT / BASEL III</span>
+								</div>
+								<p class="text-3xs text-on-surface-variant truncate">Household Debt Service Ratio (DSR), Debt-to-Income, Credit-to-GDP gap & Basel III CCyB buffer</p>
+							</div>
+						</div>
+						<div class="flex items-center gap-2 shrink-0">
+							<div class="hidden sm:flex flex-col items-end text-right">
+								<span class="text-4xs font-semibold uppercase tracking-wide text-on-surface-variant/70">Latest</span>
+								<span class="text-xs font-mono font-bold text-on-surface tabular-nums" id="hud-macroHouseholdCreditChart">-</span>
+							</div>
+							<span class="text-4xs font-semibold px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant uppercase tracking-wide">Macroprudential</span>
+							<button type="button" class="expand-chart-btn p-1 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface transition-all cursor-pointer" title="Toggle Fullscreen / Expand">
+								<span class="material-symbols-outlined text-[15px] expand-icon">open_in_full</span>
+							</button>
+						</div>
+					</div>
+					<div class="chart-canvas-container h-80 md:h-85 w-full relative">
+						<canvas id="macroHouseholdCreditChart"></canvas>
+					</div>
+				</div>
+
+				{# Chart 23: Global Economic Divergence & Foreign Demand (OECD, IMF Spillovers) #}
+				<div class="chart-card bg-surface-container-low border border-outline-variant/15 rounded-lg p-5 hover:border-outline-variant/30 transition-all flex flex-col justify-between" data-macro-category="assets">
+					<div class="flex items-start justify-between mb-3 gap-2">
+						<div class="flex items-center gap-2.5 min-w-0">
+							<div class="p-2 rounded bg-teal-500/10 text-teal-400 shrink-0">
+								<span class="material-symbols-outlined text-lg leading-none">public</span>
+							</div>
+							<div class="min-w-0">
+								<div class="flex items-center gap-2 flex-wrap">
+									<h4 class="text-xs font-bold text-on-surface">Global Economic Divergence & Foreign Demand</h4>
+									<span class="text-4xs font-mono text-primary/80 bg-primary/10 px-1.5 py-0.5 rounded border border-primary/20 shrink-0">OECD / IMF: SPILLOVERS</span>
+								</div>
+								<p class="text-3xs text-on-surface-variant truncate">Domestic vs foreign output gap divergence, global demand trade gap & foreign policy rate</p>
+							</div>
+						</div>
+						<div class="flex items-center gap-2 shrink-0">
+							<div class="hidden sm:flex flex-col items-end text-right">
+								<span class="text-4xs font-semibold uppercase tracking-wide text-on-surface-variant/70">Latest</span>
+								<span class="text-xs font-mono font-bold text-on-surface tabular-nums" id="hud-macroGlobalCycleChart">-</span>
+							</div>
+							<span class="text-4xs font-semibold px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant uppercase tracking-wide">Global Trade</span>
+							<button type="button" class="expand-chart-btn p-1 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface transition-all cursor-pointer" title="Toggle Fullscreen / Expand">
+								<span class="material-symbols-outlined text-[15px] expand-icon">open_in_full</span>
+							</button>
+						</div>
+					</div>
+					<div class="chart-canvas-container h-80 md:h-85 w-full relative">
+						<canvas id="macroGlobalCycleChart"></canvas>
+					</div>
+				</div>
+
+				{# Chart 24: Banking Liquidity, Deposit Betas & Money Market Flight (Drechsler-Savov-Schnabl) #}
+				<div class="chart-card bg-surface-container-low border border-outline-variant/15 rounded-lg p-5 hover:border-outline-variant/30 transition-all flex flex-col justify-between" data-macro-category="credit">
+					<div class="flex items-start justify-between mb-3 gap-2">
+						<div class="flex items-center gap-2.5 min-w-0">
+							<div class="p-2 rounded bg-amber-500/10 text-amber-400 shrink-0">
+								<span class="material-symbols-outlined text-lg leading-none">swap_horiz</span>
+							</div>
+							<div class="min-w-0">
+								<div class="flex items-center gap-2 flex-wrap">
+									<h4 class="text-xs font-bold text-on-surface">Banking Liquidity, Deposit Betas & MMF Flight</h4>
+									<span class="text-4xs font-mono text-primary/80 bg-primary/10 px-1.5 py-0.5 rounded border border-primary/20 shrink-0">FED: H.8 / ICI MMF</span>
+								</div>
+								<p class="text-3xs text-on-surface-variant truncate">System deposit beta pass-through, money market fund asset share & interbank liquidity spread</p>
+							</div>
+						</div>
+						<div class="flex items-center gap-2 shrink-0">
+							<div class="hidden sm:flex flex-col items-end text-right">
+								<span class="text-4xs font-semibold uppercase tracking-wide text-on-surface-variant/70">Latest</span>
+								<span class="text-xs font-mono font-bold text-on-surface tabular-nums" id="hud-macroBankingLiquidityChart">-</span>
+							</div>
+							<span class="text-4xs font-semibold px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant uppercase tracking-wide">Liquidity Channel</span>
+							<button type="button" class="expand-chart-btn p-1 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface transition-all cursor-pointer" title="Toggle Fullscreen / Expand">
+								<span class="material-symbols-outlined text-[15px] expand-icon">open_in_full</span>
+							</button>
+						</div>
+					</div>
+					<div class="chart-canvas-container h-80 md:h-85 w-full relative">
+						<canvas id="macroBankingLiquidityChart"></canvas>
 					</div>
 				</div>
 			</div>

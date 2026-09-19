@@ -38,7 +38,7 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
 
     // --- Input Cost Basket ---
     /** Shares of the variable cost base bought in tracked input markets (energy, metals, agri, freight, wholesale goods, variable payroll). */
-    public const INPUT_COST_EXPOSURES = ['energy' => 0.40, 'labor' => 0.15, 'ppi' => 0.05];
+    public const INPUT_COST_EXPOSURES = ['gas' => 0.30, 'energy' => 0.10, 'labor' => 0.15, 'ppi' => 0.05];
     /** Fuel adjustment clauses and rate cases eventually recover costs in full: unit elasticity, but only after the regulatory lag. */
     public const PRICING_ELASTICITY = 1.00;
     /** Rate cases take 12 to 24 months: authorized tariffs follow costs with a long lag. */
@@ -106,6 +106,8 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
     // --- Tail Risk & Refinancing Physics ---
     /** Z-score threshold indicating a catastrophic grid failure, pipeline explosion, or wildfire liability. */
     public const GRID_FAILURE_Z_SCORE       = -2.50;
+    /** District catastrophe burden (average-year units, smoothed) at which the grid is damaged badly enough to open the liability and hardening regime without any failure of the utility's own. */
+    public const CATASTROPHE_GRID_DAMAGE_THRESHOLD = 4.0;
     /** Variable cost penalty applied to fund massive environmental liabilities or emergency grid repairs. */
     public const GRID_FAILURE_PENALTY       = 0.15;
     /** Regime key for the multi-year liability, litigation and rebuild period after a grid failure or wildfire. */
@@ -212,7 +214,8 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
         $eventType = null;
         $disasterPenalty = 0.0;
 
-        if ($eventZ < self::GRID_FAILURE_Z_SCORE && $liabilityElapsed === 0) {
+        $districtStormDamage = $macroState->catastropheLossIndexEma >= self::CATASTROPHE_GRID_DAMAGE_THRESHOLD;
+        if (($eventZ < self::GRID_FAILURE_Z_SCORE || $districtStormDamage) && $liabilityElapsed === 0) {
             $liabilityElapsed = $streams->startRegime(self::REGIME_INFRASTRUCTURE_LIABILITY);
             $eventType = ShockEvent::INFRASTRUCTURE_FAILURE;
             $disasterPenalty = self::GRID_FAILURE_PENALTY;
@@ -234,9 +237,9 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
 
         // --- Merchant Spark Spread Crush ---
         // Unregulated merchant power relies on the "spark spread" (wholesale electricity price minus fuel input cost).
-        // If the energy index spikes violently, the spark spread collapses.
-        $energyShift = max(0.0, $macroState->energyCostPushLag / MacroEngine::ENERGY_COST_PUSH_TRANSMISSION);
-        $sparkSpreadCrush = $energyShift * 0.20 * $unregulatedWeight;
+        // The fuel is gas: a gas squeeze the power price has not yet followed collapses the spread.
+        $gasShift = max(0.0, ($macroState->naturalGasPriceIndexEma - MacroEngine::NATURAL_GAS_BASELINE) / MacroEngine::NATURAL_GAS_BASELINE);
+        $sparkSpreadCrush = $gasShift * 0.20 * $unregulatedWeight;
 
         // --- Margin Aggregation ---
         // Apply all structurally driven operating cost penalties to the baseline margin. The rate-base debt
@@ -335,9 +338,11 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
     public function getOperatingMacroFields(): array
     {
         return [
+            'catastrophe_loss_index_ema',
             'energy_cost_push_lag',
             'exchange_rate_index_ema',
             'inflation_ema',
+            'natural_gas_price_index_ema',
             'output_gap_ema',
             'producer_price_inflation_ema',
             'tips_breakeven_ema',

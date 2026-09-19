@@ -63,6 +63,16 @@ class MacroEngine
     /** Headline inflation per unit energy shock (~7% CPI weight at ~35% retail pass-through): +60% energy adds ~1.5pp. */
     public const ENERGY_COST_PUSH_TRANSMISSION = 0.025;
 
+    // --- Physical Catastrophes (Klugman, Panjer & Willmot compound Poisson; Noy 2009) ---
+    /** Relative catastrophe frequency by calendar quarter [Q1..Q4], summing to 4.0: Q3 carries the Atlantic wind season, Q1 the winter freeze and storm peak. Read by the loss process and by the insurers' seasonal threshold. */
+    public const CATASTROPHE_SEASONALITY = [0.80, 0.70, 1.90, 0.60];
+    /** Stationary standard deviation of the loss index (~1.0 on a mean of 1.0, from lambda E[S^2] / 2 decay with the Pareto tail truncated); the insurers standardise the burden by it. */
+    public const CATASTROPHE_LOSS_INDEX_SD = 1.0;
+
+    // --- Natural Gas (Pilipovic 1998; Ramberg & Parsons 2012) ---
+    /** Baseline natural gas index (neutral gas-to-oil relationship, the oil index times a unit ratio). */
+    public const NATURAL_GAS_BASELINE = 100.0;
+
     // --- Theory of Storage & Commodity Buffer Stocks (Working 1949, Litzenberger-Rabinowitz 1995) ---
     /** Baseline physical commodity inventory index (neutral buffer stock). */
     public const COMMODITY_INVENTORY_BASELINE = 100.0;
@@ -166,6 +176,10 @@ class MacroEngine
     // --- MUNDELL-FLEMING OPEN ECONOMY (IS-LM-BOP) ---
     /** Baseline exchange rate index (neutral purchasing power parity). */
     public const EXCHANGE_RATE_BASELINE = 100.0;
+    /** The foreign bloc's neutral policy rate (a G7 average), the level its Taylor rule and the UIP differential rest on. */
+    public const GLOBAL_BASELINE_RATE = 0.025;
+    /** Weight of the district's own gap in the global demand that prices its commodities: a developed economy that is small in world demand. */
+    public const DOMESTIC_DEMAND_WEIGHT = 0.35;
     /** Equity volatility above which flight-to-safety flows begin, for both the FX bid and the term premium. */
     public const FLIGHT_TO_SAFETY_VOL_THRESHOLD = 0.25;
 
@@ -309,6 +323,38 @@ class MacroEngine
     /** Fraction of a stock's non-market variance loaded onto its sector factor, setting within- vs cross-sector correlation. */
     public const SECTOR_FACTOR_VARIANCE_SHARE = 0.20;
 
+    // --- Household Balance Sheet (Mian & Sufi 2018; Drehmann, Illes, Juselius & Santos 2015; Basel III CCyB) ---
+    /** Household debt to disposable income at the seeded neutral (unity, the advanced-economy average). */
+    public const HOUSEHOLD_DEBT_TO_INCOME_BASELINE = 1.00;
+    /** The BIS debt-service ratio at neutral rates and baseline leverage: 0.7 x 6.35% mortgage + 0.3 x 11.5% consumer = 7.9% on an 18-year annuity, 10.6% of income (the US long-run average). */
+    public const HOUSEHOLD_DSR_NEUTRAL = 0.106;
+    /** Debt-service gap (ratio over its own long-run average) at which households deleverage (Drehmann & Juselius 2012: a DSR ~2pp over its average is the early-warning threshold). */
+    public const HOUSEHOLD_DSR_STRESS_MARGIN = 0.02;
+    /** Spread of the 30-year mortgage over the ten-year (~170 bps), read by the housing user cost and the household debt service. */
+    public const RESIDENTIAL_MORTGAGE_SPREAD = 0.017;
+
+    // --- Deposits Channel (Drechsler, Savov & Schnabl 2017) ---
+    /** System-wide deposit beta at the neutral policy rate (~0.20): the share of a rate rise banks pass to depositors, and the level the bank model's competitive advantage is normalised to. */
+    public const SYSTEM_DEPOSIT_BETA_BASE = 0.20;
+    /** Share of household liquid assets held in money-market funds at the neutral deposit spread (~15%, the US share outside a hiking cycle). */
+    public const MMF_SHARE_BASE = 0.15;
+
+    // --- Economic Policy Uncertainty (Baker, Bloom & Davis 2016) ---
+    /** Neutral level of the policy-uncertainty index (the BBD index is normalised to a mean of 100). */
+    public const EPU_BASELINE = 100.0;
+    /** One cycle-standard-deviation of the log index (~0.35): the unit the deal-flow elasticity is quoted in. */
+    public const EPU_CYCLE_LOG_SD = 0.35;
+    /** Log-elasticity of deal flow to one standard deviation of policy uncertainty: acquisition activity falls by single-digit percents per sd (Bonaime, Gulen & Ion 2018). */
+    public const DEAL_ACTIVITY_EPU_BETA = 0.10;
+
+    // --- Administered Healthcare Prices (CMS market-basket update) ---
+    /** Productivity offset subtracted from the annual reimbursement update (ACA s.3401 multifactor-productivity adjustment, ~0.5-1.0pp a year). Read by the fiscal subsystem and by the state's opening value. */
+    public const REIMBURSEMENT_PRODUCTIVITY_OFFSET = 0.008;
+
+    // --- Work Stoppages ---
+    /** Sector demand lost per year of stoppage, in units of the sector factor's standard deviation: a five-week stoppage costs the struck sector about half a standard deviation of its persistent demand, which the one-year factor then unwinds. */
+    public const STRIKE_SECTOR_DEMAND_LOSS_PER_YEAR = 5.0;
+
     // --- District-Wide Systemic Event Triggers ---
     /** Minimum simulated years between district-wide events, so a sustained crisis reports once rather than every tick. */
     public const SYSTEMIC_EVENT_COOLDOWN_YEARS = 0.25;
@@ -316,6 +362,8 @@ class MacroEngine
     public const SYSTEMIC_LIQUIDITY_FREEZE_SPREAD = 0.0100;
     /** High-yield spread (1000 bps) at which speculative-grade primary issuance effectively shuts. */
     public const SYSTEMIC_CREDIT_SEIZURE_SPREAD = 0.1000;
+    /** Sovereign risk spread (150 bps) at which the fiscal position is formally re-rated: the level at which an advanced sovereign loses its top rating. */
+    public const SYSTEMIC_SOVEREIGN_STRESS_SPREAD = 0.015;
     /** Recession probability above which the downturn is formally declared. */
     public const SYSTEMIC_RECESSION_DECLARE_PROBABILITY = 0.50;
     /** Output gap that must accompany the probability trigger, confirming output is genuinely contracting. */
@@ -442,6 +490,7 @@ class MacroEngine
         $this->aggregateSubsystem->calculateNaturalRate($state, $tfpTrendGrowthRate, $dt);
 
         // 3. Labor Market: Okun's Law & Diamond-Mortensen-Pissarides Beveridge Curve
+        $this->laborSubsystem->advanceWorkStoppages($state, $dt);
         $this->laborSubsystem->calculateUnemployment($state, $dt);
         $this->laborSubsystem->calculateLaborMarketAndWages($state, $tfpTrendGrowthRate, $dt);
 
@@ -473,6 +522,10 @@ class MacroEngine
 
         $this->assetSubsystem->updateSystemicMarketFactor($state, $dt);
         $this->aggregateSubsystem->updateCapitalStockOverhang($state, $dt);
+        // Policy uncertainty runs before the gap, the vol anchor and the deal index that read it.
+        $this->creditFiscalSubsystem->calculatePolicyUncertainty($state, $dt);
+        // The foreign bloc runs before the currency, the trade balance and the commodity demand that read it.
+        $this->assetSubsystem->calculateForeignEconomy($state, $dt);
 
         $stressMultiplier = 1.0 + (abs($state->outputGap) * self::STRESS_MULTIPLIER_GAP_SENSITIVITY);
         $expectedInflation = $this->monetarySubsystem->calculateExpectedInflation($state, self::TARGET_INFLATION);
@@ -480,14 +533,17 @@ class MacroEngine
 
         $this->aggregateSubsystem->calculateCapacityUtilization($state);
         $this->commoditySubsystem->calculateEnergyShock($state, $dt);
+        $this->commoditySubsystem->calculateNaturalGasIndex($state, $dt);
         $this->commoditySubsystem->calculateRefiningCrackSpread($state, $dt);
         $this->assetSubsystem->calculateExchangeRate($state, $dt);
         $this->assetSubsystem->calculateTradeBalance($state, $dt);
         $this->commoditySubsystem->calculateIndustrialMetalsIndex($state, $dt);
         $this->creditFiscalSubsystem->calculateGovernmentSpending($state, $dt);
         $this->assetSubsystem->calculateCommercialPropertyIndex($state, $dt);
+        $this->creditFiscalSubsystem->calculateHouseholdCredit($state, $dt);
         $this->creditFiscalSubsystem->calculateRetailDefaultRate($state, $dt);
         $this->commoditySubsystem->calculateAgriculturalCommodityIndex($state, $dt);
+        $this->commoditySubsystem->calculateCatastropheLosses($state, $dt);
         $this->commoditySubsystem->calculateFreightRateIndex($state, $dt);
         $this->commoditySubsystem->calculateSupplyChainPressureIndex($state);
         $this->assetSubsystem->calculateResidentialPropertyIndex($state, $expectedInflation, $dt);
@@ -500,6 +556,7 @@ class MacroEngine
 
         $this->aggregateSubsystem->calculateManufacturingPmi($state, $dt);
         $this->monetarySubsystem->calculateMoneySupplyGrowth($state, $dt, $tfpTrendGrowthRate);
+        $this->monetarySubsystem->calculateDepositChannel($state, $dt);
 
         $this->aggregateSubsystem->updateExponentialMovingAverages($state, $dt);
 
@@ -511,6 +568,8 @@ class MacroEngine
         $this->aggregateSubsystem->calculatePotentialAndNominalGdp($state, $dt, $tfpTrendGrowthRate);
         $this->creditFiscalSubsystem->calculateDynamicFiscalPolicy($state, $dt);
         $this->creditFiscalSubsystem->calculateSovereignDebt($state, $dt);
+        $this->creditFiscalSubsystem->calculateSovereignRiskSpread($state, $dt);
+        $this->creditFiscalSubsystem->calculateReimbursementRate($state, $dt);
         $this->assetSubsystem->calculateEquityRiskPremium($state);
         $this->assetSubsystem->calculateFinancialConditionsIndex($state, $dt);
         $this->assetSubsystem->calculateConsumerSentiment($state, $dt);
@@ -550,6 +609,12 @@ class MacroEngine
             $previous = (float) ($state->sectorDemandZ[$sector] ?? 0.0);
             $state->sectorDemandZ[$sector] = ($decay * $previous) + ($innovationScale * $this->mathUtility->generateStandardNormal());
         }
+
+        // A work stoppage is lost output for one sector: a flow out of its persistent demand for as long
+        // as it runs, which the factor's own decay then unwinds over the following year.
+        if ($state->strikeSector !== null && isset($state->sectorDemandZ[$state->strikeSector])) {
+            $state->sectorDemandZ[$state->strikeSector] -= self::STRIKE_SECTOR_DEMAND_LOSS_PER_YEAR * $dt;
+        }
     }
 
     /**
@@ -581,6 +646,9 @@ class MacroEngine
             $state->highYieldCreditSpread >= self::SYSTEMIC_CREDIT_SEIZURE_SPREAD
             => ShockEvent::CREDIT_MARKET_SEIZURE,
 
+            $state->sovereignRiskSpread >= self::SYSTEMIC_SOVEREIGN_STRESS_SPREAD
+            => ShockEvent::SOVEREIGN_DOWNGRADE,
+
             // The backstop only reads as a backstop if it arrives while conditions are actually stressed.
             $state->qeIntensity >= self::SYSTEMIC_INTERVENTION_QE_INTENSITY && $state->outputGapEma < 0.0
             => ShockEvent::TITAN_INTERVENTION,
@@ -588,6 +656,15 @@ class MacroEngine
             $state->recessionProbability >= self::SYSTEMIC_RECESSION_DECLARE_PROBABILITY
                 && $state->outputGap <= self::SYSTEMIC_RECESSION_DECLARE_GAP
             => ShockEvent::RECESSION_DECLARED,
+
+            // A storm big enough to make the news, reported on the tick it lands.
+            $state->lastCatastropheAt === $state->totalTime
+            => ShockEvent::NATURAL_CATASTROPHE,
+
+            // Households paying down debt under a service burden past the warning line: the bust that follows a credit boom.
+            $state->householdDebtServiceGap >= self::HOUSEHOLD_DSR_STRESS_MARGIN
+                && $state->householdDebtToIncome < $state->householdDebtToIncomeEma
+            => ShockEvent::HOUSEHOLD_DELEVERAGING,
 
             $state->inversionDuration >= self::SYSTEMIC_INVERSION_ALARM_YEARS
             => ShockEvent::YIELD_CURVE_INVERSION_ALARM,
@@ -597,6 +674,14 @@ class MacroEngine
                 && $state->outputGapEma < 0.0
                 && $state->outputGap > $state->outputGapEma
             => ShockEvent::SOVEREIGN_WEALTH_DEPLOYMENT,
+
+            // A scheduled election is news on the day, but never over a crisis.
+            $state->lastElectionAt === $state->totalTime
+            => ShockEvent::ELECTION_HELD,
+
+            // Lowest rank: a stoppage is sector news, reported on the tick it begins and never over a crisis.
+            $state->strikeSector !== null && $state->strikeStartedAt === $state->totalTime
+            => ShockEvent::SECTOR_STRIKE,
 
             default => null,
         };

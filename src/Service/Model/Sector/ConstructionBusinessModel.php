@@ -95,6 +95,10 @@ class ConstructionBusinessModel extends StandardCorporateBusinessModel
 
     /** Drag on construction financing per unit of SLOOS bank lending standard tightening. */
     public const SLOOS_CREDIT_TIGHTENING_SCALAR = 0.30;
+    /** Sensitivity of private development EPC orders to the credit-to-GDP gap. */
+    public const CREDIT_GAP_ORDER_SENSITIVITY = 0.50;
+    /** Civil orders per unit of district catastrophe burden above an average year: a season at twice the average burden adds a tenth to the infrastructure order book. */
+    public const CATASTROPHE_REBUILD_SENSITIVITY = 0.10;
 
 
     // --- Tail Risk & Shock Events ---
@@ -205,10 +209,12 @@ class ConstructionBusinessModel extends StandardCorporateBusinessModel
         $housingStartsShift = MathUtility::calculateHousingStartsShift($macroState->housingStartsIndexEma, sensitivity: self::HOUSING_STARTS_SENSITIVITY);
         $sloosDrag = max(0.0, $macroState->sloosTighteningIndexEma) * self::SLOOS_CREDIT_TIGHTENING_SCALAR;
 
-        $commercialMacroBoost = ($outputGap * 1.5 * $beta) + ($commercialPropertyShift * 0.30) + ($residentialShift * 0.20) + $housingStartsShift;
+        $commercialMacroBoost = ($outputGap * 1.5 * $beta) + ($commercialPropertyShift * 0.30) + ($residentialShift * 0.20) + $housingStartsShift + ($macroState->creditToGdpGapEma * self::CREDIT_GAP_ORDER_SENSITIVITY);
         $commercialCreditDrag = max(0.0, ($policyRate - $macroState->naturalRateEma) * 2.0 * $beta) + $sloosDrag;
         $maintenanceMacroBoost = ($outputGap * 0.3 * $beta);
         $govSpendShift = ($macroState->governmentSpendingIndexEma - 100.0) / 100.0;
+        // Reconstruction after a storm season is civil work booked into the backlog (Hallegatte 2008 on post-disaster reconstruction demand).
+        $rebuildShift = max(0.0, $macroState->catastropheLossIndexEma - 1.0) * self::CATASTROPHE_REBUILD_SENSITIVITY;
 
         // --- Tail Risk Events ---
         // A slipped fixed-price project books its forward loss on the onset quarter and then bleeds idle
@@ -238,7 +244,7 @@ class ConstructionBusinessModel extends StandardCorporateBusinessModel
         $commercialShock = $commercialZ * ($baselineVol * self::COMMERCIAL_EPC_VARIANCE_SCALAR);
         $maintenanceShock = $maintenanceZ * ($baselineVol * self::FACILITIES_MAINTENANCE_VARIANCE_SCALAR);
 
-        $civilBook = $streams->recognizeBacklog('civil_infrastructure', $expectedRevenue * $civilWeight, max(0.0, (1.0 + $civilShock + ($govSpendShift * 0.30)) * $dealMultiplier), self::CIVIL_BACKLOG_BURN_RATE);
+        $civilBook = $streams->recognizeBacklog('civil_infrastructure', $expectedRevenue * $civilWeight, max(0.0, (1.0 + $civilShock + ($govSpendShift * 0.30) + $rebuildShift) * $dealMultiplier), self::CIVIL_BACKLOG_BURN_RATE);
         $commercialBook = $streams->recognizeBacklog('commercial_epc', $expectedRevenue * $commercialWeight, max(0.0, 1.0 + $commercialShock + $commercialMacroBoost - $commercialCreditDrag), self::COMMERCIAL_BACKLOG_BURN_RATE);
 
         $civilRevenue = $civilBook['revenue'];
@@ -297,7 +303,9 @@ class ConstructionBusinessModel extends StandardCorporateBusinessModel
     public function getOperatingMacroFields(): array
     {
         return [
+            'catastrophe_loss_index_ema',
             'commercial_property_index_ema',
+            'credit_to_gdp_gap_ema',
             'energy_cost_push_lag',
             'exchange_rate_index_ema',
             'freight_rate_index_ema',

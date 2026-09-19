@@ -100,6 +100,8 @@ class RailroadBusinessModel extends StandardCorporateBusinessModel
     public const PMI_CARLOAD_SENSITIVITY = 0.50;
     /** Sensitivity of intermodal container rail traffic to international merchandise trade balance. */
     public const TRADE_BALANCE_SENSITIVITY = 1.20;
+    /** Export volume per unit of the foreign bloc's output gap: the customers-abroad half of the trade term. */
+    public const FOREIGN_DEMAND_SENSITIVITY = 0.80;
 
     // --- Rolling Stock & Track Infrastructure Reinvestment Physics ---
     /** Quarterly margin decay rate per unit of underinvestment below track and locomotive replacement CapEx. */
@@ -167,7 +169,8 @@ class RailroadBusinessModel extends StandardCorporateBusinessModel
         // Macro cyclicality
         $freightShift = ($macroState->freightRateIndexEma - 100.0) / 100.0;
         $agriShift = ($macroState->agriculturalCommodityIndexEma - 100.0) / 100.0;
-        $tradeShift = MathUtility::calculateTradeBalanceShift($macroState->tradeBalanceToGdpEma, sensitivity: self::TRADE_BALANCE_SENSITIVITY);
+        $tradeShift = MathUtility::calculateTradeBalanceShift($macroState->tradeBalanceToGdpEma, sensitivity: self::TRADE_BALANCE_SENSITIVITY)
+            + MathUtility::calculateForeignDemandShift($macroState->foreignOutputGapEma, sensitivity: self::FOREIGN_DEMAND_SENSITIVITY);
         $pmiShift = MathUtility::calculatePmiDemandShift($macroState->manufacturingPmiEma, sensitivity: self::PMI_CARLOAD_SENSITIVITY);
 
         $intermodalMacroShift = ($macroState->outputGapEma * 1.6 * $beta) + ($freightShift * 0.20) + $tradeShift;
@@ -247,6 +250,7 @@ class RailroadBusinessModel extends StandardCorporateBusinessModel
             'agricultural_commodity_index_ema',
             'energy_cost_push_lag',
             'exchange_rate_index_ema',
+            'foreign_output_gap_ema',
             'freight_rate_index_ema',
             'industrial_metals_index_ema',
             'manufacturing_pmi_ema',
