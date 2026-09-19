@@ -289,6 +289,11 @@ class MonetaryPolicySubsystem
             $effectiveTarget = $currentPolicyRate;
         }
 
+        // Both branches lean on the cyclical trend rather than the tick, so it is resolved once.
+        $cyclicalGap = ($state->outputGapEma === 0.015 && $state->outputGap !== 0.015)
+            ? $state->outputGap
+            : $state->outputGapEma;
+
         if ($effectiveTarget > $currentPolicyRate) {
             $cbSpeed = self::CB_HIKE_SMOOTHING_SPEED;
             $effectiveInflation = max($state->inflation, $state->inflationEma);
@@ -296,16 +301,14 @@ class MonetaryPolicySubsystem
             $panicMultiplier = min(self::CB_MAX_HIKE_PANIC_SPEED, $inflationPanicExcess * self::CB_INFLATION_PANIC_SCALE);
             $cbSpeed += $panicMultiplier;
 
+            // The Volcker velocity cap stays a function of the inflation panic alone: running hot is a
+            // reason to close the gap to the rule's target faster, not to hike at emergency speed.
             $panicFraction = min(1.0, $panicMultiplier / self::CB_MAX_HIKE_PANIC_SPEED);
             $maxHikeVelocity = MacroEngine::CB_MAX_NORMAL_HIKE_VELOCITY + $panicFraction * (MacroEngine::CB_MAX_PANIC_HIKE_VELOCITY - MacroEngine::CB_MAX_NORMAL_HIKE_VELOCITY);
 
             $rawMove = $cbSpeed * ($effectiveTarget - $currentPolicyRate);
             $clampedMove = min($maxHikeVelocity, $rawMove);
         } else {
-            $cyclicalGap = ($state->outputGapEma === 0.015 && $state->outputGap !== 0.015)
-                ? $state->outputGap
-                : $state->outputGapEma;
-
             $cbSpeed = self::CB_CUT_SMOOTHING_SPEED;
             $effectiveDeflation = min($state->inflation, $state->inflationEma);
             $deflationPanic = max(0.0, MacroEngine::TARGET_INFLATION - $effectiveDeflation) * self::CB_INFLATION_PANIC_SCALE;

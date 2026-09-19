@@ -1297,7 +1297,7 @@ class InitialMarket
             // 1,770B of capital employed and left its own operating subsidiaries below the 20% of the
             // balance sheet AnchorHoldings::MIN_CONSOLIDATED_SHARE requires them to be — a trust whose
             // stakes swallow it has no operations left to draw a stream from. 2,010B puts them back at 25%.
-            'total_equity' => 2_010_000_000_000.00,
+            'total_equity' => 2_090_000_000_000.00,
             'customer_deposits' => 0.00,
             'wholesale_debt' => 140_000_000_000.00,
             'retained_earnings' => 1_200_000_000_000.00

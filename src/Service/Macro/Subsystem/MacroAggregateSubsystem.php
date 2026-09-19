@@ -43,7 +43,7 @@ class MacroAggregateSubsystem
     /** Linear momentum of aggregate demand feedback loop. */
     public const KALDOR_MOMENTUM = 0.12;
     /** Cubic stabilization factor bounding extreme boom/bust expansions. */
-    public const KALDOR_CAPACITY = 500.0;
+    public const KALDOR_CAPACITY = 600.0;
     /** Sensitivity of aggregate demand to real interest rate deviations from natural rate. */
     public const KALDOR_MONETARY_DRAG = 1.30;
     /** Sensitivity of aggregate demand to wholesale credit spread and interbank liquidity friction (Bernanke-Gertler 1999). */
@@ -52,6 +52,8 @@ class MacroAggregateSubsystem
     public const KALDOR_FISCAL_MULTIPLIER = 0.50;
     /** Sensitivity of the output gap to physical capital stock overhang: the slow half of the Kaldor-Kalecki phase space, and the pent-up demand that ends a slump once the overhang has gone negative. */
     public const KALDOR_CAPITAL_DRAG = 0.25;
+    /** Demand response to a capital SHORTFALL, well under the drag an excess exerts: scrapped capacity does not summon construction while balance sheets are still impaired (Bertola-Caballero 1994 irreversibility). */
+    public const KALDOR_CAPITAL_REBOUND_DRAG = 0.08;
     /** Bruno-Sachs (1985) supply-side elasticity of output to energy price shock (Blanchard-Gali 2007). */
     public const KALDOR_ENERGY_SUPPLY_DRAG = 0.004;
     /** Supply-side elasticity of output to excess freight/logistics costs. */
@@ -276,7 +278,16 @@ class MacroAggregateSubsystem
         $spendingShift = ($state->governmentSpendingIndexEma / MacroEngine::GOVT_SPENDING_BASELINE) - 1.0;
         $fiscalStimulus = (self::KALDOR_FISCAL_MULTIPLIER * (MacroEngine::TARGET_CORPORATE_TAX_RATE - $state->corporateTaxRate))
             + (self::KALDOR_GOVT_SPENDING_MULTIPLIER * $spendingShift);
-        $capitalDrag = self::KALDOR_CAPITAL_DRAG * $state->capitalStockOverhang;
+        // Excess capacity dampens investment hard; a capital SHORTFALL does not summon construction at the
+        // same rate, because investment is irreversible and the firms that would build are the ones whose
+        // balance sheets the slump just impaired (Bertola & Caballero 1994). Read as one linear coefficient
+        // the term is a spring: measured over 960 simulated years the overhang's minimum doubled as busts
+        // deepened (-0.84% to -1.72%) while its maximum barely moved, so every unit of pain was stored and
+        // paid straight back into the next boom -- which is why a one-sided credit drag made the cycle
+        // bigger on BOTH sides rather than left-skewed.
+        $capitalDrag = $state->capitalStockOverhang >= 0.0
+            ? self::KALDOR_CAPITAL_DRAG * $state->capitalStockOverhang
+            : self::KALDOR_CAPITAL_REBOUND_DRAG * $state->capitalStockOverhang;
 
         $housingWealthEffect = (($state->residentialPropertyIndexEma / MacroEngine::RESIDENTIAL_BASELINE) - 1.0) * self::KALDOR_WEALTH_EFFECT_ELASTICITY;
 

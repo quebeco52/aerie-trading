@@ -30,7 +30,7 @@ class MacroStateBuilder
         $this->state->unemploymentRate = MacroEngine::NATURAL_UNEMPLOYMENT;
         $this->state->macroCreditSpread = MacroEngine::BASE_CREDIT_SPREAD;
         $this->state->macroCreditSpreadEma = MacroEngine::BASE_CREDIT_SPREAD;
-        $this->state->highYieldCreditSpread = MacroEngine::BASE_CREDIT_SPREAD * 2.5;
+        $this->state->highYieldCreditSpread = MacroEngine::BASE_CREDIT_SPREAD * MacroEngine::HY_BASE_SPREAD_MULTIPLIER;
         $this->state->highYieldCreditSpreadEma = $this->state->highYieldCreditSpread;
         $this->state->yield10y = 0.040;
         $this->state->yield2y = 0.038;

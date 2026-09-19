@@ -2,6 +2,7 @@
 
 namespace App\Tests\Service\Macro\Subsystem;
 
+use App\Service\Macro\MacroEngine;
 use App\Service\Macro\MacroState;
 use App\Service\Macro\Subsystem\LaborMarketSubsystem;
 use PHPUnit\Framework\TestCase;
@@ -82,6 +83,60 @@ class LaborMarketSubsystemTest extends TestCase
      * shock lifted headline inflation by ~195bps and nominal wage growth by 2bps, so real pay fell by the
      * whole of the shock and the second round of the spiral never happened.
      */
+    /**
+     * Scarring has to be reversible. The re-absorption term used to be the product of two deviations,
+     * which is a rounding error at every reachable state: measured over 960 simulated years NAIRU only
+     * ever ratcheted up, +0.58pp per 80 years in all twelve seeds, its maximum always equal to its final
+     * value. The old test only asserted the sign of one year's move from a hand-built 6% NAIRU, so an
+     * inert recovery passed it. This pins the rate, and therefore the closure of the ratchet.
+     */
+    public function testScarringUnwindsOnceTheLabourMarketTightensAgain(): void
+    {
+        $state = new MacroState();
+        $state->nairu = MacroEngine::NATURAL_UNEMPLOYMENT;
+        $state->unemploymentRate = 0.060;
+        $state->outputGap = -0.04;
+
+        // Two years held 2pp above NAIRU. The EMA is pinned by hand so this exercises the NAIRU law
+        // rather than Okun's Law feeding back into it.
+        for ($quarter = 0; $quarter < 8; $quarter++) {
+            $state->unemploymentRateEma = 0.060;
+            $this->subsystem->calculateUnemployment($state, 0.25);
+        }
+        $scarred = $state->nairu;
+
+        // 0.10/yr x (6.0% - 4.0% - 0.5%) x 2yr ~ +0.29pp, shrinking slightly as NAIRU itself rises.
+        $this->assertGreaterThan(
+            MacroEngine::NATURAL_UNEMPLOYMENT + 0.0020,
+            $scarred,
+            'Two years of sustained slack must leave structural scarring behind.'
+        );
+
+        // Ten years with the market tight. Re-absorption is linear in the scarring, so the excess decays
+        // geometrically: (1 - 0.10 x 0.25)^40 of it survives.
+        $state->unemploymentRate = 0.035;
+        for ($quarter = 0; $quarter < 40; $quarter++) {
+            $state->unemploymentRateEma = 0.035;
+            $this->subsystem->calculateUnemployment($state, 0.25);
+        }
+
+        $surviving = (1.0 - (LaborMarketSubsystem::NAIRU_REABSORPTION_SPEED * 0.25)) ** 40;
+        $expected = MacroEngine::NATURAL_UNEMPLOYMENT
+            + (($scarred - MacroEngine::NATURAL_UNEMPLOYMENT) * $surviving);
+
+        $this->assertEqualsWithDelta(
+            $expected,
+            $state->nairu,
+            1e-6,
+            'A tight labour market must re-absorb scarring at its own speed, not at the product of two deviations.'
+        );
+        $this->assertLessThan(
+            MacroEngine::NATURAL_UNEMPLOYMENT + (($scarred - MacroEngine::NATURAL_UNEMPLOYMENT) * 0.40),
+            $state->nairu,
+            'Most of the scarring must be gone after a decade of tight labour markets: the ratchet has to close.'
+        );
+    }
+
     public function testWageDemandsIndexToExpectedInflationOneForOne(): void
     {
         $anchored = $this->convergedWageGrowth(0.02);

@@ -352,6 +352,56 @@ class MacroAggregateSubsystemTest extends TestCase
         );
     }
 
+    /**
+     * The Kaldor-Kalecki capital term is the slow half of the phase space, and read through one linear
+     * coefficient it behaves as a spring: whatever a slump takes out of the capital stock is handed back as
+     * pent-up demand on the way up. Measured over 960 simulated years, as busts deepened the overhang's
+     * minimum doubled (-0.84% to -1.72%) while its maximum barely moved, so a one-sided drag on the downside
+     * came back as a BIGGER boom and the gap's skew moved the wrong way. Investment is irreversible: idle
+     * plant stops orders immediately, scrapped plant does not start them (Bertola & Caballero 1994).
+     */
+    public function testACapitalShortfallReboundsMoreSlowlyThanAnExcessDrags(): void
+    {
+        $overhang = 0.020;
+
+        // Built before any call: calculateOutputGap mutates the inventory and demand disturbance it is
+        // handed, so a state cloned afterwards would not be a clean control.
+        $neutral = new MacroState();
+        $neutral->outputGap = 0.0;
+        $neutral->outputGapEma = 0.0;
+        $neutral->capitalStockOverhang = 0.0;
+
+        $excess = clone $neutral;
+        $excess->capitalStockOverhang = $overhang;
+
+        $shortfall = clone $neutral;
+        $shortfall->capitalStockOverhang = -$overhang;
+
+        $gapNeutral = $this->subsystem->calculateOutputGap($neutral, 0.035, MacroEngine::BASE_NATURAL_RATE, 0.25, 1.0);
+        $gapExcess = $this->subsystem->calculateOutputGap($excess, 0.035, MacroEngine::BASE_NATURAL_RATE, 0.25, 1.0);
+        $gapShortfall = $this->subsystem->calculateOutputGap($shortfall, 0.035, MacroEngine::BASE_NATURAL_RATE, 0.25, 1.0);
+
+        $this->assertEqualsWithDelta(
+            -MacroAggregateSubsystem::KALDOR_CAPITAL_DRAG * $overhang * 0.25,
+            $gapExcess - $gapNeutral,
+            1e-9,
+            'Excess capacity must subtract its calibrated drag from the output gap drift.'
+        );
+
+        $this->assertEqualsWithDelta(
+            MacroAggregateSubsystem::KALDOR_CAPITAL_REBOUND_DRAG * $overhang * 0.25,
+            $gapShortfall - $gapNeutral,
+            1e-9,
+            'A capital shortfall must return demand at its own, slower rate.'
+        );
+
+        $this->assertLessThan(
+            abs($gapExcess - $gapNeutral),
+            abs($gapShortfall - $gapNeutral),
+            'An equal and opposite shortfall must not hand back as much demand as the excess took away: that symmetry is the spring that pays a deep bust straight back as a bigger boom.'
+        );
+    }
+
     public function testFarmPriceCollapseLowersFoodCostPushBelowZero(): void
     {
         $state = new MacroState();
