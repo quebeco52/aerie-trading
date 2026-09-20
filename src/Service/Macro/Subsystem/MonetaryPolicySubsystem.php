@@ -70,8 +70,8 @@ class MonetaryPolicySubsystem
     public const TAYLOR_INFLATION_ANCHOR_WEIGHT = 0.30;
     /** Evans Rule forward guidance: Maximum inflation ceiling tolerated while holding rates at ZLB. */
     public const EVANS_RULE_INFLATION_CAP = 0.025;
-    /** Central bank baseline rate hiking smoothing speed per year (Woodford 2003 inertial gradualism). */
-    public const CB_HIKE_SMOOTHING_SPEED = 0.80;
+    /** Rate hiking partial-adjustment speed per year (Woodford 2003 inertial gradualism, Clarida-Gali-Gertler rho ~0.8 quarterly); at 0.8 the rate trailed a rising target by ~140bp through every boom and policy never turned restrictive. */
+    public const CB_HIKE_SMOOTHING_SPEED = 1.00;
     /** Central bank baseline rate cutting smoothing speed per year (rapid crisis easing). */
     public const CB_CUT_SMOOTHING_SPEED = 1.20;
     /** Inflation panic reaction multiplier accelerating rate hikes during extreme inflation spikes. */
@@ -200,10 +200,10 @@ class MonetaryPolicySubsystem
      */
     public function calculateExpectedInflation(MacroState $state, float $targetInflation): float
     {
-        $coreWeight = MacroEngine::INFLATION_WEIGHT_SUPERCORE + MacroEngine::INFLATION_WEIGHT_GOODS;
+        $coreWeight = MacroAggregateSubsystem::INFLATION_WEIGHT_SUPERCORE + MacroAggregateSubsystem::INFLATION_WEIGHT_GOODS;
         if ($coreWeight > 0 && ($state->supercoreInflationEma !== $targetInflation || $state->coreGoodsInflationEma !== $targetInflation)) {
-            $coreInflation = ((MacroEngine::INFLATION_WEIGHT_SUPERCORE * $state->supercoreInflationEma)
-                + (MacroEngine::INFLATION_WEIGHT_GOODS * $state->coreGoodsInflationEma)) / $coreWeight;
+            $coreInflation = ((MacroAggregateSubsystem::INFLATION_WEIGHT_SUPERCORE * $state->supercoreInflationEma)
+                + (MacroAggregateSubsystem::INFLATION_WEIGHT_GOODS * $state->coreGoodsInflationEma)) / $coreWeight;
         } else {
             $coreInflation = $state->inflationEma;
         }
@@ -282,8 +282,11 @@ class MonetaryPolicySubsystem
      * The ten-year moves for reasons the policy rate does not set: the term premium drifting from its structural
      * baseline, and the market's perceived long-run policy rate drifting from the model-consistent endpoint.
      * Both tighten or loosen financial conditions (mortgages, cap rates, sentiment, business borrowing), so the
-     * rule offsets a share of them. The central bank's own balance sheet is excluded: QE is meant to compress
-     * the premium and the rule must not undo it.
+     * rule offsets a share of them. The central bank's own footprint is excluded twice over: QE is meant to
+     * compress the premium and the rule must not undo it, and the compression a restrictive stance itself
+     * produces (calculateYieldCurve's tightening term) is not news about the premium either. Read as news, it
+     * was a loop: tightening compressed the premium, the rule leaned against the compression by tightening
+     * further, and the target sat ~0.4pp above its own rule through every late-cycle inversion.
      *
      * @param MacroState $state       Current macroeconomic state.
      * @param float      $naturalRate Dynamic natural real rate of interest (r*).
@@ -296,7 +299,8 @@ class MonetaryPolicySubsystem
             tau: 10.0,
             habitatSensitivity: MacroEngine::PREFERRED_HABITAT_DURATION_SENSITIVITY
         );
-        $premiumDeviation = ($state->termPremium10yEma - $habitatShiftAtTenYears) - MacroEngine::NS_BASE_TERM_PREMIUM;
+        $ownCompression = $this->restrictiveCompression($state, $naturalRate);
+        $premiumDeviation = ($state->termPremium10yEma - $habitatShiftAtTenYears + $ownCompression) - MacroEngine::NS_BASE_TERM_PREMIUM;
 
         $slopeLoad10y = (1.0 - exp(-10.0 * MacroEngine::SVENSSON_SLOPE_LAMBDA)) / (10.0 * MacroEngine::SVENSSON_SLOPE_LAMBDA);
         $endpointDeviation = self::KOZICKI_TINSLEY_ENDPOINT_WEIGHT
@@ -304,6 +308,24 @@ class MonetaryPolicySubsystem
             * (1.0 - $slopeLoad10y);
 
         return $premiumDeviation + $endpointDeviation;
+    }
+
+    /**
+     * Term premium compression a restrictive stance produces, fading with the time spent restrictive.
+     *
+     * One definition shared by the curve, which subtracts it, and the long-rate gap, which must not read it
+     * as a premium move to lean against.
+     *
+     * @param MacroState $state       Current macroeconomic state.
+     * @param float      $naturalRate Dynamic natural real rate of interest (r*).
+     * @return float Premium compression in yield units, zero at or below neutral.
+     */
+    private function restrictiveCompression(MacroState $state, float $naturalRate): float
+    {
+        $rawTighteningCompression = self::TERM_PREMIUM_TIGHTENING_COMPRESSION * max(0.0, $state->policyRate - ($naturalRate + MacroEngine::TARGET_INFLATION));
+        $compressionDecay = exp(-self::TERM_PREMIUM_COMPRESSION_DECAY_RATE * $state->restrictiveDuration);
+
+        return $rawTighteningCompression * $compressionDecay;
     }
 
     /**
@@ -554,9 +576,7 @@ class MonetaryPolicySubsystem
         $inflationRiskPremium = self::TERM_PREMIUM_IRP_EXPECTATION_SCALE * max(0.0, $state->tipsBreakeven - MacroEngine::TARGET_INFLATION);
         $flightToSafetyShift = self::FLIGHT_TO_SAFETY_SENSITIVITY * max(0.0, $state->marketVolatilityEma - MacroEngine::FLIGHT_TO_SAFETY_VOL_THRESHOLD);
         $cyclicalTermPremium = $state->outputGap * self::NS_GAP_TERM_PREMIUM_SCALE;
-        $rawTighteningCompression = self::TERM_PREMIUM_TIGHTENING_COMPRESSION * max(0.0, $state->policyRate - ($naturalRate + MacroEngine::TARGET_INFLATION));
-        $compressionDecay = exp(-self::TERM_PREMIUM_COMPRESSION_DECAY_RATE * $state->restrictiveDuration);
-        $restrictiveCompression = $rawTighteningCompression * $compressionDecay;
+        $restrictiveCompression = $this->restrictiveCompression($state, $naturalRate);
         // The fiscal premium (Laubach 2009) is a level every tenor carries through the duration-scaled premium:
         // the ten-year in full, the two-year its duration share, as a sovereign CDS curve slopes up.
         $structuralTermPremium = $state->termPremiumRegime + $state->termPremiumShock + $state->sovereignRiskSpreadEma;

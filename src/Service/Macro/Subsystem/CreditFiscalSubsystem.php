@@ -41,8 +41,8 @@ class CreditFiscalSubsystem
     // --- Barro Tax-Smoothing & Automatic Fiscal Stabilizers (Barro 1979) ---
     /** Countercyclical statutory tax response sensitivity to output gap deviations. */
     public const FISCAL_STABILIZER_SENSITIVITY = 1.0;
-    /** Institutional legislative adjustment speed of corporate tax rate changes. */
-    public const FISCAL_ADJUSTMENT_SPEED = 0.20;
+    /** Adjustment speed of the effective tax burden toward its cyclical target: automatic stabilisers act within the year (OECD budget semi-elasticity ~0.5; Fatas & Mihov 2001); at 0.2 the bust's tax relief arrived at the next peak. */
+    public const FISCAL_ADJUSTMENT_SPEED = 1.0;
     /** Statutory corporate tax rate floor during deep economic recessions. */
     public const MIN_CORPORATE_TAX_RATE = 0.12;
     /** Statutory corporate tax rate ceiling during overheating economic booms. */
@@ -51,8 +51,8 @@ class CreditFiscalSubsystem
     // --- GOVERNMENT SPENDING & FISCAL APPROPRIATIONS ---
     /** Counter-cyclical appropriation response: a -3% output gap lifts the spending index ~6 points (discretionary stimulus plus stabilizers). */
     public const GOVT_COUNTERCYCLICAL_SENSITIVITY = 200.0;
-    /** Mean-reversion speed of government spending toward structural baseline. */
-    public const GOVT_SPENDING_MEAN_REVERSION = 0.40;
+    /** Speed at which appropriations reach their cyclical target (stabilisers plus a stimulus bill lag of ~2-3 quarters); at 0.4 the spending index was below baseline in the deepest busts. */
+    public const GOVT_SPENDING_MEAN_REVERSION = 1.5;
     /** Stochastic volatility of annual budget appropriations, kept below the countercyclical swing so the cycle drives spending. */
     public const GOVT_SPENDING_VOLATILITY = 0.03;
     /** Poisson intensity of major geopolitical events triggering spending surges. */

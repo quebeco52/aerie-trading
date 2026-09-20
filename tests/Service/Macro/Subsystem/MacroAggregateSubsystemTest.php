@@ -57,14 +57,14 @@ class MacroAggregateSubsystemTest extends TestCase
 
     public function testConvexPhillipsCurveAcceleratesNearCapacity(): void
     {
-        $expansionPressureLow = $this->mathUtility->calculateConvexPhillipsCurve(0.02, MacroEngine::PHILLIPS_MAX_CAPACITY, MacroEngine::PHILLIPS_CONVEX_KAPPA, MacroEngine::PHILLIPS_DOWNWARD_RIGIDITY_FACTOR);
-        $expansionPressureHigh = $this->mathUtility->calculateConvexPhillipsCurve(0.06, MacroEngine::PHILLIPS_MAX_CAPACITY, MacroEngine::PHILLIPS_CONVEX_KAPPA, MacroEngine::PHILLIPS_DOWNWARD_RIGIDITY_FACTOR);
+        $expansionPressureLow = $this->mathUtility->calculateConvexPhillipsCurve(0.02, MacroAggregateSubsystem::PHILLIPS_MAX_CAPACITY, MacroAggregateSubsystem::PHILLIPS_CONVEX_KAPPA, MacroAggregateSubsystem::PHILLIPS_DOWNWARD_RIGIDITY_FACTOR);
+        $expansionPressureHigh = $this->mathUtility->calculateConvexPhillipsCurve(0.06, MacroAggregateSubsystem::PHILLIPS_MAX_CAPACITY, MacroAggregateSubsystem::PHILLIPS_CONVEX_KAPPA, MacroAggregateSubsystem::PHILLIPS_DOWNWARD_RIGIDITY_FACTOR);
 
         // Near capacity (y=0.06), pressure must be more than 3x higher than at y=0.02 due to non-linear convexity
         $this->assertGreaterThan(3.0 * $expansionPressureLow, $expansionPressureHigh);
 
         // During contractions (y=-0.04), downward nominal rigidity flattens deflation pressure
-        $recessionPressure = $this->mathUtility->calculateConvexPhillipsCurve(-0.04, MacroEngine::PHILLIPS_MAX_CAPACITY, MacroEngine::PHILLIPS_CONVEX_KAPPA, MacroEngine::PHILLIPS_DOWNWARD_RIGIDITY_FACTOR);
+        $recessionPressure = $this->mathUtility->calculateConvexPhillipsCurve(-0.04, MacroAggregateSubsystem::PHILLIPS_MAX_CAPACITY, MacroAggregateSubsystem::PHILLIPS_CONVEX_KAPPA, MacroAggregateSubsystem::PHILLIPS_DOWNWARD_RIGIDITY_FACTOR);
         $this->assertLessThan(0.0, $recessionPressure);
         $this->assertGreaterThan(-0.01, $recessionPressure, 'Downward rigidity must prevent runaway deflationary pressure');
     }

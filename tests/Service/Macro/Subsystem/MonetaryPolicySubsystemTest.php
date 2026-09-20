@@ -4,6 +4,7 @@ namespace App\Tests\Service\Macro\Subsystem;
 
 use App\Service\Macro\MacroEngine;
 use App\Service\Macro\MacroState;
+use App\Service\Macro\Subsystem\MacroAggregateSubsystem;
 use App\Service\Macro\Subsystem\MonetaryPolicySubsystem;
 use App\Service\Math\MathUtility;
 use PHPUnit\Framework\TestCase;
@@ -711,6 +712,33 @@ class MonetaryPolicySubsystemTest extends TestCase
         $this->assertEqualsWithDelta(0.0, $this->subsystem->calculateLongRateGap($qe, MacroEngine::BASE_NATURAL_RATE), 0.00001, 'Balance-sheet compression is excluded from the long-rate gap.');
     }
 
+    public function testTaylorRuleDoesNotLeanAgainstItsOwnTighteningCompression(): void
+    {
+        $state = new MacroState();
+        $state->inflation = MacroEngine::TARGET_INFLATION;
+        $state->inflationEma = MacroEngine::TARGET_INFLATION;
+        $state->tipsBreakeven = MacroEngine::TARGET_INFLATION;
+        $state->outputGap = 0.0;
+        $state->outputGapEma = 0.0;
+        $state->termPremium10yEma = MacroEngine::NS_BASE_TERM_PREMIUM;
+        $state->perceivedNeutralRate = MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION;
+
+        // Two points restrictive: the curve compresses the premium by TERM_PREMIUM_TIGHTENING_COMPRESSION x 2pp.
+        // Read as a premium move, that compression lifted the rule's own target ~0.4pp through every late-cycle
+        // inversion (measured 2026-09-20) and fed back into further tightening.
+        $restrictive = clone $state;
+        $restrictive->policyRate = MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION + 0.020;
+        $restrictive->restrictiveDuration = 0.0;
+        $restrictive->termPremium10yEma = MacroEngine::NS_BASE_TERM_PREMIUM - (MonetaryPolicySubsystem::TERM_PREMIUM_TIGHTENING_COMPRESSION * 0.020);
+
+        $this->assertEqualsWithDelta(0.0, $this->subsystem->calculateLongRateGap($restrictive, MacroEngine::BASE_NATURAL_RATE), 0.00001, 'The compression a restrictive stance produces is excluded from the long-rate gap.');
+
+        // Once the compression has faded with the restrictive clock, a premium still that low IS news.
+        $stale = clone $restrictive;
+        $stale->restrictiveDuration = 20.0;
+        $this->assertLessThan(-0.005, $this->subsystem->calculateLongRateGap($stale, MacroEngine::BASE_NATURAL_RATE), 'A compression the stance no longer explains is a genuine premium move.');
+    }
+
     public function testTaylorRuleLeansAgainstAMarketThatHasRepricedNeutralUpward(): void
     {
         $state = new MacroState();
@@ -853,8 +881,8 @@ class MonetaryPolicySubsystemTest extends TestCase
         $state->inflation = 0.09; // Headline must not enter.
         $state->inflationEma = 0.09;
 
-        $coreWeight = MacroEngine::INFLATION_WEIGHT_SUPERCORE + MacroEngine::INFLATION_WEIGHT_GOODS;
-        $core = ((MacroEngine::INFLATION_WEIGHT_SUPERCORE * 0.04) + (MacroEngine::INFLATION_WEIGHT_GOODS * 0.01)) / $coreWeight;
+        $coreWeight = MacroAggregateSubsystem::INFLATION_WEIGHT_SUPERCORE + MacroAggregateSubsystem::INFLATION_WEIGHT_GOODS;
+        $core = ((MacroAggregateSubsystem::INFLATION_WEIGHT_SUPERCORE * 0.04) + (MacroAggregateSubsystem::INFLATION_WEIGHT_GOODS * 0.01)) / $coreWeight;
         $expected = (MonetaryPolicySubsystem::TAYLOR_INFLATION_CORE_WEIGHT * $core)
             + (MonetaryPolicySubsystem::TAYLOR_INFLATION_ANCHOR_WEIGHT * 0.025);
 

@@ -119,18 +119,6 @@ class MacroEngine
     /** Sensitivity of duration-weighted term premium extraction to central bank balance sheet intensity. */
     public const PREFERRED_HABITAT_DURATION_SENSITIVITY = 1.0;
 
-    // --- New Keynesian Phillips Curve Dynamics ---
-    /** Maximum asymptotic output gap capacity ceiling where supply bottlenecks bind (Benigno & Eggertsson 2023). */
-    public const PHILLIPS_MAX_CAPACITY = 0.11;
-    /** Base slope sensitivity of convex Phillips curve to output gap capacity. */
-    public const PHILLIPS_CONVEX_KAPPA = 0.012;
-    /** Downward nominal rigidity factor dampening deflationary pressure during recessions (Bewley 1999). */
-    public const PHILLIPS_DOWNWARD_RIGIDITY_FACTOR = 0.35;
-    /** Weight of supercore services inflation in headline PCE/CPI basket (Shapiro 2022). */
-    public const INFLATION_WEIGHT_SUPERCORE = 0.55;
-    /** Weight of core goods inflation in headline basket. */
-    public const INFLATION_WEIGHT_GOODS = 0.25;
-
     // --- Merton Structural Corporate Credit Spreads (Merton 1974) ---
     /** IG spread widening per unit of interbank stress (~0.6). TED and IG share a common factor, and with the reverse coupling below the loop gain stays under 0.25 so calm markets do not self-excite. */
     public const INTERBANK_CREDIT_CONTAGION_SENSITIVITY = 0.6;

@@ -21,47 +21,33 @@ use PHPUnit\Framework\TestCase;
  * so the gap is left-skewed (-0.32 over the whole post-war record, -1.20 since 1985) with roughly a tenth of
  * quarters below -3% and troughs reaching -6% and worse.
  *
- * The engine does not produce that shape. Measured over 960 simulated years (12 seeds x 80y at production
- * tick rate, 2026-09-18): the gap's skew is +0.02, only 0.4% of quarters fall below -3%, the worst single
- * quarter in the whole run is -3.43%, and busts descend at 1.46pp a year against 4.3-5.1 in the record.
- * Booms are stopped by the cubic capacity clamp while busts are fought by the Taylor rule, downward nominal
- * rigidity and a balance sheet that can only ease -- every asymmetry in the engine pushes the same way.
+ * Until 2026-09-20 the engine did not produce that shape: over 960 simulated years the gap's skew was +0.02
+ * and 0.4% of quarters fell below -3%, because a SYMMETRIC cubic capacity term was the largest restoring
+ * force at both ends of the cycle. The ceiling is now one-sided (Friedman 1993 plucking; Dupraz, Nakamura &
+ * Steinsson 2019) and the stabilisers act within the year, and the same harness measures skew -0.20 with
+ * 5% of quarters below -3% at production tick rate (8 seeds x 60y).
  *
- * Two mechanisms were built and measured against this, and neither closed it; see the notes on the
- * incomplete tests below. The bounds here are deliberately wider than the calibration target -- they exist
- * to catch the return of a symmetric cycle, not to pin any particular constant.
+ * Skew is a noisy statistic: two 4-seed halves of the SAME arm read -0.01 and -0.32. The path is therefore
+ * pooled across eight seeds and computed once, and the bounds are deliberately wider than the calibration
+ * target -- they exist to catch the return of a symmetric cycle, not to pin any particular constant.
  */
 class BusinessCycleRealismTest extends TestCase
 {
     private const YEARS = 40;
     private const BURN_IN_YEARS = 5;
     private const TICKS_PER_YEAR = 252;
-    private const SEEDS = [20260918, 4711, 90210];
+    private const SEEDS = [20260918, 4711, 90210, 1, 2, 3, 5, 8];
+
+    /** @var array<string, list<float>> Pooled quarterly gap paths, keyed by seed list; the run is the whole cost of this class. */
+    private static array $pathCache = [];
 
     public function testTheOutputGapIsLeftSkewedWithARealLeftTail(): void
     {
-        // NOT YET MET, and left in place rather than weakened to fit. Two candidates were built and measured
-        // at 12 seeds x 80y, and both are recorded here so they are not retried blind:
-        //
-        // 1. A Gilchrist-Zakrajsek excess bond premium drag on the high-yield tranche took quarters below
-        //    -3% from 0.4% to 2.6%, but the skew moved the WRONG way (+0.02 -> +0.07) and quarters above +2%
-        //    rose from 21.8% to 25.2%. The gap is a Kaldor limit cycle with a slow capital variable: a deeper
-        //    bust digs a bigger pent-up-demand hole (capitalStockOverhang min -0.84% -> -1.72%, max flat)
-        //    which KALDOR_CAPITAL_DRAG pays straight back into the recovery. Energy added on the downside is
-        //    stored and returned on the upside.
-        // 2. Lowering KALDOR_MOMENTUM to zero makes a zero gap a stable point and does produce the central
-        //    hump the real distribution has (the engine at 0.12 is a flat plateau, 13-16% of quarters in
-        //    every bucket from -2.5% to +2.5%). But the skew gets worse still (+0.09) and the left tail
-        //    shrinks to 0.3%: damping the oscillator shrinks both tails symmetrically.
-        //
-        // What is actually missing: aggregate demand is the only major driver in the engine with NO jump
-        // process -- TFP has calculateJumpDiffusion, market volatility has SVJJ/Kou, interbank spreads have
-        // Kou, and calculateOutputGap draws a single Gaussian shared between the Smets-Wouters disturbance
-        // and the level diffusion. Every asymmetric force in the engine cushions the downside, so nothing can
-        // make the gap left-skewed until a downward-skewed demand shock exists.
-        $this->markTestIncomplete('The engine has no downward-skewed aggregate demand shock; see the note above.');
-
-        // @phpstan-ignore deadCode.unreachable
+        // Before the one-sided ceiling, every candidate that kept the cubic symmetric failed here: a
+        // Gilchrist-Zakrajsek excess bond premium drag deepened busts but the capital overhang returned the
+        // energy into the next boom (skew +0.02 -> +0.07); zeroing KALDOR_MOMENTUM, faster hikes, faster
+        // stabilisers, weaker easing transmission and a steeper (quintic) limiter all shrank or grew BOTH tails
+        // together. A symmetric bound plus symmetric-or-pro-boom economics gives a symmetric distribution.
         $gaps = $this->simulateGapPath();
         $count = count($gaps);
 
@@ -81,8 +67,9 @@ class BusinessCycleRealismTest extends TestCase
         $belowThree = count(array_filter($gaps, static fn (float $g): bool => $g < -0.03)) / $count;
         $aboveTwo = count(array_filter($gaps, static fn (float $g): bool => $g > 0.02)) / $count;
 
-        // CBO gap: skew -0.32 since 1949 and -1.20 since 1985. A symmetric oscillator reads about zero.
-        $this->assertLessThan(-0.15, $skew, 'The cycle must be left-skewed: contractions fall away faster than expansions build.');
+        // CBO gap: skew -0.32 since 1949 and -1.20 since 1985. A symmetric oscillator reads about zero; the
+        // engine measures -0.20 over 8 seeds x 60y, and the bound leaves room for seed noise at this length.
+        $this->assertLessThan(-0.10, $skew, 'The cycle must be left-skewed: contractions fall away faster than expansions build.');
 
         // 10.0% of post-war quarters and 7.8% since 1985 sit below -3%. The engine managed 0.4% without a
         // credit crunch, and its worst quarter in 960 simulated years was -3.43%.
@@ -97,7 +84,11 @@ class BusinessCycleRealismTest extends TestCase
 
     public function testContractionsDescendFasterThanExpansionsClimb(): void
     {
-        $this->markTestIncomplete('Contractions still descend no faster than expansions climb: the cycle is symmetric until aggregate demand gets a downward-skewed shock.');
+        // NOT YET MET. With the one-sided ceiling busts reach their trough at 1.7-1.9pp a year against booms at
+        // 1.8-2.0 (8 seeds x 60y, production tick rate): the depth is there but the descent is not, because a
+        // bust still has no amplifier of its own -- credit is a function of the gap and cannot turn on its own.
+        // A credit-cycle crisis hazard (Schularick & Taylor 2012) on the credit-to-GDP gap is the candidate.
+        $this->markTestIncomplete('Contractions do not yet descend faster than expansions climb: a bust has no amplifier of its own.');
 
         // @phpstan-ignore deadCode.unreachable
         $gaps = $this->simulateGapPath();
@@ -174,6 +165,11 @@ class BusinessCycleRealismTest extends TestCase
      */
     private function simulateGapPath(?array $seeds = null): array
     {
+        $cacheKey = implode(',', $seeds ?? self::SEEDS);
+        if (isset(self::$pathCache[$cacheKey])) {
+            return self::$pathCache[$cacheKey];
+        }
+
         $sampleEvery = intdiv(self::TICKS_PER_YEAR, 4);
         $dt = 1.0 / self::TICKS_PER_YEAR;
         $gaps = [];
@@ -202,7 +198,7 @@ class BusinessCycleRealismTest extends TestCase
             }
         }
 
-        return $gaps;
+        return self::$pathCache[$cacheKey] = $gaps;
     }
 
     /** The bootstrap's Redis stand-in forgets everything; the engine needs its state back each tick. */

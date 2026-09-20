@@ -40,9 +40,9 @@ class MacroAggregateSubsystem
     // --- KALDOR-KALECKI 2D LIMIT CYCLE ---
     /** Elasticity of aggregate demand to exchange rate deviations (Marshall-Lerner Net Export Drag). */
     public const KALDOR_FX_ELASTICITY = 0.04;
-    /** Linear momentum of aggregate demand feedback loop. */
-    public const KALDOR_MOMENTUM = 0.12;
-    /** Cubic stabilization factor bounding extreme boom/bust expansions. */
+    /** Linear self-reinforcement of demand; at 0.12 zero was an unstable point and the gap swept through it on a clockwork limit cycle, at 0.06 it rests inside ±1% 44% of quarters (Frisch-Slutsky shock-driven cycle) while keeping the left skew. */
+    public const KALDOR_MOMENTUM = 0.06;
+    /** Cubic capacity ceiling on the UPSIDE only (Friedman 1993 plucking; Dupraz, Nakamura & Steinsson 2019): output is plucked below a ceiling it cannot run above, and a slump has no floor of its own. */
     public const KALDOR_CAPACITY = 600.0;
     /** Sensitivity of aggregate demand to real interest rate deviations from natural rate. */
     public const KALDOR_MONETARY_DRAG = 1.30;
@@ -109,12 +109,22 @@ class MacroAggregateSubsystem
     public const AGRI_COST_PUSH_LAG_YEARS = 0.75;
 
     // --- New Keynesian Phillips Curve Dynamics ---
+    /** Output gap at which supply bottlenecks bind (Benigno & Eggertsson 2023, the v/u = 1 kink); at 11% the convexity sat outside the ±4% the gap lives in and inflation was flat across the cycle. */
+    public const PHILLIPS_MAX_CAPACITY = 0.035;
+    /** Convex Phillips slope scale; kappa / PHILLIPS_MAX_CAPACITY is the near-zero slope (~0.11 of inflation per unit gap), held constant when the ceiling moved. */
+    public const PHILLIPS_CONVEX_KAPPA = 0.0038;
+    /** Downward nominal rigidity factor dampening deflationary pressure during recessions (Bewley 1999). */
+    public const PHILLIPS_DOWNWARD_RIGIDITY_FACTOR = 0.50;
+    /** Weight of supercore services inflation in headline PCE/CPI basket (Shapiro 2022). */
+    public const INFLATION_WEIGHT_SUPERCORE = 0.55;
+    /** Weight of core goods inflation in headline basket. */
+    public const INFLATION_WEIGHT_GOODS = 0.25;
+    /** Weight of energy and agricultural food commodities in headline basket. */
+    public const INFLATION_WEIGHT_COMMODITY = 0.20;
     /** Adaptive unanchoring weight of inflation expectations to sustained trend deviations. */
     public const INFLATION_ADAPTIVE_EXPECTATIONS_WEIGHT = 0.25;
     /** Speed of inflation expectations mean-reverting toward central bank target (anchored expectations). */
     public const INFLATION_MEAN_REVERSION = 0.75;
-    /** Weight of energy and agricultural food commodities in headline basket. */
-    public const INFLATION_WEIGHT_COMMODITY = 0.20;
 
     // --- Sectoral Inflation Sensitivities (Shapiro 2022) ---
     /** Wage-push transmission factor passing excess wage growth into supercore services inflation. */
@@ -244,7 +254,7 @@ class MacroAggregateSubsystem
      * Kaldor (1940) Non-Linear Business Cycle with Modigliani Wealth Effect & Marshall-Lerner FX Drag.
      *
      * Solves continuous macroeconomic aggregate demand dynamics:
-     *   dy = [Momentum - CubicCapacity - RealRateDrag + FiscalStimulus - CapitalOverhang + WealthEffect - FxDrag + DemandShock] * dt
+     *   dy = [Momentum - CapacityCeiling(y>0) - RealRateDrag + FiscalStimulus - CapitalOverhang + WealthEffect - FxDrag + DemandShock] * dt
      *
      * @param MacroState $state             Current macroeconomic state.
      * @param float      $yield5y           5-Year Treasury yield benchmark for business borrowing.
@@ -285,7 +295,11 @@ class MacroAggregateSubsystem
         $creditFrictionDrag = self::KALDOR_CREDIT_FRICTION_DRAG * ($excessCreditSpread + $excessInterbankSpread);
 
         $momentum = self::KALDOR_MOMENTUM * $y;
-        $cubicConstraint = self::KALDOR_CAPACITY * pow($y, 3);
+        // The ceiling is one-sided. A symmetric cubic was the largest restoring force at BOTH ends of the cycle
+        // (measured 2026-09-20: +2.3 pp/yr at -3%, against +2.1 from policy), so busts were cushioned by an
+        // algebraic bound rather than fought by economics and the gap came out symmetric (skew -0.12 vs a real
+        // -0.32). Below potential only policy, the stabilisers and the credit chain pull the economy back.
+        $cubicConstraint = $y > 0.0 ? self::KALDOR_CAPACITY * pow($y, 3) : 0.0;
         // Fiscal impulse: tax-smoothing stabilizer plus discretionary appropriations above the peacetime baseline
         // (Blanchard-Perotti 2002 spending multiplier scaled by the public share of output).
         $spendingShift = ($state->governmentSpendingIndexEma / MacroEngine::GOVT_SPENDING_BASELINE) - 1.0;
@@ -390,9 +404,9 @@ class MacroAggregateSubsystem
         // 2. Benigno & Eggertsson (2023): Non-linear convex demand-pull curve
         $convexDemandPressure = $this->mathUtility->calculateConvexPhillipsCurve(
             outputGap: $state->outputGap,
-            maxCapacity: MacroEngine::PHILLIPS_MAX_CAPACITY,
-            kappa: MacroEngine::PHILLIPS_CONVEX_KAPPA,
-            downwardRigidityFactor: MacroEngine::PHILLIPS_DOWNWARD_RIGIDITY_FACTOR
+            maxCapacity: self::PHILLIPS_MAX_CAPACITY,
+            kappa: self::PHILLIPS_CONVEX_KAPPA,
+            downwardRigidityFactor: self::PHILLIPS_DOWNWARD_RIGIDITY_FACTOR
         );
 
         // 3. Shapiro (2022) Sector 1: Supercore Services (Labor / Wage-Push Channel)
@@ -438,8 +452,8 @@ class MacroAggregateSubsystem
             + (($state->energyCostPushLag + $state->agriCostPushLag) / self::INFLATION_WEIGHT_COMMODITY);
 
         // 6. Blended Headline Inflation (Shapiro 2022 expenditure basket aggregation)
-        $blendedInflation = (MacroEngine::INFLATION_WEIGHT_SUPERCORE * $state->supercoreInflation)
-            + (MacroEngine::INFLATION_WEIGHT_GOODS * $state->coreGoodsInflation)
+        $blendedInflation = (self::INFLATION_WEIGHT_SUPERCORE * $state->supercoreInflation)
+            + (self::INFLATION_WEIGHT_GOODS * $state->coreGoodsInflation)
             + (self::INFLATION_WEIGHT_COMMODITY * $commodityBasketInflation);
 
         $newInflation = $blendedInflation + (self::INFLATION_DIFFUSION_SIGMA * $stressMultiplier * sqrt($dt) * $infZ);
@@ -461,9 +475,9 @@ class MacroAggregateSubsystem
     {
         $cyclicalForecast = $this->mathUtility->calculateConvexPhillipsCurve(
             outputGap: $state->outputGapEma,
-            maxCapacity: MacroEngine::PHILLIPS_MAX_CAPACITY,
-            kappa: MacroEngine::PHILLIPS_CONVEX_KAPPA,
-            downwardRigidityFactor: MacroEngine::PHILLIPS_DOWNWARD_RIGIDITY_FACTOR
+            maxCapacity: self::PHILLIPS_MAX_CAPACITY,
+            kappa: self::PHILLIPS_CONVEX_KAPPA,
+            downwardRigidityFactor: self::PHILLIPS_DOWNWARD_RIGIDITY_FACTOR
         );
 
         $inflationRiskPremium = $this->inflationRiskPremium($state, $targetInflation);
