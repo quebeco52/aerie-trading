@@ -9,6 +9,7 @@ import { renderEvents } from '../stock/events-feed.js';
 import { updateConstituentRows } from '../stock/index-table.js';
 import { updateFundamentalCharts, resizeFundamentalCharts, destroyFundamentalCharts } from '../stock/fundamental-charts.js';
 import { onPageLoad } from '../utils/page-init.js';
+import { tickPoints } from '../services/market-stream.js';
 
 let rawReports = [];
 let currentContext = {};
@@ -90,14 +91,17 @@ function initStockPage() {
         });
     }
 
-    // Every tick goes to the price chart only: the live bar's high and low are accumulated
-    // from each tick, so the chart is the one consumer that must see all of them.
+    // Every wire frame goes to the price chart only, and the chart replays the frame's per-tick
+    // points: the live bar's high and low are accumulated from each tick, so the chart is the one
+    // consumer that must see all of them (see market-stream.js for the frame contract).
     marketUpdateHandler = (event) => {
         const payload = event.detail;
         const stockUpdate = payload && payload.stocks ? payload.stocks.find(s => s.ticker === ticker) : null;
         if (!stockUpdate) return;
         try {
-            updateLivePricePoint(parseFloat(stockUpdate.price), stockUpdate.volume);
+            for (const [price, volume] of tickPoints(stockUpdate)) {
+                updateLivePricePoint(price, volume);
+            }
         } catch (err) {
             console.error('Error updating live chart:', err);
         }

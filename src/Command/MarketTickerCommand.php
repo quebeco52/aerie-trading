@@ -13,6 +13,7 @@ use App\Service\Market\SimulationClockService;
 use App\Service\Market\OptionChainService;
 use App\Service\Market\OptionDeskService;
 use App\Service\Market\StockTickColumns;
+use App\Service\Market\WireFrame;
 use App\Service\Market\TreasuryAuctionService;
 use App\Service\Market\EtfTracker;
 use App\Service\Market\IndexFundAccountant;
@@ -412,6 +413,8 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
         // Lag equity market cap across ticks to avoid simultaneous feedback loops in macro step.
         $lastEquityMarketCap = null;
 
+        $wireFrame = new WireFrame();
+
         while ($this->keepRunning) {
 
             $tickStartTime = microtime(true);
@@ -428,6 +431,8 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
 
             $macroState = $this->macroEngine->updateMacroState($dt, $lastEquityMarketCap);
             $lap('macro');
+
+            $isFrameTick = WireFrame::isFrameTick($tickCount, $this->tickIntervalUs);
 
             if ($tickCount % $operatorInterval === 0) {
                 $operatorEvents = $this->marketOperator->enforceMarketStability($stocks, $macroState);
@@ -879,19 +884,26 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                     }
                 }
 
-                // Publish pub/sub updates
-                $this->redis->publish('market_updates', json_encode([
-                    'timestamp' => time(),
-                    'tick' => $tickCount,
-                    'stocks' => $published,
-                    'events' => $events,
-                    'district' => $districtReconstitution,
-                    'market_vol' => $marketVol,
-                    'economic_cycle' => $macroState->economicCycleLabel(),
-                    'council_rate' => $macroState->policyRate,
-                    'macro' => $macroState->toArray(),
-                    'bond_curve' => $bondResult['curve'],
-                ]));
+                // The wire carries frames, not ticks: the latest quote per instrument plus the per-tick
+                // points the live chart draws, published WireFrame::FRAMES_PER_SECOND times a second.
+                // The scalars are absorbed on frame ticks only: macro alone is ~200 fields, and a frame
+                // carries the last tick's value whichever tick it was read on.
+                $wireFrame->absorb(
+                    $tickCount,
+                    $published,
+                    $events,
+                    $districtReconstitution,
+                    $isFrameTick ? [
+                        'market_vol' => $marketVol,
+                        'economic_cycle' => $macroState->economicCycleLabel(),
+                        'council_rate' => $macroState->policyRate,
+                        'macro' => $macroState->toArray(),
+                        'bond_curve' => $bondResult['curve'],
+                    ] : []
+                );
+                if ($isFrameTick) {
+                    $this->redis->publish('market_updates', json_encode($wireFrame->flush($tickCount, time())));
+                }
 
                 // A cache of the committed clock, for the web process. Never the authority: see SimulationClock.
                 $this->redis->set('simulation_tick_count', $tickCount);

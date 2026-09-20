@@ -1,16 +1,40 @@
 /**
  * The live market feed, and the two events it raises on `document`:
  *
- * - `market:update` — one per WebSocket message, i.e. one per simulation tick, carrying the
- *   tick's payload verbatim. For consumers that must see every tick: a price chart extending
- *   the current bar's high and low, and nothing else.
- * - `market:frame` — the same shape, coalesced: the latest entry per ticker, every event
- *   since the previous frame, the latest macro state and curve, at most every
- *   FRAME_INTERVAL_MS and on an animation frame. For anything that writes to the DOM. The
- *   cost of a live page is then set by this wall-clock cadence, not by how fast the
- *   simulation ticks (SIM_TICK_INTERVAL_US), and several ticks landing inside one frame cost
- *   one write, not several.
+ * - `market:update` — one per WebSocket message, which is one WIRE FRAME: the ticker
+ *   coalesces its ticks server-side (App\Service\Market\WireFrame, ten frames a second) into
+ *   the latest quote per ticker, every event of the frame, the latest macro state and curve,
+ *   and on each quote a `points` array of the ticks the frame spans — `[tick, price, volume]`
+ *   in tick order, price being the chart's series (a bond's clean price). For consumers that
+ *   must see every tick: a price chart extending the current bar's high and low, which
+ *   replays `points` with tickPoints(), and nothing else.
+ * - `market:frame` — the same shape, coalesced again on the client: the latest entry per
+ *   ticker, every event since the previous frame, at most every FRAME_INTERVAL_MS and on an
+ *   animation frame. For anything that writes to the DOM. The cost of a live page is then set
+ *   by this wall-clock cadence, not by how fast the simulation ticks (SIM_TICK_INTERVAL_US),
+ *   and several wire frames landing inside one cost one write, not several. `points` on a
+ *   frame entry cover that entry's wire frame only; do not chart from `market:frame`.
  */
+
+/**
+ * The per-tick points of one quote, as `[price, volume]` pairs in tick order, for the live chart.
+ *
+ * A quote with no `points` (a payload from before the frame contract) yields itself once, read from
+ * `priceKey`, so the chart advances one tick per point either way.
+ *
+ * @param {object} quote An entry of a `market:update` payload's `stocks`.
+ * @param {string} priceKey The quote field to fall back on when there are no points.
+ * @returns {Array<[number, number]>}
+ */
+export function tickPoints(quote, priceKey = 'price') {
+    if (Array.isArray(quote.points) && quote.points.length > 0) {
+        return quote.points
+            .map(([, price, volume]) => [parseFloat(price), Number(volume) || 0])
+            .filter(([price]) => Number.isFinite(price));
+    }
+    const price = parseFloat(quote[priceKey]);
+    return Number.isFinite(price) ? [[price, Number(quote.volume) || 0]] : [];
+}
 
 let isConnected = false;
 let globalMarketSocket = null;

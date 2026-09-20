@@ -2,6 +2,7 @@ import { readPageData } from '../utils/page-data.js';
 import { initPriceChart, updateLivePricePoint, resizePriceChart, destroyPriceChart } from '../stock/price-chart.js';
 import { flashTick } from '../utils/tick-flash.js';
 import { onPageLoad } from '../utils/page-init.js';
+import { tickPoints } from '../services/market-stream.js';
 
 let marketUpdateHandler = null;
 let marketFrameHandler = null;
@@ -84,12 +85,14 @@ function quoteFor(event) {
     return quotes.find(q => q.ticker === context.ticker) || null;
 }
 
-/** Every tick, for the chart alone: the live bar's high and low accumulate from each one. */
+/** Every wire frame, for the chart alone: the live bar's high and low accumulate from each tick point. */
 function onMarketUpdate(event) {
     const quote = quoteFor(event);
     if (!quote) return;
-    const clean = parseFloat(quote.clean_price);
-    if (Number.isFinite(clean)) updateLivePricePoint(clean);
+    // A bond's points already carry the clean price (see the frame contract in market-stream.js).
+    for (const [price] of tickPoints(quote, 'clean_price')) {
+        updateLivePricePoint(price);
+    }
 }
 
 /** The coalesced frame (market-stream.js), for everything written to the page. */

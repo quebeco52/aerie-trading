@@ -26,6 +26,21 @@ use App\Service\Math\MathUtility;
  */
 final class BondPricingEngine
 {
+    /**
+     * Sovereign zero yields by tenor, for $memoCurve.
+     *
+     * A mark evaluates the Svensson curve once per remaining cash flow of every issue on the ladder, and
+     * the ladder repeats itself: an auction sells every tenor on the same day, so a 2-year's four coupon
+     * dates are the first four of the 30-year's sixty from the same sale, and the next sale shares them
+     * again a period later. Measured on a production-shaped ladder the curve was asked for the same tenor
+     * three times over. The memo lives for one curve object, which the ticker builds fresh each tick.
+     *
+     * @var array<string, float>
+     */
+    private array $zeroYieldMemo = [];
+
+    private ?SovereignCurveDTO $memoCurve = null;
+
     public function __construct(
         private readonly MathUtility $mathUtility,
     ) {}
@@ -67,6 +82,17 @@ final class BondPricingEngine
      * @param float $currentTime Simulation time in years.
      * @return array<int, array{time: float, amount: float}> Ascending in time; empty once matured.
      */
+    /** zeroYield() through the per-curve memo: the same object gets the same answer without a second evaluation. */
+    private function memoizedZeroYield(SovereignCurveDTO $curve, float $tau): float
+    {
+        if ($this->memoCurve !== $curve) {
+            $this->memoCurve = $curve;
+            $this->zeroYieldMemo = [];
+        }
+
+        return $this->zeroYieldMemo[(string) $tau] ??= $this->zeroYield($curve, $tau);
+    }
+
     public function remainingCashFlows(Bond $bond, float $currentTime): array
     {
         if ($bond->isMatured($currentTime)) {
@@ -146,7 +172,7 @@ final class BondPricingEngine
         // charge compound along the schedule the way it actually does: a ten-year bond pays the spread on
         // every coupon it is still waiting for, not once on its redemption.
         $spread = max(0.0, $creditSpread);
-        $discount = fn (float $tau): float => $this->zeroYield($curve, $tau) + $spread;
+        $discount = fn (float $tau): float => $this->memoizedZeroYield($curve, $tau) + $spread;
 
         $dirtyPrice = $this->mathUtility->calculateBondPresentValue($flows, $discount);
 
