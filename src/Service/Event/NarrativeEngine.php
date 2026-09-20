@@ -291,6 +291,17 @@ class NarrativeEngine
                 "Asset management AUM contracted following market volatility and client rebalancing.",
                 "Net redemption outflows reduced recurring management fee revenues."
             ]),
+            ShockEvent::BANKING_CRISIS => $this->getRandomPhrase(
+                isset($context['credit_gap_pct']) ? [
+                    "Banking crisis: With household credit {$context['credit_gap_pct']} points of income above trend, lenders are failing and the credit boom has gone bust.",
+                    "Credit boom gone bust: Leverage {$context['credit_gap_pct']} points over its trend has turned into a banking crisis; wholesale funding is running and borrowers are cut off.",
+                    "Financial crisis declared: Bank failures spread as the credit build-up of {$context['credit_gap_pct']} points of income unwinds; households and firms deleverage.",
+                ] : [
+                    "Banking crisis: Lenders are failing and the credit boom has gone bust; wholesale funding is running and borrowers are cut off.",
+                    "Credit boom gone bust: A banking crisis has begun and households and firms are deleveraging.",
+                    "Financial crisis declared: Bank failures spread as the credit build-up unwinds.",
+                ]
+            ),
             ShockEvent::SYSTEMIC_LIQUIDITY_FREEZE => $this->getRandomPhrase(
                 isset($context['interbank_spread_bps']) ? [
                     "Interbank liquidity freeze: Short-term wholesale funding spread spiked to {$context['interbank_spread_bps']} bps, reflecting acute money-market distress.",

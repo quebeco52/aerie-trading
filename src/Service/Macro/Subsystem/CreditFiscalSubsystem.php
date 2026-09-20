@@ -166,6 +166,24 @@ class CreditFiscalSubsystem
     /** How the buffer reads to lending standards: a unit of buffer is worth this much excess credit spread in the SLOOS response. */
     public const SLOOS_CCYB_SPREAD_EQUIVALENT = 0.50;
 
+    // --- Credit Crisis Hazard (Schularick & Taylor 2012; Jorda, Schularick & Taylor 2013; Drehmann & Juselius 2014) ---
+    /** Logit intercept: ~1% a year with no boom, the post-war advanced-economy crisis frequency in Schularick & Taylor's panel. */
+    public const CREDIT_CRISIS_LOGIT_INTERCEPT = -4.6;
+    /** Logit per unit of credit gap: a 10-point gap lifts the hazard to ~12% a year (BIS: a third of such gaps end in a crisis within three years). */
+    public const CREDIT_CRISIS_LOGIT_GAP = 26.0;
+    /** Logit per unit of debt-service gap: two points of income over the average add a logit point, the near-term trigger in Drehmann & Juselius. */
+    public const CREDIT_CRISIS_LOGIT_DSR = 50.0;
+    /** Years after a crisis during which the hazard is off: the bust resets the credit stock, and the panel's crises are decades apart. */
+    public const CREDIT_CRISIS_REFRACTORY_YEARS = 5.0;
+    /** Demand drag (pp/yr) a crisis books on impact without any boom behind it: a financial recession runs ~1pp a year deeper than a normal one (JST 2013). */
+    public const CREDIT_CRISIS_DRAG_BASE = 0.010;
+    /** Extra drag per unit of credit gap at the crisis: "credit bites back", each ten points of boom cost another ~1.5pp a year. */
+    public const CREDIT_CRISIS_DRAG_PER_GAP = 0.15;
+    /** Decay of the crisis drag (two-year time constant): financial recessions bottom in the second or third year. */
+    public const CREDIT_CRISIS_DRAG_DECAY = 0.5;
+    /** How a crisis reads to lending standards: a unit of crisis drag is worth this much excess spread, so a boom-fed crisis (2.5pp/yr) is 400bp and standards reach the ~80% net tightening of 2008 (Bassett, Chosak, Driscoll & Zakrajsek 2014). */
+    public const SLOOS_CRISIS_SPREAD_EQUIVALENT = 1.6;
+
     // --- Federal Reserve Senior Loan Officer Opinion Survey (SLOOS) ---
     /** Mean-reversion speed (kappa) of bank lending standards toward fundamental target. */
     public const SLOOS_KAPPA = 1.80;
@@ -254,6 +272,10 @@ class CreditFiscalSubsystem
         $jumpAmount = 0.0;
         if ($jumpData['multiplier'] !== 1.0) {
             $jumpAmount = $baseProcess * ($jumpData['multiplier'] - 1.0);
+        }
+        // A credit crisis is a run on wholesale funding (Gorton & Metrick 2012): the panic jump lands with certainty on the day.
+        if ($state->lastCreditCrisisAt === $state->totalTime) {
+            $jumpAmount = max($jumpAmount, $baseProcess * (exp(self::INTERBANK_JUMP_MEAN) - 1.0));
         }
 
         $state->interbankLiquiditySpread = max(
@@ -460,6 +482,45 @@ class CreditFiscalSubsystem
     }
 
     /**
+     * The crisis channel of the credit cycle (Schularick & Taylor 2012; Jorda, Schularick & Taylor 2013).
+     *
+     * A boom carries state the output gap does not: the debt stock. Its hazard is a logit on the credit gap
+     * (the medium-term signal) and the debt-service gap (the near-term trigger, Drehmann & Juselius 2014),
+     * evaluated as a Poisson arrival per tick. When a crisis lands it books a deleveraging drag on demand
+     * that scales with the boom behind it ("credit bites back") and decays over the following years, and
+     * the same tick forces the wholesale funding run in the interbank spread. The hazard is off for a
+     * refractory window afterwards: the bust resets the stock the hazard reads.
+     *
+     * @param MacroState $state Current macroeconomic state.
+     * @param float      $dt    Time increment in years.
+     */
+    public function calculateCreditCrisisHazard(MacroState $state, float $dt): void
+    {
+        $state->creditCrisisDrag *= exp(-self::CREDIT_CRISIS_DRAG_DECAY * $dt);
+
+        $yearsSinceLast = $state->lastCreditCrisisAt < 0.0 ? INF : $state->totalTime - $state->lastCreditCrisisAt;
+        if ($yearsSinceLast < self::CREDIT_CRISIS_REFRACTORY_YEARS) {
+            $state->creditCrisisHazard = 0.0;
+            return;
+        }
+
+        $state->creditCrisisHazard = $this->mathUtility->calculateSchularickTaylorCrisisHazard(
+            creditGap: $state->creditToGdpGapEma,
+            debtServiceGap: $state->householdDebtServiceGap,
+            beta0: self::CREDIT_CRISIS_LOGIT_INTERCEPT,
+            betaGap: self::CREDIT_CRISIS_LOGIT_GAP,
+            betaDsr: self::CREDIT_CRISIS_LOGIT_DSR
+        );
+
+        if (!$this->mathUtility->checkProbability($state->creditCrisisHazard * $dt)) {
+            return;
+        }
+
+        $state->lastCreditCrisisAt = $state->totalTime;
+        $state->creditCrisisDrag += self::CREDIT_CRISIS_DRAG_BASE + (self::CREDIT_CRISIS_DRAG_PER_GAP * max(0.0, $state->creditToGdpGapEma));
+    }
+
+    /**
      * Sovereign risk premium (Laubach 2009): the fiscal position priced into the long end.
      *
      * One-sided on the debt stock above the level at which an advanced sovereign is re-rated. The premium is
@@ -579,12 +640,14 @@ class CreditFiscalSubsystem
         $excessCreditSpread = max(0.0, $state->macroCreditSpread - MacroEngine::BASE_CREDIT_SPREAD);
         // A countercyclical buffer is capital banks must hold against the loans they write: it tightens standards like a spread would.
         $bufferTightening = self::SLOOS_CCYB_SPREAD_EQUIVALENT * $state->countercyclicalBufferRateEma;
+        // A crisis destroys the capital behind the loan book: the exogenous credit-supply cut of Bassett et al. (2014).
+        $crisisTightening = self::SLOOS_CRISIS_SPREAD_EQUIVALENT * $state->creditCrisisDrag;
         $dW = $this->mathUtility->generateStandardNormal();
 
         $state->sloosTighteningIndex = $this->mathUtility->calculateSloosCreditStandards(
             currentSloos: $state->sloosTighteningIndex,
             outputGap: $state->outputGapEma,
-            excessCreditSpread: $excessCreditSpread + $bufferTightening,
+            excessCreditSpread: $excessCreditSpread + $bufferTightening + $crisisTightening,
             dt: $dt,
             dW: $dW,
             kappa: self::SLOOS_KAPPA,

@@ -18,12 +18,14 @@ class MacroAggregateSubsystem
     // --- KALDOR-KALECKI 2D LIMIT CYCLE ---
     /** Demand impulse per unit of public spending above baseline (~20% GDP share x unit multiplier): +10% spending adds ~1pp/yr to the gap drift. */
     public const KALDOR_GOVT_SPENDING_MULTIPLIER = 0.10;
-    /** Elasticity of aggregate demand to HOUSING wealth deviations (Modigliani 1971 Wealth Effect). */
-    public const KALDOR_WEALTH_EFFECT_ELASTICITY = 0.02;
+    /** Demand per unit of housing wealth above the level households are used to: Mian, Rao & Sufi (2013) put the MPC out of housing wealth at 5-7c on a stock worth 1.5-2x GDP. */
+    public const KALDOR_WEALTH_EFFECT_ELASTICITY = 0.05;
     /** Elasticity to EQUITY wealth; Carroll-Otsuka-Slacalek (2011) put the MPC out of financial wealth at about half that out of housing. */
     public const KALDOR_EQUITY_WEALTH_ELASTICITY = 0.01;
     /** Years over which a valuation level stops being news and becomes the household's normal (Carroll et al. slow adjustment). */
     public const EQUITY_WEALTH_TREND_HORIZON_YEARS = 3.0;
+    /** The same horizon for houses, longer because housing wealth is revalued by sales that are years apart (Carroll, Otsuka & Slacalek 2011); a house price cycle runs about twice this, so the cycle still reads as deviation. */
+    public const RESIDENTIAL_WEALTH_TREND_HORIZON_YEARS = 5.0;
 
     // --- Distributed Lag Transmission Constants ---
     /** Headline inflation per unit farm-price shock (~13% food CPI weight at ~15% pass-through), symmetric in both directions. */
@@ -48,6 +50,8 @@ class MacroAggregateSubsystem
     public const KALDOR_MONETARY_DRAG = 1.30;
     /** Sensitivity of aggregate demand to wholesale credit spread and interbank liquidity friction (Bernanke-Gertler 1999). */
     public const KALDOR_CREDIT_FRICTION_DRAG = 0.25;
+    /** Bank lending channel (Lown & Morgan 2006; Bassett, Chosak, Driscoll & Zakrajsek 2014): demand per unit of net lending tightening, so the ~80% of 2008 costs ~2pp a year while it lasts, the loss they attribute to the credit-supply cut. */
+    public const KALDOR_LENDING_STANDARDS_DRAG = 0.025;
     /** Countercyclical fiscal stimulus multiplier from corporate tax rate cuts. */
     public const KALDOR_FISCAL_MULTIPLIER = 0.50;
     /** Sensitivity of the output gap to physical capital stock overhang: the slow half of the Kaldor-Kalecki phase space, and the pent-up demand that ends a slump once the overhang has gone negative. */
@@ -55,7 +59,7 @@ class MacroAggregateSubsystem
     /** Demand response to a capital SHORTFALL, well under the drag an excess exerts: scrapped capacity does not summon construction while balance sheets are still impaired (Bertola-Caballero 1994 irreversibility). */
     public const KALDOR_CAPITAL_REBOUND_DRAG = 0.08;
     /** Bruno-Sachs (1985) supply-side elasticity of output to energy price shock (Blanchard-Gali 2007). */
-    public const KALDOR_ENERGY_SUPPLY_DRAG = 0.004;
+    public const KALDOR_ENERGY_SUPPLY_DRAG = 0.012;
     /** Supply-side elasticity of output to excess freight/logistics costs. */
     public const KALDOR_FREIGHT_SUPPLY_DRAG = 0.002;
     /** Demand per unit of household debt-service gap (Juselius & Drehmann 2015; Drehmann, Juselius & Korinek 2017): new borrowing lifts spending while service is below its average, and the service on the stock takes it back two to three years later; a point of income in extra service costs half a point of demand a year. */
@@ -64,8 +68,8 @@ class MacroAggregateSubsystem
     public const KALDOR_FOREIGN_DEMAND = 0.08;
     /** Output lost per unit of catastrophe loss burden above an average year (Noy 2009; Hsiang & Jina 2014 give the sign): a year at twice the average burden costs ~0.4pp of output, before the rebuild the construction stream books. */
     public const KALDOR_CATASTROPHE_DRAG = 0.004;
-    /** Demand drag per log unit of policy uncertainty: a doubling of the index takes about a point a year off demand growth, the order of the ~1% output loss Baker, Bloom & Davis attribute to the 2006-2011 rise (investment −6%, employment −2.3m). Two-sided in logs, as the index is. */
-    public const KALDOR_EPU_DRAG = 0.015;
+    /** Demand drag per log unit of policy uncertainty ABOVE baseline: a doubling costs ~0.4pp a year, so the 2006-2011 rise integrates to the ~1% output loss Baker, Bloom & Davis attribute to it. One-sided: spikes cost output (Bloom 2009), calm does not stimulate. */
+    public const KALDOR_EPU_DRAG = 0.006;
 
     // --- Aggregate Demand Disturbance (Smets-Wouters 2007) ---
     /** Mean reversion speed of the aggregate demand disturbance: -4*ln(0.86) per year, from the estimated quarterly AR(1) coefficient. */
@@ -254,7 +258,7 @@ class MacroAggregateSubsystem
      * Kaldor (1940) Non-Linear Business Cycle with Modigliani Wealth Effect & Marshall-Lerner FX Drag.
      *
      * Solves continuous macroeconomic aggregate demand dynamics:
-     *   dy = [Momentum - CapacityCeiling(y>0) - RealRateDrag + FiscalStimulus - CapitalOverhang + WealthEffect - FxDrag + DemandShock] * dt
+     *   dy = [Momentum - CapacityCeiling(y>0) - RealRateDrag + FiscalStimulus - CapitalOverhang + WealthEffect - FxDrag - CrisisDeleveraging - LendingStandards + DemandShock] * dt
      *
      * @param MacroState $state             Current macroeconomic state.
      * @param float      $yield5y           5-Year Treasury yield benchmark for business borrowing.
@@ -311,7 +315,11 @@ class MacroAggregateSubsystem
             ? self::KALDOR_CAPITAL_DRAG * $state->capitalStockOverhang
             : self::KALDOR_CAPITAL_REBOUND_DRAG * $state->capitalStockOverhang;
 
-        $housingWealthEffect = (($state->residentialPropertyIndexEma / MacroEngine::RESIDENTIAL_BASELINE) - 1.0) * self::KALDOR_WEALTH_EFFECT_ELASTICITY;
+        // Housing wealth against the level households have got used to, not against a fixed opening: house
+        // prices trend, and a trend measured as a deviation is a permanent demand subsidy, not a wealth effect.
+        $housingWealthEffect = $state->residentialWealthTrend > 0.0
+            ? max(-0.60, min(0.60, ($state->residentialPropertyIndexEma / $state->residentialWealthTrend) - 1.0)) * self::KALDOR_WEALTH_EFFECT_ELASTICITY
+            : 0.0;
 
         // Equity wealth effect: deviation of equity market cap-to-GDP ratio from its trend.
         $equityWealthRatio = $this->equityWealthRatio($state);
@@ -339,8 +347,13 @@ class MacroAggregateSubsystem
         // Physical destruction is a supply shock on impact; the rebuild is demand the builders book later.
         $catastropheSupplyDrag = self::KALDOR_CATASTROPHE_DRAG * max(0.0, $state->catastropheLossIndexEma - 1.0);
 
+        // Jorda, Schularick & Taylor (2013): the deleveraging a credit crisis leaves behind, booked and decayed by the credit subsystem.
+        $crisisDeleveragingDrag = $state->creditCrisisDrag;
+        // Bank lending channel: standards are a quantity constraint on credit that no rate cut reaches (Bernanke & Blinder 1988).
+        $lendingStandardsDrag = self::KALDOR_LENDING_STANDARDS_DRAG * $state->sloosTighteningIndexEma;
+
         // Baker, Bloom & Davis (2016): firms defer irreversible investment while the policy regime is in question.
-        $policyUncertaintyDrag = self::KALDOR_EPU_DRAG * log(max(1.0, $state->policyUncertaintyIndexEma) / MacroEngine::EPU_BASELINE);
+        $policyUncertaintyDrag = self::KALDOR_EPU_DRAG * max(0.0, log(max(1.0, $state->policyUncertaintyIndexEma) / MacroEngine::EPU_BASELINE));
 
         // Metzler (1941) & Blinder (1982) Inventory Investment Cycle Step
         $state->inventoryStockGap = $this->mathUtility->calculateInventoryCycleStep(
@@ -373,6 +386,8 @@ class MacroAggregateSubsystem
             - $policyUncertaintyDrag
             - $catastropheSupplyDrag
             - $householdDeleveragingDrag
+            - $crisisDeleveragingDrag
+            - $lendingStandardsDrag
             + $state->demandShock) * $dt;
 
         $diffusion = self::OUTPUT_GAP_DIFFUSION_SIGMA * $stressMultiplier * sqrt($dt) * $outZ;
@@ -594,6 +609,8 @@ class MacroAggregateSubsystem
         $state->totalFactorProductivityIndexEma += $emaWeight * ($state->totalFactorProductivityIndex - $state->totalFactorProductivityIndexEma);
         $state->capitalStockOverhangEma += $emaWeight * ($state->capitalStockOverhang - $state->capitalStockOverhangEma);
         $state->residentialPropertyIndexEma += $emaWeight * ($state->residentialPropertyIndex - $state->residentialPropertyIndexEma);
+        $residentialTrendWeight = 1.0 - exp(-$dt / self::RESIDENTIAL_WEALTH_TREND_HORIZON_YEARS);
+        $state->residentialWealthTrend += $residentialTrendWeight * ($state->residentialPropertyIndexEma - $state->residentialWealthTrend);
         $state->commercialPropertyIndexEma += $emaWeight * ($state->commercialPropertyIndex - $state->commercialPropertyIndexEma);
         $state->nairuEma += $emaWeight * ($state->nairu - $state->nairuEma);
         $state->sovereignDebtToGdpEma += $emaWeight * ($state->sovereignDebtToGdp - $state->sovereignDebtToGdpEma);

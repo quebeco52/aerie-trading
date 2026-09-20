@@ -2033,6 +2033,32 @@ class MathUtility
     }
 
     /**
+     * Annual financial-crisis hazard from the credit cycle (Schularick & Taylor 2012 "Credit Booms Gone Bust").
+     *
+     * Schularick and Taylor estimate a logit of crisis onset on lagged credit growth over 140 years of
+     * advanced-economy data: the credit-to-GDP gap is the medium-term signal and, per Drehmann & Juselius
+     * (2014), the debt-service gap is the near-term trigger:
+     *   h = 1 / (1 + exp(-(beta0 + betaGap * creditGap + betaDsr * debtServiceGap)))
+     *
+     * @param float $creditGap      Credit-to-GDP gap (stock over its slow one-sided trend; Basel III units).
+     * @param float $debtServiceGap Debt-service ratio over its own long-run average.
+     * @param float $beta0          Logit intercept (log-odds of a crisis in a year with no boom).
+     * @param float $betaGap        Logit sensitivity to the credit gap.
+     * @param float $betaDsr        Logit sensitivity to the debt-service gap.
+     * @return float Annual crisis hazard in [0, 0.99].
+     */
+    public function calculateSchularickTaylorCrisisHazard(
+        float $creditGap,
+        float $debtServiceGap,
+        float $beta0,
+        float $betaGap,
+        float $betaDsr
+    ): float {
+        $logit = $beta0 + ($betaGap * $creditGap) + ($betaDsr * $debtServiceGap);
+        return min(0.99, self::logisticUnitInterval($logit, 0.0, 1.0));
+    }
+
+    /**
      * Calculates the Federal Reserve G.17 Industrial Capacity Utilization Rate.
      *
      * Models real physical factory and equipment load factor based on the macroeconomic output gap

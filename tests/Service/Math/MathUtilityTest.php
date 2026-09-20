@@ -2269,4 +2269,24 @@ class MathUtilityTest extends TestCase
         $this->assertLessThan(10.0, MathUtility::calculateBufferedLeverageLimit(10.0, 0.01));
         $this->assertGreaterThan(MathUtility::calculateBufferedLeverageLimit(10.0, 0.025), MathUtility::calculateBufferedLeverageLimit(10.0, 0.01), 'A bigger buffer binds harder.');
     }
+
+    public function testSchularickTaylorCrisisHazardRisesWithTheCreditBoom(): void
+    {
+        $intercept = -4.6;
+        $noBoom = $this->mathUtility->calculateSchularickTaylorCrisisHazard(creditGap: 0.0, debtServiceGap: 0.0, beta0: $intercept, betaGap: 26.0, betaDsr: 50.0);
+        $this->assertEqualsWithDelta(0.01, $noBoom, 0.001, 'With no boom the hazard is the intercept\'s base rate.');
+
+        $boom = $this->mathUtility->calculateSchularickTaylorCrisisHazard(creditGap: 0.10, debtServiceGap: 0.0, beta0: $intercept, betaGap: 26.0, betaDsr: 50.0);
+        $this->assertGreaterThan(0.10, $boom, 'A ten-point credit gap lifts the annual hazard past a tenth.');
+        $this->assertLessThan(0.20, $boom);
+
+        $overstretched = $this->mathUtility->calculateSchularickTaylorCrisisHazard(creditGap: 0.10, debtServiceGap: 0.02, beta0: $intercept, betaGap: 26.0, betaDsr: 50.0);
+        $this->assertGreaterThan($boom, $overstretched, 'Debt service over its average is the near-term trigger on top of the gap.');
+
+        $bust = $this->mathUtility->calculateSchularickTaylorCrisisHazard(creditGap: -0.10, debtServiceGap: -0.02, beta0: $intercept, betaGap: 26.0, betaDsr: 50.0);
+        $this->assertLessThan($noBoom, $bust, 'Credit below trend is safer than trend.');
+
+        $capped = $this->mathUtility->calculateSchularickTaylorCrisisHazard(creditGap: 1.0, debtServiceGap: 1.0, beta0: $intercept, betaGap: 26.0, betaDsr: 50.0);
+        $this->assertSame(0.99, $capped);
+    }
 }

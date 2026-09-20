@@ -501,6 +501,49 @@ class MacroAggregateSubsystemTest extends TestCase
         );
     }
 
+    /** A house price index and the level households have got used to, with every other series held still. */
+    private function gapWithHousingAt(float $index, float $trend): float
+    {
+        $state = $this->neutralBorrowingState();
+        $state->residentialPropertyIndex = $index;
+        $state->residentialPropertyIndexEma = $index;
+        $state->residentialWealthTrend = $trend;
+
+        return $this->subsystem->calculateOutputGap($state, 0.03, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0);
+    }
+
+    /**
+     * The same argument as the equity trend above, and the reason housing needed it: measured against a fixed
+     * opening index instead, a district whose houses outpace its output collects a standing addition to demand
+     * for as long as the level persists -- 0.7pp a year at the end of a live 19-year run -- which is a drift,
+     * not the wealth effect Mian, Rao & Sufi (2013) measured out of housing wealth CHANGES.
+     */
+    public function testAHousePriceLevelHouseholdsHaveGotUsedToStopsMovingDemand(): void
+    {
+        $this->assertGreaterThan(
+            $this->gapWithHousingAt(100.0, 100.0),
+            $this->gapWithHousingAt(130.0, 100.0),
+            'A 30% dearer housing stock must move demand while it is still news.'
+        );
+
+        $state = $this->neutralBorrowingState();
+        $state->residentialPropertyIndex = 130.0;
+        $state->residentialPropertyIndexEma = 130.0;
+
+        // Four horizons of living with it.
+        for ($i = 0; $i < 4 * 12; $i++) {
+            $this->subsystem->updateExponentialMovingAverages($state, MacroAggregateSubsystem::RESIDENTIAL_WEALTH_TREND_HORIZON_YEARS / 12.0);
+        }
+
+        $this->assertEqualsWithDelta(130.0, $state->residentialWealthTrend, 1.0, 'The trend settles on the level it has been shown.');
+        $this->assertEqualsWithDelta(
+            $this->gapWithHousingAt(100.0, 100.0),
+            $this->gapWithHousingAt(130.0, 130.0),
+            1e-12,
+            'Once it is normal, a 30% dearer housing stock moves demand no more than an ordinary one.'
+        );
+    }
+
     /**
      * A caller that never reports a market -- the simulate command, the headless harness, every unit test
      * written before this channel existed -- must be left exactly where it was.
@@ -564,8 +607,8 @@ class MacroAggregateSubsystemTest extends TestCase
 
             $mean = array_sum($annualGrowth) / count($annualGrowth);
             $realizedVolatility = sqrt(
-                array_sum(array_map(static fn (float $g): float => ($g - $mean) ** 2, $annualGrowth))
-                / count($annualGrowth)
+                array_sum(array_map(static fn(float $g): float => ($g - $mean) ** 2, $annualGrowth))
+                    / count($annualGrowth)
             );
 
             $this->assertEqualsWithDelta(
@@ -745,7 +788,7 @@ class MacroAggregateSubsystemTest extends TestCase
     }
 
 
-    /** Baker, Bloom & Davis (2016): a doubling of policy uncertainty is a demand drag; a quiet regime is a mild tailwind. */
+    /** Baker, Bloom & Davis (2016): spikes in policy uncertainty cost output (Bloom 2009 wait-and-see), but calm does not stimulate. */
     public function testPolicyUncertaintyDragsDemandInLogs(): void
     {
         $neutral = new MacroState();
@@ -761,7 +804,7 @@ class MacroAggregateSubsystemTest extends TestCase
 
         $expected = MacroAggregateSubsystem::KALDOR_EPU_DRAG * log(2.0) * $dt;
         $this->assertEqualsWithDelta(-$expected, $gapDoubled - $gapNeutral, 1e-9, 'A doubling of the index takes the drag off demand over the quarter.');
-        $this->assertEqualsWithDelta($expected, $gapHalved - $gapNeutral, 1e-9, 'and a halving gives the same amount back: the drag is symmetric in logs.');
+        $this->assertEqualsWithDelta(0.0, $gapHalved - $gapNeutral, 1e-9, 'A halving does not stimulate: uncertainty drag is one-sided.');
     }
 
 
@@ -815,5 +858,24 @@ class MacroAggregateSubsystemTest extends TestCase
 
         $this->assertEqualsWithDelta(MacroAggregateSubsystem::KALDOR_HOUSEHOLD_DEBT_SERVICE * 0.02 * $dt, $gapCarried - $gapNeutral, 1e-9, 'Two points of service below average is borrowing that adds a point a year.');
         $this->assertEqualsWithDelta(-MacroAggregateSubsystem::KALDOR_HOUSEHOLD_DEBT_SERVICE * 0.02 * $dt, $gapRepaying - $gapNeutral, 1e-9, 'Two points over it take a point a year off demand.');
+    }
+
+    public function testCrisisDeleveragingAndLendingStandardsDragDemandOneForOne(): void
+    {
+        $neutral = new MacroState();
+        $deleveraging = new MacroState();
+        $deleveraging->creditCrisisDrag = 0.02;
+        $tightStandards = new MacroState();
+        $tightStandards->sloosTighteningIndexEma = 0.80;
+        $looseStandards = new MacroState();
+        $looseStandards->sloosTighteningIndexEma = -0.20;
+
+        $dt = 0.25;
+        $run = fn(MacroState $state): float => $this->subsystem->calculateOutputGap($state, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, $dt, 1.0);
+        $gapNeutral = $run($neutral);
+
+        $this->assertEqualsWithDelta(-0.02 * $dt, $run($deleveraging) - $gapNeutral, 1e-9, 'The crisis drag enters the drift at face value: two points a year off demand.');
+        $this->assertEqualsWithDelta(-MacroAggregateSubsystem::KALDOR_LENDING_STANDARDS_DRAG * 0.80 * $dt, $run($tightStandards) - $gapNeutral, 1e-9, 'Standards at the 80% of 2008 are a quantity constraint no rate cut reaches.');
+        $this->assertEqualsWithDelta(MacroAggregateSubsystem::KALDOR_LENDING_STANDARDS_DRAG * 0.20 * $dt, $run($looseStandards) - $gapNeutral, 1e-9, 'Easing standards lend into demand.');
     }
 }

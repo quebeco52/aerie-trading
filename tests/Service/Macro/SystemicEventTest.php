@@ -317,5 +317,30 @@ class SystemicEventTest extends TestCase
             'Edge-triggered catastrophe headlines must not be dropped by an active district cooldown.'
         );
     }
-}
 
+    public function testABankingCrisisIsReportedOnTheDayAndOutranksTheFreezeItCauses(): void
+    {
+        $state = new MacroState();
+        $state->totalTime = 12.5;
+        $state->lastCreditCrisisAt = 12.5;
+        $state->interbankLiquiditySpread = MacroEngine::SYSTEMIC_LIQUIDITY_FREEZE_SPREAD + 0.005;
+
+        $this->assertSame(ShockEvent::BANKING_CRISIS, $this->fire($state), 'The crisis is the cause; the funding freeze it forces is the symptom.');
+
+        $state->totalTime += 1.0 / self::TICKS_PER_YEAR;
+        $this->assertNotSame(ShockEvent::BANKING_CRISIS, $this->fire($state), 'The crisis headline is a single-tick pulse.');
+    }
+
+    public function testABankingCrisisIsNotLostToAnActiveCooldown(): void
+    {
+        $state = new MacroState();
+        $state->totalTime = 12.5;
+        $state->highYieldCreditSpread = MacroEngine::SYSTEMIC_CREDIT_SEIZURE_SPREAD + 0.02;
+        $this->assertSame(ShockEvent::CREDIT_MARKET_SEIZURE, $this->fire($state));
+        $this->assertGreaterThan(0.0, $state->eventCooldownTimer);
+
+        $state->totalTime += 1.0 / self::TICKS_PER_YEAR;
+        $state->lastCreditCrisisAt = $state->totalTime;
+        $this->assertSame(ShockEvent::BANKING_CRISIS, $this->fire($state), 'An edge-triggered crisis lands on one tick and must be reported through the cooldown.');
+    }
+}

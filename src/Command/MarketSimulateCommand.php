@@ -202,6 +202,7 @@ class MarketSimulateCommand extends Command
                         'cat_severity' => number_format($macroState->lastCatastropheSeverity, 1),
                         'dsr_pct' => number_format($macroState->householdDebtServiceRatio * 100.0, 1),
                         'debt_to_income_pct' => number_format($macroState->householdDebtToIncome * 100.0, 0),
+                        'credit_gap_pct' => number_format($macroState->creditToGdpGapEma * 100.0, 1),
                     ];
                     $desc = $this->narrativeEngine->generateLore($macroState->eventType, $macroContext);
                     $shockPct = match ($macroState->eventType) {

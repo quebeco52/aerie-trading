@@ -405,4 +405,22 @@ class AssetMarketSubsystemTest extends TestCase
 
         $this->assertEqualsWithDelta(AssetMarketSubsystem::TRADE_BALANCE_GAP_ELASTICITY * 0.03, $abroad->tradeBalanceToGdp - $home->tradeBalanceToGdp, 0.0005, 'Their absorption is our exports, at the same elasticity as ours is their exports.');
     }
+
+    public function testLendingStandardsMoveTheHousePriceFundamental(): void
+    {
+        $calm = new MacroState();
+        $tight = new MacroState();
+        $tight->sloosTighteningIndexEma = 0.80;
+        $loose = new MacroState();
+        $loose->sloosTighteningIndexEma = -0.20;
+
+        for ($i = 0; $i < 40; $i++) {
+            $this->subsystem->calculateResidentialPropertyIndex($calm, MacroEngine::TARGET_INFLATION, 0.25);
+            $this->subsystem->calculateResidentialPropertyIndex($tight, MacroEngine::TARGET_INFLATION, 0.25);
+            $this->subsystem->calculateResidentialPropertyIndex($loose, MacroEngine::TARGET_INFLATION, 0.25);
+        }
+
+        $this->assertLessThan(0.85 * $calm->residentialPropertyIndex, $tight->residentialPropertyIndex, 'The price a buyer can pay is the price a lender will finance: the 80% tightening of a crisis takes over 15% off in a decade.');
+        $this->assertGreaterThan($calm->residentialPropertyIndex, $loose->residentialPropertyIndex, 'Loosening standards lift what buyers can bid.');
+    }
 }

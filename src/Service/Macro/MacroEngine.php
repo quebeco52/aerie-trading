@@ -529,6 +529,7 @@ class MacroEngine
         $this->creditFiscalSubsystem->calculateGovernmentSpending($state, $dt);
         $this->assetSubsystem->calculateCommercialPropertyIndex($state, $dt);
         $this->creditFiscalSubsystem->calculateHouseholdCredit($state, $dt);
+        $this->creditFiscalSubsystem->calculateCreditCrisisHazard($state, $dt);
         $this->creditFiscalSubsystem->calculateRetailDefaultRate($state, $dt);
         $this->commoditySubsystem->calculateAgriculturalCommodityIndex($state, $dt);
         $this->commoditySubsystem->calculateCatastropheLosses($state, $dt);
@@ -624,13 +625,17 @@ class MacroEngine
 
         if ($state->eventCooldownTimer > 0.0) {
             $state->eventCooldownTimer = max(0.0, $state->eventCooldownTimer - $dt);
-            // Edge-triggered catastrophe headlines land on a single tick and must not be lost to an active cooldown.
-            if ($state->lastCatastropheAt !== $state->totalTime) {
+            // Edge-triggered headlines (a storm, a crisis) land on a single tick and must not be lost to an active cooldown.
+            if ($state->lastCatastropheAt !== $state->totalTime && $state->lastCreditCrisisAt !== $state->totalTime) {
                 return;
             }
         }
 
         $eventType = match (true) {
+            // The credit boom has gone bust: reported on the tick the hazard fires, and it outranks the freeze it causes.
+            $state->lastCreditCrisisAt === $state->totalTime
+            => ShockEvent::BANKING_CRISIS,
+
             $state->interbankLiquiditySpread >= self::SYSTEMIC_LIQUIDITY_FREEZE_SPREAD
             => ShockEvent::SYSTEMIC_LIQUIDITY_FREEZE,
 

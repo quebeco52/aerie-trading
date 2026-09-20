@@ -689,4 +689,94 @@ class CreditFiscalSubsystemTest extends TestCase
         }
         $this->assertLessThan(0.002, abs($state->householdDebtServiceGap), 'A century later the same rates are the average, and the gap has closed.');
     }
+
+    public function testCrisisHazardReadsTheCreditBoomAndIsOffInsideTheRefractoryWindow(): void
+    {
+        $subsystem = $this->quietSubsystem();
+
+        $boom = new MacroState();
+        $boom->totalTime = 20.0;
+        $boom->creditToGdpGapEma = 0.10;
+        $boom->householdDebtServiceGap = 0.02;
+        $subsystem->calculateCreditCrisisHazard($boom, 0.25);
+        $this->assertGreaterThan(0.10, $boom->creditCrisisHazard, 'A ten-point boom with service over its average is a live hazard.');
+        $this->assertSame(-1.0, $boom->lastCreditCrisisAt, 'The dice did not land, so no crisis has struck.');
+
+        $calm = new MacroState();
+        $calm->totalTime = 20.0;
+        $subsystem->calculateCreditCrisisHazard($calm, 0.25);
+        $this->assertLessThan(0.02, $calm->creditCrisisHazard, 'With no boom the hazard is the base rate.');
+
+        $recovering = new MacroState();
+        $recovering->totalTime = 20.0;
+        $recovering->creditToGdpGapEma = 0.10;
+        $recovering->lastCreditCrisisAt = 20.0 - (CreditFiscalSubsystem::CREDIT_CRISIS_REFRACTORY_YEARS - 1.0);
+        $subsystem->calculateCreditCrisisHazard($recovering, 0.25);
+        $this->assertSame(0.0, $recovering->creditCrisisHazard, 'The bust resets the stock: no second crisis inside the refractory window.');
+    }
+
+    public function testACrisisBooksADragScaledByTheBoomAndForcesTheFundingRun(): void
+    {
+        $math = new class extends MathUtility {
+            public function generateStandardNormal(): float { return 0.0; }
+            public function checkProbability(float $probability): bool { return true; }
+            public function calculateJumpDiffusion(float $lambda, float $jumpMean, float $jumpVol, float $dt): array
+            {
+                return ['multiplier' => 1.0, 'shock_pct' => null, 'exponent' => null];
+            }
+        };
+        $subsystem = new CreditFiscalSubsystem($math);
+
+        $state = new MacroState();
+        $state->totalTime = 12.5;
+        $state->creditToGdpGapEma = 0.10;
+        $subsystem->calculateCreditCrisisHazard($state, 1.0 / 3600.0);
+
+        $this->assertSame(12.5, $state->lastCreditCrisisAt, 'The crisis is dated to the tick it lands on.');
+        $this->assertEqualsWithDelta(
+            CreditFiscalSubsystem::CREDIT_CRISIS_DRAG_BASE + (CreditFiscalSubsystem::CREDIT_CRISIS_DRAG_PER_GAP * 0.10),
+            $state->creditCrisisDrag,
+            1e-9,
+            'Credit bites back: the drag is the base loss plus a share of the boom behind it.'
+        );
+
+        $state->interbankLiquiditySpread = MacroEngine::INTERBANK_BASELINE_SPREAD;
+        $subsystem->calculateInterbankLiquiditySpread($state, 1.0 / 3600.0);
+        $this->assertGreaterThan(2.5 * MacroEngine::INTERBANK_BASELINE_SPREAD, $state->interbankLiquiditySpread, 'The day of the crisis is a run on wholesale funding: the panic jump lands with certainty.');
+
+        $quiet = new MacroState();
+        $quiet->totalTime = 12.5;
+        $quiet->lastCreditCrisisAt = 12.0;
+        $quiet->interbankLiquiditySpread = MacroEngine::INTERBANK_BASELINE_SPREAD;
+        $subsystem->calculateInterbankLiquiditySpread($quiet, 1.0 / 3600.0);
+        $this->assertEqualsWithDelta(MacroEngine::INTERBANK_BASELINE_SPREAD, $quiet->interbankLiquiditySpread, 1e-5, 'A crisis already six months old does not re-run the funding market.');
+    }
+
+    public function testTheCrisisDragDecaysAtItsTimeConstant(): void
+    {
+        $subsystem = $this->quietSubsystem();
+        $state = new MacroState();
+        $state->totalTime = 10.0;
+        $state->lastCreditCrisisAt = 9.0;
+        $state->creditCrisisDrag = 0.02;
+
+        $subsystem->calculateCreditCrisisHazard($state, 1.0);
+
+        $this->assertEqualsWithDelta(0.02 * exp(-CreditFiscalSubsystem::CREDIT_CRISIS_DRAG_DECAY), $state->creditCrisisDrag, 1e-9, 'A year on, the drag has decayed by its time constant.');
+    }
+
+    public function testACrisisTightensLendingStandardsLikeASpreadWould(): void
+    {
+        $subsystem = $this->quietSubsystem();
+
+        $calm = new MacroState();
+        $crisis = new MacroState();
+        $crisis->creditCrisisDrag = 0.025;
+        for ($i = 0; $i < 8; $i++) {
+            $subsystem->calculateSloosCreditStandards($calm, 0.25);
+            $subsystem->calculateSloosCreditStandards($crisis, 0.25);
+        }
+
+        $this->assertGreaterThan(0.40, $crisis->sloosTighteningIndex - $calm->sloosTighteningIndex, 'A boom-fed crisis pushes net tightening toward the 80% of 2008 within two years.');
+    }
 }

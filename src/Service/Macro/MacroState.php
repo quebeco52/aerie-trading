@@ -56,6 +56,10 @@ class MacroState
 
     public float $residentialPropertyIndex = 100.0;
     public float $residentialPropertyIndexEma = 100.0;
+    // The price level households have got used to. Unlike the equity ratio below this index carries a
+    // baseline scale, so it opens at that baseline instead of at the first reading, and a state that has
+    // never been shown a house price is neutral on the wealth channel rather than silent on it.
+    public float $residentialWealthTrend = 100.0;
 
     public float $retailDefaultRate = 0.0250;
     public float $retailDefaultRateEma = 0.0250;
@@ -246,6 +250,10 @@ class MacroState
     public float $creditToGdpGapEma = 0.0;
     public float $countercyclicalBufferRate = 0.0;
     public float $countercyclicalBufferRateEma = 0.0;
+    // The credit cycle's crisis channel: this year's hazard, the deleveraging drag a crisis leaves on demand, and when the last one struck.
+    public float $creditCrisisHazard = 0.0;
+    public float $creditCrisisDrag = 0.0;
+    public float $lastCreditCrisisAt = -1.0;
 
     // Foreign bloc: its output gap, the policy rate its Taylor rule sets, and the global demand composite.
     public float $foreignOutputGap = 0.0;

@@ -144,6 +144,8 @@ class AssetMarketSubsystem
     public const RESIDENTIAL_MAX_LABOR_FACTOR = 1.80;
     /** Mean-reversion speed of residential property valuations toward fundamental user-cost equilibrium. */
     public const RESIDENTIAL_MEAN_REVERSION = 0.15;
+    /** Fundamental price per unit of net lending tightening (Duca, Muellbauer & Murphy 2011; Favara & Imbs 2015): the ~80% tightening of a crisis takes a fifth off, the post-crisis decline in Reinhart & Rogoff. */
+    public const RESIDENTIAL_CREDIT_STANDARDS_ELASTICITY = 0.25;
     /** Stochastic volatility of residential home prices (stationary noise ~5% so the user-cost channel dominates). */
     public const RESIDENTIAL_VOLATILITY = 0.03;
     /** Structural lower floor for the residential property index value. */
@@ -267,7 +269,9 @@ class AssetMarketSubsystem
      * Jorgenson (1963) User Cost of Capital & Spatial Housing Affordability Equilibrium Model.
      *
      * Calculates fundamental home prices from user cost of housing capital (mortgage rate + taxes - expected inflation)
-     * and household real disposable income affordability, with sticky physical mean reversion.
+     * and household real disposable income affordability, with sticky physical mean reversion. Credit conditions
+     * enter the fundamental as in Duca, Muellbauer & Murphy (2011): the price a buyer can pay is the price a lender
+     * will finance, so net tightening in bank standards lowers it and loosening lifts it.
      *
      * @param MacroState $state             Current macroeconomic state.
      * @param float      $expectedInflation Expected inflation (MonetaryPolicySubsystem::calculateExpectedInflation), the same measure the Taylor rule and IS curve use.
@@ -285,7 +289,8 @@ class AssetMarketSubsystem
         $affordabilityFactor = (self::RESIDENTIAL_NEUTRAL_USER_COST / $userCost) * $demandMultiplier;
         // Storm damage takes stock out of the market; the starts channel puts it back.
         $damageFactor = 1.0 - (self::CATASTROPHE_PROPERTY_DAMAGE_SHARE * max(0.0, $state->catastropheLossIndexEma - 1.0));
-        $fundamentalPrice = MacroEngine::RESIDENTIAL_BASELINE * max(0.30, min(2.50, $affordabilityFactor * max(0.5, $damageFactor)));
+        $creditConditionsFactor = 1.0 - (self::RESIDENTIAL_CREDIT_STANDARDS_ELASTICITY * $state->sloosTighteningIndexEma);
+        $fundamentalPrice = MacroEngine::RESIDENTIAL_BASELINE * max(0.30, min(2.50, $affordabilityFactor * max(0.5, $damageFactor) * max(0.5, $creditConditionsFactor)));
 
         $dW = $this->mathUtility->generateStandardNormal();
         $newIndex = $this->mathUtility->calculateSchwartz1Factor(

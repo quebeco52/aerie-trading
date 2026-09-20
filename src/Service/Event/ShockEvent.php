@@ -26,6 +26,9 @@ class ShockEvent
     /** Cyclical valuation bottom and counter-cyclical institutional equity buying driven by deep-value ERP. */
     public const SOVEREIGN_WEALTH_DEPLOYMENT = 'sovereign_wealth_deployment';
 
+    /** A credit boom has gone bust (Schularick & Taylor): lenders are failing, households deleverage and wholesale funding runs. */
+    public const BANKING_CRISIS = 'banking_crisis';
+
     /** Wholesale interbank lending freeze driven by severe counterparty liquidity spread blowout. */
     public const SYSTEMIC_LIQUIDITY_FREEZE = 'systemic_liquidity_freeze';
     /** Speculative-grade corporate debt market freeze triggered by high-yield spread widening. */
