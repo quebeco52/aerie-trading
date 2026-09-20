@@ -284,6 +284,27 @@ trait StandardOperatingPhysicsTrait
         };
     }
 
+    /**
+     * The expected-inflation measure input costs track, chosen by the model's COST_INFLATION_BASIS
+     * constant. Falls back to resolveExpectedInflationBasis() if not declared.
+     */
+    public function resolveCostInflationBasis(MacroStateDTO $macroState): float
+    {
+        if (!defined('static::COST_INFLATION_BASIS')) {
+            return $this->resolveExpectedInflationBasis($macroState);
+        }
+
+        $basis = (string) static::COST_INFLATION_BASIS;
+
+        return match ($basis) {
+            'supercore_inflation_ema'   => $macroState->supercoreInflationEma,
+            'inflation_ema'             => $macroState->inflationEma,
+            'reimbursement_rate_growth' => $macroState->reimbursementRateGrowth,
+            default                     => $macroState->tipsBreakevenEma,
+        };
+    }
+
+
     /** Pricing power index for this stock: ticker override, then the sector's PRICING_POWER_INDEX, then the median 0.5. */
     protected function resolvePricingPower(Stock $stock): float
     {

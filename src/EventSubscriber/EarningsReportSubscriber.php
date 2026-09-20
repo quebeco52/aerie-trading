@@ -9,6 +9,7 @@ use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\EventDispatcher\EventSubscriberInterface;
 use App\Data\MacroFieldCatalog;
 use App\Data\Sectors;
+use App\Service\Macro\MacroEngine;
 use App\Service\Model\Sector\PrivateEquityBusinessModel;
 
 class EarningsReportSubscriber implements EventSubscriberInterface
@@ -705,7 +706,7 @@ class EarningsReportSubscriber implements EventSubscriberInterface
                 if ($streamKey === 'commercial_therapeutics') {
                     $drivers[] = [
                         'label'  => 'Healthcare Reimbursement Rate Update',
-                        'impact' => round(($macro->reimbursementRateGrowth - (0.02 - 0.008)) * 1.0, 4),
+                        'impact' => round(($macro->reimbursementRateGrowth - (MacroEngine::TARGET_INFLATION - MacroEngine::REIMBURSEMENT_PRODUCTIVITY_OFFSET)) * 1.0, 4),
                         'type'   => 'macro',
                         'fields' => ['reimbursement_rate_growth'],
                     ];

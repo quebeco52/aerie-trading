@@ -56,8 +56,8 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
     public const SPONSOR_CREDIT_SPREAD_BASELINE = MacroEngine::BASE_CREDIT_SPREAD;
     /** Baseline policy rate (~4.5%) threshold above which LBO financing becomes distressed. */
     public const LBO_RATE_FREEZE_THRESHOLD  = 0.045;
-    /** Elasticity scalar: How LBO multiples compress and exits freeze as total Cost of Debt rises. */
-    public const LBO_COST_OF_DEBT_ELASTICITY = 7.50;
+    /** Elasticity scalar: How LBO multiples compress and exits freeze as total Cost of Debt rises. Rescaled from 7.50 for high-yield spread moves (~3.3x IG). */
+    public const LBO_COST_OF_DEBT_ELASTICITY = 2.27;
     /** Z-score cliff where economic conditions trigger a complete miss of the hurdle rate, wiping out carry. */
     public const HURDLE_RATE_Z_CLIFF = -1.00;
     /** Sensitivity of the hurdle rate cliff to widening credit spreads. */

@@ -290,4 +290,32 @@ class SystemicEventTest extends TestCase
         $state->householdDebtToIncome = 1.30;
         $this->assertNull($this->fire($state), 'A burden households are still borrowing into is not yet a deleveraging.');
     }
+
+    public function testWorkStoppageDoesNotArmDistrictCooldown(): void
+    {
+        $state = new MacroState();
+        $state->totalTime = 2.5;
+        $state->strikeSector = 'Industrials';
+        $state->strikeRemainingYears = 0.10;
+        $state->strikeStartedAt = 2.5;
+
+        $this->assertSame(ShockEvent::SECTOR_STRIKE, $this->fire($state));
+        $this->assertSame(0.0, $state->eventCooldownTimer, 'Sector strike news must not arm the district event cooldown.');
+    }
+
+    public function testCatastropheFiresDuringActiveDistrictCooldown(): void
+    {
+        $state = new MacroState();
+        $state->totalTime = 3.0;
+        $state->eventCooldownTimer = 0.15; // Active cooldown from an earlier event
+        $state->lastCatastropheAt = 3.0;
+        $state->lastCatastropheSeverity = 2.0;
+
+        $this->assertSame(
+            ShockEvent::NATURAL_CATASTROPHE,
+            $this->fire($state),
+            'Edge-triggered catastrophe headlines must not be dropped by an active district cooldown.'
+        );
+    }
 }
+

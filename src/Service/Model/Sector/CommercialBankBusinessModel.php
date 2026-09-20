@@ -379,7 +379,7 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
         // Calculate what the bank MUST pay depositors to keep them from fleeing.
         $depositRatio = $totalDebt > 0 ? ($customerDeposits / $totalDebt) : 0.0;
         $depositBeta = $this->calculateDepositBeta($totalDebt, $equity, $equityLimit, $customerDeposits);
-        $depositRate = max(0.001, $policyRate * $depositBeta * $this->resolveSystemDepositBetaScale($macroState));
+        $depositRate = max(0.001, $policyRate * $this->resolveEffectiveDepositBeta($depositBeta, $macroState));
 
         $blendedWholesaleRate = ($floatingRatio * ($policyRate + $macroState->interbankLiquiditySpreadEma)) + ((1.0 - $floatingRatio) * $yield5y) + $structuralSpread;
 
@@ -767,6 +767,15 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
         return max(0.25, min(3.0, $macroState->systemDepositBetaEma / self::DEPOSIT_BETA_NORMALIZATION_BASELINE));
     }
 
+    /**
+     * Resolves effective deposit beta scaled by system rate pass-through, strictly capped at MAX_DEPOSIT_BETA.
+     * Prevents deposit rates or APYs from ever exceeding the central bank policy rate.
+     */
+    private function resolveEffectiveDepositBeta(float $depositBeta, ?\App\DTO\MacroStateDTO $macroState): float
+    {
+        return min(self::MAX_DEPOSIT_BETA, $depositBeta * $this->resolveSystemDepositBetaScale($macroState));
+    }
+
     public function calculateDepositBeta(float $totalDebt, float $equity, float $equityLimit, float $customerDeposits): float
     {
         $utilization = $equity > 0.0 ? ($totalDebt / ($equity * $equityLimit)) : 1.0;
@@ -803,7 +812,7 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
         // Deposits are cheap, but the bank must pay an APY to prevent capital flight, and how much of the
         // policy rate the whole system passes through moves with the level of rates.
         $depositBeta = $this->calculateDepositBeta($debt, $totalEquity, $equityLimit, $customerDeposits);
-        $depositRate = max(0.001, $policyRate * $depositBeta * $this->resolveSystemDepositBetaScale($macroState));
+        $depositRate = max(0.001, $policyRate * $this->resolveEffectiveDepositBeta($depositBeta, $macroState));
         $depositInterest = $customerDeposits * $depositRate;
 
         return new InterestExpenseDTO(interestExpense: $wholesaleInterest + $depositInterest, wholesaleRate: $wholesaleRate);
@@ -855,7 +864,7 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
 
         $realGdpGrowth = self::LIABILITY_BASE_GDP_GROWTH + ($outputGap > 0.0 ? $outputGap * self::LIABILITY_GDP_POSITIVE_GAP_MULT : $outputGap * self::LIABILITY_GDP_NEGATIVE_GAP_MULT);
         $depositApyBeta = $this->calculateDepositBeta($totalDebt, $equity, $equityLimit, $currentLiabilities);
-        $state['bank_apy'] = max(0.001, $policyRate * $depositApyBeta * $this->resolveSystemDepositBetaScale($macroState));
+        $state['bank_apy'] = max(0.001, $policyRate * $this->resolveEffectiveDepositBeta($depositApyBeta, $macroState));
 
         // Yield Flight Penalty: If Money Market funds yield much higher than the bank's APY, depositors flee.
         $yieldFlightPenalty = max(0.0, max(0.0, $policyRate - self::YIELD_FLIGHT_POLICY_RATE_OFFSET) - $state['bank_apy']) * 1.0;

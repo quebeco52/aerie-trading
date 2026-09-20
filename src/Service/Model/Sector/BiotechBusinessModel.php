@@ -200,10 +200,6 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
     /** Valuation discount on the earnings multiple while clinical trial funding keeps FCF negative. */
     public const NEGATIVE_FCF_VAL_DISCOUNT = 0.88;
 
-    // --- Reimbursement Pricing Power ---
-    /** Reimbursement rate update basis for marketed branded therapeutics: commercial payers follow CMS administered pricing updates. */
-    public const PRICING_INFLATION_BASIS = 'reimbursement_rate_growth';
-
     public function getReversionSpeed(): float
     {
         return 0.15;

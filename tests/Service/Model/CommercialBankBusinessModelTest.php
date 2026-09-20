@@ -811,6 +811,32 @@ class CommercialBankBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta(2.0 * $neutral->interestExpense, $tight->interestExpense, 1e-9, 'A system passing twice as much through doubles the deposit interest on the same franchise.');
     }
 
+    /**
+     * A bank's deposit rate must never exceed the policy rate, even under extreme system deposit beta multipliers.
+     */
+    public function testEffectiveDepositBetaIsCappedAtMaximum(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('LAKE');
+        $stock->setCustomerDeposits('1000.0');
+        $stock->setWholesaleDebt('0.0');
+        $stock->setFloatingDebtRatio('0.0');
+
+        // System beta elevated to maximum (3.0x normalisation scale)
+        $extremeSystem = MacroStateDTO::fromArray(['system_deposit_beta_ema' => 0.60]);
+        $policyRate = 0.06;
+
+        // Utilization = 0 (debt = 0) with 0 customer deposits in ratio gives depositBeta = MAX_DEPOSIT_BETA (0.70)
+        $result = $this->model->calculateInterestExpenseAndWholesaleRate(
+            $stock, 0.05, 0.05, 0.05, $policyRate, 15.0, 1000.0, 0.0, $extremeSystem
+        );
+
+        // Max deposit rate is 0.70 * 0.06 = 0.042; deposit interest on $1000 is $42.0
+        $maxAllowedInterest = 1000.0 * $policyRate * CommercialBankBusinessModel::MAX_DEPOSIT_BETA;
+        $this->assertLessThanOrEqual($maxAllowedInterest, $result->interestExpense);
+        $this->assertLessThan($policyRate * 1000.0, $result->interestExpense, 'Deposit rate must never exceed the policy rate.');
+    }
+
     public function testMoneyFundMigrationDrainsTheDepositBase(): void
     {
         $stock = new Stock();

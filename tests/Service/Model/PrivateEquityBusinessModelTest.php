@@ -69,15 +69,15 @@ class PrivateEquityBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta(1.0, $normalPhysics['pricing_power_multiplier'], 0.001);
 
         // High cost of debt macro: policy 100 bps above the freeze threshold, spread 100 bps above baseline -> CoD +200 bps over baseline
-        // Delta = 0.02 * 7.50 = 0.15 compression => carried interest multiple = 0.85
-        // Blended (35% mgmt + 65% carry) = 0.35*1.0 + 0.65*0.85 = 0.35 + 0.5525 = 0.9025
         $highCoDMacro = MacroStateDTO::fromArray([
             'policy_rate_ema' => PrivateEquityBusinessModel::LBO_RATE_FREEZE_THRESHOLD + 0.010,
             'high_yield_credit_spread_ema' => PrivateEquityBusinessModel::LBO_CREDIT_SPREAD_BASELINE + 0.010,
         ]);
         $distressedPhysics = $this->model->getMacroPhysics($stock, $highCoDMacro);
         $this->assertLessThan(1.0, $distressedPhysics['pricing_power_multiplier']);
-        $this->assertEqualsWithDelta(0.9025, $distressedPhysics['pricing_power_multiplier'], 0.001);
+        $expectedCarry = 1.0 - (0.020 * PrivateEquityBusinessModel::LBO_COST_OF_DEBT_ELASTICITY);
+        $expectedPricingPower = (0.35 * 1.0) + (0.65 * $expectedCarry);
+        $this->assertEqualsWithDelta($expectedPricingPower, $distressedPhysics['pricing_power_multiplier'], 0.001);
     }
 
     public function testLboDebtIsPricedOffTheHighYieldTrancheNotInvestmentGrade(): void

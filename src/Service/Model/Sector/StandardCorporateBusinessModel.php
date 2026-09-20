@@ -167,6 +167,7 @@ class StandardCorporateBusinessModel implements BusinessModelInterface
     public function resolvePricingMultipliers(Stock $stock, \App\DTO\MacroStateDTO $macroState): array
     {
         $expectedInflation = $this->resolveExpectedInflationBasis($macroState);
+        $costInflation = $this->resolveCostInflationBasis($macroState);
         $elasticity = $this->resolvePricingElasticity($stock);
 
         $passThrough = $this->resolveInflationPassThrough($stock, $macroState, $elasticity, $expectedInflation, (float) static::PRICE_PASS_THROUGH_LAG_YEARS);
@@ -175,7 +176,8 @@ class StandardCorporateBusinessModel implements BusinessModelInterface
             'pricing_power_multiplier' => 1.0 + $passThrough,
             // Input prices move with expected inflation at unit elasticity and the same repricing lag, whatever
             // the firm itself manages to charge: the gap between the two multipliers is the firm's real pricing.
-            'input_cost_multiplier' => 1.0 + ($elasticity > 0.0 ? $passThrough / $elasticity : $expectedInflation),
+            // If the model sets an administered pricing basis distinct from its cost basis, input costs inflate at their own basis.
+            'input_cost_multiplier' => 1.0 + ($costInflation !== $expectedInflation ? $costInflation : ($elasticity > 0.0 ? $passThrough / $elasticity : $expectedInflation)),
         ];
     }
 

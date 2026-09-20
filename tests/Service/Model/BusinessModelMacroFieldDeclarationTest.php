@@ -102,6 +102,11 @@ final class BusinessModelMacroFieldDeclarationTest extends TestCase
             $actual = array_values(array_unique($actual));
         }
 
+        if ($this->invokesHelper($modelClass, 'resolvePricingMultipliers(') && defined($modelClass . '::COST_INFLATION_BASIS')) {
+            $actual[] = (string) constant($modelClass . '::COST_INFLATION_BASIS');
+            $actual = array_values(array_unique($actual));
+        }
+
         // FX is trait code too, but WHETHER a model is exposed at all is a per-model declaration
         // (FX_REVENUE_EXPOSURE), so invoking the helper is a genuine coupling to the exchange rate.
         if ($this->invokesHelper($modelClass, 'resolveFxDemandShift(')) {

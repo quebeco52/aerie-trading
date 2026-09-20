@@ -7,6 +7,7 @@ namespace App\Tests\Service\Model;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
+use App\Service\Macro\MacroEngine;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\BiotechBusinessModel;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
@@ -484,7 +485,7 @@ class BiotechBusinessModelTest extends TestCase
             realizedVariableMargin: 0.20,
             fixedCosts: self::FIXED_COSTS,
             baselineVol: self::BASELINE_VOL,
-            macroState: new MacroStateDTO(), // Baseline reimbursementRateGrowth (0.012)
+            macroState: new MacroStateDTO(), // Baseline reimbursementRateGrowth (0.014)
             mathUtility: $mathBaseline
         );
 
@@ -495,16 +496,16 @@ class BiotechBusinessModelTest extends TestCase
             realizedVariableMargin: 0.20,
             fixedCosts: self::FIXED_COSTS,
             baselineVol: self::BASELINE_VOL,
-            macroState: new MacroStateDTO(reimbursementRateGrowth: 0.04), // +4% reimbursement update vs 1.2% baseline
+            macroState: new MacroStateDTO(reimbursementRateGrowth: 0.04), // +4% reimbursement update vs 1.4% baseline
             mathUtility: $mathUplift
         );
 
-        // Branded commercial stream expands with reimbursement rate growth above baseline (+2.8%)
+        // Branded commercial stream expands with reimbursement rate growth above baseline (+2.6%)
         $this->assertGreaterThan(
             $baseResult->streamRevenue['commercial_therapeutics'],
             $upliftResult->streamRevenue['commercial_therapeutics']
         );
-        $expectedUplift = 1.0 + (0.04 - (0.02 - 0.008));
+        $expectedUplift = 1.0 + (0.04 - (MacroEngine::TARGET_INFLATION - MacroEngine::REIMBURSEMENT_PRODUCTIVITY_OFFSET));
         $this->assertEqualsWithDelta(
             $baseResult->streamRevenue['commercial_therapeutics'] * $expectedUplift,
             $upliftResult->streamRevenue['commercial_therapeutics'],

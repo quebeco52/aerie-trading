@@ -143,4 +143,28 @@ class MedicalCareFacilityBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta($healthy['elective_outpatient'] * (1.0 - $expectedDrop), $recession['elective_outpatient'], 1e-6);
         $this->assertEqualsWithDelta($healthy['inpatient_care'], $recession['inpatient_care'], 1e-9, 'The uninsured postpone the knee, not the heart attack.');
     }
+
+    /**
+     * Medical facilities price off administered CMS reimbursement updates, while input costs
+     * (clinical nurse wages and hospital supplies) inflate at market core services inflation (supercore).
+     */
+    public function testPricingMultipliersDecoupleReimbursementFromSupercoreCostInflation(): void
+    {
+        $stock = (new Stock())->setTicker('CRAN')->setBeta('0.60');
+        // Reimbursement growth = 1.2%, Supercore inflation = 4.5%
+        $macro = new MacroStateDTO(
+            supercoreInflationEma: 0.045,
+            reimbursementRateGrowth: 0.012,
+        );
+
+        $multipliers = $this->model->resolvePricingMultipliers($stock, $macro);
+
+        $this->assertArrayHasKey('pricing_power_multiplier', $multipliers);
+        $this->assertArrayHasKey('input_cost_multiplier', $multipliers);
+
+        // Input cost multiplier reflects supercore inflation (4.5%), not administered reimbursement update (1.2%)
+        $this->assertEqualsWithDelta(1.0 + 0.045, $multipliers['input_cost_multiplier'], 1e-6);
+        // Selling price reflects reimbursement rate pass-through
+        $this->assertLessThan($multipliers['input_cost_multiplier'], $multipliers['pricing_power_multiplier']);
+    }
 }

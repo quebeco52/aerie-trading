@@ -230,6 +230,8 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
         private \App\Service\Market\AuthorizedParticipant $authorizedParticipant,
         /** Where a creation basket is posted, so it lands on the constituents next tick like any other order. */
         private \App\Service\Market\Flow\OrderFlowStoreInterface $orderFlow,
+        /** One limit-order check per instrument per retry window, not one per tick while the worker answers. */
+        private \App\Service\Market\LimitOrderDispatchGate $limitOrderGate,
 
         private int $tickIntervalUs,
         private int $ticksPerYear,
@@ -730,13 +732,20 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                         // has been flushed since they were placed, and the two are indistinguishable from
                         // here — so check once. The handler rewrites the bounds either way, which means the
                         // uncertainty costs exactly one dispatch rather than stranding resting orders.
-                        $this->messageBus->dispatch(new \App\Message\ProcessLimitOrdersMessage($ticker, $price));
+                        // The gate keeps it at one: the key stays missing until the worker has answered.
+                        if ($this->limitOrderGate->allow($ticker, $tickCount)) {
+                            $this->messageBus->dispatch(new \App\Message\ProcessLimitOrdersMessage($ticker, $price));
+                        }
                         continue;
                     }
 
                     $bounds = json_decode($boundsJson, true);
                     if ($price <= ($bounds['buy'] ?? 0.0) || $price >= ($bounds['sell'] ?? 999999999.0)) {
-                        $this->messageBus->dispatch(new \App\Message\ProcessLimitOrdersMessage($ticker, $price));
+                        if ($this->limitOrderGate->allow($ticker, $tickCount)) {
+                            $this->messageBus->dispatch(new \App\Message\ProcessLimitOrdersMessage($ticker, $price));
+                        }
+                    } else {
+                        $this->limitOrderGate->settle($ticker);
                     }
                 }
 

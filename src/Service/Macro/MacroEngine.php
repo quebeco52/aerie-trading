@@ -348,8 +348,8 @@ class MacroEngine
     public const DEAL_ACTIVITY_EPU_BETA = 0.10;
 
     // --- Administered Healthcare Prices (CMS market-basket update) ---
-    /** Productivity offset subtracted from the annual reimbursement update (ACA s.3401 multifactor-productivity adjustment, ~0.5-1.0pp a year). Read by the fiscal subsystem and by the state's opening value. */
-    public const REIMBURSEMENT_PRODUCTIVITY_OFFSET = 0.008;
+    /** Productivity offset subtracted from the annual reimbursement update (ACA s.3401 multifactor-productivity adjustment, ~0.6pp a year). Read by the fiscal subsystem and by the state's opening value. */
+    public const REIMBURSEMENT_PRODUCTIVITY_OFFSET = 0.006;
 
     // --- Work Stoppages ---
     /** Sector demand lost per year of stoppage, in units of the sector factor's standard deviation: a five-week stoppage costs the struck sector about half a standard deviation of its persistent demand, which the one-year factor then unwinds. */
@@ -636,7 +636,10 @@ class MacroEngine
 
         if ($state->eventCooldownTimer > 0.0) {
             $state->eventCooldownTimer = max(0.0, $state->eventCooldownTimer - $dt);
-            return;
+            // Edge-triggered catastrophe headlines land on a single tick and must not be lost to an active cooldown.
+            if ($state->lastCatastropheAt !== $state->totalTime) {
+                return;
+            }
         }
 
         $eventType = match (true) {
@@ -688,7 +691,10 @@ class MacroEngine
 
         if ($eventType !== null) {
             $state->eventType = $eventType;
-            $state->eventCooldownTimer = self::SYSTEMIC_EVENT_COOLDOWN_YEARS;
+            // Sector news and scheduled elections must not arm the district-wide cooldown.
+            if ($eventType !== ShockEvent::SECTOR_STRIKE && $eventType !== ShockEvent::ELECTION_HELD) {
+                $state->eventCooldownTimer = self::SYSTEMIC_EVENT_COOLDOWN_YEARS;
+            }
         }
     }
 

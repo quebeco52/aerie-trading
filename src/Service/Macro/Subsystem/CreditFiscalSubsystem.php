@@ -119,7 +119,7 @@ class CreditFiscalSubsystem
     public const MAX_EPU = 400.0;
 
     // --- Administered Healthcare Prices (CMS market-basket update) ---
-    /** Reimbursement update cut per unit of sovereign debt above the neutral threshold: the sequester that a fiscal correction imposes on administered prices (Budget Control Act 2011 took 2% off Medicare payments). */
+    /** Reimbursement update cut per unit of sovereign debt above the risk threshold (90%): the sequester that a fiscal correction imposes on administered prices. */
     public const REIMBURSEMENT_FISCAL_CUT_SENSITIVITY = 0.02;
     /** Floor on the annual update: administered prices are held, not cut, in a deflationary year. */
     public const REIMBURSEMENT_MIN_UPDATE = 0.0;
@@ -556,7 +556,7 @@ class CreditFiscalSubsystem
             return;
         }
 
-        $excessDebt = max(0.0, $state->sovereignDebtToGdpEma - MacroEngine::SOVEREIGN_DEBT_NEUTRAL_THRESHOLD);
+        $excessDebt = max(0.0, $state->sovereignDebtToGdpEma - self::SOVEREIGN_RISK_DEBT_THRESHOLD);
         $update = $state->inflationEma
             - MacroEngine::REIMBURSEMENT_PRODUCTIVITY_OFFSET
             - (self::REIMBURSEMENT_FISCAL_CUT_SENSITIVITY * $excessDebt);

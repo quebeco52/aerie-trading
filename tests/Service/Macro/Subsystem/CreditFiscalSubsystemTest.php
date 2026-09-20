@@ -339,12 +339,12 @@ class CreditFiscalSubsystemTest extends TestCase
         $solvent = new MacroState();
         $solvent->totalTime = 4.001;
         $solvent->inflationEma = 0.03;
-        $solvent->sovereignDebtToGdpEma = MacroEngine::SOVEREIGN_DEBT_NEUTRAL_THRESHOLD;
+        $solvent->sovereignDebtToGdpEma = CreditFiscalSubsystem::SOVEREIGN_RISK_DEBT_THRESHOLD;
 
         $indebted = new MacroState();
         $indebted->totalTime = 4.001;
         $indebted->inflationEma = 0.03;
-        $indebted->sovereignDebtToGdpEma = MacroEngine::SOVEREIGN_DEBT_NEUTRAL_THRESHOLD + 0.30;
+        $indebted->sovereignDebtToGdpEma = CreditFiscalSubsystem::SOVEREIGN_RISK_DEBT_THRESHOLD + 0.30;
 
         $this->subsystem->calculateReimbursementRate($solvent, 0.01);
         $this->subsystem->calculateReimbursementRate($indebted, 0.01);

@@ -4,6 +4,7 @@ namespace App\Command;
 
 use App\Entity\OptionContract;
 use App\Entity\SimulationClock;
+use Doctrine\DBAL\Connection;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
@@ -24,6 +25,10 @@ class PruneHistoryCommand extends Command
 
     /** Simulated years a settled option contract is kept after expiry; the listing grid only reaches four months out. */
     public const EXPIRED_OPTION_YEARS_KEPT = 1.0;
+
+    // --- Batching ---
+    /** Primary-key ids one DELETE spans. Short statements keep the row locks and undo log small while the ticker keeps inserting behind them. */
+    public const DELETE_BATCH_IDS = 50000;
 
     public function __construct(private EntityManagerInterface $em)
     {
@@ -53,29 +58,10 @@ class PruneHistoryCommand extends Command
         $io->text(sprintf('Simulation stands at year %.4f; downsampling everything before year %.4f.', $now, $cutoff));
 
         try {
-            // Downsample older records based on simulated time (or missing sim_time) by retention ratio.
-            $sql = 'DELETE FROM :table WHERE (sim_time IS NULL OR sim_time < :cutoff) AND id % :ratio != 0';
-            
-            // Downsample Stocks
-            $stockDeleted = $conn->executeStatement(
-                str_replace(':table', 'stock_history', $sql),
-                ['cutoff' => $cutoff, 'ratio' => $ratio]
-            );
-            $io->success("Cleared $stockDeleted redundant rows from stock_history.");
-
-            // Downsample ETFs
-            $etfDeleted = $conn->executeStatement(
-                str_replace(':table', 'etf_history', $sql),
-                ['cutoff' => $cutoff, 'ratio' => $ratio]
-            );
-            $io->success("Cleared $etfDeleted redundant rows from etf_history.");
-
-            // Downsample Bonds
-            $bondDeleted = $conn->executeStatement(
-                str_replace(':table', 'bond_history', $sql),
-                ['cutoff' => $cutoff, 'ratio' => $ratio]
-            );
-            $io->success("Cleared $bondDeleted redundant rows from bond_history.");
+            foreach (['stock_history', 'etf_history', 'bond_history'] as $table) {
+                $deleted = $this->downsampleTable($conn, $table, $cutoff, $ratio);
+                $io->success("Cleared $deleted redundant rows from $table.");
+            }
 
             // Settled option contracts, which nothing reads and nothing downsamples.
             //
@@ -123,5 +109,62 @@ class PruneHistoryCommand extends Command
         $io->success('Downsampling complete! Long-term charts preserved, disk space recovered.');
 
         return Command::SUCCESS;
+    }
+
+    /**
+     * Downsamples one history table below the cutoff, walking the primary key in batches.
+     *
+     * A single DELETE over the whole table was one transaction the size of the history: hours of row locks
+     * and undo log against a ticker inserting thousands of rows a second, and the sim_time predicate has no
+     * index of its own (every history index leads with the asset id). Ids are assigned in insertion order,
+     * so simulated time is monotonic in id: the walk starts at the lowest id and stops at the first batch
+     * that holds rows and none of them older than the cutoff. A batch with no rows at all is a region an
+     * earlier run already thinned, and the walk continues through it.
+     */
+    private function downsampleTable(Connection $conn, string $table, float $cutoff, int $ratio): int
+    {
+        /** @var array{0: int|string|null, 1: int|string|null}|false $bounds */
+        $bounds = $conn->fetchNumeric("SELECT MIN(id), MAX(id) FROM $table");
+        if ($bounds === false || $bounds[0] === null || $bounds[1] === null) {
+            return 0;
+        }
+
+        $lo = (int) $bounds[0];
+        $max = (int) $bounds[1];
+        $deleted = 0;
+
+        while ($lo <= $max) {
+            $hi = $lo + self::DELETE_BATCH_IDS;
+            $range = ['lo' => $lo, 'hi' => $hi, 'cutoff' => $cutoff];
+
+            /** @var array{total: int|string, old: int|string|null}|false $probe */
+            $probe = $conn->fetchAssociative(
+                "SELECT COUNT(*) AS total,
+                        SUM(CASE WHEN sim_time IS NULL OR sim_time < :cutoff THEN 1 ELSE 0 END) AS old
+                 FROM $table WHERE id >= :lo AND id < :hi",
+                $range
+            );
+
+            $total = $probe === false ? 0 : (int) $probe['total'];
+            $old = $probe === false ? 0 : (int) ($probe['old'] ?? 0);
+
+            if ($total > 0 && $old === 0) {
+                break;
+            }
+
+            if ($old > 0) {
+                $deleted += (int) $conn->executeStatement(
+                    "DELETE FROM $table
+                     WHERE id >= :lo AND id < :hi
+                       AND (sim_time IS NULL OR sim_time < :cutoff)
+                       AND id % :ratio != 0",
+                    $range + ['ratio' => $ratio]
+                );
+            }
+
+            $lo = $hi;
+        }
+
+        return $deleted;
     }
 }
