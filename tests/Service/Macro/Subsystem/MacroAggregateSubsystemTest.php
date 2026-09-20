@@ -4,6 +4,7 @@ namespace App\Tests\Service\Macro\Subsystem;
 
 use App\Service\Macro\MacroEngine;
 use App\Service\Macro\MacroState;
+use App\Service\Macro\Recorder\OutputGapProbe;
 use App\Service\Macro\Subsystem\MacroAggregateSubsystem;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\SemiconductorBusinessModel;
@@ -877,5 +878,242 @@ class MacroAggregateSubsystemTest extends TestCase
         $this->assertEqualsWithDelta(-0.02 * $dt, $run($deleveraging) - $gapNeutral, 1e-9, 'The crisis drag enters the drift at face value: two points a year off demand.');
         $this->assertEqualsWithDelta(-MacroAggregateSubsystem::KALDOR_LENDING_STANDARDS_DRAG * 0.80 * $dt, $run($tightStandards) - $gapNeutral, 1e-9, 'Standards at the 80% of 2008 are a quantity constraint no rate cut reaches.');
         $this->assertEqualsWithDelta(MacroAggregateSubsystem::KALDOR_LENDING_STANDARDS_DRAG * 0.20 * $dt, $run($looseStandards) - $gapNeutral, 1e-9, 'Easing standards lend into demand.');
+    }
+
+    /**
+     * The aggregate demand disturbance and the output gap's own diffusion are separate innovations in
+     * the estimated system (Smets & Wouters 2007); one draw serving both correlates them at unity.
+     */
+    public function testDemandDisturbanceAndGapDiffusionDrawSeparateInnovations(): void
+    {
+        $dt = 0.25;
+        $math = new class extends MathUtility {
+            /** @var list<float> */
+            private array $draws = [];
+            private int $calls = 0;
+
+            public function script(float ...$draws): void
+            {
+                $this->draws = $draws;
+                $this->calls = 0;
+            }
+
+            public function drawCount(): int
+            {
+                return $this->calls;
+            }
+
+            public function generateStandardNormal(): float
+            {
+                return $this->draws[$this->calls++] ?? 0.0;
+            }
+        };
+        $subsystem = new MacroAggregateSubsystem($math);
+
+        $run = function (float $demandDraw, float $diffusionDraw) use ($subsystem, $math, $dt): array {
+            $math->script($demandDraw, $diffusionDraw);
+            $state = new MacroState();
+            $state->outputGap = 0.0;
+            $state->inflation = 0.02;
+            $state->policyRate = 0.02;
+            $state->wageGrowth = 0.035;
+            $gap = $subsystem->calculateOutputGap($state, 0.03, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, $dt, 1.0);
+
+            return [$gap, $state->demandShock, $math->drawCount()];
+        };
+
+        [$neutralGap, $neutralShock, $calls] = $run(0.0, 0.0);
+        // A shared draw fails here first: it consumes one innovation, not two.
+        $this->assertSame(2, $calls, 'One innovation for the demand disturbance, one for the gap diffusion');
+        $this->assertEqualsWithDelta(0.0, $neutralShock, 1e-15);
+
+        // Second draw only: the gap moves by the full diffusion, the disturbance does not move at all.
+        [$diffusionGap, $diffusionShock] = $run(0.0, 1.0);
+        $this->assertEqualsWithDelta(0.0, $diffusionShock, 1e-15, 'A diffusion innovation must not enter the demand disturbance');
+        $this->assertEqualsWithDelta(
+            MacroAggregateSubsystem::OUTPUT_GAP_DIFFUSION_SIGMA * sqrt($dt),
+            $diffusionGap - $neutralGap,
+            1e-12
+        );
+
+        // First draw only: the disturbance takes it whole and reaches the gap only through the drift.
+        [$demandGap, $demandShock] = $run(1.0, 0.0);
+        $expectedShock = MacroAggregateSubsystem::DEMAND_SHOCK_SIGMA * sqrt($dt);
+        $this->assertEqualsWithDelta($expectedShock, $demandShock, 1e-15);
+        $this->assertEqualsWithDelta($expectedShock * $dt, $demandGap - $neutralGap, 1e-12);
+    }
+
+    /**
+     * A subsystem wired to a live probe, with a diffusion draw that is not zero.
+     *
+     * The class fixture returns 0.0 from every normal, which is what most of these tests want and is
+     * exactly wrong here: it would leave the diffusion and clamp legs of the accounting untested.
+     */
+    private function probedSubsystem(OutputGapProbe $probe, float $normal): MacroAggregateSubsystem
+    {
+        $math = new class($normal) extends MathUtility {
+            public function __construct(private readonly float $normal) {}
+
+            public function generateStandardNormal(): float
+            {
+                return $this->normal;
+            }
+        };
+
+        return new MacroAggregateSubsystem($math, $probe);
+    }
+
+    private function probedState(): MacroState
+    {
+        $state = new MacroState();
+        $state->outputGap = -0.02;
+        $state->inflation = MacroEngine::TARGET_INFLATION;
+        $state->policyRate = MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION;
+        $state->demandShock = 0.004;
+
+        return $state;
+    }
+
+    /**
+     * The decomposition has to add up to the move it claims to explain.
+     *
+     * The probe is a second reading of a sum the subsystem also computes, and a second reading is worth
+     * nothing unless it reconciles: a channel added to the drift and not to the decomposition would
+     * otherwise show up as a panel that quietly under-reports. `unexplained` is what catches that, so it is
+     * asserted at zero rather than merely carried.
+     */
+    public function testTheProbeAccountsForEveryChannelThatMovedTheGap(): void
+    {
+        $probe = new OutputGapProbe();
+        $probe->enable();
+        $subsystem = $this->probedSubsystem($probe, 0.8);
+        $state = $this->probedState();
+
+        $dt = 1.0 / 3600.0;
+        $opening = $state->outputGap;
+        for ($tick = 0; $tick < 900; ++$tick) {
+            $state->outputGap = $subsystem->calculateOutputGap($state, 0.03, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, $dt, 1.0);
+        }
+
+        $window = $probe->snapshot()['current'];
+        $this->assertNotNull($window);
+
+        $this->assertSame(900, $window['ticks']);
+        $this->assertEqualsWithDelta(0.25, $window['years'], 1e-12, 'Nine hundred production ticks are one simulation quarter');
+        $this->assertEqualsWithDelta($opening, $window['opening_gap'], 1e-15);
+        $this->assertEqualsWithDelta($state->outputGap, $window['closing_gap'], 1e-15);
+
+        $this->assertEqualsWithDelta(0.0, $window['unexplained'], 1e-12, 'A channel reaches the drift without reaching the decomposition');
+
+        $this->assertEqualsWithDelta(
+            $window['change'],
+            $window['drift'] + $window['diffusion'] + $window['clamp'] + $window['unexplained'],
+            1e-12,
+            'The decomposition must reconstruct the gap it decomposes'
+        );
+
+        // Every channel in the drift is named, so the panel cannot silently drop one.
+        $this->assertCount(18, $window['contributions']);
+        $this->assertArrayHasKey('monetaryDrag', $window['contributions']);
+        $this->assertEqualsWithDelta(array_sum($window['contributions']), $window['drift'], 1e-15);
+    }
+
+    /**
+     * The contribution is an integral, not a level: a channel's line is the percentage points of gap it
+     * actually delivered over the window, which is the quantity a recession leg is decomposed in.
+     */
+    public function testAChannelsContributionIsItsRateIntegratedOverTheWindow(): void
+    {
+        $probe = new OutputGapProbe();
+        $probe->enable();
+        $subsystem = $this->probedSubsystem($probe, 0.0);
+
+        $state = $this->probedState();
+        $state->demandShock = 0.0;
+        $state->creditCrisisDrag = 0.02;
+
+        $dt = 1.0 / 3600.0;
+        for ($tick = 0; $tick < 900; ++$tick) {
+            $state->outputGap = $subsystem->calculateOutputGap($state, 0.03, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, $dt, 1.0);
+        }
+
+        $window = $probe->snapshot()['current'];
+
+        // A 2pp/yr drag held for a quarter delivers half a point of gap, and delivers it negative.
+        $this->assertEqualsWithDelta(-0.02 * 0.25, $window['contributions']['crisisDeleveragingDrag'], 1e-12);
+        $contributions = $window['contributions'];
+        asort($contributions);
+        $this->assertSame(
+            'crisisDeleveragingDrag',
+            array_key_first($contributions),
+            'The crisis is the heaviest drag on a state built around it'
+        );
+    }
+
+    /**
+     * The bound is booked as itself. Deriving the clamp as whatever is left over would make it the bucket
+     * every accounting error falls into, and `unexplained` would never fire.
+     */
+    public function testTheBoundIsBookedSeparatelyFromTheChannels(): void
+    {
+        $probe = new OutputGapProbe();
+        $probe->enable();
+        $subsystem = $this->probedSubsystem($probe, 0.0);
+
+        $state = $this->probedState();
+        $state->outputGap = MacroAggregateSubsystem::OUTPUT_GAP_FLOOR;
+        $state->creditCrisisDrag = 0.50;
+        $state->demandShock = 0.0;
+
+        $newGap = $subsystem->calculateOutputGap($state, 0.03, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0);
+        $window = $probe->snapshot()['current'];
+
+        $this->assertSame(MacroAggregateSubsystem::OUTPUT_GAP_FLOOR, $newGap, 'The floor holds');
+        $this->assertGreaterThan(0.0, $window['clamp'], 'The floor gave back the gap the drift took past it');
+        $this->assertEqualsWithDelta(0.0, $window['unexplained'], 1e-12);
+        $this->assertEqualsWithDelta(
+            $window['change'],
+            $window['drift'] + $window['diffusion'] + $window['clamp'] + $window['unexplained'],
+            1e-12
+        );
+    }
+
+    /**
+     * Off unless something turns it on: the web process constructs the same subsystem and must not pay for
+     * a decomposition nothing there reads.
+     */
+    public function testAProbeNobodyEnabledRecordsNothing(): void
+    {
+        $probe = new OutputGapProbe();
+        $subsystem = $this->probedSubsystem($probe, 0.8);
+        $state = $this->probedState();
+
+        $subsystem->calculateOutputGap($state, 0.03, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0);
+
+        $this->assertFalse($probe->isEnabled());
+        $this->assertNull($probe->snapshot()['current']);
+        $this->assertNull($probe->snapshot()['previous']);
+    }
+
+    /**
+     * Rolling closes the quarter and opens an empty one, so a reading is "this quarter so far" against
+     * "last quarter" rather than the run since the ticker started.
+     */
+    public function testRollingTheWindowKeepsTheClosedQuarterAndStartsTheNextEmpty(): void
+    {
+        $probe = new OutputGapProbe();
+        $probe->enable();
+        $subsystem = $this->probedSubsystem($probe, 0.0);
+        $state = $this->probedState();
+
+        $subsystem->calculateOutputGap($state, 0.03, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0);
+        $closing = $probe->snapshot()['current']['closing_gap'];
+
+        $probe->rollWindow();
+        $snapshot = $probe->snapshot();
+
+        $this->assertNull($snapshot['current'], 'The new quarter has not seen a tick yet');
+        $this->assertSame(1, $snapshot['previous']['ticks']);
+        $this->assertSame($closing, $snapshot['previous']['closing_gap']);
     }
 }

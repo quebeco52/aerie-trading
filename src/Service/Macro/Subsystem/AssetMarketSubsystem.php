@@ -23,7 +23,7 @@ class AssetMarketSubsystem
 
     // --- Sector Demand Factor ---
     /** Campbell-Cochrane (1999) habit formation risk aversion sensitivity to output gap deviations. */
-    public const HABIT_RISK_AVERSION_COEFF = 25.0;
+    public const HABIT_RISK_AVERSION_COEFF = 9.0;
     /** Structural floor: equities must logically yield more than risk-free T-bills. */
     public const MIN_EQUITY_RISK_PREMIUM = 0.02;
 

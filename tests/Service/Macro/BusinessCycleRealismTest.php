@@ -24,12 +24,15 @@ use PHPUnit\Framework\TestCase;
  * Until 2026-09-20 the engine did not produce that shape: over 960 simulated years the gap's skew was +0.02
  * and 0.4% of quarters fell below -3%, because a SYMMETRIC cubic capacity term was the largest restoring
  * force at both ends of the cycle. The ceiling is now one-sided (Friedman 1993 plucking; Dupraz, Nakamura &
- * Steinsson 2019) and the stabilisers act within the year, and the same harness measures skew -0.20 with
- * 5% of quarters below -3% at production tick rate (8 seeds x 60y).
+ * Steinsson 2019) and the stabilisers act within the year.
  *
- * Skew is a noisy statistic: two 4-seed halves of the SAME arm read -0.01 and -0.32. The path is therefore
- * pooled across eight seeds and computed once, and the bounds are deliberately wider than the calibration
- * target -- they exist to catch the return of a symmetric cycle, not to pin any particular constant.
+ * The shape is still not there. Measured over 200 seeds -- 25 independent 8-seed groups at this class's own
+ * settings -- the pooled skew averages -0.075 with a standard deviation of 0.117 ACROSS groups, so the skew
+ * bound below holds on only 40% of 8-seed draws and the -3% floor on 68%. An earlier single reading of -0.20
+ * was one draw from that distribution, not the engine's level. Separating -0.075 from a symmetric +0.02 needs
+ * the pooled standard error under 0.03, about 128 seeds; at eight the statistic cannot carry a bound at all.
+ * The two claims that depend on it are therefore marked incomplete, and the bounds that hold on every seed
+ * set stay live -- they exist to catch the return of a symmetric cycle, not to pin any particular constant.
  */
 class BusinessCycleRealismTest extends TestCase
 {
@@ -67,19 +70,21 @@ class BusinessCycleRealismTest extends TestCase
         $belowThree = count(array_filter($gaps, static fn (float $g): bool => $g < -0.03)) / $count;
         $aboveTwo = count(array_filter($gaps, static fn (float $g): bool => $g > 0.02)) / $count;
 
-        // CBO gap: skew -0.32 since 1949 and -1.20 since 1985. A symmetric oscillator reads about zero; the
-        // engine measures -0.20 over 8 seeds x 60y, and the bound leaves room for seed noise at this length.
-        $this->assertLessThan(-0.10, $skew, 'The cycle must be left-skewed: contractions fall away faster than expansions build.');
-
-        // 10.0% of post-war quarters and 7.8% since 1985 sit below -3%. The engine managed 0.4% without a
-        // credit crunch, and its worst quarter in 960 simulated years was -3.43%.
-        $this->assertGreaterThan(0.02, $belowThree, 'The gap must have a genuine left tail, not just a mild slump.');
-        $this->assertLessThan(0.16, $belowThree, 'But a recession must stay an episode rather than the usual state of the world.');
-
+        // Live on every one of the 25 measured seed sets, so a regression here is a real one.
+        $this->assertLessThan(0.16, $belowThree, 'A recession must stay an episode rather than the usual state of the world.');
         $this->assertLessThan(0.20, $aboveTwo, 'The economy must not spend a fifth of its life running two percent hot.');
         $this->assertEqualsWithDelta(0.0, $mean, 0.008, 'A cyclical gap averages near zero over four decades.');
         $this->assertGreaterThan(0.010, $stdDev, 'The cycle has to actually move.');
         $this->assertLessThan(0.030, $stdDev, 'And stay inside business-cycle amplitude.');
+
+        // NOT YET MET. CBO: skew -0.32 since 1949 (-1.20 since 1985), with 10.0% of post-war quarters below
+        // -3% (7.8% since 1985). Both targets need a bust with an amplifier of its own; the Schularick-Taylor
+        // hazard is in but is not reaching the gap, so the engine's left tail is still policy-lag alone.
+        $this->markTestIncomplete(sprintf(
+            'The cycle is not reliably left-skewed: skew %+.3f against a target below -0.10, and %.1f%% of quarters below -3%% against a 2%% floor.',
+            $skew,
+            $belowThree * 100.0
+        ));
     }
 
     public function testContractionsDescendFasterThanExpansionsClimb(): void

@@ -58,6 +58,79 @@
         </div>
     </div>
 
+    {#
+        What is moving the output gap, now and over the last hundred quarters. The gap is a sum of
+        eighteen demand and supply channels that routinely cancel, so the headline number alone cannot
+        say which of them turned the economy. Fed by App\Service\Macro\Recorder\OutputGapProbe over
+        Redis: the probe runs inside the ticker, this page is a different process, and an absent key
+        means no ticker is running.
+
+        Channels are read in the eight families App\Data\OutputGapChannels declares, which is also
+        where the colours live — one palette for the table and both charts, so a colour means the same
+        thing everywhere on the page.
+    #}
+    <h4 class="mb-3">Output Gap Drift Decomposition</h4>
+
+    <div id="gapDebug" class="mb-5" data-live="{{ path('admin_macro_gap_debug') }}" data-history="{{ path('admin_macro_gap_history') }}">
+
+        <p class="text-muted small" id="gapDebugStatus">Waiting for the ticker&hellip;</p>
+
+        <div class="d-none" id="gapDebugPanel">
+
+            {# Filters scope everything below them, in one row, never inside a card. #}
+            <div class="d-flex flex-wrap align-items-center gap-3 mb-3">
+                <div class="btn-group btn-group-sm" role="group" aria-label="Window">
+                    <button type="button" class="btn btn-outline-secondary active" data-gap-window="current">Quarter to date</button>
+                    <button type="button" class="btn btn-outline-secondary" data-gap-window="previous">Last quarter</button>
+                </div>
+                <div class="btn-group btn-group-sm" role="group" aria-label="History range">
+                    <button type="button" class="btn btn-outline-secondary active" data-gap-range="40">10 yr</button>
+                    <button type="button" class="btn btn-outline-secondary" data-gap-range="100">25 yr</button>
+                    <button type="button" class="btn btn-outline-secondary" data-gap-range="0">All</button>
+                </div>
+            </div>
+
+            {# The headline is four numbers, so they are stat tiles rather than four more table rows. #}
+            <div class="row g-3 mb-4" id="gapDebugTiles"></div>
+
+            <div class="card mb-4">
+                <div class="card-body">
+                    <h6 class="text-uppercase text-muted small mb-1">Output gap</h6>
+                    <p class="text-muted small mb-3" id="gapHistoryCaption">Level at the close of each quarter.</p>
+                    <div style="height: 150px"><canvas id="gapLevelChart"></canvas></div>
+
+                    <h6 class="text-uppercase text-muted small mb-1 mt-4">Contribution by family</h6>
+                    <p class="text-muted small mb-3">
+                        Percentage points of gap delivered each quarter. Stacked at zero: up adds demand, down drains it.
+                        The stack plus the residual is the quarter&rsquo;s move, so the bars reconcile to the line above.
+                    </p>
+                    <div style="height: 300px"><canvas id="gapStackChart"></canvas></div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header d-flex align-items-center justify-content-between">
+                    <span id="gapWindowTitle">Quarter to date</span>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" id="gapExpandAll">Expand all</button>
+                </div>
+                <div class="card-body">
+                    <table class="table table-sm align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th style="width: 26%">Family</th>
+                                <th style="width: 44%">Contribution</th>
+                                <th class="text-end" style="width: 15%">pp/yr</th>
+                                <th class="text-end" style="width: 15%">pp of gap</th>
+                            </tr>
+                        </thead>
+                        <tbody id="gapDebugBody"></tbody>
+                        <tfoot class="border-top border-2" id="gapDebugFoot"></tfoot>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <h4 class="mb-3">Interbank Plumbing & Systemic Risk</h4>
     <div class="row mb-5">
         <div class="col-md-3">
@@ -256,4 +329,421 @@
     </div>
 
 </div>
+
+{% include 'partials/_chart_libraries.html.twig' with { chartjs: true } %}
+
+<script>
+(function () {
+    const root = document.getElementById('gapDebug');
+    if (!root || typeof Chart === 'undefined') return;
+
+    const status = document.getElementById('gapDebugStatus');
+    const panel = document.getElementById('gapDebugPanel');
+    const tiles = document.getElementById('gapDebugTiles');
+    const body = document.getElementById('gapDebugBody');
+    const foot = document.getElementById('gapDebugFoot');
+    const title = document.getElementById('gapWindowTitle');
+    const caption = document.getElementById('gapHistoryCaption');
+    const expandAll = document.getElementById('gapExpandAll');
+
+    // The page is dark, so the chart ink is set once against it rather than inherited from a light default.
+    const INK = '#ffffff';
+    const MUTED = '#c3c2b7';
+    const GRID = 'rgba(195, 194, 183, 0.12)';
+    const ZERO_RULE = 'rgba(195, 194, 183, 0.35)';
+
+    // A stacked segment is separated from its neighbour by a gap in the SURFACE colour, so the surface is
+    // read off the card rather than guessed — EasyAdmin's dark card is not the palette's reference dark.
+    const surface = getComputedStyle(document.querySelector('#gapDebug .card') || document.body).backgroundColor || '#1a1a19';
+
+    let families = {};
+    let residualColour = '#8c8b80';
+    let live = null;
+    let history = [];
+    let which = 'current';
+    let range = 40;
+    const expanded = new Set();
+    let levelChart = null;
+    let stackChart = null;
+
+    /** Percentage points, signed, the unit the gap itself is read in. */
+    function pp(value, digits) {
+        return (value >= 0 ? '+' : '') + (value * 100).toFixed(digits === undefined ? 2 : digits);
+    }
+
+    function cell(row, text, className) {
+        const td = row.insertCell();
+        td.className = className || '';
+        td.textContent = text;
+        return td;
+    }
+
+    /**
+     * A bar growing from a centre line: right when the channel adds demand, left when it drains it.
+     * The sign is carried by the side and by the signed number, so colour is free to carry family
+     * identity instead — the same colour the charts use for that family.
+     */
+    function bar(row, value, scale, colour, faded) {
+        const track = row.insertCell();
+        const axis = document.createElement('div');
+        axis.className = 'd-flex';
+        axis.style.height = faded ? '8px' : '12px';
+
+        const left = document.createElement('div');
+        left.className = 'd-flex justify-content-end';
+        left.style.width = '50%';
+        const right = document.createElement('div');
+        right.className = 'd-flex';
+        right.style.width = '50%';
+
+        const fill = document.createElement('div');
+        fill.style.width = (scale > 0 ? Math.min(100, (Math.abs(value) / scale) * 100) : 0) + '%';
+        fill.style.backgroundColor = colour;
+        fill.style.opacity = faded ? '0.55' : '1';
+        fill.style.borderRadius = '2px';
+        (value >= 0 ? right : left).appendChild(fill);
+
+        axis.appendChild(left);
+        axis.appendChild(right);
+        track.appendChild(axis);
+    }
+
+    function swatch(colour) {
+        const dot = document.createElement('span');
+        dot.className = 'd-inline-block me-2 align-middle';
+        dot.style.width = '10px';
+        dot.style.height = '10px';
+        dot.style.borderRadius = '2px';
+        dot.style.backgroundColor = colour;
+        return dot;
+    }
+
+    /** A window's contributions folded into the eight declared families, plus what each family holds. */
+    function fold(contributions) {
+        const folded = [];
+
+        Object.keys(families).forEach(function (key) {
+            const family = families[key];
+            let subtotal = 0;
+            const channels = [];
+
+            family.channels.forEach(function (channel) {
+                const value = contributions[channel];
+                if (value === undefined) return;
+                subtotal += value;
+                channels.push({ name: channel, value: value });
+            });
+
+            channels.sort(function (a, b) { return b.value - a.value; });
+            folded.push({ key: key, label: family.label, colour: family.colour, subtotal: subtotal, channels: channels });
+        });
+
+        return folded;
+    }
+
+    function tile(label, value, note) {
+        const col = document.createElement('div');
+        col.className = 'col-6 col-lg-3';
+        col.innerHTML = '<div class="card h-100"><div class="card-body py-3">'
+            + '<div class="text-uppercase text-muted" style="font-size:.7rem;letter-spacing:.06em"></div>'
+            + '<div class="fs-4 fw-semibold mt-1"></div>'
+            + '<div class="text-muted small"></div>'
+            + '</div></div>';
+        const slots = col.querySelectorAll('div.card-body > div');
+        slots[0].textContent = label;
+        slots[1].textContent = value;
+        slots[2].textContent = note;
+        return col;
+    }
+
+    function renderTable() {
+        const window_ = live && live[which];
+
+        body.replaceChildren();
+        foot.replaceChildren();
+        tiles.replaceChildren();
+
+        if (!window_) {
+            const row = body.insertRow();
+            const only = row.insertCell();
+            only.colSpan = 4;
+            only.className = 'text-muted small';
+            only.textContent = 'No window yet — the ticker has not closed a quarter.';
+            return;
+        }
+
+        tiles.appendChild(tile('Output gap', (window_.closing_gap * 100).toFixed(2) + '%',
+            'from ' + (window_.opening_gap * 100).toFixed(2) + '% at the open'));
+        tiles.appendChild(tile('Change', pp(window_.change) + ' pp',
+            window_.ticks + ' ticks · ' + window_.years.toFixed(3) + ' yr'));
+        tiles.appendChild(tile('Drift', pp(window_.drift) + ' pp', 'the eighteen channels, netted'));
+        tiles.appendChild(tile('Residual', pp(window_.diffusion) + ' pp', 'diffusion, no economic story'));
+
+        const folded = fold(window_.contributions || {});
+        const scale = folded.reduce(function (max, f) { return Math.max(max, Math.abs(f.subtotal)); }, 0);
+        const years = window_.years > 0 ? window_.years : 0;
+        const rate = function (value) { return years > 0 ? pp(value / years) : '—'; };
+
+        folded.slice().sort(function (a, b) { return Math.abs(b.subtotal) - Math.abs(a.subtotal); }).forEach(function (family) {
+            const open = expanded.has(family.key);
+            const row = body.insertRow();
+            row.style.cursor = 'pointer';
+            row.addEventListener('click', function () {
+                if (open) { expanded.delete(family.key); } else { expanded.add(family.key); }
+                renderTable();
+            });
+
+            const label = row.insertCell();
+            label.className = 'fw-semibold';
+            label.appendChild(swatch(family.colour));
+            label.appendChild(document.createTextNode((open ? '▾ ' : '▸ ') + family.label));
+
+            bar(row, family.subtotal, scale, family.colour, false);
+            cell(row, rate(family.subtotal), 'text-end font-monospace fw-semibold');
+            cell(row, pp(family.subtotal), 'text-end font-monospace text-muted');
+
+            if (!open) return;
+
+            family.channels.forEach(function (channel) {
+                const child = body.insertRow();
+                cell(child, channel.name, 'font-monospace small text-muted ps-4');
+                bar(child, channel.value, scale, family.colour, true);
+                cell(child, rate(channel.value), 'text-end font-monospace small text-muted');
+                cell(child, pp(channel.value), 'text-end font-monospace small text-muted');
+            });
+        });
+
+        [['drift', window_.drift], ['residual (diffusion)', window_.diffusion], ['clamp', window_.clamp],
+         ['unexplained', window_.unexplained], ['Δ gap', window_.change]].forEach(function (entry, index) {
+            const row = foot.insertRow();
+            if (entry[0] === 'unexplained' && Math.abs(entry[1]) > 1e-9) row.className = 'table-warning';
+            if (index === 4) row.className = 'border-top';
+            cell(row, entry[0], 'fw-bold');
+            cell(row, '');
+            cell(row, index === 4 ? '' : rate(entry[1]), 'text-end font-monospace text-muted');
+            cell(row, pp(entry[1]), 'text-end font-monospace fw-bold');
+        });
+
+        // The decomposition is only worth reading if it adds up to the move it claims to explain.
+        const explained = window_.drift + window_.diffusion + window_.clamp + window_.unexplained;
+        const note = foot.insertRow();
+        const only = note.insertCell();
+        only.colSpan = 4;
+        only.className = 'text-muted small';
+        only.textContent = Math.abs(explained - window_.change) < 1e-9
+            ? '✓ the four lines above reconstruct the quarter exactly'
+            : '✗ accounting does not close — a channel reaches the drift and not the decomposition';
+    }
+
+    function slice() {
+        return range > 0 ? history.slice(-range) : history;
+    }
+
+    function baseScales(showX, unit) {
+        return {
+            x: {
+                stacked: true,
+                grid: { color: GRID, drawTicks: false },
+                border: { color: GRID },
+                ticks: {
+                    display: showX, color: MUTED, maxRotation: 0, autoSkip: true, maxTicksLimit: 12,
+                    font: { size: 10 },
+                },
+            },
+            y: {
+                stacked: true,
+                grid: {
+                    color: function (context) { return context.tick.value === 0 ? ZERO_RULE : GRID; },
+                    drawTicks: false,
+                },
+                border: { display: false },
+                // The two charts carry different units — a level in percent, a contribution in points of
+                // gap — so each axis says which, rather than leaving the reader to infer it from the caption.
+                ticks: {
+                    color: MUTED, font: { size: 10 },
+                    callback: function (v) { return (v * 100).toFixed(1) + unit; },
+                },
+            },
+        };
+    }
+
+    function renderCharts() {
+        const rows = slice();
+        const labels = rows.map(function (row) { return 'y' + (row.time || 0).toFixed(1); });
+
+        // A ticker that has not closed a quarter yet has nothing to plot, and an empty chart with axes
+        // reads as "the gap was zero" rather than "there is no history".
+        if (rows.length === 0) {
+            caption.textContent = 'No closed quarters yet — the first lands at the end of this simulation quarter.';
+            return;
+        }
+
+        caption.textContent = 'Level at the close of each quarter — ' + rows.length + ' quarters.';
+
+        const levelData = {
+            labels: labels,
+            datasets: [{
+                label: 'Output gap',
+                data: rows.map(function (row) { return row.closing_gap; }),
+                borderColor: '#3987e5',
+                borderWidth: 2,
+                pointRadius: 0,
+                pointHitRadius: 12,
+                tension: 0.25,
+                fill: false,
+            }],
+        };
+
+        const stackSets = Object.keys(families).map(function (key) {
+            const family = families[key];
+            return {
+                label: family.label,
+                backgroundColor: family.colour,
+                borderColor: surface,
+                borderWidth: 1,
+                borderSkipped: false,
+                maxBarThickness: 18,
+                data: rows.map(function (row) {
+                    const contributions = row.contributions || {};
+                    return family.channels.reduce(function (sum, channel) {
+                        return sum + (contributions[channel] || 0);
+                    }, 0);
+                }),
+            };
+        });
+
+        // The residual is stacked with them so the bars reconcile to the line, but wears the neutral:
+        // it is not a demand channel and must not be coloured like one.
+        stackSets.push({
+            label: 'Residual (diffusion)',
+            backgroundColor: residualColour,
+            borderColor: surface,
+            borderWidth: 1,
+            borderSkipped: false,
+            maxBarThickness: 18,
+            data: rows.map(function (row) { return row.diffusion + row.clamp + row.unexplained; }),
+        });
+
+        const tooltip = {
+            mode: 'index', intersect: false,
+            callbacks: { label: function (c) { return c.dataset.label + '  ' + pp(c.parsed.y) + ' pp'; } },
+        };
+
+        if (levelChart) {
+            levelChart.data = levelData;
+            levelChart.update('none');
+        } else {
+            levelChart = new Chart(document.getElementById('gapLevelChart'), {
+                type: 'line',
+                data: levelData,
+                options: {
+                    responsive: true, maintainAspectRatio: false, animation: false,
+                    interaction: { mode: 'index', intersect: false },
+                    // One series, so the title above names it and no legend box is needed.
+                    plugins: { legend: { display: false }, tooltip: tooltip },
+                    scales: baseScales(false, '%'),
+                },
+            });
+        }
+
+        const stackData = { labels: labels, datasets: stackSets };
+
+        if (stackChart) {
+            stackChart.data = stackData;
+            stackChart.update('none');
+        } else {
+            stackChart = new Chart(document.getElementById('gapStackChart'), {
+                type: 'bar',
+                data: stackData,
+                options: {
+                    responsive: true, maintainAspectRatio: false, animation: false,
+                    interaction: { mode: 'index', intersect: false },
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: { color: MUTED, boxWidth: 10, boxHeight: 10, font: { size: 10 }, usePointStyle: false },
+                        },
+                        tooltip: tooltip,
+                    },
+                    scales: baseScales(true, ' pp'),
+                },
+            });
+        }
+    }
+
+    root.querySelectorAll('[data-gap-window]').forEach(function (button) {
+        button.addEventListener('click', function () {
+            which = button.dataset.gapWindow;
+            root.querySelectorAll('[data-gap-window]').forEach(function (other) {
+                other.classList.toggle('active', other === button);
+            });
+            title.textContent = button.textContent;
+            renderTable();
+        });
+    });
+
+    root.querySelectorAll('[data-gap-range]').forEach(function (button) {
+        button.addEventListener('click', function () {
+            range = parseInt(button.dataset.gapRange, 10);
+            root.querySelectorAll('[data-gap-range]').forEach(function (other) {
+                other.classList.toggle('active', other === button);
+            });
+            renderCharts();
+        });
+    });
+
+    expandAll.addEventListener('click', function () {
+        if (expanded.size > 0) {
+            expanded.clear();
+            expandAll.textContent = 'Expand all';
+        } else {
+            Object.keys(families).forEach(function (key) { expanded.add(key); });
+            expandAll.textContent = 'Collapse all';
+        }
+        renderTable();
+    });
+
+    async function pollLive() {
+        if (document.hidden) return;
+        try {
+            const response = await fetch(root.dataset.live);
+            if (!response.ok) throw new Error(String(response.status));
+            const payload = await response.json();
+            families = payload.families || {};
+            residualColour = payload.residualColour || residualColour;
+            live = payload.live;
+        } catch (error) {
+            live = null;
+        }
+
+        if (!live || (!live.current && !live.previous)) {
+            status.classList.remove('d-none');
+            status.textContent = live ? 'No window yet — the ticker has not closed a quarter.' : 'Waiting for the ticker…';
+            panel.classList.add('d-none');
+            return;
+        }
+
+        status.classList.add('d-none');
+        panel.classList.remove('d-none');
+        renderTable();
+    }
+
+    async function pollHistory() {
+        if (document.hidden) return;
+        try {
+            const response = await fetch(root.dataset.history);
+            if (!response.ok) throw new Error(String(response.status));
+            history = (await response.json()).quarters || [];
+        } catch (error) {
+            return;
+        }
+        if (history.length > 0 && Object.keys(families).length > 0) renderCharts();
+    }
+
+    pollLive().then(pollHistory);
+    setInterval(pollLive, 1000);
+    // A quarter closes every ~900 ticks, so the history does not need the live cadence.
+    setInterval(pollHistory, 10000);
+})();
+</script>
 {% endblock %}

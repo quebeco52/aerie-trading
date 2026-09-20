@@ -212,6 +212,7 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
         private BondTracker $bondTracker,
         private \App\Service\Market\ForcedLiquidationService $liquidationService,
         private \App\EventListener\FlushProfiler $flushProfiler,
+        private \App\Service\Macro\Recorder\OutputGapProbe $gapProbe,
         private SimulationClockService $simulationClock,
         private OptionChainService $optionChain,
         private TreasuryAuctionService $treasuryAuction,
@@ -403,6 +404,9 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
 
         // The tick is the only place a flush is timed, so it is the only place that wants the attribution.
         $this->flushProfiler->enable();
+
+        // The gap is only ever moved here, so this is the only process that can say what moved it.
+        $this->gapProbe->enable();
 
         $lap = static function (string $name) use (&$phases, &$phaseStart): void {
             $now = hrtime(true);
@@ -904,6 +908,13 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                 );
                 if ($isFrameTick) {
                     $this->redis->publish('market_updates', json_encode($wireFrame->flush($tickCount, time())));
+
+                    // The gap decomposition goes to its own key rather than into the frame: the admin panel
+                    // is the only reader, and a frame is on every open browser's wire.
+                    $this->redis->set(
+                        \App\Service\Macro\Recorder\OutputGapProbe::REDIS_KEY,
+                        (string) json_encode($this->gapProbe->snapshot())
+                    );
                 }
 
                 // A cache of the committed clock, for the web process. Never the authority: see SimulationClock.
@@ -934,6 +945,29 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                 // Save Macro Report Snapshot once a "Simulation Quarter"
                 if ($tickCount % $quarterlyInterval === 0) {
                     $this->macroEngine->recordMacroSnapshot($macroState, $conn);
+                    // Same boundary, so a decomposition covers the quarter the snapshot beside it reports.
+                    $this->gapProbe->rollWindow();
+                    $closedQuarter = $this->gapProbe->snapshot()['previous'];
+
+                    // A ticker that starts mid-quarter closes a PARTIAL first window, and a partial window
+                    // is not a quarter: its contributions are short while its annualised rates divide by a
+                    // near-zero horizon, so one start produced a +7.0pp/yr residual against a ±1.2 range.
+                    // Kept out of the history rather than corrected, because the reading it would carry is
+                    // "this quarter was extraordinary" and it was only brief.
+                    if ($closedQuarter !== null && $closedQuarter['ticks'] >= $quarterlyInterval) {
+                        // Capped list rather than columns on macro_report: this is a diagnostic, and
+                        // widening a 107-column table by eighteen for it would be paying in schema.
+                        $closedQuarter['time'] = $macroState->totalTime;
+                        $this->redis->lPush(
+                            \App\Service\Macro\Recorder\OutputGapProbe::HISTORY_KEY,
+                            (string) json_encode($closedQuarter)
+                        );
+                        $this->redis->lTrim(
+                            \App\Service\Macro\Recorder\OutputGapProbe::HISTORY_KEY,
+                            0,
+                            \App\Service\Macro\Recorder\OutputGapProbe::HISTORY_QUARTERS - 1
+                        );
+                    }
                 }
 
                 // The clock goes in with the tick, on the tick's own connection: a tick that rolls back

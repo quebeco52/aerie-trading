@@ -4,6 +4,7 @@ namespace App\Service\Macro\Subsystem;
 
 use App\Service\Macro\MacroEngine;
 use App\Service\Macro\MacroState;
+use App\Service\Macro\Recorder\OutputGapProbe;
 use App\Service\Math\MathUtility;
 
 /**
@@ -75,10 +76,16 @@ class MacroAggregateSubsystem
     /** Mean reversion speed of the aggregate demand disturbance: -4*ln(0.86) per year, from the estimated quarterly AR(1) coefficient. */
     public const DEMAND_SHOCK_REVERSION = 0.60;
     /** Innovation volatility of the aggregate demand disturbance, in annualized output gap drift units. */
-    public const DEMAND_SHOCK_SIGMA = 0.010;
+    public const DEMAND_SHOCK_SIGMA = 0.0075;
 
     /** Stochastic micro-diffusion volatility of the output gap: realistic quarterly variance without breaking cycle phase. */
     public const OUTPUT_GAP_DIFFUSION_SIGMA = 0.0025;
+
+    // --- Cyclical Output Gap Bounds ---
+    /** Deepest slump the cycle may reach; below the worst postwar CBO gap (-8.8%, 2009Q2), so the bound guards runaway feedback rather than shaping the distribution. */
+    public const OUTPUT_GAP_FLOOR = -0.12;
+    /** Hottest the economy may run: above the postwar CBO peak (+5.6%, 1966Q1), since the one-sided cubic is what holds the upside. */
+    public const OUTPUT_GAP_CEILING = 0.10;
 
     // --- Metzler-Blinder Inventory Investment Cycle (Metzler 1941, Blinder 1982) ---
     /** Sensitivity of output gap drift to involuntary inventory liquidation and restocking; inventory swings carry a large share of the peak-to-trough decline in a typical downturn. */
@@ -189,7 +196,9 @@ class MacroAggregateSubsystem
     public const STANDARD_EMA_HORIZON_YEARS = 0.25;
 
     public function __construct(
-        private readonly MathUtility $mathUtility
+        private readonly MathUtility $mathUtility,
+        /** Records what moved the gap. Null in a test or a headless harness, off everywhere the ticker is not. */
+        private readonly ?OutputGapProbe $gapProbe = null
     ) {}
 
     /**
@@ -268,6 +277,9 @@ class MacroAggregateSubsystem
     public function calculateOutputGap(MacroState $state, float $yield5y, float $naturalRate, float $expectedInflation, float $dt, float $stressMultiplier): float
     {
         $y = $state->outputGap;
+        // Smets & Wouters (2007) estimate the demand disturbance and the measurement-frequency
+        // component as separate innovations; one draw serving both correlates them at unity.
+        $demandZ = $this->mathUtility->generateStandardNormal();
         $outZ = $this->mathUtility->generateStandardNormal();
 
         // Curdia & Woodford (2010) ex-ante real borrowing cost deflated by expected inflation.
@@ -358,30 +370,47 @@ class MacroAggregateSubsystem
 
         // Smets & Wouters (2007) persistent AR(1) aggregate demand disturbance.
         $state->demandShock += (-self::DEMAND_SHOCK_REVERSION * $state->demandShock * $dt)
-            + (self::DEMAND_SHOCK_SIGMA * $stressMultiplier * sqrt($dt) * $outZ);
+            + (self::DEMAND_SHOCK_SIGMA * $stressMultiplier * sqrt($dt) * $demandZ);
 
-        $drift = ($momentum
-            - $cubicConstraint
-            - $monetaryDrag
-            - $creditFrictionDrag
-            + $fiscalStimulus
-            - $capitalDrag
-            - $inventoryDrag
-            + $housingWealthEffect
-            + $equityWealthEffect
-            - $netExportDrag
-            - $energySupplyDrag
-            - $freightSupplyDrag
-            - $policyUncertaintyDrag
-            - $catastropheSupplyDrag
-            - $householdDeleveragingDrag
-            - $crisisDeleveragingDrag
-            - $lendingStandardsDrag
-            + $state->demandShock) * $dt;
+        // Every channel signed as it acts on demand, so a drag reads negative wherever it is looked at.
+        // This array IS the drift: it is summed below and handed to the probe unchanged, so a channel
+        // cannot reach the economy and miss the decomposition that explains it.
+        $contributions = [
+            'momentum' => $momentum,
+            'cubicConstraint' => -$cubicConstraint,
+            'monetaryDrag' => -$monetaryDrag,
+            'creditFrictionDrag' => -$creditFrictionDrag,
+            'fiscalStimulus' => $fiscalStimulus,
+            'capitalDrag' => -$capitalDrag,
+            'inventoryDrag' => -$inventoryDrag,
+            'housingWealthEffect' => $housingWealthEffect,
+            'equityWealthEffect' => $equityWealthEffect,
+            'netExportDrag' => -$netExportDrag,
+            'energySupplyDrag' => -$energySupplyDrag,
+            'freightSupplyDrag' => -$freightSupplyDrag,
+            'policyUncertaintyDrag' => -$policyUncertaintyDrag,
+            'catastropheSupplyDrag' => -$catastropheSupplyDrag,
+            'householdDeleveragingDrag' => -$householdDeleveragingDrag,
+            'crisisDeleveragingDrag' => -$crisisDeleveragingDrag,
+            'lendingStandardsDrag' => -$lendingStandardsDrag,
+            'demandShock' => $state->demandShock,
+        ];
 
+        $drift = array_sum($contributions) * $dt;
         $diffusion = self::OUTPUT_GAP_DIFFUSION_SIGMA * $stressMultiplier * sqrt($dt) * $outZ;
-        $newGap = $y + $drift + $diffusion;
-        return max(-0.12, min(0.10, $newGap));
+        $preClampGap = $y + $drift + $diffusion;
+        $newGap = max(self::OUTPUT_GAP_FLOOR, min(self::OUTPUT_GAP_CEILING, $preClampGap));
+
+        $this->gapProbe?->record(
+            terms: $contributions,
+            diffusion: $diffusion,
+            openingGap: $y,
+            preClampGap: $preClampGap,
+            closingGap: $newGap,
+            dt: $dt
+        );
+
+        return $newGap;
     }
 
     /**
