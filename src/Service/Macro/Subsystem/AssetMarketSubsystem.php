@@ -244,7 +244,7 @@ class AssetMarketSubsystem
         $occupancyFactor = 1.0 - ($excessUnemployment * self::CRE_OCCUPANCY_UNEMPLOYMENT_SENSITIVITY);
         $occupancyFactor = max(0.30, min(1.80, $occupancyFactor));
 
-        // DiPasquale-Wheaton (1996): Commercial rent contracts adjust with trend inflation and cyclical demand
+        // DiPasquale-Wheaton (1996) commercial real estate rent adjustment with inflation and demand.
         $rentGrowthFactor = 1.0 + (($state->inflationEma - MacroEngine::TARGET_INFLATION) * self::CRE_RENT_GROWTH_ELASTICITY)
             + ($state->outputGapEma * 0.50);
         $rentGrowthFactor = max(0.50, min(2.0, $rentGrowthFactor));
@@ -287,7 +287,7 @@ class AssetMarketSubsystem
         $demandMultiplier = max(self::RESIDENTIAL_MIN_LABOR_FACTOR, min(self::RESIDENTIAL_MAX_LABOR_FACTOR, $laborFactor * $incomeFactor));
 
         $affordabilityFactor = (self::RESIDENTIAL_NEUTRAL_USER_COST / $userCost) * $demandMultiplier;
-        // Storm damage takes stock out of the market; the starts channel puts it back.
+        // Hallegatte et al. (2007) physical housing stock destruction and post-disaster replacement.
         $damageFactor = 1.0 - (self::CATASTROPHE_PROPERTY_DAMAGE_SHARE * max(0.0, $state->catastropheLossIndexEma - 1.0));
         $creditConditionsFactor = 1.0 - (self::RESIDENTIAL_CREDIT_STANDARDS_ELASTICITY * $state->sloosTighteningIndexEma);
         $fundamentalPrice = MacroEngine::RESIDENTIAL_BASELINE * max(0.30, min(2.50, $affordabilityFactor * max(0.5, $damageFactor) * max(0.5, $creditConditionsFactor)));
@@ -401,7 +401,7 @@ class AssetMarketSubsystem
      */
     public function updateSystemicMarketFactor(MacroState $state, float $dt): void
     {
-        // Systemic market factor: combined AR(1) persistent regime shock and Student's t heavy-tailed shock.
+        // Two-factor equity market innovation: AR(1) regime persistence plus Student's t heavy tails.
         $marketFactorPhi = exp(-$dt / MacroEngine::MARKET_FACTOR_DECAY_TAU_YEARS);
         $state->marketZLatent = $this->mathUtility->generatePersistentZ($state->marketZLatent, $marketFactorPhi);
 
@@ -411,7 +411,7 @@ class AssetMarketSubsystem
         $state->marketZ = (sqrt(MacroEngine::MARKET_FACTOR_REGIME_VARIANCE_SHARE) * $regimeShock)
             + (sqrt(1.0 - MacroEngine::MARKET_FACTOR_REGIME_VARIANCE_SHARE) * $tailShock);
 
-        // Market-wide jump: discontinuous systemic Poisson jump (Kou double-exponential).
+        // Kou (2002) double-exponential jump diffusion for systemic equity market crashes.
         $systemicJump = $this->mathUtility->calculateSVJJJumps(
             lambda: MacroEngine::SYSTEMIC_JUMP_INTENSITY,
             pUp: MacroEngine::SYSTEMIC_JUMP_PROBABILITY_UP,
@@ -443,17 +443,17 @@ class AssetMarketSubsystem
     {
         $rateDiff = $state->policyRate - $state->foreignPolicyRate;
 
-        // Terms of trade: commodity import price inflation weakens the currency for a net importer.
+        // Harrod-Balassa-Samuelson terms-of-trade import price effect on real exchange rates.
         $energyShift = ($state->energyPriceIndexEma / MacroEngine::ENERGY_BASELINE) - 1.0;
         $metalsShift = ($state->industrialMetalsIndexEma / MacroEngine::METALS_BASELINE) - 1.0;
         $importBillShift = (MacroEngine::PPI_ENERGY_WEIGHT * $energyShift) + (MacroEngine::PPI_METALS_WEIGHT * $metalsShift);
         $termsOfTradeShift = self::FX_TERMS_OF_TRADE_SENSITIVITY * $importBillShift;
 
-        // Safe haven bid: currency appreciation during flight to safety when volatility exceeds threshold.
+        // Caballero & Krishnamurthy (2008) safe-haven currency bid under global volatility flight to safety.
         $panic = max(0.0, $state->marketVolatilityEma - MacroEngine::FLIGHT_TO_SAFETY_VOL_THRESHOLD);
         $safeHavenBid = self::FX_SAFE_HAVEN_SENSITIVITY * $panic;
 
-        // Fiscal risk sells the currency: a premium on the sovereign is not carry, it is default and inflation risk.
+        // Della Corte et al. (2016) sovereign credit default risk discount on currency valuation.
         $fiscalRiskDiscount = self::FX_FISCAL_RISK_SENSITIVITY * $state->sovereignRiskSpreadEma;
 
         $targetFx = MacroEngine::EXCHANGE_RATE_BASELINE * exp(
@@ -536,7 +536,7 @@ class AssetMarketSubsystem
         $creditZ = ($state->macroCreditSpreadEma - self::FCI_CREDIT_MEAN) / self::FCI_CREDIT_STD;
         $erpZ = ($state->equityRiskPremium - self::FCI_ERP_MEAN) / self::FCI_ERP_STD;
         $fxZ = ($state->exchangeRateIndexEma - MacroEngine::EXCHANGE_RATE_BASELINE) / self::FCI_FX_STD;
-        $slopeZ = -($state->nsSlopeEma - self::FCI_SLOPE_MEAN) / self::FCI_SLOPE_STD;
+        $slopeZ = - ($state->nsSlopeEma - self::FCI_SLOPE_MEAN) / self::FCI_SLOPE_STD;
         $volZ = ($state->marketVolatilityEma - self::FCI_VOL_MEAN) / self::FCI_VOL_STD;
         $sloosZ = ($state->sloosTighteningIndexEma - self::FCI_SLOOS_MEAN) / self::FCI_SLOOS_STD;
 
@@ -625,7 +625,7 @@ class AssetMarketSubsystem
         $fxDeviation = ($state->exchangeRateIndex / MacroEngine::EXCHANGE_RATE_BASELINE) - 1.0;
         $cyclicalAbsorption = $state->outputGap;
 
-        // Foreign absorption is the mirror of the district's own: their boom is our exports.
+        // Mundell-Fleming foreign absorption spillover to domestic export demand.
         $targetTradeBalance = MacroEngine::TRADE_BALANCE_BASELINE
             - (self::TRADE_BALANCE_FX_ELASTICITY * $fxDeviation)
             - (self::TRADE_BALANCE_GAP_ELASTICITY * $cyclicalAbsorption)

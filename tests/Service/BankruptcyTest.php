@@ -236,11 +236,15 @@ class BankruptcyTest extends TestCase
     }
 
     /**
-     * A payment default liquidates the firm even though the Altman test says it is solvent. These are two
-     * genuinely different ways to fail, and the second is the more common one in reality: the assets were
-     * fine, the refinancing simply was not there on the day the principal came due.
+     * A missed payment does not liquidate a solvent firm, however long it has been missing it.
+     *
+     * Liquidation is a solvency verdict. An event of default shuts the issuer out of the primary market,
+     * costs it its facility and rates it D, but a company whose assets comfortably cover the claims on them
+     * is worth more alive than broken up, and its creditors know it. Winding up on the flag alone destroyed
+     * firms carrying hundreds of billions of equity because one quarter ended with an empty treasury on the
+     * day a maturity landed — and since nothing ever cleared the flag, it did so for the rest of their lives.
      */
-    public function testPaymentDefaultLiquidatesAnOtherwiseSolventCompany(): void
+    public function testPaymentDefaultAloneDoesNotLiquidateASolventCompany(): void
     {
         $stock = new Stock();
         $stock->setTicker('DFLT');
@@ -250,8 +254,10 @@ class BankruptcyTest extends TestCase
         $stock->setTotalRevenue('1000000000');
         $stock->setOperatingMargin('0.15');
         $stock->setPaymentDefault(true);
+        // Well past any cure period: even an UNCURED default is not grounds for winding up a solvent firm.
+        $stock->setQuartersInDefault(8);
 
-        // Comfortably solvent on the balance sheet: only the missed payment can kill it.
+        // Comfortably solvent on the balance sheet.
         $this->debtEngineMock->method('calculateAltmanZScore')
             ->willReturn(['z_score' => 8.0, 'zone' => 'Safe', 'is_bankrupt' => false]);
 
@@ -269,8 +275,54 @@ class BankruptcyTest extends TestCase
 
         $operator->enforceMarketStability([$stock], new MacroStateDTO());
 
-        $this->assertTrue($stock->isBankrupt(), 'a missed principal payment must end the company');
+        $this->assertFalse($stock->isBankrupt(), 'a solvent firm must not be liquidated for a missed payment');
+        $this->assertSame('25.00', $stock->getPrice(), 'the equity is not wiped');
+    }
+
+    /**
+     * Insolvency still liquidates, and an uncured event of default is what makes it a creditor-driven
+     * filing rather than a firm simply running out of balance sheet. The Chapter 7 path is intact.
+     */
+    public function testAnUncuredDefaultCombinedWithInsolvencyStillLiquidates(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('GONE');
+        $stock->setName('Gone Holdings');
+        $stock->setPrice('25.00');
+        $stock->setSharesOutstanding('1000000');
+        $stock->setTotalRevenue('1000000000');
+        $stock->setOperatingMargin('0.15');
+        $stock->setPaymentDefault(true);
+        $stock->setQuartersInDefault(4);
+
+        $this->debtEngineMock->method('calculateAltmanZScore')
+            ->willReturn(['z_score' => -0.4, 'zone' => 'Distress', 'is_bankrupt' => true]);
+
+        $this->entityManagerMock->method('getRepository')->willReturn($this->createConfiguredStub(
+            TradeOrderRepository::class,
+            ['findOpenByTicker' => []]
+        ));
+
+        $captured = null;
+        $this->marketEventMock->method('publish')->willReturnCallback(
+            function ($s, $type, $desc, $pct) use (&$captured) {
+                $captured = $desc;
+                return [];
+            }
+        );
+
+        $operator = new MarketOperator(
+            $this->entityManagerMock,
+            $this->loggerMock,
+            $this->marketEventMock,
+            $this->debtEngineMock
+        );
+
+        $operator->enforceMarketStability([$stock], new MacroStateDTO());
+
+        $this->assertTrue($stock->isBankrupt());
         $this->assertEquals('0.00000000', $stock->getPrice());
+        $this->assertStringContainsString('failed to cure an event of default', (string) $captured);
     }
 
     /**

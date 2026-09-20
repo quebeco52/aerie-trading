@@ -212,8 +212,7 @@ class CreditFiscalSubsystem
     {
         $interbankStress = max(0.0, $state->interbankLiquiditySpreadEma - MacroEngine::INTERBANK_BASELINE_SPREAD);
 
-        // Sovereign ceiling: a corporate is rarely priced inside its own sovereign, so part of the fiscal premium
-        // lifts the whole investment-grade base before the cycle scales it.
+        // Borensztein, Cowan & Valenzuela (2013) sovereign ceiling transmission to corporate credit spreads.
         $baseIgSpread = MacroEngine::BASE_CREDIT_SPREAD + (self::SOVEREIGN_CEILING_PASSTHROUGH * $state->sovereignRiskSpreadEma);
 
         $trancheSpreads = $this->mathUtility->calculateDualTrancheCreditSpreads(
@@ -225,7 +224,7 @@ class CreditFiscalSubsystem
             fallenAngelSens: MacroEngine::FALLEN_ANGEL_CLIFF_SENSITIVITY
         );
 
-        // Both tranches are already floored and capped inside the formula (MIN/MAX_CREDIT_SPREAD, MAX_HY_CREDIT_SPREAD).
+        // Dual-tranche credit spread boundary clamping (Merton 1974 structural model).
         $state->macroCreditSpread = $trancheSpreads['ig'];
         $state->highYieldCreditSpread = $trancheSpreads['hy'];
     }
@@ -243,8 +242,7 @@ class CreditFiscalSubsystem
     {
         $currentSpread = $state->interbankLiquiditySpread ?? MacroEngine::INTERBANK_BASELINE_SPREAD;
 
-        // Systemic credit risk coupling (Brunnermeier 2009, Gorton & Metrick 2012):
-        // Interbank lending risk premium rises with wholesale corporate credit spreads
+        // Brunnermeier (2009) & Gorton-Metrick (2012) systemic interbank wholesale funding risk coupling.
         $excessCreditSpread = max(0.0, $state->macroCreditSpread - MacroEngine::BASE_CREDIT_SPREAD);
         $creditCoupledTheta = MacroEngine::INTERBANK_BASELINE_SPREAD + ($excessCreditSpread * self::INTERBANK_CREDIT_COUPLING);
 
@@ -273,7 +271,7 @@ class CreditFiscalSubsystem
         if ($jumpData['multiplier'] !== 1.0) {
             $jumpAmount = $baseProcess * ($jumpData['multiplier'] - 1.0);
         }
-        // A credit crisis is a run on wholesale funding (Gorton & Metrick 2012): the panic jump lands with certainty on the day.
+        // Gorton & Metrick (2012) wholesale funding liquidity run during banking crisis shock.
         if ($state->lastCreditCrisisAt === $state->totalTime) {
             $jumpAmount = max($jumpAmount, $baseProcess * (exp(self::INTERBANK_JUMP_MEAN) - 1.0));
         }
@@ -285,7 +283,7 @@ class CreditFiscalSubsystem
     }
 
     /**
-     * Basel II / III Vasicek Asymptotic Single Risk Factor (ASRF) Consumer Credit Portfolio Model.
+     * Vasicek (2002) One-Factor Asymptotic Single Risk Factor (ASRF) Retail Default Model (Basel II/III).
      *
      * Derives conditional retail loan default probability (PD) driven by a macroeconomic systemic factor
      * reflecting unemployment shocks (Okun's Law) and inflation-induced disposable income erosion.
@@ -300,7 +298,7 @@ class CreditFiscalSubsystem
 
         $borrowingSpreadStress = max(0.0, $state->macroCreditSpreadEma - MacroEngine::BASE_CREDIT_SPREAD);
         $interbankStress = max(0.0, $state->interbankLiquiditySpreadEma - MacroEngine::INTERBANK_BASELINE_SPREAD);
-        // Debt service is what a household actually pays: the spreads on new borrowing plus the burden on the stock.
+        // Drehmann, Illes, Juselius & Santos (2015) debt service burden on conditional default rates.
         $debtServiceShock = (($borrowingSpreadStress + $interbankStress) * self::RETAIL_DEBT_SERVICE_SENSITIVITY)
             + ($state->householdDebtServiceGap * self::RETAIL_DSR_SENSITIVITY);
 
@@ -390,7 +388,7 @@ class CreditFiscalSubsystem
         $govtSpendingFlow = ($state->governmentSpendingIndex / MacroEngine::GOVT_SPENDING_BASELINE)
             * MacroEngine::TARGET_CORPORATE_TAX_RATE * $state->nominalGdpIndex;
 
-        // Bohn (1998) Fiscal Reaction Function: primary budget surpluses emerge when debt/GDP exceeds neutral threshold
+        // Bohn (1998) fiscal reaction function: debt stabilization via primary budget surplus.
         $excessDebt = max(0.0, $state->sovereignDebtToGdp - MacroEngine::SOVEREIGN_DEBT_NEUTRAL_THRESHOLD);
         $bohnFiscalAdjustment = self::BOHN_FISCAL_REACTION_SENSITIVITY * $excessDebt * $state->nominalGdpIndex;
 
@@ -398,7 +396,7 @@ class CreditFiscalSubsystem
         $state->primaryDeficitToGdp = $primaryDeficit / max(0.1, $state->nominalGdpIndex);
         $interestCost = $state->yield10yEma * $state->sovereignDebtToGdp;
 
-        // Blanchard (2019): Nominal GDP growth includes real potential growth trend (labor + TFP) + cyclical gap + inflation
+        // Blanchard (2019) sovereign debt accumulation driven by growth-adjusted real rate (r - g).
         $realPotentialGrowth = MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE + MacroEngine::TFP_DRIFT;
         $nominalGrowthRate = $realPotentialGrowth + $state->outputGap + $state->inflationEma;
         $growthErosion = $nominalGrowthRate * $state->sovereignDebtToGdp;
@@ -445,13 +443,13 @@ class CreditFiscalSubsystem
 
         $state->householdDebtToIncome = max(self::MIN_HOUSEHOLD_DEBT_TO_INCOME, min(self::MAX_HOUSEHOLD_DEBT_TO_INCOME, $state->householdDebtToIncome * exp(($growth * $dt) + $noise)));
 
-        // BIS debt-service ratio: the instalment on the stock over its average remaining maturity.
+        // BIS debt-service ratio annuity calculation (Drehmann, Illes, Juselius & Santos 2015).
         $annuityFactor = $effectiveRate > 0.0
             ? $effectiveRate / (1.0 - ((1.0 + $effectiveRate) ** (-self::DSR_AVERAGE_MATURITY_YEARS)))
             : 1.0 / self::DSR_AVERAGE_MATURITY_YEARS;
         $state->householdDebtServiceRatio = $state->householdDebtToIncome * $annuityFactor;
 
-        // The service gap: the ratio against its own long-run average, started at the first observation.
+        // Drehmann & Juselius (2012) debt-service ratio gap relative to structural trend.
         if ($state->householdDebtServiceTrend <= 0.0) {
             $state->householdDebtServiceTrend = $state->householdDebtServiceRatio;
         }
@@ -463,7 +461,7 @@ class CreditFiscalSubsystem
         );
         $state->householdDebtServiceGap = $state->householdDebtServiceRatio - $state->householdDebtServiceTrend;
 
-        // Credit-to-GDP gap against a slow one-sided trend, and the Basel buffer it maps to.
+        // Basel III countercyclical capital buffer (CCyB) mapping from credit-to-GDP gap.
         $state->creditToGdpTrend = $this->mathUtility->calculateDistributedLag(
             currentLaggedValue: $state->creditToGdpTrend,
             targetValue: $state->householdDebtToIncome,
@@ -563,16 +561,14 @@ class CreditFiscalSubsystem
         $electionProximity = max(0.0, 1.0 - $yearsToElection);
         $recessionExcess = max(0.0, $state->recessionProbabilityEma - self::EPU_STRESS_PROBABILITY_FLOOR);
 
-        // The index is normalised to average its baseline, as the published series is, so the calendar lift is
-        // taken relative to its term average (a one-year ramp averages 0.5 / term) and the jumps are compensated
-        // by their stationary log contribution (lambda x mean size / kappa). Only the cycle lifts the mean.
+        // Julio & Yook (2012) election-cycle policy uncertainty with jump compensation.
         $averageElectionProximity = 0.5 / $term;
         $jumpLogCompensator = self::EPU_JUMP_PROBABILITY * self::EPU_JUMP_MEAN / self::EPU_MEAN_REVERSION;
 
         $target = MacroEngine::EPU_BASELINE * exp(
             (self::EPU_ELECTION_LIFT * ($electionProximity - $averageElectionProximity))
-            + (self::EPU_STRESS_LIFT * $recessionExcess)
-            - $jumpLogCompensator
+                + (self::EPU_STRESS_LIFT * $recessionExcess)
+                - $jumpLogCompensator
         );
 
         $baseProcess = $this->mathUtility->calculateSchwartz1Factor(
@@ -638,9 +634,9 @@ class CreditFiscalSubsystem
     public function calculateSloosCreditStandards(MacroState $state, float $dt): void
     {
         $excessCreditSpread = max(0.0, $state->macroCreditSpread - MacroEngine::BASE_CREDIT_SPREAD);
-        // A countercyclical buffer is capital banks must hold against the loans they write: it tightens standards like a spread would.
+        // Basel III CCyB transmission to commercial bank lending standards (BCBS 2010).
         $bufferTightening = self::SLOOS_CCYB_SPREAD_EQUIVALENT * $state->countercyclicalBufferRateEma;
-        // A crisis destroys the capital behind the loan book: the exogenous credit-supply cut of Bassett et al. (2014).
+        // Bassett et al. (2014) bank capital destruction shock tightening lending standards.
         $crisisTightening = self::SLOOS_CRISIS_SPREAD_EQUIVALENT * $state->creditCrisisDrag;
         $dW = $this->mathUtility->generateStandardNormal();
 

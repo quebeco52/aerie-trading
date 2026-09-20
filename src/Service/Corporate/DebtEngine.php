@@ -8,6 +8,7 @@ use App\Service\Event\MarketEventPublisher;
 use App\Service\Macro\MacroEngine;
 use App\Service\Market\CreditRatingAgency;
 use App\Service\Math\CorporateMetrics;
+use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
 
 class DebtEngine
@@ -143,7 +144,7 @@ class DebtEngine
             if ($this->creditRatingAgency !== null && $advanceMaturity) {
                 $oldRating = $stock->getCreditRating();
                 $zScoreData = $this->calculateAltmanZScore($stock, $ebit, $revenue, (float) $stock->getPrice());
-                $newRating = $this->creditRatingAgency->evaluateRating($stock, 10.0, $zScoreData['z_score']);
+                $newRating = $this->creditRatingAgency->evaluateRating($stock, 10.0, $zScoreData['z_score'], $zScoreData['zone']);
                 if ($newRating !== null && $this->marketEventPublisher !== null) {
                     $isDowngrade = $this->creditRatingAgency->isDowngrade($oldRating, $newRating);
                     $eventType = $isDowngrade ? 'CREDIT_DOWNGRADE' : 'CREDIT_UPGRADE';
@@ -221,7 +222,7 @@ class DebtEngine
         if ($this->creditRatingAgency !== null && $advanceMaturity) {
             $oldRating = $stock->getCreditRating();
             $zScoreData = $this->calculateAltmanZScore($stock, $ebit, $revenue, (float) $stock->getPrice());
-            $newRating = $this->creditRatingAgency->evaluateRating($stock, $distanceToDefault, $zScoreData['z_score']);
+            $newRating = $this->creditRatingAgency->evaluateRating($stock, $distanceToDefault, $zScoreData['z_score'], $zScoreData['zone']);
             if ($newRating !== null && $this->marketEventPublisher !== null) {
                 $isDowngrade = $this->creditRatingAgency->isDowngrade($oldRating, $newRating);
                 $eventType = $isDowngrade ? 'CREDIT_DOWNGRADE' : 'CREDIT_UPGRADE';
@@ -268,9 +269,22 @@ class DebtEngine
 
         // Customer Deposits & Leverage Physics
         $strategy = \App\Data\Sectors::getBusinessModelStrategy($businessModel);
-        $expenseMetrics = $strategy->calculateInterestExpenseAndWholesaleRate($stock, $blendedFixedRate, $floatingInterestRate, $currentMarketFixedRate, $policyRate, $equityLimit, $totalEquity, $debt, $macroState);
+        // The strategies are handed the FUNDED book only — term debt and deposits — because the revolver is
+        // priced here instead. They do not agree on where they read the balance from: the corporate and the
+        // base financial physics charge whatever $debt they are given, while the bank, credit, clearing and
+        // insurance models re-read the entity themselves. A revolver leg pushed down into them would be
+        // charged twice by the first group and not at all by the second.
+        $revolverDrawn = max(0.0, (float) $stock->getRevolverDrawn());
+        $fundedDebt = max(0.0, $debt - $revolverDrawn);
+        $expenseMetrics = $strategy->calculateInterestExpenseAndWholesaleRate($stock, $blendedFixedRate, $floatingInterestRate, $currentMarketFixedRate, $policyRate, $equityLimit, $totalEquity, $fundedDebt, $macroState);
         $interestExpense = $expenseMetrics->interestExpense;
         $wholesaleRate = $expenseMetrics->wholesaleRate;
+
+        // A revolving credit facility is floating by construction — a reference rate plus a contracted
+        // margin — so it is never part of the blended fixed coupon the term book carries.
+        if ($revolverDrawn > 0.0) {
+            $interestExpense += $revolverDrawn * ($floatingInterestRate + FinancialConstants::REVOLVER_DRAW_SPREAD_PENALTY);
+        }
 
         $trueBlendedRate = $debt > 1.0 ? ($interestExpense / $debt) : 0.0;
 
@@ -520,6 +534,11 @@ class DebtEngine
             if ($stock->hasBalanceSheetLedger()) {
                 $totalAssets = max(1.0, $stock->getTotalAssets($leaseLiability));
             }
+            // Client money held in custody is matched by a liability to the client and is bankruptcy-remote,
+            // so it is neither capital the firm can lose nor a claim its capital has to cover. Leaving it in
+            // measured a clearinghouse's solvency against the size of its members' margin pool, which grows
+            // with volatility: the score fell hardest in exactly the conditions it was meant to survive.
+            $totalAssets = max(1.0, $totalAssets - $strategy->getSegregatedCustodyLiabilities($stock));
             $capitalRatio = $equity / $totalAssets;
             $zScore = max(-100.0, min(100.0, $capitalRatio * 100.0)); // Convert to percentage points (e.g., 8% capital = 8.0 score)
 

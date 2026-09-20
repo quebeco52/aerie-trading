@@ -222,10 +222,7 @@ class MacroAggregateSubsystem
 
         $jumpExponent = (float) ($jumpData['exponent'] ?? 0.0);
 
-        // The growth rate is bounded above; the increment must not be bounded again. A per-year band
-        // scaled by dt is far narrower than an innovation scaled by sqrt(dt) -- at 3600 ticks/year by a
-        // factor of 26 -- so clipping here pins realized growth to the band's midpoint and takes the
-        // diffusion and the breakthrough jumps down with it.
+        // Merton (1976) jump-diffusion accumulation for technological progress.
         $logIncrement = ($clampedTrendGrowthRate * $dt) + $innovationDiffusion + $jumpExponent;
 
         $state->totalFactorProductivityIndex = max(1.0, $currentTfp * exp($logIncrement));
@@ -245,7 +242,7 @@ class MacroAggregateSubsystem
      */
     public function calculateNaturalRate(MacroState $state, float $tfpGrowthRate, float $dt): void
     {
-        // Holston-Laubach-Williams (2017): Natural rate r* tracks secular TFP trend drift and cyclical investment demand
+        // Holston, Laubach & Williams (2017) natural rate tracking secular TFP drift and investment demand.
         $tfpEffect = self::NATURAL_RATE_TFP_SENSITIVITY * ($tfpGrowthRate - MacroEngine::TFP_DRIFT);
         $demandEffect = self::NATURAL_RATE_OUTPUT_GAP_SENSITIVITY * $state->outputGapEma;
         $targetNaturalRate = MacroEngine::BASE_NATURAL_RATE + $tfpEffect + $demandEffect;
@@ -273,64 +270,56 @@ class MacroAggregateSubsystem
         $y = $state->outputGap;
         $outZ = $this->mathUtility->generateStandardNormal();
 
-        // Ex-ante real borrowing cost (Curdia & Woodford 2010, Eq. 14): each leg deflated by the inflation
-        // expected over its own horizon. The breakeven carries a risk premium that is not an expectation, so
-        // the five-year leg strips it. Headline is not used: a commodity spike is not a real-rate cut.
+        // Curdia & Woodford (2010) ex-ante real borrowing cost deflated by expected inflation.
+        // Strips inflation risk premium from TIPS breakeven on the 5-year leg.
         $expectedInflation5y = $state->tipsBreakeven - $this->inflationRiskPremium($state, MacroEngine::TARGET_INFLATION);
         $realRate = (self::BORROWING_POLICY_WEIGHT * ($state->policyRate - $expectedInflation))
             + (self::BORROWING_YIELD5Y_WEIGHT * ($yield5y - $expectedInflation5y));
 
         $neutral5yDurationScale = MathUtility::calculateTermPremiumDurationScale(5.0, MacroEngine::TERM_PREMIUM_DURATION_HORIZON_YEARS);
-        // The neutral benchmark is structural: a high-premium era really does tighten business borrowing, and it is
-        // the central bank's long-rate offset in the Taylor rule (Bernanke 2006) that leans against it, not the IS curve.
+        // Bernanke (2006) neutral borrowing benchmark incorporating structural term premium.
         $neutral5yYield = $naturalRate + MacroEngine::TARGET_INFLATION + (MacroEngine::NS_BASE_TERM_PREMIUM * $neutral5yDurationScale);
 
         $neutralBorrowingPolicy = (self::BORROWING_POLICY_WEIGHT * ($naturalRate + MacroEngine::TARGET_INFLATION))
             + (self::BORROWING_YIELD5Y_WEIGHT * $neutral5yYield);
-        // At neutral, expectations sit on the target on both legs.
+        // Woodford (2003) neutral real rate with expectations anchored at inflation target.
         $neutralRealRate = $neutralBorrowingPolicy - MacroEngine::TARGET_INFLATION;
 
-        // Pure risk-free real monetary policy transmission stance (Curdia & Woodford 2010 Eq. 14)
+        // Curdia & Woodford (2010) pure risk-free real monetary policy transmission stance.
         $monetaryDrag = self::KALDOR_MONETARY_DRAG * ($realRate - $neutralRealRate);
 
-        // Bernanke, Gertler, & Gilchrist (1999) Financial Accelerator & Wholesale Credit Friction
+        // Bernanke, Gertler & Gilchrist (1999) financial accelerator wholesale credit frictions.
         $excessCreditSpread = max(-MacroEngine::BASE_CREDIT_SPREAD * 0.5, $state->macroCreditSpreadEma - MacroEngine::BASE_CREDIT_SPREAD);
         $excessInterbankSpread = max(-MacroEngine::INTERBANK_BASELINE_SPREAD * 0.5, $state->interbankLiquiditySpreadEma - MacroEngine::INTERBANK_BASELINE_SPREAD);
         $creditFrictionDrag = self::KALDOR_CREDIT_FRICTION_DRAG * ($excessCreditSpread + $excessInterbankSpread);
 
         $momentum = self::KALDOR_MOMENTUM * $y;
-        // The ceiling is one-sided. A symmetric cubic was the largest restoring force at BOTH ends of the cycle
-        // (measured 2026-09-20: +2.3 pp/yr at -3%, against +2.1 from policy), so busts were cushioned by an
-        // algebraic bound rather than fought by economics and the gap came out symmetric (skew -0.12 vs a real
-        // -0.32). Below potential only policy, the stabilisers and the credit chain pull the economy back.
+        // Kaldor (1940) non-linear asymmetric capacity ceiling constraint.
         $cubicConstraint = $y > 0.0 ? self::KALDOR_CAPACITY * pow($y, 3) : 0.0;
-        // Fiscal impulse: tax-smoothing stabilizer plus discretionary appropriations above the peacetime baseline
-        // (Blanchard-Perotti 2002 spending multiplier scaled by the public share of output).
+        // Blanchard & Perotti (2002) fiscal impulse via automatic stabilizers and discretionary spending.
         $spendingShift = ($state->governmentSpendingIndexEma / MacroEngine::GOVT_SPENDING_BASELINE) - 1.0;
         $fiscalStimulus = (self::KALDOR_FISCAL_MULTIPLIER * (MacroEngine::TARGET_CORPORATE_TAX_RATE - $state->corporateTaxRate))
             + (self::KALDOR_GOVT_SPENDING_MULTIPLIER * $spendingShift);
-        // Excess capacity dampens investment hard; a capital SHORTFALL does not summon construction at the
-        // same rate (Bertola & Caballero 1994).
+        // Bertola & Caballero (1994) asymmetric capital overhang drag reflecting investment irreversibility.
         $capitalDrag = $state->capitalStockOverhang >= 0.0
             ? self::KALDOR_CAPITAL_DRAG * $state->capitalStockOverhang
             : self::KALDOR_CAPITAL_REBOUND_DRAG * $state->capitalStockOverhang;
 
-        // Housing wealth against the level households have got used to, not against a fixed opening: house
-        // prices trend, and a trend measured as a deviation is a permanent demand subsidy, not a wealth effect.
+        // Case, Quigley & Shiller (2005) housing wealth effect relative to persistent trend.
         $housingWealthEffect = $state->residentialWealthTrend > 0.0
             ? max(-0.60, min(0.60, ($state->residentialPropertyIndexEma / $state->residentialWealthTrend) - 1.0)) * self::KALDOR_WEALTH_EFFECT_ELASTICITY
             : 0.0;
 
-        // Equity wealth effect: deviation of equity market cap-to-GDP ratio from its trend.
+        // Lettau & Ludvigson (2001) equity wealth effect from equity-to-GDP valuation trend deviations.
         $equityWealthRatio = $this->equityWealthRatio($state);
         $equityWealthEffect = ($equityWealthRatio > 0.0 && $state->equityWealthTrend > 0.0)
             ? max(-0.60, min(0.60, ($equityWealthRatio / $state->equityWealthTrend) - 1.0)) * self::KALDOR_EQUITY_WEALTH_ELASTICITY
             : 0.0;
         $fxShift = ($state->exchangeRateIndexEma / MacroEngine::EXCHANGE_RATE_BASELINE) - 1.0;
-        // Net exports: the currency's price effect, less the foreign bloc's demand for what the district sells.
+        // Mundell-Fleming net export drag via real exchange rate elasticity and foreign demand.
         $netExportDrag = (self::KALDOR_FX_ELASTICITY * $fxShift) - (self::KALDOR_FOREIGN_DEMAND * $state->foreignOutputGapEma);
 
-        // Symmetric supply shocks (Bruno-Sachs 1985 & Blanchard-Gali 2007): below baseline is cost dividend
+        // Bruno & Sachs (1985) and Blanchard & Gali (2007) symmetric energy supply shock drag.
         $energyShock = $state->energyPriceShock != 0.0
             ? $state->energyPriceShock
             : (($state->energyPriceIndexEma > 0.0 ? $state->energyPriceIndexEma : $state->energyPriceIndex) - MacroEngine::ENERGY_BASELINE);
@@ -341,21 +330,21 @@ class MacroAggregateSubsystem
         $freightSupplyShift = ($freightRate - MacroEngine::FREIGHT_BASELINE) / MacroEngine::FREIGHT_BASELINE;
         $freightSupplyDrag = $freightSupplyShift * self::KALDOR_FREIGHT_SUPPLY_DRAG;
 
-        // Drehmann, Juselius & Korinek (2017): borrowing boosts demand now and the service on it drags later; the gap carries both.
+        // Drehmann, Juselius & Korinek (2017) household debt service drag on demand.
         $householdDeleveragingDrag = self::KALDOR_HOUSEHOLD_DEBT_SERVICE * $state->householdDebtServiceGap;
 
-        // Physical destruction is a supply shock on impact; the rebuild is demand the builders book later.
+        // Hallegatte et al. (2007) physical capital destruction supply drag.
         $catastropheSupplyDrag = self::KALDOR_CATASTROPHE_DRAG * max(0.0, $state->catastropheLossIndexEma - 1.0);
 
-        // Jorda, Schularick & Taylor (2013): the deleveraging a credit crisis leaves behind, booked and decayed by the credit subsystem.
+        // Jordà, Schularick & Taylor (2013) post-crisis balance sheet deleveraging drag.
         $crisisDeleveragingDrag = $state->creditCrisisDrag;
-        // Bank lending channel: standards are a quantity constraint on credit that no rate cut reaches (Bernanke & Blinder 1988).
+        // Bernanke & Blinder (1988) bank lending channel credit standards quantity constraint.
         $lendingStandardsDrag = self::KALDOR_LENDING_STANDARDS_DRAG * $state->sloosTighteningIndexEma;
 
-        // Baker, Bloom & Davis (2016): firms defer irreversible investment while the policy regime is in question.
+        // Baker, Bloom & Davis (2016) real options investment deferral under policy uncertainty.
         $policyUncertaintyDrag = self::KALDOR_EPU_DRAG * max(0.0, log(max(1.0, $state->policyUncertaintyIndexEma) / MacroEngine::EPU_BASELINE));
 
-        // Metzler (1941) & Blinder (1982) Inventory Investment Cycle Step
+        // Metzler (1941) & Blinder (1982) inventory investment cycle step.
         $state->inventoryStockGap = $this->mathUtility->calculateInventoryCycleStep(
             currentInventoryGap: $state->inventoryStockGap,
             outputGap: $y,
@@ -367,7 +356,7 @@ class MacroAggregateSubsystem
         );
         $inventoryDrag = self::METZLER_INVENTORY_DRAG * $state->inventoryStockGap;
 
-        // Smets & Wouters (2007) aggregate demand disturbance. Estimated demand shocks are persistent --
+        // Smets & Wouters (2007) persistent AR(1) aggregate demand disturbance.
         $state->demandShock += (-self::DEMAND_SHOCK_REVERSION * $state->demandShock * $dt)
             + (self::DEMAND_SHOCK_SIGMA * $stressMultiplier * sqrt($dt) * $outZ);
 
@@ -413,10 +402,10 @@ class MacroAggregateSubsystem
     {
         $infZ = $this->mathUtility->generateStandardNormal();
 
-        // 1. Adaptive Inflation Expectations Unanchoring
+        // Mankiw, Reis & Wolfers (2004) adaptive inflation expectations unanchoring.
         $anchorSlip = ($state->inflationEma - $targetInflation) * self::INFLATION_ADAPTIVE_EXPECTATIONS_WEIGHT;
 
-        // 2. Benigno & Eggertsson (2023): Non-linear convex demand-pull curve
+        // Benigno & Eggertsson (2023) non-linear convex demand-pull Phillips curve.
         $convexDemandPressure = $this->mathUtility->calculateConvexPhillipsCurve(
             outputGap: $state->outputGap,
             maxCapacity: self::PHILLIPS_MAX_CAPACITY,
@@ -424,19 +413,19 @@ class MacroAggregateSubsystem
             downwardRigidityFactor: self::PHILLIPS_DOWNWARD_RIGIDITY_FACTOR
         );
 
-        // 3. Shapiro (2022) Sector 1: Supercore Services (Labor / Wage-Push Channel)
+        // Shapiro (2022) Sector 1: Supercore services labor wage-push inflation channel.
         $wageGap = $state->wageGrowth - (MacroEngine::TFP_DRIFT + $targetInflation);
         $wageCostPush = $wageGap * self::SUPERCORE_WAGE_TRANSMISSION;
         $targetSupercore = $targetInflation + $anchorSlip + $convexDemandPressure + $wageCostPush;
 
-        // 4. Shapiro (2022) Sector 2: Core Goods (Supply Chain / Freight / Materials)
+        // Shapiro (2022) Sector 2: Core goods intermediate supply chain and materials cost pressures.
         $freightShift = ($state->freightRateIndexEma / MacroEngine::FREIGHT_BASELINE) - 1.0;
         $metalsShift = ($state->industrialMetalsIndexEma / MacroEngine::METALS_BASELINE) - 1.0;
         $gscpiFriction = max(-0.01, $state->supplyChainPressureIndexEma * self::CORE_GOODS_GSCPI_SENSITIVITY);
         $goodsSupplyFriction = ($freightShift * self::CORE_GOODS_FREIGHT_SENSITIVITY) + ($metalsShift * self::CORE_GOODS_METALS_SENSITIVITY) + $gscpiFriction;
         $targetCoreGoods = $targetInflation + $anchorSlip + (self::CORE_GOODS_DEMAND_SENSITIVITY * $convexDemandPressure) + $goodsSupplyFriction;
 
-        // Dynamic AR(1) state updating for sticky core baskets
+        // Calvo (1983) sticky price dynamics via continuous AR(1) state adjustment.
         $reversionWeight = 1.0 - exp(-self::INFLATION_MEAN_REVERSION * $dt);
         $state->supercoreInflation += $reversionWeight * ($targetSupercore - $state->supercoreInflation);
         $state->supercoreInflation = max(-0.01, min(0.20, $state->supercoreInflation));
@@ -444,7 +433,7 @@ class MacroAggregateSubsystem
         $state->coreGoodsInflation += $reversionWeight * ($targetCoreGoods - $state->coreGoodsInflation);
         $state->coreGoodsInflation = max(-0.02, min(0.20, $state->coreGoodsInflation));
 
-        // 5. Shapiro (2022) Sector 3: Commodity Pass-Through (Energy & Agriculture)
+        // Shapiro (2022) Sector 3: Distributed lag energy cost-push pass-through.
         $rawEnergyCostPush = ($state->energyPriceShock / MacroEngine::ENERGY_BASELINE) * MacroEngine::ENERGY_COST_PUSH_TRANSMISSION;
         $state->energyCostPushLag = $this->mathUtility->calculateDistributedLag(
             currentLaggedValue: $state->energyCostPushLag,
@@ -453,7 +442,7 @@ class MacroAggregateSubsystem
             lagTimeConstant: self::ENERGY_COST_PUSH_LAG_YEARS
         );
 
-        // Symmetric like the energy channel: a farm-price collapse is a food-CPI dividend, not a no-op
+        // Gelos & Ustyugova (2017) distributed lag agricultural pass-through to food CPI.
         $rawAgriCostPush = (($state->agriculturalCommodityIndex / MacroEngine::AGRI_BASELINE) - 1.0) * self::AGRI_COST_PUSH_TRANSMISSION;
         $state->agriCostPushLag = $this->mathUtility->calculateDistributedLag(
             currentLaggedValue: $state->agriCostPushLag,
@@ -462,11 +451,11 @@ class MacroAggregateSubsystem
             lagTimeConstant: self::AGRI_COST_PUSH_LAG_YEARS
         );
 
-        // Scaled to commodity basket weight so headline receives the full intended shock
+        // Shapiro (2022) commodity basket aggregation normalized by expenditure weight.
         $commodityBasketInflation = $targetInflation + $anchorSlip
             + (($state->energyCostPushLag + $state->agriCostPushLag) / self::INFLATION_WEIGHT_COMMODITY);
 
-        // 6. Blended Headline Inflation (Shapiro 2022 expenditure basket aggregation)
+        // Shapiro (2022) expenditure-weighted headline consumer price aggregation.
         $blendedInflation = (self::INFLATION_WEIGHT_SUPERCORE * $state->supercoreInflation)
             + (self::INFLATION_WEIGHT_GOODS * $state->coreGoodsInflation)
             + (self::INFLATION_WEIGHT_COMMODITY * $commodityBasketInflation);
@@ -561,18 +550,14 @@ class MacroAggregateSubsystem
         $state->inflationEma += $emaWeight * ($state->inflation - $state->inflationEma);
         $state->tipsBreakevenEma += $emaWeight * ($state->tipsBreakeven - $state->tipsBreakevenEma);
         $state->nsSlopeEma += $emaWeight * ($state->nsSlope - $state->nsSlopeEma);
-        // A capitalisation of zero is "no market reported", not a market worth nothing, so the smoothed
-        // series opens on the first real reading instead of averaging its way up from a placeholder.
+        // Lucas (1978) asset pricing: initialises equity market cap EMA on first reported observation.
         if ($state->equityMarketCap > 0.0) {
             $state->equityMarketCapEma = $state->equityMarketCapEma > 0.0
                 ? $state->equityMarketCapEma + ($emaWeight * ($state->equityMarketCap - $state->equityMarketCapEma))
                 : $state->equityMarketCap;
         }
 
-        // The trend the wealth effect is measured against, at its own multi-year horizon rather than the
-        // quarter every other series here is smoothed over. Seeded from the first ratio it is shown: nobody
-        // has got used to a level they have never seen, and a constant opening would be a scale this ratio
-        // does not have.
+        // Lettau & Ludvigson (2001) cay model: multi-year trend EMA for equity wealth effect.
         $state->equityWealthRatio = $this->equityWealthRatio($state);
         if ($state->equityWealthRatio > 0.0) {
             $trendWeight = 1.0 - exp(-$dt / self::EQUITY_WEALTH_TREND_HORIZON_YEARS);
@@ -652,24 +637,6 @@ class MacroAggregateSubsystem
     }
 
     /**
-     * Federal Reserve G.17 Industrial Capacity Utilization Index.
-     *
-     * Evaluates real aggregate physical factory, mining, and utility capacity utilization (CU_t)
-     * based on macroeconomic output gap demand and capital stock overhang.
-     *
-     * @param MacroState $state Current macroeconomic state.
-     */
-    /**
-     * Household equity wealth as a share of income: the whole board's capitalisation over nominal GDP, the
-     * ratio the MPC-out-of-wealth literature is estimated on.
-     *
-     * Carries an arbitrary scale, because capitalisation is currency and nominal GDP is an index. That is
-     * deliberate and costs nothing: the effect reads this against its own trend, and a constant factor
-     * divides straight out of that comparison. Zero means no market has been reported.
-     *
-     * @param MacroState $state Current macroeconomic state.
-     */
-    /**
      * The capital half of the 2D Kaldor-Kalecki phase space, whose other half is the output gap above.
      *
      * Stepped BEFORE the gap on each tick, because the gap's own capitalDrag term reads the level this
@@ -680,18 +647,24 @@ class MacroAggregateSubsystem
      */
     public function updateCapitalStockOverhang(MacroState $state, float $dt): void
     {
-        // 2D Kaldor Phase Space: Capital Stock tracking
-        // Booms build excess capacity (+k); Recessions cause physical depreciation and pent-up demand (-k).
+        // Kaldor (1940) capital stock accumulation and physical depreciation dynamics.
         $state->capitalStockOverhang += (($state->outputGap * MacroEngine::CAPITAL_ACCUMULATION_RATE) - (MacroEngine::CAPITAL_DECAY_RATE * $state->capitalStockOverhang)) * $dt;
         $state->capitalStockOverhang = max(MacroEngine::CAPITAL_OVERHANG_MIN, min(MacroEngine::CAPITAL_OVERHANG_MAX, $state->capitalStockOverhang));
     }
 
+    /**
+     * Household equity wealth as a share of income: the whole board's capitalisation over nominal GDP, the
+     * ratio the MPC-out-of-wealth literature is estimated on.
+     *
+     * Carries an arbitrary scale, because capitalisation is currency and nominal GDP is an index. That is
+     * deliberate and costs nothing: the effect reads this against its own trend, and a constant factor
+     * divides straight out of that comparison. Zero means no market has been reported.
+     *
+     * @param MacroState $state Current macroeconomic state.
+     */
     private function equityWealthRatio(MacroState $state): float
     {
-        // Derived on demand from the capitalisation rather than read off $state->equityWealthRatio, so that
-        // calculateOutputGap() stands on its own. That field is this same number, recorded once a tick for
-        // the history table and the wire; depending on it here would make the channel silent for every
-        // caller that runs the gap without the smoothing step behind it.
+        // Piketty & Zucman (2014) equity market capitalization to nominal GDP valuation ratio.
         if ($state->equityMarketCapEma <= 0.0) {
             return 0.0;
         }
@@ -699,6 +672,14 @@ class MacroAggregateSubsystem
         return $state->equityMarketCapEma / max(0.01, $state->nominalGdpIndex);
     }
 
+    /**
+     * Federal Reserve G.17 Industrial Capacity Utilization Index.
+     *
+     * Evaluates real aggregate physical factory, mining, and utility capacity utilization (CU_t)
+     * based on macroeconomic output gap demand and capital stock overhang.
+     *
+     * @param MacroState $state Current macroeconomic state.
+     */
     public function calculateCapacityUtilization(MacroState $state): void
     {
         $state->capacityUtilizationRate = $this->mathUtility->calculateCapacityUtilization(
@@ -726,8 +707,7 @@ class MacroAggregateSubsystem
     public function calculateManufacturingPmi(MacroState $state, float $dt): void
     {
         $cuDeviation = $state->capacityUtilizationRate - MacroEngine::CU_BASELINE;
-        // The gap's distance from its EMA is the EMA horizon times the gap's rate of change (Brown 1963), so
-        // dividing it out gives annualized real growth over potential.
+        // Brown (1963) real GDP growth momentum derived from EMA output gap time-derivative.
         $excessGrowth = ($state->outputGap - $state->outputGapEma) / self::STANDARD_EMA_HORIZON_YEARS;
         $inventoryDemand = -$state->inventoryStockGap; // Shortfall stimulates orders
         $sloosStress = max(0.0, $state->sloosTighteningIndexEma);
@@ -746,8 +726,7 @@ class MacroAggregateSubsystem
             max: MacroEngine::MAX_PMI
         );
 
-        // Exact Ornstein-Uhlenbeck discretization (Gillespie 1996) so the survey's adjustment is tick-rate
-        // invariant: a quarterly step with a six-week half-life lands near the target instead of overshooting it.
+        // Gillespie (1996) exact Ornstein-Uhlenbeck discretization for PMI diffusion index.
         $dW = $this->mathUtility->generateStandardNormal();
         $decay = exp(-self::PMI_KAPPA * $dt);
         $drift = (1.0 - $decay) * ($targetPmi - $state->manufacturingPmi);

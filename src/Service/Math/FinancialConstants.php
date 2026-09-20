@@ -341,6 +341,20 @@ class FinancialConstants
     /** Dampen double-counting of historical debt when re-levering Beta through the Hamada equation. */
     public const HAMADA_DAMPENING_FACTOR = 0.25;
 
+    // --- Committed Revolving Credit Facility ---
+    /**
+     * Committed revolver sized as a multiple of the firm's minimum operating cash. That base is what each
+     * business model already scales its liquidity needs on, so a lender's facility is struck on its funding
+     * book rather than on net interest income, which is a small number attached to an enormous balance sheet.
+     */
+    public const REVOLVER_COMMITMENT_OPERATING_CASH_MULTIPLE = 5.0;
+    /** Drawn-revolver spread (+100 bps) over the issuer's market rate; a pre-negotiated facility prices inside emergency paper. */
+    public const REVOLVER_DRAW_SPREAD_PENALTY = 0.01;
+
+    // --- Payment Default & Cure Period ---
+    /** Consecutive quarters a missed principal payment may stand before the firm is a defaulted issuer rather than a late one (standard 30-day indenture grace, rounded to the reporting period). */
+    public const PAYMENT_DEFAULT_GRACE_QUARTERS = 1;
+
     // --- Valuation Consensus Weights ---
     /** Consensus weight given to earnings/DCF intrinsic fair value in valuation blending. */
     public const FAIR_VALUE_EARNINGS_WEIGHT = 0.90;
@@ -358,6 +372,10 @@ class FinancialConstants
     public const STICKY_COST_BETA_EXPANSION = 0.85;
     /** Downward stickiness penalty reducing expense contraction during revenue declines (beta 2 < 0). */
     public const STICKY_COST_BETA_CONTRACTION_PENALTY = -0.40;
+    /** Floor on the committed cost base: property, insurance, minimum maintenance and core staffing survive any restructuring short of liquidation. */
+    public const MIN_COMMITTED_COST_SCALE = 0.50;
+    /** Quarters of eliminated payroll recognised as one-time termination benefits when the committed base is cut (ASC 420-10). */
+    public const RESTRUCTURING_SEVERANCE_QUARTERS = 2.0;
 
     // --- Dynamic Cash Conversion Cycle & Working Capital (CCC) ---
     /** Sensitivity of Days Sales Outstanding (DSO) to corporate credit spread widening. */

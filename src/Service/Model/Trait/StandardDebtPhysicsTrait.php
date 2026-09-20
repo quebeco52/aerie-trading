@@ -125,6 +125,12 @@ trait StandardDebtPhysicsTrait
     public function requiresAlternativeZScore(): bool {
         return false;
     }
+
+    /** An operating company holds no client money. */
+    public function getSegregatedCustodyLiabilities(Stock $stock): float
+    {
+        return 0.0;
+    }
     
     public function processPassiveLiabilityGrowth(Stock $stock, MacroStateDTO $macroState, array &$state, MathUtility $mathUtility): void {}
 

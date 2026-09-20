@@ -147,10 +147,7 @@ class CommodityLogisticsSubsystem
      */
     public function calculateEnergyShock(MacroState $state, float $dt): void
     {
-        // Cobweb (Ezekiel 1938): demand clears now, capacity follows the price it saw years ago. Productive
-        // capacity chases the smoothed price with the investment lag, and the spot price reverts to the level
-        // that clears today's demand against that capacity rather than to a flat baseline, so a price spike
-        // summons the supply that ends it and a glut idles the rigs that end the glut.
+        // Ezekiel (1938) cobweb dynamics: capacity chases lagged prices while spot market clears demand.
         $demandIndex = MacroEngine::ENERGY_BASELINE * (1.0 + ($state->globalDemandGapEma * self::ENERGY_DEMAND_GAP_SENSITIVITY));
         $priceSeen = $state->energyPriceIndexEma > 0.0 ? $state->energyPriceIndexEma : MacroEngine::ENERGY_BASELINE;
         $targetSupply = MacroEngine::ENERGY_BASELINE * (($priceSeen / MacroEngine::ENERGY_BASELINE) ** self::ENERGY_SUPPLY_ELASTICITY);
@@ -184,14 +181,14 @@ class CommodityLogisticsSubsystem
             $jumpAmount = $baseProcess * ($jumpData['multiplier'] - 1.0);
         }
 
-        // Physical inventory buffer evolution
+        // Litzenberger & Rabinowitz (1995) physical commodity inventory buffer stock evolution.
         $demandDraw = $state->globalDemandGapEma * self::COMMODITY_INVENTORY_DRAWDOWN_SENSITIVITY * 100.0;
         $shockDraw = ($jumpData['multiplier'] > 1.0) ? (log($jumpData['multiplier']) * 40.0) : 0.0;
         $reversionFlow = self::COMMODITY_INVENTORY_REVERSION_SPEED * (MacroEngine::COMMODITY_INVENTORY_BASELINE - $state->energyInventoryIndex);
         $dInventory = ($reversionFlow - $demandDraw - $shockDraw) * $dt;
         $state->energyInventoryIndex = max(self::COMMODITY_MIN_BUFFER_STOCK, min(160.0, $state->energyInventoryIndex + $dInventory));
 
-        // Theory of Storage (Working 1949): Non-linear convenience yield backwardation add-on
+        // Working (1949) theory of storage non-linear convenience yield backwardation.
         $convenienceYield = $this->mathUtility->calculateConvenienceYield(
             inventoryLevel: $state->energyInventoryIndex,
             minBufferStock: self::COMMODITY_MIN_BUFFER_STOCK
@@ -222,7 +219,7 @@ class CommodityLogisticsSubsystem
         $seasonalFrequency = MacroEngine::CATASTROPHE_SEASONALITY[$quarter] ?? 1.0;
         $eventCount = $this->mathUtility->generatePoissonCount(self::CATASTROPHE_ARRIVAL_PER_YEAR * $seasonalFrequency * $dt);
 
-        // Mean severity that makes the stationary burden an average year, and the Pareto scale that delivers it.
+        // Pickands (1975) extreme value theory Pareto severity calibration for catastrophe loss index.
         $meanSeverity = self::CATASTROPHE_LOSS_DECAY / self::CATASTROPHE_ARRIVAL_PER_YEAR;
         $severityScale = $meanSeverity * (self::CATASTROPHE_SEVERITY_ALPHA - 1.0) / self::CATASTROPHE_SEVERITY_ALPHA;
 
@@ -256,11 +253,10 @@ class CommodityLogisticsSubsystem
      */
     public function calculateNaturalGasIndex(MacroState $state, float $dt): void
     {
-        // theta = exp(sigma^2 / 4 kappa - lambda mu / kappa): the first term undoes the log-OU's mean shortfall,
-        // the second compensates the squeezes' stationary log contribution, so the ratio averages one.
+        // Schwartz (1997) one-factor log-price mean-reversion drift with jump compensator.
         $ratioTarget = exp(
             ((self::GAS_OIL_RATIO_SIGMA ** 2) / (4.0 * self::GAS_OIL_RATIO_KAPPA))
-            - (self::GAS_JUMP_PROBABILITY * self::GAS_JUMP_MEAN / self::GAS_OIL_RATIO_KAPPA)
+                - (self::GAS_JUMP_PROBABILITY * self::GAS_JUMP_MEAN / self::GAS_OIL_RATIO_KAPPA)
         );
         $ratio = $this->mathUtility->calculateSchwartz1Factor(
             currentPrice: exp($state->gasOilRatioLog),

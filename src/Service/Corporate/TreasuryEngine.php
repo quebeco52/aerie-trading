@@ -27,16 +27,6 @@ class TreasuryEngine
     /** Cash held above the operating target before a lender treats the rest as deployable funding (same buffer the expansion path uses). */
     private const LIQUIDITY_BUFFER_MULTIPLIER = 1.20;
 
-    // --- Committed Revolving Credit Facility ---
-    /**
-     * Committed revolver sized as a multiple of the firm's minimum operating cash. That base is what each
-     * business model already scales its liquidity needs on, so a lender's facility is struck on its funding
-     * book rather than on net interest income, which is a small number attached to an enormous balance sheet.
-     */
-    private const REVOLVER_COMMITMENT_OPERATING_CASH_MULTIPLE = 5.0;
-    /** Drawn-revolver spread (+100 bps) over the issuer's market rate; a pre-negotiated facility prices inside emergency paper. */
-    private const REVOLVER_DRAW_SPREAD_PENALTY = 0.01;
-
     public function __construct(
         private CorporateMetrics $corporateMetrics,
         private DebtEngine $debtEngine,
@@ -557,7 +547,11 @@ class TreasuryEngine
         $stock = $ctx->stock;
         if ($ctx->currentPrice <= 0.0) return;
 
-        if ($ctx->totalCashSpent > 0.0) return;
+        // A buyback this quarter bars the OPPORTUNISTIC raise — a board does not buy its own stock and sell
+        // it in the same breath. It must not bar the rescue: a firm that repurchased shares before the
+        // maturity landed was left unable to raise the money to fund it, which is backwards.
+        $isRescue = $ctx->failedEmergencyBorrow || $ctx->unfundedMaturity > 0.0;
+        if ($ctx->totalCashSpent > 0.0 && !$isRescue) return;
 
         $currentPE = $ctx->quarterlyEps > 0 ? ($ctx->currentPrice / ($ctx->quarterlyEps * 4)) : 9999.0;
         if ($ctx->actualAnnualEps > 0) {
@@ -584,7 +578,10 @@ class TreasuryEngine
         $priceToBook = $ctx->currentPrice / $bookValuePerShare;
 
         $isBubble = $economicSpread > 0.0 && $currentPE > ($fairValuePE * 2.5) && $currentPE > 40.0 && $priceToBook > 3.0;
-        $isDeathSpiral = $ctx->failedEmergencyBorrow;
+        // Principal the firm cannot fund is the reason to go to the equity market, and it used to be the one
+        // shortfall this path could not see: the raise was sized on operating cash alone, so a solvent firm
+        // facing a maturity it could not roll never even tried to sell stock to cover it.
+        $isDeathSpiral = $isRescue;
 
         $executeIssuance = false;
 
@@ -604,7 +601,7 @@ class TreasuryEngine
             $shock = 0.0;
 
             if ($isDeathSpiral) {
-                $shortfall = max(0.0, $minOperatingCash - $ctx->newTreasury);
+                $shortfall = max(0.0, $minOperatingCash - $ctx->newTreasury) + max(0.0, $ctx->unfundedMaturity);
                 $marketCap = max(1.0, $ctx->sharesOutstanding * $ctx->currentPrice);
                 $maxEmergencyRaise = max(FinancialConstants::MIN_OPERATING_BASE_CASH, $marketCap * FinancialConstants::MAX_EMERGENCY_EQUITY_RAISE_RATIO);
                 $targetRaise = min($shortfall * 1.5, $maxEmergencyRaise);
@@ -648,73 +645,78 @@ class TreasuryEngine
     }
 
     /**
-     * Draws on the committed revolving credit facility to close a negative cash balance.
+     * Draws on the committed revolving credit facility to close a negative cash balance or a maturity.
      *
      * A revolver is contractually committed: the bank must fund a draw whatever the primary market is doing,
      * which is exactly why firms drew their facilities in March 2020 when commercial paper shut. So this runs
      * even for an issuer the bond market has refused, and it is the reason a cash balance cannot simply go
-     * negative. The commitment is sized to the business, though: past it the bank is no longer bound, the
-     * money prices at distress rates, and the firm is flagged into the death-spiral financing path.
+     * negative.
      *
      * The facility also takes out a maturity the primary market refused to roll. That is the other thing a
      * revolver is for: a solvent issuer whose notes come due in a closed market draws the line and repays the
      * bondholders, which is why a refused refinancing is a funding problem and not, by itself, a default.
-     * The maturity wall only repays principal down to the operating cash floor, so the balance is never
-     * negative on that account and the overdraft test alone never saw it. An overdraft is cash already spent
-     * and is funded first; the maturity takes whatever commitment is left, and only the part no committed
-     * line will cover goes forward to the default test.
+     * The maturity is funded FIRST. An overdraft is a working-capital gap the firm can still borrow its way
+     * out of at a penalty; a maturity it cannot fund is an event of default. Funding the overdraft ahead of
+     * the notes let one bad operating quarter consume the whole facility and then default the BOND, which is
+     * the wrong claim to leave short.
      */
     private function processRevolverDraw(CapitalAllocationContext $ctx): void
     {
+        // Sized before anything is drawn, so a firm that never needs the line still carries one its banks
+        // have committed to, and so the commitment is on the books the quarter before the trouble arrives.
+        $this->sizeRevolverCommitment($ctx);
+
         $overdraft = max(0.0, -$ctx->newTreasury);
-        $need = $overdraft + max(0.0, $ctx->unfundedMaturity);
-        if ($need <= 0.0) {
+        $maturity = max(0.0, $ctx->unfundedMaturity);
+        if (($overdraft + $maturity) <= 0.0) {
             return;
         }
 
         $stock = $ctx->stock;
 
-        $commitment = max(
-            FinancialConstants::MIN_OPERATING_BASE_CASH,
-            $ctx->strategy->calculateMinOperatingCash($ctx->operatingBase, $ctx->customerDeposits, $ctx->wholesaleDebt)
-                * self::REVOLVER_COMMITMENT_OPERATING_CASH_MULTIPLE
-        );
-        $drawn = min($need, $commitment);
-        if ($drawn <= 0.0) {
+        // Every credit agreement makes "no Event of Default continuing" a condition precedent to each
+        // borrowing. A *default* does not close the line — that is what lets a late firm cure — but a default
+        // continued past its cure period does, and the lenders may terminate the undrawn commitment with it.
+        if ($stock->getQuartersInDefault() > FinancialConstants::PAYMENT_DEFAULT_GRACE_QUARTERS) {
+            $stock->setRevolverCommitment($stock->getRevolverDrawn());
+
             return;
         }
 
-        $currentMarketRate = $ctx->health->rawMetrics->currentMarketRate
-            ?? ($ctx->macroState->yield5yEma + (float) $stock->getCreditSpread());
-
-        $this->debtEngine->issueDebt($stock, $drawn, $currentMarketRate + self::REVOLVER_DRAW_SPREAD_PENALTY);
-        $ctx->wholesaleDebt = (float) $stock->getWholesaleDebt();
-        $ctx->newTreasury += $drawn;
-        $ctx->debtActionTaken = true;
-
-        // The maturity is repaid out of the draw the moment it lands: the notes leave the ladder and the
-        // revolver balance takes their place, which is a refinancing onto the committed line, not new
-        // leverage. The cash passes straight through, so the treasury ends where it started.
-        $maturityFunded = min(max(0.0, $ctx->unfundedMaturity), max(0.0, $drawn - $overdraft));
-        if ($maturityFunded > 0.0) {
-            $ctx->newTreasury -= $maturityFunded;
-            $ctx->wholesaleDebt = max(0.0, $ctx->wholesaleDebt - $maturityFunded);
-            $stock->setWholesaleDebt((string) $ctx->wholesaleDebt);
-            $ctx->principalRepaid += $maturityFunded;
-            $ctx->unfundedMaturity -= $maturityFunded;
+        $drawn = min($overdraft + $maturity, $stock->getRevolverUndrawn());
+        if ($drawn > 0.0) {
+            $stock->setRevolverDrawn((string) ((float) $stock->getRevolverDrawn() + $drawn));
+            $ctx->newTreasury += $drawn;
+            $ctx->debtActionTaken = true;
         }
 
-        // Emergency overdraft facility: fund uncommitted overdrafts at penalty distress spread.
-        $overCommitment = max(0.0, $overdraft - $drawn);
-        if ($overCommitment > 0.0) {
-            $this->debtEngine->issueDebt(
-                $stock,
-                $overCommitment,
-                $currentMarketRate + FinancialConstants::EMERGENCY_DEBT_SPREAD_PENALTY
-            );
+        // The notes are taken out of the draw the moment it lands: they leave the ladder and the revolver
+        // balance takes their place, which is a refinancing onto the committed line, not new term leverage.
+        $this->fundMaturityFromCash($ctx, min($maturity, $drawn));
+
+        // Whatever the committed line could not cover goes to the emergency facility at a distress spread.
+        // The overdraft leg is unconditional, as it has always been — working-capital finance is available to
+        // anyone. The maturity leg is not: rolling principal needs a lender willing to underwrite the credit,
+        // so a firm whose coverage has already shut that door is left with a genuine, curable payment default.
+        $currentMarketRate = $ctx->health->rawMetrics->currentMarketRate
+            ?? ($ctx->macroState->yield5yEma + (float) $stock->getCreditSpread());
+        $emergencyRate = $currentMarketRate + FinancialConstants::EMERGENCY_DEBT_SPREAD_PENALTY;
+
+        $uncoveredOverdraft = max(0.0, -$ctx->newTreasury);
+        if ($uncoveredOverdraft > 0.0) {
+            $this->debtEngine->issueDebt($stock, $uncoveredOverdraft, $emergencyRate);
             $ctx->wholesaleDebt = (float) $stock->getWholesaleDebt();
-            $ctx->newTreasury += $overCommitment;
+            $ctx->newTreasury += $uncoveredOverdraft;
             $ctx->failedEmergencyBorrow = true;
+        }
+
+        $uncoveredMaturity = max(0.0, $ctx->unfundedMaturity);
+        if ($uncoveredMaturity > 0.0 && $ctx->health->canIssueDebt) {
+            $this->debtEngine->issueDebt($stock, $uncoveredMaturity, $emergencyRate);
+            $ctx->wholesaleDebt = (float) $stock->getWholesaleDebt();
+            $ctx->newTreasury += $uncoveredMaturity;
+            $ctx->failedEmergencyBorrow = true;
+            $this->fundMaturityFromCash($ctx, $uncoveredMaturity);
         }
 
         if ($drawn > 500_000_000.0) {
@@ -727,6 +729,48 @@ class TreasuryEngine
     }
 
     /**
+     * Sets the committed size of the revolving credit facility, as a high-water ratchet.
+     *
+     * A revolver is a term contract negotiated in good times. It is renegotiated upward as the business
+     * grows, and it does NOT shrink because one bad quarter shrank revenue — which is what a commitment
+     * recomputed every call from current revenue did, halving the backstop at the exact moment it was the
+     * only thing standing between a solvent firm and an event of default. The ratchet is frozen while the
+     * firm is missing payments: a bank will not upsize a facility for a borrower already in default, though
+     * it stays bound to what it has already committed, which is what lets that firm cure.
+     */
+    private function sizeRevolverCommitment(CapitalAllocationContext $ctx): void
+    {
+        if ($ctx->stock->isPaymentDefault()) {
+            return;
+        }
+
+        $sized = max(
+            FinancialConstants::MIN_OPERATING_BASE_CASH,
+            $ctx->strategy->calculateMinOperatingCash($ctx->operatingBase, $ctx->customerDeposits, $ctx->wholesaleDebt)
+                * FinancialConstants::REVOLVER_COMMITMENT_OPERATING_CASH_MULTIPLE
+        );
+
+        if ($sized > (float) $ctx->stock->getRevolverCommitment()) {
+            $ctx->stock->setRevolverCommitment((string) $sized);
+        }
+    }
+
+    /** Retires maturing principal out of cash already in the treasury: the notes leave the ladder for good. */
+    private function fundMaturityFromCash(CapitalAllocationContext $ctx, float $amount): void
+    {
+        $funded = min(max(0.0, $amount), max(0.0, $ctx->unfundedMaturity));
+        if ($funded <= 0.0) {
+            return;
+        }
+
+        $ctx->newTreasury -= $funded;
+        $ctx->wholesaleDebt = max(0.0, $ctx->wholesaleDebt - $funded);
+        $ctx->stock->setWholesaleDebt((string) $ctx->wholesaleDebt);
+        $ctx->principalRepaid += $funded;
+        $ctx->unfundedMaturity = max(0.0, $ctx->unfundedMaturity - $funded);
+    }
+
+    /**
      * Records an event of default when principal came due that the firm could neither refinance, repay from
      * cash, nor cover with an emergency raise. This is a payment default, which is a separate failure mode
      * from balance-sheet insolvency: a firm can be worth more than it owes on paper and still fail because
@@ -734,23 +778,30 @@ class TreasuryEngine
      */
     private function processPaymentDefault(CapitalAllocationContext $ctx): void
     {
-        if ($ctx->unfundedMaturity <= 0.0) {
-            return;
-        }
+        $stock = $ctx->stock;
 
         // The emergency equity raise, if it landed, may have covered the gap after all.
-        $stillUnfunded = $ctx->newTreasury < $ctx->unfundedMaturity;
-        if (!$stillUnfunded) {
-            $ctx->newTreasury -= $ctx->unfundedMaturity;
-            $ctx->wholesaleDebt = max(0.0, $ctx->wholesaleDebt - $ctx->unfundedMaturity);
-            $ctx->stock->setWholesaleDebt((string) $ctx->wholesaleDebt);
-            $ctx->principalRepaid += $ctx->unfundedMaturity;
-            $ctx->unfundedMaturity = 0.0;
+        if ($ctx->unfundedMaturity > 0.0 && $ctx->newTreasury >= $ctx->unfundedMaturity) {
+            $this->fundMaturityFromCash($ctx, $ctx->unfundedMaturity);
+        }
+
+        if ($ctx->unfundedMaturity <= 0.0) {
+            $this->curePaymentDefault($ctx);
 
             return;
         }
 
-        $ctx->stock->setPaymentDefault(true);
+        $wasInDefault = $stock->isPaymentDefault();
+        $stock->setPaymentDefault(true);
+        $stock->setQuartersInDefault($stock->getQuartersInDefault() + 1);
+
+        // Only the quarter the default OPENS is news. A firm three quarters into the same unfunded maturity
+        // is not defaulting again each time the allocation pass runs, and publishing it as though it were
+        // charged the price of the default over and over.
+        if ($wasInDefault) {
+            return;
+        }
+
         $amtB = number_format($ctx->unfundedMaturity / 1_000_000_000, 2);
         $ctx->events[] = [
             'description' => "Failed to repay \${$amtB}B of maturing debt, triggering an event of default.",
@@ -758,10 +809,45 @@ class TreasuryEngine
         ];
     }
 
+    /**
+     * Clears a payment default the firm has funded its way out of.
+     *
+     * A missed payment is an event, not a state of nature. Real indentures give a borrower a grace period,
+     * and a firm that finds the money — from the next quarter's cash, an asset sale, the committed line or a
+     * rescue raise — is current again and is not liquidated for having once been late. This flag used to be
+     * set and never cleared anywhere in the codebase, which made a single dollar of shortfall a permanent
+     * death sentence for an otherwise solvent company.
+     */
+    private function curePaymentDefault(CapitalAllocationContext $ctx): void
+    {
+        $stock = $ctx->stock;
+        if (!$stock->isPaymentDefault()) {
+            return;
+        }
+
+        $stock->setPaymentDefault(false);
+        $stock->setQuartersInDefault(0);
+        $ctx->events[] = [
+            'description' => 'Funded the principal it had missed and cured its event of default.',
+            'shock' => 8.0
+        ];
+    }
+
     private function processArbitragePaydown(CapitalAllocationContext $ctx): void
     {
         $stock = $ctx->stock;
         $targetOperatingCash = $ctx->strategy->calculateTargetOperatingCash($ctx->operatingBase, $ctx->customerDeposits, $ctx->wholesaleDebt);
+
+        // The revolver is swept first, and down to the operating FLOOR rather than the target. It is the
+        // expensive balance and it is repayable on demand, so a treasury rebuilding a cash cushion while the
+        // line is still drawn is paying a distress spread to hold its own money. Sweeping only above the
+        // target left the facility a one-way ratchet for any firm whose target sits above its actual
+        // balance — every lender, whose target is struck on its deposits — so the line could only ever be
+        // drawn down and never repaid, and a run of closed quarters exhausted it for good.
+        $this->sweepRevolver(
+            $ctx,
+            $ctx->strategy->calculateMinOperatingCash($ctx->operatingBase, $ctx->customerDeposits, $ctx->wholesaleDebt)
+        );
 
         if (!$ctx->debtActionTaken && $ctx->health->wantsToPaydownDebt && $ctx->wholesaleDebt > 0 && $ctx->newTreasury > $targetOperatingCash) {
             $distressThreshold = 1.0 + $ctx->strategy->getRequiredIcrBuffer();
@@ -792,6 +878,23 @@ class TreasuryEngine
                 }
             }
         }
+    }
+
+    /** Repays the drawn revolver out of cash held above the operating floor, before any term debt. */
+    private function sweepRevolver(CapitalAllocationContext $ctx, float $cashFloor): void
+    {
+        $drawn = (float) $ctx->stock->getRevolverDrawn();
+        if ($drawn <= 0.0) {
+            return;
+        }
+
+        $sweepable = min($drawn, max(0.0, $ctx->newTreasury - $cashFloor));
+        if ($sweepable <= 0.0) {
+            return;
+        }
+
+        $ctx->stock->setRevolverDrawn((string) ($drawn - $sweepable));
+        $ctx->newTreasury -= $sweepable;
     }
 
     private function processDeleveragingSweep(CapitalAllocationContext $ctx, float $newEquity): void

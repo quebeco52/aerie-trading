@@ -640,12 +640,15 @@ class TreasuryEngineTest extends TestCase
     }
 
     /**
-     * Principal the firm can neither refinance, fund from cash, nor cover with its committed revolver is an
-     * event of default. This is a distinct failure mode from insolvency: the balance sheet here is perfectly
-     * solvent, the money simply was not there. The fixture's revolver is 5x a $30M cash floor, so it takes
-     * $150M of the $290M shortfall and the remaining $140M is what defaults.
+     * A maturity past the committed line is not a default while anyone will still lend.
+     *
+     * The fixture's revolver is 5x a $30M cash floor, so it takes $150M of the $290M shortfall. The rest is
+     * raised as uncommitted emergency paper, because a firm that can borrow at a penalty rate for working
+     * capital is not a firm that defaults on its bonds the same afternoon. Booking the shortfall straight to
+     * an event of default while the overdraft leg beside it drew on an UNCAPPED emergency facility left the
+     * contractual claim as the only one in the capital structure that could go short.
      */
-    public function testMaturityBeyondTheRevolverCommitmentTriggersAPaymentDefault(): void
+    public function testMaturityBeyondTheCommitmentIsCoveredByEmergencyPaperWhileTheFirmCanBorrow(): void
     {
         $stock = $this->createSolventCorporate();
         $stock->setWholesaleDebt('2000000000.00');
@@ -659,14 +662,148 @@ class TreasuryEngineTest extends TestCase
         $this->debtEngine->method('rollMaturities')->willReturn(
             new MaturityRollDTO(maturingPrincipal: 300_000_000.0, refinanced: false, principalRepaid: 10_000_000.0, unfundedShortfall: 290_000_000.0)
         );
+        $this->debtEngine->method('issueDebt')->willReturnCallback(
+            static function (Stock $target, float $amount): void {
+                $target->setWholesaleDebt((string) ((float) $target->getWholesaleDebt() + $amount));
+            }
+        );
         $engine = new TreasuryEngine($this->corporateMetrics, $this->debtEngine, $this->capExEngine, $this->mathUtility);
 
         $engine->finalizeLiquidity($ctx);
 
-        $this->assertTrue($stock->isPaymentDefault(), 'a maturity past the committed line must be an event of default');
+        $this->assertFalse($stock->isPaymentDefault(), 'a shortfall the emergency market funded is not a default');
+        $this->assertSame(0, $stock->getQuartersInDefault());
+        $this->assertEqualsWithDelta(0.0, $ctx->unfundedMaturity, 1.0, 'the whole maturity was funded');
+        $this->assertEqualsWithDelta(300_000_000.0, $ctx->principalRepaid, 1.0, 'cash, the commitment and emergency paper all reached the bondholders');
+        $this->assertEqualsWithDelta(150_000_000.0, (float) $stock->getRevolverDrawn(), 1.0, 'the committed line went first');
+        $this->assertTrue($ctx->failedEmergencyBorrow, 'borrowing past the commitment is still a liquidity failure');
+    }
+
+    /**
+     * When no market will lend at any price, the maturity really is an event of default -- and it is a
+     * curable one. The firm is flagged and its grace clock starts; MarketOperator no longer liquidates on it.
+     */
+    public function testMaturityBeyondTheCommitmentDefaultsWhenNoMarketWillLend(): void
+    {
+        $stock = $this->createSolventCorporate();
+        $stock->setWholesaleDebt('2000000000.00');
+
+        $ctx = $this->createAllocationContext($stock, stockCompensation: 0.0, currentPrice: 0.0);
+        $ctx->wholesaleDebt = 2_000_000_000.0;
+        $ctx->newTreasury = 10_000_000.0;
+        $ctx->health = $this->healthThatCannotIssue($ctx->health);
+
+        $this->debtEngine = $this->createMock(DebtEngine::class);
+        $this->debtEngine->method('rollMaturities')->willReturn(
+            new MaturityRollDTO(maturingPrincipal: 300_000_000.0, refinanced: false, principalRepaid: 10_000_000.0, unfundedShortfall: 290_000_000.0)
+        );
+        $engine = new TreasuryEngine($this->corporateMetrics, $this->debtEngine, $this->capExEngine, $this->mathUtility);
+
+        $engine->finalizeLiquidity($ctx);
+
+        $this->assertTrue($stock->isPaymentDefault(), 'a maturity nobody will fund is an event of default');
+        $this->assertSame(1, $stock->getQuartersInDefault(), 'the grace clock starts at one');
         $this->assertEqualsWithDelta(140_000_000.0, $ctx->unfundedMaturity, 1.0, 'only the part the revolver could not cover is unfunded');
         $this->assertEqualsWithDelta(160_000_000.0, $ctx->principalRepaid, 1.0, 'cash plus the full commitment went to the bondholders');
         $this->assertGreaterThan(0.0, (float) $stock->getTotalEquity(), 'the firm is still notionally solvent');
+    }
+
+    /**
+     * The missed payment is an event, not a state of nature. A firm that finds the money the following
+     * quarter is current again, and the flag and its grace clock both clear. Nothing in the engine used to
+     * clear this flag at all, which made one dollar of shortfall permanent.
+     */
+    public function testAMissedMaturityCuredTheFollowingQuarterClearsTheDefault(): void
+    {
+        $stock = $this->createSolventCorporate();
+        $stock->setWholesaleDebt('2000000000.00');
+
+        $ctx = $this->createAllocationContext($stock, stockCompensation: 0.0, currentPrice: 0.0);
+        $ctx->wholesaleDebt = 2_000_000_000.0;
+        $ctx->newTreasury = 10_000_000.0;
+        $ctx->health = $this->healthThatCannotIssue($ctx->health);
+
+        $this->debtEngine = $this->createMock(DebtEngine::class);
+        $this->debtEngine->method('rollMaturities')->willReturn(
+            new MaturityRollDTO(maturingPrincipal: 300_000_000.0, refinanced: false, principalRepaid: 10_000_000.0, unfundedShortfall: 290_000_000.0)
+        );
+        $engine = new TreasuryEngine($this->corporateMetrics, $this->debtEngine, $this->capExEngine, $this->mathUtility);
+        $engine->finalizeLiquidity($ctx);
+
+        $this->assertTrue($stock->isPaymentDefault());
+
+        // Next quarter the market reopens and rolls the notes.
+        $cured = $this->createAllocationContext($stock, stockCompensation: 0.0, currentPrice: 0.0);
+        $cured->wholesaleDebt = (float) $stock->getWholesaleDebt();
+        $cured->newTreasury = 500_000_000.0;
+
+        $this->debtEngine = $this->createMock(DebtEngine::class);
+        $this->debtEngine->method('rollMaturities')->willReturn(new MaturityRollDTO(maturingPrincipal: 0.0, refinanced: true));
+        $engine = new TreasuryEngine($this->corporateMetrics, $this->debtEngine, $this->capExEngine, $this->mathUtility);
+        $engine->finalizeLiquidity($cured);
+
+        $this->assertFalse($stock->isPaymentDefault(), 'a funded quarter cures the default');
+        $this->assertSame(0, $stock->getQuartersInDefault(), 'and resets the grace clock');
+    }
+
+    /**
+     * A committed facility is a term contract. It is renegotiated upward as the business grows and it does
+     * not shrink because one bad quarter shrank revenue -- which is exactly what a commitment recomputed
+     * from current revenue on every call did, halving the backstop at the moment it was the only thing
+     * between a solvent firm and an event of default.
+     */
+    public function testTheRevolverCommitmentRatchetsUpAndNeverDown(): void
+    {
+        $stock = $this->createSolventCorporate();
+        $stock->setWholesaleDebt('2000000000.00');
+
+        $this->debtEngine = $this->createMock(DebtEngine::class);
+        $this->debtEngine->method('rollMaturities')->willReturn(new MaturityRollDTO(maturingPrincipal: 0.0, refinanced: true));
+        $engine = new TreasuryEngine($this->corporateMetrics, $this->debtEngine, $this->capExEngine, $this->mathUtility);
+
+        $rich = $this->createAllocationContext($stock, stockCompensation: 0.0, currentPrice: 0.0);
+        $rich->operatingBase = 10_000_000_000.0;
+        $rich->newTreasury = 100_000_000.0;
+        $engine->finalizeLiquidity($rich);
+
+        $peak = (float) $stock->getRevolverCommitment();
+        $this->assertGreaterThan(0.0, $peak, 'a facility is sized even in a quarter with nothing to draw for');
+
+        // The recession arrives and the operating base halves.
+        $poor = $this->createAllocationContext($stock, stockCompensation: 0.0, currentPrice: 0.0);
+        $poor->operatingBase = 5_000_000_000.0;
+        $poor->newTreasury = 100_000_000.0;
+        $engine->finalizeLiquidity($poor);
+
+        $this->assertEqualsWithDelta($peak, (float) $stock->getRevolverCommitment(), 1.0, 'the committed line does not shrink with revenue');
+    }
+
+    /** A drawn revolver is not term debt, so it must not enlarge the principal coming due next quarter. */
+    public function testARevolverDrawDoesNotEnlargeTheMaturityWall(): void
+    {
+        $stock = $this->createSolventCorporate();
+        $stock->setWholesaleDebt('2000000000.00');
+
+        $ctx = $this->createAllocationContext($stock, stockCompensation: 0.0, currentPrice: 0.0);
+        $ctx->wholesaleDebt = 2_000_000_000.0;
+        $ctx->newTreasury = 35_000_000.0;
+
+        $this->debtEngine = $this->createMock(DebtEngine::class);
+        $this->debtEngine->method('rollMaturities')->willReturn(
+            new MaturityRollDTO(maturingPrincipal: 100_000_000.0, refinanced: false, principalRepaid: 5_000_000.0, unfundedShortfall: 95_000_000.0)
+        );
+        $this->debtEngine->expects($this->never())->method('issueDebt');
+        $engine = new TreasuryEngine($this->corporateMetrics, $this->debtEngine, $this->capExEngine, $this->mathUtility);
+
+        $engine->finalizeLiquidity($ctx);
+
+        $this->assertEqualsWithDelta(95_000_000.0, (float) $stock->getRevolverDrawn(), 1.0);
+        $this->assertEqualsWithDelta(
+            1_905_000_000.0,
+            (float) $stock->getWholesaleDebt(),
+            1.0,
+            'the notes left the ladder and the facility took their place: next quarter rolls a SMALLER wall'
+        );
     }
 
     /**
@@ -688,12 +825,8 @@ class TreasuryEngineTest extends TestCase
         $this->debtEngine->method('rollMaturities')->willReturn(
             new MaturityRollDTO(maturingPrincipal: 100_000_000.0, refinanced: false, principalRepaid: 5_000_000.0, unfundedShortfall: 95_000_000.0)
         );
-        // The draw is booked as wholesale debt at the revolver's price: market rate 5% plus 100 bps.
-        $this->debtEngine->expects($this->once())->method('issueDebt')
-            ->with($stock, 95_000_000.0, $this->equalToWithDelta(0.06, 1e-9))
-            ->willReturnCallback(static function (Stock $s, float $amount): void {
-                $s->setWholesaleDebt((string) ((float) $s->getWholesaleDebt() + $amount));
-            });
+        // The draw is NOT an issuance: it lands on the facility's own balance, priced at the revolver spread.
+        $this->debtEngine->expects($this->never())->method('issueDebt');
         $engine = new TreasuryEngine($this->corporateMetrics, $this->debtEngine, $this->capExEngine, $this->mathUtility);
 
         $engine->finalizeLiquidity($ctx);
@@ -701,7 +834,13 @@ class TreasuryEngineTest extends TestCase
         $this->assertFalse($stock->isPaymentDefault(), 'a maturity the revolver funded is not a default');
         $this->assertEqualsWithDelta(0.0, $ctx->unfundedMaturity, 1e-6);
         $this->assertEqualsWithDelta(100_000_000.0, $ctx->principalRepaid, 1.0, 'the whole maturity reached the bondholders');
-        $this->assertEqualsWithDelta(2_000_000_000.0, (float) $stock->getWholesaleDebt(), 1.0, 'the notes were refinanced onto the line, not added to it');
+        $this->assertEqualsWithDelta(95_000_000.0, (float) $stock->getRevolverDrawn(), 1.0, 'the line carries what the bondholders were paid');
+        $this->assertEqualsWithDelta(
+            2_000_000_000.0,
+            (float) $stock->getWholesaleDebt() + (float) $stock->getRevolverDrawn(),
+            1.0,
+            'the notes were refinanced onto the line, not added to it: total borrowings are unchanged'
+        );
         $this->assertEqualsWithDelta(30_000_000.0, $ctx->newTreasury, 1.0, 'the draw passed straight through to the bondholders');
     }
 
@@ -735,8 +874,31 @@ class TreasuryEngineTest extends TestCase
         $engine->finalizeLiquidity($ctx);
 
         $this->assertTrue($ctx->failedEmergencyBorrow);
-        $this->assertCount(1, $ratesIssuedAt, 'the only borrowing is the revolver draw');
-        $this->assertEqualsWithDelta(0.06, $ratesIssuedAt[0], 1e-9, 'priced at the revolver spread, not the emergency one');
+        $this->assertCount(0, $ratesIssuedAt, 'the committed line funded it, and a draw is not an issuance');
+        $this->assertEqualsWithDelta(95_000_000.0, (float) $stock->getRevolverDrawn(), 1.0, 'the facility carried the whole maturity');
+    }
+
+    /** The same health reading, with every lending door shut: no market will underwrite this credit. */
+    private function healthThatCannotIssue(\App\DTO\DebtHealthDTO $health): \App\DTO\DebtHealthDTO
+    {
+        return new \App\DTO\DebtHealthDTO(
+            grossCost: $health->grossCost,
+            effectiveCost: $health->effectiveCost,
+            cashYield: $health->cashYield,
+            isNegativeCarry: $health->isNegativeCarry,
+            isSevereNegativeCarry: $health->isSevereNegativeCarry,
+            interestCoverage: $health->interestCoverage,
+            wantsToPaydownDebt: $health->wantsToPaydownDebt,
+            canIssueDebt: false,
+            debtTolerance: $health->debtTolerance,
+            wacc: $health->wacc,
+            costOfEquity: $health->costOfEquity,
+            leveredBeta: $health->leveredBeta,
+            rawMetrics: $health->rawMetrics,
+            isLiquidityCrisis: $health->isLiquidityCrisis,
+            isLiquidityWarning: $health->isLiquidityWarning,
+            isUnderLeveraged: $health->isUnderLeveraged
+        );
     }
 
     private function createSolventCorporate(): Stock

@@ -318,6 +318,16 @@ trait FinancialPhysicsTrait
         return true;
     }
 
+    /**
+     * A deposit is not custody: a bank lends it out and owes it back out of its own estate, so it belongs
+     * in the balance sheet a capital ratio is struck on. Only a model that genuinely segregates client
+     * assets overrides this.
+     */
+    public function getSegregatedCustodyLiabilities(Stock $stock): float
+    {
+        return 0.0;
+    }
+
     public function getAcquisitionType(string $defaultType): string
     {
         return 'STRATEGIC ACQUISITION'; // Financials don't do LBOs or Conglomerate Expansion

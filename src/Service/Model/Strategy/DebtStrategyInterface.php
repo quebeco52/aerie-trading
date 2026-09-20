@@ -42,6 +42,13 @@ interface DebtStrategyInterface
     public function getNetDebtCapital(float $currentDebt, float $wholesaleDebt, float $treasury): float;
     public function calculateLeveredBeta(float $baseBeta, float $impliedTaxShieldRate, float $effectiveDebtToEquity, MathUtility $mathUtility): float;
     public function requiresAlternativeZScore(): bool;
+    /**
+     * Client assets the firm holds in custody and keeps segregated from its own estate. They are matched
+     * one-for-one by a liability to the client, are bankruptcy-remote (CPMI-IOSCO PFMI Principle 14, EMIR
+     * Art. 39), and are excluded from leverage exposure under Basel III for the same reason: they are not
+     * the firm's balance sheet and cannot answer for the firm's debts.
+     */
+    public function getSegregatedCustodyLiabilities(Stock $stock): float;
     public function processPassiveLiabilityGrowth(Stock $stock, MacroStateDTO $macroState, array &$state, MathUtility $mathUtility): void;
     public function getMinIcr(): float;
     public function getBankruptEquityThreshold(): float;

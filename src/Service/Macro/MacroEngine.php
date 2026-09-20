@@ -471,26 +471,26 @@ class MacroEngine
         // Advance physical simulation time in years
         $state->totalTime += $dt;
 
-        // 1. Evaluate Total Factor Productivity (TFP) & Secular Drift
+        // 1. Solow-Swan (1956) Total Factor Productivity (TFP) secular drift and endogenous growth.
         $tfpTrendGrowthRate = $this->aggregateSubsystem->calculateTotalFactorProductivity($state, $dt);
 
-        // 2. Laubach-Williams (2003) Dynamic Natural Rate of Interest (r*)
+        // 2. Laubach & Williams (2003) dynamic natural rate of interest (r*).
         $this->aggregateSubsystem->calculateNaturalRate($state, $tfpTrendGrowthRate, $dt);
 
-        // 3. Labor Market: Okun's Law & Diamond-Mortensen-Pissarides Beveridge Curve
+        // 3. Okun (1962) & Diamond-Mortensen-Pissarides (1994) labor market dynamics.
         $this->laborSubsystem->advanceWorkStoppages($state, $dt);
         $this->laborSubsystem->calculateUnemployment($state, $dt);
         $this->laborSubsystem->calculateLaborMarketAndWages($state, $tfpTrendGrowthRate, $dt);
 
-        // 4. Inflation Expectations (TIPS Breakeven)
+        // 4. Gurkaynak, Sack & Wright (2010) TIPS breakeven inflation expectations.
         $state->tipsBreakeven = $this->aggregateSubsystem->calculateTipsBreakeven($state, self::TARGET_INFLATION, $dt);
 
-        // 5. Central Bank Monetary Policy Target & Rate Setting
+        // 5. Taylor (1993) monetary policy target and Clarida-Gali-Gertler (2000) rate inertia.
         $state->targetRate = $this->monetarySubsystem->calculateTargetRate($state, self::TARGET_INFLATION, $state->naturalRate, $dt);
         $clampedTarget = max(self::EFFECTIVE_LOWER_BOUND, min(self::POLICY_RATE_CEILING, $state->targetRate));
         $state->policyRate = $this->monetarySubsystem->updatePolicyRate($state, $clampedTarget, $dt);
 
-        // 6. Central Bank Balance Sheet Operations (QE / QT)
+        // 6. Central bank balance sheet unconventional QE/QT operations (Bernanke & Reinhart 2004).
         $balanceSheetData = $this->monetarySubsystem->calculateBalanceSheetOperations($state, $dt);
         $state->balanceSheetIntensity = $balanceSheetData['new_balance_sheet_intensity'];
         $state->balanceSheetHoldTimer = $balanceSheetData['new_hold_timer'];
@@ -499,20 +499,20 @@ class MacroEngine
         $state->qtIntensity = $balanceSheetData['new_qt_intensity'];
         $state->qtActive = $state->qtIntensity > self::BALANCE_SHEET_ACTIVE_THRESHOLD;
 
-        // 7. Market Expectations: term premium dynamics, the shifting long-run endpoint and the restrictive-stance clock
+        // 7. Adrian, Crump & Moench (2013) term premium and market expectations dynamics.
         $this->monetarySubsystem->updateTermPremiumDynamics($state, $dt);
         $this->monetarySubsystem->updateMarketExpectations($state, $dt);
 
-        // 8. Sovereign Yield Curve & Term Structure Decomposition
+        // 8. Nelson-Siegel (1987) / Svensson (1994) sovereign yield curve term structure.
         $yieldData = $this->monetarySubsystem->calculateYieldCurve($state, self::TARGET_INFLATION, $state->naturalRate);
 
         $this->monetarySubsystem->applyYieldCurve($state, $yieldData, $dt);
 
         $this->assetSubsystem->updateSystemicMarketFactor($state, $dt);
         $this->aggregateSubsystem->updateCapitalStockOverhang($state, $dt);
-        // Policy uncertainty runs before the gap, the vol anchor and the deal index that read it.
+        // Baker, Bloom & Davis (2016) economic policy uncertainty index simulation.
         $this->creditFiscalSubsystem->calculatePolicyUncertainty($state, $dt);
-        // The foreign bloc runs before the currency, the trade balance and the commodity demand that read it.
+        // Mundell-Fleming multi-country foreign output gap and global policy transmission.
         $this->assetSubsystem->calculateForeignEconomy($state, $dt);
 
         $stressMultiplier = 1.0 + (abs($state->outputGap) * self::STRESS_MULTIPLIER_GAP_SENSITIVITY);
@@ -588,8 +588,7 @@ class MacroEngine
      */
     private function updateSectorFactors(MacroState $state, float $dt): void
     {
-        // Exact Ornstein-Uhlenbeck step: the persistent demand factor keeps unit stationary variance while
-        // decaying toward zero with time constant SECTOR_DEMAND_PERSISTENCE_YEARS.
+        // Ornstein-Uhlenbeck persistent sector demand factor with unit stationary variance (Vasicek 1977).
         $decay = exp(-$dt / self::SECTOR_DEMAND_PERSISTENCE_YEARS);
         $innovationScale = sqrt(max(0.0, 1.0 - ($decay * $decay)));
 
@@ -599,8 +598,7 @@ class MacroEngine
             $state->sectorDemandZ[$sector] = ($decay * $previous) + ($innovationScale * $this->mathUtility->generateStandardNormal());
         }
 
-        // A work stoppage is lost output for one sector: a flow out of its persistent demand for as long
-        // as it runs, which the factor's own decay then unwinds over the following year.
+        // Sector output loss from labor work stoppage shocks (Ashenfelter & Johnson 1969).
         if ($state->strikeSector !== null && isset($state->sectorDemandZ[$state->strikeSector])) {
             $state->sectorDemandZ[$state->strikeSector] -= self::STRIKE_SECTOR_DEMAND_LOSS_PER_YEAR * $dt;
         }
@@ -620,19 +618,19 @@ class MacroEngine
      */
     private function evaluateSystemicEvent(MacroState $state, float $dt): void
     {
-        // The event is a pulse, not a latch: clear last tick's value before deciding this tick's.
+        // Pulse trigger: resets instantaneous systemic event classification before evaluation.
         $state->eventType = null;
 
         if ($state->eventCooldownTimer > 0.0) {
             $state->eventCooldownTimer = max(0.0, $state->eventCooldownTimer - $dt);
-            // Edge-triggered headlines (a storm, a crisis) land on a single tick and must not be lost to an active cooldown.
+            // Preserves unhandled edge-triggered systemic shocks during refractory cooldown.
             if ($state->lastCatastropheAt !== $state->totalTime && $state->lastCreditCrisisAt !== $state->totalTime) {
                 return;
             }
         }
 
         $eventType = match (true) {
-            // The credit boom has gone bust: reported on the tick the hazard fires, and it outranks the freeze it causes.
+            // Mian & Sufi (2018) systemic banking crisis triggered by debt overhang default hazard.
             $state->lastCreditCrisisAt === $state->totalTime
             => ShockEvent::BANKING_CRISIS,
 
@@ -645,7 +643,7 @@ class MacroEngine
             $state->sovereignRiskSpread >= self::SYSTEMIC_SOVEREIGN_STRESS_SPREAD
             => ShockEvent::SOVEREIGN_DOWNGRADE,
 
-            // The backstop only reads as a backstop if it arrives while conditions are actually stressed.
+            // Central bank emergency liquidity backstop intervention under recessionary conditions.
             $state->qeIntensity >= self::SYSTEMIC_INTERVENTION_QE_INTENSITY && $state->outputGapEma < 0.0
             => ShockEvent::TITAN_INTERVENTION,
 
@@ -653,11 +651,11 @@ class MacroEngine
                 && $state->outputGap <= self::SYSTEMIC_RECESSION_DECLARE_GAP
             => ShockEvent::RECESSION_DECLARED,
 
-            // A storm big enough to make the news, reported on the tick it lands.
+            // Natural catastrophe physical damage shock event (Hallegatte et al. 2007).
             $state->lastCatastropheAt === $state->totalTime
             => ShockEvent::NATURAL_CATASTROPHE,
 
-            // Households paying down debt under a service burden past the warning line: the bust that follows a credit boom.
+            // Drehmann & Juselius (2012) household balance sheet debt-service deleveraging shock.
             $state->householdDebtServiceGap >= self::HOUSEHOLD_DSR_STRESS_MARGIN
                 && $state->householdDebtToIncome < $state->householdDebtToIncomeEma
             => ShockEvent::HOUSEHOLD_DELEVERAGING,
@@ -665,17 +663,17 @@ class MacroEngine
             $state->inversionDuration >= self::SYSTEMIC_INVERSION_ALARM_YEARS
             => ShockEvent::YIELD_CURVE_INVERSION_ALARM,
 
-            // Deep value with the cycle already turning: capital steps in as the gap closes from below.
+            // Countercyclical sovereign wealth deployment at deep value distress valuations.
             $state->equityRiskPremium >= self::SYSTEMIC_DEPLOYMENT_ERP_THRESHOLD
                 && $state->outputGapEma < 0.0
                 && $state->outputGap > $state->outputGapEma
             => ShockEvent::SOVEREIGN_WEALTH_DEPLOYMENT,
 
-            // A scheduled election is news on the day, but never over a crisis.
+            // Scheduled democratic political election shock event (Nordhaus 1975).
             $state->lastElectionAt === $state->totalTime
             => ShockEvent::ELECTION_HELD,
 
-            // Lowest rank: a stoppage is sector news, reported on the tick it begins and never over a crisis.
+            // Industry-level labor union work stoppage strike event (Hicks 1932).
             $state->strikeSector !== null && $state->strikeStartedAt === $state->totalTime
             => ShockEvent::SECTOR_STRIKE,
 
@@ -684,7 +682,7 @@ class MacroEngine
 
         if ($eventType !== null) {
             $state->eventType = $eventType;
-            // Sector news and scheduled elections must not arm the district-wide cooldown.
+            // District-wide systemic crisis refractory cooldown timer arming.
             if ($eventType !== ShockEvent::SECTOR_STRIKE && $eventType !== ShockEvent::ELECTION_HELD) {
                 $state->eventCooldownTimer = self::SYSTEMIC_EVENT_COOLDOWN_YEARS;
             }

@@ -173,13 +173,13 @@ class DebtEngineTest extends TestCase
             ->with(
                 $this->equalTo($stock),
                 $this->equalTo('CREDIT_DOWNGRADE'),
-                $this->stringContains('downgraded from AAA to D'),
+                $this->stringContains('downgraded from AAA to CCC'),
                 $this->equalTo(-3.0)
             );
 
         $this->engine->calculateInterestExpense($stock, $macroState, true);
 
-        $this->assertSame('D', $stock->getCreditRating());
+        $this->assertSame('CCC', $stock->getCreditRating());
     }
 
     public function testMaturityWallRollsAtBusinessModelRolloverRate(): void
@@ -555,6 +555,106 @@ class DebtEngineTest extends TestCase
 
         $this->assertEquals(0.0, $roll->maturingPrincipal);
         $this->assertTrue($roll->refinanced);
+    }
+
+    /**
+     * A drawn revolver costs money without becoming term debt.
+     *
+     * The balance is priced here rather than inside the business models because they do not agree on where
+     * they read it from: the corporate and the base financial physics charge whatever $debt they are handed,
+     * while the bank, credit-services, clearing and insurance models re-read the entity themselves. A leg
+     * pushed down into them would be charged twice by the first group and not at all by the second.
+     */
+    public function testADrawnRevolverIsChargedInterestWithoutTouchingWholesaleDebt(): void
+    {
+        $macro = MacroStateDTO::fromArray(['policy_rate_ema' => 0.04, 'yield_5y_ema' => 0.045, 'macro_credit_spread_ema' => 0.02]);
+
+        $dry = $this->buildMaturityIssuer('BBB', 0.02);
+        $baseline = $this->engine->calculateInterestExpense($dry, $macro);
+
+        $drawn = $this->buildMaturityIssuer('BBB', 0.02);
+        $drawn->setRevolverCommitment('5000000000.00');
+        $drawn->setRevolverDrawn('1000000000.00');
+        $withLine = $this->engine->calculateInterestExpense($drawn, $macro);
+
+        $this->assertSame(
+            $dry->getWholesaleDebt(),
+            $drawn->getWholesaleDebt(),
+            'pricing the facility must not disturb the term ladder'
+        );
+        $this->assertGreaterThan(
+            $baseline->interestExpense,
+            $withLine->interestExpense,
+            'a drawn facility is borrowed money and has to be paid for'
+        );
+        $this->assertEqualsWithDelta(
+            1_000_000_000.0,
+            (float) $drawn->getTotalDebt() - (float) $dry->getTotalDebt(),
+            1.0,
+            'and it is leverage: coverage, the Altman test and the Merton distance all have to see it'
+        );
+    }
+
+    /**
+     * Every business model inherits the revolver leg, whatever its own interest physics does with the debt
+     * argument. Five of the nine sector strategies ignore that argument entirely, so a leg written inside
+     * them would have been silently skipped for banks, lenders, clearing houses and insurers.
+     */
+    public function testRevolverInterestIsChargedForEveryBusinessModel(): void
+    {
+        $macro = MacroStateDTO::fromArray(['policy_rate_ema' => 0.04, 'yield_5y_ema' => 0.045, 'macro_credit_spread_ema' => 0.02]);
+
+        $seen = [];
+        foreach (\App\Data\Sectors::INDUSTRY_METRICS as $industry => $metrics) {
+            $model = $metrics['business_model'] ?? 'none';
+            if (isset($seen[$model])) {
+                continue;
+            }
+            $seen[$model] = true;
+
+            $dry = $this->buildMaturityIssuer('BBB', 0.02);
+            $dry->setIndustry($industry);
+            $baseline = $this->engine->calculateInterestExpense($dry, $macro);
+
+            $drawn = $this->buildMaturityIssuer('BBB', 0.02);
+            $drawn->setIndustry($industry);
+            $drawn->setRevolverCommitment('5000000000.00');
+            $drawn->setRevolverDrawn('1000000000.00');
+            $withLine = $this->engine->calculateInterestExpense($drawn, $macro);
+
+            $this->assertGreaterThan(
+                $baseline->interestExpense,
+                $withLine->interestExpense,
+                "{$model} does not charge its drawn revolver any interest"
+            );
+        }
+
+        $this->assertGreaterThan(5, count($seen), 'the sweep must actually cover the sector models');
+    }
+
+    /**
+     * A price crash on its own must not shut an issuer out of the primary bond market.
+     *
+     * The rating ladder reads a market-implied Merton distance to default, and it used to fall through to a
+     * live 'D' — which hasPrimaryMarketAccess treats as no access at all. So a drawdown alone closed
+     * refinancing on a firm that was current on everything it owed, forced the maturity to be repaid in cash,
+     * and manufactured the payment default the tape had only guessed at.
+     */
+    public function testAPriceCrashAloneDoesNotCloseThePrimaryMarket(): void
+    {
+        $stock = $this->buildMaturityIssuer('BBB', 0.01);
+        $stock->setPrice('0.05');
+        $stock->setSharesOutstanding('1000000000');
+        $stock->setVolatility('1.20');
+        $stock->setCurrentVolatility('1.20');
+
+        // The credit itself is sound: a healthy spread and comfortable coverage.
+        $health = $this->buildHealthForMaturity(interestCoverage: 6.0, dynamicSpread: 0.03);
+
+        $roll = $this->engine->rollMaturities($stock, $health, 5_000_000_000.0, 0.0);
+
+        $this->assertTrue($roll->refinanced, 'a collapsed share price is not a missed payment');
+        $this->assertSame(0.0, $roll->unfundedShortfall);
     }
 
     private function buildMaturityIssuer(string $rating, float $creditSpread): Stock

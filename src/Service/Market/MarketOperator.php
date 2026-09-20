@@ -136,15 +136,21 @@ class MarketOperator
         // quarters have been reported the ratio is struck on them, as it was built to be.
         $ebit = $this->resolveTrailingEbit($stock, $macroState) ?? $revenue * $margin;
 
-        // Two independent ways to fail. Insolvency is the balance sheet no longer covering the claims on it;
-        // a payment default is principal coming due that nobody would refinance and the firm could not pay.
-        // A firm can pass the solvency test on paper and still fail the second, which is how most real
-        // defaults happen: the assets were fine, the money just was not there on the day.
-        $isPaymentDefault = $stock->isPaymentDefault();
+        // Liquidation is a solvency verdict, and only a solvency verdict. A missed payment is an event of
+        // default — the firm is rated D, shut out of the primary market and has its facility terminated once
+        // the cure period lapses — but it is not, by itself, grounds for winding the company up. Liquidating
+        // on the flag alone wiped firms carrying hundreds of billions of equity and a Safe Altman score
+        // because a maturity landed on a quarter that ended with an empty treasury, and because the flag was
+        // never cleared once set it did so for the rest of the company's life.
         $zScoreData = $this->debtEngine->calculateAltmanZScore($stock, $ebit, $revenue, (float) $stock->getPrice());
-        if (!$zScoreData['is_bankrupt'] && !$isPaymentDefault) {
+        if (!$zScoreData['is_bankrupt']) {
             return null; // The company is surviving; abort bankruptcy
         }
+
+        // An insolvent firm that is ALSO past its cure period is a creditor-driven filing rather than a
+        // balance sheet that simply ran out of room; the two read differently on the tape.
+        $isPaymentDefault = $stock->isPaymentDefault()
+            && $stock->getQuartersInDefault() > \App\Service\Math\FinancialConstants::PAYMENT_DEFAULT_GRACE_QUARTERS;
 
         $failureMode = $isPaymentDefault ? 'defaulted on maturing debt' : 'collapsed into insolvency';
         $this->logger->info("BANKRUPTCY DETECTED: {$stock->getName()} ({$stock->getTicker()}) {$failureMode}. Company permanently terminated.");
@@ -190,7 +196,7 @@ class MarketOperator
         // Historical quarters, charts, and lore records remain frozen in place.
 
         $eventDesc = $isPaymentDefault
-            ? "{$name} ({$stock->getTicker()}) missed a principal payment it could not refinance and filed for Chapter 7 bankruptcy liquidation. Shareholder equity wiped to 0 and trading permanently halted."
+            ? "{$name} ({$stock->getTicker()}) failed to cure an event of default and was forced into Chapter 7 bankruptcy liquidation by its creditors. Shareholder equity wiped to 0 and trading permanently halted."
             : "{$name} ({$stock->getTicker()}) has collapsed into insolvency and filed for Chapter 7 bankruptcy liquidation. Shareholder equity wiped to 0 and trading permanently halted.";
 
         if ($settledIssues !== []) {

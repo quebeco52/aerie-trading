@@ -129,7 +129,8 @@ class SolventFirmSurvivalTest extends TestCase
         $stock->setCreditRating('BBB');
         $stock->setTotalEquity('-1000000.00');
 
-        $this->assertSame('D', $agency->evaluateRating($stock, 0.05, -0.50));
+        // CCC, not D: the accounts say insolvent, but the firm has not missed a payment.
+        $this->assertSame('CCC', $agency->evaluateRating($stock, 0.05, -0.50));
     }
 
     /**
@@ -219,10 +220,21 @@ class SolventFirmSurvivalTest extends TestCase
             (float) $stock->getCorporateTreasury(),
             'corporate cash must never be reported as a negative balance'
         );
-        $this->assertGreaterThan(
+        $this->assertEqualsWithDelta(
             20_000_000_000.0,
             (float) $stock->getWholesaleDebt(),
+            1.0,
+            'a revolver draw is not term debt: the bond ladder must be untouched by it'
+        );
+        $this->assertGreaterThan(
+            0.0,
+            (float) $stock->getRevolverDrawn(),
             'the overdraft must appear on the liability side, not vanish'
+        );
+        $this->assertLessThanOrEqual(
+            (float) $stock->getRevolverCommitment(),
+            (float) $stock->getRevolverDrawn(),
+            'a draw cannot exceed the committed facility'
         );
     }
 
@@ -258,11 +270,19 @@ class SolventFirmSurvivalTest extends TestCase
         $engine->finalizeLiquidity($ctx);
 
         $this->assertGreaterThanOrEqual(0.0, (float) $stock->getCorporateTreasury());
+        // The whole overdraft is still funded, but it now lands on the two balances it belongs on: the
+        // committed facility up to its limit, and uncommitted emergency paper for the rest.
         $this->assertEqualsWithDelta(
             50_000_000_000.0,
-            (float) $stock->getWholesaleDebt(),
+            (float) $stock->getWholesaleDebt() + (float) $stock->getRevolverDrawn(),
             1.0,
             'the whole overdraft is funded, within the commitment and beyond it'
+        );
+        $this->assertEqualsWithDelta(
+            (float) $stock->getRevolverCommitment(),
+            (float) $stock->getRevolverDrawn(),
+            1.0,
+            'the committed line is drawn to its limit before uncommitted money is raised'
         );
         $this->assertTrue($ctx->failedEmergencyBorrow, 'a draw past the commitment is a liquidity failure');
     }

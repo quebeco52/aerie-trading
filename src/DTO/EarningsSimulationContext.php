@@ -65,6 +65,16 @@ class EarningsSimulationContext
      * else came out of EBIT or the solvency tests read a margin the firm did not earn.
      */
     public float $impairmentCharges = 0.0;
+    /**
+     * One-time termination benefits recognised this quarter for the committed cost base the firm cut
+     * (ASC 420-10). Like the impairments above it sits in operating expense and has to be told to the
+     * seasonally adjusted run-rate, and like them no analyst forecasts it.
+     */
+    public float $restructuringCharge = 0.0;
+    /** The committed cost base this quarter, as a fraction of the base structural capacity implies. */
+    public float $committedCostScale = 1.0;
+    /** How far that base was cut this quarter; zero when the firm held or rebuilt it. */
+    public float $committedCostCut = 0.0;
     /** Portion of the quarter's tax expense postponed by accelerated tax depreciation (ASC 740), non-cash. */
     public float $deferredTaxExpense = 0.0;
     /** Tax that actually left the company this quarter; total expense less the deferred portion. */

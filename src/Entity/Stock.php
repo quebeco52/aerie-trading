@@ -607,12 +607,47 @@ class Stock
     private bool $isBankrupt = false;
 
     /**
-     * @var bool True once the firm has failed to repay maturing principal it could neither refinance nor
+     * @var bool True while the firm is failing to repay maturing principal it can neither refinance nor
      *           fund. A payment default is an event of default in its own right, independent of whether the
-     *           balance sheet is still notionally solvent.
+     *           balance sheet is still notionally solvent — and it is CURABLE: the next quarter's cash, an
+     *           asset sale or a rescue raise clears it. It is not, by itself, grounds for liquidation.
      */
     #[ORM\Column(type: Types::BOOLEAN, options: ['default' => false])]
     private bool $paymentDefault = false;
+
+    /**
+     * @var int Consecutive quarters the firm has been in payment default. The grace clock a real indenture
+     *          gives a late borrower: zero while current, and reset the moment the shortfall is funded.
+     */
+    #[ORM\Column(type: Types::INTEGER, options: ['default' => 0])]
+    private int $quartersInDefault = 0;
+
+    /**
+     * @var string Committed size of the revolving credit facility the firm's banks have contracted to fund.
+     *             A revolver is a term commitment negotiated in good times: it ratchets UP as the business
+     *             grows and does not shrink because a bad quarter shrank revenue, which is what makes it a
+     *             backstop rather than a line that vanishes exactly when it is needed.
+     */
+    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, options: ['default' => '0.0000'])]
+    private string $revolverCommitment = '0.0000';
+
+    /**
+     * @var string Drawn balance on that facility. Held apart from wholesale debt because revolving credit
+     *             does not amortise: booking a draw into the term ladder made every draw enlarge the next
+     *             quarter's maturity wall, so covering one maturity manufactured a larger one.
+     */
+    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, options: ['default' => '0.0000'])]
+    private string $revolverDrawn = '0.0000';
+
+    /**
+     * @var string The committed fixed cost base the firm is actually resourced for, as a fraction of the
+     *             cost base its structural capacity implies. One is a firm staffed for full capacity. It
+     *             falls as a slump persists and recovers as volume returns, sluggishly downward and faster
+     *             upward (Anderson, Banker & Janakiraman 2003), because capacity cost is committed, not
+     *             chosen quarter by quarter.
+     */
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 6, options: ['default' => '1.000000'])]
+    private string $committedCostScale = '1.000000';
 
 
 
@@ -1984,8 +2019,12 @@ class Stock
     {
         $wholesale = (float) $this->wholesaleDebt;
         $deposits = (float) $this->customerDeposits;
+        // The drawn revolver is borrowed money like any other: it levers the firm, it is senior to equity and
+        // it has to show up in coverage, the Altman test and the Merton default distance. Only its MATURITY
+        // behaves differently, which is why the balance is held apart from the term ladder rather than here.
+        $revolver = (float) $this->revolverDrawn;
 
-        return self::cleanBcStr((string) number_format($wholesale + $deposits, 4, '.', ''), 4);
+        return self::cleanBcStr((string) number_format($wholesale + $deposits + $revolver, 4, '.', ''), 4);
     }
 
     public function getRoicTtm(): string
@@ -2061,6 +2100,58 @@ class Stock
     public function setPaymentDefault(bool $paymentDefault): static
     {
         $this->paymentDefault = $paymentDefault;
+        return $this;
+    }
+
+    public function getQuartersInDefault(): int
+    {
+        return $this->quartersInDefault;
+    }
+
+    public function setQuartersInDefault(int $quartersInDefault): static
+    {
+        $this->quartersInDefault = max(0, $quartersInDefault);
+        return $this;
+    }
+
+    public function getRevolverCommitment(): string
+    {
+        return $this->revolverCommitment;
+    }
+
+    public function setRevolverCommitment(string $revolverCommitment): static
+    {
+        $this->revolverCommitment = self::cleanBcStr($revolverCommitment, 4);
+        return $this;
+    }
+
+    public function getRevolverDrawn(): string
+    {
+        return $this->revolverDrawn;
+    }
+
+    public function setRevolverDrawn(string $revolverDrawn): static
+    {
+        $this->revolverDrawn = self::cleanBcStr($revolverDrawn, 4);
+        return $this;
+    }
+
+    /** Facility still available to draw: the committed size less what is already outstanding on it. */
+    public function getRevolverUndrawn(): float
+    {
+        return max(0.0, (float) $this->revolverCommitment - (float) $this->revolverDrawn);
+    }
+
+    public function getCommittedCostScale(): string
+    {
+        return $this->committedCostScale;
+    }
+
+    /** Bounded by the structural base above and by what no restructuring can remove below. */
+    public function setCommittedCostScale(string $committedCostScale): static
+    {
+        $bounded = min(1.0, max(\App\Service\Math\FinancialConstants::MIN_COMMITTED_COST_SCALE, (float) $committedCostScale));
+        $this->committedCostScale = self::cleanBcStr($bounded, 6);
         return $this;
     }
 }

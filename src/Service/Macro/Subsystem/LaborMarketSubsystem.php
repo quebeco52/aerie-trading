@@ -103,13 +103,7 @@ class LaborMarketSubsystem
         $excessSlack = max(0.0, $state->unemploymentRateEma - $state->nairu - self::NAIRU_HYSTERESIS_THRESHOLD);
         $state->nairu += self::NAIRU_HYSTERESIS_SPEED * $excessSlack * $dt;
 
-        // Scarring has to unwind at a rate of its own. Re-absorption used to be the PRODUCT of two
-        // deviations -- (nairu - natural) x (nairu - u) x 0.5 -- and a product of two small numbers is a
-        // rounding error: offsetting one year of scarring at a NAIRU 2pp above natural needed a 25pp
-        // unemployment gap, which no reachable state supplies. Measured over 960 simulated years NAIRU
-        // therefore only ever ratcheted UP, +0.58pp per 80 years in all twelve seeds, its maximum always
-        // equal to its final value. A tight labour market re-absorbs the long-term unemployed (Ball 2009),
-        // so the erosion is linear in the scarring itself and gated on the market no longer being slack.
+        // Ball (2009) NAIRU hysteresis re-absorption in tight labor markets.
         if ($state->unemploymentRateEma <= $state->nairu) {
             $reabsorption = max(0.0, $state->nairu - MacroEngine::NATURAL_UNEMPLOYMENT) * self::NAIRU_REABSORPTION_SPEED;
             $state->nairu -= $reabsorption * $dt;

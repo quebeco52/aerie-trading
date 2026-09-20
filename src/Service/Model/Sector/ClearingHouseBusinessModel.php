@@ -40,6 +40,17 @@ class ClearingHouseBusinessModel extends BaseFinancialBusinessModel
     public function getBankruptEquityThreshold(): float { return 0.5; }
     public function getDistressEquityThreshold(): float { return 1.25; }
     public function getWarningEquityThreshold(): float { return 2.5; }
+
+    /**
+     * Member initial and variation margin. The clearinghouse holds it, invests it and keeps the spread,
+     * but it belongs to the members and the default waterfall spends it before ACC's own equity is ever
+     * reached, so it cannot answer for ACC's debts. getTargetMetrics, calculateInterestIncome,
+     * isUnderLeveraged and evaluateHoardingStatus all already treat the pool this way.
+     */
+    public function getSegregatedCustodyLiabilities(Stock $stock): float
+    {
+        return max(0.0, (float) $stock->getCustomerDeposits());
+    }
     public function getWholesaleLeverageLimit(): float { return 0.0; }
     public function getDividendCrisisIcr(): float { return 1.05; }
     public function getBuybackMinIcr(): float { return 1.15; }

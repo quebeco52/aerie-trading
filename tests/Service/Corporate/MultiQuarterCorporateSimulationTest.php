@@ -9,6 +9,7 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use App\Entity\Stock;
 use App\DTO\MacroStateDTO;
 use App\Service\Corporate\EarningsEngine;
+use App\Service\Math\FinancialConstants;
 use App\Service\Corporate\CapitalAllocationEngine;
 use App\Service\Corporate\TreasuryEngine;
 use App\Service\Corporate\DebtEngine;
@@ -364,10 +365,19 @@ class MultiQuarterCorporateSimulationTest extends TestCase
     }
 
     /**
-     * A severe but functioning credit market (700bps spreads) must not push solvent firms into payment
-     * default. Market access to refinance an existing maturity is deliberately a looser test than the one
-     * for taking on new leverage, because investment-grade issuers really do roll their debt straight
-     * through recessions. If an ordinary downturn defaulted the whole market the mechanism would be wrong.
+     * A severe but functioning credit market (700bps spreads) must not push solvent firms into an UNCURED
+     * event of default. Market access to refinance an existing maturity is deliberately a looser test than
+     * the one for taking on new leverage, because investment-grade issuers really do roll their debt
+     * straight through recessions. If an ordinary downturn defaulted the whole market the mechanism would
+     * be wrong.
+     *
+     * The property pinned is that a firm always finds the money within its grace period, not that it never
+     * misses at all. Two lenders here run their interest coverage below 1.0 for several quarters, close
+     * their own primary market on that test, and draw their committed facility down to nothing — which is
+     * what a mortgage lender in a credit crunch does. They miss, and they cure the following quarter. That
+     * is the distinction the engine could not previously express: the facility was recomputed from scratch
+     * on every call and a draw was recycled straight back into wholesale debt, so it was in effect an
+     * unlimited, self-renewing line, and nothing anywhere ever cleared the default flag once set.
      */
     #[DataProvider('allIndustriesProvider')]
     public function testOrdinaryRecessionDoesNotDefaultSolventIssuers(string $industry, array $metrics): void
@@ -395,9 +405,15 @@ class MultiQuarterCorporateSimulationTest extends TestCase
         for ($quarter = 1; $quarter <= 12; $quarter++) {
             $this->earningsEngine->calculate($stock, $recessionMacro, (($quarter - 1) * $ticksPerQuarter) + $reportingTick, 252);
 
-            $this->assertFalse(
-                $stock->isPaymentDefault(),
-                "{$industry} defaulted on a maturity in Q{$quarter} of an ordinary recession"
+            $this->assertLessThanOrEqual(
+                FinancialConstants::PAYMENT_DEFAULT_GRACE_QUARTERS,
+                $stock->getQuartersInDefault(),
+                "{$industry} failed to cure a missed maturity within its grace period by Q{$quarter} of an ordinary recession"
+            );
+            $this->assertGreaterThan(
+                0.0,
+                (float) $stock->getTotalEquity(),
+                "{$industry} was rendered insolvent by an ordinary recession in Q{$quarter}"
             );
         }
     }

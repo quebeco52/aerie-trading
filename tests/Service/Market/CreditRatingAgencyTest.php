@@ -27,8 +27,47 @@ class CreditRatingAgencyTest extends TestCase
         $this->assertSame('BB', $this->agency->convertDistanceToRating(1.8));
         $this->assertSame('B', $this->agency->convertDistanceToRating(1.2));
         $this->assertSame('CCC', $this->agency->convertDistanceToRating(0.6));
-        $this->assertSame('D', $this->agency->convertDistanceToRating(0.2));
-        $this->assertSame('D', $this->agency->convertDistanceToRating(-1.0));
+        // Floored at CCC. This ladder reads a market-implied distance to default; however far the equity
+        // falls, a price is not a missed payment, and D is reserved for obligors that actually missed one.
+        $this->assertSame('CCC', $this->agency->convertDistanceToRating(0.2));
+        $this->assertSame('CCC', $this->agency->convertDistanceToRating(-1.0));
+    }
+
+    public function testAMarketImpliedCollapseCannotProduceD(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('CRSH');
+        $stock->setCreditRating('BBB');
+        $stock->setTotalEquity('50000000000');
+
+        // A catastrophic distance to default and a distressed Altman score, but the firm is current on
+        // everything it owes. Letting this reach D shut the primary bond market on a drawdown alone.
+        $this->agency->evaluateRating($stock, -6.0, 0.5);
+
+        $this->assertNotSame('D', $stock->getCreditRating());
+    }
+
+    public function testAPaymentDefaultAssignsRatingD(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('MISS');
+        $stock->setCreditRating('BBB');
+        $stock->setTotalEquity('50000000000');
+        $stock->setPaymentDefault(true);
+
+        $this->assertSame('D', $this->agency->evaluateRating($stock, 4.0, 9.0));
+        $this->assertSame('D', $stock->getCreditRating());
+    }
+
+    public function testACuredDefaultLeavesRatingD(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('CURE');
+        $stock->setCreditRating('D');
+        $stock->setTotalEquity('50000000000');
+        $stock->setPaymentDefault(false);
+
+        $this->assertNotSame('D', $this->agency->evaluateRating($stock, 4.0, 9.0));
     }
 
     public function testEvaluateRatingUpdatesStockWhenRatingChanges(): void
@@ -88,18 +127,19 @@ class CreditRatingAgencyTest extends TestCase
         $this->assertSame('CCC', $stock->getCreditRating());
     }
 
-    public function testAltmanInsolventCapsRatingAtD(): void
+    public function testAltmanInsolventCapsRatingAtCcc(): void
     {
         $stock = new Stock();
         $stock->setTicker('DEAD');
         $stock->setCreditRating('AA');
         $stock->setTotalEquity('10000000');
 
-        // Altman Z < 0 indicates insolvency
+        // Altman Z < 0 indicates insolvency — but an insolvent obligor that is still paying has not
+        // defaulted, and MarketOperator liquidates on this score in any case.
         $transition = $this->agency->evaluateRating($stock, 3.8, -1.5);
 
-        $this->assertSame('D', $transition);
-        $this->assertSame('D', $stock->getCreditRating());
+        $this->assertSame('CCC', $transition);
+        $this->assertSame('CCC', $stock->getCreditRating());
     }
 
     public function testAltmanGreyZoneCapsRatingAtBB(): void
@@ -142,5 +182,63 @@ class CreditRatingAgencyTest extends TestCase
 
         $this->assertSame('D', $transition);
         $this->assertSame('D', $stock->getCreditRating());
+    }
+
+    /**
+     * A financial's ALTERNATIVE score is a capital ratio in percentage points, not a 1968 Z''-score, so the
+     * numeric brackets read it on the wrong scale. The zone the firm's own model assigns is authoritative:
+     * a bank three points from statutory failure is in distress however comfortably 3.7 clears a grey zone
+     * of 2.60, and a clearinghouse whose ratio is healthy is not distressed merely because the number is low.
+     */
+    public function testTheModelsOwnZoneOverridesTheNumericAltmanBrackets(): void
+    {
+        $bank = new Stock();
+        $bank->setTicker('BNK');
+        $bank->setCreditRating('AAA');
+        $bank->setTotalEquity('50000000000');
+
+        // 3.68 sits above the 2.60 grey bound, so the numeric path would apply no cap at all.
+        $this->assertNull($this->agency->evaluateRating($bank, 4.0, 3.68));
+
+        $bank->setCreditRating('AAA');
+        $this->assertSame('CCC', $this->agency->evaluateRating($bank, 4.0, 3.68, 'Distress'));
+
+        $ccp = new Stock();
+        $ccp->setTicker('ACC');
+        $ccp->setCreditRating('BBB');
+        $ccp->setTotalEquity('50000000000');
+
+        // 2.40 is inside the numeric grey band, but the CCP's own thresholds call that ratio safe.
+        $this->assertSame('BB', $this->agency->evaluateRating($ccp, 4.0, 2.40));
+
+        $ccp->setCreditRating('BBB');
+        $zoned = $this->agency->evaluateRating($ccp, 4.0, 2.40, 'Safe');
+        $this->assertNotNull($zoned);
+        $this->assertFalse(
+            $this->agency->isDowngrade('BBB', $zoned),
+            'a capital ratio the CCP\'s own model calls safe may not cap its rating'
+        );
+    }
+
+    /** With no zone supplied the numeric brackets still govern, so operating firms are untouched. */
+    public function testAnOperatingFirmRatesIdenticallyWithOrWithoutItsZone(): void
+    {
+        foreach ([[0.8, 'Distress'], [1.8, 'Grey'], [4.0, 'Safe']] as [$zScore, $zone]) {
+            $numeric = new Stock();
+            $numeric->setTicker('NUM');
+            $numeric->setCreditRating('BBB');
+            $numeric->setTotalEquity('100000000');
+
+            $zoned = new Stock();
+            $zoned->setTicker('ZON');
+            $zoned->setCreditRating('BBB');
+            $zoned->setTotalEquity('100000000');
+
+            $this->assertSame(
+                $this->agency->evaluateRating($numeric, 4.0, $zScore),
+                $this->agency->evaluateRating($zoned, 4.0, $zScore, $zone),
+                'the standard path zones on the same two numbers the brackets use'
+            );
+        }
     }
 }

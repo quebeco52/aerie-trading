@@ -229,9 +229,7 @@ class MonetaryPolicySubsystem
      */
     public function calculateTargetRate(MacroState $state, float $targetInflation, float $naturalRate, float $dt = 0.25): float
     {
-        // Continuous accumulation of cumulative price-level shortfall under Flexible Average Inflation Targeting (FAIT - Powell 2020)
-        // FAIT is an asymmetric make-up framework: persistent shortfalls (pi < target) create an accommodative buffer (offset < 0)
-        // that tolerates moderate overshoots before rate hikes are initiated.
+        // Powell (2020) Flexible Average Inflation Targeting (FAIT) cumulative price-level shortfall buffer.
         $inflationShortfall = $state->inflationEma - $targetInflation;
         $state->cumulativeInflationGap += ($inflationShortfall - (self::FAIT_MEMORY_SPEED * $state->cumulativeInflationGap)) * $dt;
         $state->cumulativeInflationGap = max(-0.06, min(0.06, $state->cumulativeInflationGap));
@@ -240,17 +238,12 @@ class MonetaryPolicySubsystem
 
         $inflationMeasure = $this->calculateExpectedInflation($state, $targetInflation);
 
-        // Clarida, Galí & Gertler (1998, 2000): Taylor rule responds to the cyclical trend (EMA)
-        // to prevent stochastic tick diffusion from causing erratic swings in the policy stance.
+        // Clarida, Galí & Gertler (2000) forward-looking Taylor rule responding to cyclical trend EMA.
         $cyclicalGap = ($state->outputGapEma === 0.015 && $state->outputGap !== 0.015)
             ? $state->outputGap
             : $state->outputGapEma;
 
-        // Smooth asymmetric output gap weighting: continuous bounded multiplier preventing panic cliff drops.
-        // Cukierman & Muscatelli (2008) find the reaction function is recession-averse rather than symmetric,
-        // and the boost has to reach the balanced-approach weight to matter: capped at half a Taylor weight it
-        // saturated at a gap of -1.4%, so the rule met a mild slowdown and a severe one with the same lean, and
-        // policy stayed restrictive for ten quarters into a downturn while sticky inflation unwound.
+        // Cukierman & Muscatelli (2008) asymmetric recession-averse Taylor rule output gap weighting.
         if ($cyclicalGap < 0.0) {
             $gapWeight = self::TAYLOR_OUTPUT_GAP_WEIGHT
                 * (1.0 + min(self::TAYLOR_RECESSION_MAX_BOOST, abs($cyclicalGap) * self::TAYLOR_RECESSION_SCALE));
@@ -258,8 +251,7 @@ class MonetaryPolicySubsystem
             $gapWeight = self::TAYLOR_OUTPUT_GAP_WEIGHT;
         }
 
-        // Bernanke (2006): lean against long-rate moves the policy rate does not set, so a high-premium era or a
-        // market that has repriced neutral is met with easier policy rather than a decade of restrictive conditions.
+        // Bernanke (2006) offset leaning against exogenous non-monetary long-rate term premium shifts.
         $longRateOffset = self::TAYLOR_LONG_RATE_OFFSET * $this->calculateLongRateGap($state, $naturalRate);
 
         $unclampedTarget = $naturalRate + $inflationMeasure
@@ -268,9 +260,7 @@ class MonetaryPolicySubsystem
             + $faitOffset
             - $longRateOffset;
 
-        // Wu-Xia (2016) / Krippner (2013) Unconstrained Shadow Rate:
-        // Incorporates unconventional monetary accommodation (QE balance sheet expansion)
-        // during Zero Lower Bound regimes, allowing the shadow rate to drop negative to quantify policy stance.
+        // Wu-Xia (2016) / Krippner (2013) shadow rate reflecting unconventional QE accommodation at ZLB.
         $qeShadowAccommodation = $state->qeIntensity * self::WU_XIA_QE_SHADOW_SENSITIVITY;
 
         return $unclampedTarget - $qeShadowAccommodation;
@@ -345,8 +335,7 @@ class MonetaryPolicySubsystem
         $currentPolicyRate = $state->policyRate;
         $effectiveTarget = max(MacroEngine::EFFECTIVE_LOWER_BOUND, min(0.20, $targetRate));
 
-        // Evans Rule (FOMC Dec 2012): Forward guidance holds policy rate at lower bound during recovery
-        // as long as unemployment remains elevated and inflation remains contained below the threshold ceiling.
+        // Evans Rule (FOMC 2012) forward guidance threshold keeping rates at lower bound.
         if (
             $currentPolicyRate <= MacroEngine::ZLB_PROXIMITY_THRESHOLD
             && $effectiveTarget > $currentPolicyRate
@@ -356,7 +345,7 @@ class MonetaryPolicySubsystem
             $effectiveTarget = $currentPolicyRate;
         }
 
-        // Both branches lean on the cyclical trend rather than the tick, so it is resolved once.
+        // Clarida, Galí & Gertler (2000) policy inertia evaluated on cyclical output trend.
         $cyclicalGap = ($state->outputGapEma === 0.015 && $state->outputGap !== 0.015)
             ? $state->outputGap
             : $state->outputGapEma;
@@ -368,8 +357,7 @@ class MonetaryPolicySubsystem
             $panicMultiplier = min(self::CB_MAX_HIKE_PANIC_SPEED, $inflationPanicExcess * self::CB_INFLATION_PANIC_SCALE);
             $cbSpeed += $panicMultiplier;
 
-            // The Volcker velocity cap stays a function of the inflation panic alone: running hot is a
-            // reason to close the gap to the rule's target faster, not to hike at emergency speed.
+            // Clarida-Galí-Gertler (2000) emergency rate adjustment ceiling under inflation panic.
             $panicFraction = min(1.0, $panicMultiplier / self::CB_MAX_HIKE_PANIC_SPEED);
             $maxHikeVelocity = MacroEngine::CB_MAX_NORMAL_HIKE_VELOCITY + $panicFraction * (MacroEngine::CB_MAX_PANIC_HIKE_VELOCITY - MacroEngine::CB_MAX_NORMAL_HIKE_VELOCITY);
 
@@ -438,20 +426,19 @@ class MonetaryPolicySubsystem
             $runoffPressure = 0.0;
         }
 
-        // The portfolio is a STOCK, floored at zero. The bank can buy duration and it can let what it bought
-        // mature, but it cannot go net short: QT is the withdrawal of QE's compression, never a premium of its own.
+        // Vayanos & Vila (2021) central bank duration extraction portfolio stock floored at zero.
         $portfolio = max(0.0, $state->balanceSheetIntensity);
         $rampSpeed = self::BALANCE_SHEET_RAMP_SPEED;
         $inRunoff = false;
 
         if ($qeYieldSuppressionTarget > 0.0) {
-            // Active purchases: the stock ratchets toward the dose the crisis calls for and never shrinks mid-round.
+            // Quantitative easing purchase trajectory ramping toward crisis target dose.
             $balanceSheetTarget = max($portfolio, $qeYieldSuppressionTarget);
             $newHoldTimer = 0.0;
         } elseif ($portfolio > MacroEngine::BALANCE_SHEET_ACTIVE_THRESHOLD) {
             $newHoldTimer = $state->balanceSheetHoldTimer + $dt;
 
-            // Bernanke (2020) reinvestment hold, cut short when the economy overheats.
+            // Bernanke (2020) reinvestment hold phase preceding systematic balance sheet runoff.
             $inRunoff = $newHoldTimer >= self::BALANCE_SHEET_REINVESTMENT_HOLD_YEARS || $runoffPressure > 0.0;
 
             if ($inRunoff) {
@@ -472,10 +459,9 @@ class MonetaryPolicySubsystem
         return [
             'new_balance_sheet_intensity' => $newBalanceSheetIntensity,
             'new_hold_timer' => $newHoldTimer,
-            // Accommodation actually delivered: the habitat compression and the Wu-Xia shadow rate both read this,
-            // so it must track the stock through the hold rather than switching off when purchases stop.
+            // Active cumulative QE duration accommodation (Vayanos & Vila 2021 / Wu & Xia 2016).
             'new_qe_intensity' => $newBalanceSheetIntensity,
-            // The portfolio being unwound. Zero unless there is something to unwind, which is the whole point.
+            // Quantitative tightening runoff portfolio tracking active balance sheet contraction.
             'new_qt_intensity' => $inRunoff ? $newBalanceSheetIntensity : 0.0,
         ];
     }
@@ -498,7 +484,7 @@ class MonetaryPolicySubsystem
      */
     public function updateTermPremiumDynamics(MacroState $state, float $dt): void
     {
-        // Exact OU step (theta 0): decay, then the stationary-consistent innovation variance over dt.
+        // Diebold & Li (2006) exact Ornstein-Uhlenbeck monetary expectations path innovation.
         $pathDecay = exp(-self::EXPECTED_PATH_SHOCK_KAPPA * $dt);
         $pathVariance = (self::EXPECTED_PATH_SHOCK_SIGMA ** 2 / (2.0 * self::EXPECTED_PATH_SHOCK_KAPPA)) * (1.0 - exp(-2.0 * self::EXPECTED_PATH_SHOCK_KAPPA * $dt));
         $nextPathShock = ($state->expectedPathShock * $pathDecay) + (sqrt($pathVariance) * $this->mathUtility->generateStandardNormal());
@@ -577,28 +563,20 @@ class MonetaryPolicySubsystem
         $flightToSafetyShift = self::FLIGHT_TO_SAFETY_SENSITIVITY * max(0.0, $state->marketVolatilityEma - MacroEngine::FLIGHT_TO_SAFETY_VOL_THRESHOLD);
         $cyclicalTermPremium = $state->outputGap * self::NS_GAP_TERM_PREMIUM_SCALE;
         $restrictiveCompression = $this->restrictiveCompression($state, $naturalRate);
-        // The fiscal premium (Laubach 2009) is a level every tenor carries through the duration-scaled premium:
-        // the ten-year in full, the two-year its duration share, as a sovereign CDS curve slopes up.
+        // Laubach (2009) structural fiscal debt-to-GDP term premium component.
         $structuralTermPremium = $state->termPremiumRegime + $state->termPremiumShock + $state->sovereignRiskSpreadEma;
         $totalBaseTermPremium = max(self::MIN_TERM_PREMIUM_10Y, $structuralTermPremium + $inflationRiskPremium + $cyclicalTermPremium - $flightToSafetyShift - $restrictiveCompression);
 
-        // Long-term asymptotic yield level beta0 (Nelson-Siegel 1987, Diebold-Li 2006): the risk-neutral
-        // anchor, r* plus expected inflation over the 10-year horizon (Fisher hypothesis). The term premium is
-        // NOT part of the level: it is added per tenor below, scaled by duration, because a premium folded
-        // into the level reaches the two-year note in full and flattens the whole curve. Real premia rise
-        // with maturity (ACM 2013), and that rise is most of what a normal 2s10s slope is made of.
+        // Nelson-Siegel (1987) & Diebold-Li (2006) asymptotic risk-neutral rate level beta0.
         $expectedInflation10y = (self::LONG_RUN_INFLATION_ANCHOR_WEIGHT * MacroEngine::TARGET_INFLATION)
             + ((1.0 - self::LONG_RUN_INFLATION_ANCHOR_WEIGHT) * $state->tipsBreakeven);
-        // Kozicki-Tinsley (2001): the anchor blends the model-consistent endpoint with the market's slowly
-        // adapting perception of the long-run policy rate, so long regimes reprice the long end.
+        // Kozicki & Tinsley (2001) shifting endpoint perception of long-run neutral policy rate.
         $modelEndpoint = $naturalRate + $expectedInflation10y;
         $level = ((1.0 - self::KOZICKI_TINSLEY_ENDPOINT_WEIGHT) * $modelEndpoint)
             + (self::KOZICKI_TINSLEY_ENDPOINT_WEIGHT * $state->perceivedNeutralRate);
         $nsBeta1 = $state->policyRate - $level;
 
-        // Diebold-Li (2006) Curvature beta2: forward monetary tightening/easing expectations, plus the factor's
-        // own innovation. The curvature loading is zero at maturity zero and fades past the belly, so a
-        // repricing of the next few years of policy moves neither today's rate nor the long-run anchor.
+        // Diebold & Li (2006) curvature beta2 capturing forward monetary policy trajectory.
         $monetaryStanceGap = $state->targetRate - $state->policyRate;
         $nsBeta2 = (self::SVENSSON_CURVATURE1_TARGET_SCALE * $monetaryStanceGap)
             + (self::SVENSSON_CURVATURE1_GAP_SCALE * $state->outputGap)
@@ -609,11 +587,7 @@ class MonetaryPolicySubsystem
         $debtCurvature = $excessDebt * self::SOVEREIGN_DEBT_YIELD_SENSITIVITY;
         $nsBeta3 = (self::SVENSSON_CURVATURE2_FISCAL_SCALE * $fiscalShift) + $debtCurvature;
 
-        // Past the ten-year point only the structural regime keeps earning duration compensation; the transitory
-        // shock, the inflation risk premium and the cyclical terms shift the whole long end together, so the
-        // 10s30s spread stays stable through a tantrum instead of amplifying it half again.
-        // Liability-driven investors are the marginal buyer past ten years: once the thirty-year runs above the
-        // neutral long-end level, their demand takes part of the excess back out of the long-end premium.
+        // Greenwood & Vayanos (2014) preferred-habitat long-end duration demand hurdle.
         $scale30y = MathUtility::calculateTermPremiumDurationScale(30.0, MacroEngine::TERM_PREMIUM_DURATION_HORIZON_YEARS);
         $longEndHurdle = $naturalRate + $targetInflation + (MacroEngine::NS_BASE_TERM_PREMIUM * $scale30y);
         $habitatDemandShift = self::HABITAT_LONG_END_DEMAND_SENSITIVITY * max(0.0, $state->yield30yEma - $longEndHurdle);
@@ -628,9 +602,7 @@ class MonetaryPolicySubsystem
         $curvatureLoad10y = (1.0 - exp(-10.0 * MacroEngine::SVENSSON_LAMBDA_1)) / (10.0 * MacroEngine::SVENSSON_LAMBDA_1);
         $factor2_10y = $curvatureLoad10y - exp(-10.0 * MacroEngine::SVENSSON_LAMBDA_1);
 
-        // Adrian, Crump & Moench (2013) Pure Risk-Neutral Rate: Expected path of policy rates under zero term premium.
-        // Built on the same ten-year expected-inflation level the fitted curve uses, so the breakeven share of the
-        // level lands in the expectations component rather than being misbooked as term premium.
+        // Adrian, Crump & Moench (2013) pure risk-neutral rate path under zero term premium.
         $riskNeutral10y = $level + ($nsBeta1 * $durationFactor10y) + ($nsBeta2 * $factor2_10y);
         $termPremium10y = $yield10y - $riskNeutral10y;
 
@@ -676,9 +648,7 @@ class MonetaryPolicySubsystem
         $state->nsCurvature = $yieldData['curvature'];
         $state->nsCurvature2 = $yieldData['curvature2'];
 
-        // The factors the curve was actually fitted with, kept so the bond desk discounts an off-benchmark
-        // maturity off the same function that produced the quoted 2y/5y/10y/30y rather than off a curve
-        // reverse-engineered from those four points.
+        // Nelson-Siegel-Svensson (1994) fitted parameters retained for continuous discounting.
         $state->nsBeta1 = $yieldData['beta1'];
         $state->nsBaseTermPremium = $yieldData['base_term_premium'];
         $state->nsLongEndPremium = $yieldData['long_end_premium'];
@@ -798,7 +768,7 @@ class MonetaryPolicySubsystem
         $policyRate = max(0.0, $state->policyRateEma);
         $neutralRate = MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION;
 
-        // The pass-through line runs through the base beta at the neutral rate, so the bank model's normalisation holds there.
+        // Drechsler, Savov & Schnabl (2017) imperfect deposit beta pass-through across rate cycles.
         $targetBeta = MacroEngine::SYSTEM_DEPOSIT_BETA_BASE + (self::DEPOSIT_BETA_RATE_SENSITIVITY * ($policyRate - $neutralRate));
         $targetBeta = max(self::DEPOSIT_BETA_FLOOR, min(self::MAX_SYSTEM_DEPOSIT_BETA, $targetBeta));
         $state->systemDepositBeta = $this->mathUtility->calculateDistributedLag(

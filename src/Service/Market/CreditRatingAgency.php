@@ -25,7 +25,7 @@ class CreditRatingAgency
     public const THRESHOLD_BB  = 1.5;
     /** Distance to Default threshold center for B rating bracket. */
     public const THRESHOLD_B   = 1.0;
-    /** Distance to Default threshold center for CCC rating bracket. */
+    /** Distance to Default floor: CCC is the lowest bracket a market-implied d2 can reach, so nothing sits below it. */
     public const THRESHOLD_CCC = 0.5;
 
     // --- Hysteresis Buffer ---
@@ -37,8 +37,6 @@ class CreditRatingAgency
     public const ALTMAN_DISTRESS_THRESHOLD = 1.10;
     /** Altman Z''-Score threshold below which a firm is in the grey zone (speculative ceiling BB). */
     public const ALTMAN_GREY_THRESHOLD = 2.60;
-    /** Altman Z''-Score threshold below which a firm is insolvent/defaulting (rating D). */
-    public const ALTMAN_INSOLVENT_THRESHOLD = 0.00;
 
     // --- Rating Hierarchy ---
     /** Discrete numerical ranks for credit rating brackets from highest (AAA=7) to default (D=0). */
@@ -60,13 +58,17 @@ class CreditRatingAgency
      * @param Stock       $stock             The stock entity being evaluated.
      * @param float       $distanceToDefault The continuous Distance to Default score (d2) from Merton's model.
      * @param float|null  $altmanZScore      The company's Altman Z''-score for accounting solvency.
+     * @param string|null $altmanZone        That score's zone as the firm's OWN model classified it.
      * @return string|null The new credit rating bracket if a transition occurred, or null if the rating stayed the same.
      */
-    public function evaluateRating(Stock $stock, float $distanceToDefault, ?float $altmanZScore = null): ?string
+    public function evaluateRating(Stock $stock, float $distanceToDefault, ?float $altmanZScore = null, ?string $altmanZone = null): ?string
     {
         $oldRating = $stock->getCreditRating();
 
-        if ($stock->isBankrupt()) {
+        // D is a statement of fact, not of opinion: the agencies assign it when an obligor has actually
+        // missed a payment or filed, and they withdraw it when the obligor is current again. It is therefore
+        // written here and nowhere else — a market-implied distance to default, however bad, cannot reach it.
+        if ($stock->isBankrupt() || $stock->isPaymentDefault()) {
             if ($oldRating !== 'D') {
                 $stock->setCreditRating('D');
                 return 'D';
@@ -86,14 +88,25 @@ class CreditRatingAgency
             $capRank = min($capRank, self::RATING_RANKS['CCC']);
         }
 
-        if ($altmanZScore !== null) {
-            if ($altmanZScore < self::ALTMAN_INSOLVENT_THRESHOLD) {
-                $capRank = min($capRank, self::RATING_RANKS['D']);
-            } elseif ($altmanZScore < self::ALTMAN_DISTRESS_THRESHOLD) {
-                $capRank = min($capRank, self::RATING_RANKS['CCC']);
-            } elseif ($altmanZScore < self::ALTMAN_GREY_THRESHOLD) {
-                $capRank = min($capRank, self::RATING_RANKS['BB']);
-            }
+        // The zone, when the caller supplies it, is the firm's own model classifying its own score, and it
+        // has to win over the numeric brackets. Those brackets are struck on the 1968 Z'' scale, while a
+        // financial's ALTERNATIVE score is a capital ratio in percentage points: read against a grey zone
+        // of 2.60, a bank three points from statutory failure looks comfortably safe and a clearinghouse
+        // carrying a healthy ratio against a member margin pool looks distressed. For an operating firm the
+        // two agree by construction — the standard path zones on these same two numbers.
+        $isDistressed = $altmanZone !== null
+            ? $altmanZone === 'Distress'
+            : ($altmanZScore !== null && $altmanZScore < self::ALTMAN_DISTRESS_THRESHOLD);
+        $isGrey = $altmanZone !== null
+            ? $altmanZone === 'Grey'
+            : ($altmanZScore !== null && $altmanZScore < self::ALTMAN_GREY_THRESHOLD);
+
+        if ($isDistressed) {
+            // Insolvent on the accounts but still paying: the lowest rating an obligor that has not
+            // actually missed anything can hold. MarketOperator liquidates on this score in any case.
+            $capRank = min($capRank, self::RATING_RANKS['CCC']);
+        } elseif ($isGrey) {
+            $capRank = min($capRank, self::RATING_RANKS['BB']);
         }
 
         $effectiveTargetRank = min($targetRank, $capRank);
@@ -106,8 +119,7 @@ class CreditRatingAgency
             // exactly the case it exists for: a firm whose accounts never deteriorated could be carried from
             // BBB to D in three evaluations on nothing but a rise in its equity volatility. Agencies move one
             // notch at a time precisely because a market-implied score is noisier than the credit is.
-            $isSevereDistress = ($altmanZScore !== null && $altmanZScore < self::ALTMAN_DISTRESS_THRESHOLD)
-                || ((float) $stock->getTotalEquity() <= 0.0);
+            $isSevereDistress = $isDistressed || ((float) $stock->getTotalEquity() <= 0.0);
 
             // During fatal distress or insolvency, execute an immediate emergency downgrade
             // rather than artificially maintaining investment-grade ratings via notch damping.
@@ -153,11 +165,11 @@ class CreditRatingAgency
         if ($this->qualifiesForBracket($distanceToDefault, self::THRESHOLD_B, $currentRank, 2)) {
             return 'B';
         }
-        if ($this->qualifiesForBracket($distanceToDefault, self::THRESHOLD_CCC, $currentRank, 1)) {
-            return 'CCC';
-        }
-
-        return 'D';
+        // Floored at CCC. This ladder reads a MARKET-IMPLIED distance to default — equity price and
+        // volatility — and a crash is not a missed payment. Letting it fall through to D handed the rating
+        // to the tape, and since DebtEngine::hasPrimaryMarketAccess shuts the primary market on a D, a
+        // drawdown alone could close an otherwise current issuer's access to refinancing.
+        return 'CCC';
     }
 
     /**

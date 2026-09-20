@@ -1213,7 +1213,10 @@ class EarningsEngineTest extends TestCase
 
         $this->assertNotNull($captured);
         $lease = (new CorporateMetrics())->calculateLeaseLiability((float) $stock->getTotalRevenue(), $captured->strategy->getLeaseIntensity());
-        $expected = (($captured->actualQuarterlyNetIncome - $captured->operatingCashFlow) * 4.0) / $stock->getTotalAssets($lease);
+        // Sloan measures REPORTED earnings against operating cash, so the managed entry belongs in the
+        // numerator alongside net income — steering the headline with accruals is precisely the low-quality
+        // earnings the anomaly detects. It is only ever zero on a quarter the firm had no reason to steer.
+        $expected = ((($captured->actualQuarterlyNetIncome + $captured->managedAccrual) - $captured->operatingCashFlow) * 4.0) / $stock->getTotalAssets($lease);
 
         $this->assertEqualsWithDelta($expected, (float) $stock->getAccrualsRatio(), 1e-9);
 
@@ -1892,13 +1895,16 @@ class EarningsEngineTest extends TestCase
 
             // Rebuild the run-rate the way the engine does — from the deseasonalized revenue and the
             // realized cost ratio — and assert the impairments came off it. Drop the subtraction and this
-            // is the figure the solvency tests would read instead.
+            // is the figure the solvency tests would read instead. Severance is charged the same way and
+            // for the same reason: both sit in operating expense after the cost base was struck, so the
+            // run-rate has to be told about them rather than deseasonalized out of EBIT.
             $costRatio = $captured->actualRevenue > 0.0
                 ? $captured->actualVariableCosts / $captured->actualRevenue
                 : $captured->realizedVariableMargin;
             $beforeCharges = ($captured->seasonallyAdjustedRevenue * (1.0 - $costRatio))
                 - $captured->fixedCosts
-                - $captured->quarterlyDepreciation;
+                - $captured->quarterlyDepreciation
+                - $captured->restructuringCharge;
 
             $this->assertEqualsWithDelta(
                 $beforeCharges - $captured->impairmentCharges,

@@ -156,6 +156,7 @@ class EarningsEngine
         $this->processVariableMargins($ctx);
         $this->calculateDepreciation($ctx);
         $this->calculateExpectedVsActualFinancials($ctx);
+        $this->applyRestructuringCharge($ctx);
         $this->applyWorkingCapitalCharges($ctx);
         $this->rollForwardCreditLossAllowance($ctx);
         $this->calculateInterestAndRunRates($ctx);
@@ -549,10 +550,54 @@ class EarningsEngine
         // Wage-price spiral: excess wage growth above trend inflates the labor-cost share of fixed costs.
         $excessWageGrowth = max(-FinancialConstants::MAX_WAGE_RELIEF, $macroState->wageGrowth - (MacroEngine::TFP_DRIFT + MacroEngine::TARGET_INFLATION));
         $wageInflationFactor = 1.0 + ($strategy->getLaborCostShare() * $excessWageGrowth / max(0.5, $pricingPowerMultiplier));
-        $ctx->fixedCosts = $cashStructuralCosts * $fixedCostRatio * $wageInflationFactor;
+        // Capacity cost is committed, not chosen quarter by quarter: a firm carries the base it was
+        // resourced for until it restructures, which is why the structural figure is what gets scaled.
+        $structuralFixedCosts = $cashStructuralCosts * $fixedCostRatio * $wageInflationFactor;
+        $ctx->fixedCosts = $structuralFixedCosts * $this->resolveCommittedCostScale($ctx);
 
         $structuralVariableCosts = $cashStructuralCosts - ($cashStructuralCosts * $fixedCostRatio);
         $ctx->baselineVariableMargin = $structuralVariableCosts / $ctx->structuralRevenue;
+    }
+
+    /**
+     * The committed cost base the firm is actually resourced for, as a fraction of the base its structural
+     * capacity implies.
+     *
+     * Anderson, Banker & Janakiraman (2003) measure what happens to operating costs when activity moves:
+     * they follow it up at one elasticity and down at a lower one, because a firm cannot unstaff a plant
+     * the quarter demand falls and does not re-staff one the quarter it returns. Written as a partial
+     * adjustment of the base toward the activity it is being asked to carry, their one-period coefficients
+     * give a base that a single bad quarter trims and a slump that persists restructures over about five
+     * quarters. The ceiling at one keeps the boom side out of this channel: running above capacity is
+     * already paid for as the convex overtime premium on the variable margin.
+     */
+    private function resolveCommittedCostScale(EarningsSimulationContext $ctx): float
+    {
+        // A row seeded before the column existed is carrying its full structural base.
+        $prior = (float) $ctx->stock->getCommittedCostScale();
+        if ($prior <= 0.0) {
+            $prior = 1.0;
+        }
+
+        // The activity the base has to carry, with the seasonal swing the firm staffs through taken out.
+        $utilization = $ctx->capacityUtilization / max(0.01, $ctx->seasonalFactor);
+        $activityGap = log(
+            max(self::MIN_CAPACITY_UTILIZATION, $utilization) / max(self::MIN_CAPACITY_UTILIZATION, $prior)
+        );
+
+        $elasticity = FinancialConstants::STICKY_COST_BETA_EXPANSION
+            + ($activityGap < 0.0 ? FinancialConstants::STICKY_COST_BETA_CONTRACTION_PENALTY : 0.0);
+
+        $scale = min(
+            1.0,
+            max(FinancialConstants::MIN_COMMITTED_COST_SCALE, $prior * exp($elasticity * $activityGap))
+        );
+
+        $ctx->committedCostScale = $scale;
+        $ctx->committedCostCut = max(0.0, $prior - $scale);
+        $ctx->stock->setCommittedCostScale((string) $scale);
+
+        return $scale;
     }
 
     /**
@@ -834,7 +879,7 @@ class EarningsEngine
             ? ($ctx->actualVariableCosts / $ctx->actualRevenue)
             : $ctx->realizedVariableMargin;
         // Deseasonalized run-rate EBIT: reconstructed from revenue and cost ratios with non-seasonal impairments deducted.
-        $ctx->seasonallyAdjustedEbit = ($ctx->seasonallyAdjustedRevenue * (1.0 - $realizedCostRatio)) - $ctx->fixedCosts - $ctx->quarterlyDepreciation - $ctx->impairmentCharges;
+        $ctx->seasonallyAdjustedEbit = ($ctx->seasonallyAdjustedRevenue * (1.0 - $realizedCostRatio)) - $ctx->fixedCosts - $ctx->quarterlyDepreciation - $ctx->impairmentCharges - $ctx->restructuringCharge;
         $ctx->structuralOperatingMargin = $ctx->seasonallyAdjustedEbit / max(1.0, $ctx->seasonallyAdjustedRevenue);
 
         // Persist the margin the firm actually earned. The stock's operatingMargin is the slow structural
@@ -1381,6 +1426,35 @@ class EarningsEngine
      * replacement of the impaired stock, leaves later through the working capital roll-forward as the
      * allowance unwinds.
      */
+    /**
+     * One-time termination benefits for the capacity just cut (ASC 420-10), recognised in the quarter the
+     * plan is committed rather than spread over the savings it buys. Only the labour share carries
+     * severance — exiting a lease or mothballing a line does not — and no analyst forecasts the charge, so
+     * expectedEbit is deliberately left alone and a restructuring quarter reports as a miss. That cost is
+     * the reason a firm does not resize on the first soft quarter.
+     */
+    private function applyRestructuringCharge(EarningsSimulationContext $ctx): void
+    {
+        if ($ctx->committedCostCut <= 0.0 || $ctx->committedCostScale <= 0.0) {
+            return;
+        }
+
+        $structuralFixedCosts = $ctx->fixedCosts / $ctx->committedCostScale;
+        $charge = $ctx->committedCostCut
+            * $structuralFixedCosts
+            * $ctx->strategy->getLaborCostShare()
+            * FinancialConstants::RESTRUCTURING_SEVERANCE_QUARTERS;
+
+        if ($charge <= 0.0) {
+            return;
+        }
+
+        // Severance sits in operating expense, so it reduces EBITDA and EBIT alike.
+        $ctx->ebitda -= $charge;
+        $ctx->ebit -= $charge;
+        $ctx->restructuringCharge += $charge;
+    }
+
     private function applyWorkingCapitalCharges(EarningsSimulationContext $ctx): void
     {
         $stock = $ctx->stock;
