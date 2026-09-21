@@ -4,6 +4,7 @@ namespace App\Tests\Service\Macro\Subsystem;
 
 use App\Service\Macro\MacroEngine;
 use App\Service\Macro\MacroState;
+use App\Service\Macro\Subsystem\AssetMarketSubsystem;
 use App\Service\Macro\Subsystem\CreditFiscalSubsystem;
 use App\Service\Math\MathUtility;
 use PHPUnit\Framework\TestCase;
@@ -554,7 +555,7 @@ class CreditFiscalSubsystemTest extends TestCase
         $subsystem = $this->quietSubsystem();
 
         $boom = $this->householdStateAtNeutralRates();
-        $boom->residentialPropertyIndexEma = 1.20 * MacroEngine::RESIDENTIAL_BASELINE;
+        $boom->residentialPropertyIndexEma = 1.20 * AssetMarketSubsystem::RESIDENTIAL_BASELINE;
         $subsystem->calculateHouseholdCredit($boom, 1.0);
 
         $tight = $this->householdStateAtNeutralRates();
@@ -565,6 +566,99 @@ class CreditFiscalSubsystemTest extends TestCase
         $this->assertEqualsWithDelta($expectedBoom, $boom->householdDebtToIncome, 1e-9, 'Twenty percent richer collateral borrows two percent more in a year.');
         $this->assertLessThan(MacroEngine::HOUSEHOLD_DEBT_TO_INCOME_BASELINE, $tight->householdDebtToIncome, 'Rationed credit amortises faster than it is written.');
         $this->assertGreaterThan($tight->householdDebtToIncome, $boom->householdDebtToIncome);
+    }
+
+    /**
+     * A house-price level that the trend has followed must not move leverage at all.
+     *
+     * The collateral term used to read against the nominal RESIDENTIAL_BASELINE of 100. The index's own
+     * equilibrium sits near 94, so a run at rest showed a standing -5.6% "lift" and the term drained
+     * -0.56%/yr of leverage forever: measured over 25 live years, household debt to income slid 1.005 to
+     * 0.869 and the credit-to-GDP gap could only ever go negative, which left the Schularick-Taylor crisis
+     * hazard at 0.4 per century and the engine with no recession to be had.
+     */
+    public function testAHousePriceLevelTheTrendHasFollowedDoesNotMoveLeverage(): void
+    {
+        $subsystem = $this->quietSubsystem();
+
+        $settled = $this->householdStateAtNeutralRates();
+        $settled->residentialPropertyIndexEma = 0.9442 * AssetMarketSubsystem::RESIDENTIAL_BASELINE;
+        $settled->residentialWealthTrend = $settled->residentialPropertyIndexEma;
+
+        $subsystem->calculateHouseholdCredit($settled, 1.0);
+
+        $this->assertEqualsWithDelta(
+            MacroEngine::HOUSEHOLD_DEBT_TO_INCOME_BASELINE,
+            $settled->householdDebtToIncome,
+            1e-9,
+            'Prices at their own trend are not a collateral shock, whatever the nominal index reads.'
+        );
+    }
+
+    /**
+     * The cyclical response the term exists for has to survive the trend anchoring: Mian & Sufi's channel is
+     * borrowing against collateral that has moved AWAY from trend, which is what the gap-building boom is.
+     */
+    public function testCollateralBorrowingStillRespondsToPricesAboveTrend(): void
+    {
+        $subsystem = $this->quietSubsystem();
+
+        $boom = $this->householdStateAtNeutralRates();
+        $boom->residentialWealthTrend = 0.9442 * AssetMarketSubsystem::RESIDENTIAL_BASELINE;
+        $boom->residentialPropertyIndexEma = 1.20 * $boom->residentialWealthTrend;
+
+        $subsystem->calculateHouseholdCredit($boom, 1.0);
+
+        $expected = MacroEngine::HOUSEHOLD_DEBT_TO_INCOME_BASELINE
+            * exp(CreditFiscalSubsystem::CREDIT_GROWTH_HOUSE_PRICE * 0.20);
+
+        $this->assertEqualsWithDelta($expected, $boom->householdDebtToIncome, 1e-9);
+    }
+
+    /**
+     * Standards sitting at the level this economy treats as normal must not move leverage either.
+     *
+     * The term read the index against zero, and the index cannot average zero: macroCreditSpread carries a
+     * rectified interbank stress and a one-sided sovereign passthrough, so it sat above BASE_CREDIT_SPREAD in
+     * 86 of 107 live quarters and SLOOS_CREDIT_SENSITIVITY turned that into a mean +0.038 of standing
+     * tightening. At CREDIT_GROWTH_SLOOS that drained 0.38%/yr, and leverage settled at 1 - 0.382/5.0 = 0.924
+     * against an observed 0.930 — the arithmetic of an economy that deleverages forever.
+     */
+    public function testStandardsAtTheirOwnTrendDoNotMoveLeverage(): void
+    {
+        $subsystem = $this->quietSubsystem();
+
+        $settled = $this->householdStateAtNeutralRates();
+        $settled->sloosTighteningIndexEma = 0.0382;
+        $settled->sloosTighteningTrend = 0.0382;
+
+        $subsystem->calculateHouseholdCredit($settled, 1.0);
+
+        $this->assertEqualsWithDelta(
+            MacroEngine::HOUSEHOLD_DEBT_TO_INCOME_BASELINE,
+            $settled->householdDebtToIncome,
+            1e-9,
+            'A standing level of tightening is this economy\'s normal, not a credit crunch.'
+        );
+    }
+
+    /**
+     * The rationing response the term exists for still has to bite when standards move above that normal.
+     */
+    public function testStandardsAboveTrendStillRationCredit(): void
+    {
+        $subsystem = $this->quietSubsystem();
+
+        $crunch = $this->householdStateAtNeutralRates();
+        $crunch->sloosTighteningTrend = 0.0382;
+        $crunch->sloosTighteningIndexEma = $crunch->sloosTighteningTrend + 1.0;
+
+        $subsystem->calculateHouseholdCredit($crunch, 1.0);
+
+        $expected = MacroEngine::HOUSEHOLD_DEBT_TO_INCOME_BASELINE
+            * exp(-CreditFiscalSubsystem::CREDIT_GROWTH_SLOOS * 1.0);
+
+        $this->assertEqualsWithDelta($expected, $crunch->householdDebtToIncome, 1e-9);
     }
 
     public function testTheDebtServiceRatioIsTheBisAnnuityAndRisesWithRates(): void
@@ -763,6 +857,38 @@ class CreditFiscalSubsystemTest extends TestCase
         $subsystem->calculateCreditCrisisHazard($state, 1.0);
 
         $this->assertEqualsWithDelta(0.02 * exp(-CreditFiscalSubsystem::CREDIT_CRISIS_DRAG_DECAY), $state->creditCrisisDrag, 1e-9, 'A year on, the drag has decayed by its time constant.');
+    }
+
+    /**
+     * The decay rate is the whole depth lever, so it is asserted as the property it was chosen for rather
+     * than as its own value. JST 2013 follow output five years past a credit-boom recession and still find
+     * it depressed; a drag that is spent inside the ~5 quarters the policy loop needs to respond gets
+     * offset as it arrives and the bust never reaches its floor.
+     */
+    public function testTheCrisisDragOutlastsThePolicyResponse(): void
+    {
+        $subsystem = $this->quietSubsystem();
+        $state = new MacroState();
+        $state->totalTime = 10.0;
+        $state->lastCreditCrisisAt = 9.0;
+        $state->creditCrisisDrag = 0.02;
+
+        for ($year = 0; $year < 5; $year++) {
+            $subsystem->calculateCreditCrisisHazard($state, 1.0);
+        }
+
+        $surviving = $state->creditCrisisDrag / 0.02;
+
+        $this->assertGreaterThan(
+            0.20,
+            $surviving,
+            'Five years on, a credit-boom recession is still depressing output in the JST panel.'
+        );
+        $this->assertLessThan(
+            0.60,
+            $surviving,
+            'It is a transitory deleveraging drag, not permanent scarring; the economy does recover.'
+        );
     }
 
     public function testACrisisTightensLendingStandardsLikeASpreadWould(): void

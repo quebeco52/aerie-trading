@@ -42,6 +42,7 @@ class MacroState
 
     public float $exchangeRateIndex = 100.0;
     public float $exchangeRateIndexEma = 100.0;
+    public float $exchangeRateTrend = 100.0;
 
     public float $industrialMetalsIndex = 100.0;
     public float $industrialMetalsIndexEma = 100.0;
@@ -206,6 +207,7 @@ class MacroState
 
     public float $sloosTighteningIndex = 0.0;
     public float $sloosTighteningIndexEma = 0.0;
+    public float $sloosTighteningTrend = 0.0;
 
     public float $supplyChainPressureIndex = 0.0;
     public float $supplyChainPressureIndexEma = 0.0;

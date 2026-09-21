@@ -4,6 +4,7 @@ namespace App\Tests\Service\Macro\Subsystem;
 
 use App\Service\Macro\MacroEngine;
 use App\Service\Macro\MacroState;
+use App\Service\Macro\Subsystem\AssetMarketSubsystem;
 use App\Service\Macro\Recorder\OutputGapProbe;
 use App\Service\Macro\Subsystem\MacroAggregateSubsystem;
 use App\Service\Math\MathUtility;
@@ -797,8 +798,9 @@ class MacroAggregateSubsystemTest extends TestCase
         $state->macroCreditSpreadEma = MacroEngine::BASE_CREDIT_SPREAD;
         $state->interbankLiquiditySpreadEma = MacroEngine::INTERBANK_BASELINE_SPREAD;
         $state->governmentSpendingIndexEma = MacroEngine::GOVT_SPENDING_BASELINE;
-        $state->residentialPropertyIndexEma = MacroEngine::RESIDENTIAL_BASELINE;
-        $state->exchangeRateIndexEma = MacroEngine::EXCHANGE_RATE_BASELINE;
+        $state->residentialPropertyIndexEma = AssetMarketSubsystem::RESIDENTIAL_BASELINE;
+        $state->exchangeRateIndexEma = AssetMarketSubsystem::EXCHANGE_RATE_BASELINE;
+        $state->exchangeRateTrend = AssetMarketSubsystem::EXCHANGE_RATE_BASELINE;
         $state->energyPriceIndexEma = MacroEngine::ENERGY_BASELINE;
         $state->freightRateIndexEma = MacroEngine::FREIGHT_BASELINE;
         $state->capitalStockOverhang = 0.0;
@@ -1164,5 +1166,83 @@ class MacroAggregateSubsystemTest extends TestCase
         $this->assertNull($snapshot['current'], 'The new quarter has not seen a tick yet');
         $this->assertSame(1, $snapshot['previous']['ticks']);
         $this->assertSame($closing, $snapshot['previous']['closing_gap']);
+    }
+
+    /**
+     * The Mundell-Fleming term is a response to the currency MOVING, so a currency parked wherever this
+     * economy's normal happens to be is not a net-export impulse. Read off the nominal 100 baseline instead,
+     * a rectified safe-haven bid and a one-sided sovereign risk discount hold the index near 97.3 forever and
+     * the term becomes a permanent 0.11 pp/yr of demand.
+     */
+    public function testACurrencyLevelTheTrendHasFollowedDoesNotMoveNetExports(): void
+    {
+        $atBaseline = $this->neutralBorrowingState();
+
+        $weakButSettled = $this->neutralBorrowingState();
+        $weakButSettled->exchangeRateIndexEma = 97.3;
+        $weakButSettled->exchangeRateTrend = 97.3;
+
+        $gapAtBaseline = $this->subsystem->calculateOutputGap($atBaseline, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0);
+        $gapWeakButSettled = $this->subsystem->calculateOutputGap($weakButSettled, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0);
+
+        $this->assertEqualsWithDelta(
+            $gapAtBaseline,
+            $gapWeakButSettled,
+            1e-12,
+            'A currency sitting at its own trend is this economy\'s normal, not a devaluation.'
+        );
+    }
+
+    /**
+     * The elasticity the term exists for still has to bite when the currency moves away from that normal.
+     */
+    public function testACurrencyBelowItsTrendStillLiftsNetExports(): void
+    {
+        $settled = $this->neutralBorrowingState();
+        $settled->exchangeRateIndexEma = 97.3;
+        $settled->exchangeRateTrend = 97.3;
+
+        $depreciated = $this->neutralBorrowingState();
+        $depreciated->exchangeRateTrend = 97.3;
+        $depreciated->exchangeRateIndexEma = 97.3 * 0.90;
+
+        $gapSettled = $this->subsystem->calculateOutputGap($settled, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0);
+        $gapDepreciated = $this->subsystem->calculateOutputGap($depreciated, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0);
+
+        $expected = MacroAggregateSubsystem::KALDOR_FX_ELASTICITY * 0.10 * 0.25;
+
+        $this->assertEqualsWithDelta(
+            $expected,
+            $gapDepreciated - $gapSettled,
+            1e-12,
+            'A 10% depreciation below trend must still deliver the full Mundell-Fleming export lift.'
+        );
+    }
+
+    /**
+     * The trend has to be slow enough that the currency's own swing survives it: a first-order lag this long
+     * follows under a tenth of the ~12-year swing the rate differential and the risk discount drive.
+     */
+    public function testTheExchangeRateTrendLeavesTheCurrencySwingIntact(): void
+    {
+        $state = new MacroState();
+        $state->exchangeRateIndex = 90.0;
+        $state->exchangeRateIndexEma = 90.0;
+        $state->exchangeRateTrend = 100.0;
+
+        $this->subsystem->updateExponentialMovingAverages($state, 6.0);
+
+        $followed = (100.0 - $state->exchangeRateTrend) / 10.0;
+
+        $this->assertLessThan(
+            0.30,
+            $followed,
+            'Over half a currency swing the trend must still read most of that swing as a deviation.'
+        );
+        $this->assertGreaterThan(
+            0.0,
+            $followed,
+            'The trend must follow a genuinely new level eventually, or it is just another constant.'
+        );
     }
 }

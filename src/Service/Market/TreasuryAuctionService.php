@@ -120,6 +120,11 @@ class TreasuryAuctionService
         foreach ($outstanding as $bond) {
             if ($bond->isOnTheRun() && (float) $bond->getTenorYears() === $tenor) {
                 $bond->setIsOnTheRun(false);
+
+                // The statement above is the authority for the row and this only keeps the working set from
+                // quoting a stale flag. Persisted anyway because Bond is mapped DEFERRED_EXPLICIT and the
+                // write would otherwise show up as a miss in DeferredWriteAudit every auction.
+                $this->entityManager->persist($bond);
             }
         }
     }

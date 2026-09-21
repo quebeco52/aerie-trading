@@ -73,6 +73,7 @@
             <file>tests/Service/Market/OptionSettlementBatchTest.php</file>
             <file>tests/Service/Market/OptionChainListingTest.php</file>
             <file>tests/EventListener/FlushProfilerTest.php</file>
+            <file>tests/EventListener/DeferredWriteAuditTest.php</file>
             <file>tests/Service/Market/SimulationClockTest.php</file>
             <file>tests/Service/Market/HistorySimTimeTest.php</file>
             <file>tests/Service/Corporate/MergerAndAcquisitionGateTest.php</file>

@@ -42,7 +42,7 @@ class CreditFiscalSubsystem
     /** Countercyclical statutory tax response sensitivity to output gap deviations. */
     public const FISCAL_STABILIZER_SENSITIVITY = 1.0;
     /** Adjustment speed of the effective tax burden toward its cyclical target: automatic stabilisers act within the year (OECD budget semi-elasticity ~0.5; Fatas & Mihov 2001); at 0.2 the bust's tax relief arrived at the next peak. */
-    public const FISCAL_ADJUSTMENT_SPEED = 1.0;
+    public const FISCAL_ADJUSTMENT_SPEED = 0.5;
     /** Statutory corporate tax rate floor during deep economic recessions. */
     public const MIN_CORPORATE_TAX_RATE = 0.12;
     /** Statutory corporate tax rate ceiling during overheating economic booms. */
@@ -152,7 +152,7 @@ class CreditFiscalSubsystem
     /** Upper bound on household debt to income. */
     public const MAX_HOUSEHOLD_DEBT_TO_INCOME = 2.50;
     /** Time constant (years) of the one-sided credit trend: the stand-in for the Basel one-sided HP filter (lambda 400,000), whose trend has a multi-decade half-life. */
-    public const CREDIT_TREND_HORIZON_YEARS = 10.0;
+    public const CREDIT_TREND_HORIZON_YEARS = 30.0;
     /** Credit-to-GDP gap at which the countercyclical buffer starts to build (Basel III: 2 percentage points). */
     public const CCYB_GAP_FLOOR = 0.02;
     /** Credit-to-GDP gap at which the buffer reaches its maximum (Basel III: 10 percentage points). */
@@ -179,8 +179,8 @@ class CreditFiscalSubsystem
     public const CREDIT_CRISIS_DRAG_BASE = 0.010;
     /** Extra drag per unit of credit gap at the crisis: "credit bites back", each ten points of boom cost another ~1.5pp a year. */
     public const CREDIT_CRISIS_DRAG_PER_GAP = 0.15;
-    /** Decay of the crisis drag (two-year time constant): financial recessions bottom in the second or third year. */
-    public const CREDIT_CRISIS_DRAG_DECAY = 0.5;
+    /** Decay of the crisis drag (four-year time constant, ~29% still running at year five): JST 2013 track output for five years after a credit-boom recession and the excess-credit effect is still clearly negative there. At the 0.5 this was until 2026-09-21 only 8% survived to year five, so a drag spent inside two years was offset as it arrived by a policy loop that responds in four to five quarters -- depth comes from OUTLASTING that loop, not from a bigger impact. */
+    public const CREDIT_CRISIS_DRAG_DECAY = 0.25;
     /** How a crisis reads to lending standards: a unit of crisis drag is worth this much excess spread, so a boom-fed crisis (2.5pp/yr) is 400bp and standards reach the ~80% net tightening of 2008 (Bassett, Chosak, Driscoll & Zakrajsek 2014). */
     public const SLOOS_CRISIS_SPREAD_EQUIVALENT = 1.6;
 
@@ -429,12 +429,23 @@ class CreditFiscalSubsystem
         $neutralRate = (self::HOUSEHOLD_MORTGAGE_DEBT_SHARE * (MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION + MacroEngine::NS_BASE_TERM_PREMIUM + MacroEngine::RESIDENTIAL_MORTGAGE_SPREAD))
             + ((1.0 - self::HOUSEHOLD_MORTGAGE_DEBT_SHARE) * (MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION + self::CONSUMER_CREDIT_SPREAD));
 
-        $housePriceLift = ($state->residentialPropertyIndexEma / MacroEngine::RESIDENTIAL_BASELINE) - 1.0;
+        // Against the persistent trend, not the nominal baseline. Mian & Sufi's home-equity channel is a
+        // response to prices moving away from trend; read off a fixed 100 it becomes a permanent level
+        // signal, and the index's own equilibrium sits at ~94, so the term carried -0.56%/yr of standing
+        // deleveraging and the credit stock could never build. Same fix as the housing wealth effect.
+        $housePriceLift = $state->residentialWealthTrend > 0.0
+            ? ($state->residentialPropertyIndexEma / $state->residentialWealthTrend) - 1.0
+            : 0.0;
         $relativeExcess = ($state->householdDebtToIncome - MacroEngine::HOUSEHOLD_DEBT_TO_INCOME_BASELINE) / MacroEngine::HOUSEHOLD_DEBT_TO_INCOME_BASELINE;
         $excessDsr = max(0.0, $state->householdDebtServiceGap - MacroEngine::HOUSEHOLD_DSR_STRESS_MARGIN);
 
+        // Both cyclical terms read a deviation from a TREND, never from a nominal constant. The standards
+        // index cannot average zero: macroCreditSpread carries a rectified interbank stress and a one-sided
+        // sovereign passthrough, so it settles ~16bp above BASE_CREDIT_SPREAD and SLOOS_CREDIT_SENSITIVITY
+        // turned that into +0.025 of standing tightening — 0.38%/yr of leverage drained forever, which left
+        // the credit-to-GDP gap negative for decades and the Schularick-Taylor hazard on its floor.
         $growth = (self::CREDIT_GROWTH_HOUSE_PRICE * $housePriceLift)
-            - (self::CREDIT_GROWTH_SLOOS * $state->sloosTighteningIndexEma)
+            - (self::CREDIT_GROWTH_SLOOS * ($state->sloosTighteningIndexEma - $state->sloosTighteningTrend))
             - (self::CREDIT_GROWTH_RATE * ($effectiveRate - $neutralRate))
             + (self::CREDIT_GROWTH_GAP * $state->outputGapEma)
             - (self::CREDIT_MEAN_REVERSION * $relativeExcess)

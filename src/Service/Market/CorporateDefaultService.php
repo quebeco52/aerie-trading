@@ -99,6 +99,9 @@ final class CorporateDefaultService
                 ->setConvexity('0.000000')
                 ->setUpdatedAt($settledAt instanceof \DateTime ? $settledAt : new \DateTime());
 
+            // Bond is mapped DEFERRED_EXPLICIT, so a change reaches the database only through persist().
+            $this->em->persist($bond);
+
             $settled[] = [
                 'ticker' => $bond->getTicker(),
                 'recovery' => $recovery,

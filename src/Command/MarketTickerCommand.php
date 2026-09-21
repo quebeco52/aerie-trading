@@ -30,6 +30,7 @@ use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Command\SignalableCommandInterface;
 use Symfony\Component\Console\Input\InputInterface;
+use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
 
 #[AsCommand(
@@ -212,6 +213,8 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
         private BondTracker $bondTracker,
         private \App\Service\Market\ForcedLiquidationService $liquidationService,
         private \App\EventListener\FlushProfiler $flushProfiler,
+        /** Catches a mutation that DEFERRED_EXPLICIT tracking would drop, and writes it anyway. */
+        private \App\EventListener\DeferredWriteAudit $writeAudit,
         private \App\Service\Macro\Recorder\OutputGapProbe $gapProbe,
         private SimulationClockService $simulationClock,
         private OptionChainService $optionChain,
@@ -315,6 +318,16 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
         return false; // Return false so doesn't forcefully exit immediately
     }
 
+    protected function configure(): void
+    {
+        $this->addOption(
+            'audit-writes',
+            null,
+            InputOption::VALUE_NONE,
+            'Report and repair any Stock or Bond change that was not handed to persist(). Costs the identity-map walk that explicit change tracking exists to avoid, so it is for a canary run rather than for steady state.'
+        );
+    }
+
     /**
      * Executes the market simulation loop.
      *
@@ -405,6 +418,13 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
         // The tick is the only place a flush is timed, so it is the only place that wants the attribution.
         $this->flushProfiler->enable();
 
+        $auditWrites = (bool) $input->getOption('audit-writes');
+
+        if ($auditWrites) {
+            $this->writeAudit->enable();
+            $output->writeln('<comment>Write audit on: explicit-tracking misses will be reported and repaired.</comment>');
+        }
+
         // The gap is only ever moved here, so this is the only process that can say what moved it.
         $this->gapProbe->enable();
 
@@ -425,6 +445,7 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
             $phases = [];
             $phaseStart = hrtime(true);
             $this->flushProfiler->reset();
+            $this->writeAudit->reset();
 
             pcntl_signal_dispatch();
 
@@ -998,6 +1019,14 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
             }
 
             $tickCount++;
+
+            // Reported on its own line rather than folded into the lag warning below: a dropped write has
+            // nothing to do with how long the tick took, and the warning only ever fires on an overrun.
+            $unpersisted = $this->writeAudit->summary();
+
+            if ($unpersisted !== '') {
+                $output->writeln("<error>⚠️ Unpersisted writes on tick {$tickCount}: {$unpersisted} — repaired, but a mutation is missing its persist().</error>");
+            }
 
             // Stop the stopwatch and calculate how long the work took
             $executionTimeSec = microtime(true) - $tickStartTime;

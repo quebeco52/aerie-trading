@@ -162,8 +162,6 @@ class MacroEngine
     public const BALANCE_SHEET_ACTIVE_THRESHOLD = 0.0005;
 
     // --- MUNDELL-FLEMING OPEN ECONOMY (IS-LM-BOP) ---
-    /** Baseline exchange rate index (neutral purchasing power parity). */
-    public const EXCHANGE_RATE_BASELINE = 100.0;
     /** The foreign bloc's neutral policy rate (a G7 average), the level its Taylor rule and the UIP differential rest on. */
     public const GLOBAL_BASELINE_RATE = 0.025;
     /** Weight of the district's own gap in the global demand that prices its commodities: a developed economy that is small in world demand. */
@@ -190,10 +188,6 @@ class MacroEngine
     // --- COBWEB THEOREM FREIGHT RATE INDEX (BALTIC DRY) ---
     /** Baseline ocean freight index value (balanced fleet capacity and trade volume). */
     public const FREIGHT_BASELINE = 100.0;
-
-    // --- JORGENSON USER COST RESIDENTIAL REAL ESTATE ---
-    /** Baseline residential property index value (neutral home affordability). */
-    public const RESIDENTIAL_BASELINE = 100.0;
 
     // --- INTERBANK LIQUIDITY SPREAD (CIR PROCESS & JUMPS) ---
     /** Baseline interbank liquidity spread (FRA-OIS / TED Spread proxy) under normal conditions. */

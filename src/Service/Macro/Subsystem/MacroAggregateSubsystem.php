@@ -27,6 +27,10 @@ class MacroAggregateSubsystem
     public const EQUITY_WEALTH_TREND_HORIZON_YEARS = 3.0;
     /** The same horizon for houses, longer because housing wealth is revalued by sales that are years apart (Carroll, Otsuka & Slacalek 2011); a house price cycle runs about twice this, so the cycle still reads as deviation. */
     public const RESIDENTIAL_WEALTH_TREND_HORIZON_YEARS = 5.0;
+    /** Horizon of the lending-standards trend. Far longer than the 6-10y credit cycle it must leave intact, short enough to follow a regime change; the trend exists to strip a STANDING level, not a swing. */
+    public const SLOOS_TREND_HORIZON_YEARS = 20.0;
+    /** Horizon of the real exchange rate's own normal, well beyond the ~12y swing the UIP differential and the sovereign risk discount drive: a first-order lag this long follows under a tenth of that swing, so PPP deviations (Rogoff 1996: 3-5y half-life) survive intact while a standing level does not. */
+    public const EXCHANGE_RATE_TREND_HORIZON_YEARS = 20.0;
 
     // --- Distributed Lag Transmission Constants ---
     /** Headline inflation per unit farm-price shock (~13% food CPI weight at ~15% pass-through), symmetric in both directions. */
@@ -77,18 +81,6 @@ class MacroAggregateSubsystem
     public const DEMAND_SHOCK_REVERSION = 0.60;
     /** Innovation volatility of the aggregate demand disturbance, in annualized output gap drift units. */
     public const DEMAND_SHOCK_SIGMA = 0.0075;
-
-    // --- Rare Demand Disasters (Barro 2006, Gourio 2012; Kou 2002 jump) ---
-    /** Disaster arrivals per year in either direction. The Gaussian innovation above is symmetric and its worst quarter in 20 sim-years reaches -1.8pp/yr against a real CBO bust descent of -4.7pp/yr, so the only cause of a slump is 2.6x too small to make one. */
-    public const DEMAND_DISASTER_INTENSITY = 0.50;
-    /** Probability a disaster is an upside demand surprise. Barro's disaster set is one-sided; a quarter weight keeps booms possible while leaving the left tail three times heavier. */
-    public const DEMAND_DISASTER_UP_PROBABILITY = 0.25;
-    /** Exponential rate of the upside jump: mean 1.0pp/yr of demand, half the downside, so expansions build gradually and slumps arrive whole. */
-    public const DEMAND_DISASTER_UP_RATE = 100.0;
-    /** Exponential rate of the downside jump: mean 2.0pp/yr of demand. The exponential tail puts a 4pp/yr shock once per ~16y and a 6pp/yr once per ~45y, matching the 40% of real busts that run past -4%. */
-    public const DEMAND_DISASTER_DOWN_RATE = 50.0;
-    /** Cap on one disaster (8pp/yr of demand, four mean down-jumps). Guards the tail of the exponential draw without binding on the calibrated range. */
-    public const DEMAND_DISASTER_CAP = 0.08;
 
     /** Stochastic micro-diffusion volatility of the output gap: realistic quarterly variance without breaking cycle phase. */
     public const OUTPUT_GAP_DIFFUSION_SIGMA = 0.0025;
@@ -339,7 +331,14 @@ class MacroAggregateSubsystem
         $equityWealthEffect = ($equityWealthRatio > 0.0 && $state->equityWealthTrend > 0.0)
             ? max(-0.60, min(0.60, ($equityWealthRatio / $state->equityWealthTrend) - 1.0)) * self::KALDOR_EQUITY_WEALTH_ELASTICITY
             : 0.0;
-        $fxShift = ($state->exchangeRateIndexEma / MacroEngine::EXCHANGE_RATE_BASELINE) - 1.0;
+        // Against the currency's own trend, not the nominal PPP baseline. targetFx carries a rectified
+        // safe-haven bid and a one-sided sovereign risk discount, so the index cannot average 100 by
+        // construction -- it settles ~97.3 -- and read off a fixed 100 the Mundell-Fleming term became a
+        // permanent +0.11 pp/yr of demand instead of a cyclical one. Same fix as the housing wealth effect
+        // and the credit equation's SLOOS term.
+        $fxShift = $state->exchangeRateTrend > 0.0
+            ? ($state->exchangeRateIndexEma / $state->exchangeRateTrend) - 1.0
+            : 0.0;
         // Mundell-Fleming net export drag via real exchange rate elasticity and foreign demand.
         $netExportDrag = (self::KALDOR_FX_ELASTICITY * $fxShift) - (self::KALDOR_FOREIGN_DEMAND * $state->foreignOutputGapEma);
 
@@ -384,19 +383,6 @@ class MacroAggregateSubsystem
         $state->demandShock += (-self::DEMAND_SHOCK_REVERSION * $state->demandShock * $dt)
             + (self::DEMAND_SHOCK_SIGMA * $stressMultiplier * sqrt($dt) * $demandZ);
 
-        // Barro (2006) rare demand disaster. The Gaussian innovation above is symmetric and small enough
-        // that the Taylor rule offsets three quarters of it on the way down, which is why a slump here is
-        // a slow slide the policy loop then snaps back. A jump lands inside one tick, so it is already
-        // spent before a rule reading a trailing gap EMA can respond: the descent outruns the offset.
-        // Compensated, so this bends the shape of the disturbance without shifting its mean.
-        $state->demandShock += $this->mathUtility->calculateCompensatedKouJump(
-            lambda: self::DEMAND_DISASTER_INTENSITY,
-            pUp: self::DEMAND_DISASTER_UP_PROBABILITY,
-            etaUp: self::DEMAND_DISASTER_UP_RATE,
-            etaDown: self::DEMAND_DISASTER_DOWN_RATE,
-            cap: self::DEMAND_DISASTER_CAP,
-            dt: $dt
-        );
 
         // Every channel signed as it acts on demand, so a drag reads negative wherever it is looked at.
         // This array IS the drift: it is summed below and handed to the probe unchanged, so a channel
@@ -640,6 +626,8 @@ class MacroAggregateSubsystem
         $state->energyPriceIndexEma += $emaWeight * ($state->energyPriceIndex - $state->energyPriceIndexEma);
         $state->consumerSentimentIndexEma += $emaWeight * ($state->consumerSentimentIndex - $state->consumerSentimentIndexEma);
         $state->exchangeRateIndexEma += $emaWeight * ($state->exchangeRateIndex - $state->exchangeRateIndexEma);
+        $exchangeRateTrendWeight = 1.0 - exp(-$dt / self::EXCHANGE_RATE_TREND_HORIZON_YEARS);
+        $state->exchangeRateTrend += $exchangeRateTrendWeight * ($state->exchangeRateIndexEma - $state->exchangeRateTrend);
         $state->industrialMetalsIndexEma += $emaWeight * ($state->industrialMetalsIndex - $state->industrialMetalsIndexEma);
         $state->governmentSpendingIndexEma += $emaWeight * ($state->governmentSpendingIndex - $state->governmentSpendingIndexEma);
         $state->retailDefaultRateEma += $emaWeight * ($state->retailDefaultRate - $state->retailDefaultRateEma);
@@ -666,6 +654,8 @@ class MacroAggregateSubsystem
         $state->recessionProbabilityEma += $emaWeight * ($state->recessionProbability - $state->recessionProbabilityEma);
         $state->corporateDefaultRateEma += $emaWeight * ($state->corporateDefaultRate - $state->corporateDefaultRateEma);
         $state->sloosTighteningIndexEma += $emaWeight * ($state->sloosTighteningIndex - $state->sloosTighteningIndexEma);
+        $sloosTrendWeight = 1.0 - exp(-$dt / self::SLOOS_TREND_HORIZON_YEARS);
+        $state->sloosTighteningTrend += $sloosTrendWeight * ($state->sloosTighteningIndexEma - $state->sloosTighteningTrend);
         $state->supplyChainPressureIndexEma += $emaWeight * ($state->supplyChainPressureIndex - $state->supplyChainPressureIndexEma);
         $state->refiningCrackSpreadEma += $emaWeight * ($state->refiningCrackSpread - $state->refiningCrackSpreadEma);
         $state->dealActivityIndexEma += $emaWeight * ($state->dealActivityIndex - $state->dealActivityIndexEma);

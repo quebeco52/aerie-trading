@@ -96,6 +96,16 @@ class AssetMarketSubsystem
     public const MAX_FOREIGN_POLICY_RATE = 0.10;
 
     // --- MUNDELL-FLEMING OPEN ECONOMY (IS-LM-BOP) ---
+    /**
+     * Baseline exchange rate index (neutral purchasing power parity).
+     *
+     * The NOMINAL anchor targetFx is built on, not the level the index settles at: the safe-haven bid is
+     * rectified and the sovereign risk discount is one-sided, so a run at rest sits near 97.3. A consumer
+     * wanting "is the currency strong" reads MacroState::exchangeRateTrend instead — reading this constant
+     * for that cost App\Service\Macro\Subsystem\MacroAggregateSubsystem 0.11 pp/yr of standing net-export
+     * demand until 2026-09-21.
+     */
+    public const EXCHANGE_RATE_BASELINE = 100.0;
     /** UIP sensitivity: exchange rate response to domestic-foreign interest rate differential. */
     public const UIP_SENSITIVITY = 3.0;
     /** Mean-reversion speed of exchange rate toward purchasing power parity equilibrium. */
@@ -134,6 +144,17 @@ class AssetMarketSubsystem
     public const CRE_MIN_CAP_RATE = 0.03;
 
     // --- JORGENSON USER COST RESIDENTIAL REAL ESTATE ---
+    /**
+     * Baseline residential property index value (neutral home affordability).
+     *
+     * The NOMINAL anchor the fundamental price is built on, not the level the index settles at: the
+     * affordability, damage and credit factors multiplying it average below 1, so a run at rest sits near
+     * 94. A consumer wanting "have prices moved" reads MacroState::residentialWealthTrend instead — reading
+     * this constant for that cost App\Service\Macro\Subsystem\CreditFiscalSubsystem 0.56%/yr of standing
+     * deleveraging until 2026-09-21.
+     */
+    public const RESIDENTIAL_BASELINE = 100.0;
+
     /** Sensitivity of housing demand to unemployment rate shocks (foreclosure and affordability drag). */
     public const RESIDENTIAL_UNEMPLOYMENT_SENSITIVITY = 5.0;
     /** Elasticity of residential housing purchasing power to real macroeconomic income and GDP growth. */
@@ -290,7 +311,7 @@ class AssetMarketSubsystem
         // Hallegatte et al. (2007) physical housing stock destruction and post-disaster replacement.
         $damageFactor = 1.0 - (self::CATASTROPHE_PROPERTY_DAMAGE_SHARE * max(0.0, $state->catastropheLossIndexEma - 1.0));
         $creditConditionsFactor = 1.0 - (self::RESIDENTIAL_CREDIT_STANDARDS_ELASTICITY * $state->sloosTighteningIndexEma);
-        $fundamentalPrice = MacroEngine::RESIDENTIAL_BASELINE * max(0.30, min(2.50, $affordabilityFactor * max(0.5, $damageFactor) * max(0.5, $creditConditionsFactor)));
+        $fundamentalPrice = self::RESIDENTIAL_BASELINE * max(0.30, min(2.50, $affordabilityFactor * max(0.5, $damageFactor) * max(0.5, $creditConditionsFactor)));
 
         $dW = $this->mathUtility->generateStandardNormal();
         $newIndex = $this->mathUtility->calculateSchwartz1Factor(
@@ -456,7 +477,7 @@ class AssetMarketSubsystem
         // Della Corte et al. (2016) sovereign credit default risk discount on currency valuation.
         $fiscalRiskDiscount = self::FX_FISCAL_RISK_SENSITIVITY * $state->sovereignRiskSpreadEma;
 
-        $targetFx = MacroEngine::EXCHANGE_RATE_BASELINE * exp(
+        $targetFx = self::EXCHANGE_RATE_BASELINE * exp(
             (self::UIP_SENSITIVITY * $rateDiff) - $termsOfTradeShift + $safeHavenBid - $fiscalRiskDiscount
         );
 
@@ -535,7 +556,7 @@ class AssetMarketSubsystem
     {
         $creditZ = ($state->macroCreditSpreadEma - self::FCI_CREDIT_MEAN) / self::FCI_CREDIT_STD;
         $erpZ = ($state->equityRiskPremium - self::FCI_ERP_MEAN) / self::FCI_ERP_STD;
-        $fxZ = ($state->exchangeRateIndexEma - MacroEngine::EXCHANGE_RATE_BASELINE) / self::FCI_FX_STD;
+        $fxZ = ($state->exchangeRateIndexEma - self::EXCHANGE_RATE_BASELINE) / self::FCI_FX_STD;
         $slopeZ = - ($state->nsSlopeEma - self::FCI_SLOPE_MEAN) / self::FCI_SLOPE_STD;
         $volZ = ($state->marketVolatilityEma - self::FCI_VOL_MEAN) / self::FCI_VOL_STD;
         $sloosZ = ($state->sloosTighteningIndexEma - self::FCI_SLOOS_MEAN) / self::FCI_SLOOS_STD;
@@ -622,7 +643,7 @@ class AssetMarketSubsystem
      */
     public function calculateTradeBalance(MacroState $state, float $dt): void
     {
-        $fxDeviation = ($state->exchangeRateIndex / MacroEngine::EXCHANGE_RATE_BASELINE) - 1.0;
+        $fxDeviation = ($state->exchangeRateIndex / self::EXCHANGE_RATE_BASELINE) - 1.0;
         $cyclicalAbsorption = $state->outputGap;
 
         // Mundell-Fleming foreign absorption spillover to domestic export demand.
@@ -661,7 +682,7 @@ class AssetMarketSubsystem
      */
     public function calculateHousingStarts(MacroState $state, float $expectedInflation, float $dt): void
     {
-        $residentialPriceRatio = $state->residentialPropertyIndex / MacroEngine::RESIDENTIAL_BASELINE;
+        $residentialPriceRatio = $state->residentialPropertyIndex / self::RESIDENTIAL_BASELINE;
         $metalsCostRatio = $state->industrialMetalsIndex / MacroEngine::METALS_BASELINE;
         $laborCostRatio = 1.0 + $state->wageGrowth;
         $replacementCostRatio = (0.50 * $metalsCostRatio) + (0.50 * $laborCostRatio);

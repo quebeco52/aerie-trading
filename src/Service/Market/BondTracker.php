@@ -115,6 +115,9 @@ class BondTracker
                     ->setConvexity('0.000000')
                     ->setUpdatedAt($now);
 
+                // Bond is mapped DEFERRED_EXPLICIT, so a change reaches the database only through persist().
+                $this->entityManager->persist($bond);
+
                 $matured[] = $bond;
                 unset($this->lastMarks[$bond->getTicker()]);
                 continue;
@@ -252,6 +255,11 @@ class BondTracker
 
             $this->ledger->processCouponPayment($bond, $couponAmount, $nextCouponTime, $now);
             $bond->setLastCouponTime($nextCouponTime);
+
+            // Bond is mapped DEFERRED_EXPLICIT: without this the coupon is paid and the issue forgets it,
+            // so the next tick pays it again.
+            $this->entityManager->persist($bond);
+
             $nextCouponTime += $period;
         }
     }

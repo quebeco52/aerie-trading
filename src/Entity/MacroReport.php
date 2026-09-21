@@ -153,6 +153,10 @@ class MacroReport
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4)]
     private ?string $exchangeRateIndexEma = null;
 
+    /** The exchange rate level this economy treats as normal; a consumer wanting "is the currency strong" reads the deviation from it, not from the nominal 100 baseline. */
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $exchangeRateTrend = null;
+
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4)]
     private ?string $industrialMetalsIndex = null;
 
@@ -338,6 +342,10 @@ class MacroReport
 
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
     private ?string $sloosTighteningIndexEma = null;
+
+    /** The level of lending standards this economy treats as normal; a consumer wanting "are standards tight" reads the deviation from it, not from zero. */
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $sloosTighteningTrend = null;
 
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
     private ?string $supplyChainPressureIndex = null;

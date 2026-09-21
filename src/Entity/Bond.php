@@ -22,7 +22,15 @@ use Doctrine\ORM\Mapping as ORM;
  * configurable and a bond's economics depend on how much simulated time is left, never on how long the
  * process has been running.
  */
+/**
+ * The ladder is marked by BulkRowUpdate and never through these fields, so a flush that dirty-checks every
+ * issue is comparing a few hundred rows against their own hydration snapshot to find nothing: measured at
+ * 1.2 ms of the ticker's 4.6 ms bar flush. Explicit tracking means only an issue handed to persist() is
+ * examined, and the three places that change one — a coupon accrual, a maturity and a default settlement —
+ * do that. A setter without a persist() is silently NOT written; DeferredWriteAudit finds those.
+ */
 #[ORM\Entity(repositoryClass: \App\Repository\BondRepository::class)]
+#[ORM\ChangeTrackingPolicy('DEFERRED_EXPLICIT')]
 #[ORM\Table(name: 'bonds')]
 #[ORM\Index(name: 'idx_bond_status_matures', columns: ['status', 'matures_at_time'])]
 #[ORM\Index(name: 'idx_bond_on_the_run', columns: ['tenor_years', 'is_on_the_run'])]
