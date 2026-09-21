@@ -944,30 +944,22 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
 
                 // Save Macro Report Snapshot once a "Simulation Quarter"
                 if ($tickCount % $quarterlyInterval === 0) {
-                    $this->macroEngine->recordMacroSnapshot($macroState, $conn);
-                    // Same boundary, so a decomposition covers the quarter the snapshot beside it reports.
+                    // Rolled BEFORE the snapshot, so the decomposition of the quarter that just ended is
+                    // in hand to go into that quarter's own row rather than the next one's.
                     $this->gapProbe->rollWindow();
                     $closedQuarter = $this->gapProbe->snapshot()['previous'];
 
                     // A ticker that starts mid-quarter closes a PARTIAL first window, and a partial window
                     // is not a quarter: its contributions are short while its annualised rates divide by a
                     // near-zero horizon, so one start produced a +7.0pp/yr residual against a ±1.2 range.
-                    // Kept out of the history rather than corrected, because the reading it would carry is
-                    // "this quarter was extraordinary" and it was only brief.
-                    if ($closedQuarter !== null && $closedQuarter['ticks'] >= $quarterlyInterval) {
-                        // Capped list rather than columns on macro_report: this is a diagnostic, and
-                        // widening a 107-column table by eighteen for it would be paying in schema.
-                        $closedQuarter['time'] = $macroState->totalTime;
-                        $this->redis->lPush(
-                            \App\Service\Macro\Recorder\OutputGapProbe::HISTORY_KEY,
-                            (string) json_encode($closedQuarter)
-                        );
-                        $this->redis->lTrim(
-                            \App\Service\Macro\Recorder\OutputGapProbe::HISTORY_KEY,
-                            0,
-                            \App\Service\Macro\Recorder\OutputGapProbe::HISTORY_QUARTERS - 1
-                        );
-                    }
+                    // Dropped rather than corrected, because the reading it would carry is "this quarter
+                    // was extraordinary" and it was only brief.
+                    $wholeQuarter = $closedQuarter !== null && $closedQuarter['ticks'] >= $quarterlyInterval;
+
+                    // One row carrying the state vector and what moved it, which is what makes macro_report
+                    // readable as a run rather than as a series of unexplained levels. The decomposition
+                    // needs no time of its own: it is in the row whose total_time already stamps it.
+                    $this->macroEngine->recordMacroSnapshot($macroState, $conn, $wholeQuarter ? $closedQuarter : null);
                 }
 
                 // The clock goes in with the tick, on the tick's own connection: a tick that rolls back

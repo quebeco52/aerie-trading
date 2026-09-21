@@ -664,6 +664,55 @@ class MathUtility
     }
 
     /**
+     * One additive, mean-compensated Kou (2002) double-exponential jump drawn over a step of dt.
+     *
+     * Kou's jump is asymmetric by construction: up with probability pUp and size Exp(etaUp), otherwise down
+     * with size Exp(etaDown). A low pUp with etaDown below etaUp is the rare-disaster shape Barro (2006) and
+     * Gourio (2012) put on aggregate demand — long stretches of nothing, then a drop large enough that a
+     * policy rule reacting to a trailing average cannot answer it within its own transmission lag. Unlike
+     * calculateSVJJJumps this returns an additive increment rather than a price multiplier, so it composes
+     * with a process carried in level or rate units instead of log-returns.
+     *
+     * The expected jump per unit time is subtracted, so adding this to a mean-reverting process moves its
+     * skewness and kurtosis without moving its mean. The compensator uses the mean of the CAPPED
+     * exponential, E[min(X, cap)] = (1 - e^(-eta*cap)) / eta, because the cap is part of the draw: an
+     * uncapped compensator over-corrects the truncated down branch and leaves a standing positive drift.
+     *
+     * @param float $lambda  Jump arrivals per year.
+     * @param float $pUp     Probability that a jump is upwards.
+     * @param float $etaUp   Exponential rate of the up jump (mean size 1/etaUp).
+     * @param float $etaDown Exponential rate of the down jump (mean size 1/etaDown).
+     * @param float $cap     Absolute cap on a single jump, in the units of the process.
+     * @param float $dt      Time step in years.
+     * @return float The compensated jump increment, zero-mean in expectation over dt.
+     */
+    public function calculateCompensatedKouJump(
+        float $lambda,
+        float $pUp,
+        float $etaUp,
+        float $etaDown,
+        float $cap,
+        float $dt
+    ): float {
+        if ($lambda <= 0.0 || $etaUp <= 0.0 || $etaDown <= 0.0 || $cap <= 0.0 || $dt <= 0.0) {
+            return 0.0;
+        }
+
+        $cappedUpMean = (1.0 - exp(-$etaUp * $cap)) / $etaUp;
+        $cappedDownMean = (1.0 - exp(-$etaDown * $cap)) / $etaDown;
+        $compensator = $lambda * (($pUp * $cappedUpMean) - ((1.0 - $pUp) * $cappedDownMean)) * $dt;
+
+        $jump = 0.0;
+        if ($this->checkProbability($lambda * $dt)) {
+            $jump = $this->generateUniform() < $pUp
+                ? min($this->generateExponential($etaUp), $cap)
+                : -min($this->generateExponential($etaDown), $cap);
+        }
+
+        return $jump - $compensator;
+    }
+
+    /**
      * Applies a 1-Dimensional Kalman Filter to smooth Earnings Per Share (EPS).
      * Replaces arbitrary exponential decay heuristics with optimal statistical estimation.
      *

@@ -26,6 +26,17 @@ class PruneHistoryCommand extends Command
     /** Simulated years a settled option contract is kept after expiry; the listing grid only reaches four months out. */
     public const EXPIRED_OPTION_YEARS_KEPT = 1.0;
 
+    /**
+     * Quarterly macro snapshots kept: 120 simulated years, matching App\Service\Macro\Recorder\OutputGapProbe.
+     *
+     * Was 100 rows — 25 years — which is shorter than the thing the table is used to study. A business
+     * cycle runs about six years here, so 25 years is four episodes: too few to say whether a bust's depth
+     * distribution moved, which is the question every calibration pass on this table asks. At ~1.5 KB a row
+     * the whole 120 years is under a megabyte, so the retention is set by the horizon of the analysis
+     * rather than by the cost of the rows.
+     */
+    public const MACRO_QUARTERS_KEPT = 480;
+
     // --- Batching ---
     /** Primary-key ids one DELETE spans. Short statements keep the row locks and undo log small while the ticker keeps inserting behind them. */
     public const DELETE_BATCH_IDS = 50000;
@@ -87,9 +98,11 @@ class PruneHistoryCommand extends Command
             );
             $io->success("Cleared $optionsDeleted settled contracts from option_contracts (expired before year " . sprintf('%.4f', $optionCutoff) . ").");
 
-            // Prune Macro Reports (Keep the latest 100 simulation quarters)
-            $io->text("Pruning old macro reports (keeping the latest 100)...");
-            $macroCutoffId = $conn->fetchOne('SELECT id FROM macro_report ORDER BY id DESC LIMIT 1 OFFSET 99');
+            // Prune Macro Reports (Keep the latest MACRO_QUARTERS_KEPT simulation quarters)
+            $io->text(sprintf('Pruning old macro reports (keeping the latest %d)...', self::MACRO_QUARTERS_KEPT));
+            $macroCutoffId = $conn->fetchOne(
+                'SELECT id FROM macro_report ORDER BY id DESC LIMIT 1 OFFSET ' . (self::MACRO_QUARTERS_KEPT - 1)
+            );
             
             if ($macroCutoffId) {
                 $macroDeleted = $conn->executeStatement(

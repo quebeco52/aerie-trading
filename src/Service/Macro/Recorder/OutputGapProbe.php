@@ -24,20 +24,20 @@ namespace App\Service\Macro\Recorder;
  * channel that was added to the drift sum and not to the decomposition.
  *
  * Off unless something turns it on, because only the ticker writes it and only the admin view reads it —
- * and those are two processes, so the reading is carried over Redis rather than out of this object.
+ * and those are two processes, so the reading is carried out of this object rather than read off it.
+ *
+ * Only the window currently OPEN goes over Redis. A window this object closes is handed to
+ * App\Service\Macro\Recorder\MacroSnapshotRecorder and lands in the quarter's own macro_report row, beside
+ * the state vector it explains. The closed history used to be a second copy in a capped Redis list, which
+ * made the panel disagree with the table after any restart — Redis has no volume here — and gave the same
+ * series two owners.
  */
 final class OutputGapProbe
 {
     // --- Wire ---
 
-    /** Redis key the ticker publishes the live window under; the admin view runs in another process and reads it there. */
+    /** Redis key the ticker publishes the OPEN window under; the admin view runs in another process and reads it there. */
     public const REDIS_KEY = 'macro_gap_debug';
-
-    /** Redis list of closed quarters, newest first. A decomposition of the quarter you are in cannot explain the bust you just watched. */
-    public const HISTORY_KEY = 'macro_gap_debug:history';
-
-    /** Quarters kept, at ~400 bytes each: 120 simulated years, the horizon the shape work measures episodes over. */
-    public const HISTORY_QUARTERS = 480;
 
     private bool $enabled = false;
 

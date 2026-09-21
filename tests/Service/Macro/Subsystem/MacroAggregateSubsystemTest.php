@@ -22,6 +22,14 @@ class MacroAggregateSubsystemTest extends TestCase
             {
                 return 0.0;
             }
+
+            // The rare demand disaster is the only probabilistic gate in this subsystem. Held shut so a
+            // neutral tick stays neutral; its compensator still rides on every tick and cancels in the
+            // state-vs-state differences these tests assert on.
+            public function checkProbability(float $probability): bool
+            {
+                return false;
+            }
         };
         $this->subsystem = new MacroAggregateSubsystem($this->mathUtility);
     }
@@ -652,15 +660,39 @@ class MacroAggregateSubsystemTest extends TestCase
                 // One unit innovation on the first tick, silence afterwards.
                 return $this->calls++ === 0 ? 1.0 : 0.0;
             }
+
+            // Hold the demand-disaster gate shut so the tick is deterministic.
+            public function checkProbability(float $probability): bool
+            {
+                return false;
+            }
         };
         $subsystem = new MacroAggregateSubsystem($draws);
 
+        // The disaster jump's compensator rides on every tick regardless of the innovation, so measure the
+        // impulse against a control run that takes the same ticks without it. The disturbance is linear, so
+        // the difference between the two is the impulse alone and decays at the reversion speed.
+        $control = new MacroAggregateSubsystem(new class extends MathUtility {
+            public function generateStandardNormal(): float
+            {
+                return 0.0;
+            }
+
+            public function checkProbability(float $probability): bool
+            {
+                return false;
+            }
+        });
+
         $state = new MacroState();
         $state->outputGap = 0.0;
+        $base = new MacroState();
+        $base->outputGap = 0.0;
         $dt = 1.0 / 3600.0;
 
         $state->outputGap = $subsystem->calculateOutputGap($state, 0.03, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, $dt, 1.0);
-        $impulse = $state->demandShock;
+        $base->outputGap = $control->calculateOutputGap($base, 0.03, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, $dt, 1.0);
+        $impulse = $state->demandShock - $base->demandShock;
 
         $this->assertGreaterThan(0.0, $impulse, 'The innovation must land on the disturbance.');
         $this->assertEqualsWithDelta(
@@ -674,11 +706,12 @@ class MacroAggregateSubsystemTest extends TestCase
         $halfLifeTicks = (int) round((log(2.0) / MacroAggregateSubsystem::DEMAND_SHOCK_REVERSION) * 3600.0);
         for ($i = 0; $i < $halfLifeTicks; $i++) {
             $state->outputGap = $subsystem->calculateOutputGap($state, 0.03, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, $dt, 1.0);
+            $base->outputGap = $control->calculateOutputGap($base, 0.03, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, $dt, 1.0);
         }
 
         $this->assertEqualsWithDelta(
             0.5 * $impulse,
-            $state->demandShock,
+            $state->demandShock - $base->demandShock,
             0.02 * $impulse,
             'After one half-life the disturbance must retain half the impulse, not have been redrawn away.'
         );
@@ -723,10 +756,13 @@ class MacroAggregateSubsystemTest extends TestCase
     /** A rise in short-horizon expectations lowers the real policy leg and lifts demand; the fixed-rate leg is unmoved. */
     public function testHigherExpectedInflationLowersTheRealPolicyLegOnly(): void
     {
-        $state = $this->neutralBorrowingState();
+        // Two fresh states: one call mutates the demand disturbance it is handed, so reusing a single
+        // state would carry that mutation into the second leg instead of differencing cleanly against it.
+        $anchored = $this->neutralBorrowingState();
+        $unanchored = $this->neutralBorrowingState();
 
-        $gapAnchored = $this->subsystem->calculateOutputGap($state, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0);
-        $gapUnanchored = $this->subsystem->calculateOutputGap($state, 0.035, MacroEngine::BASE_NATURAL_RATE, 0.03, 0.25, 1.0);
+        $gapAnchored = $this->subsystem->calculateOutputGap($anchored, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0);
+        $gapUnanchored = $this->subsystem->calculateOutputGap($unanchored, 0.035, MacroEngine::BASE_NATURAL_RATE, 0.03, 0.25, 1.0);
 
         // One percentage point of expected inflation on a 0.50 policy leg is 50bps of real easing, through the drag coefficient over a quarter.
         $expectedLift = MacroAggregateSubsystem::KALDOR_MONETARY_DRAG * MacroAggregateSubsystem::BORROWING_POLICY_WEIGHT * 0.01 * 0.25;
@@ -907,6 +943,12 @@ class MacroAggregateSubsystemTest extends TestCase
             {
                 return $this->draws[$this->calls++] ?? 0.0;
             }
+
+            // Hold the demand-disaster gate shut so the tick is deterministic.
+            public function checkProbability(float $probability): bool
+            {
+                return false;
+            }
         };
         $subsystem = new MacroAggregateSubsystem($math);
 
@@ -925,11 +967,12 @@ class MacroAggregateSubsystemTest extends TestCase
         [$neutralGap, $neutralShock, $calls] = $run(0.0, 0.0);
         // A shared draw fails here first: it consumes one innovation, not two.
         $this->assertSame(2, $calls, 'One innovation for the demand disturbance, one for the gap diffusion');
-        $this->assertEqualsWithDelta(0.0, $neutralShock, 1e-15);
+        // With both innovations silent the disturbance still carries the disaster jump's compensator, which
+        // is a deterministic function of dt and is therefore the baseline the other two runs are read against.
 
         // Second draw only: the gap moves by the full diffusion, the disturbance does not move at all.
         [$diffusionGap, $diffusionShock] = $run(0.0, 1.0);
-        $this->assertEqualsWithDelta(0.0, $diffusionShock, 1e-15, 'A diffusion innovation must not enter the demand disturbance');
+        $this->assertEqualsWithDelta($neutralShock, $diffusionShock, 1e-15, 'A diffusion innovation must not enter the demand disturbance');
         $this->assertEqualsWithDelta(
             MacroAggregateSubsystem::OUTPUT_GAP_DIFFUSION_SIGMA * sqrt($dt),
             $diffusionGap - $neutralGap,
@@ -939,7 +982,7 @@ class MacroAggregateSubsystemTest extends TestCase
         // First draw only: the disturbance takes it whole and reaches the gap only through the drift.
         [$demandGap, $demandShock] = $run(1.0, 0.0);
         $expectedShock = MacroAggregateSubsystem::DEMAND_SHOCK_SIGMA * sqrt($dt);
-        $this->assertEqualsWithDelta($expectedShock, $demandShock, 1e-15);
+        $this->assertEqualsWithDelta($expectedShock, $demandShock - $neutralShock, 1e-15);
         $this->assertEqualsWithDelta($expectedShock * $dt, $demandGap - $neutralGap, 1e-12);
     }
 
@@ -957,6 +1000,12 @@ class MacroAggregateSubsystemTest extends TestCase
             public function generateStandardNormal(): float
             {
                 return $this->normal;
+            }
+
+            // Hold the demand-disaster gate shut so the tick is deterministic.
+            public function checkProbability(float $probability): bool
+            {
+                return false;
             }
         };
 

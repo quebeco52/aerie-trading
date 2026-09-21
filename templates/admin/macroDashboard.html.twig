@@ -59,11 +59,16 @@
     </div>
 
     {#
-        What is moving the output gap, now and over the last hundred quarters. The gap is a sum of
+        What is moving the output gap, now and over the last 120 simulated years. The gap is a sum of
         eighteen demand and supply channels that routinely cancel, so the headline number alone cannot
-        say which of them turned the economy. Fed by App\Service\Macro\Recorder\OutputGapProbe over
-        Redis: the probe runs inside the ticker, this page is a different process, and an absent key
-        means no ticker is running.
+        say which of them turned the economy.
+
+        Two sources, because they answer different questions. The QUARTER TO DATE window is still open
+        and only App\Service\Macro\Recorder\OutputGapProbe inside the ticker has it, so it comes over
+        Redis and an absent key means no ticker is running. The HISTORY is read from macro_report, where
+        each closed quarter's decomposition sits in the same row as the state vector it explains — so it
+        survives a restart, and it is the same data App\Command\MacroGapDumpCommand writes out for
+        offline analysis.
 
         Channels are read in the eight families App\Data\OutputGapChannels declares, which is also
         where the colours live — one palette for the table and both charts, so a colour means the same
@@ -85,7 +90,8 @@
                 </div>
                 <div class="btn-group btn-group-sm" role="group" aria-label="History range">
                     <button type="button" class="btn btn-outline-secondary active" data-gap-range="40">10 yr</button>
-                    <button type="button" class="btn btn-outline-secondary" data-gap-range="100">25 yr</button>
+                    <button type="button" class="btn btn-outline-secondary" data-gap-range="80">20 yr</button>
+                    <button type="button" class="btn btn-outline-secondary" data-gap-range="200">50 yr</button>
                     <button type="button" class="btn btn-outline-secondary" data-gap-range="0">All</button>
                 </div>
             </div>

@@ -7,6 +7,8 @@ namespace App\Service\Macro\Recorder;
 use App\Data\MacroFieldRegistry;
 use App\DTO\MacroStateDTO;
 use Doctrine\DBAL\Connection;
+use Doctrine\DBAL\ParameterType;
+use Doctrine\DBAL\Types\Types;
 
 /**
  * Persists macroeconomic state vector snapshots into the historical macro_report database table.
@@ -15,8 +17,11 @@ class MacroSnapshotRecorder
 {
     // --- Snapshot Schema ---
 
-    /** Column carrying the wall-clock time a snapshot was taken; the only column not owned by the macro vector. */
+    /** Column carrying the wall-clock time a snapshot was taken; not owned by the macro vector. */
     private const TIMESTAMP_COLUMN = 'recorded_at';
+
+    /** Column carrying the quarter's gap drift decomposition; not owned by the macro vector either. */
+    private const GAP_CHANNELS_COLUMN = 'gap_channels';
 
     /**
      * Prepared INSERT statement, built once per process from the registry's column list.
@@ -32,19 +37,43 @@ class MacroSnapshotRecorder
      * three separate lists that only a careful eye kept aligned; one insertion in the wrong place
      * silently shifted every following value into its neighbour's column.
      *
-     * @param MacroStateDTO $macroState State snapshot to record.
-     * @param Connection    $conn       Database connection.
+     * The gap decomposition rides along in the same row rather than in a store of its own. It is
+     * produced on this exact tick boundary, so writing it here is what makes "which channels moved
+     * the gap" and "what state the economy was in" the same record: a reader needs no join, and no
+     * alignment can slip when a ticker restart drops a partial window from one series and not the
+     * other.
+     *
+     * Every value is bound with an explicit type, because DBAL falls back to a string bind for an
+     * unnamed one and a bool then reaches the driver as '' rather than as 0.
+     *
+     * @param MacroStateDTO             $macroState State snapshot to record.
+     * @param Connection                $conn       Database connection.
+     * @param array<string, mixed>|null $gapChannels Closed quarter's drift decomposition, or null if
+     *                                               the probe could not close one.
      */
-    public function recordSnapshot(MacroStateDTO $macroState, Connection $conn): void
+    public function recordSnapshot(MacroStateDTO $macroState, Connection $conn, ?array $gapChannels = null): void
     {
         $columns = MacroFieldRegistry::persistedColumns();
 
         $values = [(new \DateTimeImmutable())->format('Y-m-d H:i:s')];
+        $types = [ParameterType::STRING];
         foreach (array_keys($columns) as $field) {
-            $values[] = $macroState->$field;
+            $value = $macroState->$field;
+
+            // A parameter bound without a type binds as a string, and PHP renders false as '', which
+            // MySQL in strict mode rejects for the TINYINT a bool column is. Naming the type sends the
+            // regime flags through Doctrine's BooleanType, which writes the platform's own literal.
+            $types[] = is_bool($value) ? Types::BOOLEAN : ParameterType::STRING;
+            $values[] = $value;
         }
 
-        $conn->executeStatement($this->statement ??= $this->buildStatement($columns), $values);
+        // Last, matching buildStatement's order. The statement is prepared once per process, so the
+        // column is always named and carries NULL on a quarter with no decomposition rather than
+        // making the shape of the statement depend on the row.
+        $values[] = $gapChannels === null ? null : json_encode($gapChannels);
+        $types[] = ParameterType::STRING;
+
+        $conn->executeStatement($this->statement ??= $this->buildStatement($columns), $values, $types);
     }
 
     /**
@@ -55,7 +84,7 @@ class MacroSnapshotRecorder
      */
     private function buildStatement(array $columns): string
     {
-        $names = array_merge([self::TIMESTAMP_COLUMN], array_values($columns));
+        $names = array_merge([self::TIMESTAMP_COLUMN], array_values($columns), [self::GAP_CHANNELS_COLUMN]);
         $placeholders = array_fill(0, count($names), '?');
 
         return sprintf(

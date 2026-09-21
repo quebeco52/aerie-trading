@@ -756,6 +756,13 @@ class FinancialInvariantTest extends TestCase
             {
                 return 0.0;
             }
+
+            // This scenario is restrictive policy held against a contraction, not a disaster arriving on
+            // top of one. The jump gate is the only randomness left in the subsystem, so hold it shut.
+            public function checkProbability(float $probability): bool
+            {
+                return false;
+            }
         };
         $aggregate = new MacroAggregateSubsystem($deterministicMath);
 

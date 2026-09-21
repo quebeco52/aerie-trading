@@ -105,6 +105,74 @@ class MathUtilityTest extends TestCase
         );
     }
 
+    public function testCompensatedKouJumpHasZeroMeanOverManyDraws(): void
+    {
+        // The whole point of the compensator is that adding this to a mean-reverting process bends its
+        // shape without moving its mean. Accumulate the increment over many steps: it must average to zero
+        // even though the jump itself is heavily skewed down.
+        mt_srand(2718);
+
+        $lambda = 0.50;
+        $dt = 1.0 / 3600.0;
+        $steps = 2000000;
+
+        $sum = 0.0;
+        for ($i = 0; $i < $steps; $i++) {
+            $sum += $this->mathUtility->calculateCompensatedKouJump($lambda, 0.25, 100.0, 50.0, 0.08, $dt);
+        }
+
+        // Over 555 simulated years the residual must be small against the disturbance it is added to.
+        $this->assertEqualsWithDelta(0.0, $sum / ($steps * $dt), 0.002, 'Compensated jump must not drift the mean.');
+    }
+
+    public function testCompensatedKouJumpIsSkewedDownWhenTheDownBranchIsHeavier(): void
+    {
+        // pUp below a half with a slower down rate is Kou's asymmetry: rare large drops against frequent
+        // small rises. The compensator removes the mean, so what is left must be negatively skewed.
+        mt_srand(31415);
+
+        $dt = 1.0 / 3600.0;
+        $steps = 2000000;
+
+        // The compensator is on every step and is far smaller than any arrival, so threshold well above it.
+        $draws = [];
+        for ($i = 0; $i < $steps; $i++) {
+            $j = $this->mathUtility->calculateCompensatedKouJump(0.50, 0.25, 100.0, 50.0, 0.08, $dt);
+            if (abs($j) > 1.0e-4) {
+                $draws[] = $j;
+            }
+        }
+
+        $this->assertGreaterThan(100, count($draws), 'Jumps must land over 555 simulated years.');
+        $negative = count(array_filter($draws, static fn(float $j): bool => $j < 0.0));
+
+        $this->assertGreaterThan(count($draws) * 0.6, $negative, 'The down branch must dominate the arrivals.');
+        $this->assertLessThan(0.0, array_sum($draws) / count($draws), 'The mean realised jump must be a fall.');
+    }
+
+    public function testCompensatedKouJumpRespectsTheCapAndDegenerateParameters(): void
+    {
+        mt_srand(161803);
+
+        // A cap at a twentieth of the mean down jump binds on nearly every arrival. The compensator rides
+        // on top of the capped draw, and at this intensity it is worth 1.4e-5, so allow one of those.
+        $capped = 0;
+        for ($i = 0; $i < 20000; $i++) {
+            $j = $this->mathUtility->calculateCompensatedKouJump(100.0, 0.25, 100.0, 50.0, 0.001, 1.0 / 3600.0);
+            $this->assertLessThanOrEqual(0.00102, abs($j), 'A draw must not exceed the cap.');
+            if (abs($j) > 0.0009) {
+                $capped++;
+            }
+        }
+        $this->assertGreaterThan(100, $capped, 'The cap must actually bind at this intensity.');
+
+        // Guard rails: a disabled or malformed process contributes nothing rather than a NAN.
+        $this->assertSame(0.0, $this->mathUtility->calculateCompensatedKouJump(0.0, 0.25, 100.0, 50.0, 0.08, 0.25));
+        $this->assertSame(0.0, $this->mathUtility->calculateCompensatedKouJump(0.5, 0.25, 0.0, 50.0, 0.08, 0.25));
+        $this->assertSame(0.0, $this->mathUtility->calculateCompensatedKouJump(0.5, 0.25, 100.0, 50.0, 0.0, 0.25));
+        $this->assertSame(0.0, $this->mathUtility->calculateCompensatedKouJump(0.5, 0.25, 100.0, 50.0, 0.08, 0.0));
+    }
+
     public function testCalculateSVJJJumpsSurvivesAZeroVarianceJumpMean(): void
     {
         // The per-name variance jump mean is derived from the stock's own volatility state, which a

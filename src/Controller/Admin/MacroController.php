@@ -2,8 +2,10 @@
 
 namespace App\Controller\Admin;
 
+use App\Command\PruneHistoryCommand;
 use App\Data\OutputGapChannels;
 use App\Service\Macro\Recorder\OutputGapProbe;
+use Doctrine\DBAL\Connection;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Response;
@@ -48,20 +50,35 @@ class MacroController extends AbstractController
     /**
      * Closed quarters, oldest first, so the charts read left to right.
      *
-     * The list is stored newest-first because that is the end Redis caps, and reversed here rather than
-     * in the browser: the page should not have to know which end of the store is which.
+     * Read from macro_report rather than from the ticker's process or a Redis mirror of it. The quarters
+     * the panel draws are the same rows App\Command\MacroGapDumpCommand dumps, so a shape read off the
+     * chart and a number measured off the file cannot disagree — and the history survives a ticker
+     * restart, which the Redis copy it replaces did not: that container has no volume.
+     *
+     * Three columns, not the row: the chart needs the level, the time and the decomposition, and this
+     * runs on every dashboard poll.
      */
     #[Route('/admin/macro/gap-history', name: 'admin_macro_gap_history', methods: ['GET'])]
-    public function gapHistory(\Redis $redis): JsonResponse
+    public function gapHistory(Connection $conn): JsonResponse
     {
-        $rows = $redis->lRange(OutputGapProbe::HISTORY_KEY, 0, OutputGapProbe::HISTORY_QUARTERS - 1);
-        $quarters = [];
+        // Newest first with a LIMIT, then reversed: the range buttons read back from the present, and the
+        // rows past the horizon are the ones the panel would never draw.
+        $rows = $conn->fetchAllAssociative(
+            'SELECT total_time, gap_channels FROM macro_report
+             WHERE gap_channels IS NOT NULL
+             ORDER BY id DESC LIMIT ' . PruneHistoryCommand::MACRO_QUARTERS_KEPT
+        );
 
-        foreach (is_array($rows) ? array_reverse($rows) : [] as $row) {
-            $decoded = json_decode((string) $row, true);
-            if (is_array($decoded)) {
-                $quarters[] = $decoded;
+        $quarters = [];
+        foreach (array_reverse($rows) as $row) {
+            $decoded = json_decode((string) $row['gap_channels'], true);
+            if (!is_array($decoded)) {
+                continue;
             }
+
+            // The row's own simulated time stamps the decomposition, which carries none of its own.
+            $decoded['time'] = (float) $row['total_time'];
+            $quarters[] = $decoded;
         }
 
         return new JsonResponse(['quarters' => $quarters]);

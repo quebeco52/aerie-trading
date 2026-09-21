@@ -9,6 +9,8 @@ use App\DTO\MacroStateDTO;
 use App\Service\Macro\MacroState;
 use App\Service\Macro\Recorder\MacroSnapshotRecorder;
 use Doctrine\DBAL\Connection;
+use Doctrine\DBAL\ParameterType;
+use Doctrine\DBAL\Types\Types;
 use PHPUnit\Framework\TestCase;
 
 class MacroSnapshotRecorderTest extends TestCase
@@ -35,27 +37,34 @@ class MacroSnapshotRecorderTest extends TestCase
         'manufacturing_pmi' => 'manufacturingPmi',
         'money_supply_growth_ema' => 'moneySupplyGrowthEma',
         'restrictive_duration' => 'restrictiveDuration',
+        // The regime flags, whose bool sentinels cannot tell one from the other on their own.
+        'qe_active' => 'qeActive',
+        'qt_active' => 'qtActive',
+        'equity_market_cap' => 'equityMarketCap',
+        'demand_shock' => 'demandShock',
+        'total_time' => 'totalTime',
     ];
 
     /**
      * Captures the statement and parameters the recorder would execute.
      *
-     * @return array{sql: string, params: list<mixed>}
+     * @param  array<string, mixed>|null       $gapChannels Decomposition to record alongside the vector.
+     * @return array{sql: string, params: list<mixed>, types: list<ParameterType|string>}
      */
-    private function capture(MacroStateDTO $dto): array
+    private function capture(MacroStateDTO $dto, ?array $gapChannels = null): array
     {
         $captured = [];
 
         $connMock = $this->createMock(Connection::class);
         $connMock->expects($this->once())
             ->method('executeStatement')
-            ->willReturnCallback(function (string $sql, array $params) use (&$captured): int {
-                $captured = ['sql' => $sql, 'params' => $params];
+            ->willReturnCallback(function (string $sql, array $params, array $types) use (&$captured): int {
+                $captured = ['sql' => $sql, 'params' => $params, 'types' => $types];
 
                 return 1;
             });
 
-        (new MacroSnapshotRecorder())->recordSnapshot($dto, $connMock);
+        (new MacroSnapshotRecorder())->recordSnapshot($dto, $connMock, $gapChannels);
 
         return $captured;
     }
@@ -73,9 +82,9 @@ class MacroSnapshotRecorderTest extends TestCase
         $columns = array_map('trim', explode(',', $matches[1]));
         $placeholders = array_map('trim', explode(',', $matches[2]));
 
-        $this->assertSame(
+        $this->assertCount(
             count($columns),
-            count($placeholders),
+            $placeholders,
             'The statement names a different number of columns than it binds placeholders.'
         );
         $this->assertSame(['?'], array_values(array_unique($placeholders)), 'Every value must be bound, never inlined.');
@@ -87,7 +96,12 @@ class MacroSnapshotRecorderTest extends TestCase
      * Builds a snapshot in which every field carries a value unique to that field, so a value landing
      * in the wrong column cannot coincidentally match what belongs there.
      *
-     * @return array{0: MacroStateDTO, 1: array<string, float>} The snapshot and field => sentinel.
+     * Bools get the one value that is not their default rather than a distinct one, because two of them
+     * exist and a bool has no third state. That is weaker than the float sentinels — it catches a column
+     * that is never written, not two bools swapped with each other — so the regime flags are also named in
+     * ANCHOR_COLUMNS, where the column they must land in is spelled out by hand.
+     *
+     * @return array{0: MacroStateDTO, 1: array<string, float|bool>} The snapshot and field => sentinel.
      */
     private function sentinelSnapshot(): array
     {
@@ -97,9 +111,19 @@ class MacroSnapshotRecorderTest extends TestCase
         $offset = 0;
         foreach ((new \ReflectionClass($state))->getProperties() as $property) {
             ++$offset;
-            if ((string) $property->getType() !== 'float') {
+            $type = (string) $property->getType();
+
+            if ($type === 'bool') {
+                $property->setValue($state, true);
+                $sentinels[$property->getName()] = true;
+
                 continue;
             }
+
+            if ($type !== 'float') {
+                continue;
+            }
+
             $value = 1000.0 + $offset;
             $property->setValue($state, $value);
             $sentinels[$property->getName()] = $value;
@@ -162,6 +186,45 @@ class MacroSnapshotRecorderTest extends TestCase
     }
 
     /**
+     * A parameter bound without a type binds as a string, and PHP renders false as '', which MySQL in
+     * strict mode rejects for the TINYINT a bool column is: the ticker died on "Incorrect integer value:
+     * '' for column qe_active" on the first quarter recorded with the balance sheet idle.
+     */
+    public function testRegimeFlagsAreBoundAsBooleansNotStrings(): void
+    {
+        $dto = MacroStateDTO::fromMacroState(new MacroState());
+        $this->assertFalse($dto->qeActive, 'The bind only fails on false, which is the opening value.');
+
+        $captured = $this->capture($dto);
+        $byColumn = array_combine($this->columnsOf($captured['sql']), $captured['types']);
+
+        $this->assertSame(Types::BOOLEAN, $byColumn['qe_active']);
+        $this->assertSame(Types::BOOLEAN, $byColumn['qt_active']);
+        $this->assertSame(ParameterType::STRING, $byColumn['output_gap'], 'Only the bools need a named type.');
+    }
+
+    /**
+     * Every placeholder has to carry a type, because DBAL falls back to a string bind for the ones that
+     * do not — a bool added to the vector later must not reach the driver untyped.
+     */
+    public function testEveryParameterIsBoundWithTheTypeOfItsValue(): void
+    {
+        [$dto] = $this->sentinelSnapshot();
+        $captured = $this->capture($dto);
+
+        $this->assertCount(count($captured['params']), $captured['types']);
+        $this->assertSame(array_keys($captured['params']), array_keys($captured['types']));
+
+        foreach ($captured['params'] as $index => $value) {
+            $this->assertSame(
+                is_bool($value) ? Types::BOOLEAN : ParameterType::STRING,
+                $captured['types'][$index],
+                "Parameter {$index} is bound with a type its value cannot survive."
+            );
+        }
+    }
+
+    /**
      * The statement is built once and reused, so a second snapshot must bind the same columns.
      */
     public function testStatementIsStableAcrossSnapshots(): void
@@ -173,5 +236,78 @@ class MacroSnapshotRecorderTest extends TestCase
 
         $this->assertSame($first['sql'], $second['sql']);
         $this->assertCount(count($first['params']), $second['params']);
+    }
+
+    /**
+     * Simulated time is what makes a row addressable. Without it the table is a sequence of levels whose
+     * only key is a surrogate id that pruning makes non-contiguous, and no episode can be located in it.
+     */
+    public function testSimulatedTimeIsPersisted(): void
+    {
+        [$dto, $sentinels] = $this->sentinelSnapshot();
+        $captured = $this->capture($dto);
+
+        $byColumn = array_combine($this->columnsOf($captured['sql']), $captured['params']);
+
+        $this->assertArrayHasKey('total_time', $byColumn, 'macro_report must carry the simulated time of the row.');
+        $this->assertSame($sentinels['totalTime'], $byColumn['total_time']);
+    }
+
+    /**
+     * The decomposition rides in the same row as the state it explains, so the two can never fall out of
+     * alignment. It is encoded rather than bound as an array, because the column is JSON.
+     */
+    public function testGapDecompositionIsRecordedAlongsideTheVector(): void
+    {
+        $dto = MacroStateDTO::fromMacroState(new MacroState());
+        $decomposition = [
+            'contributions' => ['monetaryDrag' => -0.0041, 'fiscalStimulus' => 0.0018],
+            'diffusion' => 0.0009,
+            'clamp' => -0.0002,
+            'unexplained' => 0.00004,
+            'closing_gap' => -0.0312,
+        ];
+
+        $captured = $this->capture($dto, $decomposition);
+        $byColumn = array_combine($this->columnsOf($captured['sql']), $captured['params']);
+
+        $this->assertArrayHasKey('gap_channels', $byColumn);
+        $this->assertSame($decomposition, json_decode((string) $byColumn['gap_channels'], true));
+    }
+
+    /**
+     * A channel contributes on the order of 1e-5 of potential output over a quarter, which the DECIMAL(10, 4)
+     * the rest of the table uses would round to zero. The JSON column exists to keep that resolution, so a
+     * value small enough to be the whole point must survive the round trip.
+     */
+    public function testSmallChannelContributionsSurviveTheRoundTrip(): void
+    {
+        $dto = MacroStateDTO::fromMacroState(new MacroState());
+        $decomposition = ['contributions' => ['catastropheSupplyDrag' => -1.7e-6]];
+
+        $captured = $this->capture($dto, $decomposition);
+        $byColumn = array_combine($this->columnsOf($captured['sql']), $captured['params']);
+
+        $restored = json_decode((string) $byColumn['gap_channels'], true);
+        $this->assertEqualsWithDelta(-1.7e-6, $restored['contributions']['catastropheSupplyDrag'], 1e-12);
+    }
+
+    /**
+     * A ticker that starts mid-quarter has no whole quarter to decompose. The statement must still name the
+     * column and bind NULL, because it is prepared once per process: a shape that depended on the row would
+     * bind the first row's shape to every later one.
+     */
+    public function testStatementShapeDoesNotDependOnWhetherAQuarterWasDecomposed(): void
+    {
+        $dto = MacroStateDTO::fromMacroState(new MacroState());
+
+        $without = $this->capture($dto);
+        $with = $this->capture($dto, ['contributions' => ['monetaryDrag' => -0.004]]);
+
+        $this->assertSame($without['sql'], $with['sql']);
+        $this->assertCount(count($with['params']), $without['params']);
+
+        $byColumn = array_combine($this->columnsOf($without['sql']), $without['params']);
+        $this->assertNull($byColumn['gap_channels'], 'An undecomposed quarter must record NULL, never zeros.');
     }
 }

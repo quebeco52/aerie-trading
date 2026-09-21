@@ -1,4 +1,4 @@
-.PHONY: up down clean install seed reset ticker ticker-stop tailwind-watch bash test test-unit test-integration test-functional test-financial test-e2e test-all test-coverage phpstan
+.PHONY: up down clean install seed reset ticker ticker-stop macro-dump tailwind-watch bash test test-unit test-integration test-functional test-financial test-e2e test-all test-coverage phpstan
 
 DC = docker compose --env-file .env.dev -f docker-compose.dev.yml
 EXEC_PHP = $(DC) exec aerie-app
@@ -29,6 +29,11 @@ ticker:
 
 ticker-stop:
 	$(DC) --profile live stop aerie-ticker
+
+# The recorded run as NDJSON in var/, one object per simulated quarter: state vector plus what moved the
+# output gap. YEARS counts back from the present; omit it for everything retained (120 simulated years).
+macro-dump:
+	$(EXEC_PHP) php bin/console app:macro:gap-dump $(if $(YEARS),--years=$(YEARS),)
 
 tailwind-watch:
 	$(EXEC_PHP) php bin/console tailwind:build --watch

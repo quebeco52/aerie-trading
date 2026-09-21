@@ -17,7 +17,9 @@ use Doctrine\ORM\Mapping as ORM;
  * raw SQL, because a snapshot is an append-only row of 106 scalars rather than an object graph. So
  * this class carries mapped properties and no accessors: a getter here would have no caller, and a
  * column here with no matching DTO field fails App\Tests\DTO\MacroFieldRegistryTest rather than
- * quietly recording NULL on every snapshot for the life of the table.
+ * quietly recording NULL on every snapshot for the life of the table. The few columns the recorder
+ * fills from outside the vector — the surrogate key, the timestamp, the gap decomposition — are named
+ * in that test's RECORDER_OWNED_COLUMNS, so the exception is declared rather than assumed.
  *
  * Do not delete it to tidy away an unused class — Doctrine would diff the table out of existence.
  */
@@ -31,6 +33,26 @@ class MacroReport
 
     #[ORM\Column(type: Types::DATETIME_MUTABLE)]
     private ?\DateTimeInterface $recordedAt = null;
+
+    // Wider than the DECIMAL(10, 4) the macro vector uses, because this is the row's KEY rather than one
+    // of its readings: simulated time accumulates 1/3600 of a year per tick, so four decimal places put
+    // two quarters 0.0001 apart at year 900 and a join or an episode boundary reads the wrong row.
+    #[ORM\Column(type: Types::DECIMAL, precision: 14, scale: 6, nullable: true)]
+    private ?string $totalTime = null;
+
+    /**
+     * The closed quarter's output gap drift decomposition, as App\Service\Macro\Recorder\OutputGapProbe
+     * accumulated it: eighteen channel contributions plus diffusion, clamp and the unexplained residual.
+     *
+     * JSON rather than eighteen more DECIMAL(10, 4) columns, and not for schema economy: a single channel
+     * delivers on the order of 1e-5 of potential output over a quarter, which four decimal places round
+     * to zero. The decomposition is only worth recording at full float precision.
+     *
+     * NULL on a row whose quarter the probe could not close — a ticker started mid-quarter, or one running
+     * with the probe off. Absent is the honest reading there; zeros would claim a quiet quarter.
+     */
+    #[ORM\Column(type: Types::JSON, nullable: true)]
+    private ?array $gapChannels = null;
 
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4)]
     private ?string $inflation = null;
@@ -457,4 +479,130 @@ class MacroReport
 
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
     private ?string $reimbursementRateGrowth = null;
+
+    // --- Monetary Regime ---
+    // Which regime the central bank was in, not just where the rate sat. A quarter at the effective lower
+    // bound with QE running and a quarter at the same rate on the way down are different economies, and the
+    // policy_rate column alone cannot tell them apart.
+
+    #[ORM\Column(nullable: true)]
+    private ?bool $qeActive = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $qeIntensity = null;
+
+    #[ORM\Column(nullable: true)]
+    private ?bool $qtActive = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $qtIntensity = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $balanceSheetHoldTimer = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $inversionDuration = null;
+
+    // --- Wealth Stocks ---
+    // The levels the wealth channels are read against. Their CONTRIBUTION is in gap_channels; without the
+    // stock behind it, a contribution cannot be told from a change in the elasticity that scales it.
+
+    // A whole-board capitalisation runs to eleven figures, so this is the one column the DECIMAL(10, 4) the
+    // rest of the vector uses would overflow rather than merely round.
+    #[ORM\Column(type: Types::DECIMAL, precision: 22, scale: 2, nullable: true)]
+    private ?string $equityMarketCap = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 22, scale: 2, nullable: true)]
+    private ?string $equityMarketCapEma = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $residentialWealthTrend = null;
+
+    // --- Gap Drivers ---
+
+    /** The AR(1) demand disturbance's LEVEL; gap_channels carries only what it delivered over the quarter. */
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $demandShock = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $potentialGdpIndex = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $gdpDeflator = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $inventoryStockGap = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $energyPriceShock = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $policyUncertaintyIndex = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $policyUncertaintyIndexEma = null;
+
+    // --- Inflation Decomposition ---
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $supercoreInflation = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $coreGoodsInflation = null;
+
+    /** Drives the price-level-target catch-up, so a Taylor residual cannot be read without it. */
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $cumulativeInflationGap = null;
+
+    // --- Curve Factors ---
+    // The Diebold-Li factors the recorded yields are generated FROM. The yields are already columns, but a
+    // curve fault shows in the factor and only its shadow shows in the four tenors.
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $nsLevel = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $nsSlope = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $nsSlopeEma = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $structuralSlope = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $nsCurvature = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $nsBeta1 = null;
+
+    // --- Credit Stocks ---
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $creditToGdpTrend = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $householdDebtServiceTrend = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $householdDebtServiceGap = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $highYieldCreditSpread = null;
+
+    // --- Episode Markers ---
+    // Simulated times, so they carry total_time's width rather than the vector's. They are what lets an
+    // episode be cut out of the run by cause instead of by eye.
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 14, scale: 6, nullable: true)]
+    private ?string $lastCreditCrisisAt = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 14, scale: 6, nullable: true)]
+    private ?string $lastCatastropheAt = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $lastCatastropheSeverity = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $eventCooldownTimer = null;
 }

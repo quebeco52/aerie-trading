@@ -18,7 +18,48 @@ use PHPUnit\Framework\TestCase;
 class MacroFieldRegistryTest extends TestCase
 {
     /** Columns on macro_report that the macro vector does not own and must not try to fill. */
-    private const RECORDER_OWNED_COLUMNS = ['id', 'recordedAt'];
+    private const RECORDER_OWNED_COLUMNS = ['id', 'recordedAt', 'gapChannels'];
+
+    /**
+     * Macro fields deliberately NOT recorded, each with the reason it is not worth a column.
+     *
+     * The registry's other tests all run column -> field: they catch a column nothing fills. Nothing ran
+     * field -> column, and 55 fields had quietly accumulated with no column at all — including the QE and
+     * ELB regime flags and the equity wealth stock, which is to say the recorded history could not answer
+     * the questions it was being read for. The absences here are the ones that survived that review, so a
+     * new observable now has to be argued out of the table rather than fall out of it.
+     *
+     * @var array<string, string>
+     */
+    private const TRANSIENT_FIELDS = [
+        'sectorZ' => 'Per-sector array; a scalar column cannot hold it.',
+        'sectorDemandZ' => 'Per-sector array; a scalar column cannot hold it.',
+
+        'marketZ' => 'Redrawn every tick, so a quarterly sample is one arbitrary tick of noise.',
+        'marketZLatent' => 'Per-tick latent behind marketZ; same objection.',
+        'marketJumpMultiplier' => 'Per-tick jump scale; marketVolatility carries the quarter-scale reading.',
+        'marketVolatilityEma' => 'Smoothing of marketVolatility, which is recorded.',
+
+        'metalsChi' => 'Latent OU state behind industrialMetalsIndex, which is recorded.',
+        'metalsXi' => 'Latent OU state behind industrialMetalsIndex, which is recorded.',
+        'agriChi' => 'Latent OU state behind agriculturalCommodityIndex, which is recorded.',
+        'agriXi' => 'Latent OU state behind agriculturalCommodityIndex, which is recorded.',
+
+        'energyBasePrice' => 'Internal to the energy process; energyPriceIndex is the observable and is recorded.',
+        'energySupplyEma' => 'Internal to the energy process; energyPriceIndex is the observable and is recorded.',
+        'energyCostPushLag' => 'Pass-through queue, not a level; its effect lands in the recorded inflation.',
+        'energyInventoryIndex' => 'energyInventoryIndexEma is the quarter-scale reading and is recorded.',
+        'freightSupplyEma' => 'Internal to the freight process; freightRateIndex is recorded.',
+
+        'nsBaseTermPremium' => 'Slow regime anchor; termPremiumRegime and termPremium10y are recorded.',
+        'nsLongEndPremium' => 'Slow regime anchor; termPremium10y is recorded.',
+
+        'eventType' => 'Label of the event in flight, not a series.',
+        'lastElectionAt' => 'Fixed-term calendar, derivable from the election period.',
+        'strikeSector' => 'Bookkeeping for a strike in flight, not a series.',
+        'strikeRemainingYears' => 'Bookkeeping for a strike in flight, not a series.',
+        'strikeStartedAt' => 'Bookkeeping for a strike in flight, not a series.',
+    ];
 
     /**
      * The engine's mutable state and the immutable snapshot must describe the same vector, because
@@ -160,6 +201,51 @@ class MacroFieldRegistryTest extends TestCase
             $columns,
             'The persisted field list and the mapped entity columns disagree on how many columns the macro vector fills.'
         );
+    }
+
+    /**
+     * A field with no column is recorded nowhere, and nothing else fails when that happens: the engine runs,
+     * the wire carries it, the dashboards read it live, and only a later attempt to explain a past episode
+     * discovers the series was never kept. Either the field is on the table or the exclusion is declared.
+     */
+    public function testEveryFieldIsPersistedOrDeclaredTransient(): void
+    {
+        $persisted = MacroFieldRegistry::persistedColumns();
+
+        $unrecorded = [];
+        foreach (array_keys(MacroFieldRegistry::wireKeys()) as $field) {
+            if (!isset($persisted[$field]) && !isset(self::TRANSIENT_FIELDS[$field])) {
+                $unrecorded[] = $field;
+            }
+        }
+
+        $this->assertSame(
+            [],
+            $unrecorded,
+            'Macro fields reach no macro_report column and are not declared transient. Add a column to '
+            . 'App\Entity\MacroReport, or name the field in TRANSIENT_FIELDS with the reason: '
+            . implode(', ', $unrecorded)
+        );
+    }
+
+    /**
+     * An exclusion that names a field which since gained a column is a stale claim, and the next reader of
+     * this list would believe it.
+     */
+    public function testNoDeclaredExclusionNamesARecordedField(): void
+    {
+        $persisted = MacroFieldRegistry::persistedColumns();
+        $fields = MacroFieldRegistry::wireKeys();
+
+        foreach (self::TRANSIENT_FIELDS as $field => $reason) {
+            $this->assertArrayHasKey($field, $fields, "TRANSIENT_FIELDS names '{$field}', which is not a macro field.");
+            $this->assertArrayNotHasKey(
+                $field,
+                $persisted,
+                "TRANSIENT_FIELDS says '{$field}' is not recorded, but macro_report has a column for it."
+            );
+            $this->assertNotSame('', trim($reason), "TRANSIENT_FIELDS gives no reason for '{$field}'.");
+        }
     }
 
     /**

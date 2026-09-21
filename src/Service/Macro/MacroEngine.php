@@ -696,11 +696,15 @@ class MacroEngine
      * inflation, labor market dynamics, credit spreads, commodities, real estate,
      * and national accounts into the macro_report table.
      *
-     * @param \App\DTO\MacroStateDTO   $macroState State snapshot to record.
-     * @param \Doctrine\DBAL\Connection $conn       Database connection.
+     * @param \App\DTO\MacroStateDTO    $macroState  State snapshot to record.
+     * @param \Doctrine\DBAL\Connection  $conn        Database connection.
+     * @param array<string, mixed>|null  $gapChannels Closed quarter's output gap drift decomposition.
      */
-    public function recordMacroSnapshot(\App\DTO\MacroStateDTO $macroState, \Doctrine\DBAL\Connection $conn): void
-    {
-        $this->snapshotRecorder->recordSnapshot($macroState, $conn);
+    public function recordMacroSnapshot(
+        \App\DTO\MacroStateDTO $macroState,
+        \Doctrine\DBAL\Connection $conn,
+        ?array $gapChannels = null
+    ): void {
+        $this->snapshotRecorder->recordSnapshot($macroState, $conn, $gapChannels);
     }
 }

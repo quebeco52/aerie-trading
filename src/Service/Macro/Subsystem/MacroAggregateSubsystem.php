@@ -78,6 +78,18 @@ class MacroAggregateSubsystem
     /** Innovation volatility of the aggregate demand disturbance, in annualized output gap drift units. */
     public const DEMAND_SHOCK_SIGMA = 0.0075;
 
+    // --- Rare Demand Disasters (Barro 2006, Gourio 2012; Kou 2002 jump) ---
+    /** Disaster arrivals per year in either direction. The Gaussian innovation above is symmetric and its worst quarter in 20 sim-years reaches -1.8pp/yr against a real CBO bust descent of -4.7pp/yr, so the only cause of a slump is 2.6x too small to make one. */
+    public const DEMAND_DISASTER_INTENSITY = 0.50;
+    /** Probability a disaster is an upside demand surprise. Barro's disaster set is one-sided; a quarter weight keeps booms possible while leaving the left tail three times heavier. */
+    public const DEMAND_DISASTER_UP_PROBABILITY = 0.25;
+    /** Exponential rate of the upside jump: mean 1.0pp/yr of demand, half the downside, so expansions build gradually and slumps arrive whole. */
+    public const DEMAND_DISASTER_UP_RATE = 100.0;
+    /** Exponential rate of the downside jump: mean 2.0pp/yr of demand. The exponential tail puts a 4pp/yr shock once per ~16y and a 6pp/yr once per ~45y, matching the 40% of real busts that run past -4%. */
+    public const DEMAND_DISASTER_DOWN_RATE = 50.0;
+    /** Cap on one disaster (8pp/yr of demand, four mean down-jumps). Guards the tail of the exponential draw without binding on the calibrated range. */
+    public const DEMAND_DISASTER_CAP = 0.08;
+
     /** Stochastic micro-diffusion volatility of the output gap: realistic quarterly variance without breaking cycle phase. */
     public const OUTPUT_GAP_DIFFUSION_SIGMA = 0.0025;
 
@@ -371,6 +383,20 @@ class MacroAggregateSubsystem
         // Smets & Wouters (2007) persistent AR(1) aggregate demand disturbance.
         $state->demandShock += (-self::DEMAND_SHOCK_REVERSION * $state->demandShock * $dt)
             + (self::DEMAND_SHOCK_SIGMA * $stressMultiplier * sqrt($dt) * $demandZ);
+
+        // Barro (2006) rare demand disaster. The Gaussian innovation above is symmetric and small enough
+        // that the Taylor rule offsets three quarters of it on the way down, which is why a slump here is
+        // a slow slide the policy loop then snaps back. A jump lands inside one tick, so it is already
+        // spent before a rule reading a trailing gap EMA can respond: the descent outruns the offset.
+        // Compensated, so this bends the shape of the disturbance without shifting its mean.
+        $state->demandShock += $this->mathUtility->calculateCompensatedKouJump(
+            lambda: self::DEMAND_DISASTER_INTENSITY,
+            pUp: self::DEMAND_DISASTER_UP_PROBABILITY,
+            etaUp: self::DEMAND_DISASTER_UP_RATE,
+            etaDown: self::DEMAND_DISASTER_DOWN_RATE,
+            cap: self::DEMAND_DISASTER_CAP,
+            dt: $dt
+        );
 
         // Every channel signed as it acts on demand, so a drag reads negative wherever it is looked at.
         // This array IS the drift: it is summed below and handed to the probe unchanged, so a channel
