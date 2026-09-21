@@ -203,4 +203,48 @@ class MarketTickerCadenceTest extends TestCase
             $this->assertGreaterThanOrEqual(1, MarketTickerCommand::reloadIntervalBars($ticksPerYear), (string) $ticksPerYear);
         }
     }
+
+    /**
+     * A job whose period is written in simulated years fires once per year at ANY tick rate.
+     *
+     * This is what the retention pass hangs on, and it is the property the tick-count cadences do not have:
+     * theirs coincide with a simulated interval only while `dt` stays `1/ticksPerYear` and the counter stays
+     * in step with the clock, neither of which survives a rate change.
+     */
+    public function testASimulatedBoundaryIsCrossedExactlyOncePerPeriodAtEveryTickRate(): void
+    {
+        foreach ([252, 720, 1800, 2400, 3600, 7200, 14400, 54000] as $ticksPerYear) {
+            $dt = 1.0 / $ticksPerYear;
+            $accumulated = 0.0;
+            $fired = [];
+
+            // Accumulated, not reconstructed: the loop adds dt to the clock every tick, and the rounding of
+            // that sum is the case that matters. 252 additions of 1/252 land at 0.99999999999999989, which a
+            // plain comparison against the period reads as "the first year has not happened yet".
+            for ($tick = 1; $tick <= 3 * $ticksPerYear; $tick++) {
+                $accumulated += $dt;
+
+                if (MarketTickerCommand::crossedSimulatedBoundary($accumulated, $dt, 1.0)) {
+                    $fired[] = $tick;
+                }
+            }
+
+            $this->assertSame(
+                [$ticksPerYear, 2 * $ticksPerYear, 3 * $ticksPerYear],
+                $fired,
+                "Year boundary miscounted at {$ticksPerYear} ticks/year."
+            );
+        }
+    }
+
+    /** Nothing has elapsed before the first period, and a zero or negative period can never fire. */
+    public function testABoundaryBeforeTheFirstPeriodNeverFires(): void
+    {
+        $dt = 1.0 / 3600;
+
+        $this->assertFalse(MarketTickerCommand::crossedSimulatedBoundary(0.5, $dt, 1.0));
+        $this->assertFalse(MarketTickerCommand::crossedSimulatedBoundary(0.0, $dt, 1.0));
+        $this->assertFalse(MarketTickerCommand::crossedSimulatedBoundary(5.0, $dt, 0.0));
+        $this->assertFalse(MarketTickerCommand::crossedSimulatedBoundary(5.0, 0.0, 1.0));
+    }
 }

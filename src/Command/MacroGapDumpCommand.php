@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Command;
 
+use App\Service\Market\HistoryPruner;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
@@ -92,7 +93,7 @@ class MacroGapDumpCommand extends Command
         // is still converging off its seed.
         $limit = $years > 0.0
             ? (int) ceil($years * self::QUARTERS_PER_YEAR)
-            : PruneHistoryCommand::MACRO_QUARTERS_KEPT;
+            : HistoryPruner::MACRO_QUARTERS_KEPT;
 
         $rows = $conn->fetchAllAssociative(
             'SELECT * FROM macro_report ORDER BY id DESC LIMIT ' . $limit

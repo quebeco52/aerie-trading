@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Tests\Command;
 
+use App\Service\Market\HistoryPruner;
 use App\Command\MacroGapDumpCommand;
 use App\Command\PruneHistoryCommand;
 use App\Service\Macro\Recorder\OutputGapProbe;
@@ -115,7 +116,7 @@ class MacroGapDumpCommandTest extends TestCase
      */
     public function testRetentionCoversEnoughEpisodesToMeasureShape(): void
     {
-        $years = PruneHistoryCommand::MACRO_QUARTERS_KEPT / 4;
+        $years = HistoryPruner::MACRO_QUARTERS_KEPT / 4;
 
         $this->assertGreaterThanOrEqual(
             20,

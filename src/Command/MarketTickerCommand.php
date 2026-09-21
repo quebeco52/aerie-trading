@@ -74,6 +74,13 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
     /** Phases named in a lag warning, most expensive first. */
     public const LAG_PHASES_SHOWN = 4;
 
+    /** Simulated years the tick counter may imply away from the clock before the start-up reports it as a divergence. */
+    public const CLOCK_DIVERGENCE_TOLERANCE_YEARS = 0.01;
+
+    // --- Retention ---
+    /** Simulated years between retention passes, matching the units the cutoffs themselves are written in. */
+    public const PRUNE_INTERVAL_YEARS = 1.0;
+
     /** Ticks a steady-state phase report covers. Long enough that the slowest cadence in the tick — the option sweep, at a pass every few dozen ticks — is averaged over several of its own passes. */
     public const PHASE_REPORT_INTERVAL_TICKS = 600;
 
@@ -190,6 +197,37 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
     public static function barIndex(int $tickCount, int $ticksPerYear): int
     {
         return intdiv(max(0, $tickCount) * self::historyPointsPerYear($ticksPerYear), max(1, $ticksPerYear));
+    }
+
+    /**
+     * Whether this tick crossed a boundary of the given period in SIMULATED time.
+     *
+     * The tick-count cadences elsewhere in this loop only equal a simulated interval because `dt` happens to
+     * be `1/ticksPerYear` for the whole of a run; they carry no meaning across a rate change or a counter
+     * that has drifted from the clock. A job whose period is written in simulated years asks the clock.
+     */
+    public static function crossedSimulatedBoundary(float $totalTime, float $dt, float $periodYears): bool
+    {
+        if ($periodYears <= 0.0 || $dt <= 0.0) {
+            return false;
+        }
+
+        // Half a tick, expressed in periods, applied to BOTH samples and to the floor above zero.
+        //
+        // Neither end of the comparison is exact. The previous sample is reconstructed as `$totalTime - $dt`
+        // rather than remembered, and that subtraction does not land back on the value the last tick held:
+        // at 14,400 ticks a year the tick after the second year reconstructs its predecessor as
+        // 1.99999999999999978, one ulp below a boundary it had already crossed, and the period fires twice.
+        // The current sample is no better, because the loop ACCUMULATES it: 252 additions of 1/252 reach
+        // 0.99999999999999989, so a plain `< $periodYears` guard rejects the first year outright and loses
+        // it. Both samples are supposed to be tick multiples, so they are snapped to the nearest one; a
+        // discrepancy smaller than half a tick is the float representation, not elapsed time.
+        $epsilon = $dt / $periodYears / 2.0;
+        $index = (int) floor($totalTime / $periodYears + $epsilon);
+        $previous = (int) floor(max(0.0, $totalTime - $dt) / $periodYears + $epsilon);
+
+        // Index zero is the period the simulation starts inside, which is entered rather than crossed.
+        return $index >= 1 && $index > $previous;
     }
 
     /** Whether a tick closes a history bar: the tick the bar count rolls over on. */
@@ -326,6 +364,13 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
             InputOption::VALUE_NONE,
             'Report and repair any Stock or Bond change that was not handed to persist(). Costs the identity-map walk that explicit change tracking exists to avoid, so it is for a canary run rather than for steady state.'
         );
+
+        $this->addOption(
+            'rebase-clock',
+            null,
+            InputOption::VALUE_NONE,
+            'Align the tick counter to the simulation clock once at start-up. Shifts the phase of every tick-keyed cadence — earnings seasons, auctions, reconstitutions — and ages out industry-ledger records stamped against the old numbering, so it is a deliberate repair rather than a default.'
+        );
     }
 
     /**
@@ -349,19 +394,44 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
         $clock = $this->simulationClock->resume(
             (int) ($this->redis->get('simulation_tick_count') ?: 0),
             $this->macroEngine->getLiveState()->totalTime,
-            $furthestSerial === null ? 0.0 : OptionChainService::earliestTimeFor($furthestSerial)
+            $furthestSerial === null ? 0.0 : OptionChainService::earliestTimeFor($furthestSerial),
+            (bool) $input->getOption('rebase-clock')
         );
 
         $tickCount = $clock->getTickCount();
 
+        // The economic clock, carried alongside the loop counter because the two are not interchangeable:
+        // this is what the option grid, the bond ladder and every retention cutoff are measured against,
+        // and it is the only one of the pair that can be converted into a date.
+        $simTime = $clock->getTotalTime();
+
         // Synchronize cached Redis macro clock with authoritative simulation clock.
-        $this->macroEngine->alignClock($clock->getTotalTime());
+        $this->macroEngine->alignClock($simTime);
 
         $output->writeln(sprintf(
-            'Resuming at tick %d (simulation year %.4f).',
+            'Resuming at tick %d (simulation year %.4f, day %s).',
             $tickCount,
-            $clock->getTotalTime()
+            $simTime,
+            number_format($simTime * 365.0, 1)
         ));
+
+        // The counter and the clock advance at the same rate by construction, so they can only differ by an
+        // offset — and an offset means one of them was seeded from a cache the other did not come from.
+        // Neither reading is corrupt on its own: every tick-keyed cadence stays self-consistent with the
+        // counter and every dated fact stays self-consistent with the clock. What breaks is converting one
+        // into the other, so the divergence is reported rather than silently repaired; --rebase-clock does
+        // that on request, at the cost of shifting every cadence's phase once.
+        $impliedTime = $tickCount / max(1, $this->ticksPerYear);
+
+        if (abs($impliedTime - $simTime) > self::CLOCK_DIVERGENCE_TOLERANCE_YEARS) {
+            $output->writeln(sprintf(
+                '<error>⚠️ Clock divergence: tick %d implies simulation year %.4f, but the clock reads %.4f (a %.4f-year offset). Dated output follows the clock; cadences follow the counter. Run with --rebase-clock to align the counter.</error>',
+                $tickCount,
+                $impliedTime,
+                $simTime,
+                $impliedTime - $simTime
+            ));
+        }
 
         $operatorInterval = (int) max(1, $this->ticksPerYear / 24);  // Operator audits once a game "month"
         $snapshotInterval = (int) max(1, $this->ticksPerYear / 52);  // Snapshots once a game "week"
@@ -369,6 +439,21 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
         $auctionInterval = TreasuryAuctionService::auctionIntervalTicks($this->ticksPerYear);
         $optionSweepInterval = OptionDeskService::sweepIntervalTicks($this->ticksPerYear);
         $corporateIssuanceInterval = CorporateBondDesk::issuanceIntervalTicks($this->ticksPerYear);
+
+        // What the configured tick rate actually buys, said once rather than inferred from the overrun rate.
+        // A bar carries the flush, the bond mark, the tick-column write and the reload, so the share of
+        // ticks that close one is the share that cannot finish inside the budget. When the tick rate is at
+        // or below the target every tick closes a bar — correct, because a bar cannot be finer than a tick,
+        // but it leaves no tick with slack and a hundred percent overrun rate is the expected reading rather
+        // than a regression.
+        $barsPerYear = self::historyPointsPerYear($this->ticksPerYear);
+        $output->writeln(sprintf(
+            'Sampling: %d bars/sim-year over %d ticks (%.0f%% of ticks close a bar), %.1f ms budget.',
+            $barsPerYear,
+            $this->ticksPerYear,
+            100.0 * $barsPerYear / max(1, $this->ticksPerYear),
+            $this->tickIntervalUs / 1000.0
+        ));
 
         $conn = $this->entityManager->getConnection();
 
@@ -450,12 +535,29 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
             pcntl_signal_dispatch();
 
             if ($tickCount % 10 === 0) {
-                $simDay = ($tickCount / $this->ticksPerYear) * 365;
-                $output->writeln("Updating Market Prices... (Day: " . number_format($simDay, 1) . ") [Tick: $tickCount]");
+                // Dated off the simulation clock, never off the tick count. The counter is a loop position
+                // whose absolute value only has to be consistent with itself; converting it into a date
+                // reports the wrong day for the whole run whenever the two have drifted apart.
+                $output->writeln("Updating Market Prices... (Day: " . number_format($simTime * 365.0, 1) . ") [Tick: $tickCount]");
             }
 
             $macroState = $this->macroEngine->updateMacroState($dt, $lastEquityMarketCap);
+            $simTime = $macroState->totalTime;
             $lap('macro');
+
+            // Retention, on the clock its cutoffs are measured against. The boundary test is the same one
+            // the macro subsystems use for a simulated year-end: true exactly once per crossing, and
+            // indifferent to the tick rate in a way `$tickCount % $interval` is not. No gate and no
+            // persisted marker, because the pass is idempotent — a crossing missed while the ticker was
+            // down and one repeated after it restarts both cost a second look at rows already too old to
+            // keep. The work itself goes to the worker; only the dispatch happens here, once a simulated
+            // year, which is why it carries no lap of its own.
+            if (self::crossedSimulatedBoundary($simTime, $dt, self::PRUNE_INTERVAL_YEARS)) {
+                $this->messageBus->dispatch(new \App\Message\PruneHistoryMessage(
+                    \App\Service\Market\HistoryPruner::DEFAULT_YEARS_KEPT,
+                    \App\Service\Market\HistoryPruner::DEFAULT_KEEP_RATIO
+                ));
+            }
 
             $isFrameTick = WireFrame::isFrameTick($tickCount, $this->tickIntervalUs);
 
@@ -716,6 +818,28 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                     // The sweep's own stages, so an overrun names the statement rather than the service.
                     foreach ($sweepResult['timing'] as $stage => $ms) {
                         $phases['opt:' . $stage] = $ms;
+                    }
+
+                    // What the pass actually moved. The stage timings say WHICH statement was slow and the
+                    // row counts say whether it was slow for the amount of work it did — a settle that
+                    // retires the whole front month and one that retires nothing look identical without
+                    // this, which is why four consecutive elevated passes could not be told apart.
+                    // Marking is every sweep's routine job, so only the two event stages are reported.
+                    if ($sweepResult['settled'] > 0 || $sweepResult['listed'] > 0) {
+                        // `marked` counts only contracts a player HOLDS, which are written a row at a time;
+                        // the whole chain's marks go out in one bulk statement and are not counted here. On a
+                        // market with no open option positions it is zero on every pass, so it is reported
+                        // only when there is something to report rather than printed as noise.
+                        $held = $sweepResult['marked'] > 0 ? sprintf(', held marks %d', $sweepResult['marked']) : '';
+
+                        $output->writeln(sprintf(
+                            '<info>   opt: settled %d (exercised %d), listed %d%s [tick %d]</info>',
+                            $sweepResult['settled'],
+                            $sweepResult['exercised'],
+                            $sweepResult['listed'],
+                            $held,
+                            $tickCount
+                        ));
                     }
                 }
 
@@ -1018,6 +1142,10 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                 sleep(5);
             }
 
+            // The tick that just ran, kept before the counter moves on. Every diagnostic below names THIS
+            // number: the warnings used to print the incremented counter, so a lag report and the sweep
+            // counts for the same tick disagreed by one and every reading of a log started by subtracting it.
+            $ranTick = $tickCount;
             $tickCount++;
 
             // Reported on its own line rather than folded into the lag warning below: a dropped write has
@@ -1025,7 +1153,7 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
             $unpersisted = $this->writeAudit->summary();
 
             if ($unpersisted !== '') {
-                $output->writeln("<error>⚠️ Unpersisted writes on tick {$tickCount}: {$unpersisted} — repaired, but a mutation is missing its persist().</error>");
+                $output->writeln("<error>⚠️ Unpersisted writes on tick {$ranTick}: {$unpersisted} — repaired, but a mutation is missing its persist().</error>");
             }
 
             // Stop the stopwatch and calculate how long the work took
@@ -1047,7 +1175,7 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                 $written = $this->flushProfiler->summary();
                 $wrote = $written === '' ? 'wrote nothing' : $written;
 
-                $output->writeln("<comment>⚠️ Lag Spike: Tick {$tickCount} took too long! Dropped behind by " . round($overtimeMs, 2) . "ms ({$breakdown} | map {$managed} | {$wrote})</comment>");
+                $output->writeln("<comment>⚠️ Lag Spike: Tick {$ranTick} took too long! Dropped behind by " . round($overtimeMs, 2) . "ms ({$breakdown} | map {$managed} | {$wrote})</comment>");
             }
 
             // Track steady-state execution time distribution across phase windows.

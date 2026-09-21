@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Tests\Command;
 
+use App\Service\Market\HistoryPruner;
 use App\Command\PruneHistoryCommand;
 use App\Schedule;
 use Doctrine\ORM\EntityManagerInterface;
@@ -31,7 +32,7 @@ class ScheduledCommandsTest extends TestCase
     private function commands(): array
     {
         $application = new Application();
-        $prune = new PruneHistoryCommand($this->createMock(EntityManagerInterface::class));
+        $prune = new PruneHistoryCommand(new HistoryPruner($this->createMock(EntityManagerInterface::class)));
         $application->addCommand($prune);
         // The application adds the `command` argument the first token of the line binds to.
         $prune->mergeApplicationDefinition();
@@ -84,7 +85,7 @@ class ScheduledCommandsTest extends TestCase
         $input = new StringInput($pruneLines[0]);
         $input->bind($prune->getDefinition());
 
-        $this->assertEqualsWithDelta(PruneHistoryCommand::DEFAULT_YEARS_KEPT, (float) $input->getOption('years'), 1e-9);
+        $this->assertEqualsWithDelta(HistoryPruner::DEFAULT_YEARS_KEPT, (float) $input->getOption('years'), 1e-9);
         $this->assertSame(1000, (int) $input->getOption('ratio'));
     }
 }

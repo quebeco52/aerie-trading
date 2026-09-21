@@ -53,14 +53,55 @@ class SimulationClockTest extends TestCase
         $this->assertEqualsWithDelta(0.6094, $clock->getTotalTime(), 1e-9);
     }
 
-    public function testTheFirstStartSeedsTheClockFromTheCache(): void
+    /**
+     * The seed takes the TIME and derives the counter, rather than believing both caches at once.
+     *
+     * The two arguments come from different writers at different moments, so a seed that trusts each of them
+     * separately can open a clock whose counter and time already disagree — and once open, nothing
+     * reconciles them: the counter's cadences and the clock's dates each stay self-consistent while meaning
+     * different things. The fixture here is the defect in miniature, three ticks apart.
+     */
+    public function testTheFirstStartSeedsTheCounterFromTheTimeRatherThanFromItsOwnCache(): void
     {
         $persisted = null;
         $clock = $this->service(null, $persisted)->resume(8_772, 0.6094);
 
         $this->assertInstanceOf(SimulationClock::class, $persisted);
-        $this->assertSame(8_772, $clock->getTickCount());
+        $this->assertSame((int) round(0.6094 * self::TICKS_PER_YEAR), $clock->getTickCount());
         $this->assertEqualsWithDelta(0.6094, $clock->getTotalTime(), 1e-9);
+    }
+
+    /** With no time to derive from there is nothing to be inconsistent with, so the cached count stands. */
+    public function testAGenuinelyFreshInstallationFallsBackToTheCachedCount(): void
+    {
+        $persisted = null;
+        $clock = $this->service(null, $persisted)->resume(0, 0.0);
+
+        $this->assertSame(0, $clock->getTickCount());
+        $this->assertEqualsWithDelta(0.0, $clock->getTotalTime(), 1e-9);
+    }
+
+    /**
+     * A drifted counter is left alone unless the repair is asked for.
+     *
+     * The offset is not corruption — every cadence keyed on the counter is still self-consistent with it —
+     * so moving it moves the phase of all of them at once. That is a decision, not a repair to make on
+     * someone's behalf at start-up.
+     */
+    public function testADrifedCounterIsReportedByBeingLeftAlone(): void
+    {
+        $clock = $this->service($this->storedAt(10_591, 13.6))->resume(0, 0.0);
+
+        $this->assertSame(10_591, $clock->getTickCount());
+        $this->assertEqualsWithDelta(13.6, $clock->getTotalTime(), 1e-9);
+    }
+
+    public function testRebasingAlignsTheCounterToTheClock(): void
+    {
+        $clock = $this->service($this->storedAt(10_591, 13.6))->resume(0, 0.0, 0.0, true);
+
+        $this->assertSame((int) round(13.6 * self::TICKS_PER_YEAR), $clock->getTickCount());
+        $this->assertEqualsWithDelta(13.6, $clock->getTotalTime(), 1e-9);
     }
 
     public function testASeedBehindWhatTheDatabaseProvesIsCorrectedRatherThanReplayed(): void

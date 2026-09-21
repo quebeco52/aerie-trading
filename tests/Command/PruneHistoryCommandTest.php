@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Tests\Command;
 
 use App\Command\PruneHistoryCommand;
+use App\Service\Market\HistoryPruner;
 use Doctrine\DBAL\Connection;
 use Doctrine\ORM\EntityManagerInterface;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
@@ -16,7 +17,7 @@ use Symfony\Component\Console\Tester\CommandTester;
 #[AllowMockObjectsWithoutExpectations]
 class PruneHistoryCommandTest extends TestCase
 {
-    private const BATCH = PruneHistoryCommand::DELETE_BATCH_IDS;
+    private const BATCH = HistoryPruner::DELETE_BATCH_IDS;
 
     /**
      * A connection whose history tables span ids 1..($batches × batch) and answer the batch probe through
@@ -56,7 +57,7 @@ class PruneHistoryCommandTest extends TestCase
         $em = $this->createMock(EntityManagerInterface::class);
         $em->method('getConnection')->willReturn($connection);
 
-        $tester = new CommandTester(new PruneHistoryCommand($em));
+        $tester = new CommandTester(new PruneHistoryCommand(new HistoryPruner($em)));
         $this->assertSame(Command::SUCCESS, $tester->execute(['--years' => '5', '--ratio' => '100']));
 
         return $tester;
@@ -93,14 +94,14 @@ class PruneHistoryCommandTest extends TestCase
         $this->assertStringContainsString('NOT EXISTS', $options[0][0]);
         $this->assertStringContainsString('user_options.option_contract_id', $options[0][0]);
         $this->assertSame('EXPIRED', $options[0][1]['status']);
-        $this->assertEqualsWithDelta(12.0 - PruneHistoryCommand::EXPIRED_OPTION_YEARS_KEPT, $options[0][1]['cutoff'], 1e-9);
+        $this->assertEqualsWithDelta(12.0 - HistoryPruner::EXPIRED_OPTION_YEARS_KEPT, $options[0][1]['cutoff'], 1e-9);
 
         $output = $tester->getDisplay();
         $this->assertStringContainsString('Downsampling Market History', $output);
         $this->assertStringContainsString('Cleared 150 redundant rows from stock_history', $output);
         $this->assertStringContainsString('Cleared 150 redundant rows from etf_history', $output);
         $this->assertStringContainsString('Cleared 150 redundant rows from bond_history', $output);
-        $this->assertStringContainsString('Cleared 150 settled contracts from option_contracts', $output);
+        $this->assertStringContainsString('Cleared 150 settled option contracts', $output);
     }
 
     public function testWalkSkipsThinnedRegionsAndStopsAtTheFirstBatchNewerThanTheCutoff(): void
@@ -143,9 +144,37 @@ class PruneHistoryCommandTest extends TestCase
         );
         $connection->method('fetchNumeric')->willReturn([null, null]);
         $connection->expects($this->never())->method('fetchAssociative');
-        // Only the option-contract delete reaches the database.
-        $connection->expects($this->once())->method('executeStatement')->willReturn(0);
+        // Every delete is addressed by a primary-key range, so a table with no rows has no range to walk and
+        // nothing reaches the database at all — not even the settled-contract sweep.
+        $connection->expects($this->never())->method('executeStatement');
 
         $this->runPrune($connection);
+    }
+
+    /**
+     * The settled-contract sweep walks the whole key range and never stops early.
+     *
+     * A listing pass opens several serials at once and the furthest of them expires half a year beyond the
+     * nearest, so expiry is only broadly monotonic in id. The history walk may stop at the first batch with
+     * nothing old in it; this one may not, or it would strand rows behind a batch that happened to hold only
+     * contracts still live.
+     */
+    public function testSettledContractsAreDeletedInBatchesAcrossTheWholeKeyRange(): void
+    {
+        $sent = [];
+        // Three batches of ids, and a history probe that ends the history walk on its very first batch so
+        // only the option sweep is left to account for.
+        $this->runPrune($this->connection(3, static fn (int $lo): array => [self::BATCH, 0], $sent));
+
+        $options = array_values(array_filter($sent, static fn (array $call): bool => str_contains($call[0], 'option_contracts')));
+        $this->assertCount(3, $options);
+
+        foreach ($options as $index => [$sql, $params]) {
+            $this->assertStringContainsString('id >= :lo AND id < :hi', $sql);
+            $this->assertStringContainsString('NOT EXISTS', $sql);
+            $this->assertSame('EXPIRED', $params['status']);
+            $this->assertSame(1 + $index * self::BATCH, $params['lo']);
+            $this->assertSame(1 + ($index + 1) * self::BATCH, $params['hi']);
+        }
     }
 }

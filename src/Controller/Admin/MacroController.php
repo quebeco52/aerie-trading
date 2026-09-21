@@ -2,7 +2,7 @@
 
 namespace App\Controller\Admin;
 
-use App\Command\PruneHistoryCommand;
+use App\Service\Market\HistoryPruner;
 use App\Data\OutputGapChannels;
 use App\Service\Macro\Recorder\OutputGapProbe;
 use Doctrine\DBAL\Connection;
@@ -66,7 +66,7 @@ class MacroController extends AbstractController
         $rows = $conn->fetchAllAssociative(
             'SELECT total_time, gap_channels FROM macro_report
              WHERE gap_channels IS NOT NULL
-             ORDER BY id DESC LIMIT ' . PruneHistoryCommand::MACRO_QUARTERS_KEPT
+             ORDER BY id DESC LIMIT ' . HistoryPruner::MACRO_QUARTERS_KEPT
         );
 
         $quarters = [];
