@@ -11,17 +11,9 @@ use PHPUnit\Framework\TestCase;
  * The two rules that keep the ticker off MySQL error 1213, guarded on the source because the loop they
  * live in needs a database and a worker to run at all.
  *
- * The ticker holds one transaction per tick. A `ProcessLimitOrdersMessage` sent from inside it reaches the
- * worker immediately -- the transport is Redis, which owes nothing to a database commit -- so the worker
- * starts taking rows the tick still holds, and it takes them in the opposite order: its user row first, by
- * TradeExecutionService's pessimistic lock, then the stock. That is a lock cycle, and InnoDB answers it by
- * shooting one of the two. Routing the message to the worker moved the work out of the transaction; it did
- * not stop it running concurrently with it, which is the part that deadlocks.
- *
- * The second rule is about what the failure costs. A deadlock is transient and consistent by construction,
- * so the tick is simply lost and the next one recomputes from disk. Handing it to the generic handler
- * instead spends `sleep(5)` on it, which at the shipped 10 ms interval is five hundred ticks of frozen
- * market for a fault that was over before the exception was caught.
+ * A `ProcessLimitOrdersMessage` sent inside the tick transaction reaches the Redis-backed worker at once,
+ * which then takes the same rows in the opposite lock order and deadlocks. And a deadlock is transient, so
+ * the tick is simply lost -- the generic handler's `sleep(5)` is 500 frozen ticks for a fault already over.
  */
 class MarketTickerLockContentionTest extends TestCase
 {

@@ -141,6 +141,10 @@ class MacroReport
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4)]
     private ?string $energyPriceIndexEma = null;
 
+    /** The energy price level this economy treats as normal; the PPI leg reads its growth against this. */
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $energyPriceIndexTrend = null;
+
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4)]
     private ?string $consumerSentimentIndex = null;
 
@@ -162,6 +166,10 @@ class MacroReport
 
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4)]
     private ?string $industrialMetalsIndexEma = null;
+
+    /** The industrial metals level this economy treats as normal; the PPI leg reads its growth against this. */
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $industrialMetalsIndexTrend = null;
 
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4)]
     private ?string $governmentSpendingIndex = null;
@@ -192,6 +200,10 @@ class MacroReport
 
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4)]
     private ?string $agriculturalCommodityIndexEma = null;
+
+    /** The agricultural commodity level this economy treats as normal; the PPI leg reads its growth against this. */
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $agriculturalCommodityIndexTrend = null;
 
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4)]
     private ?string $freightRateIndex = null;

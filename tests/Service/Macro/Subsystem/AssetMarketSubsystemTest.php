@@ -423,4 +423,46 @@ class AssetMarketSubsystemTest extends TestCase
         $this->assertLessThan(0.85 * $calm->residentialPropertyIndex, $tight->residentialPropertyIndex, 'The price a buyer can pay is the price a lender will finance: the 80% tightening of a crisis takes over 15% off in a decade.');
         $this->assertGreaterThan($calm->residentialPropertyIndex, $loose->residentialPropertyIndex, 'Loosening standards lift what buyers can bid.');
     }
+
+    /** Favara & Imbs (2015): the quantity of credit outstanding is housing demand in its own right, which closes the collateral loop against CreditFiscalSubsystem's Mian & Sufi home-equity term. */
+    public function testCreditSupplyIsHousingDemandInItsOwnRight(): void
+    {
+        $boom = new MacroState();
+        $boom->creditToGdpGapEma = 0.10;
+        $bust = new MacroState();
+        $bust->creditToGdpGapEma = -0.10;
+        $neutral = new MacroState();
+
+        // The standards index is flat in all three, so only the credit QUANTITY leg can separate them.
+        foreach ([$boom, $bust, $neutral] as $state) {
+            $state->sloosTighteningIndexEma = 0.0;
+            self::assertSame(0.0, $state->sloosTighteningIndexEma);
+        }
+
+        for ($i = 0; $i < 40; $i++) {
+            $this->subsystem->calculateResidentialPropertyIndex($boom, MacroEngine::TARGET_INFLATION, 0.25);
+            $this->subsystem->calculateResidentialPropertyIndex($bust, MacroEngine::TARGET_INFLATION, 0.25);
+            $this->subsystem->calculateResidentialPropertyIndex($neutral, MacroEngine::TARGET_INFLATION, 0.25);
+        }
+
+        $this->assertGreaterThan(
+            $neutral->residentialPropertyIndex,
+            $boom->residentialPropertyIndex,
+            'A credit stock ten points over trend is bidding for houses, whatever the standards index says.'
+        );
+        $this->assertLessThan(
+            $neutral->residentialPropertyIndex,
+            $bust->residentialPropertyIndex,
+            'A deleveraging economy withdraws that bid, which is what makes the bust leg of the loop work.'
+        );
+
+        // The size of the effect, not merely its sign: ten points of gap at 0.25 is 2.5% on the fundamental.
+        $lift = ($boom->residentialPropertyIndex / $neutral->residentialPropertyIndex) - 1.0;
+        $this->assertEqualsWithDelta(
+            AssetMarketSubsystem::RESIDENTIAL_CREDIT_SUPPLY_ELASTICITY * 0.10,
+            $lift,
+            0.010,
+            'The house price response must carry the Favara-Imbs elasticity, not just its direction.'
+        );
+    }
 }

@@ -167,6 +167,8 @@ class AssetMarketSubsystem
     public const RESIDENTIAL_MEAN_REVERSION = 0.15;
     /** Fundamental price per unit of net lending tightening (Duca, Muellbauer & Murphy 2011; Favara & Imbs 2015): the ~80% tightening of a crisis takes a fifth off, the post-crisis decline in Reinhart & Rogoff. */
     public const RESIDENTIAL_CREDIT_STANDARDS_ELASTICITY = 0.25;
+    /** House price response per unit of credit-to-GDP gap (Favara & Imbs 2015): the return leg of the collateral channel, without which Mian & Sufi's home-equity term is a one-way street. */
+    public const RESIDENTIAL_CREDIT_SUPPLY_ELASTICITY = 0.25;
     /** Stochastic volatility of residential home prices (stationary noise ~5% so the user-cost channel dominates). */
     public const RESIDENTIAL_VOLATILITY = 0.03;
     /** Structural lower floor for the residential property index value. */
@@ -311,7 +313,12 @@ class AssetMarketSubsystem
         // Hallegatte et al. (2007) physical housing stock destruction and post-disaster replacement.
         $damageFactor = 1.0 - (self::CATASTROPHE_PROPERTY_DAMAGE_SHARE * max(0.0, $state->catastropheLossIndexEma - 1.0));
         $creditConditionsFactor = 1.0 - (self::RESIDENTIAL_CREDIT_STANDARDS_ELASTICITY * $state->sloosTighteningIndexEma);
-        $fundamentalPrice = self::RESIDENTIAL_BASELINE * max(0.30, min(2.50, $affordabilityFactor * max(0.5, $damageFactor) * max(0.5, $creditConditionsFactor)));
+        // Favara & Imbs (2015) credit supply as housing demand: the quantity outstanding, not just the
+        // standards it is lent on. One tick stale, since the EMA block runs later in the tick.
+        $creditSupplyFactor = $state->creditToGdpTrend > 0.0
+            ? 1.0 + (self::RESIDENTIAL_CREDIT_SUPPLY_ELASTICITY * ($state->creditToGdpGapEma / $state->creditToGdpTrend))
+            : 1.0;
+        $fundamentalPrice = self::RESIDENTIAL_BASELINE * max(0.30, min(2.50, $affordabilityFactor * max(0.5, $damageFactor) * max(0.5, $creditConditionsFactor) * max(0.5, $creditSupplyFactor)));
 
         $dW = $this->mathUtility->generateStandardNormal();
         $newIndex = $this->mathUtility->calculateSchwartz1Factor(

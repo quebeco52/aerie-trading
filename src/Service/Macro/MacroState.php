@@ -30,6 +30,9 @@ class MacroState
 
     public float $energyPriceIndex = 90.0;
     public float $energyPriceIndexEma = 90.0;
+    // The index's own long-run average, which the PPI leg measures a growth RATE against. Zero means no
+    // observation yet: the trend opens at the first one, so a cold start reports no commodity inflation.
+    public float $energyPriceIndexTrend = 0.0;
     public float $energyPriceShock = 0.0;
     public float $energyBasePrice = 90.0;
     // Productive energy capacity, lagging price: the supply leg of the energy cobweb.
@@ -46,6 +49,7 @@ class MacroState
 
     public float $industrialMetalsIndex = 100.0;
     public float $industrialMetalsIndexEma = 100.0;
+    public float $industrialMetalsIndexTrend = 0.0;
     public float $metalsChi = 0.0;
     public float $metalsXi = 4.60517;
 
@@ -67,6 +71,7 @@ class MacroState
 
     public float $agriculturalCommodityIndex = 100.0;
     public float $agriculturalCommodityIndexEma = 100.0;
+    public float $agriculturalCommodityIndexTrend = 0.0;
     public float $agriChi = 0.0;
     public float $agriXi = 4.60517;
 

@@ -133,8 +133,8 @@ class CreditFiscalSubsystem
     public const DSR_AVERAGE_MATURITY_YEARS = 18.0;
     /** Time constant (years) of the ratio's long-run average: Drehmann & Juselius (2012, 2014) read the DSR as its deviation from a 15-year moving average. */
     public const DSR_TREND_HORIZON_YEARS = 15.0;
-    /** Annual credit growth per unit of house-price deviation from baseline: collateral values drive borrowing (Mian & Sufi 2011 home-equity channel). */
-    public const CREDIT_GROWTH_HOUSE_PRICE = 0.10;
+    /** Annual credit growth per unit of house-price deviation from trend (Mian & Sufi 2011 home-equity channel), off the episode they measure: DTI 1.00 -> 1.30 over 2002-06 is 7.0%/yr against prices ~30% over 2002. */
+    public const CREDIT_GROWTH_HOUSE_PRICE = 0.25;
     /** Annual credit growth lost per unit of the SLOOS tightening index: credit supply gates the boom. */
     public const CREDIT_GROWTH_SLOOS = 0.10;
     /** Annual credit growth lost per unit of the effective household rate above its neutral level. */

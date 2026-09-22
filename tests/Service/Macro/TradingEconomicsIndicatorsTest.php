@@ -81,12 +81,16 @@ class TradingEconomicsIndicatorsTest extends TestCase
         $dt = 0.25;
         $tfpGrowth = MacroEngine::TFP_DRIFT;
 
-        // 1. Benign commodity & supply chain conditions
+        // 1. Benign conditions: each index sits ON its own trend, so a stable price contributes nothing
+        // however high its level is. The legs take rates.
         $calmState = (new MacroStateBuilder())->build();
         $calmState->energyPriceIndex = MacroEngine::ENERGY_BASELINE;
+        $calmState->energyPriceIndexTrend = MacroEngine::ENERGY_BASELINE;
         $calmState->industrialMetalsIndex = MacroEngine::METALS_BASELINE;
         $calmState->industrialMetalsIndexEma = MacroEngine::METALS_BASELINE;
+        $calmState->industrialMetalsIndexTrend = MacroEngine::METALS_BASELINE;
         $calmState->agriculturalCommodityIndex = MacroEngine::AGRI_BASELINE;
+        $calmState->agriculturalCommodityIndexTrend = MacroEngine::AGRI_BASELINE;
         $calmState->supplyChainPressureIndex = 0.0;
         $calmState->wageGrowth = MacroEngine::TARGET_INFLATION + $tfpGrowth; // Neutral wage growth
         $calmState->outputGap = 0.0;
@@ -99,9 +103,13 @@ class TradingEconomicsIndicatorsTest extends TestCase
         $shockState = (new MacroStateBuilder())
             ->asStagflation()
             ->build();
+        // Displaced from a trend still at baseline, so the leg reads a genuine price SURGE.
         $shockState->energyPriceIndex = 180.0; // +80% energy shock
+        $shockState->energyPriceIndexTrend = MacroEngine::ENERGY_BASELINE;
         $shockState->industrialMetalsIndex = 140.0;
+        $shockState->industrialMetalsIndexTrend = MacroEngine::METALS_BASELINE;
         $shockState->agriculturalCommodityIndex = 130.0;
+        $shockState->agriculturalCommodityIndexTrend = MacroEngine::AGRI_BASELINE;
         $shockState->supplyChainPressureIndex = 2.5; // Supply bottleneck
         $shockState->wageGrowth = 0.060;            // Wage pressure
         $shockState->outputGap = -0.010;
@@ -111,6 +119,34 @@ class TradingEconomicsIndicatorsTest extends TestCase
         $this->assertGreaterThan($calmState->producerPriceInflation, $shockState->producerPriceInflation);
         $this->assertGreaterThan(0.050, $shockState->producerPriceInflation, 'Upstream wholesale cost surges must push PPI significantly higher.');
         $this->assertLessThanOrEqual(MacroEngine::MAX_PPI_INFLATION, $shockState->producerPriceInflation);
+
+        // 3. The same expensive levels with the trend caught up: an index parked at 180 for a decade is an
+        // expensive economy, not an inflating one. Reading that level as a rate was the bug.
+        $settledState = (new MacroStateBuilder())->asStagflation()->build();
+        $settledState->energyPriceIndex = 180.0;
+        $settledState->energyPriceIndexTrend = 180.0;
+        $settledState->industrialMetalsIndex = 140.0;
+        $settledState->industrialMetalsIndexTrend = 140.0;
+        $settledState->agriculturalCommodityIndex = 130.0;
+        $settledState->agriculturalCommodityIndexTrend = 130.0;
+        $settledState->supplyChainPressureIndex = 2.5;
+        $settledState->wageGrowth = 0.060;
+        $settledState->outputGap = -0.010;
+
+        $this->macroAggregateSubsystem->calculateProducerPriceInflation($settledState, $tfpGrowth, $dt);
+
+        $this->assertLessThan(
+            $shockState->producerPriceInflation,
+            $settledState->producerPriceInflation,
+            'A settled price level is not a price surge: with the trend caught up, the commodity legs must '
+            . 'contribute no inflation, however far the level sits from its nominal baseline.'
+        );
+        $this->assertLessThan(
+            0.050,
+            $settledState->producerPriceInflation,
+            'Standing commodity levels must not book permanent producer inflation; only the wage, supply '
+            . 'chain and demand legs may still be firing here.'
+        );
     }
 
     public function testTradeBalanceMundellFlemingDynamics(): void
