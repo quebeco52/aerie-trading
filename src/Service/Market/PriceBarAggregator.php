@@ -18,8 +18,20 @@ namespace App\Service\Market;
 class PriceBarAggregator
 {
     // --- Chart Resolution ---
-    /** Bars a range is reduced to; ~3px each on a typical chart, the width below which a candle stops being legible. */
+    /** Bars a CANDLE range is reduced to; ~3px each on a typical chart, the width below which a candle stops being legible. */
     public const TARGET_BARS = 400;
+
+    /**
+     * Bars a LINE range is reduced to: roughly one slot per pixel on a wide chart.
+     *
+     * A line has no minimum legible width the way a candle does, and the bar grid is also the grid the LIVE
+     * tail advances on: the chart holds its last point still until simulated time crosses a whole slot, then
+     * steps the whole series left by one. At the candle target that step is 90 ms of wall clock on a one-year
+     * range and 1.8 s on the longest, which reads as a freeze and a lurch rather than a moving price. Four
+     * times the slots makes each step four times shorter AND four times narrower; past about one slot per
+     * pixel a finer grid moves nothing the eye can resolve, so this is where the gain stops.
+     */
+    public const LINE_TARGET_BARS = 1600;
 
     /** Rows per bar floor: a bar built from one observation is a doji by construction and says nothing the line does not. */
     public const MIN_ROWS_PER_BAR = 2;

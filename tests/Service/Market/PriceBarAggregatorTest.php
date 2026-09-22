@@ -216,6 +216,62 @@ class PriceBarAggregatorTest extends TestCase
         }
     }
 
+    /**
+     * The line grid exists to keep the LIVE tail moving.
+     *
+     * The chart holds its last point still until simulated time crosses a whole slot, so the slot width in
+     * ticks is the dwell: at the candle target a one-year range steps once every nine ticks, which at the
+     * configured tick rate is 90 ms of wall clock spent frozen before the whole series lurches left.
+     */
+    public function testTheLineGridDwellsFewerTicksPerSlotThanTheCandleGrid(): void
+    {
+        $ticksPerYear = 3600;
+        $rowsPerYear = MarketTickerCommand::historyPointsPerYear($ticksPerYear);
+
+        foreach ([1, 3, 10] as $years) {
+            $rows = $this->rows($this->sawtooth($rowsPerYear * $years));
+
+            $candleBars = count($this->aggregator->aggregate($rows, $rowsPerYear * $years, PriceBarAggregator::TARGET_BARS));
+            $lineBars = count($this->aggregator->aggregate($rows, $rowsPerYear * $years, PriceBarAggregator::LINE_TARGET_BARS));
+
+            $candleDwell = ($ticksPerYear * $years) / $candleBars;
+            $lineDwell = ($ticksPerYear * $years) / $lineBars;
+
+            self::assertLessThan(
+                $candleDwell,
+                $lineDwell,
+                sprintf('A %dy line slot must span fewer ticks than the candle slot it replaces.', $years)
+            );
+            self::assertLessThanOrEqual(
+                30.0,
+                $lineDwell,
+                sprintf('A %dy line slot spans %.1f ticks: the tail freezes that long between steps.', $years, $lineDwell)
+            );
+        }
+    }
+
+    /**
+     * A slot narrower than one tick cannot be advanced a tick at a time, which is the only way the live tail
+     * moves. The row floor is what keeps the served grid clear of it at the rate this project runs at.
+     */
+    public function testTheLineGridNeverServesASlotNarrowerThanATick(): void
+    {
+        $ticksPerYear = 3600;
+        $rowsPerYear = MarketTickerCommand::historyPointsPerYear($ticksPerYear);
+
+        $bars = $this->aggregator->aggregate(
+            $this->rows($this->sawtooth($rowsPerYear)),
+            $rowsPerYear,
+            PriceBarAggregator::LINE_TARGET_BARS
+        );
+
+        self::assertLessThanOrEqual(
+            $ticksPerYear,
+            count($bars),
+            'More slots than ticks would leave the grid finer than the clock that advances it.'
+        );
+    }
+
     public function testAnEmptySeriesProducesNoBars(): void
     {
         self::assertSame([], $this->aggregator->aggregate([], 0));

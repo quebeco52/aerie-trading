@@ -48,7 +48,7 @@ class StockController extends AbstractController
     /**
      * API endpoint to retrieve historical price data for charting.
      *
-     * @param Request                $request       The HTTP request containing 'ticker' and 'range' parameters.
+     * @param Request                $request       The HTTP request carrying 'ticker', 'range' and the 'style' being drawn.
      * @param EntityManagerInterface $entityManager The entity manager.
      * @param \Redis                 $redis         The Redis instance for caching short-term data.
      *
@@ -61,6 +61,13 @@ class StockController extends AbstractController
         $range = $request->query->get('range', '1y');
 
         if (!$ticker) return $this->json([]);
+
+        // The line and the candle rendering of a range do not share a bar grid: a candle has a legible
+        // minimum width, a line does not, and the finer grid is what keeps the live tail moving rather
+        // than lurching a whole bar at a time. The chart asks for the one it is about to draw.
+        $targetBars = $request->query->get('style') === 'line'
+            ? PriceBarAggregator::LINE_TARGET_BARS
+            : PriceBarAggregator::TARGET_BARS;
 
         $ticksPerYear = (int) ($_ENV['SIM_TICKS_PER_YEAR'] ?? 14400);
         $ticksPerMonth = (int) ceil($ticksPerYear / 12);
@@ -77,7 +84,7 @@ class StockController extends AbstractController
             }
 
             // Buffered points are single ticks, so the bar has to be built here or every candle is a doji.
-            return $this->json($barAggregator->aggregate($results, count($results)));
+            return $this->json($barAggregator->aggregate($results, count($results), $targetBars));
         }
 
         // Derive row limit for simulated timeframe based on configured history sampling rate.
@@ -148,7 +155,7 @@ class StockController extends AbstractController
         $stmt = $conn->executeQuery($sql, ['id' => $targetId]);
 
         // Aggregate rows into candles via bucketed bar aggregation to preserve price extremes.
-        return $this->json($barAggregator->aggregate($stmt->iterateAssociative(), $actualCount));
+        return $this->json($barAggregator->aggregate($stmt->iterateAssociative(), $actualCount, $targetBars));
     }
 
     /**

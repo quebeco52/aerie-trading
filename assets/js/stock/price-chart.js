@@ -14,6 +14,21 @@ let lastChartPointTime = 0;
 let currentStepSize = 1;
 let currentTicker = null;
 let secondsPerTick = 600;
+let chartData = [];
+let candleData = [];
+let volumeData = [];
+
+/**
+ * Points the live series are allowed to reach before the oldest are dropped.
+ *
+ * Paint cost is set by the VISIBLE slots, not by the total, so this is a memory bound rather than a frame
+ * rate one: on a one-year range the tail appends around thirty points a second and would otherwise grow
+ * without limit for as long as the tab stays open.
+ */
+const MAX_SERIES_POINTS = 20000;
+
+/** Points dropped in one trim. Dropping a batch makes the rebuild rare enough that the hitch is not seen. */
+const TRIM_BATCH = 8000;
 
 export function initPriceChart(container, ticker, ticksPerYear = 54000) {
     if (!container || typeof LightweightCharts === 'undefined') return null;
@@ -123,7 +138,10 @@ export async function loadPriceHistory(range) {
     });
 
     try {
-        const res = await fetch(`/api/history?ticker=${encodeURIComponent(currentTicker)}&range=${encodeURIComponent(range)}`);
+        // The bar grid belongs to the rendering, not the range: a line is served four times as many slots
+        // as a candle (PriceBarAggregator::LINE_TARGET_BARS), which is what keeps the live tail moving.
+        const style = chartStyle === 'candles' ? 'candles' : 'line';
+        const res = await fetch(`/api/history?ticker=${encodeURIComponent(currentTicker)}&range=${encodeURIComponent(range)}&style=${style}`);
         if (!res.ok) return;
         const data = await res.json();
         if (!data || data.length === 0 || !areaSeries) return;
@@ -141,11 +159,18 @@ export async function loadPriceHistory(range) {
         };
 
         const anchorTime = Math.floor(Date.now() / 1000);
-        currentStepSize = Math.max(1, Math.floor((rangeSpans[range] || 31536000) / data.length));
 
-        const chartData = [];
-        const candleData = [];
-        const volumeData = [];
+        // A slot shorter than a tick cannot be advanced one tick at a time: the live clock would outrun the
+        // grid and the tail would fall further behind the price on every point. The row floor the aggregator
+        // applies keeps the served grid well clear of it, so this only ever binds on a misconfigured rate.
+        currentStepSize = Math.max(
+            secondsPerTick,
+            Math.floor((rangeSpans[range] || 31536000) / data.length)
+        );
+
+        chartData = [];
+        candleData = [];
+        volumeData = [];
 
         data.forEach((d, i) => {
             const close = parseFloat(d.price);
@@ -208,9 +233,19 @@ export function updateLivePricePoint(newPrice, volume = 0) {
     const openedNewBar = currentSimTime >= lastChartPointTime + currentStepSize;
     if (openedNewBar) {
         lastChartPointTime += currentStepSize;
+        trimSeriesIfNeeded();
     }
 
-    areaSeries.update({ time: lastChartPointTime, value: newPrice });
+    const point = { time: lastChartPointTime, value: newPrice };
+    areaSeries.update(point);
+
+    // The series is mirrored here so the tail can be trimmed: lightweight-charts has no way to drop a
+    // point, only to be handed the series again.
+    if (openedNewBar || chartData.length === 0) {
+        chartData.push(point);
+    } else {
+        chartData[chartData.length - 1] = point;
+    }
 
     if (!candleSeries) return;
 
@@ -234,18 +269,65 @@ export function updateLivePricePoint(newPrice, volume = 0) {
     lastBar.volume = (lastBar.volume || 0) + (Number(volume) || 0);
     candleSeries.update(lastBar);
 
+    if (openedNewBar || candleData.length === 0) {
+        candleData.push({ ...lastBar });
+    } else {
+        candleData[candleData.length - 1] = { ...lastBar };
+    }
+
     if (volumeSeries && lastBar.volume > 0) {
-        volumeSeries.update({
+        const volumePoint = {
             time: lastBar.time,
             value: lastBar.volume,
             color: lastBar.close >= lastBar.open ? 'rgba(78, 222, 163, 0.35)' : 'rgba(255, 179, 173, 0.35)'
-        });
+        };
+        volumeSeries.update(volumePoint);
+
+        const lastVolume = volumeData[volumeData.length - 1];
+        if (lastVolume && lastVolume.time === volumePoint.time) {
+            volumeData[volumeData.length - 1] = volumePoint;
+        } else {
+            volumeData.push(volumePoint);
+        }
+    }
+}
+
+/**
+ * Drops the oldest points once the live tail has grown past its bound.
+ *
+ * Every series shares one time scale, and that scale is indexed rather than measured: a slot exists
+ * because some series has a point at it. Trimming one series and not the others would leave the dropped
+ * slots in the index as gaps, so all three are cut to the same instant. The visible window is expressed in
+ * those same indices, which shift under the cut, so it is put back where it was pointing.
+ */
+function trimSeriesIfNeeded() {
+    if (chartData.length <= MAX_SERIES_POINTS || !lwChart || !areaSeries) return;
+
+    const cutoff = chartData[TRIM_BATCH].time;
+    const visible = lwChart.timeScale().getVisibleLogicalRange();
+
+    chartData = chartData.slice(TRIM_BATCH);
+    candleData = candleData.filter(bar => bar.time >= cutoff);
+    volumeData = volumeData.filter(bar => bar.time >= cutoff);
+
+    areaSeries.setData(chartData);
+    if (candleSeries) candleSeries.setData(candleData);
+    if (volumeSeries) volumeSeries.setData(volumeData);
+
+    if (visible) {
+        // Shifting the window by the whole batch would push it past the start of what is left and open a
+        // gutter of empty slots, so it stops at the oldest point; the zoom level is carried across either way.
+        const width = visible.to - visible.from;
+        const from = Math.max(0, visible.from - TRIM_BATCH);
+        lwChart.timeScale().setVisibleLogicalRange({ from, to: from + width });
     }
 }
 
 /** Switches between the line and candle renderings of the same series. */
 export function setChartStyle(style) {
-    chartStyle = style === 'candles' ? 'candles' : 'area';
+    const next = style === 'candles' ? 'candles' : 'area';
+    const gridChanged = next !== chartStyle;
+    chartStyle = next;
 
     if (areaSeries) areaSeries.applyOptions({ visible: chartStyle === 'area' });
     if (candleSeries) candleSeries.applyOptions({ visible: chartStyle === 'candles' });
@@ -257,6 +339,12 @@ export function setChartStyle(style) {
         btn.classList.toggle('bg-surface-container', !active);
         btn.classList.toggle('text-on-surface-variant', !active);
     });
+
+    // The two renderings are served on different bar grids and the time scale is shared by every series,
+    // so they cannot both be on the chart at once: the range is re-read at the resolution now being drawn.
+    if (gridChanged && lwChart && currentTicker && chartData.length > 0) {
+        loadPriceHistory(currentRange);
+    }
 }
 
 export function setupChartStyleButtons() {
@@ -286,5 +374,8 @@ export function destroyPriceChart() {
         candleSeries = null;
         volumeSeries = null;
         lastBar = null;
+        chartData = [];
+        candleData = [];
+        volumeData = [];
     }
 }
