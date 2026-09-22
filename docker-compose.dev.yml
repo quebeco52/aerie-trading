@@ -18,11 +18,14 @@ services:
     depends_on:
       - aerie-database
       - aerie-redis
+    environment:
+      # XDEBUG_MODE: "${XDEBUG_MODE:-profile}"
+      XDEBUG_MODE: "${XDEBUG_MODE:-off}"
     env_file:
       - .env.dev
-  
+
   aerie-worker:
-    build: 
+    build:
       context: .
       dockerfile: docker/php/Dockerfile.frankenphp
     volumes:
@@ -36,6 +39,8 @@ services:
     # to var/log/dev.log, at the tick rate, and the file passed 5 GB.
     command: sh -c "php bin/console messenger:setup-transports --env=prod --no-debug && exec php bin/console messenger:consume async --memory-limit=128M --time-limit=3600 --env=prod --no-debug"
     restart: unless-stopped
+    environment:
+      XDEBUG_MODE: "off"
     env_file:
       - .env.dev
 
@@ -52,12 +57,14 @@ services:
     depends_on:
       - aerie-database
       - aerie-redis
+    environment:
+      XDEBUG_MODE: "off"
     env_file:
       - .env.dev
-  
+
   # The Market Ticker
   aerie-ticker:
-    profiles: ["live"]
+    profiles: [ "live" ]
     build:
       context: .
       dockerfile: docker/php/Dockerfile.frankenphp
@@ -72,6 +79,8 @@ services:
     depends_on:
       - aerie-redis
       - aerie-database
+    environment:
+      XDEBUG_MODE: "off"
     env_file:
       - .env.dev
 
@@ -88,6 +97,8 @@ services:
       - "host.docker.internal:host-gateway"
     depends_on:
       - aerie-redis
+    environment:
+      XDEBUG_MODE: "off"
     env_file:
       - .env.dev
 
@@ -96,7 +107,7 @@ services:
     restart: unless-stopped
     env_file:
       - .env.dev
-    command: 
+    command:
       - --innodb-buffer-pool-size=1G
       - --innodb-log-file-size=512M
       - --innodb-flush-log-at-trx-commit=2
@@ -131,7 +142,7 @@ services:
       - "7900:7900"
     depends_on:
       - aerie-app
-  
+
 volumes:
   caddy_data:
   caddy_config:

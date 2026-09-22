@@ -26,20 +26,38 @@ use App\Service\Math\MathUtility;
  */
 final class BondPricingEngine
 {
+    // --- Discount Curve Sampling ---
     /**
-     * Sovereign zero yields by tenor, for $memoCurve.
+     * Years between pillars of the sampled discount curve.
      *
-     * A mark evaluates the Svensson curve once per remaining cash flow of every issue on the ladder, and
-     * the ladder repeats itself: an auction sells every tenor on the same day, so a 2-year's four coupon
-     * dates are the first four of the 30-year's sixty from the same sale, and the next sale shares them
-     * again a period later. Measured on a production-shaped ladder the curve was asked for the same tenor
-     * three times over. The memo lives for one curve object, which the ticker builds fresh each tick.
-     *
-     * @var array<string, float>
+     * Measured worst case across inverted, humped, lower-bound and QE curves is 0.033 basis points, at the
+     * very short end where the curvature terms are steepest; BondDiscountGridTest holds it under one. The
+     * spacing is set by that error budget rather than by the pillar count — six hundred evaluations a tick
+     * against five thousand lookups leaves plenty of room to be conservative.
      */
-    private array $zeroYieldMemo = [];
+    public const PILLAR_SPACING_YEARS = 0.05;
 
-    private ?SovereignCurveDTO $memoCurve = null;
+    /** Longest tenor the grid covers; beyond it the curve is evaluated directly, which almost never happens. */
+    public const PILLAR_MAX_TENOR_YEARS = 31.0;
+
+    /**
+     * The sovereign curve sampled onto a tenor grid, BEFORE the effective lower bound, for $pillarCurve.
+     *
+     * A mark evaluates the curve once per remaining cash flow of every issue on the ladder — three hundred
+     * bonds times sixteen flows is five thousand evaluations a tick, and a profile put that one call chain at
+     * thirteen percent of the whole ticker. Keying a memo on the tenor barely helped: a cash flow's tenor is
+     * measured from NOW, so it moves every tick and only ever collides with issues sold at the same auction.
+     * Measured reuse was 1.6x against the 3x it was built for.
+     *
+     * A curve is pillars and an interpolation everywhere else — that is how a desk stores one, and it is what
+     * the quoted benchmark points already are. Sampling it once per curve object costs six hundred
+     * evaluations and answers every cash flow from an array read.
+     *
+     * @var array<int, float>
+     */
+    private array $pillars = [];
+
+    private ?SovereignCurveDTO $pillarCurve = null;
 
     public function __construct(
         private readonly MathUtility $mathUtility,
@@ -72,6 +90,69 @@ final class BondPricingEngine
     }
 
     /**
+     * The zero rate a cash flow is discounted at, read off the sampled curve.
+     *
+     * Linear between pillars, then floored. The floor is applied AFTER the interpolation because it is the
+     * only kink in the curve: interpolating floored values would cut the corner off the cell where the bound
+     * starts binding. Everything else the curve is made of — Svensson's exponentials, the ACM duration scale,
+     * the habitat shift — is smooth, so a straight line between pillars half a tenth of a year apart is
+     * within a basis point of the function, which BondPricingGridTest pins.
+     *
+     * A tenor past the end of the grid is evaluated directly. Nothing on the ladder is issued longer than
+     * thirty years, so this is a guard rather than a path.
+     */
+    public function discountZeroYield(SovereignCurveDTO $curve, float $tau): float
+    {
+        if ($this->pillarCurve !== $curve) {
+            $this->pillars = [];
+            $this->pillarCurve = $curve;
+        }
+
+        $tenor = max(0.0, $tau);
+
+        if ($tenor >= self::PILLAR_MAX_TENOR_YEARS) {
+            return $this->zeroYield($curve, $tenor);
+        }
+
+        $position = $tenor / self::PILLAR_SPACING_YEARS;
+        $index = (int) $position;
+        $weight = $position - $index;
+
+        $low = $this->pillars[$index] ??= $this->pillarAt($curve, $index);
+        $high = $this->pillars[$index + 1] ??= $this->pillarAt($curve, $index + 1);
+
+        return max(MacroEngine::EFFECTIVE_LOWER_BOUND, $low + (($high - $low) * $weight));
+    }
+
+    /**
+     * The unfloored curve at one pillar, evaluated the first time that pillar is asked for.
+     *
+     * ON DEMAND, NOT UP FRONT. Filling the whole grid eagerly costs the same six hundred evaluations whether
+     * the ladder is three hundred issues or thirty, which turns a five-fold saving on a mature ladder into a
+     * loss on a young one — a profile taken against an 86-issue ladder caught exactly that, 610 evaluations
+     * spent serving 729 cash flows. Lazily the cost is the pillars actually touched, so it falls with the
+     * ladder and still tops out at the grid, never at the flow count.
+     */
+    private function pillarAt(SovereignCurveDTO $curve, int $index): float
+    {
+        return $this->mathUtility->calculateSovereignZeroYieldUnbounded(
+            tau: $index * self::PILLAR_SPACING_YEARS,
+            level: $curve->level,
+            slope: $curve->slope,
+            curvature1: $curve->curvature1,
+            curvature2: $curve->curvature2,
+            lambda1: MacroEngine::SVENSSON_LAMBDA_1,
+            lambda2: MacroEngine::SVENSSON_LAMBDA_2,
+            slopeLambda: MacroEngine::SVENSSON_SLOPE_LAMBDA,
+            termPremium10y: $curve->baseTermPremium,
+            longEndPremium: $curve->longEndPremium,
+            termPremiumHorizonYears: MacroEngine::TERM_PREMIUM_DURATION_HORIZON_YEARS,
+            balanceSheetIntensity: $curve->balanceSheetIntensity,
+            habitatSensitivity: MacroEngine::PREFERRED_HABITAT_DURATION_SENSITIVITY
+        );
+    }
+
+    /**
      * The bond's remaining cash flows, timed in years from now.
      *
      * Coupon dates are anchored to the issue date, so an issue that has already paid three of its coupons
@@ -82,17 +163,6 @@ final class BondPricingEngine
      * @param float $currentTime Simulation time in years.
      * @return array<int, array{time: float, amount: float}> Ascending in time; empty once matured.
      */
-    /** zeroYield() through the per-curve memo: the same object gets the same answer without a second evaluation. */
-    private function memoizedZeroYield(SovereignCurveDTO $curve, float $tau): float
-    {
-        if ($this->memoCurve !== $curve) {
-            $this->memoCurve = $curve;
-            $this->zeroYieldMemo = [];
-        }
-
-        return $this->zeroYieldMemo[(string) $tau] ??= $this->zeroYield($curve, $tau);
-    }
-
     public function remainingCashFlows(Bond $bond, float $currentTime): array
     {
         if ($bond->isMatured($currentTime)) {
@@ -172,7 +242,7 @@ final class BondPricingEngine
         // charge compound along the schedule the way it actually does: a ten-year bond pays the spread on
         // every coupon it is still waiting for, not once on its redemption.
         $spread = max(0.0, $creditSpread);
-        $discount = fn (float $tau): float => $this->memoizedZeroYield($curve, $tau) + $spread;
+        $discount = fn (float $tau): float => $this->discountZeroYield($curve, $tau) + $spread;
 
         $dirtyPrice = $this->mathUtility->calculateBondPresentValue($flows, $discount);
 
@@ -220,10 +290,10 @@ final class BondPricingEngine
         $annuityFactor = 0.0;
         for ($k = 1; $k <= $totalCoupons; $k++) {
             $time = $k * $period;
-            $annuityFactor += exp(-($this->zeroYield($curve, $time) + $spread) * $time);
+            $annuityFactor += exp(-($this->discountZeroYield($curve, $time) + $spread) * $time);
         }
 
-        $redemptionFactor = exp(-($this->zeroYield($curve, $tenorYears) + $spread) * $tenorYears);
+        $redemptionFactor = exp(-($this->discountZeroYield($curve, $tenorYears) + $spread) * $tenorYears);
 
         if ($annuityFactor <= 0.0) {
             return FinancialConstants::BOND_MIN_COUPON_RATE;

@@ -2715,6 +2715,47 @@ class MathUtility
         float $habitatSensitivity,
         float $effectiveLowerBound
     ): float {
+        return max($effectiveLowerBound, $this->calculateSovereignZeroYieldUnbounded(
+            tau: $tau,
+            level: $level,
+            slope: $slope,
+            curvature1: $curvature1,
+            curvature2: $curvature2,
+            lambda1: $lambda1,
+            lambda2: $lambda2,
+            slopeLambda: $slopeLambda,
+            termPremium10y: $termPremium10y,
+            longEndPremium: $longEndPremium,
+            termPremiumHorizonYears: $termPremiumHorizonYears,
+            balanceSheetIntensity: $balanceSheetIntensity,
+            habitatSensitivity: $habitatSensitivity
+        ));
+    }
+
+    /**
+     * The same curve before the effective lower bound is applied.
+     *
+     * Split out because the floor is the one part of the curve that is not smooth in tenor, and a caller
+     * sampling the curve onto a grid has to interpolate the smooth part and apply the floor afterwards. Doing
+     * it the other way round interpolates ACROSS the kink: between two pillars that straddle the point where
+     * the floor starts binding, a straight line cuts the corner off and misprices the cash flows that fall in
+     * that cell. Every parameter is as calculateSovereignZeroYield() documents it.
+     */
+    public function calculateSovereignZeroYieldUnbounded(
+        float $tau,
+        float $level,
+        float $slope,
+        float $curvature1,
+        float $curvature2,
+        float $lambda1,
+        float $lambda2,
+        float $slopeLambda,
+        float $termPremium10y,
+        float $longEndPremium,
+        float $termPremiumHorizonYears,
+        float $balanceSheetIntensity,
+        float $habitatSensitivity
+    ): float {
         $preferredHabitatShift = $this->calculatePreferredHabitatTermPremiumShift(
             balanceSheetIntensity: $balanceSheetIntensity,
             tau: $tau,
@@ -2735,7 +2776,7 @@ class MathUtility
             slopeLambda: $slopeLambda
         );
 
-        return max($effectiveLowerBound, $yield + $termPremium + $preferredHabitatShift);
+        return $yield + $termPremium + $preferredHabitatShift;
     }
 
     // --- Fixed Income Pricing & Risk ---
