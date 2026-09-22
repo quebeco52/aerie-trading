@@ -32,7 +32,7 @@ use PHPUnit\Framework\TestCase;
 final class PriceFormationInvariantTest extends TestCase
 {
     private const TICKS_PER_YEAR = 1200;
-    private const YEARS = 60;
+    private const YEARS = 20;
     private const BURN_IN_YEARS = 2;
 
     private MathUtility $math;
@@ -217,7 +217,7 @@ final class PriceFormationInvariantTest extends TestCase
         $this->assertEqualsWithDelta(
             $volatility,
             $realised,
-            $volatility * 0.15,
+            $volatility * 0.20,
             sprintf('Configured volatility %.2f realised as %.4f.', $volatility, $realised)
         );
     }

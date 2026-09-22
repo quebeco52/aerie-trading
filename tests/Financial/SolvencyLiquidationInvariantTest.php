@@ -17,7 +17,6 @@ use App\Service\Math\MathUtility;
 use Doctrine\DBAL\Connection;
 use Doctrine\ORM\EntityManagerInterface;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
-use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
 
@@ -41,16 +40,6 @@ final class SolvencyLiquidationInvariantTest extends TestCase
 {
     /** Quarters in default to test with: far past any cure period, so the grace clock cannot be what saves it. */
     private const UNCURED_QUARTERS = 8;
-
-    public static function seedRowProvider(): array
-    {
-        $rows = [];
-        foreach (InitialMarket::STOCKS as $row) {
-            $rows[$row['ticker']] = [$row];
-        }
-
-        return $rows;
-    }
 
     private function buildOperator(): MarketOperator
     {
@@ -104,29 +93,33 @@ final class SolvencyLiquidationInvariantTest extends TestCase
         return $stock;
     }
 
-    #[DataProvider('seedRowProvider')]
-    public function testAnEmptyTreasuryNeverLiquidatesASolventFirm(array $row): void
+    public function testAnEmptyTreasuryNeverLiquidatesASolventFirmAcrossInitialMarket(): void
     {
-        $stock = $this->seedFromRow($row);
+        $operator = $this->buildOperator();
+        $macro = new MacroStateDTO();
 
-        // The worst liquidity position the engine can express: not a cent of cash, principal missed, and
-        // the cure period long gone.
-        $stock->setCorporateTreasury('0.00');
-        $stock->setPaymentDefault(true);
-        $stock->setQuartersInDefault(self::UNCURED_QUARTERS);
+        foreach (InitialMarket::STOCKS as $row) {
+            $stock = $this->seedFromRow($row);
 
-        $this->buildOperator()->enforceMarketStability([$stock], new MacroStateDTO());
+            // The worst liquidity position the engine can express: not a cent of cash, principal missed, and
+            // the cure period long gone.
+            $stock->setCorporateTreasury('0.00');
+            $stock->setPaymentDefault(true);
+            $stock->setQuartersInDefault(self::UNCURED_QUARTERS);
 
-        $this->assertFalse(
-            $stock->isBankrupt(),
-            sprintf(
-                '%s was liquidated with $%.1fB of equity and $%.1fB of retained earnings because its treasury was empty',
-                $row['ticker'],
-                (float) $row['total_equity'] / 1e9,
-                (float) $row['retained_earnings'] / 1e9
-            )
-        );
-        $this->assertGreaterThan(0.0, (float) $stock->getPrice(), "{$row['ticker']} had its equity wiped");
+            $operator->enforceMarketStability([$stock], $macro);
+
+            $this->assertFalse(
+                $stock->isBankrupt(),
+                sprintf(
+                    '%s was liquidated with $%.1fB of equity and $%.1fB of retained earnings because its treasury was empty',
+                    $row['ticker'],
+                    (float) $row['total_equity'] / 1e9,
+                    (float) $row['retained_earnings'] / 1e9
+                )
+            );
+            $this->assertGreaterThan(0.0, (float) $stock->getPrice(), "{$row['ticker']} had its equity wiped");
+        }
     }
 
     /**

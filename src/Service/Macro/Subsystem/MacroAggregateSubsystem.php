@@ -59,6 +59,8 @@ class MacroAggregateSubsystem
     public const KALDOR_LENDING_STANDARDS_DRAG = 0.025;
     /** Countercyclical fiscal stimulus multiplier from corporate tax rate cuts. */
     public const KALDOR_FISCAL_MULTIPLIER = 0.50;
+    /** Blanchard-Perotti (2002) automatic stabilisers, the fiscal leg that needs no legislation: progressive receipts and transfer outlays move with income inside the quarter, so this one is read off the CURRENT gap while the discretionary legs above lag. Held below the OECD budget elasticity (~0.5 at a ~0.5 multiplier) because it is a contemporaneous spring and every point of it comes off the left tail. */
+    public const KALDOR_AUTOMATIC_STABILISER = 0.15;
     /** Sensitivity of the output gap to physical capital stock overhang: the slow half of the Kaldor-Kalecki phase space, and the pent-up demand that ends a slump once the overhang has gone negative. */
     public const KALDOR_CAPITAL_DRAG = 0.25;
     /** Demand response to a capital SHORTFALL, well under the drag an excess exerts: scrapped capacity does not summon construction while balance sheets are still impaired (Bertola-Caballero 1994 irreversibility). */
@@ -81,6 +83,18 @@ class MacroAggregateSubsystem
     public const DEMAND_SHOCK_REVERSION = 0.60;
     /** Innovation volatility of the aggregate demand disturbance, in annualized output gap drift units. */
     public const DEMAND_SHOCK_SIGMA = 0.0050;
+
+    // --- Rare Demand Disasters (Barro 2006, Gourio 2012; Kou 2002 jump) ---
+    /** Disaster arrivals per year in either direction. The Gaussian innovation above is symmetric and its worst quarter in 20 sim-years reaches -1.8pp/yr against a real CBO bust descent of -4.7pp/yr, so the only cause of a slump is 2.6x too small to make one. */
+    public const DEMAND_DISASTER_INTENSITY = 0.20;
+    /** Probability a disaster is an upside demand surprise. Barro's disaster set is one-sided; a quarter weight keeps booms possible while leaving the left tail three times heavier. */
+    public const DEMAND_DISASTER_UP_PROBABILITY = 0.25;
+    /** Exponential rate of the upside jump: mean 1.0pp/yr of demand, half the downside, so expansions build gradually and slumps arrive whole. */
+    public const DEMAND_DISASTER_UP_RATE = 100.0;
+    /** Exponential rate of the downside jump: mean 2.0pp/yr of demand. The exponential tail puts a 4pp/yr shock once per ~16y and a 6pp/yr once per ~45y, matching the 40% of real busts that run past -4%. */
+    public const DEMAND_DISASTER_DOWN_RATE = 75.0;
+    /** Cap on one disaster (8pp/yr of demand, four mean down-jumps). Guards the tail of the exponential draw without binding on the calibrated range. */
+    public const DEMAND_DISASTER_CAP = 0.05;
 
     /** Stochastic micro-diffusion volatility of the output gap: realistic quarterly variance without breaking cycle phase. */
     public const OUTPUT_GAP_DIFFUSION_SIGMA = 0.0025;
@@ -268,7 +282,7 @@ class MacroAggregateSubsystem
      * Kaldor (1940) Non-Linear Business Cycle with Modigliani Wealth Effect & Marshall-Lerner FX Drag.
      *
      * Solves continuous macroeconomic aggregate demand dynamics:
-     *   dy = [Momentum - CapacityCeiling(y>0) - RealRateDrag + FiscalStimulus - CapitalOverhang + WealthEffect - FxDrag - CrisisDeleveraging - LendingStandards + DemandShock] * dt
+     *   dy = [Momentum - CapacityCeiling(y>0) - RealRateDrag + FiscalStimulus + AutomaticStabilisers - CapitalOverhang + WealthEffect - FxDrag - CrisisDeleveraging - LendingStandards + DemandShock] * dt
      *
      * @param MacroState $state             Current macroeconomic state.
      * @param float      $yield5y           5-Year Treasury yield benchmark for business borrowing.
@@ -312,10 +326,18 @@ class MacroAggregateSubsystem
         $momentum = self::KALDOR_MOMENTUM * $y;
         // Kaldor (1940) non-linear asymmetric capacity ceiling constraint.
         $cubicConstraint = $y > 0.0 ? self::KALDOR_CAPACITY * pow($y, 3) : 0.0;
-        // Blanchard & Perotti (2002) fiscal impulse via automatic stabilizers and discretionary spending.
+        // Blanchard & Perotti (2002) DISCRETIONARY fiscal impulse: a statutory rate and an appropriated outlay
+        // both clear a recognition and legislative lag, so this leg reaches demand late by construction, and a
+        // countercyclical force delivered late subtracts from the loop's damping. It stays lagged because it
+        // genuinely is; the fast half of fiscal policy is the stabiliser leg below, which this had been folding in.
         $spendingShift = ($state->governmentSpendingIndexEma / MacroEngine::GOVT_SPENDING_BASELINE) - 1.0;
-        $fiscalStimulus = (self::KALDOR_FISCAL_MULTIPLIER * (MacroEngine::TARGET_CORPORATE_TAX_RATE - $state->corporateTaxRate))
+        $discretionaryFiscal = (self::KALDOR_FISCAL_MULTIPLIER * (MacroEngine::TARGET_CORPORATE_TAX_RATE - $state->corporateTaxRate))
             + (self::KALDOR_GOVT_SPENDING_MULTIPLIER * $spendingShift);
+
+        // Blanchard & Perotti (2002) AUTOMATIC stabilisers, on the contemporaneous gap: nobody legislates them,
+        // so they carry no lag and act as a spring rather than the discretionary leg's anti-damper.
+        $automaticStabiliser = -self::KALDOR_AUTOMATIC_STABILISER * $y;
+
         // Bertola & Caballero (1994) asymmetric capital overhang drag reflecting investment irreversibility.
         $capitalDrag = $state->capitalStockOverhang >= 0.0
             ? self::KALDOR_CAPITAL_DRAG * $state->capitalStockOverhang
@@ -383,6 +405,19 @@ class MacroAggregateSubsystem
         $state->demandShock += (-self::DEMAND_SHOCK_REVERSION * $state->demandShock * $dt)
             + (self::DEMAND_SHOCK_SIGMA * $stressMultiplier * sqrt($dt) * $demandZ);
 
+        // Barro (2006) rare demand disaster: the one-sided cause a slump needs, since the Gaussian
+        // innovation above is symmetric and too small to dig one. Added in 78575e9 and gone again by
+        // 9a3ecb1, whose message covers neither -- and which left MathUtility::calculateCompensatedKouJump
+        // with its seven tests and no caller. Restored here; without it the gap's skew is ~0 and no quarter
+        // in 1260 simulated years reaches -4%. Compensated, so it bends the shape without shifting the mean.
+        $state->demandShock += $this->mathUtility->calculateCompensatedKouJump(
+            lambda: self::DEMAND_DISASTER_INTENSITY,
+            pUp: self::DEMAND_DISASTER_UP_PROBABILITY,
+            etaUp: self::DEMAND_DISASTER_UP_RATE,
+            etaDown: self::DEMAND_DISASTER_DOWN_RATE,
+            cap: self::DEMAND_DISASTER_CAP,
+            dt: $dt
+        );
 
         // Every channel signed as it acts on demand, so a drag reads negative wherever it is looked at.
         // This array IS the drift: it is summed below and handed to the probe unchanged, so a channel
@@ -392,7 +427,8 @@ class MacroAggregateSubsystem
             'cubicConstraint' => -$cubicConstraint,
             'monetaryDrag' => -$monetaryDrag,
             'creditFrictionDrag' => -$creditFrictionDrag,
-            'fiscalStimulus' => $fiscalStimulus,
+            'fiscalStimulus' => $discretionaryFiscal,
+            'automaticStabiliser' => $automaticStabiliser,
             'capitalDrag' => -$capitalDrag,
             'inventoryDrag' => -$inventoryDrag,
             'housingWealthEffect' => $housingWealthEffect,

@@ -68,6 +68,12 @@ class MonetaryPolicySubsystem
     public const TAYLOR_INFLATION_CORE_WEIGHT = 0.70;
     /** Bernanke (2015) blend: weight on forward inflation expectations (TIPS breakeven) in the Taylor Rule inflation measure. */
     public const TAYLOR_INFLATION_ANCHOR_WEIGHT = 0.30;
+
+    // --- Forward-Looking Policy Horizon (Clarida, Gali & Gertler 2000; Batini & Haldane 1999) ---
+    /** Quarters of gap momentum the rule projects forward. One quarter is what a staff projection actually carries; the longer horizons swept here read as foresight but act as gain, buying a broader spectrum with the left tail (0.75y halves the share of quarters below -3%). */
+    public const TAYLOR_GAP_FORECAST_YEARS = 0.25;
+    /** Cap on that projection in gap units: a quarter's momentum extrapolated a year out is a forecast, not a measurement, and an uncapped derivative hands the rule the diffusion term. */
+    public const TAYLOR_GAP_FORECAST_CAP = 0.020;
     /** Evans Rule forward guidance: Maximum inflation ceiling tolerated while holding rates at ZLB. */
     public const EVANS_RULE_INFLATION_CAP = 0.025;
     /** Rate hiking partial-adjustment speed per year (Woodford 2003 inertial gradualism, Clarida-Gali-Gertler rho ~0.8 quarterly); at 0.8 the rate trailed a rising target by ~140bp through every boom and policy never turned restrictive. */
@@ -213,6 +219,39 @@ class MonetaryPolicySubsystem
     }
 
     /**
+     * Projected output gap the policy rule responds to (Clarida, Galí & Gertler 2000; Batini & Haldane 1999).
+     *
+     * CGG's rule responds to E_t[y_{t+k}] rather than to a trailing measure, and the difference is phase,
+     * not gain. Decompose a delayed response -k*y(t-tau) at frequency w: it splits into a spring
+     * -k*cos(w*tau)*y and a term +k*sin(w*tau)/w * dy/dt that subtracts from the loop's damping, so a lag
+     * spends restoring force on anti-damping, and at w*tau = 90 degrees spends all of it. Measured over 45
+     * simulated years the delivered stance lagged the gap by 6 of the cycle's 24 quarters -- exactly 90
+     * degrees -- and the gap rang at that frequency: 90% of its variance inside the 4-9y band against a real
+     * ~50%, autocorrelation -0.79 at lag 13q against a real ~-0.15. The loop stayed net stable (AR(2) zeta
+     * +0.38); it was a lightly damped resonance, not a self-exciting one.
+     *
+     * Projecting the gap forward is the lead compensation, and is what a staff forecast is for. The trend
+     * term is exact rather than estimated: the EMA's own ODE gives d(ema)/dt = (y - ema) / horizon, and
+     * Brown (1963) linear exponential smoothing forecasts h years out as level + h * trend. During cold
+     * start the EMA still holds its seed, so no trend is read off it.
+     *
+     * @param MacroState $state Current macroeconomic state.
+     * @return float Output gap projected TAYLOR_GAP_FORECAST_YEARS ahead.
+     */
+    private function cyclicalGapForecast(MacroState $state): float
+    {
+        if ($state->outputGapEma === 0.015 && $state->outputGap !== 0.015) {
+            return $state->outputGap;
+        }
+
+        $trend = ($state->outputGap - $state->outputGapEma) / MacroAggregateSubsystem::STANDARD_EMA_HORIZON_YEARS;
+        $projection = $trend * self::TAYLOR_GAP_FORECAST_YEARS;
+
+        return $state->outputGapEma
+            + max(-self::TAYLOR_GAP_FORECAST_CAP, min(self::TAYLOR_GAP_FORECAST_CAP, $projection));
+    }
+
+    /**
      * Taylor (1993) Monetary Policy Rule with Evans (2012) Forward Guidance.
      *
      * Computes the central bank's nominal policy rate target:
@@ -238,10 +277,7 @@ class MonetaryPolicySubsystem
 
         $inflationMeasure = $this->calculateExpectedInflation($state, $targetInflation);
 
-        // Clarida, Galí & Gertler (2000) forward-looking Taylor rule responding to cyclical trend EMA.
-        $cyclicalGap = ($state->outputGapEma === 0.015 && $state->outputGap !== 0.015)
-            ? $state->outputGap
-            : $state->outputGapEma;
+        $cyclicalGap = $this->cyclicalGapForecast($state);
 
         // Cukierman & Muscatelli (2008) asymmetric recession-averse Taylor rule output gap weighting.
         if ($cyclicalGap < 0.0) {
@@ -345,10 +381,9 @@ class MonetaryPolicySubsystem
             $effectiveTarget = $currentPolicyRate;
         }
 
-        // Clarida, Galí & Gertler (2000) policy inertia evaluated on cyclical output trend.
-        $cyclicalGap = ($state->outputGapEma === 0.015 && $state->outputGap !== 0.015)
-            ? $state->outputGap
-            : $state->outputGapEma;
+        // Clarida, Galí & Gertler (2000) policy inertia evaluated on the same projected gap the target uses,
+        // so the recession panic leg accelerates on a slump that is still opening rather than one already dug.
+        $cyclicalGap = $this->cyclicalGapForecast($state);
 
         if ($effectiveTarget > $currentPolicyRate) {
             $cbSpeed = self::CB_HIKE_SMOOTHING_SPEED;

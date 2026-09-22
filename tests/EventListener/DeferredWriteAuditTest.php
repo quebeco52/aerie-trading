@@ -31,7 +31,7 @@ class DeferredWriteAuditTest extends TestCase
 
     private function entityManager(bool $explicit = true): EntityManager
     {
-        $config = ORMSetup::createAttributeMetadataConfiguration([__DIR__ . '/../../src/Entity'], false);
+        $config = ORMSetup::createAttributeMetadataConfiguration([__DIR__ . '/../../src/Entity'], true);
         $config->enableNativeLazyObjects(true);
 
         $connection = DriverManager::getConnection([

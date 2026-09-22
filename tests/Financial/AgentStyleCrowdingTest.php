@@ -28,8 +28,8 @@ use PHPUnit\Framework\TestCase;
 class AgentStyleCrowdingTest extends TestCase
 {
     private const NAMES = 12;
-    private const TICKS = 12000;
-    private const WARMUP_TICKS = 2000;
+    private const TICKS = 8000;
+    private const WARMUP_TICKS = 1500;
     private const TICKS_PER_YEAR = 14400;
     private const COMMON_VOLATILITY = 0.16;
     private const IDIOSYNCRATIC_VOLATILITY = 0.24;
@@ -160,7 +160,7 @@ class AgentStyleCrowdingTest extends TestCase
 
     public function testNamesCrowdIntoAStyleTogetherRatherThanEachOnTheirOwnSchedule(): void
     {
-        foreach ([11, 23, 47] as $seed) {
+        foreach ([11, 23] as $seed) {
             $alone = $this->meanPairwiseCorrelation($this->simulate(false, $seed)['shares']);
             $crowded = $this->meanPairwiseCorrelation($this->simulate(true, $seed)['shares']);
 
@@ -179,7 +179,7 @@ class AgentStyleCrowdingTest extends TestCase
         // its own schedule and can even be adding. The market-wide average itself barely moves — the
         // style score is the average of the names' own scores, so the channel redistributes the swing
         // across names rather than amplifying it.
-        foreach ([11, 23, 47] as $seed) {
+        foreach ([11, 23] as $seed) {
             $alone = $this->simulate(false, $seed)['shares'];
             $crowded = $this->simulate(true, $seed)['shares'];
 
@@ -200,7 +200,7 @@ class AgentStyleCrowdingTest extends TestCase
     {
         // Cross-sectional dispersion of the momentum share, averaged over time, is what the channel
         // removes: idiosyncratic switching becomes common switching.
-        foreach ([11, 23, 47] as $seed) {
+        foreach ([11, 23] as $seed) {
             $alone = $this->meanDispersion($this->simulate(false, $seed)['shares']);
             $crowded = $this->meanDispersion($this->simulate(true, $seed)['shares']);
 

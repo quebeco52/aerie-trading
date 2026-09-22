@@ -7,7 +7,7 @@ namespace App\Service\Macro\Recorder;
 /**
  * Accumulates the output gap's drift channels, so a move in the gap can be attributed rather than guessed at.
  *
- * App\Service\Macro\Subsystem\MacroAggregateSubsystem::calculateOutputGap sums eighteen demand and supply
+ * App\Service\Macro\Subsystem\MacroAggregateSubsystem::calculateOutputGap sums nineteen demand and supply
  * channels into one drift and returns a single number. Watching that number says the economy turned; it
  * never says which channel turned it, and the channels routinely cancel — a recovery running at +2.4pp/yr
  * of monetary stimulus against -1.5pp/yr of private brakes reads on the dashboard as a quiet +0.9.

@@ -1064,8 +1064,9 @@ class MacroAggregateSubsystemTest extends TestCase
         );
 
         // Every channel in the drift is named, so the panel cannot silently drop one.
-        $this->assertCount(18, $window['contributions']);
+        $this->assertCount(19, $window['contributions']);
         $this->assertArrayHasKey('monetaryDrag', $window['contributions']);
+        $this->assertArrayHasKey('automaticStabiliser', $window['contributions']);
         $this->assertEqualsWithDelta(array_sum($window['contributions']), $window['drift'], 1e-15);
     }
 

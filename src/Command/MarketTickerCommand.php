@@ -25,6 +25,7 @@ use App\Service\Event\NarrativeEngine;
 use App\Service\Event\MarketEventPublisher;
 use App\Service\District\DistrictRoster;
 use App\Entity\Etf;
+use Doctrine\DBAL\Exception\RetryableException;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
@@ -577,6 +578,17 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
             try {
                 $this->entityManager->beginTransaction();
 
+                // Instruments whose resting orders need a look, collected here and dispatched AFTER the
+                // commit below. The transport is Redis, so a dispatch is visible to the worker the instant
+                // it is made and owes nothing to this transaction: sending from inside the tick handed the
+                // worker a ticker whose rows the tick still held, and the worker takes them in the opposite
+                // order it does (its user row first, by TradeExecutionService's pessimistic lock, then the
+                // stock) -- the lock cycle InnoDB answers with a 1213. Routing the message to the worker
+                // moved the work out of this transaction; it did not stop it running CONCURRENTLY with it.
+                // Same rule the margin sweep already follows below, and a tick that rolls back now drops
+                // these instead of having asked the worker to fill against a price that never happened.
+                $pendingLimitOrderChecks = [];
+
                 $lap('operator+hedge');
                 $result = $this->stockTracker->updateStocks($stocks, $dt, $isHistoryTick, $macroState, $tickCount, $this->ticksPerYear);
                 $lap('stocks');
@@ -889,7 +901,7 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                         // uncertainty costs exactly one dispatch rather than stranding resting orders.
                         // The gate keeps it at one: the key stays missing until the worker has answered.
                         if ($this->limitOrderGate->allow($ticker, $tickCount)) {
-                            $this->messageBus->dispatch(new \App\Message\ProcessLimitOrdersMessage($ticker, $price));
+                            $pendingLimitOrderChecks[$ticker] = $price;
                         }
                         continue;
                     }
@@ -897,7 +909,7 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                     $bounds = json_decode($boundsJson, true);
                     if ($price <= ($bounds['buy'] ?? 0.0) || $price >= ($bounds['sell'] ?? 999999999.0)) {
                         if ($this->limitOrderGate->allow($ticker, $tickCount)) {
-                            $this->messageBus->dispatch(new \App\Message\ProcessLimitOrdersMessage($ticker, $price));
+                            $pendingLimitOrderChecks[$ticker] = $price;
                         }
                     } else {
                         $this->limitOrderGate->settle($ticker);
@@ -1114,6 +1126,12 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                 $this->entityManager->commit();
                 $lap('commit');
 
+                // Drained here, with the tick's locks released: the worker is free to take the rows it needs.
+                foreach ($pendingLimitOrderChecks as $pendingTicker => $pendingPrice) {
+                    $this->messageBus->dispatch(new \App\Message\ProcessLimitOrdersMessage($pendingTicker, $pendingPrice));
+                }
+                $lap('limit dispatch');
+
                 // The margin sweep runs AFTER the tick commits, never inside it. A forced sale goes through
                 // the ordinary execution path, which opens its own transaction, and nesting one account's
                 // liquidation inside the whole market's tick would couple the two.
@@ -1121,6 +1139,30 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                     $this->liquidationService->sweep($macroState->policyRate, $snapshotInterval * $dt);
                     $lap('margin sweep');
                 }
+            } catch (RetryableException $e) {
+                // A deadlock or a lock-wait timeout is not a fault in the tick: InnoDB saw two transactions
+                // cross, picked one and rolled it back, and the state it left is consistent. What it costs
+                // is THIS tick, and the next one recomputes everything from the rows on disk -- so the
+                // handling is to take the loss and carry on, never the generic path's five-second pause,
+                // which at a 10 ms interval freezes the market for 500 ticks over a fault that is already
+                // over. The tick is not re-run in place either: the operator pass and the option hedge run
+                // before the transaction opens, against the entity graph the clear() below discards, so a
+                // second pass through the body would drop their work rather than repeat it.
+                if ($this->entityManager->getConnection()->isTransactionActive()) {
+                    $this->entityManager->rollback();
+                }
+
+                $output->writeln("<comment>Tick {$tickCount} lost to lock contention: " . $e->getMessage() . "</comment>");
+
+                if (!$this->entityManager->isOpen()) {
+                    $output->writeln("<error>EntityManager is closed. Exiting Ticker to reboot...</error>");
+                    return Command::FAILURE;
+                }
+
+                $this->entityManager->clear();
+                $stocks = $this->entityManager->getRepository(Stock::class)->findAll();
+                $indexFunds = $this->loadIndexFunds();
+                $bonds = $this->entityManager->getRepository(Bond::class)->findBy(['status' => Bond::STATUS_ACTIVE]);
             } catch (\Exception $e) {
                 if ($this->entityManager->getConnection()->isTransactionActive()) {
                     $this->entityManager->rollback();

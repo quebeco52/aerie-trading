@@ -16,6 +16,7 @@
     <php>
         <ini name="display_errors" value="1" />
         <ini name="error_reporting" value="-1" />
+        <ini name="memory_limit" value="512M" />
         <server name="APP_ENV" value="test" force="true" />
         <env name="APP_ENV" value="test" force="true" />
         <server name="APP_SECRET" value="6c5e75877fba1c8d50e8a719d2b8b93b" force="true" />
