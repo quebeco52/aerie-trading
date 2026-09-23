@@ -747,6 +747,52 @@ class TreasuryEngineTest extends TestCase
     }
 
     /**
+     * Debt overhang (Myers 1977): rescue equity is sold only while the firm's assets still cover the debt
+     * ahead of the new shares. Below that, a new dollar goes to the creditors and nobody subscribes, so the
+     * missed maturity stands and the firm restructures, rather than selling stock into the hole every quarter
+     * until its shares have been diluted hundreds of times over.
+     */
+    public function testRescueEquityIsSoldOnlyWhileTheGoingConcernCoversItsDebt(): void
+    {
+        foreach (['solvent' => 3_010_000_000.0, 'insolvent' => 510_000_000.0] as $case => $assetValue) {
+            $stock = $this->createSolventCorporate();
+            $stock->setWholesaleDebt('2000000000.00');
+            $stock->setSharesOutstanding('100000000');
+
+            $ctx = $this->createAllocationContext($stock, stockCompensation: 0.0, currentPrice: 50.0);
+            $ctx->wholesaleDebt = 2_000_000_000.0;
+            $ctx->newTreasury = 10_000_000.0;
+            $ctx->health = $this->healthThatCannotIssue($ctx->health);
+
+            $debtEngine = $this->createMock(DebtEngine::class);
+            $debtEngine->method('rollMaturities')->willReturn(
+                new MaturityRollDTO(maturingPrincipal: 300_000_000.0, refinanced: false, principalRepaid: 10_000_000.0, unfundedShortfall: 290_000_000.0)
+            );
+            $debtEngine->method('assessGoingConcern')->willReturn(new \App\DTO\GoingConcernDTO(
+                trailingEbit: 150_000_000.0,
+                trailingEbitda: 170_000_000.0,
+                assetValue: $assetValue,
+                cash: 10_000_000.0,
+                claims: 2_000_000_000.0
+            ));
+            // The subscription draw always clears, so the solvency test is the only thing that can refuse it.
+            $mathUtility = $this->getMockBuilder(MathUtility::class)->onlyMethods(['generateUniform'])->getMock();
+            $mathUtility->method('generateUniform')->willReturn(0.0);
+
+            (new TreasuryEngine($this->corporateMetrics, $debtEngine, $this->capExEngine, $mathUtility))->finalizeLiquidity($ctx);
+
+            if ($case === 'solvent') {
+                $this->assertGreaterThan(0.0, $ctx->equityRaised, 'a solvent firm can still sell rescue equity');
+                $this->assertFalse($stock->isPaymentDefault(), 'and the raise funds the maturity');
+            } else {
+                $this->assertSame(0.0, $ctx->equityRaised, 'nobody subscribes to shares that are already out of the money');
+                $this->assertEqualsWithDelta(100_000_000.0, (float) $stock->getSharesOutstanding(), 1e-6);
+                $this->assertTrue($stock->isPaymentDefault(), 'the missed maturity stands, and the firm restructures');
+            }
+        }
+    }
+
+    /**
      * A committed facility is a term contract. It is renegotiated upward as the business grows and it does
      * not shrink because one bad quarter shrank revenue -- which is exactly what a commitment recomputed
      * from current revenue on every call did, halving the backstop at the moment it was the only thing

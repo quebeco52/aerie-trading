@@ -80,6 +80,7 @@ class CapitalAllocationEngineTest extends TestCase
         );
 
         $this->debtEngineMock->method('analyzeDebtHealth')->willReturn($debtHealthMock);
+        $this->debtEngineMock->method('analyzeTrailingDebtHealth')->willReturn($debtHealthMock);
 
         $this->mathUtilityMock = $this->createStub(MathUtility::class);
         $this->mathUtilityMock->method('calculateManagementFairValuePE')->willReturn(15.0);
@@ -419,35 +420,26 @@ class CapitalAllocationEngineTest extends TestCase
     }
 
     /**
-     * Coverage, cost of capital and the hurdle that gate dividends and buybacks have to be read off the
-     * margin the firm actually reported, the same figure the earnings engine and the solvency tests use.
-     * On the structural margin, which only reinvestment decay moves, a firm in a margin collapse kept
-     * paying a dividend on coverage it no longer had.
+     * Coverage, cost of capital and the hurdle that gate dividends, buybacks and borrowing are read off what
+     * the firm earned over the last twelve months, as its lenders measure it (DebtEngine resolves that
+     * window, and the reported margin before a first report). On the structural margin, which only
+     * reinvestment decay moves, a firm in a margin collapse kept paying a dividend on coverage it no longer
+     * had; on one annualized quarter the verdict flipped with the seasons.
      */
-    public function testDistributionsAreGatedOnTheReportedMarginNotTheStructuralOne(): void
+    public function testDistributionsAreGatedOnTheTrailingYearTheLendersRead(): void
     {
         $health = $this->buildHealth();
         $macroState = new MacroStateDTO(corporateTaxRate: 0.21);
-
-        $reported = $this->buildDistributor('RPTD');
-        $reported->setOperatingMargin('0.30');
-        $reported->setReportedOperatingMargin(0.03);
+        $stock = $this->buildDistributor('TTMD');
 
         $debtEngine = $this->createMock(DebtEngine::class);
         $debtEngine->expects($this->once())
-            ->method('analyzeDebtHealth')
-            ->with($this->identicalTo($reported), $this->identicalTo($macroState), $this->isNull(), $this->identicalTo(0.03))
+            ->method('analyzeTrailingDebtHealth')
+            ->with($this->identicalTo($stock), $this->identicalTo($macroState))
             ->willReturn($health);
-        $this->buildEngineWith($debtEngine)->allocateCapital($reported, 4.00, 2.00, 10.00, 1000000.0, $macroState);
+        $debtEngine->expects($this->never())->method('analyzeDebtHealth');
 
-        // Before a first report there is nothing reported, and the debt engine falls back to structural itself.
-        $unreported = $this->buildDistributor('UNRP');
-        $debtEngine = $this->createMock(DebtEngine::class);
-        $debtEngine->expects($this->once())
-            ->method('analyzeDebtHealth')
-            ->with($this->identicalTo($unreported), $this->identicalTo($macroState), $this->isNull(), $this->isNull())
-            ->willReturn($health);
-        $this->buildEngineWith($debtEngine)->allocateCapital($unreported, 4.00, 2.00, 10.00, 1000000.0, $macroState);
+        $this->buildEngineWith($debtEngine)->allocateCapital($stock, 4.00, 2.00, 10.00, 1000000.0, $macroState);
     }
 
     private function buildEngineWith(DebtEngine $debtEngine): CapitalAllocationEngine
@@ -573,6 +565,7 @@ class CapitalAllocationEngineTest extends TestCase
     {
         $debtEngine = $this->createStub(DebtEngine::class);
         $debtEngine->method('analyzeDebtHealth')->willReturn($health);
+        $debtEngine->method('analyzeTrailingDebtHealth')->willReturn($health);
 
         return $debtEngine;
     }

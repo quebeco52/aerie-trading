@@ -288,6 +288,59 @@ class IndustryShareLedgerTest extends TestCase
         $this->assertEqualsWithDelta(1.0, $described['roster_trend_share'], 1e-9);
     }
 
+    /**
+     * A merger review measures the acquirer's market: its trend demand in revenue, the roster's trend shares
+     * of it (the concentration index is their sum of squares, the atomistic fringe adding nothing) and the
+     * fringe still off the board. A leader at 30% beside a peer at 10% sits in a market of 10,000 with
+     * HHI 1,000 and 60% left to buy.
+     */
+    public function testTheMergerMarketIsTheAcquirersTrendDemandAndTheRostersShares(): void
+    {
+        $ledger = new IndustryShareLedger(new InMemoryIndustryShareStore());
+        $leader = $this->stock('LDR', 3_000.0);
+        $peer = $this->stock('PER', 1_000.0);
+        $macro = new MacroStateDTO(potentialGdpIndex: 1.0, gdpDeflator: 1.0, totalTime: 0.0);
+
+        $this->assertNull($ledger->describeMergerMarket($leader, $macro, 0.0, 10, 252), 'no market before the firm is priced');
+
+        $ledger->resolveIndustryCapacityRatio($leader, 3_000.0, 0.30, 1.0, 0.0, 0.0, 10, 252);
+        $ledger->resolveIndustryCapacityRatio($peer, 1_000.0, 0.10, 1.0, 0.0, 0.0, 20, 252);
+
+        $market = $ledger->describeMergerMarket($leader, $macro, 0.0, 30, 252);
+        $this->assertNotNull($market);
+        $this->assertEqualsWithDelta(10_000.0, $market['market_revenue'], 1e-6);
+        $this->assertEqualsWithDelta(0.30, $market['acquirer_share'], 1e-12);
+        $this->assertEqualsWithDelta(0.10, $market['herfindahl'], 1e-12);
+        $this->assertEqualsWithDelta(0.60, $market['fringe_share'], 1e-12);
+
+        // The market rides trend nominal GDP and the industry's secular excess, as the anchor's trend demand does.
+        $later = $ledger->describeMergerMarket($leader, new MacroStateDTO(potentialGdpIndex: 1.2, gdpDeflator: 1.1, totalTime: 5.0), 0.02, 40, 252);
+        $this->assertEqualsWithDelta(10_000.0 * 1.2 * 1.1 * exp(0.02 * 5.0), $later['market_revenue'], 1e-6);
+
+        // A peer whose record has aged out is off the roster: its share is back in the fringe.
+        $stale = $ledger->describeMergerMarket($leader, $macro, 0.0, 20 + 253, 252);
+        $this->assertEqualsWithDelta(0.09, $stale['herfindahl'], 1e-12);
+        $this->assertEqualsWithDelta(0.70, $stale['fringe_share'], 1e-12);
+    }
+
+    /** What a deal buys leaves the fringe and joins the acquirer's share; the concentration index follows. */
+    public function testAnAcquisitionMovesItsShareOutOfTheFringeAndIntoTheAcquirers(): void
+    {
+        $ledger = new IndustryShareLedger(new InMemoryIndustryShareStore());
+        $leader = $this->stock('LDR', 3_000.0);
+        $macro = new MacroStateDTO(potentialGdpIndex: 1.0, gdpDeflator: 1.0, totalTime: 0.0);
+        $ledger->resolveIndustryCapacityRatio($leader, 3_000.0, 0.30, 1.0, 0.0, 0.0, 10, 252);
+        $ledger->resolveIndustryCapacityRatio($this->stock('PER', 1_000.0), 1_000.0, 0.10, 1.0, 0.0, 0.0, 20, 252);
+
+        $ledger->recordAcquiredCapacity($leader, 500.0, $macro, 0.0);
+
+        $market = $ledger->describeMergerMarket($leader, $macro, 0.0, 30, 252);
+        $this->assertEqualsWithDelta(10_000.0, $market['market_revenue'], 1e-6, 'a deal changes who owns the market, not its size');
+        $this->assertEqualsWithDelta(0.35, $market['acquirer_share'], 1e-12);
+        $this->assertEqualsWithDelta((0.35 ** 2) + (0.10 ** 2), $market['herfindahl'], 1e-12);
+        $this->assertEqualsWithDelta(0.55, $market['fringe_share'], 1e-12);
+    }
+
     public function testTheCapacityRatioIsBoundedToTheRangeThePriceRespondsTo(): void
     {
         $ledger = new IndustryShareLedger(new InMemoryIndustryShareStore());

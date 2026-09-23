@@ -586,7 +586,12 @@ class TreasuryEngine
         $executeIssuance = false;
 
         if ($isDeathSpiral) {
-            $executeIssuance = $this->mathUtility->generateUniform() < 0.80;
+            // Debt overhang (Myers 1977): once the business and its cash no longer cover the debt ahead of
+            // them, a dollar of new equity goes to the creditors, and under absolute priority the shares are
+            // already out of the money. Nobody subscribes; the firm restructures instead. Selling stock into
+            // that every quarter diluted a failing firm hundreds of times over without ever curing it.
+            $executeIssuance = $this->debtEngine->assessGoingConcern($stock, $ctx->macroState, $ctx->health)->isSolvent()
+                && $this->mathUtility->generateUniform() < 0.80;
         } elseif ($isBubble) {
             $bubbleSeverity = ($currentPE / max(1.0, $fairValuePE * 2.5)) - 1.0;
             $probBubble = min(0.90, 0.05 + ($bubbleSeverity * 0.20));

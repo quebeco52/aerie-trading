@@ -188,6 +188,12 @@ export function renderEvents(events, currentTicker, feedId = 'events-feed') {
             cardData.borderClass = 'border-l-red-500';
             cardData.icon = 'gavel';
             cardData.iconClass = 'bg-red-500/20 text-red-400';
+        } else if (type === 'REORGANIZATION') {
+            cardData.badge = 'CHAPTER 11';
+            cardData.badgeClass = 'bg-amber-500/15 text-amber-300 border-amber-500/40';
+            cardData.borderClass = 'border-l-amber-500';
+            cardData.icon = 'balance';
+            cardData.iconClass = 'bg-amber-500/20 text-amber-300';
         }
 
         const card = document.createElement('div');

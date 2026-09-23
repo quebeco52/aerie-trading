@@ -1131,6 +1131,103 @@ class DebtEngineTest extends TestCase
     }
 
     /**
+     * Lenders measure coverage and leverage on the last twelve months. A seasonal firm whose year repeats has
+     * the same trailing year every quarter, so its creditworthiness must not change with the calendar; read
+     * off one annualized quarter, the same firm could borrow in its peak season and not in its trough.
+     */
+    public function testCreditIsJudgedOnTheTrailingYearSoTheSeasonsCannotFlipIt(): void
+    {
+        $engine = $this->costOfCapitalEngine();
+        $macro = $this->neutralMacro();
+        $stock = $this->leveredFirm('SEAS', '1.00', '0.01');
+        $year = [
+            ['revenue' => 160_000_000.0, 'ebit' => -32_000_000.0],
+            ['revenue' => 200_000_000.0, 'ebit' => 40_000_000.0],
+            ['revenue' => 200_000_000.0, 'ebit' => 60_000_000.0],
+            ['revenue' => 240_000_000.0, 'ebit' => 132_000_000.0],
+        ];
+
+        $trailingVerdicts = [];
+        $quarterVerdicts = [];
+        $window = $year;
+        foreach ($year as $quarter) {
+            $window = array_values(array_slice([...$window, $quarter], -4));
+            $stock->setQuarterlyOperatingHistory($window);
+            $stock->setReportedOperatingMargin($quarter['ebit'] / $quarter['revenue']);
+
+            $trailing = $engine->analyzeTrailingDebtHealth($stock, $macro);
+            $trailingVerdicts[] = [$trailing->canIssueDebt, round($trailing->interestCoverage, 9)];
+            $quarterVerdicts[] = $engine->analyzeDebtHealth($stock, $macro, null, $stock->getReportedOperatingMargin())->canIssueDebt;
+        }
+
+        $this->assertCount(2, array_unique($quarterVerdicts), 'the fixture must swing across the gate when read one quarter at a time');
+        $this->assertCount(1, array_unique(array_map('serialize', $trailingVerdicts)), 'a repeating year is the same credit every quarter');
+        $this->assertTrue($trailingVerdicts[0][0], 'a year earning 200M on 800M of revenue clears the gate');
+        $this->assertEqualsWithDelta(
+            ['revenue' => 800_000_000.0, 'margin' => 0.25],
+            $engine->resolveTrailingOperatingBasis($stock),
+            1e-9
+        );
+    }
+
+    /**
+     * Before a firm has reported, there is no trailing year to read, and the basis is the reported margin,
+     * which is itself null until then and leaves the structural margin in place.
+     */
+    public function testTrailingBasisFallsBackToTheReportedMarginBeforeAYearIsRecorded(): void
+    {
+        $engine = $this->costOfCapitalEngine();
+        $macro = $this->neutralMacro();
+        $stock = $this->leveredFirm('NEWL', '1.00', '0.01');
+        $stock->setReportedOperatingMargin(0.02);
+
+        $this->assertNull($engine->resolveTrailingOperatingBasis($stock));
+        $stock->setQuarterlyOperatingHistory([['revenue' => 100.0, 'ebit' => 10.0]]);
+        $this->assertNull($engine->resolveTrailingOperatingBasis($stock), 'three quarters short of a year');
+
+        $this->assertEquals(
+            $engine->analyzeDebtHealth($stock, $macro, null, 0.02),
+            $engine->analyzeTrailingDebtHealth($stock, $macro)
+        );
+    }
+
+    /**
+     * The firm's assets are valued where the market values them: the Merton asset value its equity price
+     * implies at the business's own asset volatility. Below the debt's face the equity is out of the money,
+     * which a collapsed share price says long before a trailing year does. Viability is read off the year's
+     * cash operating earnings.
+     */
+    public function testTheGoingConcernIsTheAssetValueTheEquityPriceImplies(): void
+    {
+        $engine = $this->costOfCapitalEngine();
+        $macro = $this->neutralMacro();
+        $stock = $this->leveredFirm('GOCO', '1.00', '0.01');
+        $stock->setQuarterlyOperatingHistory(array_fill(0, 4, ['revenue' => 200_000_000.0, 'ebit' => 30_000_000.0]));
+
+        $going = $engine->assessGoingConcern($stock, $macro);
+        $assetVolatility = $engine->resolveAssetVolatility($stock, 1_000_000_000.0, 500_000_000.0, $macro->policyRateEma);
+
+        $this->assertEqualsWithDelta(
+            (new MathUtility())->solveMertonAssetValue(1_000_000_000.0, $assetVolatility, 500_000_000.0, $macro->policyRateEma, 5.0),
+            $going->assetValue,
+            1.0
+        );
+        $this->assertEqualsWithDelta(120_000_000.0, $going->trailingEbit, 1e-3);
+        $this->assertEqualsWithDelta($engine->analyzeTrailingDebtHealth($stock, $macro)->rawMetrics->ebitda, $going->trailingEbitda, 1e-3);
+        $this->assertEqualsWithDelta(50_000_000.0, $going->cash, 1e-6);
+        $this->assertEqualsWithDelta(500_000_000.0, $going->claims, 1e-6);
+        $this->assertTrue($going->isViable());
+        $this->assertTrue($going->isSolvent(), 'equity worth twice the debt');
+
+        // The market marks the equity down to 2% of the debt: the assets no longer cover it.
+        $stock->setPrice('0.10');
+        $this->assertFalse($engine->assessGoingConcern($stock, $macro)->isSolvent());
+
+        $stock->setQuarterlyOperatingHistory(array_fill(0, 4, ['revenue' => 200_000_000.0, 'ebit' => -150_000_000.0]));
+        $this->assertFalse($engine->assessGoingConcern($stock, $macro)->isViable(), 'a year that does not cover its cash costs');
+    }
+
+    /**
      * Builds a firm whose only interesting property is its leverage, so the covenant is the variable under test.
      */
     private function leverageFixture(string $industry, string $debt, string $treasury): Stock

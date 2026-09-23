@@ -386,7 +386,44 @@ class IndustryShareLedger
             return 0.0;
         }
 
-        $share = 0.0;
+        return min(1.0, array_sum($this->rosterTrendShares($industry, $ticker, $tick, $ticksPerYear)));
+    }
+
+    /**
+     * The acquirer's market as a horizontal merger review sees it: the market in annual revenue (its trend
+     * demand), its trend share of that market, the roster's concentration index, and the fringe still off
+     * the board to buy. The fringe is competitive, many small firms, and adds nothing to the index. Null
+     * before the ledger has priced the firm, when there is no market to measure yet.
+     *
+     * @return array{market_revenue: float, acquirer_share: float, herfindahl: float, fringe_share: float}|null
+     */
+    public function describeMergerMarket(Stock $stock, MacroStateDTO $macroState, float $secularExcessGrowth, int $tick, int $ticksPerYear): ?array
+    {
+        $own = $this->readOwnRecord($stock);
+        if ($own === null || (float) ($own['anchor_capacity_share'] ?? 0.0) <= 0.0 || (float) ($own['anchor_demand_share'] ?? 0.0) <= 0.0) {
+            return null;
+        }
+
+        $growth = self::trendNominalGdp($macroState) * exp($secularExcessGrowth * ($macroState->totalTime - (float) $own['anchor_time']));
+        $shares = $this->rosterTrendShares((string) $stock->getIndustry(), $stock->getTicker(), $tick, $ticksPerYear);
+
+        return [
+            'market_revenue' => (float) $own['anchor_demand_share'] * $growth,
+            'acquirer_share' => min(1.0, $shares[$stock->getTicker()] ?? 0.0),
+            'herfindahl'     => min(1.0, array_sum(array_map(static fn (float $share): float => $share * $share, $shares))),
+            'fringe_share'   => max(0.0, 1.0 - array_sum($shares)),
+        ];
+    }
+
+    /**
+     * Each anchored firm's trend share of the market: its anchor plant over its anchor market, which only a
+     * deal moves. This firm always; a peer while its record is under a year old.
+     *
+     * @return array<string, float>
+     */
+    private function rosterTrendShares(string $industry, string $ticker, int $tick, int $ticksPerYear): array
+    {
+        $shares = [];
         foreach ($this->store->readIndustry($industry) as $peerTicker => $record) {
             $demandShare = (float) ($record['anchor_demand_share'] ?? 0.0);
             if ($demandShare <= 0.0 || (float) ($record['anchor_capacity_share'] ?? 0.0) <= 0.0) {
@@ -395,10 +432,10 @@ class IndustryShareLedger
             if ($peerTicker !== $ticker && $tick - $record['tick'] > $ticksPerYear) {
                 continue;
             }
-            $share += (float) $record['anchor_capacity_share'] / $demandShare;
+            $shares[(string) $peerTicker] = (float) $record['anchor_capacity_share'] / $demandShare;
         }
 
-        return min(1.0, $share);
+        return $shares;
     }
 
     private function boundedCapacityRatio(float $supplyOverDemand): float

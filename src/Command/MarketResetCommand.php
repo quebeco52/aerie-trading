@@ -369,6 +369,7 @@ class MarketResetCommand extends Command
                     short_interest_shares = 0.00,
                     reported_operating_margin = NULL,
                     quarterly_net_income_history = NULL,
+                    quarterly_operating_history = NULL,
                     earnings_surprise_history = NULL
                 WHERE ticker = :ticker',
                 [

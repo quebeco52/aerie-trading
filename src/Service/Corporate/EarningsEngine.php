@@ -875,9 +875,9 @@ class EarningsEngine
 
         // Seasonally Adjusted Annual Rate (SAAR) Metrics:
         // Reported quarterly revenue and EBIT oscillate with operational seasonality.
-        // Annual-basis metrics (total revenue run-rate, borrowing rate, ICR, debt health)
-        // must read the seasonally adjusted run-rate rather than interpreting a seasonal
-        // trough/peak as a permanent structural shift.
+        // Annual-basis run-rates (total revenue, the reported margin) read the seasonally
+        // adjusted quarter rather than interpreting a seasonal trough/peak as a permanent
+        // structural shift; credit (ICR, debt health, the rating) reads the trailing year.
         $ctx->seasonallyAdjustedRevenue = $ctx->actualRevenue / max(0.01, $ctx->seasonalFactor);
         $realizedCostRatio = $ctx->actualRevenue > 0.0
             ? ($ctx->actualVariableCosts / $ctx->actualRevenue)
@@ -891,6 +891,16 @@ class EarningsEngine
         // realized profitability quarters late.
         $stock->setReportedOperatingMargin($ctx->structuralOperatingMargin);
 
+        // Lenders underwrite coverage and leverage on the last twelve months, where the seasons and one
+        // quarter's charges wash out. The first report seeds the window from the deseasonalized quarter, as
+        // the net income history is seeded, so a new listing is not judged on whichever season it opens in.
+        $operatingHistory = $stock->getQuarterlyOperatingHistory() ?? [];
+        if (count($operatingHistory) < self::TTM_QUARTERS) {
+            $operatingHistory = array_fill(0, self::TTM_QUARTERS, ['revenue' => $ctx->seasonallyAdjustedRevenue, 'ebit' => $ctx->seasonallyAdjustedEbit]);
+        }
+        $operatingHistory[] = ['revenue' => $ctx->actualRevenue, 'ebit' => $ctx->ebit];
+        $stock->setQuarterlyOperatingHistory(array_values(array_slice($operatingHistory, -self::TTM_QUARTERS)));
+
         $annualSaarRevenue = MathUtility::calculateSeasonallyAdjustedAnnualRate($ctx->actualRevenue, $ctx->seasonalFactor, 4);
         $stock->setTotalRevenue((string) $annualSaarRevenue);
 
@@ -901,7 +911,9 @@ class EarningsEngine
         $ctx->expectedInterestExpense = $expectedDebtMetrics->interestExpense / 4.0;
 
         $ctx->trueOperatingMargin = $ctx->ebit / max(1.0, $ctx->actualRevenue);
-        $ctx->debtMetrics = $this->debtEngine->calculateInterestExpense($stock, $ctx->macroState, true, $annualSaarRevenue, $ctx->structuralOperatingMargin);
+        // The rating review reads the same twelve months a lender does; only its Altman cap uses the operating figures.
+        $trailing = $this->debtEngine->resolveTrailingOperatingBasis($stock);
+        $ctx->debtMetrics = $this->debtEngine->calculateInterestExpense($stock, $ctx->macroState, true, $trailing['revenue'] ?? $annualSaarRevenue, $trailing['margin'] ?? $ctx->structuralOperatingMargin);
 
         $annualInterestExpense = $ctx->debtMetrics->interestExpense;
         $ctx->quarterlyInterestExpense = $annualInterestExpense / 4.0;
@@ -968,8 +980,7 @@ class EarningsEngine
             $ctx->reportedActualNetIncome += $ctx->quarterlyDepreciation;
         }
 
-        $annualSaarRevenue = MathUtility::calculateSeasonallyAdjustedAnnualRate($ctx->actualRevenue, $ctx->seasonalFactor, 4);
-        $ctx->health = $this->debtEngine->analyzeDebtHealth($stock, $ctx->macroState, $annualSaarRevenue, $ctx->structuralOperatingMargin);
+        $ctx->health = $this->debtEngine->analyzeTrailingDebtHealth($stock, $ctx->macroState);
         $ctx->truePostTaxReturn = $ctx->strategy->updateDynamicRoic(
             $stock,
             $ctx->actualQuarterlyNetIncome,

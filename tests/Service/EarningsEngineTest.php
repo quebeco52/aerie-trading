@@ -59,7 +59,7 @@ class EarningsEngineTest extends TestCase
             ebitda: 1100.0
         );
         $this->debtEngineMock->method('calculateInterestExpense')->willReturn($debtMetrics);
-        $this->debtEngineMock->method('analyzeDebtHealth')->willReturn(new \App\DTO\DebtHealthDTO(
+        $debtHealth = new \App\DTO\DebtHealthDTO(
             grossCost: 0.05,
             effectiveCost: 0.04,
             cashYield: 0.02,
@@ -76,7 +76,9 @@ class EarningsEngineTest extends TestCase
             isLiquidityCrisis: false,
             isLiquidityWarning: false,
             isUnderLeveraged: false
-        ));
+        );
+        $this->debtEngineMock->method('analyzeDebtHealth')->willReturn($debtHealth);
+        $this->debtEngineMock->method('analyzeTrailingDebtHealth')->willReturn($debtHealth);
 
         $this->marketEventMock = $this->createStub(MarketEventPublisher::class);
         $this->marketEventMock->method('publish')->willReturnCallback(function($stock, $type, $desc, $pct) {
@@ -723,6 +725,134 @@ class EarningsEngineTest extends TestCase
         $revenue = (float) $stock->getTotalRevenue();
         $this->assertTrue(is_finite($revenue));
         $this->assertGreaterThan(0.0, $revenue);
+    }
+
+    /**
+     * Each report adds its quarter's revenue and operating income to the trailing year lenders underwrite on
+     * and drops the oldest. The first report seeds the window from its deseasonalized quarter, so a new
+     * listing is not judged on whichever season it happens to open in.
+     */
+    public function testEachReportRollsTheTrailingYearLendersUnderwriteOn(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('TTM_ROLL');
+        $stock->setIndustry('Engineering & Construction');
+        $stock->setSharesOutstanding('1000000');
+        $stock->setTotalEquity('100000000');
+        $stock->setFixedCostRatio(0.60);
+        $stock->setOperatingMargin('0.09');
+        $stock->setBaselineRoic('0.09');
+        $stock->setVolatility('0.15');
+        $stock->setCurrentVolatility('0.15');
+        $stock->setBeta('1.0');
+        $stock->setWholesaleDebt('10000000');
+        $stock->setCustomerDeposits('0');
+        $stock->setCorporateTreasury('5000000');
+
+        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
+        $macro = new \App\DTO\MacroStateDTO();
+        $reportingTick = $this->getReportingTick('TTM_ROLL');
+
+        $context = null;
+        $this->eventDispatcherMock->method('dispatch')->willReturnCallback(function ($event) use (&$context) {
+            if ($event instanceof \App\Service\Event\EarningsReportedEvent) {
+                $context = $event->getContext();
+            }
+            return $event;
+        });
+
+        $this->engine->calculate($stock, $macro, $reportingTick, 252);
+        $first = $context;
+        $opened = $stock->getQuarterlyOperatingHistory();
+
+        $this->assertCount(4, $opened);
+        $this->assertNotEqualsWithDelta($first->actualRevenue, $first->seasonallyAdjustedRevenue, 1.0, 'the opening quarter must be seasonal for the seed to matter');
+        foreach (array_slice($opened, 0, 3) as $seed) {
+            $this->assertEqualsWithDelta($first->seasonallyAdjustedRevenue, $seed['revenue'], 1e-6);
+            $this->assertEqualsWithDelta($first->seasonallyAdjustedEbit, $seed['ebit'], 1e-6);
+        }
+        $this->assertEqualsWithDelta($first->actualRevenue, $opened[3]['revenue'], 1e-6);
+        $this->assertEqualsWithDelta($first->ebit, $opened[3]['ebit'], 1e-6);
+
+        $this->engine->calculate($stock, $macro, $reportingTick + 63, 252);
+        $rolled = $stock->getQuarterlyOperatingHistory();
+
+        $this->assertCount(4, $rolled);
+        $this->assertSame(array_slice($opened, 1), array_slice($rolled, 0, 3), 'the oldest quarter drops out');
+        $this->assertEqualsWithDelta($context->actualRevenue, $rolled[3]['revenue'], 1e-6);
+        $this->assertEqualsWithDelta($context->ebit, $rolled[3]['ebit'], 1e-6);
+    }
+
+    /**
+     * The quarter's credit reads the trailing year it has just recorded: the report's debt health (coverage,
+     * the hurdle, the goodwill test) and the rating review, whose Altman cap is struck on the operating
+     * figures. Either one annualizing the quarter instead would put the calendar back into the verdict.
+     */
+    public function testTheReportsCreditReadsTheTrailingYear(): void
+    {
+        $debt = new class (new MathUtility(), new CorporateMetrics()) extends DebtEngine {
+            /** @var list<\App\DTO\DebtHealthDTO> */
+            public array $trailingHealth = [];
+            /** @var list<float|null> */
+            public array $ratingRevenue = [];
+
+            public function analyzeTrailingDebtHealth(Stock $stock, \App\DTO\MacroStateDTO $macroState): \App\DTO\DebtHealthDTO
+            {
+                return $this->trailingHealth[] = parent::analyzeTrailingDebtHealth($stock, $macroState);
+            }
+
+            public function calculateInterestExpense(Stock $stock, \App\DTO\MacroStateDTO $macroState, bool $advanceMaturity = false, ?float $overrideRevenue = null, ?float $overrideMargin = null): \App\DTO\DebtMetricsDTO
+            {
+                if ($advanceMaturity) {
+                    $this->ratingRevenue[] = $overrideRevenue;
+                }
+
+                return parent::calculateInterestExpense($stock, $macroState, $advanceMaturity, $overrideRevenue, $overrideMargin);
+            }
+        };
+        $engine = new EarningsEngine(
+            $this->eventDispatcherMock,
+            $this->marketEventMock,
+            $this->capitalAllocationEngineMock,
+            $debt,
+            $this->capExEngineMock,
+            $this->mathUtilityMock,
+            $this->corporateMetricsMock,
+            $this->narrativeEngineMock,
+            new MarketConsensusEngine()
+        );
+
+        $stock = new Stock();
+        $stock->setTicker('TTM_CRED');
+        $stock->setIndustry('Engineering & Construction');
+        $stock->setSharesOutstanding('1000000');
+        $stock->setTotalEquity('100000000');
+        $stock->setFixedCostRatio(0.60);
+        $stock->setOperatingMargin('0.09');
+        $stock->setBaselineRoic('0.09');
+        $stock->setVolatility('0.15');
+        $stock->setCurrentVolatility('0.15');
+        $stock->setBeta('1.0');
+        $stock->setWholesaleDebt('10000000');
+        $stock->setCustomerDeposits('0');
+        $stock->setCorporateTreasury('5000000');
+        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
+
+        $context = null;
+        $this->eventDispatcherMock->method('dispatch')->willReturnCallback(function ($event) use (&$context) {
+            if ($event instanceof \App\Service\Event\EarningsReportedEvent) {
+                $context = $event->getContext();
+            }
+            return $event;
+        });
+
+        $engine->calculate($stock, new \App\DTO\MacroStateDTO(), $this->getReportingTick('TTM_CRED'), 252);
+
+        $window = $stock->getQuarterlyOperatingHistory();
+        $this->assertCount(4, $window);
+        $this->assertCount(1, $debt->trailingHealth);
+        $this->assertSame($debt->trailingHealth[0], $context->health);
+        $this->assertEqualsWithDelta(array_sum(array_column($window, 'revenue')), $debt->ratingRevenue[0], 1e-6);
     }
 
     public function testSeasonalAnnualizationDeseasonalizesAnnualRunrateAndProtectsDebtHealth(): void

@@ -55,6 +55,10 @@ class EventPresenter
             return $this->presentBankruptcy($rawType, $rawDesc, $changePct, $recordedAt);
         }
 
+        if ($rawType === 'REORGANIZATION') {
+            return $this->presentReorganization($rawType, $rawDesc, $changePct, $recordedAt);
+        }
+
         if ($rawType === 'DISTRICT') {
             return $this->presentDistrict($rawType, $rawDesc, $changePct, $recordedAt);
         }
@@ -388,6 +392,26 @@ class EventPresenter
         ];
     }
 
+    /** A Chapter 11 plan: the company keeps trading, so it reads as a restructuring rather than a death. */
+    private function presentReorganization(string $type, string $rawDesc, ?float $changePct, \DateTimeInterface $recordedAt): array
+    {
+        return [
+            'type' => $type,
+            'category' => 'reorganization',
+            'badge' => 'CHAPTER 11',
+            'badgeClass' => 'bg-amber-500/15 text-amber-300 border-amber-500/40',
+            'borderClass' => 'border-l-amber-500',
+            'icon' => 'balance',
+            'iconClass' => 'bg-amber-500/20 text-amber-300',
+            'isEarnings' => false,
+            'headline' => !empty($rawDesc) ? $rawDesc : 'Confirmed a Chapter 11 plan of reorganization.',
+            'pills' => [],
+            'changePercent' => $changePct,
+            'recordedAt' => $recordedAt,
+            'rawDescription' => $rawDesc,
+        ];
+    }
+
     private function presentBankruptcy(string $type, string $rawDesc, ?float $changePct, \DateTimeInterface $recordedAt): array
     {
         return [
@@ -399,7 +423,7 @@ class EventPresenter
             'icon' => 'gavel',
             'iconClass' => 'bg-red-500/20 text-red-400',
             'isEarnings' => false,
-            'headline' => !empty($rawDesc) ? $rawDesc : 'Filed for Chapter 11 bankruptcy liquidation.',
+            'headline' => !empty($rawDesc) ? $rawDesc : 'Filed for Chapter 7 bankruptcy liquidation.',
             'pills' => [],
             'changePercent' => $changePct ?? -100.0,
             'recordedAt' => $recordedAt,

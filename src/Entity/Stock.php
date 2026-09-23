@@ -571,6 +571,13 @@ class Stock
     private ?array $quarterlyNetIncomeHistory = [];
 
     /**
+     * @var list<array{revenue: float, ebit: float}>|null Revenue and operating income of the last four quarters,
+     *      oldest first: the last-twelve-month basis lenders underwrite coverage and leverage on.
+     */
+    #[ORM\Column(type: Types::JSON, nullable: true)]
+    private ?array $quarterlyOperatingHistory = null;
+
+    /**
      * @var array<int, float>|null Blended earnings surprises of recent quarters, the sample the SUE denominator is estimated from.
      */
     #[ORM\Column(type: Types::JSON, nullable: true)]
@@ -1649,6 +1656,23 @@ class Stock
     public function getQuarterlyNetIncomeHistory(): ?array
     {
         return $this->quarterlyNetIncomeHistory;
+    }
+
+    /**
+     * @return list<array{revenue: float, ebit: float}>|null
+     */
+    public function getQuarterlyOperatingHistory(): ?array
+    {
+        return $this->quarterlyOperatingHistory;
+    }
+
+    /**
+     * @param list<array{revenue: float, ebit: float}>|null $quarterlyOperatingHistory
+     */
+    public function setQuarterlyOperatingHistory(?array $quarterlyOperatingHistory): static
+    {
+        $this->quarterlyOperatingHistory = $quarterlyOperatingHistory;
+        return $this;
     }
 
     /**

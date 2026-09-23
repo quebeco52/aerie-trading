@@ -105,6 +105,7 @@ class MergerAndAcquisitionGateTest extends TestCase
                 return false;
             });
         $debt->expects($this->never())->method('analyzeDebtHealth');
+        $debt->expects($this->never())->method('analyzeTrailingDebtHealth');
         $math->expects($this->never())->method('generateUniform');
 
         $stock = StockBuilder::create('GATE')->build();
@@ -131,6 +132,7 @@ class MergerAndAcquisitionGateTest extends TestCase
         $stock->setTotalRevenue('100000000000.00');
 
         $this->debt->method('analyzeDebtHealth')->willReturn($this->healthyBalanceSheet());
+        $this->debt->method('analyzeTrailingDebtHealth')->willReturn($this->healthyBalanceSheet());
         $this->math->method('checkProbability')->willReturn(true);
 
         $macro = \App\DTO\MacroStateDTO::fromMacroState(MacroStateBuilder::create()->build());
@@ -161,6 +163,7 @@ class MergerAndAcquisitionGateTest extends TestCase
         $stock->setTotalRevenue('100000000000.00');
 
         $this->debt->method('analyzeDebtHealth')->willReturn($this->healthyBalanceSheet());
+        $this->debt->method('analyzeTrailingDebtHealth')->willReturn($this->healthyBalanceSheet());
         $this->math->method('checkProbability')->willReturn(true);
         // The top of the conditional interval: above every hazard the ceiling admits.
         $this->math->method('generateUniform')->willReturn(0.999999);

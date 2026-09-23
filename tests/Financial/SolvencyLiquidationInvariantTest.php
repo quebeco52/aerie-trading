@@ -31,9 +31,9 @@ use Psr\Log\LoggerInterface;
  *
  * The property pinned here is the one a player experiences: a company whose balance sheet still covers the
  * claims on it is not wound up and its shareholders are not wiped, however badly its treasury is managed and
- * however long it has been missing payments. Liquidation is a solvency verdict. This runs the REAL Altman
- * path over every seeded balance sheet rather than a stubbed score, so it also pins that the seed itself is
- * solvent enough to survive a liquidity crisis.
+ * however long it has been missing payments. Liquidation is reserved for a business with no going-concern
+ * value; an insolvent but viable one is reorganized. This runs the REAL failure path over every seeded
+ * balance sheet rather than a stubbed score, so it also pins that the seed itself survives a liquidity crisis.
  */
 #[AllowMockObjectsWithoutExpectations]
 final class SolvencyLiquidationInvariantTest extends TestCase
@@ -123,28 +123,72 @@ final class SolvencyLiquidationInvariantTest extends TestCase
     }
 
     /**
-     * The other half of the invariant: the Chapter 7 path is intact. A balance sheet that genuinely no
-     * longer covers its claims is still wound up, in default or not.
+     * The other half of the invariant: the Chapter 7 path is intact. A business that no longer covers its cash
+     * operating costs is still wound up once its default outlasts the cure period.
      */
-    public function testAnInsolventFirmIsStillLiquidated(): void
+    public function testABusinessThatNoLongerCoversItsCashCostsIsLiquidatedOnceItDefaults(): void
+    {
+        $stock = $this->buildInsolventShipper('GONE', '-0.40');
+        $stock->setPaymentDefault(true);
+        $stock->setQuartersInDefault(self::UNCURED_QUARTERS);
+
+        $this->buildOperator()->enforceMarketStability([$stock], new MacroStateDTO());
+
+        $this->assertTrue($stock->isBankrupt(), 'a business with no going-concern value is liquidated');
+        $this->assertSame('0.00000000', $stock->getPrice());
+    }
+
+    /**
+     * Owing more than the business is worth is a reason to change who owns it, not to break it up. A viable
+     * firm in uncured default is reorganized: it keeps trading, carries only the debt it can service, and the
+     * rest of its creditors hold its equity.
+     */
+    public function testAnInsolventButViableFirmIsReorganizedNotWoundUp(): void
+    {
+        $stock = $this->buildInsolventShipper('SHIP', '0.08');
+        $stock->setPaymentDefault(true);
+        $stock->setQuartersInDefault(self::UNCURED_QUARTERS);
+
+        $this->buildOperator()->enforceMarketStability([$stock], MacroStateDTO::fromArray(['yield_5y_ema' => 0.04, 'policy_rate_ema' => 0.03, 'corporate_tax_rate' => 0.21]));
+
+        $this->assertFalse($stock->isBankrupt(), 'a viable business is reorganized, not liquidated');
+        $this->assertFalse($stock->isPaymentDefault(), 'confirmation cures the default');
+        $this->assertLessThan(120_000_000_000.0, (float) $stock->getTotalDebt(), 'the debt it cannot carry was exchanged');
+        $this->assertGreaterThan(0.0, (float) $stock->getTotalEquity(), 'the exchange recapitalized it');
+        $this->assertGreaterThan(0.0, (float) $stock->getPrice(), 'and it keeps trading');
+    }
+
+    /**
+     * A firm that is insolvent on paper but still paying what it owes is not wound up: an operating company
+     * files when it cannot pay, and a negative Altman score is a forecast, not a verdict.
+     */
+    public function testAnInsolventFirmCurrentOnItsDebtsIsNotWoundUp(): void
+    {
+        $stock = $this->buildInsolventShipper('ZOMB', '-0.40');
+
+        $this->buildOperator()->enforceMarketStability([$stock], new MacroStateDTO());
+
+        $this->assertFalse($stock->isBankrupt());
+        $this->assertSame('0.20', $stock->getPrice());
+    }
+
+    private function buildInsolventShipper(string $ticker, string $margin): Stock
     {
         $stock = new Stock();
-        $stock->setTicker('GONE');
-        $stock->setName('Gone Holdings');
+        $stock->setTicker($ticker);
+        $stock->setName('Shipping Holdings');
         $stock->setSector('Industrials');
         $stock->setIndustry('Marine Shipping');
         $stock->setSharesOutstanding('1000000000');
         $stock->setPrice('0.20');
-        $stock->setOperatingMargin('-0.40');
+        $stock->setOperatingMargin($margin);
         $stock->setTotalRevenue('10000000000.00');
         $stock->setTotalEquity('-40000000000.00');
         $stock->setRetainedEarnings('-90000000000.00');
         $stock->setWholesaleDebt('120000000000.00');
         $stock->setCorporateTreasury('0.00');
+        $stock->setCreditSpread('0.02');
 
-        $this->buildOperator()->enforceMarketStability([$stock], new MacroStateDTO());
-
-        $this->assertTrue($stock->isBankrupt(), 'an insolvent balance sheet must still be liquidated');
-        $this->assertSame('0.00000000', $stock->getPrice());
+        return $stock;
     }
 }

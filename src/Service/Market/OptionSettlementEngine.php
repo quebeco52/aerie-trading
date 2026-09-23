@@ -137,6 +137,69 @@ final class OptionSettlementEngine
     }
 
     /**
+     * Settles every open contract on an underlying whose shares were cancelled, in cash, at an underlying of zero.
+     *
+     * When a plan of reorganization cancels the old shares, the deliverable the contracts were written on no
+     * longer exists, and the OCC adjusts them to cash settlement on what the shares became: nothing. A call
+     * is worthless and a put is worth its full strike. Left alone, the contracts would have expired later
+     * against the NEW equity's price and physically delivered shares of a company their writers never
+     * referenced.
+     *
+     * @return int Contracts settled.
+     */
+    public function settleCancelledUnderlying(Stock $stock): int
+    {
+        $connection = $this->em->getConnection();
+
+        $rows = $connection->fetchAllAssociative(
+            'SELECT o.id, o.ticker, o.option_type, o.strike FROM option_contracts o
+             WHERE o.status = :status AND o.stock_id = :stock',
+            ['status' => OptionContract::STATUS_ACTIVE, 'stock' => $stock->getId()]
+        );
+
+        if ($rows === []) {
+            return 0;
+        }
+
+        $positions = $this->positionsByContract(
+            array_map(static fn (array $row): int => (int) $row['id'], $rows)
+        );
+        $expiryRows = [];
+
+        foreach ($rows as $row) {
+            $id = (int) $row['id'];
+            $contract = (new OptionContract())
+                ->setTicker((string) $row['ticker'])
+                ->setOptionType((string) $row['option_type'])
+                ->setStrike((string) $row['strike']);
+            $intrinsic = $contract->intrinsicValue(0.0);
+
+            foreach ($positions[$id] ?? [] as $position) {
+                $contracts = (int) $position->getQuantity();
+                $value = abs((float) $contracts) * FinancialConstants::OPTION_CONTRACT_MULTIPLIER * $intrinsic;
+
+                if ($value > 0.0) {
+                    $amount = MathUtility::formatDecimal($value, 4);
+                    if ($contracts > 0) {
+                        $this->cashLedger->credit($position->getUser(), $amount);
+                    } else {
+                        $this->cashLedger->debit($position->getUser(), $amount);
+                    }
+                    $this->em->persist($position->getUser());
+                }
+
+                $this->em->remove($position);
+            }
+
+            $expiryRows[$id] = MathUtility::formatDecimal($intrinsic, 8);
+        }
+
+        $this->writeExpiry($connection, $expiryRows, (new \DateTime())->format('Y-m-d H:i:s'));
+
+        return count($rows);
+    }
+
+    /**
      * Stamps a batch of contracts as expired.
      *
      * Every column but the settlement price is IDENTICAL across the batch — expired, no open interest, no

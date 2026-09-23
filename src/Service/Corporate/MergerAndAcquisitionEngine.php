@@ -65,6 +65,14 @@ class MergerAndAcquisitionEngine
     /** Maturity used in Merton's distance to default calculation. */
     public const MA_MERTON_MATURITY = 5.0;
 
+    // --- Horizontal Merger Review (2023 Merger Guidelines §2.1) ---
+    /** HHI increase above which a merger significantly increases concentration (100 points). */
+    public const MERGER_REVIEW_HHI_DELTA = 0.0100;
+    /** Post-merger HHI above which the market is highly concentrated (1,800 points). */
+    public const MERGER_REVIEW_CONCENTRATED_HHI = 0.1800;
+    /** Merged market share above which a deal that also passes the HHI delta is presumed illegal (Philadelphia National Bank, 1963). */
+    public const MERGER_REVIEW_SHARE_CEILING = 0.30;
+
     // --- M&A Synergy & Target Returns (Log-Normal) ---
     /** Mean of log-normal synergy. */
     public const MA_SYNERGY_MU = -0.02;
@@ -173,6 +181,24 @@ class MergerAndAcquisitionEngine
         return self::$acquisitionHazardCeiling = $primary + (self::MA_CASH_FALLBACK_PROB * $maxBias);
     }
 
+    /**
+     * The largest share of its market an acquirer can buy and still clear horizontal merger review (2023
+     * Merger Guidelines §2.1). A deal is presumed to lessen competition when it raises the HHI by more than
+     * 100 points and either leaves the market highly concentrated (above 1,800) or creates a firm with more
+     * than 30% of it. The target comes out of the competitive fringe, so buying share t at share s raises
+     * the HHI by 2st and leaves it at H + t² + 2st. Clearance is the union of two intervals from zero: the
+     * delta safe harbour t ≤ Δ/2s, and t ≤ min(ceiling − s, √(s² + 1,800 − H) − s) while both screens hold.
+     */
+    public static function maxClearedTargetShare(float $acquirerShare, float $herfindahl): float
+    {
+        $share = max(0.0, $acquirerShare);
+        $safeHarbour = $share > 0.0 ? self::MERGER_REVIEW_HHI_DELTA / (2.0 * $share) : 1.0;
+        $belowConcentration = sqrt(($share * $share) + max(0.0, self::MERGER_REVIEW_CONCENTRATED_HHI - $herfindahl)) - $share;
+        $belowScreens = min(self::MERGER_REVIEW_SHARE_CEILING - $share, $belowConcentration);
+
+        return min(1.0, max(0.0, $safeHarbour, $belowScreens));
+    }
+
     /** The largest annual divestiture hazard any state assigns; the bound its rejection gate is struck at. */
     public static function divestitureHazardCeiling(): float
     {
@@ -195,7 +221,7 @@ class MergerAndAcquisitionEngine
     // ACQUISITION PIPELINE
     // =========================================================================
 
-    public function evaluatePrivateAcquisition(Stock $acquirer, MacroStateDTO $macroState, float $dt): ?array
+    public function evaluatePrivateAcquisition(Stock $acquirer, MacroStateDTO $macroState, float $dt, int $tickCount = 0, int $ticksPerYear = 252): ?array
     {
         if ($acquirer->isBankrupt()) {
             return null;
@@ -206,7 +232,7 @@ class MergerAndAcquisitionEngine
             return null;
         }
 
-        $ctx = new AcquisitionContext($acquirer, $macroState, $dt);
+        $ctx = new AcquisitionContext($acquirer, $macroState, $dt, $tickCount, $ticksPerYear);
 
         $this->initializeAcquisitionContext($ctx);
         
@@ -242,7 +268,7 @@ class MergerAndAcquisitionEngine
 
         // Underwritten on the margin the firm last reported, as the treasury's own lender test is: the
         // structural margin kept a firm that was losing money looking fit to borrow for the next deal.
-        $ctx->health = $this->debtEngine->analyzeDebtHealth($stock, $ctx->macroState, null, $stock->getReportedOperatingMargin());
+        $ctx->health = $this->debtEngine->analyzeTrailingDebtHealth($stock, $ctx->macroState);
         
         $ctx->industry = $stock->getIndustry() ?: 'General';
         $ctx->businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$ctx->industry]['business_model'] ?? 'none';
@@ -400,6 +426,72 @@ class MergerAndAcquisitionEngine
 
         $ctx->config = $config;
         $ctx->target = $this->generateProceduralTarget();
+        $this->drawTargetEconomics($ctx);
+
+        // The target is a private firm in the acquirer's own market, so the deal is sized to the largest
+        // one there is to buy and that clears merger review. Sized by the acquirer's buying power alone, a
+        // firm that already owned its market kept buying more of it than exists.
+        $ctx->purchasePrice = min($ctx->purchasePrice, $this->resolveLargestAvailableTarget($ctx));
+        if ($ctx->purchasePrice < self::MA_MIN_DEAL_SIZE) {
+            $ctx->dealExecuted = false;
+        }
+    }
+
+    /** The target's economics: synergy with the acquirer, standalone return and operating margin. */
+    private function drawTargetEconomics(AcquisitionContext $ctx): void
+    {
+        $ctx->synergyMultiplier = $this->mathUtility->calculateLogNormalSynergy(self::MA_SYNERGY_MU, self::MA_SYNERGY_SIGMA);
+
+        $targetRoicDraw = $this->mathUtility->calculateLogNormalSynergy(self::MA_TARGET_ROIC_MU, self::MA_TARGET_ROIC_SIGMA);
+        $ctx->targetRoic = max(self::MA_TARGET_ROIC_FLOOR, min(self::MA_TARGET_ROIC_CEILING, $targetRoicDraw));
+
+        $ctx->targetMargin = max(0.01, (float) $ctx->acquirer->getOperatingMargin() * (mt_rand(70, 95) / 100.0));
+    }
+
+    /**
+     * Price of the largest target the acquirer's market holds for it: the fringe still off the board, capped
+     * at the share merger review clears. Unbounded when the ledger has not priced the firm's market.
+     */
+    private function resolveLargestAvailableTarget(AcquisitionContext $ctx): float
+    {
+        $market = $this->industryShareLedger?->describeMergerMarket(
+            $ctx->acquirer,
+            $ctx->macroState,
+            IndustryShareLedger::secularExcessGrowth($ctx->strategy, $ctx->acquirer),
+            $ctx->tickCount,
+            $ctx->ticksPerYear
+        );
+        if ($market === null) {
+            return INF;
+        }
+
+        $targetShare = min($market['fringe_share'], self::maxClearedTargetShare($market['acquirer_share'], $market['herfindahl']));
+        $revenuePerDollar = $this->valueTarget($ctx, 1.0)['revenue'];
+
+        return $revenuePerDollar > 0.0 ? ($targetShare * $market['market_revenue']) / $revenuePerDollar : INF;
+    }
+
+    /**
+     * What a deal at this price buys: the target's standalone value (the price less the hubris premium, Roll
+     * 1986), its after-tax return on that value, and the operating income and revenue that return implies at
+     * the target's margin. Sizing a deal against its market and booking it read the same figures.
+     *
+     * @return array{economic_value: float, nopat: float, operating_income: float, revenue: float}
+     */
+    private function valueTarget(AcquisitionContext $ctx, float $price): array
+    {
+        $economicValue = $price / (1.0 + max(0.0, $ctx->hubrisPremium));
+        $nopat = $economicValue * $ctx->targetRoic * $ctx->synergyMultiplier;
+        // ROIC is after tax; the earnings engine rebuilds revenue from margin x (1 - t) x turnover, so the
+        // target's return is grossed up to operating income before it is split into revenue and cost.
+        $operatingIncome = $nopat / max(0.01, 1.0 - $ctx->strategy->getEffectiveTaxRate($ctx->macroState->corporateTaxRate));
+
+        return [
+            'economic_value' => $economicValue,
+            'nopat' => $nopat,
+            'operating_income' => $operatingIncome,
+            'revenue' => $operatingIncome / max(0.01, $ctx->targetMargin),
+        ];
     }
 
     private function fundAcquisition(AcquisitionContext $ctx): void
@@ -454,11 +546,6 @@ class MergerAndAcquisitionEngine
     {
         $stock = $ctx->acquirer;
 
-        $mu = self::MA_SYNERGY_MU;
-        $sigma = self::MA_SYNERGY_SIGMA;
-
-        $ctx->synergyMultiplier = $this->mathUtility->calculateLogNormalSynergy($mu, $sigma);
-
         // Purchase accounting (ASC 805): the deal creates no day-one equity. Cash and debt deals swap cash for
         // net assets plus goodwill; stock deals add the shares issued to equity. Expected synergies only
         // reach the books as they are earned, through the blended ROIC below; the market prices them at once.
@@ -481,14 +568,11 @@ class MergerAndAcquisitionEngine
             ? $oldRevenueCapital * (float) $acquirerTurnover
             : (float) $stock->getTotalRevenue();
 
-        $targetRoicDraw = $this->mathUtility->calculateLogNormalSynergy(self::MA_TARGET_ROIC_MU, self::MA_TARGET_ROIC_SIGMA);
-        $targetRoic = max(self::MA_TARGET_ROIC_FLOOR, min(self::MA_TARGET_ROIC_CEILING, $targetRoicDraw));
-        $effectiveTargetRoic = $targetRoic * $ctx->synergyMultiplier;
-        
-        $targetMargin = max(0.01, $oldOperatingMargin * (mt_rand(70, 95) / 100.0));
+        $effectiveTargetRoic = $ctx->targetRoic * $ctx->synergyMultiplier;
 
         // Hubris hypothesis: purchase price premium over standalone economic value is capitalized into goodwill.
-        $economicValue = $ctx->purchasePrice / (1.0 + max(0.0, $ctx->hubrisPremium));
+        $acquired = $this->valueTarget($ctx, $ctx->purchasePrice);
+        $economicValue = $acquired['economic_value'];
         $roicOnPricePaid = $effectiveTargetRoic * ($economicValue / max(1.0, $ctx->purchasePrice));
 
         $totalNewCapital = max(1.0, $oldCapitalBase + $ctx->purchasePrice);
@@ -502,13 +586,13 @@ class MergerAndAcquisitionEngine
 
         $this->bookAcquiredNetAssets($stock, $ctx->strategy, $netAssetsAcquired);
 
-        // ROIC is after tax; the earnings engine rebuilds revenue from margin x (1 - t) x turnover, so the
-        // target's return is grossed up to operating income before it is split into revenue and cost.
-        $acquiredNopat = $economicValue * $effectiveTargetRoic;
-        $acquiredOperatingIncome = $acquiredNopat / max(0.01, 1.0 - $ctx->strategy->getEffectiveTaxRate($ctx->macroState->corporateTaxRate));
-        $acquiredRevenue = $acquiredOperatingIncome / max(0.01, $targetMargin);
+        $acquiredNopat = $acquired['nopat'];
+        $acquiredOperatingIncome = $acquired['operating_income'];
+        $acquiredRevenue = $acquired['revenue'];
         $currentRevenue = (float) $stock->getTotalRevenue();
         $stock->setTotalRevenue((string) ($currentRevenue + $acquiredRevenue));
+        // Credit agreements measure a buyer pro forma, as if it had owned the target all year.
+        $this->restateOperatingHistory($stock, 1.0, $acquiredRevenue, $acquiredOperatingIncome);
         $this->industryShareLedger?->recordAcquiredCapacity($stock, $acquiredRevenue, $ctx->macroState, IndustryShareLedger::secularExcessGrowth($ctx->strategy, $stock));
 
         // Operating income adds across the two businesses, so the combined margin is revenue-weighted.
@@ -533,6 +617,27 @@ class MergerAndAcquisitionEngine
         
         $currentEps = (float) $stock->getEarningsPerShare();
         $stock->setEarningsPerShare((string) ($currentEps + ($trueAcquiredNetIncome / max(1.0, $ctx->shares))));
+    }
+
+    /**
+     * Restates the trailing four quarters pro forma for a deal: each quarter keeps the retained share of what
+     * the firm earned and gains a quarter of the acquired business's annual revenue and operating income.
+     */
+    private function restateOperatingHistory(Stock $stock, float $retainedShare, float $acquiredAnnualRevenue, float $acquiredAnnualOperatingIncome): void
+    {
+        $history = $stock->getQuarterlyOperatingHistory();
+        if ($history === null || $history === []) {
+            return;
+        }
+
+        $quarters = EarningsEngine::TTM_QUARTERS;
+        $stock->setQuarterlyOperatingHistory(array_map(
+            static fn (array $quarter): array => [
+                'revenue' => ((float) $quarter['revenue'] * $retainedShare) + ($acquiredAnnualRevenue / $quarters),
+                'ebit' => ((float) $quarter['ebit'] * $retainedShare) + ($acquiredAnnualOperatingIncome / $quarters),
+            ],
+            array_values($history)
+        ));
     }
 
     /**
@@ -803,6 +908,8 @@ class MergerAndAcquisitionEngine
         
         $currentRevenue = (float) $stock->getTotalRevenue();
         $stock->setTotalRevenue((string) max(1.0, $currentRevenue * (1.0 - $ctx->divestedFraction)));
+        // ...and a seller as if the business it sold had never been its own.
+        $this->restateOperatingHistory($stock, 1.0 - $ctx->divestedFraction, 0.0, 0.0);
         $this->industryShareLedger?->recordDivestedFraction($stock, $ctx->divestedFraction, $ctx->macroState, IndustryShareLedger::secularExcessGrowth($ctx->strategy, $stock));
 
         if ($stock->hasBalanceSheetLedger()) {

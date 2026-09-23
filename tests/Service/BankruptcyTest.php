@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Tests\Service;
 
+use App\DTO\GoingConcernDTO;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Entity\TradeOrder;
@@ -52,25 +53,18 @@ class BankruptcyTest extends TestCase
         $this->entityManagerMock->method('getConnection')->willReturn($this->connectionMock);
     }
 
-    public function testMarketOperatorKillsInsolventCompanyAndCancelsOrdersWithRefund(): void
+    /**
+     * A firm whose default has outlasted its cure period and whose business no longer covers its cash
+     * operating costs is liquidated under Chapter 7: open orders are cancelled with buy escrow refunded, the
+     * positions are wiped and the company leaves the board.
+     */
+    public function testANonViableFirmPastItsCureIsLiquidatedAndItsOrdersRefunded(): void
     {
-        $stock = new Stock();
-        $stock->setTicker('DEAD');
-        $stock->setName('Dead Corp');
-        $stock->setPrice('10.00');
-        $stock->setSharesOutstanding('1000000');
-        $stock->setOperatingMargin('0.10');
-        $stock->setTotalRevenue('1000000');
-        $stock->setCreditRating('BBB');
-
+        $stock = $this->buildDefaulter('DEAD', 'Dead Corp', quartersInDefault: 2);
         $this->assertFalse($stock->isBankrupt());
 
-        // Insolvent Altman Z-Score
-        $this->debtEngineMock->method('calculateAltmanZScore')->willReturn([
-            'z_score' => -1.5,
-            'zone' => 'Distress',
-            'is_bankrupt' => true,
-        ]);
+        $this->debtEngineMock->expects($this->never())->method('calculateAltmanZScore');
+        $this->debtEngineMock->method('assessGoingConcern')->willReturn($this->going(ebit: -120_000_000.0, ebitda: -80_000_000.0, assetValue: 0.0, cash: 0.0, claims: 2_000_000_000.0));
 
         // Mock open buy order with escrow
         $buyer = new User();
@@ -114,7 +108,7 @@ class BankruptcyTest extends TestCase
 
         $this->marketEventMock->expects($this->once())
             ->method('publish')
-            ->with($stock, 'BANKRUPTCY', $this->stringContains('Dead Corp'), -100.00)
+            ->with($stock, 'BANKRUPTCY', $this->logicalAnd($this->stringContains('Dead Corp'), $this->stringContains('Chapter 7')), -100.00)
             ->willReturn(['type' => 'BANKRUPTCY']);
 
         $operator = new MarketOperator(
@@ -145,6 +139,7 @@ class BankruptcyTest extends TestCase
         $stock->setIsBankrupt(true);
 
         $this->debtEngineMock->expects($this->never())->method('calculateAltmanZScore');
+        $this->debtEngineMock->expects($this->never())->method('assessGoingConcern');
 
         $operator = new MarketOperator(
             $this->entityManagerMock,
@@ -158,47 +153,12 @@ class BankruptcyTest extends TestCase
     }
 
     /**
-     * Altman's X3 is EBIT over the trailing year. Annualizing the latest quarter's margin turned one
-     * catastrophic print into a liquidation: a firm that earned $150M in each of three quarters and then
-     * lost $80M in a fire-sale quarter must be judged on the year, not on the quarter times four.
+     * Altman's Z'' predicts failure; it does not adjudicate it. An operating company files when it cannot pay,
+     * and liquidating on a negative score wound up firms that were current on every obligation — WEAV with
+     * $433B of equity, on a trailing EBIT that had counted a goodwill write-off. A firm paying its debts is
+     * not touched, whatever its score, its reported loss or its book equity.
      */
-    public function testSolvencyTestReadsTheTrailingYearOnceFourQuartersHaveBeenReported(): void
-    {
-        $stock = new Stock();
-        $stock->setTicker('YEAR');
-        $stock->setName('Trailing Year Industries');
-        $stock->setPrice('10.00');
-        $stock->setSharesOutstanding('1000000');
-        $stock->setTotalRevenue('1000000000');
-        $stock->setOperatingMargin('0.15');
-        $stock->setReportedOperatingMargin(-0.08);
-        // Three sound quarters and one loss, reported as net income.
-        $stock->setQuarterlyNetIncomeHistory([118_500_000.0, 118_500_000.0, 118_500_000.0, -80_000_000.0]);
-
-        $capturedEbit = null;
-        $this->debtEngineMock->method('calculateAltmanZScore')
-            ->willReturnCallback(function (Stock $s, float $ebit) use (&$capturedEbit): array {
-                $capturedEbit = $ebit;
-
-                return ['z_score' => 5.0, 'zone' => 'Safe', 'is_bankrupt' => false];
-            });
-
-        $operator = new MarketOperator(
-            $this->entityManagerMock,
-            $this->loggerMock,
-            $this->marketEventMock,
-            $this->debtEngineMock
-        );
-
-        $operator->enforceMarketStability([$stock], new MacroStateDTO(corporateTaxRate: 0.21));
-
-        // Trailing net income $275.5M grossed up for tax at 21% is $348.7M of pre-tax income (no interest
-        // on the stub), not the -$80M x 4 the last quarter alone would have said.
-        $this->assertNotNull($capturedEbit);
-        $this->assertEqualsWithDelta(275_500_000.0 / 0.79, $capturedEbit, 1.0);
-    }
-
-    public function testSolvencyTestUsesTheMarginTheFirmActuallyReported(): void
+    public function testAnOperatingFirmCurrentOnItsDebtsIsNeverLiquidatedWhateverItsAltmanScore(): void
     {
         $stock = new Stock();
         $stock->setTicker('ROTS');
@@ -206,97 +166,127 @@ class BankruptcyTest extends TestCase
         $stock->setPrice('10.00');
         $stock->setSharesOutstanding('1000000');
         $stock->setTotalRevenue('1000000000');
-
-        // The structural margin is the slow parameter only asset reinvestment moves; the firm's realized
-        // margin has collapsed to a loss. Solvency must be judged on the loss, not on the plant.
         $stock->setOperatingMargin('0.15');
         $stock->setReportedOperatingMargin(-0.08);
+        $stock->setTotalEquity('-400000000');
+        $stock->setRetainedEarnings('-900000000');
 
-        $capturedEbit = null;
-        $this->debtEngineMock->method('calculateAltmanZScore')
-            ->willReturnCallback(function (Stock $s, float $ebit) use (&$capturedEbit): array {
-                $capturedEbit = $ebit;
+        $this->debtEngineMock->expects($this->never())->method('calculateAltmanZScore');
+        $this->debtEngineMock->expects($this->never())->method('assessGoingConcern');
+        $this->marketEventMock->expects($this->never())->method('publish');
 
-                return ['z_score' => 5.0, 'zone' => 'Safe', 'is_bankrupt' => false];
-            });
+        $operator = new MarketOperator($this->entityManagerMock, $this->loggerMock, $this->marketEventMock, $this->debtEngineMock);
+        $events = $operator->enforceMarketStability([$stock], new MacroStateDTO());
 
-        $operator = new MarketOperator(
-            $this->entityManagerMock,
-            $this->loggerMock,
-            $this->marketEventMock,
-            $this->debtEngineMock
-        );
-
-        $operator->enforceMarketStability([$stock], new MacroStateDTO());
-
-        // Reading the structural margin would have handed the Altman test a healthy +$150M profit on a firm
-        // that is losing $80M, keeping a failing company solvent on paper for as long as its plant held up.
-        $this->assertNotNull($capturedEbit);
-        $this->assertEqualsWithDelta(-80000000.0, $capturedEbit, 1.0);
+        $this->assertSame([], $events);
+        $this->assertFalse($stock->isBankrupt());
+        $this->assertSame('10.00', $stock->getPrice());
     }
 
     /**
-     * A missed payment does not liquidate a solvent firm, however long it has been missing it.
-     *
-     * Liquidation is a solvency verdict. An event of default shuts the issuer out of the primary market,
-     * costs it its facility and rates it D, but a company whose assets comfortably cover the claims on them
-     * is worth more alive than broken up, and its creditors know it. Winding up on the flag alone destroyed
-     * firms carrying hundreds of billions of equity because one quarter ended with an empty treasury on the
-     * day a maturity landed — and since nothing ever cleared the flag, it did so for the rest of their lives.
+     * A missed payment inside its grace period is a late payment, not a filing: the firm has the cure period
+     * the indenture gives it to find the money.
      */
-    public function testPaymentDefaultAloneDoesNotLiquidateASolventCompany(): void
+    public function testADefaultStillInsideItsGracePeriodFilesNothing(): void
     {
-        $stock = new Stock();
-        $stock->setTicker('DFLT');
-        $stock->setName('Defaulted Holdings');
-        $stock->setPrice('25.00');
-        $stock->setSharesOutstanding('1000000');
-        $stock->setTotalRevenue('1000000000');
-        $stock->setOperatingMargin('0.15');
-        $stock->setPaymentDefault(true);
-        // Well past any cure period: even an UNCURED default is not grounds for winding up a solvent firm.
-        $stock->setQuartersInDefault(8);
+        $stock = $this->buildDefaulter('LATE', 'Late Payer Inc', quartersInDefault: \App\Service\Math\FinancialConstants::PAYMENT_DEFAULT_GRACE_QUARTERS);
 
-        // Comfortably solvent on the balance sheet.
-        $this->debtEngineMock->method('calculateAltmanZScore')
-            ->willReturn(['z_score' => 8.0, 'zone' => 'Safe', 'is_bankrupt' => false]);
+        $this->debtEngineMock->expects($this->never())->method('assessGoingConcern');
 
-        $this->entityManagerMock->method('getRepository')->willReturn($this->createConfiguredStub(
-            TradeOrderRepository::class,
-            ['findOpenByTicker' => []]
-        ));
-
-        $operator = new MarketOperator(
-            $this->entityManagerMock,
-            $this->loggerMock,
-            $this->marketEventMock,
-            $this->debtEngineMock
-        );
-
+        $operator = new MarketOperator($this->entityManagerMock, $this->loggerMock, $this->marketEventMock, $this->debtEngineMock);
         $operator->enforceMarketStability([$stock], new MacroStateDTO());
+
+        $this->assertFalse($stock->isBankrupt());
+        $this->assertTrue($stock->isPaymentDefault(), 'the default stands; only a plan or the money cures it');
+    }
+
+    /**
+     * A solvent firm that missed a maturity reaches Chapter 11 with its creditors covered in full, so the plan
+     * reinstates their claims and the shareholders keep the company: nothing is cancelled and nothing is
+     * exchanged, and the default is cured. Liquidating it for a missed payment destroyed firms carrying
+     * hundreds of billions of equity.
+     */
+    public function testAnUncuredDefaultOnASolventFirmIsReinstatedAndTheEquityKept(): void
+    {
+        $stock = $this->buildDefaulter('DFLT', 'Defaulted Holdings', quartersInDefault: 8);
+        $stock->setPrice('25.00');
+        $stock->setWholesaleDebt('500000000');
+        $stock->setTotalEquity('900000000');
+
+        $this->debtEngineMock->method('assessGoingConcern')->willReturn($this->going(ebit: 150_000_000.0, ebitda: 200_000_000.0, assetValue: 2_100_000_000.0, cash: 100_000_000.0, claims: 500_000_000.0));
+        $this->connectionMock->expects($this->never())->method('executeStatement');
+        $this->marketEventMock->expects($this->once())
+            ->method('publish')
+            ->with($stock, 'REORGANIZATION', $this->stringContains('shareholders keep the company'), $this->anything())
+            ->willReturn([]);
+
+        $operator = new MarketOperator($this->entityManagerMock, $this->loggerMock, $this->marketEventMock, $this->debtEngineMock);
+        $operator->enforceMarketStability([$stock], new MacroStateDTO(yield5yEma: 0.04));
 
         $this->assertFalse($stock->isBankrupt(), 'a solvent firm must not be liquidated for a missed payment');
         $this->assertSame('25.00', $stock->getPrice(), 'the equity is not wiped');
+        $this->assertFalse($stock->isPaymentDefault(), 'the plan cures the default');
+        $this->assertSame(0, $stock->getQuartersInDefault());
+        $this->assertEqualsWithDelta(500_000_000.0, (float) $stock->getWholesaleDebt(), 1.0, 'every claim is reinstated');
+        $this->assertEqualsWithDelta(900_000_000.0, (float) $stock->getTotalEquity(), 1.0);
     }
 
     /**
-     * Insolvency still liquidates, and an uncured event of default is what makes it a creditor-driven
-     * filing rather than a firm simply running out of balance sheet. The Chapter 7 path is intact.
+     * A viable business that owes more than it is worth is reorganized, not wound up. The plan keeps the debt
+     * it can carry on its own lender test, swaps the rest for the equity, and the old shares — out of the
+     * money under absolute priority — are cancelled. The company keeps trading and keeps its plant.
      */
-    public function testAnUncuredDefaultCombinedWithInsolvencyStillLiquidates(): void
+    public function testAViableInsolventFirmIsReorganizedAndKeepsTrading(): void
     {
-        $stock = new Stock();
-        $stock->setTicker('GONE');
-        $stock->setName('Gone Holdings');
-        $stock->setPrice('25.00');
-        $stock->setSharesOutstanding('1000000');
-        $stock->setTotalRevenue('1000000000');
-        $stock->setOperatingMargin('0.15');
-        $stock->setPaymentDefault(true);
-        $stock->setQuartersInDefault(4);
+        $stock = $this->buildDefaulter('REOR', 'Reorganized Freight', quartersInDefault: 2);
+        $stock->setIndustry('Airlines');
+        $stock->setPrice('0.50');
+        $stock->setWholesaleDebt('2000000000');
+        $stock->setTotalEquity('-500000000');
+        $stock->setRetainedEarnings('-900000000');
 
-        $this->debtEngineMock->method('calculateAltmanZScore')
-            ->willReturn(['z_score' => -0.4, 'zone' => 'Distress', 'is_bankrupt' => true]);
+        $store = new \App\Service\Corporate\Industry\InMemoryIndustryShareStore();
+        $ledger = new \App\Service\Corporate\Industry\IndustryShareLedger($store);
+        $ledger->resolveIndustryCapacityRatio($stock, 1_000_000.0, 0.5, 1.0, 0.0, 0.0, 1, 252);
+        $capacityBefore = $store->readIndustry('Airlines')['REOR']['capacity'];
+
+        $this->debtEngineMock->method('assessGoingConcern')->willReturn($this->going(ebit: 50_000_000.0, ebitda: 80_000_000.0, assetValue: 320_000_000.0, cash: 20_000_000.0, claims: 2_000_000_000.0));
+        $this->entityManagerMock->method('getRepository')->willReturn($this->tradeOrderRepoMock);
+        $this->tradeOrderRepoMock->method('findOpenByTicker')->willReturn([]);
+        $this->connectionMock->expects($this->once())
+            ->method('executeStatement')
+            ->with($this->stringContains('DELETE FROM user_stocks'), $this->anything());
+        $this->marketEventMock->expects($this->once())
+            ->method('publish')
+            ->with($stock, 'REORGANIZATION', $this->logicalAnd($this->stringContains('Chapter 11'), $this->stringContains('creditors now own')), -100.0)
+            ->willReturn([]);
+
+        $operator = new MarketOperator($this->entityManagerMock, $this->loggerMock, $this->marketEventMock, $this->debtEngineMock, $ledger);
+        $operator->enforceMarketStability([$stock], new MacroStateDTO(yield5yEma: 0.04));
+
+        // Exit debt is the tightest of: coverage 50M / (5% x (2.0 + 1.5)) = 285.7M, the airline 3.5x covenant
+        // 3.5 x 80M + 20M = 300M, and the 320M the assets are worth. The other 1.71B became the equity.
+        $exitDebt = 50_000_000.0 / (0.05 * 3.5);
+        $this->assertFalse($stock->isBankrupt());
+        $this->assertEqualsWithDelta($exitDebt, (float) $stock->getWholesaleDebt(), 1.0);
+        $this->assertEqualsWithDelta(-500_000_000.0 + (2_000_000_000.0 - $exitDebt), (float) $stock->getTotalEquity(), 1.0);
+        $this->assertEqualsWithDelta(0.0, (float) $stock->getRetainedEarnings(), 1e-6, 'fresh start eliminates the deficit');
+        $this->assertFalse($stock->isPaymentDefault());
+        $this->assertEqualsWithDelta(0.05, (float) $stock->getHistoricalFixedRate(), 1e-9, 'the exit notes are new paper');
+        $this->assertEqualsWithDelta((320_000_000.0 - $exitDebt) / 1_000_000.0, (float) $stock->getPrice(), 1e-6, 'the assets less the exit debt, over a million new shares');
+        $this->assertSame($capacityBefore, $store->readIndustry('Airlines')['REOR']['capacity'], 'a reorganized firm keeps its plant');
+    }
+
+    /**
+     * An uncured default on a business that no longer covers its cash operating costs is a creditor-driven
+     * Chapter 7 filing, and the tape says so.
+     */
+    public function testAnUncuredDefaultOnANonViableBusinessIsNarratedAsACreditorDrivenLiquidation(): void
+    {
+        $stock = $this->buildDefaulter('GONE', 'Gone Holdings', quartersInDefault: 4);
+        $stock->setPrice('25.00');
+
+        $this->debtEngineMock->method('assessGoingConcern')->willReturn($this->going(ebit: -300_000_000.0, ebitda: -250_000_000.0, assetValue: 0.0, cash: 0.0, claims: 1_000_000_000.0));
 
         $this->entityManagerMock->method('getRepository')->willReturn($this->createConfiguredStub(
             TradeOrderRepository::class,
@@ -323,6 +313,34 @@ class BankruptcyTest extends TestCase
         $this->assertTrue($stock->isBankrupt());
         $this->assertEquals('0.00000000', $stock->getPrice());
         $this->assertStringContainsString('failed to cure an event of default', (string) $captured);
+        $this->assertStringContainsString('Chapter 7', (string) $captured);
+    }
+
+    /**
+     * Lenders are closed on their capital ratio, as a regulator closes a bank below its statutory floor; that
+     * path is unchanged and never reaches the Chapter 11 assessment.
+     */
+    public function testALenderBelowItsCapitalFloorIsStillClosed(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('BANK');
+        $stock->setName('Undercapitalized Bank');
+        $stock->setIndustry('Banks - Regional');
+        $stock->setPrice('5.00');
+        $stock->setSharesOutstanding('1000000');
+        $stock->setTotalRevenue('1000000000');
+        $stock->setOperatingMargin('0.20');
+
+        $this->debtEngineMock->method('calculateAltmanZScore')->willReturn(['z_score' => 1.2, 'zone' => 'Distress', 'is_bankrupt' => true]);
+        $this->debtEngineMock->expects($this->never())->method('assessGoingConcern');
+        $this->entityManagerMock->method('getRepository')->willReturn($this->tradeOrderRepoMock);
+        $this->tradeOrderRepoMock->method('findOpenByTicker')->willReturn([]);
+        $this->marketEventMock->method('publish')->willReturn([]);
+
+        $operator = new MarketOperator($this->entityManagerMock, $this->loggerMock, $this->marketEventMock, $this->debtEngineMock);
+        $operator->enforceMarketStability([$stock], new MacroStateDTO());
+
+        $this->assertTrue($stock->isBankrupt());
     }
 
     /**
@@ -338,9 +356,6 @@ class BankruptcyTest extends TestCase
         $stock->setTotalRevenue('1000000000');
         $stock->setOperatingMargin('0.15');
 
-        $this->debtEngineMock->method('calculateAltmanZScore')
-            ->willReturn(['z_score' => 8.0, 'zone' => 'Safe', 'is_bankrupt' => false]);
-
         $operator = new MarketOperator(
             $this->entityManagerMock,
             $this->loggerMock,
@@ -353,36 +368,27 @@ class BankruptcyTest extends TestCase
         $this->assertFalse($stock->isBankrupt());
     }
 
-    public function testSolvencyTestFallsBackToTheStructuralMarginBeforeTheFirstReport(): void
+    /** An operating firm whose missed maturity has stood for the given number of quarters. */
+    private function buildDefaulter(string $ticker, string $name, int $quartersInDefault): Stock
     {
         $stock = new Stock();
-        $stock->setTicker('NEWC');
-        $stock->setName('Newly Listed Corp');
+        $stock->setTicker($ticker);
+        $stock->setName($name);
         $stock->setPrice('10.00');
         $stock->setSharesOutstanding('1000000');
         $stock->setTotalRevenue('1000000000');
-        $stock->setOperatingMargin('0.15');
+        $stock->setOperatingMargin('0.10');
+        $stock->setCreditRating('D');
+        $stock->setCreditSpread('0.01');
+        $stock->setPaymentDefault(true);
+        $stock->setQuartersInDefault($quartersInDefault);
 
-        $this->assertNull($stock->getReportedOperatingMargin());
+        return $stock;
+    }
 
-        $capturedEbit = null;
-        $this->debtEngineMock->method('calculateAltmanZScore')
-            ->willReturnCallback(function (Stock $s, float $ebit) use (&$capturedEbit): array {
-                $capturedEbit = $ebit;
-
-                return ['z_score' => 5.0, 'zone' => 'Safe', 'is_bankrupt' => false];
-            });
-
-        $operator = new MarketOperator(
-            $this->entityManagerMock,
-            $this->loggerMock,
-            $this->marketEventMock,
-            $this->debtEngineMock
-        );
-
-        $operator->enforceMarketStability([$stock], new MacroStateDTO());
-
-        $this->assertEqualsWithDelta(150000000.0, $capturedEbit, 1.0);
+    private function going(float $ebit, float $ebitda, float $assetValue, float $cash, float $claims): GoingConcernDTO
+    {
+        return new GoingConcernDTO(trailingEbit: $ebit, trailingEbitda: $ebitda, assetValue: $assetValue, cash: $cash, claims: $claims);
     }
 
     public function testTradeExecutionServiceBlocksTradingOnBankruptStock(): void
@@ -548,6 +554,8 @@ class BankruptcyTest extends TestCase
             return $stock;
         };
         $failed = $build('DEAD');
+        $failed->setPaymentDefault(true);
+        $failed->setQuartersInDefault(2);
         $survivor = $build('BIG');
 
         $store = new \App\Service\Corporate\Industry\InMemoryIndustryShareStore();
@@ -555,9 +563,7 @@ class BankruptcyTest extends TestCase
         $ledger->resolveIndustryCapacityRatio($survivor, 1_000_000.0, 0.5, 1.0, 0.0, 0.0, 1, 252);
         $ledger->resolveIndustryCapacityRatio($failed, 1_000_000.0, 0.5, 1.0, 0.0, 0.0, 2, 252);
 
-        $this->debtEngineMock->method('calculateAltmanZScore')->willReturnCallback(
-            static fn (Stock $stock): array => ['z_score' => $stock->getTicker() === 'DEAD' ? -1.5 : 5.0, 'zone' => 'Safe', 'is_bankrupt' => $stock->getTicker() === 'DEAD']
-        );
+        $this->debtEngineMock->method('assessGoingConcern')->willReturn($this->going(ebit: -50_000.0, ebitda: -20_000.0, assetValue: 0.0, cash: 0.0, claims: 1_000_000.0));
         $this->entityManagerMock->method('getRepository')->willReturn($this->tradeOrderRepoMock);
         $this->tradeOrderRepoMock->method('findOpenByTicker')->willReturn([]);
         $this->marketEventMock->method('publish')->willReturn(['type' => 'BANKRUPTCY']);

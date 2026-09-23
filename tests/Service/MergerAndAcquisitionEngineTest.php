@@ -10,6 +10,8 @@ use App\DTO\MacroStateDTO;
 use App\Data\ManagementStyle;
 use App\Entity\Stock;
 use App\Service\Corporate\DebtEngine;
+use App\Service\Corporate\Industry\InMemoryIndustryShareStore;
+use App\Service\Corporate\Industry\IndustryShareLedger;
 use App\Service\Corporate\MergerAndAcquisitionEngine;
 use App\Service\Event\MarketEventPublisher;
 use App\Service\Math\CorporateMetrics;
@@ -101,6 +103,7 @@ class MergerAndAcquisitionEngineTest extends TestCase
         );
 
         $this->debtEngineMock->method('analyzeDebtHealth')->willReturn($debtHealthMock);
+        $this->debtEngineMock->method('analyzeTrailingDebtHealth')->willReturn($debtHealthMock);
         $this->corporateMetricsMock->method('calculateOperatingBase')->willReturn(15000000000.0);
         $this->mathUtilityMock->method('calculateManagementFairValuePE')->willReturn(15.0);
         $this->mathUtilityMock->method('calculateLogNormalSynergy')->willReturn(1.10);
@@ -178,6 +181,7 @@ class MergerAndAcquisitionEngineTest extends TestCase
         );
 
         $this->debtEngineMock->method('analyzeDebtHealth')->willReturn($debtHealthMock);
+        $this->debtEngineMock->method('analyzeTrailingDebtHealth')->willReturn($debtHealthMock);
         $this->corporateMetricsMock->method('calculateOperatingBase')->willReturn(15000000000.0);
         $this->mathUtilityMock->method('calculateManagementFairValuePE')->willReturn(15.0);
         $this->mathUtilityMock->method('calculateLogNormalSynergy')->willReturn(1.10);
@@ -324,6 +328,7 @@ class MergerAndAcquisitionEngineTest extends TestCase
         );
 
         $this->debtEngineMock->method('analyzeDebtHealth')->willReturn($debtHealthMock);
+        $this->debtEngineMock->method('analyzeTrailingDebtHealth')->willReturn($debtHealthMock);
         $this->corporateMetricsMock->method('calculateOperatingBase')->willReturn(15000000000.0);
         $this->mathUtilityMock->method('calculateManagementFairValuePE')->willReturn(15.0);
         $this->mathUtilityMock->method('calculateLogNormalSynergy')->willReturn(1.10);
@@ -408,6 +413,7 @@ class MergerAndAcquisitionEngineTest extends TestCase
         );
 
         $this->debtEngineMock->method('analyzeDebtHealth')->willReturn($debtHealthMock);
+        $this->debtEngineMock->method('analyzeTrailingDebtHealth')->willReturn($debtHealthMock);
         $this->corporateMetricsMock->method('calculateOperatingBase')->willReturn(10000000.0);
         $this->corporateMetricsMock->method('calculateScaleRatio')->willReturn(0.10);
         $this->mathUtilityMock->method('checkProbability')->willReturn(true);
@@ -872,7 +878,8 @@ class MergerAndAcquisitionEngineTest extends TestCase
 
         $stock = $this->buildLedgeredAcquirer('PLNT', 4_000_000_000.0, 1_000_000_000.0, 100_000_000.0);
         $stock->setManagementStyle(ManagementStyle::Steward);
-        $ledger->resolveIndustryCapacityRatio($stock, 20_000_000_000.0, 0.3, 1.0, 0.0, 0.0, 10, 252);
+        // At 5% of its market the deal clears merger review whole.
+        $ledger->resolveIndustryCapacityRatio($stock, 20_000_000_000.0, 0.05, 1.0, 0.0, 0.0, 10, 252);
 
         $result = $engine->evaluatePrivateAcquisition($stock, $this->healthyMacro(), 1.0);
         $this->assertIsArray($result);
@@ -881,31 +888,185 @@ class MergerAndAcquisitionEngineTest extends TestCase
 
         $this->assertEqualsWithDelta(
             1.0,
-            $ledger->resolveIndustryCapacityRatio($stock, 20_000_000_000.0 + $acquiredRevenue, 0.3, 1.0, 0.0, 0.0, 73, 252),
+            $ledger->resolveIndustryCapacityRatio($stock, 20_000_000_000.0 + $acquiredRevenue, 0.05, 1.0, 0.0, 0.0, 73, 252),
             1e-9
         );
     }
 
     /**
-     * The lender prices the next deal on what the firm actually earned last quarter, as the treasury's own
-     * lender test does. Reading the structural margin kept a firm that was losing money creditworthy.
+     * The 2023 Merger Guidelines presume a deal illegal when it raises the HHI by more than 100 points and
+     * either leaves the market above 1,800 or creates a firm with more than 30% of it. The cleared share is
+     * the largest deal those screens pass, checked here against the screens as the guidelines state them.
      */
-    public function testAcquisitionCreditIsUnderwrittenOnTheReportedMargin(): void
+    public function testTheClearedTargetShareIsTheLargestDealTheMergerScreensPass(): void
+    {
+        $presumedIllegal = static function (float $share, float $herfindahl, float $target): bool {
+            $delta = 2.0 * $share * $target;
+
+            return $delta > 0.0100 && (($herfindahl + ($target * $target) + $delta) > 0.1800 || ($share + $target) > 0.30);
+        };
+
+        foreach ([0.0, 0.02, 0.05, 0.10, 0.20, 0.28, 0.30, 0.35, 0.50, 0.80] as $share) {
+            foreach ([0.0, 0.02, 0.08, 0.15, 0.18, 0.25] as $rivals) {
+                $herfindahl = ($share * $share) + $rivals;
+                $cleared = MergerAndAcquisitionEngine::maxClearedTargetShare($share, $herfindahl);
+                $case = "share {$share}, HHI {$herfindahl}, cleared {$cleared}";
+
+                foreach ([0.25, 0.5, 0.999999] as $fraction) {
+                    $this->assertFalse($presumedIllegal($share, $herfindahl, $cleared * $fraction), "every smaller deal clears: {$case}");
+                }
+                if ($cleared < 1.0) {
+                    $this->assertTrue($presumedIllegal($share, $herfindahl, $cleared + 1e-6), "a larger deal is presumed illegal: {$case}");
+                }
+            }
+        }
+
+        // A leader at 30% alone in its market is held to the delta safe harbour: 100 points over 2 x 30%.
+        $this->assertEqualsWithDelta(0.0100 / 0.60, MergerAndAcquisitionEngine::maxClearedTargetShare(0.30, 0.09), 1e-12);
+        // A 10% firm in an unconcentrated market may buy up to the 30% share ceiling.
+        $this->assertEqualsWithDelta(0.20, MergerAndAcquisitionEngine::maxClearedTargetShare(0.10, 0.01), 1e-12);
+        // In a highly concentrated market even a small firm only gets the safe harbour.
+        $this->assertEqualsWithDelta(0.10, MergerAndAcquisitionEngine::maxClearedTargetShare(0.05, 0.20), 1e-12);
+    }
+
+    /**
+     * A leader at 30% of its market buys no more of it than the delta safe harbour clears, 1.67% of the
+     * market, however much its balance sheet could pay. Its share after the deal is its share before plus
+     * exactly that, which is an HHI increase of exactly 100 points.
+     */
+    public function testADominantAcquirerBuysNoMoreThanMergerReviewClears(): void
+    {
+        $this->primeHealthyDeal(operatingBase: 15_000_000_000.0);
+        $this->bookIssuedDebt();
+
+        $unreviewed = $this->buildLedgeredAcquirer('FREE', 4_000_000_000.0, 1_000_000_000.0, 100_000_000.0);
+        $unreviewed->setManagementStyle(ManagementStyle::Steward);
+        $unreviewedDeal = $this->engine->evaluatePrivateAcquisition($unreviewed, $this->healthyMacro(), 1.0);
+        $this->assertIsArray($unreviewedDeal);
+        $unreviewedRevenue = (float) $unreviewed->getTotalRevenue() - 20_000_000_000.0;
+
+        // The market is sized so the cleared target is half of what the same balance sheet buys unreviewed.
+        $cleared = MergerAndAcquisitionEngine::maxClearedTargetShare(0.30, 0.09);
+        $marketRevenue = 0.5 * $unreviewedRevenue / $cleared;
+        $ledger = new IndustryShareLedger(new InMemoryIndustryShareStore());
+        $engine = new MergerAndAcquisitionEngine($this->marketEventPublisherMock, $this->debtEngineMock, $this->mathUtilityMock, $this->corporateMetricsMock, $ledger);
+        $leader = $this->buildLedgeredAcquirer('LEAD', 4_000_000_000.0, 1_000_000_000.0, 100_000_000.0);
+        $leader->setManagementStyle(ManagementStyle::Steward);
+        $ledger->resolveIndustryCapacityRatio($leader, 0.30 * $marketRevenue, 0.30, 1.0, 0.0, 0.0, 10, 252);
+
+        $deal = $engine->evaluatePrivateAcquisition($leader, $this->healthyMacro(), 1.0, 20, 252);
+        $this->assertIsArray($deal);
+        $acquiredRevenue = (float) $leader->getTotalRevenue() - 20_000_000_000.0;
+
+        $this->assertEqualsWithDelta($cleared * $marketRevenue, $acquiredRevenue, 1.0, 'the review, not the balance sheet, sized the deal');
+        $this->assertLessThan((float) $unreviewedDeal['spent'], (float) $deal['spent'], 'and the price follows the target');
+        $market = $ledger->describeMergerMarket($leader, $this->healthyMacro(), 0.0, 30, 252);
+        $this->assertEqualsWithDelta(0.30 + $cleared, $market['acquirer_share'], 1e-9);
+        $this->assertEqualsWithDelta(0.0100, $market['herfindahl'] - 0.09 - ($cleared * $cleared), 1e-9);
+    }
+
+    /** A market the roster already owns has nothing left off the board to buy: no deal and no cash spent. */
+    public function testAnAcquirerWhoseMarketHasNoFringeLeftBuysNothing(): void
+    {
+        $this->primeHealthyDeal(operatingBase: 15_000_000_000.0);
+        $this->bookIssuedDebt();
+        $ledger = new IndustryShareLedger(new InMemoryIndustryShareStore());
+        $engine = new MergerAndAcquisitionEngine($this->marketEventPublisherMock, $this->debtEngineMock, $this->mathUtilityMock, $this->corporateMetricsMock, $ledger);
+
+        // At 5% the review would clear a target of a tenth of the market; the rival holds the other 95%.
+        $acquirer = $this->buildLedgeredAcquirer('SMAL', 4_000_000_000.0, 1_000_000_000.0, 100_000_000.0);
+        $acquirer->setManagementStyle(ManagementStyle::Steward);
+        $ledger->resolveIndustryCapacityRatio($acquirer, 20_000_000_000.0, 0.05, 1.0, 0.0, 0.0, 10, 252);
+        $rival = (new Stock())->setTicker('HOLD')->setIndustry('Technology');
+        $ledger->resolveIndustryCapacityRatio($rival, 380_000_000_000.0, 0.95, 1.0, 0.0, 0.0, 12, 252);
+        $this->assertEqualsWithDelta(0.0, $ledger->describeMergerMarket($acquirer, $this->healthyMacro(), 0.0, 20, 252)['fringe_share'], 1e-12);
+
+        $this->assertNull($engine->evaluatePrivateAcquisition($acquirer, $this->healthyMacro(), 1.0, 20, 252));
+        $this->assertSame('4000000000', $acquirer->getCorporateTreasury());
+        $this->assertSame('20000000000', $acquirer->getTotalRevenue());
+    }
+
+    /**
+     * The lender prices the next deal on what the firm actually earned over the last twelve months, as the
+     * treasury's own lender test does. Reading the structural margin kept a firm that was losing money
+     * creditworthy; one annualized quarter made its credit flip with the seasons.
+     */
+    public function testAcquisitionCreditIsUnderwrittenOnTheTrailingYear(): void
     {
         $this->primeHealthyDeal(operatingBase: 15_000_000_000.0);
         $health = $this->debtEngineMock->analyzeDebtHealth(new Stock(), $this->healthyMacro());
 
         $stock = $this->buildLedgeredAcquirer('RPTM', 4_000_000_000.0, 1_000_000_000.0, 100_000_000.0);
-        $stock->setReportedOperatingMargin(-0.04);
 
         $debtEngine = $this->createMock(DebtEngine::class);
         $debtEngine->expects($this->once())
-            ->method('analyzeDebtHealth')
-            ->with($stock, $this->anything(), null, -0.04)
+            ->method('analyzeTrailingDebtHealth')
+            ->with($stock, $this->anything())
             ->willReturn($health);
+        $debtEngine->expects($this->never())->method('analyzeDebtHealth');
         $engine = new MergerAndAcquisitionEngine($this->marketEventPublisherMock, $debtEngine, $this->mathUtilityMock, $this->corporateMetricsMock);
 
         $engine->evaluatePrivateAcquisition($stock, $this->healthyMacro(), 1.0);
+    }
+
+    /**
+     * Credit agreements measure a buyer pro forma, as if it had owned the target all year: every trailing
+     * quarter gains the same quarter-share of the acquired business, so the window's revenue grows by exactly
+     * what the deal added to the run-rate.
+     */
+    public function testAnAcquisitionRestatesTheTrailingYearProForma(): void
+    {
+        $stock = $this->buildLedgeredAcquirer('PROF', treasury: 4_000_000_000.0, debt: 1_000_000_000.0, shares: 100_000_000.0);
+        $history = [
+            ['revenue' => 4_000_000_000.0, 'ebit' => 900_000_000.0],
+            ['revenue' => 5_000_000_000.0, 'ebit' => 1_300_000_000.0],
+            ['revenue' => 4_500_000_000.0, 'ebit' => 1_000_000_000.0],
+            ['revenue' => 6_500_000_000.0, 'ebit' => 1_800_000_000.0],
+        ];
+        $stock->setQuarterlyOperatingHistory($history);
+        $this->primeHealthyDeal(operatingBase: 15_000_000_000.0);
+        $this->bookIssuedDebt();
+        $revenueBefore = (float) $stock->getTotalRevenue();
+
+        $this->assertIsArray($this->engine->evaluatePrivateAcquisition($stock, $this->healthyMacro(), 1.0));
+
+        $acquiredRevenue = (float) $stock->getTotalRevenue() - $revenueBefore;
+        $this->assertGreaterThan(0.0, $acquiredRevenue);
+        $restated = $stock->getQuarterlyOperatingHistory();
+        $this->assertCount(4, $restated);
+        $ebitAdded = $restated[0]['ebit'] - $history[0]['ebit'];
+        $this->assertGreaterThan(0.0, $ebitAdded);
+        foreach ($restated as $i => $quarter) {
+            $this->assertEqualsWithDelta($history[$i]['revenue'] + ($acquiredRevenue / 4.0), $quarter['revenue'], 1.0);
+            $this->assertEqualsWithDelta($history[$i]['ebit'] + $ebitAdded, $quarter['ebit'], 1.0);
+        }
+    }
+
+    /**
+     * ...and a seller as if the business it sold had never been its own.
+     */
+    public function testADivestitureRestatesTheTrailingYearProForma(): void
+    {
+        $stock = $this->buildLedgeredAcquirer('PROD', treasury: 1_000_000_000.0, debt: 4_000_000_000.0, shares: 10_000_000.0);
+        $stock->setOperatingMargin('-0.05');
+        $stock->setEarningsPerShare('-0.10');
+        $stock->setTotalNetIncome('-1000000000');
+        $stock->setRoicTtm('0.00');
+        $history = [
+            ['revenue' => 5_000_000_000.0, 'ebit' => -100_000_000.0],
+            ['revenue' => 4_000_000_000.0, 'ebit' => -300_000_000.0],
+            ['revenue' => 5_500_000_000.0, 'ebit' => 200_000_000.0],
+            ['revenue' => 5_500_000_000.0, 'ebit' => -200_000_000.0],
+        ];
+        $stock->setQuarterlyOperatingHistory($history);
+        $this->primeDistressedDivestiture(operatingBase: 10_000_000_000.0, fraction: 0.25);
+
+        $this->assertIsArray($this->engine->evaluateCorporateDivestiture($stock, new MacroStateDTO(policyRateEma: 0.04, corporateTaxRate: 0.20, yield5yEma: 0.04, nominalGdpIndex: 1.0), 1.0));
+
+        foreach ($stock->getQuarterlyOperatingHistory() as $i => $quarter) {
+            $this->assertEqualsWithDelta($history[$i]['revenue'] * 0.75, $quarter['revenue'], 1.0);
+            $this->assertEqualsWithDelta($history[$i]['ebit'] * 0.75, $quarter['ebit'], 1.0);
+        }
     }
 
     private function buildLedgeredAcquirer(string $ticker, float $treasury, float $debt, float $shares): Stock
@@ -978,6 +1139,7 @@ class MergerAndAcquisitionEngineTest extends TestCase
         );
 
         $this->debtEngineMock->method('analyzeDebtHealth')->willReturn($health);
+        $this->debtEngineMock->method('analyzeTrailingDebtHealth')->willReturn($health);
         $this->corporateMetricsMock->method('calculateOperatingBase')->willReturn($operatingBase);
         $this->mathUtilityMock->method('calculateManagementFairValuePE')->willReturn(15.0);
         $this->mathUtilityMock->method('calculateLogNormalSynergy')->willReturn(1.10);
@@ -1020,6 +1182,7 @@ class MergerAndAcquisitionEngineTest extends TestCase
         );
 
         $this->debtEngineMock->method('analyzeDebtHealth')->willReturn($health);
+        $this->debtEngineMock->method('analyzeTrailingDebtHealth')->willReturn($health);
         $this->corporateMetricsMock->method('calculateOperatingBase')->willReturn($operatingBase);
         $this->corporateMetricsMock->method('calculateScaleRatio')->willReturn(0.10);
         $this->mathUtilityMock->method('checkProbability')->willReturn(true);

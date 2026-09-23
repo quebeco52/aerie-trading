@@ -142,7 +142,7 @@ class StockTracker
             $currentVol = (float) ($stock->getCurrentVolatility() ?? $baselineVol);
 
             // M&A
-            $maResult = $this->maEngine->evaluatePrivateAcquisition($stock, $macroDTO, $dt);
+            $maResult = $this->maEngine->evaluatePrivateAcquisition($stock, $macroDTO, $dt, $tickCount, $ticksPerYear);
             $maShock = 0.0;
             if ($maResult) {
                 $events[] = $maResult['event'];

@@ -1217,6 +1217,7 @@ class MathUtilityTest extends TestCase
             $solved = $this->mathUtility->solveMertonAssetVolatility($equity, $equityVolatility, $debt, $rate, $horizon);
 
             $this->assertEqualsWithDelta($assetVolatility, $solved, 1e-6, sprintf('D/V %.2f', $debt / $assets));
+            $this->assertEqualsWithDelta($assets, $this->mathUtility->solveMertonAssetValue($equity, $assetVolatility, $debt, $rate, $horizon), 1e-6, 'the equity price implies the assets');
         }
     }
 
@@ -1229,6 +1230,20 @@ class MathUtilityTest extends TestCase
         $solved = $this->mathUtility->solveMertonAssetVolatility(20.0, 0.60, 90.0, 0.03, 5.0);
 
         $this->assertGreaterThan(0.60 * 20.0 / 110.0, $solved);
+    }
+
+    /**
+     * Deep out of the money the equity is almost all option value: a firm whose shares are worth 1% of its
+     * debt has assets worth well under the debt, which is what makes it insolvent rather than merely levered.
+     */
+    public function testMertonAssetValueOfNearlyWorthlessEquityIsBelowTheDebt(): void
+    {
+        $assets = $this->mathUtility->solveMertonAssetValue(1.0, 0.20, 100.0, 0.03, 5.0);
+
+        $this->assertLessThan(100.0, $assets);
+        $this->assertGreaterThan(1.0, $assets);
+        $this->assertSame(500.0, $this->mathUtility->solveMertonAssetValue(500.0, 0.22, 0.0, 0.03, 5.0), 'no debt: the equity is the firm');
+        $this->assertSame(0.0, $this->mathUtility->solveMertonAssetValue(0.0, 0.22, 100.0, 0.03, 5.0));
     }
 
     public function testMertonAssetVolatilityOfAnUnleveredFirmIsItsEquityVolatility(): void

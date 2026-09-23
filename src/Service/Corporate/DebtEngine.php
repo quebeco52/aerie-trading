@@ -27,9 +27,9 @@ class DebtEngine
 
     // --- Leverage Covenant (Net Debt / EBITDA) ---
     /** Sector limits at or above this are a no-test sentinel: financials are bound by regulatory capital, not cash-flow leverage. */
-    private const EBITDA_COVENANT_EXEMPT_LIMIT = 999.0;
+    public const EBITDA_COVENANT_EXEMPT_LIMIT = 999.0;
     /** Fallback Net Debt / EBITDA covenant for an industry carrying no calibrated limit. */
-    private const DEFAULT_EBITDA_COVENANT_LIMIT = 3.0;
+    public const DEFAULT_EBITDA_COVENANT_LIMIT = 3.0;
 
     // --- CAPM / Beta Limits ---
     /** Prevent runaway WACC in standard CAPM by capping debt to equity ratio. */
@@ -372,6 +372,78 @@ class DebtEngine
         $stock->setAssetVolatility($assetVolatility);
 
         return $assetVolatility;
+    }
+
+    /**
+     * Revenue and operating margin over the last twelve months: the basis a lender measures coverage and
+     * leverage on, where a firm's seasons and one quarter's charges wash out. Annualizing a single quarter
+     * instead let creditworthiness flip with the calendar.
+     *
+     * @return array{revenue: float, margin: float}|null Null until a window is recorded, or with no revenue in it.
+     */
+    public function resolveTrailingOperatingBasis(Stock $stock): ?array
+    {
+        $history = $stock->getQuarterlyOperatingHistory() ?? [];
+        if (count($history) < EarningsEngine::TTM_QUARTERS) {
+            return null;
+        }
+
+        $revenue = array_sum(array_column($history, 'revenue'));
+        if ($revenue <= 0.0) {
+            return null;
+        }
+
+        return ['revenue' => $revenue, 'margin' => array_sum(array_column($history, 'ebit')) / $revenue];
+    }
+
+    /**
+     * Debt health on the last twelve months, as a lender underwrites it. Before the first earnings report it
+     * reads the reported margin, which is itself null until then and falls back to the structural one.
+     */
+    public function analyzeTrailingDebtHealth(Stock $stock, MacroStateDTO $macroState): \App\DTO\DebtHealthDTO
+    {
+        $trailing = $this->resolveTrailingOperatingBasis($stock);
+        if ($trailing === null) {
+            return $this->analyzeDebtHealth($stock, $macroState, null, $stock->getReportedOperatingMargin());
+        }
+
+        return $this->analyzeDebtHealth($stock, $macroState, $trailing['revenue'], $trailing['margin']);
+    }
+
+    /**
+     * What the firm is worth as a going concern against what it owes.
+     *
+     * The assets are valued where the market values them: the Merton (1974) asset value its equity price
+     * implies, at the business's own asset volatility, as KMV reads a firm's market value of assets (Crosbie
+     * & Bohn 2003). That is the reorganization value a plan divides, and below the debt's face it is the
+     * point at which the equity is out of the money. Capitalizing the trailing year instead valued any
+     * business in a cyclical trough at nothing. Whether the business covers its cash operating costs is read
+     * off the last twelve months.
+     */
+    public function assessGoingConcern(Stock $stock, MacroStateDTO $macroState, ?\App\DTO\DebtHealthDTO $health = null): \App\DTO\GoingConcernDTO
+    {
+        $health ??= $this->analyzeTrailingDebtHealth($stock, $macroState);
+        $industry = $stock->getIndustry() ?: 'General';
+        $strategy = \App\Data\Sectors::getBusinessModelStrategy(\App\Data\Sectors::INDUSTRY_METRICS[$industry]['business_model'] ?? 'none');
+
+        $equityValue = max(0.0, (float) $stock->getPrice() * (float) $stock->getSharesOutstanding());
+        $debtValue = max(0.0, $strategy->getDeleveragingEvaluationDebt((float) $stock->getTotalDebt(), (float) $stock->getWholesaleDebt()));
+        $riskFreeRate = $macroState->policyRateEma;
+        $assetValue = $this->mathUtility->solveMertonAssetValue(
+            $equityValue,
+            $this->resolveAssetVolatility($stock, $equityValue, $debtValue, $riskFreeRate),
+            $debtValue,
+            $riskFreeRate,
+            self::MERTON_HORIZON_YEARS
+        );
+
+        return new \App\DTO\GoingConcernDTO(
+            trailingEbit: $health->rawMetrics->ebit,
+            trailingEbitda: $health->rawMetrics->ebitda,
+            assetValue: $assetValue,
+            cash: max(0.0, (float) $stock->getCorporateTreasury()),
+            claims: max(0.0, (float) $stock->getTotalDebt()),
+        );
     }
 
     /**

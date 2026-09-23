@@ -199,6 +199,9 @@ function categorizeEvent(type, changePercent) {
     if (t === 'BANKRUPTCY') {
         return { category: 'bankruptcy', color: EVENT_COLORS.red500, icon: 'gavel', badge: 'BANKRUPTCY' };
     }
+    if (t === 'REORGANIZATION') {
+        return { category: 'reorganization', color: EVENT_COLORS.amber, icon: 'balance', badge: 'CHAPTER 11' };
+    }
     if (t === 'DISTRICT') {
         // Roster change at the quarterly reconstitution — see App\Service\Event\EventPresenter::presentDistrict().
         return { category: 'district', color: EVENT_COLORS.primary, icon: 'location_city', badge: 'RECONSTITUTION' };

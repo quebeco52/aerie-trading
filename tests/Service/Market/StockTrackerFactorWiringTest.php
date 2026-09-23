@@ -77,7 +77,8 @@ final class StockTrackerFactorWiringTest extends TestCase
         ?MarketPricingContext &$captured,
         ?float $postSplitPrice = null,
         ?\App\Service\Market\Agent\AgentStrategyInterface $agentStrategy = null,
-        ?\Closure $earningsReport = null
+        ?\Closure $earningsReport = null,
+        ?MergerAndAcquisitionEngine $maEngine = null
     ): StockTracker {
         $marketEngine = $this->createStub(MarketEngine::class);
         $marketEngine->method('calculateNextPrice')->willReturnCallback(
@@ -113,9 +114,12 @@ final class StockTrackerFactorWiringTest extends TestCase
             $earnings->method('calculate')->willReturnCallback($earningsReport);
         }
 
-        $ma = $this->createStub(MergerAndAcquisitionEngine::class);
-        $ma->method('evaluatePrivateAcquisition')->willReturn(null);
-        $ma->method('evaluateCorporateDivestiture')->willReturn(null);
+        $ma = $maEngine;
+        if ($ma === null) {
+            $ma = $this->createStub(MergerAndAcquisitionEngine::class);
+            $ma->method('evaluatePrivateAcquisition')->willReturn(null);
+            $ma->method('evaluateCorporateDivestiture')->willReturn(null);
+        }
 
         return new StockTracker(
             $marketEngine,
@@ -218,6 +222,26 @@ final class StockTrackerFactorWiringTest extends TestCase
 
         $this->assertInstanceOf(MarketPricingContext::class, $captured);
         $this->assertSame(0.0, $captured->sectorZ);
+    }
+
+    /**
+     * The merger review reads the acquirer's rivals off the industry ledger, whose records are dated in
+     * ticks: the tracker hands the M&A engine the tick and the year's tick count so a failed peer's share
+     * returns to the fringe on the same clock the capacity balance uses.
+     */
+    public function testTheAcquisitionReviewIsDatedOnTheTrackersTick(): void
+    {
+        $stock = $this->stock();
+        $ma = $this->createMock(MergerAndAcquisitionEngine::class);
+        $ma->expects($this->once())
+            ->method('evaluatePrivateAcquisition')
+            ->with($stock, $this->anything(), 1.0 / 360.0, 7_205, 360)
+            ->willReturn(null);
+        $ma->method('evaluateCorporateDivestiture')->willReturn(null);
+
+        $captured = null;
+        $tracker = $this->buildTracker(1.0, [100.0], $captured, maEngine: $ma);
+        $tracker->updateStocks([$stock], 1.0 / 360.0, false, new MacroStateDTO(), 7_205, 360);
     }
 
     /**

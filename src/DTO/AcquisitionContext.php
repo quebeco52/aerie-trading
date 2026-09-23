@@ -15,7 +15,10 @@ class AcquisitionContext
     public function __construct(
         public readonly Stock $acquirer,
         public readonly MacroStateDTO $macroState,
-        public readonly float $dt
+        public readonly float $dt,
+        /** Simulation tick; dates the industry ledger's peer records the merger review reads. */
+        public readonly int $tickCount = 0,
+        public readonly int $ticksPerYear = 252
     ) {}
 
     // State Variables
@@ -79,6 +82,10 @@ class AcquisitionContext
     
     // Synergy & Accounting
     public float $synergyMultiplier = 1.0;
+    /** The target's standalone after-tax return on its economic value, before synergy. */
+    public float $targetRoic = 0.0;
+    /** The target's operating margin; turns its operating income into the revenue it brings. */
+    public float $targetMargin = 0.01;
     public float $synergyValueCreation = 0.0;
     /** Goodwill recognized on this deal (purchase price above the fair value of net identifiable assets). */
     public float $goodwillRecorded = 0.0;
