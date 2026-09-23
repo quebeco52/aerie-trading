@@ -11,7 +11,7 @@ trait StandardMaTrait
         return $defaultType;
     }
     
-    public function applyMaSpendCap(float $purchasePrice, float $equity, bool $isMegaHoarder, bool $isEmpireBuilder): float {
+    public function applyMaSpendCap(float $purchasePrice, float $equity): float {
         return $purchasePrice;
     }
     

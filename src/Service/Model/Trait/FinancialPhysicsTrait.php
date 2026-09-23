@@ -188,20 +188,24 @@ trait FinancialPhysicsTrait
 
     /**
      * The loans, securities and other assets the institution earns its yield on, net of the losses it
-     * already expects. Read from the earning-asset ledger once it is open; before that (a firm that has
-     * never reported) it is what the funding must have been deployed into: equity plus all funding less
-     * the cash still idle, which is the identity the ledger is seeded from.
+     * already expects. The ledger is read only where the model actually keeps one: TreasuryEngine gates
+     * deployment on deploysFundingIntoEarningAssets(), so a house that never deploys leaves the balance
+     * frozen at whatever it was seeded with on the first report, and reading it would price today's book
+     * off a years-old snapshot. Everywhere else the book is the identity the ledger is seeded from:
+     * equity plus all funding, less the cash still idle and any goodwill an acquisition left behind,
+     * neither of which earns a spread.
      */
     public function resolveEarningAssets(Stock $stock, ?float $currentTreasury = null): float
     {
-        if ($stock->hasEarningAssetLedger()) {
+        if ($stock->hasEarningAssetLedger() && $this->deploysFundingIntoEarningAssets()) {
             return max(1.0, $stock->getNetEarningAssets());
         }
 
         $treasury = $currentTreasury ?? (float) $stock->getCorporateTreasury();
         $effectiveEquity = max(1.0, (float) $stock->getTotalEquity());
+        $goodwill = max(0.0, (float) $stock->getGoodwill());
 
-        return max($effectiveEquity, $effectiveEquity + (float) $stock->getTotalDebt() - $treasury);
+        return max($effectiveEquity, $effectiveEquity + (float) $stock->getTotalDebt() - $treasury - $goodwill);
     }
 
     /**
@@ -333,12 +337,13 @@ trait FinancialPhysicsTrait
         return 'STRATEGIC ACQUISITION'; // Financials don't do LBOs or Conglomerate Expansion
     }
 
-    public function applyMaSpendCap(float $purchasePrice, float $equity, bool $isMegaHoarder, bool $isEmpireBuilder): float
+    /**
+     * A financial buys with regulatory capital, and the goodwill a deal books is deducted from it, so the cap
+     * binds whoever is buying: a style bends what management chooses, never the capital rules it is held to.
+     */
+    public function applyMaSpendCap(float $purchasePrice, float $equity): float
     {
-        if (!$isMegaHoarder && !$isEmpireBuilder) {
-            return min($purchasePrice, $equity * \App\Service\Corporate\MergerAndAcquisitionEngine::MA_FINANCIAL_EQUITY_CAP);
-        }
-        return $purchasePrice;
+        return min($purchasePrice, max(0.0, $equity) * \App\Service\Corporate\MergerAndAcquisitionEngine::MA_FINANCIAL_EQUITY_CAP);
     }
 
     public function blendAcquisitionDNA(Stock $acquirer, float $oldCapitalBase, float $purchasePrice, float $effectiveTargetRoic, float $totalNewCapital): void

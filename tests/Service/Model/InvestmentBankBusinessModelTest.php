@@ -213,6 +213,7 @@ class InvestmentBankBusinessModelTest extends TestCase
         $stock->setTicker('KING');
         $stock->setCreditSpread('0.0150'); // 150 bps structural spread
         $stock->setWholesaleDebt('100000000000.0'); // $100B debt
+        $stock->setTotalEquity('12500000000.0'); // $12.5B equity: the 8x wholesale limit, so the sheet balances
         $stock->setCorporateTreasury('10000000000.0'); // $10B treasury (equal to min cash)
 
         $mathMock = $this->createStub(MathUtility::class);
@@ -226,11 +227,120 @@ class InvestmentBankBusinessModelTest extends TestCase
         $income = $this->model->calculateInterestIncome($stock, $macroState, $mathMock);
 
         // Funding benchmark = max(0.0, 0.04 + 0.0150) = 0.0550
-        // Prime financing = $70B * (0.0550 + 0.0150) = $70B * 0.0700 = $4.90B
-        // Repo inventory = $30B * max(0, 0.0550 - 0.0025) = $30B * 0.0525 = $1.575B
+        // Funded book = equity + total debt - treasury = 12.5B + 100B - 10B = $102.5B
+        // Prime financing = $102.5B * 0.70 * (0.0550 + 0.0150) = $71.75B * 0.0700 = $5.0225B
+        // Repo inventory = $102.5B * 0.30 * max(0, 0.0550 - 0.0025) = $30.75B * 0.0525 = $1.614375B
         // Excess cash = 0 (minCash = 100B * 0.10 = 10B)
-        // Total interest income = 4.90B + 1.575B = 6.475B ($6,475,000,000.0)
-        $this->assertEqualsWithDelta(6_475_000_000.0, $income, 1_000.0);
+        // Total interest income = 5.0225B + 1.614375B = $6.636875B
+        $this->assertEqualsWithDelta(6_636_875_000.0, $income, 1_000.0);
+    }
+
+    /**
+     * Interest expense is charged on getTotalDebt(); interest income must be struck on the same funding.
+     * Two banks holding the same book differ only in the FORM of the funding behind it, so they must book
+     * the same interest income. This failed before: the asset leg read getWholesaleDebt(), so the bank
+     * whose funding had migrated onto its revolver earned nothing on that slice while still paying its
+     * coupon -- and fundMaturityFromCash() performs exactly that migration every time a refused rollover
+     * is taken out on the committed line.
+     *
+     * Both fixtures hold treasury below the liquidity floor so the excess-cash leg is zero on each and the
+     * comparison isolates the spread legs. That floor is still struck on the wholesale book on purpose --
+     * it is a requirement against funding that has to be rolled, which a drawn revolver no longer does.
+     */
+    public function testInterestIncomeDependsOnTotalFundingNotItsComposition(): void
+    {
+        $macroState = \App\DTO\MacroStateDTO::fromArray([
+            'policy_rate'                    => 0.04,
+            'policy_rate_ema'                => 0.04,
+            'yield_5y_ema'                   => 0.04,
+            'interbank_liquidity_spread_ema' => 0.0,
+        ]);
+        $mathMock = $this->createStub(MathUtility::class);
+
+        $allTermNotes = new Stock();
+        $allTermNotes->setTicker('KING');
+        $allTermNotes->setCreditSpread('0.0150');
+        $allTermNotes->setTotalEquity('12500000000.0');
+        $allTermNotes->setCorporateTreasury('5000000000.0');
+        $allTermNotes->setWholesaleDebt('100000000000.0');
+
+        // Same $100B of funding, 40% of it now sitting on the drawn revolver after refused rollovers.
+        $halfOnTheRevolver = new Stock();
+        $halfOnTheRevolver->setTicker('KING');
+        $halfOnTheRevolver->setCreditSpread('0.0150');
+        $halfOnTheRevolver->setTotalEquity('12500000000.0');
+        $halfOnTheRevolver->setCorporateTreasury('5000000000.0');
+        $halfOnTheRevolver->setWholesaleDebt('60000000000.0');
+        $halfOnTheRevolver->setRevolverDrawn('40000000000.0');
+
+        $this->assertSame(
+            (float) $allTermNotes->getTotalDebt(),
+            (float) $halfOnTheRevolver->getTotalDebt(),
+            'fixture guard: both banks must carry the same total funding'
+        );
+
+        $this->assertEqualsWithDelta(
+            $this->model->calculateInterestIncome($allTermNotes, $macroState, $mathMock),
+            $this->model->calculateInterestIncome($halfOnTheRevolver, $macroState, $mathMock),
+            1_000.0,
+            'a dollar of funding earns the same whether it is a term note or a revolver draw'
+        );
+    }
+
+    /**
+     * Regression on the balance sheet that actually failed. CORV died with $953.8B of wholesale debt and
+     * $1,551.6B of fully drawn revolver: expense ran on all $2,505.4B while income was booked on the
+     * wholesale slice alone, so 62% of the book paid a coupon and earned nothing. Net interest was roughly
+     * -$24B a quarter, which walked equity to a 1.79% capital ratio and through the 2.0% liquidation floor.
+     * The matched book carries a structural 0.70 * 150bps - 0.30 * 25bps = 97.5bps spread, so on any
+     * balance sheet the asset legs must more than cover the funding they are struck on.
+     */
+    public function testFundedBookCoversItsOwnFundingCost(): void
+    {
+        $realizedWholesaleRate = 0.0683; // the rate CORV's reported interest expense implies on total debt
+
+        $corv = new Stock();
+        $corv->setTicker('CORV');
+        $corv->setCreditSpread('0.0150');
+        $corv->setTotalEquity('45644707140.98');
+        $corv->setCorporateTreasury('61541476622.02');
+        $corv->setWholesaleDebt('953793346624.08');
+        $corv->setRevolverDrawn('1551605717620.60');
+
+        $macroState = \App\DTO\MacroStateDTO::fromArray([
+            'policy_rate'                    => 0.036,
+            'policy_rate_ema'                => 0.036,
+            'yield_5y_ema'                   => 0.044,
+            'interbank_liquidity_spread_ema' => 0.0,
+        ]);
+
+        $totalDebt = (float) $corv->getTotalDebt();
+        $interestExpense = $totalDebt * $realizedWholesaleRate;
+        $interestIncome = $this->model->calculateInterestIncome(
+            $corv,
+            $macroState,
+            $this->createStub(MathUtility::class),
+            $realizedWholesaleRate
+        );
+
+        $this->assertGreaterThan(
+            $interestExpense,
+            $interestIncome,
+            'the funded book must out-earn the funding interest expense is charged on'
+        );
+
+        // Treasury ($61.5B) is below the 10% liquidity floor on the wholesale book, so there is no
+        // excess-cash leg at all. Net interest is then the structural 97.5bps on the funded book, less the
+        // carry on the borrowed cash lying idle: the treasury exceeds equity, so $15.9B of the funding is
+        // sitting in cash that pays a coupon and earns nothing. That drag is real and deliberate -- what
+        // was wrong before was charging it on 62% of the balance sheet rather than on the idle slice.
+        $fundedBook = 45_644_707_140.98 + $totalDebt - 61_541_476_622.02;
+        $idleBorrowedCash = $totalDebt - $fundedBook;
+        $this->assertEqualsWithDelta(
+            ($fundedBook * 0.00975) - ($idleBorrowedCash * $realizedWholesaleRate),
+            $interestIncome - $interestExpense,
+            1_000_000.0
+        );
     }
 
     public function testPereOptionWritingPurePlayWithZeroAdvisoryMaintainsZeroAdvisoryAcrossQuarters(): void
@@ -541,13 +651,14 @@ class InvestmentBankBusinessModelTest extends TestCase
 
         $interestIncome = $this->model->calculateInterestIncome($stock, $macroState, $mathMock);
 
-        // 1. Prime financing: $100B * 70% * (0.04 + 0.0150) = $70B * 0.055 = $3.85B
-        // 2. Repo inventory: $100B * 30% * max(0, 0.04 - 0.0025) = $30B * 0.0375 = $1.125B
+        // Funded book = equity + total debt - treasury = $50B + $100B - $25B = $125B
+        // 1. Prime financing: $125B * 70% * (0.04 + 0.0150) = $87.5B * 0.055 = $4.8125B
+        // 2. Repo inventory: $125B * 30% * max(0, 0.04 - 0.0025) = $37.5B * 0.0375 = $1.40625B
         // 3. Min cash = max(operatingBase * 0.10, $100B * 0.10) = $10B
         //    Excess cash = $25B - $10B = $15B. Cash yield = max(0, 0.04 - 0.0025) = 0.0375
         //    Cash interest = $15B * 0.0375 = $0.5625B
-        // Total interest income = $3.85B + $1.125B + $0.5625B = $5.5375B ($5,537,500,000.0)
-        $this->assertEqualsWithDelta(5_537_500_000.0, $interestIncome, 1000.0);
+        // Total interest income = $4.8125B + $1.40625B + $0.5625B = $6.78125B
+        $this->assertEqualsWithDelta(6_781_250_000.0, $interestIncome, 1000.0);
     }
 
     public function testWallStreetCompensationRatioOperatingLeverage(): void
@@ -707,10 +818,11 @@ class InvestmentBankBusinessModelTest extends TestCase
         // With max(0.0, blendedWholesaleRate), fundingBenchmark = 0.0250, primeRate = 0.0400.
         $income = $this->model->calculateInterestIncome($stock, $macroInverted, $mathMock);
 
-        // Prime: $7B * (0.0250 + 0.0150) = $7B * 0.0400 = $280M
-        // Repo: $3B * (0.0250 - 0.0025) = $3B * 0.0225 = $67.5M
-        // Total interest income = $347.5M ($347,500,000.0)
-        $this->assertEqualsWithDelta(347_500_000.0, $income, 100.0);
+        // Funded book = equity + total debt - treasury = $0B + $10B - $1B = $9B
+        // Prime: $9B * 70% * (0.0250 + 0.0150) = $6.3B * 0.0400 = $252M
+        // Repo: $9B * 30% * (0.0250 - 0.0025) = $2.7B * 0.0225 = $60.75M
+        // Total interest income = $312.75M
+        $this->assertEqualsWithDelta(312_750_000.0, $income, 100.0);
     }
 
     public function testRealizedWholesaleRateOverridesStaticApproximationUnderDistress(): void
@@ -741,10 +853,11 @@ class InvestmentBankBusinessModelTest extends TestCase
         // widening on top of the static credit_spread) -- the exact scenario where the two rails used to diverge.
         $distressedIncome = $this->model->calculateInterestIncome($stock, $macroState, $mathMock, 0.15);
 
-        // Prime: $70B * (0.15 + 0.0150) = $70B * 0.1650 = $11.55B
-        // Repo:  $30B * (0.15 - 0.0025) = $30B * 0.1475 = $4.425B
-        // Total = $15.975B ($15,975,000,000.0)
-        $this->assertEqualsWithDelta(15_975_000_000.0, $distressedIncome, 1_000.0);
+        // Funded book = equity + total debt - treasury = $0B + $100B - $10B = $90B
+        // Prime: $90B * 70% * (0.15 + 0.0150) = $63B * 0.1650 = $10.395B
+        // Repo:  $90B * 30% * (0.15 - 0.0025) = $27B * 0.1475 = $3.9825B
+        // Total = $14.3775B
+        $this->assertEqualsWithDelta(14_377_500_000.0, $distressedIncome, 1_000.0);
 
         // The realized rate must dominate the static approximation, not be silently ignored.
         $this->assertGreaterThan($calmIncome, $distressedIncome, 'Realized wholesale rate must override the static credit_spread approximation once a live debt calc exists.');

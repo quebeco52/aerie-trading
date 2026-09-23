@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\Corporate\Industry;
 
+use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Corporate\Industry\InMemoryIndustryShareStore;
 use App\Service\Corporate\Industry\IndustryShareLedger;
@@ -181,6 +182,78 @@ class IndustryShareLedgerTest extends TestCase
         // Retiring a firm the ledger never saw writes nothing.
         $ledger->retireFirm($this->stock('NVR', 1.0));
         $this->assertArrayNotHasKey('NVR', (new \ReflectionProperty($ledger, 'store'))->getValue($ledger)->readIndustry('Steel'));
+    }
+
+    /**
+     * Buying an off-board company buys plant that was already supplying the market. The same 2,000 that
+     * reads as a 25% glut when it is BUILT (see the test above) leaves the balance at one when it is BOUGHT:
+     * the builder's share of the market rises and the fringe's falls by exactly that much.
+     */
+    public function testAnAcquisitionMovesPlantFromTheFringeWithoutMovingTheBalance(): void
+    {
+        $ledger = new IndustryShareLedger(new InMemoryIndustryShareStore());
+        $acquirer = $this->stock('ACQ', 4_000.0);
+        $peer = $this->stock('PER', 2_000.0);
+        $macro = new MacroStateDTO(potentialGdpIndex: 1.0, gdpDeflator: 1.0, totalTime: 0.0);
+
+        $ledger->resolveIndustryCapacityRatio($acquirer, 4_000.0, 0.5, 1.0, 0.0, 0.0, 10, 252);
+        $ledger->resolveIndustryCapacityRatio($peer, 2_000.0, 0.25, 1.0, 0.0, 0.0, 20, 252);
+        $this->assertEqualsWithDelta(0.75, $ledger->resolveRosterTrendShare($acquirer, 30, 252), 1e-9);
+
+        $ledger->recordAcquiredCapacity($acquirer, 2_000.0, $macro, 0.0);
+
+        $this->assertEqualsWithDelta(1.0, $ledger->resolveIndustryCapacityRatio($acquirer, 6_000.0, 0.5, 1.0, 0.0, 0.0, 73, 252), 1e-9);
+        $this->assertEqualsWithDelta(1.0, $ledger->resolveIndustryCapacityRatio($peer, 2_000.0, 0.25, 1.0, 0.0, 0.0, 83, 252), 1e-9);
+        $this->assertEqualsWithDelta(1.0, $ledger->resolveRosterTrendShare($acquirer, 90, 252), 1e-9, 'the fringe ceded the share the acquirer bought');
+    }
+
+    /**
+     * The transfer is struck at the deal date, where trend has moved on from the anchor: the ratio the day
+     * after the deal is the ratio the day before it, whatever the firm's standing against trend.
+     */
+    public function testATransferUnderTrendGrowthLeavesTheBalanceWhereItWas(): void
+    {
+        $ledger = new IndustryShareLedger(new InMemoryIndustryShareStore());
+        $firm = $this->stock('GRW', 1_000.0);
+        $ledger->resolveIndustryCapacityRatio($firm, 1_000.0, 0.5, 1.0, 0.0, 0.03, 10, 252);
+
+        $before = $ledger->resolveIndustryCapacityRatio($firm, 1_000.0, 0.5, 1.10, 2.0, 0.03, 514, 252);
+        $ledger->recordAcquiredCapacity($firm, 400.0, new MacroStateDTO(potentialGdpIndex: 1.10, gdpDeflator: 1.0, totalTime: 2.0), 0.03);
+        $after = $ledger->resolveIndustryCapacityRatio($firm, 1_400.0, 0.5, 1.10, 2.0, 0.03, 520, 252);
+
+        $this->assertEqualsWithDelta($before, $after, 1e-9);
+    }
+
+    /**
+     * A division sold to an off-board buyer keeps supplying the market from the fringe. A seller overbuilt by
+     * 2,000 that sells half of its 6,000 takes its excess with it pro rata to nothing: the balance holds.
+     */
+    public function testADivestitureHandsPlantBackToTheFringeWithoutMovingTheBalance(): void
+    {
+        $ledger = new IndustryShareLedger(new InMemoryIndustryShareStore());
+        $seller = $this->stock('SEL', 4_000.0);
+        $peer = $this->stock('PER', 2_000.0);
+        $macro = new MacroStateDTO(potentialGdpIndex: 1.0, gdpDeflator: 1.0, totalTime: 0.0);
+
+        $ledger->resolveIndustryCapacityRatio($seller, 4_000.0, 0.5, 1.0, 0.0, 0.0, 10, 252);
+        $ledger->resolveIndustryCapacityRatio($peer, 2_000.0, 0.25, 1.0, 0.0, 0.0, 20, 252);
+        $overbuilt = $ledger->resolveIndustryCapacityRatio($seller, 6_000.0, 0.5, 1.0, 0.0, 0.0, 73, 252);
+        $this->assertEqualsWithDelta(1.25, $overbuilt, 1e-9);
+
+        $ledger->recordDivestedFraction($seller, 0.5, $macro, 0.0);
+
+        $this->assertEqualsWithDelta($overbuilt, $ledger->resolveIndustryCapacityRatio($seller, 3_000.0, 0.5, 1.0, 0.0, 0.0, 136, 252), 1e-9);
+    }
+
+    public function testATransferForAFirmTheLedgerHasNotPricedWritesNothing(): void
+    {
+        $ledger = new IndustryShareLedger(new InMemoryIndustryShareStore());
+        $macro = new MacroStateDTO(potentialGdpIndex: 1.0, gdpDeflator: 1.0, totalTime: 0.0);
+
+        $ledger->recordAcquiredCapacity($this->stock('NEW', 1_000.0), 500.0, $macro, 0.0);
+        $ledger->recordDivestedFraction($this->stock('NEW', 1_000.0), 0.3, $macro, 0.0);
+
+        $this->assertArrayNotHasKey('NEW', (new \ReflectionProperty($ledger, 'store'))->getValue($ledger)->readIndustry('Steel'));
     }
 
     public function testTheRosterTrendShareIsTheSumOfAnchorSharesAndTheFringeIsTheRest(): void

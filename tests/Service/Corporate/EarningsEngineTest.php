@@ -1340,6 +1340,79 @@ class EarningsEngineTest extends TestCase
         $this->assertEqualsWithDelta($healthyCtx->expectedRevenue, $squeezedCtx->expectedRevenue, 1.0);
     }
 
+    /**
+     * Goodwill is the premium paid over the identifiable assets and runs no plant. Two firms with the same
+     * operating capital, one also carrying goodwill (and the equity that paid for it), have the same revenue
+     * capacity — which is also what keeps an impairment from deleting revenue while the debt that paid for
+     * the deal stays.
+     */
+    public function testGoodwillAddsNoRevenueCapacity(): void
+    {
+        $macroState = new MacroStateDTO(corporateTaxRate: 0.21, policyRateEma: 0.04, yield5yEma: 0.04);
+
+        $run = function (float $goodwill) use ($macroState): object {
+            $captured = null;
+            $dispatcher = new EventDispatcher();
+            $dispatcher->addListener(EarningsReportedEvent::class, function (EarningsReportedEvent $event) use (&$captured): void {
+                $captured = $event->getContext();
+            });
+            $this->mathUtility = new MathUtility();
+            $engine = $this->buildEngine($dispatcher);
+
+            $stock = $this->buildMatureIndustrial('GWCP');
+            $stock->setAssetTurnover('1.4000');
+            $stock->setGoodwill((string) $goodwill);
+            $stock->setTotalEquity((string) (50_000_000_000.0 + $goodwill));
+            $stock->setLifecycleStage(LifecycleStage::Mature);
+
+            mt_srand(4321);
+            $engine->calculate($stock, $macroState, EarningsEngine::resolveReportingTick('GWCP', 252));
+            $this->assertNotNull($captured);
+
+            return $captured;
+        };
+
+        $plain = $run(0.0);
+        $acquisitive = $run(12_000_000_000.0);
+
+        $this->assertEqualsWithDelta($plain->structuralRevenue, $acquisitive->structuralRevenue, 1.0);
+        $this->assertEqualsWithDelta($plain->expectedRevenue, $acquisitive->expectedRevenue, 1.0);
+    }
+
+    /**
+     * The working capital ledger is rebuilt to its new balances every quarter, so the cash that funds or is
+     * released by the change has to move by exactly that change. Clamping the cash leg to a quarter of
+     * revenue left the excess on the balance sheet with no account behind it. Seeding the trade cycle off
+     * a recorded revenue three times the plant's capacity forces a release far past that old clamp.
+     */
+    public function testAWorkingCapitalReleaseReachesCashInFull(): void
+    {
+        $captured = null;
+        $dispatcher = new EventDispatcher();
+        $dispatcher->addListener(EarningsReportedEvent::class, function (EarningsReportedEvent $event) use (&$captured): void {
+            $captured = $event->getContext();
+        });
+        $engine = $this->buildEngine($dispatcher);
+
+        $stock = $this->buildMatureIndustrial('WCRL');
+        $stock->setTotalRevenue('240000000000');
+        $stock->setLifecycleStage(LifecycleStage::Mature);
+
+        mt_srand(2468);
+        $macroState = new MacroStateDTO(corporateTaxRate: 0.21, policyRateEma: 0.04, yield5yEma: 0.04);
+        $engine->calculate($stock, $macroState, EarningsEngine::resolveReportingTick('WCRL', 252));
+        $this->assertNotNull($captured);
+
+        $strategy = \App\Data\Sectors::getBusinessModelStrategy(\App\Data\Sectors::INDUSTRY_METRICS['Auto Manufacturers']['business_model']);
+        $lease = (new CorporateMetrics())->calculateLeaseLiability((float) $stock->getTotalRevenue(), $strategy->getLeaseIntensity());
+        $assets = $stock->getTotalAssets($lease);
+        $claims = $stock->getTotalLiabilities($lease) + (float) $stock->getTotalEquity();
+        $this->assertEqualsWithDelta($assets, $claims, max(1.0, $assets * 1e-9), 'the released working capital must land in cash');
+
+        $annualizedRevenue = $captured->actualRevenue / EarningsEngine::QUARTERLY_TIME_STEP;
+        $this->assertLessThan(-0.25 * $annualizedRevenue, $captured->deltaWorkingCapital, 'the fixture must release more than the old clamp allowed');
+    }
+
     public function testStructuralTurnoverPersistsThroughMarginDrift(): void
     {
         $captured = null;

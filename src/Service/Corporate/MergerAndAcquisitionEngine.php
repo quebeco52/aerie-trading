@@ -12,6 +12,7 @@ use App\Service\Math\CorporateMetrics;
 use App\DTO\AcquisitionContext;
 use App\DTO\DivestitureContext;
 use App\Service\Model\BusinessModelInterface;
+use App\Service\Corporate\Industry\IndustryShareLedger;
 
 /**
  * Service responsible for executing Mergers and Acquisitions.
@@ -56,10 +57,8 @@ class MergerAndAcquisitionEngine
     public const MA_STOCK_DILUTION_FRACTION = 0.10;
     /** Stock underpricing discount. */
     public const MA_STOCK_UNDERPRICING = 0.10;
-    /** Equity cap for financial M&A. */
+    /** Largest deal a financial may fund, as a fraction of its equity; applies to every financial acquirer whatever its style. */
     public const MA_FINANCIAL_EQUITY_CAP = 0.15;
-    /** Penalty to margin for indigestion. */
-    public const MA_INDIGESTION_PENALTY = 0.10;
     /** Most of a target's net identifiable assets that can be trade cycle rather than plant. */
     public const MA_MAX_WORKING_CAPITAL_SHARE = 0.90;
     
@@ -187,7 +186,9 @@ class MergerAndAcquisitionEngine
         private MarketEventPublisher $marketEvent,
         private DebtEngine $debtEngine,
         private MathUtility $mathUtility,
-        private CorporateMetrics $corporateMetrics
+        private CorporateMetrics $corporateMetrics,
+        /** Industry capacity balance; null (unit tests) leaves a deal's plant to be read as a build. */
+        private ?IndustryShareLedger $industryShareLedger = null
     ) {}
 
     // =========================================================================
@@ -234,11 +235,14 @@ class MergerAndAcquisitionEngine
         
         $ctx->operatingBase = $this->corporateMetrics->calculateOperatingBase((float) $stock->getTotalRevenue(), (float) $stock->getTotalEquity());
         $ctx->equity = (float) $stock->getTotalEquity();
+        $ctx->preDealInvestedCapital = $stock->getInvestedCapital();
         $ctx->currentDebt = (float) $stock->getTotalDebt();
         $ctx->policyRate = $ctx->macroState->policyRate;
         $ctx->yield5y = $ctx->macroState->yield5yEma;
 
-        $ctx->health = $this->debtEngine->analyzeDebtHealth($stock, $ctx->macroState);
+        // Underwritten on the margin the firm last reported, as the treasury's own lender test is: the
+        // structural margin kept a firm that was losing money looking fit to borrow for the next deal.
+        $ctx->health = $this->debtEngine->analyzeDebtHealth($stock, $ctx->macroState, null, $stock->getReportedOperatingMargin());
         
         $ctx->industry = $stock->getIndustry() ?: 'General';
         $ctx->businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$ctx->industry]['business_model'] ?? 'none';
@@ -264,9 +268,19 @@ class MergerAndAcquisitionEngine
         $ctx->costOfNewBorrowing = $ctx->health->rawMetrics->currentMarketRate ?? ($ctx->yield5y + (float) $stock->getCreditSpread());
 
         $equityLimit = \App\Data\Sectors::INDUSTRY_METRICS[$ctx->industry]['equity_limit'] ?? 1.0;
-        
-        $ctx->maxAllowableDebt = $ctx->equity * $equityLimit;
-        $ctx->borrowingCapacity = max(0.0, $ctx->maxAllowableDebt - $ctx->currentDebt);
+
+        // A lender sizes acquisition debt the way it sizes any other: the balance sheet AND the interest the
+        // firm can cover. Testing only book leverage let a thin-margin acquirer borrow to its equity limit on
+        // every deal while coverage collapsed, so the treasury's own capacity test is the one applied here.
+        $ctx->borrowingCapacity = max(0.0, $ctx->strategy->calculateDebtExpansionCapacity(
+            $ctx->equity,
+            $ctx->currentDebt,
+            (float) $stock->getWholesaleDebt(),
+            $ctx->health,
+            $ctx->costOfNewBorrowing,
+            $ctx->health->rawMetrics->ebit ?? 0.0,
+            $ctx->health->rawMetrics->depreciation ?? 0.0
+        ));
         $ctx->totalBuyingPower = $ctx->treasury + $ctx->borrowingCapacity;
 
         $ctx->targetCash = $stock->getManagementProfile()->appliedTargetCash($ctx->strategy->calculateTargetOperatingCash($ctx->operatingBase, (float) $stock->getCustomerDeposits(), (float) $stock->getWholesaleDebt()));
@@ -377,7 +391,7 @@ class MergerAndAcquisitionEngine
         $ctx->maxPrivateCompanyValue = max((float) mt_rand(100, 500) * 1_000_000_000.0, $ctx->availableCapital * 0.50);
         $ctx->purchasePrice = min($ctx->purchasePrice, $ctx->maxPrivateCompanyValue);
         
-        $ctx->purchasePrice = $ctx->strategy->applyMaSpendCap($ctx->purchasePrice, $ctx->equity, $ctx->isMegaHoarder, $ctx->isEmpireBuilder);
+        $ctx->purchasePrice = $ctx->strategy->applyMaSpendCap($ctx->purchasePrice, $ctx->equity);
         
         if ($ctx->purchasePrice < self::MA_MIN_DEAL_SIZE) {
             $ctx->dealExecuted = false;
@@ -456,9 +470,19 @@ class MergerAndAcquisitionEngine
         $stock->setTotalEquity((string) $ctx->newEquity);
 
         $oldOperatingMargin = (float) $stock->getOperatingMargin();
-        $oldInvestedCapital = $stock->getInvestedCapital();
-        $oldCapitalBase = $ctx->strategy->getEvaluationCapital($ctx->equity, $oldInvestedCapital);
-        
+        // The acquirer as it stood before the deal. Funding has already moved the cash, debt or shares that
+        // paid for it, so invested capital read now would count the purchase price twice.
+        $oldCapitalBase = $ctx->strategy->getEvaluationCapital($ctx->equity, $ctx->preDealInvestedCapital);
+        $oldRevenueCapital = CorporateMetrics::revenueGeneratingCapital(
+            $ctx->preDealInvestedCapital,
+            $stock->getTotalCipAmount(),
+            (float) $stock->getGoodwill()
+        );
+        $acquirerTurnover = $ctx->strategy->isFinancial() ? null : $stock->getAssetTurnover();
+        $oldStructuralRevenue = $acquirerTurnover !== null
+            ? $oldRevenueCapital * (float) $acquirerTurnover
+            : (float) $stock->getTotalRevenue();
+
         $targetRoicDraw = $this->mathUtility->calculateLogNormalSynergy(self::MA_TARGET_ROIC_MU, self::MA_TARGET_ROIC_SIGMA);
         $targetRoic = max(self::MA_TARGET_ROIC_FLOOR, min(self::MA_TARGET_ROIC_CEILING, $targetRoicDraw));
         $effectiveTargetRoic = $targetRoic * $ctx->synergyMultiplier;
@@ -479,22 +503,26 @@ class MergerAndAcquisitionEngine
         $stock->setGoodwill((string) ((float) $stock->getGoodwill() + $ctx->goodwillRecorded));
 
         $this->bookAcquiredNetAssets($stock, $ctx->strategy, $netAssetsAcquired);
-        
-        // Blend operating margins based on standalone economic capital of acquirer and target.
-        $marginBlendCapital = max(1.0, $oldCapitalBase + $economicValue);
-        $blendedMargin = (($oldCapitalBase * $oldOperatingMargin) + ($economicValue * $targetMargin)) / $marginBlendCapital;
-        $stock->setOperatingMargin((string) max(0.01, $blendedMargin * (1.0 - self::MA_INDIGESTION_PENALTY)));
-        
-        $acquiredOperatingIncome = $economicValue * $effectiveTargetRoic;
+
+        // ROIC is after tax; the earnings engine rebuilds revenue from margin x (1 - t) x turnover, so the
+        // target's return is grossed up to operating income before it is split into revenue and cost.
+        $acquiredNopat = $economicValue * $effectiveTargetRoic;
+        $acquiredOperatingIncome = $acquiredNopat / max(0.01, 1.0 - $ctx->strategy->getEffectiveTaxRate($ctx->macroState->corporateTaxRate));
         $acquiredRevenue = $acquiredOperatingIncome / max(0.01, $targetMargin);
         $currentRevenue = (float) $stock->getTotalRevenue();
         $stock->setTotalRevenue((string) ($currentRevenue + $acquiredRevenue));
+        $this->industryShareLedger?->recordAcquiredCapacity($stock, $acquiredRevenue, $ctx->macroState, IndustryShareLedger::secularExcessGrowth($ctx->strategy, $stock));
 
-        // The acquired capital keeps generating the revenue booked above, so the target's revenue per dollar of
-        // capital joins the acquirer's structural turnover capital-weighted (null until the engine seeds it).
-        $acquirerTurnover = $stock->getAssetTurnover();
+        // Operating income adds across the two businesses, so the combined margin is revenue-weighted.
+        $blendedMargin = (($oldStructuralRevenue * $oldOperatingMargin) + $acquiredOperatingIncome)
+            / max(1.0, $oldStructuralRevenue + $acquiredRevenue);
+        $stock->setOperatingMargin((string) max(0.01, $blendedMargin));
+
+        // Turnover is revenue per dollar of operating capital. Only the net identifiable assets join that base:
+        // the premium over them is goodwill and runs no plant (null until the engine seeds the turnover).
         if ($acquirerTurnover !== null) {
-            $blendedTurnover = (($oldCapitalBase * (float) $acquirerTurnover) + $acquiredRevenue) / $totalNewCapital;
+            $blendedTurnover = (($oldRevenueCapital * (float) $acquirerTurnover) + $acquiredRevenue)
+                / max(1.0, $oldRevenueCapital + $netAssetsAcquired);
             $stock->setAssetTurnover((string) max(0.01, $blendedTurnover));
         }
 
@@ -503,7 +531,7 @@ class MergerAndAcquisitionEngine
             $newInterestExpense = $ctx->debtIssued * $ctx->costOfNewDebt * (1.0 - $ctx->macroState->corporateTaxRate);
         }
         
-        $trueAcquiredNetIncome = $acquiredOperatingIncome - $newInterestExpense;
+        $trueAcquiredNetIncome = $acquiredNopat - $newInterestExpense;
         
         $currentEps = (float) $stock->getEarningsPerShare();
         $stock->setEarningsPerShare((string) ($currentEps + ($trueAcquiredNetIncome / max(1.0, $ctx->shares))));
@@ -777,6 +805,7 @@ class MergerAndAcquisitionEngine
         
         $currentRevenue = (float) $stock->getTotalRevenue();
         $stock->setTotalRevenue((string) max(1.0, $currentRevenue * (1.0 - $ctx->divestedFraction)));
+        $this->industryShareLedger?->recordDivestedFraction($stock, $ctx->divestedFraction, $ctx->macroState, IndustryShareLedger::secularExcessGrowth($ctx->strategy, $stock));
 
         if ($stock->hasBalanceSheetLedger()) {
             $this->retireDivestedLedgers($stock, $ctx->divestedFraction);

@@ -44,6 +44,19 @@ class CorporateMetrics
     }
 
     /**
+     * The capital that produces revenue: invested capital less plant not yet in service and less goodwill.
+     * Goodwill is the price paid over the identifiable assets (ASC 805) and runs no plant, so impairing it
+     * leaves capacity where it was. Construction is deducted only up to its capped share of capital.
+     */
+    public static function revenueGeneratingCapital(float $investedCapital, float $constructionInProgress, float $goodwill): float
+    {
+        $capital = abs($investedCapital);
+        $cipDeduction = min($capital * FinancialConstants::MAX_CIP_CAPITAL_DEDUCTION_RATIO, max(0.0, $constructionInProgress));
+
+        return max(0.0, $capital - $cipDeduction - max(0.0, $goodwill));
+    }
+
+    /**
      * Calculates variable margin friction from market saturation, following the Penrose (1959) Limit to Growth
      * and Hayashi (1982) Q-Theory with Quadratic Adjustment Costs.
      *

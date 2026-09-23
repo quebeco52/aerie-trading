@@ -23,11 +23,11 @@ final class StandardMaTraitTest extends TestCase
     public function testAcquisitionTypeAndSpendPassThroughUnmodified(): void
     {
         $this->assertSame('horizontal', $this->model->getAcquisitionType('horizontal'), 'A standard corporate does not reinterpret the deal type it is handed.');
-        $this->assertSame(500.0, $this->model->applyMaSpendCap(500.0, 1000.0, false, false), 'No sector-specific spend cap applies.');
+        $this->assertSame(500.0, $this->model->applyMaSpendCap(500.0, 1000.0), 'No sector-specific spend cap applies.');
         $this->assertSame(
             5_000_000_000.0,
-            $this->model->applyMaSpendCap(5_000_000_000.0, 100_000_000.0, true, true),
-            'Even an empire builder buying far beyond its equity is capped by the engine, not by this model.'
+            $this->model->applyMaSpendCap(5_000_000_000.0, 100_000_000.0),
+            'A deal far beyond equity is bounded by the engine\'s borrowing capacity, not by this model.'
         );
     }
 

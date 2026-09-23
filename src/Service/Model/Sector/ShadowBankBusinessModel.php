@@ -146,7 +146,10 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
 
     public function calculateInterestIncome(Stock $stock, MacroStateDTO $macroState, MathUtility $mathUtility, ?float $realizedWholesaleRate = null): float
     {
-        $wholesaleDebt = (float) $stock->getWholesaleDebt();
+        // The portfolio is struck on the funded book, not the term notes alone: interest expense runs on
+        // getTotalDebt(), so a leg priced off getWholesaleDebt() left drawn revolver paying a coupon against
+        // no asset. A shadow bank deploys its funding, so this reads the live earning-asset ledger.
+        $fundedBook = $this->resolveEarningAssets($stock);
         $treasury = (float) $stock->getCorporateTreasury();
 
         $params = $this->resolveModelParameters($stock, [
@@ -165,13 +168,13 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
         // 1. Mortgage Portfolio Interest Income (Agency / Non-Agency MBS and residential whole loans):
         // Backed by long-term mortgage yields benchmarked to 30Y Treasury yield + portfolio mortgage spread.
         $mortgageYield = max(0.01, $macroState->yield30yEma + self::MORTGAGE_PORTFOLIO_SPREAD);
-        $mortgageInterest = ($wholesaleDebt * $mortgageWeight) * $mortgageYield;
+        $mortgageInterest = ($fundedBook * $mortgageWeight) * $mortgageYield;
 
         // 2. Direct Lending / Private Credit Floating-Rate Loan Portfolio:
         // Senior secured middle-market loans float over overnight policy rate (SOFR) + illiquidity spread.
         $policyRate = $macroState->policyRateEma;
         $directLendingYield = max(0.01, $policyRate + self::DIRECT_LENDING_PORTFOLIO_SPREAD);
-        $directLendingInterest = ($wholesaleDebt * $lendingWeight) * $directLendingYield;
+        $directLendingInterest = ($fundedBook * $lendingWeight) * $directLendingYield;
 
         // 3. Excess Treasury Liquidity Yield:
         $operatingBase = $this->getOperatingBase($stock);

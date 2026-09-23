@@ -437,4 +437,61 @@ class IndustryShareLedger
             'consumed_tick'         => (int) $own['consumed_tick'],
         ]);
     }
+
+    /**
+     * An acquired off-board company was already selling into this market: the deal changes who owns the
+     * plant, not how much the industry supplies. The acquirer's trend plant rises with the capacity it
+     * bought and its market stays where it was, so its share of that market rises and the fringe's falls.
+     * Booked as a build, every deal priced the acquirer's whole industry down with plant it had merely bought.
+     */
+    public function recordAcquiredCapacity(Stock $stock, float $annualCapacity, MacroStateDTO $macroState, float $secularExcessGrowth): void
+    {
+        $this->transferCapacity($stock, max(0.0, $annualCapacity), $macroState, $secularExcessGrowth);
+    }
+
+    /**
+     * The mirror of an acquisition: a division sold to an off-board buyer keeps supplying the market, now
+     * from the fringe. The seller's installed and trend plant both fall by the capacity that left.
+     */
+    public function recordDivestedFraction(Stock $stock, float $fraction, MacroStateDTO $macroState, float $secularExcessGrowth): void
+    {
+        $own = $this->readOwnRecord($stock);
+        if ($own === null) {
+            return;
+        }
+
+        $this->transferCapacity($stock, -max(0.0, min(1.0, $fraction)) * max(0.0, (float) $own['capacity']), $macroState, $secularExcessGrowth);
+    }
+
+    /**
+     * Moves installed and trend plant together, which leaves the firm's excess over trend — and with it the
+     * industry balance — exactly where it was. A firm not yet priced has no anchor to move; its first report
+     * anchors whatever it then owns. A sale larger than the trend plant left clears the anchor, and the next
+     * report strikes a fresh one.
+     */
+    private function transferCapacity(Stock $stock, float $capacityDelta, MacroStateDTO $macroState, float $secularExcessGrowth): void
+    {
+        $own = $this->readOwnRecord($stock);
+        $trendNominalGdp = self::trendNominalGdp($macroState);
+        if ($own === null || $capacityDelta === 0.0 || (float) ($own['anchor_capacity_share'] ?? 0.0) <= 0.0) {
+            return;
+        }
+
+        $growth = $trendNominalGdp * exp($secularExcessGrowth * ($macroState->totalTime - (float) $own['anchor_time']));
+        $own['anchor_capacity_share'] = max(0.0, (float) $own['anchor_capacity_share'] + ($capacityDelta / $growth));
+        $own['capacity'] = max(0.0, (float) $own['capacity'] + $capacityDelta);
+
+        $this->store->writeRecord((string) $stock->getIndustry(), $stock->getTicker(), $own);
+    }
+
+    /** @return array<string, mixed>|null */
+    private function readOwnRecord(Stock $stock): ?array
+    {
+        $industry = $stock->getIndustry();
+        if ($industry === null || $industry === '' || $stock->getTicker() === '') {
+            return null;
+        }
+
+        return $this->store->readIndustry($industry)[$stock->getTicker()] ?? null;
+    }
 }

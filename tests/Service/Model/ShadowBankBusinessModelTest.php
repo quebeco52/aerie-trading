@@ -80,11 +80,50 @@ class ShadowBankBusinessModelTest extends TestCase
 
         $income = $this->model->calculateInterestIncome($stock, $macro, $this->mathUtility);
 
-        // Mortgage: 400B * 60% = 240B. Yield: 0.055 + 0.0225 = 0.0775 -> 240B * 0.0775 = 18.6B
-        // Direct Lending: 400B * 40% = 160B. Yield: 0.04 + 0.0450 = 0.0850 -> 160B * 0.0850 = 13.6B
+        // The portfolio is struck on the funded book. This fixture has never reported, so no earning-asset
+        // ledger is open yet and the book falls back to the identity: equity + total debt - treasury
+        // = 0B + 400B - 40B = 360B. A seasoned shadow bank reads its live ledger instead.
+        // Mortgage: 360B * 60% = 216B. Yield: 0.055 + 0.0225 = 0.0775 -> 216B * 0.0775 = 16.74B
+        // Direct Lending: 360B * 40% = 144B. Yield: 0.04 + 0.0450 = 0.0850 -> 144B * 0.0850 = 12.24B
         // Cash: excess cash = 40B - operatingBuffer (0.05 * 0 = 0) = 40B. Cash yield = max(0, 0.04 - 0.0025) = 0.0375 -> 40B * 0.0375 = 1.5B
-        // Total = 18.6B + 13.6B + 1.5B = 33.7B ($33,700,000,000.0)
-        $this->assertEqualsWithDelta(33_700_000_000.0, $income, 1_000_000.0);
+        // Total = 16.74B + 12.24B + 1.5B = 30.48B
+        $this->assertEqualsWithDelta(30_480_000_000.0, $income, 1_000_000.0);
+    }
+
+    /**
+     * The mortgage and direct-lending legs are struck on the funded book, so the split between term notes
+     * and drawn revolver cannot change portfolio income. Interest expense runs on getTotalDebt(), and a leg
+     * priced off getWholesaleDebt() left drawn revolver paying a coupon against no asset.
+     */
+    public function testPortfolioIncomeDependsOnTotalFundingNotItsComposition(): void
+    {
+        $macro = new MacroStateDTO(
+            policyRateEma: 0.04,
+            yield30yEma: 0.055
+        );
+
+        $allTermNotes = new Stock();
+        $allTermNotes->setTicker('POOL');
+        $allTermNotes->setWholesaleDebt('400000000000.0');
+        $allTermNotes->setCorporateTreasury('40000000000.0');
+
+        $partlyOnTheRevolver = new Stock();
+        $partlyOnTheRevolver->setTicker('POOL');
+        $partlyOnTheRevolver->setWholesaleDebt('250000000000.0');
+        $partlyOnTheRevolver->setRevolverDrawn('150000000000.0');
+        $partlyOnTheRevolver->setCorporateTreasury('40000000000.0');
+
+        $this->assertSame(
+            (float) $allTermNotes->getTotalDebt(),
+            (float) $partlyOnTheRevolver->getTotalDebt(),
+            'fixture guard: both lenders must carry the same total funding'
+        );
+
+        $this->assertEqualsWithDelta(
+            $this->model->calculateInterestIncome($allTermNotes, $macro, $this->mathUtility),
+            $this->model->calculateInterestIncome($partlyOnTheRevolver, $macro, $this->mathUtility),
+            1_000_000.0
+        );
     }
 
     public function testRetailDefaultAndCommercialPropertyDistressIncreasesProvisionDrag(): void

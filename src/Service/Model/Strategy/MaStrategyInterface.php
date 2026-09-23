@@ -9,7 +9,7 @@ use App\Entity\Stock;
 interface MaStrategyInterface
 {
     public function getAcquisitionType(string $defaultType): string;
-    public function applyMaSpendCap(float $purchasePrice, float $equity, bool $isMegaHoarder, bool $isEmpireBuilder): float;
+    public function applyMaSpendCap(float $purchasePrice, float $equity): float;
     public function blendAcquisitionDNA(Stock $acquirer, float $oldCapitalBase, float $purchasePrice, float $effectiveTargetRoic, float $totalNewCapital): void;
     public function calculateDivestedEquity(Stock $seller, float $divestedFraction, float $currentEquity, float $currentDebt, float $treasury, float $investedCapital, float $lostDebt): float;
     public function shedDivestedLiabilities(Stock $seller, float $divestedFraction, float $currentTreasury): void;

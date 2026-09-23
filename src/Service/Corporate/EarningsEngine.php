@@ -502,12 +502,14 @@ class EarningsEngine
         $rawUtilization = $ctx->seasonalFactor * (1.0 + $secularDrift + $macroDemandShift + $idiosyncraticDemandShock + $jumpMagnitude);
         $ctx->capacityUtilization = max(self::MIN_CAPACITY_UTILIZATION, min(self::MAX_CAPACITY_UTILIZATION, $rawUtilization));
         // Capital tied up in construction earns nothing yet, but only so much of the base may be excluded:
-        // a firm mid-megaproject still runs the plant it already has. Capping the deduction is what bounds
-        // the result — the floor that used to be written alongside it could never bind, since the deduction
-        // is already at most that same fraction of the base.
-        $maxCipDeduction = abs($ctx->investedCapital) * FinancialConstants::MAX_CIP_CAPITAL_DEDUCTION_RATIO;
-        $effectiveCip = min($maxCipDeduction, $stock->getTotalCipAmount());
-        $revenueGeneratingCapital = abs($ctx->investedCapital) - $effectiveCip;
+        // a firm mid-megaproject still runs the plant it already has. Goodwill earns nothing either — it is
+        // the premium paid over the plant — so an impairment cannot shrink capacity. A financial's base is
+        // its earning assets, which never contained goodwill.
+        $revenueGeneratingCapital = CorporateMetrics::revenueGeneratingCapital(
+            $ctx->investedCapital,
+            $stock->getTotalCipAmount(),
+            $strategy->isFinancial() ? 0.0 : (float) $stock->getGoodwill()
+        );
 
         $structuralRevenue = max(1.0, $revenueGeneratingCapital * $assetTurnover * $pricingPowerMultiplier);
 
@@ -1172,11 +1174,11 @@ class EarningsEngine
             $priorNwcStr = $stock->getNetWorkingCapital();
             $currentNwc = $this->rollForwardWorkingCapitalLedger($ctx, $currentAnnualizedRevenue);
 
-            // Seed on first report; no spurious one-time swing.
+            // Seed on first report; no spurious one-time swing. The ledger has already moved to the new
+            // balances, so cash moves by exactly that much: clamping only the cash leg put the difference on
+            // the balance sheet with no account behind it.
             $priorNwc = $priorNwcStr === null ? $currentNwc : (float) $priorNwcStr;
-            $rawDeltaNwc = $currentNwc - $priorNwc;
-            $maxNwcSwing = $currentAnnualizedRevenue * 0.25; // Clamp single-quarter NWC swing to at most 1 quarter of revenue
-            $deltaNwc = max(-$maxNwcSwing, min($maxNwcSwing, $rawDeltaNwc));
+            $deltaNwc = $currentNwc - $priorNwc;
             $ctx->deltaWorkingCapital = $deltaNwc;
 
             // 2. Growth CapEx: fundamental reinvestment planned on normalized earnings power,

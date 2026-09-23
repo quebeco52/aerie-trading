@@ -198,7 +198,13 @@ class InvestmentBankBusinessModel extends BrokerageBusinessModel
 
     public function calculateInterestIncome(Stock $stock, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility, ?float $realizedWholesaleRate = null): float
     {
-        $wholesaleDebt = (float) $stock->getWholesaleDebt();
+        // The funded book the balance sheet actually carries, not the term notes alone. DebtEngine charges
+        // interest on getTotalDebt() (wholesale + deposits + drawn revolver), so pricing the asset leg off
+        // getWholesaleDebt() left drawn revolver paying a full coupon and earning nothing. That gap is not
+        // static either: fundMaturityFromCash() retires wholesale principal when a refused rollover is taken
+        // out on the committed line, which changes the form of the funding and not the assets behind it, so
+        // every closed primary market migrated another slice of the book from earning to non-earning.
+        $fundedBook = $this->resolveEarningAssets($stock);
 
         // Benchmark client asset yield to realized wholesale rate (liability borrowing cost) to preserve spread economics.
         $fundingBenchmark = max(0.0, $realizedWholesaleRate ?? $this->calculateBlendedWholesaleRate($stock, $macroState));
@@ -206,17 +212,18 @@ class InvestmentBankBusinessModel extends BrokerageBusinessModel
         // 1. Institutional Prime Brokerage & Secured Financing (Securities Lending & Margin Debits):
         // Investment banks lend wholesale funding to institutional hedge fund clients against liquid collateral.
         $primeFinancingRate = $fundingBenchmark + self::PRIME_FINANCING_SPREAD;
-        $primeFinancingAssets = $wholesaleDebt * self::PRIME_BROKERAGE_ALLOCATION;
+        $primeFinancingAssets = $fundedBook * self::PRIME_BROKERAGE_ALLOCATION;
         $primeInterest = $primeFinancingAssets * $primeFinancingRate;
 
         // 2. Institutional Matched-Book Repo & Trading Inventory Financing:
-        // The remainder of wholesale debt finances market-making inventory and reverse repo operations.
+        // The remainder of the book finances market-making inventory and reverse repo operations.
         $inventoryFinancingYield = max(0.0, $fundingBenchmark - self::MATCHED_REPO_SPREAD_HAIRCUT);
-        $inventoryInterest = ($wholesaleDebt * (1.0 - self::PRIME_BROKERAGE_ALLOCATION)) * $inventoryFinancingYield;
+        $inventoryInterest = ($fundedBook * (1.0 - self::PRIME_BROKERAGE_ALLOCATION)) * $inventoryFinancingYield;
 
         // 3. Excess Corporate Treasury Yield
+        // The liquidity floor is a requirement on the term book, so it stays struck on wholesale debt.
         $operatingBase = $this->getOperatingBase($stock);
-        $minCash = $this->calculateMinOperatingCash($operatingBase, 0.0, $wholesaleDebt);
+        $minCash = $this->calculateMinOperatingCash($operatingBase, 0.0, (float) $stock->getWholesaleDebt());
         $excessCash = max(0.0, (float) $stock->getCorporateTreasury() - $minCash);
         $cashYield = $this->calculateCashYield($macroState);
         $cashInterest = $excessCash * $cashYield;

@@ -299,9 +299,12 @@ class BrokerageBusinessModel extends BaseFinancialBusinessModel
         $fundingBenchmark = max(0.0, $realizedWholesaleRate ?? $this->calculateBlendedWholesaleRate($stock, $macroState));
 
         // 1. Margin Loan Yield
-        // Brokerages lend their wholesale debt to clients as margin loans at a spread over their funding cost.
+        // Brokerages lend their funding to clients as margin loans at a spread over their funding cost. The
+        // base is the whole funded book, not the term notes alone: DebtEngine charges interest on
+        // getTotalDebt(), so an asset leg struck on getWholesaleDebt() left every dollar of drawn revolver
+        // paying a coupon and earning nothing at all.
         $marginLoanYield = $fundingBenchmark + FinancialConstants::MARGIN_LOAN_SPREAD;
-        $marginLoans = (float) $stock->getWholesaleDebt();
+        $marginLoans = $this->resolveEarningAssets($stock);
         $marginInterest = $marginLoans * $marginLoanYield;
 
         // 2. Client Cash Sweep Net Interest Income (NII):

@@ -26,6 +26,8 @@ class AcquisitionContext
     
     public float $operatingBase = 0.0;
     public float $equity = 0.0;
+    /** Invested capital before the deal is funded; funding moves cash, debt or shares and already adds the price. */
+    public float $preDealInvestedCapital = 0.0;
     public float $currentDebt = 0.0;
     public float $policyRate = 0.0;
     public float $yield5y = 0.0;
@@ -36,7 +38,6 @@ class AcquisitionContext
     public ?BusinessModelInterface $strategy = null;
     
     // Buying Power & Cash
-    public float $maxAllowableDebt = 0.0;
     public float $borrowingCapacity = 0.0;
     public float $totalBuyingPower = 0.0;
     public float $targetCash = 0.0;

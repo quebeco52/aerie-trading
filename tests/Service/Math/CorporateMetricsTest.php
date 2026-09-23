@@ -166,6 +166,21 @@ class CorporateMetricsTest extends TestCase
         $this->assertSame(1.0, $this->metrics->calculateLiveInvestedCapital(0.0, 0.0, 0.0));
     }
 
+    public function testRevenueGeneratingCapitalExcludesGoodwillAndCappedConstruction(): void
+    {
+        // 100 of capital, 10 under construction, 15 of goodwill: 75 runs plant.
+        $this->assertSame(75.0, CorporateMetrics::revenueGeneratingCapital(100.0, 10.0, 15.0));
+
+        // Construction beyond the cap still leaves the plant already running: at most 25% is deducted.
+        $this->assertSame(75.0, CorporateMetrics::revenueGeneratingCapital(100.0, 60.0, 0.0));
+
+        // Writing goodwill off moves capital and goodwill together, so the productive base does not move.
+        $this->assertSame(
+            CorporateMetrics::revenueGeneratingCapital(100.0, 0.0, 15.0),
+            CorporateMetrics::revenueGeneratingCapital(85.0, 0.0, 0.0)
+        );
+    }
+
     public function testMarketSaturationPenaltyPenroseQuadraticFriction(): void
     {
         $stock = new Stock();

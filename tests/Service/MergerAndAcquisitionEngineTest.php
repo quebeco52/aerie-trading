@@ -122,7 +122,12 @@ class MergerAndAcquisitionEngineTest extends TestCase
         $this->assertLessThanOrEqual(10_000_000_000.0 + (float) $result['spent'] + 1.0, (float) $stock->getTotalEquity());
     }
 
-    public function testPrivateAcquisitionBlendsStructuralTurnoverCapitalWeighted(): void
+    /**
+     * Turnover is revenue per dollar of operating capital. The target's identifiable net assets join that
+     * base and its revenue joins the numerator; the premium paid over them is goodwill and runs no plant.
+     * The acquirer's side is its capital BEFORE the deal was funded, counted once.
+     */
+    public function testPrivateAcquisitionBlendsTurnoverOverIdentifiableNetAssets(): void
     {
         $stock = new Stock();
         $stock->setTicker('ACQT');
@@ -180,21 +185,86 @@ class MergerAndAcquisitionEngineTest extends TestCase
         $this->mathUtilityMock->method('generateUniformBetween')->willReturn(0.80);
         $this->marketEventPublisherMock->method('publish')->willReturn([]);
 
+        $preDealCapital = $stock->getInvestedCapital();
         $result = $this->engine->evaluatePrivateAcquisition($stock, $macroState, 1.0);
         $this->assertIsArray($result);
 
         $spent = (float) $result['spent'];
         $this->assertGreaterThan(0.0, $spent);
 
-        // The target's revenue per dollar of purchase price is what the engine booked into total revenue.
         $acquiredRevenue = (float) $stock->getTotalRevenue() - 20_000_000_000.0;
-        $targetTurnover = $acquiredRevenue / $spent;
-        $blended = (float) $stock->getAssetTurnover();
+        $netAssets = $spent - (float) $stock->getGoodwill();
+        $this->assertGreaterThan(0.0, $netAssets);
+        $this->assertLessThan($spent, $netAssets, 'the fixture must book goodwill, or it cannot tell the two bases apart');
 
-        // A capital-weighted average lies strictly between the two turnovers and moves off the acquirer's own.
-        $this->assertNotEqualsWithDelta(2.0, $blended, 1e-6);
-        $this->assertGreaterThanOrEqual(min(2.0, $targetTurnover) - 1e-6, $blended);
-        $this->assertLessThanOrEqual(max(2.0, $targetTurnover) + 1e-6, $blended);
+        $this->assertEqualsWithDelta(
+            (($preDealCapital * 2.0) + $acquiredRevenue) / ($preDealCapital + $netAssets),
+            (float) $stock->getAssetTurnover(),
+            1e-9
+        );
+    }
+
+    /**
+     * Operating income adds across the two businesses: the acquirer keeps every dollar it earned and gains
+     * the target's. The acquirer's margin used to be multiplied by 0.9 on every deal on top of the blend, a
+     * permanent firm-wide haircut that compounded to 0.59 over five deals and dragged a 16% industrial
+     * below its interest bill. The target's after-tax ROIC is grossed up by the DuPont identity the
+     * earnings engine rebuilds revenue with, so the capacity booked earns the return the deal was priced on.
+     */
+    public function testAcquisitionAddsTheTargetsOperatingIncomeToTheAcquirersOwn(): void
+    {
+        $this->primeHealthyDeal(operatingBase: 15_000_000_000.0);
+        $this->bookIssuedDebt();
+
+        // A modest treasury keeps invested capital off its half-of-equity floor, where it would stop moving
+        // one for one with the cheque and no identity on it could hold.
+        $stock = $this->buildLedgeredAcquirer('ADDI', 4_000_000_000.0, 1_000_000_000.0, 100_000_000.0);
+        $stock->setManagementStyle(ManagementStyle::Steward);
+        $stock->setAssetTurnover('1.5000');
+
+        $revenueCapital = static fn (Stock $s): float => CorporateMetrics::revenueGeneratingCapital(
+            $s->getInvestedCapital(),
+            $s->getTotalCipAmount(),
+            (float) $s->getGoodwill()
+        );
+        $operatingIncome = static fn (Stock $s): float => $revenueCapital($s) * (float) $s->getAssetTurnover() * (float) $s->getOperatingMargin();
+
+        $before = $operatingIncome($stock);
+        $result = $this->engine->evaluatePrivateAcquisition($stock, $this->healthyMacro(), 1.0);
+        $this->assertIsArray($result);
+
+        // The harness pins synergy at 1.10 and the target ROIC draw to the 0.25 ceiling; a steward pays no premium.
+        $effectiveTargetRoic = MergerAndAcquisitionEngine::MA_TARGET_ROIC_CEILING * 1.10;
+        $taxRate = \App\Data\Sectors::getBusinessModelStrategy(\App\Data\Sectors::INDUSTRY_METRICS['Technology']['business_model'] ?? 'none')
+            ->getEffectiveTaxRate(0.21);
+        $acquiredOperatingIncome = (float) $result['spent'] * $effectiveTargetRoic / (1.0 - $taxRate);
+
+        $this->assertEqualsWithDelta($before + $acquiredOperatingIncome, $operatingIncome($stock), max(1.0, $before * 1e-9));
+    }
+
+    /**
+     * Funding moves the cash, debt or shares before the synergies are booked, so invested capital read at that
+     * point already contains the price. The acquirer's return has to be weighted on what it held before.
+     */
+    public function testReturnBlendWeighsTheAcquirersPreDealCapitalOnce(): void
+    {
+        $this->primeHealthyDeal(operatingBase: 15_000_000_000.0);
+        $this->bookIssuedDebt();
+
+        $stock = $this->buildLedgeredAcquirer('ONCE', 40_000_000_000.0, 1_000_000_000.0, 100_000_000.0);
+        $stock->setManagementStyle(ManagementStyle::Steward);
+        $preDealCapital = $stock->getInvestedCapital();
+
+        $result = $this->engine->evaluatePrivateAcquisition($stock, $this->healthyMacro(), 1.0);
+        $this->assertIsArray($result);
+        $spent = (float) $result['spent'];
+
+        $targetReturn = MergerAndAcquisitionEngine::MA_TARGET_ROIC_CEILING * 1.10;
+        $this->assertEqualsWithDelta(
+            (($preDealCapital * 0.15) + ($spent * $targetReturn)) / ($preDealCapital + $spent),
+            (float) $stock->getBaselineRoic(),
+            1e-9
+        );
     }
 
     /**
@@ -687,6 +757,129 @@ class MergerAndAcquisitionEngineTest extends TestCase
         $this->assertLessThan((float) $levered['spent'], $spent, 'Losing access to credit must shrink the cheque.');
     }
 
+    /**
+     * Acquisition debt is sized by the same lender test as any other borrowing: the balance sheet AND the
+     * interest the firm can cover. A firm whose EBIT only just covers the interest it already pays has no
+     * coverage left to borrow against, however much book equity it carries, so the empire builder's cheque
+     * falls to what its own cash can write.
+     */
+    public function testAcquisitionDebtIsLimitedByInterestCoverageNotBookLeverageAlone(): void
+    {
+        $treasury = 4_000_000_000.0;
+
+        $this->primeHealthyDeal(operatingBase: 15_000_000_000.0);
+        $this->bookIssuedDebt();
+        $covered = $this->buildLedgeredAcquirer('COVA', $treasury, 1_000_000_000.0, 100_000_000.0);
+        $covered->setManagementStyle(ManagementStyle::EmpireBuilder);
+        $levered = $this->engine->evaluatePrivateAcquisition($covered, $this->healthyMacro(), 1.0);
+        $this->assertIsArray($levered, 'The control deal must execute, or the comparison proves nothing.');
+        $this->assertGreaterThan($treasury, (float) $levered['spent'], 'A well-covered firm borrows for the deal.');
+
+        $this->setUp();
+        // EBIT equal to the interest bill: coverage of 1.0, below any minimum a lender would accept.
+        $this->primeHealthyDeal(operatingBase: 15_000_000_000.0, ebit: 50_000_000.0);
+        $this->bookIssuedDebt();
+        $stretched = $this->buildLedgeredAcquirer('COVB', $treasury, 1_000_000_000.0, 100_000_000.0);
+        $stretched->setManagementStyle(ManagementStyle::EmpireBuilder);
+        $cashOnly = $this->engine->evaluatePrivateAcquisition($stretched, $this->healthyMacro(), 1.0);
+
+        $spent = is_array($cashOnly) ? (float) $cashOnly['spent'] : 0.0;
+        $this->assertLessThanOrEqual($treasury, $spent, 'No coverage left means no acquisition debt.');
+        $this->assertSame(1_000_000_000.0, (float) $stretched->getWholesaleDebt(), 'The stretched acquirer must not have borrowed.');
+    }
+
+    /**
+     * A financial buys with regulatory capital, and the goodwill a deal books is deducted from it. The cap on
+     * deal size is therefore a rule the firm is held to, not a preference: an empire builder and a cash
+     * hoarder are bound by it exactly as a steward is. Exempting them let a bank write a multi-trillion
+     * cheque for a single private company.
+     */
+    public function testEveryFinancialAcquirerIsBoundByTheEquityCapWhateverItsStyle(): void
+    {
+        foreach ([ManagementStyle::EmpireBuilder, ManagementStyle::Fortress, ManagementStyle::Steward] as $style) {
+            $this->setUp();
+            $this->primeHealthyDeal(operatingBase: 15_000_000_000.0);
+            $this->bookIssuedDebt();
+
+            $bank = new Stock();
+            $bank->setTicker('BNK' . substr($style->value, 0, 2));
+            $bank->setName('Acquisitive Bank');
+            $bank->setIndustry('Banks - Diversified');
+            $bank->setPrice('50.00');
+            $bank->setSharesOutstanding('1000000000');
+            $bank->setCorporateTreasury('60000000000');
+            $bank->setTotalEquity('100000000000');
+            $bank->setWholesaleDebt('10000000000');
+            $bank->setTotalRevenue('20000000000');
+            $bank->setOperatingMargin('0.30');
+            $bank->setRetainedEarnings('40000000000');
+            $bank->setEarningsPerShare('4.00');
+            $bank->setBaselineRoe('0.12');
+            $bank->setManagementStyle($style);
+
+            $result = $this->engine->evaluatePrivateAcquisition($bank, $this->healthyMacro(), 1.0);
+            if ($result === null) {
+                continue; // This style's branch did not trade; the cap is only asserted on deals that happen.
+            }
+
+            $this->assertLessThanOrEqual(
+                100_000_000_000.0 * MergerAndAcquisitionEngine::MA_FINANCIAL_EQUITY_CAP + 1.0,
+                (float) $result['spent'],
+                "A {$style->value} bank must not spend more than the capital cap allows."
+            );
+        }
+    }
+
+    /**
+     * The target was an off-board company already selling into the acquirer's market, so the acquirer's trend
+     * plant rises by the capacity it bought and the industry balance reads the deal as a change of owner,
+     * not a build. The acquirer reporting its old plant plus the acquisition finds its industry where it was.
+     */
+    public function testAnAcquisitionIsBookedAsPlantBoughtNotPlantBuilt(): void
+    {
+        $this->primeHealthyDeal(operatingBase: 15_000_000_000.0);
+        $this->bookIssuedDebt();
+        $ledger = new \App\Service\Corporate\Industry\IndustryShareLedger(new \App\Service\Corporate\Industry\InMemoryIndustryShareStore());
+        $engine = new MergerAndAcquisitionEngine($this->marketEventPublisherMock, $this->debtEngineMock, $this->mathUtilityMock, $this->corporateMetricsMock, $ledger);
+
+        $stock = $this->buildLedgeredAcquirer('PLNT', 4_000_000_000.0, 1_000_000_000.0, 100_000_000.0);
+        $stock->setManagementStyle(ManagementStyle::Steward);
+        $ledger->resolveIndustryCapacityRatio($stock, 20_000_000_000.0, 0.3, 1.0, 0.0, 0.0, 10, 252);
+
+        $result = $engine->evaluatePrivateAcquisition($stock, $this->healthyMacro(), 1.0);
+        $this->assertIsArray($result);
+        $acquiredRevenue = (float) $stock->getTotalRevenue() - 20_000_000_000.0;
+        $this->assertGreaterThan(0.0, $acquiredRevenue);
+
+        $this->assertEqualsWithDelta(
+            1.0,
+            $ledger->resolveIndustryCapacityRatio($stock, 20_000_000_000.0 + $acquiredRevenue, 0.3, 1.0, 0.0, 0.0, 73, 252),
+            1e-9
+        );
+    }
+
+    /**
+     * The lender prices the next deal on what the firm actually earned last quarter, as the treasury's own
+     * lender test does. Reading the structural margin kept a firm that was losing money creditworthy.
+     */
+    public function testAcquisitionCreditIsUnderwrittenOnTheReportedMargin(): void
+    {
+        $this->primeHealthyDeal(operatingBase: 15_000_000_000.0);
+        $health = $this->debtEngineMock->analyzeDebtHealth(new Stock(), $this->healthyMacro());
+
+        $stock = $this->buildLedgeredAcquirer('RPTM', 4_000_000_000.0, 1_000_000_000.0, 100_000_000.0);
+        $stock->setReportedOperatingMargin(-0.04);
+
+        $debtEngine = $this->createMock(DebtEngine::class);
+        $debtEngine->expects($this->once())
+            ->method('analyzeDebtHealth')
+            ->with($stock, $this->anything(), null, -0.04)
+            ->willReturn($health);
+        $engine = new MergerAndAcquisitionEngine($this->marketEventPublisherMock, $debtEngine, $this->mathUtilityMock, $this->corporateMetricsMock);
+
+        $engine->evaluatePrivateAcquisition($stock, $this->healthyMacro(), 1.0);
+    }
+
     private function buildLedgeredAcquirer(string $ticker, float $treasury, float $debt, float $shares): Stock
     {
         $stock = new Stock();
@@ -720,7 +913,7 @@ class MergerAndAcquisitionEngineTest extends TestCase
         return $stock;
     }
 
-    private function primeHealthyDeal(float $operatingBase, bool $canIssueDebt = true, bool $hasLeverageHeadroom = true): void
+    private function primeHealthyDeal(float $operatingBase, bool $canIssueDebt = true, bool $hasLeverageHeadroom = true, float $ebit = 5_000_000_000.0): void
     {
         $debtMetrics = new DebtMetricsDTO(
             interestExpense: 50000000.0,
@@ -729,10 +922,10 @@ class MergerAndAcquisitionEngineTest extends TestCase
             dynamicSpread: 0.015,
             currentMarketRate: 0.05,
             wholesaleRate: 0.05,
-            ebit: 5000000000.0,
+            ebit: $ebit,
             revenue: 20000000000.0,
             depreciation: 500000000.0,
-            ebitda: 5500000000.0
+            ebitda: $ebit + 500000000.0
         );
         $health = new DebtHealthDTO(
             grossCost: 0.05,

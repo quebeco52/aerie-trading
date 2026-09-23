@@ -119,6 +119,45 @@ class BrokerageBusinessModelTest extends TestCase
         $this->assertGreaterThan(750_000.0, $interestIncome);
     }
 
+    /**
+     * Margin debits are struck on the funded book, so two brokerages carrying the same funding book the same
+     * margin interest whichever form that funding takes. Before, the leg read getWholesaleDebt() while
+     * DebtEngine charged interest on getTotalDebt(), so a drawn revolver paid a coupon and earned nothing.
+     * Treasury sits under the liquidity floor on both fixtures, so neither books an excess-cash leg.
+     */
+    public function testMarginInterestDependsOnTotalFundingNotItsComposition(): void
+    {
+        $macroState = MacroStateDTO::fromArray([
+            'policy_rate_ema' => 0.05,
+            'corporate_tax_rate' => 0.21,
+        ]);
+
+        $allTermNotes = new Stock();
+        $allTermNotes->setWholesaleDebt('100000000');
+        $allTermNotes->setCorporateTreasury('1000000');
+        $allTermNotes->setTotalEquity('10000000');
+        $allTermNotes->setTotalRevenue('5000000');
+
+        $partlyOnTheRevolver = new Stock();
+        $partlyOnTheRevolver->setWholesaleDebt('60000000');
+        $partlyOnTheRevolver->setRevolverDrawn('40000000');
+        $partlyOnTheRevolver->setCorporateTreasury('1000000');
+        $partlyOnTheRevolver->setTotalEquity('10000000');
+        $partlyOnTheRevolver->setTotalRevenue('5000000');
+
+        $this->assertSame(
+            (float) $allTermNotes->getTotalDebt(),
+            (float) $partlyOnTheRevolver->getTotalDebt(),
+            'fixture guard: both brokerages must carry the same total funding'
+        );
+
+        $this->assertEqualsWithDelta(
+            $this->model->calculateInterestIncome($allTermNotes, $macroState, $this->mathUtility),
+            $this->model->calculateInterestIncome($partlyOnTheRevolver, $macroState, $this->mathUtility),
+            1.0
+        );
+    }
+
     public function testTargetMetricsCalculatedOnEarningAssetsAndRoe(): void
     {
         $stock = new Stock();
