@@ -206,7 +206,6 @@ final class StandardDebtPhysicsTraitTest extends TestCase
         $this->assertSame(0.30, $this->model->getMaxFloatingDebtRatio(), 'A corporate terms out most of its debt.');
         $this->assertSame(FinancialConstants::DEFAULT_QUARTERLY_DEBT_ROLLOVER, $this->model->getDebtMaturityRolloverRate());
         $this->assertFalse($this->model->requiresAlternativeZScore(), 'Altman Z applies to a normal balance sheet.');
-        $this->assertFalse($this->model->appliesDistressPremiumToCostOfEquity());
         $this->assertTrue($this->model->supportsUnderleveragedDebtExpansion());
         $this->assertTrue($this->model->shouldForceDeleveragingOnJunkOrHoarding());
     }

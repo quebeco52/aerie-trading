@@ -1007,6 +1007,130 @@ class DebtEngineTest extends TestCase
     }
 
     /**
+     * Borrowing brings the default barrier closer to a business whose risk has not changed, so every step up
+     * in debt must widen the spread. De-levering the configured equity volatility at the current capital
+     * structure did the opposite: it read each dollar of debt as a SAFER asset base, and at 89% debt the
+     * Merton leg added about 2bp.
+     */
+    public function testTheCreditSpreadWidensWithEveryDollarOfDebtOnAnUnchangedBusiness(): void
+    {
+        $engine = $this->costOfCapitalEngine();
+        $macro = $this->neutralMacro();
+        $stock = $this->leveredFirm('LEVR', '1.00', '0.01');
+        $engine->calibrateAssetVolatility($stock, $macro->policyRateEma);
+
+        $spreads = [];
+        foreach ([500_000_000, 1_000_000_000, 2_000_000_000, 4_000_000_000, 8_000_000_000] as $debt) {
+            $stock->setWholesaleDebt((string) $debt);
+            $spreads[] = $engine->calculateInterestExpense($stock, $macro)->dynamicSpread;
+        }
+
+        for ($i = 1; $i < count($spreads); $i++) {
+            $this->assertGreaterThan($spreads[$i - 1], $spreads[$i], "step {$i}: more debt on the same business must cost more");
+        }
+        $this->assertGreaterThan($spreads[0] + 0.01, $spreads[4], 'at 89% debt the barrier is a junk-bond spread away');
+    }
+
+    /**
+     * sigma_V is the business's risk: solved once from the configured equity volatility at the capital
+     * structure it was configured at, recorded the first time a firm is evaluated without one, and not talked
+     * down by later borrowing. It still moves with the equity's own volatility shocks. A lender keeps the
+     * de-levered identity, because its wholesale book is matched against low-risk assets.
+     */
+    public function testAssetVolatilityIsTheBusinessRiskAndDebtDoesNotTalkItDown(): void
+    {
+        $engine = $this->costOfCapitalEngine();
+        $macro = $this->neutralMacro();
+        $stock = $this->leveredFirm('BIZ', '1.00', '0.01');
+
+        $this->assertNull($stock->getAssetVolatility());
+        $engine->calculateInterestExpense($stock, $macro);
+        $recorded = $stock->getAssetVolatility();
+        $this->assertEqualsWithDelta(
+            (new MathUtility())->solveMertonAssetVolatility(1_000_000_000.0, 0.20, 500_000_000.0, $macro->policyRateEma, 5.0),
+            $recorded,
+            1e-12,
+            'the first evaluation records the solution at the capital structure it finds'
+        );
+
+        $this->assertEqualsWithDelta($recorded, $engine->resolveAssetVolatility($stock, 1_000_000_000.0, 8_000_000_000.0, 0.04), 1e-12);
+
+        $stock->setCurrentVolatility('0.40');
+        $this->assertGreaterThan($recorded, $engine->resolveAssetVolatility($stock, 1_000_000_000.0, 500_000_000.0, 0.04));
+
+        $bank = $this->leveredFirm('LEND', '1.00', '0.01');
+        $bank->setIndustry('Banks - Diversified');
+        $this->assertNull($engine->calibrateAssetVolatility($bank, 0.04));
+        $this->assertLessThan(
+            $engine->resolveAssetVolatility($bank, 1_000_000_000.0, 1_000_000_000.0, 0.04),
+            $engine->resolveAssetVolatility($bank, 1_000_000_000.0, 4_000_000_000.0, 0.04)
+        );
+    }
+
+    /**
+     * A weighted average cannot exceed the dearer of its legs. A flat distress add-on of up to 15 points
+     * made it do exactly that (a 22% WACC on a firm whose equity and debt both cost less); distress now
+     * reaches the hurdle only through the yield the firm would pay to borrow and its levered beta.
+     */
+    public function testTheWaccStaysAWeightedAverageInALiquidityCrisis(): void
+    {
+        $engine = $this->costOfCapitalEngine();
+        $stock = $this->leveredFirm('LOSS', '1.00', '0.02');
+        $stock->setOperatingMargin('-0.10');
+
+        $health = $engine->analyzeDebtHealth($stock, $this->neutralMacro());
+
+        $this->assertTrue($health->isLiquidityCrisis);
+        $netDebt = 500_000_000.0 - 50_000_000.0;
+        $capital = 1_000_000_000.0 + $netDebt;
+        // Loss-making: there are no taxes for the interest to shield.
+        $expected = ((1_000_000_000.0 / $capital) * $health->costOfEquity) + (($netDebt / $capital) * $health->rawMetrics->currentMarketRate);
+        $this->assertEqualsWithDelta($expected, $health->wacc, 1e-12);
+        $this->assertLessThanOrEqual($health->costOfEquity, $health->wacc);
+    }
+
+    /**
+     * The hurdle prices NEW capital, so the debt leg is today's yield and the coupon on debt raised years ago
+     * does not enter it. The book cost still differs, because negative carry is a question about cash.
+     */
+    public function testTheWaccPricesDebtAtTodaysYieldNotItsLegacyCoupon(): void
+    {
+        $engine = $this->costOfCapitalEngine();
+        $macro = $this->neutralMacro();
+        $cheap = $this->leveredFirm('CHEP', '1.00', '0.01');
+        $cheap->setHistoricalFixedRate('0.02');
+        $dear = $this->leveredFirm('DEAR', '1.00', '0.01');
+        $dear->setHistoricalFixedRate('0.09');
+
+        $cheapHealth = $engine->analyzeDebtHealth($cheap, $macro);
+        $dearHealth = $engine->analyzeDebtHealth($dear, $macro);
+
+        $this->assertGreaterThan($cheapHealth->effectiveCost + 0.01, $dearHealth->effectiveCost);
+        $this->assertEqualsWithDelta($cheapHealth->wacc, $dearHealth->wacc, 1e-12);
+    }
+
+    /**
+     * A lender's hurdle is its cost of equity, which used to carry the same flat distress add-on. A loss
+     * quarter does not move the lender's market price of capital, so it must not move the hurdle either.
+     */
+    public function testALendersHurdleIsNotRaisedByALossQuarter(): void
+    {
+        $engine = $this->costOfCapitalEngine();
+        $macro = $this->neutralMacro();
+        $profitable = $this->leveredFirm('PROF', '1.20', '0.01');
+        $profitable->setIndustry('Investment Banking');
+        $lossMaking = $this->leveredFirm('LOSS', '1.20', '0.01');
+        $lossMaking->setIndustry('Investment Banking');
+        $lossMaking->setOperatingMargin('-0.20');
+
+        $profitableHealth = $engine->analyzeDebtHealth($profitable, $macro);
+        $lossHealth = $engine->analyzeDebtHealth($lossMaking, $macro);
+
+        $this->assertLessThan(0.0, $lossHealth->interestCoverage);
+        $this->assertEqualsWithDelta($profitableHealth->costOfEquity, $lossHealth->costOfEquity, 1e-12);
+    }
+
+    /**
      * Builds a firm whose only interesting property is its leverage, so the covenant is the variable under test.
      */
     private function leverageFixture(string $industry, string $debt, string $treasury): Stock

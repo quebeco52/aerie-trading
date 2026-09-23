@@ -301,6 +301,9 @@ class MarketSeedCommand extends Command
 
                 $marketCalc = $this->marketEngine->calculateNextPrice($pricingCtx);
                 $stock->setPrice((string) $marketCalc['perceived_fair_value']);
+                // The configured equity volatility belongs to THIS capital structure, so the business risk it
+                // implies is solved here, once, and borrowing later cannot talk it down.
+                $this->debtEngine->calibrateAssetVolatility($stock, $dummyMacro->policyRateEma);
             }
             $stock->setName($stockData['name']);
             $stock->setSector($stockData['sector']);

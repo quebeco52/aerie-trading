@@ -50,6 +50,8 @@ class DebtEngine
      * model and the volatility process agree on how long a surprise is expected to last.
      */
     private const EQUITY_VOL_REVERSION_SPEED = 1.1507;
+    /** Floor on the asset volatility the Merton model is struck at; below it a distance to default stops meaning anything. */
+    private const MIN_ASSET_VOLATILITY = 0.02;
 
     // --- Maturity Wall & Primary Market Access ---
     /** Dynamic credit spread above which the primary market is shut to the issuer; high-yield spreads reached this in 2008 and 2020. */
@@ -180,31 +182,13 @@ class DebtEngine
         $ebitdaLimit = $metrics['ebitda_limit'];
         $equityLimit = $metrics['equity_limit'];
 
-        // Merton model default probability: average mean-reverting equity volatility over the Merton horizon.
-        $spotVolatility = max(0.05, (float) ($stock->getCurrentVolatility() ?? $stock->getVolatility()));
-        $structuralVolatility = max(0.05, (float) ($stock->getVolatility() ?: $spotVolatility));
-        $equityVolatility = $this->mathUtility->averageMeanRevertingVolatility(
-            $spotVolatility,
-            $structuralVolatility,
-            self::EQUITY_VOL_REVERSION_SPEED,
-            self::MERTON_HORIZON_YEARS
-        );
-        $equityVolatility = max(0.05, $equityVolatility); // Minimum vol failsafe
-
         $marketCap = max(1.0, (float) $stock->getPrice() * max(1.0, (float) $stock->getSharesOutstanding()));
         // For default modeling, Firm Value V = Market Equity + Total Debt Obligations
         $assetValue = $marketCap + $totalDebtObligations;
 
-        // Asset Volatility approximation: sigma_V = sigma_E * (E / V)
-        // A dying company with massive debt has E approaching 0, which would shrink Asset Volatility to 0 and falsely grant a AAA rating.
-        // We calculate their natural maximum leverage (EquityLimit) and prevent E/V from compressing below 50% of that natural limit.
-        $naturalMinEVRatio = 1.0 / (1.0 + $equityLimit);
-        $floorEV = $naturalMinEVRatio * 0.50;
-
-        $assetVolatility = $equityVolatility * max($floorEV, $marketCap / $assetValue);
-        $assetVolatility = max(0.02, $assetVolatility); // Minimum asset vol failsafe
-
         $policyRate = $macroState->policyRateEma;
+
+        $assetVolatility = $this->resolveAssetVolatility($stock, $marketCap, $totalDebtObligations, $policyRate);
 
         // Debt maturity is approximated at 5 years for standard corporate credit spreads
         $timeToMaturity = self::MERTON_HORIZON_YEARS;
@@ -303,6 +287,94 @@ class DebtEngine
     }
 
     /**
+     * Volatility of the firm's assets for the Merton model (sigma_V).
+     *
+     * An operating firm's asset volatility is the risk of its business, and borrowing does not change it:
+     * leverage raises the EQUITY's volatility instead, sigma_E = N(d1) sigma_V V / E. This simulation holds
+     * each name's equity volatility at its configured figure whatever the firm borrows, so de-levering that
+     * figure at the CURRENT capital structure, sigma_E E / V, made the assets look safer with every dollar of
+     * debt and the distance to default climbed again past D/V of about 0.7. sigma_V is therefore solved once,
+     * at the capital structure the equity volatility was configured at, and afterwards moves only with the
+     * equity volatility's own departure from that figure (an earnings shock, a volatile market).
+     *
+     * A financial keeps the de-levered identity: the wholesale book it grows is matched against low-risk
+     * assets, so its asset volatility does fall as that book grows.
+     *
+     * @param float $equityValue  Market value of equity (E).
+     * @param float $debtValue    Debt the default barrier is struck on (D).
+     * @param float $riskFreeRate Rate the Merton model discounts at.
+     */
+    public function resolveAssetVolatility(Stock $stock, float $equityValue, float $debtValue, float $riskFreeRate): float
+    {
+        $industry = $stock->getIndustry() ?: 'General';
+        $metrics = \App\Data\Sectors::INDUSTRY_METRICS[$industry] ?? \App\Data\Sectors::INDUSTRY_METRICS['General'];
+        $strategy = \App\Data\Sectors::getBusinessModelStrategy($metrics['business_model'] ?? 'none');
+
+        // Average mean-reverting equity volatility over the Merton horizon.
+        $spotVolatility = max(0.05, (float) ($stock->getCurrentVolatility() ?? $stock->getVolatility()));
+        $structuralVolatility = max(0.05, (float) ($stock->getVolatility() ?: $spotVolatility));
+        $equityVolatility = max(0.05, $this->mathUtility->averageMeanRevertingVolatility(
+            $spotVolatility,
+            $structuralVolatility,
+            self::EQUITY_VOL_REVERSION_SPEED,
+            self::MERTON_HORIZON_YEARS
+        ));
+
+        $equityShare = $equityValue / max(1.0, $equityValue + $debtValue);
+        if ($strategy->isFinancial()) {
+            // A dying lender has E approaching 0, which would shrink its asset volatility to 0 and grant it a
+            // AAA rating, so E/V is not allowed below half of what the sector's leverage limit implies.
+            $floorEV = (1.0 / (1.0 + (float) $metrics['equity_limit'])) * 0.50;
+
+            return max(self::MIN_ASSET_VOLATILITY, $equityVolatility * max($floorEV, $equityShare));
+        }
+
+        $businessVolatility = $stock->getAssetVolatility() ?? $this->calibrateAssetVolatility($stock, $riskFreeRate);
+        if ($businessVolatility === null) {
+            // Nothing to solve from yet (no market value): the identity at today's capital structure.
+            return max(self::MIN_ASSET_VOLATILITY, $equityVolatility * $equityShare);
+        }
+
+        return max(self::MIN_ASSET_VOLATILITY, $businessVolatility * ($equityVolatility / $structuralVolatility));
+    }
+
+    /**
+     * Solves and records an operating firm's asset volatility at its current capital structure.
+     *
+     * Called where the configured equity volatility and the balance sheet were set together (the seed), and
+     * lazily the first time a firm without one is evaluated. A financial carries none; see
+     * resolveAssetVolatility().
+     *
+     * @return float|null sigma_V, or null for a financial or a firm with no market value to solve from.
+     */
+    public function calibrateAssetVolatility(Stock $stock, float $riskFreeRate): ?float
+    {
+        $industry = $stock->getIndustry() ?: 'General';
+        $businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['business_model'] ?? 'none';
+        $strategy = \App\Data\Sectors::getBusinessModelStrategy($businessModel);
+        if ($strategy->isFinancial()) {
+            return null;
+        }
+
+        $equityValue = (float) $stock->getPrice() * (float) $stock->getSharesOutstanding();
+        $debtValue = $strategy->getDeleveragingEvaluationDebt((float) $stock->getTotalDebt(), (float) $stock->getWholesaleDebt());
+        $assetVolatility = $this->mathUtility->solveMertonAssetVolatility(
+            $equityValue,
+            max(0.05, (float) $stock->getVolatility()),
+            max(0.0, $debtValue),
+            $riskFreeRate,
+            self::MERTON_HORIZON_YEARS
+        );
+        if ($assetVolatility <= 0.0) {
+            return null;
+        }
+
+        $stock->setAssetVolatility($assetVolatility);
+
+        return $assetVolatility;
+    }
+
+    /**
      * Analyzes the overarching debt health and capital structure of the company.
      *
      * Determines the Weighted Average Cost of Capital (WACC), Cost of Equity (CAPM),
@@ -381,11 +453,14 @@ class DebtEngine
 
         $weightEquity = $totalCapital > 0 ? ($marketCap / $totalCapital) : 1.0;
         $weightDebt = $totalCapital > 0 ? ($netDebtCapital / $totalCapital) : 0.0;
-        $baseWacc = $this->mathUtility->calculateWACC($weightEquity, $costOfEquity, $weightDebt, $effectiveCostOfDebt);
 
-        // DISTRESS PENALTY
-        $strategy = \App\Data\Sectors::getBusinessModelStrategy($businessModel);
-        
+        // The WACC is the hurdle for NEW capital, so its debt leg is the yield the firm would pay to borrow
+        // today after the tax shield it actually earns, not the coupon on debt raised years ago (Brealey,
+        // Myers & Allen). Distress reaches the hurdle through that yield and the levered beta, and as a
+        // weighted average it can never exceed the dearer of its two legs.
+        $marginalCostOfDebt = $strategy->getMarginalCostOfDebt($debtMetrics) * (1.0 - $impliedTaxShieldRate);
+        $wacc = $this->mathUtility->calculateWACC($weightEquity, $costOfEquity, $weightDebt, $marginalCostOfDebt);
+
         $minIcr = $strategy->getMinIcr();
 
         // Interest income generated by a company's cash treasury is a core component of Cash Flow Available for Debt Service (CFADS).
@@ -398,28 +473,6 @@ class DebtEngine
 
         $depreciation = $debtMetrics->depreciation;
         $interestCoverage = $strategy->getInterestCoverage($ebit, $interestExpense, $depreciation);
-
-        // Check if the company has a massive cash hoard to weather the storm
-        $operatingBase = $this->corporateMetrics->calculateOperatingBase((float) $stock->getTotalRevenue(), (float) $stock->getTotalEquity());
-        $minOperatingCash = $strategy->calculateMinOperatingCash($operatingBase, (float) $stock->getCustomerDeposits(), (float) $stock->getWholesaleDebt());
-        $hasCashBuffer = ((float) $stock->getCorporateTreasury()) > ($minOperatingCash * 1.5);
-
-        $distressPremium = 0.0;
-        if ($interestCoverage < $minIcr && $interestCoverage >= 0) {
-            $maxPenalty = $hasCashBuffer ? 0.05 : 0.10;
-            $penaltyMultiplier = $maxPenalty / max(0.01, $minIcr);
-            $distressPremium = ($minIcr - $interestCoverage) * $penaltyMultiplier;
-        } elseif ($interestCoverage < 0) {
-            // Milder penalty if they have cash to survive the negative quarter
-            $distressPremium = $hasCashBuffer ? 0.05 : 0.15;
-        }
-
-        $wacc = $baseWacc + $distressPremium;
-
-        if ($strategy->appliesDistressPremiumToCostOfEquity()) {
-            // Financial institutions use Cost of Equity as their hurdle rate, so it must also suffer the distress penalty!
-            $costOfEquity += $distressPremium;
-        }
 
         $yieldOnCash = $strategy->calculateCashYield($macroState);
 

@@ -250,6 +250,9 @@ class MarketResetCommand extends Command
             $neutralPrice = $marketCalc['perceived_fair_value'];
             $tempStock->setPrice((string) $neutralPrice);
             $pricedBoard[$stockData['ticker']] = $tempStock;
+            // Solved on the reset's own capital structure and price, as MarketSeedCommand does.
+            $tempStock->setVolatility((string) $stockData['volatility']);
+            $assetVolatility = $this->debtEngine->calibrateAssetVolatility($tempStock, $dummyMacro->policyRateEma);
 
             $conn->executeStatement(
                 'UPDATE stocks SET 
@@ -259,6 +262,7 @@ class MarketResetCommand extends Command
                     shares_outstanding = :shares,
                     volatility = :vol,
                     current_volatility = :current_vol,
+                    asset_volatility = :asset_vol,
                     beta = :beta,
                     jump_intensity = :jump_int,
                     systemic_importance = :importance,
@@ -378,6 +382,7 @@ class MarketResetCommand extends Command
                     'lendable_supply_ratio' => FinancialConstants::DEFAULT_LENDABLE_SUPPLY_RATIO,
                     'realized_variance' => (float) $stockData['volatility'] ** 2,
                     'current_vol' => $stockData['volatility'],
+                    'asset_vol' => $assetVolatility,
                     'beta' => $stockData['beta'],
                     'jump_int' => $stockData['jump_intensity'],
                     'jump_vol' => $stockData['jump_vol'],

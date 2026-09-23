@@ -78,7 +78,6 @@ class BusinessModelThresholdsAndPolymorphismTest extends TestCase
             // Verify Polymorphic flags and hooks
             $this->assertIsBool($strategy->isFinancial());
             $this->assertIsBool($strategy->allowsPhysicalOrganicCapex());
-            $this->assertIsBool($strategy->appliesDistressPremiumToCostOfEquity());
             $this->assertIsBool($strategy->shouldForceDeleveragingOnJunkOrHoarding());
         }
     }
@@ -111,8 +110,6 @@ class BusinessModelThresholdsAndPolymorphismTest extends TestCase
         $this->assertEquals(600.0, $fin->getReturnBasisIncome($this->finStock, 500.0, 600.0));
 
         // Deleveraging & Distress Flags
-        $this->assertFalse($corp->appliesDistressPremiumToCostOfEquity());
-        $this->assertTrue($fin->appliesDistressPremiumToCostOfEquity());
         $this->assertTrue($corp->shouldForceDeleveragingOnJunkOrHoarding());
         $this->assertFalse($fin->shouldForceDeleveragingOnJunkOrHoarding());
     }

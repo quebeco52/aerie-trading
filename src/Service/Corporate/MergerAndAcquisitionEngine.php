@@ -420,17 +420,15 @@ class MergerAndAcquisitionEngine
             $ctx->debtIssued = $ctx->purchasePrice - $ctx->usableTreasury;
             $stock->setCorporateTreasury((string) ($ctx->treasury - $ctx->usableTreasury));
             
-            $equityVolatility = (float) ($stock->getCurrentVolatility() ?? $stock->getVolatility());
-            $equityVolatility = max(0.05, $equityVolatility);
-            
             $marketCap = max(1.0, (float) $stock->getPrice() * max(1.0, (float) $stock->getSharesOutstanding()));
             $currentNetDebt = max(0.0, $ctx->currentDebt - $ctx->treasury);
             $newNetDebt = $currentNetDebt + $ctx->debtIssued;
-            
+
             $newAssetValue = $marketCap + $currentNetDebt + $ctx->purchasePrice;
-            $newAssetVolatility = $equityVolatility * ($marketCap / $newAssetValue);
-            $newAssetVolatility = max(0.02, $newAssetVolatility);
-            
+            // The acquired business is priced at the acquirer's own asset risk; de-levering equity volatility
+            // across the pro-forma balance sheet instead made a debt-funded deal look SAFER the more it borrowed.
+            $newAssetVolatility = $this->debtEngine->resolveAssetVolatility($stock, $marketCap, max(0.01, $newNetDebt), $ctx->policyRate);
+
             $lossGivenDefault = $ctx->strategy->getLossGivenDefault();
             
             $distanceToDefault = $this->mathUtility->calculateDistanceToDefault(

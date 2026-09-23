@@ -546,6 +546,34 @@ class MergerAndAcquisitionEngineTest extends TestCase
     }
 
     /**
+     * The pro-forma credit check strikes the acquirer's Merton distance at its business risk. It used to
+     * de-lever equity volatility across the enlarged balance sheet, so the more a deal borrowed the SAFER the
+     * combined assets looked and the cheaper the new debt was priced.
+     */
+    public function testALeveragedDealIsUnderwrittenAtTheAcquirersAssetRisk(): void
+    {
+        $stock = $this->buildLedgeredAcquirer('LEVR', treasury: 1_000_000_000.0, debt: 1_000_000_000.0, shares: 100_000_000.0);
+        $macroState = new MacroStateDTO(policyRateEma: 0.03, corporateTaxRate: 0.21, yield5yEma: 0.035);
+        $this->primeHealthyDeal(operatingBase: 20_000_000_000.0);
+        $this->bookIssuedDebt();
+        $this->debtEngineMock->method('resolveAssetVolatility')->willReturn(0.27);
+        $struckAt = [];
+        $this->mathUtilityMock->method('calculateDistanceToDefault')->willReturnCallback(
+            static function (float $assets, float $debt, float $assetVolatility) use (&$struckAt): float {
+                $struckAt[] = $assetVolatility;
+
+                return 2.0;
+            }
+        );
+
+        $result = $this->engine->evaluatePrivateAcquisition($stock, $macroState, 1.0);
+
+        $this->assertIsArray($result, 'the levered control deal must execute');
+        $this->assertNotEmpty($struckAt, 'a debt-funded deal is credit-checked');
+        $this->assertSame([0.27], array_values(array_unique($struckAt)));
+    }
+
+    /**
      * A divestiture retires a pro rata slice of every ledger and books the difference between the proceeds
      * and that book value as the gain or loss. A fire sale below book is a real loss charged in full.
      */

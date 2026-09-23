@@ -1389,6 +1389,71 @@ class MathUtility
         // Failsafe: Prevent negative spreads or astronomical blowout
         return max(0.0, min(1.0, $spread)); // Max spread capped at 10,000 bps
     }
+
+    /**
+     * Recovers the volatility of a firm's assets from its equity's market value and volatility.
+     *
+     * Merton (1974) prices equity as a call on the firm's assets struck at the face value of its debt, and
+     * Ito's lemma ties the two volatilities through the call's delta. The pair is solved jointly (Jones,
+     * Mason & Rosenfeld 1984; the Moody's KMV procedure in Crosbie & Bohn 2003):
+     *
+     *     E = V N(d1) - D e^(-rT) N(d2)
+     *     sigma_E E = N(d1) sigma_V V
+     *
+     * by fixed-point iteration on sigma_V, with V recovered from the first equation by Newton's method at
+     * each step. The call is convex and increasing in V and the start E + D e^(-rT) sits at or above the
+     * root, so Newton descends onto it monotonically.
+     *
+     * @param float $equityValue      Market value of equity (E).
+     * @param float $equityVolatility Annualised volatility of equity (sigma_E).
+     * @param float $debtFaceValue    Face value of debt, the default barrier (D).
+     * @param float $riskFreeRate     Continuously compounded risk-free rate (r).
+     * @param float $timeToMaturity   Horizon in years (T).
+     * @return float Asset volatility sigma_V; 0.0 when equity has no value to solve from.
+     */
+    public function solveMertonAssetVolatility(
+        float $equityValue,
+        float $equityVolatility,
+        float $debtFaceValue,
+        float $riskFreeRate,
+        float $timeToMaturity
+    ): float {
+        if ($equityValue <= 0.0 || $equityVolatility <= 0.0) {
+            return 0.0;
+        }
+        if ($debtFaceValue <= 0.0 || $timeToMaturity <= 0.0) {
+            return $equityVolatility;
+        }
+
+        $discountedDebt = $debtFaceValue * exp(-$riskFreeRate * $timeToMaturity);
+        $rootT = sqrt($timeToMaturity);
+        $assetVolatility = $equityVolatility * $equityValue / ($equityValue + $debtFaceValue);
+
+        for ($outer = 0; $outer < 100; $outer++) {
+            $assetValue = $equityValue + $discountedDebt;
+            for ($inner = 0; $inner < 100; $inner++) {
+                $d1 = (log($assetValue / $debtFaceValue) + (($riskFreeRate + (0.5 * $assetVolatility * $assetVolatility)) * $timeToMaturity))
+                    / ($assetVolatility * $rootT);
+                $delta = $this->calculateNormalCDF($d1);
+                $callValue = ($assetValue * $delta) - ($discountedDebt * $this->calculateNormalCDF($d1 - ($assetVolatility * $rootT)));
+                $step = ($callValue - $equityValue) / max(1.0e-12, $delta);
+                $assetValue -= $step;
+                if (abs($step) <= 1.0e-12 * $assetValue) {
+                    break;
+                }
+            }
+
+            $d1 = (log($assetValue / $debtFaceValue) + (($riskFreeRate + (0.5 * $assetVolatility * $assetVolatility)) * $timeToMaturity))
+                / ($assetVolatility * $rootT);
+            $next = $equityVolatility * $equityValue / (max(1.0e-12, $this->calculateNormalCDF($d1)) * $assetValue);
+            if (abs($next - $assetVolatility) <= 1.0e-10) {
+                return $next;
+            }
+            $assetVolatility = $next;
+        }
+
+        return $assetVolatility;
+    }
     /**
      * Calculates a step in the Schwartz 1-Factor Model (1997) for commodity pricing.
      * Uses an Ornstein-Uhlenbeck (OU) process on the natural logarithm of the price,

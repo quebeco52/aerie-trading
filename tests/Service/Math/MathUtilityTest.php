@@ -1198,6 +1198,45 @@ class MathUtilityTest extends TestCase
         $this->assertLessThanOrEqual(1.0, $spreadDistressed, 'Credit spread must be capped at 1.0 (10,000 bps).');
     }
 
+    /**
+     * The solver inverts Merton's equity-as-a-call: price a firm forward from known assets, hand the solver
+     * only what the market would show (equity value and volatility), and it must recover the asset volatility.
+     */
+    public function testMertonAssetVolatilityInvertsTheEquityCall(): void
+    {
+        $normal = fn (float $x): float => $this->mathUtility->calculateNormalCDF($x);
+        $rate = 0.03;
+        $horizon = 5.0;
+
+        foreach ([[100.0, 0.25, 40.0], [100.0, 0.15, 85.0], [100.0, 0.30, 95.0]] as [$assets, $assetVolatility, $debt]) {
+            $d1 = (log($assets / $debt) + (($rate + (0.5 * $assetVolatility ** 2)) * $horizon)) / ($assetVolatility * sqrt($horizon));
+            $d2 = $d1 - ($assetVolatility * sqrt($horizon));
+            $equity = ($assets * $normal($d1)) - ($debt * exp(-$rate * $horizon) * $normal($d2));
+            $equityVolatility = $normal($d1) * $assetVolatility * $assets / $equity;
+
+            $solved = $this->mathUtility->solveMertonAssetVolatility($equity, $equityVolatility, $debt, $rate, $horizon);
+
+            $this->assertEqualsWithDelta($assetVolatility, $solved, 1e-6, sprintf('D/V %.2f', $debt / $assets));
+        }
+    }
+
+    /**
+     * Close to the barrier the call's delta falls below one, so the de-levered shortcut sigma_E E / V
+     * understates the assets' risk; the joint solution does not.
+     */
+    public function testMertonAssetVolatilityExceedsTheDeleveredShortcutNearTheBarrier(): void
+    {
+        $solved = $this->mathUtility->solveMertonAssetVolatility(20.0, 0.60, 90.0, 0.03, 5.0);
+
+        $this->assertGreaterThan(0.60 * 20.0 / 110.0, $solved);
+    }
+
+    public function testMertonAssetVolatilityOfAnUnleveredFirmIsItsEquityVolatility(): void
+    {
+        $this->assertSame(0.22, $this->mathUtility->solveMertonAssetVolatility(500.0, 0.22, 0.0, 0.03, 5.0));
+        $this->assertSame(0.0, $this->mathUtility->solveMertonAssetVolatility(0.0, 0.22, 100.0, 0.03, 5.0));
+    }
+
     public function testCalculateSchwartz1Factor(): void
     {
         // Mean reversion without noise (dW = 0)

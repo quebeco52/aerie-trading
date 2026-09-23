@@ -259,7 +259,6 @@ trait FinancialPhysicsTrait
     public function getDepreciableBase(Stock $stock): float { return $this->getPhysicalCapital($stock); }
     public function allowsPhysicalOrganicCapex(): bool { return false; }
     public function getReturnBasisIncome(Stock $stock, float $quarterlyNopat, float $actualTotalNetIncome): float { return $actualTotalNetIncome; }
-    public function appliesDistressPremiumToCostOfEquity(): bool { return true; }
     public function shouldForceDeleveragingOnJunkOrHoarding(): bool { return false; }
     public function calculateStructuralEps(float $bookValuePerShare, float $structuralRoic, float $revenuePerShare, float $riskFreeRate, ?float $investedCapitalPerShare = null): float
     {
@@ -306,6 +305,12 @@ trait FinancialPhysicsTrait
         }
 
         return false;
+    }
+
+    /** A financial funds itself at the wholesale rate, which already reprices with its own Merton and BGG spread. */
+    public function getMarginalCostOfDebt(\App\DTO\DebtMetricsDTO $debtMetrics): float
+    {
+        return $debtMetrics->wholesaleRate;
     }
 
     public function getDebtCostMetrics(\App\DTO\DebtMetricsDTO $debtMetrics, float $currentDebt, float $wholesaleDebt, float $interestExpense): DebtCostDTO

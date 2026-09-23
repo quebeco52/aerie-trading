@@ -39,6 +39,8 @@ interface DebtStrategyInterface
     public function getDeleveragingEvaluationDebt(float $totalDebt, float $wholesaleDebt): float;
     public function getDeleveragingEvaluationLimit(float $macroDebtTolerance): float;
     public function getDebtCostMetrics(DebtMetricsDTO $debtMetrics, float $currentDebt, float $wholesaleDebt, float $interestExpense): DebtCostDTO;
+    /** Pre-tax yield the firm would pay on a new dollar of the debt it funds itself with: the WACC's debt leg. */
+    public function getMarginalCostOfDebt(DebtMetricsDTO $debtMetrics): float;
     public function getNetDebtCapital(float $currentDebt, float $wholesaleDebt, float $treasury): float;
     public function calculateLeveredBeta(float $baseBeta, float $impliedTaxShieldRate, float $effectiveDebtToEquity, MathUtility $mathUtility): float;
     public function requiresAlternativeZScore(): bool;
@@ -57,6 +59,5 @@ interface DebtStrategyInterface
     public function getWholesaleLeverageLimit(): float;
     public function getDividendCrisisIcr(): float;
     public function getBuybackMinIcr(): float;
-    public function appliesDistressPremiumToCostOfEquity(): bool;
     public function shouldForceDeleveragingOnJunkOrHoarding(): bool;
 }

@@ -109,6 +109,10 @@ trait StandardDebtPhysicsTrait
         return $macroDebtTolerance;
     }
     
+    public function getMarginalCostOfDebt(DebtMetricsDTO $debtMetrics): float {
+        return $debtMetrics->currentMarketRate;
+    }
+
     public function getDebtCostMetrics(DebtMetricsDTO $debtMetrics, float $currentDebt, float $wholesaleDebt, float $interestExpense): DebtCostDTO {
         $grossCostOfDebt = $currentDebt > 0 ? ($interestExpense / $currentDebt) : $debtMetrics->currentMarketRate;
         return new DebtCostDTO(grossCostOfDebt: $grossCostOfDebt, totalInterestCost: $interestExpense);
@@ -141,6 +145,5 @@ trait StandardDebtPhysicsTrait
     public function getWholesaleLeverageLimit(): float { return 1.0; }
     public function getDividendCrisisIcr(): float { return 1.50; }
     public function getBuybackMinIcr(): float { return 2.00; }
-    public function appliesDistressPremiumToCostOfEquity(): bool { return false; }
     public function shouldForceDeleveragingOnJunkOrHoarding(): bool { return true; }
 }

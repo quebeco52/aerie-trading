@@ -314,6 +314,14 @@ class Stock
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true, updatable: false)]
     private ?string $currentVolatility = null;
 
+    /**
+     * @var float|null Volatility of the firm's assets (Merton sigma_V), solved once from the configured equity
+     *                 volatility at the capital structure it was configured at; the business's risk, which debt
+     *                 does not change.
+     */
+    #[ORM\Column(type: 'float', nullable: true)]
+    private ?float $assetVolatility = null;
+
     #[ORM\Column(type: Types::DECIMAL, precision: 5, scale: 2, nullable: true, options: ['default' => '1.00'])]
     private ?string $beta = '1.00';
 
@@ -1376,6 +1384,17 @@ class Stock
             'Consumer Discretionary', 'Consumer Staples' => 0.15,       // Buying and selling physical inventory
             default => 0.35,
         };
+    }
+
+    public function getAssetVolatility(): ?float
+    {
+        return $this->assetVolatility;
+    }
+
+    public function setAssetVolatility(?float $assetVolatility): static
+    {
+        $this->assetVolatility = $assetVolatility;
+        return $this;
     }
 
     public function setStructuralVariableMargin(?float $structuralVariableMargin): static
