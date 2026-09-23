@@ -94,25 +94,4 @@ final class StandardMaTraitTest extends TestCase
         $this->model->shedDivestedLiabilities($seller, 0.25, 50_000_000.0);
         $this->assertSame($before, $seller->getWholesaleDebt(), 'The standard model does not move liabilities itself.');
     }
-
-    /**
-     * Selling the weakest division lifts the returns of what is left, proportionally to how much was sold.
-     */
-    public function testDivestitureBoostsStructuralEfficiencyInProportionToWhatWasSold(): void
-    {
-        $seller = (new Stock())->setTicker('TRIM');
-        $seller->setBaselineRoic('0.10');
-        $this->model->boostStructuralEfficiency($seller, 0.20, 0.50);
-        $this->assertEqualsWithDelta(0.10 * (1.0 + 0.10), (float) $seller->getBaselineRoic(), 0.0000001, 'The bump is the baseline scaled by fraction times multiplier.');
-
-        $bigger = (new Stock())->setTicker('TRIM2');
-        $bigger->setBaselineRoic('0.10');
-        $this->model->boostStructuralEfficiency($bigger, 0.40, 0.50);
-        $this->assertGreaterThan((float) $seller->getBaselineRoic(), (float) $bigger->getBaselineRoic(), 'Selling more of the business lifts returns further.');
-
-        $untouched = (new Stock())->setTicker('TRIM3');
-        $untouched->setBaselineRoic('0.10');
-        $this->model->boostStructuralEfficiency($untouched, 0.0, 0.50);
-        $this->assertEqualsWithDelta(0.10, (float) $untouched->getBaselineRoic(), 0.0000001, 'Selling nothing changes nothing.');
-    }
 }

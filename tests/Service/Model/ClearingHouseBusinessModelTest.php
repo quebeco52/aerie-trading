@@ -87,6 +87,107 @@ class ClearingHouseBusinessModelTest extends TestCase
         $this->assertSame(35000000000.0, $metrics['invested_capital']);
     }
 
+    /**
+     * The sector's 50x tolerance is room for the members' margin pool, not for the house's own bonds: a
+     * clearinghouse gets no discretionary wholesale capacity however much equity it has. A brokerage handed
+     * the same balance sheet still has room up to its own wholesale limit, so the zero is not a blanket cut.
+     */
+    public function testAClearinghouseHasNoRoomToBorrowInTheBondMarket(): void
+    {
+        $health = $this->health(debtTolerance: 50.0);
+
+        $this->assertSame(0.0, $this->model->calculateDebtExpansionCapacity(90e9, 1_317e9, 17e9, $health, 0.05, 20e9, 0.5e9));
+
+        $brokerage = new \App\Service\Model\Sector\BrokerageBusinessModel();
+        $this->assertEqualsWithDelta(
+            (90e9 * $brokerage->getWholesaleLeverageLimit()) - 17e9,
+            $brokerage->calculateDebtExpansionCapacity(90e9, 1_317e9, 17e9, $health, 0.05, 20e9, 0.5e9),
+            1.0
+        );
+    }
+
+    /**
+     * Fee revenue follows the capital that backs clearing, not how the house is financed: $400B of bonds
+     * parked in cash leaves the revenue target where it was. Before, the interest bill was added to the
+     * operating profit required, so every borrowed dollar raised the revenue that paid for it.
+     */
+    public function testTheRevenueTargetDoesNotDependOnHowTheHouseIsFinanced(): void
+    {
+        $macroState = $this->targetMacro();
+        $equityFunded = $this->clearingHouse(equity: 90e9, goodwill: 0.0);
+        $borrowed = $this->clearingHouse(equity: 90e9, goodwill: 0.0);
+        $borrowed->setWholesaleDebt((string) 400e9);
+        $borrowed->setCorporateTreasury((string) ((float) $borrowed->getCorporateTreasury() + 400e9));
+
+        $mathMock = $this->createStub(MathUtility::class);
+        $this->assertSame(
+            $this->model->getTargetMetrics($equityFunded, $macroState, $mathMock),
+            $this->model->getTargetMetrics($borrowed, $macroState, $mathMock)
+        );
+    }
+
+    /**
+     * Clearing capacity is tangible equity: goodwill absorbs no member default. The premium paid for a deal
+     * adds none, and writing it off (equity and goodwill falling together) removes none.
+     */
+    public function testClearingCapacityIsTangibleEquitySoAGoodwillWriteOffLeavesItWhole(): void
+    {
+        $macroState = $this->targetMacro();
+        $mathMock = $this->createStub(MathUtility::class);
+
+        $beforeWriteOff = $this->model->getTargetMetrics($this->clearingHouse(equity: 90e9, goodwill: 60e9), $macroState, $mathMock);
+        $afterWriteOff = $this->model->getTargetMetrics($this->clearingHouse(equity: 30e9, goodwill: 0.0), $macroState, $mathMock);
+
+        $this->assertSame(30e9, $beforeWriteOff['invested_capital']);
+        $this->assertSame($afterWriteOff, $beforeWriteOff);
+        $this->assertEqualsWithDelta(0.22, $beforeWriteOff['baseline_roic'], 1e-12, 'the target return is earned on tangible equity');
+    }
+
+    private function clearingHouse(float $equity, float $goodwill): Stock
+    {
+        $stock = new Stock();
+        $stock->setTicker('CCP');
+        $stock->setSamRatio('1.0');
+        $stock->setTotalEquity((string) $equity);
+        $stock->setGoodwill((string) $goodwill);
+        $stock->setCustomerDeposits((string) 1_300e9);
+        $stock->setCorporateTreasury((string) 1_315e9);
+        $stock->setWholesaleDebt('0');
+        $stock->setOperatingMargin('0.55');
+        $stock->setBaselineRoe('0.22');
+        $stock->setCreditSpread('0.005');
+        $stock->setFloatingDebtRatio('0.30');
+
+        return $stock;
+    }
+
+    private function targetMacro(): MacroStateDTO
+    {
+        return new MacroStateDTO(policyRate: 0.03, equityRiskPremium: 0.05, corporateTaxRate: 0.20, policyRateEma: 0.03, yield5yEma: 0.04, nominalGdpIndex: 1.0);
+    }
+
+    private function health(float $debtTolerance): \App\DTO\DebtHealthDTO
+    {
+        return new \App\DTO\DebtHealthDTO(
+            grossCost: 0.05,
+            effectiveCost: 0.04,
+            cashYield: 0.03,
+            isNegativeCarry: false,
+            isSevereNegativeCarry: false,
+            interestCoverage: 20.0,
+            wantsToPaydownDebt: false,
+            canIssueDebt: true,
+            debtTolerance: $debtTolerance,
+            wacc: 0.07,
+            costOfEquity: 0.09,
+            leveredBeta: 0.8,
+            rawMetrics: new \App\DTO\DebtMetricsDTO(interestExpense: 1e9, blendedRate: 0.05, historicalFixedRate: 0.05, dynamicSpread: 0.005, currentMarketRate: 0.05, wholesaleRate: 0.05, ebit: 20e9, revenue: 40e9, depreciation: 0.5e9, ebitda: 20.5e9),
+            isLiquidityCrisis: false,
+            isLiquidityWarning: false,
+            isUnderLeveraged: false
+        );
+    }
+
     public function testProcessPassiveLiabilityGrowthCapacityClamping(): void
     {
         $stockMock = $this->createStub(\App\Entity\Stock::class);

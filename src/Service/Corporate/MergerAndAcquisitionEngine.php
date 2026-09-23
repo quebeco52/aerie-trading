@@ -136,10 +136,6 @@ class MergerAndAcquisitionEngine
 
     /** Cash fortress ratio to prevent divestitures. */
     public const DIV_CASH_FORTRESS_RATIO = 0.10;
-    /** ROIC bump from distressed divestiture. */
-    public const DIV_DISTRESS_ROIC_BUMP = 0.50;
-    /** Margin bump from distressed divestiture. */
-    public const DIV_DISTRESS_MARGIN_BUMP = 0.30;
 
     /** Minimum cents on the dollar for fire sale. */
     public const DIV_FIRE_SALE_MIN_CENTS = 0.40;
@@ -924,13 +920,8 @@ class MergerAndAcquisitionEngine
         $ctx->gainOnSale = $ctx->salePrice - $ctx->lostEquity;
         $currentRetained = (float) $stock->getRetainedEarnings();
         $stock->setRetainedEarnings((string) ($currentRetained + $ctx->gainOnSale));
-
-        if ($ctx->isDistressed || $ctx->isDying) {
-            $ctx->strategy->boostStructuralEfficiency($stock, $ctx->divestedFraction, self::DIV_DISTRESS_ROIC_BUMP);
-            $operatingMargin = (float) $stock->getOperatingMargin();
-            $marginBump = $operatingMargin * ($ctx->divestedFraction * self::DIV_DISTRESS_MARGIN_BUMP); 
-            $stock->setOperatingMargin((string) ($operatingMargin + $marginBump));
-        }
+        // The division sold is a pro rata slice of the firm, so the business kept earns the same margin and
+        // return it did before. Distress does not make it more efficient.
     }
 
     /**
@@ -998,9 +989,10 @@ class MergerAndAcquisitionEngine
     private function finalizeDivestitureEvent(DivestitureContext $ctx): array
     {
         $salePriceB = number_format($ctx->salePrice / 1_000_000_000, 1);
-        $gainOnSaleB = number_format($ctx->gainOnSale / 1_000_000_000, 1);
+        $resultB = number_format(abs($ctx->gainOnSale) / 1_000_000_000, 1);
+        $result = $ctx->gainOnSale >= 0.0 ? "generating a \${$resultB}B gain on sale" : "booking a \${$resultB}B loss on sale";
         $target = $this->generateProceduralTarget();
-        $desc = "{$ctx->seller->getName()} sold its {$target['name']} division for \${$salePriceB}B in cash, generating a \${$gainOnSaleB}B gain on sale.";
+        $desc = "{$ctx->seller->getName()} sold its {$target['name']} division for \${$salePriceB}B in cash, {$result}.";
 
         if ($ctx->isDistressed) {
             $ctx->eventShock = mt_rand(300, 600) / 100.0; 

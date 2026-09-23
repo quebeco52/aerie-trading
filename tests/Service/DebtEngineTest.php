@@ -7,6 +7,8 @@ namespace App\Tests\Service;
 use App\DTO\DebtHealthDTO;
 use App\DTO\DebtMetricsDTO;
 use App\DTO\MacroStateDTO;
+use App\Data\ManagementProfile;
+use App\Data\ManagementStyle;
 use App\Entity\Stock;
 use App\Service\Corporate\DebtEngine;
 use App\Service\Event\MarketEventPublisher;
@@ -1259,6 +1261,35 @@ class DebtEngineTest extends TestCase
             yield5yEma: 0.03,
             equityRiskPremium: 0.05
         );
+    }
+
+    /**
+     * The recapitalisation target is the manager's: a fortress runs the low leverage its style prescribes,
+     * so debt the sector norm would call too little is where it means to be. The same balance sheet under
+     * a neutral operator is under-levered and is recapitalised toward the sector's target.
+     */
+    public function testAFortressIsUnderLeveredOnlyAgainstItsOwnLeverageTarget(): void
+    {
+        $engine = new DebtEngine(new MathUtility(), new CorporateMetrics(), $this->creditRatingAgency, $this->marketEventPublisherMock);
+        $macro = $this->leverageMacro();
+
+        // Debt at 0.9x equity: under the conglomerate recap target (0.75 x the 1.5x tolerance), above a
+        // fortress's (0.60 of that at full conviction).
+        $operator = $this->leverageFixture('Conglomerates', '72000000', '10000000');
+        $operator->setManagementStyle(ManagementStyle::Operator);
+        $this->assertTrue($engine->analyzeDebtHealth($operator, $macro)->isUnderLeveraged, 'the fixture must sit under the sector target');
+
+        $fortress = $this->leverageFixture('Conglomerates', '72000000', '10000000');
+        $fortress->setManagementStyle(ManagementStyle::Fortress);
+        $fortress->setManagementIntensity(ManagementProfile::MAX_INTENSITY);
+        $this->assertFalse($engine->analyzeDebtHealth($fortress, $macro)->isUnderLeveraged);
+
+        // An aggressive manager's target is capped at the sector's: its appetite shows in how hard it
+        // borrows, not in a recap aimed at the limit itself.
+        $empire = $this->leverageFixture('Conglomerates', '100000000', '10000000');
+        $empire->setManagementStyle(ManagementStyle::EmpireBuilder);
+        $empire->setManagementIntensity(ManagementProfile::MAX_INTENSITY);
+        $this->assertFalse($engine->analyzeDebtHealth($empire, $macro)->isUnderLeveraged, 'debt at 1.25x equity is past the sector recap target');
     }
 
     /**

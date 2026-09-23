@@ -156,10 +156,12 @@ trait FinancialPhysicsTrait
 
     public function calculateDebtExpansionCapacity(float $equity, float $totalDebt, float $wholesaleDebt, \App\DTO\DebtHealthDTO $health, float $newBorrowingRate, float $ebit, float $depreciation): float
     {
-        $wholesaleTolerance = $this->getWholesaleLeverageLimit() > 0 ? $this->getWholesaleLeverageLimit() : $health->debtTolerance;
         $bankEquityLimit = $health->debtTolerance;
 
-        $wholesaleCapacity = max(0.0, ($equity * $wholesaleTolerance) - $wholesaleDebt);
+        // The wholesale limit is the most corporate debt the model carries against its equity, and zero means
+        // it funds itself without the bond market. Read as "no limit", zero handed a clearinghouse the 50x
+        // tolerance that belongs to its members' margin pool.
+        $wholesaleCapacity = max(0.0, ($equity * $this->getWholesaleLeverageLimit()) - $wholesaleDebt);
         $totalCapacity = max(0.0, ($equity * $bankEquityLimit) - $totalDebt);
 
         return min($wholesaleCapacity, $totalCapacity);
@@ -390,12 +392,5 @@ trait FinancialPhysicsTrait
         // Note: We use the pre-sale $currentTreasury to calculate the divested portion.
         $lostCashReserves = $currentTreasury * $divestedFraction;
         $seller->setCorporateTreasury((string) max(0.0, ((float) $seller->getCorporateTreasury()) - $lostCashReserves));
-    }
-
-    public function boostStructuralEfficiency(Stock $seller, float $divestedFraction, float $bumpMultiplier): void
-    {
-        $baselineRoe = (float) $seller->getBaselineRoe();
-        $roeBump = $baselineRoe * ($divestedFraction * $bumpMultiplier);
-        $seller->setBaselineRoe((string) ($baselineRoe + $roeBump));
     }
 }

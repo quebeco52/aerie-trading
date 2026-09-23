@@ -31,10 +31,4 @@ trait StandardMaTrait
     }
     
     public function shedDivestedLiabilities(Stock $seller, float $divestedFraction, float $currentTreasury): void {}
-    
-    public function boostStructuralEfficiency(Stock $seller, float $divestedFraction, float $bumpMultiplier): void {
-        $baselineRoic = (float) $seller->getBaselineRoic();
-        $roicBump = $baselineRoic * ($divestedFraction * $bumpMultiplier);
-        $seller->setBaselineRoic((string) ($baselineRoic + $roicBump));
-    }
 }

@@ -13,5 +13,4 @@ interface MaStrategyInterface
     public function blendAcquisitionDNA(Stock $acquirer, float $oldCapitalBase, float $purchasePrice, float $effectiveTargetRoic, float $totalNewCapital): void;
     public function calculateDivestedEquity(Stock $seller, float $divestedFraction, float $currentEquity, float $currentDebt, float $treasury, float $investedCapital, float $lostDebt): float;
     public function shedDivestedLiabilities(Stock $seller, float $divestedFraction, float $currentTreasury): void;
-    public function boostStructuralEfficiency(Stock $seller, float $divestedFraction, float $bumpMultiplier): void;
 }

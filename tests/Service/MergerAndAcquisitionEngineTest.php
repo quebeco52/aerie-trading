@@ -1069,6 +1069,44 @@ class MergerAndAcquisitionEngineTest extends TestCase
         }
     }
 
+    /**
+     * The division sold is a pro rata slice of the firm, so the business kept earns the margin and return it
+     * did before; a distressed seller is not made more efficient by selling. The sale fetches less than the
+     * book value it gives up, and the headline says it booked a loss rather than a negative gain.
+     */
+    public function testADistressSaleLeavesTheKeptBusinessAsItWasAndReportsItsLoss(): void
+    {
+        $stock = $this->buildLedgeredAcquirer('SHED', treasury: 1_000_000_000.0, debt: 4_000_000_000.0, shares: 10_000_000.0);
+        $stock->setOperatingMargin('-0.05');
+        $stock->setEarningsPerShare('-0.10');
+        $stock->setTotalNetIncome('-1000000000');
+        $stock->setRoicTtm('0.00');
+        $this->primeDistressedDivestiture(operatingBase: 10_000_000_000.0, fraction: 0.25);
+
+        $published = null;
+        $publisher = $this->createStub(MarketEventPublisher::class);
+        $publisher->method('publish')->willReturnCallback(static function (Stock $seller, string $type, string $description) use (&$published): array {
+            $published = $description;
+
+            return [];
+        });
+        $engine = new MergerAndAcquisitionEngine($publisher, $this->debtEngineMock, $this->mathUtilityMock, $this->corporateMetricsMock);
+
+        $marginBefore = $stock->getOperatingMargin();
+        $roicBefore = $stock->getBaselineRoic();
+        $retainedBefore = (float) $stock->getRetainedEarnings();
+
+        $this->assertIsArray($engine->evaluateCorporateDivestiture($stock, new MacroStateDTO(policyRateEma: 0.04, corporateTaxRate: 0.20, yield5yEma: 0.04, nominalGdpIndex: 1.0), 1.0));
+
+        $this->assertSame($marginBefore, $stock->getOperatingMargin());
+        $this->assertSame($roicBefore, $stock->getBaselineRoic());
+
+        $loss = $retainedBefore - (float) $stock->getRetainedEarnings();
+        $this->assertGreaterThan(0.0, $loss, 'a fire sale below book is a loss');
+        $this->assertStringContainsString('booking a $' . number_format($loss / 1_000_000_000, 1) . 'B loss on sale', (string) $published);
+        $this->assertStringNotContainsString('$-', (string) $published);
+    }
+
     private function buildLedgeredAcquirer(string $ticker, float $treasury, float $debt, float $shares): Stock
     {
         $stock = new Stock();

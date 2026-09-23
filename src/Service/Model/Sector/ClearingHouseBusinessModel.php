@@ -51,6 +51,10 @@ class ClearingHouseBusinessModel extends BaseFinancialBusinessModel
     {
         return max(0.0, (float) $stock->getCustomerDeposits());
     }
+    /**
+     * No discretionary corporate borrowing: a CCP funds its general business risk with liquid net assets
+     * funded by equity (CPMI-IOSCO PFMI Principle 15). Debt it already carries still refinances.
+     */
     public function getWholesaleLeverageLimit(): float { return 0.0; }
     public function getDividendCrisisIcr(): float { return 1.05; }
     public function getBuybackMinIcr(): float { return 1.15; }
@@ -150,45 +154,31 @@ class ClearingHouseBusinessModel extends BaseFinancialBusinessModel
 
     public function getTargetMetrics(Stock $stock, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): array
     {
-        $equity = (float) $stock->getTotalEquity();
-        $effectiveEquity = max(1.0, $equity);
-        $marginPool = (float) $stock->getCustomerDeposits();
-
-        // Earning assets for a clearinghouse is its own corporate equity base (skin-in-the-game capital).
-        // Custody margin pools do NOT count as corporate invested capital, they are pass-through liabilities.
-        $earningAssets = $effectiveEquity;
+        // Clearing capacity is the house's own loss-absorbing capital, its skin in the game; the members'
+        // margin pool is a pass-through liability. Goodwill absorbs no member default and is not a liquid
+        // net asset (PFMI Principle 15), so the base is tangible equity: the premium paid for a deal buys no
+        // clearing capacity and writing it off deletes none.
+        $tangibleEquity = max(1.0, (float) $stock->getTotalEquity() - (float) $stock->getGoodwill());
 
         $baselineRoe = $this->resolveStructuralTargetRoe($stock, $macroState);
 
         $taxRate = $macroState->corporateTaxRate;
         $stableMargin = max(0.01, (float) $stock->getOperatingMargin());
 
-        // 1. Target Net Income and EBT required to achieve ROE
-        $optimalNetIncome = $effectiveEquity * $baselineRoe;
-        $optimalEbt = $optimalNetIncome / (1.0 - $taxRate);
+        // Fee revenue follows the capital that backs clearing, not how the house is financed (Modigliani-
+        // Miller): operations earn the target return on that capital, and the interest on the house's own
+        // debt and cash sits below operating income. Adding the interest bill to the target let every
+        // borrowed dollar raise the revenue that paid for it.
+        $targetTotalEbit = max(
+            $tangibleEquity * self::MIN_EQUITY_EBIT_YIELD,
+            ($tangibleEquity * $baselineRoe) / (1.0 - $taxRate)
+        );
 
-        // 2. Non-operating corporate treasury interest and corporate debt expense
-        $policyRate = $macroState->policyRateEma;
-        $ownCashIncome = $this->calculateInterestIncome($stock, $macroState, $mathUtility);
-
-        $corporateDebt = (float) $stock->getWholesaleDebt();
-        $floatingRatio = (float) $stock->getFloatingDebtRatio();
-        $yield5y = $macroState->yield5yEma;
-        $structuralSpread = (float) $stock->getCreditSpread();
-        $blendedWholesaleRate = ($floatingRatio * $policyRate) + ((1.0 - $floatingRatio) * $yield5y) + $structuralSpread;
-        $optimalInterestExpense = $corporateDebt * $blendedWholesaleRate;
-
-        // 3. Total Operating EBIT required from core clearing, data, and custody operations
-        $optimalTotalEbit = $optimalEbt + $optimalInterestExpense - $ownCashIncome;
-        $minEbit = $effectiveEquity * self::MIN_EQUITY_EBIT_YIELD;
-        $targetTotalEbit = max($minEbit, $optimalTotalEbit);
-
-        // 4. Target Total Operating Revenue (including custody float)
         $targetTotalRevenue = $targetTotalEbit / $stableMargin;
-        $grossYield = $targetTotalRevenue / max(1.0, abs($earningAssets));
+        $grossYield = $targetTotalRevenue / $tangibleEquity;
 
         return [
-            'invested_capital' => $earningAssets,
+            'invested_capital' => $tangibleEquity,
             'baseline_roic'    => ($grossYield * $stableMargin) * (1.0 - $taxRate)
         ];
     }

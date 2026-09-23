@@ -587,9 +587,13 @@ class DebtEngine
         // their rent is already inside fixed costs, so they add no interest here.
         $leaseLiability = $this->corporateMetrics->calculateLeaseLiability($debtMetrics->revenue, $strategy->getLeaseIntensity());
         $currentDebtRatio = ($currentDebt + $leaseLiability) / max(1.0, $equity);
+        // A recapitalisation moves the firm toward the leverage its MANAGER targets (Bertrand & Schoar 2003
+        // find the fixed effect in leverage; Graham 2000 the persistently conservative borrower), so the
+        // test is struck at the same share of the tolerance the manager draws of its debt capacity. Capped at
+        // one: several models already set their recap target within 15% of the limit itself.
         $isUnderLeveraged = $strategy->isUnderLeveraged(
             $currentDebtRatio,
-            $macroDebtTolerance,
+            $macroDebtTolerance * min(1.0, $stock->getManagementProfile()->leverageBias()),
             $interestCoverage,
             $minIcr,
             $costOfEquity,
