@@ -183,25 +183,15 @@ class DebtEngine
         $equityLimit = $metrics['equity_limit'];
 
         $marketCap = max(1.0, (float) $stock->getPrice() * max(1.0, (float) $stock->getSharesOutstanding()));
-        // For default modeling, Firm Value V = Market Equity + Total Debt Obligations
-        $assetValue = $marketCap + $totalDebtObligations;
 
         $policyRate = $macroState->policyRateEma;
-
-        $assetVolatility = $this->resolveAssetVolatility($stock, $marketCap, $totalDebtObligations, $policyRate);
 
         // Debt maturity is approximated at 5 years for standard corporate credit spreads
         $timeToMaturity = self::MERTON_HORIZON_YEARS;
 
         $lossGivenDefault = $strategy->getLossGivenDefault();
 
-        $distanceToDefault = $this->mathUtility->calculateDistanceToDefault(
-            $assetValue,
-            $totalDebtObligations,
-            $assetVolatility,
-            $policyRate,
-            $timeToMaturity
-        );
+        $distanceToDefault = $this->resolveDistanceToDefault($stock, $macroState);
 
         if ($this->creditRatingAgency !== null && $advanceMaturity) {
             $oldRating = $stock->getCreditRating();
@@ -283,6 +273,28 @@ class DebtEngine
             $revenue,
             $depreciation,
             $ebitda
+        );
+    }
+
+    /**
+     * Merton's distance to default (d2) over the credit horizon: firm value is market equity plus the debt
+     * obligations the model is judged on, at the firm's de-levered asset volatility. The rating agency grades
+     * on it and the stock page quotes it, so both read this one calculation.
+     */
+    public function resolveDistanceToDefault(Stock $stock, \App\DTO\MacroStateDTO $macroState): float
+    {
+        $industry = $stock->getIndustry() ?: 'General';
+        $strategy = \App\Data\Sectors::getBusinessModelStrategy(\App\Data\Sectors::INDUSTRY_METRICS[$industry]['business_model'] ?? 'none');
+        $totalDebtObligations = max(0.01, $strategy->getDeleveragingEvaluationDebt((float) $stock->getTotalDebt(), (float) $stock->getWholesaleDebt()));
+        $marketCap = max(1.0, (float) $stock->getPrice() * max(1.0, (float) $stock->getSharesOutstanding()));
+        $policyRate = $macroState->policyRateEma;
+
+        return $this->mathUtility->calculateDistanceToDefault(
+            $marketCap + $totalDebtObligations,
+            $totalDebtObligations,
+            $this->resolveAssetVolatility($stock, $marketCap, $totalDebtObligations, $policyRate),
+            $policyRate,
+            self::MERTON_HORIZON_YEARS
         );
     }
 

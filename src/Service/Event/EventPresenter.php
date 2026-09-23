@@ -31,51 +31,38 @@ class EventPresenter
             $recordedAt = isset($event['recorded_at']) ? new \DateTime((string) $event['recorded_at']) : (isset($event['recordedAt']) ? ($event['recordedAt'] instanceof \DateTimeInterface ? $event['recordedAt'] : new \DateTime((string) $event['recordedAt'])) : new \DateTime());
         }
 
-        if ($rawType === 'EARNINGS') {
-            return $this->presentEarnings($rawType, $rawDesc, $changePct, $recordedAt);
-        }
+        return match (EventCategory::forType($rawType)) {
+            'earnings' => $this->presentEarnings($rawType, $rawDesc, $changePct, $recordedAt),
+            'shock' => $this->presentShock($rawType, $rawDesc, $changePct, $recordedAt),
+            'split' => $this->presentSplit($rawType, $rawDesc, $changePct, $recordedAt),
+            'debt' => $this->presentDebt($rawType, $rawDesc, $changePct, $recordedAt),
+            'mna' => $this->presentMna($rawType, $rawDesc, $changePct, $recordedAt),
+            'analyst' => $this->presentAnalyst($rawType, $rawDesc, $changePct, $recordedAt),
+            'bankruptcy' => $this->presentBankruptcy($rawType, $rawDesc, $changePct, $recordedAt),
+            'reorganization' => $this->presentReorganization($rawType, $rawDesc, $changePct, $recordedAt),
+            'district' => $this->presentDistrict($rawType, $rawDesc, $changePct, $recordedAt),
+            'index' => $this->presentIndex($rawType, $rawDesc, $changePct, $recordedAt),
+            'income' => $this->presentDistribution($rawType, $rawDesc, $changePct, $recordedAt),
+            'governance' => $this->presentSuccession($rawType, $rawDesc, $changePct, $recordedAt),
+            default => $this->presentGeneral($rawType, $rawDesc, $changePct, $recordedAt),
+        };
+    }
 
-        if ($rawType === 'SHOCK') {
-            return $this->presentShock($rawType, $rawDesc, $changePct, $recordedAt);
-        }
+    /**
+     * The card as the live feed receives it: the same array with the timestamp already printed the way the
+     * page prints it, since a DateTime does not survive json_encode in a form the browser can read.
+     *
+     * @param array<string, mixed> $event
+     * @return array<string, mixed>
+     */
+    public function presentForWire(array $event): array
+    {
+        $card = $this->present($event);
+        $card['recordedAt'] = $card['recordedAt'] instanceof \DateTimeInterface
+            ? $card['recordedAt']->format('Y-m-d H:i')
+            : (string) $card['recordedAt'];
 
-        if (in_array($rawType, ['SPLIT', 'REVERSE_SPLIT', 'REVSPLIT'], true)) {
-            return $this->presentSplit($rawType, $rawDesc, $changePct, $recordedAt);
-        }
-
-        if (in_array($rawType, ['RATING_UPGRADE', 'RATING_DOWNGRADE', 'DEBT'], true)) {
-            return $this->presentDebt($rawType, $rawDesc, $changePct, $recordedAt);
-        }
-
-        if (in_array($rawType, ['ACQUISITION', 'MERGER', 'DIVESTITURE'], true)) {
-            return $this->presentMna($rawType, $rawDesc, $changePct, $recordedAt);
-        }
-
-        if ($rawType === 'BANKRUPTCY') {
-            return $this->presentBankruptcy($rawType, $rawDesc, $changePct, $recordedAt);
-        }
-
-        if ($rawType === 'REORGANIZATION') {
-            return $this->presentReorganization($rawType, $rawDesc, $changePct, $recordedAt);
-        }
-
-        if ($rawType === 'DISTRICT') {
-            return $this->presentDistrict($rawType, $rawDesc, $changePct, $recordedAt);
-        }
-
-        if ($rawType === 'INDEX') {
-            return $this->presentIndex($rawType, $rawDesc, $changePct, $recordedAt);
-        }
-
-        if ($rawType === 'DIVIDEND') {
-            return $this->presentDistribution($rawType, $rawDesc, $changePct, $recordedAt);
-        }
-
-        if ($rawType === 'MANAGEMENT CHANGE') {
-            return $this->presentSuccession($rawType, $rawDesc, $changePct, $recordedAt);
-        }
-
-        return $this->presentGeneral($rawType, $rawDesc, $changePct, $recordedAt);
+        return $card;
     }
 
     /**
@@ -224,8 +211,11 @@ class EventPresenter
      */
     private function presentDebt(string $type, string $rawDesc, ?float $changePct, \DateTimeInterface $recordedAt): array
     {
-        $isUpgrade = $type === 'RATING_UPGRADE' || (str_contains(strtolower($rawDesc), 'upgrade'));
-        $badge = $isUpgrade ? 'RATING UPGRADE' : ($type === 'RATING_DOWNGRADE' ? 'RATING DOWNGRADE' : 'CREDIT RATING');
+        $isUpgrade = in_array($type, ['RATING_UPGRADE', 'CREDIT_UPGRADE'], true) || ($type === 'DEBT' && str_contains(strtolower($rawDesc), 'upgrade'));
+        $isDowngrade = in_array($type, ['RATING_DOWNGRADE', 'CREDIT_DOWNGRADE'], true);
+        $badge = $isUpgrade ? 'RATING UPGRADE' : ($isDowngrade ? 'RATING DOWNGRADE' : 'CREDIT RATING');
+        // The debt engine writes "[CREDIT DOWNGRADE] TICK: ..." for the log; the badge already says both.
+        $rawDesc = (string) preg_replace('/^\[[A-Z ]+\]\s*[A-Z0-9.]+:\s*/', '', $rawDesc);
         $badgeClass = $isUpgrade ? 'bg-secondary/10 text-secondary border-secondary/30' : 'bg-tertiary/10 text-tertiary border-tertiary/30';
         $borderClass = $isUpgrade ? 'border-l-secondary' : 'border-l-tertiary';
         $icon = $isUpgrade ? 'credit_score' : 'warning';
@@ -253,20 +243,14 @@ class EventPresenter
      */
     private function presentMna(string $type, string $rawDesc, ?float $changePct, \DateTimeInterface $recordedAt): array
     {
-        $badge = match ($type) {
-            'ACQUISITION' => 'ACQUISITION',
-            'DIVESTITURE' => 'DIVESTITURE',
-            'MERGER' => 'MERGER',
-            default => 'M&A EVENT'
-        };
-
+        // The deal type is already the headline a desk would print (STRATEGIC ACQUISITION, LEVERAGED BUYOUT…).
         return [
             'type' => $type,
             'category' => 'mna',
-            'badge' => $badge,
+            'badge' => $type,
             'badgeClass' => 'bg-cyan-500/10 text-cyan-300 border-cyan-500/30',
             'borderClass' => 'border-l-cyan-400',
-            'icon' => 'domain_add',
+            'icon' => $type === 'DIVESTITURE' ? 'domain_disabled' : 'domain_add',
             'iconClass' => 'bg-cyan-500/15 text-cyan-300',
             'isEarnings' => false,
             'headline' => !empty($rawDesc) ? $rawDesc : 'Corporate restructuring announcement.',
@@ -278,8 +262,33 @@ class EventPresenter
     }
 
     /**
+     * The sell side and management talking about the number rather than reporting it: a price-target
+     * revision (StockTracker) or a guidance cut (EarningsEngine). A cut reads down; a raise reads up.
+     *
      * @return array<string, mixed>
      */
+    private function presentAnalyst(string $type, string $rawDesc, ?float $changePct, \DateTimeInterface $recordedAt): array
+    {
+        $isGuidance = $type === 'GUIDANCE';
+        $isCut = $isGuidance || str_contains(strtolower($rawDesc), ' cut ');
+
+        return [
+            'type' => $type,
+            'category' => 'analyst',
+            'badge' => $isGuidance ? 'GUIDANCE CUT' : ($isCut ? 'TARGET CUT' : 'TARGET RAISED'),
+            'badgeClass' => $isCut ? 'bg-tertiary/10 text-tertiary border-tertiary/30' : 'bg-secondary/10 text-secondary border-secondary/30',
+            'borderClass' => $isCut ? 'border-l-tertiary' : 'border-l-secondary',
+            'icon' => $isGuidance ? 'campaign' : 'query_stats',
+            'iconClass' => $isCut ? 'bg-tertiary/15 text-tertiary' : 'bg-secondary/15 text-secondary',
+            'isEarnings' => false,
+            'headline' => !empty($rawDesc) ? $rawDesc : 'Analyst revision.',
+            'pills' => [],
+            'changePercent' => $changePct,
+            'recordedAt' => $recordedAt,
+            'rawDescription' => $rawDesc,
+        ];
+    }
+
     /**
      * A Glasswater Row roster change — promotion onto or eviction from the street at the quarterly
      * reconstitution (MarketTickerCommand via DistrictRoster). Not a price event: the change is

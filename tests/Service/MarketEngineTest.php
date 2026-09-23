@@ -321,4 +321,41 @@ class MarketEngineTest extends TestCase
             $this->assertNotEquals(0.0, $shock, 'SAFE market shock should be non-zero.');
         }
     }
+
+    /**
+     * A financial's P/B leg is struck on tangible book. Wherever the justified multiple is interior this is
+     * the same value (the same earnings over the smaller base, NI / r either way); at the 0.40x floor it is 40%
+     * of TANGIBLE book, so goodwill no longer props up a distressed bank's valuation.
+     */
+    public function testAFinancialsBookLegIsStruckOnTangibleBook(): void
+    {
+        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
+        $this->mathUtilityMock->method('checkProbability')->willReturn(false);
+
+        $valueAnalyst = fn (float $roe, ?float $tangibleBook, string $model = 'commercial_bank'): float => $this->engine->calculateNextPrice(new MarketPricingContext(
+            currentPrice: 50.0,
+            currentVolatility: 0.2,
+            longTermVolatility: 0.2,
+            earningsPerShare: 100.0 * $roe,
+            dt: 1.0,
+            lambda: 0.0,
+            bookValuePerShare: 100.0,
+            currentRoic: $roe,
+            roicTtm: $roe,
+            liveCostOfEquity: 0.10,
+            liveWacc: 0.10,
+            businessModel: $model,
+            tangibleBookValuePerShare: $tangibleBook
+        ))['analyst_targets']['value_analyst'];
+
+        // Interior: 15% on $100 of book is 37.5% on $40 of tangible book, and both are worth $150.
+        $this->assertEqualsWithDelta($valueAnalyst(0.15, null), $valueAnalyst(0.15, 40.0), 1e-9);
+
+        // At the floor: 1% on book is far below the hurdle, and 40% of $40 is what is left of the floor.
+        $this->assertEqualsWithDelta(0.40 * 40.0 * 0.80, $valueAnalyst(0.01, 40.0), 1e-9);
+        $this->assertEqualsWithDelta(0.40 * 100.0 * 0.80, $valueAnalyst(0.01, null), 1e-9, 'without a tangible book the leg reads book, as before');
+
+        // An operating company is valued on its invested capital's return; the tangible book is not read.
+        $this->assertEqualsWithDelta($valueAnalyst(0.01, null, 'none'), $valueAnalyst(0.01, 40.0, 'none'), 1e-9);
+    }
 }

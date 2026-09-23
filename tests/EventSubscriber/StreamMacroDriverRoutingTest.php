@@ -37,7 +37,7 @@ class StreamMacroDriverRoutingTest extends TestCase
     {
         /** @var EntityManagerInterface&MockObject $entityManager */
         $entityManager = $this->createMock(EntityManagerInterface::class);
-        $this->subscriber = new EarningsReportSubscriber($entityManager);
+        $this->subscriber = new EarningsReportSubscriber($entityManager, new \App\Service\Corporate\DebtEngine(new \App\Service\Math\MathUtility(), new \App\Service\Math\CorporateMetrics()));
         $this->resolveDrivers = new ReflectionMethod(EarningsReportSubscriber::class, 'resolveStreamMacroDrivers');
 
         // Values chosen so every branch's conditional sub-drivers (credit spread, retail default,

@@ -9,6 +9,7 @@ use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\EventDispatcher\EventSubscriberInterface;
 use App\Data\MacroFieldCatalog;
 use App\Data\Sectors;
+use App\Service\Corporate\DebtEngine;
 use App\Service\Macro\MacroEngine;
 use App\Service\Model\Sector\PrivateEquityBusinessModel;
 
@@ -29,7 +30,8 @@ class EarningsReportSubscriber implements EventSubscriberInterface
     private const MOMENTUM_MATERIALITY_FLOOR = 0.15;
 
     public function __construct(
-        private readonly EntityManagerInterface $entityManager
+        private readonly EntityManagerInterface $entityManager,
+        private readonly DebtEngine $debtEngine
     ) {}
 
     public static function getSubscribedEvents(): array
@@ -156,8 +158,12 @@ class EarningsReportSubscriber implements EventSubscriberInterface
         $roe = $finalEquity > 0 ? ($ctx->reportedActualNetIncome / $finalEquity) * 4.0 : 0.0;
         $report->setReturnOnEquity(\App\Service\Math\MathUtility::formatDecimal($roe, 4));
 
-        $capitalRatio = ($finalEquity + $finalTotalDebt) > 0 ? ($finalEquity / ($finalEquity + $finalTotalDebt)) : 1.0;
-        $report->setCapitalRatio(\App\Service\Math\MathUtility::formatDecimal($capitalRatio, 4));
+        // The ratio the regulator closes the firm on (MarketOperator via DebtEngine::calculateAltmanZScore):
+        // tangible equity over tangible assets. A firm the capital ratio does not govern discloses none.
+        if ($ctx->strategy->requiresAlternativeZScore()) {
+            $capitalBase = $this->debtEngine->resolveTangibleCapitalBase($stock, (float) $stock->getTotalRevenue());
+            $report->setCapitalRatio(\App\Service\Math\MathUtility::formatDecimal($capitalBase['capital'] / $capitalBase['assets'], 4));
+        }
 
         if (Sectors::isFinancial($ctx->businessModel) || (float) $stock->getCustomerDeposits() > 0) {
             $customerDeposits = (float) $stock->getCustomerDeposits();

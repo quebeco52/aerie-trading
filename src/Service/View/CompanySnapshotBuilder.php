@@ -13,6 +13,8 @@ use App\Repository\StockRepository;
 use App\Service\Corporate\DebtEngine;
 use App\Service\Corporate\Holdings\AnchorStakeLedger;
 use App\Service\Market\MarketEngine;
+use App\Service\Model\Sector\CommercialBankBusinessModel;
+use App\Service\Model\Sector\InsuranceBusinessModel;
 
 /**
  * Builds the headline valuation block on a company's page: size, multiple, yield, and where the
@@ -51,6 +53,8 @@ class CompanySnapshotBuilder
 
         return [
             'isFinancial' => $isFinancial,
+            // Retail, reinsurance and specialty lines are all insurers: read on a combined ratio and a float.
+            'isInsurer' => Sectors::getBusinessModelStrategy($businessModel) instanceof InsuranceBusinessModel,
             'businessModel' => $businessModel,
             'marketCap' => $isBankrupt ? 0.0 : $price * (float) $stock->getSharesOutstanding(),
             'peRatio' => (!$isBankrupt && $eps > 0.0) ? $price / $eps : null,
@@ -63,6 +67,64 @@ class CompanySnapshotBuilder
                 : 0.0,
             'analystTargets' => $isBankrupt ? null : $this->analystTargets($stock, $macroState, $businessModel),
             'netAssetValue' => $isBankrupt ? null : $this->netAssetValue($stock, $macroState, $businessModel, $price),
+            'capitalThresholds' => $this->capitalThresholds($businessModel),
+            'capital' => $isBankrupt ? null : $this->capitalPosition($stock, $businessModel, $price),
+        ];
+    }
+
+    /**
+     * What a firm the regulator governs is quoted on: its tangible book, its return on it, and the ratio it
+     * would be closed on, with the zone that ratio sits in. Goodwill is deducted everywhere (Basel III CET1,
+     * 12 USC 1831o), which is why price-to-tangible-book rather than price-to-book is how a bank is quoted.
+     * Null for a firm its capital ratio does not govern.
+     *
+     * @return array{tangibleEquity: float, tangibleBookPerShare: float, priceToTangibleBook: float|null, returnOnTangibleEquity: float|null, goodwillShare: float|null, ratio: float, zone: string, cet1: float|null}|null
+     */
+    private function capitalPosition(Stock $stock, string $businessModel, float $price): ?array
+    {
+        $strategy = Sectors::getBusinessModelStrategy($businessModel);
+        if (!$strategy->requiresAlternativeZScore()) {
+            return null;
+        }
+
+        $tangibleEquity = $stock->getTangibleEquity();
+        $tangibleBookPerShare = $tangibleEquity / max(1.0, (float) $stock->getSharesOutstanding());
+        $equity = (float) $stock->getTotalEquity();
+        // Trailing twelve months, as EarningsEngine keeps it: the last four reported quarters.
+        $history = $stock->getQuarterlyNetIncomeHistory() ?? [];
+        $revenue = (float) $stock->getTotalRevenue();
+        $closure = $this->debtEngine->calculateAltmanZScore($stock, $revenue * (float) $stock->getOperatingMargin(), $revenue, $price);
+
+        return [
+            'tangibleEquity' => $tangibleEquity,
+            'tangibleBookPerShare' => $tangibleBookPerShare,
+            'priceToTangibleBook' => $tangibleBookPerShare > 0.0 ? $price / $tangibleBookPerShare : null,
+            'returnOnTangibleEquity' => $tangibleEquity > 0.0 && count($history) >= 4 ? array_sum(array_slice($history, -4)) / $tangibleEquity : null,
+            'goodwillShare' => $equity > 0.0 ? max(0.0, (float) $stock->getGoodwill()) / $equity : null,
+            'ratio' => $closure['z_score'] / 100.0,
+            'zone' => $closure['zone'],
+            'cet1' => $strategy instanceof CommercialBankBusinessModel ? $strategy->calculateCet1Ratio($stock) : null,
+        ];
+    }
+
+    /**
+     * The lines the regulator acts on, in percent of tangible assets: above the warning line the firm is well
+     * capitalized, below the distress line it is distressed, and below the closure line MarketOperator
+     * liquidates it. Null for a firm its capital ratio does not govern.
+     *
+     * @return array{warning: float, distress: float, bankrupt: float}|null
+     */
+    private function capitalThresholds(string $businessModel): ?array
+    {
+        $strategy = Sectors::getBusinessModelStrategy($businessModel);
+        if (!$strategy->requiresAlternativeZScore()) {
+            return null;
+        }
+
+        return [
+            'warning' => $strategy->getWarningEquityThreshold(),
+            'distress' => $strategy->getDistressEquityThreshold(),
+            'bankrupt' => $strategy->getBankruptEquityThreshold(),
         ];
     }
 
@@ -132,6 +194,7 @@ class CompanySnapshotBuilder
             macroState: $macroState,
             fcfPerShare: $stock->getFreeCashFlowPerShare() !== null ? (float) $stock->getFreeCashFlowPerShare() : null,
             bookValuePerShare: (float) $stock->getBookValuePerShare(),
+            tangibleBookValuePerShare: $stock->getTangibleEquity() / $shares,
             currentRoic: (float) ($stock->getCurrentRoic() ?: $stock->getBaselineRoic()),
             roicTtm: (float) $stock->getRoicTtm(),
             dividendPerShare: (float) $stock->getLastDividend(),

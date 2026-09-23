@@ -1375,4 +1375,35 @@ class DebtEngineTest extends TestCase
         $this->assertLessThan($geared->netDebtToEbitda, $funded->netDebtToEbitda, 'Holding cash against the same gross debt must lower measured leverage.');
         $this->assertTrue($funded->hasLeverageHeadroom, 'Once net debt is inside the limit the covenant is satisfied again.');
     }
+
+    /** The page quotes the distance to default the rating agency grades on: one calculation, not two. */
+    public function testThePageAndTheRatingAgencyReadTheSameDistanceToDefault(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('DDTF');
+        $stock->setIndustry('Tools & Accessories');
+        $stock->setCreditRating('BBB');
+        $stock->setTotalEquity('100000000000');
+        $stock->setWholesaleDebt('60000000000');
+        $stock->setVolatility('0.30');
+        $stock->setSharesOutstanding('1000000000');
+        $stock->setPrice('80.00');
+        $stock->setTotalRevenue('90000000000');
+        $stock->setOperatingMargin('0.15');
+        $macroState = new MacroStateDTO(policyRateEma: 0.04, corporateTaxRate: 0.21, yield5yEma: 0.04);
+
+        $graded = null;
+        $agency = $this->createMock(CreditRatingAgency::class);
+        $agency->method('evaluateRating')->willReturnCallback(function (Stock $rated, float $distanceToDefault) use (&$graded): ?string {
+            $graded = $distanceToDefault;
+
+            return null;
+        });
+        $engine = new DebtEngine(new MathUtility(), new CorporateMetrics(), $agency, null);
+
+        $engine->calculateInterestExpense($stock, $macroState, true);
+
+        $this->assertNotNull($graded);
+        $this->assertSame($graded, $engine->resolveDistanceToDefault($stock, $macroState));
+    }
 }

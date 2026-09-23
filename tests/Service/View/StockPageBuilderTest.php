@@ -16,6 +16,8 @@ use App\Service\Market\SecuritiesLendingDesk;
 use App\Service\Math\MathUtility;
 use App\Service\View\AnchorPortfolioBuilder;
 use App\Service\View\CompanySnapshotBuilder;
+use App\Service\View\CreditHealthBuilder;
+use App\Service\View\FinancialSummaryBuilder;
 use App\Service\View\EtfCompositionBuilder;
 use App\Service\View\IndustryPositionBuilder;
 use App\Service\View\OptionChainBuilder;
@@ -42,9 +44,9 @@ class StockPageBuilderTest extends TestCase
      */
     private const TEMPLATE_KEYS = [
         'advShares', 'allAssets', 'analystTargets', 'anchorPortfolio', 'asset', 'availableToBorrow',
-        'borrowFee', 'businessModel', 'changePercent', 'components', 'dividendYield', 'economic_cycle',
-        'events', 'generalInfo', 'halfSpread', 'indexFacts', 'industry', 'investedCapital', 'isEtf',
-        'isFinancial', 'lifecycleStage', 'lifecycleStages', 'macro', 'management', 'marketCap',
+        'borrowFee', 'businessModel', 'capital', 'capitalThresholds', 'changePercent', 'components', 'creditHealth', 'dividendYield', 'economic_cycle',
+        'events', 'financialSummary', 'generalInfo', 'halfSpread', 'indexFacts', 'industry', 'investedCapital', 'isEtf',
+        'isFinancial', 'isInsurer', 'lifecycleStage', 'lifecycleStages', 'macro', 'management', 'marketCap',
         'marketShare', 'netAssetValue', 'openOrders', 'optionDealerGamma', 'optionDealerGammaPerPercent',
         'optionExpiries', 'optionMultiplier', 'optionOpenInterest', 'optionsListed', 'optionsReason',
         'peRatio', 'peers', 'pieData', 'pieLabels', 'quote', 'sharesMap', 'shortUtilization', 'targetPE',
@@ -73,6 +75,7 @@ class StockPageBuilderTest extends TestCase
         $companySnapshot = $this->createMock(CompanySnapshotBuilder::class);
         $companySnapshot->method('build')->willReturn([
             'isFinancial' => false,
+            'isInsurer' => false,
             'businessModel' => 'standard_corporate',
             'marketCap' => 1000.0,
             'peRatio' => 12.5,
@@ -82,6 +85,8 @@ class StockPageBuilderTest extends TestCase
             'dividendYield' => 0.01,
             'analystTargets' => ['consensus' => 110.0],
             'netAssetValue' => null,
+            'capitalThresholds' => null,
+            'capital' => null,
         ]);
 
         $etfComposition = $this->createMock(EtfCompositionBuilder::class);
@@ -118,6 +123,11 @@ class StockPageBuilderTest extends TestCase
             'optionMultiplier' => 100,
         ]);
 
+        $creditHealth = $this->createMock(CreditHealthBuilder::class);
+        $creditHealth->method('build')->willReturn(['creditHealth' => null]);
+        $financialSummary = $this->createMock(FinancialSummaryBuilder::class);
+        $financialSummary->method('build')->willReturn(['financialSummary' => []]);
+
         return new StockPageBuilder(
             $macroStateProvider,
             $companySnapshot,
@@ -133,6 +143,8 @@ class StockPageBuilderTest extends TestCase
             new LiquidityEngine(new MathUtility()),
             new SecuritiesLendingDesk(),
             $optionChain,
+            $creditHealth,
+            $financialSummary,
             self::TICKS_PER_YEAR,
         );
     }

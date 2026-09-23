@@ -73,6 +73,18 @@ class MergerAndAcquisitionEngine
     /** Merged market share above which a deal that also passes the HHI delta is presumed illegal (Philadelphia National Bank, 1963). */
     public const MERGER_REVIEW_SHARE_CEILING = 0.30;
 
+    // --- Deal Sizing Limits (named in the deal announcement) ---
+    /** The acquirer's cash, borrowing room or shares times the fraction it chose to spend. */
+    public const LIMIT_BUYING_POWER = 'buying power';
+    /** The business model's own cap on a single deal (a financial's share of tangible equity). */
+    public const LIMIT_SPEND_CAP = 'the per-deal spending cap';
+    /** The competitive fringe left in the acquirer's market. */
+    public const LIMIT_AVAILABLE_MARKET = 'what is left of its market to buy';
+    /** The largest share that clears horizontal merger review. */
+    public const LIMIT_MERGER_REVIEW = 'the largest deal merger review clears';
+    /** The largest deal that keeps the acquirer's tangible capital ratio well capitalized. */
+    public const LIMIT_CAPITAL_TEST = 'the largest deal that keeps it well capitalized';
+
     // --- M&A Synergy & Target Returns (Log-Normal) ---
     /** Mean of log-normal synergy. */
     public const MA_SYNERGY_MU = -0.02;
@@ -409,11 +421,9 @@ class MergerAndAcquisitionEngine
         $ctx->availableCapital = $config['use_stock'] ? ($ctx->price * $ctx->shares * self::MA_STOCK_DILUTION_FRACTION) : ($config['use_leverage'] ? ($ctx->usableTreasury + $ctx->borrowingCapacity) : $ctx->usableTreasury);
         $ctx->spendFraction = $this->mathUtility->generateUniformBetween(0.50, 1.0) * $config['spend'];
         $ctx->purchasePrice = $ctx->availableCapital * $ctx->spendFraction;
+        $ctx->bindingLimit = self::LIMIT_BUYING_POWER;
 
-        $ctx->maxPrivateCompanyValue = max((float) mt_rand(100, 500) * 1_000_000_000.0, $ctx->availableCapital * 0.50);
-        $ctx->purchasePrice = min($ctx->purchasePrice, $ctx->maxPrivateCompanyValue);
-        
-        $ctx->purchasePrice = $ctx->strategy->applyMaSpendCap($ctx->purchasePrice, $stock->getTangibleEquity());
+        $this->capPurchasePrice($ctx, $ctx->strategy->applyMaSpendCap($ctx->purchasePrice, $stock->getTangibleEquity()), self::LIMIT_SPEND_CAP);
         
         if ($ctx->purchasePrice < self::MA_MIN_DEAL_SIZE) {
             $ctx->dealExecuted = false;
@@ -427,9 +437,20 @@ class MergerAndAcquisitionEngine
         // The target is a private firm in the acquirer's own market, so the deal is sized to the largest
         // one there is to buy and that clears merger review. Sized by the acquirer's buying power alone, a
         // firm that already owned its market kept buying more of it than exists.
-        $ctx->purchasePrice = min($ctx->purchasePrice, $this->resolveLargestAvailableTarget($ctx), $this->resolveLargestCapitalClearedDeal($ctx));
+        $market = $this->resolveLargestAvailableTarget($ctx);
+        $this->capPurchasePrice($ctx, $market['price'], $market['review_binds'] ? self::LIMIT_MERGER_REVIEW : self::LIMIT_AVAILABLE_MARKET);
+        $this->capPurchasePrice($ctx, $this->resolveLargestCapitalClearedDeal($ctx), self::LIMIT_CAPITAL_TEST);
         if ($ctx->purchasePrice < self::MA_MIN_DEAL_SIZE) {
             $ctx->dealExecuted = false;
+        }
+    }
+
+    /** Cuts the price to a limit below it and records that limit as the one the deal was sized to. */
+    private function capPurchasePrice(AcquisitionContext $ctx, float $limit, string $reason): void
+    {
+        if ($limit < $ctx->purchasePrice) {
+            $ctx->purchasePrice = $limit;
+            $ctx->bindingLimit = $reason;
         }
     }
 
@@ -446,9 +467,11 @@ class MergerAndAcquisitionEngine
 
     /**
      * Price of the largest target the acquirer's market holds for it: the fringe still off the board, capped
-     * at the share merger review clears. Unbounded when the ledger has not priced the firm's market.
+     * at the share merger review clears, and whether the review rather than the fringe set it. Unbounded when
+     * the ledger has not priced the firm's market.
      */
-    private function resolveLargestAvailableTarget(AcquisitionContext $ctx): float
+    /** @return array{price: float, review_binds: bool} */
+    private function resolveLargestAvailableTarget(AcquisitionContext $ctx): array
     {
         $market = $this->industryShareLedger?->describeMergerMarket(
             $ctx->acquirer,
@@ -458,13 +481,17 @@ class MergerAndAcquisitionEngine
             $ctx->ticksPerYear
         );
         if ($market === null) {
-            return INF;
+            return ['price' => INF, 'review_binds' => false];
         }
 
-        $targetShare = min($market['fringe_share'], self::maxClearedTargetShare($market['acquirer_share'], $market['herfindahl']));
+        $reviewShare = self::maxClearedTargetShare($market['acquirer_share'], $market['herfindahl']);
+        $targetShare = min($market['fringe_share'], $reviewShare);
         $revenuePerDollar = $this->valueTarget($ctx, 1.0)['revenue'];
 
-        return $revenuePerDollar > 0.0 ? ($targetShare * $market['market_revenue']) / $revenuePerDollar : INF;
+        return [
+            'price' => $revenuePerDollar > 0.0 ? ($targetShare * $market['market_revenue']) / $revenuePerDollar : INF,
+            'review_binds' => $reviewShare < $market['fringe_share'],
+        ];
     }
 
     /**
@@ -589,7 +616,10 @@ class MergerAndAcquisitionEngine
         // net assets plus goodwill; stock deals add the shares issued to equity. Expected synergies only
         // reach the books as they are earned, through the blended ROIC below; the market prices them at once.
         $equityAddedByStock = $ctx->config['use_stock'] ? $ctx->purchasePrice : 0.0;
-        $ctx->synergyValueCreation = $ctx->purchasePrice * ($ctx->synergyMultiplier - 1.0);
+        // The deal's NPV to the acquirer: what the target is worth to it (its standalone value with the
+        // synergies) less what was paid. The hubris premium is paid away (Roll 1986), so an overpayment is
+        // value destroyed even when the synergies are real.
+        $ctx->synergyValueCreation = ($this->valueTarget($ctx, $ctx->purchasePrice)['economic_value'] * $ctx->synergyMultiplier) - $ctx->purchasePrice;
         $ctx->newEquity = $ctx->equity + $equityAddedByStock;
         $stock->setTotalEquity((string) $ctx->newEquity);
 
@@ -748,18 +778,39 @@ class MergerAndAcquisitionEngine
         $stock->setPayables((string) ((float) $stock->getPayables() * $scale));
     }
 
+    /**
+     * The terms a deal announcement states: how it was paid for, what went to goodwill, and, when a rule
+     * rather than the buyer's appetite set its size, which rule. The first sentence of the announcement is
+     * left as it was, since the replay harness and the district parse the price and type out of it.
+     */
+    private function describeDealTerms(AcquisitionContext $ctx): string
+    {
+        $billions = static fn (float $amount): string => '$' . number_format($amount / 1_000_000_000, 1) . 'B';
+        $paidInStock = ($ctx->config['use_stock'] ?? false) ? $ctx->purchasePrice : 0.0;
+        $paidInCash = max(0.0, $ctx->purchasePrice - $ctx->debtIssued - $paidInStock);
+
+        $funding = array_filter([
+            $paidInCash > 0.0 ? "{$billions($paidInCash)} in cash" : null,
+            $ctx->debtIssued > 0.0 ? "{$billions($ctx->debtIssued)} in new debt" : null,
+            $paidInStock > 0.0 ? "{$billions($paidInStock)} in new shares" : null,
+        ]);
+        $terms = 'Funded with ' . implode(' and ', $funding) . "; {$billions($ctx->goodwillRecorded)} booked as goodwill.";
+
+        $sizedByRule = in_array($ctx->bindingLimit, [self::LIMIT_SPEND_CAP, self::LIMIT_AVAILABLE_MARKET, self::LIMIT_MERGER_REVIEW, self::LIMIT_CAPITAL_TEST], true);
+
+        return $sizedByRule ? "{$terms} Sized to {$ctx->bindingLimit}." : $terms;
+    }
+
     private function finalizeAcquisitionEvent(AcquisitionContext $ctx): array
     {
         $purchasePriceB = number_format($ctx->purchasePrice / 1_000_000_000, 1);
-        $desc = "{$ctx->acquirer->getName()} executed a \${$purchasePriceB}B {$ctx->config['type']} of {$ctx->target['name']}.";
+        $desc = "{$ctx->acquirer->getName()} executed a \${$purchasePriceB}B {$ctx->config['type']} of {$ctx->target['name']}. " . $this->describeDealTerms($ctx);
 
-        if ($ctx->synergyMultiplier < 1.0) {
-            $ctx->eventShock = -1.0 * (mt_rand(200, 600) / 100.0); 
-        } else {
-            $marketCap = $ctx->price * $ctx->shares;
-            $calculatedShock = ($ctx->synergyValueCreation / max($marketCap, 1)) * 100;
-            $ctx->eventShock = min(15.0, max(2.0, $calculatedShock));
-        }
+        // The announcement return is the deal's NPV over the acquirer's market value before it (Moeller,
+        // Schlingemann & Stulz 2004 measure acquirer returns in exactly these dollar terms). Limited
+        // liability is the only bound: the equity cannot lose more than it was worth.
+        $marketCap = max(1.0, $ctx->price * $ctx->shares);
+        $ctx->eventShock = max(-100.0, ($ctx->synergyValueCreation / $marketCap) * 100.0);
 
         $event = $this->marketEvent->publish($ctx->acquirer, $ctx->config['type'], $desc, $ctx->eventShock);
 

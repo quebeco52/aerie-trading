@@ -538,10 +538,57 @@
 										<dt class="text-sm font-semibold text-on-surface-variant">Book Value (Equity)</dt>
 										<dd class="font-bold text-on-surface font-mono tabular-nums" id="stat-equity">{{ asset.totalEquity|format_large('$') }}</dd>
 									</div>
-									<div class="py-2 flex justify-between items-center">
-										<dt class="text-sm font-semibold text-on-surface-variant">Debt-to-Equity</dt>
-										<dd class="font-bold text-on-surface font-mono tabular-nums" id="stat-debt-ratio">{{ asset.debtToEquityRatio|number_format(2) }}x</dd>
-									</div>
+									{% if capital %}
+										{# A firm the regulator governs is quoted on tangible book and judged on its capital ratio;
+										   debt-to-equity with deposits in the numerator says nothing about a bank. #}
+										{% set zoneLabel = {'Safe': 'well capitalized', 'Grey': 'grey zone', 'Distress': 'distressed'} %}
+										{% set zoneTone = capital.zone == 'Safe' ? 'text-secondary' : (capital.zone == 'Grey' ? 'text-amber-300' : 'text-tertiary') %}
+										<div class="py-2 flex justify-between items-center">
+											<dt class="group relative cursor-help text-sm font-semibold text-on-surface-variant" tabindex="0">
+												<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Tangible Book / Share</span>
+												{{ _self.tooltip('Book equity less goodwill, per share. Every regulator deducts goodwill from capital (Basel III CET1, Prompt Corrective Action), so this is the book a financial firm is valued and judged on.', 'left', 'w-72') }}
+											</dt>
+											<dd class="font-bold text-on-surface font-mono tabular-nums" id="stat-tbvps">${{ capital.tangibleBookPerShare|number_format(2) }}</dd>
+										</div>
+										<div class="py-2 flex justify-between items-center">
+											<dt class="text-sm font-semibold text-on-surface-variant">Price / Tangible Book</dt>
+											<dd class="font-bold text-on-surface font-mono tabular-nums" id="stat-ptbv" data-tbvps="{{ capital.tangibleBookPerShare }}">{{ capital.priceToTangibleBook is null ? '-' : capital.priceToTangibleBook|number_format(2) ~ 'x' }}</dd>
+										</div>
+										<div class="py-2 flex justify-between items-center">
+											<dt class="group relative cursor-help text-sm font-semibold text-on-surface-variant" tabindex="0">
+												<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Return on Tangible Equity</span>
+												{{ _self.tooltip('Trailing twelve months of net income over tangible equity. It exceeds ROE by the goodwill the firm carries: the same earnings over the capital that actually backs them.', 'left', 'w-72') }}
+											</dt>
+											<dd class="font-bold text-on-surface font-mono tabular-nums">{{ capital.returnOnTangibleEquity is null ? '-' : (capital.returnOnTangibleEquity * 100)|number_format(2) ~ '%' }}</dd>
+										</div>
+										<div class="py-2 flex justify-between items-center">
+											<dt class="group relative cursor-help text-sm font-semibold text-on-surface-variant" tabindex="0">
+												<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Capital Ratio</span>
+												{{ _self.tooltip('Tangible equity over tangible assets, the ratio the regulator closes the firm on. Well capitalized above ' ~ capitalThresholds.warning|number_format(1) ~ '%, distressed below ' ~ capitalThresholds.distress|number_format(1) ~ '%, closed below ' ~ capitalThresholds.bankrupt|number_format(1) ~ '%.', 'left', 'w-72') }}
+											</dt>
+											<dd class="font-bold font-mono tabular-nums {{ zoneTone }}">{{ (capital.ratio * 100)|number_format(2) }}% <span class="font-normal text-2xs">{{ zoneLabel[capital.zone] ?? capital.zone }}</span></dd>
+										</div>
+										{% if capital.cet1 is not null %}
+											<div class="py-2 flex justify-between items-center">
+												<dt class="group relative cursor-help text-sm font-semibold text-on-surface-variant" tabindex="0">
+													<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">CET1 Ratio</span>
+													{{ _self.tooltip('Common equity tier 1 less goodwill, over risk-weighted assets (Basel III). Payouts are restricted when it runs below the regulatory buffer.', 'left', 'w-72') }}
+												</dt>
+												<dd class="font-bold text-on-surface font-mono tabular-nums">{{ (capital.cet1 * 100)|number_format(2) }}%</dd>
+											</div>
+										{% endif %}
+										{% if capital.goodwillShare %}
+											<div class="py-2 flex justify-between items-center">
+												<dt class="text-sm font-semibold text-on-surface-variant">Goodwill / Book</dt>
+												<dd class="font-bold text-on-surface font-mono tabular-nums">{{ (capital.goodwillShare * 100)|number_format(1) }}%</dd>
+											</div>
+										{% endif %}
+									{% else %}
+										<div class="py-2 flex justify-between items-center">
+											<dt class="text-sm font-semibold text-on-surface-variant">Debt-to-Equity</dt>
+											<dd class="font-bold text-on-surface font-mono tabular-nums" id="stat-debt-ratio">{{ asset.debtToEquityRatio|number_format(2) }}x</dd>
+										</div>
+									{% endif %}
 									{% if asset.creditRating is defined %}
 										<div class="py-2 flex justify-between items-center">
 											<dt class="text-sm font-semibold text-on-surface-variant">Credit Rating</dt>
@@ -554,6 +601,76 @@
 											{{ _self.tooltip('Sloan (1996) accruals ratio: (net income − free cash flow) / total assets, annualised. Cash-backed earnings sit near zero; a high positive reading means reported profit is running ahead of cash and tends to reverse.', 'left', 'w-72') }}
 										</dt>
 										<dd class="font-bold text-on-surface font-mono tabular-nums" id="stat-accruals">{{ asset.accrualsRatio is null ? '-' : ((asset.accrualsRatio >= 0 ? '+' : '') ~ (asset.accrualsRatio * 100)|number_format(2) ~ '%') }}</dd>
+									</div>
+								</dl>
+							</div>
+						{% endif %}
+
+						{# Credit & Solvency: what would put an operating company into bankruptcy, as its lenders see it.
+						   An operating firm files when it cannot pay, not when a score turns (MarketOperator). #}
+						{% if creditHealth|default(null) %}
+							{% set credit = creditHealth %}
+							<div class="bg-surface-container-low rounded-lg p-6 border {{ credit.inDefault ? 'border-tertiary/40' : 'border-outline-variant/15 hover:border-outline-variant/30' }} transition-all" id="credit-health-card">
+								<div class="flex items-center justify-between gap-3 mb-3">
+									<h3 class="text-sm font-semibold text-on-surface">Credit &amp; Solvency</h3>
+									{% if credit.inDefault %}
+										<span class="inline-flex items-center rounded border px-2 py-0.5 text-3xs font-bold uppercase tracking-wide border-tertiary/40 text-tertiary bg-tertiary/10">in default</span>
+									{% elseif not credit.hasCovenantHeadroom %}
+										<span class="inline-flex items-center rounded border px-2 py-0.5 text-3xs font-bold uppercase tracking-wide border-amber-500/40 text-amber-300 bg-amber-500/10">covenant breached</span>
+									{% else %}
+										<span class="inline-flex items-center rounded border px-2 py-0.5 text-3xs font-bold uppercase tracking-wide border-outline-variant/30 text-on-surface-variant bg-surface-container-highest">current</span>
+									{% endif %}
+								</div>
+
+								{% if credit.inDefault %}
+									<p class="mb-3 p-3 rounded bg-tertiary/10 border border-tertiary/25 text-xs text-on-surface leading-relaxed">
+										Missed a principal payment {{ credit.quartersInDefault }} {{ credit.quartersInDefault == 1 ? 'quarter' : 'quarters' }} running.
+										{% if credit.cureDueNextReport %}
+											The grace period has run: unless it funds the payment by the next report, its lenders accelerate and it files, under Chapter 11 if the business still covers its cash costs, otherwise Chapter 7.
+										{% else %}
+											It is inside the grace period and can still cure by funding the payment.
+										{% endif %}
+									</p>
+								{% endif %}
+
+								<dl class="divide-y divide-outline-variant/15 text-xs">
+									<div class="py-2 flex justify-between items-center">
+										<dt class="group relative cursor-help text-sm font-semibold text-on-surface-variant" tabindex="0">
+											<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Revolver Drawn</span>
+											{{ _self.tooltip('The committed credit line, and how much of it is drawn. The undrawn part is the cash the firm can reach in a bad quarter without going to the market.', 'left', 'w-72') }}
+										</dt>
+										<dd class="font-bold text-on-surface font-mono tabular-nums">
+											{% if credit.revolverUtilization is null %}
+												-
+											{% else %}
+												{{ credit.revolverDrawn|format_large('$') }} <span class="text-on-surface-variant font-normal text-2xs">of {{ credit.revolverCommitment|format_large('$') }} ({{ (credit.revolverUtilization * 100)|number_format(0) }}%)</span>
+											{% endif %}
+										</dd>
+									</div>
+									<div class="py-2 flex justify-between items-center">
+										<dt class="group relative cursor-help text-sm font-semibold text-on-surface-variant" tabindex="0">
+											<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Net Debt / EBITDA</span>
+											{{ _self.tooltip('Funded net debt over trailing EBITDA, the leverage an incurrence covenant is tested on. Past the limit the firm may not take on new discretionary debt.', 'left', 'w-72') }}
+										</dt>
+										<dd class="font-bold font-mono tabular-nums {{ credit.hasCovenantHeadroom ? 'text-on-surface' : 'text-tertiary' }}">
+											{{ credit.netDebtToEbitda|number_format(2) }}x{% if credit.covenantLimit is not null %} <span class="text-on-surface-variant font-normal text-2xs">limit {{ credit.covenantLimit|number_format(1) }}x</span>{% endif %}
+										</dd>
+									</div>
+									<div class="py-2 flex justify-between items-center">
+										<dt class="group relative cursor-help text-sm font-semibold text-on-surface-variant" tabindex="0">
+											<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Interest Coverage</span>
+											{{ _self.tooltip('How many times operating income covers the interest bill. Below the sector minimum the firm pays down debt before it pays out.', 'left', 'w-72') }}
+										</dt>
+										<dd class="font-bold font-mono tabular-nums {{ credit.coverageState == 'adequate' ? 'text-on-surface' : 'text-tertiary' }}">
+											{{ credit.interestCoverage|number_format(1) }}x{% if credit.coverageState != 'adequate' %} <span class="font-normal text-2xs">{{ credit.coverageState }}</span>{% endif %}
+										</dd>
+									</div>
+									<div class="py-2 flex justify-between items-center">
+										<dt class="group relative cursor-help text-sm font-semibold text-on-surface-variant" tabindex="0">
+											<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Distance to Default</span>
+											{{ _self.tooltip('Merton model: standard deviations of asset value between the firm and its debt over five years. The rating agency grades on it: below ' ~ constant('App\\Service\\Market\\CreditRatingAgency::THRESHOLD_BBB')|number_format(1) ~ ' is speculative grade.', 'left', 'w-72') }}
+										</dt>
+										<dd class="font-bold text-on-surface font-mono tabular-nums">{{ credit.distanceToDefault|number_format(2) }}σ</dd>
 									</div>
 								</dl>
 							</div>
@@ -621,7 +738,7 @@
 											</div>
 											<div>
 												<div class="text-xs font-bold text-on-surface tracking-tight">Value & Book Multiple</div>
-												<div class="text-3xs text-on-surface-variant">Tangible Equity & Replacement Value</div>
+												<div class="text-3xs text-on-surface-variant">Justified P/B (Return ÷ Hurdle) × Book Value</div>
 											</div>
 										</div>
 										<div class="text-right shrink-0">
@@ -1156,6 +1273,28 @@
 						</div>
 					</div>
 
+					{# Summary strip: the numbers an analyst reads first off the last report (FinancialSummaryBuilder). #}
+					{% if financialSummary|default([])|length > 0 %}
+						<div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3" id="financial-summary">
+							{% for tile in financialSummary %}
+								{% set v = tile.value %}
+								{% set shown = {
+									'percent': (v * 100)|number_format(2) ~ '%',
+									'signed_percent': (v >= 0 ? '+' : '') ~ (v * 100)|number_format(2) ~ '%',
+									'multiple': v|number_format(2) ~ 'x',
+									'quarters': v|number_format(1) ~ ' qtrs',
+									'years': v|number_format(1) ~ ' yrs',
+									'index': v|number_format(3),
+									'signed_index': (v >= 0 ? '+' : '') ~ v|number_format(3)
+								}[tile.format] ?? v|number_format(2) %}
+								<div class="p-4 rounded-lg bg-surface-container-low border border-outline-variant/15">
+									<span class="block text-3xs uppercase tracking-wide font-semibold text-on-surface-variant truncate">{{ tile.label }}</span>
+									<span class="block mt-1 text-base font-bold font-mono tabular-nums {{ tile.format starts with 'signed' ? (v >= 0 ? 'text-secondary' : 'text-tertiary') : 'text-on-surface' }}">{{ shown }}</span>
+								</div>
+							{% endfor %}
+						</div>
+					{% endif %}
+
 					{# Category Filter Bar & Quick Search Filter #}
 					<div class="flex flex-col sm:flex-row justify-between items-stretch sm:items-center bg-surface-container-low border border-outline-variant/15 rounded-lg p-3 gap-3">
 						{# Filter Pills #}
@@ -1626,9 +1765,9 @@
 										<div class="min-w-0">
 											<div class="flex items-center gap-2 flex-wrap">
 												<h4 class="text-xs font-bold text-on-surface truncate">Regulatory Capital & Solvency Ratios</h4>
-												<span class="text-4xs font-mono text-primary/80 bg-primary/10 px-1.5 py-0.5 rounded border border-primary/20 shrink-0">BASEL III / Fed Tier 1</span>
+												<span class="text-4xs font-mono text-primary/80 bg-primary/10 px-1.5 py-0.5 rounded border border-primary/20 shrink-0">PCA / BASEL III</span>
 											</div>
-											<p class="text-3xs text-on-surface-variant truncate">Tier 1 risk-weighted capital adequacy and core customer deposit cushion</p>
+											<p class="text-3xs text-on-surface-variant truncate">Tangible equity over tangible assets, against the lines the regulator acts on</p>
 										</div>
 									</div>
 									<div class="flex items-center gap-2 shrink-0">
@@ -1649,7 +1788,7 @@
 						{% endif %}
 
 						{# Insurance: Dual Engine Underwriting vs Float #}
-						{% if businessModel|default('none') == 'insurance' %}
+						{% if isInsurer|default(false) %}
 							<div class="chart-card bg-surface-container-low border border-outline-variant/15 rounded-lg p-5 hover:border-outline-variant/30 transition-all flex flex-col justify-between" data-financial-category="sector">
 								<div class="flex items-start justify-between mb-3 gap-2">
 									<div class="flex items-center gap-2.5 min-w-0">
@@ -1948,6 +2087,42 @@
 							{% elseif industry.tracked %}
 								<p class="mt-4 pt-4 border-t border-outline-variant/15 text-xs text-on-surface-variant leading-relaxed">The only modelled firm in its industry: the rest of its addressable market is not simulated, so the roster share is not shown. The capacity balance above weighs its own build beyond trend by its addressable share; the rest of the industry is taken to supply at trend.</p>
 							{% endif %}
+
+							{# Merger review: the same ledger reading the M&A engine sizes this firm's deals on. #}
+							{% set review = industry.mergerReview|default(null) %}
+							{% if review %}
+								<div class="mt-4 pt-4 border-t border-outline-variant/15" id="merger-review">
+									<div class="flex items-start justify-between gap-3 mb-3">
+										<div>
+											<p class="text-2xs uppercase tracking-wide font-semibold text-on-surface-variant">Merger Review</p>
+											<p class="text-xs text-on-surface-variant mt-1 leading-relaxed">A deal is presumed to lessen competition when it raises the HHI by more than 100 points and leaves the market above 1,800 or creates a firm with more than 30% of it (2023 Merger Guidelines). Targets come out of the competitive fringe.</p>
+										</div>
+										<span class="inline-flex shrink-0 items-center rounded border px-2 py-0.5 text-3xs font-bold uppercase tracking-wide {{ review.highlyConcentrated ? 'border-tertiary/40 text-tertiary bg-tertiary/10' : 'border-outline-variant/30 text-on-surface-variant bg-surface-container-highest' }}">{{ review.highlyConcentrated ? 'highly concentrated' : 'below 1,800' }}</span>
+									</div>
+									<div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
+										<div class="p-4 rounded bg-surface-container-lowest/80 border border-outline-variant/15">
+											<span class="text-on-surface-variant uppercase text-xs font-bold">HHI</span>
+											<p class="text-sm font-bold font-mono tabular-nums mt-1 text-on-surface">{{ (review.herfindahl * 10000)|number_format(0) }}</p>
+											<p class="text-3xs uppercase tracking-wide text-on-surface-variant/60 mt-1">sum of squared roster shares</p>
+										</div>
+										<div class="p-4 rounded bg-surface-container-lowest/80 border border-outline-variant/15">
+											<span class="text-on-surface-variant uppercase text-xs font-bold">Own Share</span>
+											<p class="text-sm font-bold font-mono tabular-nums mt-1 text-on-surface">{{ (review.acquirerShare * 100)|number_format(1) }}%</p>
+											<p class="text-3xs uppercase tracking-wide text-on-surface-variant/60 mt-1">trend share of its market</p>
+										</div>
+										<div class="p-4 rounded bg-surface-container-lowest/80 border border-outline-variant/15">
+											<span class="text-on-surface-variant uppercase text-xs font-bold">Fringe</span>
+											<p class="text-sm font-bold font-mono tabular-nums mt-1 text-on-surface">{{ (review.fringeShare * 100)|number_format(1) }}%</p>
+											<p class="text-3xs uppercase tracking-wide text-on-surface-variant/60 mt-1">off the board, there to buy</p>
+										</div>
+										<div class="p-4 rounded bg-surface-container-lowest/80 border border-outline-variant/15">
+											<span class="text-on-surface-variant uppercase text-xs font-bold">Largest Deal</span>
+											<p class="text-sm font-bold font-mono tabular-nums mt-1 {{ review.clearedShare < 0.005 ? 'text-tertiary' : 'text-on-surface' }}">{{ (review.clearedShare * 100)|number_format(1) }}%</p>
+											<p class="text-3xs uppercase tracking-wide text-on-surface-variant/60 mt-1">of the market · {{ review.reviewBinds ? 'capped by review' : 'capped by the fringe' }}</p>
+										</div>
+									</div>
+								</div>
+							{% endif %}
 						</div>
 					{% endif %}
 
@@ -2030,6 +2205,12 @@
 
 									{# Peer Companies #}
 									{% for peer in peers %}
+										{# One divider where the direct competitors end and the rest of the sector begins. #}
+										{% if not peer.sameIndustry and (loop.first or peers[loop.index0 - 1].sameIndustry) %}
+											<tr>
+												<td colspan="8" class="pt-3 pb-1 text-3xs uppercase tracking-wide font-semibold text-on-surface-variant/70">Elsewhere in {{ asset.sector }}</td>
+											</tr>
+										{% endif %}
 										<tr class="relative hover:bg-surface-container-high/30 focus-within:bg-surface-container-high/30 transition-colors group">
 											<th scope="row" class="py-2.5 flex items-center gap-2 text-left font-normal">
 												<a href="/stock/{{ peer.ticker }}" class="font-mono text-primary font-bold group-hover:underline outline-none after:absolute after:inset-0 after:content-[''] focus-visible:underline focus-visible:underline-offset-4">{{ peer.ticker }}</a>
@@ -2289,6 +2470,7 @@
 			isEtf: isEtf,
 			businessModel: businessModel|default('none'),
 			isFinancial: isFinancial,
+			isInsurer: isInsurer|default(false),
 			sharesOutstanding: asset.sharesOutstanding|default(1),
 			currentPrice: asset.price|default(0),
 			userQuantity: userQuantity|default(0),
@@ -2296,7 +2478,8 @@
 			ticksPerYear: ticksPerYear|default(14400),
 			pieLabels: pieLabels is defined and pieLabels ? pieLabels : [],
 			pieData: pieData is defined and pieData ? pieData : [],
-			sharesMap: sharesMap is defined and sharesMap ? sharesMap : {}
+			sharesMap: sharesMap is defined and sharesMap ? sharesMap : {},
+			capitalThresholds: capitalThresholds|default(null)
 		}|json_encode|raw }}
 	</script>
 

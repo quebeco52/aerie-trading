@@ -47,6 +47,8 @@ class StockPageBuilder
         private readonly LiquidityEngine $liquidityEngine,
         private readonly SecuritiesLendingDesk $lendingDesk,
         private readonly OptionChainBuilder $optionChain,
+        private readonly CreditHealthBuilder $creditHealth,
+        private readonly FinancialSummaryBuilder $financialSummary,
         private readonly int $ticksPerYear,
     ) {}
 
@@ -93,7 +95,11 @@ class StockPageBuilder
      */
     private function companyBlocks(Stock $stock, \App\DTO\MacroStateDTO $macroState): array
     {
-        return $this->companySnapshot->build($stock, $macroState) + $this->industryPosition->build($stock, $macroState) + [
+        return $this->companySnapshot->build($stock, $macroState)
+            + $this->industryPosition->build($stock, $macroState)
+            + $this->creditHealth->build($stock, $macroState)
+            + $this->financialSummary->build($stock)
+            + [
             'peers' => $this->peerTable->build($stock),
             // What a permanent-capital sphere actually owns; null for every firm that owns no stakes.
             'anchorPortfolio' => $this->anchorPortfolio->build($stock),
@@ -153,6 +159,7 @@ class StockPageBuilder
 
         return $this->etfComposition->build($index, $fund) + [
             'isFinancial' => false,
+            'isInsurer' => false,
             'businessModel' => 'none',
             'marketCap' => 0.0,
             'peRatio' => null,
@@ -169,6 +176,10 @@ class StockPageBuilder
                 : 0.0,
             'analystTargets' => null,
             'netAssetValue' => null,
+            'capitalThresholds' => null,
+            'capital' => null,
+            'creditHealth' => null,
+            'financialSummary' => [],
             'peers' => [],
             'anchorPortfolio' => null,
             'advShares' => 0.0,

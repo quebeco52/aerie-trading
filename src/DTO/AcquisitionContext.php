@@ -72,7 +72,8 @@ class AcquisitionContext
     public float $availableCapital = 0.0;
     public float $spendFraction = 0.0;
     public float $purchasePrice = 0.0;
-    public float $maxPrivateCompanyValue = 0.0;
+    /** The last sizing step that cut the purchase price (MergerAndAcquisitionEngine::LIMIT_*). */
+    public string $bindingLimit = '';
     public array $target = [];
     
     // Funding results

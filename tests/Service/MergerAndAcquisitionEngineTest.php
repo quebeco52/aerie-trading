@@ -907,6 +907,8 @@ class MergerAndAcquisitionEngineTest extends TestCase
         $this->assertIsArray($deal);
         $this->assertLessThan(40_000_000_000.0 * MergerAndAcquisitionEngine::MA_FINANCIAL_EQUITY_CAP, (float) $deal['spent'], 'capital, not the 15% cap, sized the deal');
         $this->assertEqualsWithDelta($warning, $ratio($bank), 1e-9);
+        $this->assertStringEndsWith('Sized to ' . MergerAndAcquisitionEngine::LIMIT_CAPITAL_TEST . '.', $deal['event']['description'], 'the announcement names the rule that sized it');
+        $this->assertStringContainsString('booked as goodwill', $deal['event']['description']);
     }
 
     /** A bank already in the grey zone has no capital to spend on goodwill: no deal and no cash spent. */
@@ -1036,10 +1038,43 @@ class MergerAndAcquisitionEngineTest extends TestCase
         $acquiredRevenue = (float) $leader->getTotalRevenue() - 20_000_000_000.0;
 
         $this->assertEqualsWithDelta($cleared * $marketRevenue, $acquiredRevenue, 1.0, 'the review, not the balance sheet, sized the deal');
+        $this->assertStringEndsWith('Sized to ' . MergerAndAcquisitionEngine::LIMIT_MERGER_REVIEW . '.', $deal['event']['description']);
+        $this->assertStringNotContainsString('Sized to', $unreviewedDeal['event']['description'], 'a deal its buyer sized states no rule');
         $this->assertLessThan((float) $unreviewedDeal['spent'], (float) $deal['spent'], 'and the price follows the target');
         $market = $ledger->describeMergerMarket($leader, $this->healthyMacro(), 0.0, 30, 252);
         $this->assertEqualsWithDelta(0.30 + $cleared, $market['acquirer_share'], 1e-9);
         $this->assertEqualsWithDelta(0.0100, $market['herfindahl'] - 0.09 - ($cleared * $cleared), 1e-9);
+    }
+
+    /**
+     * The announcement return is the deal's NPV to the acquirer over its market value (Moeller, Schlingemann &
+     * Stulz 2004): the target's standalone value with its synergies, less the price. A steward paying no
+     * premium for a 10% synergy gains 10% of the price, with no 2% floor under a small deal; an empire
+     * builder paying a premium above the synergy destroys value and falls by exactly what it destroyed.
+     */
+    public function testTheAnnouncementReturnIsTheDealsNpvToTheAcquirer(): void
+    {
+        $this->primeHealthyDeal(operatingBase: 15_000_000_000.0);
+        $this->bookIssuedDebt();
+
+        foreach ([ManagementStyle::Steward, ManagementStyle::EmpireBuilder] as $style) {
+            $acquirer = $this->buildLedgeredAcquirer('NPV' . strtoupper(substr($style->value, 0, 1)), 4_000_000_000.0, 1_000_000_000.0, 100_000_000.0);
+            $acquirer->setManagementStyle($style);
+            $marketCap = 100.0 * 100_000_000.0;
+            $hubris = $acquirer->getManagementProfile()->hubrisPremium();
+
+            $deal = $this->engine->evaluatePrivateAcquisition($acquirer, $this->healthyMacro(), 1.0);
+
+            $this->assertIsArray($deal, $style->value);
+            $npv = ((float) $deal['spent'] * 1.10 / (1.0 + $hubris)) - (float) $deal['spent'];
+            $this->assertEqualsWithDelta($npv / $marketCap, $deal['shock'], 1e-12, "{$style->value}: the deal's NPV over market value");
+            if ($style === ManagementStyle::Steward) {
+                $this->assertGreaterThan(0.0, $deal['shock']);
+            } else {
+                $this->assertGreaterThan(0.10, $hubris, 'the fixture needs a premium above the synergy');
+                $this->assertLessThan(0.0, $deal['shock'], 'a premium above the synergy is value destroyed');
+            }
+        }
     }
 
     /** A market the roster already owns has nothing left off the board to buy: no deal and no cash spent. */
@@ -1265,7 +1300,10 @@ class MergerAndAcquisitionEngineTest extends TestCase
         $this->mathUtilityMock->method('calculateLogNormalSynergy')->willReturn(1.10);
         $this->mathUtilityMock->method('checkProbability')->willReturn(true);
         $this->mathUtilityMock->method('generateUniformBetween')->willReturn(0.80);
-        $this->marketEventPublisherMock->method('publish')->willReturn([]);
+        // The announcement comes back as published, so a test can read what the deal said about itself.
+        $this->marketEventPublisherMock->method('publish')->willReturnCallback(
+            static fn (mixed $asset, string $type, string $description, float $changePercent): array => ['type' => $type, 'description' => $description, 'change_percent' => $changePercent]
+        );
     }
 
     private function primeDistressedDivestiture(float $operatingBase, float $fraction): void

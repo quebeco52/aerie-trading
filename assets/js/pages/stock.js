@@ -24,6 +24,7 @@ function getAerieContext() {
         isEtf: !!d.isEtf,
         businessModel: d.businessModel || 'none',
         isFinancial: !!d.isFinancial,
+        isInsurer: !!d.isInsurer,
         sharesOutstanding: d.sharesOutstanding || 1,
         currentPrice: d.currentPrice || 0,
         userQuantity: d.userQuantity || 0,
@@ -31,7 +32,8 @@ function getAerieContext() {
         ticksPerYear: d.ticksPerYear || 54000,
         pieLabels: Array.isArray(d.pieLabels) ? d.pieLabels : [],
         pieData: Array.isArray(d.pieData) ? d.pieData : [],
-        sharesMap: d.sharesMap || {}
+        sharesMap: d.sharesMap || {},
+        capitalThresholds: d.capitalThresholds || null
     };
 }
 

@@ -112,4 +112,18 @@ class MarketEventPublisherTest extends TestCase
         $this->assertStringContainsString('MARKET SHOCK on SHOCK_CORP: -12.50%', $output);
         $this->assertSame(-12.5, $result['change_percent']);
     }
+
+    /** The live feed renders the card the page renders on load, so the wire copy carries it, JSON-safe. */
+    public function testTheWireCopyCarriesThePresentedCard(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('WEAV');
+
+        $result = $this->publisher->publish($stock, 'CONGLOMERATE EXPANSION', 'Weave Holdings executed a $12.0B CONGLOMERATE EXPANSION of Target Co.', 3.0);
+
+        $this->assertSame('mna', $result['presented']['category']);
+        $this->assertSame('CONGLOMERATE EXPANSION', $result['presented']['badge']);
+        $this->assertIsString($result['presented']['recordedAt']);
+        $this->assertEquals($result['presented'], json_decode((string) json_encode($result['presented']), true));
+    }
 }

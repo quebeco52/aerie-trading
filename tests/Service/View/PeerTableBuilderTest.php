@@ -48,6 +48,22 @@ class PeerTableBuilderTest extends TestCase
         $this->assertSame(['BIG', 'MID', 'SMALL'], array_column($peers, 'ticker'));
     }
 
+    /** Direct competitors lead, each group by size, so the return column compares like with like first. */
+    public function testIndustryPeersComeBeforeTheRestOfTheSector(): void
+    {
+        $self = new Stock();
+        $self->setIndustry('Steel');
+
+        $peers = $this->builder([
+            $this->peer('AUTO', 100.0, 100_000.0, 1.0, 'Auto Manufacturers'),
+            $this->peer('STLB', 10.0, 1_000.0, 1.0, 'Steel'),
+            $this->peer('STLA', 50.0, 2_000.0, 1.0, 'Steel'),
+        ])->build($self);
+
+        $this->assertSame(['STLA', 'STLB', 'AUTO'], array_column($peers, 'ticker'));
+        $this->assertSame([true, true, false], array_column($peers, 'sameIndustry'));
+    }
+
     public function testTheMultipleIsPricedOffEarningsAndOmittedWhenThereAreNone(): void
     {
         $peers = $this->builder([

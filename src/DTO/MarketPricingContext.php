@@ -52,6 +52,8 @@ class MarketPricingContext
          * in for are not both counted. Zero for a name nobody trades, which is the correct answer: its
          * calibrated volatility is left alone.
          */
-        public float $orderFlowVariance = 0.0
+        public float $orderFlowVariance = 0.0,
+        /** Book equity less goodwill, per share; null when the caller has none, and the P/B leg then reads book. */
+        public ?float $tangibleBookValuePerShare = null
     ) {}
 }

@@ -152,61 +152,15 @@ const EVENT_COLORS = {
 };
 
 /**
- * A live event over the WebSocket is only ever `{type, ticker, description, change_percent}` —
- * no id, no timestamp (App\Service\Event\MarketEventPublisher::publish()). This mirrors just the
- * *outer* routing table of App\Service\Event\EventPresenter::present() — which category a type
- * belongs to, and (for the two categories whose class is a sign, not the type itself) which side
- * of that sign it's on. It deliberately does not reimplement that class's prose parsing
- * (EPS beat/miss thresholds, upgrade/downgrade keyword matching, dividend/buyback pill
- * extraction) — a flare is a momentary cue, not the record. The precise, fully-parsed badge for
- * the same event is what DistrictEventFeed backfills from the database on the next full page
- * load, and is what a click on the building always shows for its older history.
+ * The flare colour of a live event: the colour of the card App\Service\Event\EventPresenter built for it,
+ * read off the card's own left border so the building flashes the same tone the card is drawn in. The
+ * live event carries that card (`presented`, from MarketEventPublisher::publish), so the routing from type
+ * to card lives only in App\Service\Event\EventCategory.
  */
-function categorizeEvent(type, changePercent) {
-    const t = (type || '').toUpperCase();
-    const cp = Number.isFinite(changePercent) ? changePercent : null;
-
-    if (t === 'EARNINGS') {
-        const color = cp === null || cp === 0 ? EVENT_COLORS.primary : (cp > 0 ? EVENT_COLORS.secondary : EVENT_COLORS.tertiary);
-        const icon = cp > 0 ? 'trending_up' : (cp < 0 ? 'trending_down' : 'equalizer');
-        return { category: 'earnings', color, icon, badge: 'EARNINGS' };
-    }
-    if (t === 'SHOCK') {
-        const positive = cp === null || cp >= 0;
-        return { category: 'shock', color: positive ? EVENT_COLORS.amber : EVENT_COLORS.tertiary, icon: 'bolt', badge: 'MARKET SHOCK' };
-    }
-    if (t === 'SPLIT' || t === 'REVERSE_SPLIT' || t === 'REVSPLIT') {
-        const reverse = t !== 'SPLIT';
-        return { category: 'split', color: EVENT_COLORS.purple, icon: 'call_split', badge: reverse ? 'REVERSE SPLIT' : 'STOCK SPLIT' };
-    }
-    if (t === 'RATING_UPGRADE') {
-        return { category: 'debt', color: EVENT_COLORS.secondary, icon: 'credit_score', badge: 'RATING UPGRADE' };
-    }
-    if (t === 'RATING_DOWNGRADE') {
-        return { category: 'debt', color: EVENT_COLORS.tertiary, icon: 'warning', badge: 'RATING DOWNGRADE' };
-    }
-    if (t === 'DEBT') {
-        return { category: 'debt', color: EVENT_COLORS.tertiary, icon: 'warning', badge: 'CREDIT RATING' };
-    }
-    if (t === 'ACQUISITION' || t === 'MERGER' || t === 'DIVESTITURE') {
-        return { category: 'mna', color: EVENT_COLORS.cyan, icon: 'domain_add', badge: t };
-    }
-    if (t === 'MANAGEMENT CHANGE') {
-        // Carries no price move of its own; the policy the new management brings is priced by the engines.
-        const dismissed = (type || '').toLowerCase().includes('removal');
-        return { category: 'governance', color: EVENT_COLORS.amber, icon: dismissed ? 'gavel' : 'badge', badge: 'MANAGEMENT' };
-    }
-    if (t === 'BANKRUPTCY') {
-        return { category: 'bankruptcy', color: EVENT_COLORS.red500, icon: 'gavel', badge: 'BANKRUPTCY' };
-    }
-    if (t === 'REORGANIZATION') {
-        return { category: 'reorganization', color: EVENT_COLORS.amber, icon: 'balance', badge: 'CHAPTER 11' };
-    }
-    if (t === 'DISTRICT') {
-        // Roster change at the quarterly reconstitution — see App\Service\Event\EventPresenter::presentDistrict().
-        return { category: 'district', color: EVENT_COLORS.primary, icon: 'location_city', badge: 'RECONSTITUTION' };
-    }
-    return { category: 'general', color: EVENT_COLORS.primary, icon: 'campaign', badge: t || 'EVENT' };
+function flareColor(card) {
+    const tone = /border-l-(primary|secondary|tertiary|amber|purple|cyan|red)/.exec(card.borderClass || '');
+    if (!tone) return EVENT_COLORS.primary;
+    return tone[1] === 'red' ? EVENT_COLORS.red500 : EVENT_COLORS[tone[1]];
 }
 
 /** Client-clock timestamp, matching how assets/js/stock/events-feed.js stamps live events that carry none of their own. */
@@ -1128,9 +1082,8 @@ export default class extends Controller {
         events.forEach(evt => this.detailEventsTarget.appendChild(this.buildEventCard(evt)));
     }
 
-    /** Builds one compact event card. Accepts both server-presented events (badgeClass/iconClass,
-     *  Tailwind tokens from EventPresenter) and live-appended ones (plain `color`, from
-     *  categorizeEvent()) — the two are rendered identically except for how colour is applied. */
+    /** Builds one compact event card from an EventPresenter card, whether backfilled on load or
+     *  arrived live; `color` is the fallback for a card that carries no Tailwind classes. */
     buildEventCard(evt) {
         const card = document.createElement('div');
         card.className = 'district-event-card flex items-start gap-2 p-2 rounded-lg bg-surface-container-lowest/80 border border-outline-variant/15';
@@ -1557,25 +1510,21 @@ export default class extends Controller {
     /** Fires a flare, updates the badge, and prepends a live event to a building's history. */
     applyEvent(evt) {
         const ticker = evt.ticker;
-        const style = categorizeEvent(evt.type, parseFloat(evt.change_percent));
+        const card = evt.presented || { type: evt.type, category: 'general', badge: evt.type, icon: 'campaign', headline: evt.description || '' };
+        const color = flareColor(card);
 
         const flare = this.flaresByTicker.get(ticker);
         if (flare) {
-            flare.style.fill = style.color;
+            flare.style.fill = color;
             flare.setAttribute('data-flash', 'true');
             clearTimeout(this.flareTimers[ticker]);
             this.flareTimers[ticker] = setTimeout(() => flare.removeAttribute('data-flash'), 900);
         }
 
         const entry = {
-            type: evt.type,
-            category: style.category,
-            color: style.color,
-            icon: style.icon,
-            badge: style.badge,
-            headline: evt.description || '',
-            changePercent: Number.isFinite(parseFloat(evt.change_percent)) ? parseFloat(evt.change_percent) : null,
-            recordedAt: nowStamp(),
+            ...card,
+            color,
+            recordedAt: card.recordedAt || nowStamp(),
             recordedAtTs: Date.now() / 1000,
         };
 

@@ -9,6 +9,8 @@ use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Repository\CorporateReportRepository;
 use App\Service\Corporate\Industry\IndustryShareLedger;
+use App\Service\Corporate\MergerAndAcquisitionEngine;
+use App\Service\Model\BusinessModelInterface;
 use App\Service\Math\CorporateMetrics;
 use App\Service\Math\FinancialConstants;
 
@@ -64,7 +66,8 @@ class IndustryPositionBuilder
      *         balance: string,
      *         priceLevel: float|null,
      *         rivalShareDrain: float|null,
-     *         ownPriceVolumeShift: float|null
+     *         ownPriceVolumeShift: float|null,
+     *         mergerReview: array{herfindahl: float, highlyConcentrated: bool, acquirerShare: float, fringeShare: float, clearedShare: float, reviewBinds: bool}|null
      *     }
      * }
      */
@@ -141,7 +144,42 @@ class IndustryPositionBuilder
                 'priceLevel' => isset($kpis['industry_price_level']) ? (float) $kpis['industry_price_level'] : null,
                 'rivalShareDrain' => isset($kpis['rival_share_drain']) ? (float) $kpis['rival_share_drain'] : null,
                 'ownPriceVolumeShift' => isset($kpis['own_price_volume_shift']) ? (float) $kpis['own_price_volume_shift'] : null,
+                'mergerReview' => $stock->isBankrupt() ? null : $this->mergerReview($stock, $macroState, $strategy, $tick),
             ],
+        ];
+    }
+
+    /**
+     * The market as horizontal merger review sees it, read from the same ledger call the M&A engine sizes
+     * its deals on (MergerAndAcquisitionEngine::resolveLargestAvailableTarget): the roster's concentration,
+     * the competitive fringe still off the board, and the largest share a deal could add, the lesser of
+     * that fringe and what clears the 2023 Merger Guidelines screens. Null before the ledger has priced
+     * the firm's market, which is also when the engine applies no review.
+     *
+     * @return array{herfindahl: float, highlyConcentrated: bool, acquirerShare: float, fringeShare: float, clearedShare: float, reviewBinds: bool}|null
+     */
+    private function mergerReview(Stock $stock, MacroStateDTO $macroState, BusinessModelInterface $strategy, int $tick): ?array
+    {
+        $market = $this->ledger->describeMergerMarket(
+            $stock,
+            $macroState,
+            IndustryShareLedger::secularExcessGrowth($strategy, $stock),
+            $tick,
+            $this->ticksPerYear
+        );
+        if ($market === null) {
+            return null;
+        }
+
+        $reviewCap = MergerAndAcquisitionEngine::maxClearedTargetShare($market['acquirer_share'], $market['herfindahl']);
+
+        return [
+            'herfindahl' => $market['herfindahl'],
+            'highlyConcentrated' => $market['herfindahl'] > MergerAndAcquisitionEngine::MERGER_REVIEW_CONCENTRATED_HHI,
+            'acquirerShare' => $market['acquirer_share'],
+            'fringeShare' => $market['fringe_share'],
+            'clearedShare' => min($market['fringe_share'], $reviewCap),
+            'reviewBinds' => $reviewCap < $market['fringe_share'],
         ];
     }
 

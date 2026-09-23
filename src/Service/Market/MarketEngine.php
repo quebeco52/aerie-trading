@@ -437,7 +437,8 @@ class MarketEngine
             $baselineMargin,
             $accrualsRatio,
             $investedCapitalPerShare,
-            $macroState
+            $macroState,
+            $ctx->tangibleBookValuePerShare
         );
 
         $perceivedFairValue = $fundamentalState['perceived_fair_value'];
@@ -543,6 +544,7 @@ class MarketEngine
      * @param float $baselineRoic        The historical average ROIC.
      * @param float $baselineMargin      The historical average net margin.
      * @param float $accrualsRatio       The accruals-to-assets ratio.
+     * @param float|null $tangibleBookValuePerShare Book equity less goodwill per share; a financial's P/B leg is struck on it.
      * @return array{perceived_fair_value: float, dynamic_reversion: float, analyst_targets: array}
      */
     private function evaluateFundamentalState(
@@ -570,7 +572,8 @@ class MarketEngine
         float $baselineMargin = 0.20,
         float $accrualsRatio = 0.0,
         float $investedCapitalPerShare = 0.0,
-        ?MacroStateDTO $macroState = null
+        ?MacroStateDTO $macroState = null,
+        ?float $tangibleBookValuePerShare = null
     ): array {
 
         $strategy = \App\Data\Sectors::getBusinessModelStrategy($businessModel);
@@ -694,8 +697,16 @@ class MarketEngine
         // The multiple belongs to the business model: plant earning above its hurdle is worth more than the
         // plant, while a portfolio of marketable stakes is worth the portfolio, so a trust declares 1.0 and
         // this term hands its model net asset value per share rather than a multiple of it.
-        $pbMultiple = $strategy->getIntrinsicPbMultiple($structuralRoic, $hurdleRate);
-        $pbFairValue = $bookValuePerShare * $pbMultiple;
+        $pbFairValue = $bookValuePerShare * $strategy->getIntrinsicPbMultiple($structuralRoic, $hurdleRate);
+
+        // A financial is valued on tangible book, since its regulator deducts goodwill from capital. The same
+        // earnings over the smaller base give the same value wherever the multiple is interior; the change is
+        // that the floor and ceiling then bound price to TANGIBLE book, so goodwill cannot prop up the floor.
+        if ($strategy->isFinancial() && $tangibleBookValuePerShare !== null && $bookValuePerShare > 0.0) {
+            $tangibleBook = max(0.0, $tangibleBookValuePerShare);
+            $returnOnTangible = $tangibleBook > 0.0 ? $structuralRoic * $bookValuePerShare / $tangibleBook : 0.0;
+            $pbFairValue = $tangibleBook * $strategy->getIntrinsicPbMultiple($returnOnTangible, $hurdleRate);
+        }
 
         // PERFECTED WEIGHTED CONSENSUS MODEL
         $fairValue = $strategy->calculateFairValue($earningsValue, $pbFairValue, $normalizedEps, $dividendSupportValue);

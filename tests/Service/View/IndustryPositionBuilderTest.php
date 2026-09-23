@@ -106,6 +106,36 @@ class IndustryPositionBuilderTest extends TestCase
         $this->assertNull($view['industry']['priceLevel'], 'no report has been filed yet');
     }
 
+    /**
+     * The card reads the market the M&A engine sizes deals on. A leader at 30% beside a peer at 10% sits in a
+     * market with HHI 1,000 and 60% of fringe; at 30% the leader already holds the share ceiling, so the only
+     * clearance left is the 100-point safe harbour, 1/60 of the market, and the review binds before the fringe.
+     */
+    public function testTheCardShowsTheMergerReviewTheEngineSizesDealsOn(): void
+    {
+        $leader = $this->stock('LDR', 'Steel', 3_000.0);
+        $peer = $this->stock('PER', 'Steel', 1_000.0);
+        $this->ledger->resolveIndustryCapacityRatio($leader, 3_000.0, 0.30, 1.0, 0.0, 0.0, 10, 252);
+        $this->ledger->resolveIndustryCapacityRatio($peer, 1_000.0, 0.10, 1.0, 0.0, 0.0, 20, 252);
+
+        $review = $this->builder(null, 30)->build($leader, new MacroStateDTO(potentialGdpIndex: 1.0, gdpDeflator: 1.0))['industry']['mergerReview'];
+
+        $this->assertNotNull($review);
+        $this->assertEqualsWithDelta(0.10, $review['herfindahl'], 1e-12);
+        $this->assertFalse($review['highlyConcentrated']);
+        $this->assertEqualsWithDelta(0.30, $review['acquirerShare'], 1e-12);
+        $this->assertEqualsWithDelta(0.60, $review['fringeShare'], 1e-12);
+        $this->assertEqualsWithDelta(\App\Service\Corporate\MergerAndAcquisitionEngine::maxClearedTargetShare(0.30, 0.10), $review['clearedShare'], 1e-12);
+        $this->assertEqualsWithDelta(0.01 / 0.60, $review['clearedShare'], 1e-12);
+        $this->assertTrue($review['reviewBinds']);
+    }
+
+    /** Before the ledger has priced the firm the engine applies no review, and the card shows none. */
+    public function testAnUnpricedFirmShowsNoMergerReview(): void
+    {
+        $this->assertNull($this->builder(null)->build($this->stock('NEW', 'Steel', 1_000.0), new MacroStateDTO())['industry']['mergerReview']);
+    }
+
     public function testADelistedCompanyHasNoPositionLeft(): void
     {
         $shell = $this->stock('GONE', 'Steel', 2_000.0);

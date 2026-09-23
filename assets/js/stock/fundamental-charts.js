@@ -55,14 +55,44 @@ function netInterestMargin(report, fallbackSpread) {
     return Number.isFinite(parsed) ? parsed * 100 : fallbackSpread;
 }
 
+// A ratio the report may not state (a firm the regulator does not govern, a bank model's CET1 on a
+// non-bank, a row written before the column existed): null plots as a gap, where 0 would plot as a failure.
+function nullablePercent(value) {
+    if (value === undefined || value === null || value === '') return null;
+    const parsed = parseFloat(value);
+    return Number.isFinite(parsed) ? parsed * 100 : null;
+}
+
+// The regulator's lines, drawn flat across the chart: the well-capitalized line, the distress line and the
+// closure line (App\Service\Model\Strategy\DebtStrategyInterface::get*EquityThreshold, in percent).
+function thresholdDatasets(labels, thresholds) {
+    if (!thresholds) return [];
+    return [
+        { key: 'warning', label: 'Well capitalized', color: 'rgba(74, 222, 128, 0.7)' },
+        { key: 'distress', label: 'Distress', color: 'rgba(250, 204, 21, 0.7)' },
+        { key: 'bankrupt', label: 'Closure', color: 'rgba(248, 113, 113, 0.85)' },
+    ].map(line => ({
+        label: `${line.label} (${Number(thresholds[line.key]).toFixed(1)}%)`,
+        data: labels.map(() => thresholds[line.key]),
+        borderColor: line.color,
+        borderDash: [6, 4],
+        borderWidth: 1,
+        pointRadius: 0,
+        fill: false,
+        isThreshold: true,
+    }));
+}
+
 export function updateFundamentalCharts(timeframe, rawReports, context = {}) {
     if (!rawReports || rawReports.length === 0 || typeof Chart === 'undefined') return;
 
     const {
         businessModel = 'none',
         isFinancial = false,
+        isInsurer = false,
         sharesOutstanding = 1000000000,
-        currentPrice = 0
+        currentPrice = 0,
+        capitalThresholds = null
     } = context;
 
     // Toolbar button styles.
@@ -122,7 +152,9 @@ export function updateFundamentalCharts(timeframe, rawReports, context = {}) {
     let roeData = [];
     let coeData = [];
     let capitalRatioData = [];
+    let cet1Data = [];
     let customerDepositRatioData = [];
+    let goodwillData = [];
 
     // Universal Arrays
     let peData = [];
@@ -206,7 +238,9 @@ export function updateFundamentalCharts(timeframe, rawReports, context = {}) {
 
             roeData.push(parseFloat(report.return_on_equity || 0) * 100);
             coeData.push(parseFloat(report.cost_of_equity || 0) * 100);
-            capitalRatioData.push(parseFloat(report.capital_ratio || 0) * 100);
+            capitalRatioData.push(nullablePercent(report.capital_ratio));
+            cet1Data.push(nullablePercent(report.cet1_ratio));
+            goodwillData.push(parseFloat(report.goodwill || 0));
             customerDepositRatioData.push(parseFloat(report.customer_deposit_ratio || 0) * 100);
 
             let intInc = lenderInterestIncome(report);
@@ -345,7 +379,9 @@ export function updateFundamentalCharts(timeframe, rawReports, context = {}) {
 
             roeData.unshift(parseFloat(report.return_on_equity || 0) * 100);
             coeData.unshift(parseFloat(report.cost_of_equity || 0) * 100);
-            capitalRatioData.unshift(parseFloat(report.capital_ratio || 0) * 100);
+            capitalRatioData.unshift(nullablePercent(report.capital_ratio));
+            cet1Data.unshift(nullablePercent(report.cet1_ratio));
+            goodwillData.unshift(parseFloat(report.goodwill || 0));
             customerDepositRatioData.unshift(parseFloat(report.customer_deposit_ratio || 0) * 100);
 
             let eqVal = parseFloat(report.equity || 0);
@@ -397,8 +433,8 @@ export function updateFundamentalCharts(timeframe, rawReports, context = {}) {
         }
     }
 
-    let marginLabel = businessModel === 'insurance' ? 'Combined Ratio' : 'Operating Margin';
-    let displayMarginData = businessModel === 'insurance'
+    let marginLabel = isInsurer ? 'Combined Ratio' : 'Operating Margin';
+    let displayMarginData = isInsurer
         ? operatingMarginData.map(m => 100 - m)
         : operatingMarginData;
 
@@ -412,26 +448,25 @@ export function updateFundamentalCharts(timeframe, rawReports, context = {}) {
 
     renderWhenVisible('netIncomeChart', () => renderProfitEngineChart(labels, revenueData, netIncomeData, capexData, displayMarginData, marginLabel));
     renderWhenVisible('revenueStreamsChart', () => renderRevenueStreamsChart(labels, revenueStreamsKeys, revenueStreamsDataRaw, streamDetailsDataRaw));
-    renderWhenVisible('debtEquityChart', () => renderDebtEquityChart(labels, debtData, equityData, treasuryData));
+    renderWhenVisible('debtEquityChart', () => renderDebtEquityChart(labels, debtData, equityData, treasuryData, goodwillData));
     renderWhenVisible('creditHealthChart', () => renderCreditHealthChart(labels, spreadData, blendedRateData, expenseRatioData, cashYieldData, depositApyData, businessModel));
     renderWhenVisible('capitalReturnChart', () => renderCapitalReturnChart(labels, dividendData, buybackData, dividendYieldData));
     renderWhenVisible('payoutRatioChart', () => renderPayoutRatioChart(ltmDiv, ltmInc));
 
+    let regulatorySecondaryLabel = null;
     if (isFinancial) {
         renderWhenVisible('capitalEfficiencyChart', () => renderCapitalEfficiencyChart(labels, roeData, coeData, evaData, 'ROE', 'Cost of Equity'));
 
-        if (businessModel === 'commercial_bank' || businessModel === 'credit_services') {
-            renderWhenVisible('regulatoryRatiosChart', () => renderRegulatoryRatiosChart(labels, capitalRatioData, customerDepositRatioData, 'Customer Deposit Ratio'));
-        } else if (businessModel === 'insurance') {
-            renderWhenVisible('regulatoryRatiosChart', () => renderRegulatoryRatiosChart(labels, capitalRatioData, customerDepositRatioData, 'Float Ratio (0% Interest)'));
-        } else if (businessModel === 'shadow_bank') {
-            renderWhenVisible('regulatoryRatiosChart', () => renderRegulatoryRatiosChart(labels, capitalRatioData, customerDepositRatioData, 'Wholesale Funding / Deposit Ratio'));
-        } else if (businessModel === 'clearing_house') {
-            renderWhenVisible('regulatoryRatiosChart', () => renderRegulatoryRatiosChart(labels, capitalRatioData, customerDepositRatioData, 'Member Initial Margin Ratio'));
-        } else {
-            const hasDeposits = customerDepositRatioData && customerDepositRatioData.some(val => val !== 0 && val !== null && !isNaN(val));
-            renderWhenVisible('regulatoryRatiosChart', () => renderRegulatoryRatiosChart(labels, capitalRatioData, hasDeposits ? customerDepositRatioData : null, hasDeposits ? 'Client Float / Funding Ratio' : null));
-        }
+        const hasDeposits = customerDepositRatioData.some(val => val !== 0 && val !== null && !isNaN(val));
+        const secondaryLabel = isInsurer ? 'Float funding' : ({
+            commercial_bank: 'Deposit funding',
+            credit_services: 'Deposit funding',
+            shadow_bank: 'Deposit funding',
+            clearing_house: 'Member margin funding',
+        }[businessModel] ?? (hasDeposits ? 'Client float funding' : null));
+        const hasCet1 = cet1Data.some(val => val !== null);
+        renderWhenVisible('regulatoryRatiosChart', () => renderRegulatoryRatiosChart(labels, capitalRatioData, secondaryLabel ? customerDepositRatioData : null, secondaryLabel, hasCet1 ? cet1Data : null, capitalThresholds));
+        regulatorySecondaryLabel = secondaryLabel;
     } else if (businessModel === 'reit') {
         renderWhenVisible('capitalEfficiencyChart', () => renderCapitalEfficiencyChart(labels, roicData, waccData, evaData, 'Cap Rate', 'WACC'));
     } else {
@@ -445,10 +480,10 @@ export function updateFundamentalCharts(timeframe, rawReports, context = {}) {
 
     if (['commercial_bank', 'credit_services', 'shadow_bank'].includes(businessModel)) {
         renderWhenVisible('netInterestEngineChart', () => renderNetInterestEngineChart(labels, interestIncomeData, interestExpenseData, netInterestSpreadData));
-    } else if (businessModel === 'insurance') {
+    } else if (isInsurer) {
         renderWhenVisible('insuranceDualEngineChart', () => renderInsuranceDualEngineChart(labels, underwritingProfitData, interestIncomeData, displayMarginData));
     } else if (businessModel === 'reit') {
-        renderWhenVisible('reitCoverageChart', () => renderReitCoverageChart(labels, reitPayoutRatioData, reitLtvData, reitSpreadData));
+        renderWhenVisible('reitCoverageChart', () => renderReitCoverageChart(labels, reitPayoutRatioData, reitLtvData, reitSpreadData, capitalRatioData, capitalThresholds));
     } else if (['tech', 'semiconductor', 'biotech', 'defense_contractor'].includes(businessModel)) {
         renderWhenVisible('reinvestmentIntensityChart', () => renderReinvestmentIntensityChart(labels, capexRevenueRatioData, operatingMarginData, roicData));
     } else if (['commodity', 'shipping'].includes(businessModel)) {
@@ -480,11 +515,12 @@ export function updateFundamentalCharts(timeframe, rawReports, context = {}) {
         navPriceData, navDiscountData,
         fcfData, fcfConversionData,
         interestIncomeData, interestExpenseData, netInterestSpreadData,
-        capitalRatioData, customerDepositRatioData,
+        capitalRatioData, cet1Data, customerDepositRatioData, regulatorySecondaryLabel,
+        goodwillData,
         underwritingProfitData, displayMarginData,
         reitPayoutRatioData, reitLtvData,
         capexRevenueRatioData, roicData,
-        treasuryData, businessModel, isFinancial
+        treasuryData, businessModel, isFinancial, isInsurer
     });
 }
 
@@ -508,7 +544,9 @@ function updateFinancialHud(m) {
     const lastDebt = last(m.debtData);
     const lastEq = last(m.equityData);
     const deRatio = lastEq > 0 ? (lastDebt / lastEq) : 0;
-    setHud('hud-debtEquityChart', `Debt: ${formatLarge(lastDebt, '$')} | Eq: ${formatLarge(lastEq, '$')} (D/E: ${deRatio.toFixed(2)}x)`);
+    const lastGoodwill = last(m.goodwillData);
+    const goodwillShare = lastEq > 0 && lastGoodwill > 0 ? ` | Goodwill: ${((lastGoodwill / lastEq) * 100).toFixed(0)}% of book` : '';
+    setHud('hud-debtEquityChart', `Debt: ${formatLarge(lastDebt, '$')} | Eq: ${formatLarge(lastEq, '$')} (D/E: ${deRatio.toFixed(2)}x)${goodwillShare}`);
 
     const lastRate = last(m.blendedRateData);
     const lastSpread = last(m.spreadData);
@@ -545,11 +583,15 @@ function updateFinancialHud(m) {
         setHud('hud-netInterestEngineChart', `NII: ${formatLarge(lastNii, '$')} | NIM: ${lastNim.toFixed(2)}%`);
     }
     if (m.isFinancial) {
-        const lastCap = last(m.capitalRatioData);
-        const lastDep = last(m.customerDepositRatioData);
-        setHud('hud-regulatoryRatiosChart', `Capital: ${lastCap.toFixed(1)}% | Reserves: ${lastDep ? lastDep.toFixed(1) + '%' : '-'}`);
+        const lastCap = last(m.capitalRatioData, null);
+        const lastCet1 = last(m.cet1Data, null);
+        const lastDep = last(m.customerDepositRatioData, null);
+        const parts = [`Tangible capital: ${lastCap === null ? '-' : lastCap.toFixed(1) + '%'}`];
+        if (lastCet1 !== null) parts.push(`CET1: ${lastCet1.toFixed(1)}%`);
+        if (m.regulatorySecondaryLabel && lastDep !== null) parts.push(`${m.regulatorySecondaryLabel}: ${lastDep.toFixed(1)}%`);
+        setHud('hud-regulatoryRatiosChart', parts.join(' | '));
     }
-    if (m.businessModel === 'insurance') {
+    if (m.isInsurer) {
         const lastUw = last(m.underwritingProfitData);
         const lastFloat = last(m.interestIncomeData);
         const lastComb = last(m.displayMarginData);
@@ -743,14 +785,14 @@ function renderRevenueStreamsChart(labels, streamsKeysSet, rawStreamsData, strea
     });
 }
 
-function renderRegulatoryRatiosChart(labels, capitalRatioData, secondaryData, secondaryLabel) {
+function renderRegulatoryRatiosChart(labels, capitalRatioData, secondaryData, secondaryLabel, cet1Data = null, thresholds = null) {
     const canvas = document.getElementById('regulatoryRatiosChart');
     if (!canvas) return;
     regulatoryRatiosChartInstance = destroyChartInstance(regulatoryRatiosChartInstance);
 
     const datasets = [
         {
-            label: 'Capital Ratio',
+            label: 'Tangible Capital Ratio',
             data: capitalRatioData,
             borderColor: '#7dd3fc',
             backgroundColor: 'rgba(125, 211, 252, 0.2)',
@@ -758,8 +800,22 @@ function renderRegulatoryRatiosChart(labels, capitalRatioData, secondaryData, se
             tension: 0.3,
             pointRadius: 3,
             fill: true,
+            spanGaps: false,
         }
     ];
+
+    if (cet1Data) {
+        datasets.push({
+            label: 'CET1 (risk-weighted)',
+            data: cet1Data,
+            borderColor: '#c084fc',
+            backgroundColor: 'rgba(192, 132, 252, 0.15)',
+            borderWidth: 2,
+            tension: 0.3,
+            pointRadius: 3,
+            fill: false,
+        });
+    }
 
     if (secondaryData) {
         datasets.push({
@@ -770,9 +826,12 @@ function renderRegulatoryRatiosChart(labels, capitalRatioData, secondaryData, se
             borderWidth: 2,
             tension: 0.3,
             pointRadius: 3,
-            fill: true,
+            fill: false,
+            yAxisID: 'y1',
         });
     }
+
+    datasets.push(...thresholdDatasets(labels, thresholds));
 
     const ctx = canvas.getContext('2d');
     regulatoryRatiosChartInstance = new Chart(ctx, {
@@ -784,7 +843,10 @@ function renderRegulatoryRatiosChart(labels, capitalRatioData, secondaryData, se
             interaction: { mode: 'index', intersect: false },
             plugins: {
                 legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } },
-                tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${ctx.raw.toFixed(2)}%` } }
+                tooltip: {
+                    filter: (item) => !item.dataset.isThreshold,
+                    callbacks: { label: (ctx) => `${ctx.dataset.label}: ${ctx.raw === null ? '-' : ctx.raw.toFixed(2) + '%'}` }
+                }
             },
             scales: {
                 x: {
@@ -795,13 +857,25 @@ function renderRegulatoryRatiosChart(labels, capitalRatioData, secondaryData, se
                     grid: { color: 'rgba(255, 255, 255, 0.05)' },
                     ticks: { callback: (val) => val + '%' },
                     beginAtZero: true
+                },
+                // Funding mix runs 0-100% and would flatten a 2-10% capital ratio on a shared axis.
+                y1: {
+                    display: !!secondaryData,
+                    position: 'right',
+                    grid: { drawOnChartArea: false },
+                    ticks: { callback: (val) => val + '%' },
+                    beginAtZero: true
                 }
             }
         }
     });
 }
 
-function renderDebtEquityChart(labels, debtData, equityData, treasuryData) {
+// Book value is split into its tangible part and the goodwill inside it: the stack is still book equity,
+// and the goodwill slice is what a write-off takes out of it without touching capital.
+function renderDebtEquityChart(labels, debtData, equityData, treasuryData, goodwillData = []) {
+    const hasGoodwill = goodwillData.some(val => val > 0);
+    const tangibleData = equityData.map((equity, i) => equity - (goodwillData[i] || 0));
     const el = document.getElementById('debtEquityChart');
     if (!el) return;
     debtEquityChartInstance = destroyChartInstance(debtEquityChartInstance);
@@ -817,18 +891,28 @@ function renderDebtEquityChart(labels, debtData, equityData, treasuryData) {
                     data: debtData,
                     backgroundColor: THEME_COLORS.negative,
                     borderRadius: 4,
+                    stack: 'debt',
                 },
                 {
-                    label: 'Book Value',
-                    data: equityData,
+                    label: hasGoodwill ? 'Tangible Book' : 'Book Value',
+                    data: hasGoodwill ? tangibleData : equityData,
                     backgroundColor: THEME_COLORS.primary,
                     borderRadius: 4,
+                    stack: 'equity',
                 },
+                ...(hasGoodwill ? [{
+                    label: 'Goodwill',
+                    data: goodwillData,
+                    backgroundColor: 'rgba(148, 163, 184, 0.6)',
+                    borderRadius: 4,
+                    stack: 'equity',
+                }] : []),
                 {
                     label: 'Total Cash',
                     data: treasuryData,
                     backgroundColor: THEME_COLORS.positive,
                     borderRadius: 4,
+                    stack: 'cash',
                 }
             ]
         },
@@ -842,10 +926,12 @@ function renderDebtEquityChart(labels, debtData, equityData, treasuryData) {
             },
             scales: {
                 x: {
+                    stacked: true,
                     grid: { color: 'rgba(255, 255, 255, 0.05)' },
                     ticks: { maxTicksLimit: 8 }
                 },
                 y: {
+                    stacked: true,
                     grid: { color: 'rgba(255, 255, 255, 0.05)' },
                     ticks: { callback: (val) => formatLarge(val, '$') }
                 }
@@ -1665,7 +1751,8 @@ function renderInsuranceDualEngineChart(labels, underwritingProfitData, interest
     });
 }
 
-function renderReitCoverageChart(labels, payoutRatioData, ltvData, capRateSpreadData) {
+function renderReitCoverageChart(labels, payoutRatioData, ltvData, capRateSpreadData, capitalRatioData = [], thresholds = null) {
+    const hasCapitalRatio = capitalRatioData.some(val => val !== null);
     const canvas = document.getElementById('reitCoverageChart');
     if (!canvas) return;
     reitCoverageChartInstance = destroyChartInstance(reitCoverageChartInstance);
@@ -1705,7 +1792,18 @@ function renderReitCoverageChart(labels, payoutRatioData, ltvData, capRateSpread
                     backgroundColor: capRateSpreadData.map(val => val < 0 ? 'rgba(248, 113, 113, 0.4)' : 'rgba(74, 222, 128, 0.4)'),
                     borderRadius: 4,
                     yAxisID: 'y1'
-                }
+                },
+                // The ratio the regulator closes a REIT on, against its own lines.
+                ...(hasCapitalRatio ? [{
+                    type: 'line',
+                    label: 'Tangible Capital Ratio',
+                    data: capitalRatioData,
+                    borderColor: '#7dd3fc',
+                    borderWidth: 2,
+                    tension: 0.3,
+                    pointRadius: 3,
+                    yAxisID: 'y'
+                }, ...thresholdDatasets(labels, thresholds).map(line => ({ ...line, type: 'line', yAxisID: 'y' }))] : [])
             ]
         },
         options: {
@@ -1714,7 +1812,10 @@ function renderReitCoverageChart(labels, payoutRatioData, ltvData, capRateSpread
             interaction: { mode: 'index', intersect: false },
             plugins: {
                 legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } },
-                tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${ctx.raw.toFixed(2)}%` } }
+                tooltip: {
+                    filter: (item) => !item.dataset.isThreshold,
+                    callbacks: { label: (ctx) => `${ctx.dataset.label}: ${ctx.raw === null ? '-' : ctx.raw.toFixed(2) + '%'}` }
+                }
             },
             scales: {
                 x: {
@@ -1984,6 +2085,9 @@ function renderFinancialStatements(latest) {
         { divider: true },
         { label: 'Total liabilities', value: num('total_liabilities'), total: true },
         { label: 'Shareholders equity', value: num('equity'), total: true },
+        // ASC 320: the unrealized mark on the securities book, carried in other comprehensive income.
+        ...(present('unrealized_securities_mark') ? [{ label: 'of which: unrealized securities mark (AOCI)', value: num('unrealized_securities_mark'), signed: true, indent: true }] : []),
+        { label: 'Tangible equity', value: num('equity') - num('goodwill'), indent: true },
     ]);
     else if (hasAssetSide) renderStatementRows('balance-sheet-rows', [
         { label: 'Cash & equivalents', value: num('treasury'), indent: true },
@@ -2014,7 +2118,11 @@ function renderFinancialStatements(latest) {
     if (ageLabelEl) ageLabelEl.innerText = isLender ? 'Reserve ratio' : 'Plant age';
     if (ageEl && isLender) {
         const reserveRatio = num('earning_assets') > 0 ? num('credit_loss_allowance') / num('earning_assets') : NaN;
-        ageEl.innerText = isFinite(reserveRatio) ? `${(reserveRatio * 100).toFixed(2)}% of book` : '-';
+        // Quarterly charge-offs annualized over the book they came out of.
+        const chargeOffRate = num('earning_assets') > 0 ? (num('net_charge_offs') * 4) / num('earning_assets') : NaN;
+        ageEl.innerText = isFinite(reserveRatio)
+            ? `${(reserveRatio * 100).toFixed(2)}% of book${isFinite(chargeOffRate) ? ` · NCO ${(chargeOffRate * 100).toFixed(2)}%` : ''}`
+            : '-';
     }
 
     const operatingRows = isLender ? [
@@ -2046,6 +2154,13 @@ function renderFinancialStatements(latest) {
         { divider: true },
         { label: 'Free cash flow', value: num('free_cash_flow'), signed: true, total: true },
         { label: 'Cash taxes paid', value: num('cash_tax_paid'), indent: true },
+        // Memo lines, not part of the reconciliation above: loans written off against the allowance, and
+        // the realized loss on securities sold to meet a funding or capital shortfall.
+        ...(isLender ? [
+            { divider: true },
+            { label: 'Net charge-offs (memo)', value: num('net_charge_offs'), indent: true },
+            ...(num('asset_sale_loss') > 0 ? [{ label: 'Loss on forced asset sales (memo)', value: -num('asset_sale_loss'), signed: true, indent: true }] : []),
+        ] : []),
     ]);
 
     const stageEl = document.getElementById('lifecycle-stage-badge');

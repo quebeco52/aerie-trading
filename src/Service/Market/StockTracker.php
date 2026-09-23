@@ -238,6 +238,7 @@ class StockTracker
                 // tick, and fair value is struck on the second.
                 bookValuePerShare: $this->anchorStakes->resolveMarkedBookValuePerShare($stock)
                     ?? (float) $stock->getBookValuePerShare(),
+                tangibleBookValuePerShare: $stock->getTangibleEquity() / $shares,
                 maShock: $maShock,
                 currentRoic: $effectiveRoic,
                 roicTtm: $roicTtm,

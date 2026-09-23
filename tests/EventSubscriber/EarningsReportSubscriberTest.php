@@ -34,7 +34,7 @@ class EarningsReportSubscriberTest extends TestCase
             ->method('getRepository')
             ->willReturn($this->reportRepository);
 
-        $this->subscriber = new EarningsReportSubscriber($this->entityManager);
+        $this->subscriber = new EarningsReportSubscriber($this->entityManager, new \App\Service\Corporate\DebtEngine(new \App\Service\Math\MathUtility(), new \App\Service\Math\CorporateMetrics()));
     }
 
     public function testBuildsStreamDetailsForFirstQuarterReport(): void
@@ -385,6 +385,68 @@ class EarningsReportSubscriberTest extends TestCase
         // (8.0M of interest earned - 1.0M of interest paid this quarter) / 354M net book, annualized.
         $this->assertEqualsWithDelta(((8000000.0 - 1000000.0) / 354000000.0) * 4.0, (float) $persisted->getNetInterestMargin(), 1e-4);
         $this->assertEqualsWithDelta((float) $persisted->getTotalAssets(), (float) $persisted->getTotalLiabilities() + (float) $persisted->getEquity(), 0.01, 'the statement balances');
+    }
+
+    /**
+     * The capital ratio on the report is the one the regulator closes the firm on: tangible equity over
+     * tangible assets, the score DebtEngine::calculateAltmanZScore hands MarketOperator. A goodwill write-off
+     * moves book equity and goodwill together and so leaves it where it was; a firm the capital ratio does not
+     * govern states none.
+     */
+    public function testTheCapitalRatioIsTheOneTheRegulatorClosesTheFirmOn(): void
+    {
+        $debtEngine = new \App\Service\Corporate\DebtEngine(new \App\Service\Math\MathUtility(), new \App\Service\Math\CorporateMetrics());
+        $governed = $this->createStub(BusinessModelInterface::class);
+        $governed->method('requiresAlternativeZScore')->willReturn(true);
+
+        $carrying = $this->reportCapitalRatio($this->bankWithGoodwill(40000000.0), $governed);
+        $writtenOff = $this->reportCapitalRatio($this->bankWithGoodwill(0.0), $governed);
+        $bank = $this->bankWithGoodwill(40000000.0);
+        $closureScore = $debtEngine->calculateAltmanZScore($bank, 0.0, (float) $bank->getTotalRevenue(), 10.0)['z_score'] / 100.0;
+
+        $this->assertEqualsWithDelta($closureScore, $carrying, 1e-4, 'the report shows the ratio the closure reads');
+        $this->assertEqualsWithDelta($writtenOff, $carrying, 1e-4, 'a write-off moves neither side');
+        $this->assertLessThan((float) $bank->getTotalEquity() / $bank->getTotalAssets(), $carrying, 'goodwill is not capital');
+
+        $this->assertNull($this->reportCapitalRatio($this->bankWithGoodwill(40000000.0), $this->createStub(BusinessModelInterface::class)));
+    }
+
+    private function bankWithGoodwill(float $goodwill): Stock
+    {
+        $stock = new Stock();
+        $stock->setTicker('BNKG');
+        $stock->setIndustry('Banks - Diversified');
+        $stock->setSharesOutstanding('10000000');
+        $stock->setTotalRevenue('40000000.0000');
+        $stock->setWholesaleDebt('10000000.0000');
+        $stock->setCustomerDeposits('300000000.00');
+        $stock->setCorporateTreasury('5000000.0000');
+        $stock->setEarningAssets('360000000.0000');
+        $stock->setCreditLossAllowance('6000000.0000');
+        $stock->setGoodwill((string) $goodwill);
+        $stock->setTotalEquity((string) ($stock->getTotalAssets() - $stock->getTotalLiabilities()));
+
+        return $stock;
+    }
+
+    private function reportCapitalRatio(Stock $stock, BusinessModelInterface $strategy): ?float
+    {
+        $ctx = new EarningsSimulationContext(stock: $stock, macroState: new MacroStateDTO(), strategy: $strategy, businessModel: 'commercial_bank');
+        $ctx->actualRevenue = 10000000.0;
+        $ctx->streamRevenue = ['net_interest_income' => 10000000.0];
+        $ctx->operatingCashFlow = 1000000.0;
+        $ctx->debtMetrics = new \App\DTO\DebtMetricsDTO(4000000.0, 0.04, 0.04, 0.01, 0.04, 0.04, 1.0, 1.0, 0.0, 1.0);
+
+        $entityManager = $this->createStub(EntityManagerInterface::class);
+        $repository = $this->createStub(CorporateReportRepository::class);
+        $entityManager->method('getRepository')->willReturn($repository);
+        $persisted = null;
+        $entityManager->method('persist')->willReturnCallback(function ($r) use (&$persisted): void { $persisted = $r; });
+
+        (new EarningsReportSubscriber($entityManager, new \App\Service\Corporate\DebtEngine(new \App\Service\Math\MathUtility(), new \App\Service\Math\CorporateMetrics())))
+            ->onEarningsReported(new EarningsReportedEvent($ctx));
+
+        return $persisted->getCapitalRatio() === null ? null : (float) $persisted->getCapitalRatio();
     }
 
     public function testBuildsCommercialBankStreamDetails(): void

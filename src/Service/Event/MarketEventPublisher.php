@@ -17,14 +17,18 @@ class MarketEventPublisher
     public function __construct(
         private EntityManagerInterface $entityManager,
         private LoggerInterface $logger,
-        private \Redis $redis
+        private \Redis $redis,
+        private EventPresenter $presenter = new EventPresenter()
     ) {
     }
 
     /**
      * Publishes an event to the database, logs it, and formats it for the WebSocket.
      *
-     * @return array{type: string, ticker: string, description: string, change_percent: float}
+     * The wire copy carries the presented card, so the live feed renders exactly what a page load renders
+     * rather than re-deriving it from the type string in the browser.
+     *
+     * @return array{type: string, ticker: string, description: string, change_percent: float, presented: array<string, mixed>}
      */
     public function publish(Stock|Etf $asset, string $type, string $description, float $changePercent): array
     {
@@ -56,6 +60,7 @@ class MarketEventPublisher
             'description' => $description,
             'change_percent' => round($changePercent, 2)
         ];
+        $eventData['presented'] = $this->presenter->presentForWire($eventData);
 
         // Push to Redis Feed
         $this->redis->lPush('market_events_list', json_encode($eventData));

@@ -57,6 +57,13 @@ export function updatePriceUI(newPrice, stockUpdate, config = {}) {
             peEl.textContent = currentEps > 0 ? (newPrice / currentEps).toFixed(2) + 'x' : '-';
         }
 
+        // Price over tangible book moves with the price; the tangible book itself only moves on a report.
+        const ptbvEl = document.getElementById('stat-ptbv');
+        if (ptbvEl) {
+            const tbvps = parseFloat(ptbvEl.dataset.tbvps);
+            ptbvEl.textContent = tbvps > 0 ? (newPrice / tbvps).toFixed(2) + 'x' : '-';
+        }
+
         const debtRatioEl = document.getElementById('stat-debt-ratio');
         if (debtRatioEl && stockUpdate.debt_ratio !== undefined) {
             debtRatioEl.textContent = stockUpdate.debt_ratio.toFixed(2) + 'x';

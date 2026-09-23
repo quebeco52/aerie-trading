@@ -21,7 +21,7 @@ class PeerTableBuilder
     /**
      * @return list<array{
      *     ticker: string, name: string, industry: string|null, price: float,
-     *     marketCap: float, peRatio: float|null, roic: float, totalEquity: float, isBankrupt: bool
+     *     marketCap: float, peRatio: float|null, roic: float, totalEquity: float, isBankrupt: bool, sameIndustry: bool
      * }>
      */
     public function build(Stock $stock): array
@@ -45,10 +45,13 @@ class PeerTableBuilder
                 'roic' => $this->returnOnCapital($peer),
                 'totalEquity' => (float) $peer->getTotalEquity(),
                 'isBankrupt' => $isBankrupt,
+                'sameIndustry' => $peer->getIndustry() === $stock->getIndustry(),
             ];
         }
 
-        usort($peers, static fn (array $a, array $b): int => $b['marketCap'] <=> $a['marketCap']);
+        // Direct competitors first, the rest of the sector after, each by size: the return column only
+        // compares like with like inside one industry.
+        usort($peers, static fn (array $a, array $b): int => [$b['sameIndustry'], $b['marketCap']] <=> [$a['sameIndustry'], $a['marketCap']]);
 
         return $peers;
     }
