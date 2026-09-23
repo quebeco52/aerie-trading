@@ -2,7 +2,7 @@ import { setupChartDefaults } from '../utils/chart-config.js';
 import { readPageData } from '../utils/page-data.js';
 import { showLoading, showError, hideStatus } from '../utils/fetch-status.js';
 import { setupChartGridFilters, setupExpandableCards } from '../utils/chart-grid.js';
-import { initPriceChart, updateLivePricePoint, resizePriceChart, destroyPriceChart } from '../stock/price-chart.js';
+import { initPriceChart, queueLivePricePoints, resizePriceChart, destroyPriceChart } from '../stock/price-chart.js';
 import { initEtfChart, updateEtfPie, resizeEtfChart, destroyEtfChart } from '../stock/etf-chart.js';
 import { updatePriceUI, resetPriceHistoryState } from '../stock/stats-updater.js';
 import { renderEvents } from '../stock/events-feed.js';
@@ -93,7 +93,7 @@ function initStockPage() {
         });
     }
 
-    // Every wire frame goes to the price chart only, and the chart replays the frame's per-tick
+    // Every wire frame goes to the price chart only, and the chart plays out the frame's per-tick
     // points: the live bar's high and low are accumulated from each tick, so the chart is the one
     // consumer that must see all of them (see market-stream.js for the frame contract).
     marketUpdateHandler = (event) => {
@@ -101,9 +101,7 @@ function initStockPage() {
         const stockUpdate = payload && payload.stocks ? payload.stocks.find(s => s.ticker === ticker) : null;
         if (!stockUpdate) return;
         try {
-            for (const [price, volume] of tickPoints(stockUpdate)) {
-                updateLivePricePoint(price, volume);
-            }
+            queueLivePricePoints(tickPoints(stockUpdate));
         } catch (err) {
             console.error('Error updating live chart:', err);
         }

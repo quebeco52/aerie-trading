@@ -1,5 +1,5 @@
 import { readPageData } from '../utils/page-data.js';
-import { initPriceChart, updateLivePricePoint, resizePriceChart, destroyPriceChart } from '../stock/price-chart.js';
+import { initPriceChart, queueLivePricePoints, resizePriceChart, destroyPriceChart } from '../stock/price-chart.js';
 import { flashTick } from '../utils/tick-flash.js';
 import { onPageLoad } from '../utils/page-init.js';
 import { tickPoints } from '../services/market-stream.js';
@@ -90,9 +90,7 @@ function onMarketUpdate(event) {
     const quote = quoteFor(event);
     if (!quote) return;
     // A bond's points already carry the clean price (see the frame contract in market-stream.js).
-    for (const [price] of tickPoints(quote, 'clean_price')) {
-        updateLivePricePoint(price);
-    }
+    queueLivePricePoints(tickPoints(quote, 'clean_price').map(([price]) => [price, 0]));
 }
 
 /** The coalesced frame (market-stream.js), for everything written to the page. */

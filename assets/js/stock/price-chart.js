@@ -30,6 +30,31 @@ const MAX_SERIES_POINTS = 20000;
 /** Points dropped in one trim. Dropping a batch makes the rebuild rare enough that the hitch is not seen. */
 const TRIM_BATCH = 8000;
 
+/**
+ * Most repaints a second while a wire frame's ticks play out. Every paint redraws the whole canvas; at thirty a
+ * one-year line already scrolls about a pixel per paint, so a higher rate buys sub-pixel steps.
+ */
+const LIVE_PAINTS_PER_SECOND = 30;
+
+/** Timestamp jitter tolerated when holding a paint to LIVE_PAINTS_PER_SECOND. */
+const PAINT_JITTER_MS = 2;
+
+/** Wire frame spacing assumed until frames have been timed: WireFrame::FRAMES_PER_SECOND is ten. */
+const INITIAL_FRAME_INTERVAL_MS = 100;
+
+/** Gain of the frame spacing estimate: the RFC 3550 interarrival jitter filter's 1/16. */
+const FRAME_INTERVAL_GAIN = 1 / 16;
+
+/** A gap between frames this long is a stalled or reconnecting feed, not the frame rate, and is not timed. */
+const MAX_FRAME_GAP_MS = 1000;
+
+/** @type {Array<{due: number, price: number, volume: number}>} Ticks received and not yet drawn, in tick order. */
+let pendingPoints = [];
+let playoutRaf = null;
+let lastPaintAt = 0;
+let lastFrameArrival = 0;
+let frameIntervalMs = INITIAL_FRAME_INTERVAL_MS;
+
 export function initPriceChart(container, ticker, ticksPerYear = 54000) {
     if (!container || typeof LightweightCharts === 'undefined') return null;
 
@@ -202,6 +227,7 @@ export async function loadPriceHistory(range) {
 
         if (chartData.length === 0) return;
 
+        clearPendingPoints();
         areaSeries.setData(chartData);
         if (candleSeries) candleSeries.setData(candleData);
         if (volumeSeries) volumeSeries.setData(volumeData);
@@ -225,7 +251,62 @@ export async function loadPriceHistory(range) {
     }
 }
 
-export function updateLivePricePoint(newPrice, volume = 0) {
+/**
+ * Plays one wire frame's ticks into the live series, spread across the time until the next frame is due.
+ *
+ * Applied together, a frame's ticks land in one animation frame and cost one paint, which held the chart to the
+ * wire's frame rate however fast the simulation ticked. Nothing is interpolated: every state drawn is a tick the
+ * server published, drawn up to one wire frame and one paint late. A frame that arrives while the last is still playing does not
+ * wait for it: the older ticks are already due, so the next paint applies them first.
+ *
+ * @param {Array<[number, number]>} points `[price, volume]` per tick, in tick order (market-stream.js tickPoints()).
+ */
+export function queueLivePricePoints(points) {
+    if (points.length === 0 || !areaSeries) return;
+
+    const now = performance.now();
+    const gap = now - lastFrameArrival;
+    if (lastFrameArrival > 0 && gap < MAX_FRAME_GAP_MS) {
+        frameIntervalMs += (gap - frameIntervalMs) * FRAME_INTERVAL_GAIN;
+    }
+    lastFrameArrival = now;
+
+    const spacing = frameIntervalMs / points.length;
+    points.forEach(([price, volume], i) => {
+        pendingPoints.push({ due: now + i * spacing, price, volume });
+    });
+
+    if (playoutRaf === null) playoutRaf = requestAnimationFrame(playOutPendingPoints);
+}
+
+/** Draws every queued tick that has come due, at most LIVE_PAINTS_PER_SECOND times a second. */
+function playOutPendingPoints(now) {
+    playoutRaf = null;
+
+    if (now - lastPaintAt >= 1000 / LIVE_PAINTS_PER_SECOND - PAINT_JITTER_MS) {
+        let drawn = 0;
+        while (drawn < pendingPoints.length && pendingPoints[drawn].due <= now) {
+            updateLivePricePoint(pendingPoints[drawn].price, pendingPoints[drawn].volume);
+            drawn++;
+        }
+        if (drawn > 0) {
+            pendingPoints.splice(0, drawn);
+            lastPaintAt = now;
+        }
+    }
+
+    if (pendingPoints.length > 0) playoutRaf = requestAnimationFrame(playOutPendingPoints);
+}
+
+/** Drops ticks not yet drawn: the series they extend is being replaced. */
+function clearPendingPoints() {
+    if (playoutRaf !== null) cancelAnimationFrame(playoutRaf);
+    playoutRaf = null;
+    pendingPoints = [];
+    lastFrameArrival = 0;
+}
+
+function updateLivePricePoint(newPrice, volume = 0) {
     if (document.visibilityState !== 'visible' || isNaN(newPrice) || currentSimTime <= 0 || !areaSeries) return;
 
     currentSimTime += secondsPerTick;
@@ -363,6 +444,7 @@ export function resizePriceChart() {
 }
 
 export function destroyPriceChart() {
+    clearPendingPoints();
     if (chartResizeObserver) {
         try { chartResizeObserver.disconnect(); } catch (e) {}
         chartResizeObserver = null;
