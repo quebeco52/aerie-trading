@@ -1261,25 +1261,48 @@ class Stock
      * that reacts to the curve and one that does not react at all until the securities are sold — it is a
      * firm-level choice and not a market-wide constant, which is why it is a column.
      *
-     * Held-to-maturity never enters, because it is not in reported equity to begin with.
+     * Held-to-maturity never enters, because it is not in reported equity to begin with. Goodwill is
+     * deducted, as Basel III deducts it from common equity tier 1.
      */
     public function getRegulatoryEquity(): float
     {
-        return $this->aociFiltered ? $this->getAmortizedCostEquity() : (float) $this->totalEquity;
+        return ($this->aociFiltered ? $this->getAmortizedCostEquity() : (float) $this->totalEquity) - $this->getGoodwillBalance();
+    }
+
+    /**
+     * Equity less goodwill: the capital that can absorb a loss. Goodwill is the premium paid over the
+     * identifiable assets of an acquisition (ASC 805); it cannot be sold to meet a claim, so every regulator
+     * deducts it before measuring capital, and a write-off moves book equity without moving this.
+     */
+    public function getTangibleEquity(): float
+    {
+        return (float) $this->totalEquity - $this->getGoodwillBalance();
     }
 
     /**
      * Equity with the securities book put back at amortized cost: what a reader who does not mark the
-     * portfolio sees.
-     *
-     * This is statutory surplus for an insurer. Statutory accounting carries bonds at amortized cost, which
-     * is exactly why property and casualty underwriters went on writing business through the 2022 selloff
-     * while their economic capital was falling — the ratio their capacity is rationed by never moved. It is
-     * also the arithmetic behind the Basel AOCI filter, which is the same idea wearing a different name.
+     * portfolio sees. It is the arithmetic behind the Basel AOCI filter.
      */
     public function getAmortizedCostEquity(): float
     {
         return (float) $this->totalEquity - $this->getRecognizedSecuritiesMark();
+    }
+
+    /**
+     * Statutory surplus for an insurer: equity with bonds at amortized cost and goodwill valued at nil, as
+     * Solvency II values it. Statutory accounting carrying bonds at amortized cost is exactly why property and
+     * casualty underwriters went on writing business through the 2022 selloff while their economic capital
+     * was falling — the ratio their capacity is rationed by never moved.
+     */
+    public function getStatutorySurplus(): float
+    {
+        return $this->getAmortizedCostEquity() - $this->getGoodwillBalance();
+    }
+
+    /** Goodwill carried, never negative. */
+    private function getGoodwillBalance(): float
+    {
+        return max(0.0, (float) $this->goodwill);
     }
 
     /**

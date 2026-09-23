@@ -329,7 +329,8 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
      */
     public function getTargetMetrics(Stock $stock, MacroStateDTO $macroState, MathUtility $mathUtility): array
     {
-        $equity = (float) $stock->getTotalEquity();
+        // Capital is tangible: goodwill absorbs no loss, so it neither sizes the book nor earns the return target.
+        $equity = $stock->getTangibleEquity();
         $totalDebt = (float) $stock->getTotalDebt();
         $treasury = (float) $stock->getCorporateTreasury();
 
@@ -945,14 +946,15 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
     }
 
     /**
-     * Calculates Risk-Weighted Assets (RWA) under the Basel III Standardized Approach.
+     * Calculates Risk-Weighted Assets (RWA) under the Basel III Standardized Approach. Goodwill is deducted
+     * from CET1 and so carries no risk weight: the funding proxy is struck on tangible equity.
      */
     public function calculateRiskWeightedAssets(Stock $stock, ?float $currentTreasury = null): float
     {
         $treasury = $currentTreasury ?? (float) $stock->getCorporateTreasury();
         $earningAssets = $stock->hasEarningAssetLedger()
             ? $stock->getNetEarningAssets()
-            : max(0.0, (float) $stock->getTotalEquity() + (float) $stock->getTotalDebt() - $treasury);
+            : max(0.0, $stock->getTangibleEquity() + (float) $stock->getTotalDebt() - $treasury);
 
         return ($earningAssets * self::BASEL_RISK_WEIGHT_EARNING_ASSETS) + ($treasury * self::BASEL_RISK_WEIGHT_TREASURY);
     }

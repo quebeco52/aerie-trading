@@ -184,7 +184,8 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
 
     public function getTargetMetrics(Stock $stock, MacroStateDTO $macroState, MathUtility $mathUtility): array
     {
-        $equity = (float) $stock->getTotalEquity();
+        // Capital is tangible: goodwill absorbs no loss, so it neither sizes the book nor earns the return target.
+        $equity = $stock->getTangibleEquity();
         $wholesaleDebt = (float) $stock->getWholesaleDebt();
         $treasury = (float) $stock->getCorporateTreasury();
 

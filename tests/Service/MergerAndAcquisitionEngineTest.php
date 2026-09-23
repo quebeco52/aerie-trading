@@ -865,6 +865,83 @@ class MergerAndAcquisitionEngineTest extends TestCase
     }
 
     /**
+     * Goodwill is not capital, so the 15% cap is struck on tangible equity: a bank carrying $60B of goodwill
+     * on $100B of book equity buys with $40B of capital.
+     */
+    public function testTheFinancialDealCapIsStruckOnTangibleEquity(): void
+    {
+        $this->primeHealthyDeal(operatingBase: 15_000_000_000.0);
+        $bank = $this->cashRichBank(wholesaleDebt: 10_000_000_000.0);
+        $bank->setGoodwill('60000000000');
+
+        $deal = $this->engine->evaluatePrivateAcquisition($bank, $this->healthyMacro(), 1.0);
+
+        $this->assertIsArray($deal);
+        $this->assertEqualsWithDelta(40_000_000_000.0 * MergerAndAcquisitionEngine::MA_FINANCIAL_EQUITY_CAP, (float) $deal['spent'], 1.0);
+    }
+
+    /**
+     * A regulator approves a bank's acquisition only while the bank stays well capitalized, and the goodwill
+     * it pays is deducted from its capital. The deal is sized to the largest one that leaves the tangible
+     * capital ratio at the model's own warning threshold, the edge of the zone its rating and closure read,
+     * with the leases the acquired revenue brings counted on the asset side.
+     */
+    public function testAFinancialDealIsSizedToKeepTheBankOutOfTheGreyZone(): void
+    {
+        $this->primeHealthyDeal(operatingBase: 15_000_000_000.0);
+        $this->corporateMetricsMock->method('calculateLeaseLiability')->willReturnCallback(
+            static fn (float $revenue, float $intensity): float => max(0.0, $revenue) * max(0.0, $intensity)
+        );
+        $bank = $this->cashRichBank(wholesaleDebt: 1_500_000_000_000.0);
+        $capitalBase = new DebtEngine(new MathUtility(), new CorporateMetrics(), null, null);
+        $ratio = static function (Stock $stock) use ($capitalBase): float {
+            $base = $capitalBase->resolveTangibleCapitalBase($stock, (float) $stock->getTotalRevenue());
+
+            return 100.0 * $base['capital'] / $base['assets'];
+        };
+        $warning = (new \App\Service\Model\Sector\CommercialBankBusinessModel())->getWarningEquityThreshold();
+        $this->assertGreaterThan($warning, $ratio($bank), 'the fixture must open with headroom');
+
+        $deal = $this->engine->evaluatePrivateAcquisition($bank, $this->healthyMacro(), 1.0);
+
+        $this->assertIsArray($deal);
+        $this->assertLessThan(40_000_000_000.0 * MergerAndAcquisitionEngine::MA_FINANCIAL_EQUITY_CAP, (float) $deal['spent'], 'capital, not the 15% cap, sized the deal');
+        $this->assertEqualsWithDelta($warning, $ratio($bank), 1e-9);
+    }
+
+    /** A bank already in the grey zone has no capital to spend on goodwill: no deal and no cash spent. */
+    public function testABankAlreadyInTheGreyZoneBuysNothing(): void
+    {
+        $this->primeHealthyDeal(operatingBase: 15_000_000_000.0);
+        $bank = $this->cashRichBank(wholesaleDebt: 1_700_000_000_000.0);
+
+        $this->assertNull($this->engine->evaluatePrivateAcquisition($bank, $this->healthyMacro(), 1.0));
+        $this->assertSame('200000000000', $bank->getCorporateTreasury());
+    }
+
+    /** A steward bank with cash well past its target, so the cash-funded strategic acquisition trades. */
+    private function cashRichBank(float $wholesaleDebt): Stock
+    {
+        $bank = new Stock();
+        $bank->setTicker('CAPB');
+        $bank->setName('Capital Bank');
+        $bank->setIndustry('Banks - Diversified');
+        $bank->setPrice('50.00');
+        $bank->setSharesOutstanding('1000000000');
+        $bank->setCorporateTreasury('200000000000');
+        $bank->setTotalEquity('100000000000');
+        $bank->setWholesaleDebt((string) $wholesaleDebt);
+        $bank->setTotalRevenue('20000000000');
+        $bank->setOperatingMargin('0.30');
+        $bank->setRetainedEarnings('40000000000');
+        $bank->setEarningsPerShare('4.00');
+        $bank->setBaselineRoe('0.12');
+        $bank->setManagementStyle(ManagementStyle::Steward);
+
+        return $bank;
+    }
+
+    /**
      * The target was an off-board company already selling into the acquirer's market, so the acquirer's trend
      * plant rises by the capacity it bought and the industry balance reads the deal as a change of owner,
      * not a build. The acquirer reporting its old plant plus the acquisition finds its industry where it was.
@@ -1178,6 +1255,11 @@ class MergerAndAcquisitionEngineTest extends TestCase
 
         $this->debtEngineMock->method('analyzeDebtHealth')->willReturn($health);
         $this->debtEngineMock->method('analyzeTrailingDebtHealth')->willReturn($health);
+        // The capital a financial acquirer is held to is balance-sheet arithmetic, read off the real engine.
+        $capitalBase = new DebtEngine(new MathUtility(), new CorporateMetrics(), null, null);
+        $this->debtEngineMock->method('resolveTangibleCapitalBase')->willReturnCallback(
+            static fn (Stock $stock, float $revenue): array => $capitalBase->resolveTangibleCapitalBase($stock, $revenue)
+        );
         $this->corporateMetricsMock->method('calculateOperatingBase')->willReturn($operatingBase);
         $this->mathUtilityMock->method('calculateManagementFairValuePE')->willReturn(15.0);
         $this->mathUtilityMock->method('calculateLogNormalSynergy')->willReturn(1.10);

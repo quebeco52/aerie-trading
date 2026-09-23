@@ -413,7 +413,7 @@ class MergerAndAcquisitionEngine
         $ctx->maxPrivateCompanyValue = max((float) mt_rand(100, 500) * 1_000_000_000.0, $ctx->availableCapital * 0.50);
         $ctx->purchasePrice = min($ctx->purchasePrice, $ctx->maxPrivateCompanyValue);
         
-        $ctx->purchasePrice = $ctx->strategy->applyMaSpendCap($ctx->purchasePrice, $ctx->equity);
+        $ctx->purchasePrice = $ctx->strategy->applyMaSpendCap($ctx->purchasePrice, $stock->getTangibleEquity());
         
         if ($ctx->purchasePrice < self::MA_MIN_DEAL_SIZE) {
             $ctx->dealExecuted = false;
@@ -427,7 +427,7 @@ class MergerAndAcquisitionEngine
         // The target is a private firm in the acquirer's own market, so the deal is sized to the largest
         // one there is to buy and that clears merger review. Sized by the acquirer's buying power alone, a
         // firm that already owned its market kept buying more of it than exists.
-        $ctx->purchasePrice = min($ctx->purchasePrice, $this->resolveLargestAvailableTarget($ctx));
+        $ctx->purchasePrice = min($ctx->purchasePrice, $this->resolveLargestAvailableTarget($ctx), $this->resolveLargestCapitalClearedDeal($ctx));
         if ($ctx->purchasePrice < self::MA_MIN_DEAL_SIZE) {
             $ctx->dealExecuted = false;
         }
@@ -468,11 +468,51 @@ class MergerAndAcquisitionEngine
     }
 
     /**
+     * For a firm its capital ratio can close, the largest deal that keeps that ratio out of the grey zone
+     * once the goodwill is deducted: a bank must stay well capitalized to have a merger approved (Bank Merger
+     * Act; Regulation Y) and an insurer needs its regulator's Form A approval. Goodwill is linear in the
+     * price, and so are the leases the acquired revenue brings onto the balance sheet (IFRS 16), so the bound
+     * is closed-form. Paid in cash, the deal swaps cash for identifiable assets and goodwill, taking the
+     * goodwill off tangible capital and tangible assets alike; the part funded by new debt adds that debt to
+     * the assets as well. Paid in shares it adds its net assets to both sides and only raises the ratio.
+     * Unbounded for a firm the capital ratio does not govern.
+     */
+    private function resolveLargestCapitalClearedDeal(AcquisitionContext $ctx): float
+    {
+        if (!$ctx->strategy->requiresAlternativeZScore() || ($ctx->config['use_stock'] ?? false)) {
+            return INF;
+        }
+
+        $floor = $ctx->strategy->getWarningEquityThreshold() / 100.0;
+        $base = $this->debtEngine->resolveTangibleCapitalBase($ctx->acquirer, (float) $ctx->acquirer->getTotalRevenue());
+        $headroom = $base['capital'] - ($floor * $base['assets']);
+        if ($headroom <= 0.0) {
+            return 0.0;
+        }
+
+        $perDollar = $this->valueTarget($ctx, 1.0);
+        $goodwillPerDollar = max(0.0, 1.0 - $perDollar['net_assets']);
+        $leasePerDollar = $this->corporateMetrics->calculateLeaseLiability($perDollar['revenue'], $ctx->strategy->getLeaseIntensity());
+
+        // Cash-funded: (C − gP) / (A − gP + ℓP) ≥ f.
+        $cashFundedRate = ($goodwillPerDollar * (1.0 - $floor)) + ($floor * $leasePerDollar);
+        $cashFunded = $cashFundedRate > 0.0 ? $headroom / $cashFundedRate : INF;
+        if ($cashFunded <= $ctx->usableTreasury) {
+            return $cashFunded;
+        }
+
+        // Past the usable cash the rest is borrowed: (C − gP) / (A − gP + ℓP + P − U) ≥ f.
+        return ($base['capital'] - ($floor * ($base['assets'] - $ctx->usableTreasury)))
+            / max(1e-9, $goodwillPerDollar + ($floor * (1.0 - $goodwillPerDollar + $leasePerDollar)));
+    }
+
+    /**
      * What a deal at this price buys: the target's standalone value (the price less the hubris premium, Roll
-     * 1986), its after-tax return on that value, and the operating income and revenue that return implies at
-     * the target's margin. Sizing a deal against its market and booking it read the same figures.
+     * 1986), its after-tax return on that value, the operating income and revenue that return implies at the
+     * target's margin, and the identifiable net assets behind it; the rest of the price is goodwill. Sizing a
+     * deal and booking it read the same figures.
      *
-     * @return array{economic_value: float, nopat: float, operating_income: float, revenue: float}
+     * @return array{economic_value: float, nopat: float, operating_income: float, revenue: float, net_assets: float}
      */
     private function valueTarget(AcquisitionContext $ctx, float $price): array
     {
@@ -487,6 +527,9 @@ class MergerAndAcquisitionEngine
             'nopat' => $nopat,
             'operating_income' => $operatingIncome,
             'revenue' => $operatingIncome / max(0.01, $ctx->targetMargin),
+            // Goodwill allocation (ASC 805): the target's assets are worth what they earn at the acquirer's
+            // hurdle; a return above the hurdle is franchise value the premium pays for.
+            'net_assets' => $economicValue * min(1.0, max(0.01, $ctx->hurdleRate) / max(0.01, $ctx->targetRoic * $ctx->synergyMultiplier)),
         ];
     }
 
@@ -576,7 +619,7 @@ class MergerAndAcquisitionEngine
         $ctx->strategy->blendAcquisitionDNA($stock, $oldCapitalBase, $ctx->purchasePrice, $roicOnPricePaid, $totalNewCapital);
 
         // Goodwill allocation: excess of purchase price over fair value of net identifiable assets.
-        $netAssetsAcquired = $economicValue * min(1.0, max(0.01, $ctx->hurdleRate) / max(0.01, $effectiveTargetRoic));
+        $netAssetsAcquired = $acquired['net_assets'];
         $ctx->goodwillRecorded = max(0.0, $ctx->purchasePrice - $netAssetsAcquired);
         $stock->setGoodwill((string) ((float) $stock->getGoodwill() + $ctx->goodwillRecorded));
 

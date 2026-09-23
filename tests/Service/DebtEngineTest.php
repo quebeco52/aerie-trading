@@ -1264,6 +1264,36 @@ class DebtEngineTest extends TestCase
     }
 
     /**
+     * Prompt corrective action measures a bank on TANGIBLE equity over assets (12 USC 1831o): goodwill leaves
+     * both sides, so a write-off moves the ratio not at all, and a bank whose book equity looks sound but whose
+     * tangible equity is under 2% of its assets is critically undercapitalized and closed.
+     */
+    public function testTheCapitalRatioIsTangibleSoAWriteOffMovesNeitherSide(): void
+    {
+        $engine = new DebtEngine(new MathUtility(), new CorporateMetrics(), null, null);
+        $bank = static function (float $equity, float $goodwill): Stock {
+            $stock = new Stock();
+            $stock->setTicker('PCAB');
+            $stock->setIndustry('Banks - Diversified');
+            $stock->setTotalEquity((string) $equity);
+            $stock->setGoodwill((string) $goodwill);
+            $stock->setWholesaleDebt('950000000000');
+            $stock->setPrice('10.00');
+            $stock->setSharesOutstanding('1000000000');
+
+            return $stock;
+        };
+
+        $carried = $engine->calculateAltmanZScore($bank(60e9, 20e9), 5e9, 40e9, 10.0);
+        $writtenOff = $engine->calculateAltmanZScore($bank(40e9, 0.0), 5e9, 40e9, 10.0);
+        $this->assertEqualsWithDelta($writtenOff['z_score'], $carried['z_score'], 1e-9);
+
+        // Book equity 5% of assets, tangible equity 1.5%.
+        $this->assertTrue($engine->calculateAltmanZScore($bank(50e9, 35e9), 5e9, 40e9, 10.0)['is_bankrupt']);
+        $this->assertFalse($engine->calculateAltmanZScore($bank(50e9, 0.0), 5e9, 40e9, 10.0)['is_bankrupt']);
+    }
+
+    /**
      * The recapitalisation target is the manager's: a fortress runs the low leverage its style prescribes,
      * so debt the sector norm would call too little is where it means to be. The same balance sheet under
      * a neutral operator is under-levered and is recapitalised toward the sector's target.

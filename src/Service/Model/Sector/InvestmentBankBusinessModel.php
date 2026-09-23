@@ -229,7 +229,8 @@ class InvestmentBankBusinessModel extends BrokerageBusinessModel
 
     public function getTargetMetrics(Stock $stock, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): array
     {
-        $equity = (float) $stock->getTotalEquity();
+        // Capital is tangible: goodwill absorbs no loss, so it neither sizes the book nor earns the return target.
+        $equity = $stock->getTangibleEquity();
         $baselineRoe = $this->resolveStructuralTargetRoe($stock, $macroState);
 
         $taxRate = $macroState->corporateTaxRate;

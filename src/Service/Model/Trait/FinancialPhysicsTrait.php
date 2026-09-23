@@ -217,10 +217,9 @@ trait FinancialPhysicsTrait
         }
 
         $treasury = $currentTreasury ?? (float) $stock->getCorporateTreasury();
-        $effectiveEquity = max(1.0, (float) $stock->getTotalEquity());
-        $goodwill = max(0.0, (float) $stock->getGoodwill());
+        $tangibleEquity = max(1.0, $stock->getTangibleEquity());
 
-        return max($effectiveEquity, $effectiveEquity + (float) $stock->getTotalDebt() - $treasury - $goodwill);
+        return max($tangibleEquity, $tangibleEquity + (float) $stock->getTotalDebt() - $treasury);
     }
 
     /**
@@ -274,8 +273,7 @@ trait FinancialPhysicsTrait
         if ($macroState !== null && $macroState->countercyclicalBufferRateEma > 0.0) {
             $equityLimit = \App\Service\Math\MathUtility::calculateBufferedLeverageLimit($equityLimit, $macroState->countercyclicalBufferRateEma);
         }
-        $leverageRatio = (float) $stock->getDebtToEquityRatio();
-        $leverageOvershoot = $leverageRatio / $equityLimit;
+        $leverageOvershoot = $this->resolveTangibleLeverage($stock) / $equityLimit;
 
         if ($leverageOvershoot >= FinancialConstants::REGULATORY_BUFFER_TIER_3_THRESHOLD) {
             return 0.0;
@@ -302,11 +300,17 @@ trait FinancialPhysicsTrait
         }
         $buybackLockoutThreshold = max(1.0, $equityLimit - 1.0) + 0.5;
 
-        if ((float) $stock->getDebtToEquityRatio() > $buybackLockoutThreshold) {
+        if ($this->resolveTangibleLeverage($stock) > $buybackLockoutThreshold) {
             return true;
         }
 
         return false;
+    }
+
+    /** Debt over tangible equity: the leverage a regulator measures, with goodwill deducted from the capital. */
+    private function resolveTangibleLeverage(Stock $stock): float
+    {
+        return (float) $stock->getTotalDebt() / max(1.0, $stock->getTangibleEquity());
     }
 
     /** A financial funds itself at the wholesale rate, which already reprices with its own Merton and BGG spread. */

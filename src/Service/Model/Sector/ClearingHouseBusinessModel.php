@@ -158,7 +158,7 @@ class ClearingHouseBusinessModel extends BaseFinancialBusinessModel
         // margin pool is a pass-through liability. Goodwill absorbs no member default and is not a liquid
         // net asset (PFMI Principle 15), so the base is tangible equity: the premium paid for a deal buys no
         // clearing capacity and writing it off deletes none.
-        $tangibleEquity = max(1.0, (float) $stock->getTotalEquity() - (float) $stock->getGoodwill());
+        $tangibleEquity = max(1.0, $stock->getTangibleEquity());
 
         $baselineRoe = $this->resolveStructuralTargetRoe($stock, $macroState);
 

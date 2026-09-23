@@ -627,6 +627,33 @@ class DebtEngine
     }
 
     /**
+     * A capital-ratio firm's loss-absorbing capital and the assets it stands behind, both tangible: the
+     * prompt corrective action measure, tangible equity over total assets (12 USC 1831o). Goodwill leaves
+     * both sides, as every regulator deducts it, so a write-off moves neither. The assets are the balance
+     * sheet the firm carries once its ledger is open, not the funding proxy. Client money held in custody
+     * leaves them too: it is bankruptcy-remote and matched by a liability to the client, and leaving it in
+     * measured a clearinghouse against a margin pool that grows with volatility, so the score fell hardest
+     * in exactly the conditions it was meant to survive.
+     *
+     * @return array{capital: float, assets: float}
+     */
+    public function resolveTangibleCapitalBase(Stock $stock, float $revenue): array
+    {
+        $industry = $stock->getIndustry() ?: 'General';
+        $strategy = \App\Data\Sectors::getBusinessModelStrategy(\App\Data\Sectors::INDUSTRY_METRICS[$industry]['business_model'] ?? 'none');
+        $leaseLiability = $this->corporateMetrics->calculateLeaseLiability($revenue, $strategy->getLeaseIntensity());
+
+        $totalAssets = $stock->hasBalanceSheetLedger()
+            ? $stock->getTotalAssets($leaseLiability)
+            : (float) $stock->getTotalEquity() + (float) $stock->getTotalDebt() + $leaseLiability;
+
+        return [
+            'capital' => $stock->getTangibleEquity(),
+            'assets' => max(1.0, $totalAssets - max(0.0, (float) $stock->getGoodwill()) - $strategy->getSegregatedCustodyLiabilities($stock)),
+        ];
+    }
+
+    /**
      * Calculates the Altman Z''-Score (Double Prime) for modern, non-manufacturing corporate bankruptcy prediction.
      * 
      * Evaluates working capital, retained earnings, operating income, and equity to 
@@ -658,17 +685,8 @@ class DebtEngine
         $marketCap = $currentPrice * $shares;
 
         if ($strategy->requiresAlternativeZScore()) {
-            // A bank's capital ratio is struck on the balance sheet it actually carries once the earning-asset
-            // ledger is open: loans net of expected losses, not the funding proxy.
-            if ($stock->hasBalanceSheetLedger()) {
-                $totalAssets = max(1.0, $stock->getTotalAssets($leaseLiability));
-            }
-            // Client money held in custody is matched by a liability to the client and is bankruptcy-remote,
-            // so it is neither capital the firm can lose nor a claim its capital has to cover. Leaving it in
-            // measured a clearinghouse's solvency against the size of its members' margin pool, which grows
-            // with volatility: the score fell hardest in exactly the conditions it was meant to survive.
-            $totalAssets = max(1.0, $totalAssets - $strategy->getSegregatedCustodyLiabilities($stock));
-            $capitalRatio = $equity / $totalAssets;
+            $capitalBase = $this->resolveTangibleCapitalBase($stock, $revenue);
+            $capitalRatio = $capitalBase['capital'] / $capitalBase['assets'];
             $zScore = max(-100.0, min(100.0, $capitalRatio * 100.0)); // Convert to percentage points (e.g., 8% capital = 8.0 score)
 
             $distressThreshold = $strategy->getDistressEquityThreshold();

@@ -68,9 +68,9 @@ class ClearingHouseBusinessModelTest extends TestCase
 
     public function testGetTargetMetricsUsesEffectiveEquityAsInvestedCapital(): void
     {
-        $stockMock = $this->createStub(\App\Entity\Stock::class);
-        $stockMock->method('getTotalEquity')->willReturn('35000000000.0');
-        $stockMock->method('getCustomerDeposits')->willReturn('1300000000000.0');
+        $stockMock = new Stock();
+        $stockMock->setTotalEquity('35000000000.0');
+        $stockMock->setCustomerDeposits('1300000000000.0');
 
         $macroState = new \App\DTO\MacroStateDTO(
             policyRate: 0.02,

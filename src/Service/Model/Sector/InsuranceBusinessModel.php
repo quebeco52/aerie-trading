@@ -261,8 +261,8 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
      */
     public function getTargetMetrics(Stock $stock, MacroStateDTO $macroState, MathUtility $mathUtility): array
     {
-        // Underwriting capacity is rationed against statutory surplus (amortized-cost equity).
-        $equity = $stock->getAmortizedCostEquity();
+        // Underwriting capacity is rationed against statutory surplus: bonds at amortized cost, goodwill at nil.
+        $equity = $stock->getStatutorySurplus();
         $stableMargin = max(0.01, (float) $stock->getOperatingMargin());
 
         // 1. Capacity Constraint: clamp revenue to physical capital capacity (Kenney ratio = 1.5x).
@@ -296,7 +296,8 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
             $baselineRoic = min($capacityRoic, ($capacityRoic * self::BASELINE_ROIC_WEIGHT) + ($structuralRoe * self::TTM_ROIC_WEIGHT));
         }
 
-        $saturationPenalty = \App\Service\Math\CorporateMetrics::getInstance()->calculateMarketSaturationPenalty($stock, max(1.0, $equity), $macroState);
+        // Saturation measures the firm's size in its market, so it reads the whole book, goodwill included.
+        $saturationPenalty = \App\Service\Math\CorporateMetrics::getInstance()->calculateMarketSaturationPenalty($stock, max(1.0, $stock->getAmortizedCostEquity()), $macroState);
         $waccBase = $macroState->policyRate + $macroState->equityRiskPremium;
         // Cap baseline return at capacity ROIC to prevent margin compression from inflating implied turnover.
         $baselineRoic = min($capacityRoic, max($waccBase, $baselineRoic - $saturationPenalty));
@@ -1004,7 +1005,8 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
 
     public function getRegulatoryDividendCap(Stock $stock, float $currentTreasury, ?MacroStateDTO $macroState = null): ?float
     {
-        $equity = (float) $stock->getTotalEquity();
+        // Solvency is measured on capital that can pay a claim: goodwill is valued at nil.
+        $equity = $stock->getTangibleEquity();
         $totalDebt = (float) $stock->getTotalDebt();
         $totalAssets = max(1.0, $equity + $totalDebt);
         $capitalRatio = ($equity / $totalAssets) * 100.0;
