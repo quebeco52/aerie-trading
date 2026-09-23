@@ -456,4 +456,50 @@ class IndustryShareLedgerTest extends TestCase
         $this->assertNull($description['capacity_ratio']);
         $this->assertEqualsWithDelta(0.5, $ledger->resolveRevenueShare($fresh, 20, 252), 1e-9);
     }
+
+    /**
+     * A lender's market is not priced on plant, so review measures it in revenue: its own revenue over its
+     * addressable share sizes the market, and each rival reporting within the year holds its revenue's share.
+     * A bank at 10% beside a rival selling three times as much sits in a market of 5,000 with HHI 1,000 and
+     * 60% left to buy; a rival not heard from in over a year is no longer counted.
+     */
+    public function testALendersMergerMarketIsMeasuredInRevenue(): void
+    {
+        $ledger = new IndustryShareLedger(new InMemoryIndustryShareStore());
+        $bank = $this->stock('BNK', 500.0, 'Banks - Regional');
+        $ledger->recordIdiosyncraticGain($bank, 500.0, 0.0, 0.10, 300);
+        $ledger->recordIdiosyncraticGain($this->stock('BNQ', 1_500.0, 'Banks - Regional'), 1_500.0, 0.0, 0.25, 290);
+        $ledger->recordIdiosyncraticGain($this->stock('OLD', 1_000.0, 'Banks - Regional'), 1_000.0, 0.0, 0.20, 10);
+
+        $market = $ledger->describeMergerMarket($bank, new MacroStateDTO(), 0.0, 300, 252);
+
+        $this->assertNotNull($market);
+        $this->assertEqualsWithDelta(5_000.0, $market['market_revenue'], 1e-9);
+        $this->assertEqualsWithDelta(0.10, $market['acquirer_share'], 1e-12);
+        $this->assertEqualsWithDelta(0.10, $market['herfindahl'], 1e-12, '0.1^2 + 0.3^2; the stale rival is out');
+        $this->assertEqualsWithDelta(0.60, $market['fringe_share'], 1e-12);
+    }
+
+    /** A deal adds the revenue it bought at the market's size and a sale gives its fraction up, before the next report. */
+    public function testDealsAndSalesMoveARevenueMeasuredShare(): void
+    {
+        $ledger = new IndustryShareLedger(new InMemoryIndustryShareStore());
+        $bank = $this->stock('BNK', 500.0, 'Banks - Regional');
+        $ledger->recordIdiosyncraticGain($bank, 500.0, 0.0, 0.10, 300);
+
+        $ledger->recordAcquiredCapacity($bank, 250.0, new MacroStateDTO(), 0.0);
+        $bought = $ledger->describeMergerMarket($bank, new MacroStateDTO(), 0.0, 300, 252);
+        $this->assertEqualsWithDelta(5_000.0, $bought['market_revenue'], 1e-9, 'the market is where it was');
+        $this->assertEqualsWithDelta(0.15, $bought['acquirer_share'], 1e-12);
+
+        $ledger->recordDivestedFraction($bank, 0.20, new MacroStateDTO(), 0.0);
+        $this->assertEqualsWithDelta(0.12, $ledger->describeMergerMarket($bank, new MacroStateDTO(), 0.0, 300, 252)['acquirer_share'], 1e-12);
+    }
+
+    public function testAFirmThatHasNotReportedHasNoRevenueMarket(): void
+    {
+        $ledger = new IndustryShareLedger(new InMemoryIndustryShareStore());
+
+        $this->assertNull($ledger->describeMergerMarket($this->stock('NEW', 500.0, 'Banks - Regional'), new MacroStateDTO(), 0.0, 300, 252));
+    }
 }

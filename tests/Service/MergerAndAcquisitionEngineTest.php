@@ -921,6 +921,28 @@ class MergerAndAcquisitionEngineTest extends TestCase
         $this->assertSame('200000000000', $bank->getCorporateTreasury());
     }
 
+    /**
+     * A bank is under the same merger review as everyone else; its market is measured in revenue because a
+     * lender has no plant to count. At 40% of its market it has only the 100-point safe harbour left, 1.25%
+     * of the market, however much capital it could spend, and the deal says so.
+     */
+    public function testABankIsSizedByMergerReviewOnARevenueMeasuredMarket(): void
+    {
+        $this->primeHealthyDeal(operatingBase: 15_000_000_000.0);
+        $bank = $this->cashRichBank(wholesaleDebt: 100_000_000_000.0);
+        $ledger = new IndustryShareLedger(new InMemoryIndustryShareStore());
+        $ledger->recordIdiosyncraticGain($bank, 400_000_000_000.0, 0.0, 0.40, 290);
+        $engine = new MergerAndAcquisitionEngine($this->marketEventPublisherMock, $this->debtEngineMock, $this->mathUtilityMock, $this->corporateMetricsMock, $ledger);
+
+        $deal = $engine->evaluatePrivateAcquisition($bank, $this->healthyMacro(), 1.0, 300, 252);
+
+        $this->assertIsArray($deal);
+        $this->assertLessThan(100_000_000_000.0 * MergerAndAcquisitionEngine::MA_FINANCIAL_EQUITY_CAP, (float) $deal['spent'], 'review, not the capital cap, sized it');
+        $this->assertStringEndsWith('Sized to ' . MergerAndAcquisitionEngine::LIMIT_MERGER_REVIEW . '.', $deal['event']['description']);
+        $cleared = MergerAndAcquisitionEngine::maxClearedTargetShare(0.40, 0.16);
+        $this->assertEqualsWithDelta(0.40 + $cleared, $ledger->describeMergerMarket($bank, $this->healthyMacro(), 0.0, 300, 252)['acquirer_share'], 1e-9);
+    }
+
     /** A steward bank with cash well past its target, so the cash-funded strategic acquisition trades. */
     private function cashRichBank(float $wholesaleDebt): Stock
     {
@@ -1217,6 +1239,48 @@ class MergerAndAcquisitionEngineTest extends TestCase
         $this->assertGreaterThan(0.0, $loss, 'a fire sale below book is a loss');
         $this->assertStringContainsString('booking a $' . number_format($loss / 1_000_000_000, 1) . 'B loss on sale', (string) $published);
         $this->assertStringNotContainsString('$-', (string) $published);
+    }
+
+    /**
+     * The seller's announcement return is the sale's worth to its shareholders over their stake: the price
+     * received less the pro-rata market value of the division given up, struck at the price before the sale.
+     */
+    public function testTheSellersAnnouncementReturnIsTheSalesGainOverItsMarketValue(): void
+    {
+        $this->primeDistressedDivestiture(operatingBase: 10_000_000_000.0, fraction: 0.25);
+        $stock = $this->buildLedgeredAcquirer('SELL', treasury: 1_000_000_000.0, debt: 4_000_000_000.0, shares: 10_000_000.0);
+        $stock->setPrice('5.0');
+        $stock->setOperatingMargin('-0.05');
+        $stock->setEarningsPerShare('-0.10');
+        $stock->setTotalNetIncome('-1000000000');
+        $stock->setRoicTtm('0.00');
+        $cashBefore = (float) $stock->getCorporateTreasury();
+        $marketCap = 5.0 * 10_000_000.0;
+
+        $sale = $this->engine->evaluateCorporateDivestiture($stock, new MacroStateDTO(policyRateEma: 0.04, corporateTaxRate: 0.20, yield5yEma: 0.04, nominalGdpIndex: 1.0), 1.0);
+
+        $this->assertIsArray($sale);
+        $proceeds = (float) $stock->getCorporateTreasury() - $cashBefore;
+        $this->assertGreaterThan(0.0, $proceeds);
+        $this->assertEqualsWithDelta(($proceeds - (0.25 * $marketCap)) / $marketCap, $sale['shock'], 1e-9);
+    }
+
+    public function testAWrittenDownSellerGainsAndARichlyValuedOneLosesOnTheSameFireSale(): void
+    {
+        $this->primeDistressedDivestiture(operatingBase: 10_000_000_000.0, fraction: 0.25);
+        $shock = function (float $price): float {
+            $stock = $this->buildLedgeredAcquirer('SELL', treasury: 1_000_000_000.0, debt: 4_000_000_000.0, shares: 10_000_000.0);
+            $stock->setPrice((string) $price);
+            $stock->setOperatingMargin('-0.05');
+            $stock->setEarningsPerShare('-0.10');
+            $stock->setTotalNetIncome('-1000000000');
+            $stock->setRoicTtm('0.00');
+
+            return $this->engine->evaluateCorporateDivestiture($stock, new MacroStateDTO(policyRateEma: 0.04, corporateTaxRate: 0.20, yield5yEma: 0.04, nominalGdpIndex: 1.0), 1.0)['shock'];
+        };
+
+        $this->assertGreaterThan(0.0, $shock(5.0));
+        $this->assertLessThan(0.0, $shock(2_000.0));
     }
 
     private function buildLedgeredAcquirer(string $ticker, float $treasury, float $debt, float $shares): Stock

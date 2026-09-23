@@ -393,15 +393,23 @@ class IndustryShareLedger
      * The acquirer's market as a horizontal merger review sees it: the market in annual revenue (its trend
      * demand), its trend share of that market, the roster's concentration index, and the fringe still off
      * the board to buy. The fringe is competitive, many small firms, and adds nothing to the index. Null
-     * before the ledger has priced the firm, when there is no market to measure yet.
+     * before the ledger has seen the firm report, when there is no market to measure yet.
+     *
+     * A market the ledger does not price on plant (a lender sells a yield, not a unit of output) is measured
+     * in revenue instead. Section 7 of the Clayton Act reaches every merger, and since 2024 the DOJ reviews
+     * bank mergers under the same 2023 Guidelines, so a firm is not exempt from review because its industry
+     * has no capacity to count.
      *
      * @return array{market_revenue: float, acquirer_share: float, herfindahl: float, fringe_share: float}|null
      */
     public function describeMergerMarket(Stock $stock, MacroStateDTO $macroState, float $secularExcessGrowth, int $tick, int $ticksPerYear): ?array
     {
         $own = $this->readOwnRecord($stock);
-        if ($own === null || (float) ($own['anchor_capacity_share'] ?? 0.0) <= 0.0 || (float) ($own['anchor_demand_share'] ?? 0.0) <= 0.0) {
+        if ($own === null) {
             return null;
+        }
+        if ((float) ($own['anchor_capacity_share'] ?? 0.0) <= 0.0 || (float) ($own['anchor_demand_share'] ?? 0.0) <= 0.0) {
+            return $this->describeRevenueMarket($stock, $own, $tick, $ticksPerYear);
         }
 
         $growth = self::trendNominalGdp($macroState) * exp($secularExcessGrowth * ($macroState->totalTime - (float) $own['anchor_time']));
@@ -410,6 +418,40 @@ class IndustryShareLedger
         return [
             'market_revenue' => (float) $own['anchor_demand_share'] * $growth,
             'acquirer_share' => min(1.0, $shares[$stock->getTicker()] ?? 0.0),
+            'herfindahl'     => min(1.0, array_sum(array_map(static fn (float $share): float => $share * $share, $shares))),
+            'fringe_share'   => max(0.0, 1.0 - array_sum($shares)),
+        ];
+    }
+
+    /**
+     * A market measured in revenue: the firm's own annual revenue over its addressable share sizes it, and
+     * every rival that has reported within the year holds its revenue's share of it (the same sizing the
+     * rival drain reads, fringeRevenue). Null until the firm has reported a share and a revenue.
+     *
+     * @param array<string, mixed> $own
+     * @return array{market_revenue: float, acquirer_share: float, herfindahl: float, fringe_share: float}|null
+     */
+    private function describeRevenueMarket(Stock $stock, array $own, int $tick, int $ticksPerYear): ?array
+    {
+        $ownShare = min(1.0, (float) ($own['addressable_share'] ?? 0.0));
+        $ownRevenue = (float) ($own['revenue'] ?? 0.0);
+        if ($ownShare <= 0.0 || $ownRevenue <= 0.0) {
+            return null;
+        }
+
+        $marketRevenue = $ownRevenue / $ownShare;
+        $shares = [$stock->getTicker() => $ownShare];
+        foreach ($this->store->readIndustry((string) $stock->getIndustry()) as $peerTicker => $record) {
+            $revenue = (float) ($record['revenue'] ?? 0.0);
+            if ($peerTicker === $stock->getTicker() || $revenue <= 0.0 || $tick - (int) $record['tick'] > $ticksPerYear) {
+                continue;
+            }
+            $shares[(string) $peerTicker] = $revenue / $marketRevenue;
+        }
+
+        return [
+            'market_revenue' => $marketRevenue,
+            'acquirer_share' => $ownShare,
             'herfindahl'     => min(1.0, array_sum(array_map(static fn (float $share): float => $share * $share, $shares))),
             'fringe_share'   => max(0.0, 1.0 - array_sum($shares)),
         ];
@@ -497,7 +539,14 @@ class IndustryShareLedger
             return;
         }
 
-        $this->transferCapacity($stock, -max(0.0, min(1.0, $fraction)) * max(0.0, (float) $own['capacity']), $macroState, $secularExcessGrowth);
+        $fraction = max(0.0, min(1.0, $fraction));
+        if ((float) ($own['anchor_capacity_share'] ?? 0.0) <= 0.0) {
+            $this->transferRevenue($stock, $own, -$fraction * (float) ($own['revenue'] ?? 0.0));
+
+            return;
+        }
+
+        $this->transferCapacity($stock, -$fraction * max(0.0, (float) $own['capacity']), $macroState, $secularExcessGrowth);
     }
 
     /**
@@ -510,7 +559,12 @@ class IndustryShareLedger
     {
         $own = $this->readOwnRecord($stock);
         $trendNominalGdp = self::trendNominalGdp($macroState);
-        if ($own === null || $capacityDelta === 0.0 || (float) ($own['anchor_capacity_share'] ?? 0.0) <= 0.0) {
+        if ($own === null || $capacityDelta === 0.0) {
+            return;
+        }
+        if ((float) ($own['anchor_capacity_share'] ?? 0.0) <= 0.0) {
+            $this->transferRevenue($stock, $own, $capacityDelta);
+
             return;
         }
 
@@ -522,6 +576,27 @@ class IndustryShareLedger
     }
 
     /** @return array<string, mixed>|null */
+    /**
+     * A market measured in revenue moves with the revenue a deal buys or a sale gives up, at the market's
+     * size, so a second deal before the next report is reviewed at the share the first one left.
+     *
+     * @param array<string, mixed> $own
+     */
+    private function transferRevenue(Stock $stock, array $own, float $revenueDelta): void
+    {
+        $share = (float) ($own['addressable_share'] ?? 0.0);
+        $revenue = (float) ($own['revenue'] ?? 0.0);
+        if ($share <= 0.0 || $revenue <= 0.0) {
+            return;
+        }
+
+        $newRevenue = max(0.0, $revenue + $revenueDelta);
+        $own['revenue'] = $newRevenue;
+        $own['addressable_share'] = min(1.0, $newRevenue / ($revenue / $share));
+
+        $this->store->writeRecord((string) $stock->getIndustry(), $stock->getTicker(), $own);
+    }
+
     private function readOwnRecord(Stock $stock): ?array
     {
         $industry = $stock->getIndustry();

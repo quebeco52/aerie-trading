@@ -86,8 +86,8 @@ class MergerAndAcquisitionEngine
     public const LIMIT_CAPITAL_TEST = 'the largest deal that keeps it well capitalized';
 
     // --- M&A Synergy & Target Returns (Log-Normal) ---
-    /** Mean of log-normal synergy. */
-    public const MA_SYNERGY_MU = -0.02;
+    /** Median log synergy: zero, so a bidder paying no premium is as likely to destroy value as create it (bidder announcement returns average near zero, about half negative; Betton, Eckbo & Thorburn 2008). */
+    public const MA_SYNERGY_MU = 0.0;
     /** Sigma of log-normal synergy. */
     public const MA_SYNERGY_SIGMA = 0.10;
     /** Mean of log-normal target ROIC. */
@@ -1088,11 +1088,13 @@ class MergerAndAcquisitionEngine
         $target = $this->generateProceduralTarget();
         $desc = "{$ctx->seller->getName()} sold its {$target['name']} division for \${$salePriceB}B in cash, {$result}.";
 
-        if ($ctx->isDistressed) {
-            $ctx->eventShock = mt_rand(300, 600) / 100.0; 
-        } else {
-            $ctx->eventShock = mt_rand(100, 300) / 100.0; 
-        }
+        // The seller's announcement return is what the sale is worth to its shareholders over their stake. The
+        // market already values the division pro rata inside the firm, and the buyer takes its share of the
+        // debt with it, so the seller gives up that fraction of its market value and receives the price:
+        // selling above its own valuation creates value (Hite, Owers & Rogers 1987), a fire sale below it
+        // destroys some. Limited liability is the only bound.
+        $marketCap = max(1.0, $ctx->price * $ctx->shares);
+        $ctx->eventShock = max(-100.0, (($ctx->salePrice - ($ctx->divestedFraction * $marketCap)) / $marketCap) * 100.0);
 
         $event = $this->marketEvent->publish($ctx->seller, 'DIVESTITURE', $desc, $ctx->eventShock);
 
