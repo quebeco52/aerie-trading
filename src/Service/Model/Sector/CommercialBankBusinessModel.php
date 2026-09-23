@@ -81,9 +81,7 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
     public function getCapExCompletionRate(Stock $stock): float { return self::THRESHOLD_CAPEX_COMPLETION_RATE; }
 
     // --- ROE & Target Metrics ---
-    /** Weight given to historical baseline ROE when blending with TTM ROE. */
-    public const BASELINE_ROE_WEIGHT = 0.50;
-    /** Weight given to TTM ROE when blending with historical baseline ROE. */
+    /** Divisor on the trailing ROE's reversion speed: it reverts toward cost of equity plus moat at kappa / this. */
     public const TTM_ROE_WEIGHT      = 0.50;
 
     // --- Dual-Stream Banking Architecture ---
@@ -183,9 +181,9 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
     public const MAX_DEPOSIT_BETA              = 0.70;
     /** Lower bound: regulatory and reputational floor — banks always pay some yield. */
     public const MIN_DEPOSIT_BETA              = 0.10;
-    /** Market-average beta baseline: normalizes competitive advantage to 1.0 at the sector mean, and is the level the system deposit beta scales the firm's own beta from. */
+    /** Market-average beta baseline: the level the system deposit beta scales the firm's own beta from. */
     public const DEPOSIT_BETA_NORMALIZATION_BASELINE = MacroEngine::SYSTEM_DEPOSIT_BETA_BASE;
-    /** Deposit outflow per unit of money-market share gained this quarter: the migrating share leaves the deposit base, which is the 1 - base share remainder (Drechsler, Savov & Schnabl 2017). */
+    /** Deposit flow per unit of money-market share moved this quarter: share gained leaves the deposit base and share lost returns to it (Drechsler, Savov & Schnabl 2017). */
     public const MMF_MIGRATION_DEPOSIT_DRAG = 1.2;
 
     // --- Hoarding & Deposit Flight ---
@@ -193,8 +191,6 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
     public const HOARDING_THRESHOLD_DEBT_RATIO      = 0.12;
     /** Higher idle cash fraction that triggers more aggressive capital return pressure. */
     public const MEGA_HOARDING_THRESHOLD_DEBT_RATIO = 0.18;
-    /** Policy rate gap above which depositors flee to money-market funds (calibrated to 2022-23 cycle). */
-    public const YIELD_FLIGHT_POLICY_RATE_OFFSET    = 0.01;
 
     // --- Bank Valuation Weights ---
     /** Weight given to Dividend Discount Model yield support when blending bank fair value. */
@@ -306,10 +302,6 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
     public const BASEL_CCB_CET1_RATIO = 0.065;
 
     // --- Passive Liability Growth ---
-    /** Minimum sensitivity bound for liability growth relative to stock beta. */
-    public const LIABILITY_BETA_SENSITIVITY_MIN = 0.8;
-    /** Maximum sensitivity bound for liability growth relative to stock beta. */
-    public const LIABILITY_BETA_SENSITIVITY_MAX = 1.2;
     /** Standard deviation of idiosyncratic drift applied to passive liability growth. */
     public const LIABILITY_GROWTH_DRIFT_STD = 0.005;
     /** Sentiment shock magnitude applied during a severe bank run event. */
@@ -319,17 +311,11 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
     /** Sentiment shock magnitude applied when new deposits are heavily captured. */
     public const EVENT_SHOCK_DEPOSIT_CAPTURE = 0.5;
 
-    /** Base real GDP growth for liability expansion. */
-    public const LIABILITY_BASE_GDP_GROWTH = 0.02;
-    /** Positive output gap multiplier for liability growth. */
-    public const LIABILITY_GDP_POSITIVE_GAP_MULT = 0.5;
-    /** Negative output gap multiplier for liability growth. */
-    public const LIABILITY_GDP_NEGATIVE_GAP_MULT = 2.0;
     /** Absolute limit on quarterly liability change fraction. */
     public const LIABILITY_MAX_CHANGE_LIMIT = 0.15;
-    /** Change fraction threshold to trigger deposit flight event. */
+    /** Quarterly shortfall against trend nominal income growth that triggers a deposit flight event. */
     public const LIABILITY_FLIGHT_THRESHOLD = -0.005;
-    /** Change fraction threshold to trigger captured new deposits event. */
+    /** Quarterly excess over trend nominal income growth that triggers a captured new deposits event. */
     public const LIABILITY_CAPTURE_THRESHOLD = 0.005;
 
     /**
@@ -352,16 +338,7 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
         // Earning assets are the loan book the yield is struck on: the ledger once it is open, and before
         // that the funding deployed away from idle cash.
         $earningAssets = $this->resolveEarningAssets($stock, $treasury);
-        $baselineRoe = max(0.01, (float) $stock->getBaselineRoe());
-
-        $ttmRoe = (float) $stock->getRoeTtm();
-        if ($ttmRoe !== 0.0) {
-            $baselineRoe = ($baselineRoe * self::BASELINE_ROE_WEIGHT) + ($ttmRoe * self::TTM_ROE_WEIGHT);
-        }
-
-        $saturationPenalty = \App\Service\Math\CorporateMetrics::getInstance()->calculateMarketSaturationPenalty($stock, $effectiveEquity, $macroState);
-        $waccBase = $macroState->policyRate + $macroState->equityRiskPremium;
-        $baselineRoe = max($waccBase, $baselineRoe - $saturationPenalty);
+        $baselineRoe = $this->resolveStructuralTargetRoe($stock, $macroState);
 
         $industry = $stock->getIndustry() ?: 'General';
         $equityLimit = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['equity_limit'] ?? 15.0;
@@ -709,7 +686,6 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
 
         $oldTtm = (float) $stock->getRoeTtm();
         $newTtm = $oldTtm === 0.0 ? $truePostTaxReturn : ($truePostTaxReturn * self::TTM_CURRENT_QUARTER_WEIGHT) + ($oldTtm * self::TTM_HISTORICAL_WEIGHT);
-        // Scale kappa so the blended target in getTargetMetrics moves at exactly $kappa
         $scaledKappa = $kappa / self::TTM_ROE_WEIGHT;
 
         $saturationPenalty = 0.0;
@@ -853,8 +829,6 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
         $currentLiabilities = $state['customerDeposits'];
         if ($currentLiabilities <= 0) return;
 
-        $inflation = $macroState->inflationEma;
-        $outputGap = $macroState->outputGapEma;
         $policyRate = $macroState->policyRateEma;
 
         $equity = (float) $stock->getTotalEquity();
@@ -862,25 +836,17 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
         $industry = $stock->getIndustry() ?: 'General';
         $equityLimit = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['equity_limit'] ?? 15.0;
 
-        $realGdpGrowth = self::LIABILITY_BASE_GDP_GROWTH + ($outputGap > 0.0 ? $outputGap * self::LIABILITY_GDP_POSITIVE_GAP_MULT : $outputGap * self::LIABILITY_GDP_NEGATIVE_GAP_MULT);
         $depositApyBeta = $this->calculateDepositBeta($totalDebt, $equity, $equityLimit, $currentLiabilities);
         $state['bank_apy'] = max(0.001, $policyRate * $this->resolveEffectiveDepositBeta($depositApyBeta, $macroState));
 
-        // Yield Flight Penalty: If Money Market funds yield much higher than the bank's APY, depositors flee.
-        $yieldFlightPenalty = max(0.0, max(0.0, $policyRate - self::YIELD_FLIGHT_POLICY_RATE_OFFSET) - $state['bank_apy']) * 1.0;
-        // System-wide migration into money funds (the deposits channel) leaves every deposit base, on top of
-        // the firm's own yield-flight above; the smoothed share lags the level by about a quarter's move.
-        $mmfOutflowQuarterly = max(0.0, $macroState->moneyMarketFundShare - $macroState->moneyMarketFundShareEma) * self::MMF_MIGRATION_DEPOSIT_DRAG;
-        $systemicGrowthQuarterly = (($inflation + $realGdpGrowth - $yieldFlightPenalty) / self::ANNUALIZATION_FACTOR) - $mmfOutflowQuarterly;
-
-        $betaSensitivity = max(self::LIABILITY_BETA_SENSITIVITY_MIN, min(self::LIABILITY_BETA_SENSITIVITY_MAX, $this->getOperatingCyclicality($stock)));
-
-        // Competitive advantage relative to market-average deposit beta.
-        // A bank paying above the normalization baseline retains and attracts more deposits.
-        $competitiveAdvantage = $depositApyBeta / self::DEPOSIT_BETA_NORMALIZATION_BASELINE;
-
-        $baseGrowth = $systemicGrowthQuarterly > 0 ? $systemicGrowthQuarterly * $betaSensitivity * $competitiveAdvantage : $systemicGrowthQuarterly * $betaSensitivity / max(0.1, $competitiveAdvantage);
-        $liabilityChange = $currentLiabilities * max(-self::LIABILITY_MAX_CHANGE_LIMIT, min(self::LIABILITY_MAX_CHANGE_LIMIT, $baseGrowth + ($mathUtility->generateStandardNormal() * self::LIABILITY_GROWTH_DRIFT_STD)));
+        // Money demand has unit income elasticity (Lucas 2000), so the deposit base grows with trend nominal
+        // income: realized inflation plus potential real growth. The rate channel is the migration into money
+        // funds as the deposit spread opens, and back out as it closes (Drechsler, Savov & Schnabl 2017); the
+        // smoothed share lags the level by about a quarter's move.
+        $trendGrowthQuarterly = ($macroState->inflationEma + MacroEngine::TFP_DRIFT + MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE) / self::ANNUALIZATION_FACTOR;
+        $mmfMigrationQuarterly = ($macroState->moneyMarketFundShare - $macroState->moneyMarketFundShareEma) * self::MMF_MIGRATION_DEPOSIT_DRAG;
+        $growthQuarterly = $trendGrowthQuarterly - $mmfMigrationQuarterly + ($mathUtility->generateStandardNormal() * self::LIABILITY_GROWTH_DRIFT_STD);
+        $liabilityChange = $currentLiabilities * max(-self::LIABILITY_MAX_CHANGE_LIMIT, min(self::LIABILITY_MAX_CHANGE_LIMIT, $growthQuarterly));
 
         if (abs($liabilityChange) > 0) {
             $state['treasury'] += $liabilityChange;
@@ -892,8 +858,10 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
                 $state['events'][] = ['event_type' => ShockEvent::BANK_RUN, 'context' => ['amount' => $amtB], 'shock' => self::EVENT_SHOCK_BANK_RUN];
             }
             $stock->setCustomerDeposits((string) max(0.0, $state['customerDeposits']));
-            if (($liabilityChange / $currentLiabilities) < self::LIABILITY_FLIGHT_THRESHOLD) $state['events'][] = ['event_type' => ShockEvent::CUSTOMER_DEPOSIT_FLIGHT, 'context' => ['amount' => number_format(abs($liabilityChange) / 1_000_000_000, 2)], 'shock' => self::EVENT_SHOCK_DEPOSIT_FLIGHT];
-            elseif (($liabilityChange / $currentLiabilities) > self::LIABILITY_CAPTURE_THRESHOLD) $state['events'][] = ['event_type' => ShockEvent::CAPTURED_NEW_DEPOSITS, 'context' => ['amount' => number_format($liabilityChange / 1_000_000_000, 2)], 'shock' => self::EVENT_SHOCK_DEPOSIT_CAPTURE];
+            // News is the departure from trend: a base growing with the economy is not a capture.
+            $departureFromTrend = ($liabilityChange / $currentLiabilities) - $trendGrowthQuarterly;
+            if ($departureFromTrend < self::LIABILITY_FLIGHT_THRESHOLD) $state['events'][] = ['event_type' => ShockEvent::CUSTOMER_DEPOSIT_FLIGHT, 'context' => ['amount' => number_format(abs($liabilityChange) / 1_000_000_000, 2)], 'shock' => self::EVENT_SHOCK_DEPOSIT_FLIGHT];
+            elseif ($departureFromTrend > self::LIABILITY_CAPTURE_THRESHOLD) $state['events'][] = ['event_type' => ShockEvent::CAPTURED_NEW_DEPOSITS, 'context' => ['amount' => number_format($liabilityChange / 1_000_000_000, 2)], 'shock' => self::EVENT_SHOCK_DEPOSIT_CAPTURE];
         }
     }
 

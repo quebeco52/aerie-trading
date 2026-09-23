@@ -581,8 +581,10 @@ class EarningsEngine
             $prior = 1.0;
         }
 
-        // The activity the base has to carry, with the seasonal swing the firm staffs through taken out.
-        $utilization = $ctx->capacityUtilization / max(0.01, $ctx->seasonalFactor);
+        // The activity the base has to carry, with the seasonal swing the firm staffs through taken out, and
+        // the volume a model moves inside its own sector physics put back in.
+        $utilization = ($ctx->capacityUtilization / max(0.01, $ctx->seasonalFactor))
+            * max(0.0, 1.0 + $ctx->strategy->resolveSectorActivityShift($ctx->stock, $ctx->macroState));
         $activityGap = log(
             max(self::MIN_CAPACITY_UTILIZATION, $utilization) / max(self::MIN_CAPACITY_UTILIZATION, $prior)
         );

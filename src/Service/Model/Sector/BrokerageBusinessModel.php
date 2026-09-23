@@ -86,9 +86,7 @@ class BrokerageBusinessModel extends BaseFinancialBusinessModel
     public const MIN_VARIABLE_MARGIN_CLAMP = 0.01;
 
     // --- ROE & Target Architecture ---
-    /** Weight given to historical baseline ROE when blending with TTM ROE. */
-    public const BASELINE_ROE_WEIGHT = 0.50;
-    /** Weight given to TTM ROE when blending with historical baseline ROE. */
+    /** Divisor on the trailing ROE's reversion speed: it reverts toward cost of equity plus moat at kappa / this. */
     public const TTM_ROE_WEIGHT      = 0.50;
     /** Default 5Y Treasury spread over policy rate when yield curve data is absent. */
     public const DEFAULT_5Y_YIELD_PREMIUM = 0.005;
@@ -200,16 +198,7 @@ class BrokerageBusinessModel extends BaseFinancialBusinessModel
     public function getTargetMetrics(Stock $stock, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): array
     {
         $equity = (float) $stock->getTotalEquity();
-        $baselineRoe = max(0.01, (float) $stock->getBaselineRoe());
-
-        $ttmRoe = (float) $stock->getRoeTtm();
-        if ($ttmRoe !== 0.0) {
-            $baselineRoe = ($baselineRoe * self::BASELINE_ROE_WEIGHT) + ($ttmRoe * self::TTM_ROE_WEIGHT);
-        }
-
-        $saturationPenalty = \App\Service\Math\CorporateMetrics::getInstance()->calculateMarketSaturationPenalty($stock, max(1.0, $equity), $macroState);
-        $waccBase = $macroState->policyRate + $macroState->equityRiskPremium;
-        $baselineRoe = max($waccBase, $baselineRoe - $saturationPenalty);
+        $baselineRoe = $this->resolveStructuralTargetRoe($stock, $macroState);
 
         $policyRate = $macroState->policyRateEma;
         $taxRate = $macroState->corporateTaxRate;

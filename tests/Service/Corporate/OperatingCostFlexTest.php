@@ -133,6 +133,42 @@ final class OperatingCostFlexTest extends TestCase
     }
 
     /**
+     * An investment bank's deal flow moves inside its sector physics, not through capacity utilization, which
+     * it holds at one. Before the model reported that activity, an advisory drought never reached the base:
+     * the bank carried the headcount of a boom through a two-year slump and lost money on it every quarter.
+     */
+    public function testActivityAModelMovesInsideItsOwnPhysicsReachesTheCommittedBase(): void
+    {
+        $scaleAfterAQuarter = function (float $outputGap, float $equityRiskPremium): float {
+            $stock = $this->buildMatureIndustrial('IBX');
+            $stock->setIndustry('Investment Banking');
+            $stock->setCommittedCostScale('1.0');
+            $ctx = new EarningsSimulationContext(
+                $stock,
+                MacroStateDTO::fromArray([
+                    'corporate_tax_rate' => 0.21,
+                    'output_gap_ema' => $outputGap,
+                    'equity_risk_premium' => $equityRiskPremium,
+                    'macro_credit_spread_ema' => \App\Service\Model\Sector\InvestmentBankBusinessModel::DEAL_BASELINE_CREDIT_SPREAD,
+                    'market_volatility_ema' => \App\Service\Model\Sector\InvestmentBankBusinessModel::VIX_ARBITRAGE_FLOOR,
+                    'policy_rate' => 0.04,
+                    'policy_rate_ema' => 0.04,
+                    'yield_5y_ema' => 0.04 + \App\Service\Model\Sector\InvestmentBankBusinessModel::DCM_NEUTRAL_CURVE_SLOPE,
+                ]),
+                Sectors::getBusinessModelStrategy('investment_bank'),
+                'investment_bank'
+            );
+            $ctx->capacityUtilization = 1.0;
+            $ctx->seasonalFactor = 1.0;
+
+            return $this->resolveScale($ctx);
+        };
+
+        $this->assertEqualsWithDelta(1.0, $scaleAfterAQuarter(0.0, \App\Service\Macro\MacroEngine::BASE_EQUITY_RISK_PREMIUM), 1e-6, 'Normal deal flow keeps the whole base.');
+        $this->assertLessThan(0.97, $scaleAfterAQuarter(-0.045, \App\Service\Macro\MacroEngine::BASE_EQUITY_RISK_PREMIUM + 0.02), 'A deal drought starts trimming the base the quarter it arrives.');
+    }
+
+    /**
      * The ABJ asymmetry itself: the same 10% swing in activity cuts the base by less than it rebuilds it.
      * Cost stickiness IS this gap — remove it and the channel collapses back into a variable cost.
      */

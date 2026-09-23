@@ -84,12 +84,12 @@ class CreditFiscalSubsystem
     /** Baseline structural primary fiscal deficit as a fraction of GDP. */
     public const SOVEREIGN_STRUCTURAL_DEFICIT = 0.020;
 
-    // --- Speculative-Grade Corporate Default Dynamics (Moody's / Altman) ---
-    /** Basel II/III corporate asset correlation factor for speculative exposures. */
-    public const CORPORATE_DEFAULT_RHO = 0.20;
+    // --- Corporate Default Dynamics (Moody's all-rated, Vasicek single factor) ---
+    /** Asset correlation of the all-rated default rate: ~0.1 puts the Vasicek median at the post-1983 record's ~1.2% against its 1.6% mean (0.2 gives 0.8%); fits over 1920-2008 reach 0.2 on the 1930s, a tail this macro index already generates itself. */
+    public const CORPORATE_DEFAULT_RHO = 0.10;
     /** Sensitivity of corporate credit Z-score to macroeconomic output gap. */
     public const CORPORATE_DEFAULT_GAP_SENSITIVITY = 25.0;
-    /** Corporate credit Z per unit of excess HY spread (~5): a 2,000 bps blowout with a -4% gap and 80% SLOOS yields a ~13% default rate. */
+    /** Corporate credit Z per unit of excess HY spread (~5): a 2,000 bps blowout with a -4% gap and 80% SLOOS, held for a year, gives ~8% (1933's all-rated rate); 2009 averaged 5.4%. */
     public const CORPORATE_DEFAULT_SPREAD_SENSITIVITY = 5.0;
     /** Corporate credit Z per unit of SLOOS net tightening (~1): a 35% credit crunch adds ~0.35 to the systemic factor. */
     public const CORPORATE_DEFAULT_SLOOS_SENSITIVITY = 1.0;
@@ -665,11 +665,13 @@ class CreditFiscalSubsystem
     }
 
     /**
-     * Moody's / S&P Speculative-Grade Corporate Default Rate Model.
+     * Moody's All-Rated Corporate Default Rate Model.
      *
-     * Derives realized corporate probability of default (CDR) driven by a structural
-     * macroeconomic credit factor combining output gap, speculative high-yield credit spreads,
-     * and bank lending standards (SLOOS).
+     * Derives the realized all-rated issuer-weighted corporate default rate (CDR) from a structural
+     * macroeconomic credit factor combining output gap, high-yield credit spreads and bank lending
+     * standards (SLOOS). It is the all-rated series, not the speculative-grade one, because every
+     * reader treats it as the economy-wide rate: receivables are provisioned at it and sector models
+     * scale off its excess over the long-run average.
      *
      * @param MacroState $state Current macroeconomic state.
      * @param float      $dt    Time increment in years.

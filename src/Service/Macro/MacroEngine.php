@@ -231,9 +231,9 @@ class MacroEngine
     /** Probit sensitivity to financial conditions tightening. */
     public const RECESSION_PROBIT_BETA_FCI = 0.35;
 
-    // --- Speculative-Grade Corporate Default Dynamics (Moody's / Altman) ---
-    /** Long-run average through-the-cycle speculative corporate probability of default (~1.8%). */
-    public const CORPORATE_DEFAULT_BASELINE = 0.018;
+    // --- Corporate Default Dynamics (Moody's all-rated / Altman) ---
+    /** Long-run average ALL-rated issuer-weighted corporate default rate (Moody's: 1.59% over 1983-2019, 1.56% over 1920-2017); speculative grade alone runs about three times it. */
+    public const CORPORATE_DEFAULT_BASELINE = 0.016;
 
     // --- NY Fed Global Supply Chain Pressure Index (GSCPI - Benigno et al. 2022) ---
     /** Neutral baseline index for GSCPI composite (standard deviations). */

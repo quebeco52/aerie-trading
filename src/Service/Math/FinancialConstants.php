@@ -652,8 +652,8 @@ class FinancialConstants
     public const RECOVERY_SENIOR_UNSECURED = 0.48;
     /** Recovery on a SUBORDINATED claim, which is paid only once everything above it is whole. */
     public const RECOVERY_SUBORDINATED = 0.28;
-    /** Aggregate corporate default rate the base recoveries above are quoted at; the long-run average year. */
-    public const RECOVERY_BASELINE_DEFAULT_RATE = 0.018;
+    /** Aggregate corporate default rate the base recoveries above are quoted at: the long-run average year of the series the macro publishes. */
+    public const RECOVERY_BASELINE_DEFAULT_RATE = \App\Service\Macro\MacroEngine::CORPORATE_DEFAULT_BASELINE;
     /** Fall in recovery per unit of log excess in the aggregate default rate. Recovery and default are NEGATIVELY correlated: defaults cluster in bad years, distressed assets are sold into a market with no buyers, and the same claim is worth less precisely when more of them are being settled. Ignoring it prices the tail of a credit portfolio far too kindly. */
     public const RECOVERY_DEFAULT_RATE_ELASTICITY = 0.12;
     /** Bounds on recovery. Nothing recovers everything once it has defaulted, and even a wiped-out claim usually salvages something. */

@@ -17,6 +17,12 @@ interface OperatingStrategyInterface
     public function getCoverageProfile(Stock $stock): SectorCoverageProfile;
     public function getMacroPhysics(Stock $stock, MacroStateDTO $macroState): array;
     /**
+     * The systematic volume swing this model applies inside its own sector physics rather than through
+     * getMacroPhysics()'s macro_demand_shift, as a fraction of expected revenue. The committed cost base is
+     * resourced to activity (Anderson, Banker & Janakiraman 2003), and a swing it cannot see never trims it.
+     */
+    public function resolveSectorActivityShift(Stock $stock, MacroStateDTO $macroState): float;
+    /**
      * MacroStateDTO field names (snake_case, matching MacroStateDTO::toArray()) this model's own
      * operating code reads: calculateSectorPhysics(), getMacroPhysics(), calculateInterestIncome(),
      * processPassiveLiabilityGrowth(), getForwardCreditLossMultiplier() and the helpers they call,

@@ -180,16 +180,7 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
         $aggression = $this->calculateLeverageAggression($stock);
 
         $equity = (float) $stock->getTotalEquity();
-        $baselineRoe = max(0.01, (float) $stock->getBaselineRoe());
-
-        $ttmRoe = (float) $stock->getRoeTtm();
-        if ($ttmRoe !== 0.0) {
-            $baselineRoe = ($baselineRoe * self::BASELINE_ROE_WEIGHT) + ($ttmRoe * self::TTM_ROE_WEIGHT);
-        }
-
-        $saturationPenalty = \App\Service\Math\CorporateMetrics::getInstance()->calculateMarketSaturationPenalty($stock, max(1.0, $equity), $macroState);
-        $waccBase = $macroState->policyRate + $macroState->equityRiskPremium;
-        $baselineRoe = max($waccBase, $baselineRoe - $saturationPenalty);
+        $baselineRoe = $this->resolveStructuralTargetRoe($stock, $macroState);
 
         $policyRate = $macroState->policyRateEma;
         $yield5y = $macroState->yield5yEma;
@@ -537,9 +528,16 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
         return $baseCapacity;
     }
 
+    /**
+     * Judged against the tighter of the two limits calculateDebtExpansionCapacity() enforces. A sponsor funds
+     * itself wholesale, so its own limit binds before the sector's; measured against the sector's alone it
+     * stayed "under-levered" at a ratio it was not allowed to borrow past, and a financial in that state
+     * neither invests nor borrows, it only buys back stock.
+     */
     public function isUnderLeveraged(float $currentDebtRatio, float $targetDebtTolerance, float $interestCoverage, float $minIcr, float $costOfEquity, float $effectiveCostOfDebt): bool
     {
-        $limit = $targetDebtTolerance > 0.0 ? $targetDebtTolerance : $this->getWholesaleLeverageLimit();
+        $wholesaleLimit = $this->getWholesaleLeverageLimit();
+        $limit = $targetDebtTolerance > 0.0 ? min($targetDebtTolerance, $wholesaleLimit) : $wholesaleLimit;
         return $currentDebtRatio < ($limit * 0.85);
     }
 

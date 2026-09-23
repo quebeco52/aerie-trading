@@ -233,7 +233,36 @@ class CreditFiscalSubsystemTest extends TestCase
         $stateCrisis->sloosTighteningIndexEma = 0.40;   // Bank lending freeze
 
         $this->subsystem->calculateCorporateDefaultRate($stateCrisis, 0.25);
-        $this->assertGreaterThan($stateNormal->corporateDefaultRate * 2.0, $stateCrisis->corporateDefaultRate, 'Recession with credit freeze must spike speculative defaults.');
+        $this->assertGreaterThan($stateNormal->corporateDefaultRate * 2.0, $stateCrisis->corporateDefaultRate, 'Recession with credit freeze must spike corporate defaults.');
+    }
+
+    /**
+     * The series is Moody's ALL-rated default rate, and its readers treat it that way: receivables are
+     * provisioned at it, and every sector model scales off its excess over the 1.6% long-run average. The
+     * crisis end had been calibrated to the SPECULATIVE-grade 2009 peak (13%) on an all-rated base, so the
+     * worst recession read as 4.9 times "normal" excess where the all-rated record's worst is about 2.4.
+     */
+    public function testCorporateDefaultRateIsCalibratedToTheAllRatedRecord(): void
+    {
+        $neutral = new MacroState();
+        $neutral->outputGapEma = 0.0;
+        $neutral->highYieldCreditSpread = MacroEngine::BASE_CREDIT_SPREAD * MacroEngine::HY_BASE_SPREAD_MULTIPLIER;
+        $neutral->sloosTighteningIndexEma = 0.0;
+        $this->subsystem->calculateCorporateDefaultRate($neutral, 0.25);
+
+        $blowout = new MacroState();
+        $blowout->outputGapEma = -0.04;
+        $blowout->highYieldCreditSpread = 0.20;
+        $blowout->sloosTighteningIndexEma = 0.80;
+        $this->subsystem->calculateCorporateDefaultRate($blowout, 0.25);
+
+        // A neutral year at the post-1983 median, below the mean it averages to.
+        $this->assertEqualsWithDelta(0.012, $neutral->corporateDefaultRate, 0.001);
+        $this->assertLessThan(MacroEngine::CORPORATE_DEFAULT_BASELINE, $neutral->corporateDefaultRate);
+        // A 2,000 bps blowout held for a year is a Depression year for the all-rated series (1933: ~8.4%),
+        // not the speculative-grade 2009 peak of 13% the old calibration produced (14.7% here).
+        $this->assertGreaterThan(0.054, $blowout->corporateDefaultRate, 'Worse than 2009\'s all-rated 5.4%, which averaged a shorter blowout.');
+        $this->assertLessThan(0.10, $blowout->corporateDefaultRate, 'Not a speculative-grade peak on an all-rated base.');
     }
 
     public function testCalculateSloosCreditStandards(): void

@@ -509,7 +509,7 @@ class InvestmentBankBusinessModelTest extends TestCase
         );
     }
 
-    public function testLevFinHungBridgeDebtImpairmentDuringHighYieldBlowout(): void
+    public function testLevFinHungBridgeDebtIsMarkedOnTheSpreadMoveNotItsLevel(): void
     {
         $stock = new Stock();
         $stock->setTicker('LEVFIN_IB');
@@ -518,56 +518,61 @@ class InvestmentBankBusinessModelTest extends TestCase
         $mathMock->method('generateStandardNormal')->willReturn(0.0);
         $mathMock->method('generateUniform')->willReturn(0.50);
 
-        // Baseline high-yield spread (0.048) -> No hung debt
-        $macroNormal = \App\DTO\MacroStateDTO::fromArray([
-            'output_gap_ema'               => 0.0,
-            'equity_risk_premium'          => MacroEngine::BASE_EQUITY_RISK_PREMIUM,
-            'macro_credit_spread_ema'      => InvestmentBankBusinessModel::DEAL_BASELINE_CREDIT_SPREAD,
-            'high_yield_credit_spread_ema' => InvestmentBankBusinessModel::HY_BRIDGE_SPREAD_BASELINE,
-            'policy_rate'                  => 0.04, // synced with EMA: isolate this test's variable, avoid a phantom FICC rate-shock
-            'policy_rate_ema'              => 0.04,
-            'yield_5y_ema'                 => 0.04 + InvestmentBankBusinessModel::DCM_NEUTRAL_CURVE_SLOPE, // neutral slope over the 4% policy rate: no DCM stimulus
+        $baseline = MacroEngine::BASE_CREDIT_SPREAD * MacroEngine::HY_BASE_SPREAD_MULTIPLIER;
+        $margin = function (float $spot, float $ema) use ($stock, $mathMock): float {
+            $macro = \App\DTO\MacroStateDTO::fromArray([
+                'output_gap_ema'               => 0.0,
+                'equity_risk_premium'          => MacroEngine::BASE_EQUITY_RISK_PREMIUM,
+                'macro_credit_spread_ema'      => InvestmentBankBusinessModel::DEAL_BASELINE_CREDIT_SPREAD,
+                'high_yield_credit_spread'     => $spot,
+                'high_yield_credit_spread_ema' => $ema,
+                'policy_rate'                  => 0.04, // synced with EMA: isolate this test's variable, avoid a phantom FICC rate-shock
+                'policy_rate_ema'              => 0.04,
+                'yield_5y_ema'                 => 0.04 + InvestmentBankBusinessModel::DCM_NEUTRAL_CURVE_SLOPE, // neutral slope over the 4% policy rate: no DCM stimulus
+            ]);
+
+            return $this->model->computeActualFinancials($stock, 1000.0, 0.50, 100.0, 0.0, $macro, $mathMock)->clampedMargin;
+        };
+
+        $calm = $margin($baseline, $baseline);
+        // A quarter in which high-yield spreads gap 300 bps wider: 0.030 * 1.50 * 0.40 (advisory weight) = 0.018.
+        $this->assertEqualsWithDelta(0.018, $margin($baseline + 0.030, $baseline) - $calm, 0.001, 'Bridge commitments are marked down as spreads widen.');
+        // Spreads that stay wide have already been marked: no charge every quarter they stay there.
+        $this->assertEqualsWithDelta($calm, $margin($baseline + 0.030, $baseline + 0.030), 1e-9, 'A spread that stays wide is not a new loss.');
+        // And the mark comes back as the spread tightens and the book is syndicated out.
+        $this->assertLessThan($calm, $margin($baseline + 0.030, $baseline + 0.060), 'A tightening quarter writes the bridge book back up.');
+    }
+
+    /**
+     * The activity the committed cost base staffs to is the revenue the desks actually book: with the noise
+     * and the tail events switched off, the reported swing is realized over expected revenue, less one. Two
+     * separate formulas would drift, and the base would staff to a drought the income statement never had.
+     */
+    public function testSectorActivityShiftIsTheSwingTheDesksBook(): void
+    {
+        $mathMock = $this->createStub(MathUtility::class);
+        $mathMock->method('generateStandardNormal')->willReturn(0.0);
+        $mathMock->method('generateUniform')->willReturn(0.50);
+
+        $drought = \App\DTO\MacroStateDTO::fromArray([
+            'output_gap_ema'          => -0.045,
+            'equity_risk_premium'     => MacroEngine::BASE_EQUITY_RISK_PREMIUM + 0.02,
+            'macro_credit_spread_ema' => InvestmentBankBusinessModel::DEAL_BASELINE_CREDIT_SPREAD + 0.01,
+            'market_volatility_ema'   => 0.27,
+            'policy_rate'             => 0.01,
+            'policy_rate_ema'         => 0.02,
+            'yield_5y_ema'            => 0.025,
         ]);
 
-        $resultNormal = $this->model->computeActualFinancials(
-            $stock,
-            1000.0,
-            0.50,
-            100.0,
-            0.0,
-            $macroNormal,
-            $mathMock
-        );
+        foreach (['KING', 'PERE', 'IBX'] as $ticker) {
+            $stock = new Stock();
+            $stock->setTicker($ticker);
+            $shift = $this->model->resolveSectorActivityShift($stock, $drought);
+            $booked = $this->model->computeActualFinancials($stock, 1000.0, 0.50, 100.0, 0.0, $drought, $mathMock)->actualRevenue / 1000.0 - 1.0;
 
-        // High-yield spread blowout: +300 bps above the bridge baseline
-        $macroBlowout = \App\DTO\MacroStateDTO::fromArray([
-            'output_gap_ema'               => 0.0,
-            'equity_risk_premium'          => MacroEngine::BASE_EQUITY_RISK_PREMIUM,
-            'macro_credit_spread_ema'      => InvestmentBankBusinessModel::DEAL_BASELINE_CREDIT_SPREAD,
-            'high_yield_credit_spread_ema' => InvestmentBankBusinessModel::HY_BRIDGE_SPREAD_BASELINE + 0.030,
-            'policy_rate'                  => 0.04, // synced with EMA: isolate this test's variable, avoid a phantom FICC rate-shock
-            'policy_rate_ema'              => 0.04,
-            'yield_5y_ema'                 => 0.04 + InvestmentBankBusinessModel::DCM_NEUTRAL_CURVE_SLOPE, // neutral slope over the 4% policy rate: no DCM stimulus
-        ]);
-
-        $resultBlowout = $this->model->computeActualFinancials(
-            $stock,
-            1000.0,
-            0.50,
-            100.0,
-            0.0,
-            $macroBlowout,
-            $mathMock
-        );
-
-        // hySpreadStress = 0.030
-        // hungDebtCost = 0.030 * 1.50 * 0.40 (advisoryWeight) = 0.018 (+180 bps variable cost drag)
-        $this->assertGreaterThan(
-            $resultNormal->clampedMargin,
-            $resultBlowout->clampedMargin,
-            'High yield credit spread surge must force hung bridge debt markdowns that increase variable costs.'
-        );
-        $this->assertEqualsWithDelta(0.018, $resultBlowout->clampedMargin - $resultNormal->clampedMargin, 0.001);
+            $this->assertNotEqualsWithDelta(0.0, $shift, 0.01, "$ticker: a drought is not neutral activity.");
+            $this->assertEqualsWithDelta($booked, $shift, 1e-9, "$ticker staffs to the revenue its desks book.");
+        }
     }
 
     public function testFiccDeskRatesVolatilityArbitrage(): void
@@ -1022,7 +1027,7 @@ class InvestmentBankBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta(0.56, $result->clampedMargin, 0.001);
     }
 
-    public function testPrimeBrokerageCounterpartyCreditProvisionAndArchegosDefault(): void
+    public function testPrimeBrokerageLosesOnAClientBlowUpNotOnTheDefaultRate(): void
     {
         $stock = new Stock();
         $stock->setTicker('GS');
@@ -1030,7 +1035,7 @@ class InvestmentBankBusinessModelTest extends TestCase
         $mathMock = $this->createStub(MathUtility::class);
         $mathMock->method('generateUniform')->willReturn(0.50); // No regulatory fine
 
-        // 1. Corporate default rate rise from baseline 0.018 to 0.036 (+100% excess defaults)
+        // 1. Corporate default rate doubles from baseline 0.018 to 0.036
         $mathMock->method('generateStandardNormal')->willReturn(0.0);
         $macroHighDefaults = \App\DTO\MacroStateDTO::fromArray([
             'output_gap_ema'             => 0.0,
@@ -1051,9 +1056,11 @@ class InvestmentBankBusinessModelTest extends TestCase
             $mathMock
         );
 
-        // corpDefaultExcess = (0.036 - 0.018) / 0.018 = 1.0
-        // primeCreditProvisionCost = 1.0 * 0.50 * 0.70 = 0.35
-        $this->assertGreaterThan(0.50, $resultDefaults->clampedMargin);
+        // Margin debit is lent against liquid collateral with daily variation margin, so a rising corporate
+        // default rate is not a loss on the prime book. Charged as one (relative excess x 0.35 of revenue), a
+        // doubling cost 35% of revenue and a 2009-scale default wave 170%, clamped only by the 85% comp cap.
+        // What does lose money is a single client blowing through its margin, the Archegos event below.
+        $this->assertEqualsWithDelta(0.50, $resultDefaults->clampedMargin, 1e-9);
 
         // 2. Archegos single-counterparty tail blowup: eventZ < -3.00
         $mathArchegos = $this->createStub(MathUtility::class);

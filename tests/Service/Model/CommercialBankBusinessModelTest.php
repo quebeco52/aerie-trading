@@ -865,7 +865,89 @@ class CommercialBankBusinessModelTest extends TestCase
         $migrating = $run(MacroEngine::MMF_SHARE_BASE + 0.0125, MacroEngine::MMF_SHARE_BASE);
 
         $this->assertLessThan($steady, $migrating, 'A quarter in which money funds gain share is a quarter deposits leave.');
-        // At least the migrating share of the base; a bank paying below the market beta loses more than its share.
-        $this->assertGreaterThanOrEqual(1000.0 * 0.0125 * CommercialBankBusinessModel::MMF_MIGRATION_DEPOSIT_DRAG - 0.5, $steady - $migrating);
+        // Exactly the migrating share of the base, times the drag.
+        $this->assertEqualsWithDelta(1000.0 * 0.0125 * CommercialBankBusinessModel::MMF_MIGRATION_DEPOSIT_DRAG, $steady - $migrating, 1e-9);
+    }
+
+    public function testMoneyFundOutflowsReturnWhenTheShareFallsBack(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('LAKE');
+        $stock->setTotalEquity('100.0');
+        $stock->setIndustry('Banks - Regional');
+        $mathMock = $this->createStub(MathUtility::class);
+        $mathMock->method('generateStandardNormal')->willReturn(0.0);
+
+        $deposits = 1000.0;
+        foreach ([[0.0125, 0.0], [0.0, 0.0125]] as [$shareMove, $emaMove]) {
+            $macro = MacroStateDTO::fromArray([
+                'inflation_ema' => -(MacroEngine::TFP_DRIFT + MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE),
+                'policy_rate_ema' => 0.05,
+                'money_market_fund_share' => MacroEngine::MMF_SHARE_BASE + $shareMove,
+                'money_market_fund_share_ema' => MacroEngine::MMF_SHARE_BASE + $emaMove,
+            ]);
+            $state = ['customerDeposits' => $deposits, 'wholesaleDebt' => 200.0, 'treasury' => 50.0, 'events' => []];
+            $this->model->processPassiveLiabilityGrowth($stock, $macro, $state, $mathMock);
+            $deposits = $state['customerDeposits'];
+        }
+
+        // Out as the rate cycle opens the deposit spread, back in as it closes: a round trip in the share is a
+        // round trip in the base. Counting only the outflow drained a fifth of every bank's deposits in 20 years.
+        $this->assertEqualsWithDelta(1000.0, $deposits, 1000.0 * 0.0125 * 0.0125 * 2.0);
+    }
+
+    public function testDepositBaseGrowsWithNominalIncomeWhateverTheBanksLeverage(): void
+    {
+        $mathMock = $this->createStub(MathUtility::class);
+        $mathMock->method('generateStandardNormal')->willReturn(0.0);
+        $macro = MacroStateDTO::fromArray([
+            'inflation_ema' => 0.03,
+            'policy_rate_ema' => 0.05,
+            'output_gap_ema' => -0.03,
+            'money_market_fund_share' => MacroEngine::MMF_SHARE_BASE,
+            'money_market_fund_share_ema' => MacroEngine::MMF_SHARE_BASE,
+        ]);
+
+        $grow = function (float $equity, float $wholesaleDebt) use ($macro, $mathMock): float {
+            $stock = new Stock();
+            $stock->setTicker('LAKE');
+            $stock->setTotalEquity((string) $equity);
+            $stock->setIndustry('Credit Services');
+            $state = ['customerDeposits' => 1000.0, 'wholesaleDebt' => $wholesaleDebt, 'treasury' => 50.0, 'events' => []];
+            $this->model->processPassiveLiabilityGrowth($stock, $macro, $state, $mathMock);
+
+            return $state['customerDeposits'] - 1000.0;
+        };
+
+        // Money demand has unit income elasticity: the base compounds at inflation plus potential growth, a
+        // quarter at a time, through a recession-sized gap and at a high policy rate alike.
+        $trend = 0.03 + MacroEngine::TFP_DRIFT + MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE;
+        $this->assertEqualsWithDelta(1000.0 * $trend / 4.0, $grow(1000.0, 0.0), 1e-9);
+        // A lender at its leverage limit pays the floor beta; that prices its funding, it does not shrink the
+        // deposit base it is handed. Scaling growth by the beta froze card lenders' books for twenty years.
+        $this->assertEqualsWithDelta($grow(1000.0, 0.0), $grow(150.0, 50.0), 1e-9);
+    }
+
+    public function testDepositGrowthAtTrendIsNotNews(): void
+    {
+        $mathMock = $this->createStub(MathUtility::class);
+        $mathMock->method('generateStandardNormal')->willReturn(0.0);
+        $stock = new Stock();
+        $stock->setTicker('LAKE');
+        $stock->setTotalEquity('100.0');
+        $stock->setIndustry('Banks - Regional');
+        $macro = MacroStateDTO::fromArray([
+            'inflation_ema' => 0.06,
+            'policy_rate_ema' => 0.03,
+            'money_market_fund_share' => MacroEngine::MMF_SHARE_BASE,
+            'money_market_fund_share_ema' => MacroEngine::MMF_SHARE_BASE,
+        ]);
+        $state = ['customerDeposits' => 1000.0, 'wholesaleDebt' => 200.0, 'treasury' => 50.0, 'events' => []];
+
+        $this->model->processPassiveLiabilityGrowth($stock, $macro, $state, $mathMock);
+
+        // 2% in the quarter clears the 0.5% capture threshold, but it is the economy's growth, not share won.
+        $this->assertEqualsWithDelta(20.0, $state['customerDeposits'] - 1000.0, 1e-9);
+        $this->assertSame([], $state['events']);
     }
 }

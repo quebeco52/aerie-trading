@@ -97,6 +97,12 @@ trait StandardOperatingPhysicsTrait
         return 1.0;
     }
 
+    /** A model whose demand runs through macro_demand_shift has already shown the cost base its activity. */
+    public function resolveSectorActivityShift(Stock $stock, MacroStateDTO $macroState): float
+    {
+        return 0.0;
+    }
+
     // --- Input Cost Basket ---
     /** Share of an input price shock a firm with full pricing power recovers in its own prices; the rest lands on margin (incomplete pass-through, Gopinath & Itskhoki 2010). */
     public const MAX_INPUT_COST_PASS_THROUGH = 0.80;

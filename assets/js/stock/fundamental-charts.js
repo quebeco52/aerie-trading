@@ -512,7 +512,8 @@ function updateFinancialHud(m) {
 
     const lastRate = last(m.blendedRateData);
     const lastSpread = last(m.spreadData);
-    setHud('hud-creditHealthChart', `Rate: ${lastRate.toFixed(2)}% | Spr: ${lastSpread.toFixed(0)} bps`);
+    // spreadData is in percent (dynamic_spread x 100); x100 again converts percent to basis points.
+    setHud('hud-creditHealthChart', `Rate: ${lastRate.toFixed(2)}% | Spr: ${(lastSpread * 100).toFixed(0)} bps`);
 
     const lastRet = last(m.returnData);
     const lastHurd = last(m.hurdleData);

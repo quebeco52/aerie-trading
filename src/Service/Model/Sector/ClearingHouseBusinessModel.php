@@ -158,15 +158,7 @@ class ClearingHouseBusinessModel extends BaseFinancialBusinessModel
         // Custody margin pools do NOT count as corporate invested capital, they are pass-through liabilities.
         $earningAssets = $effectiveEquity;
 
-        $baselineRoe = max(0.01, (float) $stock->getBaselineRoe());
-        $ttmRoe = (float) $stock->getRoeTtm();
-        if ($ttmRoe !== 0.0) {
-            $baselineRoe = ($baselineRoe * 0.70) + ($ttmRoe * 0.30);
-        }
-
-        $saturationPenalty = \App\Service\Math\CorporateMetrics::getInstance()->calculateMarketSaturationPenalty($stock, $effectiveEquity, $macroState);
-        $waccBase = $macroState->policyRate + $macroState->equityRiskPremium;
-        $baselineRoe = max($waccBase, $baselineRoe - $saturationPenalty);
+        $baselineRoe = $this->resolveStructuralTargetRoe($stock, $macroState);
 
         $taxRate = $macroState->corporateTaxRate;
         $stableMargin = max(0.01, (float) $stock->getOperatingMargin());

@@ -1311,11 +1311,12 @@ class MathUtilityTest extends TestCase
 
     public function testCalculateCorporateDefaultRate(): void
     {
-        // Neutral macroeconomic conditions (0 macro Z: median conditional default is ~0.95% due to Vasicek skewness)
+        // Neutral conditions (macro Z = 0) sit at the Vasicek median, below the 1.6% mean: Moody's all-rated
+        // record since 1983 has its median year near 1.2%.
         $baselineDefault = $this->mathUtility->calculateCorporateDefaultRate(
             macroZ: 0.0
         );
-        $this->assertEqualsWithDelta(0.0095, $baselineDefault, 0.001);
+        $this->assertEqualsWithDelta(0.012, $baselineDefault, 0.001);
 
         // Crisis conditions (deep recession macro Z = -2.5)
         $crisisDefault = $this->mathUtility->calculateCorporateDefaultRate(

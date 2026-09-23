@@ -293,6 +293,35 @@ class PrivateEquityBusinessModelTest extends TestCase
         $this->assertFalse($this->model->isUnderLeveraged(2.2, 2.5, 5.0, 1.05, 0.12, 0.05));
     }
 
+    public function testASponsorIsOnlyUnderLeveredWhereItMayStillBorrow(): void
+    {
+        // DebtEngine passes the sector's equity limit, which sits above the sponsor's own wholesale limit.
+        $sectorTolerance = (float) \App\Data\Sectors::INDUSTRY_METRICS['Private Equity']['equity_limit'];
+        $this->assertGreaterThan($this->model->getWholesaleLeverageLimit(), $sectorTolerance);
+
+        $health = new DebtHealthDTO(
+            grossCost: 0.05, effectiveCost: 0.05, cashYield: 0.03, isNegativeCarry: false, isSevereNegativeCarry: false,
+            interestCoverage: 5.0, wantsToPaydownDebt: false, canIssueDebt: true, debtTolerance: $sectorTolerance,
+            wacc: 0.06, costOfEquity: 0.08, leveredBeta: 1.0,
+            rawMetrics: new DebtMetricsDTO(
+                interestExpense: 2.5, blendedRate: 0.05, historicalFixedRate: 0.05, dynamicSpread: 0.020, currentMarketRate: 0.05,
+                wholesaleRate: 0.05, ebit: 30.0, revenue: 100.0, depreciation: 5.0, ebitda: 35.0
+            ),
+            isLiquidityCrisis: false, isLiquidityWarning: false, isUnderLeveraged: false
+        );
+
+        // Under-levered means "should borrow", so it must never be true where there is nothing left to borrow:
+        // a financial flagged under-levered skips investment and buys back stock, and one that also cannot
+        // borrow is frozen there. TIER sat at 2.4x for twenty years with its book unchanged.
+        for ($ratio = 0.0; $ratio <= $sectorTolerance; $ratio += 0.05) {
+            if ($this->model->isUnderLeveraged($ratio, $sectorTolerance, 5.0, 1.05, 0.12, 0.05)) {
+                $headroom = $this->model->calculateDebtExpansionCapacity(100.0, $ratio * 100.0, $ratio * 100.0, $health, 0.05, 30.0, 5.0);
+                $this->assertGreaterThan(0.0, $headroom, sprintf('Under-levered at %.2fx with no capacity left to borrow.', $ratio));
+            }
+        }
+        $this->assertFalse($this->model->isUnderLeveraged(2.4, $sectorTolerance, 5.0, 1.05, 0.12, 0.05));
+    }
+
     public function testDealActivityIndexStimulatesPeCarriedInterest(): void
     {
         $stock = new Stock();

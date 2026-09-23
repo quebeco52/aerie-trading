@@ -37,6 +37,19 @@ trait FinancialPhysicsTrait
         return (float) $stock->getBaselineRoe();
     }
 
+    /**
+     * The return a balance-sheet firm's revenue capacity is struck at: its structural ROE less the saturation
+     * of its market, never below the cost-of-equity proxy. Trailing results are not an input. A book does not
+     * yield less because last year lost money, and reading them here made every loss a lower revenue target
+     * and a larger loss — the same spiral structural asset turnover removed from operating companies.
+     */
+    protected function resolveStructuralTargetRoe(Stock $stock, MacroStateDTO $macroState): float
+    {
+        $saturationPenalty = \App\Service\Math\CorporateMetrics::getInstance()->calculateMarketSaturationPenalty($stock, max(1.0, (float) $stock->getTotalEquity()), $macroState);
+
+        return max($macroState->policyRate + $macroState->equityRiskPremium, max(0.01, (float) $stock->getBaselineRoe()) - $saturationPenalty);
+    }
+
     public function calculateEconomicReturn(Stock $stock, float $quarterlyNopatOrIncome, float $investedCapital): float
     {
         $equity = (float) $stock->getTotalEquity();

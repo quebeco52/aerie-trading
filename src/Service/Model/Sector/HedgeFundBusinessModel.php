@@ -15,7 +15,6 @@ use App\DTO\StreamContext;
 use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
 use App\Service\Macro\MacroEngine;
-use App\Service\Math\CorporateMetrics;
 use App\Service\Math\MathUtility;
 
 /**
@@ -193,16 +192,7 @@ class HedgeFundBusinessModel extends AssetManagementBusinessModel
     public function getTargetMetrics(Stock $stock, MacroStateDTO $macroState, MathUtility $mathUtility): array
     {
         $equity = (float) $stock->getTotalEquity();
-        $baselineRoe = max(0.01, (float) $stock->getBaselineRoe());
-
-        $ttmRoe = (float) $stock->getRoeTtm();
-        if ($ttmRoe !== 0.0) {
-            $baselineRoe = ($baselineRoe * self::BASELINE_ROE_WEIGHT) + ($ttmRoe * self::TTM_ROE_WEIGHT);
-        }
-
-        $saturationPenalty = CorporateMetrics::getInstance()->calculateMarketSaturationPenalty($stock, max(1.0, $equity), $macroState);
-        $waccBase = $macroState->policyRate + $macroState->equityRiskPremium;
-        $baselineRoe = max($waccBase, $baselineRoe - $saturationPenalty);
+        $baselineRoe = $this->resolveStructuralTargetRoe($stock, $macroState);
 
         $policyRate = $macroState->policyRateEma;
         $yield5y = $macroState->yield5yEma;

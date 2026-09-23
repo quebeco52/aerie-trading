@@ -2133,20 +2133,20 @@ class MathUtility
     }
 
     /**
-     * Calculates the aggregate speculative-grade corporate default rate (Moody's / S&P Speculative Default Model).
+     * Calculates the aggregate all-rated corporate default rate (Moody's issuer-weighted series).
      *
      * Derives realized corporate defaults via the Merton/Vasicek structural credit portfolio transition:
      *   CDR = NormalCDF( (InverseNormalCDF(baseDefault) - sqrt(rho) * macroZ) / sqrt(1 - rho) )
      *
      * @param float $macroZ          Composite macroeconomic credit Z-score.
-     * @param float $baseDefaultRate Long-run average speculative corporate default rate (~1.8%).
-     * @param float $rho             Corporate asset correlation factor (~20% under Basel II/III).
+     * @param float $baseDefaultRate Long-run average all-rated corporate default rate (~1.6%).
+     * @param float $rho             Asset correlation of the default rate (~0.1 on the post-1983 record).
      * @return float Realized annual corporate default rate clamped between 0.2% and 18%.
      */
     public function calculateCorporateDefaultRate(
         float $macroZ,
-        float $baseDefaultRate = 0.018,
-        float $rho = 0.20
+        float $baseDefaultRate = MacroEngine::CORPORATE_DEFAULT_BASELINE,
+        float $rho = \App\Service\Macro\Subsystem\CreditFiscalSubsystem::CORPORATE_DEFAULT_RHO
     ): float {
         $invPd = $this->calculateInverseNormalCDF($baseDefaultRate);
         $sqrtRho = sqrt($rho);
