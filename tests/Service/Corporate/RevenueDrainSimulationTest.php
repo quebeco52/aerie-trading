@@ -102,57 +102,70 @@ class RevenueDrainSimulationTest extends TestCase
      */
     public function testInvestedCapitalKeepsPaceWithInflationWithoutTheEquityRevaluation(): void
     {
-        mt_srand(1234);
-        $earningsEngine = $this->createEngine();
-        $stock = $this->createStockFromInitialMarket('IBHI', 'Engineering & Construction');
-
         $ticksPerYear = 252;
         $ticksPerQuarter = (int) ($ticksPerYear / 4);
         $reportingTick = EarningsEngine::resolveReportingTick('IBHI', $ticksPerYear);
-
-        $openingCapital = null;
-        $openingRevenue = null;
-        $deflator = 1.0;
         $quarters = 24;
 
-        for ($q = 1; $q <= $quarters; $q++) {
-            // Sustained 3% inflation: the price level compounds, quarter by quarter.
-            $deflator *= (1.0 + 0.03 / 4.0);
-            $macro = new MacroStateDTO(
-                outputGapEma: 0.0,
-                policyRate: 0.04,
-                policyRateEma: 0.04,
-                yield2yEma: 0.045,
-                yield5yEma: 0.048,
-                yield10yEma: 0.050,
-                inflationEma: 0.03,
-                gdpDeflator: $deflator,
-            );
+        // One path's closing quarter lands anywhere within fifteen points of its opening one, and real revenue
+        // only just holds its value, so the claim is asserted on the mean over enough draw paths to resolve it.
+        $simulate = function (int $seed) use ($ticksPerYear, $ticksPerQuarter, $reportingTick, $quarters): array {
+            mt_srand($seed);
+            $earningsEngine = $this->createEngine();
+            $stock = $this->createStockFromInitialMarket('IBHI', 'Engineering & Construction');
 
-            $earningsEngine->calculate($stock, $macro, (($q - 1) * $ticksPerQuarter) + $reportingTick, $ticksPerYear);
+            $openingCapital = null;
+            $openingRevenue = null;
+            $deflator = 1.0;
 
-            $openingCapital ??= $stock->getInvestedCapital();
-            $openingRevenue ??= (float) $stock->getTotalRevenue();
-        }
+            for ($q = 1; $q <= $quarters; $q++) {
+                // Sustained 3% inflation: the price level compounds, quarter by quarter.
+                $deflator *= (1.0 + 0.03 / 4.0);
+                $macro = new MacroStateDTO(
+                    outputGapEma: 0.0,
+                    policyRate: 0.04,
+                    policyRateEma: 0.04,
+                    yield2yEma: 0.045,
+                    yield5yEma: 0.048,
+                    yield10yEma: 0.050,
+                    inflationEma: 0.03,
+                    gdpDeflator: $deflator,
+                );
 
-        $capitalGrowth = $stock->getInvestedCapital() / $openingCapital;
-        $revenueGrowth = (float) $stock->getTotalRevenue() / $openingRevenue;
-        $priceGrowth = $deflator;
+                $earningsEngine->calculate($stock, $macro, (($q - 1) * $ticksPerQuarter) + $reportingTick, $ticksPerYear);
+
+                $openingCapital ??= $stock->getInvestedCapital();
+                $openingRevenue ??= (float) $stock->getTotalRevenue();
+            }
+
+            return [
+                'capital' => $stock->getInvestedCapital() / $openingCapital,
+                'revenue' => (float) $stock->getTotalRevenue() / $openingRevenue,
+                'price' => $deflator,
+                'vintage' => (float) $stock->getPpeVintageDeflator(),
+            ];
+        };
+
+        $runs = array_map($simulate, range(1, 30));
+        $mean = static fn (string $key): float => array_sum(array_column($runs, $key)) / count($runs);
+        $priceGrowth = $runs[0]['price'];
 
         // Nominal capital and revenue must at least hold their real value against the price level.
         $this->assertGreaterThanOrEqual(
             $priceGrowth,
-            $capitalGrowth,
+            $mean('capital'),
             'invested capital fell behind the price level, so real capacity is shrinking'
         );
         $this->assertGreaterThanOrEqual(
             $priceGrowth,
-            $revenueGrowth,
+            $mean('revenue'),
             'nominal revenue capacity fell behind the price level'
         );
 
-        // The plant is being replaced at current prices, so its vintage tracks the price level up.
-        $this->assertGreaterThan(1.0, (float) $stock->getPpeVintageDeflator());
+        // The plant is being replaced at current prices, so its vintage tracks the price level up on every path.
+        foreach ($runs as $run) {
+            $this->assertGreaterThan(1.0, $run['vintage']);
+        }
     }
 
     private function createEngine(): EarningsEngine

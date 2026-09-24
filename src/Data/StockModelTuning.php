@@ -303,29 +303,13 @@ class StockModelTuning
         // =====================================================================
 
         // --- Sinking Shore Extraction (SINK) ---
-        // --- Sinking Shore Extraction (SINK) ---
         // Pure-play upstream offshore deepwater oil & gas E&P. Violently leveraged to spot commodity prices & global energy cycles.
         'SINK' => [
-            ModelParam::ExtractionRevenueWeight->value => 0.50, // Deepwater offshore drilling volume
-            ModelParam::SpotPriceWeight->value         => 0.50, // Heavy unhedged spot oil & gas price exposure
-            ModelParam::RefiningSpreadWeight->value    => 0.00,
-            ModelParam::SpotPriceSensitivity->value    => 0.85, // Aggressive unhedged price-taker
-            ModelParam::EnergyPriceExposure->value     => 1.00, // Pure crude & gas price exposure
-            ModelParam::IndustrialMetalsExposure->value => 0.00,
-            ModelParam::AgriculturalExposure->value    => 0.00,
+            ModelParam::LiquidsRevenueShare->value => 0.85, // Deepwater fields are oil-weighted; associated gas is the remainder
+            ModelParam::OilHedgeRatio->value       => 0.15, // Aggressive unhedged price-taker: a token swap ladder
         ],
 
-        // --- Cascade Refining & Marketing (CASC) ---
-        // Downstream high-conversion oil refinery & logistics network. Quant crack-spread arbitrage powerhouse.
-        'CASC' => [
-            ModelParam::ExtractionRevenueWeight->value => 0.25, // Physical refining throughput & logistics terminals
-            ModelParam::SpotPriceWeight->value         => 0.15, // Strategic physical crude storage inventory
-            ModelParam::RefiningSpreadWeight->value    => 0.60, // Algorithmic crack spread arbitrage (gasoline/diesel/jet fuel)
-            ModelParam::SpotPriceSensitivity->value    => 0.30, // Heavily hedged physical inventory
-            ModelParam::EnergyPriceExposure->value     => 1.00, // Crude storage inventory marked to the energy complex
-            ModelParam::IndustrialMetalsExposure->value => 0.00,
-            ModelParam::AgriculturalExposure->value    => 0.00,
-        ],
+        // Cascade Refining (CASC) runs on RefiningBusinessModel's own yield and cost constants: no ticker overrides.
 
         // --- Condor Extraction (CNDR) ---
         // Global base metals & rare earth open-pit strip mining titan. Ruthless physical anchor of the district.

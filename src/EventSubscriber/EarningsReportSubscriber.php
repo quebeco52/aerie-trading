@@ -12,6 +12,7 @@ use App\Data\Sectors;
 use App\Service\Corporate\DebtEngine;
 use App\Service\Macro\MacroEngine;
 use App\Service\Model\Sector\PrivateEquityBusinessModel;
+use App\Service\Model\Sector\RefiningBusinessModel;
 
 class EarningsReportSubscriber implements EventSubscriberInterface
 {
@@ -647,6 +648,50 @@ class EarningsReportSubscriber implements EventSubscriberInterface
                         'fields' => ['energy_price_index_ema'],
                     ];
                 }
+                break;
+
+            case 'oil_gas_producer':
+                // Volume times the benchmark price: each stream moves with its own hub.
+                if ($streamKey === 'crude_oil') {
+                    $drivers[] = [
+                        'label'  => 'Benchmark Crude Price',
+                        'impact' => round(($macro->energyPriceIndexEma / MacroEngine::ENERGY_BASELINE) - 1.0, 4),
+                        'type'   => 'macro',
+                        'fields' => ['energy_price_index_ema'],
+                    ];
+                } elseif ($streamKey === 'natural_gas') {
+                    $drivers[] = [
+                        'label'  => 'Natural Gas Hub Price',
+                        'impact' => round(($macro->naturalGasPriceIndexEma / MacroEngine::NATURAL_GAS_BASELINE) - 1.0, 4),
+                        'type'   => 'macro',
+                        'fields' => ['natural_gas_price_index_ema'],
+                    ];
+                }
+                break;
+
+            case 'refining':
+                $refiner = Sectors::getBusinessModelStrategy('refining');
+                if ($refiner instanceof RefiningBusinessModel) {
+                    $marginDrivers = $refiner->describeMarginDrivers($macro);
+                    $drivers[] = [
+                        'label'  => 'Benchmark Crack Spread',
+                        'impact' => round($marginDrivers['crack'], 4),
+                        'type'   => 'macro',
+                        'fields' => ['refining_crack_spread_ema'],
+                    ];
+                    $drivers[] = [
+                        'label'  => 'Crude Cost of the Secondary Barrel',
+                        'impact' => round($marginDrivers['crude'], 4),
+                        'type'   => 'macro',
+                        'fields' => ['energy_price_index_ema'],
+                    ];
+                }
+                $drivers[] = [
+                    'label'  => 'Fuel Demand & Run Rates',
+                    'impact' => round($macro->outputGapEma * RefiningBusinessModel::OPERATING_CYCLICALITY, 4),
+                    'type'   => 'macro',
+                    'fields' => ['output_gap_ema'],
+                ];
                 break;
 
             case 'commodity':

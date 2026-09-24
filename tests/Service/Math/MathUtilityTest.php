@@ -1270,6 +1270,44 @@ class MathUtilityTest extends TestCase
         $this->assertLessThanOrEqual($theta, $nextPrice);
     }
 
+    public function testSchwartzForwardIsTheExpectedSpotOfTheSameExactTransition(): void
+    {
+        $spot = 150.0;
+        $kappa = 0.8;
+        $theta = 100.0;
+        $sigma = 0.25;
+
+        // Delivery now is the spot itself.
+        $this->assertEqualsWithDelta($spot, $this->mathUtility->calculateSchwartzForwardPrice($spot, $kappa, $theta, $sigma, 0.0), 1e-9);
+
+        // Any horizon: E[S_T] = exp(m + v/2) of the log-normal transition calculateSchwartz1Factor steps with.
+        foreach ([0.25, 0.5, 1.0, 3.0] as $horizon) {
+            $alpha = log($theta) - ($sigma * $sigma) / (2.0 * $kappa);
+            $mean = (exp(-$kappa * $horizon) * log($spot)) + ((1.0 - exp(-$kappa * $horizon)) * $alpha);
+            $variance = ($sigma * $sigma / (2.0 * $kappa)) * (1.0 - exp(-2.0 * $kappa * $horizon));
+
+            $this->assertEqualsWithDelta(
+                exp($mean + ($variance / 2.0)),
+                $this->mathUtility->calculateSchwartzForwardPrice($spot, $kappa, $theta, $sigma, $horizon),
+                1e-9
+            );
+        }
+
+        // A spike above equilibrium prices a backwardated curve: each later delivery is cheaper.
+        $oneQuarter = $this->mathUtility->calculateSchwartzForwardPrice($spot, $kappa, $theta, $sigma, 0.25);
+        $oneYear = $this->mathUtility->calculateSchwartzForwardPrice($spot, $kappa, $theta, $sigma, 1.0);
+        $this->assertLessThan($spot, $oneQuarter);
+        $this->assertLessThan($oneQuarter, $oneYear);
+        $this->assertGreaterThan($theta * 0.9, $oneYear);
+
+        // The curve's far end is where the transition's stationary mean sits.
+        $this->assertEqualsWithDelta(
+            exp(log($theta) - ($sigma * $sigma) / (4.0 * $kappa)),
+            $this->mathUtility->calculateSchwartzForwardPrice($spot, $kappa, $theta, $sigma, 100.0),
+            1e-6
+        );
+    }
+
     public function testCalculateEarningsResponseCoefficient(): void
     {
         // Moderate SUE (+5% surprise)

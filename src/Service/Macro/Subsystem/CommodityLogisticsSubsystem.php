@@ -148,14 +148,12 @@ class CommodityLogisticsSubsystem
     public function calculateEnergyShock(MacroState $state, float $dt): void
     {
         // Ezekiel (1938) cobweb dynamics: capacity chases lagged prices while spot market clears demand.
-        $demandIndex = MacroEngine::ENERGY_BASELINE * (1.0 + ($state->globalDemandGapEma * self::ENERGY_DEMAND_GAP_SENSITIVITY));
         $priceSeen = $state->energyPriceIndexEma > 0.0 ? $state->energyPriceIndexEma : MacroEngine::ENERGY_BASELINE;
         $targetSupply = MacroEngine::ENERGY_BASELINE * (($priceSeen / MacroEngine::ENERGY_BASELINE) ** self::ENERGY_SUPPLY_ELASTICITY);
         $supplyWeight = 1.0 - exp(-$dt / self::ENERGY_SUPPLY_LAG_YEARS);
         $state->energySupplyEma += $supplyWeight * ($targetSupply - $state->energySupplyEma);
 
-        $utilization = max(0.20, $demandIndex) / max(20.0, $state->energySupplyEma);
-        $equilibriumPrice = max(self::MIN_ENERGY_EQUILIBRIUM, min(self::MAX_ENERGY_EQUILIBRIUM, MacroEngine::ENERGY_BASELINE * ($utilization ** self::ENERGY_CAPACITY_INELASTICITY)));
+        $equilibriumPrice = self::resolveEnergyEquilibriumPrice($state->globalDemandGapEma, $state->energySupplyEma);
 
         $dW = $this->mathUtility->generateStandardNormal();
         $currentBase = $state->energyBasePrice > 0.0 ? $state->energyBasePrice : $state->energyPriceIndex;
@@ -197,6 +195,19 @@ class CommodityLogisticsSubsystem
 
         $state->energyPriceIndex = max(10.0, min(350.0, $baseProcess + $jumpAmount + $conveniencePricePremium));
         $state->energyPriceShock = $state->energyPriceIndex - MacroEngine::ENERGY_BASELINE;
+    }
+
+    /**
+     * The price the energy spot process reverts to: global demand over lagging productive capacity, cleared at
+     * the combined short-run inelasticity (Ezekiel 1938 cobweb; Kilian & Murphy 2014). It is the theta of the
+     * Schwartz (1997) base process, so a producer striking forwards off the same curve reads it from here.
+     */
+    public static function resolveEnergyEquilibriumPrice(float $globalDemandGapEma, float $energySupplyEma): float
+    {
+        $demandIndex = MacroEngine::ENERGY_BASELINE * (1.0 + ($globalDemandGapEma * self::ENERGY_DEMAND_GAP_SENSITIVITY));
+        $utilization = max(0.20, $demandIndex) / max(20.0, $energySupplyEma);
+
+        return max(self::MIN_ENERGY_EQUILIBRIUM, min(self::MAX_ENERGY_EQUILIBRIUM, MacroEngine::ENERGY_BASELINE * ($utilization ** self::ENERGY_CAPACITY_INELASTICITY)));
     }
 
     /**

@@ -86,10 +86,10 @@ class DistrictMap
         ],
         // The extraction and generation end. 'commodity' used to sit inside the materials block,
         // which stood the oil houses between the machine shops and the chemical works. Named for
-        // extraction rather than energy because one business model carries both the wells and the
-        // mines: CNDR digs copper on the same `commodity` physics SINK drills with, and a copper
-        // miner under a bracket reading ENERGY is the same kind of lie this pass set out to remove.
-        'Extraction & Power' => ['commodity', 'utility'],
+        // extraction rather than energy because the block holds the mines as well as the wells:
+        // CNDR digs copper on `commodity` physics beside SINK's wells and CASC's refinery, and a
+        // copper miner under a bracket reading ENERGY is the same kind of lie this pass set out to remove.
+        'Extraction & Power' => ['oil_gas_producer', 'refining', 'commodity', 'utility'],
         'Technology & Telecoms' => ['tech', 'computer_hardware', 'semiconductor', 'communication_equipment', 'telecom'],
         'Property & Health' => ['reit', 'medical_care_facility', 'biotech'],
     ];
@@ -320,10 +320,10 @@ class DistrictMap
         // Underwriters: an umbrella. Market data: a bar chart.
         'insurance' => 'umbrella', 'reinsurance' => 'umbrella', 'retail_insurance' => 'umbrella',
         'financial_data' => 'chart',
-        // Process industry: a factory; commodities: a derrick; chemistry: a flask.
+        // Process industry: a factory; wells and mines: a derrick; refineries: a flare stack; chemistry: a flask.
         'steel_manufacturing' => 'factory', 'specialty_industrial_machinery' => 'factory',
         'tools_and_accessories' => 'factory', 'heavy_manufacturing' => 'factory',
-        'commodity' => 'derrick', 'chemical' => 'flask',
+        'commodity' => 'derrick', 'oil_gas_producer' => 'derrick', 'refining' => 'flare_stack', 'chemical' => 'flask',
         // Movers and builders.
         'construction' => 'crane', 'shipping' => 'anchor', 'logistics' => 'truck',
         'railroad' => 'train', 'waste_management' => 'bin',

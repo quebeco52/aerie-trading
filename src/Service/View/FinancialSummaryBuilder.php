@@ -47,6 +47,10 @@ class FinancialSummaryBuilder
         'walt_years' => ['WALT', 'years'],
         'releasing_spread' => ['Re-leasing Spread', 'signed_percent'],
         'in_place_rent_index' => ['In-Place Rent Index', 'index'],
+        'realized_price_index' => ['Realized Price Index', 'index'],
+        'hedge_gain' => ['Hedge Gain / Revenue', 'signed_percent'],
+        'capture_rate' => ['Crack Capture', 'percent'],
+        'throughput_index' => ['Throughput Index', 'index'],
     ];
 
     public function __construct(

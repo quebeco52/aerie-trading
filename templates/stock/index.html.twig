@@ -1887,7 +1887,7 @@
 						{% endif %}
 
 						{# Commodities / Shipping: Cyclical Dynamics & Deleveraging #}
-						{% if businessModel|default('none') in ['commodity', 'shipping'] %}
+						{% if businessModel|default('none') in ['commodity', 'oil_gas_producer', 'refining', 'shipping'] %}
 							<div class="chart-card bg-surface-container-low border border-outline-variant/15 rounded-lg p-5 hover:border-outline-variant/30 transition-all flex flex-col justify-between" data-financial-category="sector">
 								<div class="flex items-start justify-between mb-3 gap-2">
 									<div class="flex items-center gap-2.5 min-w-0">

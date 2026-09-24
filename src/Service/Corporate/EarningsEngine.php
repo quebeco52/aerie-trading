@@ -741,7 +741,14 @@ class EarningsEngine
 
         // Asymmetric Cost Stickiness (Anderson, Banker, & Janakiraman 2003):
         // Operating costs contract sluggishly when revenue drops, squeezing variable margins during contractions.
-        $priorRevenue = $ctx->previousQuarterlyRevenue > 0.0 ? $ctx->previousQuarterlyRevenue : $ctx->expectedRevenue;
+        // Both quarters are read on expected revenue, the activity the cost base was resourced for: last
+        // quarter's actual also carries its market price and one-off shocks, which are not activity.
+        $priorExpectedRevenue = (float) (($stock->getEarningsMomentumZ() ?? [])[FinancialConstants::STATE_LAST_EXPECTED_REVENUE] ?? 0.0);
+        $priorRevenue = match (true) {
+            $priorExpectedRevenue > 0.0 => $priorExpectedRevenue,
+            $ctx->previousQuarterlyRevenue > 0.0 => $ctx->previousQuarterlyRevenue,
+            default => $ctx->expectedRevenue,
+        };
         $currentDeseasonalized = $ctx->expectedRevenue / max(0.01, $ctx->seasonalFactor);
         $priorDeseasonalized   = $priorRevenue        / max(0.01, $ctx->priorSeasonalFactor);
         $revenueLogChange = max(-0.50, min(0.50, log(max(0.01, $currentDeseasonalized / max(1.0, $priorDeseasonalized)))));

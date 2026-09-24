@@ -486,7 +486,7 @@ export function updateFundamentalCharts(timeframe, rawReports, context = {}) {
         renderWhenVisible('reitCoverageChart', () => renderReitCoverageChart(labels, reitPayoutRatioData, reitLtvData, reitSpreadData, capitalRatioData, capitalThresholds));
     } else if (['tech', 'semiconductor', 'biotech', 'defense_contractor'].includes(businessModel)) {
         renderWhenVisible('reinvestmentIntensityChart', () => renderReinvestmentIntensityChart(labels, capexRevenueRatioData, operatingMarginData, roicData));
-    } else if (['commodity', 'shipping'].includes(businessModel)) {
+    } else if (['commodity', 'oil_gas_producer', 'refining', 'shipping'].includes(businessModel)) {
         renderWhenVisible('cyclicalDynamicsChart', () => renderCyclicalDynamicsChart(labels, operatingMarginData, debtData, treasuryData));
     }
 
@@ -607,7 +607,7 @@ function updateFinancialHud(m) {
         const lastRoic = last(m.roicData);
         setHud('hud-reinvestmentIntensityChart', `CapEx/Rev: ${lastCapEx.toFixed(1)}% | ROIC: ${lastRoic.toFixed(1)}%`);
     }
-    if (['commodity', 'shipping'].includes(m.businessModel)) {
+    if (['commodity', 'oil_gas_producer', 'refining', 'shipping'].includes(m.businessModel)) {
         const lastMargin = last(m.operatingMarginData);
         const lastCash = last(m.treasuryData);
         setHud('hud-cyclicalDynamicsChart', `Margin: ${lastMargin.toFixed(1)}% | Cash: ${formatLarge(lastCash, '$')}`);

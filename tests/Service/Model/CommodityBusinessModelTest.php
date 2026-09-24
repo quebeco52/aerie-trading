@@ -65,7 +65,7 @@ class CommodityBusinessModelTest extends TestCase
     public function testInflationAndEnergySpikeExplodesSpotRevenue(): void
     {
         $stock = new Stock();
-        $stock->setTicker('SINK');
+        $stock->setTicker('GEN_COMMODITY');
         $stock->setBeta('1.5');
 
         $normalMacro = new MacroStateDTO(outputGapEma: 0.0, inflationEma: 0.02, energyPriceIndexEma: 100.0);
@@ -94,17 +94,22 @@ class CommodityBusinessModelTest extends TestCase
             mathUtility: $mathMock
         );
 
-        // Spot price revenue surges aggressively under high inflation + energy spike (Schwartz convenience yield)
-        $this->assertGreaterThan(
-            $normalResult->streamRevenue['spot_price'] * 1.5,
-            $spikeResult->streamRevenue['spot_price']
+        // The default spot book: a doubled energy index at the default exposure and pass-through, plus the
+        // inflation excess passed through at operating cyclicality.
+        $expectedLift = 1.0
+            + (CommodityBusinessModel::ENERGY_PRICE_EXPOSURE * 1.0 * CommodityBusinessModel::SPOT_PRICE_SENSITIVITY)
+            + (0.04 * CommodityBusinessModel::OPERATING_CYCLICALITY * CommodityBusinessModel::INFLATION_BONUS_SCALAR * CommodityBusinessModel::SPOT_PRICE_SENSITIVITY);
+        $this->assertEqualsWithDelta(
+            $normalResult->streamRevenue['spot_price'] * $expectedLift,
+            $spikeResult->streamRevenue['spot_price'],
+            1.0
         );
     }
 
     public function testRefiningCrackSpreadSurgesWithTightOutputGap(): void
     {
         $stock = new Stock();
-        $stock->setTicker('CASC');
+        $stock->setTicker('GEN_COMMODITY');
         $stock->setBeta('1.0');
 
         $recessionMacro = new MacroStateDTO(outputGapEma: -0.03, inflationEma: 0.02, energyPriceIndexEma: 100.0);
@@ -142,13 +147,9 @@ class CommodityBusinessModelTest extends TestCase
         $mathMock = $this->createStub(MathUtility::class);
         $mathMock->method('generatePersistentZ')->willReturn(0.0);
 
-        $sink = new Stock();
-        $sink->setTicker('SINK');
-        $sink->setBeta('1.0');
-
-        $casc = new Stock();
-        $casc->setTicker('CASC');
-        $casc->setBeta('1.0');
+        $generic = new Stock();
+        $generic->setTicker('GEN_COMMODITY');
+        $generic->setBeta('1.0');
 
         $cndr = new Stock();
         $cndr->setTicker('CNDR');
@@ -156,19 +157,13 @@ class CommodityBusinessModelTest extends TestCase
 
         $macro = new MacroStateDTO(outputGapEma: 0.0, inflationEma: 0.02, energyPriceIndexEma: 100.0);
 
-        $sinkRes = $this->model->computeActualFinancials($sink, 100_000_000.0, 0.30, 20_000_000.0, 0.0, $macro, $mathMock);
-        $cascRes = $this->model->computeActualFinancials($casc, 100_000_000.0, 0.30, 20_000_000.0, 0.0, $macro, $mathMock);
+        $genericRes = $this->model->computeActualFinancials($generic, 100_000_000.0, 0.30, 20_000_000.0, 0.0, $macro, $mathMock);
         $cndrRes = $this->model->computeActualFinancials($cndr, 100_000_000.0, 0.30, 20_000_000.0, 0.0, $macro, $mathMock);
 
-        // SINK: 50% Extraction, 50% Spot, 0% Refining
-        $this->assertEqualsWithDelta(50_000_000.0, $sinkRes->streamRevenue['extraction_volume'], 1.0);
-        $this->assertEqualsWithDelta(50_000_000.0, $sinkRes->streamRevenue['spot_price'], 1.0);
-        $this->assertEqualsWithDelta(0.0, $sinkRes->streamRevenue['refining_spread'], 1.0);
-
-        // CASC: 25% Extraction/Throughput, 15% Spot, 60% Refining Spread
-        $this->assertEqualsWithDelta(25_000_000.0, $cascRes->streamRevenue['extraction_volume'], 1.0);
-        $this->assertEqualsWithDelta(15_000_000.0, $cascRes->streamRevenue['spot_price'], 1.0);
-        $this->assertEqualsWithDelta(60_000_000.0, $cascRes->streamRevenue['refining_spread'], 1.0);
+        // An untuned ticker runs on the default tri-stream weights.
+        $this->assertEqualsWithDelta(45_000_000.0, $genericRes->streamRevenue['extraction_volume'], 1.0);
+        $this->assertEqualsWithDelta(35_000_000.0, $genericRes->streamRevenue['spot_price'], 1.0);
+        $this->assertEqualsWithDelta(20_000_000.0, $genericRes->streamRevenue['refining_spread'], 1.0);
 
         // CNDR: 60% Extraction, 40% Spot, 0% Refining
         $this->assertEqualsWithDelta(60_000_000.0, $cndrRes->streamRevenue['extraction_volume'], 1.0);
@@ -224,7 +219,7 @@ class CommodityBusinessModelTest extends TestCase
     public function testEnergyPriceSpikeSqueezesRefiningCrackSpreadMargin(): void
     {
         $stock = new Stock();
-        $stock->setTicker('CASC');
+        $stock->setTicker('GEN_COMMODITY');
         $stock->setBeta('1.0');
 
         // Neutral energy vs heavy energy feedstock price spike with neutral demand (outputGap = 0)
@@ -398,10 +393,10 @@ class CommodityBusinessModelTest extends TestCase
     }
     public function testSpotRevenueIsSignedInTheCommodityComplexPrice(): void
     {
-        // Price-takers book price x volume: a crude slump must cut an E&P's spot revenue, not leave it flat.
-        $sink = new Stock();
-        $sink->setTicker('SINK');
-        $sink->setBeta('1.5');
+        // Price-takers book price x volume: a crude slump must cut an energy-exposed spot book, not leave it flat.
+        $generic = new Stock();
+        $generic->setTicker('GEN_COMMODITY');
+        $generic->setBeta('1.5');
 
         $mathMock = $this->createStub(MathUtility::class);
         $mathMock->method('generatePersistentZ')->willReturn(0.0);
@@ -421,11 +416,15 @@ class CommodityBusinessModelTest extends TestCase
         $neutral = new MacroStateDTO(outputGapEma: 0.0, inflationEma: 0.02, energyPriceIndexEma: 100.0);
         $slump   = new MacroStateDTO(outputGapEma: 0.0, inflationEma: 0.02, energyPriceIndexEma: 70.0);
 
-        $neutralSpot = $run($sink, $neutral);
-        $slumpSpot   = $run($sink, $slump);
+        $neutralSpot = $run($generic, $neutral);
+        $slumpSpot   = $run($generic, $slump);
 
-        // SINK: 100% energy exposure at 0.85 pass-through -> -30% x 0.85 = -25.5%
-        $this->assertEqualsWithDelta($neutralSpot * (1.0 - (0.30 * 0.85)), $slumpSpot, 1.0);
+        // Default book: 60% energy exposure at 50% pass-through -> -30% x 0.60 x 0.50 = -9%
+        $this->assertEqualsWithDelta(
+            $neutralSpot * (1.0 - (0.30 * CommodityBusinessModel::ENERGY_PRICE_EXPOSURE * CommodityBusinessModel::SPOT_PRICE_SENSITIVITY)),
+            $slumpSpot,
+            1.0
+        );
 
         // CNDR is a base-metals miner: crude is irrelevant, the metals complex is everything.
         $cndr = new Stock();
@@ -439,18 +438,18 @@ class CommodityBusinessModelTest extends TestCase
 
     public function testTightPhysicalInventoryPaysConvenienceYieldOnlyInBackwardation(): void
     {
-        $sink = new Stock();
-        $sink->setTicker('SINK');
-        $sink->setBeta('1.5');
+        $producer = new Stock();
+        $producer->setTicker('GEN_COMMODITY');
+        $producer->setBeta('1.5');
 
         $math = new MathUtility();
         $mathMock = $this->getMockBuilder(MathUtility::class)->onlyMethods(['generatePersistentZ'])->getMock();
         $mathMock->method('generatePersistentZ')->willReturn(0.0);
 
-        $run = function (float $inventory) use ($sink, $mathMock): float {
+        $run = function (float $inventory) use ($producer, $mathMock): float {
             $macro = new MacroStateDTO(outputGapEma: 0.0, inflationEma: 0.02, energyPriceIndexEma: 100.0, energyInventoryIndexEma: $inventory);
             return $this->model->computeActualFinancials(
-                $sink,
+                $producer,
                 expectedRevenue: 100_000_000.0,
                 realizedVariableMargin: 0.35,
                 fixedCosts: 20_000_000.0,

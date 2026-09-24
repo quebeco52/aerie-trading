@@ -101,6 +101,10 @@ enum ModelParam: string
     case EnergyPriceExposure = 'energy_price_exposure';
     case IndustrialMetalsExposure = 'industrial_metals_exposure';
     case AgriculturalExposure = 'agricultural_exposure';
+    /** Share of an oil and gas producer's revenue at baseline prices that is crude and liquids rather than natural gas. */
+    case LiquidsRevenueShare = 'liquids_revenue_share';
+    /** Share of a producer's oil volume sold forward through its rolling four-quarter swap ladder. */
+    case OilHedgeRatio = 'oil_hedge_ratio';
     case OemEquipmentWeight = 'oem_equipment_weight';
     case AftermarketMroWeight = 'aftermarket_mro_weight';
     case ContractOemWeight = 'contract_oem_weight';

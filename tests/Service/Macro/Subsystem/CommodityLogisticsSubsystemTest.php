@@ -2,6 +2,7 @@
 
 namespace App\Tests\Service\Macro\Subsystem;
 
+use App\Service\Macro\MacroEngine;
 use App\Service\Macro\MacroState;
 use App\Service\Macro\Subsystem\CommodityLogisticsSubsystem;
 use App\Service\Math\MathUtility;
@@ -36,6 +37,30 @@ class CommodityLogisticsSubsystemTest extends TestCase
         $this->assertGreaterThan(20.0, $state->industrialMetalsIndex);
         $this->assertGreaterThan(20.0, $state->agriculturalCommodityIndex);
         $this->assertGreaterThan(20.0, $state->freightRateIndex);
+    }
+
+    public function testEnergyEquilibriumClearsGlobalDemandOverLaggedCapacity(): void
+    {
+        // Balanced: demand at baseline against baseline capacity clears at the baseline price.
+        $this->assertEqualsWithDelta(
+            MacroEngine::ENERGY_BASELINE,
+            CommodityLogisticsSubsystem::resolveEnergyEquilibriumPrice(0.0, MacroEngine::ENERGY_BASELINE),
+            1e-9
+        );
+
+        // A 2% global boom against unchanged capacity clears at the combined inelasticity.
+        $boomDemand = 1.0 + (0.02 * CommodityLogisticsSubsystem::ENERGY_DEMAND_GAP_SENSITIVITY);
+        $this->assertEqualsWithDelta(
+            MacroEngine::ENERGY_BASELINE * ($boomDemand ** CommodityLogisticsSubsystem::ENERGY_CAPACITY_INELASTICITY),
+            CommodityLogisticsSubsystem::resolveEnergyEquilibriumPrice(0.02, MacroEngine::ENERGY_BASELINE),
+            1e-9
+        );
+
+        // Capacity built out far beyond demand cannot drag the equilibrium below the floor any market has cleared at.
+        $this->assertSame(
+            CommodityLogisticsSubsystem::MIN_ENERGY_EQUILIBRIUM,
+            CommodityLogisticsSubsystem::resolveEnergyEquilibriumPrice(-0.05, 400.0)
+        );
     }
 
     public function testConvenienceYieldSpikesWhenPhysicalInventoryDrawsDown(): void

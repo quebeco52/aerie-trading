@@ -283,17 +283,12 @@ class StockModelTuningTest extends TestCase
         $this->assertSame(0.70, StockModelTuning::get('NUTH', ModelParam::PricingPowerIndex, 0.0));
         $this->assertSame(1.25, StockModelTuning::get('NUTH', ModelParam::OperatingCyclicality, 0.0));
 
-        // Sinking Shore Extraction (SINK)
-        $this->assertSame(0.50, StockModelTuning::get('SINK', ModelParam::ExtractionRevenueWeight, 0.0));
-        $this->assertSame(0.50, StockModelTuning::get('SINK', ModelParam::SpotPriceWeight, 0.0));
-        $this->assertSame(0.00, StockModelTuning::get('SINK', ModelParam::RefiningSpreadWeight, 0.0));
-        $this->assertSame(0.85, StockModelTuning::get('SINK', ModelParam::SpotPriceSensitivity, 0.0));
+        // Sinking Shore Extraction (SINK): an oil-weighted deepwater producer running a token swap ladder.
+        $this->assertSame(0.85, StockModelTuning::get('SINK', ModelParam::LiquidsRevenueShare, 0.0));
+        $this->assertSame(0.15, StockModelTuning::get('SINK', ModelParam::OilHedgeRatio, 0.0));
 
-        // Cascade Refining & Marketing (CASC)
-        $this->assertSame(0.25, StockModelTuning::get('CASC', ModelParam::ExtractionRevenueWeight, 0.0));
-        $this->assertSame(0.15, StockModelTuning::get('CASC', ModelParam::SpotPriceWeight, 0.0));
-        $this->assertSame(0.60, StockModelTuning::get('CASC', ModelParam::RefiningSpreadWeight, 0.0));
-        $this->assertSame(0.30, StockModelTuning::get('CASC', ModelParam::SpotPriceSensitivity, 0.0));
+        // Cascade Refining (CASC) runs on the refining model's own constants.
+        $this->assertFalse(StockModelTuning::hasOverrides('CASC'));
 
         // Condor Extraction (CNDR)
         $this->assertSame(0.60, StockModelTuning::get('CNDR', ModelParam::ExtractionRevenueWeight, 0.0));
@@ -393,6 +388,8 @@ class StockModelTuningTest extends TestCase
             new \App\Service\Model\Sector\ClearingHouseBusinessModel(),
             new \App\Service\Model\Sector\CommercialBankBusinessModel(),
             new \App\Service\Model\Sector\CommodityBusinessModel(),
+            new \App\Service\Model\Sector\OilGasProducerBusinessModel(),
+            new \App\Service\Model\Sector\RefiningBusinessModel(),
             new \App\Service\Model\Sector\ComputerHardwareBusinessModel(),
             new \App\Service\Model\Sector\CommunicationEquipmentBusinessModel(),
             new \App\Service\Model\Sector\ConglomerateBusinessModel(),

@@ -29,7 +29,9 @@ class Sectors
         'shadow_bank'     => 'Non-depository financial institutions (Mortgage Finance, Mortgage REITs). They fund massive loan books entirely through short-term wholesale debt. Hyper-vulnerable to yield curve inversions and mortgage default spikes during housing crashes. Evaluated on ROE.',
         'reit'            => 'Real Estate Investment Trusts hold physical property. Evaluated on Funds From Operations (FFO). Pays 0% corporate tax but must issue heavy debt to expand due to high dividend payouts. Features CPI rent escalators (inflation hedge) and tenant vacancy risks.',
         'utility'         => 'Regulated monopolies and essential infrastructure (Power, Water, Telecom, Waste Management) with heavily regulated Return on Invested Capital (ROIC). They grow absolute earnings by deploying massive CapEx. Revenues are hyper-stable, but rate hikes lag behind inflation, causing temporary margin compression during inflationary spikes.',
-        'commodity'       => 'Heavy extractors and refiners (Metals, Mining, Oil & Gas) acting as ultimate "Price Takers." Revenues are violently driven by global supply and demand. Inflation is a blessing: as the base of the supply chain, their margins explode upwards during inflationary spikes.',
+        'commodity'       => 'Heavy extractors of metals and minerals acting as ultimate "Price Takers." Revenues are violently driven by global supply and demand. Inflation is a blessing: as the base of the supply chain, their margins explode upwards during inflationary spikes.',
+        'oil_gas_producer' => 'Upstream oil and gas producers selling every barrel into a global market at the going price. Revenue is volume times the realized crude and gas price, cushioned by a rolling year of forward swaps; lifting costs are paid per barrel, so a price move lands on margin in full. Output does not follow the domestic cycle, and fields deplete unless reinvestment replaces them.',
+        'refining'        => 'Merchant refiners that buy crude and sell the gasoline, diesel and jet it is cracked into. Revenue rises with crude, but the margin is the crack spread earned on a largely fixed plant, so earnings swing from losses to records across the cycle. Spring turnarounds and the summer driving season set the seasonal run rate.',
         'financial_data'  => 'Asset-light data monopolies. Characterized by incredibly sticky recurring subscription revenue, ultra-high margins, and complete immunity to physical supply chain inflation. Features exceptionally low idiosyncratic variance.',
         'tech'            => 'Asset-light platform businesses with near-zero marginal costs. Immune to physical supply chains but exposed to high wage inflation. Features higher baseline volatility and fat-tail risks like massive regulatory anti-trust fines or data breaches.',
         'consumer_staples' => 'Produces essential goods and non-cyclical services (Food, Tobacco, Household, Discount Stores). Features inelastic demand (very low volatility) and high pricing power, allowing them to completely ignore supply chain inflation penalties.',
@@ -164,11 +166,11 @@ class Sectors
         'Merchant Houses' => ['pe' => 11.00, 'depreciation' => 0.05, 'ebitda_limit' => 4.0, 'equity_limit' => 2.0, 'business_model' => 'merchant_house'],
         'Metal Fabrication' => ['pe' => 13.00, 'depreciation' => 0.06, 'ebitda_limit' => 3.0, 'equity_limit' => 1.5, 'business_model' => 'heavy_manufacturing'],
         'Mortgage Finance' => ['pe' => 11.00, 'depreciation' => 0.02, 'ebitda_limit' => 999.0, 'equity_limit' => 8.0, 'business_model' => 'shadow_bank'], // Shadow banks / Fannie Mae. Bank Rule.
-        'Oil & Gas E&P' => ['pe' => 11.00, 'depreciation' => 0.12, 'ebitda_limit' => 2.5, 'equity_limit' => 1.0, 'business_model' => 'commodity'], // Exploration. Wells deplete incredibly fast.
+        'Oil & Gas E&P' => ['pe' => 11.00, 'depreciation' => 0.12, 'ebitda_limit' => 2.5, 'equity_limit' => 1.0, 'business_model' => 'oil_gas_producer'], // Exploration. Wells deplete incredibly fast.
         'Oil & Gas Equipment & Services' => ['pe' => 14.00, 'depreciation' => 0.08, 'ebitda_limit' => 2.5, 'equity_limit' => 1.0, 'business_model' => 'commodity'], // Cyclical services.
         'Oil & Gas Integrated' => ['pe' => 13.00, 'depreciation' => 0.08, 'ebitda_limit' => 3.0, 'equity_limit' => 1.5, 'business_model' => 'commodity'], // Exxon/Chevron. Safer than E&P.
         'Oil & Gas Midstream' => ['pe' => 14.00, 'depreciation' => 0.06, 'ebitda_limit' => 4.5, 'equity_limit' => 2.0, 'business_model' => 'commodity'], // Pipelines. "Toll roads", highly stable.
-        'Oil & Gas Refining & Marketing' => ['pe' => 11.00, 'depreciation' => 0.08, 'ebitda_limit' => 2.5, 'equity_limit' => 1.5, 'business_model' => 'commodity'], // Crack spreads are volatile.
+        'Oil & Gas Refining & Marketing' => ['pe' => 11.00, 'depreciation' => 0.08, 'ebitda_limit' => 2.5, 'equity_limit' => 1.5, 'business_model' => 'refining'], // Crack spreads are volatile.
         'Packaged Foods' => ['pe' => 16.00, 'depreciation' => 0.04, 'ebitda_limit' => 4.0, 'equity_limit' => 1.5, 'business_model' => 'consumer_staples'], // Extremely defensive.
         'Packaging & Containers' => ['pe' => 15.00, 'depreciation' => 0.06, 'ebitda_limit' => 3.5, 'equity_limit' => 1.5, 'business_model' => 'heavy_manufacturing'],
         'Personal Services' => ['pe' => 18.00, 'depreciation' => 0.05, 'ebitda_limit' => 3.0, 'equity_limit' => 1.0, 'business_model' => 'none'],
@@ -280,6 +282,8 @@ class Sectors
             'clearing_house'  => new \App\Service\Model\Sector\ClearingHouseBusinessModel(),
             'utility'         => new \App\Service\Model\Sector\UtilityBusinessModel(),
             'commodity'       => new \App\Service\Model\Sector\CommodityBusinessModel(),
+            'oil_gas_producer' => new \App\Service\Model\Sector\OilGasProducerBusinessModel(),
+            'refining'        => new \App\Service\Model\Sector\RefiningBusinessModel(),
             'financial_data'  => new \App\Service\Model\Sector\FinancialDataBusinessModel(),
             'medical_care_facility' => new \App\Service\Model\Sector\MedicalCareFacilityBusinessModel(),
             'tech'            => new \App\Service\Model\Sector\TechBusinessModel(),

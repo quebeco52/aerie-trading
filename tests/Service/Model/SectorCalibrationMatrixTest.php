@@ -11,6 +11,8 @@ use App\Service\Model\Sector\DefenseContractorBusinessModel;
 use App\Service\Model\Sector\FinancialDataBusinessModel;
 use App\Service\Model\Sector\LawFirmBusinessModel;
 use App\Service\Model\Sector\LuxuryBusinessModel;
+use App\Service\Model\Sector\OilGasProducerBusinessModel;
+use App\Service\Model\Sector\RefiningBusinessModel;
 use App\Service\Model\Sector\ReitBusinessModel;
 use App\Service\Model\Sector\RestaurantBusinessModel;
 use App\Service\Model\Sector\SemiconductorBusinessModel;
@@ -237,6 +239,13 @@ final class SectorCalibrationMatrixTest extends TestCase
             ReitBusinessModel::OPERATING_CYCLICALITY,
             'A leased property book must be steadier than the restaurants inside it.'
         );
+        // A producer sells every barrel into a global pool at the going price; a refinery's runs follow the
+        // fuel demand of the economy it supplies.
+        $this->assertLessThan(
+            RefiningBusinessModel::OPERATING_CYCLICALITY,
+            OilGasProducerBusinessModel::OPERATING_CYCLICALITY,
+            'An oil producer\'s volume must answer the domestic cycle less than a refinery\'s runs do.'
+        );
 
         // The whole non-financial cross-section has to sit around unit cyclicality rather than drifting.
         $cyclicalities = [];
@@ -277,6 +286,12 @@ final class SectorCalibrationMatrixTest extends TestCase
             LuxuryBusinessModel::MAX_OPERATING_MARGIN_CEILING,
             CommodityBusinessModel::MAX_OPERATING_MARGIN_CEILING,
             'A price taker cannot hold a luxury house margin.'
+        );
+        // A producer owns the barrel; a refiner earns a spread on a barrel someone else sold it.
+        $this->assertLessThan(
+            OilGasProducerBusinessModel::MAX_OPERATING_MARGIN_CEILING,
+            RefiningBusinessModel::MAX_OPERATING_MARGIN_CEILING,
+            'A refining spread cannot hold a producer\'s margin on the whole barrel.'
         );
     }
 

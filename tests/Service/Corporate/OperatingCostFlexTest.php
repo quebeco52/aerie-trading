@@ -42,9 +42,9 @@ final class OperatingCostFlexTest extends TestCase
 {
     private const AUTO_MANUFACTURER = 'auto_manufacturer';
 
-    private function buildEngine(): EarningsEngine
+    private function buildEngine(?MathUtility $mathUtility = null): EarningsEngine
     {
-        $mathUtility = new MathUtility();
+        $mathUtility ??= new MathUtility();
         $corporateMetrics = new CorporateMetrics();
         $debtEngine = new DebtEngine($mathUtility, $corporateMetrics);
         $capExEngine = new CapExEngine();
@@ -354,5 +354,46 @@ final class OperatingCostFlexTest extends TestCase
             'an ordinary recession is not a liquidation: the irreducible base survives it'
         );
         $this->assertLessThanOrEqual(1.0, max($neutral), 'the structural base is still the ceiling at trend');
+    }
+
+    /**
+     * Stickiness reads activity. Last quarter's actual revenue also carries its market price and one-off shocks:
+     * a refiner whose revenue rose with crude, or any firm that beat its plan, has not grown its operations, so
+     * neither may be read as a contraction this quarter. A genuine fall in planned activity still is.
+     */
+    public function testStickyCostsReadLastQuartersPlannedActivityNotItsPrice(): void
+    {
+        $quiet = new class extends MathUtility {
+            public function generateStandardNormal(): float
+            {
+                return 0.0;
+            }
+        };
+        $engine = $this->buildEngine($quiet);
+        $process = new ReflectionMethod(EarningsEngine::class, 'processVariableMargins');
+
+        $realizedRatio = function (?float $priorExpectedRevenue, float $priorActualRevenue) use ($engine, $process): float {
+            $ctx = $this->buildContext(1.0, 1.0);
+            $ctx->baselineVariableMargin = 0.60;
+            $ctx->baselineVol = 0.15;
+            $ctx->expectedRevenue = 20_000_000_000.0;
+            $ctx->previousQuarterlyRevenue = $priorActualRevenue;
+            if ($priorExpectedRevenue !== null) {
+                $ctx->stock->setEarningsMomentumZ([FinancialConstants::STATE_LAST_EXPECTED_REVENUE => $priorExpectedRevenue]);
+            }
+            $process->invoke($engine, $ctx);
+
+            return $ctx->realizedVariableMargin;
+        };
+
+        $steady = $realizedRatio(20_000_000_000.0, 20_000_000_000.0);
+        $priceRally = $realizedRatio(20_000_000_000.0, 24_000_000_000.0);
+        $activityFell = $realizedRatio(24_000_000_000.0, 24_000_000_000.0);
+
+        $this->assertEqualsWithDelta($steady, $priceRally, 1e-12, 'a quarter that out-earned its plan is not a contraction');
+        $this->assertGreaterThan($steady * 1.05, $activityFell, 'a fall in planned activity still leaves the costs behind');
+
+        // A firm reporting for the first time has no plan on record and falls back to what it last reported.
+        $this->assertEqualsWithDelta($activityFell, $realizedRatio(null, 24_000_000_000.0), 1e-12);
     }
 }

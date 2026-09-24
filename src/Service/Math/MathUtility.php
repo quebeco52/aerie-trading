@@ -1526,6 +1526,33 @@ class MathUtility
     }
 
     /**
+     * Schwartz (1997) one-factor futures price with a zero market price of risk: the expected spot at the
+     * delivery horizon under the same exact log-OU transition calculateSchwartz1Factor() steps, so a swap
+     * struck on this curve is fair against the process the spot actually follows.
+     *
+     *   ln F(T) = e^(-kT) ln S + (1 - e^(-kT)) alpha + sigma^2 / (4k) (1 - e^(-2kT)),  alpha = ln theta - sigma^2 / 2k
+     *
+     * @param float $spot         Current spot price (S).
+     * @param float $kappa        Speed of mean reversion.
+     * @param float $theta        Long-term equilibrium price level.
+     * @param float $sigma        Volatility of the log price.
+     * @param float $horizonYears Time to delivery in years.
+     */
+    public function calculateSchwartzForwardPrice(float $spot, float $kappa, float $theta, float $sigma, float $horizonYears): float
+    {
+        $kappa = max(0.0001, $kappa);
+        $horizonYears = max(0.0, $horizonYears);
+        $alpha = log(max(0.0001, $theta)) - ($sigma * $sigma) / (2.0 * $kappa);
+        $decay = exp(-$kappa * $horizonYears);
+
+        $logForward = ($decay * log(max(0.0001, $spot)))
+            + ((1.0 - $decay) * $alpha)
+            + (($sigma * $sigma) / (4.0 * $kappa)) * (1.0 - exp(-2.0 * $kappa * $horizonYears));
+
+        return exp($logForward);
+    }
+
+    /**
      * Schwartz-Smith 2-Factor Model (2000) for industrial commodity pricing.
      * Decomposes log-price into a mean-reverting short-term deviation (chi)
      * and a drifting long-term equilibrium (xi).
