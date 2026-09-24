@@ -222,9 +222,13 @@ class CommunicationEquipmentBusinessModelTest extends TestCase
         $base = $this->runQuarter();
         $gscpi = $this->runQuarter(macro: new MacroStateDTO(supplyChainPressureIndexEma: 2.0));
         $ppi = $this->runQuarter(macro: new MacroStateDTO(producerPriceInflationEma: 0.08));
+        $metals = $this->runQuarter(macro: new MacroStateDTO(industrialMetalsIndexEma: 140.0));
 
         $this->assertGreaterThan($base->clampedMargin, $gscpi->clampedMargin);
-        $this->assertGreaterThan($base->clampedMargin, $ppi->clampedMargin);
+        // Wholesale-goods inflation is no longer a channel: its commodity content is measured directly (BEA: metals are
+        // 3.1% of the variable cost base through the supply chain).
+        $this->assertEqualsWithDelta($base->clampedMargin, $ppi->clampedMargin, 1e-12);
+        $this->assertGreaterThan($base->clampedMargin, $metals->clampedMargin);
     }
 
     public function testDeclaresSectorIdentityConstantsWithinTheirBands(): void

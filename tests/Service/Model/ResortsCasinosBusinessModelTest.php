@@ -26,7 +26,8 @@ class ResortsCasinosBusinessModelTest extends TestCase
         float $energyPriceIndexEma = 100.0,
         float $macroCreditSpread = 0.015,
         float $yield10y = 0.04,
-        float $energyCostPushLag = 0.0
+        float $energyCostPushLag = 0.0,
+        float $wageGrowthEma = MacroEngine::TFP_DRIFT + MacroEngine::TARGET_INFLATION
     ): MacroStateDTO {
         return new MacroStateDTO(
             outputGap: $outputGap,
@@ -37,6 +38,7 @@ class ResortsCasinosBusinessModelTest extends TestCase
             energyPriceIndexEma: $energyPriceIndexEma,
             energyPriceShock: 0.0,
             energyCostPushLag: $energyCostPushLag,
+            wageGrowthEma: $wageGrowthEma,
             consumerSentimentIndex: $consumerSentimentIndexEma,
             consumerSentimentIndexEma: $consumerSentimentIndexEma,
             inflation: $inflation,
@@ -179,17 +181,17 @@ class ResortsCasinosBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta($expectedMargin, $result->clampedMargin, 0.001);
     }
 
-    public function testEnergyUtilityDragScalesByOperationalFootprint(): void
+    public function testInputCostDragScalesByOperationalFootprint(): void
     {
         $model = new ResortsCasinosBusinessModel();
 
-        // Energy index spikes by 20 points (120 vs 100 baseline -> 0.20 relative deviation). The basket buys at
-        // spot, so the full move lands in the cost base this quarter; room and menu pricing recovers
-        // pricingPower x MAX_INPUT_COST_PASS_THROUGH of it with the pass-through lag.
-        $energyDeviation = 0.20 * ResortsCasinosBusinessModel::INPUT_COST_EXPOSURES['energy'];
+        // Wage growth runs 10pp over its neutral rate. Payroll is the resort's material tracked input (BEA puts its fuel and
+        // food content under the materiality floor). The basket buys at spot, so the full move lands in the cost base this
+        // quarter; room and menu pricing recovers pricingPower x MAX_INPUT_COST_PASS_THROUGH of it with the pass-through lag.
+        $energyDeviation = 0.10 * ResortsCasinosBusinessModel::INPUT_COST_EXPOSURES['labor'];
         $recoveryWeight = 1.0 - exp(-EarningsEngine::QUARTERLY_TIME_STEP / FinancialConstants::DEFAULT_INPUT_PASS_THROUGH_LAG_YEARS);
         $macroBase = $this->createMacroState();
-        $macroEnergy = $this->createMacroState(energyPriceIndexEma: 120.0, energyCostPushLag: 0.20 * MacroEngine::ENERGY_COST_PUSH_TRANSMISSION);
+        $macroEnergy = $this->createMacroState(wageGrowthEma: MacroEngine::TFP_DRIFT + MacroEngine::TARGET_INFLATION + 0.10);
 
         // 1. Pure-Play Casino Resort (100% operational footprint, median pricing power 0.50)
         $stockPure = new Stock();
@@ -204,11 +206,12 @@ class ResortsCasinosBusinessModelTest extends TestCase
 
         $pureRecovered = StandardCorporateBusinessModel::MIN_BETA_PRICING_POWER_FLOOR * ResortsCasinosBusinessModel::MAX_INPUT_COST_PASS_THROUGH * $recoveryWeight;
         $expectedPureDrag = 0.58 * $energyDeviation * (1.0 - $pureRecovered);
-        $this->assertEqualsWithDelta($expectedPureDrag, $resPure->clampedMargin - $resPureBase->clampedMargin, 0.0005);
+        // Same ~5% relative slack the test always carried (the resolved pricing power sits a little under the floor constant).
+        $this->assertEqualsWithDelta($expectedPureDrag, $resPure->clampedMargin - $resPureBase->clampedMargin, 0.05 * $expectedPureDrag);
 
         // 2. Landlord Empire (Silver Gull Resorts 'GULL': 20% gaming, 10% non-gaming, 70% CRE -> footprint = 0.30)
         // GULL has PricingPowerIndex = 1.00 (from StockModelTuning), so it recovers the full pass-through share,
-        // and only the physical resort footprint carries the utility bill; NNN tenants pay their own.
+        // and only the physical resort footprint carries the operating bill; NNN tenants staff and run their own.
         $stockGullBase = new Stock();
         $stockGullBase->setTicker('GULL');
         $stockGullBase->setBeta('1.0');
@@ -221,7 +224,7 @@ class ResortsCasinosBusinessModelTest extends TestCase
 
         $gullRecovered = 1.00 * ResortsCasinosBusinessModel::MAX_INPUT_COST_PASS_THROUGH * $recoveryWeight;
         $expectedGullDrag = 0.33 * $energyDeviation * (1.0 - $gullRecovered) * 0.30;
-        $this->assertEqualsWithDelta($expectedGullDrag, $resGull->clampedMargin - $resGullBase->clampedMargin, 0.0005);
+        $this->assertEqualsWithDelta($expectedGullDrag, $resGull->clampedMargin - $resGullBase->clampedMargin, 0.05 * $expectedGullDrag);
         $this->assertLessThan($expectedPureDrag, $expectedGullDrag);
     }
 

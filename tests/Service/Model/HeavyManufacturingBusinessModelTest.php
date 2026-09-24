@@ -53,23 +53,22 @@ class HeavyManufacturingBusinessModelTest extends TestCase
         );
     }
 
-    public function testExchangeRateExportDragAndFreightCostPenalty(): void
+    public function testExchangeRateExportDragAndMetalsCostPenalty(): void
     {
         $stock = new Stock();
         $stock->setTicker('CATP');
         $stock->setBeta('1.2');
-
-        $baseMacro = new MacroStateDTO(exchangeRateIndexEma: 100.0, freightRateIndexEma: 100.0);
-        $shockMacro = new MacroStateDTO(exchangeRateIndexEma: 120.0, freightRateIndexEma: 140.0);
-
         $mathMock = $this->createStub(MathUtility::class);
         $mathMock->method('generatePersistentZ')->willReturn(0.0);
+        $run = fn (MacroStateDTO $macro) => $this->model->computeActualFinancials($stock, 100_000_000.0, 0.35, 20_000_000.0, 0.0, $macro, $mathMock);
 
-        $baseResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.35, 20_000_000.0, 0.0, $baseMacro, $mathMock);
-        $shockResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.35, 20_000_000.0, 0.0, $shockMacro, $mathMock);
+        $baseResult = $run(new MacroStateDTO(exchangeRateIndexEma: 100.0, industrialMetalsIndexEma: 100.0));
+        $strongCurrency = $run(new MacroStateDTO(exchangeRateIndexEma: 120.0, industrialMetalsIndexEma: 100.0));
+        $metalsSpike = $run(new MacroStateDTO(exchangeRateIndexEma: 100.0, industrialMetalsIndexEma: 140.0));
 
-        $this->assertLessThan($baseResult->streamRevenue['oem_equipment'], $shockResult->streamRevenue['oem_equipment']);
-        $this->assertGreaterThan($baseResult->clampedMargin, $shockResult->clampedMargin);
+        $this->assertLessThan($baseResult->streamRevenue['oem_equipment'], $strongCurrency->streamRevenue['oem_equipment']);
+        // BEA 2017: steel and other metals are 19% of the variable cost base of HVAC, machinery and electrical-equipment makers.
+        $this->assertGreaterThan($baseResult->clampedMargin, $metalsSpike->clampedMargin);
     }
 
     public function testCapitalStockOverhangDampensOemEquipmentDemand(): void

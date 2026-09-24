@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service\Model\Sector;
 
+use App\Data\InputOutputExposures;
 use App\Data\ModelParam;
 use App\DTO\SectorCoverageProfile;
 use App\DTO\SectorPhysicsResult;
@@ -53,8 +54,8 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
     public const INDUSTRY_SUBSTITUTABILITY = 0.20;
 
     // --- Input Cost Basket ---
-    /** Shares of the variable cost base bought in tracked input markets (energy, metals, agri, freight, wholesale goods, variable payroll). Cost of goods is API and fill-finish manufacturing plus the technicians who run it; the science itself is fixed overhead. */
-    public const INPUT_COST_EXPOSURES = ['ppi' => 0.30, 'labor' => 0.25, 'energy' => 0.03];
+    /** Shares of the variable cost base by input channel, measured from the BEA input-output accounts with supply-chain content (labor still the model's own). */
+    public const INPUT_COST_EXPOSURES = InputOutputExposures::BIOTECH;
     /** Multi-year API supply agreements and validated second sources hold the purchase price steady well past a spot move. */
     public const INPUT_COST_LAG_YEARS = 1.00;
 
@@ -550,8 +551,6 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
     public function getOperatingMacroFields(): array
     {
         return [
-            'energy_cost_push_lag',
-            'producer_price_inflation_ema',
             'reimbursement_rate_growth',
             'wage_growth_ema',
         ];

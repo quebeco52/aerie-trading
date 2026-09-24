@@ -287,7 +287,6 @@ class InvestmentCompanyBusinessModel extends ConglomerateBusinessModel
             'output_gap_ema',
             'perceived_neutral_rate',
             'policy_rate_ema',
-            'producer_price_inflation_ema',
             'tips_breakeven_ema',
             'wage_growth_ema',
         ];

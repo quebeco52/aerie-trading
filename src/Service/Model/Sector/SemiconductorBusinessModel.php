@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service\Model\Sector;
 
+use App\Data\InputOutputExposures;
 use App\Service\Model\BusinessModelInterface;
 
 use App\Data\ModelParam;
@@ -34,8 +35,8 @@ class SemiconductorBusinessModel extends StandardCorporateBusinessModel
     public const INDUSTRY_SUBSTITUTABILITY = 0.40;
 
     // --- Input Cost Basket ---
-    /** Shares of the variable cost base bought in tracked input markets (energy, metals, agri, freight, wholesale goods, variable payroll). */
-    public const INPUT_COST_EXPOSURES = ['energy' => 0.15, 'metals' => 0.05, 'ppi' => 0.30, 'labor' => 0.15];
+    /** Shares of the variable cost base by input channel, measured from the BEA input-output accounts with supply-chain content (labor still the model's own). */
+    public const INPUT_COST_EXPOSURES = InputOutputExposures::SEMICONDUCTOR;
     /** Leading-edge capacity is scarce: wafer pricing recovers most input inflation. */
     public const PRICING_POWER_INDEX = 0.60;
 
@@ -314,13 +315,11 @@ class SemiconductorBusinessModel extends StandardCorporateBusinessModel
     {
         return [
             'capacity_utilization_rate_ema',
-            'energy_cost_push_lag',
             'exchange_rate_index_ema',
             'industrial_metals_index_ema',
             'inventory_stock_gap_ema',
             'manufacturing_pmi_ema',
             'output_gap_ema',
-            'producer_price_inflation_ema',
             'tips_breakeven_ema',
             'wage_growth_ema',
         ];

@@ -250,6 +250,10 @@ final class StandardOperatingPhysicsTraitTest extends TestCase
             $this->assertEqualsWithDelta(0.0, $deviation, 0.0000001, "The {$channel} channel must read zero at its own baseline.");
         }
 
+        // Electricity is a level off the wholesale power index, like gas; the retail pass-through lives in the weights.
+        $dearPower = new MacroStateDTO(wholesalePowerPriceIndexEma: 1.30 * MacroEngine::WHOLESALE_POWER_BASELINE);
+        $this->assertEqualsWithDelta(0.30, $this->model->resolveInputPriceDeviations($dearPower)['electricity'], 0.0000001);
+
         // Wages are measured against productivity plus target inflation, not against zero: real unit labour
         // costs only rise when wage growth outruns what productivity pays for.
         $productiveWages = new MacroStateDTO(wageGrowthEma: MacroEngine::TFP_DRIFT + MacroEngine::TARGET_INFLATION + 0.01);

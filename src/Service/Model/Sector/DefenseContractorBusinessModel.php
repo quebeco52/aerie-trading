@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service\Model\Sector;
 
+use App\Data\InputOutputExposures;
 use App\Service\Model\BusinessModelInterface;
 
 use App\Data\ModelParam;
@@ -38,8 +39,8 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
     public const INDUSTRY_SUBSTITUTABILITY = 0.30;
 
     // --- Input Cost Basket ---
-    /** Shares of the variable cost base bought in tracked input markets (energy, metals, agri, freight, wholesale goods, variable payroll). */
-    public const INPUT_COST_EXPOSURES = ['metals' => 0.10, 'ppi' => 0.20, 'labor' => 0.35, 'energy' => 0.03];
+    /** Shares of the variable cost base by input channel, measured from the BEA input-output accounts with supply-chain content (labor still the model's own). */
+    public const INPUT_COST_EXPOSURES = InputOutputExposures::DEFENSE_CONTRACTOR;
     /** Cost-plus and FMS contracts reprice through FAR escalators within the year; fixed-price EMD never does. */
     public const INPUT_PASS_THROUGH_LAG_YEARS = 0.75;
 
@@ -376,13 +377,11 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
     public function getOperatingMacroFields(): array
     {
         return [
-            'energy_cost_push_lag',
             'exchange_rate_index_ema',
             'government_spending_index_ema',
             'industrial_metals_index_ema',
             'inflation_ema',
             'macro_credit_spread_ema',
-            'producer_price_inflation_ema',
             'wage_growth_ema',
         ];
     }

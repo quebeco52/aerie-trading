@@ -95,26 +95,23 @@ class WasteManagementBusinessModelTest extends TestCase
         );
     }
 
-    public function testEnergySpikeCompressesMarginsDueToFuelSurchargeLag(): void
+    public function testEnergySpikeRaisesTheCostRatioByTheMeasuredFuelBill(): void
     {
         $stock = new Stock();
         $stock->setTicker('CORM');
         $stock->setBeta('1.0');
-
-        $calmMacro = new MacroStateDTO(energyPriceIndexEma: 100.0);
-        $energyShockMacro = new MacroStateDTO(energyPriceIndexEma: 200.0, energyCostPushLag: 0.0100);
-
         $mathMock = $this->createStub(MathUtility::class);
         $mathMock->method('generatePersistentZ')->willReturn(0.0);
+        $calmResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.40, 20_000_000.0, 0.0, new MacroStateDTO(energyPriceIndexEma: 100.0), $mathMock);
+        $shockResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.40, 20_000_000.0, 0.0, new MacroStateDTO(energyPriceIndexEma: 200.0, energyCostPushLag: 0.0100), $mathMock);
 
-        $calmResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.40, 20_000_000.0, 0.0, $calmMacro, $mathMock);
-        $shockResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.40, 20_000_000.0, 0.0, $energyShockMacro, $mathMock);
-
+        // BEA 2017: route diesel is 2.7% of a hauler's variable cost base at producers' prices (the crude-linked part of the
+        // pump price). The fuel surcharge recovers it with the pass-through lag, so the first quarter carries a squeeze.
+        // The recycling stream sells commodities that rise with energy, so the net EBIT effect is not signed here.
         $this->assertGreaterThan(
             $calmResult->clampedMargin,
             $shockResult->clampedMargin,
             'Energy price spikes cause diesel fuel surcharge lag, expanding variable cost ratio.'
         );
-        $this->assertLessThan($calmResult->ebit, $shockResult->ebit);
     }
 }

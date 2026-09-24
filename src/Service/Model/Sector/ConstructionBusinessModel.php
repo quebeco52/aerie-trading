@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service\Model\Sector;
 
+use App\Data\InputOutputExposures;
 use App\Service\Model\BusinessModelInterface;
 
 use App\Data\ModelParam;
@@ -40,8 +41,8 @@ class ConstructionBusinessModel extends StandardCorporateBusinessModel
     public const INDUSTRY_SUBSTITUTABILITY = 0.50;
 
     // --- Input Cost Basket ---
-    /** Shares of the variable cost base bought in tracked input markets (energy, metals, agri, freight, wholesale goods, variable payroll). */
-    public const INPUT_COST_EXPOSURES = ['energy' => 0.10, 'metals' => 0.15, 'freight' => 0.03, 'ppi' => 0.35, 'labor' => 0.25];
+    /** Shares of the variable cost base by input channel, measured from the BEA input-output accounts with supply-chain content (labor still the model's own). */
+    public const INPUT_COST_EXPOSURES = InputOutputExposures::CONSTRUCTION;
     /** Fixed-price contracts reprice only at the next award: material moves take a year to reach bid prices. */
     public const INPUT_PASS_THROUGH_LAG_YEARS = 1.00;
 
@@ -308,14 +309,12 @@ class ConstructionBusinessModel extends StandardCorporateBusinessModel
             'credit_to_gdp_gap_ema',
             'energy_cost_push_lag',
             'exchange_rate_index_ema',
-            'freight_rate_index_ema',
             'government_spending_index_ema',
             'housing_starts_index_ema',
             'industrial_metals_index_ema',
             'natural_rate_ema',
             'output_gap_ema',
             'policy_rate_ema',
-            'producer_price_inflation_ema',
             'residential_property_index_ema',
             'sloos_tightening_index_ema',
             'tips_breakeven_ema',

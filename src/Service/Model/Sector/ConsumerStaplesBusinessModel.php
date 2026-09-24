@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service\Model\Sector;
 
+use App\Data\InputOutputExposures;
 use App\Service\Model\BusinessModelInterface;
 
 use App\Data\ModelParam;
@@ -36,8 +37,8 @@ class ConsumerStaplesBusinessModel extends StandardCorporateBusinessModel
     public const INDUSTRY_SUBSTITUTABILITY = 0.60;
 
     // --- Input Cost Basket ---
-    /** Shares of the variable cost base bought in tracked input markets (energy, metals, agri, freight, wholesale goods, variable payroll). */
-    public const INPUT_COST_EXPOSURES = ['agri' => 0.30, 'ppi' => 0.20, 'energy' => 0.06, 'freight' => 0.05, 'labor' => 0.20];
+    /** Shares of the variable cost base by input channel, measured from the BEA input-output accounts with supply-chain content (labor still the model's own). */
+    public const INPUT_COST_EXPOSURES = InputOutputExposures::CONSUMER_STAPLES;
     /** Branded staples recover input moves on the shelf within a couple of quarters. */
     public const INPUT_PASS_THROUGH_LAG_YEARS = 0.50;
 
@@ -343,11 +344,9 @@ class ConsumerStaplesBusinessModel extends StandardCorporateBusinessModel
             'agricultural_commodity_index_ema',
             'energy_cost_push_lag',
             'exchange_rate_index_ema',
-            'freight_rate_index_ema',
             'inflation_ema',
             'inventory_stock_gap_ema',
             'output_gap_ema',
-            'producer_price_inflation_ema',
             'tips_breakeven_ema',
             'wage_growth_ema',
         ];

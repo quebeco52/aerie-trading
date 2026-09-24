@@ -6,6 +6,7 @@ namespace App\Tests\Service\Model;
 
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
+use App\Service\Macro\MacroEngine;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\SteelManufacturingBusinessModel;
 use PHPUnit\Framework\TestCase;
@@ -72,24 +73,23 @@ class SteelManufacturingBusinessModelTest extends TestCase
         );
     }
 
-    public function testEnergyAndFreightCostDragOnMargins(): void
+    public function testScrapAndOreCostsFollowMetalsWhileFuelAndFreightAreImmaterial(): void
     {
+        // BEA 2017: scrap, ore and alloying metals are 23.6% of a mill's variable cost base (its own steel trade excluded);
+        // oil and ocean freight sit under InputOutputExposures::MATERIALITY_FLOOR.
         $stock = new Stock();
         $stock->setTicker('STLD');
         $stock->setBeta('1.2');
-
-        $baseMacro = new MacroStateDTO(energyPriceIndexEma: 100.0, freightRateIndexEma: 100.0);
-        $costSpikeMacro = new MacroStateDTO(energyPriceIndexEma: 150.0, freightRateIndexEma: 140.0);
-
         $mathMock = $this->createStub(MathUtility::class);
         $mathMock->method('generatePersistentZ')->willReturn(0.0);
+        $run = fn (MacroStateDTO $macro) => $this->model->computeActualFinancials($stock, 100_000_000.0, 0.35, 20_000_000.0, 0.0, $macro, $mathMock);
 
-        $baseResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.35, 20_000_000.0, 0.0, $baseMacro, $mathMock);
-        $costSpikeResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.35, 20_000_000.0, 0.0, $costSpikeMacro, $mathMock);
+        $base = $run(new MacroStateDTO(energyPriceIndexEma: 100.0, freightRateIndexEma: 100.0, industrialMetalsIndexEma: 100.0));
+        $fuelAndFreight = $run(new MacroStateDTO(energyPriceIndexEma: 150.0, energyCostPushLag: 0.50 * MacroEngine::ENERGY_COST_PUSH_TRANSMISSION, freightRateIndexEma: 140.0, industrialMetalsIndexEma: 100.0));
+        $metals = $run(new MacroStateDTO(energyPriceIndexEma: 100.0, freightRateIndexEma: 100.0, industrialMetalsIndexEma: 130.0));
 
-        // Energy and freight cost spikes increase the variable cost ratio (clampedMargin) and compress operating income (EBIT)
-        $this->assertGreaterThan($baseResult->clampedMargin, $costSpikeResult->clampedMargin);
-        $this->assertLessThan($baseResult->ebit, $costSpikeResult->ebit);
+        $this->assertEqualsWithDelta($base->clampedMargin, $fuelAndFreight->clampedMargin, 1e-12);
+        $this->assertGreaterThan($base->clampedMargin, $metals->clampedMargin, 'dearer scrap and ore raise the cost ratio');
     }
 
     public function testBlastFurnaceAgingAndEafModernization(): void

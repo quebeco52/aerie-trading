@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service\Model\Sector;
 
+use App\Data\InputOutputExposures;
 use App\Service\Model\BusinessModelInterface;
 
 use App\Data\ModelParam;
@@ -36,8 +37,8 @@ class RestaurantBusinessModel extends StandardCorporateBusinessModel
     public const INDUSTRY_SUBSTITUTABILITY = 0.70;
 
     // --- Input Cost Basket ---
-    /** Shares of the variable cost base bought in tracked input markets (energy, metals, agri, freight, wholesale goods, variable payroll). */
-    public const INPUT_COST_EXPOSURES = ['agri' => 0.30, 'labor' => 0.35, 'energy' => 0.05, 'ppi' => 0.10];
+    /** Shares of the variable cost base by input channel, measured from the BEA input-output accounts with supply-chain content (labor still the model's own). */
+    public const INPUT_COST_EXPOSURES = InputOutputExposures::RESTAURANT;
     /** Menu prices move freely but the diner's next-best meal is one storefront away, so a chain recovers only part of a food or wage move before traffic answers. */
     public const PRICING_POWER_INDEX = 0.45;
 
@@ -271,11 +272,9 @@ class RestaurantBusinessModel extends StandardCorporateBusinessModel
         return [
             'agricultural_commodity_index_ema',
             'consumer_sentiment_index_ema',
-            'energy_cost_push_lag',
             'exchange_rate_index_ema',
             'inflation_ema',
             'output_gap_ema',
-            'producer_price_inflation_ema',
             'tips_breakeven_ema',
             'wage_growth_ema',
         ];

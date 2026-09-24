@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service\Model\Sector;
 
+use App\Data\InputOutputExposures;
 use App\Service\Model\BusinessModelInterface;
 
 use App\Data\ModelParam;
@@ -40,8 +41,8 @@ class MedicalCareFacilityBusinessModel extends StandardCorporateBusinessModel
     public const INDUSTRY_SUBSTITUTABILITY = 0.40;
 
     // --- Input Cost Basket ---
-    /** Shares of the variable cost base bought in tracked input markets (energy, metals, agri, freight, wholesale goods, variable payroll). */
-    public const INPUT_COST_EXPOSURES = ['labor' => 0.60, 'ppi' => 0.15, 'energy' => 0.03];
+    /** Shares of the variable cost base by input channel, measured from the BEA input-output accounts with supply-chain content (labor still the model's own). */
+    public const INPUT_COST_EXPOSURES = InputOutputExposures::MEDICAL_CARE_FACILITY;
 
     // --- Services Pricing ---
     /** Elasticity of fee and rate pricing to services (supercore) inflation. Reimbursement follows medical services inflation, capped by payer contracts. */
@@ -284,12 +285,10 @@ class MedicalCareFacilityBusinessModel extends StandardCorporateBusinessModel
     public function getOperatingMacroFields(): array
     {
         return [
-            'energy_cost_push_lag',
             'exchange_rate_index_ema',
             'government_spending_index_ema',
             'inflation_ema',
             'output_gap_ema',
-            'producer_price_inflation_ema',
             'reimbursement_rate_growth',
             'supercore_inflation_ema',
             'tips_breakeven_ema',

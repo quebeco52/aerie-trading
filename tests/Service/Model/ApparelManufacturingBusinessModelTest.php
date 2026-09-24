@@ -165,53 +165,24 @@ class ApparelManufacturingBusinessModelTest extends TestCase
         );
     }
 
-    public function testAgriculturalCommodityAndFreightInflationPenalty(): void
+    public function testRawFiberAndFreightAreImmaterialToAnApparelMaker(): void
     {
+        // BEA 2017: a cut-and-sew apparel maker buys fabric, not cotton; farm content through the whole supply chain is
+        // 0.9% of its variable costs and ocean freight far less, both under InputOutputExposures::MATERIALITY_FLOOR.
         $stock = new Stock();
         $stock->setTicker('SHER');
         $stock->setBeta('1.0');
-
-        $baseMacro = new MacroStateDTO(
-            agriculturalCommodityIndexEma: 100.0,
-            freightRateIndexEma: 100.0,
-            energyPriceIndexEma: 100.0
-        );
-
-        $inflationMacro = new MacroStateDTO(
-            agriculturalCommodityIndexEma: 140.0, // +40% raw fiber costs
-            freightRateIndexEma: 150.0,            // +50% freight rates
-            energyPriceIndexEma: 130.0             // +30% energy
-        );
-
         $mathMock = $this->createStub(MathUtility::class);
         $mathMock->method('generatePersistentZ')->willReturn(0.0);
 
-        $baseResult = $this->model->computeActualFinancials(
-            $stock,
-            expectedRevenue: 100_000_000.0,
-            realizedVariableMargin: 0.22,
-            fixedCosts: 20_000_000.0,
-            baselineVol: 0.15,
-            macroState: $baseMacro,
-            mathUtility: $mathMock
-        );
+        $run = fn (MacroStateDTO $macro) => $this->model->computeActualFinancials($stock, 100_000_000.0, 0.22, 20_000_000.0, 0.15, $macro, $mathMock);
+        $base = $run(new MacroStateDTO(agriculturalCommodityIndexEma: 100.0, freightRateIndexEma: 100.0));
+        $spike = $run(new MacroStateDTO(agriculturalCommodityIndexEma: 140.0, freightRateIndexEma: 150.0));
+        $slump = $run(new MacroStateDTO(agriculturalCommodityIndexEma: 80.0, freightRateIndexEma: 100.0));
 
-        $inflationResult = $this->model->computeActualFinancials(
-            $stock,
-            expectedRevenue: 100_000_000.0,
-            realizedVariableMargin: 0.22,
-            fixedCosts: 20_000_000.0,
-            baselineVol: 0.15,
-            macroState: $inflationMacro,
-            mathUtility: $mathMock
-        );
-
-        // Higher input costs must increase raw variable margin (higher cost of goods)
-        $this->assertGreaterThan(
-            $baseResult->clampedMargin,
-            $inflationResult->clampedMargin,
-            'Commodity and freight inflation must increase variable cost margin.'
-        );
+        $this->assertArrayNotHasKey('agri', ApparelManufacturingBusinessModel::INPUT_COST_EXPOSURES);
+        $this->assertEqualsWithDelta($base->clampedMargin, $spike->clampedMargin, 1e-12, 'a cotton and freight spike is no margin squeeze');
+        $this->assertEqualsWithDelta($base->clampedMargin, $slump->clampedMargin, 1e-12, 'and a cotton slump no windfall');
     }
 
     public function testSupplyChainDisruptionTailRiskEvent(): void
@@ -396,108 +367,31 @@ class ApparelManufacturingBusinessModelTest extends TestCase
         );
     }
 
-    public function testCogsForwardHedgingDampensSpotCommodityShocks(): void
+    public function testTheBuyingLagDampensAnInputCostShock(): void
     {
         $stock = new Stock();
         $stock->setTicker('SHER');
         $stock->setBeta('1.0');
-
-        $neutralMacro = new MacroStateDTO(
-            agriculturalCommodityIndexEma: 100.0,
-            freightRateIndexEma: 100.0,
-            energyPriceIndexEma: 100.0
-        );
-
-        $spotShockMacro = new MacroStateDTO(
-            agriculturalCommodityIndexEma: 150.0, // +50% raw cotton
-            freightRateIndexEma: 150.0,            // +50% shipping
-            energyPriceIndexEma: 150.0,            // +50% energy
-            energyCostPushLag: 0.50 * MacroEngine::ENERGY_COST_PUSH_TRANSMISSION // +50% energy shock, fully transmitted
-        );
-
+        $neutralWages = MacroEngine::TFP_DRIFT + MacroEngine::TARGET_INFLATION;
         $mathUtility = new MathUtility();
 
-        $neutralResult = $this->model->computeActualFinancials(
-            $stock,
-            expectedRevenue: 100_000_000.0,
-            realizedVariableMargin: 0.20,
-            fixedCosts: 20_000_000.0,
-            baselineVol: 0.0,
-            macroState: $neutralMacro,
-            mathUtility: $mathUtility
-        );
+        $run = fn (float $wageGrowth) => $this->model->computeActualFinancials($stock, 100_000_000.0, 0.20, 20_000_000.0, 0.0, new MacroStateDTO(wageGrowthEma: $wageGrowth), $mathUtility);
+        $neutralResult = $run($neutralWages);
+        $shockResult = $run($neutralWages + 0.10);
 
-        $shockResult = $this->model->computeActualFinancials(
-            $stock,
-            expectedRevenue: 100_000_000.0,
-            realizedVariableMargin: 0.20,
-            fixedCosts: 20_000_000.0,
-            baselineVol: 0.0,
-            macroState: $spotShockMacro,
-            mathUtility: $mathUtility
-        );
-
-        // Basket deviation = (0.50 * agri 0.15) + (0.50 * freight 0.06) + (0.50 * energy 0.04) = 0.125 of the variable cost base.
-        // Forward hedging: only 1 - exp(-0.25 / INPUT_COST_LAG_YEARS) of the spot move reaches COGS in the first quarter,
-        // and SHER (pricing power 0.60) starts recovering 0.60 x 0.80 of it at retail with the repricing lag.
-        $spotDeviation = 0.125;
+        // Payroll is the apparel maker's material tracked input. Only 1 - exp(-0.25 / INPUT_COST_LAG_YEARS) of the move
+        // reaches the cost base in the first quarter, and SHER (pricing power 0.60) starts recovering 0.60 x 0.80 of it.
+        $spotDeviation = 0.10 * ApparelManufacturingBusinessModel::INPUT_COST_EXPOSURES['labor'];
         $hedgedShare = 1.0 - exp(-0.25 / ApparelManufacturingBusinessModel::INPUT_COST_LAG_YEARS);
         $recoveryShare = 1.0 - exp(-0.25 / FinancialConstants::DEFAULT_INPUT_PASS_THROUGH_LAG_YEARS);
         $costLevel = $spotDeviation * $hedgedShare;
         $recovered = $costLevel * 0.60 * ApparelManufacturingBusinessModel::MAX_INPUT_COST_PASS_THROUGH * $recoveryShare;
-        $expectedIncrease = 0.20 * ($costLevel - $recovered);
         $marginIncrease = $shockResult->clampedMargin - $neutralResult->clampedMargin;
-        $this->assertEqualsWithDelta($expectedIncrease, $marginIncrease, 0.0001, 'Forward hedging must dampen spot input inflation passthrough by the buying lag.');
-        $this->assertLessThan(0.20 * $spotDeviation * (1.0 - 0.60 * 0.80), $marginIncrease, 'The first-quarter hit must be smaller than the unhedged steady-state squeeze.');
+        $this->assertEqualsWithDelta(0.20 * ($costLevel - $recovered), $marginIncrease, 0.0001, 'The buying lag must dampen the first-quarter pass-through.');
+        $this->assertLessThan(0.20 * $spotDeviation * (1.0 - 0.60 * 0.80), $marginIncrease, 'The first-quarter hit must be smaller than the steady-state squeeze.');
     }
 
-    public function testAgriculturalCommodityDeflationMarginRelief(): void
-    {
-        $stock = new Stock();
-        $stock->setTicker('SHER');
-        $stock->setBeta('1.0');
 
-        $neutralMacro = new MacroStateDTO(
-            agriculturalCommodityIndexEma: 100.0,
-            freightRateIndexEma: 100.0,
-            energyPriceIndexEma: 100.0
-        );
-
-        $deflationMacro = new MacroStateDTO(
-            agriculturalCommodityIndexEma: 80.0, // -20% raw cotton bumper harvest
-            freightRateIndexEma: 100.0,
-            energyPriceIndexEma: 100.0
-        );
-
-        $mathUtility = new MathUtility();
-
-        $neutralResult = $this->model->computeActualFinancials(
-            $stock,
-            expectedRevenue: 100_000_000.0,
-            realizedVariableMargin: 0.20,
-            fixedCosts: 20_000_000.0,
-            baselineVol: 0.0,
-            macroState: $neutralMacro,
-            mathUtility: $mathUtility
-        );
-
-        $deflationResult = $this->model->computeActualFinancials(
-            $stock,
-            expectedRevenue: 100_000_000.0,
-            realizedVariableMargin: 0.20,
-            fixedCosts: 20_000_000.0,
-            baselineVol: 0.0,
-            macroState: $deflationMacro,
-            mathUtility: $mathUtility
-        );
-
-        // Falling cotton prices provide hedged gross margin relief
-        $this->assertLessThan(
-            $neutralResult->clampedMargin,
-            $deflationResult->clampedMargin,
-            'Deflation in raw agricultural commodities must provide variable margin relief.'
-        );
-    }
 
     public function testObservableShockIncludesBullwhipDrag(): void
     {

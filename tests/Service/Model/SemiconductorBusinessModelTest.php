@@ -90,56 +90,28 @@ class SemiconductorBusinessModelTest extends TestCase
         $this->assertEquals(500.0, $result->ebit);
     }
 
-    public function testCleanroomEnergySpikeIncreasesFoundryVariableCosts(): void
+    public function testMetalsAreTheMeasuredInputAndCleanroomPowerIsImmaterial(): void
     {
         $stock = new Stock();
         $stock->setTicker('TSMC');
         $stock->setCapexRatio('0.80');
-
         $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
+        $run = fn (array $macro) => $this->model->computeActualFinancials($stock, 1000.0, 0.30, 200.0, 0.20, \App\DTO\MacroStateDTO::fromArray(['output_gap_ema' => 0.0] + $macro), $this->mathUtilityMock);
 
-        // Baseline energy price = 100.0
-        $macroBaseline = \App\DTO\MacroStateDTO::fromArray([
-            'output_gap_ema' => 0.0,
-            'energy_price_index_ema' => 100.0,
-        ]);
+        $baseline = $run([]);
+        // Fab power is 2.3% of output, but industrial tariffs pass a wholesale move through at only 0.106 (EIA), which puts
+        // it under InputOutputExposures::MATERIALITY_FLOOR; oil is under 0.5%.
+        $powerSpike = $run(['wholesale_power_price_index_ema' => 150.0, 'energy_price_index_ema' => 120.0, 'energy_cost_push_lag' => 0.20 * MacroEngine::ENERGY_COST_PUSH_TRANSMISSION]);
+        $this->assertEqualsWithDelta($baseline->clampedMargin, $powerSpike->clampedMargin, 1e-12);
 
-        $resultBaseline = $this->model->computeActualFinancials(
-            $stock,
-            expectedRevenue: 1000.0,
-            realizedVariableMargin: 0.30,
-            fixedCosts: 200.0,
-            baselineVol: 0.20,
-            macroState: $macroBaseline,
-            mathUtility: $this->mathUtilityMock
-        );
-
-        // Elevated energy price = 120.0 (20% energy spike). Cleanroom power is bought at spot, so the basket
-        // lands 0.20 x energy exposure in the cost base this quarter, and scarce wafer capacity recovers
-        // pricingPower x MAX_INPUT_COST_PASS_THROUGH of it with the pass-through lag.
-        $macroSpike = \App\DTO\MacroStateDTO::fromArray([
-            'output_gap_ema' => 0.0,
-            'energy_price_index_ema' => 120.0,
-            'energy_cost_push_lag' => 0.20 * MacroEngine::ENERGY_COST_PUSH_TRANSMISSION,
-        ]);
-
-        $resultSpike = $this->model->computeActualFinancials(
-            $stock,
-            expectedRevenue: 1000.0,
-            realizedVariableMargin: 0.30,
-            fixedCosts: 200.0,
-            baselineVol: 0.20,
-            macroState: $macroSpike,
-            mathUtility: $this->mathUtilityMock
-        );
-
-        $this->assertGreaterThan($resultBaseline->clampedMargin, $resultSpike->clampedMargin);
-        $this->assertLessThan($resultBaseline->ebit, $resultSpike->ebit);
-        $energyDeviation = 0.20 * SemiconductorBusinessModel::INPUT_COST_EXPOSURES['energy'];
+        // Metals (copper, gold, specialty metals) through the supply chain are the device maker's material commodity input.
+        // The basket buys at spot and scarce wafer capacity recovers pricingPower x MAX_INPUT_COST_PASS_THROUGH with the lag.
+        $metalsSpike = $run(['industrial_metals_index_ema' => 120.0]);
+        $metalsDeviation = 0.20 * SemiconductorBusinessModel::INPUT_COST_EXPOSURES['metals'];
         $recoveryWeight = 1.0 - exp(-EarningsEngine::QUARTERLY_TIME_STEP / FinancialConstants::DEFAULT_INPUT_PASS_THROUGH_LAG_YEARS);
         $recovered = SemiconductorBusinessModel::PRICING_POWER_INDEX * SemiconductorBusinessModel::MAX_INPUT_COST_PASS_THROUGH * $recoveryWeight;
-        $expectedDrag = 0.30 * $energyDeviation * (1.0 - $recovered);
-        $this->assertEqualsWithDelta(1000.0 * (0.30 + $expectedDrag), $resultSpike->actualVariableCosts, 0.1);
+        $this->assertEqualsWithDelta(1000.0 * 0.30 * $metalsDeviation * (1.0 - $recovered), $metalsSpike->actualVariableCosts - $baseline->actualVariableCosts, 0.1);
+        $this->assertLessThan($baseline->ebit, $metalsSpike->ebit);
     }
 
     public function testCapacityUtilizationDrivesFoundryLeverage(): void

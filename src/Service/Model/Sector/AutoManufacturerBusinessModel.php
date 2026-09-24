@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service\Model\Sector;
 
+use App\Data\InputOutputExposures;
 use App\Service\Model\BusinessModelInterface;
 
 use App\Data\ModelParam;
@@ -46,8 +47,8 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
     public const FX_REVENUE_EXPOSURE = 0.50;
 
     // --- Input Cost Basket ---
-    /** Shares of the variable cost base bought in tracked input markets (energy, metals, agri, freight, wholesale goods, variable payroll). */
-    public const INPUT_COST_EXPOSURES = ['energy' => 0.05, 'metals' => 0.15, 'freight' => 0.05, 'ppi' => 0.35, 'labor' => 0.20];
+    /** Shares of the variable cost base by input channel, measured from the BEA input-output accounts with supply-chain content (labor still the model's own). */
+    public const INPUT_COST_EXPOSURES = InputOutputExposures::AUTO_MANUFACTURER;
     /** Tier-one supplier contracts fix component prices for about a quarter before spot moves reach the line. */
     public const INPUT_COST_LAG_YEARS = 0.25;
 
@@ -383,9 +384,7 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
             'capacity_utilization_rate_ema',
             'consumer_sentiment_index_ema',
             'corporate_default_rate_ema',
-            'energy_cost_push_lag',
             'exchange_rate_index_ema',
-            'freight_rate_index_ema',
             'household_debt_service_gap',
             'industrial_metals_index_ema',
             'inflation_ema',
@@ -393,7 +392,6 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
             'manufacturing_pmi_ema',
             'output_gap_ema',
             'policy_rate_ema',
-            'producer_price_inflation_ema',
             'qe_active',
             'qe_intensity',
             'retail_default_rate_ema',

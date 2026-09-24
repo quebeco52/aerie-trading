@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service\Model\Sector;
 
+use App\Data\InputOutputExposures;
 use App\Data\ModelParam;
 use App\DTO\MacroStateDTO;
 use App\DTO\SectorPhysicsResult;
@@ -41,8 +42,8 @@ class MiningBusinessModel extends StandardCorporateBusinessModel
     public const INDUSTRY_SUBSTITUTABILITY = 0.15;
 
     // --- Input Cost Basket ---
-    /** Shares of the per-tonne cost base bought in tracked input markets: haul-truck diesel and mill power, grinding media, explosives and reagents, site payroll. */
-    public const INPUT_COST_EXPOSURES = ['energy' => 0.15, 'metals' => 0.05, 'ppi' => 0.10, 'labor' => 0.20];
+    /** Shares of the variable cost base by input channel, measured from the BEA input-output accounts with supply-chain content (labor still the model's own). */
+    public const INPUT_COST_EXPOSURES = InputOutputExposures::MINING;
     /** Price takers recover none of their own input inflation through pricing: the market sets the quote. */
     public const PRICING_POWER_INDEX = 0.00;
 
@@ -302,7 +303,6 @@ class MiningBusinessModel extends StandardCorporateBusinessModel
             'gold_price_index_ema',
             'industrial_metals_index_ema',
             'natural_gas_price_index_ema',
-            'producer_price_inflation_ema',
             'wage_growth_ema',
         ];
     }

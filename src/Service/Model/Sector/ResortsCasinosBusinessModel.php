@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service\Model\Sector;
 
+use App\Data\InputOutputExposures;
 use App\Service\Model\BusinessModelInterface;
 
 use App\Data\ModelParam;
@@ -36,8 +37,8 @@ class ResortsCasinosBusinessModel extends StandardCorporateBusinessModel
     public const INDUSTRY_SUBSTITUTABILITY = 0.60;
 
     // --- Input Cost Basket ---
-    /** Shares of the variable cost base bought in tracked input markets (energy, metals, agri, freight, wholesale goods, variable payroll). */
-    public const INPUT_COST_EXPOSURES = ['energy' => 0.10, 'agri' => 0.10, 'labor' => 0.40, 'ppi' => 0.05];
+    /** Shares of the variable cost base by input channel, measured from the BEA input-output accounts with supply-chain content (labor still the model's own). */
+    public const INPUT_COST_EXPOSURES = InputOutputExposures::RESORTS_CASINOS;
 
     // --- Labor Intensity ---
     /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze. A property has to be staffed to be open: hotel, gaming floor and food service payroll is the overhead of the box. */
@@ -333,15 +334,12 @@ class ResortsCasinosBusinessModel extends StandardCorporateBusinessModel
     public function getOperatingMacroFields(): array
     {
         return [
-            'agricultural_commodity_index_ema',
             'commercial_property_index_ema',
             'consumer_sentiment_index_ema',
-            'energy_cost_push_lag',
             'exchange_rate_index_ema',
             'foreign_output_gap_ema',
             'inflation_ema',
             'output_gap_ema',
-            'producer_price_inflation_ema',
             'residential_property_index_ema',
             'tips_breakeven_ema',
             'wage_growth_ema',

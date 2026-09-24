@@ -227,27 +227,24 @@ class AutoManufacturerBusinessModelTest extends TestCase
         );
     }
 
-    public function testFreightRateSpikeIncreasesAutomotiveLogisticsCost(): void
+    public function testMetalsAreTheInputThatMovesAndOceanFreightIsImmaterial(): void
     {
+        // BEA 2017: steel, aluminium and copper through the supply chain are 11.9% of an assembler's variable costs; ocean
+        // freight is under 0.2%, below InputOutputExposures::MATERIALITY_FLOOR.
         $stock = new Stock();
         $stock->setTicker('GEN_AUTO');
         $stock->setBeta('1.0');
-
-        $calmFreightMacro = new MacroStateDTO(freightRateIndexEma: 100.0, inflationEma: 0.02, energyPriceIndexEma: 100.0, industrialMetalsIndexEma: 100.0);
-        $spikeFreightMacro = new MacroStateDTO(freightRateIndexEma: 160.0, inflationEma: 0.02, energyPriceIndexEma: 100.0, industrialMetalsIndexEma: 100.0);
-
         $mathMock = $this->createStub(MathUtility::class);
         $mathMock->method('generatePersistentZ')->willReturn(0.0);
+        $run = fn (MacroStateDTO $macro) => $this->model->computeActualFinancials($stock, 100_000_000.0, 0.40, 20_000_000.0, 0.0, $macro, $mathMock);
 
-        $calmResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.40, 20_000_000.0, 0.0, $calmFreightMacro, $mathMock);
-        $spikeResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.40, 20_000_000.0, 0.0, $spikeFreightMacro, $mathMock);
+        $calm = $run(new MacroStateDTO(freightRateIndexEma: 100.0, industrialMetalsIndexEma: 100.0, inflationEma: 0.02));
+        $freightSpike = $run(new MacroStateDTO(freightRateIndexEma: 160.0, industrialMetalsIndexEma: 100.0, inflationEma: 0.02));
+        $metalsSpike = $run(new MacroStateDTO(freightRateIndexEma: 100.0, industrialMetalsIndexEma: 140.0, inflationEma: 0.02));
 
-        $this->assertGreaterThan(
-            $calmResult->clampedMargin,
-            $spikeResult->clampedMargin,
-            'Maritime freight rate spikes must increase automotive ocean shipping variable costs and raise clampedMargin.'
-        );
-        $this->assertLessThan($calmResult->ebit, $spikeResult->ebit);
+        $this->assertEqualsWithDelta($calm->clampedMargin, $freightSpike->clampedMargin, 1e-12);
+        $this->assertGreaterThan($calm->clampedMargin, $metalsSpike->clampedMargin);
+        $this->assertLessThan($calm->ebit, $metalsSpike->ebit);
     }
 
     /**

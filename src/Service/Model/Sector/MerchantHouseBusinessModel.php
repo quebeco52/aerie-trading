@@ -294,7 +294,6 @@ class MerchantHouseBusinessModel extends ConglomerateBusinessModel
             'output_gap_ema',
             'perceived_neutral_rate',
             'policy_rate_ema',
-            'producer_price_inflation_ema',
             'supply_chain_pressure_index_ema',
             'tips_breakeven_ema',
             'trade_balance_to_gdp_ema',

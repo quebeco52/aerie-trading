@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service\Model\Sector;
 
+use App\Data\InputOutputExposures;
 use App\Service\Model\BusinessModelInterface;
 
 use App\Data\ModelParam;
@@ -32,8 +33,8 @@ class HeavyManufacturingBusinessModel extends StandardCorporateBusinessModel
     public const INDUSTRY_SUBSTITUTABILITY = 0.50;
 
     // --- Input Cost Basket ---
-    /** Shares of the variable cost base bought in tracked input markets (energy, metals, agri, freight, wholesale goods, variable payroll). */
-    public const INPUT_COST_EXPOSURES = ['energy' => 0.08, 'metals' => 0.25, 'freight' => 0.05, 'ppi' => 0.25, 'labor' => 0.20];
+    /** Shares of the variable cost base by input channel, measured from the BEA input-output accounts with supply-chain content (labor still the model's own). */
+    public const INPUT_COST_EXPOSURES = InputOutputExposures::HEAVY_MANUFACTURING;
 
     // --- Labor Intensity ---
     /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze. Salaried engineering and plant supervision are fixed; the hourly line and the material bill move with output. */
@@ -241,14 +242,11 @@ class HeavyManufacturingBusinessModel extends StandardCorporateBusinessModel
         return [
             'capacity_utilization_rate_ema',
             'capital_stock_overhang_ema',
-            'energy_cost_push_lag',
             'exchange_rate_index_ema',
-            'freight_rate_index_ema',
             'industrial_metals_index_ema',
             'inventory_stock_gap_ema',
             'manufacturing_pmi_ema',
             'output_gap_ema',
-            'producer_price_inflation_ema',
             'supply_chain_pressure_index_ema',
             'tips_breakeven_ema',
             'wage_growth_ema',

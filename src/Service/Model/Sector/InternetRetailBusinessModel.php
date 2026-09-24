@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service\Model\Sector;
 
+use App\Data\InputOutputExposures;
 use App\Service\Math\FinancialConstants;
 
 use App\Service\Model\BusinessModelInterface;
@@ -37,8 +38,8 @@ class InternetRetailBusinessModel extends StandardCorporateBusinessModel
     public const INDUSTRY_SUBSTITUTABILITY = 0.70;
 
     // --- Input Cost Basket ---
-    /** Shares of the variable cost base bought in tracked input markets (energy, metals, agri, freight, wholesale goods, variable payroll). */
-    public const INPUT_COST_EXPOSURES = ['ppi' => 0.45, 'freight' => 0.08, 'labor' => 0.25, 'energy' => 0.03];
+    /** Shares of the variable cost base by input channel, measured from the BEA input-output accounts with supply-chain content (labor still the model's own). */
+    public const INPUT_COST_EXPOSURES = InputOutputExposures::INTERNET_RETAIL;
 
     // --- Consumer Demand ---
     /** Elasticity of first-party retail volume to the consumer sentiment gap (index points above baseline / 100). Discretionary baskets follow household confidence ahead of the output gap. */
@@ -266,11 +267,8 @@ class InternetRetailBusinessModel extends StandardCorporateBusinessModel
     {
         return [
             'consumer_sentiment_index_ema',
-            'energy_cost_push_lag',
             'exchange_rate_index_ema',
-            'freight_rate_index_ema',
             'output_gap_ema',
-            'producer_price_inflation_ema',
             'tips_breakeven_ema',
             'wage_growth_ema',
         ];

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service\Model\Sector;
 
+use App\Data\InputOutputExposures;
 use App\Service\Model\BusinessModelInterface;
 
 use App\Data\ModelParam;
@@ -37,8 +38,8 @@ class RailroadBusinessModel extends StandardCorporateBusinessModel
     public const INDUSTRY_SUBSTITUTABILITY = 0.20;
 
     // --- Input Cost Basket ---
-    /** Shares of the variable cost base bought in tracked input markets (energy, metals, agri, freight, wholesale goods, variable payroll). */
-    public const INPUT_COST_EXPOSURES = ['energy' => 0.20, 'labor' => 0.30, 'ppi' => 0.05, 'metals' => 0.03];
+    /** Shares of the variable cost base by input channel, measured from the BEA input-output accounts with supply-chain content (labor still the model's own). */
+    public const INPUT_COST_EXPOSURES = InputOutputExposures::RAILROAD;
     /** Fuel surcharge programs reprice within a quarter or two of the diesel move. */
     public const INPUT_PASS_THROUGH_LAG_YEARS = 0.25;
     /** Captive track networks: nearly all fuel and wage moves are surcharged through. */
@@ -255,7 +256,6 @@ class RailroadBusinessModel extends StandardCorporateBusinessModel
             'industrial_metals_index_ema',
             'manufacturing_pmi_ema',
             'output_gap_ema',
-            'producer_price_inflation_ema',
             'tips_breakeven_ema',
             'trade_balance_to_gdp_ema',
             'wage_growth_ema',

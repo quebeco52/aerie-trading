@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service\Model\Sector;
 
+use App\Data\InputOutputExposures;
 use App\Service\Corporate\EarningsEngine;
 use App\DTO\StreamContext;
 use App\Service\Model\BusinessModelInterface;
@@ -38,8 +39,8 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
     public const INDUSTRY_SUBSTITUTABILITY = 0.00;
 
     // --- Input Cost Basket ---
-    /** Shares of the variable cost base bought in tracked input markets (energy, metals, agri, freight, wholesale goods, variable payroll). */
-    public const INPUT_COST_EXPOSURES = ['gas' => 0.30, 'energy' => 0.10, 'labor' => 0.15, 'ppi' => 0.05];
+    /** Shares of the variable cost base by input channel, measured from the BEA input-output accounts with supply-chain content (labor still the model's own). */
+    public const INPUT_COST_EXPOSURES = InputOutputExposures::UTILITY;
     /** Fuel adjustment clauses and rate cases eventually recover costs in full: unit elasticity, but only after the regulatory lag. */
     public const PRICING_ELASTICITY = 1.00;
     /** Rate cases take 12 to 24 months: authorized tariffs follow costs with a long lag. */
@@ -411,7 +412,6 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
             'inflation_ema',
             'natural_gas_price_index_ema',
             'output_gap_ema',
-            'producer_price_inflation_ema',
             'tips_breakeven_ema',
             'wage_growth_ema',
             'wholesale_power_price_index_ema',

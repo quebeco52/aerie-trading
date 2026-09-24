@@ -53,6 +53,7 @@ final class BusinessModelMacroFieldDeclarationTest extends TestCase
     private const BASKET_CHANNEL_FIELDS = [
         'energy'  => 'energy_cost_push_lag',
         'gas'     => 'natural_gas_price_index_ema',
+        'electricity' => 'wholesale_power_price_index_ema',
         'metals'  => 'industrial_metals_index_ema',
         'agri'    => 'agricultural_commodity_index_ema',
         'freight' => 'freight_rate_index_ema',

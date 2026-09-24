@@ -568,19 +568,15 @@ class DistrictMap
      * principle CONDUITS already applied by hand to equityRiskPremium/corporateTaxRate/policyRate
      * feeding WACC alone.
      *
-     * The last two joined when the input-cost basket reached Biotech and REIT: energy and wholesale
-     * goods are what every producing firm buys, so leaving them in wired 62% of tenants to the
-     * commodity exchange and the manufactory board respectively. What still distinguishes a tenant
-     * there is genuine metals, agricultural or crack-spread exposure, which is what those conduits
-     * now draw on.
+     * Energy and wholesale goods left the list when the input-cost baskets were measured from the BEA
+     * input-output accounts (App\Data\InputOutputExposures): oil is now material to fewer than half the
+     * models and the wholesale-goods channel was retired, so an oil conduit marks a real fuel dependency.
      * See App\Service\District\DistrictConduitResolver.
      */
     public const UBIQUITOUS_MACRO_FIELDS = [
         'output_gap_ema',
         'exchange_rate_index_ema',
         'tips_breakeven_ema',
-        'energy_cost_push_lag',
-        'producer_price_inflation_ema',
     ];
 
     // --- Institution Registry ---

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service\Model\Sector;
 
+use App\Data\InputOutputExposures;
 use App\DTO\DebtExpansionAppetiteDTO;
 
 use App\Service\Model\BusinessModelInterface;
@@ -29,8 +30,8 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
     public const INDUSTRY_SUBSTITUTABILITY = 0.40;
 
     // --- Input Cost Basket ---
-    /** Shares of the variable cost base bought in tracked input markets (energy, metals, agri, freight, wholesale goods, variable payroll). Property operating expense is utilities, on-site staff and repairs; the share a landlord bears net of tenant recoveries. */
-    public const INPUT_COST_EXPOSURES = ['energy' => 0.20, 'labor' => 0.25, 'ppi' => 0.15];
+    /** Shares of the variable cost base by input channel, measured from the BEA input-output accounts with supply-chain content (labor still the model's own). */
+    public const INPUT_COST_EXPOSURES = InputOutputExposures::REIT;
     /** Utility contracts and service agreements reprice annually, so a spot move reaches property opex over about a year. */
     public const INPUT_COST_LAG_YEARS = 0.75;
     /** Operating-expense recoveries and CAM reconciliations bill tenants in arrears, a year or more behind the cost. */
@@ -538,11 +539,10 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
             'corporate_default_rate_ema',
             'energy_cost_push_lag',
             'exchange_rate_index_ema',
-            'housing_starts_index_ema',
             'household_debt_service_gap',
+            'housing_starts_index_ema',
             'inflation_ema',
             'output_gap_ema',
-            'producer_price_inflation_ema',
             'residential_property_index_ema',
             'retail_default_rate_ema',
             'tips_breakeven_ema',

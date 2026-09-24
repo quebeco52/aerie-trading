@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service\Model\Sector;
 
+use App\Data\InputOutputExposures;
 use App\Service\Math\FinancialConstants;
 
 use App\Data\ModelParam;
@@ -41,8 +42,8 @@ class ApparelManufacturingBusinessModel extends StandardCorporateBusinessModel
     public const INDUSTRY_SUBSTITUTABILITY = 0.60;
 
     // --- Input Cost Basket ---
-    /** Shares of the variable cost base bought in tracked input markets (energy, metals, agri, freight, wholesale goods, variable payroll). */
-    public const INPUT_COST_EXPOSURES = ['agri' => 0.15, 'freight' => 0.06, 'energy' => 0.04, 'ppi' => 0.20, 'labor' => 0.25];
+    /** Shares of the variable cost base by input channel, measured from the BEA input-output accounts with supply-chain content (labor still the model's own). */
+    public const INPUT_COST_EXPOSURES = InputOutputExposures::APPAREL_MANUFACTURING;
     /** Six to nine months of raw inventory and cotton futures: spot fiber and freight moves reach COGS with a lag. */
     public const INPUT_COST_LAG_YEARS = 0.50;
 
@@ -385,15 +386,11 @@ class ApparelManufacturingBusinessModel extends StandardCorporateBusinessModel
     public function getOperatingMacroFields(): array
     {
         return [
-            'agricultural_commodity_index_ema',
             'consumer_sentiment_index_ema',
-            'energy_cost_push_lag',
             'exchange_rate_index_ema',
             'foreign_output_gap_ema',
-            'freight_rate_index_ema',
             'inventory_stock_gap_ema',
             'output_gap_ema',
-            'producer_price_inflation_ema',
             'tips_breakeven_ema',
             'trade_balance_to_gdp_ema',
             'wage_growth_ema',

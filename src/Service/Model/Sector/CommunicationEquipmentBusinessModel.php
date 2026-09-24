@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service\Model\Sector;
 
+use App\Data\InputOutputExposures;
 use App\Data\ModelParam;
 use App\DTO\MacroStateDTO;
 use App\DTO\SectorCoverageProfile;
@@ -39,8 +40,8 @@ class CommunicationEquipmentBusinessModel extends StandardCorporateBusinessModel
     public const INDUSTRY_SUBSTITUTABILITY = 0.60;
 
     // --- Input Cost Basket ---
-    /** Shares of the variable cost base bought in tracked input markets (energy, metals, agri, freight, wholesale goods, variable payroll). Radios are a bill of semiconductors, RF metals and contract assembly. */
-    public const INPUT_COST_EXPOSURES = ['ppi' => 0.35, 'metals' => 0.06, 'freight' => 0.04, 'labor' => 0.20, 'energy' => 0.02];
+    /** Shares of the variable cost base by input channel, measured from the BEA input-output accounts with supply-chain content (labor still the model's own). */
+    public const INPUT_COST_EXPOSURES = InputOutputExposures::COMMUNICATION_EQUIPMENT;
     /** A concentrated vendor base under multi-year frame agreements recovers most component moves at the annual price review. */
     public const PRICING_POWER_INDEX = 0.65;
     /** Frame agreements reprice once a year. */
@@ -402,14 +403,11 @@ class CommunicationEquipmentBusinessModel extends StandardCorporateBusinessModel
         return [
             'capital_stock_overhang_ema',
             'consumer_sentiment_index_ema',
-            'energy_cost_push_lag',
             'exchange_rate_index_ema',
             'foreign_output_gap_ema',
-            'freight_rate_index_ema',
             'industrial_metals_index_ema',
             'inventory_stock_gap_ema',
             'output_gap_ema',
-            'producer_price_inflation_ema',
             'supply_chain_pressure_index_ema',
             'tips_breakeven_ema',
             'trade_balance_to_gdp_ema',

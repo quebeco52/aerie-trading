@@ -111,9 +111,9 @@ trait StandardOperatingPhysicsTrait
 
     /**
      * Shares of the VARIABLE cost base bought in each tracked input market. Channels: energy (oil-linked),
-     * gas (natural gas and the power priced off it), metals, agri, freight, ppi (wholesale intermediate
-     * goods) and labor (variable payroll). Shares need not sum to one;
-     * the remainder is bought at prices no macro index tracks. Sector models declare INPUT_COST_EXPOSURES.
+     * gas, electricity (industrial tariffs off the wholesale power index), metals, agri, freight, ppi (wholesale
+     * intermediate goods) and labor (variable payroll). Shares need not sum to one; the remainder is bought at
+     * prices no macro index tracks. Sector models declare INPUT_COST_EXPOSURES, measured in App\Data\InputOutputExposures.
      *
      * @return array<string, float>
      */
@@ -213,6 +213,7 @@ trait StandardOperatingPhysicsTrait
         return [
             'energy'  => $macroState->energyCostPushLag / \App\Service\Macro\MacroEngine::ENERGY_COST_PUSH_TRANSMISSION,
             'gas'     => ($macroState->naturalGasPriceIndexEma - 100.0) / 100.0,
+            'electricity' => ($macroState->wholesalePowerPriceIndexEma - \App\Service\Macro\MacroEngine::WHOLESALE_POWER_BASELINE) / \App\Service\Macro\MacroEngine::WHOLESALE_POWER_BASELINE,
             'metals'  => ($macroState->industrialMetalsIndexEma - 100.0) / 100.0,
             'agri'    => ($macroState->agriculturalCommodityIndexEma - 100.0) / 100.0,
             'freight' => ($macroState->freightRateIndexEma - 100.0) / 100.0,

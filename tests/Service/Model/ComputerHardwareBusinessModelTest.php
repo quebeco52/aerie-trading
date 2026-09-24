@@ -66,22 +66,19 @@ class ComputerHardwareBusinessModelTest extends TestCase
         $this->assertLessThan($baseResult->actualRevenue, $strongDollarResult->actualRevenue);
     }
 
-    public function testIndustrialMetalsCostDragOnMargins(): void
+    public function testMetalsAreBelowMaterialityForASystemsAssembler(): void
     {
+        // BEA 2017: a computer maker buys boards, chips and drives as components; metals through the whole supply chain are
+        // 1.3% of its variable costs, under InputOutputExposures::MATERIALITY_FLOOR, so a metals spike is no margin event.
         $stock = new Stock();
         $stock->setTicker('HPE');
         $stock->setBeta('1.0');
-
-        $baseMacro = new MacroStateDTO(industrialMetalsIndexEma: 100.0);
-        $metalsSpikeMacro = new MacroStateDTO(industrialMetalsIndexEma: 150.0);
-
         $mathMock = $this->createStub(MathUtility::class);
         $mathMock->method('generatePersistentZ')->willReturn(0.0);
+        $baseResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.35, 20_000_000.0, 0.0, new MacroStateDTO(industrialMetalsIndexEma: 100.0), $mathMock);
+        $metalsSpikeResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.35, 20_000_000.0, 0.0, new MacroStateDTO(industrialMetalsIndexEma: 150.0), $mathMock);
 
-        $baseResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.35, 20_000_000.0, 0.0, $baseMacro, $mathMock);
-        $metalsSpikeResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.35, 20_000_000.0, 0.0, $metalsSpikeMacro, $mathMock);
-
-        // Industrial metals cost drag increases variable cost ratio (clampedMargin)
-        $this->assertGreaterThan($baseResult->clampedMargin, $metalsSpikeResult->clampedMargin);
+        $this->assertArrayNotHasKey('metals', ComputerHardwareBusinessModel::INPUT_COST_EXPOSURES);
+        $this->assertEqualsWithDelta($baseResult->clampedMargin, $metalsSpikeResult->clampedMargin, 1e-12);
     }
 }

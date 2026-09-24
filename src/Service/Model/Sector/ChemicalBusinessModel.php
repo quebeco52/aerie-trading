@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service\Model\Sector;
 
+use App\Data\InputOutputExposures;
 use App\Data\ModelParam;
 use App\DTO\MacroStateDTO;
 use App\DTO\SectorPhysicsResult;
@@ -36,8 +37,8 @@ class ChemicalBusinessModel extends StandardCorporateBusinessModel
     public const INDUSTRY_SUBSTITUTABILITY = 0.50;
 
     // --- Input Cost Basket ---
-    /** Shares of the variable cost base bought in tracked input markets (energy, metals, agri, freight, wholesale goods, variable payroll). */
-    public const INPUT_COST_EXPOSURES = ['ppi' => 0.15, 'labor' => 0.15, 'freight' => 0.05];
+    /** Shares of the variable cost base by input channel, measured from the BEA input-output accounts with supply-chain content (labor still the model's own). */
+    public const INPUT_COST_EXPOSURES = InputOutputExposures::CHEMICAL;
     /** Share of cracker feedstock that is gas-linked (ethane) rather than oil-linked (naphtha); the feedstock squeeze blends the two. */
     public const GAS_FEEDSTOCK_SHARE = 0.50;
     /** Base petrochemicals clear at the marginal cracker's cost and take the price they are given; the specialty and agrochemical books carry the formulation power. */
@@ -392,12 +393,10 @@ class ChemicalBusinessModel extends StandardCorporateBusinessModel
             'agricultural_commodity_index_ema',
             'energy_cost_push_lag',
             'exchange_rate_index_ema',
-            'freight_rate_index_ema',
             'industrial_metals_index_ema',
             'manufacturing_pmi',
             'natural_gas_price_index_ema',
             'output_gap_ema',
-            'producer_price_inflation_ema',
             'refining_crack_spread',
             'tips_breakeven_ema',
             'wage_growth_ema',

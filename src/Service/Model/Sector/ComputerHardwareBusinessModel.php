@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service\Model\Sector;
 
+use App\Data\InputOutputExposures;
 use App\Service\Model\BusinessModelInterface;
 
 use App\Data\ModelParam;
@@ -32,8 +33,8 @@ class ComputerHardwareBusinessModel extends StandardCorporateBusinessModel
     public const INDUSTRY_SUBSTITUTABILITY = 0.60;
 
     // --- Input Cost Basket ---
-    /** Shares of the variable cost base bought in tracked input markets (energy, metals, agri, freight, wholesale goods, variable payroll). */
-    public const INPUT_COST_EXPOSURES = ['ppi' => 0.40, 'metals' => 0.08, 'freight' => 0.04, 'labor' => 0.15, 'energy' => 0.02];
+    /** Shares of the variable cost base by input channel, measured from the BEA input-output accounts with supply-chain content (labor still the model's own). */
+    public const INPUT_COST_EXPOSURES = InputOutputExposures::COMPUTER_HARDWARE;
     /** Boxes are specified on a common component bill and bid against near-identical rivals; component cost moves reach street prices, but little else does. */
     public const PRICING_POWER_INDEX = 0.45;
 
@@ -280,14 +281,10 @@ class ComputerHardwareBusinessModel extends StandardCorporateBusinessModel
     {
         return [
             'consumer_sentiment_index_ema',
-            'energy_cost_push_lag',
             'exchange_rate_index_ema',
             'foreign_output_gap_ema',
-            'freight_rate_index_ema',
-            'industrial_metals_index_ema',
             'inventory_stock_gap_ema',
             'output_gap_ema',
-            'producer_price_inflation_ema',
             'tips_breakeven_ema',
             'trade_balance_to_gdp_ema',
             'wage_growth_ema',

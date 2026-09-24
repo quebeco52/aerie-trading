@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service\Model\Sector;
 
+use App\Data\InputOutputExposures;
 use App\Service\Model\BusinessModelInterface;
 
 use App\Data\ModelParam;
@@ -32,8 +33,8 @@ class LuxuryBusinessModel extends StandardCorporateBusinessModel
     public const INDUSTRY_SUBSTITUTABILITY = 0.40;
 
     // --- Input Cost Basket ---
-    /** Shares of the variable cost base bought in tracked input markets (energy, metals, agri, freight, wholesale goods, variable payroll). */
-    public const INPUT_COST_EXPOSURES = ['labor' => 0.25, 'ppi' => 0.15, 'freight' => 0.03];
+    /** Shares of the variable cost base by input channel, measured from the BEA input-output accounts with supply-chain content (labor still the model's own). */
+    public const INPUT_COST_EXPOSURES = InputOutputExposures::LUXURY;
 
     // --- Labor Intensity ---
     /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze. Boutique staffing, atelier artisans and brand marketing are carried through the cycle to protect the brand, not flexed with sales. */
@@ -258,10 +259,9 @@ class LuxuryBusinessModel extends StandardCorporateBusinessModel
             'consumer_sentiment_index_ema',
             'exchange_rate_index_ema',
             'foreign_output_gap_ema',
-            'freight_rate_index_ema',
+            'industrial_metals_index_ema',
             'money_supply_growth_ema',
             'output_gap_ema',
-            'producer_price_inflation_ema',
             'residential_property_index_ema',
             'tips_breakeven_ema',
             'wage_growth_ema',

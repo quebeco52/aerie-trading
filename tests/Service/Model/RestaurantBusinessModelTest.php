@@ -55,50 +55,24 @@ class RestaurantBusinessModelTest extends TestCase
         $this->assertGreaterThan(0.0, $result->streamRevenue['franchise_real_estate_leases']);
     }
 
-    public function testKitchenEnergyUtilityDragIncreasesVariableCost(): void
+    public function testFoodCommodityDragIncreasesVariableCostAndKitchenFuelIsImmaterial(): void
     {
+        // BEA 2017: farm products through the supply chain are 3.8% of a restaurant's variable costs (the USDA food-dollar farm
+        // share away from home is ~4-5 cents); oil and gas content sits under InputOutputExposures::MATERIALITY_FLOOR.
         $stock = new Stock();
         $stock->setTicker('MCD');
         $stock->setBeta('1.0');
-
         $mathUtilityMock = $this->createStub(MathUtility::class);
         $mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
+        $run = fn (MacroStateDTO $macro) => $this->model->computeActualFinancials($stock, 1_000.0, 0.25, 100.0, 0.10, $macro, $mathUtilityMock);
 
-        $macroBaseline = new MacroStateDTO(
-            consumerSentimentIndexEma: 100.0,
-            energyPriceIndexEma: 100.0,
-            inflationEma: 0.02
-        );
+        $baseline = $run(new MacroStateDTO(consumerSentimentIndexEma: 100.0, agriculturalCommodityIndexEma: 100.0, inflationEma: 0.02));
+        $foodSpike = $run(new MacroStateDTO(consumerSentimentIndexEma: 100.0, agriculturalCommodityIndexEma: 130.0, inflationEma: 0.02));
+        $fuelSpike = $run(new MacroStateDTO(consumerSentimentIndexEma: 100.0, agriculturalCommodityIndexEma: 100.0, energyPriceIndexEma: 125.0, energyCostPushLag: 0.0025, inflationEma: 0.02));
 
-        $resultBaseline = $this->model->computeActualFinancials(
-            $stock,
-            expectedRevenue: 1_000.0,
-            realizedVariableMargin: 0.25,
-            fixedCosts: 100.0,
-            baselineVol: 0.10,
-            macroState: $macroBaseline,
-            mathUtility: $mathUtilityMock
-        );
-
-        $macroSpike = new MacroStateDTO(
-            consumerSentimentIndexEma: 100.0,
-            energyPriceIndexEma: 125.0,
-            energyCostPushLag: 0.0025,
-            inflationEma: 0.02
-        );
-
-        $resultSpike = $this->model->computeActualFinancials(
-            $stock,
-            expectedRevenue: 1_000.0,
-            realizedVariableMargin: 0.25,
-            fixedCosts: 100.0,
-            baselineVol: 0.10,
-            macroState: $macroSpike,
-            mathUtility: $mathUtilityMock
-        );
-
-        $this->assertGreaterThan($resultBaseline->clampedMargin, $resultSpike->clampedMargin);
-        $this->assertLessThan($resultBaseline->ebit, $resultSpike->ebit);
+        $this->assertGreaterThan($baseline->clampedMargin, $foodSpike->clampedMargin);
+        $this->assertLessThan($baseline->ebit, $foodSpike->ebit);
+        $this->assertEqualsWithDelta($baseline->clampedMargin, $fuelSpike->clampedMargin, 1e-12);
     }
 
     public function testLaborMarketTightnessIncreasesKitchenWageCost(): void

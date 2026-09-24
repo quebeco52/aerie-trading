@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service\Model\Sector;
 
+use App\Data\InputOutputExposures;
 use App\Data\ModelParam;
 use App\DTO\MacroStateDTO;
 use App\DTO\SectorPhysicsResult;
@@ -41,8 +42,8 @@ class OilGasProducerBusinessModel extends StandardCorporateBusinessModel
     public const INDUSTRY_SUBSTITUTABILITY = 0.15;
 
     // --- Input Cost Basket ---
-    /** Shares of the per-barrel cost base bought in tracked input markets: rig and vessel fuel, tubulars and steel, oilfield services, field payroll. */
-    public const INPUT_COST_EXPOSURES = ['energy' => 0.15, 'metals' => 0.05, 'ppi' => 0.10, 'labor' => 0.20];
+    /** Shares of the variable cost base by input channel, measured from the BEA input-output accounts with supply-chain content (labor still the model's own). */
+    public const INPUT_COST_EXPOSURES = InputOutputExposures::OIL_GAS_PRODUCER;
     /** Price takers recover none of their own input inflation through pricing: the market sets the quote. */
     public const PRICING_POWER_INDEX = 0.00;
 
@@ -337,7 +338,6 @@ class OilGasProducerBusinessModel extends StandardCorporateBusinessModel
             'global_demand_gap_ema',
             'industrial_metals_index_ema',
             'natural_gas_price_index_ema',
-            'producer_price_inflation_ema',
             'wage_growth_ema',
         ];
     }

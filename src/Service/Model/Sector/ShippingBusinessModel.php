@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service\Model\Sector;
 
+use App\Data\InputOutputExposures;
 use App\Service\Model\BusinessModelInterface;
 
 use App\Data\ModelParam;
@@ -34,8 +35,8 @@ class ShippingBusinessModel extends StandardCorporateBusinessModel
     public const INDUSTRY_SUBSTITUTABILITY = 0.30;
 
     // --- Input Cost Basket ---
-    /** Shares of the variable cost base bought in tracked input markets (energy, metals, agri, freight, wholesale goods, variable payroll). */
-    public const INPUT_COST_EXPOSURES = ['energy' => 0.35, 'labor' => 0.15, 'ppi' => 0.05];
+    /** Shares of the variable cost base by input channel, measured from the BEA input-output accounts with supply-chain content (labor still the model's own). */
+    public const INPUT_COST_EXPOSURES = InputOutputExposures::SHIPPING;
     /** Bunker adjustment factors on contracts reprice within a quarter; spot voyages carry the fuel themselves. */
     public const INPUT_PASS_THROUGH_LAG_YEARS = 0.25;
     /** Half the book is contracted with bunker clauses, half is spot: bunker moves are half recovered. */
@@ -300,7 +301,6 @@ class ShippingBusinessModel extends StandardCorporateBusinessModel
             'freight_rate_index_ema',
             'industrial_metals_index_ema',
             'output_gap_ema',
-            'producer_price_inflation_ema',
             'supply_chain_pressure_index_ema',
             'tips_breakeven_ema',
             'trade_balance_to_gdp_ema',

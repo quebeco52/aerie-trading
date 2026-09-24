@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service\Model\Sector;
 
+use App\Data\InputOutputExposures;
 use App\Service\Model\BusinessModelInterface;
 
 use App\Data\ModelParam;
@@ -39,8 +40,8 @@ class SecurityProtectionBusinessModel extends StandardCorporateBusinessModel
     public const INDUSTRY_SUBSTITUTABILITY = 0.50;
 
     // --- Input Cost Basket ---
-    /** Shares of the variable cost base bought in tracked input markets (energy, metals, agri, freight, wholesale goods, variable payroll). */
-    public const INPUT_COST_EXPOSURES = ['labor' => 0.75, 'energy' => 0.03];
+    /** Shares of the variable cost base by input channel, measured from the BEA input-output accounts with supply-chain content (labor still the model's own). */
+    public const INPUT_COST_EXPOSURES = InputOutputExposures::SECURITY_PROTECTION;
     /** Cost-plus government work and annual retainer resets recover guard wage moves almost in full. */
     public const PRICING_POWER_INDEX = 0.85;
 
@@ -275,7 +276,6 @@ class SecurityProtectionBusinessModel extends StandardCorporateBusinessModel
     public function getOperatingMacroFields(): array
     {
         return [
-            'energy_cost_push_lag',
             'exchange_rate_index_ema',
             'government_spending_index_ema',
             'inflation_ema',
