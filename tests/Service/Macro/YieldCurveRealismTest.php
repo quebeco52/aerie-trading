@@ -27,8 +27,14 @@ class YieldCurveRealismTest extends TestCase
     private const BURN_IN_YEARS = 5;
     private const TICKS_PER_YEAR = 252;
 
-    /** Three seeds pooled: a forty-year path is one draw of the cycle, and its mean slope moves a fifth of a percent seed to seed. */
-    private const SPREAD_SEEDS = [20260909, 20260918, 4711];
+    /**
+     * Six seeds pooled: a forty-year path is one draw of the cycle, and its mean slope moves about a third of a percent
+     * seed to seed (40-seed sd 0.34pp around a 1.02% mean), so three seeds left the pooled mean a fifth of a percent of
+     * noise against a bound a quarter of a percent away.
+     */
+    private const SPREAD_SEEDS = [20260909, 20260918, 4711, 20260924, 20260925, 20260926];
+    /** Ticks per year for the slope pool: the macro is timestep-neutral in mean and variance, so twice the seeds cost the same. */
+    private const SPREAD_TICKS_PER_YEAR = 120;
 
     public function testTwoTenSpreadDistributionMatchesTheHistoricalRecord(): void
     {
@@ -37,7 +43,7 @@ class YieldCurveRealismTest extends TestCase
         $twoOverPolicy = [];
         $thirtyOverTen = [];
         $inverted = 0;
-        $dt = 1.0 / self::TICKS_PER_YEAR;
+        $dt = 1.0 / self::SPREAD_TICKS_PER_YEAR;
 
         foreach (self::SPREAD_SEEDS as $seed) {
             mt_srand($seed);
@@ -54,9 +60,9 @@ class YieldCurveRealismTest extends TestCase
                 new CreditFiscalSubsystem($mathUtility),
             );
 
-            for ($tick = 0; $tick < self::YEARS * self::TICKS_PER_YEAR; $tick++) {
+            for ($tick = 0; $tick < self::YEARS * self::SPREAD_TICKS_PER_YEAR; $tick++) {
                 $macro = $engine->updateMacroState($dt);
-                if ($tick < self::BURN_IN_YEARS * self::TICKS_PER_YEAR) {
+                if ($tick < self::BURN_IN_YEARS * self::SPREAD_TICKS_PER_YEAR) {
                     continue;
                 }
                 $spread = $macro->yield10y - $macro->yield2y;

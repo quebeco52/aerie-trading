@@ -10,7 +10,7 @@ let macroLaborChartInstance = null;
 let macroLaborCreditChartInstance = null;
 let macroWealthEffectChartInstance = null;
 let macroCommoditiesChartInstance = null;
-let macroCrackSpreadChartInstance = null;
+let macroEnergySpreadsChartInstance = null;
 let macroPropertyChartInstance = null;
 let macroTradeLogisticsChartInstance = null;
 let macroSentimentChartInstance = null;
@@ -63,7 +63,10 @@ function updateMacroHud(d) {
     setHud('hud-macroSentimentChart', `Sent: ${last(d.sentimentData).toFixed(0)} | M&A: ${last(d.dealActivityData).toFixed(0)}`);
     const lastGold = [...d.goldPriceData].reverse().find(v => v !== null && !isNaN(v));
     setHud('hud-macroCommoditiesChart', `Energy: ${last(d.energyPriceData).toFixed(1)} | Metals: ${last(d.metalsEmaData).toFixed(1)} | Gold: ${lastGold === undefined ? '-' : lastGold.toFixed(1)} | Gas: ${last(d.naturalGasPriceData).toFixed(1)}`);
-    setHud('hud-macroCrackSpreadChart', `Crack: $${last(d.crackSpreadData).toFixed(2)}/bbl`);
+    const spreads = energySpreadDollars(d.powerPriceIndexData, d.naturalGasPriceData);
+    const lastPower = [...spreads.power].reverse().find(v => v !== null && !isNaN(v));
+    const lastSpark = [...spreads.spark].reverse().find(v => v !== null && !isNaN(v));
+    setHud('hud-macroEnergySpreadsChart', `Crack: $${last(d.crackSpreadData).toFixed(2)}/bbl | Power: ${lastPower === undefined ? '-' : '$' + lastPower.toFixed(1)} | Spark: ${lastSpark === undefined ? '-' : '$' + lastSpark.toFixed(1)}/MWh`);
     setHud('hud-macroTradeLogisticsChart', `FX: ${last(d.fxEmaData).toFixed(1)} | Freight: ${last(d.freightEmaData).toFixed(1)} | GSCPI: ${last(d.gscpiData) >= 0 ? '+' : ''}${last(d.gscpiData).toFixed(2)}σ`);
     setHud('hud-macroGovtSpendingChart', `Tax: ${last(d.taxData).toFixed(1)}% | Debt: ${last(d.sovereignDebtData).toFixed(1)}% | Spread: ${last(d.sovereignRiskSpreadData).toFixed(0)} bps | Deficit: ${last(d.primaryDeficitData) >= 0 ? '+' : ''}${last(d.primaryDeficitData).toFixed(1)}%`);
     setHud('hud-macroTermPremiumChart', `10Y: ${last(d.yield10yData).toFixed(2)}% | Term: ${last(d.termPremiumData) >= 0 ? '+' : ''}${last(d.termPremiumData).toFixed(2)}%`);
@@ -121,7 +124,7 @@ export function updateMacroCharts(reports, timeframe = currentMacroTimeframe) {
     let corporateDefaultPctData = [], corporateDefaultBpsData = [];
     let sloosData = [], dealActivityData = [];
     let pmiData = [], ppiData = [], tradeBalanceData = [], housingStartsData = [], moneySupplyGrowthData = [];
-    let naturalGasPriceData = [], goldPriceData = [], sovereignRiskSpreadData = [], primaryDeficitData = [];
+    let naturalGasPriceData = [], goldPriceData = [], powerPriceIndexData = [], sovereignRiskSpreadData = [], primaryDeficitData = [];
     let householdDsrData = [], householdDtiData = [], creditToGdpGapData = [], ccybRateData = [];
     let foreignOutputGapData = [], foreignPolicyRateData = [], globalDemandGapData = [];
     let depositBetaData = [], mmfShareData = [];
@@ -398,6 +401,10 @@ export function updateMacroCharts(reports, timeframe = currentMacroTimeframe) {
         const rawGold = report.gold_price_index_ema ?? report.gold_price_index ?? report.goldPriceIndexEma ?? report.goldPriceIndex ?? null;
         goldPriceData.push(rawGold === null ? null : parseFloat(rawGold));
 
+        // Recorded only since the power index joined the macro: older quarters stay gaps.
+        const rawPower = report.wholesale_power_price_index_ema ?? report.wholesale_power_price_index ?? report.wholesalePowerPriceIndexEma ?? report.wholesalePowerPriceIndex ?? null;
+        powerPriceIndexData.push(rawPower === null ? null : parseFloat(rawPower));
+
         let rawSovSpread = report.sovereign_risk_spread_ema ?? report.sovereign_risk_spread ?? report.sovereignRiskSpreadEma ?? report.sovereignRiskSpread ?? 0.0;
         sovereignRiskSpreadData.push(parseFloat(rawSovSpread) * 10000);
 
@@ -446,7 +453,7 @@ export function updateMacroCharts(reports, timeframe = currentMacroTimeframe) {
         inventoryStockGapData, faitCumulativeGapData,
         capacityUtilizationData, fxEmaData, freightEmaData,
         pmiData, ppiData, tradeBalanceData, housingStartsData, moneySupplyGrowthData,
-        naturalGasPriceData, goldPriceData, metalsEmaData, sovereignRiskSpreadData, primaryDeficitData,
+        naturalGasPriceData, goldPriceData, powerPriceIndexData, metalsEmaData, sovereignRiskSpreadData, primaryDeficitData,
         householdDsrData, householdDtiData, creditToGdpGapData, ccybRateData,
         foreignOutputGapData, foreignPolicyRateData, globalDemandGapData,
         depositBetaData, mmfShareData
@@ -473,7 +480,7 @@ export function updateMacroCharts(reports, timeframe = currentMacroTimeframe) {
     const rebase = (arr) => firstWealthRatio ? arr.map(v => v === null ? null : (v / firstWealthRatio) * 100.0) : arr;
     renderWhenVisible('macroWealthEffectChart', () => renderMacroWealthEffectChart(labels, rebase(equityWealthRatioData), rebase(equityWealthTrendData), equityWealthGapData, housingWealthGapData, outputGapData));
     renderWhenVisible('macroCommoditiesChart', () => renderMacroCommoditiesChart(labels, energyPriceData, metalsEmaData, agriEmaData, naturalGasPriceData, goldPriceData));
-    renderWhenVisible('macroCrackSpreadChart', () => renderMacroCrackSpreadChart(labels, crackSpreadData));
+    renderWhenVisible('macroEnergySpreadsChart', () => renderMacroEnergySpreadsChart(labels, crackSpreadData, powerPriceIndexData, naturalGasPriceData));
     renderWhenVisible('macroPropertyChart', () => renderMacroPropertyChart(labels, creEmaData, residentialEmaData, housingStartsData));
     renderWhenVisible('macroTradeLogisticsChart', () => renderMacroTradeLogisticsChart(labels, fxEmaData, freightEmaData, gscpiData));
     renderWhenVisible('macroSentimentChart', () => renderMacroSentimentChart(labels, sentimentData, retailDefaultData, dealActivityData, corporateDefaultPctData));
@@ -1312,33 +1319,81 @@ function renderMacroCommoditiesChart(labels, energyPriceData, metalsEmaData, agr
 }
 
 /** The 3:2:1 refining crack spread in dollars a barrel, on its own axis rather than a second scale beside the indices. */
-function renderMacroCrackSpreadChart(labels, crackSpreadData) {
-    const canvas = document.getElementById('macroCrackSpreadChart');
-    if (!canvas) return;
-    macroCrackSpreadChartInstance = destroyChartInstance(macroCrackSpreadChartInstance);
-    const ctx = canvas.getContext('2d');
+// The crack is $/bbl and power $/MWh, so each gets its own panel on a shared time axis (small multiples, one axis per unit).
+const ENERGY_SPREAD_SERIES_COLORS = {
+    crack: '#3987e5',
+    power: '#d95926',
+    spark: '#199e70',
+};
 
-    macroCrackSpreadChartInstance = new Chart(ctx, {
+// Power and the spark spread in dollars. The references are the PHP constants, rendered onto the canvas as data attributes.
+function energySpreadDollars(powerIndexData, gasIndexData) {
+    const canvas = document.getElementById('macroEnergySpreadsChart');
+    const read = (key) => {
+        const value = parseFloat(canvas?.dataset?.[key]);
+        return Number.isFinite(value) ? value : null;
+    };
+    const powerReference = read('powerReference');
+    const gasReference = read('gasReference');
+    const heatRate = read('sparkHeatRate');
+    if (powerReference === null || gasReference === null || heatRate === null) {
+        return { power: powerIndexData.map(() => null), spark: powerIndexData.map(() => null) };
+    }
+
+    const power = powerIndexData.map((index) => (index === null || isNaN(index)) ? null : index / 100 * powerReference);
+    const spark = power.map((dollars, i) => {
+        const gas = gasIndexData[i];
+        return (dollars === null || gas === null || gas === undefined || isNaN(gas)) ? null : dollars - (heatRate * gas / 100 * gasReference);
+    });
+
+    return { power, spark };
+}
+
+function renderMacroEnergySpreadsChart(labels, crackSpreadData, powerPriceIndexData = [], naturalGasPriceData = []) {
+    const canvas = document.getElementById('macroEnergySpreadsChart');
+    if (!canvas) return;
+    macroEnergySpreadsChartInstance = destroyChartInstance(macroEnergySpreadsChartInstance);
+    const ctx = canvas.getContext('2d');
+    const dense = labels.length > 50;
+    const spreads = energySpreadDollars(powerPriceIndexData, naturalGasPriceData);
+    const grid = { color: 'rgba(255, 255, 255, 0.05)' };
+
+    macroEnergySpreadsChartInstance = new Chart(ctx, {
         type: 'line',
         data: {
             labels,
-            datasets: [commodityLine('3:2:1 Crack Spread', crackSpreadData, COMMODITY_SERIES_COLORS.energy, labels.length > 50)]
+            datasets: [
+                { ...commodityLine('3:2:1 Crack Spread', crackSpreadData, ENERGY_SPREAD_SERIES_COLORS.crack, dense), yAxisID: 'yCrack' },
+                { ...commodityLine('Wholesale Power', spreads.power, ENERGY_SPREAD_SERIES_COLORS.power, dense), yAxisID: 'yPower' },
+                { ...commodityLine('Spark Spread (7,000 Btu/kWh)', spreads.spark, ENERGY_SPREAD_SERIES_COLORS.spark, dense), yAxisID: 'yPower' },
+            ]
         },
         options: {
             responsive: true, maintainAspectRatio: false,
             interaction: { mode: 'index', intersect: false },
             plugins: {
-                legend: { display: false },
-                tooltip: { callbacks: { label: (ctx) => `Crack spread: $${ctx.raw.toFixed(2)}/bbl` } }
+                legend: { display: true, position: 'top', labels: { boxWidth: 10, boxHeight: 2 } },
+                tooltip: {
+                    filter: (item) => item.raw !== null && !isNaN(item.raw),
+                    callbacks: {
+                        label: (item) => `${item.dataset.label}: $${item.raw.toFixed(2)}${item.dataset.yAxisID === 'yCrack' ? '/bbl' : '/MWh'}`
+                    }
+                }
             },
             scales: {
-                y: {
-                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
-                    ticks: { callback: (val) => '$' + val },
-                    title: { display: true, text: '$ per barrel' }
+                // Left axes sharing a stack are placed top-down by descending weight: the crack panel sits above power.
+                yCrack: {
+                    type: 'linear', position: 'left', stack: 'energySpreads', stackWeight: 1, weight: 1,
+                    grid, ticks: { callback: (val) => '$' + val },
+                    title: { display: true, text: '$/bbl' }
+                },
+                yPower: {
+                    type: 'linear', position: 'left', stack: 'energySpreads', stackWeight: 1, weight: 0, offset: true,
+                    grid, ticks: { callback: (val) => '$' + val },
+                    title: { display: true, text: '$/MWh' }
                 },
                 x: {
-                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    grid,
                     ticks: { maxTicksLimit: 8 }
                 }
             }
@@ -2876,7 +2931,7 @@ export function resizeMacroCharts() {
     const instances = [
         macroEconomyChartInstance, macroRatesChartInstance, macroMortgageChartInstance,
         macroRiskChartInstance, macroLaborChartInstance, macroLaborCreditChartInstance, macroWealthEffectChartInstance,
-        macroCommoditiesChartInstance, macroCrackSpreadChartInstance, macroPropertyChartInstance, macroTradeLogisticsChartInstance,
+        macroCommoditiesChartInstance, macroEnergySpreadsChartInstance, macroPropertyChartInstance, macroTradeLogisticsChartInstance,
         macroSentimentChartInstance, macroGovtSpendingChartInstance, macroInterbankLiquidityChartInstance,
         macroTermPremiumChartInstance, macroGdpGrowthChartInstance, macroBalanceSheetChartInstance,
         macroFciChartInstance, macroCostPushChartInstance,
@@ -2903,7 +2958,7 @@ export function destroyMacroCharts() {
     macroLaborCreditChartInstance = destroyChartInstance(macroLaborCreditChartInstance);
     macroWealthEffectChartInstance = destroyChartInstance(macroWealthEffectChartInstance);
     macroCommoditiesChartInstance = destroyChartInstance(macroCommoditiesChartInstance);
-    macroCrackSpreadChartInstance = destroyChartInstance(macroCrackSpreadChartInstance);
+    macroEnergySpreadsChartInstance = destroyChartInstance(macroEnergySpreadsChartInstance);
     macroPropertyChartInstance = destroyChartInstance(macroPropertyChartInstance);
     macroTradeLogisticsChartInstance = destroyChartInstance(macroTradeLogisticsChartInstance);
     macroSentimentChartInstance = destroyChartInstance(macroSentimentChartInstance);

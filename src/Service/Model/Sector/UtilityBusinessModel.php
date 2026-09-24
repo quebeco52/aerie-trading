@@ -15,6 +15,7 @@ use App\DTO\MacroStateDTO;
 use App\Service\Math\MathUtility;
 use App\Service\Event\ShockEvent;
 use App\Service\Macro\MacroEngine;
+use App\Service\Macro\Subsystem\CommodityLogisticsSubsystem;
 
 /**
  * Earnings strategy for Pure-Play Regulated Utilities (Water, Electric, Gas).
@@ -92,6 +93,14 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
     public const REGULATED_BASE_WEIGHT       = 0.85;
     /** Baseline fraction of revenue derived from unregulated merchant power generation and wholesale grid sales. */
     public const UNREGULATED_MERCHANT_WEIGHT = 0.15;
+
+    // --- Merchant Generation Economics (merit-order pricing) ---
+    /** Share of the unregulated stream sold at the wholesale power price; the rest is market-based contract work priced like the regulated book. */
+    public const MERCHANT_POWER_SHARE = 1.00;
+    /** Share of merchant generation whose fuel is gas bought at spot: 43.1% of U.S. utility-scale generation in 2023 (EIA). Nuclear, renewables, hydro and contracted coal make up the rest, whose fuel does not move with gas. */
+    public const MERCHANT_GAS_FLEET_SHARE = 0.431;
+    /** Heat rate of the merchant gas fleet (MMBtu/MWh): the U.S. gas-fired operating average, 2017-2024 (EIA Electric Power Annual, Table 8.1). */
+    public const MERCHANT_GAS_HEAT_RATE = 7.74;
 
     // --- Regulatory Lag & Macro Physics ---
     /** Macroeconomic demand shift sensitivity to output gap (industrial power usage). */
@@ -172,6 +181,8 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
         $params = $this->resolveModelParameters($stock, [
             ModelParam::RegulatedBaseWeight->value       => self::REGULATED_BASE_WEIGHT,
             ModelParam::UnregulatedMerchantWeight->value => self::UNREGULATED_MERCHANT_WEIGHT,
+            ModelParam::MerchantPowerShare->value        => self::MERCHANT_POWER_SHARE,
+            ModelParam::MerchantGasFleetShare->value     => self::MERCHANT_GAS_FLEET_SHARE,
         ]);
 
         $regulatedWeight   = $params[ModelParam::RegulatedBaseWeight];
@@ -191,13 +202,16 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
 
         // Independent stream Z-scores
         $weatherZ     = $streams->generateZ('regulated_weather_load', 0.05); // Weather is random, low persistence
-        $unregulatedZ = $streams->generateZ('unregulated_merchant', 0.20); // Merchant wholesale electricity trading
+        $unregulatedZ = $streams->generateZ('unregulated_merchant', 0.20); // Merchant generation: wind and solar resource, availability
         $eventZ       = $streams->generateExogenousZ('event', 0.10); // Infrastructure tail risks
 
         // --- Clamped Revenue Streams ---
         // Weather deviations drive regulated volume. High Z = Heatwaves/Freezes (high load). Low Z = Mild weather (low load).
-        $regulatedRevenue   = max(0.0, $expectedRevenue * $regulatedWeight * (1.0 + ($weatherZ * ($baselineVol * self::WEATHER_VARIANCE_SCALAR))));
-        $unregulatedRevenue = max(0.0, $expectedRevenue * $unregulatedWeight * (1.0 + ($unregulatedZ * ($baselineVol * self::MERCHANT_VARIANCE_SCALAR))));
+        // Merchant generation is sold at the wholesale price the market clears, gas at the margin in most hours.
+        $regulatedRevenue = max(0.0, $expectedRevenue * $regulatedWeight * (1.0 + ($weatherZ * ($baselineVol * self::WEATHER_VARIANCE_SCALAR))));
+        $merchantVolumeRevenue = max(0.0, $expectedRevenue * $unregulatedWeight * (1.0 + ($unregulatedZ * ($baselineVol * self::MERCHANT_VARIANCE_SCALAR))));
+        $merchantPriceRelative = $this->resolveMerchantPriceRelative($params[ModelParam::MerchantPowerShare], $macroState);
+        $unregulatedRevenue = $merchantVolumeRevenue * $merchantPriceRelative;
 
         $streamRevenues = [
             'regulated_weather_load' => $regulatedRevenue,
@@ -227,32 +241,43 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
         // liability regime runs; it is queued as construction-in-progress and burns FCF now.
         $scheduledCapex = $liabilityElapsed > 0 ? $expectedRevenue * 4.0 * self::GRID_HARDENING_CAPEX_RATIO : 0.0;
 
+        // Revenue at the prices the cost base was sized for, so the ratio below is per MWh.
+        $volumeRevenue = $regulatedRevenue + $merchantVolumeRevenue;
+        $priceRelative = $volumeRevenue > 0.0 ? $actualRevenue / $volumeRevenue : 1.0;
+        $regulatedCostShare = $volumeRevenue > 0.0 ? $regulatedRevenue / $volumeRevenue : 1.0;
+
         // --- Regulatory Lag & Input Costs ---
-        // Fuel, purchased power and crew payroll reach the cost base at spot; fuel adjustment clauses recover
-        // most of it, but only after the true-up lag. The gap between the two is the regulatory-lag squeeze.
-        $inputCostDrag = $this->resolveInputCostDrag($stock, $macroState, $streams, $this->resolvePricingPower($stock), $realizedVariableMargin);
+        // Fuel, purchased power and crew payroll reach the regulated cost base at spot; fuel adjustment clauses
+        // recover most of it, but only after the true-up lag. The gap between the two is the regulatory-lag squeeze.
+        $inputCostDrag = $this->resolveInputCostDrag($stock, $macroState, $streams, $this->resolvePricingPower($stock), $realizedVariableMargin * $regulatedCostShare);
 
         // Rate case cycle: tariffs remain frozen between regulatory rate cases, resulting in regulatory attrition.
         $this->advanceRateCase($streams, $macroState);
 
-        // --- Merchant Spark Spread Crush ---
-        // Unregulated merchant power relies on the "spark spread" (wholesale electricity price minus fuel input cost).
-        // The fuel is gas: a gas squeeze the power price has not yet followed collapses the spread.
-        $gasShift = max(0.0, ($macroState->naturalGasPriceIndexEma - MacroEngine::NATURAL_GAS_BASELINE) / MacroEngine::NATURAL_GAS_BASELINE);
-        $sparkSpreadCrush = $gasShift * 0.20 * $unregulatedWeight;
+        // --- Merchant Fuel ---
+        // The gas-fired share of the merchant fleet buys its fuel at spot and recovers it only through the power
+        // price, so it earns the spark spread; the zero-fuel remainder keeps the whole price.
+        $merchantFuelDrag = $volumeRevenue > 0.0
+            ? $merchantVolumeRevenue * $this->resolveMerchantFuelCostChange($params[ModelParam::MerchantPowerShare], $params[ModelParam::MerchantGasFleetShare], $macroState) / $volumeRevenue
+            : 0.0;
 
         // --- Margin Aggregation ---
-        // Apply all structurally driven operating cost penalties to the baseline margin. The rate-base debt
-        // load reaches earnings through DebtEngine's maturity wall (getDebtMaturityRolloverRate), below EBIT.
-        $clampedMargin = $this->clampMargin($realizedVariableMargin + $inputCostDrag + $sparkSpreadCrush + $disasterPenalty);
+        // Costs are per MWh: re-expressed against the realized price, they fall as a share of revenue when the
+        // wholesale price rises. The rate-base debt load reaches earnings through DebtEngine's maturity wall
+        // (getDebtMaturityRolloverRate), below EBIT.
+        $perUnitCostRatio = $realizedVariableMargin + $inputCostDrag + $merchantFuelDrag + $disasterPenalty;
+        $clampedMargin = $this->clampMargin(MathUtility::getInstance()->calculatePerUnitCostRatio($perUnitCostRatio, $priceRelative));
 
         // Primary shock is whichever stream deviated the most, overridden by tail events
         $primaryShockZ = $streams->resolveDominantShockZ([$unregulatedZ, $weatherZ], $eventZ);
 
-        // Regulated weather volume is perfectly visible via meter data, wholesale trading is opaque.
+        // Regulated weather volume is perfectly visible via meter data, merchant generation is opaque, and the
+        // wholesale price is published daily. Dividing the price leg by the base visibility lets a persistent
+        // price level converge to an unbiased consensus.
         $observableShockZ = ($weatherZ * $regulatedWeight * self::WEATHER_VARIANCE_SCALAR) +
             ($unregulatedZ * $unregulatedWeight * self::MERCHANT_VARIANCE_SCALAR * 0.2);
         $observableShockZ *= $baselineVol;
+        $observableShockZ += ($priceRelative - 1.0) / self::BASE_COVERAGE_VISIBILITY;
 
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
@@ -264,7 +289,49 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
             streamZ: $streams->getStreamZ(),
             streamRevenue: $streamRevenues,
             scheduledCapex: $scheduledCapex,
+            kpis: [
+                'power_price_index' => $merchantPriceRelative,
+            ],
         );
+    }
+
+    /**
+     * Price of the unregulated stream relative to the one its cost base was sized at: the wholesale power index on
+     * the share sold into the market, flat on market-based contract work.
+     */
+    private function resolveMerchantPriceRelative(float $powerShare, MacroStateDTO $macroState): float
+    {
+        $powerRelative = max(0.0, $macroState->wholesalePowerPriceIndexEma) / MacroEngine::WHOLESALE_POWER_BASELINE;
+
+        return (1.0 - $powerShare) + ($powerShare * $powerRelative);
+    }
+
+    /**
+     * Change in merchant fuel cost per unit of merchant revenue at baseline prices: the gas-fired share burns the
+     * fleet heat rate of gas per MWh, which at baseline prices is this share of what the MWh sells for.
+     */
+    private function resolveMerchantFuelCostChange(float $powerShare, float $gasFleetShare, MacroStateDTO $macroState): float
+    {
+        $baselineFuelShare = self::MERCHANT_GAS_HEAT_RATE * CommodityLogisticsSubsystem::REFERENCE_GAS_PRICE / CommodityLogisticsSubsystem::REFERENCE_POWER_PRICE;
+        $gasRelative = max(0.0, $macroState->naturalGasPriceIndexEma) / MacroEngine::NATURAL_GAS_BASELINE;
+
+        return $powerShare * $gasFleetShare * $baselineFuelShare * ($gasRelative - 1.0);
+    }
+
+    /**
+     * What the wholesale power market adds to or takes from the merchant stream's margin this quarter, per unit of
+     * merchant revenue at baseline prices: the price on the MWh less the gas the gas-fired share burns to make them.
+     */
+    public function describeMerchantPowerImpact(Stock $stock, MacroStateDTO $macroState): float
+    {
+        $params = $this->resolveModelParameters($stock, [
+            ModelParam::MerchantPowerShare->value    => self::MERCHANT_POWER_SHARE,
+            ModelParam::MerchantGasFleetShare->value => self::MERCHANT_GAS_FLEET_SHARE,
+        ]);
+        $powerShare = $params[ModelParam::MerchantPowerShare];
+
+        return ($this->resolveMerchantPriceRelative($powerShare, $macroState) - 1.0)
+            - $this->resolveMerchantFuelCostChange($powerShare, $params[ModelParam::MerchantGasFleetShare], $macroState);
     }
 
     public function getMarginReversionSpeed(): float
@@ -347,6 +414,7 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
             'producer_price_inflation_ema',
             'tips_breakeven_ema',
             'wage_growth_ema',
+            'wholesale_power_price_index_ema',
         ];
     }
 }

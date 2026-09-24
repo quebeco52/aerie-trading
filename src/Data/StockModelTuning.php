@@ -732,16 +732,20 @@ class StockModelTuning
 
         // --- Bird Power Inc (BIRD) ---
         // Integrated electric utility. Heavily regulated rate base transmission & distribution (80%), merchant renewables (20%).
+        // Renewables burn no fuel, so the merchant fleet keeps the whole wholesale price.
         'BIRD' => [
             ModelParam::RegulatedBaseWeight->value       => 0.80,
             ModelParam::UnregulatedMerchantWeight->value => 0.20,
+            ModelParam::MerchantGasFleetShare->value     => 0.00,
         ],
 
         // --- Heron Regional Water (WADE) ---
-        // Regulated municipal water & wastewater utility. Pure regulated rate base monopoly (95%).
+        // Regulated municipal water & wastewater utility. Pure regulated rate base monopoly (95%); the market-based 5% is
+        // contract operations for municipal and industrial systems, not power sales.
         'WADE' => [
             ModelParam::RegulatedBaseWeight->value       => 0.95,
             ModelParam::UnregulatedMerchantWeight->value => 0.05,
+            ModelParam::MerchantPowerShare->value        => 0.00,
         ],
 
         // --- Loon Call Telecom (LOON) ---

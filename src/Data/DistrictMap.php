@@ -693,7 +693,7 @@ class DistrictMap
         'commodity-exchange' => [
             'label' => 'The Commodity Exchange',
             'short_label' => 'COMMODITY',
-            'fields' => ['energy_cost_push_lag', 'natural_gas_price_index_ema', 'industrial_metals_index_ema', 'gold_price_index_ema', 'agricultural_commodity_index_ema', 'refining_crack_spread_ema'],
+            'fields' => ['energy_cost_push_lag', 'natural_gas_price_index_ema', 'industrial_metals_index_ema', 'gold_price_index_ema', 'agricultural_commodity_index_ema', 'refining_crack_spread_ema', 'wholesale_power_price_index_ema'],
             'readouts' => [
                 ['field' => 'industrial_metals_index_ema', 'label' => 'METALS', 'unit' => self::UNIT_INDEX],
                 ['field' => 'agricultural_commodity_index_ema', 'label' => 'AGRI', 'unit' => self::UNIT_INDEX],

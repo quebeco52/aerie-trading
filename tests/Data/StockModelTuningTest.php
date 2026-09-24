@@ -290,6 +290,11 @@ class StockModelTuningTest extends TestCase
         // Cascade Refining (CASC) runs on the refining model's own constants.
         $this->assertFalse(StockModelTuning::hasOverrides('CASC'));
 
+        // Bird Power (BIRD) sells its merchant renewables at the wholesale price and burns no gas for them.
+        $this->assertSame(0.00, StockModelTuning::get('BIRD', ModelParam::MerchantGasFleetShare, 1.0));
+        // Heron Regional Water (WADE): the market-based arm is contract operations, not power sales.
+        $this->assertSame(0.00, StockModelTuning::get('WADE', ModelParam::MerchantPowerShare, 1.0));
+
         // Condor Extraction (CNDR): a diversified major, base metals first.
         $this->assertSame(0.70, StockModelTuning::get('CNDR', ModelParam::BaseMetalsWeight, 0.0));
         $this->assertSame(0.10, StockModelTuning::get('CNDR', ModelParam::PreciousMetalsWeight, 0.0));

@@ -9,14 +9,16 @@ use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\UtilityBusinessModel;
 use App\DTO\StreamContext;
 use App\Service\Event\ShockEvent;
+use App\DTO\ActualFinancialsDTO;
 use App\DTO\MacroStateDTO;
+use App\Service\Macro\Subsystem\CommodityLogisticsSubsystem;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\TestCase;
 
 #[AllowMockObjectsWithoutExpectations]
 class UtilityBusinessModelTest extends TestCase
 {
-    public function testMerchantSparkSpreadImpactsVariableCosts(): void
+    public function testAStrongMerchantGenerationQuarterRaisesRevenue(): void
     {
         $model = new UtilityBusinessModel();
         $stock = new Stock();
@@ -29,7 +31,7 @@ class UtilityBusinessModelTest extends TestCase
         // Sequence of generateStandardNormal calls:
         // 1. firm-wide demand innovation = 0.0
         // 2. regulatedZ = 0.0
-        // 3. unregulatedZ idiosyncratic = 2.5 (composite 2.0: positive merchant spark spread readout)
+        // 3. unregulatedZ idiosyncratic = 2.5 (composite 2.0: a strong wind and solar quarter)
         // 4. eventZ = 0.0
         $mathUtilityMock->expects($this->exactly(4))
             ->method('generateStandardNormal')
@@ -46,7 +48,7 @@ class UtilityBusinessModelTest extends TestCase
             $mathUtilityMock
         );
 
-        // Positive unregulated trading Z increases merchant revenue
+        // More merchant generation at the same wholesale price is more revenue
         $this->assertGreaterThan(1000.0, $result->actualRevenue);
     }
 
@@ -163,24 +165,76 @@ class UtilityBusinessModelTest extends TestCase
     }
 
 
-    /** The fuel behind the spark spread is gas: a gas squeeze with oil flat crushes merchant margins; an oil move with gas flat does not touch the spread. */
-    public function testAGasSqueezeCrushesTheSparkSpreadWhileOilAloneDoesNot(): void
+    private function merchantQuarter(string $ticker, float $gasIndexEma, float $powerIndexEma): ActualFinancialsDTO
     {
-        $model = new UtilityBusinessModel();
-        $run = function (float $gasIndexEma, float $energyLag) use ($model): float {
-            $stock = new Stock();
-            $stock->setTicker('UTIL');
-            $stock->setBeta('0.5');
-            $math = $this->createStub(MathUtility::class);
-            $math->method('generateStandardNormal')->willReturn(0.0);
-            $macro = new MacroStateDTO(inflationEma: 0.02, naturalGasPriceIndexEma: $gasIndexEma, energyCostPushLag: $energyLag);
+        $stock = new Stock();
+        $stock->setTicker($ticker);
+        $stock->setBeta('0.5');
+        $math = $this->createStub(MathUtility::class);
+        $math->method('generateStandardNormal')->willReturn(0.0);
+        $macro = new MacroStateDTO(inflationEma: 0.02, naturalGasPriceIndexEma: $gasIndexEma, wholesalePowerPriceIndexEma: $powerIndexEma);
 
-            return $model->computeActualFinancials($stock, 100_000_000.0, 0.40, 20_000_000.0, 0.10, $macro, $math)->clampedMargin;
-        };
+        return (new UtilityBusinessModel())->computeActualFinancials($stock, 100_000_000.0, 0.40, 20_000_000.0, 0.10, $macro, $math);
+    }
 
-        $calm = $run(100.0, 0.0);
-        $gasSqueeze = $run(150.0, 0.0);
-        $this->assertGreaterThan($calm, $gasSqueeze, 'A 50% gas spike raises the utility cost ratio through the spark spread and the fuel basket.');
+    /** Gas sets the power price, so a gas spike reaches a zero-fuel merchant fleet as a windfall, not a squeeze (the 2022 inframarginal rent). */
+    public function testAGasSpikeIsAWindfallForAZeroFuelMerchantFleet(): void
+    {
+        $calm = $this->merchantQuarter('BIRD', 100.0, 100.0);
+        $spike = $this->merchantQuarter('BIRD', 150.0, 100.0 * (1.5 ** CommodityLogisticsSubsystem::POWER_GAS_ELASTICITY));
+
+        $this->assertGreaterThan($calm->ebit, $spike->ebit, 'the merchant windfall outweighs the regulated fuel clause lag');
+    }
+
+    public function testMerchantPowerIsSoldPerMwhAtTheWholesalePrice(): void
+    {
+        // Gas held fixed, so the regulated fuel basket is identical and only the power price moves.
+        $base = $this->merchantQuarter('BIRD', 120.0, 100.0);
+        $dear = $this->merchantQuarter('BIRD', 120.0, 140.0);
+
+        // BIRD sells 20% of its revenue as merchant power: the price lifts that slice, and the MWh cost what they cost.
+        $this->assertEqualsWithDelta(100_000_000.0 * 0.20 * 0.40, $dear->actualRevenue - $base->actualRevenue, 1.0);
+        $this->assertEqualsWithDelta($base->actualVariableCosts, $dear->actualVariableCosts, 1.0);
+        $this->assertEqualsWithDelta($dear->actualRevenue - $base->actualRevenue, $dear->ebit - $base->ebit, 1.0);
+        $this->assertEqualsWithDelta(1.40, $dear->kpis['power_price_index'], 1e-9);
+    }
+
+    public function testTheGasFiredFleetEarnsTheSparkSpreadAndTheFuelIsNotCountedTwice(): void
+    {
+        // WADE sells no power, so its cost change on a gas move is the regulated fuel clause lag alone: the drag per
+        // unit of regulated cost base, which any utility on this model shares.
+        $waterCalm = $this->merchantQuarter('WADE', 100.0, 100.0);
+        $waterGas = $this->merchantQuarter('WADE', 150.0, 100.0);
+        $clauseLagPerRegulatedCost = ($waterGas->actualVariableCosts - $waterCalm->actualVariableCosts) / (100_000_000.0 * 0.40 * 0.95);
+
+        // A default utility (15% merchant, 43.1% of it gas-fired): the regulated slice carries the clause lag and the
+        // gas-fired MWh burn 7.74 MMBtu each at spot, recovered only through the power price.
+        $calm = $this->merchantQuarter('UTIL', 100.0, 100.0);
+        $gas = $this->merchantQuarter('UTIL', 150.0, 100.0);
+        $baselineFuelShare = UtilityBusinessModel::MERCHANT_GAS_HEAT_RATE * CommodityLogisticsSubsystem::REFERENCE_GAS_PRICE / CommodityLogisticsSubsystem::REFERENCE_POWER_PRICE;
+        $merchantFuel = 100_000_000.0 * 0.15 * UtilityBusinessModel::MERCHANT_GAS_FLEET_SHARE * $baselineFuelShare * 0.50;
+        $regulatedClauseLag = 100_000_000.0 * 0.40 * 0.85 * $clauseLagPerRegulatedCost;
+
+        $this->assertEqualsWithDelta($merchantFuel + $regulatedClauseLag, $gas->actualVariableCosts - $calm->actualVariableCosts, 1.0);
+    }
+
+    public function testAWaterUtilitysMarketBasedArmIgnoresThePowerPrice(): void
+    {
+        $base = $this->merchantQuarter('WADE', 100.0, 100.0);
+        $powerSpike = $this->merchantQuarter('WADE', 100.0, 250.0);
+
+        $this->assertEqualsWithDelta($base->actualRevenue, $powerSpike->actualRevenue, 1e-6);
+        $this->assertEqualsWithDelta($base->ebit, $powerSpike->ebit, 1e-6);
+    }
+
+    public function testTheDriversPanelReadsTheModelsOwnMerchantArithmetic(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('BIRD');
+        $macro = new MacroStateDTO(naturalGasPriceIndexEma: 150.0, wholesalePowerPriceIndexEma: 130.0);
+
+        // Zero-fuel renewables keep the whole 30% price rise; gas is no cost to them.
+        $this->assertEqualsWithDelta(0.30, (new UtilityBusinessModel())->describeMerchantPowerImpact($stock, $macro), 1e-12);
     }
 
 

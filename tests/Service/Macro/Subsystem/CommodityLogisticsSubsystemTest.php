@@ -321,6 +321,75 @@ class CommodityLogisticsSubsystemTest extends TestCase
         $this->assertEqualsWithDelta(2.0, $dearOil->naturalGasPriceIndex / $cheapOil->naturalGasPriceIndex, 1e-9, 'With the ratio pinned, gas is oil.');
     }
 
+    // --- Wholesale Power ---
+
+    public function testPowerPassesGasThroughAtTheHubsElasticity(): void
+    {
+        $subsystem = $this->quietCommoditySubsystem();
+        $cheapGas = new MacroState();
+        $cheapGas->totalTime = 0.25;
+        $cheapGas->naturalGasPriceIndex = 80.0;
+        $dearGas = new MacroState();
+        $dearGas->totalTime = 0.25;
+        $dearGas->naturalGasPriceIndex = 160.0;
+
+        $subsystem->calculateWholesalePowerIndex($cheapGas, 0.01);
+        $subsystem->calculateWholesalePowerIndex($dearGas, 0.01);
+
+        // Four gas-marginal hubs on Henry Hub, 2017-2025: a doubling of gas lifts power by 2^0.852, not one for one.
+        $this->assertEqualsWithDelta(2.0 ** 0.852, $dearGas->wholesalePowerPriceIndex / $cheapGas->wholesalePowerPriceIndex, 1e-9);
+    }
+
+    public function testPowerPeaksInWinterAndSummerAndTroughsInSpring(): void
+    {
+        $factors = [];
+        for ($day = 0; $day < 360; $day++) {
+            $factors[] = CommodityLogisticsSubsystem::resolvePowerSeasonalFactor($day / 360.0);
+        }
+        $this->assertEqualsWithDelta(1.0, array_sum($factors) / count($factors), 1e-9, 'the season moves power within the year, not its level');
+
+        $month = static fn (int $m): float => CommodityLogisticsSubsystem::resolvePowerSeasonalFactor(($m + 0.5) / 12.0);
+        $this->assertGreaterThan($month(3), $month(0), 'January heating load over April');
+        $this->assertGreaterThan($month(0), $month(6), 'the air-conditioning peak is the larger one');
+        $this->assertLessThan($month(9), $month(3), 'spring, with hydro and mild weather, is the trough');
+        $this->assertSame(3, array_search(min(array_map($month, range(0, 11))), array_map($month, range(0, 11)), true));
+    }
+
+    public function testTheHeatRateIsAsVolatileAndAsPersistentAsTheHubsAtTheQuarterFirmsBook(): void
+    {
+        mt_srand(20260925);
+        $state = new MacroState();
+        $dt = 1.0 / 360.0;
+
+        $quarterly = [];
+        $levels = [];
+        $window = [];
+        for ($step = 1; $step <= 120 * 360; $step++) {
+            $state->totalTime += $dt;
+            $state->naturalGasPriceIndex = MacroEngine::NATURAL_GAS_BASELINE;
+            $this->subsystem->calculateWholesalePowerIndex($state, $dt);
+            $levels[] = $state->wholesalePowerPriceIndex;
+            $window[] = $state->wholesalePowerPriceIndex / CommodityLogisticsSubsystem::resolvePowerSeasonalFactor($state->totalTime);
+            if ($step % 90 === 0) {
+                $quarterly[] = log(array_sum($window) / count($window));
+                $window = [];
+            }
+        }
+
+        $n = count($quarterly);
+        $mean = array_sum($quarterly) / $n;
+        $variance = array_sum(array_map(static fn (float $x): float => ($x - $mean) ** 2, $quarterly)) / $n;
+        $lagged = 0.0;
+        for ($i = 1; $i < $n; $i++) {
+            $lagged += ($quarterly[$i] - $mean) * ($quarterly[$i - 1] - $mean);
+        }
+
+        // Four-hub quarterly means of the de-seasonalised log heat rate, 2017-2025: sd 0.183, AR1 0.37.
+        $this->assertEqualsWithDelta(0.183, sqrt($variance), 0.03);
+        $this->assertEqualsWithDelta(0.37, $lagged / ($variance * $n), 0.12);
+        $this->assertEqualsWithDelta(MacroEngine::WHOLESALE_POWER_BASELINE, array_sum($levels) / count($levels), 2.0, 'centred on the baseline, not its median');
+    }
+
 
     // --- Physical Catastrophes ---
 

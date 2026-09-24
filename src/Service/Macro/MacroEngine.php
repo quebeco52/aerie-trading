@@ -73,6 +73,10 @@ class MacroEngine
     /** Baseline natural gas index (neutral gas-to-oil relationship, the oil index times a unit ratio). */
     public const NATURAL_GAS_BASELINE = 100.0;
 
+    // --- Wholesale Power (Lucia & Schwartz 2002) ---
+    /** Baseline wholesale power index: the power price with gas at its baseline and the heat-rate factor at its mean. */
+    public const WHOLESALE_POWER_BASELINE = 100.0;
+
     // --- Theory of Storage & Commodity Buffer Stocks (Working 1949, Litzenberger-Rabinowitz 1995) ---
     /** Baseline physical commodity inventory index (neutral buffer stock). */
     public const COMMODITY_INVENTORY_BASELINE = 100.0;
@@ -520,6 +524,7 @@ class MacroEngine
         $this->aggregateSubsystem->calculateCapacityUtilization($state);
         $this->commoditySubsystem->calculateEnergyShock($state, $dt);
         $this->commoditySubsystem->calculateNaturalGasIndex($state, $dt);
+        $this->commoditySubsystem->calculateWholesalePowerIndex($state, $dt);
         $this->commoditySubsystem->calculateRefiningCrackSpread($state, $dt);
         $this->assetSubsystem->calculateExchangeRate($state, $dt);
         $this->assetSubsystem->calculateTradeBalance($state, $dt);

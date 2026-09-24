@@ -14,6 +14,7 @@ use App\Service\Macro\MacroEngine;
 use App\Service\Model\Sector\MiningBusinessModel;
 use App\Service\Model\Sector\PrivateEquityBusinessModel;
 use App\Service\Model\Sector\RefiningBusinessModel;
+use App\Service\Model\Sector\UtilityBusinessModel;
 
 class EarningsReportSubscriber implements EventSubscriberInterface
 {
@@ -208,7 +209,7 @@ class EarningsReportSubscriber implements EventSubscriberInterface
             $qoqDelta = $prevRev > 0.0 ? round(($revenue - $prevRev) / $prevRev, 4) : null;
             $share = $revenue / $totalRevenue;
 
-            $drivers = $this->resolveStreamMacroDrivers($bm, $streamKey, $macro, $beta, $vol);
+            $drivers = $this->resolveStreamMacroDrivers($bm, $streamKey, $macro, $beta, $vol, $stock);
 
             // Operational Momentum / AR(1) Z-Score
             $z = (float) ($momentum[$streamKey] ?? 0.0);
@@ -297,7 +298,7 @@ class EarningsReportSubscriber implements EventSubscriberInterface
      *
      * @return array<int, array{label: string, impact: float, type: string}>
      */
-    private function resolveStreamMacroDrivers(string $bm, string $streamKey, \App\DTO\MacroStateDTO $macro, float $beta, float $vol): array
+    private function resolveStreamMacroDrivers(string $bm, string $streamKey, \App\DTO\MacroStateDTO $macro, float $beta, float $vol, \App\Entity\Stock $stock): array
     {
         $drivers = [];
 
@@ -900,19 +901,26 @@ class EarningsReportSubscriber implements EventSubscriberInterface
                 break;
 
             case 'utility':
-                $energyShift = ($macro->energyPriceIndexEma - 100.0) / 100.0;
-                $drivers[] = [
-                    'label'  => 'Energy Commodity Fuel Costs',
-                    'impact' => round($energyShift * 0.30, 4),
-                    'type'   => 'macro',
-                    'fields' => ['energy_price_index_ema'],
-                ];
-                $drivers[] = [
-                    'label'  => 'Industrial & Commercial Power Load',
-                    'impact' => round($macro->outputGapEma * 0.60, 4),
-                    'type'   => 'macro',
-                    'fields' => ['output_gap_ema'],
-                ];
+                $utility = Sectors::getBusinessModelStrategy('utility');
+                if (!$utility instanceof UtilityBusinessModel) {
+                    break;
+                }
+                if ($streamKey === 'unregulated_merchant') {
+                    // Merchant MWh sell at the wholesale price; the gas-fired share pays for its gas out of it.
+                    $drivers[] = [
+                        'label'  => 'Wholesale Power Price',
+                        'impact' => round($utility->describeMerchantPowerImpact($stock, $macro), 4),
+                        'type'   => 'macro',
+                        'fields' => ['wholesale_power_price_index_ema', 'natural_gas_price_index_ema'],
+                    ];
+                } else {
+                    $drivers[] = [
+                        'label'  => 'Industrial & Commercial Power Load',
+                        'impact' => round((float) $utility->getMacroPhysics($stock, $macro)['macro_demand_shift'], 4),
+                        'type'   => 'macro',
+                        'fields' => ['output_gap_ema'],
+                    ];
+                }
                 break;
 
             case 'telecom':

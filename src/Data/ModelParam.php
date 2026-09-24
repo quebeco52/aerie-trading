@@ -215,6 +215,10 @@ enum ModelParam: string
     // --- Utilities & Waste Management ---
     case RegulatedBaseWeight = 'regulated_base_weight';
     case UnregulatedMerchantWeight = 'unregulated_merchant_weight';
+    /** Share of a utility's unregulated stream sold at the wholesale power price rather than as market-based contract work. */
+    case MerchantPowerShare = 'merchant_power_share';
+    /** Share of a utility's merchant generation whose fuel is gas bought at spot (it earns the spark spread; the rest keeps the whole price). */
+    case MerchantGasFleetShare = 'merchant_gas_fleet_share';
     case ResidentialWeight = 'residential_weight';
     case RecyclingWeight = 'recycling_weight';
     case ServicesWeight = 'services_weight';

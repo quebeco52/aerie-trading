@@ -283,6 +283,11 @@ class MacroState
     public float $goldPriceIndex = MacroEngine::GOLD_BASELINE;
     public float $goldPriceIndexEma = MacroEngine::GOLD_BASELINE;
 
+    // Wholesale power: gas passed through at the market heat rate, times a seasonal mean-reverting heat-rate factor.
+    public float $wholesalePowerPriceIndex = MacroEngine::WHOLESALE_POWER_BASELINE;
+    public float $wholesalePowerPriceIndexEma = MacroEngine::WHOLESALE_POWER_BASELINE;
+    public float $powerHeatRateLog = 0.0;
+
     // Deposits channel: the system deposit beta and the money-market share it drives.
     public float $systemDepositBeta = MacroEngine::SYSTEM_DEPOSIT_BETA_BASE;
     public float $systemDepositBetaEma = MacroEngine::SYSTEM_DEPOSIT_BETA_BASE;

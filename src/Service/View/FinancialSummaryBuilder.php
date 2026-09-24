@@ -48,6 +48,7 @@ class FinancialSummaryBuilder
         'releasing_spread' => ['Re-leasing Spread', 'signed_percent'],
         'in_place_rent_index' => ['In-Place Rent Index', 'index'],
         'realized_price_index' => ['Realized Price Index', 'index'],
+        'power_price_index' => ['Realized Power Price', 'index'],
         'hedge_gain' => ['Hedge Gain / Revenue', 'signed_percent'],
         'capture_rate' => ['Crack Capture', 'percent'],
         'throughput_index' => ['Throughput Index', 'index'],

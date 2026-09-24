@@ -6,6 +6,7 @@ namespace App\Tests\EventSubscriber;
 
 use App\Data\MacroFieldCatalog;
 use App\DTO\MacroStateDTO;
+use App\Entity\Stock;
 use App\EventSubscriber\EarningsReportSubscriber;
 use Doctrine\ORM\EntityManagerInterface;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
@@ -101,6 +102,7 @@ class StreamMacroDriverRoutingTest extends TestCase
             $this->stressedMacro,
             1.0,
             0.20,
+            new Stock(),
         );
 
         $this->assertNotEmpty(
@@ -157,6 +159,7 @@ class StreamMacroDriverRoutingTest extends TestCase
             $this->stressedMacro,
             1.0,
             0.20,
+            new Stock(),
         );
 
         $labels = array_column($drivers, 'label');

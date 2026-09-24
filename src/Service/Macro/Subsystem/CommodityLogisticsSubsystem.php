@@ -66,6 +66,28 @@ class CommodityLogisticsSubsystem
     /** Log volatility of a gas squeeze. */
     public const GAS_JUMP_VOL = 0.15;
 
+    // --- Wholesale Power (Lucia & Schwartz 2002; EIA ICE on-peak hubs vs Henry Hub, monthly 2017-2025) ---
+    /** Log change in wholesale power per log change in gas: 0.852 (se 0.081) across four gas-marginal hubs (PJM West, ISO-NE Mass Hub, SP15, Palo Verde). */
+    public const POWER_GAS_ELASTICITY = 0.852;
+    /** Mean reversion of the log implied heat rate, fitted to its quarterly means (sd 0.183, AR1 0.37) as a time-averaged OU: weather and outages clear within weeks. */
+    public const POWER_HEAT_RATE_KAPPA = 7.04;
+    /** Annual log volatility of the implied heat rate, from the same quarterly fit. */
+    public const POWER_HEAT_RATE_SIGMA = 0.883;
+    /** Annual harmonic of the power season (level profile): the summer air-conditioning peak outweighs the winter one. */
+    public const POWER_SEASONAL_ANNUAL_AMPLITUDE = 0.157;
+    /** Year fraction at which the annual harmonic peaks. */
+    public const POWER_SEASONAL_ANNUAL_PEAK = 0.719;
+    /** Semi-annual harmonic of the power season: twin winter and summer load peaks around spring and autumn shoulders. */
+    public const POWER_SEASONAL_SEMIANNUAL_AMPLITUDE = 0.246;
+    /** Year fraction of the first semi-annual peak (late January); the second falls half a year later. */
+    public const POWER_SEASONAL_SEMIANNUAL_PEAK = 0.064;
+    /** Wholesale power in $/MWh at the index baseline: the four-hub on-peak mean, 2017-2025. */
+    public const REFERENCE_POWER_PRICE = 48.91;
+    /** Henry Hub in $/MMBtu at the gas index baseline: its monthly mean over the same years. */
+    public const REFERENCE_GAS_PRICE = 3.26;
+    /** Heat rate (MMBtu/MWh) EIA quotes the spark spread at: a new, efficient combined-cycle plant. */
+    public const SPARK_SPREAD_BENCHMARK_HEAT_RATE = 7.0;
+
     // --- Gold (Barsky, Epstein, Lafont-Mueller & Yoo 2021, Chicago Fed Letter 464) ---
     /** Log change in the real gold price per unit of real ten-year yield: -0.131 per percentage point (annual levels regression, 1971-2019). */
     public const GOLD_REAL_RATE_SEMI_ELASTICITY = -13.1;
@@ -318,6 +340,45 @@ class CommodityLogisticsSubsystem
 
         $spot = ($state->energyPriceIndex / MacroEngine::ENERGY_BASELINE) * MacroEngine::NATURAL_GAS_BASELINE * exp($state->gasOilRatioLog) * $seasonalMultiplier;
         $state->naturalGasPriceIndex = max(10.0, min(500.0, $spot));
+    }
+
+    /**
+     * Wholesale power as gas passed through at the market heat rate (Lucia & Schwartz 2002, one-factor log spot).
+     *
+     * Gas sets the clearing price in most hours, so power moves with it at the log elasticity the hubs show. The
+     * implied heat rate on top (which plant is marginal, weather, outages) is a fast log-OU around its mean times a
+     * deterministic twin-peak load season. Its target is compensated by exp(sigma^2 / 4 kappa), so the index
+     * averages its baseline rather than settling at its median.
+     *
+     * @param MacroState $state Current macroeconomic state.
+     * @param float      $dt    Time increment in years.
+     */
+    public function calculateWholesalePowerIndex(MacroState $state, float $dt): void
+    {
+        $heatRate = $this->mathUtility->calculateSchwartz1Factor(
+            currentPrice: exp($state->powerHeatRateLog),
+            kappa: self::POWER_HEAT_RATE_KAPPA,
+            theta: exp((self::POWER_HEAT_RATE_SIGMA ** 2) / (4.0 * self::POWER_HEAT_RATE_KAPPA)),
+            sigma: self::POWER_HEAT_RATE_SIGMA,
+            dt: $dt,
+            dW: $this->mathUtility->generateStandardNormal()
+        );
+        $state->powerHeatRateLog = max(-3.0, min(3.0, log($heatRate)));
+
+        $gasRelative = max(0.01, $state->naturalGasPriceIndex / MacroEngine::NATURAL_GAS_BASELINE);
+        $spot = MacroEngine::WHOLESALE_POWER_BASELINE * ($gasRelative ** self::POWER_GAS_ELASTICITY)
+            * exp($state->powerHeatRateLog) * self::resolvePowerSeasonalFactor($state->totalTime);
+        $state->wholesalePowerPriceIndex = max(5.0, min(800.0, $spot));
+    }
+
+    /** The load-season multiplier on wholesale power at a point in simulated time (years); it averages one over the year. */
+    public static function resolvePowerSeasonalFactor(float $totalTime): float
+    {
+        $timeOfYear = fmod($totalTime, 1.0);
+
+        return 1.0
+            + (self::POWER_SEASONAL_ANNUAL_AMPLITUDE * cos(2.0 * M_PI * ($timeOfYear - self::POWER_SEASONAL_ANNUAL_PEAK)))
+            + (self::POWER_SEASONAL_SEMIANNUAL_AMPLITUDE * cos(4.0 * M_PI * ($timeOfYear - self::POWER_SEASONAL_SEMIANNUAL_PEAK)));
     }
 
     /**
