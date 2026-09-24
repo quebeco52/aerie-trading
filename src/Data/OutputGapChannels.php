@@ -7,7 +7,7 @@ namespace App\Data;
 /**
  * Families the output gap's drift channels are read in, and the colour each family wears.
  *
- * App\Service\Macro\Recorder\OutputGapProbe records nineteen channels, and nineteen rows sorted by
+ * App\Service\Macro\Recorder\OutputGapProbe records twenty channels, and twenty rows sorted by
  * size is a list rather than a reading: the eye has no way to tell that `crisisDeleveragingDrag`
  * and `lendingStandardsDrag` are the same story told twice, or that the largest single line and the
  * third largest are both the government. Grouping is what makes the panel answer "what kind of
@@ -74,7 +74,7 @@ final class OutputGapChannels
         'supply' => [
             'label' => 'Supply shocks',
             'colour' => '#008300',
-            'channels' => ['energySupplyDrag', 'freightSupplyDrag', 'catastropheSupplyDrag'],
+            'channels' => ['energySupplyDrag', 'freightSupplyDrag', 'catastropheSupplyDrag', 'productivitySupply'],
         ],
         'external' => [
             'label' => 'External demand',

@@ -33,6 +33,33 @@ class MonetaryPolicySubsystemTest extends TestCase
         $this->assertEqualsWithDelta(0.075, $target, 0.001);
     }
 
+    /**
+     * The rule answers demand and sees through the part of the gap a productivity gain opens (Blinder & Yellen
+     * 2001): an economy running 1% above potential because output caught up with new technology first sets the
+     * same rate as one at potential, and a 1% demand boom still gets the full gap weight.
+     */
+    public function testTheRuleSeesThroughTheProductivitySupplyGap(): void
+    {
+        $atPotential = new MacroState();
+        $atPotential->outputGap = 0.0;
+        $atPotential->outputGapEma = 0.0;
+        $productivity = new MacroState();
+        $productivity->outputGap = 0.01;
+        $productivity->outputGapEma = 0.01;
+        $productivity->productivitySupplyGap = 0.01;
+        $demand = new MacroState();
+        $demand->outputGap = 0.01;
+        $demand->outputGapEma = 0.01;
+
+        $base = $this->subsystem->calculateTargetRate($atPotential, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE);
+        $this->assertEqualsWithDelta($base, $this->subsystem->calculateTargetRate($productivity, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE), 1e-12);
+        $this->assertEqualsWithDelta(
+            MonetaryPolicySubsystem::TAYLOR_OUTPUT_GAP_WEIGHT * 0.01,
+            $this->subsystem->calculateTargetRate($demand, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE) - $base,
+            1e-12
+        );
+    }
+
     public function testTaylorRuleBlendsCoreInflationWithTIPSBreakeven(): void
     {
         $state = new MacroState();

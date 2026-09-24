@@ -475,14 +475,17 @@ class MacroEngine
 
         // 1. Solow-Swan (1956) Total Factor Productivity (TFP) secular drift and endogenous growth.
         $tfpTrendGrowthRate = $this->aggregateSubsystem->calculateTotalFactorProductivity($state, $dt);
+        // Basu, Fernald & Kimball (2006): potential absorbs a productivity shock gradually; everything built on
+        // productivity growth (r*, wage bargains, unit labour cost, money demand, potential GDP) reads that path.
+        $productivityGrowthRate = $this->aggregateSubsystem->absorbProductivityShocks($state, $tfpTrendGrowthRate, $dt);
 
         // 2. Laubach & Williams (2003) dynamic natural rate of interest (r*).
-        $this->aggregateSubsystem->calculateNaturalRate($state, $tfpTrendGrowthRate, $dt);
+        $this->aggregateSubsystem->calculateNaturalRate($state, $productivityGrowthRate, $dt);
 
         // 3. Okun (1962) & Diamond-Mortensen-Pissarides (1994) labor market dynamics.
         $this->laborSubsystem->advanceWorkStoppages($state, $dt);
         $this->laborSubsystem->calculateUnemployment($state, $dt);
-        $this->laborSubsystem->calculateLaborMarketAndWages($state, $tfpTrendGrowthRate, $dt);
+        $this->laborSubsystem->calculateLaborMarketAndWages($state, $productivityGrowthRate, $dt);
 
         // 4. Gurkaynak, Sack & Wright (2010) TIPS breakeven inflation expectations.
         $state->tipsBreakeven = $this->aggregateSubsystem->calculateTipsBreakeven($state, self::TARGET_INFLATION, $dt);
@@ -544,11 +547,11 @@ class MacroEngine
 
         $stressMultiplier = 1.0 + (abs($state->outputGap) * self::STRESS_MULTIPLIER_GAP_SENSITIVITY);
         $state->inflation = $this->aggregateSubsystem->calculateInflation($state, self::TARGET_INFLATION, $stressMultiplier, $dt);
-        $this->aggregateSubsystem->calculateProducerPriceInflation($state, $tfpTrendGrowthRate, $dt);
+        $this->aggregateSubsystem->calculateProducerPriceInflation($state, $productivityGrowthRate, $dt);
         $state->marketVolatility = $this->assetSubsystem->calculateMarketVolatility($state, $dt);
 
         $this->aggregateSubsystem->calculateManufacturingPmi($state, $dt);
-        $this->monetarySubsystem->calculateMoneySupplyGrowth($state, $dt, $tfpTrendGrowthRate);
+        $this->monetarySubsystem->calculateMoneySupplyGrowth($state, $dt, $productivityGrowthRate);
         $this->monetarySubsystem->calculateDepositChannel($state, $dt);
 
         $this->aggregateSubsystem->updateExponentialMovingAverages($state, $dt);
@@ -558,7 +561,7 @@ class MacroEngine
         $this->creditFiscalSubsystem->calculateSloosCreditStandards($state, $dt);
         $this->creditFiscalSubsystem->calculateCorporateDefaultRate($state, $dt);
 
-        $this->aggregateSubsystem->calculatePotentialAndNominalGdp($state, $dt, $tfpTrendGrowthRate);
+        $this->aggregateSubsystem->calculatePotentialAndNominalGdp($state, $dt, $productivityGrowthRate);
         $this->creditFiscalSubsystem->calculateDynamicFiscalPolicy($state, $dt);
         $this->creditFiscalSubsystem->calculateSovereignDebt($state, $dt);
         $this->creditFiscalSubsystem->calculateSovereignRiskSpread($state, $dt);

@@ -22,10 +22,12 @@ class CorporateActionEngine
     private const REVERSE_SPLIT_THRESHOLD = 2.0;
     /** The divisor (10x) for shares during a reverse split. */
     private const REVERSE_SPLIT_FACTOR = 10.0;
-    /** The minimum shares required to execute a reverse split. */
-    private const MIN_SHARES_REVERSE_SPLIT = 10.0;
+    /** Shares a listing must still have after a reverse split (Nasdaq Rule 5550(a)(4): 500,000 publicly held shares for continued listing); a consolidation that would go below it is not done. */
+    public const MIN_SHARES_AFTER_REVERSE_SPLIT = 500_000.0;
     /** The maximum absolute multiplier allowed in a single recursive split action. */
     private const MAX_SPLIT_MULTIPLIER = 1_000_000;
+    /** Simulated years before a stock can split again: a split is a board action, and under Nasdaq Rule 5810(c)(3)(A)(iv) a company that reverse split within the past year gets no compliance period to do it again. */
+    public const SPLIT_COOLDOWN_YEARS = 1.0;
 
     /**
      * Constructor.
@@ -48,12 +50,17 @@ class CorporateActionEngine
      * if the price falls below $2. Ensures the stock remains highly liquid and
      * tradeable without altering the underlying corporate value.
      *
+     * At most one split a year: without it a name whose value had collapsed split every few ticks, and each
+     * cycle of a price chasing its target through the threshold compounded the share count (TIER: 93 splits
+     * in eight minutes, a board capitalisation ~1e23).
+     *
      * @param Stock $stock             The stock entity to evaluate.
      * @param float $newPrice          The proposed new price.
      * @param float $sharesOutstanding The current number of shares outstanding.
+     * @param float $simTime           Simulated time (years) of this tick.
      * @return array{price: float, shares: float, event: array|null} The adjusted price, shares, and any generated event.
      */
-    public function processSplits(Stock $stock, float $newPrice, float $sharesOutstanding): array
+    public function processSplits(Stock $stock, float $newPrice, float $sharesOutstanding, float $simTime): array
     {
         if ($stock->isBankrupt() || $newPrice <= 0.0001) {
             return [
@@ -65,13 +72,24 @@ class CorporateActionEngine
 
         $splitEvent = null;
 
-        if ($newPrice >= self::FORWARD_SPLIT_THRESHOLD) {
-            $result = $this->executeForwardSplit($stock, $newPrice, $sharesOutstanding);
+        // A clock rewound behind the last split (an unclean Redis stop) leaves a negative gap: that split
+        // belongs to a timeline that no longer exists and does not hold the next one back.
+        $lastSplitAt = $stock->getLastSplitAt();
+        $sinceLastSplit = $lastSplitAt === null ? INF : $simTime - $lastSplitAt;
+        $coolingDown = $sinceLastSplit >= 0.0 && $sinceLastSplit < self::SPLIT_COOLDOWN_YEARS;
+
+        if ($coolingDown) {
+            // No split this tick.
+        } elseif ($newPrice >= self::FORWARD_SPLIT_THRESHOLD) {
+            $result = $this->executeForwardSplit($stock, $newPrice, $sharesOutstanding, $simTime);
             $newPrice = $result['price'];
             $sharesOutstanding = $result['shares'];
             $splitEvent = $result['event'];
-        } elseif ($newPrice < self::REVERSE_SPLIT_THRESHOLD && $newPrice > 0.0001 && $sharesOutstanding >= self::MIN_SHARES_REVERSE_SPLIT) {
-            $result = $this->executeReverseSplit($stock, $newPrice, (int) self::REVERSE_SPLIT_FACTOR);
+        } elseif (
+            $newPrice < self::REVERSE_SPLIT_THRESHOLD
+            && floor($sharesOutstanding / self::REVERSE_SPLIT_FACTOR) >= self::MIN_SHARES_AFTER_REVERSE_SPLIT
+        ) {
+            $result = $this->executeReverseSplit($stock, $newPrice, $simTime);
             $newPrice = $result['price'];
             $sharesOutstanding = $result['shares'];
             $splitEvent = $result['event'];
@@ -88,26 +106,41 @@ class CorporateActionEngine
     /**
      * Executes a recursive forward split (e.g., 4-for-1) to bring the price back below $400.
      *
+     * Price and shares move by the same factor, so the company is worth exactly what it was. A split that would
+     * take the share count past what an integer can hold is not done at all: clamping the count while still
+     * dividing the price destroyed value.
+     *
      * @param Stock $stock The stock entity.
      * @param float $newPrice The price that breached the upper threshold.
      * @param float $sharesOutstanding The current shares outstanding.
-     * @return array{price: float, shares: float, event: array}
+     * @param float $simTime Simulated time (years) of the split.
+     * @return array{price: float, shares: float, event: array|null}
      */
-    private function executeForwardSplit(Stock $stock, float $newPrice, float $sharesOutstanding): array
+    private function executeForwardSplit(Stock $stock, float $newPrice, float $sharesOutstanding, float $simTime): array
     {
         $splitFactor = 1;
-        while ($newPrice >= self::FORWARD_SPLIT_THRESHOLD && $splitFactor <= self::MAX_SPLIT_MULTIPLIER && !is_infinite($newPrice)) {
+        while (
+            $newPrice >= self::FORWARD_SPLIT_THRESHOLD
+            && $splitFactor <= self::MAX_SPLIT_MULTIPLIER
+            && $sharesOutstanding * $splitFactor * self::FORWARD_SPLIT_FACTOR <= (float) PHP_INT_MAX
+            && !is_infinite($newPrice)
+        ) {
             $newPrice = $newPrice / self::FORWARD_SPLIT_FACTOR;
             $splitFactor *= self::FORWARD_SPLIT_FACTOR;
         }
 
-        $sharesOutstanding = max(1.0, min(9223372036854775807.0, $sharesOutstanding * $splitFactor));
+        if ($splitFactor === 1) {
+            return ['price' => $newPrice, 'shares' => $sharesOutstanding, 'event' => null];
+        }
+
+        $sharesOutstanding *= $splitFactor;
 
         $oldDiv = (float) $stock->getLastDividend();
         $oldFcf = (float) $stock->getFreeCashFlowPerShare();
 
         $stock->setSharesOutstanding((string) $sharesOutstanding);
         $stock->setPrice((string) $newPrice);
+        $stock->setLastSplitAt($simTime);
 
         $stock->setLastDividend((string) ($oldDiv / $splitFactor));
         $stock->setFreeCashFlowPerShare((string) ($oldFcf / $splitFactor));
@@ -127,24 +160,36 @@ class CorporateActionEngine
      * Executes a recursive reverse split (e.g., 1-for-10) to bring the price back above $2.
      * Cashes out fractional shares directly to user accounts to prevent loss of wealth.
      *
+     * The consolidation stops at the listing's share minimum even if the price is still under $2. Flooring
+     * the count at one share while multiplying the price by the full factor minted value from nothing.
+     *
      * @param Stock $stock The stock entity.
      * @param float $newPrice The price that breached the lower threshold.
-     * @param int   $reverseFactor The factor to multiply the price by (default 10).
+     * @param float $simTime Simulated time (years) of the split.
      *
-     * @return array Returns details about the executed split.
+     * @return array{price: float, shares: float, event: array|null} Returns details about the executed split.
      * @throws \Exception
      */
-    public function executeReverseSplit(Stock $stock, float $newPrice, int $reverseFactor = 10): array
+    public function executeReverseSplit(Stock $stock, float $newPrice, float $simTime): array
     {
         $oldPrice = $newPrice;
+        $oldShares = (float) $stock->getSharesOutstanding();
         $splitFactor = 1;
-        while ($newPrice < self::REVERSE_SPLIT_THRESHOLD && $newPrice > 0.0001 && $splitFactor <= self::MAX_SPLIT_MULTIPLIER && !is_infinite($newPrice)) {
+        while (
+            $newPrice < self::REVERSE_SPLIT_THRESHOLD
+            && $newPrice > 0.0001
+            && $splitFactor <= self::MAX_SPLIT_MULTIPLIER
+            && floor($oldShares / ($splitFactor * self::REVERSE_SPLIT_FACTOR)) >= self::MIN_SHARES_AFTER_REVERSE_SPLIT
+        ) {
             $newPrice = $newPrice * self::REVERSE_SPLIT_FACTOR;
             $splitFactor *= (int) self::REVERSE_SPLIT_FACTOR;
         }
 
-        $oldShares = (float) $stock->getSharesOutstanding();
-        $sharesOutstanding = (string) max(1, (int) floor($oldShares / $splitFactor));
+        if ($splitFactor === 1) {
+            return ['price' => $newPrice, 'shares' => $oldShares, 'event' => null];
+        }
+
+        $sharesOutstanding = (string) (int) floor($oldShares / $splitFactor);
 
         $oldDiv = (float) $stock->getLastDividend();
         $oldFcf = (float) $stock->getFreeCashFlowPerShare();
@@ -152,6 +197,7 @@ class CorporateActionEngine
         $stock->setSharesOutstanding($sharesOutstanding);
 
         $stock->setPrice((string) round($newPrice, 4));
+        $stock->setLastSplitAt($simTime);
 
         $stock->setLastDividend((string) ($oldDiv * $splitFactor));
         $stock->setFreeCashFlowPerShare((string) ($oldFcf * $splitFactor));

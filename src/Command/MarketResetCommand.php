@@ -358,6 +358,7 @@ class MarketResetCommand extends Command
                     lagged_demand_gap = NULL,
                     managed_accrual_bank = 0.0000,
                     price_momentum_trend = 0.0,
+                    last_split_at = NULL,
                     turnover_ratio = :turnover_ratio,
                     impact_variance_ema = 0.0,
                     -- Reopened at the structural variance rather than at zero, for the same reason the seed

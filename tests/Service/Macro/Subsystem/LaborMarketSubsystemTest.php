@@ -270,6 +270,25 @@ class LaborMarketSubsystemTest extends TestCase
     }
 
 
+    /**
+     * The wage level is measured against POTENTIAL productivity: when potential absorbs a technology gain the
+     * real wage falls below its path by that gain (unit labour cost drops), and the error correction then pays
+     * it back to workers over the following years.
+     */
+    public function testAProductivityGainOpensAGapThatWagesThenClose(): void
+    {
+        $state = $this->restingLabourMarket(0.0);
+        $dt = 1.0 / 360.0;
+        $this->subsystem->calculateLaborMarketAndWages($state, MacroEngine::TFP_DRIFT + (0.01 / $dt), $dt);
+        $this->assertEqualsWithDelta(-0.01, $state->realWageGap, 1e-3, 'A 1% gain in potential productivity leaves the real wage 1% below its path.');
+
+        for ($tick = 0; $tick < 360 * 30; $tick++) {
+            $this->subsystem->calculateLaborMarketAndWages($state, MacroEngine::TFP_DRIFT, $dt);
+        }
+        $this->assertGreaterThan(-0.001, $state->realWageGap, 'Thirty years on, wages have caught up with the productivity they are paid out of.');
+    }
+
+
     // --- Work Stoppages ---
 
     private function scriptedStoppages(bool $arrives, float $uniform, float $duration): LaborMarketSubsystem

@@ -170,18 +170,18 @@ class MacroAggregateSubsystem
     public const INFLATION_DIFFUSION_SIGMA = 0.002;
 
     // --- SOLOW-SWAN TOTAL FACTOR PRODUCTIVITY (TFP) ---
-    /** Annual volatility (sigma) of technological innovation and diffusion shocks. */
-    public const TFP_VOLATILITY = 0.022;
+    /** Level innovation of TFP per sqrt(year): Fernald's utilization-adjusted quarterly TFP 1947-2026 is a random walk at 1-3 year horizons with this sd (annual kurtosis 2.2, so no jump component). */
+    public const TFP_VOLATILITY = 0.0165;
     /** Endogenous R&D knowledge spillover sensitivity to economic expansion and capital utilization. */
     public const TFP_OUTPUT_GAP_SENSITIVITY = 0.05;
-    /** Poisson arrival intensity (lambda) of major breakthrough innovation jump shocks per year. */
-    public const TFP_JUMP_PROBABILITY = 0.03;
-    /** Mean log-scale magnitude of a major technological breakthrough jump. */
-    public const TFP_JUMP_MEAN = 0.010;
-    /** Volatility of breakthrough technological jump shocks. */
-    public const TFP_JUMP_VOL = 0.005;
     /** Structural upper bound ceiling for annual TFP growth rate. */
     public const MAX_TFP_GROWTH_RATE = 0.050;
+
+    // --- Productivity Shock Absorption (Basu, Fernald & Kimball 2006) ---
+    /** Rate at which actual output absorbs a TFP level shock through a second-order Pascal lag (Solow 1960); fitted with the potential speed to the CBO gap's response to Fernald TFP shocks over 20 quarters, holding the supply-driven gap to the ~1.2pp sd that response implies (var/harness/tfp_real.py, tfp_grid_an.py). */
+    public const TFP_OUTPUT_ABSORPTION_SPEED = 1.65;
+    /** Rate at which potential absorbs the same shock, also through a second-order Pascal lag, as capital and organisation adjust; a slower single lag fit the response only by leaving policy to fight a 2.3pp supply gap, which drove the whole gap's sd from 2.2 to 3.5%. */
+    public const TFP_POTENTIAL_ABSORPTION_SPEED = 0.75;
 
     // --- ISM Manufacturing Purchasing Managers' Index (PMI) ---
     /** PMI points per unit CU deviation (~0.5 per pp): the level of capacity strain feeds supplier deliveries and prices, a secondary channel next to growth. */
@@ -228,10 +228,12 @@ class MacroAggregateSubsystem
     ) {}
 
     /**
-     * Solow-Swan (1956) & Romer (1990) Endogenous Growth with Merton (1976) Breakthrough Jumps.
+     * Solow-Swan (1956) & Romer (1990) Endogenous Growth.
      *
-     * Simulates technological progress via secular drift, endogenous R&D capital deepening,
-     * Brownian diffusion, and Schumpeterian general-purpose breakthrough jumps.
+     * Productivity is a trend path (secular drift plus R&D capital deepening in expansions) times a random-walk
+     * level shock: Fernald's utilization-adjusted TFP is a random walk at business-cycle horizons with no fat
+     * tails, so a breakthrough is a sequence of ordinary innovations, not a jump. The shock level is kept apart
+     * from the trend because output and potential absorb it at their own speeds (absorbProductivityShocks).
      *
      * @param MacroState $state Current macroeconomic state.
      * @param float      $dt    Time increment in years.
@@ -245,24 +247,38 @@ class MacroAggregateSubsystem
         $trendGrowthRate = MacroEngine::TFP_DRIFT + $endogenousGrowth;
         $clampedTrendGrowthRate = max(MacroEngine::MIN_TFP_GROWTH_RATE, min(self::MAX_TFP_GROWTH_RATE, $trendGrowthRate));
 
-        $dW = $this->mathUtility->generateStandardNormal();
-        $innovationDiffusion = self::TFP_VOLATILITY * sqrt($dt) * $dW;
+        $innovation = self::TFP_VOLATILITY * sqrt($dt) * $this->mathUtility->generateStandardNormal();
+        $state->tfpShockLevel += $innovation;
 
-        $jumpData = $this->mathUtility->calculateJumpDiffusion(
-            lambda: self::TFP_JUMP_PROBABILITY,
-            jumpMean: self::TFP_JUMP_MEAN,
-            jumpVol: self::TFP_JUMP_VOL,
-            dt: $dt
-        );
-
-        $jumpExponent = (float) ($jumpData['exponent'] ?? 0.0);
-
-        // Merton (1976) jump-diffusion accumulation for technological progress.
-        $logIncrement = ($clampedTrendGrowthRate * $dt) + $innovationDiffusion + $jumpExponent;
-
-        $state->totalFactorProductivityIndex = max(1.0, $currentTfp * exp($logIncrement));
+        $state->totalFactorProductivityIndex = max(1.0, $currentTfp * exp(($clampedTrendGrowthRate * $dt) + $innovation));
 
         return $clampedTrendGrowthRate;
+    }
+
+    /**
+     * Basu, Fernald & Kimball (2006): a technology improvement reaches output only with a delay (hours fall on
+     * impact, output catches up over two years), and potential absorbs it more slowly still as capital and
+     * organisation adjust. Both follow the shock level through second-order Pascal lags (Solow 1960), output
+     * the faster; their difference is the supply-side part of the output gap. With monetary policy seeing
+     * through it, the whole gap opens positive, peaks near +0.4% at eighteen months and closes within about
+     * three and a half years, against the CBO gap's +0.5% at two and a half years and close within four and a
+     * half after a Fernald TFP shock.
+     *
+     * @param MacroState $state     Current macroeconomic state.
+     * @param float      $trendRate Trend TFP growth from calculateTotalFactorProductivity().
+     * @param float      $dt        Time increment in years.
+     * @return float Productivity growth potential output is built on: the trend plus the shock potential absorbed this tick.
+     */
+    public function absorbProductivityShocks(MacroState $state, float $trendRate, float $dt): float
+    {
+        $state->tfpOutputStage1 = $this->mathUtility->calculateDistributedLag($state->tfpOutputStage1, $state->tfpShockLevel, $dt, 1.0 / self::TFP_OUTPUT_ABSORPTION_SPEED);
+        $state->tfpOutputStage2 = $this->mathUtility->calculateDistributedLag($state->tfpOutputStage2, $state->tfpOutputStage1, $dt, 1.0 / self::TFP_OUTPUT_ABSORPTION_SPEED);
+
+        $priorPotential = $state->tfpPotentialAbsorbed;
+        $state->tfpPotentialStage1 = $this->mathUtility->calculateDistributedLag($state->tfpPotentialStage1, $state->tfpShockLevel, $dt, 1.0 / self::TFP_POTENTIAL_ABSORPTION_SPEED);
+        $state->tfpPotentialAbsorbed = $this->mathUtility->calculateDistributedLag($priorPotential, $state->tfpPotentialStage1, $dt, 1.0 / self::TFP_POTENTIAL_ABSORPTION_SPEED);
+
+        return $trendRate + (($state->tfpPotentialAbsorbed - $priorPotential) / $dt);
     }
 
     /**
@@ -272,7 +288,7 @@ class MacroAggregateSubsystem
      * growth deviations from long-term trend, via continuous Ornstein-Uhlenbeck adjustment.
      *
      * @param MacroState $state         Current macroeconomic state.
-     * @param float      $tfpGrowthRate Realized annual trend TFP growth rate.
+     * @param float      $tfpGrowthRate Productivity growth potential output is built on (trend plus absorbed shocks).
      * @param float      $dt            Time increment in years.
      */
     public function calculateNaturalRate(MacroState $state, float $tfpGrowthRate, float $dt): void
@@ -302,7 +318,14 @@ class MacroAggregateSubsystem
      */
     public function calculateOutputGap(MacroState $state, float $yield5y, float $naturalRate, float $expectedInflation, float $dt, float $stressMultiplier): float
     {
-        $y = $state->outputGap;
+        // The gap is demand plus the supply part a productivity shock opens (absorbProductivityShocks). The demand
+        // equation below runs on the demand part only: momentum, stabilisers and drags answer spending, and the
+        // supply part already carries its own measured closing path.
+        $openingGap = $state->outputGap;
+        $y = $openingGap - $state->productivitySupplyGap;
+        $supplyGap = $state->tfpOutputStage2 - $state->tfpPotentialAbsorbed;
+        $supplyChange = $supplyGap - $state->productivitySupplyGap;
+        $state->productivitySupplyGap = $supplyGap;
         // Smets & Wouters (2007) estimate the demand disturbance and the measurement-frequency
         // component as separate innovations; one draw serving both correlates them at unity.
         $demandZ = $this->mathUtility->generateStandardNormal();
@@ -446,17 +469,19 @@ class MacroAggregateSubsystem
             'crisisDeleveragingDrag' => -$crisisDeleveragingDrag,
             'lendingStandardsDrag' => -$lendingStandardsDrag,
             'demandShock' => $state->demandShock,
+            // Basu, Fernald & Kimball (2006): output catches up with a technology gain before potential does.
+            'productivitySupply' => $supplyChange / $dt,
         ];
 
         $drift = array_sum($contributions) * $dt;
         $diffusion = self::OUTPUT_GAP_DIFFUSION_SIGMA * $stressMultiplier * sqrt($dt) * $outZ;
-        $preClampGap = $y + $drift + $diffusion;
+        $preClampGap = $openingGap + $drift + $diffusion;
         $newGap = max(self::OUTPUT_GAP_FLOOR, min(self::OUTPUT_GAP_CEILING, $preClampGap));
 
         $this->gapProbe?->record(
             terms: $contributions,
             diffusion: $diffusion,
-            openingGap: $y,
+            openingGap: $openingGap,
             preClampGap: $preClampGap,
             closingGap: $newGap,
             dt: $dt
@@ -841,7 +866,7 @@ class MacroAggregateSubsystem
      * and cyclical output gap demand pressure.
      *
      * @param MacroState $state         Current macroeconomic state.
-     * @param float      $tfpGrowthRate Realized annual trend TFP growth rate.
+     * @param float      $tfpGrowthRate Productivity growth potential output is built on (trend plus absorbed shocks).
      * @param float      $dt            Time step in years.
      */
     public function calculateProducerPriceInflation(MacroState $state, float $tfpGrowthRate, float $dt): void

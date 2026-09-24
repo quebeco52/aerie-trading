@@ -149,17 +149,18 @@ class LaborMarketSubsystem
      * inside unity, so the spiral converges to roughly a tenth more inflation rather than running away.
      *
      * Wages also error-correct on their LEVEL (Sargan 1964; Blanchard & Katz 1999): a real wage above its
-     * trend-productivity path slows wage growth until the labor share returns. Growth equations alone leave the
+     * potential-productivity path slows wage growth until the labor share returns. Growth equations alone leave the
      * level a random walk, and downward rigidity ratchets it up, so every history carried its own permanent
-     * labour-cost wedge. The gap integrates wage growth less realized inflation and trend TFP, the same trend the
-     * target indexes, so a gap that stops moving is one where wages grow exactly with prices times productivity.
+     * labour-cost wedge. The gap integrates wage growth less realized inflation and potential productivity
+     * growth, the same growth the target indexes, so a gap that stops moving is one where wages grow exactly
+     * with prices times productivity.
      *
      * Read one tick stale: expectations are formed at step 4 and the labour market runs at step 3. That is
      * the right direction for a bargain struck against expectations that already existed, and the smoothed
      * series is a quarter wide, so the lag is immaterial at any production tick rate.
      *
      * @param MacroState $state         Current macroeconomic state.
-     * @param float      $tfpGrowthRate Realized annual trend TFP growth rate.
+     * @param float      $tfpGrowthRate Productivity growth potential output is built on (trend plus absorbed shocks).
      * @param float      $dt            Time increment in years.
      */
     public function calculateLaborMarketAndWages(MacroState $state, float $tfpGrowthRate, float $dt): void
@@ -181,7 +182,7 @@ class LaborMarketSubsystem
 
         $state->wageGrowth += $adjustmentSpeed * $wageGap * $dt;
 
-        // The wage level against prices and trend productivity: what a unit of output costs in labour.
+        // The wage level against prices and potential productivity: what a unit of output costs in labour.
         $state->realWageGap += ($state->wageGrowth - $state->inflation - $tfpGrowthRate) * $dt;
     }
 }

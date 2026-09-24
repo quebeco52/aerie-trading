@@ -518,7 +518,7 @@ class BankruptcyTest extends TestCase
             $redis
         );
 
-        $result = $actionEngine->processSplits($stock, 0.0, 1000000.0);
+        $result = $actionEngine->processSplits($stock, 0.0, 1000000.0, 5.0);
         $this->assertEquals(0.0, $result['price']);
         $this->assertEquals(1000000.0, $result['shares']);
         $this->assertNull($result['event']);
@@ -529,7 +529,7 @@ class BankruptcyTest extends TestCase
         $aliveStock->setIsBankrupt(false);
         $aliveStock->setSharesOutstanding('1000000');
 
-        $resultZero = $actionEngine->processSplits($aliveStock, 0.0, 1000000.0);
+        $resultZero = $actionEngine->processSplits($aliveStock, 0.0, 1000000.0, 5.0);
         $this->assertEquals(0.0, $resultZero['price']);
         $this->assertEquals(1000000.0, $resultZero['shares']);
         $this->assertNull($resultZero['event']);

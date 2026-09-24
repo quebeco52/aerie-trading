@@ -304,9 +304,9 @@ export function updateMacroCharts(reports, timeframe = currentMacroTimeframe) {
         let inf = parseFloat(report.inflation_ema ?? report.inflation ?? 0.02) * 100;
         let currentGap = parseFloat(report.output_gap_ema ?? report.output_gap ?? 0.0) * 100;
 
-        // Potential growth is read off the potential GDP the engine actually accumulated (labour force plus TREND
-        // TFP), over a trailing year. The TFP index's diffusion and jumps feed nothing in the engine, so growth
-        // computed from that index printed productivity booms and busts the economy never had.
+        // Potential growth is read off the potential GDP the engine accumulated over a trailing year: labour force
+        // plus trend TFP plus the productivity shocks potential has absorbed so far. The raw TFP index moves first
+        // and potential catches up over years, so growth read off the index shows gains the economy has not yet made.
         const tfpLookback = Math.min(4, index);
         const rawPotential = report.potential_gdp_index ?? report.potentialGdpIndex ?? null;
         const rawPrevPotential = tfpLookback > 0
@@ -316,7 +316,7 @@ export function updateMacroCharts(reports, timeframe = currentMacroTimeframe) {
             ? parseFloat(slicedReports[index - 1].output_gap_ema ?? slicedReports[index - 1].output_gap ?? currentGap) * 100
             : currentGap;
 
-        // Real Potential GDP Growth (%) and the trend TFP inside it (potential less structural labour-force growth).
+        // Real Potential GDP Growth (%) and the productivity growth inside it (potential less structural labour-force growth).
         let potentialGrowth = null;
         let tfpGrowth = null;
         if (rawPotential !== null && rawPrevPotential !== null && parseFloat(rawPotential) > 0 && parseFloat(rawPrevPotential) > 0) {
@@ -1090,7 +1090,7 @@ function renderMacroGdpGrowthChart(labels, nominalGdpGrowthData, realGdpGrowthDa
             pointRadius: labels.length > 50 ? 0 : 1
         },
         {
-            label: 'Trend TFP Growth',
+            label: 'Potential Productivity Growth',
             data: tfpGrowthData,
             borderColor: '#c084fc',
             backgroundColor: '#c084fc',

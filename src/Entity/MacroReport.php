@@ -230,6 +230,24 @@ class MacroReport
     private ?string $totalFactorProductivityIndexEma = null;
 
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $tfpShockLevel = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $tfpOutputStage1 = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $tfpOutputStage2 = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $tfpPotentialStage1 = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $tfpPotentialAbsorbed = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $productivitySupplyGap = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
     private ?string $tipsBreakeven = null;
 
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]

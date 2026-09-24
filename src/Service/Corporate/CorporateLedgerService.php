@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Service\Corporate;
 
 use App\Entity\Stock;
+use Doctrine\DBAL\ParameterType;
 use Doctrine\ORM\EntityManagerInterface;
 
 /**
@@ -152,6 +153,13 @@ class CorporateLedgerService
     public function processStockSplit(Stock $stock, float $splitFactor, bool $isReverse = false, ?float $oldPrice = null): void
     {
         $conn = $this->entityManager->getConnection();
+
+        // Split factors are whole (4^k, 10^k) and bound as integers. Bound as a string, MariaDB evaluates the
+        // arithmetic in DOUBLE, and IF(volume > max / factor, max, volume * factor) returns the BIGINT ceiling
+        // as a double one past the column's range: the overflow guard itself failed the statement.
+        $factor = (int) round($splitFactor);
+        $factorType = ['factor' => ParameterType::INTEGER];
+
         $conn->beginTransaction();
 
         try {
@@ -199,13 +207,15 @@ class CorporateLedgerService
                          GROUP BY o.user_id
                      ) remnants ON remnants.user_id = u.id
                      SET u.cash_balance = u.cash_balance + remnants.remnant_value",
-                    ['factor' => $splitFactor, 'ticker' => $stock->getTicker(), 'old_price' => $oldPrice ?? 0.0]
+                    ['factor' => $factor, 'ticker' => $stock->getTicker(), 'old_price' => $oldPrice ?? 0.0],
+                    $factorType
                 );
 
                 // 4. Perform bulk SQL updates for quantities and prices
                 $conn->executeStatement(
                     "UPDATE trade_orders SET limit_price = ROUND(limit_price * :factor, 4) WHERE ticker = :ticker AND status = 'OPEN'",
-                    ['factor' => $splitFactor, 'ticker' => $stock->getTicker()]
+                    ['factor' => $factor, 'ticker' => $stock->getTicker()],
+                    $factorType
                 );
 
                 // TRUNCATE, not FLOOR: it rounds toward zero for both signs, so a long keeps the behaviour it
@@ -213,7 +223,8 @@ class CorporateLedgerService
                 // The cash settlement of the fraction happened above, against exactly this arithmetic.
                 $conn->executeStatement(
                     'UPDATE user_stocks SET quantity = TRUNCATE(quantity / :factor, 0), version = version + 1 WHERE stock_id = :stock_id',
-                    ['factor' => $splitFactor, 'stock_id' => $stock->getId()]
+                    ['factor' => $factor, 'stock_id' => $stock->getId()],
+                    $factorType
                 );
 
                 $conn->executeStatement(
@@ -223,7 +234,8 @@ class CorporateLedgerService
 
                 $conn->executeStatement(
                     "UPDATE trade_orders SET quantity = FLOOR(quantity / :factor) WHERE ticker = :ticker AND status = 'OPEN'",
-                    ['factor' => $splitFactor, 'ticker' => $stock->getTicker()]
+                    ['factor' => $factor, 'ticker' => $stock->getTicker()],
+                    $factorType
                 );
 
                 $conn->executeStatement(
@@ -244,12 +256,14 @@ class CorporateLedgerService
                          low_price = LEAST(low_price * :factor, 900000000000.0),
                          volume = FLOOR(volume / :factor)
                      WHERE stock_id = :stock_id',
-                    ['factor' => $splitFactor, 'stock_id' => $stock->getId()]
+                    ['factor' => $factor, 'stock_id' => $stock->getId()],
+                    $factorType
                 );
 
                 $conn->executeStatement(
                     'UPDATE corporate_report SET shares = FLOOR(shares / :factor) WHERE stock_id = :stock_id',
-                    ['factor' => $splitFactor, 'stock_id' => $stock->getId()]
+                    ['factor' => $factor, 'stock_id' => $stock->getId()],
+                    $factorType
                 );
 
                 // Restate executed order history to maintain cost basis consistency post-split.
@@ -260,12 +274,14 @@ class CorporateLedgerService
                          execution_price = ROUND(execution_price * :factor, 4),
                          limit_price = ROUND(limit_price * :factor, 4)
                      WHERE ticker = :ticker AND status = 'FILLED'",
-                    ['factor' => $splitFactor, 'ticker' => $stock->getTicker()]
+                    ['factor' => $factor, 'ticker' => $stock->getTicker()],
+                    $factorType
                 );
             } else {
                 $conn->executeStatement(
                     'UPDATE user_stocks SET quantity = IF(quantity > 9223372036854775807 / :factor, 9223372036854775807, quantity * :factor), version = version + 1 WHERE stock_id = :stock_id',
-                    ['factor' => $splitFactor, 'stock_id' => $stock->getId()]
+                    ['factor' => $factor, 'stock_id' => $stock->getId()],
+                    $factorType
                 );
 
                 $conn->executeStatement(
@@ -276,17 +292,20 @@ class CorporateLedgerService
                          low_price = GREATEST(low_price / :factor, 0.00000001),
                          volume = IF(volume > 9223372036854775807 / :factor, 9223372036854775807, volume * :factor)
                      WHERE stock_id = :stock_id',
-                    ['factor' => $splitFactor, 'stock_id' => $stock->getId()]
+                    ['factor' => $factor, 'stock_id' => $stock->getId()],
+                    $factorType
                 );
 
                 $conn->executeStatement(
                     'UPDATE corporate_report SET shares = IF(shares > 9223372036854775807 / :factor, 9223372036854775807, shares * :factor) WHERE stock_id = :stock_id',
-                    ['factor' => $splitFactor, 'stock_id' => $stock->getId()]
+                    ['factor' => $factor, 'stock_id' => $stock->getId()],
+                    $factorType
                 );
 
                 $conn->executeStatement(
                     "UPDATE trade_orders SET quantity = IF(quantity > 9223372036854775807 / :factor, 9223372036854775807, quantity * :factor), limit_price = ROUND(limit_price / :factor, 4) WHERE ticker = :ticker AND status = 'OPEN'",
-                    ['factor' => $splitFactor, 'ticker' => $stock->getTicker()]
+                    ['factor' => $factor, 'ticker' => $stock->getTicker()],
+                    $factorType
                 );
 
                 // Restate executed order history to maintain cost basis consistency post-split.
@@ -297,7 +316,8 @@ class CorporateLedgerService
                          execution_price = ROUND(execution_price / :factor, 4),
                          limit_price = ROUND(limit_price / :factor, 4)
                      WHERE ticker = :ticker AND status = 'FILLED'",
-                    ['factor' => $splitFactor, 'ticker' => $stock->getTicker()]
+                    ['factor' => $factor, 'ticker' => $stock->getTicker()],
+                    $factorType
                 );
             }
 

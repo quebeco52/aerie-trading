@@ -579,23 +579,20 @@ class MacroAggregateSubsystemTest extends TestCase
     /**
      * TFP_DRIFT is a promise about the productivity index, and the index has to keep it.
      *
-     * The index is a log random walk: a drift scaled by dt, an innovation scaled by sqrt(dt), and rare
-     * Schumpeterian breakthroughs. Those two scalings are the trap. A bound written in annual rate units
+     * The index is a log random walk: a drift scaled by dt and an innovation scaled by sqrt(dt). Those two
+     * scalings are the trap. A bound written in annual rate units
      * is narrower than one standard deviation of the innovation by a factor of sqrt(1/dt), so clipping the
      * increment rather than the rate clips nearly every step, and realized growth stops answering to
      * TFP_DRIFT and settles on the midpoint of the bounds instead. That is not a rounding error: at the
      * production 3600 ticks/year it delivered 1.02%/yr against the 1.50% asked for, cut the index's
-     * volatility from 2.2% to 0.07% and swallowed the jumps whole, leaving a straight line where a
-     * stochastic process belongs.
+     * volatility from 2.2% to 0.07%, leaving a straight line where a stochastic process belongs.
      *
      * So both moments are asserted at two timesteps an order of magnitude apart: what the index delivers
      * must be what the constants say, and must not depend on how finely the clock is ticked.
      */
     public function testTheProductivityIndexDeliversTheDriftAndVolatilityItIsParameterisedWith(): void
     {
-        // The breakthrough jumps are not Merton-compensated, so they carry their own arrival-weighted drift.
-        $expectedGrowth = MacroEngine::TFP_DRIFT
-            + (MacroAggregateSubsystem::TFP_JUMP_PROBABILITY * MacroAggregateSubsystem::TFP_JUMP_MEAN);
+        $expectedGrowth = MacroEngine::TFP_DRIFT;
 
         foreach ([[3600, 4, 80], [252, 10, 300]] as [$ticksPerYear, $seeds, $years]) {
             $annualGrowth = [];
@@ -1064,10 +1061,100 @@ class MacroAggregateSubsystemTest extends TestCase
         );
 
         // Every channel in the drift is named, so the panel cannot silently drop one.
-        $this->assertCount(19, $window['contributions']);
+        $this->assertCount(20, $window['contributions']);
+        $this->assertArrayHasKey('productivitySupply', $window['contributions']);
         $this->assertArrayHasKey('monetaryDrag', $window['contributions']);
         $this->assertArrayHasKey('automaticStabiliser', $window['contributions']);
         $this->assertEqualsWithDelta(array_sum($window['contributions']), $window['drift'], 1e-15);
+    }
+
+    // --- Productivity Shocks ---
+
+    /**
+     * The shock is a driftless random walk at the fitted volatility and is the whole of the index's departure
+     * from its trend path: Fernald's utilization-adjusted TFP has no fat tails, so no jump rides on top. Checked
+     * at two tick rates, because a sqrt(dt) innovation is exactly what a coarse clock gets wrong.
+     */
+    public function testTheProductivityShockIsADriftlessRandomWalk(): void
+    {
+        $years = 10;
+        $expectedSd = MacroAggregateSubsystem::TFP_VOLATILITY * sqrt($years);
+        foreach ([36, 144] as $ticksPerYear) {
+            $ends = [];
+            for ($seed = 1; $seed <= 400; $seed++) {
+                mt_srand($seed * 104729 + $ticksPerYear);
+                $subsystem = new MacroAggregateSubsystem(new MathUtility());
+                $state = new MacroState();
+                $state->outputGapEma = 0.0;
+                for ($tick = 0; $tick < $years * $ticksPerYear; $tick++) {
+                    $subsystem->calculateTotalFactorProductivity($state, 1.0 / $ticksPerYear);
+                }
+                $ends[] = $state->tfpShockLevel;
+                if ($seed === 1) {
+                    $offTrend = log($state->totalFactorProductivityIndex / MacroEngine::TFP_BASELINE) - (MacroEngine::TFP_DRIFT * $years);
+                    $this->assertEqualsWithDelta($offTrend, $state->tfpShockLevel, 1e-9, 'The index leaves its trend path by the shock level and nothing else.');
+                }
+            }
+
+            $mean = array_sum($ends) / count($ends);
+            $sd = sqrt(array_sum(array_map(static fn (float $v): float => ($v - $mean) ** 2, $ends)) / count($ends));
+            $this->assertEqualsWithDelta(0.0, $mean, 3.0 * $expectedSd / sqrt(count($ends)), "At {$ticksPerYear} ticks/year the shock drifted.");
+            $this->assertEqualsWithDelta($expectedSd, $sd, 0.10 * $expectedSd, "At {$ticksPerYear} ticks/year the shock spread at the wrong rate.");
+        }
+    }
+
+    /**
+     * Basu, Fernald & Kimball (2006): output and potential take up a technology gain through second-order Pascal
+     * lags, output the faster, so output runs ahead of potential and the gap opens positive; the productivity
+     * growth potential is built on carries exactly what potential absorbed.
+     */
+    public function testOutputAndPotentialAbsorbAShockAtTheirFittedSpeeds(): void
+    {
+        $state = new MacroState();
+        $state->tfpShockLevel = 0.01;
+        $dt = 1.0 / 360.0;
+        $growth = 0.0;
+        for ($tick = 0; $tick < 720; $tick++) {
+            $growth = $this->subsystem->absorbProductivityShocks($state, MacroEngine::TFP_DRIFT, $dt);
+        }
+
+        $t = 2.0;
+        $ky = MacroAggregateSubsystem::TFP_OUTPUT_ABSORPTION_SPEED;
+        $kp = MacroAggregateSubsystem::TFP_POTENTIAL_ABSORPTION_SPEED;
+        $this->assertEqualsWithDelta(0.01 * (1.0 - (1.0 + $ky * $t) * exp(-$ky * $t)), $state->tfpOutputStage2, 2e-5);
+        $this->assertEqualsWithDelta(0.01 * (1.0 - (1.0 + $kp * $t) * exp(-$kp * $t)), $state->tfpPotentialAbsorbed, 2e-5);
+        $this->assertGreaterThan($state->tfpPotentialAbsorbed, $state->tfpOutputStage2, 'Output catches up with the new technology before potential does.');
+        $this->assertEqualsWithDelta(MacroEngine::TFP_DRIFT + ($kp * ($state->tfpPotentialStage1 - $state->tfpPotentialAbsorbed)), $growth, 1e-5);
+    }
+
+    /**
+     * The supply part of the gap rides beside the demand equation, not inside it: two economies identical but
+     * for an absorbed productivity gain stay exactly that gain apart, so momentum, stabilisers and policy drags
+     * never answer a gap spending did not open. The probe books it as its own channel.
+     */
+    public function testTheSupplyGapRidesOutsideTheDemandEquation(): void
+    {
+        $probe = new OutputGapProbe();
+        $probe->enable();
+        $plain = $this->probedState();
+        $shocked = $this->probedState();
+        $shocked->tfpOutputStage1 = 0.004;
+        $shocked->tfpOutputStage2 = 0.004;
+        $plainSubsystem = $this->probedSubsystem(new OutputGapProbe(), 0.8);
+        $shockedSubsystem = $this->probedSubsystem($probe, 0.8);
+
+        $dt = 1.0 / 3600.0;
+        for ($tick = 0; $tick < 900; ++$tick) {
+            $plain->outputGap = $plainSubsystem->calculateOutputGap($plain, 0.03, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, $dt, 1.0);
+            $shocked->outputGap = $shockedSubsystem->calculateOutputGap($shocked, 0.03, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, $dt, 1.0);
+        }
+
+        $this->assertEqualsWithDelta(0.004, $shocked->outputGap - $plain->outputGap, 1e-12);
+        $this->assertEqualsWithDelta(0.004, $shocked->productivitySupplyGap, 1e-15);
+        $window = $probe->snapshot()['current'];
+        $this->assertNotNull($window);
+        $this->assertEqualsWithDelta(0.004, $window['contributions']['productivitySupply'], 1e-12);
+        $this->assertEqualsWithDelta(0.0, $window['unexplained'], 1e-12);
     }
 
     /**

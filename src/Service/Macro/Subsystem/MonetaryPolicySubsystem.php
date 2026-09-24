@@ -235,20 +235,28 @@ class MonetaryPolicySubsystem
      * Brown (1963) linear exponential smoothing forecasts h years out as level + h * trend. During cold
      * start the EMA still holds its seed, so no trend is read off it.
      *
+     * The part of the gap a productivity gain opens (output catching up with new technology before potential
+     * does) is seen through: the rule answers spending, and meets supply only through the inflation it brings.
+     * That is how the late-1990s productivity boom was run (Blinder & Yellen 2001), and it is what US data
+     * shows: the gap still stands +0.5% two years after a TFP gain. Leaning on it instead pulled the engine's
+     * gap below zero within ten quarters. With the forecast horizon equal to the EMA horizon, the total gap's
+     * level-plus-trend forecast less today's supply part is exactly the demand gap's own forecast.
+     *
      * @param MacroState $state Current macroeconomic state.
-     * @return float Output gap projected TAYLOR_GAP_FORECAST_YEARS ahead.
+     * @return float Demand-driven output gap projected TAYLOR_GAP_FORECAST_YEARS ahead.
      */
     private function cyclicalGapForecast(MacroState $state): float
     {
         if ($state->outputGapEma === 0.015 && $state->outputGap !== 0.015) {
-            return $state->outputGap;
+            return $state->outputGap - $state->productivitySupplyGap;
         }
 
         $trend = ($state->outputGap - $state->outputGapEma) / MacroAggregateSubsystem::STANDARD_EMA_HORIZON_YEARS;
         $projection = $trend * self::TAYLOR_GAP_FORECAST_YEARS;
 
         return $state->outputGapEma
-            + max(-self::TAYLOR_GAP_FORECAST_CAP, min(self::TAYLOR_GAP_FORECAST_CAP, $projection));
+            + max(-self::TAYLOR_GAP_FORECAST_CAP, min(self::TAYLOR_GAP_FORECAST_CAP, $projection))
+            - $state->productivitySupplyGap;
     }
 
     /**
@@ -858,7 +866,7 @@ class MonetaryPolicySubsystem
      *
      * @param MacroState $state         Current macroeconomic state.
      * @param float      $dt            Time step in years.
-     * @param float      $tfpGrowthRate Realized annual trend TFP growth rate.
+     * @param float      $tfpGrowthRate Productivity growth potential output is built on (trend plus absorbed shocks).
      */
     public function calculateMoneySupplyGrowth(MacroState $state, float $dt, float $tfpGrowthRate): void
     {

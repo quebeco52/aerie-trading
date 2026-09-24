@@ -56,6 +56,12 @@ class Stock
     #[ORM\Column(type: Types::BIGINT, options: ['unsigned' => true, 'default' => 1000000])]
     private int|string $sharesOutstanding = '1000000';
 
+    /**
+     * @var float|null Simulated time (years) of the last forward or reverse split; null if the stock has never split.
+     */
+    #[ORM\Column(type: 'float', nullable: true)]
+    private ?float $lastSplitAt = null;
+
 
     // THE BALANCE SHEET
 
@@ -733,6 +739,17 @@ class Stock
     public function setSharesOutstanding(int|string $sharesOutstanding): static
     {
         $this->sharesOutstanding = is_int($sharesOutstanding) ? $sharesOutstanding : (string) (int) self::cleanBcStr($sharesOutstanding, 0);
+        return $this;
+    }
+
+    public function getLastSplitAt(): ?float
+    {
+        return $this->lastSplitAt;
+    }
+
+    public function setLastSplitAt(?float $lastSplitAt): static
+    {
+        $this->lastSplitAt = $lastSplitAt;
         return $this;
     }
 

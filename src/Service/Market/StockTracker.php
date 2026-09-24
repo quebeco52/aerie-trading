@@ -383,7 +383,8 @@ class StockTracker
             $splitResult = $this->corporateActionEngine->processSplits(
                 $stock,
                 $currentPriceAfterEarnings,
-                $preSplitShares
+                $preSplitShares,
+                $macroDTO->totalTime
             );
 
             // Unpack the results

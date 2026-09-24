@@ -7,6 +7,7 @@ namespace App\Tests\Service;
 use App\Entity\Stock;
 use App\Service\Corporate\CorporateLedgerService;
 use Doctrine\DBAL\Connection;
+use Doctrine\DBAL\ParameterType;
 use Doctrine\ORM\EntityManagerInterface;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -28,7 +29,7 @@ final class SplitCostBasisRestatementTest extends TestCase
     private EntityManagerInterface&Stub $entityManagerMock;
     private Connection&MockObject $connectionMock;
     private CorporateLedgerService $service;
-    /** @var list<array{sql: string, params: array<string, mixed>}> */
+    /** @var list<array{sql: string, params: array<string, mixed>, types: array<string, mixed>}> */
     private array $statements = [];
 
     protected function setUp(): void
@@ -39,8 +40,8 @@ final class SplitCostBasisRestatementTest extends TestCase
         $this->entityManagerMock->method('getConnection')->willReturn($this->connectionMock);
         $this->connectionMock->method('fetchAllAssociative')->willReturn([]);
         $this->connectionMock->method('executeStatement')->willReturnCallback(
-            function (string $sql, array $params = []): int {
-                $this->statements[] = ['sql' => $sql, 'params' => $params];
+            function (string $sql, array $params = [], array $types = []): int {
+                $this->statements[] = ['sql' => $sql, 'params' => $params, 'types' => $types];
 
                 return 1;
             }
@@ -182,7 +183,7 @@ final class SplitCostBasisRestatementTest extends TestCase
         $this->assertStringContainsString('quantity * :factor', $statement['sql']);
         $this->assertStringContainsString('filled_quantity', $statement['sql']);
         $this->assertStringContainsString('execution_price = ROUND(execution_price / :factor', $statement['sql']);
-        $this->assertSame(4.0, $statement['params']['factor']);
+        $this->assertSame(4, $statement['params']['factor']);
         $this->assertSame('SPLIT_CORP', $statement['params']['ticker']);
     }
 
@@ -198,7 +199,7 @@ final class SplitCostBasisRestatementTest extends TestCase
         $this->assertStringContainsString('FLOOR(quantity / :factor)', $statement['sql']);
         $this->assertStringContainsString('FLOOR(filled_quantity / :factor)', $statement['sql']);
         $this->assertStringContainsString('execution_price = ROUND(execution_price * :factor', $statement['sql']);
-        $this->assertSame(10.0, $statement['params']['factor']);
+        $this->assertSame(10, $statement['params']['factor']);
     }
 
     /**
@@ -306,7 +307,7 @@ final class SplitCostBasisRestatementTest extends TestCase
         $this->assertStringContainsString("o.status = 'OPEN'", $statement['sql']);
         $this->assertStringContainsString('COALESCE(o.limit_price, 0) * (o.quantity % :factor)', $statement['sql']);
         $this->assertStringContainsString('(o.quantity % :factor) * :old_price', $statement['sql']);
-        $this->assertSame(10.0, $statement['params']['factor']);
+        $this->assertSame(10, $statement['params']['factor']);
         $this->assertSame(2.50, $statement['params']['old_price']);
         $this->assertSame('REV_CORP', $statement['params']['ticker']);
     }
@@ -392,6 +393,28 @@ final class SplitCostBasisRestatementTest extends TestCase
 
         foreach ($this->statements as $statement) {
             $this->assertStringNotContainsString("status = 'CANCELLED'", $statement['sql']);
+        }
+    }
+
+    /**
+     * Every statement that uses the factor binds it as an integer. Bound as a string, MariaDB does the
+     * arithmetic in DOUBLE and IF(volume > max / factor, max, volume * factor) hands the BIGINT ceiling back
+     * as a double one past the column's range, so the overflow guard failed the split and crashed the ticker.
+     */
+    public function testTheFactorIsBoundAsAnIntegerInEveryStatement(): void
+    {
+        foreach ([[4.0, false], [10.0, true]] as [$factor, $isReverse]) {
+            $this->statements = [];
+            $stock = new Stock();
+            $stock->setTicker('BIND');
+            $this->service->processStockSplit($stock, $factor, $isReverse, 2.50);
+
+            $withFactor = array_filter($this->statements, static fn (array $s): bool => str_contains($s['sql'], ':factor'));
+            $this->assertNotEmpty($withFactor);
+            foreach ($withFactor as $statement) {
+                $this->assertSame((int) $factor, $statement['params']['factor']);
+                $this->assertSame(ParameterType::INTEGER, $statement['types']['factor'] ?? null, $statement['sql']);
+            }
         }
     }
 }

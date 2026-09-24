@@ -22,7 +22,7 @@ class MacroState
     public float $laborTightnessEma = 1.125;
     public float $wageGrowth = 0.035;
     public float $wageGrowthEma = 0.035;
-    // Log real wage relative to its trend-productivity path: the price of labour firms pay against what they sell.
+    // Log real wage relative to its potential-productivity path: the price of labour firms pay against what they sell.
     public float $realWageGap = 0.0;
     public float $nairu = MacroEngine::NATURAL_UNEMPLOYMENT;
     public float $nairuEma = MacroEngine::NATURAL_UNEMPLOYMENT;
@@ -183,6 +183,14 @@ class MacroState
 
     public float $totalFactorProductivityIndex = MacroEngine::TFP_BASELINE;
     public float $totalFactorProductivityIndexEma = MacroEngine::TFP_BASELINE;
+    // Productivity shock: the random-walk level off the trend path, how far actual output and potential (two Pascal
+    // stages each) have absorbed it, and the supply-side part of the output gap that difference opens.
+    public float $tfpShockLevel = 0.0;
+    public float $tfpOutputStage1 = 0.0;
+    public float $tfpOutputStage2 = 0.0;
+    public float $tfpPotentialStage1 = 0.0;
+    public float $tfpPotentialAbsorbed = 0.0;
+    public float $productivitySupplyGap = 0.0;
 
     public float $supercoreInflation = MacroEngine::TARGET_INFLATION;
     public float $supercoreInflationEma = MacroEngine::TARGET_INFLATION;
