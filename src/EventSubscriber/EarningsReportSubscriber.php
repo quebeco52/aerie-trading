@@ -11,6 +11,7 @@ use App\Data\MacroFieldCatalog;
 use App\Data\Sectors;
 use App\Service\Corporate\DebtEngine;
 use App\Service\Macro\MacroEngine;
+use App\Service\Model\Sector\MiningBusinessModel;
 use App\Service\Model\Sector\PrivateEquityBusinessModel;
 use App\Service\Model\Sector\RefiningBusinessModel;
 
@@ -694,27 +695,21 @@ class EarningsReportSubscriber implements EventSubscriberInterface
                 ];
                 break;
 
-            case 'commodity':
-                $metalsShift = ($macro->industrialMetalsIndexEma - 100.0) / 100.0;
+            case 'mining':
+                // Tonnes times the benchmark: the metals price is the revenue driver, diesel and power the cost one.
                 $drivers[] = [
                     'label'  => 'Industrial Metals Benchmark Price',
-                    'impact' => round($metalsShift * 0.60, 4),
+                    'impact' => round(($macro->industrialMetalsIndexEma / MacroEngine::METALS_BASELINE) - 1.0, 4),
                     'type'   => 'macro',
                     'fields' => ['industrial_metals_index_ema'],
                 ];
-                $drivers[] = [
-                    'label'  => 'Global Industrial Production Demand',
-                    'impact' => round($macro->outputGapEma * 1.40 * $beta, 4),
-                    'type'   => 'macro',
-                    'fields' => ['output_gap_ema'],
-                ];
-                $energyCost = ($macro->energyPriceIndexEma - 100.0) / 100.0;
-                if (abs($energyCost) >= 0.01) {
+                $haulageEnergy = $macro->energyCostPushLag / MacroEngine::ENERGY_COST_PUSH_TRANSMISSION;
+                if (abs($haulageEnergy) >= 0.01) {
                     $drivers[] = [
-                        'label'  => 'Energy Smelting & Extraction Cost',
-                        'impact' => round(-$energyCost * 0.30, 4),
+                        'label'  => 'Haulage Diesel & Mill Power Cost',
+                        'impact' => round(-$haulageEnergy * MiningBusinessModel::INPUT_COST_EXPOSURES['energy'], 4),
                         'type'   => 'macro',
-                        'fields' => ['energy_price_index_ema'],
+                        'fields' => ['energy_cost_push_lag'],
                     ];
                 }
                 break;

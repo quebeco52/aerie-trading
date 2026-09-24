@@ -181,7 +181,6 @@ class StockModelTuningTest extends TestCase
             'construction' => [ModelParam::CivilInfrastructureWeight, ModelParam::CommercialEpcWeight, ModelParam::FacilitiesMaintenanceWeight],
             'medical_facility' => [ModelParam::InpatientCareWeight, ModelParam::ElectiveOutpatientWeight, ModelParam::InsuranceArbitrageWeight],
             'consumer_staples' => [ModelParam::BrandedStaplesWeight, ModelParam::VolumeCommodityWeight, ModelParam::CommodityTradingWeight, ModelParam::LandSpeculationWeight],
-            'commodity' => [ModelParam::ExtractionRevenueWeight, ModelParam::SpotPriceWeight, ModelParam::RefiningSpreadWeight],
             'conglomerate' => [ModelParam::IndustrialConglomerateWeight, ModelParam::DefensiveStaplesWeight, ModelParam::ContrarianFloatWeight],
             'law_firm' => [ModelParam::CorporateRetainerWeight, ModelParam::LitigationContingencyWeight, ModelParam::RestructuringAdvisoryWeight],
             'auto_manufacturer' => [ModelParam::AutoSalesWeight, ModelParam::ApexLuxuryWeight, ModelParam::SoftwareServicesWeight],
@@ -290,11 +289,8 @@ class StockModelTuningTest extends TestCase
         // Cascade Refining (CASC) runs on the refining model's own constants.
         $this->assertFalse(StockModelTuning::hasOverrides('CASC'));
 
-        // Condor Extraction (CNDR)
-        $this->assertSame(0.60, StockModelTuning::get('CNDR', ModelParam::ExtractionRevenueWeight, 0.0));
-        $this->assertSame(0.40, StockModelTuning::get('CNDR', ModelParam::SpotPriceWeight, 0.0));
-        $this->assertSame(0.00, StockModelTuning::get('CNDR', ModelParam::RefiningSpreadWeight, 0.0));
-        $this->assertSame(0.70, StockModelTuning::get('CNDR', ModelParam::SpotPriceSensitivity, 0.0));
+        // Condor Extraction (CNDR) runs on the mining model's own constants.
+        $this->assertFalse(StockModelTuning::hasOverrides('CNDR'));
 
         // Safe Harbor Reinsurance (SAFE)
         $this->assertSame(0.60, StockModelTuning::get('SAFE', ModelParam::TreatyReinsuranceWeight, 0.0));
@@ -387,7 +383,7 @@ class StockModelTuningTest extends TestCase
             new \App\Service\Model\Sector\BrokerageBusinessModel(),
             new \App\Service\Model\Sector\ClearingHouseBusinessModel(),
             new \App\Service\Model\Sector\CommercialBankBusinessModel(),
-            new \App\Service\Model\Sector\CommodityBusinessModel(),
+            new \App\Service\Model\Sector\MiningBusinessModel(),
             new \App\Service\Model\Sector\OilGasProducerBusinessModel(),
             new \App\Service\Model\Sector\RefiningBusinessModel(),
             new \App\Service\Model\Sector\ComputerHardwareBusinessModel(),

@@ -16,7 +16,6 @@ enum ModelParam: string
     case OperatingCyclicality = 'operating_cyclicality';
     case RateSensitivityScalar = 'rate_sensitivity_scalar';
     case VixArbitrageScalar = 'vix_arbitrage_scalar';
-    case SpotPriceSensitivity = 'spot_price_sensitivity';
     case AdvertisingCyclicality = 'advertising_cyclicality';
     case MonopolyAggression = 'monopoly_aggression';
     /** Propensity of this management team to steer reported earnings toward consensus with accruals. */
@@ -95,12 +94,6 @@ enum ModelParam: string
     case CommercialRealEstateWeight = 'commercial_real_estate_weight';
 
     // --- Commodities, Energy & Heavy Industry ---
-    case ExtractionRevenueWeight = 'extraction_revenue_weight';
-    case SpotPriceWeight = 'spot_price_weight';
-    case RefiningSpreadWeight = 'refining_spread_weight';
-    case EnergyPriceExposure = 'energy_price_exposure';
-    case IndustrialMetalsExposure = 'industrial_metals_exposure';
-    case AgriculturalExposure = 'agricultural_exposure';
     /** Share of an oil and gas producer's revenue at baseline prices that is crude and liquids rather than natural gas. */
     case LiquidsRevenueShare = 'liquids_revenue_share';
     /** Share of a producer's oil volume sold forward through its rolling four-quarter swap ladder. */

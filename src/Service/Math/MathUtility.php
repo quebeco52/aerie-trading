@@ -1526,6 +1526,20 @@ class MathUtility
     }
 
     /**
+     * A price taker's variable cost ratio at the price it realized, given the ratio at the price its cost base
+     * was sized for. The costs are paid per unit produced (lifting, haulage, processing), so the dollars per
+     * unit do not move with the market price and the ratio moves inversely with it: revenue = P x Q while
+     * variable cost = c x Q, so c x Q / (P x Q) = ratio at base price x P0 / P.
+     *
+     * @param float $costRatioAtBasePrice Variable cost as a share of revenue at the base price.
+     * @param float $priceRelative        Realized price over the base price.
+     */
+    public function calculatePerUnitCostRatio(float $costRatioAtBasePrice, float $priceRelative): float
+    {
+        return $costRatioAtBasePrice / max(0.01, $priceRelative);
+    }
+
+    /**
      * Schwartz (1997) one-factor futures price with a zero market price of risk: the expected spot at the
      * delivery horizon under the same exact log-OU transition calculateSchwartz1Factor() steps, so a swap
      * struck on this curve is fair against the process the spot actually follows.

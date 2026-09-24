@@ -1510,7 +1510,9 @@ class InitialMarket
             'target_payout_ratio' => 0.15,
             'dividendSpeed' => 0.50,
             'fixed_cost_ratio' => 0.80,
-            'operating_margin' => 0.16,
+            // A low-cost major: copper majors earn 25-35% at mid-cycle on ~0.5x asset turnover, which is what
+            // carries them through a metals slump that sinks the high-cost producers.
+            'operating_margin' => 0.30,
             // Majority owned by LAKE and SWAN, per its own description. A thin float is what makes a
             // high-volatility miner genuinely hard to trade in size and hard to borrow.
             'public_float' => 0.45,

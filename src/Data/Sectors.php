@@ -29,7 +29,7 @@ class Sectors
         'shadow_bank'     => 'Non-depository financial institutions (Mortgage Finance, Mortgage REITs). They fund massive loan books entirely through short-term wholesale debt. Hyper-vulnerable to yield curve inversions and mortgage default spikes during housing crashes. Evaluated on ROE.',
         'reit'            => 'Real Estate Investment Trusts hold physical property. Evaluated on Funds From Operations (FFO). Pays 0% corporate tax but must issue heavy debt to expand due to high dividend payouts. Features CPI rent escalators (inflation hedge) and tenant vacancy risks.',
         'utility'         => 'Regulated monopolies and essential infrastructure (Power, Water, Telecom, Waste Management) with heavily regulated Return on Invested Capital (ROIC). They grow absolute earnings by deploying massive CapEx. Revenues are hyper-stable, but rate hikes lag behind inflation, causing temporary margin compression during inflationary spikes.',
-        'commodity'       => 'Heavy extractors of metals and minerals acting as ultimate "Price Takers." Revenues are violently driven by global supply and demand. Inflation is a blessing: as the base of the supply chain, their margins explode upwards during inflationary spikes.',
+        'mining'          => 'Metals miners selling every tonne into a global market at the going price. Revenue is payable metal times the benchmark, sold unhedged; haulage, milling and power are paid per tonne, so a metals rally lands on margin in full and a slump leaves the whole cost base standing. Output does not follow the domestic cycle, and grades decline unless reinvestment keeps the mine modern.',
         'oil_gas_producer' => 'Upstream oil and gas producers selling every barrel into a global market at the going price. Revenue is volume times the realized crude and gas price, cushioned by a rolling year of forward swaps; lifting costs are paid per barrel, so a price move lands on margin in full. Output does not follow the domestic cycle, and fields deplete unless reinvestment replaces them.',
         'refining'        => 'Merchant refiners that buy crude and sell the gasoline, diesel and jet it is cracked into. Revenue rises with crude, but the margin is the crack spread earned on a largely fixed plant, so earnings swing from losses to records across the cycle. Spring turnarounds and the summer driving season set the seasonal run rate.',
         'financial_data'  => 'Asset-light data monopolies. Characterized by incredibly sticky recurring subscription revenue, ultra-high margins, and complete immunity to physical supply chain inflation. Features exceptionally low idiosyncratic variance.',
@@ -78,7 +78,7 @@ class Sectors
         'Aerospace & Defense' => ['pe' => 22.00, 'depreciation' => 0.06, 'ebitda_limit' => 3.5, 'equity_limit' => 1.5, 'business_model' => 'defense_contractor'],
         'Agricultural Inputs' => ['pe' => 15.00, 'depreciation' => 0.07, 'ebitda_limit' => 3.0, 'equity_limit' => 1.0, 'business_model' => 'chemical'],
         'Airlines' => ['pe' => 10.00, 'depreciation' => 0.07, 'ebitda_limit' => 3.5, 'equity_limit' => 2.0, 'business_model' => 'none'],
-        'Aluminum' => ['pe' => 12.00, 'depreciation' => 0.05, 'ebitda_limit' => 2.5, 'equity_limit' => 1.0, 'business_model' => 'commodity'],
+        'Aluminum' => ['pe' => 12.00, 'depreciation' => 0.05, 'ebitda_limit' => 2.5, 'equity_limit' => 1.0, 'business_model' => 'mining'],
         'Apparel Manufacturing' => ['pe' => 16.00, 'depreciation' => 0.08, 'ebitda_limit' => 2.5, 'equity_limit' => 1.0, 'business_model' => 'apparel_manufacturing'],
         'Apparel Retail' => ['pe' => 18.00, 'depreciation' => 0.10, 'ebitda_limit' => 2.5, 'equity_limit' => 1.0, 'business_model' => 'apparel_manufacturing'],
         'Asset Management' => ['pe' => 15.00, 'depreciation' => 0.03, 'ebitda_limit' => 2.0, 'equity_limit' => 0.5, 'business_model' => 'asset_manager'],
@@ -100,7 +100,7 @@ class Sectors
         'Computer Hardware' => ['pe' => 15.00, 'depreciation' => 0.15, 'ebitda_limit' => 2.0, 'equity_limit' => 0.5, 'business_model' => 'computer_hardware'],
         'Conglomerates' => ['pe' => 16.00, 'depreciation' => 0.05, 'ebitda_limit' => 3.5, 'equity_limit' => 1.5, 'business_model' => 'conglomerate'],
         'Consulting Services' => ['pe' => 22.00, 'depreciation' => 0.03, 'ebitda_limit' => 2.5, 'equity_limit' => 0.5, 'business_model' => 'law_firm'], // Almost entirely human capital
-        'Copper' => ['pe' => 12.00, 'depreciation' => 0.08, 'ebitda_limit' => 2.5, 'equity_limit' => 1.0, 'business_model' => 'commodity'], // Asset heavy, cyclical mining
+        'Copper' => ['pe' => 12.00, 'depreciation' => 0.08, 'ebitda_limit' => 2.5, 'equity_limit' => 1.0, 'business_model' => 'mining'], // Asset heavy, cyclical mining
         'Credit Services' => ['pe' => 15.00, 'depreciation' => 0.05, 'ebitda_limit' => 999.0, 'equity_limit' => 7.0, 'business_model' => 'credit_services'], // Amex, Discover. Unsecured lending & swipe fees.
         'Diagnostics & Research' => ['pe' => 24.00, 'depreciation' => 0.08, 'ebitda_limit' => 3.5, 'equity_limit' => 1.5, 'business_model' => 'none'],
         'Discount Stores' => ['pe' => 20.00, 'depreciation' => 0.05, 'ebitda_limit' => 3.5, 'equity_limit' => 1.5, 'business_model' => 'consumer_staples'], // Very safe, steady cash flows
@@ -122,7 +122,7 @@ class Sectors
         'Footwear & Accessories' => ['pe' => 18.00, 'depreciation' => 0.06, 'ebitda_limit' => 2.5, 'equity_limit' => 0.5, 'business_model' => 'apparel_manufacturing'],
         'Furnishings, Fixtures & Appliances' => ['pe' => 15.00, 'depreciation' => 0.06, 'ebitda_limit' => 2.5, 'equity_limit' => 1.0, 'business_model' => 'tools_and_accessories'],
         'Gambling' => ['pe' => 18.00, 'depreciation' => 0.08, 'ebitda_limit' => 4.5, 'equity_limit' => 2.0, 'business_model' => 'resorts_casinos'], // Collateralized by real estate
-        'Gold' => ['pe' => 15.00, 'depreciation' => 0.10, 'ebitda_limit' => 2.5, 'equity_limit' => 1.0, 'business_model' => 'commodity'], // Mines deplete, highly cyclical
+        'Gold' => ['pe' => 15.00, 'depreciation' => 0.10, 'ebitda_limit' => 2.5, 'equity_limit' => 1.0, 'business_model' => 'mining'], // Mines deplete, highly cyclical
         'Grocery Stores' => ['pe' => 15.00, 'depreciation' => 0.06, 'ebitda_limit' => 4.0, 'equity_limit' => 1.5, 'business_model' => 'consumer_staples'], // Very safe debt profile
         'Hedge Fund' => ['pe' => 14.00, 'depreciation' => 0.02, 'ebitda_limit' => 999.0, 'equity_limit' => 3.0, 'business_model' => 'hedge_fund'], // Quantitative alpha, leveraged directional trading
         'Healthcare Plans' => ['pe' => 16.00, 'depreciation' => 0.04, 'ebitda_limit' => 2.5, 'equity_limit' => 1.0, 'business_model' => 'none'], // Managed care
@@ -167,9 +167,9 @@ class Sectors
         'Metal Fabrication' => ['pe' => 13.00, 'depreciation' => 0.06, 'ebitda_limit' => 3.0, 'equity_limit' => 1.5, 'business_model' => 'heavy_manufacturing'],
         'Mortgage Finance' => ['pe' => 11.00, 'depreciation' => 0.02, 'ebitda_limit' => 999.0, 'equity_limit' => 8.0, 'business_model' => 'shadow_bank'], // Shadow banks / Fannie Mae. Bank Rule.
         'Oil & Gas E&P' => ['pe' => 11.00, 'depreciation' => 0.12, 'ebitda_limit' => 2.5, 'equity_limit' => 1.0, 'business_model' => 'oil_gas_producer'], // Exploration. Wells deplete incredibly fast.
-        'Oil & Gas Equipment & Services' => ['pe' => 14.00, 'depreciation' => 0.08, 'ebitda_limit' => 2.5, 'equity_limit' => 1.0, 'business_model' => 'commodity'], // Cyclical services.
-        'Oil & Gas Integrated' => ['pe' => 13.00, 'depreciation' => 0.08, 'ebitda_limit' => 3.0, 'equity_limit' => 1.5, 'business_model' => 'commodity'], // Exxon/Chevron. Safer than E&P.
-        'Oil & Gas Midstream' => ['pe' => 14.00, 'depreciation' => 0.06, 'ebitda_limit' => 4.5, 'equity_limit' => 2.0, 'business_model' => 'commodity'], // Pipelines. "Toll roads", highly stable.
+        'Oil & Gas Equipment & Services' => ['pe' => 14.00, 'depreciation' => 0.08, 'ebitda_limit' => 2.5, 'equity_limit' => 1.0, 'business_model' => 'none'], // Cyclical services.
+        'Oil & Gas Integrated' => ['pe' => 13.00, 'depreciation' => 0.08, 'ebitda_limit' => 3.0, 'equity_limit' => 1.5, 'business_model' => 'oil_gas_producer'], // Exxon/Chevron. Safer than E&P.
+        'Oil & Gas Midstream' => ['pe' => 14.00, 'depreciation' => 0.06, 'ebitda_limit' => 4.5, 'equity_limit' => 2.0, 'business_model' => 'none'], // Pipelines. "Toll roads", highly stable.
         'Oil & Gas Refining & Marketing' => ['pe' => 11.00, 'depreciation' => 0.08, 'ebitda_limit' => 2.5, 'equity_limit' => 1.5, 'business_model' => 'refining'], // Crack spreads are volatile.
         'Packaged Foods' => ['pe' => 16.00, 'depreciation' => 0.04, 'ebitda_limit' => 4.0, 'equity_limit' => 1.5, 'business_model' => 'consumer_staples'], // Extremely defensive.
         'Packaging & Containers' => ['pe' => 15.00, 'depreciation' => 0.06, 'ebitda_limit' => 3.5, 'equity_limit' => 1.5, 'business_model' => 'heavy_manufacturing'],
@@ -281,7 +281,7 @@ class Sectors
             'reit'            => new \App\Service\Model\Sector\ReitBusinessModel(),
             'clearing_house'  => new \App\Service\Model\Sector\ClearingHouseBusinessModel(),
             'utility'         => new \App\Service\Model\Sector\UtilityBusinessModel(),
-            'commodity'       => new \App\Service\Model\Sector\CommodityBusinessModel(),
+            'mining'          => new \App\Service\Model\Sector\MiningBusinessModel(),
             'oil_gas_producer' => new \App\Service\Model\Sector\OilGasProducerBusinessModel(),
             'refining'        => new \App\Service\Model\Sector\RefiningBusinessModel(),
             'financial_data'  => new \App\Service\Model\Sector\FinancialDataBusinessModel(),

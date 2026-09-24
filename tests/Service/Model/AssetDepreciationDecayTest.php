@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Tests\Service\Model;
 
 use App\Entity\Stock;
-use App\Service\Model\Sector\CommodityBusinessModel;
+use App\Service\Model\Sector\MiningBusinessModel;
 use App\Service\Model\Sector\ReitBusinessModel;
 use App\Service\Model\Sector\SemiconductorBusinessModel;
 use App\Service\Model\Sector\StandardCorporateBusinessModel;
@@ -39,9 +39,9 @@ class AssetDepreciationDecayTest extends TestCase
         $this->assertLessThanOrEqual(SemiconductorBusinessModel::MAX_OPERATING_MARGIN_CEILING, $modernized);
     }
 
-    public function testCommodityAssetDepreciationDecay(): void
+    public function testMiningAssetDepreciationDecay(): void
     {
-        $model = new CommodityBusinessModel();
+        $model = new MiningBusinessModel();
 
         $stock = new Stock();
         $stock->setOperatingMargin('0.20');

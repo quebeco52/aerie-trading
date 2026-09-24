@@ -1270,6 +1270,16 @@ class MathUtilityTest extends TestCase
         $this->assertLessThanOrEqual($theta, $nextPrice);
     }
 
+    public function testPerUnitCostsFallAsAShareOfRevenueWhenThePriceRises(): void
+    {
+        // Revenue P x Q, cost c x Q: at twice the price the same tonnes cost half as much per dollar.
+        $this->assertEqualsWithDelta(0.10, $this->mathUtility->calculatePerUnitCostRatio(0.20, 2.0), 1e-12);
+        $this->assertEqualsWithDelta(0.40, $this->mathUtility->calculatePerUnitCostRatio(0.20, 0.5), 1e-12);
+        $this->assertEqualsWithDelta(0.20, $this->mathUtility->calculatePerUnitCostRatio(0.20, 1.0), 1e-12);
+        // A price at zero cannot divide by zero.
+        $this->assertTrue(is_finite($this->mathUtility->calculatePerUnitCostRatio(0.20, 0.0)));
+    }
+
     public function testSchwartzForwardIsTheExpectedSpotOfTheSameExactTransition(): void
     {
         $spot = 150.0;

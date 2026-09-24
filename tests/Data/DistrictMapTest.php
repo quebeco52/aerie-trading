@@ -207,7 +207,8 @@ class DistrictMapTest extends TestCase
         $this->assertSame('derrick', DistrictMap::ROOF_FURNITURE_BY_INDUSTRY['Oil & Gas E&P']);
         $this->assertSame('flare_stack', DistrictMap::ROOF_FURNITURE_BY_INDUSTRY['Oil & Gas Refining & Marketing']);
         $this->assertSame('ingot', DistrictMap::ROOF_FURNITURE_BY_INDUSTRY['Copper']);
-        $this->assertSame(DistrictMap::ROOF_FURNITURE['commodity'], 'derrick', 'The model fallback still dresses a commodity house the map never singled out');
+        $this->assertSame('ingot', DistrictMap::ROOF_FURNITURE['mining'], 'The model fallback still dresses a mine the map never singled out');
+        $this->assertSame('derrick', DistrictMap::ROOF_FURNITURE['oil_gas_producer'], 'and a producer the map never singled out');
     }
 
     /** The template must define a `<symbol id="roof-…">` for every symbol the map can name. */

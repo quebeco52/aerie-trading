@@ -4,13 +4,13 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\Model;
 
-use App\Service\Model\Sector\CommodityBusinessModel;
 use App\Service\Model\Sector\ConsumerStaplesBusinessModel;
 use App\Service\Model\Sector\ConstructionBusinessModel;
 use App\Service\Model\Sector\DefenseContractorBusinessModel;
 use App\Service\Model\Sector\FinancialDataBusinessModel;
 use App\Service\Model\Sector\LawFirmBusinessModel;
 use App\Service\Model\Sector\LuxuryBusinessModel;
+use App\Service\Model\Sector\MiningBusinessModel;
 use App\Service\Model\Sector\OilGasProducerBusinessModel;
 use App\Service\Model\Sector\RefiningBusinessModel;
 use App\Service\Model\Sector\ReitBusinessModel;
@@ -281,10 +281,10 @@ final class SectorCalibrationMatrixTest extends TestCase
             TechBusinessModel::MAX_OPERATING_MARGIN_CEILING,
             'Zero marginal cost must beat a food cost line.'
         );
-        // A spot producer's ceiling is set by the marginal cost of the last barrel it sells.
+        // A spot producer's ceiling is set by the marginal cost of the last tonne it sells.
         $this->assertLessThan(
             LuxuryBusinessModel::MAX_OPERATING_MARGIN_CEILING,
-            CommodityBusinessModel::MAX_OPERATING_MARGIN_CEILING,
+            MiningBusinessModel::MAX_OPERATING_MARGIN_CEILING,
             'A price taker cannot hold a luxury house margin.'
         );
         // A producer owns the barrel; a refiner earns a spread on a barrel someone else sold it.

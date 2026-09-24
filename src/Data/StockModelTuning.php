@@ -299,7 +299,7 @@ class StockModelTuning
         ],
 
         // =====================================================================
-        // COMMODITY MINING & EXTRACTION ARCHETYPES
+        // OIL, GAS & MINING ARCHETYPES
         // =====================================================================
 
         // --- Sinking Shore Extraction (SINK) ---
@@ -311,17 +311,7 @@ class StockModelTuning
 
         // Cascade Refining (CASC) runs on RefiningBusinessModel's own yield and cost constants: no ticker overrides.
 
-        // --- Condor Extraction (CNDR) ---
-        // Global base metals & rare earth open-pit strip mining titan. Ruthless physical anchor of the district.
-        'CNDR' => [
-            ModelParam::ExtractionRevenueWeight->value => 0.60, // Massive mechanized extraction volume
-            ModelParam::SpotPriceWeight->value         => 0.40, // Base metal / rare earth spot price super-cycle exposure
-            ModelParam::RefiningSpreadWeight->value    => 0.00,
-            ModelParam::SpotPriceSensitivity->value    => 0.70, // Semi-hedged sovereign concessions
-            ModelParam::EnergyPriceExposure->value     => 0.00,
-            ModelParam::IndustrialMetalsExposure->value => 1.00, // Base metals & rare earths priced off the metals complex
-            ModelParam::AgriculturalExposure->value    => 0.00,
-        ],
+        // Condor Extraction (CNDR) runs on MiningBusinessModel's own constants, priced off the metals complex: no ticker overrides.
 
         // =====================================================================
         // HEAVY INDUSTRY & MANUFACTURING ARCHETYPES

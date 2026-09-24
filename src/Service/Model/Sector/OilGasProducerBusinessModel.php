@@ -241,7 +241,7 @@ class OilGasProducerBusinessModel extends StandardCorporateBusinessModel
         // slumping revenue line and fall as a share of a booming one.
         $inputCostDrag = $this->resolveInputCostDrag($stock, $macroState, $streams, $this->resolvePricingPower($stock), $realizedVariableMargin);
         $perBarrelCostRatio = $realizedVariableMargin + $inputCostDrag + $disasterPenalty;
-        $clampedMargin = $this->clampMargin($perBarrelCostRatio / max(0.01, $priceRelative));
+        $clampedMargin = $this->clampMargin(MathUtility::getInstance()->calculatePerUnitCostRatio($perBarrelCostRatio, $priceRelative));
 
         $hedgeGain = $expectedRevenue * $liquidsShare * $oilVolume * $hedgeRatio * ($hedgedStrike - $oilSpot) * (1.0 + $basisShift);
 
