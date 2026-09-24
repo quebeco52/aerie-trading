@@ -91,13 +91,15 @@ class RestaurantBusinessModelTest extends TestCase
             unemploymentRateEma: 0.050
         );
 
-        // A tight labor market shows up in kitchen crews' pay: wage growth well above the productivity-plus-target trend.
+        // A tight labor market shows up in kitchen crews' pay: bid up past what their productivity pays for, the real
+        // wage sits above its trend path.
         $macroTightLabor = new MacroStateDTO(
             consumerSentimentIndexEma: 100.0,
             energyPriceIndexEma: 100.0,
             inflationEma: 0.02,
             unemploymentRateEma: 0.030,
-            wageGrowthEma: 0.065
+            wageGrowthEma: 0.065,
+            realWageGap: 0.03
         );
 
         $resultNormal = $this->model->computeActualFinancials(
@@ -123,7 +125,7 @@ class RestaurantBusinessModelTest extends TestCase
         $this->assertGreaterThan(
             $resultNormal->clampedMargin,
             $resultTight->clampedMargin,
-            'Tight labor markets (wage growth above trend) must increase restaurant kitchen wage costs and raise variable margin.'
+            'A real wage above its productivity path must increase restaurant kitchen wage costs and raise the variable cost ratio.'
         );
         $this->assertLessThan($resultNormal->ebit, $resultTight->ebit);
     }

@@ -36,9 +36,7 @@ class FinancialDataBusinessModel extends StandardCorporateBusinessModel
     /** Shares of the variable cost base by input channel, measured from the BEA input-output accounts with supply-chain content (labor still the model's own). */
     public const INPUT_COST_EXPOSURES = InputOutputExposures::FINANCIAL_DATA;
 
-    // --- Labor Intensity ---
-    /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze. Content collection, analytics and platform engineering payroll is nearly the whole cost base of a data franchise. */
-    public const FIXED_COST_LABOR_SHARE = 0.75;
+    // --- Pricing Power ---
     /** Mandatory terminal and ratings subscriptions reprice on renewal with little pushback. */
     public const PRICING_POWER_INDEX = 0.85;
 
@@ -215,7 +213,7 @@ class FinancialDataBusinessModel extends StandardCorporateBusinessModel
             'market_volatility_ema',
             'output_gap_ema',
             'tips_breakeven_ema',
-            'wage_growth_ema',
+            'real_wage_gap',
         ];
     }
 }

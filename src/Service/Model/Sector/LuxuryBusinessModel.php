@@ -36,10 +36,6 @@ class LuxuryBusinessModel extends StandardCorporateBusinessModel
     /** Shares of the variable cost base by input channel, measured from the BEA input-output accounts with supply-chain content (labor still the model's own). */
     public const INPUT_COST_EXPOSURES = InputOutputExposures::LUXURY;
 
-    // --- Labor Intensity ---
-    /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze. Boutique staffing, atelier artisans and brand marketing are carried through the cycle to protect the brand, not flexed with sales. */
-    public const FIXED_COST_LABOR_SHARE = 0.65;
-
     // --- FX Exposure ---
     /** Share of revenue whose competitiveness moves with the trade-weighted exchange rate. Tourist spend and cross-border arbitrage make luxury demand unusually sensitive to the currency. */
     public const FX_REVENUE_EXPOSURE = 0.15;
@@ -264,7 +260,7 @@ class LuxuryBusinessModel extends StandardCorporateBusinessModel
             'output_gap_ema',
             'residential_property_index_ema',
             'tips_breakeven_ema',
-            'wage_growth_ema',
+            'real_wage_gap',
         ];
     }
 }

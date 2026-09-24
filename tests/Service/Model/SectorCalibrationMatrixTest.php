@@ -322,13 +322,15 @@ final class SectorCalibrationMatrixTest extends TestCase
             'A utility owns its grid; a restaurant rents its sites.'
         );
 
-        // A law firm is people; a property book is capital with a small management team on top.
+        // A law firm is people; a property book is capital with a small management team on top. Both shares are
+        // BEA compensation over the industry's operating cost base (partners' draws are mixed income, outside it).
         $this->assertGreaterThan(
-            (float) ReitBusinessModel::FIXED_COST_LABOR_SHARE,
-            (float) LawFirmBusinessModel::FIXED_COST_LABOR_SHARE,
+            (float) ReitBusinessModel::INPUT_COST_EXPOSURES['labor'],
+            (float) LawFirmBusinessModel::INPUT_COST_EXPOSURES['labor'],
             'Professional services are payroll; a property book is capital.'
         );
-        $this->assertGreaterThan(0.75, (float) LawFirmBusinessModel::FIXED_COST_LABOR_SHARE, 'A partnership is almost entirely payroll.');
+        $this->assertGreaterThan(0.5, (float) LawFirmBusinessModel::INPUT_COST_EXPOSURES['labor'], 'Most of what a law firm spends is pay.');
+        $this->assertLessThan(0.2, (float) ReitBusinessModel::INPUT_COST_EXPOSURES['labor'], 'Property upkeep is bought in, not staffed.');
     }
 
     /**

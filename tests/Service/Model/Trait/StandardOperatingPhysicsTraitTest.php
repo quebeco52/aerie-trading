@@ -211,8 +211,7 @@ final class StandardOperatingPhysicsTraitTest extends TestCase
     public function testInputCostDeviationWeightsOnlyDeclaredExposures(): void
     {
         $calm = new MacroStateDTO(
-            producerPriceInflationEma: MacroEngine::TARGET_INFLATION,
-            wageGrowthEma: MacroEngine::TFP_DRIFT + MacroEngine::TARGET_INFLATION
+            producerPriceInflationEma: MacroEngine::TARGET_INFLATION
         );
         $this->assertEqualsWithDelta(0.0, $this->model->resolveInputCostDeviation($calm), 0.0000001, 'At baseline every channel sits at zero.');
 
@@ -220,8 +219,7 @@ final class StandardOperatingPhysicsTraitTest extends TestCase
         $configured = new ConfiguredStandardModel();
         $agriSpike = new MacroStateDTO(
             agriculturalCommodityIndexEma: 200.0,
-            producerPriceInflationEma: MacroEngine::TARGET_INFLATION,
-            wageGrowthEma: MacroEngine::TFP_DRIFT + MacroEngine::TARGET_INFLATION
+            producerPriceInflationEma: MacroEngine::TARGET_INFLATION
         );
         $this->assertEqualsWithDelta(0.0, $configured->resolveInputCostDeviation($agriSpike), 0.0000001, 'A market the firm does not buy in cannot move its costs.');
         $this->assertGreaterThan(0.0, $this->model->resolveInputCostDeviation($agriSpike), 'The default basket does buy agricultural inputs.');
@@ -229,8 +227,7 @@ final class StandardOperatingPhysicsTraitTest extends TestCase
         // A metals spike reaches it in proportion to the declared share.
         $metalsSpike = new MacroStateDTO(
             industrialMetalsIndexEma: 150.0,
-            producerPriceInflationEma: MacroEngine::TARGET_INFLATION,
-            wageGrowthEma: MacroEngine::TFP_DRIFT + MacroEngine::TARGET_INFLATION
+            producerPriceInflationEma: MacroEngine::TARGET_INFLATION
         );
         $this->assertEqualsWithDelta(0.20 * 0.50, $configured->resolveInputCostDeviation($metalsSpike), 0.0000001, 'The deviation is the share times the relative move.');
     }
@@ -243,7 +240,7 @@ final class StandardOperatingPhysicsTraitTest extends TestCase
             agriculturalCommodityIndexEma: 100.0,
             freightRateIndexEma: 100.0,
             producerPriceInflationEma: MacroEngine::TARGET_INFLATION,
-            wageGrowthEma: MacroEngine::TFP_DRIFT + MacroEngine::TARGET_INFLATION
+            realWageGap: 0.0
         );
 
         foreach ($this->model->resolveInputPriceDeviations($baseline) as $channel => $deviation) {
@@ -254,10 +251,37 @@ final class StandardOperatingPhysicsTraitTest extends TestCase
         $dearPower = new MacroStateDTO(wholesalePowerPriceIndexEma: 1.30 * MacroEngine::WHOLESALE_POWER_BASELINE);
         $this->assertEqualsWithDelta(0.30, $this->model->resolveInputPriceDeviations($dearPower)['electricity'], 0.0000001);
 
-        // Wages are measured against productivity plus target inflation, not against zero: real unit labour
-        // costs only rise when wage growth outruns what productivity pays for.
-        $productiveWages = new MacroStateDTO(wageGrowthEma: MacroEngine::TFP_DRIFT + MacroEngine::TARGET_INFLATION + 0.01);
-        $this->assertEqualsWithDelta(0.01, $this->model->resolveInputPriceDeviations($productiveWages)['labor'], 0.0000001, 'Only wage growth above productivity is a cost push.');
+        // Labour is priced by the real wage's LEVEL against its trend-productivity path, not by how fast wages grow.
+        $dearLabour = new MacroStateDTO(realWageGap: 0.02);
+        $this->assertEqualsWithDelta(0.02, $this->model->resolveInputPriceDeviations($dearLabour)['labor'], 0.0000001);
+        $fastWagesOnPath = new MacroStateDTO(wageGrowthEma: MacroEngine::TFP_DRIFT + MacroEngine::TARGET_INFLATION + 0.01);
+        $this->assertEqualsWithDelta(0.0, $this->model->resolveInputPriceDeviations($fastWagesOnPath)['labor'], 0.0000001, 'Wage growth with the level still on its path is not yet a cost.');
+    }
+
+    /**
+     * A real wage that rises and STAYS risen keeps costing: the drag settles at margin x share x gap x the share
+     * pricing cannot recover, and does not fade. Read as a growth rate, the channel charged the rise only while
+     * it was happening and forgot it the moment wage growth returned to trend.
+     */
+    public function testAPermanentRiseInTheRealWageIsAPermanentCost(): void
+    {
+        $stock = (new Stock())->setTicker('WAGE');
+        $dear = new MacroStateDTO(realWageGap: 0.02);
+        $pricingPower = 0.50;
+        $momentum = [];
+        $drags = [];
+        for ($quarter = 0; $quarter < 60; $quarter++) {
+            $streams = $this->model->exposeStreamContext($momentum, $this->math);
+            $drags[] = $this->model->exposeInputCostDrag($stock, $dear, $streams, $pricingPower, 0.60);
+            $momentum = $streams->getStreamZ();
+        }
+
+        $share = (float) FinancialConstants::DEFAULT_INPUT_COST_EXPOSURES['labor'];
+        $settled = 0.60 * $share * 0.02 * (1.0 - $pricingPower * BareStandardModel::MAX_INPUT_COST_PASS_THROUGH);
+        $this->assertGreaterThan(0.0, $settled);
+        $this->assertEqualsWithDelta($settled, $drags[59], 1e-6, 'Fifteen years on, the higher real wage is still a cost.');
+        $this->assertEqualsWithDelta($drags[39], $drags[59], 1e-6, 'The drag has settled, not decayed.');
+        $this->assertGreaterThan($settled, $drags[0], 'Costs lead prices: the first quarter is the squeeze, recovery comes after.');
     }
 
     /**
@@ -269,8 +293,7 @@ final class StandardOperatingPhysicsTraitTest extends TestCase
         $stock = (new Stock())->setTicker('DRAG');
         $spike = new MacroStateDTO(
             industrialMetalsIndexEma: 200.0,
-            producerPriceInflationEma: MacroEngine::TARGET_INFLATION,
-            wageGrowthEma: MacroEngine::TFP_DRIFT + MacroEngine::TARGET_INFLATION
+            producerPriceInflationEma: MacroEngine::TARGET_INFLATION
         );
 
         $taker = $this->model->exposeInputCostDrag($stock, $spike, $this->model->exposeStreamContext([], $this->math), 0.0, 0.60);
@@ -283,16 +306,14 @@ final class StandardOperatingPhysicsTraitTest extends TestCase
         // A collapse in input prices is a windfall of the same shape, not an asymmetric no-op.
         $collapse = new MacroStateDTO(
             industrialMetalsIndexEma: 50.0,
-            producerPriceInflationEma: MacroEngine::TARGET_INFLATION,
-            wageGrowthEma: MacroEngine::TFP_DRIFT + MacroEngine::TARGET_INFLATION
+            producerPriceInflationEma: MacroEngine::TARGET_INFLATION
         );
         $this->assertLessThan(0.0, $this->model->exposeInputCostDrag($stock, $collapse, $this->model->exposeStreamContext([], $this->math), 0.0, 0.60), 'Falling input prices must widen margin.');
 
         // However violent the move, one quarter's drag is bounded.
         $crisis = new MacroStateDTO(
             industrialMetalsIndexEma: 100_000.0,
-            producerPriceInflationEma: MacroEngine::TARGET_INFLATION,
-            wageGrowthEma: MacroEngine::TFP_DRIFT + MacroEngine::TARGET_INFLATION
+            producerPriceInflationEma: MacroEngine::TARGET_INFLATION
         );
         $this->assertLessThanOrEqual(0.50, $this->model->exposeInputCostDrag($stock, $crisis, $this->model->exposeStreamContext([], $this->math), 0.0, 0.60), 'The drag is clamped so one quarter cannot destroy the cost base.');
     }

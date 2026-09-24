@@ -41,10 +41,6 @@ class SteelManufacturingBusinessModel extends StandardCorporateBusinessModel
     /** Blast furnaces and electric arc furnaces are price takers on ore, scrap and power: raw inputs reprice at spot. */
     public const PRICING_POWER_INDEX = 0.40;
 
-    // --- Labor Intensity ---
-    /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze. Mill labor shares overhead with furnace energy, refractories and maintenance. */
-    public const FIXED_COST_LABOR_SHARE = 0.40;
-
     // --- Demand Transmission Lag ---
     /** Years for a move in the output gap to reach the order book. Contracted tonnage and mill scheduling carry the order book well past a turn in demand. */
     public const DEMAND_LAG_YEARS = 0.75;
@@ -241,7 +237,7 @@ class SteelManufacturingBusinessModel extends StandardCorporateBusinessModel
             'manufacturing_pmi_ema',
             'output_gap_ema',
             'tips_breakeven_ema',
-            'wage_growth_ema',
+            'real_wage_gap',
         ];
     }
 }

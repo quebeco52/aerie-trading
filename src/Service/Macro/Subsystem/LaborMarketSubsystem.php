@@ -43,6 +43,10 @@ class LaborMarketSubsystem
     /** Downward wage adjustment speed as fraction of upward speed (nominal rigidity, Bewley 1999). */
     public const WAGE_DOWNWARD_RIGIDITY_FACTOR = 0.30;
 
+    // --- Wage Error Correction (Blanchard & Katz 1999) ---
+    /** Annual pull of wage growth against the real wage's gap to trend productivity: US nonfarm business 1960-1999, wages on the lagged labor share (se 0.10; var/harness/labor_real.py). */
+    public const WAGE_ERROR_CORRECTION_SPEED = 0.12;
+
     // --- Work Stoppages (BLS major work stoppages) ---
     /** Notable stoppages per year across the district. The BLS counts 20-30 major (1,000+ worker) stoppages a year in a US-scale economy; scaled to a district of some sixty listed employers. */
     public const STRIKE_ARRIVAL_PER_YEAR = 1.5;
@@ -144,6 +148,12 @@ class LaborMarketSubsystem
      * 0.55 x 0.25 (wages into headline) x 0.65 (headline into the breakeven) = 0.089, comfortably
      * inside unity, so the spiral converges to roughly a tenth more inflation rather than running away.
      *
+     * Wages also error-correct on their LEVEL (Sargan 1964; Blanchard & Katz 1999): a real wage above its
+     * trend-productivity path slows wage growth until the labor share returns. Growth equations alone leave the
+     * level a random walk, and downward rigidity ratchets it up, so every history carried its own permanent
+     * labour-cost wedge. The gap integrates wage growth less realized inflation and trend TFP, the same trend the
+     * target indexes, so a gap that stops moving is one where wages grow exactly with prices times productivity.
+     *
      * Read one tick stale: expectations are formed at step 4 and the labour market runs at step 3. That is
      * the right direction for a bargain struck against expectations that already existed, and the smoothed
      * series is a quarter wide, so the lag is immaterial at any production tick rate.
@@ -160,7 +170,8 @@ class LaborMarketSubsystem
         $state->laborTightness = $state->jobVacanciesRate / $effectiveUnemployment;
 
         $settlementPremium = $state->strikeSector !== null ? self::STRIKE_WAGE_SETTLEMENT_BUMP : 0.0;
-        $targetWageGrowth = $tfpGrowthRate + $state->tipsBreakevenEma + (self::WAGE_TIGHTNESS_SENSITIVITY * ($state->laborTightness - MacroEngine::NATURAL_LABOR_TIGHTNESS)) + $settlementPremium;
+        $errorCorrection = self::WAGE_ERROR_CORRECTION_SPEED * $state->realWageGap;
+        $targetWageGrowth = $tfpGrowthRate + $state->tipsBreakevenEma + (self::WAGE_TIGHTNESS_SENSITIVITY * ($state->laborTightness - MacroEngine::NATURAL_LABOR_TIGHTNESS)) + $settlementPremium - $errorCorrection;
         $targetWageGrowth = max(0.0, min(0.08, $targetWageGrowth));
 
         $wageGap = $targetWageGrowth - $state->wageGrowth;
@@ -169,5 +180,8 @@ class LaborMarketSubsystem
             : self::WAGE_ADJUSTMENT_SPEED * self::WAGE_DOWNWARD_RIGIDITY_FACTOR;
 
         $state->wageGrowth += $adjustmentSpeed * $wageGap * $dt;
+
+        // The wage level against prices and trend productivity: what a unit of output costs in labour.
+        $state->realWageGap += ($state->wageGrowth - $state->inflation - $tfpGrowthRate) * $dt;
     }
 }

@@ -47,10 +47,6 @@ class ApparelManufacturingBusinessModel extends StandardCorporateBusinessModel
     /** Six to nine months of raw inventory and cotton futures: spot fiber and freight moves reach COGS with a lag. */
     public const INPUT_COST_LAG_YEARS = 0.50;
 
-    // --- Labor Intensity ---
-    /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze. Design studios, brand marketing and merchandising are the overhead; cutting and sewing sits in variable cost, largely under contract. */
-    public const FIXED_COST_LABOR_SHARE = 0.60;
-
     // --- Demand Transmission Lag ---
     /** Years for a move in the output gap to reach the order book. Wholesale orders are placed two seasons ahead against a buying calendar, not against current demand. */
     public const DEMAND_LAG_YEARS = 0.50;
@@ -393,7 +389,7 @@ class ApparelManufacturingBusinessModel extends StandardCorporateBusinessModel
             'output_gap_ema',
             'tips_breakeven_ema',
             'trade_balance_to_gdp_ema',
-            'wage_growth_ema',
+            'real_wage_gap',
         ];
     }
 }

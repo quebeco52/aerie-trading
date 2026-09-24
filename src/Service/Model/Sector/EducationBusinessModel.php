@@ -62,10 +62,6 @@ class EducationBusinessModel extends StandardCorporateBusinessModel
     /** Capitalized operating lease liabilities as a fraction of annual revenue (IFRS 16 / ASC 842). Campus and classroom leases. */
     public const LEASE_LIABILITY_INTENSITY = 0.25;
 
-    // --- Labor Intensity ---
-    /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze. Faculty and administrative payroll dominates education overhead. */
-    public const FIXED_COST_LABOR_SHARE = 0.75;
-
     // --- Analyst Visibility & Error ---
     public const BASE_COVERAGE_VISIBILITY = 0.40;
     public const BASE_COVERAGE_ERROR = 0.06;
@@ -208,7 +204,7 @@ class EducationBusinessModel extends StandardCorporateBusinessModel
             'supercore_inflation_ema',
             'tips_breakeven_ema',
             'unemployment_rate_ema',
-            'wage_growth_ema',
+            'real_wage_gap',
         ];
     }
 }

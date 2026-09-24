@@ -60,10 +60,6 @@ class TelecomBusinessModel extends StandardCorporateBusinessModel
     /** Capitalized operating lease liabilities as a fraction of annual revenue (IFRS 16 / ASC 842). Tower, rooftop and retail store leases. */
     public const LEASE_LIABILITY_INTENSITY = 0.30;
 
-    // --- Labor Intensity ---
-    /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze. Network engineering and retail staff share overhead with towers, spectrum amortization and rents. */
-    public const FIXED_COST_LABOR_SHARE = 0.45;
-
     // --- Analyst Visibility & Error ---
     public const BASE_COVERAGE_VISIBILITY = 0.50; // Subscription metrics are reported quarterly
     public const BASE_COVERAGE_ERROR = 0.05;
@@ -310,7 +306,7 @@ class TelecomBusinessModel extends StandardCorporateBusinessModel
             'output_gap_ema',
             'tips_breakeven_ema',
             'unemployment_rate_ema',
-            'wage_growth_ema',
+            'real_wage_gap',
         ];
     }
 }

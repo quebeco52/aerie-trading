@@ -112,8 +112,9 @@ trait StandardOperatingPhysicsTrait
     /**
      * Shares of the VARIABLE cost base bought in each tracked input market. Channels: energy (oil-linked),
      * gas, electricity (industrial tariffs off the wholesale power index), metals, agri, freight, ppi (wholesale
-     * intermediate goods) and labor (variable payroll). Shares need not sum to one; the remainder is bought at
-     * prices no macro index tracks. Sector models declare INPUT_COST_EXPOSURES, measured in App\Data\InputOutputExposures.
+     * intermediate goods) and labor (payroll, priced by the real wage's gap to trend productivity). Shares need not
+     * sum to one; the remainder is bought at prices no macro index tracks. Sector models declare
+     * INPUT_COST_EXPOSURES, measured in App\Data\InputOutputExposures.
      *
      * @return array<string, float>
      */
@@ -218,7 +219,7 @@ trait StandardOperatingPhysicsTrait
             'agri'    => ($macroState->agriculturalCommodityIndexEma - 100.0) / 100.0,
             'freight' => ($macroState->freightRateIndexEma - 100.0) / 100.0,
             'ppi'     => $macroState->producerPriceInflationEma - \App\Service\Macro\MacroEngine::TARGET_INFLATION,
-            'labor'   => $macroState->wageGrowthEma - (\App\Service\Macro\MacroEngine::TFP_DRIFT + \App\Service\Macro\MacroEngine::TARGET_INFLATION),
+            'labor'   => $macroState->realWageGap,
         ];
     }
 
@@ -408,10 +409,19 @@ trait StandardOperatingPhysicsTrait
         return max(0.0, min(1.0, (float) $params[ModelParam::EarningsManagementPropensity]));
     }
 
+    /**
+     * Payroll's share of the cost base the fixed-cost wage factor and severance scale. A model's own
+     * FIXED_COST_LABOR_SHARE wins; otherwise the labor share measured into its input basket, so wages reach the
+     * fixed and variable halves of the cost base at the one share the BEA accounts give the industry.
+     */
     public function getLaborCostShare(): float
     {
-        return defined('static::FIXED_COST_LABOR_SHARE')
-            ? (float) static::FIXED_COST_LABOR_SHARE
+        if (defined('static::FIXED_COST_LABOR_SHARE')) {
+            return (float) static::FIXED_COST_LABOR_SHARE;
+        }
+
+        return defined('static::INPUT_COST_EXPOSURES') && isset(static::INPUT_COST_EXPOSURES['labor'])
+            ? (float) static::INPUT_COST_EXPOSURES['labor']
             : FinancialConstants::DEFAULT_FIXED_COST_LABOR_SHARE;
     }
 

@@ -45,10 +45,6 @@ class InternetRetailBusinessModel extends StandardCorporateBusinessModel
     /** Elasticity of first-party retail volume to the consumer sentiment gap (index points above baseline / 100). Discretionary baskets follow household confidence ahead of the output gap. */
     public const CONSUMER_SENTIMENT_SCALAR = 0.60;
 
-    // --- Labor Intensity ---
-    /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze. Technology and corporate payroll are fixed while fulfilment labor flexes with order volume. */
-    public const FIXED_COST_LABOR_SHARE = 0.55;
-
     // --- FX Exposure ---
     /** Merchandise is bought abroad and sold at home, so the exchange rate reaches this model through landed cost, not demand: a strong domestic currency cheapens the first-party cost of goods. */
     public const IMPORT_SOURCING_FX_SCALAR = 0.15;
@@ -270,7 +266,7 @@ class InternetRetailBusinessModel extends StandardCorporateBusinessModel
             'exchange_rate_index_ema',
             'output_gap_ema',
             'tips_breakeven_ema',
-            'wage_growth_ema',
+            'real_wage_gap',
         ];
     }
 }

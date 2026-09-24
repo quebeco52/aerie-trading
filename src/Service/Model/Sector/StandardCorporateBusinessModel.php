@@ -306,7 +306,7 @@ class StandardCorporateBusinessModel implements BusinessModelInterface
             'output_gap_ema',
             'producer_price_inflation_ema',
             'tips_breakeven_ema',
-            'wage_growth_ema',
+            'real_wage_gap',
         ];
     }
 

@@ -59,10 +59,6 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
     /** Multi-year API supply agreements and validated second sources hold the purchase price steady well past a spot move. */
     public const INPUT_COST_LAG_YEARS = 1.00;
 
-    // --- Labor Intensity ---
-    /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze. Research scientists, clinical operations and the specialty salesforce are the overhead; a biotech is a payroll with a patent estate. */
-    public const FIXED_COST_LABOR_SHARE = 0.75;
-
     // --- Reporting Incentives ---
     /** Propensity to steer reported earnings toward consensus with accruals. Little marketed revenue to shift and milestone income is contractually dated, so there is not much to reclassify even when the incentive is there. */
     public const EARNINGS_MANAGEMENT_PROPENSITY = 0.25;
@@ -552,7 +548,7 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
     {
         return [
             'reimbursement_rate_growth',
-            'wage_growth_ema',
+            'real_wage_gap',
         ];
     }
 }

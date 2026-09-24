@@ -99,7 +99,7 @@ class DistrictConduitTopologyTest extends TestCase
         }
 
         // Assert the whole derived set, not just each derived edge: a model may read non-ubiquitous
-        // fields that no institution publishes at all (wage_growth_ema), which leaves it correctly
+        // fields that no institution publishes at all (real_wage_gap), which leaves it correctly
         // wired to nothing. Checking only the edges that exist asserts nothing in that case, and
         // never catches an institution the model should be wired to but is not.
         $expected = [];

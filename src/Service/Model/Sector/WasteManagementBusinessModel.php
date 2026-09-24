@@ -45,9 +45,7 @@ class WasteManagementBusinessModel extends StandardCorporateBusinessModel
     /** Fuel surcharges reprice within a quarter or two. */
     public const INPUT_PASS_THROUGH_LAG_YEARS = 0.25;
 
-    // --- Labor Intensity ---
-    /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze. Route drivers and landfill operations are payroll, but the fleet and the airspace are the larger fixed burden. */
-    public const FIXED_COST_LABOR_SHARE = 0.45;
+    // --- Pricing Power ---
     /** Landfill permitting oligopolies dictate price; diesel and crew wages are largely surcharged through. */
     public const PRICING_POWER_INDEX = 0.70;
 
@@ -260,7 +258,7 @@ class WasteManagementBusinessModel extends StandardCorporateBusinessModel
             'inflation_ema',
             'output_gap_ema',
             'tips_breakeven_ema',
-            'wage_growth_ema',
+            'real_wage_gap',
         ];
     }
 }

@@ -64,10 +64,6 @@ class TechBusinessModel extends StandardCorporateBusinessModel
     /** Years for a move in the output gap to reach bookings. Enterprise IT budgets are set annually, so a downturn cuts renewals and seats at the next budget round, not this quarter. */
     public const DEMAND_LAG_YEARS = 0.50;
 
-    // --- Labor Intensity ---
-    /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze. Engineering and go-to-market payroll dominates software overhead; talent inflation bites hardest here. */
-    public const FIXED_COST_LABOR_SHARE = 0.75;
-
     // --- Reporting Incentives ---
     /** Propensity to steer reported earnings toward consensus with accruals. Equity compensation ties management's own wealth to the print, and deferred revenue schedules give them the timing discretion to act on it. */
     public const EARNINGS_MANAGEMENT_PROPENSITY = 0.60;
@@ -323,7 +319,7 @@ class TechBusinessModel extends StandardCorporateBusinessModel
             'exchange_rate_index_ema',
             'output_gap_ema',
             'tips_breakeven_ema',
-            'wage_growth_ema',
+            'real_wage_gap',
         ];
     }
 }

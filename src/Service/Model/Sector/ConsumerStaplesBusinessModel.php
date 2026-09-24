@@ -42,10 +42,6 @@ class ConsumerStaplesBusinessModel extends StandardCorporateBusinessModel
     /** Branded staples recover input moves on the shelf within a couple of quarters. */
     public const INPUT_PASS_THROUGH_LAG_YEARS = 0.50;
 
-    // --- Labor Intensity ---
-    /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze. Brand marketing and salaried commercial staff are the overhead; plant and packaging costs dominate the variable side. */
-    public const FIXED_COST_LABOR_SHARE = 0.50;
-
     // --- FX Exposure ---
     /** Share of revenue whose competitiveness moves with the trade-weighted exchange rate. Staples are made and sold close to the shelf; only a thin import-competing slice reprices with the currency. */
     public const FX_REVENUE_EXPOSURE = 0.05;
@@ -348,7 +344,7 @@ class ConsumerStaplesBusinessModel extends StandardCorporateBusinessModel
             'inventory_stock_gap_ema',
             'output_gap_ema',
             'tips_breakeven_ema',
-            'wage_growth_ema',
+            'real_wage_gap',
         ];
     }
 }

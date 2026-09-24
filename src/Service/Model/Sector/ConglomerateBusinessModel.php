@@ -59,9 +59,7 @@ class ConglomerateBusinessModel extends StandardCorporateBusinessModel
     /** Shares of the variable cost base by input channel, measured from the BEA input-output accounts with supply-chain content (labor still the model's own). */
     public const INPUT_COST_EXPOSURES = InputOutputExposures::CONGLOMERATE;
 
-    // --- Labor Intensity ---
-    /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze. A blend across unrelated subsidiaries lands near the all-industry middle by construction. */
-    public const FIXED_COST_LABOR_SHARE = 0.55;
+    // --- Price Pass-Through ---
     /** Regulated tollbooth escalators and staples list-price resets reprice about once a year. */
     public const PRICE_PASS_THROUGH_LAG_YEARS = 1.00;
 
@@ -393,7 +391,7 @@ class ConglomerateBusinessModel extends StandardCorporateBusinessModel
             'perceived_neutral_rate',
             'policy_rate_ema',
             'tips_breakeven_ema',
-            'wage_growth_ema',
+            'real_wage_gap',
         ];
     }
 }

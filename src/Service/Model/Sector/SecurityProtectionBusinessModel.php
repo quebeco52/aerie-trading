@@ -61,10 +61,6 @@ class SecurityProtectionBusinessModel extends StandardCorporateBusinessModel
         return [0.98, 1.00, 1.02, 1.00];
     }
 
-    // --- Labor Intensity ---
-    /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze. Guard and monitoring staff payroll dominates security services overhead. */
-    public const FIXED_COST_LABOR_SHARE = 0.80;
-
     // --- Analyst Visibility & Error ---
     /** Base coverage visibility for security and private military contractors. */
     public const BASE_COVERAGE_VISIBILITY = 0.20;
@@ -284,7 +280,7 @@ class SecurityProtectionBusinessModel extends StandardCorporateBusinessModel
             'output_gap_ema',
             'supercore_inflation_ema',
             'tips_breakeven_ema',
-            'wage_growth_ema',
+            'real_wage_gap',
         ];
     }
 }

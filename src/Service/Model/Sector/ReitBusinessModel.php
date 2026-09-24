@@ -45,10 +45,6 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
     /** Capitalized operating lease liabilities as a fraction of annual revenue (IFRS 16 / ASC 842). The REIT is the lessor, not the lessee. */
     public const LEASE_LIABILITY_INTENSITY = 0.00;
 
-    // --- Labor Intensity ---
-    /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze. Property operating costs, taxes and depreciation dominate; leasing staff is a small overhead line. */
-    public const FIXED_COST_LABOR_SHARE = 0.25;
-
     // --- Demand Transmission Lag ---
     /** Years for a move in the output gap to reach the order book. Rent rolls turn over on multi-year leases: a downturn reaches a landlord only as space comes up for renewal. */
     public const DEMAND_LAG_YEARS = 1.50;
@@ -546,7 +542,7 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
             'residential_property_index_ema',
             'retail_default_rate_ema',
             'tips_breakeven_ema',
-            'wage_growth_ema',
+            'real_wage_gap',
         ];
     }
 }

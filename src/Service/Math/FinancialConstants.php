@@ -312,9 +312,7 @@ class FinancialConstants
     public const MIN_GOODWILL_IMPAIRMENT_FRACTION = 0.01;
 
     // --- Labor Intensity ---
-    /** Largest fixed-payroll relief from wage growth running below trend (nominal wages are downward sticky). */
-    public const MAX_WAGE_RELIEF = 0.02;
-    /** Default labor share of the fixed cost base (salaried staff, SG&A payroll) exposed to the Beveridge wage squeeze. */
+    /** Payroll share of the cost base for a model with neither its own FIXED_COST_LABOR_SHARE nor a measured input basket. */
     public const DEFAULT_FIXED_COST_LABOR_SHARE = 0.65;
 
     // --- Debt Physics ---

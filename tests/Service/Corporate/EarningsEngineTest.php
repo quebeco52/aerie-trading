@@ -735,9 +735,11 @@ class EarningsEngineTest extends TestCase
         $this->assertEqualsWithDelta(1.00, $stablePrices->replacementCostRatio, 0.0001);
         $this->assertEqualsWithDelta(1.20, $inflatedPrices->replacementCostRatio, 0.0001);
 
-        // Same plant, same depreciation charge: only the cash cost of replacing it has moved.
+        // Same plant, same depreciation charge: only the cash cost of replacing it has moved. Growth spend nets the
+        // revaluation out of its trend tranche, so the claim lives on the maintenance slice, not on total capex.
         $this->assertEqualsWithDelta($stablePrices->quarterlyDepreciation, $inflatedPrices->quarterlyDepreciation, 1.0);
-        $this->assertGreaterThan($stablePrices->totalReportedCapex, $inflatedPrices->totalReportedCapex);
+        $this->assertGreaterThan(0.0, $stablePrices->maintenanceCapex);
+        $this->assertEqualsWithDelta(1.20, $inflatedPrices->maintenanceCapex / $stablePrices->maintenanceCapex, 1e-9);
     }
 
     /**

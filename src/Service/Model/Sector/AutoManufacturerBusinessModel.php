@@ -397,7 +397,7 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
             'retail_default_rate_ema',
             'supply_chain_pressure_index_ema',
             'tips_breakeven_ema',
-            'wage_growth_ema',
+            'real_wage_gap',
             'yield_10y_ema',
             'yield_2y_ema',
         ];

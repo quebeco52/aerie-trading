@@ -66,10 +66,12 @@ class LaborMarketSubsystemTest extends TestCase
         $state->nairu = \App\Service\Macro\MacroEngine::NATURAL_UNEMPLOYMENT;
         $state->tipsBreakeven = $expectedInflation;
         $state->tipsBreakevenEma = $expectedInflation;
+        $state->inflation = $expectedInflation;
         $state->wageGrowth = 0.0;
 
-        // Partial adjustment at WAGE_ADJUSTMENT_SPEED closes half the gap each quarter; 80 of them settle it.
-        for ($i = 0; $i < 80; $i++) {
+        // Partial adjustment at WAGE_ADJUSTMENT_SPEED closes half the growth gap each quarter; the level the start-up
+        // leaves behind error-corrects on a ~7 year half-life, so a century settles both.
+        for ($i = 0; $i < 400; $i++) {
             $this->subsystem->calculateLaborMarketAndWages($state, \App\Service\Macro\MacroEngine::TFP_DRIFT, 0.25);
         }
 
@@ -190,6 +192,81 @@ class LaborMarketSubsystemTest extends TestCase
         $this->assertEqualsWithDelta(0.08, $this->convergedWageGrowth($headroom), 1e-6, 'The ceiling is reached exactly at its headroom.');
         $this->assertEqualsWithDelta(0.08, $this->convergedWageGrowth(0.12), 1e-6, 'Beyond it, nominal wage growth stops rising.');
         $this->assertLessThan(0.0, $this->convergedWageGrowth(0.12) - 0.12, 'Past the ceiling, real pay falls.');
+    }
+
+
+    // --- Wage Error Correction ---
+
+    /** A labour market at rest: natural unemployment and tightness, wages already growing at their target. */
+    private function restingLabourMarket(float $realWageGap): MacroState
+    {
+        $state = new MacroState();
+        $state->unemploymentRate = MacroEngine::NATURAL_UNEMPLOYMENT;
+        $state->nairu = MacroEngine::NATURAL_UNEMPLOYMENT;
+        $state->tipsBreakevenEma = 0.02;
+        $state->inflation = 0.02;
+        $state->wageGrowth = 0.02 + MacroEngine::TFP_DRIFT;
+        $state->realWageGap = $realWageGap;
+
+        return $state;
+    }
+
+    public function testTheRealWageGapIntegratesWagesLessPricesAndTrendProductivity(): void
+    {
+        $state = $this->restingLabourMarket(0.0);
+        $state->inflation = 0.03;
+
+        $this->subsystem->calculateLaborMarketAndWages($state, MacroEngine::TFP_DRIFT, 0.25);
+
+        // Wages held at 3.5% while prices ran at 3% and productivity at 1.5%: a quarter of a one-point real squeeze.
+        $this->assertEqualsWithDelta(0.035, $state->wageGrowth, 1e-12);
+        $this->assertEqualsWithDelta((0.035 - 0.03 - MacroEngine::TFP_DRIFT) * 0.25, $state->realWageGap, 1e-12);
+    }
+
+    public function testARealWageAboveItsProductivityPathSlowsWageGrowth(): void
+    {
+        $atTrend = $this->restingLabourMarket(0.0);
+        $above = $this->restingLabourMarket(0.02);
+
+        $this->subsystem->calculateLaborMarketAndWages($atTrend, MacroEngine::TFP_DRIFT, 0.25);
+        $this->subsystem->calculateLaborMarketAndWages($above, MacroEngine::TFP_DRIFT, 0.25);
+
+        // The target falls by the correction speed times the gap; wages move down toward it at the rigid speed.
+        $expected = -LaborMarketSubsystem::WAGE_ERROR_CORRECTION_SPEED * 0.02
+            * LaborMarketSubsystem::WAGE_ADJUSTMENT_SPEED * LaborMarketSubsystem::WAGE_DOWNWARD_RIGIDITY_FACTOR * 0.25;
+        $this->assertEqualsWithDelta($expected, $above->wageGrowth - $atTrend->wageGrowth, 1e-12);
+    }
+
+    /**
+     * The level is bounded: a real wage 2% above its path closes without overshooting, never faster than the
+     * correction speed alone allows (the partial adjustment of the growth rate only slows it), and at the same
+     * pace whatever the tick.
+     */
+    public function testTheGapClosesAtTheCorrectionSpeedAndIsTimestepNeutral(): void
+    {
+        $halfLives = [];
+        foreach ([1 / 360, 1 / 90] as $dt) {
+            $state = $this->restingLabourMarket(0.02);
+            $halfLife = null;
+            $lowest = 1.0;
+            for ($i = 1; $i <= (int) round(40 / $dt); $i++) {
+                $this->subsystem->calculateLaborMarketAndWages($state, MacroEngine::TFP_DRIFT, $dt);
+                $lowest = min($lowest, $state->realWageGap);
+                if ($halfLife === null && $state->realWageGap <= 0.01) {
+                    $halfLife = $i * $dt;
+                }
+            }
+
+            $this->assertNotNull($halfLife, 'The gap never halved.');
+            $this->assertGreaterThanOrEqual(0.0, $lowest, 'The correction overshot into a real wage below trend.');
+            $this->assertLessThan(0.02 * 0.01, $state->realWageGap, 'Forty years leave under 1% of the gap.');
+            $halfLives[] = $halfLife;
+        }
+
+        $floor = log(2.0) / LaborMarketSubsystem::WAGE_ERROR_CORRECTION_SPEED;
+        $this->assertGreaterThanOrEqual($floor, $halfLives[0]);
+        $this->assertLessThan(1.5 * $floor, $halfLives[0]);
+        $this->assertEqualsWithDelta($halfLives[0], $halfLives[1], 0.02, 'The half-life moved with the tick.');
     }
 
 

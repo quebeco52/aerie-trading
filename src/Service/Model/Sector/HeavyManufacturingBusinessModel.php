@@ -36,10 +36,6 @@ class HeavyManufacturingBusinessModel extends StandardCorporateBusinessModel
     /** Shares of the variable cost base by input channel, measured from the BEA input-output accounts with supply-chain content (labor still the model's own). */
     public const INPUT_COST_EXPOSURES = InputOutputExposures::HEAVY_MANUFACTURING;
 
-    // --- Labor Intensity ---
-    /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze. Salaried engineering and plant supervision are fixed; the hourly line and the material bill move with output. */
-    public const FIXED_COST_LABOR_SHARE = 0.50;
-
     // --- FX Exposure ---
     /** Share of revenue whose competitiveness moves with the trade-weighted exchange rate. Heavy equipment is a globally traded good bid against foreign builders on delivered price. */
     public const FX_REVENUE_EXPOSURE = 0.15;
@@ -249,7 +245,7 @@ class HeavyManufacturingBusinessModel extends StandardCorporateBusinessModel
             'output_gap_ema',
             'supply_chain_pressure_index_ema',
             'tips_breakeven_ema',
-            'wage_growth_ema',
+            'real_wage_gap',
         ];
     }
 }

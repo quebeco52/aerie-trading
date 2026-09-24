@@ -27,7 +27,7 @@ class ResortsCasinosBusinessModelTest extends TestCase
         float $macroCreditSpread = 0.015,
         float $yield10y = 0.04,
         float $energyCostPushLag = 0.0,
-        float $wageGrowthEma = MacroEngine::TFP_DRIFT + MacroEngine::TARGET_INFLATION
+        float $realWageGap = 0.0
     ): MacroStateDTO {
         return new MacroStateDTO(
             outputGap: $outputGap,
@@ -38,7 +38,7 @@ class ResortsCasinosBusinessModelTest extends TestCase
             energyPriceIndexEma: $energyPriceIndexEma,
             energyPriceShock: 0.0,
             energyCostPushLag: $energyCostPushLag,
-            wageGrowthEma: $wageGrowthEma,
+            realWageGap: $realWageGap,
             consumerSentimentIndex: $consumerSentimentIndexEma,
             consumerSentimentIndexEma: $consumerSentimentIndexEma,
             inflation: $inflation,
@@ -185,13 +185,14 @@ class ResortsCasinosBusinessModelTest extends TestCase
     {
         $model = new ResortsCasinosBusinessModel();
 
-        // Wage growth runs 10pp over its neutral rate. Payroll is the resort's material tracked input (BEA puts its fuel and
-        // food content under the materiality floor). The basket buys at spot, so the full move lands in the cost base this
-        // quarter; room and menu pricing recovers pricingPower x MAX_INPUT_COST_PASS_THROUGH of it with the pass-through lag.
+        // The real wage runs 10% over its productivity path. Payroll is the resort's material tracked input (BEA puts its
+        // fuel and food content under the materiality floor). The basket buys at spot, so the full move lands in the cost
+        // base this quarter; room and menu pricing recovers pricingPower x MAX_INPUT_COST_PASS_THROUGH of it with the
+        // pass-through lag.
         $energyDeviation = 0.10 * ResortsCasinosBusinessModel::INPUT_COST_EXPOSURES['labor'];
         $recoveryWeight = 1.0 - exp(-EarningsEngine::QUARTERLY_TIME_STEP / FinancialConstants::DEFAULT_INPUT_PASS_THROUGH_LAG_YEARS);
         $macroBase = $this->createMacroState();
-        $macroEnergy = $this->createMacroState(wageGrowthEma: MacroEngine::TFP_DRIFT + MacroEngine::TARGET_INFLATION + 0.10);
+        $macroEnergy = $this->createMacroState(realWageGap: 0.10);
 
         // 1. Pure-Play Casino Resort (100% operational footprint, median pricing power 0.50)
         $stockPure = new Stock();

@@ -257,6 +257,9 @@ class MacroReport
     private ?string $wageGrowthEma = null;
 
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $realWageGap = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
     private ?string $naturalRate = null;
 
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]

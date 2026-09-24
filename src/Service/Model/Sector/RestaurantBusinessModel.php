@@ -46,10 +46,6 @@ class RestaurantBusinessModel extends StandardCorporateBusinessModel
     /** Capitalized operating lease liabilities as a fraction of annual revenue (IFRS 16 / ASC 842). Franchisor real estate and store leases are the largest obligation on a restaurant balance sheet. */
     public const LEASE_LIABILITY_INTENSITY = 0.60;
 
-    // --- Labor Intensity ---
-    /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze. Store-level crew wages sit in variable cost; only management and support payroll is fixed overhead. */
-    public const FIXED_COST_LABOR_SHARE = 0.50;
-
     // --- Tri-Stream Architecture ---
     /** Baseline fraction of revenue derived from company-owned store operations. */
     public const CORPORATE_WEIGHT       = 0.50;
@@ -276,7 +272,7 @@ class RestaurantBusinessModel extends StandardCorporateBusinessModel
             'inflation_ema',
             'output_gap_ema',
             'tips_breakeven_ema',
-            'wage_growth_ema',
+            'real_wage_gap',
         ];
     }
 }

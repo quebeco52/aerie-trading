@@ -51,6 +51,8 @@ class EarningsSimulationContext
     public float $completedCip = 0.0;
     /** Current capital-goods price level over the vintage the plant was bought at; 1.0 when prices have not moved. */
     public float $replacementCostRatio = 1.0;
+    /** Capex spent replacing depreciated plant at today's capital-goods prices this quarter. */
+    public float $maintenanceCapex = 0.0;
     /** Lower-of-cost-or-NRV writedown on unsold inventory this quarter (ASC 330), non-cash. */
     public float $inventoryWriteDown = 0.0;
     /** Expected credit loss provision against trade receivables this quarter (ASC 326), non-cash; negative when released. */

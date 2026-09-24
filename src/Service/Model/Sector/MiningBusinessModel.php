@@ -51,10 +51,6 @@ class MiningBusinessModel extends StandardCorporateBusinessModel
     /** Share of revenue whose home-currency realization moves with the trade-weighted exchange rate: metals are priced in the world market. */
     public const FX_REVENUE_EXPOSURE = 0.30;
 
-    // --- Labor Intensity ---
-    /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze. Site overhead is dominated by the fleet, the mill and royalties, not payroll. */
-    public const FIXED_COST_LABOR_SHARE = 0.30;
-
     // --- Analyst Visibility & Error ---
     /** Base coverage visibility: metals prices are published daily, so the sell side sees most of the quarter. */
     public const BASE_COVERAGE_VISIBILITY = 0.80;
@@ -303,7 +299,7 @@ class MiningBusinessModel extends StandardCorporateBusinessModel
             'gold_price_index_ema',
             'industrial_metals_index_ema',
             'natural_gas_price_index_ema',
-            'wage_growth_ema',
+            'real_wage_gap',
         ];
     }
 }

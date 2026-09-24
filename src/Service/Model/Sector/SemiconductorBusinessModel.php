@@ -48,10 +48,6 @@ class SemiconductorBusinessModel extends StandardCorporateBusinessModel
     /** Stock-based compensation as a fraction of revenue (ASC 718): non-cash, added back to FCF, settled in new shares. Design and process engineering talent paid partly in equity. */
     public const STOCK_COMPENSATION_INTENSITY = 0.05;
 
-    // --- Labor Intensity ---
-    /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze. Fab depreciation, cleanroom energy and materials dominate; engineering payroll is a minority of overhead. */
-    public const FIXED_COST_LABOR_SHARE = 0.35;
-
     // --- FX Exposure ---
     /** Share of revenue whose competitiveness moves with the trade-weighted exchange rate. Wafers are priced in the trade currency and sold into a global fab and OEM base. */
     public const FX_REVENUE_EXPOSURE = 0.10;
@@ -321,7 +317,7 @@ class SemiconductorBusinessModel extends StandardCorporateBusinessModel
             'manufacturing_pmi_ema',
             'output_gap_ema',
             'tips_breakeven_ema',
-            'wage_growth_ema',
+            'real_wage_gap',
         ];
     }
 }

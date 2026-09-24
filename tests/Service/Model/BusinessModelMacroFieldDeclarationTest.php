@@ -58,7 +58,7 @@ final class BusinessModelMacroFieldDeclarationTest extends TestCase
         'agri'    => 'agricultural_commodity_index_ema',
         'freight' => 'freight_rate_index_ema',
         'ppi'     => 'producer_price_inflation_ema',
-        'labor'   => 'wage_growth_ema',
+        'labor'   => 'real_wage_gap',
     ];
 
     /**

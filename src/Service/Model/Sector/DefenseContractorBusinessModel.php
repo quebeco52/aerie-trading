@@ -44,10 +44,6 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
     /** Cost-plus and FMS contracts reprice through FAR escalators within the year; fixed-price EMD never does. */
     public const INPUT_PASS_THROUGH_LAG_YEARS = 0.75;
 
-    // --- Labor Intensity ---
-    /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze. Cleared engineers on long programs are carried through the contract regardless of volume, which is what makes a defense prime a payroll with a factory attached. */
-    public const FIXED_COST_LABOR_SHARE = 0.70;
-
     // --- FX Exposure ---
     /** Share of revenue whose competitiveness moves with the trade-weighted exchange rate. Foreign military sales compete against European and Israeli primes on delivered price; domestic procurement does not. */
     public const FX_REVENUE_EXPOSURE = 0.15;
@@ -382,7 +378,7 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
             'industrial_metals_index_ema',
             'inflation_ema',
             'macro_credit_spread_ema',
-            'wage_growth_ema',
+            'real_wage_gap',
         ];
     }
 }

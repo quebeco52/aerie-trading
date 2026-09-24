@@ -22,6 +22,8 @@ class MacroState
     public float $laborTightnessEma = 1.125;
     public float $wageGrowth = 0.035;
     public float $wageGrowthEma = 0.035;
+    // Log real wage relative to its trend-productivity path: the price of labour firms pay against what they sell.
+    public float $realWageGap = 0.0;
     public float $nairu = MacroEngine::NATURAL_UNEMPLOYMENT;
     public float $nairuEma = MacroEngine::NATURAL_UNEMPLOYMENT;
 

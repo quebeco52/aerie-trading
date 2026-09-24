@@ -46,10 +46,6 @@ class ShippingBusinessModel extends StandardCorporateBusinessModel
     /** Capitalized operating lease liabilities as a fraction of annual revenue (IFRS 16 / ASC 842). Chartered-in vessels are leases in all but name. */
     public const LEASE_LIABILITY_INTENSITY = 0.35;
 
-    // --- Labor Intensity ---
-    /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze. Vessel depreciation, bunker fuel and port charges dominate; crew wages are a minority of overhead. */
-    public const FIXED_COST_LABOR_SHARE = 0.30;
-
     // --- FX Exposure ---
     /** Share of revenue whose competitiveness moves with the trade-weighted exchange rate. Charter and spot rates are quoted in the trade currency against globally mobile tonnage. */
     public const FX_REVENUE_EXPOSURE = 0.10;
@@ -304,7 +300,7 @@ class ShippingBusinessModel extends StandardCorporateBusinessModel
             'supply_chain_pressure_index_ema',
             'tips_breakeven_ema',
             'trade_balance_to_gdp_ema',
-            'wage_growth_ema',
+            'real_wage_gap',
         ];
     }
 }

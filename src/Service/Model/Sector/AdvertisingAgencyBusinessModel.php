@@ -62,10 +62,6 @@ class AdvertisingAgencyBusinessModel extends StandardCorporateBusinessModel
     /** Stock-based compensation as a fraction of revenue (ASC 718): non-cash, added back to FCF, settled in new shares. Creative leadership retention grants. */
     public const STOCK_COMPENSATION_INTENSITY = 0.03;
 
-    // --- Labor Intensity ---
-    /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze. Creative and account payroll dominates an agency's overhead. */
-    public const FIXED_COST_LABOR_SHARE = 0.80;
-
     // --- Analyst Visibility & Error ---
     public const BASE_COVERAGE_VISIBILITY = 0.25;
     public const BASE_COVERAGE_ERROR = 0.06;
@@ -193,7 +189,7 @@ class AdvertisingAgencyBusinessModel extends StandardCorporateBusinessModel
             'output_gap_ema',
             'supercore_inflation_ema',
             'tips_breakeven_ema',
-            'wage_growth_ema',
+            'real_wage_gap',
         ];
     }
 }

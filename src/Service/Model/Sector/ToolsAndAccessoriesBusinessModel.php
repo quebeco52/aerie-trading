@@ -99,10 +99,6 @@ class ToolsAndAccessoriesBusinessModel extends StandardCorporateBusinessModel
     /** Alloy and carbide supply contracts fix input prices for about a quarter. */
     public const INPUT_COST_LAG_YEARS = 0.25;
 
-    // --- Labor Intensity ---
-    /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze. Sales, marketing and salaried plant staff are fixed against a metal- and freight-heavy variable bill. */
-    public const FIXED_COST_LABOR_SHARE = 0.50;
-
     // --- FX Exposure ---
     /** Share of revenue whose competitiveness moves with the trade-weighted exchange rate. Hand and power tools are sourced and sold across borders against import-competing brands. */
     public const FX_REVENUE_EXPOSURE = 0.10;
@@ -277,7 +273,7 @@ class ToolsAndAccessoriesBusinessModel extends StandardCorporateBusinessModel
             'manufacturing_pmi_ema',
             'output_gap_ema',
             'tips_breakeven_ema',
-            'wage_growth_ema',
+            'real_wage_gap',
         ];
     }
 }

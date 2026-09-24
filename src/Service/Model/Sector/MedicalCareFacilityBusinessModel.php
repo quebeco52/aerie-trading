@@ -70,10 +70,6 @@ class MedicalCareFacilityBusinessModel extends StandardCorporateBusinessModel
     /** Elective outpatient volume lost per unit of unemployment above the natural rate (2.0 = -2% volume per point): job loss ends employer coverage and elective procedures are deferred. */
     public const UNEMPLOYMENT_ELECTIVE_SENSITIVITY = 2.0;
 
-    // --- Labor Intensity ---
-    /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze. Nursing and clinical staff payroll dominates hospital overhead. */
-    public const FIXED_COST_LABOR_SHARE = 0.70;
-
     // --- Analyst Visibility & Error ---
     /** Base coverage visibility for hospital networks with steady public reporting. */
     public const BASE_COVERAGE_VISIBILITY = 0.35;
@@ -293,7 +289,7 @@ class MedicalCareFacilityBusinessModel extends StandardCorporateBusinessModel
             'supercore_inflation_ema',
             'tips_breakeven_ema',
             'unemployment_rate_ema',
-            'wage_growth_ema',
+            'real_wage_gap',
         ];
     }
 }

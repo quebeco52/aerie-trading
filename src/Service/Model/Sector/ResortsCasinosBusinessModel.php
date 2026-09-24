@@ -40,10 +40,6 @@ class ResortsCasinosBusinessModel extends StandardCorporateBusinessModel
     /** Shares of the variable cost base by input channel, measured from the BEA input-output accounts with supply-chain content (labor still the model's own). */
     public const INPUT_COST_EXPOSURES = InputOutputExposures::RESORTS_CASINOS;
 
-    // --- Labor Intensity ---
-    /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze. A property has to be staffed to be open: hotel, gaming floor and food service payroll is the overhead of the box. */
-    public const FIXED_COST_LABOR_SHARE = 0.65;
-
     // --- FX Exposure ---
     /** Share of revenue whose competitiveness moves with the trade-weighted exchange rate. Inbound tourism is priced in the visitor's currency: a strong home currency prices the destination out. */
     public const FX_REVENUE_EXPOSURE = 0.15;
@@ -342,7 +338,7 @@ class ResortsCasinosBusinessModel extends StandardCorporateBusinessModel
             'output_gap_ema',
             'residential_property_index_ema',
             'tips_breakeven_ema',
-            'wage_growth_ema',
+            'real_wage_gap',
         ];
     }
 }

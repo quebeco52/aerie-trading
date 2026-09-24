@@ -64,10 +64,6 @@ class LawFirmBusinessModel extends StandardCorporateBusinessModel
     /** Capitalized operating lease liabilities as a fraction of annual revenue (IFRS 16 / ASC 842). Prime office space on ten-year terms is the one large non-payroll commitment a law firm carries. */
     public const LEASE_LIABILITY_INTENSITY = 0.20;
 
-    // --- Labor Intensity ---
-    /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze. Partner and associate compensation is nearly the entire overhead of a law firm. */
-    public const FIXED_COST_LABOR_SHARE = 0.85;
-
     // --- Analyst Visibility & Error ---
     /** Base coverage visibility for elite private partnerships and legal firms. */
     public const BASE_COVERAGE_VISIBILITY = 0.20;
@@ -301,7 +297,7 @@ class LawFirmBusinessModel extends StandardCorporateBusinessModel
             'output_gap_ema',
             'supercore_inflation_ema',
             'tips_breakeven_ema',
-            'wage_growth_ema',
+            'real_wage_gap',
         ];
     }
 }

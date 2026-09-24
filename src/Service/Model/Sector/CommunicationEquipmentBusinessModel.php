@@ -65,10 +65,6 @@ class CommunicationEquipmentBusinessModel extends StandardCorporateBusinessModel
     /** Export volume per unit of the foreign bloc's output gap: the customers-abroad half of the trade term. */
     public const FOREIGN_DEMAND_SENSITIVITY = 1.00;
 
-    // --- Labor Intensity ---
-    /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze. Radio and baseband R&D engineering dominates overhead; assembly is contract-manufactured. */
-    public const FIXED_COST_LABOR_SHARE = 0.65;
-
     // --- Balance Sheet Realism ---
     /** Stock-based compensation as a fraction of revenue (ASC 718): non-cash, added back to FCF, settled in new shares. */
     public const STOCK_COMPENSATION_INTENSITY = 0.02;
@@ -411,7 +407,7 @@ class CommunicationEquipmentBusinessModel extends StandardCorporateBusinessModel
             'supply_chain_pressure_index_ema',
             'tips_breakeven_ema',
             'trade_balance_to_gdp_ema',
-            'wage_growth_ema',
+            'real_wage_gap',
         ];
     }
 }

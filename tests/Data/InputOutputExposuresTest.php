@@ -120,6 +120,31 @@ final class InputOutputExposuresTest extends TestCase
         $this->assertArrayNotHasKey('energy', ChemicalBusinessModel::INPUT_COST_EXPOSURES);
     }
 
+    /**
+     * @param array<string, float> $exposures
+     */
+    #[DataProvider('measuredModelProvider')]
+    public function testLaborIsMeasuredForEveryModelAndPricesItsFixedBaseToo(string $class, array $exposures): void
+    {
+        $this->assertArrayHasKey('labor', $exposures, "{$class} has no measured payroll share");
+        $this->assertGreaterThan(0.10, $exposures['labor'], $class);
+        $this->assertLessThan(0.70, $exposures['labor'], $class);
+        // One share per industry: the fixed-cost wage factor and severance read the same number the basket does.
+        $model = (new \ReflectionClass($class))->newInstanceWithoutConstructor();
+        $this->assertSame($exposures['labor'], $model->getLaborCostShare(), $class);
+    }
+
+    public function testPayrollLeadsForPeopleBusinessesAndTrailsForProcessIndustries(): void
+    {
+        foreach (['LAW_FIRM', 'SECURITY_PROTECTION', 'EDUCATION', 'MEDICAL_CARE_FACILITY'] as $people) {
+            foreach (['STEEL_MANUFACTURING', 'CHEMICAL', 'AUTO_MANUFACTURER', 'REIT'] as $process) {
+                $this->assertGreaterThan($this->share($process, 'labor'), $this->share($people, 'labor'), "{$people} vs {$process}");
+            }
+        }
+        // BEA 722110 + 722211: compensation is ~42% of what a restaurant spends to operate.
+        $this->assertEqualsWithDelta(0.42, $this->share('RESTAURANT', 'labor'), 0.02);
+    }
+
     public function testRetailPassThroughIsWhatBusinessesActuallyPay(): void
     {
         // Industrial tariffs barely follow wholesale power (cost-of-service rates, contracts); delivered gas mostly does.

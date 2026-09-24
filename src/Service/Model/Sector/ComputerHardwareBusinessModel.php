@@ -104,10 +104,6 @@ class ComputerHardwareBusinessModel extends StandardCorporateBusinessModel
     /** Component supply agreements fix bill-of-materials prices for about a quarter before spot moves reach the line. */
     public const INPUT_COST_LAG_YEARS = 0.25;
 
-    // --- Labor Intensity ---
-    /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze. Product engineering and go-to-market payroll are fixed; assembly is contract-manufactured and moves with volume. */
-    public const FIXED_COST_LABOR_SHARE = 0.55;
-
     // --- FX Exposure ---
     /** Share of revenue whose competitiveness moves with the trade-weighted exchange rate. Systems are assembled offshore and bid against imports on a common component bill. */
     public const FX_REVENUE_EXPOSURE = 0.10;
@@ -287,7 +283,7 @@ class ComputerHardwareBusinessModel extends StandardCorporateBusinessModel
             'output_gap_ema',
             'tips_breakeven_ema',
             'trade_balance_to_gdp_ema',
-            'wage_growth_ema',
+            'real_wage_gap',
         ];
     }
 }

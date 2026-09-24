@@ -59,10 +59,6 @@ class RailroadBusinessModel extends StandardCorporateBusinessModel
     /** Capitalized operating lease liabilities as a fraction of annual revenue (IFRS 16 / ASC 842). Leased locomotives and rolling stock. */
     public const LEASE_LIABILITY_INTENSITY = 0.10;
 
-    // --- Labor Intensity ---
-    /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze. Crew and maintenance-of-way payroll shares overhead with track, locomotive and fuel costs. */
-    public const FIXED_COST_LABOR_SHARE = 0.45;
-
     // --- Analyst Visibility & Error ---
     /** Base coverage visibility for Class 1 railroad analysts. */
     public const BASE_COVERAGE_VISIBILITY = 0.60;
@@ -258,7 +254,7 @@ class RailroadBusinessModel extends StandardCorporateBusinessModel
             'output_gap_ema',
             'tips_breakeven_ema',
             'trade_balance_to_gdp_ema',
-            'wage_growth_ema',
+            'real_wage_gap',
         ];
     }
 }

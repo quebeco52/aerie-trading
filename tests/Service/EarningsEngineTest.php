@@ -476,7 +476,7 @@ class EarningsEngineTest extends TestCase
         );
     }
 
-    public function testWageInflationOverheatingSqueezesFixedCosts(): void
+    public function testARealWageAboveItsProductivityPathSqueezesEarningsAndWageGrowthAloneDoesNot(): void
     {
         $createStock = function(): Stock {
             $stock = new Stock();
@@ -499,33 +499,21 @@ class EarningsEngineTest extends TestCase
         $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
         $reportingTick = $this->getReportingTick('WAGE_TEST');
 
-        // 1. Normal wage growth economy (3.5%)
-        $stockNormal = $createStock();
-        $normalMacro = new \App\DTO\MacroStateDTO(
-            wageGrowth: 0.035,
-            wageGrowthEma: 0.035,
-            inflation: 0.02,
-            inflationEma: 0.02
-        );
-        $this->engine->calculate($stockNormal, $normalMacro, $reportingTick, 252);
-        $normalEps = (float) $stockNormal->getEarningsPerShare();
+        $earningsUnder = function (\App\DTO\MacroStateDTO $macro) use ($createStock, $reportingTick): float {
+            $stock = $createStock();
+            $this->engine->calculate($stock, $macro, $reportingTick, 252);
 
-        // 2. Severe wage-push inflation economy (7.5% wage growth)
-        $stockOverheated = $createStock();
-        $overheatedMacro = new \App\DTO\MacroStateDTO(
-            wageGrowth: 0.075,
-            wageGrowthEma: 0.075,
-            inflation: 0.02,
-            inflationEma: 0.02
-        );
-        $this->engine->calculate($stockOverheated, $overheatedMacro, $reportingTick, 252);
-        $overheatedEps = (float) $stockOverheated->getEarningsPerShare();
+            return (float) $stock->getEarningsPerShare();
+        };
 
-        $this->assertLessThan(
-            $normalEps,
-            $overheatedEps,
-            'Excess wage growth above trend must inflate fixed SG&A overhead costs and compress corporate earnings.'
-        );
+        $atTrend = $earningsUnder(new \App\DTO\MacroStateDTO(wageGrowth: 0.035, wageGrowthEma: 0.035, inflation: 0.02, inflationEma: 0.02));
+        $realWageAbove = $earningsUnder(new \App\DTO\MacroStateDTO(wageGrowth: 0.035, wageGrowthEma: 0.035, inflation: 0.02, inflationEma: 0.02, realWageGap: 0.03));
+        $fastGrowthAtTrendLevel = $earningsUnder(new \App\DTO\MacroStateDTO(wageGrowth: 0.075, wageGrowthEma: 0.075, inflation: 0.02, inflationEma: 0.02));
+
+        $this->assertLessThan($atTrend, $realWageAbove, 'Payroll priced 3% above the productivity path must compress earnings.');
+        // Cost is the wage LEVEL: a growth rate read as a level charged a quarter's overheating as if it were permanent
+        // and forgot a permanent rise the moment growth slowed.
+        $this->assertEqualsWithDelta($atTrend, $fastGrowthAtTrendLevel, 1e-9, 'Wage growth with the level still on its path is not yet a cost.');
     }
 
     public function testReportingWindowClustering(): void

@@ -207,9 +207,9 @@ class DefenseContractorBusinessModelTest extends TestCase
         // fixedPriceZ = -2.0 (< -1.50 FORWARD_LOSS_Z_SCORE)
         $mathUtilityMock = $this->createMathUtilityMock([0.0, -2.0, 0.0, 0.0]);
 
-        // Engineering wages running 2pts above trend: the fixed-price EMD share cannot recover it, cost-plus can.
+        // Engineering pay 2% above its productivity path: the fixed-price EMD share cannot recover it, cost-plus can.
         $macroState = $this->createMacroState(inflation: 0.04);
-        $macroState = MacroStateDTO::fromArray(array_merge($macroState->toArray(), ['wage_growth_ema' => 0.055]));
+        $macroState = MacroStateDTO::fromArray(array_merge($macroState->toArray(), ['real_wage_gap' => 0.02]));
 
         $result = $model->computeActualFinancials(
             $stock,
@@ -223,10 +223,10 @@ class DefenseContractorBusinessModelTest extends TestCase
 
         $this->assertSame(ShockEvent::PROJECT_DELAY, $result->eventType);
         // Fixed price weight is 0.20 for GRIP: forward loss = FORWARD_LOSS_PENALTY 0.08 * 0.20 = 0.016.
-        // Wage basket: labor share 0.35 x 2pts excess = 0.7% of the cost base; 80% of contracts (cost-plus, FMS)
-        // recover 0.80 of it with the repricing lag, so the first-quarter drag is
+        // Wage basket: the measured labor share x the 2% gap; 80% of contracts (cost-plus, FMS) recover 0.80 of it
+        // with the repricing lag, so the first-quarter drag is
         // margin x deviation x (1 - recoveredShare x firstQuarterRecoveryWeight).
-        $deviation = 0.35 * (0.055 - (MacroEngine::TFP_DRIFT + MacroEngine::TARGET_INFLATION));
+        $deviation = DefenseContractorBusinessModel::INPUT_COST_EXPOSURES['labor'] * 0.02;
         $recoveredShare = 0.80 * DefenseContractorBusinessModel::MAX_INPUT_COST_PASS_THROUGH;
         $recoveryWeight = 1.0 - exp(-0.25 / DefenseContractorBusinessModel::INPUT_PASS_THROUGH_LAG_YEARS);
         $wageDrag = 0.30 * $deviation * (1.0 - ($recoveredShare * $recoveryWeight));

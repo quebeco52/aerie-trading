@@ -65,6 +65,7 @@ readonly class MacroStateDTO
         public float $laborTightnessEma = 1.125,
         public float $wageGrowth = 0.035,
         public float $wageGrowthEma = 0.035,
+        public float $realWageGap = 0.0,
         public float $nairu = MacroEngine::NATURAL_UNEMPLOYMENT,
         public float $nairuEma = MacroEngine::NATURAL_UNEMPLOYMENT,
         public float $naturalRate = MacroEngine::BASE_NATURAL_RATE,

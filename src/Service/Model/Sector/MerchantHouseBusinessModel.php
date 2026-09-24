@@ -297,7 +297,7 @@ class MerchantHouseBusinessModel extends ConglomerateBusinessModel
             'supply_chain_pressure_index_ema',
             'tips_breakeven_ema',
             'trade_balance_to_gdp_ema',
-            'wage_growth_ema',
+            'real_wage_gap',
         ];
     }
 }

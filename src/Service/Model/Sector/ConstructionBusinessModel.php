@@ -46,10 +46,6 @@ class ConstructionBusinessModel extends StandardCorporateBusinessModel
     /** Fixed-price contracts reprice only at the next award: material moves take a year to reach bid prices. */
     public const INPUT_PASS_THROUGH_LAG_YEARS = 1.00;
 
-    // --- Labor Intensity ---
-    /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze. Estimators, project managers and equipment supervisors are salaried; trade labor is subcontracted per job and priced into variable cost. */
-    public const FIXED_COST_LABOR_SHARE = 0.55;
-
     // --- Demand Transmission Lag ---
     /** Years for a move in the output gap to reach the order book. Permits, financing and design run a year or more ahead of a break-ground, so today's backlog was ordered into a different economy. */
     public const DEMAND_LAG_YEARS = 1.50;
@@ -318,7 +314,7 @@ class ConstructionBusinessModel extends StandardCorporateBusinessModel
             'residential_property_index_ema',
             'sloos_tightening_index_ema',
             'tips_breakeven_ema',
-            'wage_growth_ema',
+            'real_wage_gap',
         ];
     }
 }

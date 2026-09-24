@@ -54,10 +54,6 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
     /** Capitalized operating lease liabilities as a fraction of annual revenue (IFRS 16 / ASC 842). Rate-base assets are owned; leases are immaterial. */
     public const LEASE_LIABILITY_INTENSITY = 0.03;
 
-    // --- Labor Intensity ---
-    /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze. Rate-base assets, fuel and purchased power dominate utility overhead; field crews are a minority. */
-    public const FIXED_COST_LABOR_SHARE = 0.35;
-
     // --- Reporting Incentives ---
     /** Propensity to steer reported earnings toward consensus with accruals. Cost-of-service regulation puts the books in front of a rate regulator every cycle, and the allowed return caps what a managed beat is even worth. */
     public const EARNINGS_MANAGEMENT_PROPENSITY = 0.30;
@@ -413,7 +409,7 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
             'natural_gas_price_index_ema',
             'output_gap_ema',
             'tips_breakeven_ema',
-            'wage_growth_ema',
+            'real_wage_gap',
             'wholesale_power_price_index_ema',
         ];
     }

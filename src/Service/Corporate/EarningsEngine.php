@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Service\Corporate;
 
 use App\Entity\Stock;
-use App\Service\Macro\MacroEngine;
 use App\Service\Event\MarketEventPublisher;
 use App\Service\Math\CorporateMetrics;
 use App\Service\Math\MathUtility;
@@ -549,9 +548,9 @@ class EarningsEngine
             $structuralCosts - $ctx->structuralDepreciation
         );
 
-        // Wage-price spiral: excess wage growth above trend inflates the labor-cost share of fixed costs.
-        $excessWageGrowth = max(-FinancialConstants::MAX_WAGE_RELIEF, $macroState->wageGrowth - (MacroEngine::TFP_DRIFT + MacroEngine::TARGET_INFLATION));
-        $wageInflationFactor = 1.0 + ($strategy->getLaborCostShare() * $excessWageGrowth / max(0.5, $pricingPowerMultiplier));
+        // Payroll in the fixed base costs the real wage's gap to trend productivity: a LEVEL, so a real wage that
+        // stays high keeps costing until the labour market corrects it (downward rigidity lives in the wage equation).
+        $wageInflationFactor = 1.0 + ($strategy->getLaborCostShare() * $macroState->realWageGap / max(0.5, $pricingPowerMultiplier));
         // Capacity cost is committed, not chosen quarter by quarter: a firm carries the base it was
         // resourced for until it restructures, which is why the structural figure is what gets scaled.
         $structuralFixedCosts = $cashStructuralCosts * $fixedCostRatio * $wageInflationFactor;
@@ -1189,6 +1188,7 @@ class EarningsEngine
                 // is capitalized. Any other figure would leave cash without an asset or a charge behind it.
                 $maintenanceCapEx = $ctx->quarterlyDepreciation;
             }
+            $ctx->maintenanceCapex = $maintenanceCapEx;
 
             $currentAnnualizedRevenue = $ctx->actualRevenue / max(0.001, $ctx->dt);
             $priorNwcStr = $stock->getNetWorkingCapital();

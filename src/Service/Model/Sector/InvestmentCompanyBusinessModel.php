@@ -288,7 +288,7 @@ class InvestmentCompanyBusinessModel extends ConglomerateBusinessModel
             'perceived_neutral_rate',
             'policy_rate_ema',
             'tips_breakeven_ema',
-            'wage_growth_ema',
+            'real_wage_gap',
         ];
     }
 

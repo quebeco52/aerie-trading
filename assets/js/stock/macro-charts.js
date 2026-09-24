@@ -52,7 +52,9 @@ function updateMacroHud(d) {
     setHud('hud-macroRatesChart', `PR: ${last(d.policyRateData).toFixed(2)}% | 10Y: ${last(d.yield10yData).toFixed(2)}%`);
     setHud('hud-macroMortgageChart', `30Y: ${last(d.mortgageYieldData).toFixed(2)}% | vs PR: ${last(d.spread30yData).toFixed(2)}%`);
     setHud('hud-macroRiskChart', `VIX: ${last(d.volData).toFixed(1)}% | ERP: ${last(d.erpData).toFixed(1)}%`);
-    setHud('hud-macroLaborCreditChart', `Unemp: ${last(d.unemploymentData).toFixed(1)}% | Wage: ${last(d.wageGrowthData).toFixed(1)}% | Real: ${(last(d.wageGrowthData) - last(d.tipsBreakevenData)).toFixed(1)}%`);
+    const lastRealWageGap = [...(d.realWageGapData ?? [])].reverse().find(v => v !== null && !isNaN(v));
+    setHud('hud-macroLaborCreditChart', `Unemp: ${last(d.unemploymentData).toFixed(1)}% | Wage: ${last(d.wageGrowthData).toFixed(1)}% | Real: ${(last(d.wageGrowthData) - last(d.tipsBreakevenData)).toFixed(1)}%`
+        + (lastRealWageGap === undefined ? '' : ` | vs Path: ${lastRealWageGap >= 0 ? '+' : ''}${lastRealWageGap.toFixed(1)}%`));
     const lastEquityGap = [...d.equityWealthGapData].reverse().find(v => v !== null && !isNaN(v));
     setHud('hud-macroWealthEffectChart', lastEquityGap === undefined
         ? `Equity: - | Housing: ${last(d.housingWealthGapData) >= 0 ? '+' : ''}${last(d.housingWealthGapData).toFixed(1)}%`
@@ -108,7 +110,7 @@ export function updateMacroCharts(reports, timeframe = currentMacroTimeframe) {
     let sovereignDebtData = [];
     let retailDefaultData = [], agriEmaData = [], freightEmaData = [], residentialEmaData = [];
     let interbankSpreadBpsData = [], creditSpreadBpsData = [];
-    let jobVacanciesData = [], laborTightnessData = [], wageGrowthData = [];
+    let jobVacanciesData = [], laborTightnessData = [], wageGrowthData = [], realWageGapData = [];
     let equityWealthRatioData = [], equityWealthTrendData = [], equityWealthGapData = [], housingWealthGapData = [];
     let naturalRateData = [], termPremiumData = [], riskNeutralData = [], balanceSheetData = [];
     let balanceSheetAssetsData = [];
@@ -256,6 +258,10 @@ export function updateMacroCharts(reports, timeframe = currentMacroTimeframe) {
 
         let rawWage = report.wage_growth_ema ?? report.wage_growth ?? report.wageGrowthEma ?? report.wageGrowth ?? 0.035;
         wageGrowthData.push(parseFloat(rawWage) * 100);
+
+        // Recorded only since the wage level joined the macro: older quarters stay gaps, not a flat zero.
+        const rawRealWageGap = report.real_wage_gap ?? report.realWageGap ?? null;
+        realWageGapData.push(rawRealWageGap === null ? null : parseFloat(rawRealWageGap) * 100);
 
         let rawNaturalRate = report.natural_rate_ema ?? report.natural_rate ?? report.naturalRateEma ?? report.naturalRate ?? 0.015;
         naturalRateData.push(parseFloat(rawNaturalRate) * 100);
@@ -442,7 +448,7 @@ export function updateMacroCharts(reports, timeframe = currentMacroTimeframe) {
     updateMacroHud({
         inflationData, outputGapData, policyRateData, yield10yData,
         mortgageYieldData, spread30yData, volData, erpData, taxData,
-        unemploymentData, wageGrowthData, tipsBreakevenData, interbankSpreadBpsData,
+        unemploymentData, wageGrowthData, tipsBreakevenData, realWageGapData, interbankSpreadBpsData,
         equityWealthGapData, housingWealthGapData,
         creEmaData, residentialEmaData, sentimentData, dealActivityData,
         energyPriceData, crackSpreadData, gscpiData, sovereignDebtData,
@@ -474,7 +480,7 @@ export function updateMacroCharts(reports, timeframe = currentMacroTimeframe) {
     renderWhenVisible('macroRatesChart', () => renderMacroRatesChart(labels, policyRateData, yield2yData, yield5yData, yield10yData, spread2s10sData, targetRateData));
     renderWhenVisible('macroMortgageChart', () => renderMacroMortgageChart(labels, policyRateData, mortgageYieldData, spread30yData));
     renderWhenVisible('macroRiskChart', () => renderMacroRiskChart(labels, erpData, volData, creditSpreadBpsData, corpBorrowingData));
-    renderWhenVisible('macroLaborCreditChart', () => renderMacroLaborCreditChart(labels, unemploymentData, jobVacanciesData, wageGrowthData, nairuData, tipsBreakevenData));
+    renderWhenVisible('macroLaborCreditChart', () => renderMacroLaborCreditChart(labels, unemploymentData, jobVacanciesData, wageGrowthData, nairuData, tipsBreakevenData, realWageGapData));
     // The wealth ratio has no unit, so the level pair is shown relative to where the window opens.
     const firstWealthRatio = equityWealthRatioData.find(v => v !== null && v > 0);
     const rebase = (arr) => firstWealthRatio ? arr.map(v => v === null ? null : (v / firstWealthRatio) * 100.0) : arr;
@@ -850,7 +856,7 @@ function renderMacroRiskChart(labels, erpData, volData, creditSpreadBpsData, cor
     });
 }
 
-function renderMacroLaborCreditChart(labels, unemploymentData, jobVacanciesData, wageGrowthData, nairuData, tipsBreakevenData) {
+function renderMacroLaborCreditChart(labels, unemploymentData, jobVacanciesData, wageGrowthData, nairuData, tipsBreakevenData, realWageGapData = []) {
     const canvas = document.getElementById('macroLaborCreditChart');
     if (!canvas) return;
     macroLaborCreditChartInstance = destroyChartInstance(macroLaborCreditChartInstance);
@@ -914,6 +920,20 @@ function renderMacroLaborCreditChart(labels, unemploymentData, jobVacanciesData,
                     tension: 0.3,
                     fill: false,
                     pointRadius: labels.length > 50 ? 0 : 1
+                },
+                {
+                    // A LEVEL, not a rate: the real wage against prices times trend productivity. It is what payroll
+                    // costs firms per unit of output, so above zero every company's margin is carrying it.
+                    label: 'Real Wage vs Productivity Path',
+                    data: realWageGapData,
+                    yAxisID: 'yRealWage',
+                    borderColor: '#10b981',
+                    backgroundColor: 'rgba(16, 185, 129, 0.10)',
+                    borderWidth: 2,
+                    tension: 0.3,
+                    fill: 'origin',
+                    spanGaps: false,
+                    pointRadius: labels.length > 50 ? 0 : 1
                 }
             ]
         },
@@ -922,15 +942,26 @@ function renderMacroLaborCreditChart(labels, unemploymentData, jobVacanciesData,
             interaction: { mode: 'index', intersect: false },
             plugins: {
                 legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } },
-                tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${ctx.raw.toFixed(2)}%` } }
+                tooltip: { callbacks: { label: (ctx) => ctx.raw === null ? `${ctx.dataset.label}: -` : `${ctx.dataset.label}: ${ctx.raw.toFixed(2)}%` } }
             },
             scales: {
+                // Rates on top, the wage LEVEL in its own panel below: left axes in one stack go top-down by descending weight.
                 y: {
                     type: 'linear',
                     display: true,
+                    position: 'left', stack: 'labor', stackWeight: 2, weight: 1,
                     grid: { color: 'rgba(255, 255, 255, 0.05)' },
                     ticks: { callback: (val) => val.toFixed(1) + '%' },
                     title: { display: true, text: 'Percentage Rate (%)' }
+                },
+                yRealWage: {
+                    type: 'linear',
+                    position: 'left', stack: 'labor', stackWeight: 1, weight: 0, offset: true,
+                    // Zero is the productivity path itself, so it always stays on the axis.
+                    suggestedMin: 0, suggestedMax: 0,
+                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    ticks: { callback: (val) => val.toFixed(1) + '%', maxTicksLimit: 4 },
+                    title: { display: true, text: 'vs Path (%)' }
                 },
                 x: {
                     grid: { color: 'rgba(255, 255, 255, 0.05)' },

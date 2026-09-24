@@ -39,10 +39,6 @@ class SpecialtyIndustrialMachineryBusinessModel extends HeavyManufacturingBusine
     /** Shares of the variable cost base by input channel, measured from the BEA input-output accounts with supply-chain content (labor still the model's own). */
     public const INPUT_COST_EXPOSURES = InputOutputExposures::SPECIALTY_INDUSTRIAL_MACHINERY;
 
-    // --- Labor Intensity ---
-    /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze. Application engineering and the field service network are carried between order cycles to defend the installed base. */
-    public const FIXED_COST_LABOR_SHARE = 0.55;
-
     // --- FX Exposure ---
     /** Share of revenue whose competitiveness moves with the trade-weighted exchange rate. Capital equipment is quoted internationally and competes with European and Japanese builders on price. */
     public const FX_REVENUE_EXPOSURE = 0.10;
@@ -294,7 +290,7 @@ class SpecialtyIndustrialMachineryBusinessModel extends HeavyManufacturingBusine
             'output_gap_ema',
             'supply_chain_pressure_index_ema',
             'tips_breakeven_ema',
-            'wage_growth_ema',
+            'real_wage_gap',
         ];
     }
 }

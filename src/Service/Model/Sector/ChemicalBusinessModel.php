@@ -54,10 +54,6 @@ class ChemicalBusinessModel extends StandardCorporateBusinessModel
         return [1.00, 1.08, 0.95, 0.97];
     }
 
-    // --- Labor Intensity ---
-    /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze. Plant operations are capital and feedstock intensive; payroll is a minority of overhead. */
-    public const FIXED_COST_LABOR_SHARE = 0.35;
-
     // --- Demand Transmission Lag ---
     /** Years for a move in the output gap to reach the order book. Offtake contracts and plant scheduling hold volumes steady for a couple of quarters after the cycle turns. */
     public const DEMAND_LAG_YEARS = 0.50;
@@ -399,7 +395,7 @@ class ChemicalBusinessModel extends StandardCorporateBusinessModel
             'output_gap_ema',
             'refining_crack_spread',
             'tips_breakeven_ema',
-            'wage_growth_ema',
+            'real_wage_gap',
         ];
     }
 }

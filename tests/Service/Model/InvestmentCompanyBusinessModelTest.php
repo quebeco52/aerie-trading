@@ -120,7 +120,7 @@ class InvestmentCompanyBusinessModelTest extends TestCase
         $this->assertLessThan($neutral, $this->model->getStructuralValuationDiscount($exuberant));
     }
 
-    private function neutralMacro(float $outputGapEma = 0.0, ?float $ppi = null, ?float $wage = null, ?float $sentiment = null): MacroStateDTO
+    private function neutralMacro(float $outputGapEma = 0.0, ?float $ppi = null, float $realWageGap = 0.0, ?float $sentiment = null): MacroStateDTO
     {
         $defaults = new MacroStateDTO();
 
@@ -131,7 +131,7 @@ class InvestmentCompanyBusinessModelTest extends TestCase
             macroCreditSpreadEma: MacroEngine::BASE_CREDIT_SPREAD,
             policyRateEma: MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION,
             producerPriceInflationEma: $ppi ?? $defaults->producerPriceInflationEma,
-            wageGrowthEma: $wage ?? $defaults->wageGrowthEma,
+            realWageGap: $realWageGap,
         );
     }
 
@@ -578,7 +578,7 @@ class InvestmentCompanyBusinessModelTest extends TestCase
      */
     public function testOnlyTheConsolidatedSubsidiariesPayForInputs(): void
     {
-        $costPush = $this->neutralMacro(ppi: 0.09, wage: 0.08);
+        $costPush = $this->neutralMacro(realWageGap: 0.03);
 
         $withPush = $this->model->computeActualFinancials(
             $this->brkw(), 100_000_000.0, 0.08, 3_000_000.0, 0.0, $costPush, $this->deterministicMath()
