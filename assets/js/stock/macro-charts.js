@@ -115,6 +115,8 @@ export function updateMacroCharts(reports, timeframe = currentMacroTimeframe) {
     let naturalRateData = [], termPremiumData = [], riskNeutralData = [], balanceSheetData = [];
     let balanceSheetAssetsData = [];
     let nominalGdpGrowthData = [], realGdpGrowthData = [], potentialGdpGrowthData = [], tfpGrowthData = [];
+    // MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE, published on the canvas so the page never keeps its own copy.
+    const structuralLaborGrowthPct = parseFloat(document.getElementById('macroGdpGrowthChart')?.dataset.structuralLaborGrowth ?? '0.005') * 100;
     let fciData = [], fciEmaData = [];
     let agriLagData = [], foodLagPctData = [], energySupplyDragData = [], freightSupplyDragData = [];
     let supercoreInflationData = [], coreGoodsInflationData = [];
@@ -300,34 +302,36 @@ export function updateMacroCharts(reports, timeframe = currentMacroTimeframe) {
 
         // Economic Growth Momentum & Solow-Swan Productivity Decomposition
         let inf = parseFloat(report.inflation_ema ?? report.inflation ?? 0.02) * 100;
-        let currentTfp = parseFloat(report.total_factor_productivity_index_ema ?? report.total_factor_productivity_index ?? report.totalFactorProductivityIndexEma ?? report.totalFactorProductivityIndex ?? 100.0);
         let currentGap = parseFloat(report.output_gap_ema ?? report.output_gap ?? 0.0) * 100;
 
-        // TFP trend growth is measured over a trailing year: annualizing a single quarter's log-difference of a
-        // diffusion with 2.2%/sqrt(yr) volatility prints +/-4% noise every tick and swamps the business cycle.
+        // Potential growth is read off the potential GDP the engine actually accumulated (labour force plus TREND
+        // TFP), over a trailing year. The TFP index's diffusion and jumps feed nothing in the engine, so growth
+        // computed from that index printed productivity booms and busts the economy never had.
         const tfpLookback = Math.min(4, index);
-        let prevTfp = tfpLookback > 0
-            ? parseFloat(slicedReports[index - tfpLookback].total_factor_productivity_index_ema ?? slicedReports[index - tfpLookback].total_factor_productivity_index ?? slicedReports[index - tfpLookback].totalFactorProductivityIndexEma ?? slicedReports[index - tfpLookback].totalFactorProductivityIndex ?? currentTfp)
-            : currentTfp / Math.exp(0.015);
-        const tfpSpanYears = tfpLookback > 0 ? tfpLookback * 0.25 : 1.0;
+        const rawPotential = report.potential_gdp_index ?? report.potentialGdpIndex ?? null;
+        const rawPrevPotential = tfpLookback > 0
+            ? (slicedReports[index - tfpLookback].potential_gdp_index ?? slicedReports[index - tfpLookback].potentialGdpIndex ?? null)
+            : null;
         let prevGap = index > 0
             ? parseFloat(slicedReports[index - 1].output_gap_ema ?? slicedReports[index - 1].output_gap ?? currentGap) * 100
             : currentGap;
 
-        // Trailing-year TFP productivity growth rate (%) - allowing negative values during recessions
-        let tfpGrowth = Math.max(-6.0, Math.min(8.0, (Math.log(Math.max(1.0, currentTfp) / Math.max(1.0, prevTfp)) / tfpSpanYears) * 100));
-
-        // Solow-Swan Real Potential GDP Growth (%): Structural Labor (0.5%) + TFP Growth
-        let potentialGrowth = 0.50 + tfpGrowth;
+        // Real Potential GDP Growth (%) and the trend TFP inside it (potential less structural labour-force growth).
+        let potentialGrowth = null;
+        let tfpGrowth = null;
+        if (rawPotential !== null && rawPrevPotential !== null && parseFloat(rawPotential) > 0 && parseFloat(rawPrevPotential) > 0) {
+            potentialGrowth = (Math.log(parseFloat(rawPotential) / parseFloat(rawPrevPotential)) / (tfpLookback * 0.25)) * 100;
+            tfpGrowth = potentialGrowth - structuralLaborGrowthPct;
+        }
 
         // Realized Cyclical Output Gap Shift Annualized (%): dGap / dt
         let cyclicalGapShift = (currentGap - prevGap) / 0.25;
 
         // Real GDP Annualized Growth Rate (%): Potential Growth + Cyclical Gap Momentum
-        let realGrowth = Math.max(-12.0, Math.min(15.0, potentialGrowth + cyclicalGapShift));
+        let realGrowth = potentialGrowth === null ? null : Math.max(-12.0, Math.min(15.0, potentialGrowth + cyclicalGapShift));
 
         // Nominal GDP Annualized Growth Rate (%): Real GDP Growth + Inflation
-        let nominalGrowth = realGrowth + inf;
+        let nominalGrowth = realGrowth === null ? null : realGrowth + inf;
 
         tfpGrowthData.push(tfpGrowth);
         potentialGdpGrowthData.push(potentialGrowth);
@@ -1086,7 +1090,7 @@ function renderMacroGdpGrowthChart(labels, nominalGdpGrowthData, realGdpGrowthDa
             pointRadius: labels.length > 50 ? 0 : 1
         },
         {
-            label: 'TFP Productivity Growth',
+            label: 'Trend TFP Growth',
             data: tfpGrowthData,
             borderColor: '#c084fc',
             backgroundColor: '#c084fc',

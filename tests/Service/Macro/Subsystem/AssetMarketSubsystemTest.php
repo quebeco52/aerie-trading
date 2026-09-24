@@ -109,7 +109,7 @@ class AssetMarketSubsystemTest extends TestCase
         $stateBoom = new MacroState();
         $stateBoom->residentialPropertyIndex = 130.0;
         $stateBoom->industrialMetalsIndex = 100.0;
-        $stateBoom->wageGrowth = 0.03;
+        $stateBoom->realWageGap = 0.0;
         $stateBoom->yield10yEma = 0.035;
         $stateBoom->macroCreditSpread = 0.015;
         $stateBoom->inflationEma = 0.025;
@@ -120,6 +120,46 @@ class AssetMarketSubsystemTest extends TestCase
         $this->assertGreaterThan(100.0, $stateBoom->housingStartsIndex, 'High Tobin Q and affordable mortgage finance must stimulate housing starts');
     }
 
+
+    /** Houses at their neutral price, built with materials and labour at their neutral real cost. */
+    private function neutralBuildingState(): MacroState
+    {
+        $state = $this->neutralHousingState();
+        $state->industrialMetalsIndex = MacroEngine::METALS_BASELINE;
+        $state->realWageGap = 0.0;
+        $state->sloosTighteningIndexEma = 0.0;
+        $state->creditToGdpGapEma = 0.0;
+        $state->housingStartsIndex = MacroEngine::HOUSING_STARTS_BASELINE;
+
+        return $state;
+    }
+
+    /**
+     * Replacement cost is priced in levels on both halves. With home prices, metals and the real wage all at their
+     * baselines Tobin's q is exactly one, so however fast nominal pay is growing it adds no building-cost premium;
+     * a real wage that stays above its productivity path does, for as long as it stays there.
+     */
+    public function testBuildingLabourIsARealWageLevelNotAWageGrowthRate(): void
+    {
+        $calm = $this->neutralBuildingState();
+        $calm->wageGrowth = 0.035;
+        $hotNominalPay = $this->neutralBuildingState();
+        $hotNominalPay->wageGrowth = 0.07;
+        $dearLabour = $this->neutralBuildingState();
+        $dearLabour->realWageGap = 0.04;
+
+        foreach ([$calm, $hotNominalPay, $dearLabour] as $state) {
+            $this->subsystem->calculateHousingStarts($state, MacroEngine::TARGET_INFLATION, 0.25);
+        }
+
+        $this->assertEqualsWithDelta($calm->housingStartsIndex, $hotNominalPay->housingStartsIndex, 1e-9, 'Wage growth alone is not a building cost.');
+        $this->assertLessThan($calm->housingStartsIndex, $dearLabour->housingStartsIndex, 'Dearer real labour raises replacement cost and lowers q.');
+
+        // Half the cost base is labour: a 4% real wage gap moves replacement cost by half of e^0.04 - 1.
+        $qShift = 1.0 / (0.5 + 0.5 * exp(0.04)) - 1.0;
+        $expected = AssetMarketSubsystem::HOUSING_STARTS_KAPPA * AssetMarketSubsystem::HOUSING_STARTS_Q_SENSITIVITY * $qShift * 0.25;
+        $this->assertEqualsWithDelta($expected, $dearLabour->housingStartsIndex - $calm->housingStartsIndex, 1e-9);
+    }
 
     public function testResidentialFundamentalPricesOffTheTenYearNotTheThirtyYear(): void
     {

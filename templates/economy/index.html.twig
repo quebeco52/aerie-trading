@@ -575,7 +575,7 @@
 									<h4 class="text-xs font-bold text-on-surface">Economic Growth, TFP & Recession Risk</h4>
 									<span class="text-4xs font-mono text-primary/80 bg-primary/10 px-1.5 py-0.5 rounded border border-primary/20 shrink-0">BEA: NIPA / NYFED</span>
 								</div>
-								<p class="text-3xs text-on-surface-variant truncate">Annualized real & nominal GDP growth momentum, potential capacity, TFP & 12M forward recession probability</p>
+								<p class="text-3xs text-on-surface-variant truncate">Annualized real & nominal GDP growth momentum, potential capacity, the trend TFP it grows on & 12M forward recession probability</p>
 							</div>
 						</div>
 						<div class="flex items-center gap-2 shrink-0">
@@ -590,7 +590,7 @@
 						</div>
 					</div>
 					<div class="chart-canvas-container h-80 md:h-85 w-full relative">
-						<canvas id="macroGdpGrowthChart"></canvas>
+						<canvas id="macroGdpGrowthChart" data-structural-labor-growth="{{ constant('App\\Service\\Macro\\MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE') }}"></canvas>
 					</div>
 				</div>
 

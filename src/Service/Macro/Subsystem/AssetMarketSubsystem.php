@@ -691,7 +691,10 @@ class AssetMarketSubsystem
     {
         $residentialPriceRatio = $state->residentialPropertyIndex / self::RESIDENTIAL_BASELINE;
         $metalsCostRatio = $state->industrialMetalsIndex / MacroEngine::METALS_BASELINE;
-        $laborCostRatio = 1.0 + $state->wageGrowth;
+        // Building labour priced as a LEVEL in the same real terms as the home price index: the real wage against its
+        // trend-productivity path. Read as 1 + wage growth, it charged a standing 1.75% premium in a calm economy and
+        // saw only the acceleration of pay, never a real wage that stayed high.
+        $laborCostRatio = exp($state->realWageGap);
         $replacementCostRatio = (0.50 * $metalsCostRatio) + (0.50 * $laborCostRatio);
 
         $userCost = $this->housingUserCost($state, $expectedInflation);
