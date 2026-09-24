@@ -763,8 +763,10 @@ class InitialMarket
             'capex_ratio' => 0.40,
             'target_payout_ratio' => 0.40,
             'dividendSpeed' => 0.02,
-            'fixed_cost_ratio' => 0.04,
-            'operating_margin' => 0.09,
+            'fixed_cost_ratio' => 0.025,
+            // A merchant refiner at a $22 crack: Valero's margin (-$0.41 + 0.598 x crack) less its ~$6.5/bbl of costs,
+            // over the refiner's own barrel revenue. Break-even near an $11.6 crack, as Valero ran in 2020.
+            'operating_margin' => 0.075,
             'public_float' => 0.90,
             'sam_ratio' => 0.35,
             'floating_debt_ratio' => 0.25,

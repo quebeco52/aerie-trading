@@ -240,6 +240,8 @@ readonly class MacroStateDTO
         public float $naturalGasPriceIndex = MacroEngine::NATURAL_GAS_BASELINE,
         public float $naturalGasPriceIndexEma = MacroEngine::NATURAL_GAS_BASELINE,
         public float $gasOilRatioLog = 0.0,
+        public float $goldPriceIndex = MacroEngine::GOLD_BASELINE,
+        public float $goldPriceIndexEma = MacroEngine::GOLD_BASELINE,
         public float $systemDepositBeta = MacroEngine::SYSTEM_DEPOSIT_BETA_BASE,
         public float $systemDepositBetaEma = MacroEngine::SYSTEM_DEPOSIT_BETA_BASE,
         public float $moneyMarketFundShare = MacroEngine::MMF_SHARE_BASE,

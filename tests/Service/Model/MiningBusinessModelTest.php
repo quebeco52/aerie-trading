@@ -49,10 +49,10 @@ final class MiningBusinessModelTest extends TestCase
         return new MacroStateDTO(...($macro + ['industrialMetalsIndexEma' => $metals]));
     }
 
-    private function report(MacroStateDTO $macro, float $z = 0.0): ActualFinancialsDTO
+    private function report(MacroStateDTO $macro, float $z = 0.0, string $ticker = 'GEN_MINER'): ActualFinancialsDTO
     {
         $stock = new Stock();
-        $stock->setTicker('CNDR');
+        $stock->setTicker($ticker);
 
         return $this->model->computeActualFinancials(
             $stock,
@@ -70,7 +70,7 @@ final class MiningBusinessModelTest extends TestCase
         // Unhedged: a 30% metals slump is a 30% revenue slump, and a rally is booked in full.
         $this->assertEqualsWithDelta(70.0, $this->report($this->macro(70.0))->actualRevenue, 1e-9);
         $this->assertEqualsWithDelta(140.0, $this->report($this->macro(140.0))->actualRevenue, 1e-9);
-        $this->assertEqualsWithDelta(140.0, $this->report($this->macro(140.0))->streamRevenue['metal_sales'], 1e-9);
+        $this->assertSame(['base_metals'], array_keys($this->report($this->macro(140.0))->streamRevenue), 'the default miner is a base-metals pure-play');
         $this->assertEqualsWithDelta(1.4, $this->report($this->macro(140.0))->kpis['realized_price_index'], 1e-9);
     }
 
@@ -106,7 +106,7 @@ final class MiningBusinessModelTest extends TestCase
     public function testTheDomesticCycleDoesNotMoveAMinesOutput(): void
     {
         $stock = new Stock();
-        $stock->setTicker('CNDR');
+        $stock->setTicker('GEN_MINER');
         $boom = $this->model->getMacroPhysics($stock, $this->macro(100.0, ['outputGapEma' => 0.03]));
         $bust = $this->model->getMacroPhysics($stock, $this->macro(100.0, ['outputGapEma' => -0.03]));
 
@@ -134,5 +134,57 @@ final class MiningBusinessModelTest extends TestCase
         $rally = $this->report($this->macro(150.0));
 
         $this->assertEqualsWithDelta(0.5 / MiningBusinessModel::BASE_COVERAGE_VISIBILITY, $rally->observableShockZ, 1e-9);
+    }
+
+    public function testCondorSellsADiversifiedBasketAtItsTunedMix(): void
+    {
+        $baseline = $this->report($this->macro(100.0), ticker: 'CNDR');
+
+        $this->assertEqualsWithDelta(100.0, $baseline->actualRevenue, 1e-9);
+        foreach (['base_metals' => 70.0, 'precious_metals' => 10.0, 'energy_minerals' => 12.0, 'fertilizer_minerals' => 8.0] as $stream => $revenue) {
+            $this->assertEqualsWithDelta($revenue, $baseline->streamRevenue[$stream], 1e-9, "{$stream} at baseline prices");
+        }
+    }
+
+    public function testEachStreamSellsAgainstItsOwnBenchmark(): void
+    {
+        $baseline = $this->report($this->macro(100.0), ticker: 'CNDR')->streamRevenue;
+        $moves = [
+            'precious_metals' => ['goldPriceIndexEma' => 150.0],
+            'energy_minerals' => ['naturalGasPriceIndexEma' => 150.0],
+            'fertilizer_minerals' => ['agriculturalCommodityIndexEma' => 150.0],
+        ];
+
+        foreach ($moves as $moved => $macro) {
+            $streams = $this->report($this->macro(100.0, $macro), ticker: 'CNDR')->streamRevenue;
+            foreach ($baseline as $stream => $revenue) {
+                $expected = $stream === $moved ? $revenue * 1.5 : $revenue;
+                $this->assertEqualsWithDelta($expected, $streams[$stream], 1e-9, "{$moved} moved: {$stream}");
+            }
+        }
+    }
+
+    public function testAGoldLegCushionsABaseMetalsBust(): void
+    {
+        // A downturn: metals slump while gold, bought against bad times and falling real rates, rallies.
+        $downturn = $this->macro(70.0, ['goldPriceIndexEma' => 115.0]);
+
+        $pureRevenue = $this->report($downturn)->actualRevenue;
+        $majorRevenue = $this->report($downturn, ticker: 'CNDR')->actualRevenue;
+
+        $this->assertEqualsWithDelta(70.0, $pureRevenue, 1e-9);
+        $this->assertEqualsWithDelta((70.0 * 0.70) + (10.0 * 1.15) + 12.0 + 8.0, $majorRevenue, 1e-9);
+        $this->assertGreaterThan($pureRevenue + 10.0, $majorRevenue);
+    }
+
+    public function testCostsFollowTheTonnesAcrossTheWholeMix(): void
+    {
+        // Every stream up 50%: the same tonnes cost the same dollars (less the grinding-media leg, priced off the metals complex).
+        $boom = $this->report($this->macro(150.0, ['goldPriceIndexEma' => 150.0, 'naturalGasPriceIndexEma' => 150.0, 'agriculturalCommodityIndexEma' => 150.0]), ticker: 'CNDR');
+        $cost = 0.15 * (1.0 + (MiningBusinessModel::INPUT_COST_EXPOSURES['metals'] * 0.5));
+
+        $this->assertEqualsWithDelta(150.0, $boom->actualRevenue, 1e-9);
+        $this->assertEqualsWithDelta($cost / 1.5, $boom->clampedMargin, 1e-9);
+        $this->assertEqualsWithDelta(100.0 * $cost, $boom->actualVariableCosts, 1e-9);
     }
 }

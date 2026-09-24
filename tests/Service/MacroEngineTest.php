@@ -249,6 +249,36 @@ class MacroEngineTest extends TestCase
         $this->assertGreaterThan(100.0, $result->industrialMetalsIndex, 'Positive output gap should drive positive supercycle drift in metals.');
     }
 
+    public function testGoldRalliesWhenRealRatesFallAndConfidenceBreaks(): void
+    {
+        // Long real yields two points under their resting level and consumers braced for bad times: the
+        // refuge's equilibrium sits well above its baseline, so the engine's step moves the price up to it.
+        $existingState = [
+            'yield10y' => 0.030,
+            'yield10y_ema' => 0.030,
+            'tips_breakeven' => 0.022,
+            'tips_breakeven_ema' => 0.022,
+            'consumer_sentiment_index' => 70.0,
+            'consumer_sentiment_index_ema' => 70.0,
+            'gold_price_index' => 100.0,
+            'gold_price_index_ema' => 100.0,
+            'inflation' => 0.02,
+            'inflation_ema' => 0.02,
+            'policy_rate' => 0.02,
+            'policy_rate_ema' => 0.02,
+        ];
+
+        $this->redisMock->expects($this->once())
+            ->method('get')
+            ->with('macroeconomic_state')
+            ->willReturn(json_encode($existingState));
+        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
+
+        $result = $this->engine->updateMacroState(0.50);
+
+        $this->assertGreaterThan(105.0, $result->goldPriceIndex, 'Falling real rates and pessimism must lift gold.');
+    }
+
     public function testGovernmentSpendingRisesDuringRecession(): void
     {
         $existingState = [

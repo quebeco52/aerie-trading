@@ -10,6 +10,7 @@ let macroLaborChartInstance = null;
 let macroLaborCreditChartInstance = null;
 let macroWealthEffectChartInstance = null;
 let macroCommoditiesChartInstance = null;
+let macroCrackSpreadChartInstance = null;
 let macroPropertyChartInstance = null;
 let macroTradeLogisticsChartInstance = null;
 let macroSentimentChartInstance = null;
@@ -60,7 +61,9 @@ function updateMacroHud(d) {
     setHud('hud-macroInterbankLiquidityChart', lastTed !== undefined ? `TED: ${lastTed.toFixed(0)} bps` : 'TED: -');
     setHud('hud-macroPropertyChart', `CRE: ${last(d.creEmaData).toFixed(1)} | Resi: ${last(d.residentialEmaData).toFixed(1)} | Starts: ${last(d.housingStartsData).toFixed(1)}`);
     setHud('hud-macroSentimentChart', `Sent: ${last(d.sentimentData).toFixed(0)} | M&A: ${last(d.dealActivityData).toFixed(0)}`);
-    setHud('hud-macroCommoditiesChart', `Energy: ${last(d.energyPriceData).toFixed(1)} | Gas: ${last(d.naturalGasPriceData).toFixed(1)} | Crack: $${last(d.crackSpreadData).toFixed(1)}`);
+    const lastGold = [...d.goldPriceData].reverse().find(v => v !== null && !isNaN(v));
+    setHud('hud-macroCommoditiesChart', `Energy: ${last(d.energyPriceData).toFixed(1)} | Metals: ${last(d.metalsEmaData).toFixed(1)} | Gold: ${lastGold === undefined ? '-' : lastGold.toFixed(1)} | Gas: ${last(d.naturalGasPriceData).toFixed(1)}`);
+    setHud('hud-macroCrackSpreadChart', `Crack: $${last(d.crackSpreadData).toFixed(2)}/bbl`);
     setHud('hud-macroTradeLogisticsChart', `FX: ${last(d.fxEmaData).toFixed(1)} | Freight: ${last(d.freightEmaData).toFixed(1)} | GSCPI: ${last(d.gscpiData) >= 0 ? '+' : ''}${last(d.gscpiData).toFixed(2)}σ`);
     setHud('hud-macroGovtSpendingChart', `Tax: ${last(d.taxData).toFixed(1)}% | Debt: ${last(d.sovereignDebtData).toFixed(1)}% | Spread: ${last(d.sovereignRiskSpreadData).toFixed(0)} bps | Deficit: ${last(d.primaryDeficitData) >= 0 ? '+' : ''}${last(d.primaryDeficitData).toFixed(1)}%`);
     setHud('hud-macroTermPremiumChart', `10Y: ${last(d.yield10yData).toFixed(2)}% | Term: ${last(d.termPremiumData) >= 0 ? '+' : ''}${last(d.termPremiumData).toFixed(2)}%`);
@@ -118,7 +121,7 @@ export function updateMacroCharts(reports, timeframe = currentMacroTimeframe) {
     let corporateDefaultPctData = [], corporateDefaultBpsData = [];
     let sloosData = [], dealActivityData = [];
     let pmiData = [], ppiData = [], tradeBalanceData = [], housingStartsData = [], moneySupplyGrowthData = [];
-    let naturalGasPriceData = [], sovereignRiskSpreadData = [], primaryDeficitData = [];
+    let naturalGasPriceData = [], goldPriceData = [], sovereignRiskSpreadData = [], primaryDeficitData = [];
     let householdDsrData = [], householdDtiData = [], creditToGdpGapData = [], ccybRateData = [];
     let foreignOutputGapData = [], foreignPolicyRateData = [], globalDemandGapData = [];
     let depositBetaData = [], mmfShareData = [];
@@ -391,6 +394,10 @@ export function updateMacroCharts(reports, timeframe = currentMacroTimeframe) {
         let rawNg = report.natural_gas_price_index_ema ?? report.natural_gas_price_index ?? report.naturalGasPriceIndexEma ?? report.naturalGasPriceIndex ?? 100.0;
         naturalGasPriceData.push(parseFloat(rawNg));
 
+        // Recorded only since the gold index joined the macro: older quarters stay gaps, not a flat 100.
+        const rawGold = report.gold_price_index_ema ?? report.gold_price_index ?? report.goldPriceIndexEma ?? report.goldPriceIndex ?? null;
+        goldPriceData.push(rawGold === null ? null : parseFloat(rawGold));
+
         let rawSovSpread = report.sovereign_risk_spread_ema ?? report.sovereign_risk_spread ?? report.sovereignRiskSpreadEma ?? report.sovereignRiskSpread ?? 0.0;
         sovereignRiskSpreadData.push(parseFloat(rawSovSpread) * 10000);
 
@@ -439,7 +446,7 @@ export function updateMacroCharts(reports, timeframe = currentMacroTimeframe) {
         inventoryStockGapData, faitCumulativeGapData,
         capacityUtilizationData, fxEmaData, freightEmaData,
         pmiData, ppiData, tradeBalanceData, housingStartsData, moneySupplyGrowthData,
-        naturalGasPriceData, sovereignRiskSpreadData, primaryDeficitData,
+        naturalGasPriceData, goldPriceData, metalsEmaData, sovereignRiskSpreadData, primaryDeficitData,
         householdDsrData, householdDtiData, creditToGdpGapData, ccybRateData,
         foreignOutputGapData, foreignPolicyRateData, globalDemandGapData,
         depositBetaData, mmfShareData
@@ -465,7 +472,8 @@ export function updateMacroCharts(reports, timeframe = currentMacroTimeframe) {
     const firstWealthRatio = equityWealthRatioData.find(v => v !== null && v > 0);
     const rebase = (arr) => firstWealthRatio ? arr.map(v => v === null ? null : (v / firstWealthRatio) * 100.0) : arr;
     renderWhenVisible('macroWealthEffectChart', () => renderMacroWealthEffectChart(labels, rebase(equityWealthRatioData), rebase(equityWealthTrendData), equityWealthGapData, housingWealthGapData, outputGapData));
-    renderWhenVisible('macroCommoditiesChart', () => renderMacroCommoditiesChart(labels, energyPriceData, metalsEmaData, agriEmaData, crackSpreadData, naturalGasPriceData));
+    renderWhenVisible('macroCommoditiesChart', () => renderMacroCommoditiesChart(labels, energyPriceData, metalsEmaData, agriEmaData, naturalGasPriceData, goldPriceData));
+    renderWhenVisible('macroCrackSpreadChart', () => renderMacroCrackSpreadChart(labels, crackSpreadData));
     renderWhenVisible('macroPropertyChart', () => renderMacroPropertyChart(labels, creEmaData, residentialEmaData, housingStartsData));
     renderWhenVisible('macroTradeLogisticsChart', () => renderMacroTradeLogisticsChart(labels, fxEmaData, freightEmaData, gscpiData));
     renderWhenVisible('macroSentimentChart', () => renderMacroSentimentChart(labels, sentimentData, retailDefaultData, dealActivityData, corporateDefaultPctData));
@@ -1236,101 +1244,98 @@ function renderMacroBalanceSheetChart(labels, balanceSheetAssetsData, balanceShe
     });
 }
 
-function renderMacroCommoditiesChart(labels, energyPriceData, metalsEmaData, agriEmaData, crackSpreadData = [], naturalGasPriceData = []) {
+// Commodity indices share one base-100 axis. Colours are the reference categorical palette's first five
+// dark-mode slots in its fixed order (validated adjacent-pair on this surface): gold takes the yellow slot.
+const COMMODITY_SERIES_COLORS = {
+    energy: '#3987e5',
+    metals: '#d95926',
+    agri: '#199e70',
+    gold: '#c98500',
+    gas: '#d55181',
+};
+
+function commodityLine(label, data, color, pointsHidden) {
+    return {
+        label,
+        data,
+        borderColor: color,
+        backgroundColor: color,
+        borderWidth: 2,
+        tension: 0.2,
+        pointRadius: pointsHidden ? 0 : 2,
+        spanGaps: false,
+    };
+}
+
+function renderMacroCommoditiesChart(labels, energyPriceData, metalsEmaData, agriEmaData, naturalGasPriceData = [], goldPriceData = []) {
     const canvas = document.getElementById('macroCommoditiesChart');
     if (!canvas) return;
     macroCommoditiesChartInstance = destroyChartInstance(macroCommoditiesChartInstance);
     const ctx = canvas.getContext('2d');
+    const dense = labels.length > 50;
 
     const datasets = [
-        {
-            label: 'Energy Price Index',
-            data: energyPriceData,
-            borderColor: '#eab308',
-            backgroundColor: 'rgba(234, 179, 8, 0.15)',
-            borderWidth: 2,
-            tension: 0.2,
-            pointRadius: labels.length > 50 ? 0 : 2,
-            yAxisID: 'y'
-        },
-        {
-            label: 'Industrial Metals Index',
-            data: metalsEmaData,
-            borderColor: '#fb923c',
-            backgroundColor: 'rgba(251, 146, 60, 0.15)',
-            borderWidth: 2,
-            tension: 0.2,
-            pointRadius: labels.length > 50 ? 0 : 2,
-            yAxisID: 'y'
-        },
-        {
-            label: 'Agricultural Commodities',
-            data: agriEmaData,
-            borderColor: '#a3e635',
-            backgroundColor: 'rgba(163, 230, 53, 0.15)',
-            borderWidth: 2,
-            tension: 0.2,
-            pointRadius: labels.length > 50 ? 0 : 2,
-            yAxisID: 'y'
-        }
+        commodityLine('Energy Price Index', energyPriceData, COMMODITY_SERIES_COLORS.energy, dense),
+        commodityLine('Industrial Metals Index', metalsEmaData, COMMODITY_SERIES_COLORS.metals, dense),
+        commodityLine('Agricultural Commodities', agriEmaData, COMMODITY_SERIES_COLORS.agri, dense),
     ];
-
-    if (naturalGasPriceData && naturalGasPriceData.length > 0) {
-        datasets.push({
-            label: 'Natural Gas Index',
-            data: naturalGasPriceData,
-            borderColor: '#06b6d4',
-            backgroundColor: 'rgba(6, 182, 212, 0.15)',
-            borderWidth: 1.8,
-            borderDash: [3, 2],
-            tension: 0.2,
-            pointRadius: labels.length > 50 ? 0 : 2,
-            yAxisID: 'y'
-        });
+    // Gold is recorded only since it joined the macro; an older window has no gold line rather than a flat 100.
+    if (goldPriceData && goldPriceData.some(v => v !== null)) {
+        datasets.push(commodityLine('Gold Index', goldPriceData, COMMODITY_SERIES_COLORS.gold, dense));
     }
-
-    if (crackSpreadData && crackSpreadData.length > 0) {
-        datasets.push({
-            label: '3:2:1 Crack Spread ($/bbl)',
-            data: crackSpreadData,
-            borderColor: '#38bdf8',
-            backgroundColor: 'rgba(56, 189, 248, 0.15)',
-            borderWidth: 2,
-            borderDash: [4, 4],
-            tension: 0.2,
-            pointRadius: labels.length > 50 ? 0 : 2,
-            yAxisID: 'y1'
-        });
+    if (naturalGasPriceData && naturalGasPriceData.length > 0) {
+        datasets.push(commodityLine('Natural Gas Index', naturalGasPriceData, COMMODITY_SERIES_COLORS.gas, dense));
     }
 
     macroCommoditiesChartInstance = new Chart(ctx, {
         type: 'line',
-        data: {
-            labels: labels,
-            datasets: datasets
-        },
+        data: { labels, datasets },
         options: {
             responsive: true, maintainAspectRatio: false,
             interaction: { mode: 'index', intersect: false },
             plugins: {
                 legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } },
-                tooltip: {
-                    callbacks: {
-                        label: (ctx) => `${ctx.dataset.label}: ${ctx.dataset.yAxisID === 'y1' ? '$' + ctx.raw.toFixed(2) : ctx.raw.toFixed(2)}`
-                    }
-                }
+                tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${ctx.raw === null ? '-' : ctx.raw.toFixed(1)}` } }
             },
             scales: {
                 y: {
                     grid: { color: 'rgba(255, 255, 255, 0.05)' },
-                    ticks: { callback: (val) => val },
-                    title: { display: true, text: 'Commodity Index (Base 100)' }
+                    title: { display: true, text: 'Index (Base 100)' }
                 },
-                y1: {
-                    position: 'right',
-                    grid: { drawOnChartArea: false },
+                x: {
+                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    ticks: { maxTicksLimit: 8 }
+                }
+            }
+        }
+    });
+}
+
+/** The 3:2:1 refining crack spread in dollars a barrel, on its own axis rather than a second scale beside the indices. */
+function renderMacroCrackSpreadChart(labels, crackSpreadData) {
+    const canvas = document.getElementById('macroCrackSpreadChart');
+    if (!canvas) return;
+    macroCrackSpreadChartInstance = destroyChartInstance(macroCrackSpreadChartInstance);
+    const ctx = canvas.getContext('2d');
+
+    macroCrackSpreadChartInstance = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels,
+            datasets: [commodityLine('3:2:1 Crack Spread', crackSpreadData, COMMODITY_SERIES_COLORS.energy, labels.length > 50)]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+                legend: { display: false },
+                tooltip: { callbacks: { label: (ctx) => `Crack spread: $${ctx.raw.toFixed(2)}/bbl` } }
+            },
+            scales: {
+                y: {
+                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
                     ticks: { callback: (val) => '$' + val },
-                    title: { display: true, text: 'Crack Spread ($/bbl)' }
+                    title: { display: true, text: '$ per barrel' }
                 },
                 x: {
                     grid: { color: 'rgba(255, 255, 255, 0.05)' },
@@ -2871,7 +2876,7 @@ export function resizeMacroCharts() {
     const instances = [
         macroEconomyChartInstance, macroRatesChartInstance, macroMortgageChartInstance,
         macroRiskChartInstance, macroLaborChartInstance, macroLaborCreditChartInstance, macroWealthEffectChartInstance,
-        macroCommoditiesChartInstance, macroPropertyChartInstance, macroTradeLogisticsChartInstance,
+        macroCommoditiesChartInstance, macroCrackSpreadChartInstance, macroPropertyChartInstance, macroTradeLogisticsChartInstance,
         macroSentimentChartInstance, macroGovtSpendingChartInstance, macroInterbankLiquidityChartInstance,
         macroTermPremiumChartInstance, macroGdpGrowthChartInstance, macroBalanceSheetChartInstance,
         macroFciChartInstance, macroCostPushChartInstance,
@@ -2898,6 +2903,7 @@ export function destroyMacroCharts() {
     macroLaborCreditChartInstance = destroyChartInstance(macroLaborCreditChartInstance);
     macroWealthEffectChartInstance = destroyChartInstance(macroWealthEffectChartInstance);
     macroCommoditiesChartInstance = destroyChartInstance(macroCommoditiesChartInstance);
+    macroCrackSpreadChartInstance = destroyChartInstance(macroCrackSpreadChartInstance);
     macroPropertyChartInstance = destroyChartInstance(macroPropertyChartInstance);
     macroTradeLogisticsChartInstance = destroyChartInstance(macroTradeLogisticsChartInstance);
     macroSentimentChartInstance = destroyChartInstance(macroSentimentChartInstance);

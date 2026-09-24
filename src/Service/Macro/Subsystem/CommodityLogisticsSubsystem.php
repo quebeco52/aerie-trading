@@ -66,6 +66,28 @@ class CommodityLogisticsSubsystem
     /** Log volatility of a gas squeeze. */
     public const GAS_JUMP_VOL = 0.15;
 
+    // --- Gold (Barsky, Epstein, Lafont-Mueller & Yoo 2021, Chicago Fed Letter 464) ---
+    /** Log change in the real gold price per unit of real ten-year yield: -0.131 per percentage point (annual levels regression, 1971-2019). */
+    public const GOLD_REAL_RATE_SEMI_ELASTICITY = -13.1;
+    /** Log change in the real gold price per unit of ten-year expected inflation: +0.365 per percentage point, the inflation-hedge motive. */
+    public const GOLD_INFLATION_EXPECTATION_SEMI_ELASTICITY = 36.5;
+    /** Log change in the real gold price per percentage point of survey respondents expecting bad times over the next five years. */
+    public const GOLD_PESSIMISM_SEMI_ELASTICITY = 0.012;
+    /** Percentage points of pessimistic respondents per point of consumer sentiment: the survey's 30-to-60% pessimism swing matched to the sentiment index's ~57-point range over the same years (an approximation; both series come from the Michigan survey). */
+    public const PESSIMISM_PER_SENTIMENT_POINT = 0.53;
+    /** Real ten-year yield the engine rests at (measured mean over a 49-year run), so the index centres on its baseline rather than on a level the engine never visits. */
+    public const GOLD_REAL_RATE_ANCHOR = 0.028;
+    /** Ten-year expected inflation the engine rests at (measured mean over the same run). */
+    public const GOLD_INFLATION_EXPECTATION_ANCHOR = 0.022;
+    /** Annual reversion toward the equilibrium: the levels regression's Durbin-Watson of 0.98 is a residual autocorrelation of 1 - DW/2 = 0.51 a year, so kappa = -ln 0.51. */
+    public const GOLD_MEAN_REVERSION = 0.67;
+    /** Annual log volatility of the gold price: its annualised volatility has stayed within 10-18% on most days since 1971 (World Gold Council). */
+    public const GOLD_VOLATILITY = 0.15;
+    /** Floor on the gold index. */
+    public const MIN_GOLD_INDEX = 20.0;
+    /** Ceiling on the gold index. */
+    public const MAX_GOLD_INDEX = 500.0;
+
     // --- Theory of Storage & Commodity Buffer Stocks (Working 1949, Litzenberger-Rabinowitz 1995) ---
     /** Critical minimum physical buffer stock floor before extreme convenience yield spike. */
     public const COMMODITY_MIN_BUFFER_STOCK = 50.0;
@@ -124,11 +146,15 @@ class CommodityLogisticsSubsystem
     /** Stochastic volatility of spot charter market fluctuations. */
     public const FREIGHT_VOLATILITY = 0.25;
 
-    // --- 3:2:1 Refining Crack Spread & Distillate Margins (Bourgeon et al. 1998) ---
-    /** Mean-reversion speed (kappa) of refining crack margins toward baseline equilibrium. */
-    public const CRACK_SPREAD_KAPPA = 1.50;
-    /** Stochastic volatility of spot crack margins. */
-    public const CRACK_SPREAD_SIGMA = 0.25;
+    // --- 3:2:1 Refining Crack Spread (EIA Gulf Coast gasoline & ULSD vs WTI, monthly 2010-2024) ---
+    /** Annual mean reversion of the de-seasonalised log crack: its monthly autocorrelation of 0.889 is kappa = -12 ln 0.889 (half-life ~6 months). */
+    public const CRACK_SPREAD_KAPPA = 1.41;
+    /** Annual log volatility of the crack: the de-seasonalised log dispersion of 0.444 times sqrt(2 kappa). */
+    public const CRACK_SPREAD_SIGMA = 0.75;
+    /** Seasonal swing of the crack around its annual mean: the first harmonic of the monthly profile (driving season against the autumn trough). */
+    public const CRACK_SEASONAL_AMPLITUDE = 0.146;
+    /** Year fraction at which the seasonal crack peaks (early June). */
+    public const CRACK_SEASONAL_PEAK = 0.46;
 
     public function __construct(
         private readonly MathUtility $mathUtility
@@ -295,6 +321,52 @@ class CommodityLogisticsSubsystem
     }
 
     /**
+     * The real gold price the market clears at given long real rates, inflation expectations and how bad the
+     * public thinks the next five years will be (Barsky, Epstein, Lafont-Mueller & Yoo 2021, annual levels).
+     *
+     * Gold pays nothing, so a higher real yield raises what holding it forgoes; it is bought against inflation
+     * and against bad times. The world-GDP trend in their regression is carried here by the firms' capital,
+     * and its cyclical part is insignificant in their quarterly news regression, so it is left out.
+     */
+    public static function resolveGoldEquilibriumPrice(float $realTenYearYield, float $expectedInflation, float $consumerSentiment): float
+    {
+        $pessimism = -self::PESSIMISM_PER_SENTIMENT_POINT * ($consumerSentiment - MacroEngine::SENTIMENT_TREND_LEVEL);
+        $logDeviation = (self::GOLD_REAL_RATE_SEMI_ELASTICITY * ($realTenYearYield - self::GOLD_REAL_RATE_ANCHOR))
+            + (self::GOLD_INFLATION_EXPECTATION_SEMI_ELASTICITY * ($expectedInflation - self::GOLD_INFLATION_EXPECTATION_ANCHOR))
+            + (self::GOLD_PESSIMISM_SEMI_ELASTICITY * $pessimism);
+
+        return MacroEngine::GOLD_BASELINE * exp($logDeviation);
+    }
+
+    /**
+     * Gold as a log mean-reverting price around its fundamental equilibrium, stepped with the exact Schwartz
+     * (1997) transition. Deviations carry half their size into the next year, as the residuals of the levels
+     * regression do, which is what lets news about rates and confidence reach the price over quarters.
+     *
+     * @param MacroState $state Current macroeconomic state.
+     * @param float      $dt    Time increment in years.
+     */
+    public function calculateGoldPriceIndex(MacroState $state, float $dt): void
+    {
+        $equilibrium = self::resolveGoldEquilibriumPrice(
+            $state->yield10yEma - $state->tipsBreakevenEma,
+            $state->tipsBreakevenEma,
+            $state->consumerSentimentIndexEma
+        );
+
+        $gold = $this->mathUtility->calculateSchwartz1Factor(
+            currentPrice: $state->goldPriceIndex > 0.0 ? $state->goldPriceIndex : MacroEngine::GOLD_BASELINE,
+            kappa: self::GOLD_MEAN_REVERSION,
+            theta: $equilibrium,
+            sigma: self::GOLD_VOLATILITY,
+            dt: $dt,
+            dW: $this->mathUtility->generateStandardNormal()
+        );
+
+        $state->goldPriceIndex = max(self::MIN_GOLD_INDEX, min(self::MAX_GOLD_INDEX, $gold));
+    }
+
+    /**
      * Schwartz-Smith (2000) Two-Factor Commodity Model for Industrial Metals (Copper/Aluminum).
      *
      * Decomposes metals prices into short-term transitory market deviations (chi) and long-term
@@ -412,29 +484,39 @@ class CommodityLogisticsSubsystem
     }
 
     /**
-     * 3:2:1 Refining Crack Spread Model (Bourgeon et al. 1998, U.S. EIA).
+     * 3:2:1 refining crack spread: a de-seasonalised log mean-reverting margin times the driving-season cycle,
+     * the same split of stochastic and deterministic seasonal parts the gas index uses (Pilipovic 1998).
      *
-     * Evaluates gross refining margin per barrel ($/bbl) for refined products over crude oil feedstocks
-     * based on cyclical demand and physical energy inventory tightness.
+     * The cycle multiplies the price rather than its target: a margin that reverts with a six-month half-life
+     * would otherwise carry barely a fifth of a yearly swing. The stored spread carries the season, so the
+     * previous step's factor is divided back out before the stochastic part is stepped.
      *
      * @param MacroState $state Current macroeconomic state.
      * @param float      $dt    Time increment in years.
      */
     public function calculateRefiningCrackSpread(MacroState $state, float $dt): void
     {
-        $dW = $this->mathUtility->generateStandardNormal();
         $currentCrack = $state->refiningCrackSpread > 0.0 ? $state->refiningCrackSpread : MacroEngine::CRACK_SPREAD_BASELINE;
+        $baseCrack = $currentCrack / self::resolveCrackSeasonalFactor($state->totalTime - $dt);
 
-        $state->refiningCrackSpread = $this->mathUtility->calculateRefiningCrackSpreadStep(
-            currentCrack: $currentCrack,
+        $nextBase = $this->mathUtility->calculateRefiningCrackSpreadStep(
+            currentCrack: $baseCrack,
             outputGap: $state->globalDemandGapEma,
             energyInventoryIndex: $state->energyInventoryIndexEma,
             dt: $dt,
-            dW: $dW,
+            dW: $this->mathUtility->generateStandardNormal(),
             baselineCrack: MacroEngine::CRACK_SPREAD_BASELINE,
             kappa: self::CRACK_SPREAD_KAPPA,
             sigma: self::CRACK_SPREAD_SIGMA
         );
+
+        $state->refiningCrackSpread = max(4.0, min(80.0, $nextBase * self::resolveCrackSeasonalFactor($state->totalTime)));
+    }
+
+    /** The driving-season multiplier on the crack at a point in simulated time (years). */
+    public static function resolveCrackSeasonalFactor(float $totalTime): float
+    {
+        return 1.0 + (self::CRACK_SEASONAL_AMPLITUDE * cos(2.0 * M_PI * (fmod($totalTime, 1.0) - self::CRACK_SEASONAL_PEAK)));
     }
 
     /**

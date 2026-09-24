@@ -417,6 +417,12 @@ class MacroReport
     private ?string $gasOilRatioLog = null;
 
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $goldPriceIndex = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $goldPriceIndexEma = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
     private ?string $sovereignRiskSpread = null;
 
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]

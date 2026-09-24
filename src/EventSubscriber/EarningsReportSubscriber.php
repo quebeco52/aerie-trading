@@ -696,13 +696,22 @@ class EarningsReportSubscriber implements EventSubscriberInterface
                 break;
 
             case 'mining':
-                // Tonnes times the benchmark: the metals price is the revenue driver, diesel and power the cost one.
-                $drivers[] = [
-                    'label'  => 'Industrial Metals Benchmark Price',
-                    'impact' => round(($macro->industrialMetalsIndexEma / MacroEngine::METALS_BASELINE) - 1.0, 4),
-                    'type'   => 'macro',
-                    'fields' => ['industrial_metals_index_ema'],
-                ];
+                // Tonnes times each stream's own benchmark; diesel and power are the cost driver across all of them.
+                $benchmark = [
+                    'base_metals' => ['Industrial Metals Benchmark Price', 'industrial_metals_index_ema'],
+                    'precious_metals' => ['Gold Price', 'gold_price_index_ema'],
+                    'energy_minerals' => ['Coal Priced Against Natural Gas', 'natural_gas_price_index_ema'],
+                    'fertilizer_minerals' => ['Potash Priced Against Crop Prices', 'agricultural_commodity_index_ema'],
+                ][$streamKey] ?? null;
+                $miner = Sectors::getBusinessModelStrategy('mining');
+                if ($benchmark !== null && $miner instanceof MiningBusinessModel) {
+                    $drivers[] = [
+                        'label'  => $benchmark[0],
+                        'impact' => round($miner->resolveStreamPriceRelatives($macro)[$streamKey] - 1.0, 4),
+                        'type'   => 'macro',
+                        'fields' => [$benchmark[1]],
+                    ];
+                }
                 $haulageEnergy = $macro->energyCostPushLag / MacroEngine::ENERGY_COST_PUSH_TRANSMISSION;
                 if (abs($haulageEnergy) >= 0.01) {
                     $drivers[] = [

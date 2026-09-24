@@ -173,6 +173,10 @@ class MacroEngine
     /** Baseline industrial metals index value (neutral equilibrium). */
     public const METALS_BASELINE = 100.0;
 
+    // --- Gold (Barsky, Epstein, Lafont-Mueller & Yoo 2021) ---
+    /** Baseline real gold price index: where gold settles with real rates, inflation expectations and confidence at their resting levels. */
+    public const GOLD_BASELINE = 100.0;
+
     // --- GOVERNMENT SPENDING & FISCAL APPROPRIATIONS ---
     /** Baseline government spending index (neutral peacetime budget). */
     public const GOVT_SPENDING_BASELINE = 100.0;
@@ -520,6 +524,7 @@ class MacroEngine
         $this->assetSubsystem->calculateExchangeRate($state, $dt);
         $this->assetSubsystem->calculateTradeBalance($state, $dt);
         $this->commoditySubsystem->calculateIndustrialMetalsIndex($state, $dt);
+        $this->commoditySubsystem->calculateGoldPriceIndex($state, $dt);
         $this->creditFiscalSubsystem->calculateGovernmentSpending($state, $dt);
         $this->assetSubsystem->calculateCommercialPropertyIndex($state, $dt);
         $this->creditFiscalSubsystem->calculateHouseholdCredit($state, $dt);

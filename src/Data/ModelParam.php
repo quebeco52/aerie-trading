@@ -98,6 +98,14 @@ enum ModelParam: string
     case LiquidsRevenueShare = 'liquids_revenue_share';
     /** Share of a producer's oil volume sold forward through its rolling four-quarter swap ladder. */
     case OilHedgeRatio = 'oil_hedge_ratio';
+    /** Share of a miner's revenue at baseline prices from base and ferrous metals (copper, iron ore, nickel, aluminium). */
+    case BaseMetalsWeight = 'base_metals_weight';
+    /** Share of a miner's revenue at baseline prices from precious metals, primary or by-product (gold, silver). */
+    case PreciousMetalsWeight = 'precious_metals_weight';
+    /** Share of a miner's revenue at baseline prices from energy minerals (thermal and metallurgical coal). */
+    case EnergyMineralsWeight = 'energy_minerals_weight';
+    /** Share of a miner's revenue at baseline prices from fertilizer minerals (potash, phosphate). */
+    case FertilizerMineralsWeight = 'fertilizer_minerals_weight';
     case OemEquipmentWeight = 'oem_equipment_weight';
     case AftermarketMroWeight = 'aftermarket_mro_weight';
     case ContractOemWeight = 'contract_oem_weight';

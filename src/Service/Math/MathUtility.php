@@ -2338,21 +2338,21 @@ class MathUtility
     }
 
     /**
-     * Models the 3:2:1 Refining Crack Spread Index (Bourgeon et al. 1998, U.S. EIA).
+     * One step of the de-seasonalised 3:2:1 refining crack spread: a Schwartz (1997) log mean-reverting margin
+     * around a target set by demand and physical inventory tightness. Margins are right-skewed and cannot go
+     * negative across a sustained run, so the log is what reverts. The exact transition settles at
+     * target x exp(-sigma^2 / 4 kappa), so the target is lifted by that factor to put the stationary mean on it.
+     *   Target = baseline * (1 + gapSens * outputGap) + inventory tightness add-on
      *
-     * Evaluates gross refining margin per barrel ($/bbl) for refined products over crude oil feedstocks
-     * using Schwartz (1997) mean-reverting dynamics driven by demand cycles and physical inventory tightness:
-     *   Target = baseline * (1 + gapSens * outputGap) + convenienceAddOn
-     *
-     * @param float $currentCrack          Current crack spread in $/bbl.
+     * @param float $currentCrack          Current de-seasonalised crack spread in $/bbl.
      * @param float $outputGap             Current macroeconomic output gap.
      * @param float $energyInventoryIndex  Physical energy buffer inventory index.
      * @param float $dt                    Time increment in years.
      * @param float $dW                    Standard normal random shock.
      * @param float $baselineCrack         Neutral long-run crack spread (~$22/bbl).
-     * @param float $kappa                 Speed of mean reversion.
-     * @param float $sigma                 Volatility of crack margins.
-     * @return float Updated refining crack spread in $/bbl clamped between $4.00 and $80.00.
+     * @param float $kappa                 Speed of mean reversion of the log crack.
+     * @param float $sigma                 Volatility of the log crack.
+     * @return float Updated de-seasonalised crack spread in $/bbl clamped between $4.00 and $80.00.
      */
     public function calculateRefiningCrackSpreadStep(
         float $currentCrack,
@@ -2361,16 +2361,15 @@ class MathUtility
         float $dt,
         float $dW,
         float $baselineCrack = 22.0,
-        float $kappa = 1.50,
-        float $sigma = 0.25
+        float $kappa = 1.41,
+        float $sigma = 0.75
     ): float {
         $demandFactor = 1.0 + (1.20 * $outputGap);
         $inventoryTightness = max(0.0, (100.0 - $energyInventoryIndex) / 100.0) * 15.0;
         $targetCrack = ($baselineCrack * max(0.30, $demandFactor)) + $inventoryTightness;
+        $meanCompensatedTarget = $targetCrack * exp(($sigma * $sigma) / (4.0 * max(0.0001, $kappa)));
 
-        $drift = $kappa * ($targetCrack - $currentCrack) * $dt;
-        $diffusion = $sigma * $currentCrack * sqrt($dt) * $dW;
-        $newCrack = $currentCrack + $drift + $diffusion;
+        $newCrack = $this->calculateSchwartz1Factor(max(0.01, $currentCrack), $kappa, $meanCompensatedTarget, $sigma, $dt, $dW);
 
         return max(4.0, min(80.0, $newCrack));
     }

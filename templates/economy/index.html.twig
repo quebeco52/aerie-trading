@@ -414,10 +414,10 @@
 							</div>
 							<div class="min-w-0">
 								<div class="flex items-center gap-2 flex-wrap">
-									<h4 class="text-xs font-bold text-on-surface">Commodity Indices, Natural Gas & 3:2:1 Crack Spread</h4>
-									<span class="text-4xs font-mono text-primary/80 bg-primary/10 px-1.5 py-0.5 rounded border border-primary/20 shrink-0">CME: WTI, NG / LME</span>
+									<h4 class="text-xs font-bold text-on-surface">Commodity Indices: Energy, Metals, Agriculture, Gold & Natural Gas</h4>
+									<span class="text-4xs font-mono text-primary/80 bg-primary/10 px-1.5 py-0.5 rounded border border-primary/20 shrink-0">CME: WTI, NG / LME / LBMA</span>
 								</div>
-								<p class="text-3xs text-on-surface-variant truncate">Crude oil, natural gas, metals & agriculture spot indices vs refining crack spread ($/bbl)</p>
+								<p class="text-3xs text-on-surface-variant truncate">Spot price indices on one scale, base 100</p>
 							</div>
 						</div>
 						<div class="flex items-center gap-2 shrink-0">
@@ -433,6 +433,37 @@
 					</div>
 					<div class="chart-canvas-container h-80 md:h-85 w-full relative">
 						<canvas id="macroCommoditiesChart"></canvas>
+					</div>
+				</div>
+
+				{# Chart 9b: Refining Crack Spread #}
+				<div class="chart-card bg-surface-container-low border border-outline-variant/15 rounded-lg p-5 hover:border-outline-variant/30 transition-all flex flex-col justify-between" data-macro-category="assets">
+					<div class="flex items-start justify-between mb-3 gap-2">
+						<div class="flex items-center gap-2.5 min-w-0">
+							<div class="p-2 rounded bg-sky-500/10 text-sky-400 shrink-0">
+								<span class="material-symbols-outlined text-lg leading-none">local_gas_station</span>
+							</div>
+							<div class="min-w-0">
+								<div class="flex items-center gap-2 flex-wrap">
+									<h4 class="text-xs font-bold text-on-surface">3:2:1 Refining Crack Spread</h4>
+									<span class="text-4xs font-mono text-primary/80 bg-primary/10 px-1.5 py-0.5 rounded border border-primary/20 shrink-0">NYMEX: RBOB, ULSD vs WTI</span>
+								</div>
+								<p class="text-3xs text-on-surface-variant truncate">What two barrels of gasoline and one of diesel fetch over three barrels of crude ($/bbl)</p>
+							</div>
+						</div>
+						<div class="flex items-center gap-2 shrink-0">
+							<div class="hidden sm:flex flex-col items-end text-right">
+								<span class="text-4xs font-semibold uppercase tracking-wide text-on-surface-variant/70">Latest</span>
+								<span class="text-xs font-mono font-bold text-on-surface tabular-nums" id="hud-macroCrackSpreadChart">-</span>
+							</div>
+							<span class="text-4xs font-semibold px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant uppercase tracking-wide">Commodities</span>
+							<button type="button" class="expand-chart-btn p-1 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface transition-all cursor-pointer" title="Toggle Fullscreen / Expand">
+								<span class="material-symbols-outlined text-[15px] expand-icon">open_in_full</span>
+							</button>
+						</div>
+					</div>
+					<div class="chart-canvas-container h-80 md:h-85 w-full relative">
+						<canvas id="macroCrackSpreadChart"></canvas>
 					</div>
 				</div>
 

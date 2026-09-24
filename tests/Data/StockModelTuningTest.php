@@ -181,6 +181,7 @@ class StockModelTuningTest extends TestCase
             'construction' => [ModelParam::CivilInfrastructureWeight, ModelParam::CommercialEpcWeight, ModelParam::FacilitiesMaintenanceWeight],
             'medical_facility' => [ModelParam::InpatientCareWeight, ModelParam::ElectiveOutpatientWeight, ModelParam::InsuranceArbitrageWeight],
             'consumer_staples' => [ModelParam::BrandedStaplesWeight, ModelParam::VolumeCommodityWeight, ModelParam::CommodityTradingWeight, ModelParam::LandSpeculationWeight],
+            'mining' => [ModelParam::BaseMetalsWeight, ModelParam::PreciousMetalsWeight, ModelParam::EnergyMineralsWeight, ModelParam::FertilizerMineralsWeight],
             'conglomerate' => [ModelParam::IndustrialConglomerateWeight, ModelParam::DefensiveStaplesWeight, ModelParam::ContrarianFloatWeight],
             'law_firm' => [ModelParam::CorporateRetainerWeight, ModelParam::LitigationContingencyWeight, ModelParam::RestructuringAdvisoryWeight],
             'auto_manufacturer' => [ModelParam::AutoSalesWeight, ModelParam::ApexLuxuryWeight, ModelParam::SoftwareServicesWeight],
@@ -289,8 +290,11 @@ class StockModelTuningTest extends TestCase
         // Cascade Refining (CASC) runs on the refining model's own constants.
         $this->assertFalse(StockModelTuning::hasOverrides('CASC'));
 
-        // Condor Extraction (CNDR) runs on the mining model's own constants.
-        $this->assertFalse(StockModelTuning::hasOverrides('CNDR'));
+        // Condor Extraction (CNDR): a diversified major, base metals first.
+        $this->assertSame(0.70, StockModelTuning::get('CNDR', ModelParam::BaseMetalsWeight, 0.0));
+        $this->assertSame(0.10, StockModelTuning::get('CNDR', ModelParam::PreciousMetalsWeight, 0.0));
+        $this->assertSame(0.12, StockModelTuning::get('CNDR', ModelParam::EnergyMineralsWeight, 0.0));
+        $this->assertSame(0.08, StockModelTuning::get('CNDR', ModelParam::FertilizerMineralsWeight, 0.0));
 
         // Safe Harbor Reinsurance (SAFE)
         $this->assertSame(0.60, StockModelTuning::get('SAFE', ModelParam::TreatyReinsuranceWeight, 0.0));

@@ -311,7 +311,15 @@ class StockModelTuning
 
         // Cascade Refining (CASC) runs on RefiningBusinessModel's own yield and cost constants: no ticker overrides.
 
-        // Condor Extraction (CNDR) runs on MiningBusinessModel's own constants, priced off the metals complex: no ticker overrides.
+        // --- Condor Extraction (CNDR) ---
+        // Diversified base-metals major: copper, iron ore and rare earths, with the by-products and side
+        // businesses a real major carries (BHP: ~83% copper and iron ore, ~16% coal; Freeport: ~17% gold).
+        'CNDR' => [
+            ModelParam::BaseMetalsWeight->value         => 0.70, // Copper, iron ore, nickel and rare earths
+            ModelParam::PreciousMetalsWeight->value     => 0.10, // Gold and silver recovered from its copper ore
+            ModelParam::EnergyMineralsWeight->value     => 0.12, // Steelmaking and thermal coal seams
+            ModelParam::FertilizerMineralsWeight->value => 0.08, // A potash leg, the way BHP is building Jansen
+        ],
 
         // =====================================================================
         // HEAVY INDUSTRY & MANUFACTURING ARCHETYPES

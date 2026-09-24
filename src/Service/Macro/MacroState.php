@@ -280,6 +280,8 @@ class MacroState
     public float $naturalGasPriceIndex = MacroEngine::NATURAL_GAS_BASELINE;
     public float $naturalGasPriceIndexEma = MacroEngine::NATURAL_GAS_BASELINE;
     public float $gasOilRatioLog = 0.0;
+    public float $goldPriceIndex = MacroEngine::GOLD_BASELINE;
+    public float $goldPriceIndexEma = MacroEngine::GOLD_BASELINE;
 
     // Deposits channel: the system deposit beta and the money-market share it drives.
     public float $systemDepositBeta = MacroEngine::SYSTEM_DEPOSIT_BETA_BASE;

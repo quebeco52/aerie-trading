@@ -64,6 +64,7 @@ final class MacroFieldCatalog
         'agricultural_commodity_index_ema' => ['label' => 'Agricultural Commodities', 'unit' => self::UNIT_INDEX],
         'energy_price_index_ema' => ['label' => 'Energy Prices', 'unit' => self::UNIT_INDEX],
         'natural_gas_price_index_ema' => ['label' => 'Natural Gas', 'unit' => self::UNIT_INDEX],
+        'gold_price_index_ema' => ['label' => 'Gold', 'unit' => self::UNIT_INDEX],
         'catastrophe_loss_index_ema' => ['label' => 'Catastrophe Losses', 'unit' => self::UNIT_INDEX],
         'freight_rate_index_ema' => ['label' => 'Freight Rates', 'unit' => self::UNIT_INDEX],
         'exchange_rate_index_ema' => ['label' => 'Trade-Weighted FX', 'unit' => self::UNIT_INDEX],

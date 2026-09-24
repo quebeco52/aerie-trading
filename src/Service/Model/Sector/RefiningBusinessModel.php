@@ -66,8 +66,10 @@ class RefiningBusinessModel extends StandardCorporateBusinessModel
     public const LIGHT_PRODUCT_YIELD = 0.866;
     /** Secondary products (coke, asphalt, residual fuel, still gas, gas liquids, lubricants, feedstocks) per barrel of crude input, processing gain included (EIA 2021-2025). */
     public const SECONDARY_PRODUCT_YIELD = 0.195;
-    /** Volume-weighted price of the secondary barrel relative to crude: coke and still gas far below it, asphalt and feedstocks near it, lubricants above. */
-    public const SECONDARY_PRODUCT_REALIZATION = 0.58;
+    /** Price of the secondary barrel relative to crude (coke and still gas far below it, asphalt and feedstocks near it, lubricants above), set so the margin at a zero crack matches Valero's reported regression, -$0.41/bbl over 2018-2024. */
+    public const SECONDARY_PRODUCT_REALIZATION = 0.66;
+    /** Share of the benchmark crack the light barrel realizes: Valero's refining margin per barrel moved $0.598 per $1 of Gulf Coast 3-2-1 crack over 2018-2024 (R 0.99), which over the 0.866 light yield is 0.69 (product grades below benchmark, crude bought above WTI). */
+    public const REALIZED_CRACK_CAPTURE = 0.69;
     /** Floor on the non-feedstock variable cost share, guarding a seeded row whose margins leave less room than the feedstock takes. */
     public const MIN_VARIABLE_OPEX_SHARE = 0.005;
 
@@ -99,7 +101,7 @@ class RefiningBusinessModel extends StandardCorporateBusinessModel
     /** Structural minimum operating margin floor for an aging, low-complexity plant. */
     public const MIN_OPERATING_MARGIN_FLOOR = 0.01;
     /** Structural maximum operating margin ceiling at the baseline crack: modernization can only cut opex, and the barrel identity leaves about a point of it to cut. */
-    public const MAX_OPERATING_MARGIN_CEILING = 0.11;
+    public const MAX_OPERATING_MARGIN_CEILING = 0.085;
     /** Baseline secular growth rate of refining capacity in a mature market. */
     public const SECULAR_GROWTH = 0.01;
     /** Share of construction in progress completed each quarter. */
@@ -164,12 +166,12 @@ class RefiningBusinessModel extends StandardCorporateBusinessModel
     }
 
     /**
-     * Revenue per barrel of crude run: light products at crude plus the crack, secondary products at their
-     * realization against crude.
+     * Revenue per barrel of crude run: light products at crude plus the share of the benchmark crack the slate
+     * realizes, secondary products at their realization against crude.
      */
     public function calculateBarrelRealization(float $crudePrice, float $crackSpread): float
     {
-        return (self::LIGHT_PRODUCT_YIELD * ($crudePrice + $crackSpread))
+        return (self::LIGHT_PRODUCT_YIELD * ($crudePrice + (self::REALIZED_CRACK_CAPTURE * $crackSpread)))
             + (self::SECONDARY_PRODUCT_YIELD * self::SECONDARY_PRODUCT_REALIZATION * $crudePrice);
     }
 
@@ -192,7 +194,7 @@ class RefiningBusinessModel extends StandardCorporateBusinessModel
         $secondaryDiscount = 1.0 - self::LIGHT_PRODUCT_YIELD - (self::SECONDARY_PRODUCT_YIELD * self::SECONDARY_PRODUCT_REALIZATION);
 
         return [
-            'crack' => self::LIGHT_PRODUCT_YIELD * ($macroState->refiningCrackSpreadEma - MacroEngine::CRACK_SPREAD_BASELINE) / $baselineRealization,
+            'crack' => self::LIGHT_PRODUCT_YIELD * self::REALIZED_CRACK_CAPTURE * ($macroState->refiningCrackSpreadEma - MacroEngine::CRACK_SPREAD_BASELINE) / $baselineRealization,
             'crude' => -$secondaryDiscount * ($this->resolveCrudePrice($macroState) - self::REFERENCE_CRUDE_PRICE) / $baselineRealization,
         ];
     }

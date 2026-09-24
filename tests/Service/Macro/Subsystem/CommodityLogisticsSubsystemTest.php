@@ -63,6 +63,76 @@ class CommodityLogisticsSubsystemTest extends TestCase
         );
     }
 
+    // --- Gold ---
+
+    /** Barsky, Epstein, Lafont-Mueller & Yoo (2021): real rates, inflation expectations and bad times. */
+    public function testGoldEquilibriumCarriesTheMeasuredSensitivities(): void
+    {
+        $realRate = CommodityLogisticsSubsystem::GOLD_REAL_RATE_ANCHOR;
+        $inflation = CommodityLogisticsSubsystem::GOLD_INFLATION_EXPECTATION_ANCHOR;
+        $sentiment = MacroEngine::SENTIMENT_TREND_LEVEL;
+        $resting = CommodityLogisticsSubsystem::resolveGoldEquilibriumPrice($realRate, $inflation, $sentiment);
+
+        $this->assertEqualsWithDelta(MacroEngine::GOLD_BASELINE, $resting, 1e-9, 'every driver at rest: gold at its baseline');
+        $this->assertEqualsWithDelta(exp(-0.131), CommodityLogisticsSubsystem::resolveGoldEquilibriumPrice($realRate + 0.01, $inflation, $sentiment) / $resting, 1e-9, 'a point of real yield takes 13.1 log points off');
+        $this->assertEqualsWithDelta(exp(0.365), CommodityLogisticsSubsystem::resolveGoldEquilibriumPrice($realRate, $inflation + 0.01, $sentiment) / $resting, 1e-9, 'a point of expected inflation adds 36.5');
+        $this->assertGreaterThan($resting, CommodityLogisticsSubsystem::resolveGoldEquilibriumPrice($realRate, $inflation, $sentiment - 15.0), 'bad times raise the price of the refuge');
+    }
+
+    public function testGoldRevertsTowardItsEquilibriumAtTheMeasuredSpeed(): void
+    {
+        $quiet = new class extends MathUtility {
+            public function generateStandardNormal(): float
+            {
+                return 0.0;
+            }
+        };
+        $subsystem = new CommodityLogisticsSubsystem($quiet);
+
+        $state = new MacroState();
+        $state->yield10yEma = CommodityLogisticsSubsystem::GOLD_REAL_RATE_ANCHOR + CommodityLogisticsSubsystem::GOLD_INFLATION_EXPECTATION_ANCHOR;
+        $state->tipsBreakevenEma = CommodityLogisticsSubsystem::GOLD_INFLATION_EXPECTATION_ANCHOR;
+        $state->consumerSentimentIndexEma = MacroEngine::SENTIMENT_TREND_LEVEL;
+        $state->goldPriceIndex = 150.0;
+
+        for ($quarter = 0; $quarter < 4; $quarter++) {
+            $subsystem->calculateGoldPriceIndex($state, 0.25);
+        }
+
+        // One year of the exact log-OU transition with no noise.
+        $kappa = CommodityLogisticsSubsystem::GOLD_MEAN_REVERSION;
+        $sigma = CommodityLogisticsSubsystem::GOLD_VOLATILITY;
+        $alpha = log(MacroEngine::GOLD_BASELINE) - ($sigma * $sigma) / (2.0 * $kappa);
+        $expected = exp((exp(-$kappa) * log(150.0)) + ((1.0 - exp(-$kappa)) * $alpha));
+        $this->assertEqualsWithDelta($expected, $state->goldPriceIndex, 1e-6);
+        $this->assertEqualsWithDelta(0.51, exp(-$kappa), 0.01, 'deviations carry half their size into the next year');
+    }
+
+    public function testGoldIsAsVolatileAsTheMetalItModels(): void
+    {
+        mt_srand(20260924);
+        $state = new MacroState();
+        $state->yield10yEma = CommodityLogisticsSubsystem::GOLD_REAL_RATE_ANCHOR + CommodityLogisticsSubsystem::GOLD_INFLATION_EXPECTATION_ANCHOR;
+        $state->tipsBreakevenEma = CommodityLogisticsSubsystem::GOLD_INFLATION_EXPECTATION_ANCHOR;
+        $state->consumerSentimentIndexEma = MacroEngine::SENTIMENT_TREND_LEVEL;
+
+        $annual = [];
+        $previous = $state->goldPriceIndex;
+        for ($week = 1; $week <= 200 * 52; $week++) {
+            $this->subsystem->calculateGoldPriceIndex($state, 1.0 / 52.0);
+            if ($week % 52 === 0) {
+                $annual[] = log($state->goldPriceIndex / $previous);
+                $previous = $state->goldPriceIndex;
+            }
+        }
+
+        $mean = array_sum($annual) / count($annual);
+        $sd = sqrt(array_sum(array_map(static fn (float $x): float => ($x - $mean) ** 2, $annual)) / count($annual));
+        // Gold's annualised volatility has stayed within 10-18% on most days since 1971 (World Gold Council).
+        $this->assertGreaterThan(0.10, $sd);
+        $this->assertLessThan(0.18, $sd);
+    }
+
     public function testConvenienceYieldSpikesWhenPhysicalInventoryDrawsDown(): void
     {
         $ampleYield = $this->mathUtility->calculateConvenienceYield(105.0, 50.0);
@@ -92,6 +162,71 @@ class CommodityLogisticsSubsystemTest extends TestCase
         $this->subsystem->calculateRefiningCrackSpread($state, 0.25);
         $this->assertGreaterThan(10.0, $state->refiningCrackSpread);
         $this->assertLessThan(80.0, $state->refiningCrackSpread);
+    }
+
+    public function testTheCrackPeaksInTheDrivingSeasonAndTroughsInAutumn(): void
+    {
+        $quiet = new class extends MathUtility {
+            public function generateStandardNormal(): float
+            {
+                return 0.0;
+            }
+        };
+        $subsystem = new CommodityLogisticsSubsystem($quiet);
+        $state = new MacroState();
+        $state->globalDemandGapEma = 0.0;
+        $state->energyInventoryIndexEma = MacroEngine::COMMODITY_INVENTORY_BASELINE;
+
+        // Settle the stochastic part, then read the season off one more year, a week at a time.
+        $crackAt = [];
+        for ($week = 1; $week <= 4 * 52; $week++) {
+            $state->totalTime += 1.0 / 52.0;
+            $subsystem->calculateRefiningCrackSpread($state, 1.0 / 52.0);
+            if ($week > 3 * 52) {
+                $crackAt[(int) round(fmod($state->totalTime, 1.0) * 52)] = $state->refiningCrackSpread;
+            }
+        }
+
+        // Early June against early December: the seasonal factor's own peak-to-trough ratio.
+        $amplitude = CommodityLogisticsSubsystem::CRACK_SEASONAL_AMPLITUDE;
+        $june = $crackAt[(int) round(CommodityLogisticsSubsystem::CRACK_SEASONAL_PEAK * 52)];
+        $december = $crackAt[(int) round((CommodityLogisticsSubsystem::CRACK_SEASONAL_PEAK + 0.5) * 52)];
+        $this->assertEqualsWithDelta((1.0 + $amplitude) / (1.0 - $amplitude), $june / $december, 0.01);
+    }
+
+    /** EIA Gulf Coast 3-2-1 against WTI, 2010-2024: de-seasonalised log sd 0.44, a half-life of about six months, a ~$19-22 mean. */
+    public function testTheCrackIsAsVolatileAndAsPersistentAsTheRealOne(): void
+    {
+        mt_srand(20260924);
+        $state = new MacroState();
+        $state->globalDemandGapEma = 0.0;
+        $state->energyInventoryIndexEma = MacroEngine::COMMODITY_INVENTORY_BASELINE;
+
+        $logBase = [];
+        $levels = [];
+        for ($step = 1; $step <= 200 * 48; $step++) {
+            $state->totalTime += 1.0 / 48.0;
+            $this->subsystem->calculateRefiningCrackSpread($state, 1.0 / 48.0);
+            if ($step % 4 === 0) {
+                $levels[] = $state->refiningCrackSpread;
+                $logBase[] = log($state->refiningCrackSpread / CommodityLogisticsSubsystem::resolveCrackSeasonalFactor($state->totalTime));
+            }
+        }
+
+        $n = count($logBase);
+        $mean = array_sum($logBase) / $n;
+        $variance = array_sum(array_map(static fn (float $x): float => ($x - $mean) ** 2, $logBase)) / $n;
+        $lagged = 0.0;
+        for ($i = 1; $i < $n; $i++) {
+            $lagged += ($logBase[$i] - $mean) * ($logBase[$i - 1] - $mean);
+        }
+        $halfLifeYears = log(0.5) / log($lagged / ($variance * $n)) / 12.0;
+
+        $this->assertGreaterThan(0.35, sqrt($variance), 'as dispersed as the real crack');
+        $this->assertLessThan(0.55, sqrt($variance));
+        $this->assertGreaterThan(0.30, $halfLifeYears, 'shocks fade over months, not weeks');
+        $this->assertLessThan(0.80, $halfLifeYears);
+        $this->assertEqualsWithDelta(MacroEngine::CRACK_SPREAD_BASELINE, array_sum($levels) / count($levels), 2.5, 'centred on the baseline, not ten percent below it');
     }
 
     public function testCalculateSupplyChainPressureIndex(): void
