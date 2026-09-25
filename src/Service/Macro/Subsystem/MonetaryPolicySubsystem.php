@@ -56,14 +56,10 @@ class MonetaryPolicySubsystem
     public const BALANCE_SHEET_REINVESTMENT_HOLD_YEARS = 1.5;
 
     // --- Taylor Rule & The Evans Rule (Forward Guidance) ---
-    /** Weight on inflation deviations from the target in the Taylor Rule. */
-    public const TAYLOR_INFLATION_WEIGHT = 0.50;
-    /** Canonical Taylor (1993) weight on the output gap in the Taylor Rule. */
-    public const TAYLOR_OUTPUT_GAP_WEIGHT = 0.50;
-    /** Non-linear scaling factor amplifying rate cuts during recessions: a -1.4% gap doubles the weight on the real economy. */
-    public const TAYLOR_RECESSION_SCALE = 70.0;
-    /** Ceiling on that recession boost: at a severe gap the rule reaches the Yellen (2012) balanced-approach weight of 1.0 and beyond, while a boom is still met with the standard 0.5. */
-    public const TAYLOR_RECESSION_MAX_BOOST = 2.00;
+    /** Weight on inflation deviations from the target, fitted with the gap weight by indirect inference on the US Clarida-Gali-Gertler rule, 1987-2008 (smoothing 0.85, inflation 1.87, gap 1.84) and on when the funds rate moves against the gap: the engine's rule regression reads 0.84, 1.63, 1.61. */
+    public const TAYLOR_INFLATION_WEIGHT = 1.6;
+    /** Weight on the projected output gap, the same in slack as in a boom (the US rule shows no asymmetry: impact 0.24 in booms, 0.29 in slack, se 0.12-0.15); the same fit. */
+    public const TAYLOR_OUTPUT_GAP_WEIGHT = 1.5;
     /** Bernanke (2015) blend: weight on realized core inflation (EMA) in the Taylor Rule inflation measure. */
     public const TAYLOR_INFLATION_CORE_WEIGHT = 0.70;
     /** Bernanke (2015) blend: weight on forward inflation expectations (TIPS breakeven) in the Taylor Rule inflation measure. */
@@ -76,28 +72,12 @@ class MonetaryPolicySubsystem
     public const TAYLOR_GAP_FORECAST_CAP = 0.020;
     /** Evans Rule forward guidance: Maximum inflation ceiling tolerated while holding rates at ZLB. */
     public const EVANS_RULE_INFLATION_CAP = 0.025;
-    /** Rate hiking partial-adjustment speed per year (Woodford 2003 inertial gradualism, Clarida-Gali-Gertler rho ~0.8 quarterly); at 0.8 the rate trailed a rising target by ~140bp through every boom and policy never turned restrictive. */
-    public const CB_HIKE_SMOOTHING_SPEED = 1.00;
-    /** Central bank baseline rate cutting smoothing speed per year (rapid crisis easing). */
-    public const CB_CUT_SMOOTHING_SPEED = 1.20;
+    /** Partial-adjustment speed of the policy rate toward its target, the same cutting as hiking (US: 15% vs 13% of the distance closed a quarter, se 4-6%), with no pace cap: the rate trails its target by a quarter, and like the funds rate (1985-2008) peaks 2q after the gap. */
+    public const CB_SMOOTHING_SPEED = 4.0;
     /** Inflation panic reaction multiplier accelerating rate hikes during extreme inflation spikes. */
     public const CB_INFLATION_PANIC_SCALE = 50.0;
-    /** Recession panic reaction multiplier accelerating emergency cuts during downturns. */
-    public const CB_RECESSION_PANIC_SCALE = 20.0;
-    /** Maximum annual rate hike velocity cap (Volcker-style panic speed cap). */
+    /** Most the inflation panic adds to the partial-adjustment speed, per year (Volcker-style acceleration). */
     public const CB_MAX_HIKE_PANIC_SPEED = 3.0;
-    /** Maximum annual rate cut velocity cap during financial crises. */
-    public const CB_MAX_CUT_PANIC_SPEED = 10.0;
-    /** Maximum annual rate cut velocity cap during economic downturns and crises. */
-    public const CB_MAX_CUT_VELOCITY = -0.080;
-
-    // --- Flexible Average Inflation Targeting (FAIT - Powell 2020) ---
-    /** FAIT rolling memory persistence speed per year for cumulative price level shortfall. */
-    public const FAIT_MEMORY_SPEED = 0.50;
-    /** Central bank reaction sensitivity to cumulative inflation shortfall/overshoot. */
-    public const FAIT_MAKEUP_COEFFICIENT = 0.25;
-    /** Maximum policy rate target offset allowed from FAIT cumulative memory. */
-    public const FAIT_MAX_TARGET_OFFSET = 0.015;
 
     // --- Central Bank Effective Lower Bound & Shadow Rates ---
     /** Shadow-rate accommodation per unit of QE yield suppression: full-scale QE (100bps) reads as a -3% shadow rate, the Wu-Xia trough of 2014. */
@@ -276,32 +256,16 @@ class MonetaryPolicySubsystem
      */
     public function calculateTargetRate(MacroState $state, float $targetInflation, float $naturalRate, float $dt = 0.25): float
     {
-        // Powell (2020) Flexible Average Inflation Targeting (FAIT) cumulative price-level shortfall buffer.
-        $inflationShortfall = $state->inflationEma - $targetInflation;
-        $state->cumulativeInflationGap += ($inflationShortfall - (self::FAIT_MEMORY_SPEED * $state->cumulativeInflationGap)) * $dt;
-        $state->cumulativeInflationGap = max(-0.06, min(0.06, $state->cumulativeInflationGap));
-        $faitOffset = min(0.0, self::FAIT_MAKEUP_COEFFICIENT * $state->cumulativeInflationGap);
-        $faitOffset = max(-self::FAIT_MAX_TARGET_OFFSET, $faitOffset);
-
         $inflationMeasure = $this->calculateExpectedInflation($state, $targetInflation);
 
         $cyclicalGap = $this->cyclicalGapForecast($state);
-
-        // Cukierman & Muscatelli (2008) asymmetric recession-averse Taylor rule output gap weighting.
-        if ($cyclicalGap < 0.0) {
-            $gapWeight = self::TAYLOR_OUTPUT_GAP_WEIGHT
-                * (1.0 + min(self::TAYLOR_RECESSION_MAX_BOOST, abs($cyclicalGap) * self::TAYLOR_RECESSION_SCALE));
-        } else {
-            $gapWeight = self::TAYLOR_OUTPUT_GAP_WEIGHT;
-        }
 
         // Bernanke (2006) offset leaning against exogenous non-monetary long-rate term premium shifts.
         $longRateOffset = self::TAYLOR_LONG_RATE_OFFSET * $this->calculateLongRateGap($state, $naturalRate);
 
         $unclampedTarget = $naturalRate + $inflationMeasure
             + self::TAYLOR_INFLATION_WEIGHT * ($inflationMeasure - $targetInflation)
-            + $gapWeight * $cyclicalGap
-            + $faitOffset
+            + self::TAYLOR_OUTPUT_GAP_WEIGHT * $cyclicalGap
             - $longRateOffset;
 
         // Wu-Xia (2016) / Krippner (2013) shadow rate reflecting unconventional QE accommodation at ZLB.
@@ -365,9 +329,10 @@ class MonetaryPolicySubsystem
     /**
      * Clarida, Galí & Gertler (1998) Partial Adjustment Monetary Policy Smoothing.
      *
-     * Models inertial interest rate adjustments toward the Taylor target with asymmetric
-     * speed: emergency rate cuts proceed swiftly, while rate hikes are gradual during
-     * normal expansions but accelerate to Volcker speed during runaway inflation spikes.
+     * Models inertial interest rate adjustments toward the Taylor target at one speed either way (1987-2008:
+     * 0.66/yr cutting, 0.57/yr hiking, not distinguishable), as an exact first-order lag, with hikes accelerating
+     * to Volcker speed during runaway inflation spikes. The pace is proportional to the distance: there is no cap
+     * on how far the rate moves in a year (the Fed hiked 300bp in 1994 and 425bp in 2022's nine months).
      *
      * @param MacroState $state      Current macroeconomic state.
      * @param float      $targetRate Target policy rate from the Taylor Rule.
@@ -389,42 +354,14 @@ class MonetaryPolicySubsystem
             $effectiveTarget = $currentPolicyRate;
         }
 
-        // Clarida, Galí & Gertler (2000) policy inertia evaluated on the same projected gap the target uses,
-        // so the recession panic leg accelerates on a slump that is still opening rather than one already dug.
-        $cyclicalGap = $this->cyclicalGapForecast($state);
-
+        $cbSpeed = self::CB_SMOOTHING_SPEED;
         if ($effectiveTarget > $currentPolicyRate) {
-            $cbSpeed = self::CB_HIKE_SMOOTHING_SPEED;
             $effectiveInflation = max($state->inflation, $state->inflationEma);
             $inflationPanicExcess = max(0.0, $effectiveInflation - MacroEngine::CB_INFLATION_PANIC_THRESHOLD);
-            $panicMultiplier = min(self::CB_MAX_HIKE_PANIC_SPEED, $inflationPanicExcess * self::CB_INFLATION_PANIC_SCALE);
-            $cbSpeed += $panicMultiplier;
-
-            // Clarida-Galí-Gertler (2000) emergency rate adjustment ceiling under inflation panic.
-            $panicFraction = min(1.0, $panicMultiplier / self::CB_MAX_HIKE_PANIC_SPEED);
-            $maxHikeVelocity = MacroEngine::CB_MAX_NORMAL_HIKE_VELOCITY + $panicFraction * (MacroEngine::CB_MAX_PANIC_HIKE_VELOCITY - MacroEngine::CB_MAX_NORMAL_HIKE_VELOCITY);
-
-            $rawMove = $cbSpeed * ($effectiveTarget - $currentPolicyRate);
-            $clampedMove = min($maxHikeVelocity, $rawMove);
-        } else {
-            $cbSpeed = self::CB_CUT_SMOOTHING_SPEED;
-            $effectiveDeflation = min($state->inflation, $state->inflationEma);
-            $deflationPanic = max(0.0, MacroEngine::TARGET_INFLATION - $effectiveDeflation) * self::CB_INFLATION_PANIC_SCALE;
-            $recessionPanic = max(0.0, -$cyclicalGap) * self::CB_RECESSION_PANIC_SCALE;
-            $cbSpeed += min(self::CB_MAX_CUT_PANIC_SPEED, $deflationPanic + $recessionPanic);
-
-            $rawMove = $cbSpeed * ($effectiveTarget - $currentPolicyRate);
-            $clampedMove = max(self::CB_MAX_CUT_VELOCITY, $rawMove);
+            $cbSpeed += min(self::CB_MAX_HIKE_PANIC_SPEED, $inflationPanicExcess * self::CB_INFLATION_PANIC_SCALE);
         }
 
-        $newRate = $currentPolicyRate + $clampedMove * $dt;
-        $newRate = max(MacroEngine::EFFECTIVE_LOWER_BOUND, min(0.20, $newRate));
-
-        if ($effectiveTarget > $currentPolicyRate) {
-            return min($effectiveTarget, $newRate);
-        } else {
-            return max($effectiveTarget, $newRate);
-        }
+        return $this->mathUtility->calculateDistributedLag($currentPolicyRate, $effectiveTarget, $dt, 1.0 / $cbSpeed);
     }
 
     /**

@@ -28,11 +28,15 @@ class YieldCurveRealismTest extends TestCase
     private const TICKS_PER_YEAR = 252;
 
     /**
-     * Six seeds pooled: a forty-year path is one draw of the cycle, and its mean slope moves about a third of a percent
-     * seed to seed (40-seed sd 0.34pp around a 1.02% mean), so three seeds left the pooled mean a fifth of a percent of
-     * noise against a bound a quarter of a percent away.
+     * Twenty-four seeds pooled: a forty-year path is one draw of the cycle. Its mean slope moves about a third of a
+     * percent seed to seed (40-seed sd 0.34pp), and its inverted share eleven points (40-seed sd 0.11), so six seeds left
+     * that share +/-4.6pp of noise against a bound a few points away; twenty-four halve it.
      */
-    private const SPREAD_SEEDS = [20260909, 20260918, 4711, 20260924, 20260925, 20260926];
+    private const SPREAD_SEEDS = [
+        20260909, 20260918, 4711, 20260924, 20260925, 20260926,
+        20261001, 20261002, 20261003, 20261004, 20261005, 20261006, 20261007, 20261008, 20261009,
+        20261010, 20261011, 20261012, 20261013, 20261014, 20261015, 20261016, 20261017, 20261018,
+    ];
     /** Ticks per year for the slope pool: the macro is timestep-neutral in mean and variance, so twice the seeds cost the same. */
     private const SPREAD_TICKS_PER_YEAR = 120;
 

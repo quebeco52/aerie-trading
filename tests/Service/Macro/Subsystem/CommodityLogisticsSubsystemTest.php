@@ -546,4 +546,75 @@ class CommodityLogisticsSubsystemTest extends TestCase
         $worldBoom = $settle(0.03);
         $this->assertEqualsWithDelta(exp(0.03 * CommodityLogisticsSubsystem::METALS_OUTPUT_GAP_SENSITIVITY), $worldBoom / $flat, 0.01, 'A 3% world boom lifts the long-run metals equilibrium by its elasticity.');
     }
+
+    /**
+     * One oil shock at the first tick, then quiet: a subsystem whose jump lands once, as a +50% move.
+     */
+    private function oneShockSubsystem(): CommodityLogisticsSubsystem
+    {
+        $math = new class extends MathUtility {
+            private bool $landed = false;
+            public function generateStandardNormal(): float { return 0.0; }
+            public function checkProbability(float $probability): bool { return false; }
+            public function calculateJumpDiffusion(float $lambda, float $jumpMean, float $jumpVol, float $dt): array
+            {
+                if ($this->landed) {
+                    return ['multiplier' => 1.0, 'shock_pct' => null, 'exponent' => null];
+                }
+                $this->landed = true;
+
+                return ['multiplier' => 1.5, 'shock_pct' => 50.0, 'exponent' => log(1.5)];
+            }
+        };
+
+        return new CommodityLogisticsSubsystem($math);
+    }
+
+    /** Log deviation of the base price from where the same path sits without the shock, stepped for $years. */
+    private function shockPath(float $dt, float $years): array
+    {
+        $run = function (CommodityLogisticsSubsystem $subsystem) use ($dt, $years): array {
+            $state = new MacroState();
+            $state->energyBasePrice = 100.0;
+            $state->energyPriceIndex = 100.0;
+            $state->energyInventoryIndex = 100.0;
+            $path = [];
+            for ($i = 0; $i < (int) round($years / $dt); $i++) {
+                $state->energyPriceIndexEma = 100.0;
+                $state->energySupplyEma = 100.0;
+                $subsystem->calculateEnergyShock($state, $dt);
+                $path[] = $state->energyBasePrice;
+            }
+
+            return $path;
+        };
+        $shocked = $run($this->oneShockSubsystem());
+        $quiet = $run($this->quietCommoditySubsystem());
+
+        return array_map(static fn (float $a, float $b): float => log($a / $b), $shocked, $quiet);
+    }
+
+    /** Merton (1976): an oil shock is a move in the level, which then reverts like any other; it does not vanish after a tick. */
+    public function testAnOilShockLandsInTheBasePriceAndDecaysAtTheReversionSpeed(): void
+    {
+        $dt = 1.0 / 360.0;
+        $path = $this->shockPath($dt, 1.0);
+
+        $this->assertEqualsWithDelta(log(1.5), $path[0], 1e-9, 'The shock is in the base price on the tick it lands.');
+        $this->assertEqualsWithDelta(log(1.5) * exp(-CommodityLogisticsSubsystem::ENERGY_MEAN_REVERSION * (count($path) - 1) * $dt), $path[count($path) - 1], 1e-9, 'A year on it has decayed at the reversion speed, not vanished.');
+    }
+
+    /** A shock's weight on the price over time is the same at every step size (a one-tick shock's weight shrinks with dt). */
+    public function testAnOilShockCarriesTheSameWeightAtEveryStepSize(): void
+    {
+        $area = function (float $dt): float {
+            return array_sum($this->shockPath($dt, 2.0)) * $dt;
+        };
+
+        $coarse = $area(1.0 / 360.0);
+        $fine = $area(1.0 / 3600.0);
+
+        $this->assertEqualsWithDelta($coarse, $fine, 0.01 * $coarse);
+        $this->assertEqualsWithDelta(log(1.5) * (1.0 - exp(-2.0 * CommodityLogisticsSubsystem::ENERGY_MEAN_REVERSION)) / CommodityLogisticsSubsystem::ENERGY_MEAN_REVERSION, $fine, 0.01 * $fine);
+    }
 }

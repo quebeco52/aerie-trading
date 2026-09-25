@@ -27,10 +27,14 @@ class MonetaryPolicySubsystemTest extends TestCase
         $state->inflationEma = 0.04;
         $state->tipsBreakeven = 0.04;
         $state->outputGap = 0.02;
+        $state->outputGapEma = 0.02;
 
         $target = $this->subsystem->calculateTargetRate($state, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE);
-        // r* (0.015) + pi_blend (0.04) + 0.5*(0.04 - 0.02) + 0.5*(0.02) = 0.015 + 0.04 + 0.010 + 0.010 = 0.075
-        $this->assertEqualsWithDelta(0.075, $target, 0.001);
+        // r* + pi_blend + w_pi * (pi_blend - pi*) + w_y * gap, with a settled gap so the projection adds nothing
+        $expected = MacroEngine::BASE_NATURAL_RATE + 0.04
+            + (MonetaryPolicySubsystem::TAYLOR_INFLATION_WEIGHT * (0.04 - MacroEngine::TARGET_INFLATION))
+            + (MonetaryPolicySubsystem::TAYLOR_OUTPUT_GAP_WEIGHT * 0.02);
+        $this->assertEqualsWithDelta($expected, $target, 0.001);
     }
 
     /**
@@ -68,9 +72,11 @@ class MonetaryPolicySubsystemTest extends TestCase
         $state->outputGap = 0.0;
 
         $target = $this->subsystem->calculateTargetRate($state, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE);
-        // pi_blend = 0.70*0.02 + 0.30*0.04 = 0.026
-        // target = 0.015 + 0.026 + 0.5*(0.026 - 0.02) + 0 = 0.015 + 0.026 + 0.003 = 0.044
-        $this->assertEqualsWithDelta(0.044, $target, 0.001);
+        // pi_blend = 0.70*0.02 + 0.30*0.04 = 0.026; target = r* + pi_blend + w_pi * (pi_blend - pi*)
+        $blend = (MonetaryPolicySubsystem::TAYLOR_INFLATION_CORE_WEIGHT * 0.020) + (MonetaryPolicySubsystem::TAYLOR_INFLATION_ANCHOR_WEIGHT * 0.040);
+        $this->assertEqualsWithDelta(0.026, $blend, 1e-12);
+        $expected = MacroEngine::BASE_NATURAL_RATE + $blend + (MonetaryPolicySubsystem::TAYLOR_INFLATION_WEIGHT * ($blend - MacroEngine::TARGET_INFLATION));
+        $this->assertEqualsWithDelta($expected, $target, 0.001);
     }
 
     public function testEvansRulePreventsPrematureLiftoffAtZlb(): void
@@ -284,27 +290,30 @@ class MonetaryPolicySubsystemTest extends TestCase
         $this->assertGreaterThan(0.0, $curve['yield_10y']);
     }
 
-    public function testFaitAccommodativeBufferAfterInflationShortfall(): void
+    /**
+     * The Fed's 2025 framework is symmetric flexible inflation targeting: an overshoot and a shortfall of the same
+     * size move the target by the same amount in opposite directions, with no make-up for the past.
+     */
+    public function testTheRuleRespondsSymmetricallyToInflationEitherSideOfTarget(): void
     {
-        $stateNeutral = new MacroState();
-        $stateNeutral->inflationEma = 0.025; // Moderate overshoot
-        $stateNeutral->tipsBreakeven = 0.025;
-        $stateNeutral->outputGap = 0.01;
-        $stateNeutral->cumulativeInflationGap = 0.0; // No historical shortfall
+        $targetAt = function (float $inflation): float {
+            $state = new MacroState();
+            $state->inflationEma = $inflation;
+            $state->supercoreInflationEma = $inflation;
+            $state->coreGoodsInflationEma = $inflation;
+            $state->tipsBreakeven = MacroEngine::TARGET_INFLATION;
+            $state->outputGap = 0.0;
+            $state->outputGapEma = 0.0;
 
-        $targetNeutral = $this->subsystem->calculateTargetRate($stateNeutral, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE);
+            return $this->subsystem->calculateTargetRate($state, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE);
+        };
 
-        $statePostRecession = new MacroState();
-        $statePostRecession->inflationEma = 0.025; // Same overshoot
-        $statePostRecession->tipsBreakeven = 0.025;
-        $statePostRecession->outputGap = 0.01;
-        $statePostRecession->cumulativeInflationGap = -0.04; // Prior 2-year low inflation shortfall
+        $neutral = $targetAt(MacroEngine::TARGET_INFLATION);
+        $over = $targetAt(MacroEngine::TARGET_INFLATION + 0.01) - $neutral;
+        $under = $neutral - $targetAt(MacroEngine::TARGET_INFLATION - 0.01);
 
-        $targetPostRecession = $this->subsystem->calculateTargetRate($statePostRecession, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE);
-
-        // FAIT make-up strategy must keep target rate lower to tolerate overshoot after shortfall
-        $this->assertLessThan($targetNeutral, $targetPostRecession);
-        $this->assertEqualsWithDelta(0.010, $targetNeutral - $targetPostRecession, 0.003, 'FAIT offset should provide ~100bps accommodation buffer');
+        $this->assertEqualsWithDelta($over, $under, 1e-12);
+        $this->assertGreaterThan(0.007, $over, 'The Taylor principle: the nominal target moves by more than the core-weighted share of inflation.');
     }
 
     public function testPreferredHabitatDurationExtraction(): void
@@ -859,12 +868,8 @@ class MonetaryPolicySubsystemTest extends TestCase
         ];
     }
 
-    /**
-     * The recession boost is what makes the reaction function recession-averse rather than symmetric
-     * (Cukierman & Muscatelli 2008). Capped at half a Taylor weight it saturated at a -1.4% gap, so a mild
-     * slowdown and a severe one drew the same lean and policy stayed restrictive deep into a downturn.
-     */
-    public function testRecessionBoostScalesWithDepthAndLeavesBoomsOnTheStandardWeight(): void
+    /** The gap weight is the same in slack as in a boom (1987-2008: impact 0.29 in slack vs 0.24 in booms, not distinguishable). */
+    public function testTheGapWeightIsTheSameInSlackAsInABoom(): void
     {
         $targetFor = function (float $gap): float {
             $state = new MacroState();
@@ -880,22 +885,8 @@ class MonetaryPolicySubsystemTest extends TestCase
         };
 
         $neutral = $targetFor(0.0);
-
-        // A boom is met with the canonical Taylor weight, unchanged.
-        $boomWeight = ($targetFor(0.02) - $neutral) / 0.02;
-        $this->assertEqualsWithDelta(MonetaryPolicySubsystem::TAYLOR_OUTPUT_GAP_WEIGHT, $boomWeight, 0.01);
-
-        // A mild slowdown leans harder than the canonical weight but short of the balanced-approach 1.0.
-        $mildWeight = ($neutral - $targetFor(-0.005)) / 0.005;
-        $this->assertGreaterThan(MonetaryPolicySubsystem::TAYLOR_OUTPUT_GAP_WEIGHT, $mildWeight);
-        $this->assertLessThan(1.0, $mildWeight);
-
-        // A severe recession reaches the Yellen (2012) balanced-approach weight or beyond.
-        $severeWeight = ($neutral - $targetFor(-0.03)) / 0.03;
-        $this->assertGreaterThanOrEqual(1.0, $severeWeight);
-
-        // And it keeps scaling with depth between the two, rather than saturating at a shallow gap.
-        $this->assertGreaterThan($mildWeight, $severeWeight);
+        $this->assertEqualsWithDelta(MonetaryPolicySubsystem::TAYLOR_OUTPUT_GAP_WEIGHT, ($targetFor(0.02) - $neutral) / 0.02, 1e-9);
+        $this->assertEqualsWithDelta(MonetaryPolicySubsystem::TAYLOR_OUTPUT_GAP_WEIGHT, ($neutral - $targetFor(-0.03)) / 0.03, 1e-9);
     }
 
     /** The Bernanke (2015) blend: 70% sectoral core, 30% breakeven -- the one expected-inflation measure both the Taylor rule and the IS curve use. */

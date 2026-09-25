@@ -94,10 +94,6 @@ class MacroEngine
     public const EVANS_RULE_UNEMPLOYMENT = 0.050;
     /** Inflation panic threshold above which central bank accelerates hiking to Volcker speed. */
     public const CB_INFLATION_PANIC_THRESHOLD = 0.035;
-    /** Maximum annual rate hike velocity cap during normal economic expansions (8 × 25bps meetings). */
-    public const CB_MAX_NORMAL_HIKE_VELOCITY = 0.025;
-    /** Maximum annual rate hike velocity cap during emergency runaway inflation spikes (525bps in 15 months annualized). */
-    public const CB_MAX_PANIC_HIKE_VELOCITY = 0.060;
     /** Policy rate threshold determining proximity to the Zero Lower Bound. */
     public const ZLB_PROXIMITY_THRESHOLD = 0.015;
 
@@ -124,14 +120,16 @@ class MacroEngine
     public const PREFERRED_HABITAT_DURATION_SENSITIVITY = 1.0;
 
     // --- Merton Structural Corporate Credit Spreads (Merton 1974) ---
-    /** IG spread widening per unit of interbank stress (~0.6). TED and IG share a common factor, and with the reverse coupling below the loop gain stays under 0.25 so calm markets do not self-excite. */
+    /** IG spread widening per unit of interbank stress (~0.6): 2008's +430 bps TED moved IG OAS ~+450 bps. TED reads the excess bond premium, never IG, so the two share a factor without forming a loop. */
     public const INTERBANK_CREDIT_CONTAGION_SENSITIVITY = 0.6;
+    /** IG spread per unit of excess bond premium, direct leg (0.58): GZ spreads map to IG OAS at 0.78 (their 2008 peaks over medians), and 0.6 x 0.32 of that already arrives through TED contagion. */
+    public const CREDIT_SPREAD_PREMIUM_LOADING = 0.58;
     /** Through-the-cycle investment-grade spread (130 bps), the long-run median of IG OAS. */
     public const BASE_CREDIT_SPREAD = 0.013;
     /** Log-elasticity of the IG spread to the output gap (distance-to-default): a -3% gap widens IG ~1.35x, a +3% gap tightens it to ~0.74x. */
     public const MERTON_LEVERAGE_SENSITIVITY = 10.0;
-    /** IG spread widening per unit of equity volatility above the threshold (vol as a fraction): 30% vol adds ~180 bps, 45% vol ~360 bps. */
-    public const MERTON_VOL_SENSITIVITY = 0.12;
+    /** IG default-risk widening per unit of equity volatility above the threshold (0.037): the GZ default-risk part on VIX, 0.047 (se 0.009), at the 0.78 GZ-to-IG scale. 45% vol adds ~90 bps; the rest of a crisis spread is the premium. */
+    public const MERTON_VOL_SENSITIVITY = 0.037;
     /** Floor on the investment-grade spread (80 bps), the tightest IG OAS of the 2000s cycle. */
     public const MIN_CREDIT_SPREAD = 0.008;
     /** Cap on the investment-grade spread (650 bps): ICE BofA US Corporate OAS peaked near 620 bps in Dec 2008. */
@@ -522,6 +520,7 @@ class MacroEngine
 
         $stressMultiplier = 1.0 + (abs($state->outputGap) * self::STRESS_MULTIPLIER_GAP_SENSITIVITY);
         $expectedInflation = $this->monetarySubsystem->calculateExpectedInflation($state, self::TARGET_INFLATION);
+        $openingGap = $state->outputGap;
         $state->outputGap = $this->aggregateSubsystem->calculateOutputGap($state, $state->yield5y, $state->naturalRate, $expectedInflation, $dt, $stressMultiplier);
 
         $this->aggregateSubsystem->calculateCapacityUtilization($state);
@@ -537,6 +536,8 @@ class MacroEngine
         $this->assetSubsystem->calculateCommercialPropertyIndex($state, $dt);
         $this->creditFiscalSubsystem->calculateHouseholdCredit($state, $dt);
         $this->creditFiscalSubsystem->calculateCreditCrisisHazard($state, $dt);
+        // Gilchrist & Zakrajsek (2012): the premium moves before volatility and the spreads that load on it.
+        $this->creditFiscalSubsystem->updateExcessBondPremium($state, $state->outputGap - $openingGap, $dt);
         $this->creditFiscalSubsystem->calculateRetailDefaultRate($state, $dt);
         $this->commoditySubsystem->calculateAgriculturalCommodityIndex($state, $dt);
         $this->commoditySubsystem->calculateCatastropheLosses($state, $dt);

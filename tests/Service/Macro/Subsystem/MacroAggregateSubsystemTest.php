@@ -762,8 +762,9 @@ class MacroAggregateSubsystemTest extends TestCase
         $gapAnchored = $this->subsystem->calculateOutputGap($anchored, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0);
         $gapUnanchored = $this->subsystem->calculateOutputGap($unanchored, 0.035, MacroEngine::BASE_NATURAL_RATE, 0.03, 0.25, 1.0);
 
-        // One percentage point of expected inflation on a 0.50 policy leg is 50bps of real easing, through the drag coefficient over a quarter.
-        $expectedLift = MacroAggregateSubsystem::KALDOR_MONETARY_DRAG * MacroAggregateSubsystem::BORROWING_POLICY_WEIGHT * 0.01 * 0.25;
+        // One percentage point of expected inflation on a 0.50 policy leg is 50bps of real easing, through the drag
+        // coefficient over a quarter, of which a one-quarter step has passed w^2 through the two Pascal stages.
+        $expectedLift = MacroAggregateSubsystem::KALDOR_MONETARY_DRAG * MacroAggregateSubsystem::BORROWING_POLICY_WEIGHT * 0.01 * $this->pascalPassThrough(0.25) * 0.25;
         $this->assertEqualsWithDelta($expectedLift, $gapUnanchored - $gapAnchored, 1e-9);
     }
 
@@ -777,8 +778,39 @@ class MacroAggregateSubsystemTest extends TestCase
         $gapAnchored = $this->subsystem->calculateOutputGap($anchored, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0);
         $gapRepriced = $this->subsystem->calculateOutputGap($repriced, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0);
 
-        $expectedLift = MacroAggregateSubsystem::KALDOR_MONETARY_DRAG * MacroAggregateSubsystem::BORROWING_YIELD5Y_WEIGHT * 0.01 * 0.25;
+        $expectedLift = MacroAggregateSubsystem::KALDOR_MONETARY_DRAG * MacroAggregateSubsystem::BORROWING_YIELD5Y_WEIGHT * 0.01 * $this->pascalPassThrough(0.25) * 0.25;
         $this->assertEqualsWithDelta($expectedLift, $gapRepriced - $gapAnchored, 1e-9);
+    }
+
+    /**
+     * A rate move reaches spending through a second-order Pascal lag (Solow 1960): nothing on the tick, 1 - 2/e of it
+     * one lag constant later (a single stage would pass 1 - 1/e), 1 - 3/e^2 after two, and the same at any step size.
+     */
+    public function testARealRateStepReachesDemandThroughAPascalLag(): void
+    {
+        $tau = MacroAggregateSubsystem::MONETARY_TRANSMISSION_LAG_YEARS;
+        foreach ([1.0 / 360.0, 4.0 / 360.0] as $dt) {
+            $state = $this->neutralBorrowingState();
+            $state->policyRate += 0.01;
+            $this->subsystem->calculateOutputGap($state, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, $dt, 1.0);
+            $stance = $state->monetaryStanceStage1 / (1.0 - exp(-$dt / $tau));
+            $this->assertLessThan(0.01 * $stance, $state->monetaryStanceTransmitted, 'Nothing reaches demand on the tick.');
+
+            $passed = [];
+            for ($i = 1; $i < (int) round(2.0 * $tau / $dt); $i++) {
+                $state->outputGap = 0.0;
+                $this->subsystem->calculateOutputGap($state, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, $dt, 1.0);
+                $passed[$i + 1] = $state->monetaryStanceTransmitted / $stance;
+            }
+            $this->assertEqualsWithDelta(1.0 - (2.0 / M_E), $passed[(int) round($tau / $dt)], 0.01, "One lag constant in at dt {$dt}.");
+            $this->assertEqualsWithDelta(1.0 - (3.0 / M_E ** 2), end($passed), 0.01, "Two lag constants in at dt {$dt}.");
+        }
+    }
+
+    /** Share of a stance step that has passed both Pascal stages after one step of $dt from rest: w^2. */
+    private function pascalPassThrough(float $dt): float
+    {
+        return (1.0 - exp(-$dt / MacroAggregateSubsystem::MONETARY_TRANSMISSION_LAG_YEARS)) ** 2;
     }
 
     /** A state with every demand channel at its baseline, so only the borrowing-cost terms can move the gap. */
@@ -1061,8 +1093,9 @@ class MacroAggregateSubsystemTest extends TestCase
         );
 
         // Every channel in the drift is named, so the panel cannot silently drop one.
-        $this->assertCount(20, $window['contributions']);
+        $this->assertCount(21, $window['contributions']);
         $this->assertArrayHasKey('productivitySupply', $window['contributions']);
+        $this->assertArrayHasKey('premiumDrag', $window['contributions']);
         $this->assertArrayHasKey('monetaryDrag', $window['contributions']);
         $this->assertArrayHasKey('automaticStabiliser', $window['contributions']);
         $this->assertEqualsWithDelta(array_sum($window['contributions']), $window['drift'], 1e-15);

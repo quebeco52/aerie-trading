@@ -24,7 +24,7 @@ let macroCostPushChartInstance = null;
 let macroSectoralInflationChartInstance = null;
 let macroCreditCliffChartInstance = null;
 let macroInventoryCycleChartInstance = null;
-let macroFaitChartInstance = null;
+let macroPolicyRuleChartInstance = null;
 let macroLeadingIndicatorsChartInstance = null;
 let macroHouseholdCreditChartInstance = null;
 let macroGlobalCycleChartInstance = null;
@@ -79,7 +79,7 @@ function updateMacroHud(d) {
     setHud('hud-macroSectoralInflationChart', `CPI: ${last(d.inflationData).toFixed(1)}% | PPI: ${last(d.ppiData) >= 0 ? '+' : ''}${last(d.ppiData).toFixed(1)}% | Supercore: ${last(d.supercoreInflationData).toFixed(1)}%`);
     setHud('hud-macroCreditCliffChart', `HY: ${last(d.highYieldSpreadBpsData).toFixed(0)} bps | Cliff: ${last(d.creditCliffRatioData).toFixed(2)}x`);
     setHud('hud-macroInventoryCycleChart', `Overhang: ${last(d.inventoryStockGapData) >= 0 ? '+' : ''}${last(d.inventoryStockGapData).toFixed(1)}% | CU: ${last(d.capacityUtilizationData).toFixed(1)}%`);
-    setHud('hud-macroFaitChart', `Cum Gap: ${last(d.faitCumulativeGapData) >= 0 ? '+' : ''}${last(d.faitCumulativeGapData).toFixed(0)} bps`);
+    setHud('hud-macroPolicyRuleChart', `Rate vs rule: ${last(d.policyRuleGapBpsData) >= 0 ? '+' : ''}${last(d.policyRuleGapBpsData).toFixed(0)} bps`);
     setHud('hud-macroLeadingIndicatorsChart', `PMI: ${last(d.pmiData).toFixed(1)} | Starts: ${last(d.housingStartsData).toFixed(0)} | M2: ${last(d.moneySupplyGrowthData) >= 0 ? '+' : ''}${last(d.moneySupplyGrowthData).toFixed(1)}% | Trade: ${last(d.tradeBalanceData) >= 0 ? '+' : ''}${last(d.tradeBalanceData).toFixed(1)}%`);
     setHud('hud-macroHouseholdCreditChart', `DSR: ${last(d.householdDsrData).toFixed(1)}% | DTI: ${last(d.householdDtiData).toFixed(1)}% | CCyB: ${last(d.ccybRateData).toFixed(2)}% | Gap: ${last(d.creditToGdpGapData) >= 0 ? '+' : ''}${last(d.creditToGdpGapData).toFixed(1)}%`);
     setHud('hud-macroGlobalCycleChart', `Dom: ${last(d.outputGapData) >= 0 ? '+' : ''}${last(d.outputGapData).toFixed(1)}% | For: ${last(d.foreignOutputGapData) >= 0 ? '+' : ''}${last(d.foreignOutputGapData).toFixed(1)}% | Global: ${last(d.globalDemandGapData) >= 0 ? '+' : ''}${last(d.globalDemandGapData).toFixed(1)}% | For Rate: ${last(d.foreignPolicyRateData).toFixed(2)}%`);
@@ -122,7 +122,7 @@ export function updateMacroCharts(reports, timeframe = currentMacroTimeframe) {
     let supercoreInflationData = [], coreGoodsInflationData = [];
     let highYieldSpreadBpsData = [], creditCliffRatioData = [];
     let inventoryStockGapData = [], energyBufferData = [];
-    let faitCumulativeGapData = [], faitOffsetBpsData = [];
+    let policyRuleGapBpsData = [];
     let capacityUtilizationData = [], recessionProbData = [];
     let crackSpreadData = [], gscpiData = [];
     let corporateDefaultPctData = [], corporateDefaultBpsData = [];
@@ -359,11 +359,10 @@ export function updateMacroCharts(reports, timeframe = currentMacroTimeframe) {
         let rawEnergyBuf = report.energy_inventory_index_ema ?? report.energyInventoryIndexEma ?? 100.0;
         energyBufferData.push(parseFloat(rawEnergyBuf));
 
-        // Powell (2020) FAIT Memory: Asymmetric make-up buffer for cumulative inflation shortfall (clamped <= 0)
-        let rawFaitGap = report.cumulative_inflation_gap_ema ?? report.cumulativeInflationGapEma ?? 0.0;
-        let faitGapPct = parseFloat(rawFaitGap) * 100;
-        faitCumulativeGapData.push(faitGapPct);
-        faitOffsetBpsData.push(Math.min(0.0, faitGapPct * 25.0)); // Asymmetric make-up buffer: tolerates overshoots without hiking extra
+        // Clarida-Gali-Gertler (2000) partial adjustment: how far the policy rate trails its rule's target.
+        let lastPolicy = policyRateData[policyRateData.length - 1];
+        let lastTarget = targetRateData[targetRateData.length - 1];
+        policyRuleGapBpsData.push(lastPolicy !== null && lastTarget !== null ? (lastPolicy - lastTarget) * 100 : null);
 
         // 7 New Macro & Financial Indicators
         let rawCu = report.capacity_utilization_rate_ema ?? report.capacity_utilization_rate ?? report.capacityUtilizationRateEma ?? report.capacityUtilizationRate ?? 0.785;
@@ -460,7 +459,7 @@ export function updateMacroCharts(reports, timeframe = currentMacroTimeframe) {
         slicedAssetStock, balanceSheetData, fciData, sloosData, agriLagData,
         supercoreInflationData, coreGoodsInflationData,
         highYieldSpreadBpsData, creditCliffRatioData,
-        inventoryStockGapData, faitCumulativeGapData,
+        inventoryStockGapData, policyRuleGapBpsData,
         capacityUtilizationData, fxEmaData, freightEmaData,
         pmiData, ppiData, tradeBalanceData, housingStartsData, moneySupplyGrowthData,
         naturalGasPriceData, goldPriceData, powerPriceIndexData, metalsEmaData, sovereignRiskSpreadData, primaryDeficitData,
@@ -504,7 +503,7 @@ export function updateMacroCharts(reports, timeframe = currentMacroTimeframe) {
     renderWhenVisible('macroSectoralInflationChart', () => renderMacroSectoralInflationChart(labels, inflationData, supercoreInflationData, coreGoodsInflationData, foodLagPctData, ppiData));
     renderWhenVisible('macroCreditCliffChart', () => renderMacroCreditCliffChart(labels, creditSpreadBpsData, highYieldSpreadBpsData, creditCliffRatioData, corporateDefaultBpsData));
     renderWhenVisible('macroInventoryCycleChart', () => renderMacroInventoryCycleChart(labels, inventoryStockGapData, outputGapData, energyBufferData, capacityUtilizationData));
-    renderWhenVisible('macroFaitChart', () => renderMacroFaitChart(labels, faitCumulativeGapData, faitOffsetBpsData, policyRateData, targetRateData));
+    renderWhenVisible('macroPolicyRuleChart', () => renderMacroPolicyRuleChart(labels, policyRuleGapBpsData, policyRateData, targetRateData));
     renderWhenVisible('macroLeadingIndicatorsChart', () => renderMacroLeadingIndicatorsChart(labels, pmiData, housingStartsData, moneySupplyGrowthData, tradeBalanceData, ppiData));
     renderWhenVisible('macroHouseholdCreditChart', () => renderMacroHouseholdCreditChart(labels, householdDsrData, householdDtiData, creditToGdpGapData, ccybRateData));
     renderWhenVisible('macroGlobalCycleChart', () => renderMacroGlobalCycleChart(labels, outputGapData, foreignOutputGapData, globalDemandGapData, foreignPolicyRateData));
@@ -2366,28 +2365,17 @@ function renderMacroInventoryCycleChart(labels, invGapData, outputGapData, energ
     });
 }
 
-function renderMacroFaitChart(labels, faitGapData, faitOffsetBpsData, policyRateData, targetRateData) {
-    const canvas = document.getElementById('macroFaitChart');
+function renderMacroPolicyRuleChart(labels, ruleGapBpsData, policyRateData, targetRateData) {
+    const canvas = document.getElementById('macroPolicyRuleChart');
     if (!canvas) return;
-    macroFaitChartInstance = destroyChartInstance(macroFaitChartInstance);
+    macroPolicyRuleChartInstance = destroyChartInstance(macroPolicyRuleChartInstance);
     const ctx = canvas.getContext('2d');
 
-    macroFaitChartInstance = new Chart(ctx, {
+    macroPolicyRuleChartInstance = new Chart(ctx, {
         type: 'line',
         data: {
             labels: labels,
             datasets: [
-                {
-                    label: 'Cumulative Inflation Gap (FAIT)',
-                    data: faitGapData,
-                    borderColor: '#c084fc',
-                    backgroundColor: 'rgba(192, 132, 252, 0.15)',
-                    borderWidth: 2,
-                    tension: 0.25,
-                    fill: true,
-                    yAxisID: 'y',
-                    pointRadius: labels.length > 50 ? 0 : 1.5
-                },
                 {
                     label: 'Target Rate',
                     data: targetRateData,
@@ -2408,8 +2396,8 @@ function renderMacroFaitChart(labels, faitGapData, faitOffsetBpsData, policyRate
                     pointRadius: labels.length > 50 ? 0 : 1
                 },
                 {
-                    label: 'FAIT Make-Up Offset',
-                    data: faitOffsetBpsData,
+                    label: 'Policy Rate - Rule Target',
+                    data: ruleGapBpsData,
                     borderColor: '#fbbf24',
                     borderWidth: 2,
                     tension: 0.25,
@@ -2438,19 +2426,14 @@ function renderMacroFaitChart(labels, faitGapData, faitOffsetBpsData, policyRate
                     position: 'left',
                     grid: { color: 'rgba(255, 255, 255, 0.05)' },
                     ticks: { callback: (val) => val.toFixed(1) + '%' },
-                    title: { display: true, text: 'Rates & Cumulative Gap (%)' }
+                    title: { display: true, text: 'Rates (%)' }
                 },
                 y1: {
                     type: 'linear',
                     position: 'right',
-                    min: -50,
-                    max: 10,
                     grid: { drawOnChartArea: false },
-                    ticks: {
-                        stepSize: 10,
-                        callback: (val) => val.toFixed(0) + ' bps'
-                    },
-                    title: { display: true, text: 'Policy Offset (bps)' }
+                    ticks: { callback: (val) => val.toFixed(0) + ' bps' },
+                    title: { display: true, text: 'Rate vs Rule (bps)' }
                 },
                 x: {
                     grid: { color: 'rgba(255, 255, 255, 0.05)' },
@@ -2971,7 +2954,7 @@ export function resizeMacroCharts() {
         macroTermPremiumChartInstance, macroGdpGrowthChartInstance, macroBalanceSheetChartInstance,
         macroFciChartInstance, macroCostPushChartInstance,
         macroSectoralInflationChartInstance, macroCreditCliffChartInstance,
-        macroInventoryCycleChartInstance, macroFaitChartInstance,
+        macroInventoryCycleChartInstance, macroPolicyRuleChartInstance,
         macroLeadingIndicatorsChartInstance,
         macroHouseholdCreditChartInstance, macroGlobalCycleChartInstance, macroBankingLiquidityChartInstance
     ];
@@ -3007,7 +2990,7 @@ export function destroyMacroCharts() {
     macroSectoralInflationChartInstance = destroyChartInstance(macroSectoralInflationChartInstance);
     macroCreditCliffChartInstance = destroyChartInstance(macroCreditCliffChartInstance);
     macroInventoryCycleChartInstance = destroyChartInstance(macroInventoryCycleChartInstance);
-    macroFaitChartInstance = destroyChartInstance(macroFaitChartInstance);
+    macroPolicyRuleChartInstance = destroyChartInstance(macroPolicyRuleChartInstance);
     macroLeadingIndicatorsChartInstance = destroyChartInstance(macroLeadingIndicatorsChartInstance);
     macroHouseholdCreditChartInstance = destroyChartInstance(macroHouseholdCreditChartInstance);
     macroGlobalCycleChartInstance = destroyChartInstance(macroGlobalCycleChartInstance);

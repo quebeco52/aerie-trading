@@ -2068,14 +2068,19 @@ class MathUtility
      * Calculates Investment Grade (IG) and High Yield (HY) corporate credit spreads
      * incorporating the Jarrow, Lando, & Turnbull (1997) rating migration model and "fallen angel" cliff.
      *
-     * During severe macroeconomic contractions, corporate credit rating transitions migrate toward speculative
-     * grades, where institutional investment mandates trigger forced selling, exponentially blowing out HY spreads.
+     * The IG spread is Gilchrist & Zakrajsek's (2012) decomposition: a default-risk part (Merton leverage on the
+     * output gap and equity volatility) plus the excess bond premium lenders charge on top of it, plus interbank
+     * contagion. During severe macroeconomic contractions, corporate credit rating transitions migrate toward
+     * speculative grades, where institutional investment mandates trigger forced selling, exponentially blowing
+     * out HY spreads.
      *
-     * @param float $baseIgSpread     Baseline investment-grade spread (e.g. 0.020).
-     * @param float $outputGapEma     Smoothed macroeconomic output gap.
-     * @param float $marketVolEma     Smoothed equity market volatility.
-     * @param float $interbankStress  Wholesale interbank liquidity stress above baseline.
-     * @param float $hyBaseMultiplier Baseline multiple of HY spread over IG spread (e.g. 2.4x).
+     * @param float $baseIgSpread      Baseline investment-grade spread (e.g. 0.020).
+     * @param float $outputGapEma      Smoothed macroeconomic output gap.
+     * @param float $marketVolEma      Smoothed equity market volatility.
+     * @param float $interbankStress   Wholesale interbank liquidity stress above baseline.
+     * @param float $excessBondPremium Excess bond premium (GZ units, signed).
+     * @param float $premiumLoading    IG spread per unit of excess bond premium.
+     * @param float $hyBaseMultiplier  Baseline multiple of HY spread over IG spread (e.g. 2.4x).
      * @param float $fallenAngelSens  Sensitivity coefficient for non-linear HY spread blowout on contractions.
      * @param float $leverageSens     Merton distance-to-default sensitivity of the IG spread to the output gap.
      * @param float $volSens          IG spread widening per unit of equity volatility above the threshold.
@@ -2092,6 +2097,8 @@ class MathUtility
         float $outputGapEma,
         float $marketVolEma,
         float $interbankStress,
+        float $excessBondPremium = 0.0,
+        float $premiumLoading = MacroEngine::CREDIT_SPREAD_PREMIUM_LOADING,
         float $hyBaseMultiplier = MacroEngine::HY_BASE_SPREAD_MULTIPLIER,
         float $fallenAngelSens = MacroEngine::FALLEN_ANGEL_CLIFF_SENSITIVITY,
         float $leverageSens = MacroEngine::MERTON_LEVERAGE_SENSITIVITY,
@@ -2107,8 +2114,9 @@ class MathUtility
         $excessVol = max(0.0, $marketVolEma - $volThreshold);
         $volSpread = $volSens * $excessVol;
         $contagionSpread = $interbankStress * $contagionSens;
+        $premiumSpread = $excessBondPremium * $premiumLoading;
 
-        $igSpread = max($minIgSpread, min($maxIgSpread, $cycleSpread + $volSpread + $contagionSpread));
+        $igSpread = max($minIgSpread, min($maxIgSpread, $cycleSpread + $volSpread + $premiumSpread + $contagionSpread));
 
         // Jarrow-Lando-Turnbull (1997): Speculative-grade default intensity surges exponentially during recessions
         $contractionDepth = max(0.0, -$outputGapEma);
@@ -2225,28 +2233,49 @@ class MathUtility
     }
 
     /**
+     * One quarterly step of the one-sided Hodrick-Prescott trend in its state-space form (Harvey & Jaeger 1993).
+     *
+     * The HP trend is the filtered level of a local linear trend, y = tau + eps, tau' = tau + beta, beta' = beta + eta,
+     * with var(eta) / var(eps) = 1 / lambda. The one-sided (real-time) trend is the Kalman filter's estimate, and at
+     * the steady-state gains of a given lambda it is a two-line recursion: predict the level along its slope, then
+     * correct both by the gains times the surprise.
+     *
+     * @param float $trendLevel  Trend level after the previous observation.
+     * @param float $trendSlope  Trend slope per observation after the previous observation.
+     * @param float $observation This period's observation.
+     * @param float $levelGain   Steady-state Kalman gain on the level.
+     * @param float $slopeGain   Steady-state Kalman gain on the slope.
+     * @return array{level: float, slope: float} The updated trend level and slope.
+     */
+    public function calculateOneSidedHpStep(float $trendLevel, float $trendSlope, float $observation, float $levelGain, float $slopeGain): array
+    {
+        $predictedLevel = $trendLevel + $trendSlope;
+        $surprise = $observation - $predictedLevel;
+
+        return [
+            'level' => $predictedLevel + ($levelGain * $surprise),
+            'slope' => $trendSlope + ($slopeGain * $surprise),
+        ];
+    }
+
+    /**
      * Annual financial-crisis hazard from the credit cycle (Schularick & Taylor 2012 "Credit Booms Gone Bust").
      *
-     * Schularick and Taylor estimate a logit of crisis onset on lagged credit growth over 140 years of
-     * advanced-economy data: the credit-to-GDP gap is the medium-term signal and, per Drehmann & Juselius
-     * (2014), the debt-service gap is the near-term trigger:
-     *   h = 1 / (1 + exp(-(beta0 + betaGap * creditGap + betaDsr * debtServiceGap)))
+     * Schularick and Taylor estimate a logit of crisis onset on the lagged credit cycle over the long run of
+     * advanced-economy data; here the regressor is the credit gap, the stock over its slow one-sided trend:
+     *   h = 1 / (1 + exp(-(beta0 + betaGap * creditGap)))
      *
-     * @param float $creditGap      Credit-to-GDP gap (stock over its slow one-sided trend; Basel III units).
-     * @param float $debtServiceGap Debt-service ratio over its own long-run average.
-     * @param float $beta0          Logit intercept (log-odds of a crisis in a year with no boom).
-     * @param float $betaGap        Logit sensitivity to the credit gap.
-     * @param float $betaDsr        Logit sensitivity to the debt-service gap.
+     * @param float $creditGap Credit gap (stock over its slow one-sided trend), in the units betaGap is quoted in.
+     * @param float $beta0     Logit intercept (log-odds of a crisis in a year with no boom).
+     * @param float $betaGap   Logit sensitivity to the credit gap.
      * @return float Annual crisis hazard in [0, 0.99].
      */
     public function calculateSchularickTaylorCrisisHazard(
         float $creditGap,
-        float $debtServiceGap,
         float $beta0,
-        float $betaGap,
-        float $betaDsr
+        float $betaGap
     ): float {
-        $logit = $beta0 + ($betaGap * $creditGap) + ($betaDsr * $debtServiceGap);
+        $logit = $beta0 + ($betaGap * $creditGap);
         return min(0.99, self::logisticUnitInterval($logit, 0.0, 1.0));
     }
 
@@ -2304,16 +2333,16 @@ class MathUtility
      * Models the Federal Reserve Senior Loan Officer Opinion Survey (SLOOS) Credit Standards Index.
      *
      * Evaluates the net percentage of domestic commercial banks tightening lending standards for C&I loans
-     * via an Ornstein-Uhlenbeck continuous adjustment process driven by wholesale credit spreads and the output gap:
-     *   Target = baseline + creditSens * excessCreditSpread - gapSens * outputGap
+     * via an Ornstein-Uhlenbeck continuous adjustment process driven by the credit risk premium and the output gap:
+     *   Target = creditSens * excessCreditSpread - gapSens * outputGap
      *
      * @param float $currentSloos        Current net tightening percentage.
      * @param float $outputGap           Current output gap.
-     * @param float $excessCreditSpread  Corporate credit spread above baseline.
+     * @param float $excessCreditSpread  Credit risk premium above baseline (the macro passes the excess bond premium).
      * @param float $dt                  Time increment in years.
      * @param float $dW                  Standard normal random shock.
      * @param float $kappa               Speed of adjustment toward target standards.
-     * @param float $creditSensitivity   Sensitivity to corporate credit spread widening.
+     * @param float $creditSensitivity   Net tightening per unit of credit risk premium.
      * @param float $gapSensitivity      Sensitivity to economic contraction.
      * @param float $sigma               Diffusion volatility of bank underwriting standards.
      * @return float Updated net tightening fraction clamped between -40% (easing) and +85% (severe credit crunch).

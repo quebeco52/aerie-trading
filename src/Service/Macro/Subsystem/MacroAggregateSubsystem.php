@@ -27,8 +27,6 @@ class MacroAggregateSubsystem
     public const EQUITY_WEALTH_TREND_HORIZON_YEARS = 3.0;
     /** The same horizon for houses, longer because housing wealth is revalued by sales that are years apart (Carroll, Otsuka & Slacalek 2011); a house price cycle runs about twice this, so the cycle still reads as deviation. */
     public const RESIDENTIAL_WEALTH_TREND_HORIZON_YEARS = 5.0;
-    /** Horizon of the lending-standards trend. Far longer than the 6-10y credit cycle it must leave intact, short enough to follow a regime change; the trend exists to strip a STANDING level, not a swing. */
-    public const SLOOS_TREND_HORIZON_YEARS = 20.0;
     /** Horizon of the real exchange rate's own normal, well beyond the ~12y swing the UIP differential and the sovereign risk discount drive: a first-order lag this long follows under a tenth of that swing, so PPP deviations (Rogoff 1996: 3-5y half-life) survive intact while a standing level does not. */
     public const EXCHANGE_RATE_TREND_HORIZON_YEARS = 20.0;
 
@@ -51,16 +49,20 @@ class MacroAggregateSubsystem
     public const KALDOR_MOMENTUM = 0.06;
     /** Cubic capacity ceiling on the UPSIDE only (Friedman 1993 plucking; Dupraz, Nakamura & Steinsson 2019): output is plucked below a ceiling it cannot run above, and a slump has no floor of its own. */
     public const KALDOR_CAPACITY = 600.0;
-    /** Sensitivity of aggregate demand to real interest rate deviations from natural rate. */
-    public const KALDOR_MONETARY_DRAG = 1.30;
+    /** Demand per unit of the transmitted real-rate stance, fitted with the reversion and the lag below, the demand shock scale and the policy rule by indirect inference on the CBO gap's autocorrelation at 4-16q and sd (1949-2019) and its path under the Bauer-Swanson (2023) post-surprise funds-rate path (var/harness/isl_an.py). The fit is flat from 0.3 to 1.0; 1.0 moves the gap -0.34pp per point of rates, the nearest the fit allows to the -0.5 to -1.5 of Christiano-Eichenbaum-Evans, Romer-Romer and Ramey: at a US-sized 3.0 policy cancels a demand shock within two years and the gap's 12q autocorrelation turns to -0.3. */
+    public const KALDOR_MONETARY_DRAG = 1.0;
+    /** Time constant of each of the two Pascal stages the real-rate stance passes through before it moves demand (Solow 1960): mean lag 0.8y against Rudebusch-Svensson's year average lagged a quarter (0.6y); the same fit. */
+    public const MONETARY_TRANSMISSION_LAG_YEARS = 0.4;
     /** Demand per unit of excess credit and interbank spread: the Bernanke-Gertler-Gilchrist (1999) accelerator's price leg only, well under Gilchrist-Zakrajsek's reduced-form 1.5-2.0 because the quantity and deleveraging legs are booked separately. */
     public const KALDOR_CREDIT_FRICTION_DRAG = 0.60;
+    /** Demand per unit of the Gilchrist-Zakrajsek (2012) excess bond premium, the credit-supply shock beyond its 0.58 loading into the IG spread above; fitted with the demand shock scale by indirect inference on their local projection of the gap on the premium (1q -0.78 vs -1.05, 2q -1.19 vs -1.29, 4q -1.15 vs -1.65 per pp), the loop's moments held. */
+    public const KALDOR_EXCESS_BOND_PREMIUM_DRAG = 6.0;
     /** Bank lending channel (Lown & Morgan 2006; Bassett, Chosak, Driscoll & Zakrajsek 2014): demand per unit of net lending tightening, so the ~80% of 2008 costs ~2pp a year while it lasts, the loss they attribute to the credit-supply cut. */
     public const KALDOR_LENDING_STANDARDS_DRAG = 0.025;
     /** Countercyclical fiscal stimulus multiplier from corporate tax rate cuts. */
     public const KALDOR_FISCAL_MULTIPLIER = 0.50;
-    /** Blanchard-Perotti (2002) automatic stabilisers, the fiscal leg that needs no legislation: progressive receipts and transfer outlays move with income inside the quarter, so this one is read off the CURRENT gap while the discretionary legs above lag. Held below the OECD budget elasticity (~0.5 at a ~0.5 multiplier) because it is a contemporaneous spring and every point of it comes off the left tail. */
-    public const KALDOR_AUTOMATIC_STABILISER = 0.15;
+    /** The demand gap's own pull back to trend on the CURRENT gap: automatic stabilisers (Blanchard & Perotti 2002) and the permanent-income smoothing of transitory income (Friedman 1957), the level forces no channel here carries; the same fit. At 0.15 the gap had no pull of its own, a rate move integrated into it without limit, and a policy loop acting 3-4 quarters late did all the restoring and rang at 6-7 years. */
+    public const KALDOR_AUTOMATIC_STABILISER = 1.5;
     /** Sensitivity of the output gap to physical capital stock overhang: the slow half of the Kaldor-Kalecki phase space, and the pent-up demand that ends a slump once the overhang has gone negative. */
     public const KALDOR_CAPITAL_DRAG = 0.25;
     /** Demand response to a capital SHORTFALL, well under the drag an excess exerts: scrapped capacity does not summon construction while balance sheets are still impaired (Bertola-Caballero 1994 irreversibility). */
@@ -81,20 +83,20 @@ class MacroAggregateSubsystem
     // --- Aggregate Demand Disturbance (Smets-Wouters 2007) ---
     /** Mean reversion speed of the aggregate demand disturbance: -4*ln(0.86) per year, from the estimated quarterly AR(1) coefficient. */
     public const DEMAND_SHOCK_REVERSION = 0.60;
-    /** Innovation volatility of the aggregate demand disturbance, in annualized output gap drift units. */
-    public const DEMAND_SHOCK_SIGMA = 0.0050;
+    /** Innovation volatility of the aggregate demand disturbance, in annualized gap-drift units: one scale, shared with the disaster sizes below, set so the gap's sd under the fitted loop is the CBO 1949-2019 2.33% beside a ~1.0% TFP supply gap and the premium's drag. */
+    public const DEMAND_SHOCK_SIGMA = 0.0175;
 
     // --- Rare Demand Disasters (Barro 2006, Gourio 2012; Kou 2002 jump) ---
-    /** Disaster arrivals per year in either direction. The Gaussian innovation above is symmetric and its worst quarter in 20 sim-years reaches -1.8pp/yr against a real CBO bust descent of -4.7pp/yr, so the only cause of a slump is 2.6x too small to make one. */
+    /** Disaster arrivals per year in either direction: the one-sided cause a slump needs, since the Gaussian innovation above is symmetric. */
     public const DEMAND_DISASTER_INTENSITY = 0.20;
     /** Probability a disaster is an upside demand surprise. Barro's disaster set is one-sided; a quarter weight keeps booms possible while leaving the left tail three times heavier. */
     public const DEMAND_DISASTER_UP_PROBABILITY = 0.25;
-    /** Exponential rate of the upside jump: mean 1.0pp/yr of demand, half the downside, so expansions build gradually and slumps arrive whole. */
-    public const DEMAND_DISASTER_UP_RATE = 100.0;
-    /** Exponential rate of the downside jump: mean 2.0pp/yr of demand. The exponential tail puts a 4pp/yr shock once per ~16y and a 6pp/yr once per ~45y, matching the 40% of real busts that run past -4%. */
-    public const DEMAND_DISASTER_DOWN_RATE = 75.0;
-    /** Cap on one disaster (8pp/yr of demand, four mean down-jumps). Guards the tail of the exponential draw without binding on the calibrated range. */
-    public const DEMAND_DISASTER_CAP = 0.05;
+    /** Exponential rate of the upside jump: mean 3.5pp/yr of demand, three quarters of the downside, so expansions build gradually and slumps arrive whole; sized with DEMAND_SHOCK_SIGMA. */
+    public const DEMAND_DISASTER_UP_RATE = 28.6;
+    /** Exponential rate of the downside jump: mean 4.7pp/yr of demand, a 10pp/yr shock once per ~57y; sized with DEMAND_SHOCK_SIGMA. */
+    public const DEMAND_DISASTER_DOWN_RATE = 21.4;
+    /** Cap on one disaster (17.5pp/yr of demand, about four mean down-jumps). Guards the tail of the exponential draw without binding on the calibrated range. */
+    public const DEMAND_DISASTER_CAP = 0.175;
 
     /** Stochastic micro-diffusion volatility of the output gap: realistic quarterly variance without breaking cycle phase. */
     public const OUTPUT_GAP_DIFFUSION_SIGMA = 0.0025;
@@ -346,13 +348,19 @@ class MacroAggregateSubsystem
         // Woodford (2003) neutral real rate with expectations anchored at inflation target.
         $neutralRealRate = $neutralBorrowingPolicy - MacroEngine::TARGET_INFLATION;
 
-        // Curdia & Woodford (2010) pure risk-free real monetary policy transmission stance.
-        $monetaryDrag = self::KALDOR_MONETARY_DRAG * ($realRate - $neutralRealRate);
+        // Curdia & Woodford (2010) risk-free real stance, reaching spending through a Pascal lag (Solow 1960;
+        // Rudebusch & Svensson 1999 lag the real rate a year): investment is planned, ordered and built.
+        $state->monetaryStanceStage1 = $this->mathUtility->calculateDistributedLag($state->monetaryStanceStage1, $realRate - $neutralRealRate, $dt, self::MONETARY_TRANSMISSION_LAG_YEARS);
+        $state->monetaryStanceTransmitted = $this->mathUtility->calculateDistributedLag($state->monetaryStanceTransmitted, $state->monetaryStanceStage1, $dt, self::MONETARY_TRANSMISSION_LAG_YEARS);
+        $monetaryDrag = self::KALDOR_MONETARY_DRAG * $state->monetaryStanceTransmitted;
 
         // Bernanke, Gertler & Gilchrist (1999) financial accelerator wholesale credit frictions.
         $excessCreditSpread = max(-MacroEngine::BASE_CREDIT_SPREAD * 0.5, $state->macroCreditSpreadEma - MacroEngine::BASE_CREDIT_SPREAD);
         $excessInterbankSpread = max(-MacroEngine::INTERBANK_BASELINE_SPREAD * 0.5, $state->interbankLiquiditySpreadEma - MacroEngine::INTERBANK_BASELINE_SPREAD);
         $creditFrictionDrag = self::KALDOR_CREDIT_FRICTION_DRAG * ($excessCreditSpread + $excessInterbankSpread);
+
+        // Gilchrist & Zakrajsek (2012): the premium is the price of credit supply, and it moves spending beyond the spread it loads into.
+        $premiumDrag = self::KALDOR_EXCESS_BOND_PREMIUM_DRAG * $state->excessBondPremium;
 
         $momentum = self::KALDOR_MOMENTUM * $y;
         // Kaldor (1940) non-linear asymmetric capacity ceiling constraint.
@@ -363,8 +371,8 @@ class MacroAggregateSubsystem
         $discretionaryFiscal = (self::KALDOR_FISCAL_MULTIPLIER * (MacroEngine::TARGET_CORPORATE_TAX_RATE - $state->corporateTaxRate))
             + (self::KALDOR_GOVT_SPENDING_MULTIPLIER * $spendingShift);
 
-        // Blanchard & Perotti (2002) AUTOMATIC stabilisers, on the contemporaneous gap: nobody legislates them,
-        // so they carry no lag and act as a spring rather than the discretionary leg's anti-damper.
+        // Blanchard & Perotti (2002) AUTOMATIC stabilisers and Friedman (1957) income smoothing, on the
+        // contemporaneous gap: nobody decides them, so they carry no lag and act as a spring rather than an anti-damper.
         $automaticStabiliser = -self::KALDOR_AUTOMATIC_STABILISER * $y;
 
         // Bertola & Caballero (1994) asymmetric capital overhang drag reflecting investment irreversibility.
@@ -454,6 +462,7 @@ class MacroAggregateSubsystem
             'cubicConstraint' => -$cubicConstraint,
             'monetaryDrag' => -$monetaryDrag,
             'creditFrictionDrag' => -$creditFrictionDrag,
+            'premiumDrag' => -$premiumDrag,
             'fiscalStimulus' => $discretionaryFiscal,
             'automaticStabiliser' => $automaticStabiliser,
             'capitalDrag' => -$capitalDrag,
@@ -721,7 +730,6 @@ class MacroAggregateSubsystem
 
         $state->supercoreInflationEma += $emaWeight * ($state->supercoreInflation - $state->supercoreInflationEma);
         $state->coreGoodsInflationEma += $emaWeight * ($state->coreGoodsInflation - $state->coreGoodsInflationEma);
-        $state->cumulativeInflationGapEma += $emaWeight * ($state->cumulativeInflationGap - $state->cumulativeInflationGapEma);
         $state->highYieldCreditSpreadEma += $emaWeight * ($state->highYieldCreditSpread - $state->highYieldCreditSpreadEma);
         $state->inventoryStockGapEma += $emaWeight * ($state->inventoryStockGap - $state->inventoryStockGapEma);
         $state->energyInventoryIndexEma += $emaWeight * ($state->energyInventoryIndex - $state->energyInventoryIndexEma);
@@ -729,8 +737,6 @@ class MacroAggregateSubsystem
         $state->recessionProbabilityEma += $emaWeight * ($state->recessionProbability - $state->recessionProbabilityEma);
         $state->corporateDefaultRateEma += $emaWeight * ($state->corporateDefaultRate - $state->corporateDefaultRateEma);
         $state->sloosTighteningIndexEma += $emaWeight * ($state->sloosTighteningIndex - $state->sloosTighteningIndexEma);
-        $sloosTrendWeight = 1.0 - exp(-$dt / self::SLOOS_TREND_HORIZON_YEARS);
-        $state->sloosTighteningTrend += $sloosTrendWeight * ($state->sloosTighteningIndexEma - $state->sloosTighteningTrend);
         $state->supplyChainPressureIndexEma += $emaWeight * ($state->supplyChainPressureIndex - $state->supplyChainPressureIndexEma);
         $state->refiningCrackSpreadEma += $emaWeight * ($state->refiningCrackSpread - $state->refiningCrackSpreadEma);
         $state->dealActivityIndexEma += $emaWeight * ($state->dealActivityIndex - $state->dealActivityIndexEma);

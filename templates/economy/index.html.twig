@@ -780,7 +780,7 @@
 					</div>
 				</div>
 
-				{# Chart 20: Average Inflation Targeting & Policy Gap (Powell 2020 FAIT) #}
+				{# Chart 20: Policy Rule & Partial Adjustment (FOMC 2025 flexible inflation targeting) #}
 				<div class="chart-card bg-surface-container-low border border-outline-variant/15 rounded-lg p-5 hover:border-outline-variant/30 transition-all flex flex-col justify-between" data-macro-category="monetary">
 					<div class="flex items-start justify-between mb-3 gap-2">
 						<div class="flex items-center gap-2.5 min-w-0">
@@ -789,25 +789,25 @@
 							</div>
 							<div class="min-w-0">
 								<div class="flex items-center gap-2 flex-wrap">
-									<h4 class="text-xs font-bold text-on-surface">Average Inflation Targeting (FAIT)</h4>
-									<span class="text-4xs font-mono text-primary/80 bg-primary/10 px-1.5 py-0.5 rounded border border-primary/20 shrink-0">FOMC: FAIT Framework</span>
+									<h4 class="text-xs font-bold text-on-surface">Policy Rule vs Policy Rate</h4>
+									<span class="text-4xs font-mono text-primary/80 bg-primary/10 px-1.5 py-0.5 rounded border border-primary/20 shrink-0">FOMC: 2025 Framework</span>
 								</div>
-								<p class="text-3xs text-on-surface-variant truncate">Cumulative inflation shortfall/overshoot gap vs policy rate target make-up offset</p>
+								<p class="text-3xs text-on-surface-variant truncate">Taylor-rule target against the policy rate, and how far the rate trails it</p>
 							</div>
 						</div>
 						<div class="flex items-center gap-2 shrink-0">
 							<div class="hidden sm:flex flex-col items-end text-right">
 								<span class="text-4xs font-semibold uppercase tracking-wide text-on-surface-variant/70">Latest</span>
-								<span class="text-xs font-mono font-bold text-on-surface tabular-nums" id="hud-macroFaitChart">-</span>
+								<span class="text-xs font-mono font-bold text-on-surface tabular-nums" id="hud-macroPolicyRuleChart">-</span>
 							</div>
-							<span class="text-4xs font-semibold px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant uppercase tracking-wide">Monetary FAIT</span>
+							<span class="text-4xs font-semibold px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant uppercase tracking-wide">Monetary Rule</span>
 							<button type="button" class="expand-chart-btn p-1 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface transition-all cursor-pointer" title="Toggle Fullscreen / Expand">
 								<span class="material-symbols-outlined text-[15px] expand-icon">open_in_full</span>
 							</button>
 						</div>
 					</div>
 					<div class="chart-canvas-container h-80 md:h-85 w-full relative">
-						<canvas id="macroFaitChart"></canvas>
+						<canvas id="macroPolicyRuleChart"></canvas>
 					</div>
 				</div>
 

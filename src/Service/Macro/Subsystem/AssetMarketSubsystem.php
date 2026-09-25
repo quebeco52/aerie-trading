@@ -28,10 +28,10 @@ class AssetMarketSubsystem
     public const MIN_EQUITY_RISK_PREMIUM = 0.02;
 
     // --- GARCH-MIDAS Macroeconomic Volatility Constants (Engle, Ghysels, & Sohn 2013 Eq. 5) ---
-    /** Sensitivity of exponential baseline volatility to output gap fluctuations (countercyclical). */
-    public const MACRO_VOL_OUTPUT_GAP_SENSITIVITY = 10.0;
-    /** Sensitivity of exponential baseline volatility to corporate credit spread deviations from baseline. */
-    public const MACRO_VOL_CREDIT_SENSITIVITY     = 10.0;
+    /** Log volatility per unit of output gap contraction (1.1, se 2.1): ln VIX on the gap AND the excess bond premium, 1990-2026. Alone the gap takes ~4 by standing in for the omitted premium; 2010's VIX averaged 22 with the gap still -3.5%. */
+    public const MACRO_VOL_OUTPUT_GAP_SENSITIVITY = 1.1;
+    /** Log volatility per unit of excess bond premium (31.6, se 3.6), the same regression: 2008's 340 bps premium lifts the anchor ~2.9x. VIX is uncertainty plus the price of risk (Bekaert & Hoerova 2014), and the premium is that price. */
+    public const MACRO_VOL_PREMIUM_SENSITIVITY    = 31.6;
     /** Sensitivity of exponential baseline volatility to yield curve slope (flattening/inversion increases vol). */
     public const MACRO_VOL_SLOPE_SENSITIVITY      = 8.0;
     /** Sensitivity of the baseline volatility anchor to the log policy-uncertainty index: a doubling lifts the anchor ~11% (Pastor & Veronesi 2013 political uncertainty premium; the BBD index co-moves with the VIX). Enters the anchor, so it is budgeted against the jump compensation like the other drivers. */
@@ -351,8 +351,9 @@ class AssetMarketSubsystem
      * Engle, Ghysels & Sohn (2013) Spline-GARCH Macro Link with SVJJ Jump-Diffusion (Bates 1996).
      *
      * Models aggregate equity implied volatility using continuous macroeconomic fundamental scaling
-     * (output gap, credit spreads, yield curve slope) driven by a Quadratic Exponential (Broadie-Kaya)
-     * variance step and asymmetric Poisson compound jumps (SVJJ).
+     * (output gap, the excess bond premium, yield curve slope, policy uncertainty) driven by a Quadratic
+     * Exponential (Broadie-Kaya) variance step and asymmetric Poisson compound jumps (SVJJ). It reads the
+     * premium the credit spread is built on, not the spread, which reads volatility back.
      *
      * @param MacroState $state Current macroeconomic state.
      * @param float      $dt    Time increment in years.
@@ -362,10 +363,9 @@ class AssetMarketSubsystem
     {
         $currentMarketVol = $state->marketVolatility;
 
-        $spreadDeviation = max(0.0, $state->macroCreditSpread - MacroEngine::BASE_CREDIT_SPREAD);
         $policyUncertaintyLog = log(max(1.0, $state->policyUncertaintyIndexEma) / MacroEngine::EPU_BASELINE);
         $macroDriver = (-$state->outputGap * self::MACRO_VOL_OUTPUT_GAP_SENSITIVITY)
-            + ($spreadDeviation * self::MACRO_VOL_CREDIT_SENSITIVITY)
+            + ($state->excessBondPremium * self::MACRO_VOL_PREMIUM_SENSITIVITY)
             + (-min(0.0, $state->structuralSlope) * self::MACRO_VOL_SLOPE_SENSITIVITY)
             + ($policyUncertaintyLog * self::MACRO_VOL_EPU_SENSITIVITY);
 

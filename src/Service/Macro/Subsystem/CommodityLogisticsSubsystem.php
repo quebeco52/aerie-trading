@@ -13,16 +13,16 @@ use App\Service\Math\MathUtility;
 class CommodityLogisticsSubsystem
 {
     // --- Energy Shock Jump-Diffusion (Schwartz 1997 Commodity Dynamics) ---
-    /** Poisson annual jump arrival intensity for geopolitical and OPEC energy supply shocks. */
-    public const ENERGY_JUMP_PROBABILITY = 0.05;
+    /** Oil shocks per year (0.87): Merton (1976) jump-diffusion by maximum likelihood on month-end real WTI log returns, 1986-2025 (LR 87.7 over a pure diffusion). */
+    public const ENERGY_JUMP_PROBABILITY = 0.87;
     /** Mean-reversion speed (kappa) of energy prices reverting to long-run baseline. */
     public const ENERGY_MEAN_REVERSION = 0.8;
-    /** Schwartz 1-factor log-price volatility (diffusion sigma). */
-    public const ENERGY_VOLATILITY = 0.25;
-    /** Expected mean log-return magnitude of an energy price spike. */
-    public const ENERGY_JUMP_MEAN = 0.20;
-    /** Volatility of energy jump shock magnitude. */
-    public const ENERGY_JUMP_VOL = 0.10;
+    /** Schwartz 1-factor log-price diffusion (0.283 per sqrt year), the same fit net of the jumps; total monthly volatility is 36% a year. */
+    public const ENERGY_VOLATILITY = 0.283;
+    /** Mean log size of an oil shock (-0.021, so none): shocks run both ways, 1986 -39%, 1990 +36%, 2008 -38%, 2020 -78% then +62% in a month. */
+    public const ENERGY_JUMP_MEAN = -0.021;
+    /** Standard deviation of an oil shock's log size (0.243), the same fit. */
+    public const ENERGY_JUMP_VOL = 0.243;
 
     // --- Energy Supply Cobweb (Ezekiel 1938; Anderson, Kellogg & Salant 2018) ---
     /** Income elasticity of energy demand to the output gap (~0.5, Hamilton 2009; Caldara, Cavallo & Iacoviello 2019). */
@@ -183,12 +183,13 @@ class CommodityLogisticsSubsystem
     ) {}
 
     /**
-     * Schwartz (1997) One-Factor Mean-Reverting Commodity Model with Poisson Supply Jumps
+     * Schwartz (1997) One-Factor Mean-Reverting Commodity Model with Merton (1976) Jumps
      * and Working (1949) / Litzenberger & Rabinowitz (1995) Theory of Storage Convenience Yield.
      *
      * Simulates global retail energy commodity prices (crude oil & refined products benchmark)
-     * using mean-reverting log-prices driven by Ornstein-Uhlenbeck drift, geopolitical supply disruption jumps,
-     * and non-linear convenience yield backwardation spikes when physical inventory buffer stocks deplete.
+     * using mean-reverting log-prices driven by Ornstein-Uhlenbeck drift, two-sided oil shocks that land in the
+     * base price and decay at the reversion speed, and non-linear convenience yield backwardation spikes when
+     * physical inventory buffer stocks deplete.
      *
      * @param MacroState $state Current macroeconomic state.
      * @param float      $dt    Time increment in years.
@@ -213,25 +214,20 @@ class CommodityLogisticsSubsystem
             dt: $dt,
             dW: $dW
         );
-        $state->energyBasePrice = max(10.0, min(250.0, $baseProcess));
-
+        // Merton (1976) jump in the log price: it lands in the level and decays at the reversion speed like any
+        // other move, so a year of shocks carries the same weight at every step size.
         $jumpData = $this->mathUtility->calculateJumpDiffusion(
             lambda: self::ENERGY_JUMP_PROBABILITY,
             jumpMean: self::ENERGY_JUMP_MEAN,
             jumpVol: self::ENERGY_JUMP_VOL,
             dt: $dt
         );
-
-        $jumpAmount = 0.0;
-        if ($jumpData['multiplier'] !== 1.0) {
-            $jumpAmount = $baseProcess * ($jumpData['multiplier'] - 1.0);
-        }
+        $state->energyBasePrice = max(10.0, min(350.0, $baseProcess * $jumpData['multiplier']));
 
         // Litzenberger & Rabinowitz (1995) physical commodity inventory buffer stock evolution.
         $demandDraw = $state->globalDemandGapEma * self::COMMODITY_INVENTORY_DRAWDOWN_SENSITIVITY * 100.0;
-        $shockDraw = ($jumpData['multiplier'] > 1.0) ? (log($jumpData['multiplier']) * 40.0) : 0.0;
         $reversionFlow = self::COMMODITY_INVENTORY_REVERSION_SPEED * (MacroEngine::COMMODITY_INVENTORY_BASELINE - $state->energyInventoryIndex);
-        $dInventory = ($reversionFlow - $demandDraw - $shockDraw) * $dt;
+        $dInventory = ($reversionFlow - $demandDraw) * $dt;
         $state->energyInventoryIndex = max(self::COMMODITY_MIN_BUFFER_STOCK, min(160.0, $state->energyInventoryIndex + $dInventory));
 
         // Working (1949) theory of storage non-linear convenience yield backwardation.
@@ -241,7 +237,7 @@ class CommodityLogisticsSubsystem
         );
         $conveniencePricePremium = MacroEngine::ENERGY_BASELINE * $convenienceYield;
 
-        $state->energyPriceIndex = max(10.0, min(350.0, $baseProcess + $jumpAmount + $conveniencePricePremium));
+        $state->energyPriceIndex = max(10.0, min(350.0, $state->energyBasePrice + $conveniencePricePremium));
         $state->energyPriceShock = $state->energyPriceIndex - MacroEngine::ENERGY_BASELINE;
     }
 

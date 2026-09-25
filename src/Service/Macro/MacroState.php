@@ -180,6 +180,7 @@ class MacroState
 
     public float $interbankLiquiditySpread = MacroEngine::INTERBANK_BASELINE_SPREAD;
     public float $interbankLiquiditySpreadEma = MacroEngine::INTERBANK_BASELINE_SPREAD;
+    public float $excessBondPremium = 0.0;
 
     public float $totalFactorProductivityIndex = MacroEngine::TFP_BASELINE;
     public float $totalFactorProductivityIndexEma = MacroEngine::TFP_BASELINE;
@@ -191,14 +192,15 @@ class MacroState
     public float $tfpPotentialStage1 = 0.0;
     public float $tfpPotentialAbsorbed = 0.0;
     public float $productivitySupplyGap = 0.0;
+    // Monetary transmission: the real-rate stance through two Pascal stages (Solow 1960) on its way to demand.
+    public float $monetaryStanceStage1 = 0.0;
+    public float $monetaryStanceTransmitted = 0.0;
 
     public float $supercoreInflation = MacroEngine::TARGET_INFLATION;
     public float $supercoreInflationEma = MacroEngine::TARGET_INFLATION;
     public float $coreGoodsInflation = MacroEngine::TARGET_INFLATION;
     public float $coreGoodsInflationEma = MacroEngine::TARGET_INFLATION;
 
-    public float $cumulativeInflationGap = 0.0;
-    public float $cumulativeInflationGapEma = 0.0;
 
     public float $highYieldCreditSpread = MacroEngine::BASE_CREDIT_SPREAD * MacroEngine::HY_BASE_SPREAD_MULTIPLIER;
     public float $highYieldCreditSpreadEma = MacroEngine::BASE_CREDIT_SPREAD * MacroEngine::HY_BASE_SPREAD_MULTIPLIER;
@@ -222,7 +224,6 @@ class MacroState
 
     public float $sloosTighteningIndex = 0.0;
     public float $sloosTighteningIndexEma = 0.0;
-    public float $sloosTighteningTrend = 0.0;
 
     public float $supplyChainPressureIndex = 0.0;
     public float $supplyChainPressureIndexEma = 0.0;
@@ -263,6 +264,7 @@ class MacroState
     public float $householdDebtServiceTrend = 0.0;
     public float $householdDebtServiceGap = 0.0;
     public float $creditToGdpTrend = MacroEngine::HOUSEHOLD_DEBT_TO_INCOME_BASELINE;
+    public float $creditToGdpTrendSlope = 0.0;
     public float $creditToGdpGap = 0.0;
     public float $creditToGdpGapEma = 0.0;
     public float $countercyclicalBufferRate = 0.0;

@@ -223,6 +223,9 @@ class MacroReport
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4)]
     private ?string $interbankLiquiditySpreadEma = null;
 
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $excessBondPremium = null;
+
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4)]
     private ?string $totalFactorProductivityIndex = null;
 
@@ -246,6 +249,12 @@ class MacroReport
 
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
     private ?string $productivitySupplyGap = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 6, nullable: true)]
+    private ?string $monetaryStanceStage1 = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 6, nullable: true)]
+    private ?string $monetaryStanceTransmitted = null;
 
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
     private ?string $tipsBreakeven = null;
@@ -341,9 +350,6 @@ class MacroReport
     private ?string $coreGoodsInflationEma = null;
 
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
-    private ?string $cumulativeInflationGapEma = null;
-
-    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
     private ?string $highYieldCreditSpreadEma = null;
 
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
@@ -375,10 +381,6 @@ class MacroReport
 
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
     private ?string $sloosTighteningIndexEma = null;
-
-    /** The level of lending standards this economy treats as normal; a consumer wanting "are standards tight" reads the deviation from it, not from zero. */
-    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
-    private ?string $sloosTighteningTrend = null;
 
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
     private ?string $supplyChainPressureIndex = null;
@@ -606,10 +608,6 @@ class MacroReport
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
     private ?string $coreGoodsInflation = null;
 
-    /** Drives the price-level-target catch-up, so a Taylor residual cannot be read without it. */
-    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
-    private ?string $cumulativeInflationGap = null;
-
     // --- Curve Factors ---
     // The Diebold-Li factors the recorded yields are generated FROM. The yields are already columns, but a
     // curve fault shows in the factor and only its shadow shows in the four tenors.
@@ -636,6 +634,9 @@ class MacroReport
 
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
     private ?string $creditToGdpTrend = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 12, scale: 8, nullable: true)]
+    private ?string $creditToGdpTrendSlope = null;
 
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
     private ?string $householdDebtServiceTrend = null;

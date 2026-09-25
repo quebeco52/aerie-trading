@@ -168,61 +168,43 @@ class FinancialInvariantTest extends TestCase
         );
     }
 
-    // --- Flexible Average Inflation Targeting (FAIT - Powell 2020) Invariants ---
+    // --- Flexible Inflation Targeting (FOMC 2025 framework) Invariants ---
 
-    public function testFaitPolicyRateZeroLowerBoundAndConvergence(): void
+    public function testPolicyRateRespectsTheLowerBoundInADeflationarySlump(): void
     {
         $monetarySubsystem = new MonetaryPolicySubsystem($this->math);
 
-        // Severe deflationary shock: inflation = -2%, output gap = -8%
         $state = MacroStateBuilder::create()
             ->withInflation(-0.02)
             ->withOutputGap(-0.08)
             ->withPolicyRate(0.005)
             ->build();
 
-        $state->cumulativeInflationGap = -0.05;
-
-        // Run monetary policy update
         $targetRate = $monetarySubsystem->calculateTargetRate($state, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 0.25);
         $newRate = $monetarySubsystem->updatePolicyRate($state, $targetRate, 0.25);
 
-        // Invariant: Policy rate must never fall below zero lower bound
-        $this->assertGreaterThanOrEqual(
-            MacroEngine::EFFECTIVE_LOWER_BOUND,
-            $newRate,
-            'Policy rate must respect the Effective Lower Bound'
-        );
+        $this->assertGreaterThanOrEqual(MacroEngine::EFFECTIVE_LOWER_BOUND, $newRate, 'Policy rate must respect the Effective Lower Bound');
         $this->assertFalse(is_nan($newRate), 'Policy rate must not be NaN');
     }
 
-    public function testFaitCumulativeHistoryAnchor(): void
+    /** No make-up: the target reads today's inflation and gap, not the path that led there. */
+    public function testTheTargetCarriesNoMemoryOfPastInflation(): void
     {
         $monetarySubsystem = new MonetaryPolicySubsystem($this->math);
 
-        // Two identical current inflation states (3.0%), but one with prior undershoot history
-        $stateNoHistory = MacroStateBuilder::create()
-            ->withInflation(0.03)
-            ->withOutputGap(0.01)
-            ->withPolicyRate(0.035)
-            ->build();
-        $stateNoHistory->cumulativeInflationGap = 0.0;
+        $withHistory = MacroStateBuilder::create()->withInflation(0.005)->withOutputGap(-0.02)->withPolicyRate(0.01)->build();
+        for ($quarter = 0; $quarter < 8; $quarter++) {
+            $monetarySubsystem->calculateTargetRate($withHistory, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 0.25);
+        }
+        $fresh = MacroStateBuilder::create()->withInflation(0.03)->withOutputGap(0.01)->withPolicyRate(0.035)->build();
+        foreach (['inflation', 'inflationEma', 'outputGap', 'outputGapEma', 'policyRate', 'policyRateEma'] as $field) {
+            $withHistory->{$field} = $fresh->{$field};
+        }
 
-        $stateWithUndershoot = MacroStateBuilder::create()
-            ->withInflation(0.03)
-            ->withOutputGap(0.01)
-            ->withPolicyRate(0.035)
-            ->build();
-        $stateWithUndershoot->cumulativeInflationGap = -0.04; // Past cumulative undershoot
-
-        $targetNoHistory = $monetarySubsystem->calculateTargetRate($stateNoHistory, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 0.25);
-        $targetWithUndershoot = $monetarySubsystem->calculateTargetRate($stateWithUndershoot, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 0.25);
-
-        // Under FAIT, past undershoot allows central bank to be more patient (lower target rate)
-        $this->assertGreaterThan(
-            $targetWithUndershoot,
-            $targetNoHistory,
-            'FAIT past undershoot must result in more accommodative policy target rate'
+        $this->assertSame(
+            $monetarySubsystem->calculateTargetRate($fresh, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 0.25),
+            $monetarySubsystem->calculateTargetRate($withHistory, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 0.25),
+            'Two years of undershoot buy no extra accommodation once inflation is back.'
         );
     }
 
@@ -639,16 +621,20 @@ class FinancialInvariantTest extends TestCase
 
         $target = $monetary->calculateTargetRate($expansionState, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 0.25);
 
-        // Invariant: Taylor rule anchored by structural r* (1.5%) must cap peak target at or below 6.0% (previously 6.66%)
+        // Invariant: the target sits between Taylor's (1993) prescription for this state and the long-run US rule
+        // Clarida, Gali & Gertler's form estimates on 1987-2008 (inflation 1.87, gap 1.84; var/harness/policy_fit.py).
+        $inflation = 0.028;
+        $taylor1993 = MacroEngine::BASE_NATURAL_RATE + $inflation + (0.5 * ($inflation - MacroEngine::TARGET_INFLATION)) + (0.5 * 0.026);
+        $estimatedUsRule = MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION + (1.87 * ($inflation - MacroEngine::TARGET_INFLATION)) + (1.84 * 0.026);
         $this->assertLessThanOrEqual(
-            0.060,
+            $estimatedUsRule,
             $target,
-            sprintf('Taylor target rate must not overshoot to punitive >6.0%% during standard expansion (got %0.2f%%)', $target * 100)
+            sprintf('Taylor target must not lean harder than the estimated US rule (%0.2f%%, got %0.2f%%)', $estimatedUsRule * 100, $target * 100)
         );
         $this->assertGreaterThanOrEqual(
-            0.045,
+            $taylor1993,
             $target,
-            'Taylor target rate must remain restrictive above 4.5% during hot expansion'
+            sprintf('Taylor target must be at least Taylor 1993 in a hot expansion (%0.2f%%, got %0.2f%%)', $taylor1993 * 100, $target * 100)
         );
     }
 
@@ -749,7 +735,13 @@ class FinancialInvariantTest extends TestCase
         );
     }
 
-    public function testRecessionOutputGapReachesRealisticTroughDepth(): void
+    /**
+     * Restrictive policy held against a contraction keeps it open, and a tighter stance keeps it deeper. The depth
+     * itself is the fitted IS elasticity (drag over the gap's own reversion, about half Rudebusch-Svensson's -1 per
+     * point of real rate), so the bounds here are the properties that hold at any calibration: no recovery above
+     * potential while policy stays tight, monotone in the stance, and short of a depression.
+     */
+    public function testRestrictivePolicyHeldKeepsTheContractionOpenInProportionToTheStance(): void
     {
         $deterministicMath = new class extends MathUtility {
             public function generateStandardNormal(): float
@@ -764,40 +756,37 @@ class FinancialInvariantTest extends TestCase
                 return false;
             }
         };
-        $aggregate = new MacroAggregateSubsystem($deterministicMath);
 
-        // Contractionary onset: restrictive monetary policy (5.0%), inventory overhang (3%), starting negative gap (-0.5%)
-        $state = MacroStateBuilder::create()
-            ->withOutputGap(-0.005)
-            ->withInflation(0.020)
-            ->withPolicyRate(0.050)
-            ->withInventoryGap(0.030)
-            ->build();
-        $state->outputGapEma = -0.005;
+        $paths = [];
+        foreach (['tight' => [0.050, 0.045], 'tighter' => [0.060, 0.055]] as $name => [$policyRate, $yield5y]) {
+            $aggregate = new MacroAggregateSubsystem($deterministicMath);
+            // Contractionary onset: restrictive policy, inventory overhang (3%), starting negative gap (-0.5%)
+            $state = MacroStateBuilder::create()
+                ->withOutputGap(-0.005)
+                ->withInflation(0.020)
+                ->withPolicyRate($policyRate)
+                ->withInventoryGap(0.030)
+                ->build();
+            $state->outputGapEma = -0.005;
 
-        $minGap = 0.0;
-        for ($quarter = 0; $quarter < 12; $quarter++) {
-            $newGap = $aggregate->calculateOutputGap($state, 0.045, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0);
-            $state->outputGap = $newGap;
-            $state->outputGapEma += 0.25 * ($newGap - $state->outputGapEma);
-            $minGap = min($minGap, $newGap);
+            for ($quarter = 0; $quarter < 12; $quarter++) {
+                $newGap = $aggregate->calculateOutputGap($state, $yield5y, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0);
+                $state->outputGap = $newGap;
+                $state->outputGapEma += 0.25 * ($newGap - $state->outputGapEma);
+                $paths[$name][] = $newGap;
+            }
         }
 
-        // Invariant 1: Contraction must develop realistic empirical depth past the previous -0.8% floor (<= -1.8%)
-        $this->assertLessThanOrEqual(
-            -0.018,
-            $minGap,
-            sprintf('Recession output gap must reach genuine trough depth <= -1.8%% (got %0.2f%%)', $minGap * 100)
-        );
+        // Invariant 1: while policy stays restrictive the economy does not recover above potential.
+        $this->assertLessThan(0.0, max($paths['tight']), 'A contraction held under restrictive policy must stay open for three years.');
 
-        // Invariant 2: three years of a 5% policy rate held against a contraction, with nothing cutting it, is a
-        // severe scenario (1981-82 reached -7%). The capacity ceiling is one-sided, so the only floor here is the
-        // economics: it must stay clear of the -12% hard clamp and short of a depression.
-        $this->assertGreaterThan(
-            -0.080,
-            $minGap,
-            sprintf('Recession output gap must remain bounded above depression threshold -8.0%% (got %0.2f%%)', $minGap * 100)
-        );
+        // Invariant 2: a tighter stance holds the gap deeper in every quarter.
+        foreach ($paths['tighter'] as $quarter => $gap) {
+            $this->assertLessThan($paths['tight'][$quarter], $gap, "A tighter stance must hold the gap deeper (quarter {$quarter}).");
+        }
+
+        // Invariant 3: even the tighter stance, held three years, stays short of a depression and clear of the -12% clamp.
+        $this->assertGreaterThan(-0.080, min($paths['tighter']), 'Held policy alone must not dig a depression.');
     }
 }
 

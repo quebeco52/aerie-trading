@@ -335,6 +335,43 @@ class AssetMarketSubsystemTest extends TestCase
         $this->assertEqualsWithDelta($expectedRatio, $anchorDoubled / $anchorNeutral, 0.01, 'A doubling of the index lifts the anchor by the exponential of the sensitivity.');
     }
 
+    /**
+     * Volatility loads on the excess bond premium, never on the credit spread. The spread reads volatility, and
+     * with volatility reading the spread back the two held each other at their caps for four years of a slump.
+     */
+    public function testTheVolatilityAnchorReadsThePremiumNotTheSpread(): void
+    {
+        $math = new class extends MathUtility {
+            public function calculateSVJJJumps(float $lambda, float $pUp, float $etaUp, float $etaDown, float $muV, float $dt): array
+            {
+                return ['price_multiplier' => 1.0, 'var_jump' => 0.0, 'shock_pct' => 0.0];
+            }
+            public function calculateQEVarianceStep(float $currentVar, float $theta, float $kappa, float $sigma, float $dt): float
+            {
+                return $theta;
+            }
+        };
+        $subsystem = new AssetMarketSubsystem($math);
+        $drag = AssetMarketSubsystem::jumpVarianceDrag();
+        $anchor = fn (float $vol): float => sqrt(($vol ** 2) + $drag);
+
+        $neutral = new MacroState();
+        $wideSpread = new MacroState();
+        $wideSpread->macroCreditSpread = MacroEngine::MAX_CREDIT_SPREAD;
+        $premium = new MacroState();
+        $premium->excessBondPremium = 0.010;
+
+        $volNeutral = $subsystem->calculateMarketVolatility($neutral, 0.01);
+
+        $this->assertSame($volNeutral, $subsystem->calculateMarketVolatility($wideSpread, 0.01), 'A spread at its cap, with no premium behind it, leaves volatility alone.');
+        $this->assertEqualsWithDelta(
+            exp(0.010 * AssetMarketSubsystem::MACRO_VOL_PREMIUM_SENSITIVITY),
+            $anchor($subsystem->calculateMarketVolatility($premium, 0.01)) / $anchor($volNeutral),
+            0.01,
+            'A 100 bps premium lifts the anchor by the exponential of its loading (~1.37x).'
+        );
+    }
+
 
     /** Alesina & Perotti (1995): fiscal risk is default and inflation risk, and sells the currency rather than earning carry. */
     public function testFiscalRiskSellsTheCurrency(): void

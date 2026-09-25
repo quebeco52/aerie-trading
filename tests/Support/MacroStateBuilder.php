@@ -42,8 +42,6 @@ class MacroStateBuilder
         $this->state->inventoryStockGapEma = 0.0;
         $this->state->energyInventoryIndex = MacroEngine::COMMODITY_INVENTORY_BASELINE;
         $this->state->energyInventoryIndexEma = MacroEngine::COMMODITY_INVENTORY_BASELINE;
-        $this->state->cumulativeInflationGap = 0.0;
-        $this->state->cumulativeInflationGapEma = 0.0;
         $this->state->manufacturingPmi = MacroEngine::PMI_BASELINE;
         $this->state->manufacturingPmiEma = MacroEngine::PMI_BASELINE;
         $this->state->producerPriceInflation = MacroEngine::TARGET_INFLATION;
@@ -154,6 +152,7 @@ class MacroStateBuilder
         $this->state->highYieldCreditSpread = 0.145;
         $this->state->highYieldCreditSpreadEma = 0.145;
         $this->state->interbankLiquiditySpreadEma = 0.0120;
+        $this->state->excessBondPremium = 0.025;
         $this->state->marketVolatility = 0.45;
         $this->state->marketVolatilityEma = 0.40;
         return $this;
@@ -200,13 +199,6 @@ class MacroStateBuilder
     {
         $this->state->inventoryStockGap = $inventoryGap;
         $this->state->inventoryStockGapEma = $inventoryGap;
-        return $this;
-    }
-
-    public function withCumulativeInflationGap(float $gap): self
-    {
-        $this->state->cumulativeInflationGap = $gap;
-        $this->state->cumulativeInflationGapEma = $gap;
         return $this;
     }
 

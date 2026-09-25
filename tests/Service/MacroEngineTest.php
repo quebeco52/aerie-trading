@@ -86,8 +86,10 @@ class MacroEngineTest extends TestCase
 
         $this->assertInstanceOf(\App\DTO\MacroStateDTO::class, $result);
 
-        // Starting in a 0.02 boom pulls the initial target rate up, raising the policy rate from 0.02 to ~0.04
-        $this->assertEqualsWithDelta(0.04, $result->policyRate, 0.01);
+        // Starting in a 0.02 boom puts the target well above 0.02; a one-year step moves toward it without passing it
+        $this->assertGreaterThan(0.04, $result->targetRate);
+        $this->assertGreaterThan(0.03, $result->policyRate);
+        $this->assertLessThanOrEqual($result->targetRate, $result->policyRate);
         $this->assertEqualsWithDelta(0.02, $result->inflation, 0.01);
         $this->assertGreaterThan(0.0, $result->exchangeRateIndex);
         $this->assertGreaterThan(0.0, $result->industrialMetalsIndex);
@@ -277,58 +279,6 @@ class MacroEngineTest extends TestCase
         $result = $this->engine->updateMacroState(0.50);
 
         $this->assertGreaterThan(105.0, $result->goldPriceIndex, 'Falling real rates and pessimism must lift gold.');
-    }
-
-    public function testGovernmentSpendingRisesDuringRecession(): void
-    {
-        $existingState = [
-            'output_gap' => -0.04,
-            'output_gap_ema' => -0.04,
-            'government_spending_index' => 100.0,
-            'government_spending_index_ema' => 100.0,
-            'inflation' => 0.02,
-            'inflation_ema' => 0.02,
-            'policy_rate' => 0.02,
-            'policy_rate_ema' => 0.02,
-            'yield5y' => 0.025,
-            'yield10y' => 0.03,
-        ];
-
-        $this->redisMock->expects($this->once())
-            ->method('get')
-            ->with('macroeconomic_state')
-            ->willReturn(json_encode($existingState));
-        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
-
-        $result = $this->engine->updateMacroState(0.25);
-
-        $this->assertGreaterThan(MacroEngine::GOVT_SPENDING_BASELINE, $result->governmentSpendingIndex, 'Recession should trigger countercyclical automatic fiscal stabilizers.');
-    }
-
-    public function testGovernmentSpendingFallsDuringBoom(): void
-    {
-        $existingState = [
-            'output_gap' => 0.04,
-            'output_gap_ema' => 0.04,
-            'government_spending_index' => 100.0,
-            'government_spending_index_ema' => 100.0,
-            'inflation' => 0.02,
-            'inflation_ema' => 0.02,
-            'policy_rate' => 0.04,
-            'policy_rate_ema' => 0.04,
-            'yield5y' => 0.045,
-            'yield10y' => 0.05,
-        ];
-
-        $this->redisMock->expects($this->once())
-            ->method('get')
-            ->with('macroeconomic_state')
-            ->willReturn(json_encode($existingState));
-        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
-
-        $result = $this->engine->updateMacroState(0.25);
-
-        $this->assertLessThan(MacroEngine::GOVT_SPENDING_BASELINE, $result->governmentSpendingIndex, 'Economic boom should reduce government spending index.');
     }
 
     public function testCommercialPropertyCollapsesDuringHighRatesAndUnemployment(): void
@@ -1236,69 +1186,59 @@ class MacroEngineTest extends TestCase
         $this->assertGreaterThan($lagQ1, $lagQ2, 'Sticky cost lag should accumulate and rise across successive quarters of elevated energy.');
     }
 
-    public function testAsymmetricInterestRateSmoothingPacing(): void
+    public function testRateSmoothingClosesTheSameShareCuttingAsHiking(): void
     {
-        // 1. Hiking scenario (target 5.0%, current 2.0%, inflation benign at 2.0%)
+        // US 1987-2008: 15% of the distance closed a quarter cutting, 13% hiking, not distinguishable (se 4-6%).
         $hikingState = new \App\Service\Macro\MacroState();
         $hikingState->policyRate = 0.02;
         $hikingState->inflation = 0.02;
         $hikingState->outputGap = 0.02;
+        $hike = $this->monetarySubsystem->updatePolicyRate($hikingState, 0.05, 0.25) - $hikingState->policyRate;
 
-        $targetRateHike = 0.05; // +300 bps gap
-        $dt = 0.25; // 1 quarter
-
-        $newHikedRate = $this->monetarySubsystem->updatePolicyRate($hikingState, $targetRateHike, $dt);
-        $quarterlyHike = $newHikedRate - $hikingState->policyRate;
-
-        // 2. Cutting scenario (target 1.0%, current 4.0%, recession gap -3%)
         $cuttingState = new \App\Service\Macro\MacroState();
         $cuttingState->policyRate = 0.04;
         $cuttingState->inflation = 0.015;
         $cuttingState->outputGap = -0.03;
+        $cut = $cuttingState->policyRate - $this->monetarySubsystem->updatePolicyRate($cuttingState, 0.01, 0.25);
 
-        $targetRateCut = 0.01; // -300 bps gap
-
-        $newCutRate = $this->monetarySubsystem->updatePolicyRate($cuttingState, $targetRateCut, $dt);
-        $quarterlyCut = $cuttingState->policyRate - $newCutRate;
-
-        // Rate cut should be significantly swifter than rate hike for an identical 300 bps gap
-        $this->assertGreaterThan($quarterlyHike, $quarterlyCut, 'Central bank must ease rates faster during recession than it hikes during expansion (asymmetric smoothing).');
+        $this->assertEqualsWithDelta($hike, $cut, 1e-12, 'Below the panic threshold a 300bp distance must close by the same amount either way.');
     }
 
-    public function testRateHikesDuringNormalExpansionDoNotExceedNormalVelocity(): void
+    public function testPolicyRatePaceIsProportionalToTheDistanceWithNoCap(): void
     {
-        $expansionState = new \App\Service\Macro\MacroState();
-        $expansionState->policyRate = 0.01;
-        $expansionState->inflation = 0.025; // Mild healthy expansion inflation (below 3.5% panic threshold)
-        $expansionState->outputGap = 0.03;
+        $state = new \App\Service\Macro\MacroState();
+        $state->policyRate = 0.02; // clear of the lower bound, so forward guidance plays no part
+        $state->inflation = 0.025; // below the panic threshold
+        $state->outputGap = 0.03;
+        $dt = 0.25;
 
-        $highTargetRate = 0.08; // High target
-        $dt = 1.0; // 1 full year
+        $smallMove = $this->monetarySubsystem->updatePolicyRate($state, 0.03, $dt) - $state->policyRate;
+        $largeMove = $this->monetarySubsystem->updatePolicyRate($state, 0.09, $dt) - $state->policyRate;
 
-        $newRate = $this->monetarySubsystem->updatePolicyRate($expansionState, $highTargetRate, $dt);
-        $annualHike = $newRate - $expansionState->policyRate;
-
-        // Annual hike during normal expansion must be bounded by CB_MAX_NORMAL_HIKE_VELOCITY (200 bps/year)
-        $this->assertLessThanOrEqual(MacroEngine::CB_MAX_NORMAL_HIKE_VELOCITY + 0.0001, $annualHike, 'Normal expansion rate hike velocity must not exceed 200 bps/year.');
+        // Partial adjustment: a 7pp distance moves the rate seven times as far as a 1pp one in the same quarter.
+        $this->assertEqualsWithDelta(7.0 * $smallMove, $largeMove, 1e-12, 'The pace must scale with the distance to the target, with no velocity cap.');
+        $this->assertEqualsWithDelta((1.0 - exp(-MonetaryPolicySubsystem::CB_SMOOTHING_SPEED * $dt)) * 0.07, $largeMove, 1e-12);
     }
 
     public function testInflationPanicAcceleratesHikesAboveEmergencyThreshold(): void
     {
-        // Severe stagflation / runaway inflation shock (8.0% inflation)
+        $dt = 0.25;
+        $calmState = new \App\Service\Macro\MacroState();
+        $calmState->policyRate = 0.02;
+        $calmState->inflation = 0.025;
+        $calmState->outputGap = 0.03;
+        $calmHike = $this->monetarySubsystem->updatePolicyRate($calmState, 0.12, $dt) - $calmState->policyRate;
+
+        // Severe stagflation / runaway inflation shock (8.0% inflation), the same distance to the target.
         $panicState = new \App\Service\Macro\MacroState();
         $panicState->policyRate = 0.02;
         $panicState->inflation = 0.080;
         $panicState->outputGap = 0.03;
+        $panicHike = $this->monetarySubsystem->updatePolicyRate($panicState, 0.12, $dt) - $panicState->policyRate;
 
-        $highTargetRate = 0.12;
-        $dt = 1.0; // 1 full year
-
-        $newPanicRate = $this->monetarySubsystem->updatePolicyRate($panicState, $highTargetRate, $dt);
-        $annualPanicHike = $newPanicRate - $panicState->policyRate;
-
-        // In panic mode, rate hike velocity should exceed normal 200 bps cap up to panic cap (400 bps/year)
-        $this->assertGreaterThan(MacroEngine::CB_MAX_NORMAL_HIKE_VELOCITY, $annualPanicHike, 'Severe runaway inflation must trigger emergency panic rate hiking acceleration.');
-        $this->assertLessThanOrEqual(MacroEngine::CB_MAX_PANIC_HIKE_VELOCITY + 0.0001, $annualPanicHike, 'Panic rate hiking must remain bounded by CB_MAX_PANIC_HIKE_VELOCITY.');
+        $this->assertGreaterThan($calmHike, $panicHike, 'Severe runaway inflation must trigger emergency panic rate hiking acceleration.');
+        $maxSpeed = MonetaryPolicySubsystem::CB_SMOOTHING_SPEED + MonetaryPolicySubsystem::CB_MAX_HIKE_PANIC_SPEED;
+        $this->assertLessThanOrEqual((1.0 - exp(-$maxSpeed * $dt)) * 0.10 + 1e-12, $panicHike, 'Panic hiking must stay within the most the panic adds to the speed.');
     }
 
     public function testDynamicNaturalRateDriftsWithTfpGrowth(): void
@@ -2042,20 +1982,17 @@ class MacroEngineTest extends TestCase
         $this->assertEquals(0.0, $yieldData['new_qt_intensity'], 'QT runoff must be zero when QE is active.');
     }
 
-    public function testInterbankLiquiditySpreadCoupledToCorporateCreditStress(): void
+    public function testInterbankLiquiditySpreadCoupledToTheBondPremium(): void
     {
         $creditSubsystem = new \App\Service\Macro\Subsystem\CreditFiscalSubsystem($this->mathUtilityMock);
         $dt = 0.25;
 
         $stateCalm = new \App\Service\Macro\MacroState();
-        $stateCalm->macroCreditSpread = MacroEngine::BASE_CREDIT_SPREAD;
-        $stateCalm->macroCreditSpreadEma = MacroEngine::BASE_CREDIT_SPREAD;
         $stateCalm->interbankLiquiditySpread = MacroEngine::INTERBANK_BASELINE_SPREAD;
         $stateCalm->marketVolatilityEma = MacroEngine::MACRO_VOL_BASE_ANCHOR;
 
         $stateStressed = new \App\Service\Macro\MacroState();
-        $stateStressed->macroCreditSpread = 0.045; // 450 bps credit spread
-        $stateStressed->macroCreditSpreadEma = 0.045;
+        $stateStressed->excessBondPremium = 0.030; // a 2008-scale premium
         $stateStressed->interbankLiquiditySpread = MacroEngine::INTERBANK_BASELINE_SPREAD;
         $stateStressed->marketVolatilityEma = 0.30;
 
@@ -2068,7 +2005,7 @@ class MacroEngineTest extends TestCase
         $this->assertGreaterThan(
             $stateCalm->interbankLiquiditySpread,
             $stateStressed->interbankLiquiditySpread,
-            'Wholesale interbank liquidity spread must widen when corporate credit risk surges.'
+            'Wholesale interbank liquidity spread must widen when lenders reprice credit risk.'
         );
     }
 

@@ -2441,23 +2441,32 @@ class MathUtilityTest extends TestCase
         $this->assertGreaterThan(MathUtility::calculateBufferedLeverageLimit(10.0, 0.025), MathUtility::calculateBufferedLeverageLimit(10.0, 0.01), 'A bigger buffer binds harder.');
     }
 
+    /** Harvey & Jaeger (1993): the one-sided HP trend as a Kalman recursion splits each surprise between level and slope by the gains. */
+    public function testOneSidedHpStepSplitsTheSurpriseByItsGains(): void
+    {
+        $step = $this->mathUtility->calculateOneSidedHpStep(1.0, 0.01, 1.11, 0.05, 0.002);
+        $this->assertEqualsWithDelta(1.01 + 0.05 * 0.10, $step['level'], 1e-12, 'Predict along the slope, then correct by the level gain times the surprise.');
+        $this->assertEqualsWithDelta(0.01 + 0.002 * 0.10, $step['slope'], 1e-12);
+
+        $onTrend = $this->mathUtility->calculateOneSidedHpStep(2.0, 0.03, 2.03, 0.05, 0.002);
+        $this->assertEqualsWithDelta(2.03, $onTrend['level'], 1e-12, 'An observation on the predicted trend leaves nothing to correct.');
+        $this->assertEqualsWithDelta(0.03, $onTrend['slope'], 1e-12);
+    }
+
     public function testSchularickTaylorCrisisHazardRisesWithTheCreditBoom(): void
     {
-        $intercept = -4.6;
-        $noBoom = $this->mathUtility->calculateSchularickTaylorCrisisHazard(creditGap: 0.0, debtServiceGap: 0.0, beta0: $intercept, betaGap: 26.0, betaDsr: 50.0);
-        $this->assertEqualsWithDelta(0.01, $noBoom, 0.001, 'With no boom the hazard is the intercept\'s base rate.');
+        $intercept = -4.50;
+        $slope = 3.98;
+        $noBoom = $this->mathUtility->calculateSchularickTaylorCrisisHazard(creditGap: 0.0, beta0: $intercept, betaGap: $slope);
+        $this->assertEqualsWithDelta(1.0 / (1.0 + exp(4.50)), $noBoom, 1e-12, 'With no boom the hazard is the intercept\'s base rate, ~1.1% a year.');
 
-        $boom = $this->mathUtility->calculateSchularickTaylorCrisisHazard(creditGap: 0.10, debtServiceGap: 0.0, beta0: $intercept, betaGap: 26.0, betaDsr: 50.0);
-        $this->assertGreaterThan(0.10, $boom, 'A ten-point credit gap lifts the annual hazard past a tenth.');
-        $this->assertLessThan(0.20, $boom);
+        $boom = $this->mathUtility->calculateSchularickTaylorCrisisHazard(creditGap: 0.30, beta0: $intercept, betaGap: $slope);
+        $this->assertGreaterThan(2.5 * $noBoom, $boom, 'A thirty-point boom (the US household gap of 2006) triples the odds.');
 
-        $overstretched = $this->mathUtility->calculateSchularickTaylorCrisisHazard(creditGap: 0.10, debtServiceGap: 0.02, beta0: $intercept, betaGap: 26.0, betaDsr: 50.0);
-        $this->assertGreaterThan($boom, $overstretched, 'Debt service over its average is the near-term trigger on top of the gap.');
-
-        $bust = $this->mathUtility->calculateSchularickTaylorCrisisHazard(creditGap: -0.10, debtServiceGap: -0.02, beta0: $intercept, betaGap: 26.0, betaDsr: 50.0);
+        $bust = $this->mathUtility->calculateSchularickTaylorCrisisHazard(creditGap: -0.10, beta0: $intercept, betaGap: $slope);
         $this->assertLessThan($noBoom, $bust, 'Credit below trend is safer than trend.');
 
-        $capped = $this->mathUtility->calculateSchularickTaylorCrisisHazard(creditGap: 1.0, debtServiceGap: 1.0, beta0: $intercept, betaGap: 26.0, betaDsr: 50.0);
+        $capped = $this->mathUtility->calculateSchularickTaylorCrisisHazard(creditGap: 10.0, beta0: 5.0, betaGap: 10.0);
         $this->assertSame(0.99, $capped);
     }
 }

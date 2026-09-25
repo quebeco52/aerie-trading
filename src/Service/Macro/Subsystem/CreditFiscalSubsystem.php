@@ -15,8 +15,8 @@ class CreditFiscalSubsystem
     // --- INTERBANK LIQUIDITY SPREAD (CIR PROCESS & JUMPS) ---
     /** Cap on the interbank spread (500 bps): the TED spread's all-time high was 457 bps on 10 Oct 2008. */
     public const INTERBANK_MAX_SPREAD = 0.05;
-    /** Share of excess IG spread that lifts the interbank spread's mean (~0.4): a 470 bps IG blowout pulls TED toward ~200 bps, a mild recession toward ~90. */
-    public const INTERBANK_CREDIT_COUPLING = 0.40;
+    /** Interbank spread mean per unit of positive excess bond premium: 0.32 (se 0.11), TED on the GZ premium 1986-2022, so 2008's 340 bps premium pulls TED ~110 bps above base. */
+    public const INTERBANK_PREMIUM_COUPLING = 0.32;
     /** Mean log-size of a panic jump: median 2.7x (1.65x to 4.5x at one sigma), so a 2008-scale 5x freeze is the tail, not the norm. */
     public const INTERBANK_JUMP_MEAN = 1.00;
     /** Sigma of the jump log-size; at 0.50 the two-sigma low is exactly 1.0x, so a panic jump never shrinks the spread. */
@@ -39,28 +39,26 @@ class CreditFiscalSubsystem
     public const SOVEREIGN_CEILING_PASSTHROUGH = 0.50;
 
     // --- Barro Tax-Smoothing & Automatic Fiscal Stabilizers (Barro 1979) ---
-    /** Countercyclical statutory tax response sensitivity to output gap deviations. */
-    public const FISCAL_STABILIZER_SENSITIVITY = 1.0;
-    /** Adjustment speed of the effective tax burden toward its cyclical target: automatic stabilisers act within the year (OECD budget semi-elasticity ~0.5; Fatas & Mihov 2001); at 0.2 the bust's tax relief arrived at the next peak. */
-    public const FISCAL_ADJUSTMENT_SPEED = 0.5;
+    /** Tax-rate response to the output gap, fitted with the speed below by indirect inference on the US primary deficit's Auerbach (2002) reaction, 1960-2019: automatic -0.29, discretionary -0.038 per pp of lagged gap a quarter, persistence -0.047; the engine's regression lands within half a standard error of all three. */
+    public const FISCAL_STABILIZER_SENSITIVITY = 0.35;
+    /** Adjustment speed of the effective tax burden toward its cyclical target (half-life 0.7y), the same fit. */
+    public const FISCAL_ADJUSTMENT_SPEED = 1.0;
     /** Statutory corporate tax rate floor during deep economic recessions. */
     public const MIN_CORPORATE_TAX_RATE = 0.12;
     /** Statutory corporate tax rate ceiling during overheating economic booms. */
     public const MAX_CORPORATE_TAX_RATE = 0.30;
 
     // --- GOVERNMENT SPENDING & FISCAL APPROPRIATIONS ---
-    /** Counter-cyclical appropriation response: a -3% output gap lifts the spending index ~6 points (discretionary stimulus plus stabilizers). */
-    public const GOVT_COUNTERCYCLICAL_SENSITIVITY = 200.0;
-    /** Speed at which appropriations reach their cyclical target (stabilisers plus a stimulus bill lag of ~2-3 quarters); at 0.4 the spending index was below baseline in the deepest busts. */
-    public const GOVT_SPENDING_MEAN_REVERSION = 1.5;
-    /** Stochastic volatility of annual budget appropriations, kept below the countercyclical swing so the cycle drives spending. */
-    public const GOVT_SPENDING_VOLATILITY = 0.03;
-    /** Poisson intensity of major geopolitical events triggering spending surges. */
-    public const GEOPOLITICAL_JUMP_PROBABILITY = 0.08;
-    /** Mean log-return magnitude of a geopolitical spending surge. */
-    public const GEOPOLITICAL_JUMP_MEAN = 0.15;
-    /** Volatility of geopolitical jump size. */
-    public const GEOPOLITICAL_JUMP_VOL = 0.08;
+    /** Reversion speed of log real purchases / potential (half-life 1.8y): US 1949-2019 AR(1) on a trend, corrected for NIPA quarterly averaging (Working 1960); no countercyclical response to the lagged gap (+0.16, se 0.10). */
+    public const GOVT_SPENDING_MEAN_REVERSION = 0.383;
+    /** Diffusion of log purchases / potential: the Merton (1976) MLE on the US 1949-2019 quarterly residuals, scaled for the same averaging. */
+    public const GOVT_SPENDING_VOLATILITY = 0.0255;
+    /** Poisson intensity of spending jumps, the same MLE: the fat tail is the Korea mobilisation (+25% in 1951's first three quarters), the Vietnam build-up and the demobilisations. */
+    public const GEOPOLITICAL_JUMP_PROBABILITY = 0.34;
+    /** Mean log size of a spending jump, the same MLE; Merton-compensated in the target so jumps add variance, not level. */
+    public const GEOPOLITICAL_JUMP_MEAN = 0.009;
+    /** Volatility of the log spending jump, the same MLE. */
+    public const GEOPOLITICAL_JUMP_VOL = 0.046;
 
     // --- VASICEK ASRF RETAIL DEFAULT RATE ---
     /** Basel II/III consumer asset correlation factor for retail exposures. */
@@ -133,46 +131,40 @@ class CreditFiscalSubsystem
     public const DSR_AVERAGE_MATURITY_YEARS = 18.0;
     /** Time constant (years) of the ratio's long-run average: Drehmann & Juselius (2012, 2014) read the DSR as its deviation from a 15-year moving average. */
     public const DSR_TREND_HORIZON_YEARS = 15.0;
-    /** Annual credit growth per unit of house-price deviation from trend (Mian & Sufi 2011 home-equity channel), off the episode they measure: DTI 1.00 -> 1.30 over 2002-06 is 7.0%/yr against prices ~30% over 2002. */
-    public const CREDIT_GROWTH_HOUSE_PRICE = 0.25;
-    /** Annual credit growth lost per unit of the SLOOS tightening index: credit supply gates the boom. */
-    public const CREDIT_GROWTH_SLOOS = 0.10;
-    /** Annual credit growth lost per unit of the effective household rate above its neutral level. */
-    public const CREDIT_GROWTH_RATE = 1.00;
-    /** Annual credit growth per unit of output gap: incomes and confidence borrow. */
-    public const CREDIT_GROWTH_GAP = 0.50;
-    /** Annual reversion of leverage toward its baseline per unit of relative excess: amortisation outrunning new borrowing once the boom fades. */
-    public const CREDIT_MEAN_REVERSION = 0.05;
-    /** Annual log volatility of the leverage ratio. */
-    public const CREDIT_GROWTH_SIGMA = 0.01;
-    /** Extra annual credit contraction per unit of debt-service gap above the warning line: households repay when the service bites (Mian & Sufi 2018). */
-    public const DELEVERAGING_SPEED = 0.50;
+    /** Annual credit growth per unit of real house-price lift over its 5-year trend (Mian & Sufi 2011 home-equity channel): 0.337 (se 0.046), US household debt to income 1976-2019 with the lift built as the engine builds it. */
+    public const CREDIT_GROWTH_HOUSE_PRICE = 0.337;
+    /** Annual reversion of leverage toward its baseline per unit of relative excess: 0.075 (se 0.016), the same regression, whose implied baseline (0.97) is the engine's own. */
+    public const CREDIT_MEAN_REVERSION = 0.075;
+    /** Annual log volatility of the leverage ratio: the regression's residual, 0.99% a quarter and serially uncorrelated. */
+    public const CREDIT_GROWTH_SIGMA = 0.020;
+    /** Extra annual credit contraction per unit of debt-service gap above the warning line (Mian & Sufi 2018): 1.75 (se 0.44), the same regression, so two points over the line repay 3.5% of the stock a year. */
+    public const DELEVERAGING_SPEED = 1.75;
     /** Bounds on household debt to income. */
     public const MIN_HOUSEHOLD_DEBT_TO_INCOME = 0.40;
     /** Upper bound on household debt to income. */
     public const MAX_HOUSEHOLD_DEBT_TO_INCOME = 2.50;
-    /** Time constant (years) of the one-sided credit trend: the stand-in for the Basel one-sided HP filter (lambda 400,000), whose trend has a multi-decade half-life. */
-    public const CREDIT_TREND_HORIZON_YEARS = 30.0;
-    /** Credit-to-GDP gap at which the countercyclical buffer starts to build (Basel III: 2 percentage points). */
-    public const CCYB_GAP_FLOOR = 0.02;
-    /** Credit-to-GDP gap at which the buffer reaches its maximum (Basel III: 10 percentage points). */
-    public const CCYB_GAP_CEILING = 0.10;
+    /** Steady-state Kalman level gain of the Basel III one-sided HP filter (lambda 400,000 on quarterly data) in its state-space form; a 30-year EMA stood in for it and, on the engine's own paths, correlated 0.17 with it. */
+    public const CREDIT_GAP_HP_LEVEL_GAIN = 0.054686;
+    /** Steady-state Kalman slope gain of the same filter. */
+    public const CREDIT_GAP_HP_SLOPE_GAIN = 0.0015373;
+    /** Household debt-to-income gap at which the countercyclical buffer starts to build: Basel III's 2 points of GDP over disposable income / GDP (0.727). */
+    public const CCYB_GAP_FLOOR = 0.0275;
+    /** Household debt-to-income gap at which the buffer reaches its maximum: Basel III's 10 points of GDP in the same units. */
+    public const CCYB_GAP_CEILING = 0.1376;
     /** Maximum countercyclical capital buffer (Basel III: 2.5% of risk-weighted assets). */
     public const MAX_CCYB = 0.025;
     /** Phase-in time (years) of a buffer decision: Basel gives banks twelve months. */
     public const CCYB_PHASE_IN_YEARS = 1.0;
     /** Retail default z-score per unit of debt-service gap (ratio over its long-run average): a point of income more in debt service is ~0.3 z of stress. */
     public const RETAIL_DSR_SENSITIVITY = 30.0;
-    /** How the buffer reads to lending standards: a unit of buffer is worth this much excess credit spread in the SLOOS response. */
-    public const SLOOS_CCYB_SPREAD_EQUIVALENT = 0.50;
+    /** How the buffer reads to lending standards: a unit of buffer is worth this much excess bond premium, so the full 2.5% buffer tightens standards ~0.19 (unchanged from when it was priced as 0.5 of excess spread at the old sensitivity of 15). */
+    public const SLOOS_CCYB_PREMIUM_EQUIVALENT = 0.22;
 
-    // --- Credit Crisis Hazard (Schularick & Taylor 2012; Jorda, Schularick & Taylor 2013; Drehmann & Juselius 2014) ---
-    /** Logit intercept: ~1% a year with no boom, the post-war advanced-economy crisis frequency in Schularick & Taylor's panel. */
-    public const CREDIT_CRISIS_LOGIT_INTERCEPT = -4.6;
-    /** Logit per unit of credit gap: a 10-point gap lifts the hazard to ~12% a year (BIS: a third of such gaps end in a crisis within three years). */
-    public const CREDIT_CRISIS_LOGIT_GAP = 26.0;
-    /** Logit per unit of debt-service gap: two points of income over the average add a logit point, the near-term trigger in Drehmann & Juselius. */
-    public const CREDIT_CRISIS_LOGIT_DSR = 50.0;
+    // --- Credit Crisis Hazard (Schularick & Taylor 2012; Jorda, Schularick & Taylor 2013) ---
+    /** Logit intercept: -3.77 (se 0.25), crisis starts on the lagged Basel (one-sided HP) household credit gap, JST Macrohistory R6, 17 economies 1950-2020 outside war years and 5-year post-crisis windows; 2.2% a year at trend. */
+    public const CREDIT_CRISIS_LOGIT_INTERCEPT = -3.77;
+    /** Logit per unit of the household debt-to-INCOME gap: 11.44, the same fit's 15.74 (se 4.90) per point of household credit to GDP times disposable income / GDP (0.727, US 1976-2019). A 5-point gap lifts the hazard to ~3.9% a year, 10 points to ~6.7%. */
+    public const CREDIT_CRISIS_LOGIT_GAP = 11.44;
     /** Years after a crisis during which the hazard is off: the bust resets the credit stock, and the panel's crises are decades apart. */
     public const CREDIT_CRISIS_REFRACTORY_YEARS = 5.0;
     /** Demand drag (pp/yr) a crisis books on impact without any boom behind it: a financial recession runs ~1pp a year deeper than a normal one (JST 2013). */
@@ -181,16 +173,32 @@ class CreditFiscalSubsystem
     public const CREDIT_CRISIS_DRAG_PER_GAP = 0.15;
     /** Decay of the crisis drag (four-year time constant, ~29% still running at year five): JST 2013 track output for five years after a credit-boom recession and the excess-credit effect is still clearly negative there. At the 0.5 this was until 2026-09-21 only 8% survived to year five, so a drag spent inside two years was offset as it arrived by a policy loop that responds in four to five quarters -- depth comes from OUTLASTING that loop, not from a bigger impact. */
     public const CREDIT_CRISIS_DRAG_DECAY = 0.25;
-    /** How a crisis reads to lending standards: a unit of crisis drag is worth this much excess spread, so a boom-fed crisis (2.5pp/yr) is 400bp and standards reach the ~80% net tightening of 2008 (Bassett, Chosak, Driscoll & Zakrajsek 2014). */
-    public const SLOOS_CRISIS_SPREAD_EQUIVALENT = 1.6;
+    /** Excess bond premium a crisis books on the day (216 bps): 2008's jump, EBP 1.24% in August to 3.40% in October, the one systemic crisis in the GZ record. The boom's size scales the drag (JST 2013), not this: nothing in the record says how the premium scales past 2008. */
+    public const EBP_CRISIS_JUMP = 0.0216;
+
+    // --- Excess Bond Premium (Gilchrist & Zakrajsek 2012), a displaced lognormal ---
+    /** Displacement (141 bps): the premium plus this is lognormal. Profile maximum likelihood on the GZ series, 1973-2026 (95% CI 116-185 bps); in logs the shocks are the same size at every level, in levels they grow 2.8x from low to high. */
+    public const EBP_DISPLACEMENT = 0.0141;
+    /** Mean of ln(premium + displacement) over 1973-2026 outside the 2008 crisis quarters, so the premium averages ~0 as GZ's does. */
+    public const EBP_LOG_MEAN = -4.271;
+    /** Mean reversion of the log premium (1/yr), by indirect inference: quarterly averages of the process give its own shock 0.57 / 0.42 / 0.24 left at 3 / 4 / 6 quarters, the record 0.59 / 0.45 / 0.22. */
+    public const EBP_MEAN_REVERSION = 1.2;
+    /** Diffusion of the log premium (per sqrt year), fitted with the jumps below so quarterly averages give the log-ARX residual sd of 0.142. */
+    public const EBP_LOG_VOLATILITY = 0.183;
+    /** Merton jumps in the log premium per year: 4.94 by exact compound-Poisson likelihood on the quarterly residuals (LR 13.8 over a Gaussian; jump mean +0.001, so none). */
+    public const EBP_JUMP_INTENSITY = 4.94;
+    /** Standard deviation of a log-premium jump, from the same fit rescaled for quarterly averaging (0.114 per quarter's residual). */
+    public const EBP_JUMP_LOG_VOLATILITY = 0.165;
+    /** Log premium per unit FALL in the output gap: 3.71 (se 0.78), the log-ARX; a quarter losing 2pp of gap adds ~11 bps at a neutral premium and ~37 at 2008's. The gap's level has no pull of its own. */
+    public const EBP_LOG_GAP_SPEED_SENSITIVITY = 3.71;
 
     // --- Federal Reserve Senior Loan Officer Opinion Survey (SLOOS) ---
-    /** Mean-reversion speed (kappa) of bank lending standards toward fundamental target. */
-    public const SLOOS_KAPPA = 1.80;
-    /** Sensitivity of net tightening percentage to wholesale corporate credit spread widening. */
-    public const SLOOS_CREDIT_SENSITIVITY = 15.0;
-    /** Sensitivity of net tightening percentage to output gap contraction. */
-    public const SLOOS_GAP_SENSITIVITY = 3.0;
+    /** Adjustment speed of lending standards toward their target (1/yr): partial adjustment on the GZ premium, 1990-2026, SLOOS AR 0.71 (se 0.05) a quarter, a six-month half-life. */
+    public const SLOOS_KAPPA = 1.36;
+    /** Long-run net tightening per unit of excess bond premium: 34.6 from the same partial adjustment (impact 9.9, se 2.2); standards follow the premium better than the whole GZ spread (static R2 0.46 against 0.27). */
+    public const SLOOS_PREMIUM_SENSITIVITY = 34.6;
+    /** Net tightening per unit of output gap contraction: none. With the premium in, the gap's loading is +1.4 (se 1.5), wrong-signed and insignificant; 2008's standards eased while the gap was still -4%. */
+    public const SLOOS_GAP_SENSITIVITY = 0.0;
     /** Stochastic diffusion volatility of commercial bank underwriting standards. */
     public const SLOOS_SIGMA = 0.08;
 
@@ -202,9 +210,11 @@ class CreditFiscalSubsystem
      * Merton (1974) Structural Distance-to-Default Corporate Credit Spread Model
      * with Jarrow, Lando & Turnbull (1997) Dual-Tranche (IG vs HY) Rating Migration Cliff.
      *
-     * Models investment-grade (IG) and speculative high-yield (HY) corporate credit spreads
-     * over risk-free Treasuries driven by leverage decay, equity volatility, wholesale interbank contagion,
-     * and the non-linear "fallen angel" rating migration cliff during contractions.
+     * Models investment-grade (IG) and speculative high-yield (HY) corporate credit spreads over risk-free
+     * Treasuries as Gilchrist & Zakrajsek's (2012) two parts: the default risk of leverage and equity volatility,
+     * and the excess bond premium lenders charge on top of it, plus wholesale interbank contagion and the
+     * non-linear "fallen angel" rating migration cliff during contractions. None of the inputs reads the spread
+     * back, so the spread has no loop of its own to hold it at its cap.
      *
      * @param MacroState $state Current macroeconomic state.
      */
@@ -220,6 +230,7 @@ class CreditFiscalSubsystem
             outputGapEma: $state->outputGapEma,
             marketVolEma: $state->marketVolatilityEma,
             interbankStress: $interbankStress,
+            excessBondPremium: $state->excessBondPremium,
             hyBaseMultiplier: MacroEngine::HY_BASE_SPREAD_MULTIPLIER,
             fallenAngelSens: MacroEngine::FALLEN_ANGEL_CLIFF_SENSITIVITY
         );
@@ -242,22 +253,23 @@ class CreditFiscalSubsystem
     {
         $currentSpread = $state->interbankLiquiditySpread ?? MacroEngine::INTERBANK_BASELINE_SPREAD;
 
-        // Brunnermeier (2009) & Gorton-Metrick (2012) systemic interbank wholesale funding risk coupling.
-        $excessCreditSpread = max(0.0, $state->macroCreditSpread - MacroEngine::BASE_CREDIT_SPREAD);
-        $creditCoupledTheta = MacroEngine::INTERBANK_BASELINE_SPREAD + ($excessCreditSpread * self::INTERBANK_CREDIT_COUPLING);
+        // Brunnermeier (2009) & Gorton-Metrick (2012) wholesale funding risk. It reads the lenders' premium, the
+        // factor TED and the corporate spread share, and not the corporate spread itself, which reads TED back.
+        $positivePremium = max(0.0, $state->excessBondPremium);
+        $premiumCoupledTheta = MacroEngine::INTERBANK_BASELINE_SPREAD + ($positivePremium * self::INTERBANK_PREMIUM_COUPLING);
 
         $dW = $this->mathUtility->generateStandardNormal();
         $baseProcess = $this->mathUtility->calculateCIR(
             currentValue: $currentSpread,
             kappa: MacroEngine::INTERBANK_SPREAD_KAPPA,
-            theta: $creditCoupledTheta,
+            theta: $premiumCoupledTheta,
             sigma: MacroEngine::INTERBANK_SPREAD_SIGMA,
             dt: $dt,
             dW: $dW
         );
 
         $volatilityRatio = max(1.0, $state->marketVolatilityEma / MacroEngine::MACRO_VOL_BASE_ANCHOR);
-        $creditRatio = max(1.0, $state->macroCreditSpreadEma / MacroEngine::BASE_CREDIT_SPREAD);
+        $creditRatio = 1.0 + ($positivePremium / MacroEngine::BASE_CREDIT_SPREAD);
         $jumpProbability = min(0.20, self::INTERBANK_JUMP_PROBABILITY * $volatilityRatio * (1.0 + 0.5 * ($creditRatio - 1.0)));
 
         $jumpData = $this->mathUtility->calculateJumpDiffusion(
@@ -316,27 +328,25 @@ class CreditFiscalSubsystem
     }
 
     /**
-     * Keynesian Countercyclical Fiscal Spending Rule with Geopolitical Defense Jumps.
-     *
-     * Adjusts sovereign government spending countercyclically against GDP output gap deviations,
-     * combined with Schwartz (1997) mean reversion and Poisson geopolitical conflict appropriation jumps.
+     * Government purchases as an exogenous process: a Schwartz (1997) log-OU with Merton (1976) jumps, all four
+     * fitted to US real purchases over potential, 1949-2019 (var/harness/gov_fit.py). US purchases do not lean against the cycle
+     * (Auerbach 2002; the fit's lagged-gap term is zero or procyclical), so the countercyclical fiscal leg is the
+     * tax rule alone.
      *
      * @param MacroState $state Current macroeconomic state.
      * @param float      $dt    Time increment in years.
      */
     public function calculateGovernmentSpending(MacroState $state, float $dt): void
     {
-        $cyclicalTarget = MacroEngine::GOVT_SPENDING_BASELINE - ($state->outputGapEma * self::GOVT_COUNTERCYCLICAL_SENSITIVITY);
-        $targetSpending = max(60.0, min(160.0, $cyclicalTarget));
-
-        $dW = $this->mathUtility->generateStandardNormal();
+        // Merton compensator: the target nets out the jumps' expected drift, lambda * (E[e^J] - 1) / kappa in log.
+        $jumpDrift = self::GEOPOLITICAL_JUMP_PROBABILITY * (exp(self::GEOPOLITICAL_JUMP_MEAN + ((self::GEOPOLITICAL_JUMP_VOL ** 2) / 2.0)) - 1.0);
         $baseProcess = $this->mathUtility->calculateSchwartz1Factor(
             currentPrice: $state->governmentSpendingIndex,
             kappa: self::GOVT_SPENDING_MEAN_REVERSION,
-            theta: $targetSpending,
+            theta: MacroEngine::GOVT_SPENDING_BASELINE * exp(-$jumpDrift / self::GOVT_SPENDING_MEAN_REVERSION),
             sigma: self::GOVT_SPENDING_VOLATILITY,
             dt: $dt,
-            dW: $dW
+            dW: $this->mathUtility->generateStandardNormal()
         );
 
         $jumpData = $this->mathUtility->calculateJumpDiffusion(
@@ -346,13 +356,7 @@ class CreditFiscalSubsystem
             dt: $dt
         );
 
-        $jumpAmount = 0.0;
-        if ($jumpData['multiplier'] !== 1.0) {
-            $jumpAmount = $baseProcess * ($jumpData['multiplier'] - 1.0);
-        }
-
-        $newSpending = $baseProcess + $jumpAmount;
-        $state->governmentSpendingIndex = max(60.0, min(200.0, $newSpending));
+        $state->governmentSpendingIndex = max(60.0, min(200.0, $baseProcess * $jumpData['multiplier']));
     }
 
     /**
@@ -409,8 +413,8 @@ class CreditFiscalSubsystem
     /**
      * The household credit cycle (Mian & Sufi 2018) with the BIS debt-service ratio and the Basel III buffer.
      *
-     * Leverage builds on collateral values, easy standards, cheap money and incomes, and unwinds through
-     * amortisation and, past the warning line, deleveraging. The debt-service ratio is the BIS annuity
+     * Leverage builds on collateral values and unwinds through amortisation and, past the warning line,
+     * deleveraging; rates reach it through house prices and the debt service. The debt-service ratio is the BIS annuity
      * (Drehmann, Illes, Juselius & Santos 2015): the stock times the instalment its effective rate implies
      * over the average remaining maturity, read against its own 15-year average (Drehmann & Juselius 2012),
      * so a cold start and a slow drift in leverage are silent. The credit-to-GDP gap is the stock against a slow one-sided trend
@@ -426,8 +430,6 @@ class CreditFiscalSubsystem
         $mortgageRate = $state->yield10yEma + MacroEngine::RESIDENTIAL_MORTGAGE_SPREAD;
         $revolvingRate = max(0.0, $state->policyRateEma) + self::CONSUMER_CREDIT_SPREAD;
         $effectiveRate = (self::HOUSEHOLD_MORTGAGE_DEBT_SHARE * $mortgageRate) + ((1.0 - self::HOUSEHOLD_MORTGAGE_DEBT_SHARE) * $revolvingRate);
-        $neutralRate = (self::HOUSEHOLD_MORTGAGE_DEBT_SHARE * (MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION + MacroEngine::NS_BASE_TERM_PREMIUM + MacroEngine::RESIDENTIAL_MORTGAGE_SPREAD))
-            + ((1.0 - self::HOUSEHOLD_MORTGAGE_DEBT_SHARE) * (MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION + self::CONSUMER_CREDIT_SPREAD));
 
         // Against the persistent trend, not the nominal baseline. Mian & Sufi's home-equity channel is a
         // response to prices moving away from trend; read off a fixed 100 it becomes a permanent level
@@ -439,15 +441,9 @@ class CreditFiscalSubsystem
         $relativeExcess = ($state->householdDebtToIncome - MacroEngine::HOUSEHOLD_DEBT_TO_INCOME_BASELINE) / MacroEngine::HOUSEHOLD_DEBT_TO_INCOME_BASELINE;
         $excessDsr = max(0.0, $state->householdDebtServiceGap - MacroEngine::HOUSEHOLD_DSR_STRESS_MARGIN);
 
-        // Both cyclical terms read a deviation from a TREND, never from a nominal constant. The standards
-        // index cannot average zero: macroCreditSpread carries a rectified interbank stress and a one-sided
-        // sovereign passthrough, so it settles ~16bp above BASE_CREDIT_SPREAD and SLOOS_CREDIT_SENSITIVITY
-        // turned that into +0.025 of standing tightening — 0.38%/yr of leverage drained forever, which left
-        // the credit-to-GDP gap negative for decades and the Schularick-Taylor hazard on its floor.
+        // The terms US household credit supports (1976-2019). Rates, the gap and business-loan standards have no
+        // direct pull on it once house prices are in; they act through the collateral and the debt service.
         $growth = (self::CREDIT_GROWTH_HOUSE_PRICE * $housePriceLift)
-            - (self::CREDIT_GROWTH_SLOOS * ($state->sloosTighteningIndexEma - $state->sloosTighteningTrend))
-            - (self::CREDIT_GROWTH_RATE * ($effectiveRate - $neutralRate))
-            + (self::CREDIT_GROWTH_GAP * $state->outputGapEma)
             - (self::CREDIT_MEAN_REVERSION * $relativeExcess)
             - (self::DELEVERAGING_SPEED * $excessDsr);
         $noise = self::CREDIT_GROWTH_SIGMA * sqrt($dt) * $this->mathUtility->generateStandardNormal();
@@ -472,13 +468,18 @@ class CreditFiscalSubsystem
         );
         $state->householdDebtServiceGap = $state->householdDebtServiceRatio - $state->householdDebtServiceTrend;
 
-        // Basel III countercyclical capital buffer (CCyB) mapping from credit-to-GDP gap.
-        $state->creditToGdpTrend = $this->mathUtility->calculateDistributedLag(
-            currentLaggedValue: $state->creditToGdpTrend,
-            targetValue: $state->householdDebtToIncome,
-            dt: $dt,
-            lagTimeConstant: self::CREDIT_TREND_HORIZON_YEARS
-        );
+        // Basel III credit gap: the one-sided HP trend, which is defined on quarterly data, so it steps on the quarter.
+        if (floor($state->totalTime * 4.0) > floor(($state->totalTime - $dt) * 4.0)) {
+            $trend = $this->mathUtility->calculateOneSidedHpStep(
+                trendLevel: $state->creditToGdpTrend,
+                trendSlope: $state->creditToGdpTrendSlope,
+                observation: $state->householdDebtToIncome,
+                levelGain: self::CREDIT_GAP_HP_LEVEL_GAIN,
+                slopeGain: self::CREDIT_GAP_HP_SLOPE_GAIN
+            );
+            $state->creditToGdpTrend = $trend['level'];
+            $state->creditToGdpTrendSlope = $trend['slope'];
+        }
         $state->creditToGdpGap = $state->householdDebtToIncome - $state->creditToGdpTrend;
 
         $bufferPosition = max(0.0, min(1.0, ($state->creditToGdpGapEma - self::CCYB_GAP_FLOOR) / (self::CCYB_GAP_CEILING - self::CCYB_GAP_FLOOR)));
@@ -515,10 +516,8 @@ class CreditFiscalSubsystem
 
         $state->creditCrisisHazard = $this->mathUtility->calculateSchularickTaylorCrisisHazard(
             creditGap: $state->creditToGdpGapEma,
-            debtServiceGap: $state->householdDebtServiceGap,
             beta0: self::CREDIT_CRISIS_LOGIT_INTERCEPT,
-            betaGap: self::CREDIT_CRISIS_LOGIT_GAP,
-            betaDsr: self::CREDIT_CRISIS_LOGIT_DSR
+            betaGap: self::CREDIT_CRISIS_LOGIT_GAP
         );
 
         if (!$this->mathUtility->checkProbability($state->creditCrisisHazard * $dt)) {
@@ -527,6 +526,47 @@ class CreditFiscalSubsystem
 
         $state->lastCreditCrisisAt = $state->totalTime;
         $state->creditCrisisDrag += self::CREDIT_CRISIS_DRAG_BASE + (self::CREDIT_CRISIS_DRAG_PER_GAP * max(0.0, $state->creditToGdpGapEma));
+        // Gilchrist & Zakrajsek (2012): lenders' capital is hit on the day, so the premium they charge jumps with it.
+        $state->excessBondPremium += self::EBP_CRISIS_JUMP;
+    }
+
+    /**
+     * Excess bond premium (Gilchrist & Zakrajsek 2012): the part of the corporate spread that default risk does
+     * not explain, the price lenders put on bearing credit risk at all.
+     *
+     * A displaced lognormal: the premium plus EBP_DISPLACEMENT follows a Schwartz (1997) log-OU, stepped with
+     * its exact transition, with Merton (1976) jumps in the log. In the record its shocks grow with its level and
+     * it never falls far below zero; in logs the shocks are the same size everywhere, so a lognormal gives both.
+     * It is driven by the speed the output gap falls (never its level) and by a level jump when a credit crisis
+     * strikes. It peaks before the gap's trough and is largely gone within a year while the gap is still there.
+     * The spread, equity volatility, the interbank spread and lending standards all load on it, and none of them
+     * feeds back into it.
+     *
+     * @param MacroState $state     Current macroeconomic state.
+     * @param float      $gapChange Change in the output gap over this step.
+     * @param float      $dt        Time increment in years.
+     */
+    public function updateExcessBondPremium(MacroState $state, float $gapChange, float $dt): void
+    {
+        // The Schwartz target carries the Ito correction; handing it this level puts the log mean on EBP_LOG_MEAN.
+        $target = exp(self::EBP_LOG_MEAN + ((self::EBP_LOG_VOLATILITY ** 2) / (2.0 * self::EBP_MEAN_REVERSION)));
+        $shifted = $this->mathUtility->calculateSchwartz1Factor(
+            currentPrice: $state->excessBondPremium + self::EBP_DISPLACEMENT,
+            kappa: self::EBP_MEAN_REVERSION,
+            theta: $target,
+            sigma: self::EBP_LOG_VOLATILITY,
+            dt: $dt,
+            dW: $this->mathUtility->generateStandardNormal()
+        );
+        $jump = $this->mathUtility->calculateJumpDiffusion(
+            lambda: self::EBP_JUMP_INTENSITY,
+            jumpMean: 0.0,
+            jumpVol: self::EBP_JUMP_LOG_VOLATILITY,
+            dt: $dt
+        );
+
+        $shifted *= $jump['multiplier'] * exp(-self::EBP_LOG_GAP_SPEED_SENSITIVITY * $gapChange);
+        $state->excessBondPremium = $shifted - self::EBP_DISPLACEMENT;
     }
 
     /**
@@ -636,29 +676,29 @@ class CreditFiscalSubsystem
     /**
      * Federal Reserve Senior Loan Officer Opinion Survey (SLOOS) Credit Standards Index.
      *
-     * Evaluates net percentage of commercial banks tightening C&I loan standards
-     * based on wholesale credit spreads and macroeconomic output gap.
+     * Evaluates net percentage of commercial banks tightening C&I loan standards from the price lenders put on
+     * credit risk, the excess bond premium. Standards follow the premium rather than the whole spread (R2 0.46
+     * against 0.27), so they tighten on the shock and ease once it passes, with the gap still deep: net
+     * tightening went from 84% in October 2008 to easing by January 2010. A credit crisis reaches them through
+     * the premium jump it books, not through the multi-year deleveraging drag.
      *
      * @param MacroState $state Current macroeconomic state.
      * @param float      $dt    Time increment in years.
      */
     public function calculateSloosCreditStandards(MacroState $state, float $dt): void
     {
-        $excessCreditSpread = max(0.0, $state->macroCreditSpread - MacroEngine::BASE_CREDIT_SPREAD);
         // Basel III CCyB transmission to commercial bank lending standards (BCBS 2010).
-        $bufferTightening = self::SLOOS_CCYB_SPREAD_EQUIVALENT * $state->countercyclicalBufferRateEma;
-        // Bassett et al. (2014) bank capital destruction shock tightening lending standards.
-        $crisisTightening = self::SLOOS_CRISIS_SPREAD_EQUIVALENT * $state->creditCrisisDrag;
+        $bufferTightening = self::SLOOS_CCYB_PREMIUM_EQUIVALENT * $state->countercyclicalBufferRateEma;
         $dW = $this->mathUtility->generateStandardNormal();
 
         $state->sloosTighteningIndex = $this->mathUtility->calculateSloosCreditStandards(
             currentSloos: $state->sloosTighteningIndex,
             outputGap: $state->outputGapEma,
-            excessCreditSpread: $excessCreditSpread + $bufferTightening + $crisisTightening,
+            excessCreditSpread: $state->excessBondPremium + $bufferTightening,
             dt: $dt,
             dW: $dW,
             kappa: self::SLOOS_KAPPA,
-            creditSensitivity: self::SLOOS_CREDIT_SENSITIVITY,
+            creditSensitivity: self::SLOOS_PREMIUM_SENSITIVITY,
             gapSensitivity: self::SLOOS_GAP_SENSITIVITY,
             sigma: self::SLOOS_SIGMA
         );

@@ -31,24 +31,35 @@ class CreditFiscalSubsystemTest extends TestCase
         $this->assertGreaterThan(MacroEngine::BASE_CREDIT_SPREAD, $state->macroCreditSpread);
     }
 
-    public function testGovernmentSpendingExpandsCountercyclically(): void
+    /** Purchases do not lean against the cycle (US 1949-2019), and a surge fades on the fitted 1.8-year half-life. */
+    public function testGovernmentSpendingIgnoresTheGapAndASurgeFadesOverYears(): void
     {
-        $mathMock = $this->createStub(MathUtility::class);
-        $mathMock->method('generateStandardNormal')->willReturn(0.0);
-        $mathMock->method('calculateSchwartz1Factor')->willReturnCallback(function ($currentPrice, $kappa, $theta, $sigma, $dt, $dW) {
-            $drift = $kappa * ($theta - $currentPrice) * $dt;
-            return $currentPrice + $drift;
-        });
-        $mathMock->method('calculateJumpDiffusion')->willReturn(['jumped' => false, 'multiplier' => 1.0]);
+        $subsystem = $this->quietSubsystem();
+        $paths = [];
+        foreach ([-0.04, 0.04] as $gap) {
+            $state = new MacroState();
+            $state->outputGap = $gap;
+            $state->outputGapEma = $gap;
+            $state->governmentSpendingIndex = 125.0;
+            $path = [];
+            for ($year = 1; $year <= 3; $year++) {
+                for ($i = 0; $i < 360; $i++) {
+                    $subsystem->calculateGovernmentSpending($state, 1.0 / 360.0);
+                }
+                $path[$year] = $state->governmentSpendingIndex;
+            }
+            $paths[] = $path;
+        }
 
-        $subsystem = new CreditFiscalSubsystem($mathMock);
-
-        $state = new MacroState();
-        $state->outputGapEma = -0.04;
-        $state->governmentSpendingIndex = 100.0;
-
-        $subsystem->calculateGovernmentSpending($state, 0.25);
-        $this->assertGreaterThan(100.0, $state->governmentSpendingIndex);
+        $this->assertSame($paths[0], $paths[1], 'A slump and a boom leave purchases on the same path.');
+        $settle = $paths[0][2];
+        for ($i = 0; $i < 360 * 40; $i++) {
+            $subsystem->calculateGovernmentSpending($state, 1.0 / 360.0);
+        }
+        $share = static fn (float $index): float => log($index / $state->governmentSpendingIndex) / log(125.0 / $state->governmentSpendingIndex);
+        $this->assertGreaterThan(0.5, $share($paths[0][1]), 'More than half of a Korea-sized surge is still there after a year.');
+        $this->assertLessThan(0.5, $share($settle), 'Less than half is left after two.');
+        $this->assertGreaterThan(0.25, $share($settle), 'A mobilisation is still a quarter there after two years.');
     }
 
     public function testBarroFiscalPolicyCutsCorporateTaxInRecession(): void
@@ -269,12 +280,11 @@ class CreditFiscalSubsystemTest extends TestCase
     {
         $state = new MacroState();
         $state->sloosTighteningIndex = 0.0;
-        $state->macroCreditSpread = 0.050;    // +300bps widening above baseline
-        $state->macroCreditSpreadEma = 0.050;
+        $state->excessBondPremium = 0.020;    // lenders charging 200 bps over default risk
         $state->outputGapEma = -0.03;         // Recession
 
         $this->subsystem->calculateSloosCreditStandards($state, 0.25);
-        $this->assertGreaterThan(0.05, $state->sloosTighteningIndex, 'Wide credit spreads and recession must trigger net bank tightening.');
+        $this->assertGreaterThan(0.05, $state->sloosTighteningIndex, 'A repricing of credit risk must trigger net bank tightening.');
     }
 
 
@@ -289,6 +299,7 @@ class CreditFiscalSubsystemTest extends TestCase
         $crisis->outputGapEma = -0.04;
         $crisis->marketVolatilityEma = 0.35;
         $crisis->interbankLiquiditySpreadEma = 0.020;
+        $crisis->excessBondPremium = 0.034; // October 2008
 
         $this->subsystem->calculateMacroCreditSpread($boom);
         $this->subsystem->calculateMacroCreditSpread($crisis);
@@ -303,10 +314,11 @@ class CreditFiscalSubsystemTest extends TestCase
         $this->assertLessThanOrEqual(MacroEngine::MAX_HY_CREDIT_SPREAD, $crisis->highYieldCreditSpread);
     }
 
-    public function testInterbankSpreadMeanTracksCreditStress(): void
+    public function testInterbankSpreadMeanTracksTheBondPremium(): void
     {
-        // With diffusion silenced the CIR process converges on its credit-coupled mean: a wide IG spread must
-        // pull the interbank spread well above baseline, so a credit crisis shows up in TED rather than random jumps.
+        // With diffusion silenced the CIR process converges on its premium-coupled mean: lenders repricing credit
+        // risk must pull the interbank spread well above baseline, so a credit crisis shows up in TED rather than
+        // random jumps.
         $quiet = new class extends MathUtility {
             public function generateStandardNormal(): float
             {
@@ -321,8 +333,7 @@ class CreditFiscalSubsystemTest extends TestCase
         $subsystem = new CreditFiscalSubsystem($quiet);
 
         $state = new MacroState();
-        $state->macroCreditSpread = MacroEngine::BASE_CREDIT_SPREAD + 0.030;
-        $state->macroCreditSpreadEma = $state->macroCreditSpread;
+        $state->excessBondPremium = 0.034;
         $state->marketVolatilityEma = 0.30;
         $state->interbankLiquiditySpread = MacroEngine::INTERBANK_BASELINE_SPREAD;
 
@@ -330,9 +341,9 @@ class CreditFiscalSubsystemTest extends TestCase
             $subsystem->calculateInterbankLiquiditySpread($state, 0.25);
         }
 
-        $expectedMean = MacroEngine::INTERBANK_BASELINE_SPREAD + (0.030 * CreditFiscalSubsystem::INTERBANK_CREDIT_COUPLING);
+        $expectedMean = MacroEngine::INTERBANK_BASELINE_SPREAD + (0.034 * CreditFiscalSubsystem::INTERBANK_PREMIUM_COUPLING);
         $this->assertEqualsWithDelta($expectedMean, $state->interbankLiquiditySpread, 0.0005);
-        $this->assertGreaterThan(0.010, $state->interbankLiquiditySpread, 'A 300 bps IG blowout must lift TED past 100 bps.');
+        $this->assertGreaterThan(0.010, $state->interbankLiquiditySpread, "2008's 340 bps premium must lift TED past 100 bps.");
     }
 
 
@@ -579,7 +590,7 @@ class CreditFiscalSubsystemTest extends TestCase
         return $state;
     }
 
-    public function testLeverageBuildsOnAHousePriceBoomAndUnwindsUnderTightStandards(): void
+    public function testLeverageBuildsOnAHousePriceBoom(): void
     {
         $subsystem = $this->quietSubsystem();
 
@@ -587,14 +598,8 @@ class CreditFiscalSubsystemTest extends TestCase
         $boom->residentialPropertyIndexEma = 1.20 * AssetMarketSubsystem::RESIDENTIAL_BASELINE;
         $subsystem->calculateHouseholdCredit($boom, 1.0);
 
-        $tight = $this->householdStateAtNeutralRates();
-        $tight->sloosTighteningIndexEma = 1.0;
-        $subsystem->calculateHouseholdCredit($tight, 1.0);
-
         $expectedBoom = MacroEngine::HOUSEHOLD_DEBT_TO_INCOME_BASELINE * exp(CreditFiscalSubsystem::CREDIT_GROWTH_HOUSE_PRICE * 0.20);
-        $this->assertEqualsWithDelta($expectedBoom, $boom->householdDebtToIncome, 1e-9, 'Twenty percent richer collateral borrows two percent more in a year.');
-        $this->assertLessThan(MacroEngine::HOUSEHOLD_DEBT_TO_INCOME_BASELINE, $tight->householdDebtToIncome, 'Rationed credit amortises faster than it is written.');
-        $this->assertGreaterThan($tight->householdDebtToIncome, $boom->householdDebtToIncome);
+        $this->assertEqualsWithDelta($expectedBoom, $boom->householdDebtToIncome, 1e-9, 'Twenty percent richer collateral borrows ~7% more in a year.');
     }
 
     /**
@@ -645,49 +650,58 @@ class CreditFiscalSubsystemTest extends TestCase
     }
 
     /**
-     * Standards sitting at the level this economy treats as normal must not move leverage either.
-     *
-     * The term read the index against zero, and the index cannot average zero: macroCreditSpread carries a
-     * rectified interbank stress and a one-sided sovereign passthrough, so it sat above BASE_CREDIT_SPREAD in
-     * 86 of 107 live quarters and SLOOS_CREDIT_SENSITIVITY turned that into a mean +0.038 of standing
-     * tightening. At CREDIT_GROWTH_SLOOS that drained 0.38%/yr, and leverage settled at 1 - 0.382/5.0 = 0.924
-     * against an observed 0.930 — the arithmetic of an economy that deleverages forever.
+     * US household credit does not answer business-loan standards, the policy stance or the gap once house prices
+     * are in (1976-2019: +0.002, +0.12 and +0.04, none significant). Those act through the collateral and the
+     * debt service, so on their own they must leave leverage where it is.
      */
-    public function testStandardsAtTheirOwnTrendDoNotMoveLeverage(): void
+    public function testStandardsRatesAndTheGapMoveLeverageOnlyThroughHousesAndDebtService(): void
     {
         $subsystem = $this->quietSubsystem();
 
-        $settled = $this->householdStateAtNeutralRates();
-        $settled->sloosTighteningIndexEma = 0.0382;
-        $settled->sloosTighteningTrend = 0.0382;
+        $shocked = $this->householdStateAtNeutralRates();
+        $shocked->sloosTighteningIndexEma = 0.80;
+        $shocked->outputGapEma = -0.05;
+        $shocked->policyRateEma += 0.03;
+        $shocked->householdDebtServiceTrend = 1.0;
+        $subsystem->calculateHouseholdCredit($shocked, 1.0);
 
-        $subsystem->calculateHouseholdCredit($settled, 1.0);
-
-        $this->assertEqualsWithDelta(
-            MacroEngine::HOUSEHOLD_DEBT_TO_INCOME_BASELINE,
-            $settled->householdDebtToIncome,
-            1e-9,
-            'A standing level of tightening is this economy\'s normal, not a credit crunch.'
-        );
+        $this->assertEqualsWithDelta(MacroEngine::HOUSEHOLD_DEBT_TO_INCOME_BASELINE, $shocked->householdDebtToIncome, 1e-9);
     }
 
-    /**
-     * The rationing response the term exists for still has to bite when standards move above that normal.
-     */
-    public function testStandardsAboveTrendStillRationCredit(): void
+    /** Basel III measures the credit gap against a one-sided HP trend, which follows steady financial deepening; a slow EMA reads it as a boom. */
+    public function testSteadyFinancialDeepeningLeavesNoStandingCreditGap(): void
+    {
+        $state = $this->householdStateAtNeutralRates();
+        $dt = 0.25;
+        for ($quarter = 1; $quarter <= 240; $quarter++) {
+            $state->totalTime = $quarter * $dt;
+            $state->householdDebtToIncome = MacroEngine::HOUSEHOLD_DEBT_TO_INCOME_BASELINE + 0.0025 * $quarter;
+            $state->householdDebtServiceTrend = 10.0;
+            $trend = $state->creditToGdpTrend;
+            $slope = $state->creditToGdpTrendSlope;
+            $credit = $this->mathUtility->calculateOneSidedHpStep($trend, $slope, $state->householdDebtToIncome, CreditFiscalSubsystem::CREDIT_GAP_HP_LEVEL_GAIN, CreditFiscalSubsystem::CREDIT_GAP_HP_SLOPE_GAIN);
+            $state->creditToGdpTrend = $credit['level'];
+            $state->creditToGdpTrendSlope = $credit['slope'];
+        }
+
+        $this->assertEqualsWithDelta(0.0025, $state->creditToGdpTrendSlope, 0.0002, 'Sixty years in, the trend has learned the deepening rate.');
+        $this->assertLessThan(0.02, abs($state->householdDebtToIncome - $state->creditToGdpTrend), 'Deepening at a steady pace is trend, not a boom (a 30-year EMA lags it by ~30 points here).');
+    }
+
+    /** The HP trend is defined on quarterly data: it steps when a quarter closes and holds inside one. */
+    public function testTheCreditTrendStepsOnTheQuarter(): void
     {
         $subsystem = $this->quietSubsystem();
+        $state = $this->householdStateAtNeutralRates();
+        $state->householdDebtToIncome = 1.10;
+        $state->totalTime = 5.10;
+        $subsystem->calculateHouseholdCredit($state, 0.01);
+        $this->assertSame(MacroEngine::HOUSEHOLD_DEBT_TO_INCOME_BASELINE, $state->creditToGdpTrend, 'Mid-quarter the trend holds.');
+        $this->assertEqualsWithDelta($state->householdDebtToIncome - $state->creditToGdpTrend, $state->creditToGdpGap, 1e-12, '...while the gap reads today\'s leverage against it.');
 
-        $crunch = $this->householdStateAtNeutralRates();
-        $crunch->sloosTighteningTrend = 0.0382;
-        $crunch->sloosTighteningIndexEma = $crunch->sloosTighteningTrend + 1.0;
-
-        $subsystem->calculateHouseholdCredit($crunch, 1.0);
-
-        $expected = MacroEngine::HOUSEHOLD_DEBT_TO_INCOME_BASELINE
-            * exp(-CreditFiscalSubsystem::CREDIT_GROWTH_SLOOS * 1.0);
-
-        $this->assertEqualsWithDelta($expected, $crunch->householdDebtToIncome, 1e-9);
+        $state->totalTime = 5.25;
+        $subsystem->calculateHouseholdCredit($state, 0.01);
+        $this->assertGreaterThan(MacroEngine::HOUSEHOLD_DEBT_TO_INCOME_BASELINE, $state->creditToGdpTrend, 'At the quarter the trend takes its step toward leverage.');
     }
 
     public function testTheDebtServiceRatioIsTheBisAnnuityAndRisesWithRates(): void
@@ -752,7 +766,7 @@ class CreditFiscalSubsystemTest extends TestCase
         $subsystem->calculateHouseholdCredit($above, 1.0);
 
         $this->assertEqualsWithDelta(MacroEngine::HOUSEHOLD_DEBT_TO_INCOME_BASELINE, $below->householdDebtToIncome, 1e-9, 'Under the line the service burden is carried, not repaid.');
-        $this->assertEqualsWithDelta(MacroEngine::HOUSEHOLD_DEBT_TO_INCOME_BASELINE * exp(-CreditFiscalSubsystem::DELEVERAGING_SPEED * 0.02), $above->householdDebtToIncome, 1e-9, 'Two points over the line repay one percent of income a year.');
+        $this->assertEqualsWithDelta(MacroEngine::HOUSEHOLD_DEBT_TO_INCOME_BASELINE * exp(-CreditFiscalSubsystem::DELEVERAGING_SPEED * 0.02), $above->householdDebtToIncome, 1e-9, 'Two points over the line repay 3.5% of the stock a year.');
     }
 
     public function testRetailDefaultsRiseWithTheDebtServiceRatioAtFixedUnemployment(): void
@@ -820,15 +834,14 @@ class CreditFiscalSubsystemTest extends TestCase
         $boom = new MacroState();
         $boom->totalTime = 20.0;
         $boom->creditToGdpGapEma = 0.10;
-        $boom->householdDebtServiceGap = 0.02;
         $subsystem->calculateCreditCrisisHazard($boom, 0.25);
-        $this->assertGreaterThan(0.10, $boom->creditCrisisHazard, 'A ten-point boom with service over its average is a live hazard.');
+        $this->assertGreaterThan(0.06, $boom->creditCrisisHazard, 'A ten-point household boom triples the base rate: ~6.7% a year in the JST panel.');
         $this->assertSame(-1.0, $boom->lastCreditCrisisAt, 'The dice did not land, so no crisis has struck.');
 
         $calm = new MacroState();
         $calm->totalTime = 20.0;
         $subsystem->calculateCreditCrisisHazard($calm, 0.25);
-        $this->assertLessThan(0.02, $calm->creditCrisisHazard, 'With no boom the hazard is the base rate.');
+        $this->assertEqualsWithDelta(1.0 / (1.0 + exp(-CreditFiscalSubsystem::CREDIT_CRISIS_LOGIT_INTERCEPT)), $calm->creditCrisisHazard, 1e-12, 'With no boom the hazard is the panel\'s base rate, 2.2% a year.');
 
         $recovering = new MacroState();
         $recovering->totalTime = 20.0;
@@ -920,18 +933,264 @@ class CreditFiscalSubsystemTest extends TestCase
         );
     }
 
-    public function testACrisisTightensLendingStandardsLikeASpreadWould(): void
+    /**
+     * A crisis reaches lending standards through the premium it books, so standards tighten on the day and ease
+     * as the premium passes, while the crisis drag on demand still has most of its four-year life to run.
+     * 2008: net tightening 84% in October, 32% by July 2009, easing by January 2010 with the gap at -4%.
+     */
+    public function testACrisisTightensLendingStandardsThroughThePremiumItBooks(): void
     {
-        $subsystem = $this->quietSubsystem();
+        $math = new class extends MathUtility {
+            public function generateStandardNormal(): float { return 0.0; }
+            public function checkProbability(float $probability): bool { return true; }
+        };
+        $subsystem = new CreditFiscalSubsystem($math);
+        $quiet = $this->quietSubsystem();
 
         $calm = new MacroState();
         $crisis = new MacroState();
-        $crisis->creditCrisisDrag = 0.025;
-        for ($i = 0; $i < 8; $i++) {
-            $subsystem->calculateSloosCreditStandards($calm, 0.25);
-            $subsystem->calculateSloosCreditStandards($crisis, 0.25);
+        $crisis->totalTime = 12.5;
+        $crisis->creditToGdpGapEma = 0.116; // the US boom of 2007 (BIS)
+        $subsystem->calculateCreditCrisisHazard($crisis, 1.0 / 3600.0);
+        $bookedDrag = $crisis->creditCrisisDrag;
+
+        $peak = 0.0;
+        $dt = 1.0 / 52.0;
+        for ($week = 1; $week <= 104; $week++) {
+            foreach ([$calm, $crisis] as $state) {
+                $quiet->updateExcessBondPremium($state, 0.0, $dt);
+                $quiet->calculateSloosCreditStandards($state, $dt);
+            }
+            $crisis->creditCrisisDrag *= exp(-CreditFiscalSubsystem::CREDIT_CRISIS_DRAG_DECAY * $dt);
+            $peak = max($peak, $crisis->sloosTighteningIndex - $calm->sloosTighteningIndex);
+        }
+        $remaining = ($crisis->sloosTighteningIndex - $calm->sloosTighteningIndex) / $peak;
+
+        $this->assertGreaterThan(0.20, $peak, 'The premium a crisis books tightens standards by a fifth on its own, before any fall in the gap adds to it.');
+        $this->assertLessThan(
+            $crisis->creditCrisisDrag / $bookedDrag,
+            $remaining,
+            'Two years on, standards have unwound further than the deleveraging drag has: they follow the premium, not the drag.'
+        );
+    }
+
+    // --- Excess Bond Premium (Gilchrist & Zakrajsek 2012) ---
+
+    /** The log premium decays on its own clock, whatever the level of the gap: a deep but stable slump holds no premium up. */
+    public function testThePremiumDecaysAtItsOwnRateWhateverTheGapLevel(): void
+    {
+        $subsystem = $this->quietSubsystem();
+        $logGap = static fn (float $premium): float => log($premium + CreditFiscalSubsystem::EBP_DISPLACEMENT) - CreditFiscalSubsystem::EBP_LOG_MEAN;
+        $halfLife = log(2.0) / CreditFiscalSubsystem::EBP_MEAN_REVERSION;
+
+        foreach ([1.0 / 360.0, 4.0 / 360.0] as $dt) {
+            $state = new MacroState();
+            $state->excessBondPremium = 0.034;
+            $state->outputGap = -0.07;
+            $state->outputGapEma = -0.07;
+            $start = $logGap($state->excessBondPremium);
+            $steps = (int) round($halfLife / $dt);
+            for ($i = 0; $i < $steps; $i++) {
+                $subsystem->updateExcessBondPremium($state, 0.0, $dt);
+            }
+
+            $this->assertEqualsWithDelta($start * exp(-CreditFiscalSubsystem::EBP_MEAN_REVERSION * $steps * $dt), $logGap($state->excessBondPremium), 1e-12, "Exact log-OU decay at dt {$dt}.");
+            $this->assertEqualsWithDelta(0.5 * $start, $logGap($state->excessBondPremium), 0.01, 'The log deviation is half gone after ln2/kappa, at any step size.');
+        }
+        $this->assertLessThan(0.75, $halfLife, 'A shock to the premium is half spent within three quarters (record: 0.59 left at 3q).');
+    }
+
+    /** A 2008-sized premium fades faster in levels than a small one: the same log decay removes more basis points. */
+    public function testAHighPremiumFadesFasterInLevelsThanALowOne(): void
+    {
+        $subsystem = $this->quietSubsystem();
+
+        $high = new MacroState();
+        $high->excessBondPremium = 0.034;
+        $low = new MacroState();
+        $low->excessBondPremium = 0.005;
+        for ($i = 0; $i < 360; $i++) {
+            $subsystem->updateExcessBondPremium($high, 0.0, 1.0 / 360.0);
+            $subsystem->updateExcessBondPremium($low, 0.0, 1.0 / 360.0);
         }
 
-        $this->assertGreaterThan(0.40, $crisis->sloosTighteningIndex - $calm->sloosTighteningIndex, 'A boom-fed crisis pushes net tightening toward the 80% of 2008 within two years.');
+        $this->assertLessThan(0.30, $high->excessBondPremium / 0.034, 'A year on, most of a 340 bps premium is gone (GZ: 3.40% in October 2008, 0.33% by July 2009).');
+        $this->assertGreaterThan($high->excessBondPremium / 0.034, $low->excessBondPremium / 0.005, 'A small premium keeps a larger share of itself.');
+    }
+
+    /** Lenders price the speed of the fall, multiplicatively in the shifted premium, so it is step-size neutral. */
+    public function testAFallingGapLiftsThePremiumAndARecoveryLowersIt(): void
+    {
+        $subsystem = $this->quietSubsystem();
+        $shift = CreditFiscalSubsystem::EBP_DISPLACEMENT;
+        $lift = exp(0.02 * CreditFiscalSubsystem::EBP_LOG_GAP_SPEED_SENSITIVITY);
+
+        $falling = new MacroState();
+        $subsystem->updateExcessBondPremium($falling, -0.02, 1e-9);
+        $this->assertEqualsWithDelta($shift * ($lift - 1.0), $falling->excessBondPremium, 1e-9);
+
+        $recovering = new MacroState();
+        $subsystem->updateExcessBondPremium($recovering, 0.02, 1e-9);
+        $this->assertEqualsWithDelta($shift * ((1.0 / $lift) - 1.0), $recovering->excessBondPremium, 1e-9);
+
+        $split = new MacroState();
+        for ($i = 0; $i < 4; $i++) {
+            $subsystem->updateExcessBondPremium($split, -0.005, 1e-9);
+        }
+        $this->assertEqualsWithDelta($falling->excessBondPremium, $split->excessBondPremium, 1e-10, 'Four small falls price as one large one.');
+
+        $alreadyHigh = new MacroState();
+        $alreadyHigh->excessBondPremium = 0.03;
+        $subsystem->updateExcessBondPremium($alreadyHigh, -0.02, 1e-9);
+        $this->assertEqualsWithDelta(
+            (0.03 + $shift) / $shift,
+            ($alreadyHigh->excessBondPremium - 0.03) / $falling->excessBondPremium,
+            1e-6,
+            'The same fall adds more to a premium that is already high.'
+        );
+    }
+
+    /** In levels the record's shocks grow with the premium (0.15pp a quarter low, 0.42pp high); in logs they are one size. */
+    public function testAShockMovesAHighPremiumFurtherThanALowOne(): void
+    {
+        $math = new class extends MathUtility {
+            public function generateStandardNormal(): float { return 1.0; }
+            public function checkProbability(float $probability): bool { return false; }
+        };
+        $subsystem = new CreditFiscalSubsystem($math);
+        $shift = CreditFiscalSubsystem::EBP_DISPLACEMENT;
+
+        $low = new MacroState();
+        $high = new MacroState();
+        $high->excessBondPremium = 0.03;
+        $subsystem->updateExcessBondPremium($low, 0.0, 1e-6);
+        $subsystem->updateExcessBondPremium($high, 0.0, 1e-6);
+
+        $this->assertEqualsWithDelta((0.03 + $shift) / $shift, ($high->excessBondPremium - 0.03) / $low->excessBondPremium, 0.06, 'Moves scale with the shifted level; the small residue is the drift, which pulls the two levels differently.');
+    }
+
+    /** However hard it is pushed down, the premium stays above minus its displacement: the record's low is -0.78pp a quarter. */
+    public function testThePremiumCannotFallThroughItsDisplacement(): void
+    {
+        $math = new class extends MathUtility {
+            public function generateStandardNormal(): float { return -8.0; }
+            public function checkProbability(float $probability): bool { return true; }
+        };
+        $subsystem = new CreditFiscalSubsystem($math);
+
+        $state = new MacroState();
+        for ($i = 0; $i < 720; $i++) {
+            $subsystem->updateExcessBondPremium($state, 0.05, 1.0 / 360.0);
+        }
+
+        $this->assertGreaterThan(-CreditFiscalSubsystem::EBP_DISPLACEMENT, $state->excessBondPremium);
+    }
+
+    public function testACrisisBooksThe2008PremiumJump(): void
+    {
+        $math = new class extends MathUtility {
+            public function generateStandardNormal(): float { return 0.0; }
+            public function checkProbability(float $probability): bool { return true; }
+        };
+        $subsystem = new CreditFiscalSubsystem($math);
+
+        $state = new MacroState();
+        $state->totalTime = 12.5;
+        $state->creditToGdpGapEma = 0.116;
+        $subsystem->calculateCreditCrisisHazard($state, 1.0 / 3600.0);
+
+        $this->assertSame(CreditFiscalSubsystem::EBP_CRISIS_JUMP, $state->excessBondPremium, "A crisis books 2008's jump (EBP 1.24% in August to 3.40% in October).");
+
+        $bigger = new MacroState();
+        $bigger->totalTime = 12.5;
+        $bigger->creditToGdpGapEma = 0.40;
+        $subsystem->calculateCreditCrisisHazard($bigger, 1.0 / 3600.0);
+        $this->assertSame(CreditFiscalSubsystem::EBP_CRISIS_JUMP, $bigger->excessBondPremium, 'A bigger boom books a bigger drag, not a premium past the record.');
+        $this->assertGreaterThan($state->creditCrisisDrag, $bigger->creditCrisisDrag);
+    }
+
+    /** None of the premium's readers feeds back into the spread that reads them: volatility and TED ignore the spread itself. */
+    public function testTheCreditBlockHasNoLoop(): void
+    {
+        $math = new class extends MathUtility {
+            public function generateStandardNormal(): float { return 0.0; }
+            public function checkProbability(float $probability): bool { return false; }
+        };
+        $credit = new CreditFiscalSubsystem($math);
+        $assets = new AssetMarketSubsystem($math);
+
+        $calm = new MacroState();
+        $capped = new MacroState();
+        $capped->macroCreditSpread = MacroEngine::MAX_CREDIT_SPREAD;
+        $capped->macroCreditSpreadEma = MacroEngine::MAX_CREDIT_SPREAD;
+        $capped->highYieldCreditSpread = MacroEngine::MAX_HY_CREDIT_SPREAD;
+
+        $this->assertSame($assets->calculateMarketVolatility($calm, 0.25), $assets->calculateMarketVolatility($capped, 0.25), 'Volatility does not read the spread.');
+
+        $credit->calculateInterbankLiquiditySpread($calm, 0.25);
+        $credit->calculateInterbankLiquiditySpread($capped, 0.25);
+        $this->assertSame($calm->interbankLiquiditySpread, $capped->interbankLiquiditySpread, 'TED does not read the spread.');
+
+        $credit->calculateSloosCreditStandards($calm, 0.25);
+        $credit->calculateSloosCreditStandards($capped, 0.25);
+        $this->assertSame($calm->sloosTighteningIndex, $capped->sloosTighteningIndex, 'Lending standards do not read the spread.');
+    }
+
+    /**
+     * The regression this model exists for. A slump held at -7% with 2008's premium and stress: the spread must
+     * come off its cap within a quarter and standards off theirs within a year, with the gap not having moved.
+     * Before it, both sat at their caps for 16 quarters and released only as the gap closed. The premium fades at
+     * its average-episode rate; 2009's own fade was faster, with the Fed's facilities behind it.
+     */
+    public function testSpreadsAndStandardsFadeWhileTheGapStaysDeep(): void
+    {
+        $math = new class extends MathUtility {
+            public function generateStandardNormal(): float { return 0.0; }
+            public function checkProbability(float $probability): bool { return false; }
+            public function calculateSVJJJumps(float $lambda, float $pUp, float $etaUp, float $etaDown, float $muV, float $dt): array
+            {
+                return ['price_multiplier' => 1.0, 'var_jump' => 0.0, 'shock_pct' => 0.0];
+            }
+        };
+        $credit = new CreditFiscalSubsystem($math);
+        $assets = new AssetMarketSubsystem($math);
+
+        $state = new MacroState();
+        $state->outputGap = -0.07;
+        $state->outputGapEma = -0.07;
+        $state->excessBondPremium = 0.034;
+        $state->marketVolatility = 0.45;
+        $state->marketVolatilityEma = 0.45;
+        $state->interbankLiquiditySpread = 0.020;
+        $state->interbankLiquiditySpreadEma = 0.020;
+        $state->sloosTighteningIndex = 0.85;
+
+        $credit->calculateMacroCreditSpread($state);
+        $this->assertSame(MacroEngine::MAX_CREDIT_SPREAD, $state->macroCreditSpread, 'October 2008 conditions start at the cap.');
+        $defaultRisk = MacroEngine::BASE_CREDIT_SPREAD * exp(-MacroEngine::MERTON_LEVERAGE_SENSITIVITY * -0.07);
+
+        $dt = 1.0 / 52.0;
+        $emaWeight = 1.0 - exp(-$dt / 0.25);
+        for ($week = 1; $week <= 104; $week++) {
+            $credit->updateExcessBondPremium($state, 0.0, $dt);
+            $state->marketVolatility = $assets->calculateMarketVolatility($state, $dt);
+            $state->marketVolatilityEma += $emaWeight * ($state->marketVolatility - $state->marketVolatilityEma);
+            $credit->calculateInterbankLiquiditySpread($state, $dt);
+            $state->interbankLiquiditySpreadEma += $emaWeight * ($state->interbankLiquiditySpread - $state->interbankLiquiditySpreadEma);
+            $credit->calculateMacroCreditSpread($state);
+            $credit->calculateSloosCreditStandards($state, $dt);
+
+            if ($week === 13) {
+                $this->assertLessThan(MacroEngine::MAX_CREDIT_SPREAD, $state->macroCreditSpread, 'A quarter on the spread is already off its cap.');
+            }
+            if ($week === 52) {
+                $this->assertLessThan(0.5 * (MacroEngine::MAX_CREDIT_SPREAD - $defaultRisk), $state->macroCreditSpread - $defaultRisk, 'A year on the spread has given back over half its excess over default risk, the gap unchanged.');
+                $this->assertLessThan(0.75, $state->sloosTighteningIndex, 'A year on standards are off their cap.');
+                $this->assertLessThan(0.33, $state->marketVolatility, 'A year on volatility is down to about two thirds of 45%.');
+            }
+        }
+
+        $this->assertLessThan($defaultRisk + 0.005, $state->macroCreditSpread, 'Two years on, what is left is the default risk of a -7% slump.');
+        $this->assertLessThan(0.40, $state->sloosTighteningIndex, 'Two years on standards have given back most of their tightening.');
     }
 }
