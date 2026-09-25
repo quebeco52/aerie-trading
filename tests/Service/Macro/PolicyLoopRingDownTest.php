@@ -29,10 +29,12 @@ class PolicyLoopRingDownTest extends TestCase
     private const BURN_IN_YEARS = 15;
     private const OBSERVE_YEARS = 8;
     private const KICK = 0.016;
+    /** A slump's overshoot must be smaller than a boom's by a margin; the symmetric loop's was 5% larger. */
+    private const SLUMP_OVERSHOOT_RATIO = 0.95;
 
     public function testAnOpeningGapFadesWithoutAPendulum(): void
     {
-        $response = $this->ringDown();
+        $response = $this->ringDown(self::KICK);
         $trough = min($response);
         $troughAt = array_search($trough, $response, true);
 
@@ -44,13 +46,31 @@ class PolicyLoopRingDownTest extends TestCase
         }
     }
 
+    /**
+     * Barnichon & Matthes (2018), Tenreyro & Thwaites (2016): easing pushes on a string. The rate cuts that follow a
+     * slump lift demand less than the hikes that follow a boom cut it, so a slump climbs back without the swing past
+     * zero a boom's bust has; the symmetric loop overshot both ways alike (-0.22 against -0.21 per unit of kick),
+     * the kinked one -0.19 against -0.21.
+     */
+    public function testASlumpClimbsBackWithLessOvershootThanABoomFalls(): void
+    {
+        $boom = $this->ringDown(self::KICK);
+        $slump = $this->ringDown(-self::KICK);
+
+        $this->assertLessThan(0.5, $slump[3], 'Most of a slump is gone within a year.');
+        $this->assertGreaterThan(self::SLUMP_OVERSHOOT_RATIO * min($boom), min($slump), 'The climb out of a slump overshoots less than the fall after a boom.');
+        foreach (array_slice($slump, 20) as $quarter => $value) {
+            $this->assertLessThan(0.03, abs($value), sprintf('Settled from year five on (quarter %d).', $quarter + 20));
+        }
+    }
+
     /** @return list<float> Kicked minus control gap, per unit of kick, at each quarter end. */
-    private function ringDown(): array
+    private function ringDown(float $kickSize): array
     {
         $dt = 1.0 / self::TICKS_PER_YEAR;
         $perQuarter = intdiv(self::TICKS_PER_YEAR, 4);
         $paths = [];
-        foreach ([0.0, self::KICK] as $kick) {
+        foreach ([0.0, $kickSize] as $kick) {
             // Common random numbers: a few draws bypass the zeroed methods, so both runs replay the same stream.
             mt_srand(42);
             $math = new class extends MathUtility {
@@ -85,7 +105,7 @@ class PolicyLoopRingDownTest extends TestCase
             $paths[] = $path;
         }
 
-        return array_map(static fn (float $kicked, float $control): float => ($kicked - $control) / self::KICK, $paths[1], $paths[0]);
+        return array_map(static fn (float $kicked, float $control): float => ($kicked - $control) / $kickSize, $paths[1], $paths[0]);
     }
 
     /** The bootstrap's Redis stand-in forgets everything; the engine needs its state back each tick. */

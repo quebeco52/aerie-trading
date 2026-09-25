@@ -56,8 +56,8 @@ class MonetaryPolicySubsystem
     public const BALANCE_SHEET_REINVESTMENT_HOLD_YEARS = 1.5;
 
     // --- Taylor Rule & The Evans Rule (Forward Guidance) ---
-    /** Weight on inflation deviations from the target, fitted with the gap weight by indirect inference on the US Clarida-Gali-Gertler rule, 1987-2008 (smoothing 0.85, inflation 1.87, gap 1.84) and on when the funds rate moves against the gap: the engine's rule regression reads 0.84, 1.63, 1.61. */
-    public const TAYLOR_INFLATION_WEIGHT = 1.6;
+    /** Weight on inflation deviations from the target, fitted with the gap weight by indirect inference on the US Clarida-Gali-Gertler rule, 1987-2008 (smoothing 0.85, inflation 1.87, gap 1.84) and on when the funds rate moves against the gap, jointly with the asymmetric transmission: the engine's rule regression reads 0.87, 1.73, 1.61. */
+    public const TAYLOR_INFLATION_WEIGHT = 2.4;
     /** Weight on the projected output gap, the same in slack as in a boom (the US rule shows no asymmetry: impact 0.24 in booms, 0.29 in slack, se 0.12-0.15); the same fit. */
     public const TAYLOR_OUTPUT_GAP_WEIGHT = 1.5;
     /** Bernanke (2015) blend: weight on realized core inflation (EMA) in the Taylor Rule inflation measure. */

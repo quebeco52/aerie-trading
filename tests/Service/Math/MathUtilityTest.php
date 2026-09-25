@@ -833,6 +833,15 @@ class MathUtilityTest extends TestCase
         $this->assertEquals($target, $immediate);
     }
 
+    public function testAsymmetricResponseTakesOneSlopeAboveZeroAndAnotherBelow(): void
+    {
+        $this->assertEqualsWithDelta(6.0, $this->mathUtility->calculateAsymmetricResponse(2.0, 3.0, 0.5), 1e-12);
+        $this->assertEqualsWithDelta(-1.0, $this->mathUtility->calculateAsymmetricResponse(-2.0, 3.0, 0.5), 1e-12);
+        $this->assertSame(0.0, $this->mathUtility->calculateAsymmetricResponse(0.0, 3.0, 0.5));
+        // Continuous through the kink: no jump where the driver changes sign.
+        $this->assertEqualsWithDelta(0.0, $this->mathUtility->calculateAsymmetricResponse(1e-12, 3.0, 0.5) - $this->mathUtility->calculateAsymmetricResponse(-1e-12, 3.0, 0.5), 1e-11);
+    }
+
     public function testCalculateAsymmetricCostStickinessCompressesMarginsOnRevenueDecline(): void
     {
         $baselineVariableCostRatio = 0.70; // 70% variable cost ratio (30% gross margin)

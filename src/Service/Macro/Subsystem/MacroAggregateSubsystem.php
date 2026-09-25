@@ -49,14 +49,18 @@ class MacroAggregateSubsystem
     public const KALDOR_MOMENTUM = 0.06;
     /** Cubic capacity ceiling on the UPSIDE only (Friedman 1993 plucking; Dupraz, Nakamura & Steinsson 2019): output is plucked below a ceiling it cannot run above, and a slump has no floor of its own. */
     public const KALDOR_CAPACITY = 600.0;
-    /** Demand per unit of the transmitted real-rate stance, fitted with the reversion and the lag below, the demand shock scale and the policy rule by indirect inference on the CBO gap's autocorrelation at 4-16q and sd (1949-2019) and its path under the Bauer-Swanson (2023) post-surprise funds-rate path (var/harness/isl_an.py). The fit is flat from 0.3 to 1.0; 1.0 moves the gap -0.34pp per point of rates, the nearest the fit allows to the -0.5 to -1.5 of Christiano-Eichenbaum-Evans, Romer-Romer and Ramey: at a US-sized 3.0 policy cancels a demand shock within two years and the gap's 12q autocorrelation turns to -0.3. */
-    public const KALDOR_MONETARY_DRAG = 1.0;
+    /** Demand per unit of a RESTRICTIVE transmitted real-rate stance: tightening binds collateral constraints (Guerrieri & Iacoviello 2017); fitted with the accommodative slope, the premium legs and the rule by indirect inference (var/harness/asym_an.py: ACF, sd, rule, timing, US rate path, sign-split premium projection, Barnichon-Matthes 2018). The fit is flat from 1.3 to 3.5; 1.3 is the strongest whose deterministic ring-down stays clean -- above it a boom swings into a policy-made bust and back. */
+    public const KALDOR_MONETARY_DRAG_RESTRICTIVE = 1.3;
+    /** Demand per unit of an ACCOMMODATIVE stance, about half the restrictive slope: easing pushes on a string (Tenreyro & Thwaites 2016; Barnichon & Matthes 2018 put the expansionary peak at a third of the contractionary); the same fit. */
+    public const KALDOR_MONETARY_DRAG_ACCOMMODATIVE = 0.7;
     /** Time constant of each of the two Pascal stages the real-rate stance passes through before it moves demand (Solow 1960): mean lag 0.8y against Rudebusch-Svensson's year average lagged a quarter (0.6y); the same fit. */
     public const MONETARY_TRANSMISSION_LAG_YEARS = 0.4;
     /** Demand per unit of excess credit and interbank spread: the Bernanke-Gertler-Gilchrist (1999) accelerator's price leg only, well under Gilchrist-Zakrajsek's reduced-form 1.5-2.0 because the quantity and deleveraging legs are booked separately. */
     public const KALDOR_CREDIT_FRICTION_DRAG = 0.60;
-    /** Demand per unit of the Gilchrist-Zakrajsek (2012) excess bond premium, the credit-supply shock beyond its 0.58 loading into the IG spread above; fitted with the demand shock scale by indirect inference on their local projection of the gap on the premium (1q -0.78 vs -1.05, 2q -1.19 vs -1.29, 4q -1.15 vs -1.65 per pp), the loop's moments held. */
-    public const KALDOR_EXCESS_BOND_PREMIUM_DRAG = 6.0;
+    /** Demand per unit of an ADVERSE Gilchrist-Zakrajsek (2012) excess bond premium, beyond its 0.58 loading into the IG spread; fitted to the US sign-split projection of the CBO gap on premium innovations (1973-2019 ex-pandemic: 2q -1.59, 4q -1.69 per pp; var/harness/asym_fit.py). */
+    public const KALDOR_EXCESS_BOND_PREMIUM_DRAG_ADVERSE = 2.0;
+    /** Demand per unit of a FAVORABLE (negative) premium: none, Barnichon, Matthes & Ziegenbein's (2022) estimate -- easy credit does not lift output (IP ~0 to two years, +0.7 insignificant after); it had been feeding booms. */
+    public const KALDOR_EXCESS_BOND_PREMIUM_DRAG_FAVORABLE = 0.0;
     /** Bank lending channel (Lown & Morgan 2006; Bassett, Chosak, Driscoll & Zakrajsek 2014): demand per unit of net lending tightening, so the ~80% of 2008 costs ~2pp a year while it lasts, the loss they attribute to the credit-supply cut. */
     public const KALDOR_LENDING_STANDARDS_DRAG = 0.025;
     /** Countercyclical fiscal stimulus multiplier from corporate tax rate cuts. */
@@ -83,7 +87,7 @@ class MacroAggregateSubsystem
     // --- Aggregate Demand Disturbance (Smets-Wouters 2007) ---
     /** Mean reversion speed of the aggregate demand disturbance: -4*ln(0.86) per year, from the estimated quarterly AR(1) coefficient. */
     public const DEMAND_SHOCK_REVERSION = 0.60;
-    /** Innovation volatility of the aggregate demand disturbance, in annualized gap-drift units: one scale, shared with the disaster sizes below, set so the gap's sd under the fitted loop is the CBO 1949-2019 2.33% beside a ~1.0% TFP supply gap and the premium's drag. */
+    /** Innovation volatility of the aggregate demand disturbance, in annualized gap-drift units: one scale, shared with the disaster sizes below, set so the gap's sd and quarterly moves under the fitted loop are the CBO 1985-2019 1.63% and 0.53pp, the era the policy rule is fitted on, beside a ~1.0% TFP supply gap. */
     public const DEMAND_SHOCK_SIGMA = 0.0175;
 
     // --- Rare Demand Disasters (Barro 2006, Gourio 2012; Kou 2002 jump) ---
@@ -223,6 +227,10 @@ class MacroAggregateSubsystem
     /** Standard quarterly macro indicator EMA smoothing horizon. */
     public const STANDARD_EMA_HORIZON_YEARS = 0.25;
 
+    /** The premium's stationary means depend on constants only; computed once. */
+    private ?float $adversePremiumMean = null;
+    private ?float $premiumMean = null;
+
     public function __construct(
         private readonly MathUtility $mathUtility,
         /** Records what moved the gap. Null in a test or a headless harness, off everywhere the ticker is not. */
@@ -305,6 +313,56 @@ class MacroAggregateSubsystem
     }
 
     /**
+     * Stationary mean of the adverse excess bond premium, E[max(P, 0)], under the premium's own law.
+     *
+     * The premium plus its displacement is lognormal: a log-OU (CreditFiscalSubsystem::updateExcessBondPremium) whose
+     * stationary log variance is (sigma^2 + lambda sigma_J^2) / 2 kappa once its Merton jumps are counted, so the
+     * adverse part is a Black (1976) call on it struck at the displacement. The recession feedback and the crisis jump
+     * are left out on purpose: they are amplification, and their average cost is real. A premium held at this level
+     * leaves both compensated credit legs neutral.
+     *
+     * @return float Mean adverse premium (fraction).
+     */
+    public function stationaryAdversePremium(): float
+    {
+        if ($this->adversePremiumMean !== null) {
+            return $this->adversePremiumMean;
+        }
+        $logVariance = $this->stationaryPremiumLogVariance();
+
+        return $this->adversePremiumMean = $this->mathUtility->calculateBlackScholesPrice(
+            spot: exp(CreditFiscalSubsystem::EBP_LOG_MEAN + ($logVariance / 2.0)),
+            strike: CreditFiscalSubsystem::EBP_DISPLACEMENT,
+            volatility: sqrt($logVariance),
+            riskFreeRate: 0.0,
+            dividendYield: 0.0,
+            timeToExpiry: 1.0,
+            isCall: true
+        );
+    }
+
+    /**
+     * Stationary mean of the excess bond premium under the same law: the lognormal mean less the displacement.
+     *
+     * @return float Mean premium (fraction).
+     */
+    private function stationaryPremiumMean(): float
+    {
+        return $this->premiumMean ??= exp(CreditFiscalSubsystem::EBP_LOG_MEAN + ($this->stationaryPremiumLogVariance() / 2.0)) - CreditFiscalSubsystem::EBP_DISPLACEMENT;
+    }
+
+    /**
+     * Stationary variance of the log displaced premium: diffusion plus Merton jumps over twice the reversion speed.
+     *
+     * @return float Log variance.
+     */
+    private function stationaryPremiumLogVariance(): float
+    {
+        return ((CreditFiscalSubsystem::EBP_LOG_VOLATILITY ** 2) + (CreditFiscalSubsystem::EBP_JUMP_INTENSITY * (CreditFiscalSubsystem::EBP_JUMP_LOG_VOLATILITY ** 2)))
+            / (2.0 * CreditFiscalSubsystem::EBP_MEAN_REVERSION);
+    }
+
+    /**
      * Kaldor (1940) Non-Linear Business Cycle with Modigliani Wealth Effect & Marshall-Lerner FX Drag.
      *
      * Solves continuous macroeconomic aggregate demand dynamics:
@@ -352,7 +410,7 @@ class MacroAggregateSubsystem
         // Rudebusch & Svensson 1999 lag the real rate a year): investment is planned, ordered and built.
         $state->monetaryStanceStage1 = $this->mathUtility->calculateDistributedLag($state->monetaryStanceStage1, $realRate - $neutralRealRate, $dt, self::MONETARY_TRANSMISSION_LAG_YEARS);
         $state->monetaryStanceTransmitted = $this->mathUtility->calculateDistributedLag($state->monetaryStanceTransmitted, $state->monetaryStanceStage1, $dt, self::MONETARY_TRANSMISSION_LAG_YEARS);
-        $monetaryDrag = self::KALDOR_MONETARY_DRAG * $state->monetaryStanceTransmitted;
+        $monetaryDrag = $this->mathUtility->calculateAsymmetricResponse($state->monetaryStanceTransmitted, self::KALDOR_MONETARY_DRAG_RESTRICTIVE, self::KALDOR_MONETARY_DRAG_ACCOMMODATIVE);
 
         // Bernanke, Gertler & Gilchrist (1999) financial accelerator wholesale credit frictions.
         $excessCreditSpread = max(-MacroEngine::BASE_CREDIT_SPREAD * 0.5, $state->macroCreditSpreadEma - MacroEngine::BASE_CREDIT_SPREAD);
@@ -360,7 +418,12 @@ class MacroAggregateSubsystem
         $creditFrictionDrag = self::KALDOR_CREDIT_FRICTION_DRAG * ($excessCreditSpread + $excessInterbankSpread);
 
         // Gilchrist & Zakrajsek (2012): the premium is the price of credit supply, and it moves spending beyond the spread it loads into.
-        $premiumDrag = self::KALDOR_EXCESS_BOND_PREMIUM_DRAG * $state->excessBondPremium;
+        // The premium bites on its adverse side only, so each side is compensated by its stationary mean (Merton 1976):
+        // it bends the cycle without shifting its average, whose cost belongs in potential, not the gap.
+        $adversePremiumMean = $this->stationaryAdversePremium();
+        $premiumDrag = $this->mathUtility->calculateAsymmetricResponse($state->excessBondPremium, self::KALDOR_EXCESS_BOND_PREMIUM_DRAG_ADVERSE, self::KALDOR_EXCESS_BOND_PREMIUM_DRAG_FAVORABLE)
+            - (self::KALDOR_EXCESS_BOND_PREMIUM_DRAG_ADVERSE * $adversePremiumMean)
+            - (self::KALDOR_EXCESS_BOND_PREMIUM_DRAG_FAVORABLE * ($this->stationaryPremiumMean() - $adversePremiumMean));
 
         $momentum = self::KALDOR_MOMENTUM * $y;
         // Kaldor (1940) non-linear asymmetric capacity ceiling constraint.
@@ -376,9 +439,7 @@ class MacroAggregateSubsystem
         $automaticStabiliser = -self::KALDOR_AUTOMATIC_STABILISER * $y;
 
         // Bertola & Caballero (1994) asymmetric capital overhang drag reflecting investment irreversibility.
-        $capitalDrag = $state->capitalStockOverhang >= 0.0
-            ? self::KALDOR_CAPITAL_DRAG * $state->capitalStockOverhang
-            : self::KALDOR_CAPITAL_REBOUND_DRAG * $state->capitalStockOverhang;
+        $capitalDrag = $this->mathUtility->calculateAsymmetricResponse($state->capitalStockOverhang, self::KALDOR_CAPITAL_DRAG, self::KALDOR_CAPITAL_REBOUND_DRAG);
 
         // Case, Quigley & Shiller (2005) housing wealth effect relative to persistent trend.
         $housingWealthEffect = $state->residentialWealthTrend > 0.0

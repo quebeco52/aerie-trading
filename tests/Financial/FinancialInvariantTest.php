@@ -526,44 +526,38 @@ class FinancialInvariantTest extends TestCase
         );
     }
 
-    public function testMonetaryEasingOverpowersCreditFrictionDuringRecession(): void
+    /**
+     * Tenreyro & Thwaites (2016), Barnichon & Matthes (2018): easing still lifts demand in a slump with blown-out
+     * spreads, but it pushes on a string -- a 300bp cut lifts the gap by less than a 300bp hike from the same state
+     * cuts it.
+     */
+    public function testMonetaryEasingStillStimulatesInARecessionButLessThanTighteningRestrains(): void
     {
         $deterministicMath = new class extends MathUtility {
             public function generateStandardNormal(): float { return 0.0; }
+
+            // The disaster gate is the only randomness left; a jump in one leg would swamp the difference.
+            public function checkProbability(float $probability): bool { return false; }
         };
-        $aggregate = new MacroAggregateSubsystem($deterministicMath);
 
-        // Recession state with blown-out credit spreads (450 bps IG, 60 bps interbank)
-        $stateTightMoney = MacroStateBuilder::create()
-            ->withOutputGap(-0.025)
-            ->withInflation(0.015)
-            ->withPolicyRate(0.045) // Central bank hasn't cut yet
-            ->build();
-        $stateTightMoney->macroCreditSpreadEma = 0.045;
-        $stateTightMoney->interbankLiquiditySpreadEma = 0.006;
-        $stateTightMoney->energyPriceIndexEma = MacroEngine::ENERGY_BASELINE;
-        $stateTightMoney->freightRateIndexEma = MacroEngine::FREIGHT_BASELINE;
+        $gaps = [];
+        foreach (['tight' => [0.045, 0.045], 'eased' => [0.015, 0.025], 'tighter' => [0.075, 0.065]] as $name => [$policyRate, $yield5y]) {
+            $aggregate = new MacroAggregateSubsystem($deterministicMath);
+            // Recession state with blown-out credit spreads (450 bps IG, 60 bps interbank)
+            $state = MacroStateBuilder::create()
+                ->withOutputGap(-0.025)
+                ->withInflation(0.015)
+                ->withPolicyRate($policyRate)
+                ->build();
+            $state->macroCreditSpreadEma = 0.045;
+            $state->interbankLiquiditySpreadEma = 0.006;
+            $state->energyPriceIndexEma = MacroEngine::ENERGY_BASELINE;
+            $state->freightRateIndexEma = MacroEngine::FREIGHT_BASELINE;
+            $gaps[$name] = $aggregate->calculateOutputGap($state, $yield5y, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0);
+        }
 
-        // Easing state: central bank cuts policy rate from 4.5% to 1.5%
-        $stateEasedMoney = clone $stateTightMoney;
-        $stateEasedMoney->policyRate = 0.015;
-
-        $gapTight = $aggregate->calculateOutputGap($stateTightMoney, 0.045, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0);
-        $gapEased = $aggregate->calculateOutputGap($stateEasedMoney, 0.025, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0);
-
-        // Invariant: Monetary policy easing must produce a significant positive aggregate demand boost
-        $this->assertGreaterThan(
-            $gapTight,
-            $gapEased,
-            'Central bank rate cuts during a downturn must stimulate output gap drift despite credit spreads'
-        );
-
-        // Easing boost must be at least +50 bps annualized (+0.00125 per quarter)
-        $this->assertGreaterThanOrEqual(
-            0.00125,
-            $gapEased - $gapTight,
-            '300 bps rate cut must deliver at least 50 bps annualized output gap recovery boost'
-        );
+        $this->assertGreaterThan($gaps['tight'], $gaps['eased'], 'Rate cuts during a downturn must still lift the output gap despite credit spreads.');
+        $this->assertLessThan($gaps['tight'] - $gaps['tighter'], $gaps['eased'] - $gaps['tight'], 'A 300bp cut must lift demand by less than a 300bp hike cuts it.');
     }
 
     public function testFinancialConditionsIndexEmpiricalBalanceAcrossRegimes(): void
@@ -768,6 +762,8 @@ class FinancialInvariantTest extends TestCase
                 ->withInventoryGap(0.030)
                 ->build();
             $state->outputGapEma = -0.005;
+            // Credit at its average: the compensated premium is neutral, so only policy acts.
+            $state->excessBondPremium = $aggregate->stationaryAdversePremium();
 
             for ($quarter = 0; $quarter < 12; $quarter++) {
                 $newGap = $aggregate->calculateOutputGap($state, $yield5y, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0);

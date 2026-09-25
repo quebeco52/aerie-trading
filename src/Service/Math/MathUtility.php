@@ -1122,6 +1122,23 @@ class MathUtility
     }
 
     /**
+     * Kinked linear response to a signed driver: one slope above zero, another below.
+     *
+     * The reduced form of an occasionally binding constraint (Mendoza 2010; Guerrieri & Iacoviello 2017): tight
+     * conditions bind and cut spending at one rate, loose ones relax a slack constraint and lift it at another.
+     * Continuous at zero, so the response has no jump where the driver changes sign.
+     *
+     * @param float $driver     Signed driver, zero at neutral.
+     * @param float $slopeAbove Response per unit of a positive driver.
+     * @param float $slopeBelow Response per unit of a negative driver.
+     * @return float The response.
+     */
+    public function calculateAsymmetricResponse(float $driver, float $slopeAbove, float $slopeBelow): float
+    {
+        return $driver >= 0.0 ? $slopeAbove * $driver : $slopeBelow * $driver;
+    }
+
+    /**
      * Calculates an exponential distributed lag step (discrete recursive lag filter).
      * Models delayed transmission and economic stickiness (e.g., cost-push pass-through).
      *

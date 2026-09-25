@@ -764,8 +764,66 @@ class MacroAggregateSubsystemTest extends TestCase
 
         // One percentage point of expected inflation on a 0.50 policy leg is 50bps of real easing, through the drag
         // coefficient over a quarter, of which a one-quarter step has passed w^2 through the two Pascal stages.
-        $expectedLift = MacroAggregateSubsystem::KALDOR_MONETARY_DRAG * MacroAggregateSubsystem::BORROWING_POLICY_WEIGHT * 0.01 * $this->pascalPassThrough(0.25) * 0.25;
+        $expectedLift = MacroAggregateSubsystem::KALDOR_MONETARY_DRAG_ACCOMMODATIVE * MacroAggregateSubsystem::BORROWING_POLICY_WEIGHT * 0.01 * $this->pascalPassThrough(0.25) * 0.25;
         $this->assertEqualsWithDelta($expectedLift, $gapUnanchored - $gapAnchored, 1e-9);
+    }
+
+    /**
+     * The mirror of the case above on the restrictive side: from a stance already restrictive, lower expected inflation
+     * raises the real policy leg further, and drags at the restrictive rate. (The neutral fixture's five-year sits a term
+     * premium under its neutral, so the fixture itself is slightly accommodative; starting from it would cross the kink.)
+     */
+    public function testLowerExpectedInflationTightensAtTheRestrictiveRate(): void
+    {
+        $anchored = $this->neutralBorrowingState();
+        $tightened = $this->neutralBorrowingState();
+
+        $gapAnchored = $this->subsystem->calculateOutputGap($anchored, 0.035, MacroEngine::BASE_NATURAL_RATE, 0.01, 0.25, 1.0);
+        $gapTightened = $this->subsystem->calculateOutputGap($tightened, 0.035, MacroEngine::BASE_NATURAL_RATE, 0.0, 0.25, 1.0);
+        $this->assertGreaterThan(0.0, $anchored->monetaryStanceTransmitted, 'Both legs sit on the restrictive side.');
+
+        $expectedDrag = MacroAggregateSubsystem::KALDOR_MONETARY_DRAG_RESTRICTIVE * MacroAggregateSubsystem::BORROWING_POLICY_WEIGHT * 0.01 * $this->pascalPassThrough(0.25) * 0.25;
+        $this->assertEqualsWithDelta(-$expectedDrag, $gapTightened - $gapAnchored, 1e-9);
+    }
+
+    /**
+     * Barnichon & Matthes (2018), Tenreyro & Thwaites (2016): tightening moves spending, easing pushes on a string.
+     * An equal real-rate move either side of neutral cuts demand more than it lifts it.
+     */
+    public function testTighteningCutsDemandMoreThanAnEqualEasingLiftsIt(): void
+    {
+        $neutral = $this->neutralBorrowingState();
+        $tight = $this->neutralBorrowingState();
+        $easy = $this->neutralBorrowingState();
+
+        $gapNeutral = $this->subsystem->calculateOutputGap($neutral, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0);
+        $gapTight = $this->subsystem->calculateOutputGap($tight, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION - 0.01, 0.25, 1.0);
+        $gapEasy = $this->subsystem->calculateOutputGap($easy, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION + 0.01, 0.25, 1.0);
+
+        $this->assertLessThan($gapNeutral, $gapTight);
+        $this->assertGreaterThan($gapNeutral, $gapEasy);
+        $this->assertLessThan($gapNeutral - $gapTight, $gapEasy - $gapNeutral, 'Easing must lift demand by less than an equal tightening cuts it.');
+    }
+
+    /**
+     * Gilchrist & Zakrajsek (2012) premium, Barnichon, Matthes & Ziegenbein (2022) asymmetry: an adverse premium drags at
+     * the adverse rate, a favorable one lifts demand at the (much smaller) favorable rate.
+     */
+    public function testAnAdversePremiumCutsDemandMoreThanAnEqualFavorableOneLiftsIt(): void
+    {
+        $neutral = $this->neutralBorrowingState();
+        $adverse = $this->neutralBorrowingState();
+        $adverse->excessBondPremium = 0.01;
+        $favorable = $this->neutralBorrowingState();
+        $favorable->excessBondPremium = -0.01;
+
+        $gapNeutral = $this->subsystem->calculateOutputGap($neutral, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0);
+        $gapAdverse = $this->subsystem->calculateOutputGap($adverse, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0);
+        $gapFavorable = $this->subsystem->calculateOutputGap($favorable, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0);
+
+        $this->assertEqualsWithDelta(-MacroAggregateSubsystem::KALDOR_EXCESS_BOND_PREMIUM_DRAG_ADVERSE * 0.01 * 0.25, $gapAdverse - $gapNeutral, 1e-12);
+        $this->assertEqualsWithDelta(MacroAggregateSubsystem::KALDOR_EXCESS_BOND_PREMIUM_DRAG_FAVORABLE * 0.01 * 0.25, $gapFavorable - $gapNeutral, 1e-12);
+        $this->assertLessThan($gapNeutral - $gapAdverse, $gapFavorable - $gapNeutral, 'Easy credit must lift demand by less than tight credit cuts it.');
     }
 
     /** The fixed-rate leg is the real five-year: the breakeven deflates it, so a higher breakeven at the same nominal yield is easier money. */
@@ -778,7 +836,7 @@ class MacroAggregateSubsystemTest extends TestCase
         $gapAnchored = $this->subsystem->calculateOutputGap($anchored, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0);
         $gapRepriced = $this->subsystem->calculateOutputGap($repriced, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0);
 
-        $expectedLift = MacroAggregateSubsystem::KALDOR_MONETARY_DRAG * MacroAggregateSubsystem::BORROWING_YIELD5Y_WEIGHT * 0.01 * $this->pascalPassThrough(0.25) * 0.25;
+        $expectedLift = MacroAggregateSubsystem::KALDOR_MONETARY_DRAG_ACCOMMODATIVE * MacroAggregateSubsystem::BORROWING_YIELD5Y_WEIGHT * 0.01 * $this->pascalPassThrough(0.25) * 0.25;
         $this->assertEqualsWithDelta($expectedLift, $gapRepriced - $gapAnchored, 1e-9);
     }
 
