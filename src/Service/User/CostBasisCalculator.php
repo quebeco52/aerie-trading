@@ -39,12 +39,14 @@ final class CostBasisCalculator
 
             $quantity = $order->getFilledQuantity() > 0 ? (int) $order->getFilledQuantity() : (int) $order->getQuantity();
             $price = (float) ($order->getExecutionPrice() ?? $order->getLimitPrice() ?? 0.0);
+            // Transfer taxes are part of what a position cost (and come off what a short raised), as a tax basis has them.
+            $duty = (float) ($order->getStampDuty() ?? 0.0);
             $positions[$ticker] ??= ['qty' => 0, 'cost' => 0.0];
 
             $action = $order->getAction();
 
             if ($action === 'BUY') {
-                $positions[$ticker]['cost'] += $quantity * $price;
+                $positions[$ticker]['cost'] += ($quantity * $price) + $duty;
                 $positions[$ticker]['qty'] += $quantity;
                 continue;
             }
@@ -53,7 +55,7 @@ final class CostBasisCalculator
                 // A short's basis is what it was sold for. Both legs are carried negative so the running
                 // average is proceeds per share and the pool arithmetic below is the same in either
                 // direction — without that, a short reports its cost as zero and its P&L as its whole value.
-                $positions[$ticker]['cost'] -= $quantity * $price;
+                $positions[$ticker]['cost'] -= ($quantity * $price) - $duty;
                 $positions[$ticker]['qty'] -= $quantity;
                 continue;
             }

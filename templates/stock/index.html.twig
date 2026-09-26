@@ -360,6 +360,7 @@
 											  data-controller="trade-form"
 											  data-trade-form-ticker-value="{{ asset.ticker }}"
 											  data-trade-form-price-value="{{ asset.price }}"
+											  data-trade-form-duty-rate-value="{{ isEtf ? 0 : constant('App\\Service\\Math\\FinancialConstants::STAMP_DUTY_RATE') }}"
 											  data-action="submit->trade-form#onSubmit">
 									<input type="hidden" name="ticker" value="{{ asset.ticker }}">
 									<input type="hidden" name="_token" value="{{ csrf_token('execute_trade') }}">
@@ -459,9 +460,18 @@
 										<input type="number" id="quantity" name="quantity" min="1" max="1000000" value="1" required class="w-full bg-surface-container-lowest border border-outline-variant/25 rounded px-3 py-1.5 text-sm font-mono tabular-nums text-on-surface focus:ring-1 focus:ring-primary outline-none" data-trade-form-target="quantity" data-action="input->trade-form#render">
 									</div>
 
-									<div class="p-3 rounded bg-surface-container-lowest/80 border border-outline-variant/20 flex justify-between items-center text-xs">
-										<span class="text-on-surface-variant uppercase tracking-wider font-bold">Estimated Cost</span>
-										<span class="font-bold text-on-surface font-mono tabular-nums text-sm" id="estimated-total" data-trade-form-target="estimate" aria-live="polite">${{ asset.price|number_format(2) }}</span>
+									<div class="p-3 rounded bg-surface-container-lowest/80 border border-outline-variant/20 space-y-1.5 text-xs">
+										<div class="flex justify-between items-center">
+											<span class="text-on-surface-variant uppercase tracking-wider font-bold" data-trade-form-target="estimateLabel">Estimated Cost</span>
+											<span class="font-bold text-on-surface font-mono tabular-nums text-sm" id="estimated-total" data-trade-form-target="estimate" aria-live="polite">${{ asset.price|number_format(2) }}</span>
+										</div>
+										{% if not isEtf %}
+											{# Listed shares carry the District's stamp duty on both sides; funds are exempt. #}
+											<div class="flex justify-between items-center text-on-surface-variant">
+												<span>Stamp duty ({{ (constant('App\\Service\\Math\\FinancialConstants::STAMP_DUTY_RATE') * 100)|number_format(2) }}%, to the Sovereign Reserve)</span>
+												<span class="font-mono tabular-nums" data-trade-form-target="duty">-</span>
+											</div>
+										{% endif %}
 									</div>
 
 									<button type="submit" data-trade-form-target="submit" class="w-full py-2 px-4 rounded bg-primary text-on-primary font-bold text-xs uppercase tracking-wider hover:brightness-110 active:scale-98 transition-all cursor-pointer disabled:hover:brightness-100 disabled:active:scale-100">Submit Order</button>

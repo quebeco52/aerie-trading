@@ -291,6 +291,8 @@ readonly class MacroStateDTO
         public float $sovereignFundEquityShare = 0.0,
         public float $sovereignFundOwnershipShare = 0.0,
         public float $sovereignFundDrawToGdp = 0.0,
+        public float $sovereignFundStampDutyYearToDate = 0.0,
+        public float $sovereignFundStampDutyToGdp = 0.0,
         public float $foreignEquityIndex = MacroEngine::FOREIGN_EQUITY_BASELINE,
         public float $foreignEquityRiskPremium = MacroEngine::BASE_EQUITY_RISK_PREMIUM,
         public float $foreignEquityValuation = 0.0,
@@ -299,6 +301,7 @@ readonly class MacroStateDTO
         public float $boardPriceReturn = 0.0,
         public float $boardDividendCash = 0.0,
         public float $boardNetIssuance = 0.0,
+        public float $boardStampDuty = 0.0,
     ) {}
 
     /**

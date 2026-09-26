@@ -518,4 +518,20 @@ class OrderFlowImpactWiringTest extends TestCase
         $this->assertEqualsWithDelta($expected, $result['board_net_issuance'], 1e-3, 'Float issued less float retired, at the tick\'s price.');
         $this->assertSame(0.0, $this->tracker()->updateStocks([$this->stock()], 1.0 / 14400.0, false, new MacroStateDTO())['board_net_issuance']);
     }
+
+    public function testTheBoardReportsTheStampDutyItsTradingPaid(): void
+    {
+        $apex = $this->stock();
+        $beta = $this->secondStock();
+
+        $result = $this->tracker()->updateStocks([$apex, $beta], 1.0 / 252.0, false, new MacroStateDTO());
+
+        // Buyer and seller each pay the rate on every print; the reported volume is rounded, so allow a share's worth.
+        $traded = 0.0;
+        foreach ($result['updates'] as $update) {
+            $traded += $update['volume'] * $update['price'];
+        }
+        $this->assertGreaterThan(0.0, $result['board_stamp_duty']);
+        $this->assertEqualsWithDelta(2.0 * FinancialConstants::STAMP_DUTY_RATE * $traded, $result['board_stamp_duty'], 2.0 * FinancialConstants::STAMP_DUTY_RATE * 200.0);
+    }
 }

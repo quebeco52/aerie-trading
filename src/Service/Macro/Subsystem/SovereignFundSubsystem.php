@@ -26,7 +26,8 @@ use App\Service\Math\MathUtility;
  * band; that is how a fixed-weight rebalancer behaves in the record (GPFG in 2008-09 and 2020).
  *
  * It holds the float as an index holder does: it tenders its share into buybacks and takes up its share of issues, so
- * a company's own flow never moves its ownership. The fund incepts on the first tick that carries a board and books no
+ * a company's own flow never moves its ownership. Its one inflow is the District's stamp duty on share trading, which
+ * is paid to the fund rather than the budget. The fund incepts on the first tick that carries a board and books no
  * trade doing so: a structural holder opens at its holding. A run with no market (the simulate command, the macro
  * harnesses, unit tests) never has a fund.
  */
@@ -106,6 +107,7 @@ class SovereignFundSubsystem
 
         if (MathUtility::crossedSimulatedBoundary($state->totalTime, $dt, self::DRAW_RESET_PERIOD_YEARS)) {
             $state->sovereignFundAnnualDraw = $this->calculateAnnualDraw($state);
+            $this->closeStampDutyYear($state);
         }
         $this->payDraw($state, $dt);
 
@@ -204,6 +206,19 @@ class SovereignFundSubsystem
             $state->sovereignFundDomesticEquity = max(0.0, $state->sovereignFundDomesticEquity + $participation);
             $state->sovereignFundForeignBonds += ($dividends - $participation) * $state->exchangeRateIndex;
         }
+
+        // The stamp duty on the board's trading is paid into the fund rather than the budget, as Singapore's land-sale
+        // proceeds go to its reserves: new money, parked in the paper sleeve like any cash the fund receives.
+        $state->sovereignFundForeignBonds += $state->boardStampDuty * $state->exchangeRateIndex;
+        $state->sovereignFundStampDutyYearToDate += $state->boardStampDuty;
+    }
+
+    /** Publishes the budget year's stamp duty over GDP and starts the next year's count. */
+    private function closeStampDutyYear(MacroState $state): void
+    {
+        $gdpDollars = $state->sovereignFundDollarsPerGdp * $state->nominalGdpIndex;
+        $state->sovereignFundStampDutyToGdp = $gdpDollars > 0.0 ? $state->sovereignFundStampDutyYearToDate / $gdpDollars : 0.0;
+        $state->sovereignFundStampDutyYearToDate = 0.0;
     }
 
     /**

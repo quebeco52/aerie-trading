@@ -9,22 +9,39 @@ import { formatCurrency } from '../js/utils/formatters.js';
  * Submission locks the button, so a slow round-trip plus a second click cannot place two orders.
  */
 export default class extends Controller {
-    static targets = ['limitGroup', 'limitPrice', 'stopGroup', 'stopPrice', 'quantity', 'estimate', 'submit'];
+    static targets = ['limitGroup', 'limitPrice', 'stopGroup', 'stopPrice', 'quantity', 'estimate', 'estimateLabel', 'duty', 'submit'];
     static values = {
         ticker: String,
         /** Last traded price, refreshed from the market stream for as long as the page is open. */
-        price: Number
+        price: Number,
+        /** Stamp duty on the consideration, each side of the trade; zero for an instrument that carries none. */
+        dutyRate: { type: Number, default: 0 }
     };
 
     connect() {
         // The coalesced frame (market-stream.js): the ticket only needs the latest quote.
         this.marketUpdateHandler = (event) => this.onMarketUpdate(event);
         document.addEventListener('market:frame', this.marketUpdateHandler);
+        // Buying pays the duty on top, selling pays it out of the proceeds, so the side changes the estimate.
+        this.actionChangeHandler = (event) => {
+            if (event.target?.name === 'action') this.render();
+        };
+        this.element.addEventListener('change', this.actionChangeHandler);
         this.render();
     }
 
     disconnect() {
         document.removeEventListener('market:frame', this.marketUpdateHandler);
+        this.element.removeEventListener('change', this.actionChangeHandler);
+    }
+
+    get action() {
+        return this.element.querySelector('input[name="action"]:checked')?.value || 'BUY';
+    }
+
+    /** BUY and COVER pay cash out; SELL and SHORT take it in. */
+    get isBuySide() {
+        return this.action === 'BUY' || this.action === 'COVER';
     }
 
     onMarketUpdate(event) {
@@ -88,11 +105,20 @@ export default class extends Controller {
         const quantity = parseInt(this.hasQuantityTarget ? this.quantityTarget.value : '0', 10);
         const price = this.effectivePrice;
 
+        if (this.hasEstimateLabelTarget) {
+            this.estimateLabelTarget.textContent = this.isBuySide ? 'Estimated Cost' : 'Estimated Proceeds';
+        }
+
         if (!Number.isFinite(quantity) || quantity <= 0 || !Number.isFinite(price)) {
             this.estimateTarget.textContent = formatCurrency(null);
+            if (this.hasDutyTarget) this.dutyTarget.textContent = formatCurrency(null);
             return;
         }
-        this.estimateTarget.textContent = formatCurrency(price * quantity);
+
+        const consideration = price * quantity;
+        const duty = consideration * this.dutyRateValue;
+        if (this.hasDutyTarget) this.dutyTarget.textContent = formatCurrency(duty);
+        this.estimateTarget.textContent = formatCurrency(this.isBuySide ? consideration + duty : consideration - duty);
     }
 
     /**

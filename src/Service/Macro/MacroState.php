@@ -344,6 +344,9 @@ class MacroState
     public float $sovereignFundEquityShare;
     public float $sovereignFundOwnershipShare;
     public float $sovereignFundDrawToGdp;
+    // The District's stamp duty on share trading, paid into the fund: this budget year so far, and last year's over GDP.
+    public float $sovereignFundStampDutyYearToDate;
+    public float $sovereignFundStampDutyToGdp;
     // The foreign equity market the reserve portfolio holds, in its own currency, and the habit premium its investors
     // demand on their own cycle, with the log re-rating it implies and that re-rating's change this tick.
     public float $foreignEquityIndex;
@@ -358,6 +361,7 @@ class MacroState
     public float $boardPriceReturn;
     public float $boardDividendCash;
     public float $boardNetIssuance;
+    public float $boardStampDuty;
 
     public function __construct()
     {

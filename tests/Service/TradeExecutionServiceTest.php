@@ -22,6 +22,7 @@ use App\Service\Market\OptionPricingEngine;
 use App\Service\Market\OptionTradeService;
 use App\Service\Market\OptionMarginCalculator;
 use App\Service\Market\SecuritiesLendingDesk;
+use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Market\TradeExecutionService;
 use App\Service\User\Portfolio;
@@ -586,8 +587,70 @@ class TradeExecutionServiceTest extends TestCase
         $this->assertGreaterThan(90.0, $fill, 'A resting buy still crosses the spread when it fills.');
         $this->assertLessThanOrEqual(100.0, $fill, 'A limit order must never fill above its own limit.');
 
-        // Refund is the unspent escrow: ($100 - fill) * 10.
-        $this->assertEqualsWithDelta((100.0 - $fill) * 10.0, (float) $buyer->getCashBalance(), 0.01);
+        // Refund is the unspent escrow, ($100 - fill) * 10, less the stamp duty the fill pays on top of it.
+        $duty = $fill * 10.0 * FinancialConstants::STAMP_DUTY_RATE;
+        $this->assertEqualsWithDelta($duty, (float) $buyOrder->getStampDuty(), 0.0001);
+        $this->assertEqualsWithDelta(((100.0 - $fill) * 10.0) - $duty, (float) $buyer->getCashBalance(), 0.01);
+    }
+
+    /** A fund is exempt, as Hong Kong exempts ETF transfers: testExecuteMarketBuyOnEtf pins its spend to the spread alone. */
+    public function testAStockBuyPaysStampDutyOnTopOfTheConsideration(): void
+    {
+        $user = new User();
+        $user->setCashBalance('10000.00');
+
+        $stock = new Stock();
+        $stock->setTicker('APEX');
+        $stock->setPrice('50.00');
+
+        $this->stockRepoStub->method('findOneByTicker')->willReturn($stock);
+        $this->userStockRepoStub->method('findOneBy')->willReturn(null);
+
+        $captured = [];
+        $this->emMock->method('persist')->willReturnCallback(static function (object $entity) use (&$captured): void {
+            if ($entity instanceof TradeOrder) {
+                $captured[] = $entity;
+            }
+        });
+
+        $before = (float) $user->getCashBalance();
+        $this->service->executeOrder($user, 'APEX', 'BUY', 'MARKET', 100);
+        $order = end($captured);
+        $consideration = (float) $order->getExecutionPrice() * 100.0;
+
+        $this->assertEqualsWithDelta($consideration * FinancialConstants::STAMP_DUTY_RATE, (float) $order->getStampDuty(), 0.0001);
+        $this->assertEqualsWithDelta($consideration * (1.0 + FinancialConstants::STAMP_DUTY_RATE), $before - (float) $user->getCashBalance(), 0.0001, 'A buyer pays the consideration and the duty on it.');
+    }
+
+    public function testAStockSellPaysStampDutyOutOfTheProceeds(): void
+    {
+        $user = new User();
+        $user->setCashBalance('0.00');
+
+        $stock = new Stock();
+        $stock->setTicker('APEX');
+        $stock->setPrice('50.00');
+
+        $holding = new UserStock();
+        $holding->setUser($user);
+        $holding->setStock($stock);
+        $holding->setQuantity(100);
+
+        $this->stockRepoStub->method('findOneByTicker')->willReturn($stock);
+        $this->userStockRepoStub->method('findOneBy')->willReturn($holding);
+
+        $captured = [];
+        $this->emMock->method('persist')->willReturnCallback(static function (object $entity) use (&$captured): void {
+            if ($entity instanceof TradeOrder) {
+                $captured[] = $entity;
+            }
+        });
+
+        $this->service->executeOrder($user, 'APEX', 'SELL', 'MARKET', 100);
+        $order = end($captured);
+        $consideration = (float) $order->getExecutionPrice() * 100.0;
+
+        $this->assertEqualsWithDelta($consideration * (1.0 - FinancialConstants::STAMP_DUTY_RATE), (float) $user->getCashBalance(), 0.0001, 'A seller receives the consideration less the duty.');
     }
 
     public function testARestingLimitDoesNotFillWhenExecutionCostsWouldBreachItsLimit(): void
@@ -844,7 +907,8 @@ class TradeExecutionServiceTest extends TestCase
 
         $fill = (float) $order->getExecutionPrice();
         $this->assertLessThanOrEqual(45.0, $fill, 'A limit order must never fill above its own limit.');
-        $this->assertEqualsWithDelta(75000.0 - 400.0 * $fill, (float) $user->getCashBalance(), 0.01);
+        // The cover pays for the stock and the stamp duty on it.
+        $this->assertEqualsWithDelta(75000.0 - (400.0 * $fill * (1.0 + FinancialConstants::STAMP_DUTY_RATE)), (float) $user->getCashBalance(), 0.01);
         $this->assertEquals('0.00', $user->getMarginDebit());
     }
 

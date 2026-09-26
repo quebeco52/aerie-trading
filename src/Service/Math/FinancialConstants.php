@@ -520,6 +520,10 @@ class FinancialConstants
     public const MIN_ANNUAL_TURNOVER = 0.35;
     public const MAX_ANNUAL_TURNOVER = 4.00;
 
+    // --- Stamp Duty ---
+    /** Stamp duty on a transfer of listed shares, charged to buyer and seller each and paid into the sovereign reserve fund (District rate; Hong Kong charges 0.1% a side, the UK 0.5% on purchases). */
+    public const STAMP_DUTY_RATE = 0.0005;
+
     // --- Market Microstructure: Spread (Wyart, Bouchaud, Kockelkoren, Potters & Vettorazzo 2008) ---
     /** Coefficient c in S = c * sigma_daily / sqrt(N), the observed relation between spread, volatility and trade count. Near unity in real order-driven markets. */
     public const SPREAD_VOLATILITY_COEFFICIENT = 1.00;

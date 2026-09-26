@@ -468,6 +468,7 @@ class MacroEngine
      * @param float|null $boardPriceReturn  The previous tick's float-weighted price return of the board, or null.
      * @param float|null $boardDividendCash Dividend cash the board's float was paid on the previous tick, or null.
      * @param float|null $boardNetIssuance  Float the companies' own issuance added on the previous tick (buybacks negative), or null.
+     * @param float|null $boardStampDuty    Stamp duty the board's trading paid on the previous tick, or null.
      */
     public function updateMacroState(
         float $dt,
@@ -476,6 +477,7 @@ class MacroEngine
         ?float $boardPriceReturn = null,
         ?float $boardDividendCash = null,
         ?float $boardNetIssuance = null,
+        ?float $boardStampDuty = null,
     ): \App\DTO\MacroStateDTO {
         $state = $this->loadState();
 
@@ -488,6 +490,7 @@ class MacroEngine
         $state->boardPriceReturn = $boardPriceReturn ?? 0.0;
         $state->boardDividendCash = $boardDividendCash ?? 0.0;
         $state->boardNetIssuance = $boardNetIssuance ?? 0.0;
+        $state->boardStampDuty = $boardStampDuty ?? 0.0;
 
         // Advance physical simulation time in years
         $state->totalTime += $dt;

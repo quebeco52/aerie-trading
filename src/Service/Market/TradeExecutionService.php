@@ -12,6 +12,7 @@ use App\Entity\UserBond;
 use App\Entity\UserEtf;
 use App\Entity\UserStock;
 use App\Service\Market\Flow\OrderFlowStoreInterface;
+use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
 use App\Service\User\Portfolio;
 use Doctrine\ORM\EntityManagerInterface;
@@ -201,6 +202,7 @@ class TradeExecutionService
             );
             $livePriceStr = MathUtility::formatDecimal($quote->executionPrice, 4);
             $totalValueStr = \bcmul($livePriceStr, $quantityStr, 4);
+            $stampDutyStr = $this->stampDuty($stock, $totalValueStr);
 
             $userAsset = $this->assetResolver->findHolding($user, $asset);
 
@@ -216,9 +218,9 @@ class TradeExecutionService
 
             if ($orderType === TradeOrder::TYPE_MARKET) {
                 // Execute immediately at market price
-                $userAsset = $this->settlePosition($user, $asset, $userAsset, $action, $quantity, $totalValueStr, $stock);
+                $userAsset = $this->settlePosition($user, $asset, $userAsset, $action, $quantity, $totalValueStr, $stock, $stampDutyStr);
 
-                $this->recordFill($order, $quote, $quantity, $action, $asset->ticker(), $assetType);
+                $this->recordFill($order, $quote, $quantity, $action, $asset->ticker(), $assetType, $stampDutyStr);
                 $this->em->persist($order);
 
             } else {
@@ -248,8 +250,8 @@ class TradeExecutionService
 
                 if ($shouldFillImmediately) {
                     // Fill immediately at LIVE PRICE, not limit price (better execution)
-                    $userAsset = $this->settlePosition($user, $asset, $userAsset, $action, $quantity, $totalValueStr, $stock);
-                    $this->recordFill($order, $quote, $quantity, $action, $asset->ticker(), $assetType);
+                    $userAsset = $this->settlePosition($user, $asset, $userAsset, $action, $quantity, $totalValueStr, $stock, $stampDutyStr);
+                    $this->recordFill($order, $quote, $quantity, $action, $asset->ticker(), $assetType, $stampDutyStr);
                 } else {
                     // Escrow and save as OPEN
                     if ($action === 'BUY' && !$order->isStop()) {
@@ -319,8 +321,12 @@ class TradeExecutionService
      * position they move, and what has to be true beforehand — and spelling that out four times is how the
      * pre-trade checks drift apart from each other.
      *
+     * Stamp duty is paid on top whichever way the stock moves: a buyer needs the consideration and the duty, a
+     * seller receives the consideration and pays the duty out of it.
+     *
      * @param string $totalValue Consideration for the fill, as a bcmath string.
      * @param Stock|null $stock  The instrument when it is an equity; short selling exists only for equities.
+     * @param string $stampDuty  Duty on the consideration, as a bcmath string; zero for anything but listed shares.
      */
     private function settlePosition(
         User $user,
@@ -329,7 +335,8 @@ class TradeExecutionService
         string $action,
         int $quantity,
         string $totalValue,
-        ?Stock $stock
+        ?Stock $stock,
+        string $stampDuty = '0.0000'
     ): UserStock|UserEtf|UserBond {
         $held = $userAsset !== null ? (int) $userAsset->getQuantity() : 0;
 
@@ -340,8 +347,9 @@ class TradeExecutionService
                 }
             }
 
-            $this->requireFunding($user, (float) $totalValue, $action);
+            $this->requireFunding($user, (float) \bcadd($totalValue, $stampDuty, 4), $action);
             $this->cashLedger->debit($user, $totalValue);
+            $this->payStampDuty($user, $stampDuty);
 
             $userAsset = $this->assetResolver->addToHolding($user, $asset, $userAsset, $quantity);
 
@@ -377,6 +385,7 @@ class TradeExecutionService
             // Proceeds are credited, then immediately collateralize the borrowed stock. They are not free
             // cash: MarginEngine subtracts the position's market value straight back out of equity.
             $this->cashLedger->credit($user, $totalValue);
+            $this->payStampDuty($user, $stampDuty);
             $userAsset = $this->assetResolver->addToHolding($user, $asset, $userAsset, -$quantity);
             $this->adjustShortInterest($stock, $quantity);
 
@@ -389,9 +398,35 @@ class TradeExecutionService
         }
 
         $this->cashLedger->credit($user, $totalValue);
+        $this->payStampDuty($user, $stampDuty);
         $this->assetResolver->removeFromHolding($userAsset, $quantity);
 
         return $userAsset;
+    }
+
+    /**
+     * Stamp duty on a fill: listed shares only, at the District rate on the consideration.
+     *
+     * Funds are exempt, as Hong Kong exempts ETF transfers, and bonds and options carry none, so only an equity
+     * fill is charged. The tax is levied on each side of the trade, so buyer and seller each pay it.
+     *
+     * @return string The duty, as a bcmath string.
+     */
+    private function stampDuty(?Stock $stock, string $consideration): string
+    {
+        if ($stock === null) {
+            return '0.0000';
+        }
+
+        return \bcmul($consideration, MathUtility::formatDecimal(FinancialConstants::STAMP_DUTY_RATE, 6), 4);
+    }
+
+    /** Pays the duty out of the account, borrowing any part the settled balance does not cover like any payment. */
+    private function payStampDuty(User $user, string $stampDuty): void
+    {
+        if (\bccomp($stampDuty, '0.0000', 4) > 0) {
+            $this->cashLedger->debit($user, $stampDuty);
+        }
     }
 
     /**
@@ -461,12 +496,13 @@ class TradeExecutionService
      * per order would let a trader split a position into a hundred pieces and pay a hundred separate
      * square roots, which is cheaper than the one they should have paid.
      */
-    private function recordFill(TradeOrder $order, ExecutionQuoteDTO $quote, int $quantity, string $action, string $ticker, string $assetType): void
+    private function recordFill(TradeOrder $order, ExecutionQuoteDTO $quote, int $quantity, string $action, string $ticker, string $assetType, string $stampDuty = '0.0000'): void
     {
         $order->setFilledQuantity($quantity);
         $order->setExecutionPrice(MathUtility::formatDecimal($quote->executionPrice, 4));
         $order->setSpreadCost(MathUtility::formatDecimal($quote->spreadCost, 4));
         $order->setImpactCost(MathUtility::formatDecimal($quote->impactCost, 4));
+        $order->setStampDuty($stampDuty);
         $order->setStatus(TradeOrder::STATUS_FILLED);
         $order->setFilledAt(new \DateTime());
 
@@ -626,6 +662,7 @@ class TradeExecutionService
 
             $action = $order->getAction();
             $considerationStr = \bcmul(MathUtility::formatDecimal($fillPrice, 4), (string) $quantity, 4);
+            $stampDutyStr = $this->stampDuty($stock, $considerationStr);
 
             if ($action === 'COVER') {
                 // Process fill for resting COVER: settle consideration and verify existing short position.
@@ -636,6 +673,7 @@ class TradeExecutionService
                 }
 
                 $this->cashLedger->debit($user, $considerationStr);
+                $this->payStampDuty($user, $stampDutyStr);
 
                 if ($stock !== null) {
                     $this->adjustShortInterest($stock, -$quantity);
@@ -647,12 +685,13 @@ class TradeExecutionService
                 // A buy stop escrowed nothing, so it is paid for now and buying power is checked now. The
                 // account can have spent the money while this rested, and a stop that fires into an
                 // unfunded account does not get to buy on credit: it stays open and tries again.
-                if (!$this->hasFunding($user, (float) $considerationStr)) {
+                if (!$this->hasFunding($user, (float) \bcadd($considerationStr, $stampDutyStr, 4))) {
                     $this->em->getConnection()->rollBack();
                     return;
                 }
 
                 $this->cashLedger->debit($user, $considerationStr);
+                $this->payStampDuty($user, $stampDutyStr);
                 $this->assetResolver->addToHolding($user, $asset, $userAsset, $quantity);
 
             } elseif ($action === 'BUY') {
@@ -663,6 +702,8 @@ class TradeExecutionService
                 if (\bccomp($refundStr, '0.0000', 4) > 0) {
                     $this->cashLedger->credit($user, $refundStr);
                 }
+                // The escrow was the limit price alone, so the duty is paid on top when the order fills.
+                $this->payStampDuty($user, $stampDutyStr);
 
                 $this->assetResolver->addToHolding($user, $asset, $userAsset, $quantity);
 
@@ -681,15 +722,17 @@ class TradeExecutionService
                 }
 
                 $this->cashLedger->credit($user, $considerationStr);
+                $this->payStampDuty($user, $stampDutyStr);
                 $this->assetResolver->addToHolding($user, $asset, $userAsset, -$quantity);
                 $this->adjustShortInterest($stock, $quantity);
 
             } else { // SELL
-                // Shares were already escrowed. Just give them the cash from the sale.
+                // Shares were already escrowed. Just give them the cash from the sale, less the duty on it.
                 $this->cashLedger->credit($user, $considerationStr);
+                $this->payStampDuty($user, $stampDutyStr);
             }
 
-            $this->recordFill($order, $quote, $quantity, $order->getAction(), $ticker, $asset->type);
+            $this->recordFill($order, $quote, $quantity, $order->getAction(), $ticker, $asset->type, $stampDutyStr);
 
             $this->em->persist($order);
             $this->em->persist($user);

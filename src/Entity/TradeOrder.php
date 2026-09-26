@@ -80,6 +80,10 @@ class TradeOrder
     #[ORM\Column(type: Types::DECIMAL, precision: 18, scale: 4, nullable: true)]
     private ?string $impactCost = null;
 
+    /** Stamp duty paid on the fill: listed shares only, charged on the consideration whichever side the order was. */
+    #[ORM\Column(type: Types::DECIMAL, precision: 18, scale: 4, nullable: true)]
+    private ?string $stampDuty = null;
+
     /**
      * Price at which a stop becomes live, in the direction the market has to move to reach it.
      *
@@ -245,6 +249,18 @@ class TradeOrder
     public function setImpactCost(?string $impactCost): static
     {
         $this->impactCost = $impactCost;
+
+        return $this;
+    }
+
+    public function getStampDuty(): ?string
+    {
+        return $this->stampDuty;
+    }
+
+    public function setStampDuty(?string $stampDuty): static
+    {
+        $this->stampDuty = $stampDuty;
 
         return $this;
     }

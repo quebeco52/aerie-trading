@@ -285,6 +285,35 @@ class SovereignFundSubsystemTest extends TestCase
         $this->assertEqualsWithDelta($paper, $fund->foreignHomeValue($state) - $fund->foreignEquityHomeValue($state), 1e-3);
     }
 
+    public function testStampDutyIsPaidIntoTheFundAndReportedForTheYear(): void
+    {
+        $tpy = 360;
+        $dt = 1.0 / $tpy;
+        $fund = new SovereignFundSubsystem($this->stillMarket());
+        $state = $this->openFund($fund, $tpy);
+        $state->sovereignFundAnnualDraw = 0.0;
+        $before = $fund->fundValue($state);
+
+        $state->boardStampDuty = 1.0e6;
+        $this->step($fund, $state, $dt);
+        $this->assertEqualsWithDelta($before + 1.0e6, $fund->fundValue($state), 1e-3, 'Paid in as cash.');
+        $this->assertEqualsWithDelta(1.0e6, $state->sovereignFundStampDutyYearToDate, 1e-9);
+
+        // A steady flow for the rest of the year, then the year is closed and published over GDP.
+        $perTick = 2.0e6;
+        while ($state->totalTime < 1.0 - (1.5 * $dt)) {
+            $state->boardStampDuty = $perTick;
+            $this->step($fund, $state, $dt);
+        }
+        $yearToDate = $state->sovereignFundStampDutyYearToDate;
+        $state->boardStampDuty = $perTick;
+        $this->step($fund, $state, $dt);
+
+        $gdpDollars = $state->sovereignFundDollarsPerGdp * $state->nominalGdpIndex;
+        $this->assertEqualsWithDelta(($yearToDate + $perTick) / $gdpDollars, $state->sovereignFundStampDutyToGdp, 1e-15);
+        $this->assertSame(0.0, $state->sovereignFundStampDutyYearToDate, 'The next year starts from nothing.');
+    }
+
     public function testTheFundTendersIntoBuybacksAndKeepsItsOwnership(): void
     {
         $tpy = 720;
@@ -412,6 +441,7 @@ class SovereignFundSubsystemTest extends TestCase
         $state->boardDividendCash = 0.0;
         $state->boardNetIssuance = 0.0;
         $state->foreignEquityValuationChange = 0.0;
+        $state->boardStampDuty = 0.0;
     }
 
     /** Steps until the tick that crosses the next month end, inclusive. */

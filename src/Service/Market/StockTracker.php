@@ -69,7 +69,7 @@ class StockTracker
      * @param bool    $recordHistory Whether to persist the new prices to the stock history table.
      * @param MacroStateDTO|null $macroState    The current state of the macroeconomic cycle.
      * 
-     * @return array{updates: array<mixed>, total_cap: float, float_caps: array<string, float>, half_spreads: array<string, float>, fund_flow: array<string, float>, dividend_points: array<string, float>, board_float_cap: float, board_price_return: float, board_dividend_cash: float, board_net_issuance: float, events: array<mixed>, market_vol: float, history: array<mixed>}
+     * @return array{updates: array<mixed>, total_cap: float, float_caps: array<string, float>, half_spreads: array<string, float>, fund_flow: array<string, float>, dividend_points: array<string, float>, board_float_cap: float, board_price_return: float, board_dividend_cash: float, board_net_issuance: float, board_stamp_duty: float, events: array<mixed>, market_vol: float, history: array<mixed>}
      */
     public function updateStocks(array $stocks, float $dt, bool $recordHistory, ?\App\DTO\MacroStateDTO $macroState = null, int $tickCount = 0, int $ticksPerYear = 252): array
     {
@@ -96,6 +96,8 @@ class StockTracker
         $boardFloatCapAtStart = 0.0;
         $boardPriceGain = 0.0;
         $boardNetIssuance = 0.0;
+        // What the board traded this tick, which the District's stamp duty is charged on, buyer and seller each.
+        $boardTradedValue = 0.0;
 
         // Everything that traded since the last tick, netted per ticker. Drained once for the whole book
         // rather than per stock: it is one round trip, and a quantity that has already moved the price must
@@ -488,6 +490,7 @@ class StockTracker
             $halfSpreads[$stock->getTicker()] = $halfSpread;
 
             $tickVolume = $this->liquidityEngine->simulateTickVolume($stock, $dt, abs($tickFlow + $fundShares));
+            $boardTradedValue += $tickVolume * $finalPrice;
 
             // What the name prints on an ordinary tick, which is what makes the realized figure abnormal
             // or not. The level alone is a size statistic: a mega-cap always prints more than a micro-cap
@@ -592,6 +595,7 @@ class StockTracker
             'board_price_return' => $boardFloatCapAtStart > 0.0 ? $boardPriceGain / $boardFloatCapAtStart : 0.0,
             'board_dividend_cash' => (float) array_sum($dividendPoints),
             'board_net_issuance' => $boardNetIssuance,
+            'board_stamp_duty' => 2.0 * FinancialConstants::STAMP_DUTY_RATE * $boardTradedValue,
             'events' => $events,
             'market_vol' => $marketVol
         ];

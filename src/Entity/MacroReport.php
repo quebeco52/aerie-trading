@@ -715,6 +715,9 @@ class MacroReport
     private ?string $sovereignFundDrawToGdp = null;
 
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 6, nullable: true)]
+    private ?string $sovereignFundStampDutyToGdp = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 6, nullable: true)]
     private ?string $sovereignFundRebalanceShare = null;
 
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
