@@ -68,6 +68,7 @@ class LaborMarketSubsystemTest extends TestCase
         $state->tipsBreakevenEma = $expectedInflation;
         $state->inflation = $expectedInflation;
         $state->wageGrowth = 0.0;
+        $state->realWageGap = 0.0; // real pay on its productivity path
 
         // Partial adjustment at WAGE_ADJUSTMENT_SPEED closes half the growth gap each quarter; the level the start-up
         // leaves behind error-corrects on a ~7 year half-life, so a century settles both.

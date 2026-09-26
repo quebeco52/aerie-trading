@@ -7,6 +7,8 @@ namespace App\Tests\DTO;
 use App\DTO\MacroStateDTO;
 use App\Service\Macro\MacroEngine;
 use App\Service\Macro\MacroState;
+use App\Service\Macro\Subsystem\MonetaryPolicySubsystem;
+use App\Service\Math\MathUtility;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -18,11 +20,12 @@ class MacroStateHydrationTest extends TestCase
     public function testAbsentCurveIsRebuiltOffThePolicyRate(): void
     {
         $dto = MacroStateDTO::fromArray(['policy_rate' => 0.06]);
+        $opening = new MacroStateDTO();
 
-        $this->assertSame(0.06, $dto->yield2y, 'A 2y with no reading opens at the policy rate.');
-        $this->assertEqualsWithDelta(0.065, $dto->yield5y, 1e-12);
-        $this->assertEqualsWithDelta(0.070, $dto->yield10y, 1e-12);
-        $this->assertEqualsWithDelta(0.075, $dto->yield30y, 1e-12);
+        // The opening curve's term spreads, carried on top of the policy rate the payload does report.
+        foreach (['yield2y', 'yield5y', 'yield10y', 'yield30y'] as $tenor) {
+            $this->assertEqualsWithDelta(0.06 + ($opening->$tenor - $opening->policyRate), $dto->$tenor, 1e-12, $tenor);
+        }
         $this->assertGreaterThan($dto->yield2y, $dto->yield30y, 'The rebuilt curve must slope upward.');
     }
 
@@ -155,6 +158,30 @@ class MacroStateHydrationTest extends TestCase
         $this->assertSame([], $dto->sectorZ);
     }
 
+    /** A fresh engine, an empty snapshot and a DTO built with no arguments are one economy. */
+    public function testEveryReaderOpensOnTheSameEconomy(): void
+    {
+        $opening = (new MacroStateDTO())->toArray();
+
+        $this->assertSame($opening, MacroStateDTO::fromArray([])->toArray());
+        $this->assertSame($opening, (new MacroState())->toArray());
+        $this->assertSame($opening, MacroState::fromArray([])->toArray());
+    }
+
+    /** The opening curve is the curve the engine fits at the opening state, so the first tick does not reprice it. */
+    public function testTheOpeningCurveIsTheEnginesOwnCurveAtTheOpeningState(): void
+    {
+        $state = new MacroState();
+        $curve = (new MonetaryPolicySubsystem(new MathUtility()))->calculateYieldCurve($state, MacroEngine::TARGET_INFLATION, $state->naturalRate);
+
+        // Openings are declared to the basis point.
+        foreach (['yield_2y' => 'yield2y', 'yield_5y' => 'yield5y', 'yield_10y' => 'yield10y', 'yield_30y' => 'yield30y',
+                  'level' => 'nsLevel', 'beta1' => 'nsBeta1', 'curvature' => 'nsCurvature', 'curvature2' => 'nsCurvature2',
+                  'base_term_premium' => 'nsBaseTermPremium', 'term_premium_10y' => 'termPremium10y', 'risk_neutral_10y' => 'riskNeutral10y'] as $key => $field) {
+            $this->assertEqualsWithDelta($curve[$key], $state->$field, 0.00006, $field);
+        }
+    }
+
     /**
      * The engine's state and the snapshot are hydrated by separate readers, so the same payload has
      * to mean the same thing to both.
@@ -180,7 +207,7 @@ class MacroStateHydrationTest extends TestCase
     }
 
     /**
-     * Three identities tie the curve's stored factors to the tenors they generate, and a reader that
+     * Two identities tie the curve's stored factors to the tenors they generate, and a reader that
      * breaks one reports a curve that cannot exist.
      *
      * The snapshot broke all three on an empty payload: the rebuild above gave the tenors a policy-rate
@@ -235,13 +262,6 @@ class MacroStateHydrationTest extends TestCase
             1e-12,
             'The reported slope is the 10y-over-policy term spread.'
         );
-        $this->assertEqualsWithDelta(
-            $curve->yield30y,
-            $curve->nsLevel,
-            1e-12,
-            'The level is the curve asymptote, so the longest tenor opens level with it.'
-        );
-
         $this->assertGreaterThan(0.0, $curve->nsLevel, 'A long end at zero is a degenerate curve.');
         $this->assertLessThan(0.0, $curve->nsBeta1, 'An upward curve carries a negative beta1.');
         $this->assertGreaterThan($curve->policyRate, $curve->yield30y, 'The opening curve slopes upward.');

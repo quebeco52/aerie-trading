@@ -11,6 +11,9 @@ use PHPUnit\Framework\TestCase;
 
 class CreditFiscalSubsystemTest extends TestCase
 {
+    /** A debt position below the 70% the Bohn reaction defends: no sequester, no fiscal tightening, no market premium. */
+    private const SOUND_DEBT_TO_GDP = 0.60;
+
     private MathUtility $mathUtility;
     private CreditFiscalSubsystem $subsystem;
 
@@ -367,7 +370,7 @@ class CreditFiscalSubsystemTest extends TestCase
         $state = new MacroState();
         $state->totalTime = 4.001; // the tick that crossed the year end
         $state->inflationEma = 0.04;
-        $state->sovereignDebtToGdpEma = MacroEngine::INITIAL_DEBT_TO_GDP; // below the neutral threshold: no sequester
+        $state->sovereignDebtToGdpEma = self::SOUND_DEBT_TO_GDP; // below the neutral threshold: no sequester
 
         $this->subsystem->calculateReimbursementRate($state, 0.01);
 
@@ -505,6 +508,7 @@ class CreditFiscalSubsystemTest extends TestCase
     {
         $state = new MacroState();
         $state->sovereignDebtToGdpEma = $debtToGdpEma;
+        $state->sovereignRiskSpread = 0.0;
         for ($i = 0; $i < 2000; $i++) {
             $this->subsystem->calculateSovereignRiskSpread($state, 0.01);
         }
@@ -514,7 +518,7 @@ class CreditFiscalSubsystemTest extends TestCase
 
     public function testTheFiscalPositionTheReactionDefendsCarriesNoRiskPremium(): void
     {
-        $this->assertSame(0.0, $this->settledSovereignSpread(MacroEngine::INITIAL_DEBT_TO_GDP));
+        $this->assertSame(0.0, $this->settledSovereignSpread(self::SOUND_DEBT_TO_GDP));
         $this->assertSame(0.0, $this->settledSovereignSpread(MacroEngine::SOVEREIGN_DEBT_NEUTRAL_THRESHOLD), 'The Bohn threshold is where the fiscal reaction starts, not where the market re-rates.');
         $this->assertSame(0.0, $this->settledSovereignSpread(CreditFiscalSubsystem::SOVEREIGN_RISK_DEBT_THRESHOLD), 'At the line itself there is nothing to charge for yet.');
     }
@@ -538,6 +542,7 @@ class CreditFiscalSubsystemTest extends TestCase
     {
         $state = new MacroState();
         $state->sovereignDebtToGdpEma = CreditFiscalSubsystem::SOVEREIGN_RISK_DEBT_THRESHOLD + 0.30;
+        $state->sovereignRiskSpread = 0.0; // from no premium at all
 
         $this->subsystem->calculateSovereignRiskSpread($state, 1.0 / 252.0);
 
@@ -550,6 +555,7 @@ class CreditFiscalSubsystemTest extends TestCase
     {
         $sound = new MacroState();
         $sound->outputGapEma = 0.0;
+        $sound->sovereignRiskSpreadEma = 0.0;
         $stressed = new MacroState();
         $stressed->outputGapEma = 0.0;
         $stressed->sovereignRiskSpreadEma = 0.02;
@@ -564,7 +570,7 @@ class CreditFiscalSubsystemTest extends TestCase
     public function testTheDeficitIsPublishedAsAShareOfGdp(): void
     {
         $state = new MacroState();
-        $state->sovereignDebtToGdp = MacroEngine::INITIAL_DEBT_TO_GDP;
+        $state->sovereignDebtToGdp = self::SOUND_DEBT_TO_GDP;
         $state->nominalGdpIndex = 1.0;
         $state->outputGap = 0.0;
         $state->governmentSpendingIndex = 100.0;

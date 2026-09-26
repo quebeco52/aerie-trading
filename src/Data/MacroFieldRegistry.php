@@ -141,7 +141,9 @@ final class MacroFieldRegistry
     }
 
     /**
-     * The opening value MacroStateDTO gives each field when the payload carries none.
+     * The opening value of every field: the economy at trend, declared once as MacroStateDTO's constructor
+     * defaults. A fresh MacroState, a snapshot read before the ticker has published, and a payload that
+     * omits a field all open here.
      *
      * @return array<string, mixed> Field name => the constructor's declared default.
      */

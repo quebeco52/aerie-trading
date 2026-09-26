@@ -50,11 +50,11 @@ class MacroAggregateSubsystem
     /** Cubic capacity ceiling on the UPSIDE only (Friedman 1993 plucking; Dupraz, Nakamura & Steinsson 2019): output is plucked below a ceiling it cannot run above, and a slump has no floor of its own. */
     public const KALDOR_CAPACITY = 600.0;
     /** Demand per unit of a RESTRICTIVE transmitted real-rate stance: tightening binds collateral constraints (Guerrieri & Iacoviello 2017); fitted with the accommodative slope, the premium legs and the rule by indirect inference (var/harness/asym_an.py: ACF, sd, rule, timing, US rate path, sign-split premium projection, Barnichon-Matthes 2018). The fit is flat from 1.3 to 3.5; 1.3 is the strongest whose deterministic ring-down stays clean -- above it a boom swings into a policy-made bust and back. */
-    public const KALDOR_MONETARY_DRAG_RESTRICTIVE = 1.3;
+    public const KALDOR_MONETARY_DRAG_RESTRICTIVE = 1.6;
     /** Demand per unit of an ACCOMMODATIVE stance, about half the restrictive slope: easing pushes on a string (Tenreyro & Thwaites 2016; Barnichon & Matthes 2018 put the expansionary peak at a third of the contractionary); the same fit. */
-    public const KALDOR_MONETARY_DRAG_ACCOMMODATIVE = 0.7;
+    public const KALDOR_MONETARY_DRAG_ACCOMMODATIVE = 0.9;
     /** Time constant of each of the two Pascal stages the real-rate stance passes through before it moves demand (Solow 1960): mean lag 0.8y against Rudebusch-Svensson's year average lagged a quarter (0.6y); the same fit. */
-    public const MONETARY_TRANSMISSION_LAG_YEARS = 0.4;
+    public const MONETARY_TRANSMISSION_LAG_YEARS = 0.3;
     /** Demand per unit of excess credit and interbank spread: the Bernanke-Gertler-Gilchrist (1999) accelerator's price leg only, well under Gilchrist-Zakrajsek's reduced-form 1.5-2.0 because the quantity and deleveraging legs are booked separately. */
     public const KALDOR_CREDIT_FRICTION_DRAG = 0.60;
     /** Demand per unit of an ADVERSE Gilchrist-Zakrajsek (2012) excess bond premium, beyond its 0.58 loading into the IG spread; fitted to the US sign-split projection of the CBO gap on premium innovations (1973-2019 ex-pandemic: 2q -1.59, 4q -1.69 per pp; var/harness/asym_fit.py). */
@@ -88,7 +88,7 @@ class MacroAggregateSubsystem
     /** Mean reversion speed of the aggregate demand disturbance: -4*ln(0.86) per year, from the estimated quarterly AR(1) coefficient. */
     public const DEMAND_SHOCK_REVERSION = 0.60;
     /** Innovation volatility of the aggregate demand disturbance, in annualized gap-drift units: one scale, shared with the disaster sizes below, set so the gap's sd and quarterly moves under the fitted loop are the CBO 1985-2019 1.63% and 0.53pp, the era the policy rule is fitted on, beside a ~1.0% TFP supply gap. */
-    public const DEMAND_SHOCK_SIGMA = 0.0175;
+    public const DEMAND_SHOCK_SIGMA = 0.0125;
 
     // --- Rare Demand Disasters (Barro 2006, Gourio 2012; Kou 2002 jump) ---
     /** Disaster arrivals per year in either direction: the one-sided cause a slump needs, since the Gaussian innovation above is symmetric. */
@@ -96,9 +96,9 @@ class MacroAggregateSubsystem
     /** Probability a disaster is an upside demand surprise. Barro's disaster set is one-sided; a quarter weight keeps booms possible while leaving the left tail three times heavier. */
     public const DEMAND_DISASTER_UP_PROBABILITY = 0.25;
     /** Exponential rate of the upside jump: mean 3.5pp/yr of demand, three quarters of the downside, so expansions build gradually and slumps arrive whole; sized with DEMAND_SHOCK_SIGMA. */
-    public const DEMAND_DISASTER_UP_RATE = 28.6;
+    public const DEMAND_DISASTER_UP_RATE = 13.6;
     /** Exponential rate of the downside jump: mean 4.7pp/yr of demand, a 10pp/yr shock once per ~57y; sized with DEMAND_SHOCK_SIGMA. */
-    public const DEMAND_DISASTER_DOWN_RATE = 21.4;
+    public const DEMAND_DISASTER_DOWN_RATE = 12.4;
     /** Cap on one disaster (17.5pp/yr of demand, about four mean down-jumps). Guards the tail of the exponential draw without binding on the calibrated range. */
     public const DEMAND_DISASTER_CAP = 0.175;
 

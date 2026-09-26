@@ -18,7 +18,6 @@ use Symfony\Component\Console\Style\SymfonyStyle;
 use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
-use App\Service\Macro\MacroEngine;
 
 #[AsCommand(
     name: 'app:market-seed',
@@ -43,27 +42,8 @@ class MarketSeedCommand extends Command
         $io = new SymfonyStyle($input, $output);
         $io->title('Seeding the Lakebird Exchange (Production)');
 
-        $dummyMacro = new MacroStateDTO(
-            outputGapEma: 0.0,
-            inflationEma: 0.02,
-            policyRateEma: 0.04,
-            yield5yEma: 0.045,
-            yield10yEma: 0.05,
-            yield30yEma: 0.055,
-            yield2yEma: 0.04,
-            macroCreditSpreadEma: 0.02,
-            marketVolatilityEma: 0.15,
-            corporateTaxRate: MacroEngine::BASE_CORPORATE_TAX_RATE,
-            equityRiskPremium: 0.045,
-
-            // The fitted curve factors the bond ladder is struck off. beta1 is the policy rate minus the
-            // level, which is what the curve function expects; the yield fields above are outputs of a
-            // curve, not inputs to one, and cannot reconstruct it.
-            nsLevel: MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION,
-            nsBeta1: 0.04 - (MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION),
-            nsBaseTermPremium: MacroEngine::NS_BASE_TERM_PREMIUM,
-            nsLongEndPremium: MacroEngine::NS_BASE_TERM_PREMIUM
-        );
+        // The board is priced against the economy the macro engine opens in, so the first tick does not revalue it.
+        $openingMacro = new MacroStateDTO();
 
         // Loop through ETFs
         foreach (InitialMarket::ETFS as $etfData) {
@@ -167,16 +147,16 @@ class MarketSeedCommand extends Command
                 $strategy = \App\Data\Sectors::getBusinessModelStrategy($businessModel);
 
                 // Query the exact structural metrics the engine uses to prevent massive gravity explosions on tick 1
-                $targetMetrics = $strategy->getTargetMetrics($stock, $dummyMacro, $this->mathUtility);
+                $targetMetrics = $strategy->getTargetMetrics($stock, $openingMacro, $this->mathUtility);
                 $investedCapital = $targetMetrics['invested_capital'];
                 $impliedRoic = max(0.01, (float) $targetMetrics['baseline_roic']);
-                $taxRate = $dummyMacro->corporateTaxRate;
+                $taxRate = $openingMacro->corporateTaxRate;
                 $preTaxRoic = $impliedRoic / (1.0 - $taxRate);
                 $revenue = $margin > 0 ? ($investedCapital * ($preTaxRoic / $margin)) : 0.0;
 
                 $stock->setTotalRevenue((string) $revenue);
 
-                $debtHealth = $this->debtEngine->analyzeDebtHealth($stock, $dummyMacro, $revenue, $margin);
+                $debtHealth = $this->debtEngine->analyzeDebtHealth($stock, $openingMacro, $revenue, $margin);
 
                 // Rate risk needs a cross-section or every lender lives and dies together. The seed names a
                 // duration where a firm's book is distinctive; the rest take their model's. The AOCI
@@ -199,7 +179,7 @@ class MarketSeedCommand extends Command
                 } else {
                     $ebit = $revenue * $margin;
                     $interestExpense = $debtHealth->interestExpense ?? 0.0;
-                    $interestIncome = $strategy->calculateInterestIncome($stock, $dummyMacro, $this->mathUtility);
+                    $interestIncome = $strategy->calculateInterestIncome($stock, $openingMacro, $this->mathUtility);
                     $ebt = $ebit - $interestExpense + $interestIncome;
                     $effectiveTaxRate = $strategy->getEffectiveTaxRate($taxRate);
                     $netIncome = max(0.0, $ebt * (1.0 - $effectiveTaxRate));
@@ -227,7 +207,7 @@ class MarketSeedCommand extends Command
                         $revenue,
                         $revenue * (1.0 - $margin)
                     );
-                    $metrics->seedReceivablesAllowance($stock, $dummyMacro->corporateDefaultRateEma);
+                    $metrics->seedReceivablesAllowance($stock, $openingMacro->corporateDefaultRateEma);
 
                     // A sphere's plant is what its portfolio leaves, and the portfolio cannot be valued
                     // until the board it holds has prices — which, halfway down this loop, half of it does
@@ -251,7 +231,7 @@ class MarketSeedCommand extends Command
                         $stock,
                         $strategy->getThroughTheCycleCreditLossRate($stock)
                             * $strategy->getCreditLossHorizonYears()
-                            * $strategy->getForwardCreditLossMultiplier($stock, $dummyMacro)
+                            * $strategy->getForwardCreditLossMultiplier($stock, $openingMacro)
                     );
                 }
 
@@ -280,7 +260,7 @@ class MarketSeedCommand extends Command
                     beta: (float) ($stockData['beta'] ?? 1.0),
                     marketZ: 0.0,
                     marketVol: 0.15,
-                    macroState: $dummyMacro,
+                    macroState: $openingMacro,
                     fcfPerShare: null,
                     bookValuePerShare: $bookValuePerShare,
                     maShock: 0.0,
@@ -303,7 +283,7 @@ class MarketSeedCommand extends Command
                 $stock->setPrice((string) $marketCalc['perceived_fair_value']);
                 // The configured equity volatility belongs to THIS capital structure, so the business risk it
                 // implies is solved here, once, and borrowing later cannot talk it down.
-                $this->debtEngine->calibrateAssetVolatility($stock, $dummyMacro->policyRateEma);
+                $this->debtEngine->calibrateAssetVolatility($stock, $openingMacro->policyRateEma);
             }
             $stock->setName($stockData['name']);
             $stock->setSector($stockData['sector']);
@@ -320,7 +300,7 @@ class MarketSeedCommand extends Command
         $this->anchorStakes->beginTick($seeded);
 
         foreach ($deferredPlant as $sphere) {
-            $this->anchorStakes->markToMarket($sphere['stock'], $sphere['strategy']->getEffectiveTaxRate($dummyMacro->corporateTaxRate));
+            $this->anchorStakes->markToMarket($sphere['stock'], $sphere['strategy']->getEffectiveTaxRate($openingMacro->corporateTaxRate));
 
             // The stake list is edited by hand in a file that knows nothing about the balance sheet it has
             // to fit inside. Refused rather than logged: a portfolio that swallows the book leaves the
@@ -374,7 +354,7 @@ class MarketSeedCommand extends Command
         // off-the-run issues rather than having them appear fully formed.
         $existingBonds = (int) $this->entityManager->getConnection()->fetchOne('SELECT COUNT(*) FROM bonds');
         if ($existingBonds === 0) {
-            $issued = $this->treasuryAuction->conductAuction($dummyMacro->sovereignCurve(), 0.0);
+            $issued = $this->treasuryAuction->conductAuction($openingMacro->sovereignCurve(), 0.0);
             $this->entityManager->flush();
             $io->text(sprintf('Opened the bond desk with %d benchmark issues.', count($issued)));
         }

@@ -214,8 +214,8 @@ class MacroEngine
     public const STRUCTURAL_LABOR_GROWTH_RATE = 0.005;
 
     // --- Sovereign Debt Dynamics (Greenwood-Vayanos 2014) ---
-    /** Initial sovereign debt-to-GDP ratio at simulation start (Maastricht 60% benchmark). */
-    public const INITIAL_DEBT_TO_GDP = 0.60;
+    /** Sovereign debt-to-GDP at simulation start: where the fiscal rule holds it with output at trend (median 0.93, 32 seeds x 100y); the old 0.60 took 40 years to climb out of. */
+    public const INITIAL_DEBT_TO_GDP = 0.93;
     /** Debt-to-GDP baseline level below which no excess fiscal term premium applies. */
     public const SOVEREIGN_DEBT_NEUTRAL_THRESHOLD = 0.70;
 

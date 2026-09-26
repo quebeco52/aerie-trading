@@ -11,32 +11,22 @@ use PHPUnit\Framework\TestCase;
 
 class MacroStateDTOTest extends TestCase
 {
-    public function testFromArrayWithDefaults(): void
+    public function testAnEmptyPayloadOpensAtTheConstructorOpening(): void
     {
         $dto = MacroStateDTO::fromArray([]);
 
+        $this->assertSame((new MacroStateDTO())->toArray(), $dto->toArray(), 'A payload with nothing in it is the opening, field for field.');
+        $this->assertSame(0.0, $dto->outputGap, 'The economy opens at trend.');
         $this->assertEquals(MacroEngine::TARGET_INFLATION, $dto->inflation);
         $this->assertEquals(MacroEngine::TARGET_INFLATION, $dto->inflationEma);
-        $this->assertEquals(0.02, $dto->outputGap);
-        $this->assertEquals(0.15, $dto->marketVolatility);
         $this->assertEquals(100.0, $dto->exchangeRateIndex);
         $this->assertEquals(100.0, $dto->industrialMetalsIndex);
         $this->assertEquals(100.0, $dto->governmentSpendingIndex);
         $this->assertEquals(100.0, $dto->commercialPropertyIndex);
-        $this->assertEquals(MacroEngine::INTERBANK_BASELINE_SPREAD, $dto->interbankLiquiditySpread);
-        $this->assertEquals(MacroEngine::INTERBANK_BASELINE_SPREAD, $dto->interbankLiquiditySpreadEma);
         $this->assertEquals(MacroEngine::TFP_BASELINE, $dto->totalFactorProductivityIndex);
-        $this->assertEquals(MacroEngine::TFP_BASELINE, $dto->totalFactorProductivityIndexEma);
         $this->assertEquals(MacroEngine::PMI_BASELINE, $dto->manufacturingPmi);
-        $this->assertEquals(MacroEngine::PMI_BASELINE, $dto->manufacturingPmiEma);
-        $this->assertEquals(MacroEngine::TARGET_INFLATION, $dto->producerPriceInflation);
-        $this->assertEquals(MacroEngine::TARGET_INFLATION, $dto->producerPriceInflationEma);
         $this->assertEquals(MacroEngine::TRADE_BALANCE_BASELINE, $dto->tradeBalanceToGdp);
-        $this->assertEquals(MacroEngine::TRADE_BALANCE_BASELINE, $dto->tradeBalanceToGdpEma);
         $this->assertEquals(MacroEngine::HOUSING_STARTS_BASELINE, $dto->housingStartsIndex);
-        $this->assertEquals(MacroEngine::HOUSING_STARTS_BASELINE, $dto->housingStartsIndexEma);
-        $this->assertEquals(MacroEngine::M2_BASE_GROWTH, $dto->moneySupplyGrowth);
-        $this->assertEquals(MacroEngine::M2_BASE_GROWTH, $dto->moneySupplyGrowthEma);
         $this->assertFalse($dto->qeActive);
         $this->assertNull($dto->eventType);
     }

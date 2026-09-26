@@ -212,11 +212,11 @@ class SecuritiesBookServiceTest extends TestCase
 
     /**
      * An unfitted curve evaluates near zero. Marking a book against nothing would print an enormous phantom
-     * gain on every financial in the market, from a harness or a test that built a bare state object.
+     * gain on every financial in the market, from a harness or a test that zeroed the curve factors.
      */
     public function testAnUnfittedCurveFallsBackToThePublishedYieldInsteadOfPricingAgainstZero(): void
     {
-        $bare = new MacroStateDTO();
+        $bare = new MacroStateDTO(nsLevel: 0.0, nsBeta1: 0.0, nsCurvature: 0.0, nsCurvature2: 0.0);
         self::assertSame(0.0, $bare->sovereignCurve()->level, 'Guard assumes an unfitted curve has a zero level.');
 
         $mark = $this->service->roll(

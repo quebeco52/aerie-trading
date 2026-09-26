@@ -19,19 +19,13 @@ readonly class MacroStateDTO
     /** Points in one unit of a 100-based macro index, so a deviation off one reads as a fraction. */
     private const INDEX_SCALE = 100.0;
 
-    // --- Hydration Openings ---
+    // --- Openings ---
 
-    /** Output gap a payload with no reading of its own opens at; the seeded market starts mid-expansion, not at trend. */
-    private const HYDRATION_OUTPUT_GAP = 0.02;
+    /** Policy rate at the opening: the Taylor rule's own target with output at trend (3.42%), so the first tick does not move it. */
+    private const OPENING_POLICY_RATE = 0.034;
 
-    /** 5y-over-policy term spread used to rebuild a curve the payload does not carry (~50bps). */
-    private const HYDRATION_5Y_SPREAD = 0.005;
-
-    /** 10y-over-policy term spread used to rebuild a curve the payload does not carry (~100bps). */
-    private const HYDRATION_10Y_SPREAD = 0.01;
-
-    /** 30y-over-policy term spread used to rebuild a curve the payload does not carry (~150bps). */
-    private const HYDRATION_30Y_SPREAD = 0.015;
+    /** Ten-year at the opening: the engine's curve evaluated at the opening state (at-trend median 4.78%). */
+    private const OPENING_YIELD_10Y = 0.0479;
 
     /**
      * Seeds this snapshot adds to the shared set, for openings only a snapshot needs.
@@ -39,32 +33,44 @@ readonly class MacroStateDTO
      * App\Data\MacroFieldRegistry::seeds() already carries the seeds both readers share — every
      * `*Ema` pair, plus the three declared in its SEED_OVERRIDES (energyBasePrice,
      * supercoreInflation, coreGoodsInflation) that the naming convention does not describe. These
-     * three are on top of those, and are not seeded when the engine's own state is hydrated: a
-     * snapshot is read by the pricing surfaces, which cannot be handed a zero for a breakeven, a
-     * structural slope or a 2y yield just because the payload predates that field.
+     * two are on top of those, and are not seeded when the engine's own state is hydrated: a
+     * snapshot is read by the pricing surfaces, which cannot be handed a stale breakeven or structural
+     * slope just because the payload predates that field.
      *
      * @var array<string, string>
      */
     private const HYDRATION_SEEDS = [
         'tipsBreakeven' => 'inflation',
         'structuralSlope' => 'nsSlope',
-        'yield2y' => 'policyRate',
     ];
 
+    /**
+     * The macro vector's fields, and the one place their opening values are declared.
+     *
+     * The opening is the economy at trend, so a fresh engine, a snapshot read before the ticker has
+     * published, the seeded market and a test fixture all start from one state that the first tick does
+     * not jolt. The slow states that carry the cycle -- the policy rate, sovereign debt and its premium --
+     * open where the engine holds them with output at trend (median over quarters with |gap| and its EMA
+     * under 0.6%, off the lower bound, no credit crisis, inflation within 0.6pp of target; 32 seeds x
+     * 100y), and the curve is the engine's own curve at that state. Cyclical gaps and shocks open at zero.
+     * Everything firms read as a deviation from a named reference -- unemployment, spreads, default rates,
+     * money growth, the real wage gap, prices and indices -- opens at that reference, so the opening reads
+     * neutral to every model. App\Service\Macro\MacroState takes its openings from here.
+     */
     public function __construct(
         public float $totalTime = 0.0,
         public float $outputGap = 0.0,
         public float $outputGapEma = 0.0,
         public float $capitalStockOverhang = 0.0,
         public float $capitalStockOverhangEma = 0.0,
-        public float $unemploymentRate = 0.04,
-        public float $unemploymentRateEma = 0.04,
-        public float $jobVacanciesRate = 0.045,
-        public float $jobVacanciesRateEma = 0.045,
-        public float $laborTightness = 1.125,
-        public float $laborTightnessEma = 1.125,
-        public float $wageGrowth = 0.035,
-        public float $wageGrowthEma = 0.035,
+        public float $unemploymentRate = MacroEngine::NATURAL_UNEMPLOYMENT,
+        public float $unemploymentRateEma = MacroEngine::NATURAL_UNEMPLOYMENT,
+        public float $jobVacanciesRate = MacroEngine::NATURAL_UNEMPLOYMENT * MacroEngine::NATURAL_LABOR_TIGHTNESS,
+        public float $jobVacanciesRateEma = MacroEngine::NATURAL_UNEMPLOYMENT * MacroEngine::NATURAL_LABOR_TIGHTNESS,
+        public float $laborTightness = MacroEngine::NATURAL_LABOR_TIGHTNESS,
+        public float $laborTightnessEma = MacroEngine::NATURAL_LABOR_TIGHTNESS,
+        public float $wageGrowth = MacroEngine::TARGET_INFLATION + MacroEngine::TFP_DRIFT,
+        public float $wageGrowthEma = MacroEngine::TARGET_INFLATION + MacroEngine::TFP_DRIFT,
         public float $realWageGap = 0.0,
         public float $nairu = MacroEngine::NATURAL_UNEMPLOYMENT,
         public float $nairuEma = MacroEngine::NATURAL_UNEMPLOYMENT,
@@ -95,8 +101,8 @@ readonly class MacroStateDTO
         public float $residentialPropertyIndex = 100.0,
         public float $residentialPropertyIndexEma = 100.0,
         public float $residentialWealthTrend = 100.0,
-        public float $retailDefaultRate = 0.0250,
-        public float $retailDefaultRateEma = 0.0250,
+        public float $retailDefaultRate = MacroEngine::RETAIL_DEFAULT_BASELINE,
+        public float $retailDefaultRateEma = MacroEngine::RETAIL_DEFAULT_BASELINE,
         public float $agriculturalCommodityIndex = 100.0,
         public float $agriculturalCommodityIndexEma = 100.0,
         public float $agriculturalCommodityIndexTrend = 0.0,
@@ -105,32 +111,32 @@ readonly class MacroStateDTO
         public float $freightRateIndex = 100.0,
         public float $freightRateIndexEma = 100.0,
         public float $freightSupplyEma = 100.0,
-        public float $inflation = 0.02,
-        public float $inflationEma = 0.02,
-        public float $tipsBreakeven = 0.02,
-        public float $tipsBreakevenEma = 0.02,
-        public float $policyRate = 0.02,
-        public float $policyRateEma = 0.02,
-        public float $targetRate = 0.02,
-        public float $yield2y = 0.04,
-        public float $yield2yEma = 0.04,
-        public float $yield5y = 0.045,
-        public float $yield5yEma = 0.045,
-        public float $yield10y = 0.05,
-        public float $yield10yEma = 0.05,
-        public float $yield30y = 0.055,
-        public float $yield30yEma = 0.055,
-        public float $termPremium10y = 0.0125,
-        public float $termPremium10yEma = 0.0125,
-        public float $riskNeutral10y = 0.0250,
-        public float $riskNeutral10yEma = 0.0250,
+        public float $inflation = MacroEngine::TARGET_INFLATION,
+        public float $inflationEma = MacroEngine::TARGET_INFLATION,
+        public float $tipsBreakeven = MacroEngine::TARGET_INFLATION,
+        public float $tipsBreakevenEma = MacroEngine::TARGET_INFLATION,
+        public float $policyRate = self::OPENING_POLICY_RATE,
+        public float $policyRateEma = self::OPENING_POLICY_RATE,
+        public float $targetRate = self::OPENING_POLICY_RATE,
+        public float $yield2y = 0.0381,
+        public float $yield2yEma = 0.0381,
+        public float $yield5y = 0.0428,
+        public float $yield5yEma = 0.0428,
+        public float $yield10y = self::OPENING_YIELD_10Y,
+        public float $yield10yEma = self::OPENING_YIELD_10Y,
+        public float $yield30y = 0.0534,
+        public float $yield30yEma = 0.0534,
+        public float $termPremium10y = 0.0132,
+        public float $termPremium10yEma = 0.0132,
+        public float $riskNeutral10y = 0.0347,
+        public float $riskNeutral10yEma = 0.0347,
         public float $termPremiumShock = 0.0,
         public float $expectedPathShock = 0.0,
         public float $termPremiumRegime = MacroEngine::NS_BASE_TERM_PREMIUM,
         public float $perceivedNeutralRate = MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION,
         public float $restrictiveDuration = 0.0,
-        public float $marketVolatility = 0.15,
-        public float $marketVolatilityEma = 0.15,
+        public float $marketVolatility = 0.14,
+        public float $marketVolatilityEma = 0.14,
         public float $marketZ = 0.0,
         public float $marketZLatent = 0.0,
         public float $marketJumpMultiplier = 1.0,
@@ -166,15 +172,15 @@ readonly class MacroStateDTO
         public float $balanceSheetIntensity = 0.0,
         public float $balanceSheetHoldTimer = 0.0,
         public float $inversionDuration = 0.0,
-        public float $nsLevel = 0.0,
-        public float $nsSlope = 0.0,
-        public float $nsSlopeEma = 0.0,
-        public float $structuralSlope = 0.0,
+        public float $nsLevel = MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION,
+        public float $nsSlope = self::OPENING_YIELD_10Y - self::OPENING_POLICY_RATE,
+        public float $nsSlopeEma = self::OPENING_YIELD_10Y - self::OPENING_POLICY_RATE,
+        public float $structuralSlope = self::OPENING_YIELD_10Y - self::OPENING_POLICY_RATE,
         public float $nsCurvature = 0.0,
-        public float $nsCurvature2 = 0.0,
-        public float $nsBeta1 = 0.0,
-        public float $nsBaseTermPremium = MacroEngine::NS_BASE_TERM_PREMIUM,
-        public float $nsLongEndPremium = MacroEngine::NS_BASE_TERM_PREMIUM,
+        public float $nsCurvature2 = 0.0023,
+        public float $nsBeta1 = self::OPENING_POLICY_RATE - (MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION),
+        public float $nsBaseTermPremium = 0.0125,
+        public float $nsLongEndPremium = 0.0109,
         public float $potentialGdpIndex = 1.0,
         public float $nominalGdpIndex = 1.0,
         public float $equityMarketCap = 0.0,
@@ -257,9 +263,9 @@ readonly class MacroStateDTO
         public float $systemDepositBetaEma = MacroEngine::SYSTEM_DEPOSIT_BETA_BASE,
         public float $moneyMarketFundShare = MacroEngine::MMF_SHARE_BASE,
         public float $moneyMarketFundShareEma = MacroEngine::MMF_SHARE_BASE,
-        public float $sovereignRiskSpread = 0.0,
-        public float $sovereignRiskSpreadEma = 0.0,
-        public float $primaryDeficitToGdp = 0.0,
+        public float $sovereignRiskSpread = 0.001,
+        public float $sovereignRiskSpreadEma = 0.001,
+        public float $primaryDeficitToGdp = -0.0025,
         public float $policyUncertaintyIndex = MacroEngine::EPU_BASELINE,
         public float $policyUncertaintyIndexEma = MacroEngine::EPU_BASELINE,
         public float $lastElectionAt = -1.0,
@@ -308,10 +314,6 @@ readonly class MacroStateDTO
             return $args[$field] ?? $defaults[$field];
         };
 
-        // A snapshot rehydrated cold sits at the top of the cycle rather than at trend, which is
-        // where the seeded market opens; the constructor's own zero is for a DTO built field by field.
-        $args['outputGap'] ??= self::HYDRATION_OUTPUT_GAP;
-
         // The smoothed 5y was recorded under the macro_report column spelling before the wire key
         // existed, and a payload carrying both is a database row, so the column spelling wins.
         if (isset($data['yield5y_ema'])) {
@@ -327,18 +329,13 @@ readonly class MacroStateDTO
         $args['qtActive'] ??= $balanceSheetIntensity < -MacroEngine::BALANCE_SHEET_ACTIVE_THRESHOLD;
         $args['qtIntensity'] ??= max(0.0, -$balanceSheetIntensity);
 
-        // A curve absent from the payload is rebuilt off the policy rate at the standard term spreads,
-        // so the bond desk never discounts against a flat zero curve.
-        $args['yield5y'] ??= $resolve('policyRate') + self::HYDRATION_5Y_SPREAD;
-        $args['yield10y'] ??= $resolve('policyRate') + self::HYDRATION_10Y_SPREAD;
-        $args['yield30y'] ??= $resolve('policyRate') + self::HYDRATION_30Y_SPREAD;
-
-        // The Nelson-Siegel level is the curve's long-run nominal anchor -- the Fisher sum of the natural
-        // rate and the inflation target -- and it is an INPUT to the curve function, so unlike the tenors
-        // above it cannot be recovered from them: they are that function's outputs. Left at the
-        // constructor's zero it hands the bond desk exactly the flat zero curve the rebuild above exists to
-        // prevent, and beta1, derived from it on the next line, inherits the error with its sign flipped.
-        $args['nsLevel'] ??= MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION;
+        // A payload that carries a policy rate but no curve gets the opening curve's term spreads on top of
+        // that rate, so the tenors stay consistent with the rate the payload does report.
+        if (isset($args['policyRate'])) {
+            foreach (['yield2y', 'yield5y', 'yield10y', 'yield30y'] as $tenor) {
+                $args[$tenor] ??= $args['policyRate'] + ($defaults[$tenor] - $defaults['policyRate']);
+            }
+        }
 
         // Nelson-Siegel beta1 is the short-end spread of the curve, not a free parameter.
         $args['nsBeta1'] ??= $resolve('policyRate') - $resolve('nsLevel');

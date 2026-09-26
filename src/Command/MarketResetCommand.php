@@ -15,7 +15,6 @@ use Symfony\Component\Console\Style\SymfonyStyle;
 use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
-use App\Service\Macro\MacroEngine;
 
 #[AsCommand(
     name: 'app:market-reset',
@@ -106,27 +105,8 @@ class MarketResetCommand extends Command
 
         $io->text('3. Resetting Stock Prices & Absolute Values...');
 
-        $dummyMacro = new MacroStateDTO(
-            outputGapEma: 0.0,
-            inflationEma: 0.02,
-            policyRateEma: 0.04,
-            yield5yEma: 0.045,
-            yield10yEma: 0.05,
-            yield30yEma: 0.055,
-            yield2yEma: 0.04,
-            macroCreditSpreadEma: 0.02,
-            marketVolatilityEma: 0.15,
-            corporateTaxRate: MacroEngine::BASE_CORPORATE_TAX_RATE,
-            equityRiskPremium: 0.045,
-
-            // The fitted curve factors the bond ladder is struck off. beta1 is the policy rate minus the
-            // level, which is what the curve function expects; the yield fields above are outputs of a
-            // curve, not inputs to one, and cannot reconstruct it.
-            nsLevel: MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION,
-            nsBeta1: 0.04 - (MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION),
-            nsBaseTermPremium: MacroEngine::NS_BASE_TERM_PREMIUM,
-            nsLongEndPremium: MacroEngine::NS_BASE_TERM_PREMIUM
-        );
+        // The board is priced against the economy the macro engine opens in, so the first tick does not revalue it.
+        $openingMacro = new MacroStateDTO();
 
         // The reset prices the board through throwaway entities, kept here to mark the spheres against.
         $pricedBoard = [];
@@ -159,10 +139,10 @@ class MarketResetCommand extends Command
             $tempStock->setBaselineRoic((string) ($isFinancial ? 0.10 : ($stockData['baseline_roic'] ?? 0.10)));
 
             // Query the exact structural metrics the engine uses to prevent massive gravity explosions on tick 1
-            $targetMetrics = $strategy->getTargetMetrics($tempStock, $dummyMacro, $this->mathUtility);
+            $targetMetrics = $strategy->getTargetMetrics($tempStock, $openingMacro, $this->mathUtility);
             $investedCapital = $targetMetrics['invested_capital'];
             $operatingYield = max(0.01, (float) $targetMetrics['baseline_roic']);
-            $taxRate = $dummyMacro->corporateTaxRate ?? 0.21;
+            $taxRate = $openingMacro->corporateTaxRate ?? 0.21;
             $preTaxYield = $operatingYield / (1.0 - $taxRate);
             $revenue = $margin > 0 ? ($investedCapital * ($preTaxYield / $margin)) : 0.0;
 
@@ -178,14 +158,14 @@ class MarketResetCommand extends Command
             $tempStock->setSharesOutstanding((string)$shares);
             $tempStock->setPrice((string)$bookValuePerShare);
 
-            $debtHealth = $this->debtEngine->analyzeDebtHealth($tempStock, $dummyMacro, $revenue, $margin);
+            $debtHealth = $this->debtEngine->analyzeDebtHealth($tempStock, $openingMacro, $revenue, $margin);
 
             if ($isFinancial) {
                 $netIncome = ((float) ($stockData['total_equity'] ?? 0.0)) * (float) $tempStock->getBaselineRoe();
             } else {
                 $ebit = $revenue * $margin;
                 $interestExpense = $debtHealth->interestExpense ?? 0.0;
-                $interestIncome = $strategy->calculateInterestIncome($tempStock, $dummyMacro, $this->mathUtility);
+                $interestIncome = $strategy->calculateInterestIncome($tempStock, $openingMacro, $this->mathUtility);
                 $ebt = $ebit - $interestExpense + $interestIncome;
                 $effectiveTaxRate = $strategy->getEffectiveTaxRate($taxRate);
                 $netIncome = max(0.0, $ebt * (1.0 - $effectiveTaxRate));
@@ -219,7 +199,7 @@ class MarketResetCommand extends Command
                 beta: (float) ($stockData['beta'] ?? 1.0),
                 marketZ: 0.0,
                 marketVol: 0.15,
-                macroState: $dummyMacro,
+                macroState: $openingMacro,
                 fcfPerShare: null,
                 bookValuePerShare: $bookValuePerShare,
                 maShock: 0.0,
@@ -252,7 +232,7 @@ class MarketResetCommand extends Command
             $pricedBoard[$stockData['ticker']] = $tempStock;
             // Solved on the reset's own capital structure and price, as MarketSeedCommand does.
             $tempStock->setVolatility((string) $stockData['volatility']);
-            $assetVolatility = $this->debtEngine->calibrateAssetVolatility($tempStock, $dummyMacro->policyRateEma);
+            $assetVolatility = $this->debtEngine->calibrateAssetVolatility($tempStock, $openingMacro->policyRateEma);
 
             $conn->executeStatement(
                 'UPDATE stocks SET 
@@ -526,7 +506,7 @@ class MarketResetCommand extends Command
         }
 
         // Reopen the bond desk on the fresh timeline.
-        $this->treasuryAuction->conductAuction($dummyMacro->sovereignCurve(), 0.0);
+        $this->treasuryAuction->conductAuction($openingMacro->sovereignCurve(), 0.0);
         $this->entityManager->flush();
 
         $io->success('Market Reset Complete! You can now start the ticker.');

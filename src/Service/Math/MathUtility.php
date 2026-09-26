@@ -1163,6 +1163,41 @@ class MathUtility
     }
 
     /**
+     * Exponential distributed lag whose speed is capped (a slew-rate-limited first-order lag).
+     *
+     * Exact step of dx/dt = sign(d) * min(|d| / tau, maxSpeed), d = target - x: the value moves at the ceiling
+     * until the distance falls to maxSpeed * tau, where the lag's own speed equals it, and follows the plain lag
+     * from there. Being exact, one step of dt equals any split of it for a fixed target.
+     *
+     * @param float $currentLaggedValue The current lagged state variable.
+     * @param float $targetValue        The driving target value.
+     * @param float $dt                 The time step in years.
+     * @param float $lagTimeConstant    The adjustment time constant in years.
+     * @param float $maxSpeed           Most the value moves per year (INF for none).
+     * @return float The updated lagged value.
+     */
+    public function calculateSpeedLimitedDistributedLag(
+        float $currentLaggedValue,
+        float $targetValue,
+        float $dt,
+        float $lagTimeConstant,
+        float $maxSpeed
+    ): float {
+        $distance = abs($targetValue - $currentLaggedValue);
+        $knee = $lagTimeConstant > 0.0 ? $maxSpeed * $lagTimeConstant : 0.0;
+        if ($distance <= $knee || $dt <= 0.0) {
+            return $this->calculateDistributedLag($currentLaggedValue, $targetValue, $dt, $lagTimeConstant);
+        }
+
+        $timeAtCeiling = ($distance - $knee) / $maxSpeed;
+        $move = $timeAtCeiling >= $dt || $lagTimeConstant <= 0.0
+            ? min($distance, $maxSpeed * $dt)
+            : ($distance - $knee) + $knee * (1.0 - exp(-($dt - $timeAtCeiling) / $lagTimeConstant));
+
+        return $currentLaggedValue + ($targetValue > $currentLaggedValue ? $move : -$move);
+    }
+
+    /**
      * Calculates the Weighted Average Cost of Capital (WACC).
      *
      * @param float $weightEquity The proportion of equity in the capital structure.

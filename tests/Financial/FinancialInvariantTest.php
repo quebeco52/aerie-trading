@@ -353,10 +353,16 @@ class FinancialInvariantTest extends TestCase
 
     public function testOutputGapBoundedWithinRealisticHistoricalBounds(): void
     {
+        // No diffusion and no jump arrivals: the uniform gate sits above every per-tick jump probability.
         $deterministicMath = new class extends MathUtility {
             public function generateStandardNormal(): float
             {
                 return 0.0;
+            }
+
+            public function generateUniform(): float
+            {
+                return 0.5;
             }
         };
         $aggregateSubsystem = new MacroAggregateSubsystem($deterministicMath);

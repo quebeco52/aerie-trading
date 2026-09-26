@@ -86,10 +86,10 @@ class MacroEngineTest extends TestCase
 
         $this->assertInstanceOf(\App\DTO\MacroStateDTO::class, $result);
 
-        // Starting in a 0.02 boom puts the target well above 0.02; a one-year step moves toward it without passing it
-        $this->assertGreaterThan(0.04, $result->targetRate);
-        $this->assertGreaterThan(0.03, $result->policyRate);
-        $this->assertLessThanOrEqual($result->targetRate, $result->policyRate);
+        // A cold start opens at trend, where the rule's target is the opening policy rate: a year's step barely moves it.
+        $opening = new \App\DTO\MacroStateDTO();
+        $this->assertEqualsWithDelta($opening->policyRate, $result->targetRate, 0.005, 'At trend the rule asks for the rate it opens at.');
+        $this->assertEqualsWithDelta($opening->policyRate, $result->policyRate, 0.005, 'So the first year does not jolt the policy rate.');
         $this->assertEqualsWithDelta(0.02, $result->inflation, 0.01);
         $this->assertGreaterThan(0.0, $result->exchangeRateIndex);
         $this->assertGreaterThan(0.0, $result->industrialMetalsIndex);
@@ -178,8 +178,8 @@ class MacroEngineTest extends TestCase
             'inflation_ema' => 0.02,
             'output_gap' => 0.0,
             'output_gap_ema' => 0.0,
-            'yield5y' => 0.06,
-            'yield10y' => 0.065,
+            'yield_5y' => 0.06,
+            'yield_10y' => 0.065,
         ];
 
         $this->redisMock->expects($this->once())
@@ -205,8 +205,8 @@ class MacroEngineTest extends TestCase
             'inflation_ema' => 0.02,
             'output_gap' => 0.0,
             'output_gap_ema' => 0.0,
-            'yield5y' => 0.01,
-            'yield10y' => 0.02,
+            'yield_5y' => 0.01,
+            'yield_10y' => 0.02,
         ];
 
         $this->redisMock->expects($this->once())
@@ -236,8 +236,8 @@ class MacroEngineTest extends TestCase
             'inflation_ema' => 0.02,
             'policy_rate' => 0.03,
             'policy_rate_ema' => 0.03,
-            'yield5y' => 0.035,
-            'yield10y' => 0.04,
+            'yield_5y' => 0.035,
+            'yield_10y' => 0.04,
         ];
 
         $this->redisMock->expects($this->once())
@@ -256,8 +256,8 @@ class MacroEngineTest extends TestCase
         // Long real yields two points under their resting level and consumers braced for bad times: the
         // refuge's equilibrium sits well above its baseline, so the engine's step moves the price up to it.
         $existingState = [
-            'yield10y' => 0.030,
-            'yield10y_ema' => 0.030,
+            'yield_10y' => 0.030,
+            'yield_10y_ema' => 0.030,
             'tips_breakeven' => 0.022,
             'tips_breakeven_ema' => 0.022,
             'consumer_sentiment_index' => 70.0,
@@ -286,8 +286,8 @@ class MacroEngineTest extends TestCase
         $existingState = [
             'unemployment_rate' => 0.08,
             'unemployment_rate_ema' => 0.08,
-            'yield10y' => 0.08,
-            'yield10y_ema' => 0.08,
+            'yield_10y' => 0.08,
+            'yield_10y_ema' => 0.08,
             'macro_credit_spread' => 0.05,
             'macro_credit_spread_ema' => 0.05,
             'commercial_property_index' => 100.0,
@@ -298,7 +298,7 @@ class MacroEngineTest extends TestCase
             'output_gap_ema' => -0.05,
             'policy_rate' => 0.06,
             'policy_rate_ema' => 0.06,
-            'yield5y' => 0.075,
+            'yield_5y' => 0.075,
         ];
 
         $this->redisMock->expects($this->once())
@@ -321,8 +321,8 @@ class MacroEngineTest extends TestCase
             'inflation_ema' => 0.08,
             'policy_rate' => 0.06,
             'policy_rate_ema' => 0.06,
-            'yield5y' => 0.07,
-            'yield10y' => 0.075,
+            'yield_5y' => 0.07,
+            'yield_10y' => 0.075,
             'output_gap' => -0.04,
             'output_gap_ema' => -0.04,
             'retail_default_rate' => 0.025,
@@ -354,8 +354,8 @@ class MacroEngineTest extends TestCase
             'inflation_ema' => 0.02,
             'policy_rate' => 0.03,
             'policy_rate_ema' => 0.03,
-            'yield5y' => 0.04,
-            'yield10y' => 0.045,
+            'yield_5y' => 0.04,
+            'yield_10y' => 0.045,
         ];
 
         $this->redisMock->expects($this->once())
@@ -384,8 +384,8 @@ class MacroEngineTest extends TestCase
             'inflation_ema' => MacroEngine::TARGET_INFLATION,
             'policy_rate' => 0.041,
             'policy_rate_ema' => 0.041,
-            'yield5y' => 0.05,
-            'yield10y' => 0.0564,
+            'yield_5y' => 0.05,
+            'yield_10y' => 0.0564,
         ];
 
         $this->redisMock->expects($this->once())
@@ -413,8 +413,8 @@ class MacroEngineTest extends TestCase
             'inflation_ema' => 0.02,
             'policy_rate' => 0.03,
             'policy_rate_ema' => 0.03,
-            'yield5y' => 0.04,
-            'yield10y' => 0.045,
+            'yield_5y' => 0.04,
+            'yield_10y' => 0.045,
         ];
 
         $this->redisMock->expects($this->once())
@@ -443,8 +443,8 @@ class MacroEngineTest extends TestCase
             'inflation_ema' => 0.02,
             'policy_rate' => 0.03,
             'policy_rate_ema' => 0.03,
-            'yield5y' => 0.04,
-            'yield10y' => 0.045,
+            'yield_5y' => 0.04,
+            'yield_10y' => 0.045,
         ];
 
         $this->redisMock->expects($this->once())
@@ -494,6 +494,8 @@ class MacroEngineTest extends TestCase
         $neutralState = [
             'unemployment_rate' => MacroEngine::NATURAL_UNEMPLOYMENT,
             'unemployment_rate_ema' => MacroEngine::NATURAL_UNEMPLOYMENT,
+            'nairu' => MacroEngine::NATURAL_UNEMPLOYMENT,
+            'nairu_ema' => MacroEngine::NATURAL_UNEMPLOYMENT,
             'yield_10y' => 0.0504,
             'yield_10y_ema' => 0.0504,
             'macro_credit_spread' => MacroEngine::BASE_CREDIT_SPREAD,
@@ -769,8 +771,8 @@ class MacroEngineTest extends TestCase
             'output_gap_ema' => 0.0,
             'policy_rate' => 0.035,
             'policy_rate_ema' => 0.035,
-            'yield10y' => 0.0475,
-            'yield10y_ema' => 0.0475,
+            'yield_10y' => 0.0475,
+            'yield_10y_ema' => 0.0475,
             'market_volatility' => MacroEngine::MACRO_VOL_BASE_ANCHOR,
             'market_volatility_ema' => MacroEngine::MACRO_VOL_BASE_ANCHOR,
             'consumer_sentiment_index' => 100.0,
@@ -806,8 +808,8 @@ class MacroEngineTest extends TestCase
             'output_gap_ema' => -0.02,
             'policy_rate' => 0.06,
             'policy_rate_ema' => 0.05,
-            'yield10y' => 0.07,
-            'yield10y_ema' => 0.06,
+            'yield_10y' => 0.07,
+            'yield_10y_ema' => 0.06,
             'market_volatility' => 0.35,
             'market_volatility_ema' => 0.30,
             'consumer_sentiment_index' => 100.0,
@@ -846,6 +848,10 @@ class MacroEngineTest extends TestCase
         $stateNeutral->policyRate = 0.035; // Natural rate (1.5%) + Target Inflation (2%)
         $stateNeutral->corporateTaxRate = 0.21;
         $stateNeutral->capitalStockOverhang = 0.0;
+
+        // Neutral credit: spreads at the baselines the credit legs measure their drag from
+        $stateNeutral->macroCreditSpreadEma = MacroEngine::BASE_CREDIT_SPREAD;
+        $stateNeutral->interbankLiquiditySpreadEma = MacroEngine::INTERBANK_BASELINE_SPREAD;
 
         // Neutral Housing & Commodity Markets
         $stateNeutral->residentialPropertyIndexEma = 100.0;
@@ -1193,18 +1199,18 @@ class MacroEngineTest extends TestCase
         $hikingState->policyRate = 0.02;
         $hikingState->inflation = 0.02;
         $hikingState->outputGap = 0.02;
-        $hike = $this->monetarySubsystem->updatePolicyRate($hikingState, 0.05, 0.25) - $hikingState->policyRate;
+        $hike = $this->monetarySubsystem->updatePolicyRate($hikingState, 0.03, 0.25) - $hikingState->policyRate;
 
         $cuttingState = new \App\Service\Macro\MacroState();
         $cuttingState->policyRate = 0.04;
         $cuttingState->inflation = 0.015;
         $cuttingState->outputGap = -0.03;
-        $cut = $cuttingState->policyRate - $this->monetarySubsystem->updatePolicyRate($cuttingState, 0.01, 0.25);
+        $cut = $cuttingState->policyRate - $this->monetarySubsystem->updatePolicyRate($cuttingState, 0.03, 0.25);
 
-        $this->assertEqualsWithDelta($hike, $cut, 1e-12, 'Below the panic threshold a 300bp distance must close by the same amount either way.');
+        $this->assertEqualsWithDelta($hike, $cut, 1e-12, 'Below the panic threshold and the hike ceiling a 100bp distance must close by the same amount either way.');
     }
 
-    public function testPolicyRatePaceIsProportionalToTheDistanceWithNoCap(): void
+    public function testPolicyRatePaceIsProportionalToTheDistanceBelowTheHikeCeiling(): void
     {
         $state = new \App\Service\Macro\MacroState();
         $state->policyRate = 0.02; // clear of the lower bound, so forward guidance plays no part
@@ -1212,12 +1218,32 @@ class MacroEngineTest extends TestCase
         $state->outputGap = 0.03;
         $dt = 0.25;
 
-        $smallMove = $this->monetarySubsystem->updatePolicyRate($state, 0.03, $dt) - $state->policyRate;
-        $largeMove = $this->monetarySubsystem->updatePolicyRate($state, 0.09, $dt) - $state->policyRate;
+        $smallMove = $this->monetarySubsystem->updatePolicyRate($state, 0.0225, $dt) - $state->policyRate;
+        $largeMove = $this->monetarySubsystem->updatePolicyRate($state, 0.0325, $dt) - $state->policyRate;
 
-        // Partial adjustment: a 7pp distance moves the rate seven times as far as a 1pp one in the same quarter.
-        $this->assertEqualsWithDelta(7.0 * $smallMove, $largeMove, 1e-12, 'The pace must scale with the distance to the target, with no velocity cap.');
-        $this->assertEqualsWithDelta((1.0 - exp(-MonetaryPolicySubsystem::CB_SMOOTHING_SPEED * $dt)) * 0.07, $largeMove, 1e-12);
+        // Partial adjustment: a 125bp distance moves the rate five times as far as a 25bp one in the same quarter.
+        $this->assertEqualsWithDelta(5.0 * $smallMove, $largeMove, 1e-12, 'Below the ceiling the pace must scale with the distance to the target.');
+        $this->assertEqualsWithDelta((1.0 - exp(-MonetaryPolicySubsystem::CB_SMOOTHING_SPEED * $dt)) * 0.0125, $largeMove, 1e-12);
+    }
+
+    public function testHikesAreCappedAtTheFastestModernPaceButCutsAreNot(): void
+    {
+        $dt = 0.25;
+        $hikingState = new \App\Service\Macro\MacroState();
+        $hikingState->policyRate = 0.02;
+        $hikingState->inflation = 0.025;
+        $hikingState->outputGap = 0.04;
+        $hike = $this->monetarySubsystem->updatePolicyRate($hikingState, 0.09, $dt) - $hikingState->policyRate;
+
+        $cuttingState = new \App\Service\Macro\MacroState();
+        $cuttingState->policyRate = 0.09;
+        $cuttingState->inflation = 0.025;
+        $cuttingState->outputGap = -0.04;
+        $cut = $cuttingState->policyRate - $this->monetarySubsystem->updatePolicyRate($cuttingState, 0.02, $dt);
+
+        // A 700bp jump in the target: the partial adjustment alone would hike 440bp in the quarter; the FOMC's fastest is 150bp (2022Q3).
+        $this->assertEqualsWithDelta(MonetaryPolicySubsystem::CB_MAX_HIKE_VELOCITY * $dt, $hike, 1e-12, 'A hike must not outrun 75bp at each of the quarter\'s two meetings.');
+        $this->assertEqualsWithDelta((1.0 - exp(-MonetaryPolicySubsystem::CB_SMOOTHING_SPEED * $dt)) * 0.07, $cut, 1e-12, 'Cuts keep the partial-adjustment pace (the Fed cut 200bp in 2008Q1).');
     }
 
     public function testInflationPanicAcceleratesHikesAboveEmergencyThreshold(): void
@@ -1227,18 +1253,18 @@ class MacroEngineTest extends TestCase
         $calmState->policyRate = 0.02;
         $calmState->inflation = 0.025;
         $calmState->outputGap = 0.03;
-        $calmHike = $this->monetarySubsystem->updatePolicyRate($calmState, 0.12, $dt) - $calmState->policyRate;
+        $calmHike = $this->monetarySubsystem->updatePolicyRate($calmState, 0.025, $dt) - $calmState->policyRate;
 
-        // Severe stagflation / runaway inflation shock (8.0% inflation), the same distance to the target.
+        // Severe stagflation / runaway inflation shock (8.0% inflation), the same 50bp distance, under the hike ceiling at either speed.
         $panicState = new \App\Service\Macro\MacroState();
         $panicState->policyRate = 0.02;
         $panicState->inflation = 0.080;
         $panicState->outputGap = 0.03;
-        $panicHike = $this->monetarySubsystem->updatePolicyRate($panicState, 0.12, $dt) - $panicState->policyRate;
+        $panicHike = $this->monetarySubsystem->updatePolicyRate($panicState, 0.025, $dt) - $panicState->policyRate;
 
         $this->assertGreaterThan($calmHike, $panicHike, 'Severe runaway inflation must trigger emergency panic rate hiking acceleration.');
         $maxSpeed = MonetaryPolicySubsystem::CB_SMOOTHING_SPEED + MonetaryPolicySubsystem::CB_MAX_HIKE_PANIC_SPEED;
-        $this->assertLessThanOrEqual((1.0 - exp(-$maxSpeed * $dt)) * 0.10 + 1e-12, $panicHike, 'Panic hiking must stay within the most the panic adds to the speed.');
+        $this->assertLessThanOrEqual((1.0 - exp(-$maxSpeed * $dt)) * 0.005 + 1e-12, $panicHike, 'Panic hiking must stay within the most the panic adds to the speed.');
     }
 
     public function testDynamicNaturalRateDriftsWithTfpGrowth(): void

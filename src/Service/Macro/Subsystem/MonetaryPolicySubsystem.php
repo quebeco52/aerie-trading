@@ -2,6 +2,7 @@
 
 namespace App\Service\Macro\Subsystem;
 
+use App\Data\MacroFieldRegistry;
 use App\Service\Macro\MacroEngine;
 use App\Service\Macro\MacroState;
 use App\Service\Math\MathUtility;
@@ -56,8 +57,8 @@ class MonetaryPolicySubsystem
     public const BALANCE_SHEET_REINVESTMENT_HOLD_YEARS = 1.5;
 
     // --- Taylor Rule & The Evans Rule (Forward Guidance) ---
-    /** Weight on inflation deviations from the target, fitted with the gap weight by indirect inference on the US Clarida-Gali-Gertler rule, 1987-2008 (smoothing 0.85, inflation 1.87, gap 1.84) and on when the funds rate moves against the gap, jointly with the asymmetric transmission: the engine's rule regression reads 0.87, 1.73, 1.61. */
-    public const TAYLOR_INFLATION_WEIGHT = 2.4;
+    /** Weight on inflation deviations from the target, fitted with the gap weight by indirect inference on the US Clarida-Gali-Gertler rule, 1987-2008 (smoothing 0.85, inflation 1.87, gap 1.84) and on when the funds rate moves against the gap: the engine's rule regression reads 0.86, 1.70, 1.76 (2.4 read 2.49 once the financial scar, which depressed it, was removed). */
+    public const TAYLOR_INFLATION_WEIGHT = 1.6;
     /** Weight on the projected output gap, the same in slack as in a boom (the US rule shows no asymmetry: impact 0.24 in booms, 0.29 in slack, se 0.12-0.15); the same fit. */
     public const TAYLOR_OUTPUT_GAP_WEIGHT = 1.5;
     /** Bernanke (2015) blend: weight on realized core inflation (EMA) in the Taylor Rule inflation measure. */
@@ -72,12 +73,14 @@ class MonetaryPolicySubsystem
     public const TAYLOR_GAP_FORECAST_CAP = 0.020;
     /** Evans Rule forward guidance: Maximum inflation ceiling tolerated while holding rates at ZLB. */
     public const EVANS_RULE_INFLATION_CAP = 0.025;
-    /** Partial-adjustment speed of the policy rate toward its target, the same cutting as hiking (US: 15% vs 13% of the distance closed a quarter, se 4-6%), with no pace cap: the rate trails its target by a quarter, and like the funds rate (1985-2008) peaks 2q after the gap. */
+    /** Partial-adjustment speed of the policy rate toward its target, the same cutting as hiking (US: 15% vs 13% of the distance closed a quarter, se 4-6%): the rate trails its target by a quarter, and like the funds rate (1985-2008) peaks 2q after the gap. */
     public const CB_SMOOTHING_SPEED = 4.0;
     /** Inflation panic reaction multiplier accelerating rate hikes during extreme inflation spikes. */
     public const CB_INFLATION_PANIC_SCALE = 50.0;
     /** Most the inflation panic adds to the partial-adjustment speed, per year (Volcker-style acceleration). */
     public const CB_MAX_HIKE_PANIC_SPEED = 3.0;
+    /** Fastest the policy rate rises, per year: the FOMC's largest modern step (75bp) at each of its eight meetings, 2022's pace (+150bp in Q3); cuts are not capped, the fastest US cuts (-200bp in 2008Q1, with intermeeting moves) outran it. */
+    public const CB_MAX_HIKE_VELOCITY = 0.06;
 
     // --- Central Bank Effective Lower Bound & Shadow Rates ---
     /** Shadow-rate accommodation per unit of QE yield suppression: full-scale QE (100bps) reads as a -3% shadow rate, the Wu-Xia trough of 2014. */
@@ -227,7 +230,8 @@ class MonetaryPolicySubsystem
      */
     private function cyclicalGapForecast(MacroState $state): float
     {
-        if ($state->outputGapEma === 0.015 && $state->outputGap !== 0.015) {
+        $openingGap = MacroFieldRegistry::defaults()['outputGapEma'];
+        if ($state->outputGapEma === $openingGap && $state->outputGap !== $openingGap) {
             return $state->outputGap - $state->productivitySupplyGap;
         }
 
@@ -331,8 +335,10 @@ class MonetaryPolicySubsystem
      *
      * Models inertial interest rate adjustments toward the Taylor target at one speed either way (1987-2008:
      * 0.66/yr cutting, 0.57/yr hiking, not distinguishable), as an exact first-order lag, with hikes accelerating
-     * to Volcker speed during runaway inflation spikes. The pace is proportional to the distance: there is no cap
-     * on how far the rate moves in a year (the Fed hiked 300bp in 1994 and 425bp in 2022's nine months).
+     * to Volcker speed during runaway inflation spikes. The pace is proportional to the distance up to the fastest
+     * the FOMC has hiked since 1985 (75bp a meeting, 2022). Without that ceiling the partial adjustment turned a
+     * target that jumps -- liftoff after forward guidance, a demand boom -- into +650bp in a quarter at 2.8%
+     * inflation, and 5% of years hiked over 300bp against the Fed's 1% (1985-2008).
      *
      * @param MacroState $state      Current macroeconomic state.
      * @param float      $targetRate Target policy rate from the Taylor Rule.
@@ -361,7 +367,9 @@ class MonetaryPolicySubsystem
             $cbSpeed += min(self::CB_MAX_HIKE_PANIC_SPEED, $inflationPanicExcess * self::CB_INFLATION_PANIC_SCALE);
         }
 
-        return $this->mathUtility->calculateDistributedLag($currentPolicyRate, $effectiveTarget, $dt, 1.0 / $cbSpeed);
+        $maxSpeed = $effectiveTarget > $currentPolicyRate ? self::CB_MAX_HIKE_VELOCITY : INF;
+
+        return $this->mathUtility->calculateSpeedLimitedDistributedLag($currentPolicyRate, $effectiveTarget, $dt, 1.0 / $cbSpeed, $maxSpeed);
     }
 
     /**

@@ -464,6 +464,7 @@ class MonetaryPolicySubsystemTest extends TestCase
         $state->tipsBreakeven = MacroEngine::TARGET_INFLATION;
         $state->outputGap = 0.0;
         $state->marketVolatilityEma = 0.15;
+        $this->holdSoundFiscalPosition($state);
 
         $curve = $this->subsystem->calculateYieldCurve($state, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE);
 
@@ -540,6 +541,7 @@ class MonetaryPolicySubsystemTest extends TestCase
         $state->outputGap = -0.03;
         $state->marketVolatilityEma = 0.60; // panic: flight to safety
         $state->inversionDuration = 0.0;
+        $this->holdSoundFiscalPosition($state); // the fiscal supply premium is not a compression channel
 
         $curve = $this->subsystem->calculateYieldCurve($state, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE);
 
@@ -1039,6 +1041,7 @@ class MonetaryPolicySubsystemTest extends TestCase
         $sound->tipsBreakeven = MacroEngine::TARGET_INFLATION;
         $sound->outputGap = 0.0;
         $sound->marketVolatilityEma = 0.15;
+        $this->holdSoundFiscalPosition($sound);
 
         $stressed = clone $sound;
         $stressed->sovereignRiskSpreadEma = 0.01;
@@ -1102,5 +1105,12 @@ class MonetaryPolicySubsystemTest extends TestCase
 
         $this->assertGreaterThan(MacroEngine::SYSTEM_DEPOSIT_BETA_BASE, $state->systemDepositBeta);
         $this->assertLessThan(MacroEngine::SYSTEM_DEPOSIT_BETA_BASE + 0.002, $state->systemDepositBeta, 'One trading day moves the system beta by a fraction of a point.');
+    }
+
+    /** Debt inside the 70% the Bohn reaction defends and no market premium on it: the curve carries no fiscal term. */
+    private function holdSoundFiscalPosition(MacroState $state): void
+    {
+        $state->sovereignDebtToGdpEma = MacroEngine::SOVEREIGN_DEBT_NEUTRAL_THRESHOLD;
+        $state->sovereignRiskSpreadEma = 0.0;
     }
 }

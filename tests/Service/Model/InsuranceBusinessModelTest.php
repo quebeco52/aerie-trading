@@ -278,7 +278,11 @@ class InsuranceBusinessModelTest extends TestCase
     {
         $model = new InsuranceBusinessModel();
         $mathUtility = new MathUtility();
-        $macroState = new \App\DTO\MacroStateDTO();
+        // Rates at the level the book was priced at, so neither the float-yield discount nor the hurdle moves the book.
+        $macroState = new \App\DTO\MacroStateDTO(
+            policyRate: InsuranceBusinessModel::DEFAULT_POLICY_RATE_FALLBACK,
+            policyRateEma: InsuranceBusinessModel::DEFAULT_POLICY_RATE_FALLBACK,
+        );
         $afterTaxMargin = static fn(float $margin): float => $margin * (1.0 - $macroState->corporateTaxRate);
 
         // A float-levered underwriter: a 4.5% underwriting margin, and a TTM ROE of 20% that the float,
@@ -317,7 +321,10 @@ class InsuranceBusinessModelTest extends TestCase
         $model = new InsuranceBusinessModel();
         // Policy rate at the model's own fallback so the Cummins-Danzon float-yield discount is zero and
         // the capacity term is the only thing moving the multiplier.
-        $macroState = new \App\DTO\MacroStateDTO(policyRateEma: InsuranceBusinessModel::DEFAULT_POLICY_RATE_FALLBACK);
+        $macroState = new \App\DTO\MacroStateDTO(
+            policyRate: InsuranceBusinessModel::DEFAULT_POLICY_RATE_FALLBACK,
+            policyRateEma: InsuranceBusinessModel::DEFAULT_POLICY_RATE_FALLBACK,
+        );
         $pricingPower = static fn(Stock $s): float => (float) $model->getMacroPhysics($s, $macroState)['pricing_power_multiplier'];
 
         // Capital inside the market's optimal scale: no glut, no discount.
@@ -356,7 +363,10 @@ class InsuranceBusinessModelTest extends TestCase
     {
         $model = new InsuranceBusinessModel();
         $mathUtility = new MathUtility();
-        $macroState = new \App\DTO\MacroStateDTO(policyRateEma: InsuranceBusinessModel::DEFAULT_POLICY_RATE_FALLBACK);
+        $macroState = new \App\DTO\MacroStateDTO(
+            policyRate: InsuranceBusinessModel::DEFAULT_POLICY_RATE_FALLBACK,
+            policyRateEma: InsuranceBusinessModel::DEFAULT_POLICY_RATE_FALLBACK,
+        );
         $writtenCapacity = static function (Stock $s) use ($model, $macroState, $mathUtility): float {
             $roic = $model->getTargetMetrics($s, $macroState, $mathUtility)['baseline_roic'];
 
@@ -395,7 +405,10 @@ class InsuranceBusinessModelTest extends TestCase
     {
         $model = new InsuranceBusinessModel();
         $mathUtility = new MathUtility();
-        $macroState = new \App\DTO\MacroStateDTO(policyRateEma: InsuranceBusinessModel::DEFAULT_POLICY_RATE_FALLBACK);
+        $macroState = new \App\DTO\MacroStateDTO(
+            policyRate: InsuranceBusinessModel::DEFAULT_POLICY_RATE_FALLBACK,
+            policyRateEma: InsuranceBusinessModel::DEFAULT_POLICY_RATE_FALLBACK,
+        );
 
         // Writing the whole book: every dollar of surplus is doing something.
         $this->assertSame(0.0, $model->getUndeployableCapitalShare($this->underwriterAtShare(0.40), $macroState, $mathUtility));
@@ -419,7 +432,10 @@ class InsuranceBusinessModelTest extends TestCase
     public function testRatesFollowObservedCapitalRatherThanTodaysBalanceSheet(): void
     {
         $model = new InsuranceBusinessModel();
-        $macroState = new \App\DTO\MacroStateDTO(policyRateEma: InsuranceBusinessModel::DEFAULT_POLICY_RATE_FALLBACK);
+        $macroState = new \App\DTO\MacroStateDTO(
+            policyRate: InsuranceBusinessModel::DEFAULT_POLICY_RATE_FALLBACK,
+            policyRateEma: InsuranceBusinessModel::DEFAULT_POLICY_RATE_FALLBACK,
+        );
 
         // Capital already well past the market's optimal scale, but nothing has been filed or rated yet.
         $stock = $this->underwriterAtShare(1.00);
