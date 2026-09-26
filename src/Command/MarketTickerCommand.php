@@ -255,6 +255,8 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
         /** Catches a mutation that DEFERRED_EXPLICIT tracking would drop, and writes it anyway. */
         private \App\EventListener\DeferredWriteAudit $writeAudit,
         private \App\Service\Macro\Recorder\OutputGapProbe $gapProbe,
+        private \App\Service\Macro\Recorder\MacroDiagnosticsProbe $diagnosticsProbe,
+        private \App\Service\Macro\MacroConfigFingerprint $configFingerprint,
         private SimulationClockService $simulationClock,
         private OptionChainService $optionChain,
         private TreasuryAuctionService $treasuryAuction,
@@ -513,6 +515,7 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
 
         // The gap is only ever moved here, so this is the only process that can say what moved it.
         $this->gapProbe->enable();
+        $this->diagnosticsProbe->enable();
 
         $lap = static function (string $name) use (&$phases, &$phaseStart): void {
             $now = hrtime(true);
@@ -1072,6 +1075,10 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                         \App\Service\Macro\Recorder\OutputGapProbe::REDIS_KEY,
                         (string) json_encode($this->gapProbe->snapshot())
                     );
+                    $this->redis->set(
+                        \App\Service\Macro\Recorder\MacroDiagnosticsProbe::REDIS_KEY,
+                        (string) json_encode($this->diagnosticsProbe->snapshot())
+                    );
                 }
 
                 // A cache of the committed clock, for the web process. Never the authority: see SimulationClock.
@@ -1104,7 +1111,9 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                     // Rolled BEFORE the snapshot, so the decomposition of the quarter that just ended is
                     // in hand to go into that quarter's own row rather than the next one's.
                     $this->gapProbe->rollWindow();
+                    $this->diagnosticsProbe->rollWindow();
                     $closedQuarter = $this->gapProbe->snapshot()['previous'];
+                    $closedDiagnostics = $this->diagnosticsProbe->snapshot()['previous'];
 
                     // A ticker that starts mid-quarter closes a PARTIAL first window, and a partial window
                     // is not a quarter: its contributions are short while its annualised rates divide by a
@@ -1116,7 +1125,12 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                     // One row carrying the state vector and what moved it, which is what makes macro_report
                     // readable as a run rather than as a series of unexplained levels. The decomposition
                     // needs no time of its own: it is in the row whose total_time already stamps it.
-                    $this->macroEngine->recordMacroSnapshot($macroState, $conn, $wholeQuarter ? $closedQuarter : null);
+                    $this->macroEngine->recordMacroSnapshot($macroState, $conn, new \App\Service\Macro\Recorder\QuarterRecord(
+                        gapChannels: $wholeQuarter ? $closedQuarter : null,
+                        diagnostics: $wholeQuarter ? $closedDiagnostics : null,
+                        configFingerprint: $this->configFingerprint->fingerprint(),
+                        ticksPerYear: $this->ticksPerYear,
+                    ));
                 }
 
                 // The clock goes in with the tick, on the tick's own connection: a tick that rolls back

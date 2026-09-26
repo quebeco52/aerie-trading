@@ -4,6 +4,7 @@ namespace App\Service\Macro\Subsystem;
 
 use App\Service\Macro\MacroEngine;
 use App\Service\Macro\MacroState;
+use App\Service\Macro\Recorder\MacroDiagnosticsProbe;
 use App\Service\Math\MathUtility;
 
 /**
@@ -203,7 +204,9 @@ class CreditFiscalSubsystem
     public const SLOOS_SIGMA = 0.08;
 
     public function __construct(
-        private readonly MathUtility $mathUtility
+        private readonly MathUtility $mathUtility,
+        /** Logs the jumps this subsystem draws. Null in a test or a headless harness, off everywhere the ticker is not. */
+        private readonly ?MacroDiagnosticsProbe $diagnostics = null
     ) {}
 
     /**
@@ -282,6 +285,7 @@ class CreditFiscalSubsystem
         $jumpAmount = 0.0;
         if ($jumpData['multiplier'] !== 1.0) {
             $jumpAmount = $baseProcess * ($jumpData['multiplier'] - 1.0);
+            $this->diagnostics?->recordEvent('interbank', (float) $jumpData['exponent']);
         }
         // Gorton & Metrick (2012) wholesale funding liquidity run during banking crisis shock.
         if ($state->lastCreditCrisisAt === $state->totalTime) {
@@ -357,6 +361,9 @@ class CreditFiscalSubsystem
         );
 
         $state->governmentSpendingIndex = max(60.0, min(200.0, $baseProcess * $jumpData['multiplier']));
+        if ($jumpData['exponent'] !== null) {
+            $this->diagnostics?->recordEvent('governmentSpending', $jumpData['exponent']);
+        }
     }
 
     /**
@@ -525,7 +532,9 @@ class CreditFiscalSubsystem
         }
 
         $state->lastCreditCrisisAt = $state->totalTime;
-        $state->creditCrisisDrag += self::CREDIT_CRISIS_DRAG_BASE + (self::CREDIT_CRISIS_DRAG_PER_GAP * max(0.0, $state->creditToGdpGapEma));
+        $crisisDrag = self::CREDIT_CRISIS_DRAG_BASE + (self::CREDIT_CRISIS_DRAG_PER_GAP * max(0.0, $state->creditToGdpGapEma));
+        $state->creditCrisisDrag += $crisisDrag;
+        $this->diagnostics?->recordEvent('creditCrisis', $crisisDrag);
         // Gilchrist & Zakrajsek (2012): lenders' capital is hit on the day, so the premium they charge jumps with it.
         $state->excessBondPremium += self::EBP_CRISIS_JUMP;
     }
@@ -566,6 +575,9 @@ class CreditFiscalSubsystem
         );
 
         $shifted *= $jump['multiplier'] * exp(-self::EBP_LOG_GAP_SPEED_SENSITIVITY * $gapChange);
+        if ($jump['exponent'] !== null) {
+            $this->diagnostics?->recordEvent('excessBondPremium', $jump['exponent']);
+        }
         $state->excessBondPremium = $shifted - self::EBP_DISPLACEMENT;
     }
 
@@ -639,6 +651,9 @@ class CreditFiscalSubsystem
         );
 
         $state->policyUncertaintyIndex = max(self::MIN_EPU, min(self::MAX_EPU, $baseProcess * $jumpData['multiplier']));
+        if ($jumpData['exponent'] !== null) {
+            $this->diagnostics?->recordEvent('policyUncertainty', $jumpData['exponent']);
+        }
 
         if (floor($state->totalTime / $term) > floor(($state->totalTime - $dt) / $term)) {
             $state->lastElectionAt = $state->totalTime;

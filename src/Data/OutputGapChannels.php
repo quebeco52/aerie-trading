@@ -7,7 +7,7 @@ namespace App\Data;
 /**
  * Families the output gap's drift channels are read in, and the colour each family wears.
  *
- * App\Service\Macro\Recorder\OutputGapProbe records twenty-one channels, and that many rows sorted by
+ * App\Service\Macro\Recorder\OutputGapProbe records a couple of dozen channels, and that many rows sorted by
  * size is a list rather than a reading: the eye has no way to tell that `crisisDeleveragingDrag`
  * and `lendingStandardsDrag` are the same story told twice, or that the largest single line and the
  * third largest are both the government. Grouping is what makes the panel answer "what kind of
@@ -54,7 +54,7 @@ final class OutputGapChannels
         'disturbance' => [
             'label' => 'Demand disturbance',
             'colour' => '#199e70',
-            'channels' => ['demandShock'],
+            'channels' => ['demandShock', 'demandDisaster', 'disasterCompensator'],
         ],
         'credit' => [
             'label' => 'Credit',
@@ -62,6 +62,7 @@ final class OutputGapChannels
             'channels' => [
                 'creditFrictionDrag',
                 'premiumDrag',
+                'premiumCompensator',
                 'crisisDeleveragingDrag',
                 'lendingStandardsDrag',
                 'householdDeleveragingDrag',
@@ -103,6 +104,17 @@ final class OutputGapChannels
     public static function families(): array
     {
         return self::FAMILIES;
+    }
+
+    /**
+     * The validated categorical slots, in palette order, for the panel's other stacked charts (inflation, the
+     * policy target). Those charts draw their series from these slots in order, never cycled.
+     *
+     * @return list<string>
+     */
+    public static function palette(): array
+    {
+        return array_values(array_column(self::FAMILIES, 'colour'));
     }
 
     /**

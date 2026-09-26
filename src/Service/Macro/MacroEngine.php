@@ -2,6 +2,7 @@
 
 namespace App\Service\Macro;
 
+use App\Service\Macro\Recorder\MacroDiagnosticsProbe;
 use App\Service\Macro\Recorder\MacroSnapshotRecorder;
 use App\Service\Macro\Subsystem\AssetMarketSubsystem;
 use App\Service\Macro\Subsystem\CommodityLogisticsSubsystem;
@@ -374,6 +375,8 @@ class MacroEngine
         private readonly AssetMarketSubsystem $assetSubsystem,
         private readonly CreditFiscalSubsystem $creditFiscalSubsystem,
         private readonly ?LoggerInterface $logger = null,
+        /** Records the quarter's averages. Null in a test or a headless harness, off everywhere the ticker is not. */
+        private readonly ?MacroDiagnosticsProbe $diagnostics = null,
     ) {}
 
     private function loadState(): MacroState
@@ -575,6 +578,11 @@ class MacroEngine
 
         $this->updateSectorFactors($state, $dt);
         $this->evaluateSystemicEvent($state, $dt);
+        if ($state->eventType !== null) {
+            $this->diagnostics?->recordEvent('systemic.' . $state->eventType, 1.0);
+        }
+
+        $this->diagnostics?->recordAverages($state, $dt);
 
         $this->saveState($state);
         return \App\DTO\MacroStateDTO::fromMacroState($state);
@@ -704,15 +712,15 @@ class MacroEngine
      * inflation, labor market dynamics, credit spreads, commodities, real estate,
      * and national accounts into the macro_report table.
      *
-     * @param \App\DTO\MacroStateDTO    $macroState  State snapshot to record.
-     * @param \Doctrine\DBAL\Connection  $conn        Database connection.
-     * @param array<string, mixed>|null  $gapChannels Closed quarter's output gap drift decomposition.
+     * @param \App\DTO\MacroStateDTO                         $macroState State snapshot to record.
+     * @param \Doctrine\DBAL\Connection                       $conn       Database connection.
+     * @param \App\Service\Macro\Recorder\QuarterRecord|null $quarter    The probes' closed windows and the run's identity.
      */
     public function recordMacroSnapshot(
         \App\DTO\MacroStateDTO $macroState,
         \Doctrine\DBAL\Connection $conn,
-        ?array $gapChannels = null
+        ?\App\Service\Macro\Recorder\QuarterRecord $quarter = null
     ): void {
-        $this->snapshotRecorder->recordSnapshot($macroState, $conn, $gapChannels);
+        $this->snapshotRecorder->recordSnapshot($macroState, $conn, $quarter);
     }
 }

@@ -3,6 +3,7 @@
 namespace App\Service\Macro\Subsystem;
 
 use App\Data\MacroFieldRegistry;
+use App\Service\Macro\Recorder\MacroDiagnosticsProbe;
 use App\Service\Macro\MacroEngine;
 use App\Service\Macro\MacroState;
 use App\Service\Math\MathUtility;
@@ -171,7 +172,9 @@ class MonetaryPolicySubsystem
     public const MAX_M2_GROWTH = 0.250;
 
     public function __construct(
-        private readonly MathUtility $mathUtility
+        private readonly MathUtility $mathUtility,
+        /** Records what set the target and what held the rate. Null in a test or a headless harness, off everywhere the ticker is not. */
+        private readonly ?MacroDiagnosticsProbe $diagnostics = null
     ) {}
 
     /**
@@ -189,16 +192,27 @@ class MonetaryPolicySubsystem
      */
     public function calculateExpectedInflation(MacroState $state, float $targetInflation): float
     {
+        return (self::TAYLOR_INFLATION_CORE_WEIGHT * $this->realizedCoreInflation($state, $targetInflation))
+            + (self::TAYLOR_INFLATION_ANCHOR_WEIGHT * $state->tipsBreakeven);
+    }
+
+    /**
+     * The realized core leg of that blend: supercore and core goods at their CPI weights, or headline's EMA while
+     * both still sit at their opening.
+     *
+     * @param MacroState $state           Current macroeconomic state.
+     * @param float      $targetInflation Statutory central bank target inflation.
+     * @return float Realized core inflation (EMA).
+     */
+    private function realizedCoreInflation(MacroState $state, float $targetInflation): float
+    {
         $coreWeight = MacroAggregateSubsystem::INFLATION_WEIGHT_SUPERCORE + MacroAggregateSubsystem::INFLATION_WEIGHT_GOODS;
         if ($coreWeight > 0 && ($state->supercoreInflationEma !== $targetInflation || $state->coreGoodsInflationEma !== $targetInflation)) {
-            $coreInflation = ((MacroAggregateSubsystem::INFLATION_WEIGHT_SUPERCORE * $state->supercoreInflationEma)
+            return ((MacroAggregateSubsystem::INFLATION_WEIGHT_SUPERCORE * $state->supercoreInflationEma)
                 + (MacroAggregateSubsystem::INFLATION_WEIGHT_GOODS * $state->coreGoodsInflationEma)) / $coreWeight;
-        } else {
-            $coreInflation = $state->inflationEma;
         }
 
-        return (self::TAYLOR_INFLATION_CORE_WEIGHT * $coreInflation)
-            + (self::TAYLOR_INFLATION_ANCHOR_WEIGHT * $state->tipsBreakeven);
+        return $state->inflationEma;
     }
 
     /**
@@ -274,8 +288,24 @@ class MonetaryPolicySubsystem
 
         // Wu-Xia (2016) / Krippner (2013) shadow rate reflecting unconventional QE accommodation at ZLB.
         $qeShadowAccommodation = $state->qeIntensity * self::WU_XIA_QE_SHADOW_SENSITIVITY;
+        $target = $unclampedTarget - $qeShadowAccommodation;
 
-        return $unclampedTarget - $qeShadowAccommodation;
+        // The inflation measure is a blend weighted to one, so its level and the response to its gap split exactly
+        // into a realized-core leg and an expectations leg on top of r* and the target.
+        if ($this->diagnostics?->isEnabled()) {
+            $inflationResponse = 1.0 + self::TAYLOR_INFLATION_WEIGHT;
+            $this->diagnostics->recordPolicyTarget([
+                'naturalRate' => $naturalRate,
+                'inflationTarget' => $targetInflation * (self::TAYLOR_INFLATION_CORE_WEIGHT + self::TAYLOR_INFLATION_ANCHOR_WEIGHT),
+                'coreInflationGap' => $inflationResponse * self::TAYLOR_INFLATION_CORE_WEIGHT * ($this->realizedCoreInflation($state, $targetInflation) - $targetInflation),
+                'expectationsGap' => $inflationResponse * self::TAYLOR_INFLATION_ANCHOR_WEIGHT * ($state->tipsBreakeven - $targetInflation),
+                'outputGap' => self::TAYLOR_OUTPUT_GAP_WEIGHT * $cyclicalGap,
+                'longRateOffset' => -$longRateOffset,
+                'qeShadow' => -$qeShadowAccommodation,
+            ], $target, $dt);
+        }
+
+        return $target;
     }
 
     /**
@@ -351,12 +381,11 @@ class MonetaryPolicySubsystem
         $effectiveTarget = max(MacroEngine::EFFECTIVE_LOWER_BOUND, min(0.20, $targetRate));
 
         // Evans Rule (FOMC 2012) forward guidance threshold keeping rates at lower bound.
-        if (
-            $currentPolicyRate <= MacroEngine::ZLB_PROXIMITY_THRESHOLD
+        $evansHold = $currentPolicyRate <= MacroEngine::ZLB_PROXIMITY_THRESHOLD
             && $effectiveTarget > $currentPolicyRate
             && $state->unemploymentRateEma > MacroEngine::EVANS_RULE_UNEMPLOYMENT
-            && max($state->inflationEma, $state->tipsBreakeven) < self::EVANS_RULE_INFLATION_CAP
-        ) {
+            && max($state->inflationEma, $state->tipsBreakeven) < self::EVANS_RULE_INFLATION_CAP;
+        if ($evansHold) {
             $effectiveTarget = $currentPolicyRate;
         }
 
@@ -368,8 +397,20 @@ class MonetaryPolicySubsystem
         }
 
         $maxSpeed = $effectiveTarget > $currentPolicyRate ? self::CB_MAX_HIKE_VELOCITY : INF;
+        $newPolicyRate = $this->mathUtility->calculateSpeedLimitedDistributedLag($currentPolicyRate, $effectiveTarget, $dt, 1.0 / $cbSpeed, $maxSpeed);
 
-        return $this->mathUtility->calculateSpeedLimitedDistributedLag($currentPolicyRate, $effectiveTarget, $dt, 1.0 / $cbSpeed, $maxSpeed);
+        if ($this->diagnostics?->isEnabled()) {
+            $this->diagnostics->recordPolicyRate($newPolicyRate, [
+                'lowerBound' => $targetRate <= MacroEngine::EFFECTIVE_LOWER_BOUND,
+                'evansHold' => $evansHold,
+                // Past the knee of the speed-limited lag, where the partial adjustment would outrun the ceiling.
+                'hikeCeiling' => $maxSpeed < INF && ($effectiveTarget - $currentPolicyRate) > ($maxSpeed / $cbSpeed),
+                'panicSpeed' => $cbSpeed > self::CB_SMOOTHING_SPEED,
+                'targetCap' => $targetRate >= MacroEngine::POLICY_RATE_CEILING,
+            ], $dt);
+        }
+
+        return $newPolicyRate;
     }
 
     /**

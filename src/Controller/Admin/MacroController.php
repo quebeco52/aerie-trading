@@ -4,6 +4,7 @@ namespace App\Controller\Admin;
 
 use App\Service\Market\HistoryPruner;
 use App\Data\OutputGapChannels;
+use App\Service\Macro\Recorder\MacroDiagnosticsProbe;
 use App\Service\Macro\Recorder\OutputGapProbe;
 use Doctrine\DBAL\Connection;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -37,13 +38,14 @@ class MacroController extends AbstractController
     #[Route('/admin/macro/gap-debug', name: 'admin_macro_gap_debug', methods: ['GET'])]
     public function gapDebug(\Redis $redis): JsonResponse
     {
-        $raw = $redis->get(OutputGapProbe::REDIS_KEY);
-        $decoded = is_string($raw) && $raw !== '' ? json_decode($raw, true) : null;
+        $empty = ['enabled' => false, 'current' => null, 'previous' => null];
 
         return new JsonResponse([
             'families' => OutputGapChannels::families(),
             'residualColour' => OutputGapChannels::RESIDUAL_COLOUR,
-            'live' => is_array($decoded) ? $decoded : ['enabled' => false, 'current' => null, 'previous' => null],
+            'palette' => OutputGapChannels::palette(),
+            'live' => $this->readProbe($redis, OutputGapProbe::REDIS_KEY) ?? $empty,
+            'diagnostics' => $this->readProbe($redis, MacroDiagnosticsProbe::REDIS_KEY) ?? $empty,
         ]);
     }
 
@@ -64,7 +66,7 @@ class MacroController extends AbstractController
         // Newest first with a LIMIT, then reversed: the range buttons read back from the present, and the
         // rows past the horizon are the ones the panel would never draw.
         $rows = $conn->fetchAllAssociative(
-            'SELECT total_time, gap_channels FROM macro_report
+            'SELECT total_time, gap_channels, quarter_diagnostics FROM macro_report
              WHERE gap_channels IS NOT NULL
              ORDER BY id DESC LIMIT ' . HistoryPruner::MACRO_QUARTERS_KEPT
         );
@@ -78,9 +80,25 @@ class MacroController extends AbstractController
 
             // The row's own simulated time stamps the decomposition, which carries none of its own.
             $decoded['time'] = (float) $row['total_time'];
+            // The inflation and policy accounts of the same quarter, or null on a row recorded before they existed.
+            $diagnostics = is_string($row['quarter_diagnostics']) ? json_decode($row['quarter_diagnostics'], true) : null;
+            $decoded['diagnostics'] = is_array($diagnostics) ? $diagnostics : null;
             $quarters[] = $decoded;
         }
 
         return new JsonResponse(['quarters' => $quarters]);
+    }
+
+    /**
+     * A probe's published window, or null when no ticker has published one.
+     *
+     * @return array<string, mixed>|null
+     */
+    private function readProbe(\Redis $redis, string $key): ?array
+    {
+        $raw = $redis->get($key);
+        $decoded = is_string($raw) && $raw !== '' ? json_decode($raw, true) : null;
+
+        return is_array($decoded) ? $decoded : null;
     }
 }

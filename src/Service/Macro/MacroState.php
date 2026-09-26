@@ -208,6 +208,9 @@ class MacroState
     public float $inventoryStockGapEma;
 
     public float $demandShock;
+    // The parts of demandShock the Kou disasters and their compensator put there, reverting with it; demandShock stays the total.
+    public float $demandDisasterShock;
+    public float $demandDisasterCompensation;
 
     public float $energyInventoryIndex;
     public float $energyInventoryIndexEma;

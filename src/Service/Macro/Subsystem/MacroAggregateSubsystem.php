@@ -4,6 +4,7 @@ namespace App\Service\Macro\Subsystem;
 
 use App\Service\Macro\MacroEngine;
 use App\Service\Macro\MacroState;
+use App\Service\Macro\Recorder\MacroDiagnosticsProbe;
 use App\Service\Macro\Recorder\OutputGapProbe;
 use App\Service\Math\MathUtility;
 
@@ -234,7 +235,9 @@ class MacroAggregateSubsystem
     public function __construct(
         private readonly MathUtility $mathUtility,
         /** Records what moved the gap. Null in a test or a headless harness, off everywhere the ticker is not. */
-        private readonly ?OutputGapProbe $gapProbe = null
+        private readonly ?OutputGapProbe $gapProbe = null,
+        /** Records what set inflation and which shocks were drawn; null and off on the same terms. */
+        private readonly ?MacroDiagnosticsProbe $diagnostics = null
     ) {}
 
     /**
@@ -259,6 +262,7 @@ class MacroAggregateSubsystem
 
         $innovation = self::TFP_VOLATILITY * sqrt($dt) * $this->mathUtility->generateStandardNormal();
         $state->tfpShockLevel += $innovation;
+        $this->diagnostics?->recordShock('tfpInnovation', $innovation);
 
         $state->totalFactorProductivityIndex = max(1.0, $currentTfp * exp(($clampedTrendGrowthRate * $dt) + $innovation));
 
@@ -419,11 +423,12 @@ class MacroAggregateSubsystem
 
         // Gilchrist & Zakrajsek (2012): the premium is the price of credit supply, and it moves spending beyond the spread it loads into.
         // The premium bites on its adverse side only, so each side is compensated by its stationary mean (Merton 1976):
-        // it bends the cycle without shifting its average, whose cost belongs in potential, not the gap.
+        // it bends the cycle without shifting its average, whose cost belongs in potential, not the gap. The
+        // compensator is its own channel, so a calm quarter does not read as credit stimulus.
         $adversePremiumMean = $this->stationaryAdversePremium();
-        $premiumDrag = $this->mathUtility->calculateAsymmetricResponse($state->excessBondPremium, self::KALDOR_EXCESS_BOND_PREMIUM_DRAG_ADVERSE, self::KALDOR_EXCESS_BOND_PREMIUM_DRAG_FAVORABLE)
-            - (self::KALDOR_EXCESS_BOND_PREMIUM_DRAG_ADVERSE * $adversePremiumMean)
-            - (self::KALDOR_EXCESS_BOND_PREMIUM_DRAG_FAVORABLE * ($this->stationaryPremiumMean() - $adversePremiumMean));
+        $premiumDrag = $this->mathUtility->calculateAsymmetricResponse($state->excessBondPremium, self::KALDOR_EXCESS_BOND_PREMIUM_DRAG_ADVERSE, self::KALDOR_EXCESS_BOND_PREMIUM_DRAG_FAVORABLE);
+        $premiumCompensator = (self::KALDOR_EXCESS_BOND_PREMIUM_DRAG_ADVERSE * $adversePremiumMean)
+            + (self::KALDOR_EXCESS_BOND_PREMIUM_DRAG_FAVORABLE * ($this->stationaryPremiumMean() - $adversePremiumMean));
 
         $momentum = self::KALDOR_MOMENTUM * $y;
         // Kaldor (1940) non-linear asymmetric capacity ceiling constraint.
@@ -506,7 +511,7 @@ class MacroAggregateSubsystem
         // Barro (2006) rare demand disaster: the one-sided cause a slump needs, since the Gaussian
         // innovation above is symmetric and too small to dig one. Compensated, so it bends the shape
         // without shifting the mean.
-        $state->demandShock += $this->mathUtility->calculateCompensatedKouJump(
+        $disasterIncrement = $this->mathUtility->calculateCompensatedKouJump(
             lambda: self::DEMAND_DISASTER_INTENSITY,
             pUp: self::DEMAND_DISASTER_UP_PROBABILITY,
             etaUp: self::DEMAND_DISASTER_UP_RATE,
@@ -514,6 +519,25 @@ class MacroAggregateSubsystem
             cap: self::DEMAND_DISASTER_CAP,
             dt: $dt
         );
+        $state->demandShock += $disasterIncrement;
+
+        // The disasters' share of that level and their compensator's, each reverting as the whole does: the level is
+        // linear, so noise, disasters and compensation are three processes summing to it exactly, and each can be
+        // attributed without changing it.
+        $disasterCompensator = $this->mathUtility->calculateKouCompensator(
+            lambda: self::DEMAND_DISASTER_INTENSITY,
+            pUp: self::DEMAND_DISASTER_UP_PROBABILITY,
+            etaUp: self::DEMAND_DISASTER_UP_RATE,
+            etaDown: self::DEMAND_DISASTER_DOWN_RATE,
+            cap: self::DEMAND_DISASTER_CAP,
+            dt: $dt
+        );
+        $disasterJump = $disasterIncrement + $disasterCompensator;
+        $state->demandDisasterShock += (-self::DEMAND_SHOCK_REVERSION * $state->demandDisasterShock * $dt) + $disasterJump;
+        $state->demandDisasterCompensation += (-self::DEMAND_SHOCK_REVERSION * $state->demandDisasterCompensation * $dt) + $disasterCompensator;
+        if ($disasterJump !== 0.0) {
+            $this->diagnostics?->recordEvent('demandDisaster', $disasterJump);
+        }
 
         // Every channel signed as it acts on demand, so a drag reads negative wherever it is looked at.
         // This array IS the drift: it is summed below and handed to the probe unchanged, so a channel
@@ -524,6 +548,7 @@ class MacroAggregateSubsystem
             'monetaryDrag' => -$monetaryDrag,
             'creditFrictionDrag' => -$creditFrictionDrag,
             'premiumDrag' => -$premiumDrag,
+            'premiumCompensator' => $premiumCompensator,
             'fiscalStimulus' => $discretionaryFiscal,
             'automaticStabiliser' => $automaticStabiliser,
             'capitalDrag' => -$capitalDrag,
@@ -538,7 +563,9 @@ class MacroAggregateSubsystem
             'householdDeleveragingDrag' => -$householdDeleveragingDrag,
             'crisisDeleveragingDrag' => -$crisisDeleveragingDrag,
             'lendingStandardsDrag' => -$lendingStandardsDrag,
-            'demandShock' => $state->demandShock,
+            'demandShock' => $state->demandShock - $state->demandDisasterShock + $state->demandDisasterCompensation,
+            'demandDisaster' => $state->demandDisasterShock,
+            'disasterCompensator' => -$state->demandDisasterCompensation,
             // Basu, Fernald & Kimball (2006): output catches up with a technology gain before potential does.
             'productivitySupply' => $supplyChange / $dt,
         ];
@@ -636,8 +663,30 @@ class MacroAggregateSubsystem
             + (self::INFLATION_WEIGHT_GOODS * $state->coreGoodsInflation)
             + (self::INFLATION_WEIGHT_COMMODITY * $commodityBasketInflation);
 
-        $newInflation = $blendedInflation + (self::INFLATION_DIFFUSION_SIGMA * $stressMultiplier * sqrt($dt) * $infZ);
-        return max(-0.02, min(0.25, $newInflation));
+        $noise = self::INFLATION_DIFFUSION_SIGMA * $stressMultiplier * sqrt($dt) * $infZ;
+        $newInflation = $blendedInflation + $noise;
+        $boundedInflation = max(-0.02, min(0.25, $newInflation));
+
+        // The blend is linear with weights summing to one, so headline splits exactly into what each channel put in
+        // it, with the gap between a sector's rate and the rate it is moving toward booked as the sticky-price lag.
+        if ($this->diagnostics?->isEnabled()) {
+            $weightSum = self::INFLATION_WEIGHT_SUPERCORE + self::INFLATION_WEIGHT_GOODS + self::INFLATION_WEIGHT_COMMODITY;
+            $this->diagnostics->recordInflation([
+                'target' => $targetInflation * $weightSum,
+                'expectationsSlip' => $anchorSlip * $weightSum,
+                'demandPull' => $convexDemandPressure * (self::INFLATION_WEIGHT_SUPERCORE + (self::CORE_GOODS_DEMAND_SENSITIVITY * self::INFLATION_WEIGHT_GOODS)),
+                'wagePush' => $wageCostPush * self::INFLATION_WEIGHT_SUPERCORE,
+                'goodsSupply' => $goodsSupplyFriction * self::INFLATION_WEIGHT_GOODS,
+                'energyPassThrough' => $state->energyCostPushLag,
+                'foodPassThrough' => $state->agriCostPushLag,
+                'stickyPriceLag' => (self::INFLATION_WEIGHT_SUPERCORE * ($state->supercoreInflation - $targetSupercore))
+                    + (self::INFLATION_WEIGHT_GOODS * ($state->coreGoodsInflation - $targetCoreGoods)),
+                'noise' => $noise,
+                'clamp' => $boundedInflation - $newInflation,
+            ], $boundedInflation, $dt);
+        }
+
+        return $boundedInflation;
     }
 
     /**

@@ -18,7 +18,7 @@ use PHPUnit\Framework\TestCase;
 class MacroFieldRegistryTest extends TestCase
 {
     /** Columns on macro_report that the macro vector does not own and must not try to fill. */
-    private const RECORDER_OWNED_COLUMNS = ['id', 'recordedAt', 'gapChannels'];
+    private const RECORDER_OWNED_COLUMNS = ['id', 'recordedAt', 'gapChannels', 'quarterDiagnostics', 'configFingerprint', 'ticksPerYear'];
 
     /**
      * Macro fields deliberately NOT recorded, each with the reason it is not worth a column.
@@ -38,21 +38,15 @@ class MacroFieldRegistryTest extends TestCase
         'marketZ' => 'Redrawn every tick, so a quarterly sample is one arbitrary tick of noise.',
         'marketZLatent' => 'Per-tick latent behind marketZ; same objection.',
         'marketJumpMultiplier' => 'Per-tick jump scale; marketVolatility carries the quarter-scale reading.',
-        'marketVolatilityEma' => 'Smoothing of marketVolatility, which is recorded.',
 
         'metalsChi' => 'Latent OU state behind industrialMetalsIndex, which is recorded.',
         'metalsXi' => 'Latent OU state behind industrialMetalsIndex, which is recorded.',
         'agriChi' => 'Latent OU state behind agriculturalCommodityIndex, which is recorded.',
         'agriXi' => 'Latent OU state behind agriculturalCommodityIndex, which is recorded.',
 
-        'energyBasePrice' => 'Internal to the energy process; energyPriceIndex is the observable and is recorded.',
         'energySupplyEma' => 'Internal to the energy process; energyPriceIndex is the observable and is recorded.',
-        'energyCostPushLag' => 'Pass-through queue, not a level; its effect lands in the recorded inflation.',
         'energyInventoryIndex' => 'energyInventoryIndexEma is the quarter-scale reading and is recorded.',
         'freightSupplyEma' => 'Internal to the freight process; freightRateIndex is recorded.',
-
-        'nsBaseTermPremium' => 'Slow regime anchor; termPremiumRegime and termPremium10y are recorded.',
-        'nsLongEndPremium' => 'Slow regime anchor; termPremium10y is recorded.',
 
         'eventType' => 'Label of the event in flight, not a series.',
         'lastElectionAt' => 'Fixed-term calendar, derivable from the election period.',

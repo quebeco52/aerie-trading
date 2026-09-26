@@ -18,12 +18,17 @@ class MacroReportController extends AbstractController
         $sql = "SELECT * FROM macro_report ORDER BY id DESC LIMIT 100";
         $results = $conn->fetchAllAssociative($sql);
 
-        // SELECT * so a newly recorded observable reaches the charts without touching this line. The gap
-        // decomposition is the one column that is not an observable: it is a nested diagnostic that would
-        // arrive here as a JSON string no chart can plot, and it is eighteen channels wide per row.
-        // App\Controller\Admin\MacroController serves it, decoded, to the panel that reads it.
+        // SELECT * so a newly recorded observable reaches the charts without touching this line. The probes'
+        // accounts and the run identity are the columns that are not observables: nested diagnostics that would
+        // arrive here as JSON strings no chart can plot, and a label. App\Controller\Admin\MacroController serves
+        // the accounts, decoded, to the panel that reads them.
         foreach (array_keys($results) as $index) {
-            unset($results[$index]['gap_channels']);
+            unset(
+                $results[$index]['gap_channels'],
+                $results[$index]['quarter_diagnostics'],
+                $results[$index]['config_fingerprint'],
+                $results[$index]['ticks_per_year']
+            );
         }
 
         // Reverse to chronological order for Chart.js

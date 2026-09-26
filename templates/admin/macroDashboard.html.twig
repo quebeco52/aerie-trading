@@ -59,9 +59,10 @@
     </div>
 
     {#
-        What is moving the output gap, now and over the last 120 simulated years. The gap is a sum of
-        eighteen demand and supply channels that routinely cancel, so the headline number alone cannot
-        say which of them turned the economy.
+        What is moving the output gap, inflation and the policy rate, now and over the last 120 simulated
+        years. The gap is a sum of demand and supply channels that routinely cancel, so the headline number
+        alone cannot say which of them turned the economy; inflation and the Taylor target are sums of terms
+        in the same way.
 
         Two sources, because they answer different questions. The QUARTER TO DATE window is still open
         and only App\Service\Macro\Recorder\OutputGapProbe inside the ticker has it, so it comes over
@@ -71,8 +72,9 @@
         offline analysis.
 
         Channels are read in the eight families App\Data\OutputGapChannels declares, which is also
-        where the colours live — one palette for the table and both charts, so a colour means the same
-        thing everywhere on the page.
+        where the colours live — one palette for the gap table and both gap charts, so a colour means the
+        same family there. The inflation and policy charts draw their own series from the same validated
+        slots, in order, each with its own legend.
     #}
     <h4 class="mb-3">Output Gap Drift Decomposition</h4>
 
@@ -109,6 +111,7 @@
                     <p class="text-muted small mb-3">
                         Percentage points of gap delivered each quarter. Stacked at zero: up adds demand, down drains it.
                         The stack plus the residual is the quarter&rsquo;s move, so the bars reconcile to the line above.
+                        Triangles mark quarters a demand disaster or a credit crisis struck.
                     </p>
                     <div style="height: 300px"><canvas id="gapStackChart"></canvas></div>
                 </div>
@@ -132,6 +135,62 @@
                         <tbody id="gapDebugBody"></tbody>
                         <tfoot class="border-top border-2" id="gapDebugFoot"></tfoot>
                     </table>
+                </div>
+            </div>
+
+            {# Inflation and the policy rate for the same window: time averages whose terms sum to the average. #}
+            <p class="text-muted small mt-4 mb-2 d-none" id="diagStatus"></p>
+            <div class="row g-3 mt-2" id="diagTables">
+                <div class="col-lg-6">
+                    <div class="card h-100">
+                        <div class="card-header">Inflation <span class="text-muted small">&middot; quarter average</span></div>
+                        <div class="card-body">
+                            <table class="table table-sm align-middle mb-0">
+                                <thead class="table-light"><tr><th>Term</th><th class="text-end">pp</th></tr></thead>
+                                <tbody id="inflBody"></tbody>
+                                <tfoot class="border-top border-2" id="inflFoot"></tfoot>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-lg-6">
+                    <div class="card h-100">
+                        <div class="card-header">Policy rate <span class="text-muted small">&middot; Taylor target terms, quarter average</span></div>
+                        <div class="card-body">
+                            <table class="table table-sm align-middle mb-3">
+                                <thead class="table-light"><tr><th>Term</th><th class="text-end">pp</th></tr></thead>
+                                <tbody id="policyBody"></tbody>
+                                <tfoot class="border-top border-2" id="policyFoot"></tfoot>
+                            </table>
+                            <table class="table table-sm align-middle mb-0">
+                                <thead class="table-light"><tr><th>What held the rate</th><th class="text-end">share of quarter</th></tr></thead>
+                                <tbody id="constraintBody"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-12">
+                    <div class="card">
+                        <div class="card-header">Shocks drawn</div>
+                        <div class="card-body">
+                            <table class="table table-sm align-middle mb-0">
+                                <thead class="table-light"><tr><th>Process</th><th class="text-end">jumps</th><th class="text-end">sum</th><th class="text-end">largest</th></tr></thead>
+                                <tbody id="eventBody"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card mt-3">
+                <div class="card-body">
+                    <h6 class="text-uppercase text-muted small mb-1">Inflation against target, by term</h6>
+                    <p class="text-muted small mb-3">Percentage points of the quarter&rsquo;s average inflation above or below the target. The stack plus the residual is inflation minus target.</p>
+                    <div style="height: 260px"><canvas id="inflStackChart"></canvas></div>
+
+                    <h6 class="text-uppercase text-muted small mb-1 mt-4">Taylor target against neutral, by term</h6>
+                    <p class="text-muted small mb-3">Percentage points of the quarter&rsquo;s average target above or below the neutral rate r* + target inflation, which the table above carries.</p>
+                    <div style="height: 260px"><canvas id="policyStackChart"></canvas></div>
                 </div>
             </div>
         </div>
@@ -372,6 +431,48 @@
     let levelChart = null;
     let stackChart = null;
 
+    // --- Inflation and policy accounts (App\Service\Macro\Recorder\MacroDiagnosticsProbe) ---
+    let diag = null;
+    let palette = [];
+    let inflChart = null;
+    let policyChart = null;
+
+    const INFLATION_LABELS = {
+        target: 'Target', expectationsSlip: 'Expectations slip', demandPull: 'Demand pull', wagePush: 'Wage push',
+        goodsSupply: 'Goods supply', energyPassThrough: 'Energy pass-through', foodPassThrough: 'Food pass-through',
+        stickyPriceLag: 'Sticky-price lag', noise: 'Noise', clamp: 'Clamp',
+    };
+    // The chart stacks the deviation from target, at most eight series in the validated slot order; noise and
+    // clamp share the neutral residual, as the gap chart's diffusion does.
+    const INFLATION_SERIES = [
+        { label: 'Expectations slip', terms: ['expectationsSlip'] },
+        { label: 'Demand pull', terms: ['demandPull'] },
+        { label: 'Wage push', terms: ['wagePush'] },
+        { label: 'Goods supply', terms: ['goodsSupply'] },
+        { label: 'Energy & food', terms: ['energyPassThrough', 'foodPassThrough'] },
+        { label: 'Sticky-price lag', terms: ['stickyPriceLag'] },
+    ];
+    const INFLATION_RESIDUAL = ['noise', 'clamp'];
+
+    const POLICY_LABELS = {
+        naturalRate: 'Natural rate r*', inflationTarget: 'Inflation target', coreInflationGap: 'Core inflation gap',
+        expectationsGap: 'Expectations gap', outputGap: 'Output gap', longRateOffset: 'Long-rate offset', qeShadow: 'QE shadow',
+    };
+    // Stacked as the deviation from neutral (r* + target), which the table carries on its own lines.
+    const POLICY_SERIES = [
+        { label: 'Core inflation gap', terms: ['coreInflationGap'] },
+        { label: 'Expectations gap', terms: ['expectationsGap'] },
+        { label: 'Output gap', terms: ['outputGap'] },
+        { label: 'Long-rate offset', terms: ['longRateOffset'] },
+        { label: 'QE shadow', terms: ['qeShadow'] },
+    ];
+    const CONSTRAINT_LABELS = {
+        lowerBound: 'At the lower bound', evansHold: 'Evans-rule hold', hikeCeiling: 'Hike-pace ceiling',
+        panicSpeed: 'Inflation panic speed', targetCap: 'Target above the 20% cap',
+    };
+    // Quarters a shock of this kind struck are marked on the gap level chart.
+    const MARKED_EVENTS = ['demandDisaster', 'creditCrisis'];
+
     /** Percentage points, signed, the unit the gap itself is read in. */
     function pp(value, digits) {
         return (value >= 0 ? '+' : '') + (value * 100).toFixed(digits === undefined ? 2 : digits);
@@ -482,7 +583,7 @@
             'from ' + (window_.opening_gap * 100).toFixed(2) + '% at the open'));
         tiles.appendChild(tile('Change', pp(window_.change) + ' pp',
             window_.ticks + ' ticks · ' + window_.years.toFixed(3) + ' yr'));
-        tiles.appendChild(tile('Drift', pp(window_.drift) + ' pp', 'the eighteen channels, netted'));
+        tiles.appendChild(tile('Drift', pp(window_.drift) + ' pp', 'every channel, netted'));
         tiles.appendChild(tile('Residual', pp(window_.diffusion) + ' pp', 'diffusion, no economic story'));
 
         const folded = fold(window_.contributions || {});
@@ -519,26 +620,107 @@
             });
         });
 
+        const external = window_.external || 0;
         [['drift', window_.drift], ['residual (diffusion)', window_.diffusion], ['clamp', window_.clamp],
-         ['unexplained', window_.unexplained], ['Δ gap', window_.change]].forEach(function (entry, index) {
+         ['external', external], ['unexplained', window_.unexplained], ['Δ gap', window_.change]].forEach(function (entry, index) {
             const row = foot.insertRow();
-            if (entry[0] === 'unexplained' && Math.abs(entry[1]) > 1e-9) row.className = 'table-warning';
-            if (index === 4) row.className = 'border-top';
+            // Either residual away from zero means something moved the gap outside the channels.
+            if ((entry[0] === 'unexplained' || entry[0] === 'external') && Math.abs(entry[1]) > 1e-9) row.className = 'table-warning';
+            if (index === 5) row.className = 'border-top';
             cell(row, entry[0], 'fw-bold');
             cell(row, '');
-            cell(row, index === 4 ? '' : rate(entry[1]), 'text-end font-monospace text-muted');
+            cell(row, index === 5 ? '' : rate(entry[1]), 'text-end font-monospace text-muted');
             cell(row, pp(entry[1]), 'text-end font-monospace fw-bold');
         });
 
         // The decomposition is only worth reading if it adds up to the move it claims to explain.
-        const explained = window_.drift + window_.diffusion + window_.clamp + window_.unexplained;
+        const explained = window_.drift + window_.diffusion + window_.clamp + external + window_.unexplained;
         const note = foot.insertRow();
         const only = note.insertCell();
         only.colSpan = 4;
         only.className = 'text-muted small';
         only.textContent = Math.abs(explained - window_.change) < 1e-9
-            ? '✓ the four lines above reconstruct the quarter exactly'
+            ? '✓ the lines above reconstruct the quarter exactly'
             : '✗ accounting does not close — a channel reaches the drift and not the decomposition';
+    }
+
+    /** One term row: a label and its signed average in points. */
+    function termRow(tbody, label, value, className) {
+        const row = tbody.insertRow();
+        if (className) row.className = className;
+        cell(row, label, 'small');
+        cell(row, pp(value), 'text-end font-monospace small');
+    }
+
+    /** The inflation, policy and shock tables for the window the toggle selects. */
+    function renderDiagnostics() {
+        const window_ = diag && diag[which];
+        const statusLine = document.getElementById('diagStatus');
+        const tables = document.getElementById('diagTables');
+        ['inflBody', 'inflFoot', 'policyBody', 'policyFoot', 'constraintBody', 'eventBody'].forEach(function (id) {
+            document.getElementById(id).replaceChildren();
+        });
+
+        if (!window_ || !window_.inflation || !window_.policy) {
+            statusLine.textContent = 'No inflation or policy account for this window yet.';
+            statusLine.classList.remove('d-none');
+            tables.classList.add('d-none');
+            return;
+        }
+        statusLine.classList.add('d-none');
+        tables.classList.remove('d-none');
+
+        const inflBody = document.getElementById('inflBody');
+        const inflFoot = document.getElementById('inflFoot');
+        Object.keys(window_.inflation.terms).forEach(function (key) {
+            termRow(inflBody, INFLATION_LABELS[key] || key, window_.inflation.terms[key]);
+        });
+        const inflationSum = Object.values(window_.inflation.terms).reduce(function (a, b) { return a + b; }, 0);
+        termRow(inflFoot, 'Average inflation', window_.inflation.average, 'fw-bold');
+        termRow(inflFoot, Math.abs(inflationSum - window_.inflation.average) < 1e-9 ? '✓ terms sum to the average' : '✗ terms do not sum to the average', inflationSum - window_.inflation.average, 'text-muted');
+
+        const policyBody = document.getElementById('policyBody');
+        const policyFoot = document.getElementById('policyFoot');
+        const policy = window_.policy;
+        Object.keys(policy.terms || {}).forEach(function (key) {
+            termRow(policyBody, POLICY_LABELS[key] || key, policy.terms[key]);
+        });
+        if (policy.averageTarget !== null) termRow(policyFoot, 'Average target (shadow rate)', policy.averageTarget, 'fw-bold');
+        if (policy.averageRate !== null) termRow(policyFoot, 'Average policy rate', policy.averageRate, 'fw-bold');
+
+        const constraintBody = document.getElementById('constraintBody');
+        Object.keys(policy.constraints || {}).forEach(function (key) {
+            const row = constraintBody.insertRow();
+            if (policy.constraints[key] > 0) row.className = 'table-warning';
+            cell(row, CONSTRAINT_LABELS[key] || key, 'small');
+            cell(row, (policy.constraints[key] * 100).toFixed(0) + '%', 'text-end font-monospace small');
+        });
+
+        const eventBody = document.getElementById('eventBody');
+        const events = window_.events || {};
+        const names = Object.keys(events).sort(function (a, b) { return events[b].count - events[a].count; });
+        names.forEach(function (name) {
+            const row = eventBody.insertRow();
+            cell(row, name, 'font-monospace small');
+            cell(row, String(events[name].count), 'text-end font-monospace small');
+            cell(row, events[name].sum.toFixed(4), 'text-end font-monospace small');
+            cell(row, events[name].maxAbs.toFixed(4), 'text-end font-monospace small');
+        });
+        const shocks = window_.shocks || {};
+        Object.keys(shocks).forEach(function (name) {
+            const row = eventBody.insertRow();
+            cell(row, name + ' (summed innovation)', 'font-monospace small text-muted');
+            cell(row, '—', 'text-end small text-muted');
+            cell(row, shocks[name].toFixed(4), 'text-end font-monospace small text-muted');
+            cell(row, '—', 'text-end small text-muted');
+        });
+        if (names.length === 0 && Object.keys(shocks).length === 0) {
+            const row = eventBody.insertRow();
+            const only = row.insertCell();
+            only.colSpan = 4;
+            only.className = 'text-muted small';
+            only.textContent = 'No jumps drawn this window.';
+        }
     }
 
     function slice() {
@@ -573,6 +755,14 @@
         };
     }
 
+    /** The level chart plots readings, not parts of a whole, so its markers must sit on the line rather than stack on it. */
+    function levelScales() {
+        const scales = baseScales(false, '%');
+        scales.x.stacked = false;
+        scales.y.stacked = false;
+        return scales;
+    }
+
     function renderCharts() {
         const rows = slice();
         const labels = rows.map(function (row) { return 'y' + (row.time || 0).toFixed(1); });
@@ -600,6 +790,27 @@
             }],
         };
 
+        // Quarters a disaster or a crisis struck, as markers on the level so a slump can be read against its cause.
+        const struck = rows.map(function (row) {
+            const events = (row.diagnostics && row.diagnostics.events) || {};
+            return MARKED_EVENTS.some(function (name) { return events[name]; }) ? row.closing_gap : null;
+        });
+        const hasMarkers = struck.some(function (value) { return value !== null; });
+        if (hasMarkers) {
+            levelData.datasets.push({
+                label: 'Demand disaster or credit crisis',
+                data: struck,
+                type: 'line',
+                showLine: false,
+                pointStyle: 'triangle',
+                pointRadius: 7,
+                pointHoverRadius: 9,
+                pointBackgroundColor: INK,
+                pointBorderColor: surface,
+                pointBorderWidth: 2,
+            });
+        }
+
         const stackSets = Object.keys(families).map(function (key) {
             const family = families[key];
             return {
@@ -621,13 +832,13 @@
         // The residual is stacked with them so the bars reconcile to the line, but wears the neutral:
         // it is not a demand channel and must not be coloured like one.
         stackSets.push({
-            label: 'Residual (diffusion)',
+            label: 'Residual (diffusion, clamp, external)',
             backgroundColor: residualColour,
             borderColor: surface,
             borderWidth: 1,
             borderSkipped: false,
             maxBarThickness: 18,
-            data: rows.map(function (row) { return row.diffusion + row.clamp + row.unexplained; }),
+            data: rows.map(function (row) { return row.diffusion + row.clamp + (row.external || 0) + row.unexplained; }),
         });
 
         const tooltip = {
@@ -637,6 +848,7 @@
 
         if (levelChart) {
             levelChart.data = levelData;
+            levelChart.options.plugins.legend.display = hasMarkers;
             levelChart.update('none');
         } else {
             levelChart = new Chart(document.getElementById('gapLevelChart'), {
@@ -645,9 +857,12 @@
                 options: {
                     responsive: true, maintainAspectRatio: false, animation: false,
                     interaction: { mode: 'index', intersect: false },
-                    // One series, so the title above names it and no legend box is needed.
-                    plugins: { legend: { display: false }, tooltip: tooltip },
-                    scales: baseScales(false, '%'),
+                    // One series, so the title above names it; the event markers, when there are any, get a legend.
+                    plugins: {
+                        legend: { display: hasMarkers, position: 'bottom', labels: { color: MUTED, boxWidth: 10, boxHeight: 10, font: { size: 10 }, usePointStyle: true } },
+                        tooltip: tooltip,
+                    },
+                    scales: levelScales(),
                 },
             });
         }
@@ -675,6 +890,69 @@
                 },
             });
         }
+
+        inflChart = renderTermStack('inflStackChart', inflChart, rows, labels, INFLATION_SERIES, INFLATION_RESIDUAL,
+            function (row) { return row.diagnostics && row.diagnostics.inflation ? row.diagnostics.inflation.terms : null; }, tooltip);
+        policyChart = renderTermStack('policyStackChart', policyChart, rows, labels, POLICY_SERIES, [],
+            function (row) { return row.diagnostics && row.diagnostics.policy ? row.diagnostics.policy.terms : null; }, tooltip);
+    }
+
+    /**
+     * A stacked-bar history of one account's terms, series drawn from the validated slots in order. A quarter
+     * recorded before the account existed plots as a gap, not as a zero.
+     */
+    function renderTermStack(canvasId, chart, rows, labels, series, residualTerms, termsOf, tooltip) {
+        const datasets = series.map(function (entry, index) {
+            return {
+                label: entry.label,
+                backgroundColor: palette[index] || residualColour,
+                borderColor: surface,
+                borderWidth: 1,
+                borderSkipped: false,
+                maxBarThickness: 18,
+                data: rows.map(function (row) {
+                    const terms = termsOf(row);
+                    if (!terms) return null;
+                    return entry.terms.reduce(function (sum, key) { return sum + (terms[key] || 0); }, 0);
+                }),
+            };
+        });
+        if (residualTerms.length > 0) {
+            datasets.push({
+                label: 'Residual (noise, clamp)',
+                backgroundColor: residualColour,
+                borderColor: surface,
+                borderWidth: 1,
+                borderSkipped: false,
+                maxBarThickness: 18,
+                data: rows.map(function (row) {
+                    const terms = termsOf(row);
+                    if (!terms) return null;
+                    return residualTerms.reduce(function (sum, key) { return sum + (terms[key] || 0); }, 0);
+                }),
+            });
+        }
+
+        const data = { labels: labels, datasets: datasets };
+        if (chart) {
+            chart.data = data;
+            chart.update('none');
+            return chart;
+        }
+
+        return new Chart(document.getElementById(canvasId), {
+            type: 'bar',
+            data: data,
+            options: {
+                responsive: true, maintainAspectRatio: false, animation: false,
+                interaction: { mode: 'index', intersect: false },
+                plugins: {
+                    legend: { position: 'bottom', labels: { color: MUTED, boxWidth: 10, boxHeight: 10, font: { size: 10 }, usePointStyle: false } },
+                    tooltip: tooltip,
+                },
+                scales: baseScales(true, ' pp'),
+            },
+        });
     }
 
     root.querySelectorAll('[data-gap-window]').forEach(function (button) {
@@ -685,6 +963,7 @@
             });
             title.textContent = button.textContent;
             renderTable();
+            renderDiagnostics();
         });
     });
 
@@ -717,7 +996,9 @@
             const payload = await response.json();
             families = payload.families || {};
             residualColour = payload.residualColour || residualColour;
+            palette = payload.palette || palette;
             live = payload.live;
+            diag = payload.diagnostics || null;
         } catch (error) {
             live = null;
         }
@@ -732,6 +1013,7 @@
         status.classList.add('d-none');
         panel.classList.remove('d-none');
         renderTable();
+        renderDiagnostics();
     }
 
     async function pollHistory() {

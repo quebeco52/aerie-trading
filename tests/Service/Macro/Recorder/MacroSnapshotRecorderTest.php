@@ -8,6 +8,7 @@ use App\Data\MacroFieldRegistry;
 use App\DTO\MacroStateDTO;
 use App\Service\Macro\MacroState;
 use App\Service\Macro\Recorder\MacroSnapshotRecorder;
+use App\Service\Macro\Recorder\QuarterRecord;
 use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\ParameterType;
 use Doctrine\DBAL\Types\Types;
@@ -51,7 +52,7 @@ class MacroSnapshotRecorderTest extends TestCase
      * @param  array<string, mixed>|null       $gapChannels Decomposition to record alongside the vector.
      * @return array{sql: string, params: list<mixed>, types: list<ParameterType|string>}
      */
-    private function capture(MacroStateDTO $dto, ?array $gapChannels = null): array
+    private function capture(MacroStateDTO $dto, ?array $gapChannels = null, ?QuarterRecord $quarter = null): array
     {
         $captured = [];
 
@@ -64,7 +65,7 @@ class MacroSnapshotRecorderTest extends TestCase
                 return 1;
             });
 
-        (new MacroSnapshotRecorder())->recordSnapshot($dto, $connMock, $gapChannels);
+        (new MacroSnapshotRecorder())->recordSnapshot($dto, $connMock, $quarter ?? new QuarterRecord(gapChannels: $gapChannels));
 
         return $captured;
     }
@@ -215,12 +216,14 @@ class MacroSnapshotRecorderTest extends TestCase
         $this->assertCount(count($captured['params']), $captured['types']);
         $this->assertSame(array_keys($captured['params']), array_keys($captured['types']));
 
+        $columns = $this->columnsOf($captured['sql']);
         foreach ($captured['params'] as $index => $value) {
-            $this->assertSame(
-                is_bool($value) ? Types::BOOLEAN : ParameterType::STRING,
-                $captured['types'][$index],
-                "Parameter {$index} is bound with a type its value cannot survive."
-            );
+            $expected = match (true) {
+                is_bool($value) => Types::BOOLEAN,
+                $columns[$index] === 'ticks_per_year' => ParameterType::INTEGER,
+                default => ParameterType::STRING,
+            };
+            $this->assertSame($expected, $captured['types'][$index], "Parameter {$index} is bound with a type its value cannot survive.");
         }
     }
 
@@ -309,5 +312,46 @@ class MacroSnapshotRecorderTest extends TestCase
 
         $byColumn = array_combine($this->columnsOf($without['sql']), $without['params']);
         $this->assertNull($byColumn['gap_channels'], 'An undecomposed quarter must record NULL, never zeros.');
+    }
+
+    /** The diagnostics window and the run's identity ride in the same row, typed as the columns are. */
+    public function testDiagnosticsAndRunIdentityAreRecordedAlongsideTheVector(): void
+    {
+        $dto = MacroStateDTO::fromMacroState(new MacroState());
+        $diagnostics = ['inflation' => ['average' => 0.021, 'terms' => ['target' => 0.02, 'demandPull' => 0.001]]];
+
+        $captured = $this->capture($dto, quarter: new QuarterRecord(
+            gapChannels: ['contributions' => ['monetaryDrag' => -0.004]],
+            diagnostics: $diagnostics,
+            configFingerprint: 'a1b2c3d4e5f6',
+            ticksPerYear: 3600,
+        ));
+        $columns = $this->columnsOf($captured['sql']);
+        $byColumn = array_combine($columns, $captured['params']);
+        $typeOf = array_combine($columns, $captured['types']);
+
+        $this->assertSame($diagnostics, json_decode((string) $byColumn['quarter_diagnostics'], true));
+        $this->assertSame('a1b2c3d4e5f6', $byColumn['config_fingerprint']);
+        $this->assertSame(3600, $byColumn['ticks_per_year']);
+        $this->assertSame(ParameterType::INTEGER, $typeOf['ticks_per_year']);
+    }
+
+    /** A quarter recorded without a QuarterRecord leaves every recorder-owned column NULL. */
+    public function testAVectorAloneLeavesTheRecorderColumnsNull(): void
+    {
+        $captured = [];
+        $connMock = $this->createMock(Connection::class);
+        $connMock->expects($this->once())->method('executeStatement')->willReturnCallback(function (string $sql, array $params) use (&$captured): int {
+            $captured = ['sql' => $sql, 'params' => $params];
+
+            return 1;
+        });
+
+        (new MacroSnapshotRecorder())->recordSnapshot(MacroStateDTO::fromMacroState(new MacroState()), $connMock);
+        $byColumn = array_combine($this->columnsOf($captured['sql']), $captured['params']);
+
+        foreach (['gap_channels', 'quarter_diagnostics', 'config_fingerprint', 'ticks_per_year'] as $column) {
+            $this->assertNull($byColumn[$column], $column);
+        }
     }
 }

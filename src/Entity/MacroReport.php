@@ -14,11 +14,11 @@ use Doctrine\ORM\Mapping as ORM;
  * App\Service\Macro\Recorder\MacroSnapshotRecorder builds its INSERT from that mapping.
  *
  * The table is written by that recorder and read by App\Controller\MacroReportController, both in
- * raw SQL, because a snapshot is an append-only row of 106 scalars rather than an object graph. So
+ * raw SQL, because a snapshot is an append-only row of scalars rather than an object graph. So
  * this class carries mapped properties and no accessors: a getter here would have no caller, and a
  * column here with no matching DTO field fails App\Tests\DTO\MacroFieldRegistryTest rather than
  * quietly recording NULL on every snapshot for the life of the table. The few columns the recorder
- * fills from outside the vector — the surrogate key, the timestamp, the gap decomposition — are named
+ * fills from outside the vector — the surrogate key, the timestamp, the probes' accounts, the run identity — are named
  * in that test's RECORDER_OWNED_COLUMNS, so the exception is declared rather than assumed.
  *
  * Do not delete it to tidy away an unused class — Doctrine would diff the table out of existence.
@@ -42,9 +42,9 @@ class MacroReport
 
     /**
      * The closed quarter's output gap drift decomposition, as App\Service\Macro\Recorder\OutputGapProbe
-     * accumulated it: eighteen channel contributions plus diffusion, clamp and the unexplained residual.
+     * accumulated it: every channel's contribution plus diffusion, clamp, external and unexplained residuals.
      *
-     * JSON rather than eighteen more DECIMAL(10, 4) columns, and not for schema economy: a single channel
+     * JSON rather than a DECIMAL(10, 4) column per channel, and not for schema economy: a single channel
      * delivers on the order of 1e-5 of potential output over a quarter, which four decimal places round
      * to zero. The decomposition is only worth recording at full float precision.
      *
@@ -53,6 +53,21 @@ class MacroReport
      */
     #[ORM\Column(type: Types::JSON, nullable: true)]
     private ?array $gapChannels = null;
+
+    /**
+     * The closed quarter's inflation and policy-rate accounts, quarter averages, constraint shares and shock log, as
+     * App\Service\Macro\Recorder\MacroDiagnosticsProbe accumulated them. NULL where the probe closed no whole quarter.
+     */
+    #[ORM\Column(type: Types::JSON, nullable: true)]
+    private ?array $quarterDiagnostics = null;
+
+    /** App\Service\Macro\MacroConfigFingerprint of the constants that ran the quarter, so a dump can split at a recalibration. */
+    #[ORM\Column(length: 16, nullable: true)]
+    private ?string $configFingerprint = null;
+
+    /** Simulation ticks per year the quarter ran at. */
+    #[ORM\Column(nullable: true)]
+    private ?int $ticksPerYear = null;
 
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4)]
     private ?string $inflation = null;
@@ -121,6 +136,10 @@ class MacroReport
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4)]
     private ?string $marketVolatility = null;
 
+    // The flight-to-safety leg of the term premium reads the smoothed volatility, not the spot reading.
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $marketVolatilityEma = null;
+
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
     private ?string $macroCreditSpread = null;
 
@@ -137,6 +156,10 @@ class MacroReport
 
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4)]
     private ?string $energyPriceIndex = null;
+
+    // The level an energy jump persists in; the index adds the convenience premium to it.
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $energyBasePrice = null;
 
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4)]
     private ?string $energyPriceIndexEma = null;
@@ -223,7 +246,8 @@ class MacroReport
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4)]
     private ?string $interbankLiquiditySpreadEma = null;
 
-    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    // Six places: a calm-quarter premium is a few basis points, which four places would round to a handful of steps.
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 6, nullable: true)]
     private ?string $excessBondPremium = null;
 
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4)]
@@ -313,6 +337,14 @@ class MacroReport
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
     private ?string $termPremiumRegime = null;
 
+    // The curve's fitted premia, recomputed every tick from the regime, flight to safety, restrictive compression and
+    // the sovereign spread: the base premium the tenors are scaled from and the long end's habitat-adjusted premium.
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $nsBaseTermPremium = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $nsLongEndPremium = null;
+
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
     private ?string $perceivedNeutralRate = null;
 
@@ -342,6 +374,10 @@ class MacroReport
 
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
     private ?string $agriCostPushLag = null;
+
+    // Energy's pass-through queue into headline inflation, the counterpart of the food lag above.
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 6, nullable: true)]
+    private ?string $energyCostPushLag = null;
 
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
     private ?string $supercoreInflationEma = null;
@@ -454,10 +490,11 @@ class MacroReport
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
     private ?string $powerHeatRateLog = null;
 
-    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    // Six places: the premium at trend is about ten basis points.
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 6, nullable: true)]
     private ?string $sovereignRiskSpread = null;
 
-    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 6, nullable: true)]
     private ?string $sovereignRiskSpreadEma = null;
 
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
@@ -581,6 +618,14 @@ class MacroReport
     /** The AR(1) demand disturbance's LEVEL; gap_channels carries only what it delivered over the quarter. */
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
     private ?string $demandShock = null;
+
+    /** The part of that level the demand disasters put there, still reverting; the jumps themselves are in quarter_diagnostics. */
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 6, nullable: true)]
+    private ?string $demandDisasterShock = null;
+
+    /** The part the disasters' Merton compensator put there, still reverting. */
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 6, nullable: true)]
+    private ?string $demandDisasterCompensation = null;
 
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
     private ?string $potentialGdpIndex = null;

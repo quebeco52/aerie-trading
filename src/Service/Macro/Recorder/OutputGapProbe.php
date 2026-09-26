@@ -7,8 +7,8 @@ namespace App\Service\Macro\Recorder;
 /**
  * Accumulates the output gap's drift channels, so a move in the gap can be attributed rather than guessed at.
  *
- * App\Service\Macro\Subsystem\MacroAggregateSubsystem::calculateOutputGap sums nineteen demand and supply
- * channels into one drift and returns a single number. Watching that number says the economy turned; it
+ * App\Service\Macro\Subsystem\MacroAggregateSubsystem::calculateOutputGap sums its demand and supply channels
+ * into one drift and returns a single number. Watching that number says the economy turned; it
  * never says which channel turned it, and the channels routinely cancel — a recovery running at +2.4pp/yr
  * of monetary stimulus against -1.5pp/yr of private brakes reads on the dashboard as a quiet +0.9.
  *
@@ -18,10 +18,11 @@ namespace App\Service\Macro\Recorder;
  * which gives the percentage points of gap the channel actually delivered, the quantity a drift
  * decomposition of a recession leg is measured in.
  *
- * The window's arithmetic closes: contributions + diffusion + clamp + unexplained is exactly the change in
- * the gap across the window. `unexplained` is carried rather than assumed away. It is zero while every term
- * reaching the drift also reaches the probe, so a non-zero value on the panel is the one symptom of a
- * channel that was added to the drift sum and not to the decomposition.
+ * The window's arithmetic closes: contributions + diffusion + clamp + external + unexplained is exactly the
+ * change in the gap across the window. The two residuals watch different leaks. `unexplained` compares a tick's
+ * move with the terms it was handed, so it stays at rounding while the subsystem sums the same array it reports,
+ * and flags a term added to the move and not to that array. `external` compares each tick's opening gap with the
+ * last tick's closing one, so it catches anything that writes the gap between ticks, which no per-tick check can.
  *
  * Off unless something turns it on, because only the ticker writes it and only the admin view reads it —
  * and those are two processes, so the reading is carried out of this object rather than read off it.
@@ -61,6 +62,12 @@ final class OutputGapProbe
 
     /** Gap movement no recorded channel accounts for; zero unless the drift and the decomposition have drifted apart. */
     private float $unexplained = 0.0;
+
+    /** Gap moved between ticks, by something other than the drift equation; zero while it is the gap's only writer. */
+    private float $external = 0.0;
+
+    /** Gap the last recorded tick closed at, carried across windows so consecutive windows chain. */
+    private ?float $lastClosingGap = null;
 
     /** Gap the window opened at. */
     private float $openingGap = 0.0;
@@ -118,9 +125,15 @@ final class OutputGapProbe
         }
 
         if (!$this->windowOpen) {
-            $this->openingGap = $openingGap;
+            // A window opens where the last one closed, so a move between them is booked rather than lost.
+            $this->openingGap = $this->lastClosingGap ?? $openingGap;
             $this->windowOpen = true;
         }
+
+        if ($this->lastClosingGap !== null) {
+            $this->external += $openingGap - $this->lastClosingGap;
+        }
+        $this->lastClosingGap = $closingGap;
 
         $drift = 0.0;
         foreach ($terms as $name => $rate) {
@@ -155,6 +168,7 @@ final class OutputGapProbe
         $this->diffusion = 0.0;
         $this->clamp = 0.0;
         $this->unexplained = 0.0;
+        $this->external = 0.0;
         $this->years = 0.0;
         $this->ticks = 0;
         $this->windowOpen = false;
@@ -187,6 +201,7 @@ final class OutputGapProbe
             'diffusion' => $this->diffusion,
             'clamp' => $this->clamp,
             'unexplained' => $this->unexplained,
+            'external' => $this->external,
             'opening_gap' => $this->openingGap,
             'closing_gap' => $this->closingGap,
             'change' => $this->closingGap - $this->openingGap,

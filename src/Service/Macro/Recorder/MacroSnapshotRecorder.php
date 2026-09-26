@@ -23,6 +23,15 @@ class MacroSnapshotRecorder
     /** Column carrying the quarter's gap drift decomposition; not owned by the macro vector either. */
     private const GAP_CHANNELS_COLUMN = 'gap_channels';
 
+    /** Column carrying the quarter's inflation and policy accounts, averages and shock log. */
+    private const DIAGNOSTICS_COLUMN = 'quarter_diagnostics';
+
+    /** Column carrying the hash of the constants that ran the quarter. */
+    private const FINGERPRINT_COLUMN = 'config_fingerprint';
+
+    /** Column carrying the tick rate the quarter ran at. */
+    private const TICKS_PER_YEAR_COLUMN = 'ticks_per_year';
+
     /**
      * Prepared INSERT statement, built once per process from the registry's column list.
      */
@@ -37,7 +46,7 @@ class MacroSnapshotRecorder
      * three separate lists that only a careful eye kept aligned; one insertion in the wrong place
      * silently shifted every following value into its neighbour's column.
      *
-     * The gap decomposition rides along in the same row rather than in a store of its own. It is
+     * The probes' accounts ride along in the same row rather than in a store of their own. They are
      * produced on this exact tick boundary, so writing it here is what makes "which channels moved
      * the gap" and "what state the economy was in" the same record: a reader needs no join, and no
      * alignment can slip when a ticker restart drops a partial window from one series and not the
@@ -46,12 +55,12 @@ class MacroSnapshotRecorder
      * Every value is bound with an explicit type, because DBAL falls back to a string bind for an
      * unnamed one and a bool then reaches the driver as '' rather than as 0.
      *
-     * @param MacroStateDTO             $macroState State snapshot to record.
-     * @param Connection                $conn       Database connection.
-     * @param array<string, mixed>|null $gapChannels Closed quarter's drift decomposition, or null if
-     *                                               the probe could not close one.
+     * @param MacroStateDTO      $macroState State snapshot to record.
+     * @param Connection         $conn       Database connection.
+     * @param QuarterRecord|null $quarter    The probes' closed windows and the run's identity; null records the
+     *                                       vector alone.
      */
-    public function recordSnapshot(MacroStateDTO $macroState, Connection $conn, ?array $gapChannels = null): void
+    public function recordSnapshot(MacroStateDTO $macroState, Connection $conn, ?QuarterRecord $quarter = null): void
     {
         $columns = MacroFieldRegistry::persistedColumns();
 
@@ -68,10 +77,13 @@ class MacroSnapshotRecorder
         }
 
         // Last, matching buildStatement's order. The statement is prepared once per process, so the
-        // column is always named and carries NULL on a quarter with no decomposition rather than
+        // columns are always named and carry NULL on a quarter with no decomposition rather than
         // making the shape of the statement depend on the row.
-        $values[] = $gapChannels === null ? null : json_encode($gapChannels);
-        $types[] = ParameterType::STRING;
+        $values[] = $quarter?->gapChannels === null ? null : json_encode($quarter->gapChannels);
+        $values[] = $quarter?->diagnostics === null ? null : json_encode($quarter->diagnostics);
+        $values[] = $quarter?->configFingerprint;
+        $values[] = $quarter?->ticksPerYear;
+        array_push($types, ParameterType::STRING, ParameterType::STRING, ParameterType::STRING, ParameterType::INTEGER);
 
         $conn->executeStatement($this->statement ??= $this->buildStatement($columns), $values, $types);
     }
@@ -84,7 +96,11 @@ class MacroSnapshotRecorder
      */
     private function buildStatement(array $columns): string
     {
-        $names = array_merge([self::TIMESTAMP_COLUMN], array_values($columns), [self::GAP_CHANNELS_COLUMN]);
+        $names = array_merge(
+            [self::TIMESTAMP_COLUMN],
+            array_values($columns),
+            [self::GAP_CHANNELS_COLUMN, self::DIAGNOSTICS_COLUMN, self::FINGERPRINT_COLUMN, self::TICKS_PER_YEAR_COLUMN]
+        );
         $placeholders = array_fill(0, count($names), '?');
 
         return sprintf(

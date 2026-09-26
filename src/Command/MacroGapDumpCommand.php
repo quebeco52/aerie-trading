@@ -31,8 +31,12 @@ use Symfony\Component\DependencyInjection\Attribute\Autowire;
  *
  * TWO TRAPS FOR A READER OF THE FILE. The `last*_at` episode markers carry -1 for "has not happened", not a
  * simulated time, so an elapsed-since is meaningless until the marker is non-negative. And the state columns
- * are DECIMAL(10, 4): 1bp resolution, enough for quarterly shape work and not for anything finer. Only
- * `gap_channels` is at full float precision.
+ * are mostly DECIMAL(10, 4): 1bp resolution, enough for quarterly shape work and not for anything finer. Only
+ * `gap_channels` and `quarter_diagnostics` are at full float precision, and `quarter_diagnostics.averages` holds
+ * the quarter AVERAGES a comparison with quarterly-averaged data should use instead of the quarter-end columns.
+ *
+ * A dump can span a recalibration. Every row carries the fingerprint of the constants that ran it, and the
+ * command says so when the file holds more than one economy.
  */
 #[AsCommand(
     name: 'app:macro:gap-dump',
@@ -50,6 +54,15 @@ class MacroGapDumpCommand extends Command
 
     /** Columns that are neither part of the macro vector nor a decomposition, and are dropped from the dump. */
     private const NON_SERIES_COLUMNS = ['id', 'recorded_at'];
+
+    /** JSON columns, decoded into the record rather than passed through as strings. */
+    private const JSON_COLUMNS = ['gap_channels', 'quarter_diagnostics'];
+
+    /** Columns that are labels rather than numbers. */
+    private const STRING_COLUMNS = ['config_fingerprint'];
+
+    /** Columns that are counts rather than readings. */
+    private const INTEGER_COLUMNS = ['ticks_per_year'];
 
     public function __construct(
         private EntityManagerInterface $em,
@@ -122,9 +135,13 @@ class MacroGapDumpCommand extends Command
         }
 
         $decomposed = 0;
+        $diagnosed = 0;
+        $fingerprints = [];
         foreach ($rows as $index => $row) {
             $record = $this->toRecord($row, $index + 1);
             $decomposed += isset($record['gap_channels']) ? 1 : 0;
+            $diagnosed += isset($record['quarter_diagnostics']) ? 1 : 0;
+            $fingerprints[] = $record['config_fingerprint'] ?? null;
             fwrite($handle, json_encode($record, JSON_THROW_ON_ERROR) . "\n");
         }
 
@@ -151,8 +168,49 @@ class MacroGapDumpCommand extends Command
                 \count($rows)
             ));
         }
+        if ($diagnosed < \count($rows)) {
+            $io->note(sprintf(
+                '%d of %d quarters carry no inflation, policy or shock diagnostics.',
+                \count($rows) - $diagnosed,
+                \count($rows)
+            ));
+        }
+
+        // Pooling two calibrations measures neither, so a file that holds more than one is said to.
+        $segments = self::segments($fingerprints);
+        if (\count($segments) > 1) {
+            $io->warning(array_merge(
+                ['The dump spans ' . \count($segments) . ' constant sets; split on config_fingerprint before measuring:'],
+                array_map(
+                    static fn (array $segment): string => sprintf('%s  quarters %d-%d', $segment['fingerprint'] ?? 'unrecorded', $segment['from'], $segment['to']),
+                    $segments
+                )
+            ));
+        }
 
         return Command::SUCCESS;
+    }
+
+    /**
+     * Runs of consecutive quarters recorded under one fingerprint, in file order.
+     *
+     * @param  list<string|null> $fingerprints One per quarter, in file order.
+     * @return list<array{fingerprint: string|null, from: int, to: int}> 1-based quarter ranges.
+     */
+    public static function segments(array $fingerprints): array
+    {
+        $segments = [];
+        foreach ($fingerprints as $index => $fingerprint) {
+            $last = array_key_last($segments);
+            if ($last !== null && $segments[$last]['fingerprint'] === $fingerprint) {
+                $segments[$last]['to'] = $index + 1;
+
+                continue;
+            }
+            $segments[] = ['fingerprint' => $fingerprint, 'from' => $index + 1, 'to' => $index + 1];
+        }
+
+        return $segments;
     }
 
     /**
@@ -172,9 +230,21 @@ class MacroGapDumpCommand extends Command
                 continue;
             }
 
-            if ($column === 'gap_channels') {
+            if (\in_array($column, self::JSON_COLUMNS, true)) {
                 $decoded = \is_string($value) && $value !== '' ? json_decode($value, true) : null;
-                $record['gap_channels'] = \is_array($decoded) ? $decoded : null;
+                $record[$column] = \is_array($decoded) ? $decoded : null;
+
+                continue;
+            }
+
+            if (\in_array($column, self::STRING_COLUMNS, true)) {
+                $record[$column] = $value === null ? null : (string) $value;
+
+                continue;
+            }
+
+            if (\in_array($column, self::INTEGER_COLUMNS, true)) {
+                $record[$column] = $value === null ? null : (int) $value;
 
                 continue;
             }

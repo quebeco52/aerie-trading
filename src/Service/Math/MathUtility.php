@@ -698,9 +698,7 @@ class MathUtility
             return 0.0;
         }
 
-        $cappedUpMean = (1.0 - exp(-$etaUp * $cap)) / $etaUp;
-        $cappedDownMean = (1.0 - exp(-$etaDown * $cap)) / $etaDown;
-        $compensator = $lambda * (($pUp * $cappedUpMean) - ((1.0 - $pUp) * $cappedDownMean)) * $dt;
+        $compensator = $this->calculateKouCompensator($lambda, $pUp, $etaUp, $etaDown, $cap, $dt);
 
         $jump = 0.0;
         if ($this->checkProbability($lambda * $dt)) {
@@ -710,6 +708,36 @@ class MathUtility
         }
 
         return $jump - $compensator;
+    }
+
+    /**
+     * The expected capped Kou jump over dt, the part calculateCompensatedKouJump subtracts: a caller that has to
+     * account for the jump and its compensation separately adds it back to recover the jump drawn.
+     *
+     * @param float $lambda  Jump arrivals per year.
+     * @param float $pUp     Probability that a jump is upwards.
+     * @param float $etaUp   Exponential rate of the up jump (mean size 1/etaUp).
+     * @param float $etaDown Exponential rate of the down jump (mean size 1/etaDown).
+     * @param float $cap     Absolute cap on a single jump, in the units of the process.
+     * @param float $dt      Time step in years.
+     * @return float Expected jump over dt, signed.
+     */
+    public function calculateKouCompensator(
+        float $lambda,
+        float $pUp,
+        float $etaUp,
+        float $etaDown,
+        float $cap,
+        float $dt
+    ): float {
+        if ($lambda <= 0.0 || $etaUp <= 0.0 || $etaDown <= 0.0 || $cap <= 0.0 || $dt <= 0.0) {
+            return 0.0;
+        }
+
+        $cappedUpMean = (1.0 - exp(-$etaUp * $cap)) / $etaUp;
+        $cappedDownMean = (1.0 - exp(-$etaDown * $cap)) / $etaDown;
+
+        return $lambda * (($pUp * $cappedUpMean) - ((1.0 - $pUp) * $cappedDownMean)) * $dt;
     }
 
     /**

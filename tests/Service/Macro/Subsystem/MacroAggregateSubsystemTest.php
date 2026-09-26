@@ -1151,12 +1151,83 @@ class MacroAggregateSubsystemTest extends TestCase
         );
 
         // Every channel in the drift is named, so the panel cannot silently drop one.
-        $this->assertCount(21, $window['contributions']);
+        $this->assertCount(24, $window['contributions']);
         $this->assertArrayHasKey('productivitySupply', $window['contributions']);
         $this->assertArrayHasKey('premiumDrag', $window['contributions']);
+        $this->assertArrayHasKey('premiumCompensator', $window['contributions']);
+        $this->assertArrayHasKey('demandDisaster', $window['contributions']);
+        $this->assertArrayHasKey('disasterCompensator', $window['contributions']);
         $this->assertArrayHasKey('monetaryDrag', $window['contributions']);
         $this->assertArrayHasKey('automaticStabiliser', $window['contributions']);
         $this->assertEqualsWithDelta(array_sum($window['contributions']), $window['drift'], 1e-15);
+    }
+
+    /**
+     * The disturbance is linear, so its noise, its disasters and their compensator are three processes summing to
+     * it exactly: the split attributes the level without changing it, and a disaster decays as the whole does.
+     */
+    public function testTheDisturbanceSplitsIntoNoiseDisastersAndCompensationThatSumToIt(): void
+    {
+        $probe = new OutputGapProbe();
+        $probe->enable();
+        $math = new class extends MathUtility {
+            private int $gate = 0;
+
+            public function generateStandardNormal(): float
+            {
+                return 0.3;
+            }
+
+            // Exactly one disaster, on the first tick.
+            public function checkProbability(float $probability): bool
+            {
+                return $this->gate++ === 0;
+            }
+
+            public function generateUniform(): float
+            {
+                return 0.99; // down
+            }
+
+            public function generateExponential(float $rate = 1.0): float
+            {
+                return 0.04;
+            }
+        };
+        $subsystem = new MacroAggregateSubsystem($math, $probe);
+        $state = $this->probedState();
+        $dt = 1.0 / 360.0;
+
+        for ($tick = 0; $tick < 90; ++$tick) {
+            $state->outputGap = $subsystem->calculateOutputGap($state, 0.03, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, $dt, 1.0);
+        }
+
+        $decay = 1.0 - (MacroAggregateSubsystem::DEMAND_SHOCK_REVERSION * $dt);
+        $this->assertEqualsWithDelta(-0.04 * $decay ** 89, $state->demandDisasterShock, 1e-12);
+
+        // What is left is the Gaussian disturbance alone, as if no disaster or compensator had ever touched it.
+        $noise = 0.004;
+        for ($tick = 0; $tick < 90; ++$tick) {
+            $noise = ($noise * $decay) + (MacroAggregateSubsystem::DEMAND_SHOCK_SIGMA * sqrt($dt) * 0.3);
+        }
+        $this->assertEqualsWithDelta($noise, $state->demandShock - $state->demandDisasterShock + $state->demandDisasterCompensation, 1e-12);
+        $this->assertLessThan(0.0, $probe->snapshot()['current']['contributions']['demandDisaster']);
+    }
+
+    /** At a zero premium the kinked response is silent and the compensator alone is on the panel, as its own line. */
+    public function testThePremiumCompensatorIsItsOwnChannel(): void
+    {
+        $probe = new OutputGapProbe();
+        $probe->enable();
+        $subsystem = $this->probedSubsystem($probe, 0.0);
+        $state = $this->probedState();
+        $state->excessBondPremium = 0.0;
+
+        $subsystem->calculateOutputGap($state, 0.03, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0);
+        $contributions = $probe->snapshot()['current']['contributions'];
+
+        $this->assertSame(0.0, $contributions['premiumDrag']);
+        $this->assertGreaterThan(0.0, $contributions['premiumCompensator'], 'The adverse-only drag is compensated upward.');
     }
 
     // --- Productivity Shocks ---

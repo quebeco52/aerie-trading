@@ -199,6 +199,8 @@ readonly class MacroStateDTO
         public float $inventoryStockGap = 0.0,
         public float $inventoryStockGapEma = 0.0,
         public float $demandShock = 0.0,
+        public float $demandDisasterShock = 0.0,
+        public float $demandDisasterCompensation = 0.0,
         public float $energyInventoryIndex = MacroEngine::COMMODITY_INVENTORY_BASELINE,
         public float $energyInventoryIndexEma = MacroEngine::COMMODITY_INVENTORY_BASELINE,
         public float $capacityUtilizationRate = MacroEngine::CU_BASELINE,

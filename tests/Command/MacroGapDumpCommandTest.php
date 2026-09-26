@@ -97,6 +97,37 @@ class MacroGapDumpCommandTest extends TestCase
         $this->assertNull($this->record(['gap_channels' => ''])['gap_channels']);
     }
 
+    /** The diagnostics window is decoded like the decomposition, and the run identity keeps its own types. */
+    public function testDiagnosticsAreDecodedAndTheRunIdentityKeepsItsTypes(): void
+    {
+        $diagnostics = ['averages' => ['outputGap' => -0.0123], 'events' => ['energy' => ['count' => 1, 'sum' => 0.2, 'maxAbs' => 0.2]]];
+
+        $record = $this->record([
+            'quarter_diagnostics' => json_encode($diagnostics),
+            'config_fingerprint' => '00e1b2c3d4f5',
+            'ticks_per_year' => '3600',
+        ]);
+
+        $this->assertSame($diagnostics, $record['quarter_diagnostics']);
+        $this->assertSame('00e1b2c3d4f5', $record['config_fingerprint'], 'A hash with a leading zero is a label, not a number.');
+        $this->assertSame(3600, $record['ticks_per_year']);
+        $this->assertNull($this->record(['quarter_diagnostics' => null])['quarter_diagnostics']);
+    }
+
+    /** A run recalibrated mid-dump splits where its constants changed, and nowhere else. */
+    public function testSegmentsSplitWhereTheConstantsChanged(): void
+    {
+        $this->assertSame(
+            [
+                ['fingerprint' => null, 'from' => 1, 'to' => 2],
+                ['fingerprint' => 'aaa', 'from' => 3, 'to' => 5],
+                ['fingerprint' => 'bbb', 'from' => 6, 'to' => 6],
+            ],
+            MacroGapDumpCommand::segments([null, null, 'aaa', 'aaa', 'aaa', 'bbb'])
+        );
+        $this->assertCount(1, MacroGapDumpCommand::segments(['aaa', 'aaa']));
+    }
+
     /**
      * Channel contributions are the reason the column is JSON. A value at 1e-6 is a real reading of a channel
      * that barely fired, and DECIMAL(10, 4) would have recorded it as zero.

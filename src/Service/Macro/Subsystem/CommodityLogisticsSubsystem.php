@@ -4,6 +4,7 @@ namespace App\Service\Macro\Subsystem;
 
 use App\Service\Macro\MacroEngine;
 use App\Service\Macro\MacroState;
+use App\Service\Macro\Recorder\MacroDiagnosticsProbe;
 use App\Service\Math\MathUtility;
 
 /**
@@ -179,7 +180,9 @@ class CommodityLogisticsSubsystem
     public const CRACK_SEASONAL_PEAK = 0.46;
 
     public function __construct(
-        private readonly MathUtility $mathUtility
+        private readonly MathUtility $mathUtility,
+        /** Logs the jumps this subsystem draws. Null in a test or a headless harness, off everywhere the ticker is not. */
+        private readonly ?MacroDiagnosticsProbe $diagnostics = null
     ) {}
 
     /**
@@ -223,6 +226,9 @@ class CommodityLogisticsSubsystem
             dt: $dt
         );
         $state->energyBasePrice = max(10.0, min(350.0, $baseProcess * $jumpData['multiplier']));
+        if ($jumpData['exponent'] !== null) {
+            $this->diagnostics?->recordEvent('energy', $jumpData['exponent']);
+        }
 
         // Litzenberger & Rabinowitz (1995) physical commodity inventory buffer stock evolution.
         $demandDraw = $state->globalDemandGapEma * self::COMMODITY_INVENTORY_DRAWDOWN_SENSITIVITY * 100.0;
@@ -285,6 +291,7 @@ class CommodityLogisticsSubsystem
             $severity = $this->mathUtility->generateParetoSeverity($severityScale, self::CATASTROPHE_SEVERITY_ALPHA, self::CATASTROPHE_SEVERITY_CAP);
             $state->catastropheLossIndex += $severity;
             $largestEvent = max($largestEvent, $severity);
+            $this->diagnostics?->recordEvent('catastrophe', $severity);
         }
 
         if ($largestEvent >= self::SYSTEMIC_CATASTROPHE_SEVERITY) {
@@ -330,6 +337,9 @@ class CommodityLogisticsSubsystem
         );
 
         $state->gasOilRatioLog = max(-2.0, min(2.0, log($ratio * $jumpData['multiplier'])));
+        if ($jumpData['exponent'] !== null) {
+            $this->diagnostics?->recordEvent('naturalGas', $jumpData['exponent']);
+        }
 
         $timeOfYear = fmod($state->totalTime, 1.0);
         $seasonalMultiplier = 1.0 + (self::GAS_SEASONALITY_AMPLITUDE * cos(2.0 * M_PI * $timeOfYear));
@@ -490,6 +500,7 @@ class CommodityLogisticsSubsystem
         $chi = $result['chi'];
         if ($jumpData['multiplier'] !== 1.0) {
             $chi += log($jumpData['multiplier']);
+            $this->diagnostics?->recordEvent('agriculture', (float) $jumpData['exponent']);
         }
 
         $state->agriChi = $chi;

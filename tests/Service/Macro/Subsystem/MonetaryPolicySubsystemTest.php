@@ -4,6 +4,7 @@ namespace App\Tests\Service\Macro\Subsystem;
 
 use App\Service\Macro\MacroEngine;
 use App\Service\Macro\MacroState;
+use App\Service\Macro\Recorder\MacroDiagnosticsProbe;
 use App\Service\Macro\Subsystem\MacroAggregateSubsystem;
 use App\Service\Macro\Subsystem\MonetaryPolicySubsystem;
 use App\Service\Math\MathUtility;
@@ -1105,6 +1106,66 @@ class MonetaryPolicySubsystemTest extends TestCase
 
         $this->assertGreaterThan(MacroEngine::SYSTEM_DEPOSIT_BETA_BASE, $state->systemDepositBeta);
         $this->assertLessThan(MacroEngine::SYSTEM_DEPOSIT_BETA_BASE + 0.002, $state->systemDepositBeta, 'One trading day moves the system beta by a fraction of a point.');
+    }
+
+    // --- Diagnostics: what held the rate ---
+
+    /** @return array<string, float> Constraint => share of one recorded tick. */
+    private function constraintsFor(MacroState $state, float $targetRate): array
+    {
+        $probe = new MacroDiagnosticsProbe();
+        $probe->enable();
+        (new MonetaryPolicySubsystem(new MathUtility(), $probe))->updatePolicyRate($state, $targetRate, 0.25);
+
+        return $probe->snapshot()['current']['policy']['constraints'];
+    }
+
+    public function testTheEvansHoldIsReportedWhileItPinsTheRate(): void
+    {
+        $state = new MacroState();
+        $state->policyRate = 0.0;
+        $state->unemploymentRateEma = 0.07;
+        $state->inflationEma = 0.018;
+        $state->tipsBreakeven = 0.018;
+
+        $constraints = $this->constraintsFor($state, 0.03);
+
+        $this->assertSame(1.0, $constraints['evansHold']);
+        $this->assertSame(0.0, $constraints['hikeCeiling'], 'A held rate is not also rationed by the ceiling.');
+    }
+
+    public function testTheHikeCeilingIsReportedPastItsKnee(): void
+    {
+        $state = new MacroState();
+        $state->policyRate = 0.02;
+        $state->inflation = 0.025;
+
+        $this->assertSame(1.0, $this->constraintsFor($state, 0.09)['hikeCeiling'], 'A 700bp distance is far past the 150bp knee.');
+        $this->assertSame(0.0, $this->constraintsFor($state, 0.025)['hikeCeiling'], 'A 50bp distance adjusts freely.');
+    }
+
+    public function testAMidCycleRateMovesUnconstrained(): void
+    {
+        $state = new MacroState();
+        $state->policyRate = 0.03;
+        $state->inflation = 0.022;
+
+        $constraints = $this->constraintsFor($state, 0.035);
+
+        $this->assertSame(['lowerBound' => 0.0, 'evansHold' => 0.0, 'hikeCeiling' => 0.0, 'panicSpeed' => 0.0, 'targetCap' => 0.0], $constraints);
+    }
+
+    public function testTheLowerBoundAndPanicSpeedAreReported(): void
+    {
+        $atFloor = new MacroState();
+        $atFloor->policyRate = 0.0;
+        $atFloor->unemploymentRateEma = MacroEngine::NATURAL_UNEMPLOYMENT;
+        $this->assertSame(1.0, $this->constraintsFor($atFloor, MacroEngine::EFFECTIVE_LOWER_BOUND)['lowerBound']);
+
+        $panic = new MacroState();
+        $panic->policyRate = 0.04;
+        $panic->inflation = 0.08;
+        $this->assertSame(1.0, $this->constraintsFor($panic, 0.045)['panicSpeed']);
     }
 
     /** Debt inside the 70% the Bohn reaction defends and no market premium on it: the curve carries no fiscal term. */
