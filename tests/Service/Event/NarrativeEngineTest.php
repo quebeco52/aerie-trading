@@ -92,12 +92,26 @@ class NarrativeEngineTest extends TestCase
         ]);
         $this->assertStringContainsString('1.50%', $qe);
 
-        $valuation = $this->engine->generateLore(ShockEvent::SOVEREIGN_WEALTH_DEPLOYMENT, [
-            'erp_pct' => '7.50',
-            'output_gap_pct' => '-1.20',
+        $deployment = $this->engine->generateLore(ShockEvent::SOVEREIGN_WEALTH_DEPLOYMENT, [
+            'swf_trade_pct' => '2.36',
+            'swf_weight_pct' => '3.51',
+            'swf_target_pct' => '4.93',
+            'swf_size_gdp_pct' => '109',
+            'swf_months' => '3',
         ]);
-        $this->assertStringContainsString('7.50%', $valuation);
-        $this->assertStringContainsString('-1.20%', $valuation);
+        $this->assertStringContainsString('2.36%', $deployment);
+        $this->assertStringContainsString('3.51%', $deployment);
+        $this->assertStringContainsString('4.93%', $deployment);
+
+        $trim = $this->engine->generateLore(ShockEvent::SOVEREIGN_WEALTH_TRIM, [
+            'swf_trade_pct' => '1.10',
+            'swf_weight_pct' => '6.40',
+            'swf_target_pct' => '4.93',
+            'swf_size_gdp_pct' => '115',
+            'swf_months' => '3',
+        ]);
+        $this->assertStringContainsString('1.10%', $trim);
+        $this->assertStringContainsString('sell', $trim);
     }
 
     public function testSystemicEventsDoNotContainFantasyLore(): void
@@ -109,6 +123,7 @@ class NarrativeEngineTest extends TestCase
             ShockEvent::YIELD_CURVE_INVERSION_ALARM,
             ShockEvent::TITAN_INTERVENTION,
             ShockEvent::SOVEREIGN_WEALTH_DEPLOYMENT,
+            ShockEvent::SOVEREIGN_WEALTH_TRIM,
         ];
 
         foreach ($eventsToVerify as $eventType) {

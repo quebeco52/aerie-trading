@@ -7,6 +7,7 @@ namespace App\Service\Macro;
 use App\Service\Macro\Subsystem\AssetMarketSubsystem;
 use App\Service\Macro\Subsystem\CommodityLogisticsSubsystem;
 use App\Service\Macro\Subsystem\CreditFiscalSubsystem;
+use App\Service\Macro\Subsystem\SovereignFundSubsystem;
 use App\Service\Macro\Subsystem\LaborMarketSubsystem;
 use App\Service\Macro\Subsystem\MacroAggregateSubsystem;
 use App\Service\Macro\Subsystem\MonetaryPolicySubsystem;
@@ -31,6 +32,7 @@ final class MacroConfigFingerprint
         CommodityLogisticsSubsystem::class,
         AssetMarketSubsystem::class,
         CreditFiscalSubsystem::class,
+        SovereignFundSubsystem::class,
     ];
 
     // --- Format ---

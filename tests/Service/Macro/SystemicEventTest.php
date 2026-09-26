@@ -115,21 +115,56 @@ class SystemicEventTest extends TestCase
         $this->assertSame(ShockEvent::TITAN_INTERVENTION, $this->fire($state), 'The launch lands on one tick and must be reported through the cooldown.');
     }
 
-    public function testDeepValueDeploymentRequiresTheCycleToBeTurningUp(): void
+    public function testTheReserveFundsBuyingProgrammeIsReportedOnTheTickItStarts(): void
     {
-        $stillFalling = new MacroState();
-        $stillFalling->equityRiskPremium = MacroEngine::SYSTEMIC_DEPLOYMENT_ERP_THRESHOLD + 0.01;
-        $stillFalling->outputGap = -0.04;
-        $stillFalling->outputGapEma = -0.02; // Gap still deteriorating below its own average.
+        $state = new MacroState();
+        $state->totalTime = 7.25;
+        $state->lastSovereignRebalanceAt = $state->totalTime;
+        $state->sovereignFundRebalanceBacklog = 1.0e9;
+        $this->assertSame(ShockEvent::SOVEREIGN_WEALTH_DEPLOYMENT, $this->fire($state));
 
-        $this->assertNull($this->fire($stillFalling), 'Capital must not deploy while the cycle is still falling.');
+        // The next tick of the same programme is trading, not news.
+        $state->totalTime += 1.0 / self::TICKS_PER_YEAR;
+        $state->eventCooldownTimer = 0.0;
+        $this->assertNull($this->fire($state), 'A programme in progress is not a new headline.');
+    }
 
-        $turning = new MacroState();
-        $turning->equityRiskPremium = MacroEngine::SYSTEMIC_DEPLOYMENT_ERP_THRESHOLD + 0.01;
-        $turning->outputGap = -0.01;
-        $turning->outputGapEma = -0.03; // Gap recovering from the trough.
+    public function testTheReserveFundsSellingProgrammeIsReportedAsATrim(): void
+    {
+        $state = new MacroState();
+        $state->totalTime = 3.5;
+        $state->lastSovereignRebalanceAt = $state->totalTime;
+        $state->sovereignFundRebalanceBacklog = -1.0e9;
 
-        $this->assertSame(ShockEvent::SOVEREIGN_WEALTH_DEPLOYMENT, $this->fire($turning));
+        $this->assertSame(ShockEvent::SOVEREIGN_WEALTH_TRIM, $this->fire($state));
+    }
+
+    public function testAReserveFundProgrammeIsNotLostToAnActiveCooldown(): void
+    {
+        $state = new MacroState();
+        $state->totalTime = 12.5;
+        $state->highYieldCreditSpread = MacroEngine::SYSTEMIC_CREDIT_SEIZURE_SPREAD + 0.02;
+        $this->assertSame(ShockEvent::CREDIT_MARKET_SEIZURE, $this->fire($state));
+
+        $state->totalTime += 1.0 / self::TICKS_PER_YEAR;
+        $state->highYieldCreditSpread = 0.0;
+        $state->lastSovereignRebalanceAt = $state->totalTime;
+        $state->sovereignFundRebalanceBacklog = 5.0e8;
+        $this->assertSame(
+            ShockEvent::SOVEREIGN_WEALTH_DEPLOYMENT,
+            $this->fire($state),
+            'The programme starts on one tick and must be reported through the cooldown.'
+        );
+    }
+
+    public function testDeepValuationsAloneNoLongerManufactureAFundHeadline(): void
+    {
+        $state = new MacroState();
+        $state->equityRiskPremium = 0.09;
+        $state->outputGap = -0.01;
+        $state->outputGapEma = -0.03;
+
+        $this->assertNull($this->fire($state), 'Only a real rebalance by the fund is reported as its buying.');
     }
 
     public function testMostSevereConditionWinsWhenSeveralTriggerTogether(): void

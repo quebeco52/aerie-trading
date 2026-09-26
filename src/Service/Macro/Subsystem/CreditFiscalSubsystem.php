@@ -79,10 +79,6 @@ class CreditFiscalSubsystem
     /** Poisson intensity of severe interbank credit freeze/panic events. */
     public const INTERBANK_JUMP_PROBABILITY = 0.05;
 
-    // --- Sovereign Debt Dynamics (Greenwood-Vayanos 2014) ---
-    /** Baseline structural primary fiscal deficit as a fraction of GDP. */
-    public const SOVEREIGN_STRUCTURAL_DEFICIT = 0.020;
-
     // --- Corporate Default Dynamics (Moody's all-rated, Vasicek single factor) ---
     /** Asset correlation of the all-rated default rate: ~0.1 puts the Vasicek median at the post-1983 record's ~1.2% against its 1.6% mean (0.2 gives 0.8%); fits over 1920-2008 reach 0.2 on the 1930s, a tail this macro index already generates itself. */
     public const CORPORATE_DEFAULT_RHO = 0.10;
@@ -387,7 +383,8 @@ class CreditFiscalSubsystem
      *
      * Accumulates sovereign debt-to-GDP ratio from primary deficit flow, net interest expenses,
      * and nominal GDP growth erosion:
-     *   d(Debt/GDP) = [ (G - T)/GDP + (r_10y - g_nominal) * (Debt/GDP) ] * dt
+     *   d(Debt/GDP) = [ (G - T - NIRC)/GDP + (r_10y - g_nominal) * (Debt/GDP) ] * dt
+     * where NIRC is the sovereign fund's draw on its expected returns, revenue like a tax.
      *
      * @param MacroState $state Current macroeconomic state.
      * @param float      $dt    Time increment in years.
@@ -402,7 +399,10 @@ class CreditFiscalSubsystem
         $excessDebt = max(0.0, $state->sovereignDebtToGdp - MacroEngine::SOVEREIGN_DEBT_NEUTRAL_THRESHOLD);
         $bohnFiscalAdjustment = self::BOHN_FISCAL_REACTION_SENSITIVITY * $excessDebt * $state->nominalGdpIndex;
 
-        $primaryDeficit = ($govtSpendingFlow - $taxRevenue) + (self::SOVEREIGN_STRUCTURAL_DEFICIT * $state->nominalGdpIndex) - $bohnFiscalAdjustment;
+        // Singapore's Net Investment Returns Contribution: the sovereign fund's draw is budget revenue (zero with no fund).
+        $fundContribution = $state->sovereignFundDrawToGdp * $state->nominalGdpIndex;
+
+        $primaryDeficit = ($govtSpendingFlow - $taxRevenue) + (MacroEngine::SOVEREIGN_STRUCTURAL_DEFICIT * $state->nominalGdpIndex) - $bohnFiscalAdjustment - $fundContribution;
         $state->primaryDeficitToGdp = $primaryDeficit / max(0.1, $state->nominalGdpIndex);
         $interestCost = $state->yield10yEma * $state->sovereignDebtToGdp;
 

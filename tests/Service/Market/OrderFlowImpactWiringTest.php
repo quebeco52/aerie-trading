@@ -422,4 +422,75 @@ class OrderFlowImpactWiringTest extends TestCase
         $this->assertSame(0.0, $stock->getImpactVarianceEma());
         $this->assertEqualsWithDelta(100.0, (float) $stock->getPrice(), 1e-12);
     }
+
+    // --- Sovereign Fund Execution ---
+
+    /** A second name with a different price, share count and float, so a pro-rata split is visible. */
+    private function secondStock(): Stock
+    {
+        $stock = $this->stock()->setTicker('BETA');
+        $stock->setPrice('50.00')->setSharesOutstanding('200000000')->setPublicFloatPercentage('0.50');
+        $stock->setTurnoverRatio(LiquidityEngine::structuralTurnoverRatio(0.28));
+
+        return $stock;
+    }
+
+    public function testTheSovereignFundsTradeIsSpreadOverTheFloat(): void
+    {
+        $apex = $this->stock();
+        $beta = $this->secondStock();
+        $boardFloat = (100.0 * 1.0e8 * 0.90) + (50.0 * 2.0e8 * 0.50);
+        $trade = 0.002 * $boardFloat;
+
+        // Each name takes its float's share of the currency traded, in shares at the price the tick opens on.
+        $expectedApex = $this->liquidity->permanentImpact($apex, $trade * (9.0e9 / $boardFloat) / 100.0);
+        $expectedBeta = $this->liquidity->permanentImpact($beta, $trade * (5.0e9 / $boardFloat) / 50.0);
+
+        $this->tracker()->updateStocks(
+            [$apex, $beta],
+            1.0 / 14400.0,
+            false,
+            new MacroStateDTO(sovereignFundTrade: $trade, boardFloatCap: $boardFloat)
+        );
+
+        $this->assertGreaterThan(0.0, $expectedApex);
+        $this->assertEqualsWithDelta(100.0 * exp($expectedApex), (float) $apex->getPrice(), 1e-9);
+        $this->assertEqualsWithDelta(50.0 * exp($expectedBeta), (float) $beta->getPrice(), 1e-9);
+    }
+
+    public function testTheSovereignFundsImpactIsNotChargedToTheIdiosyncraticBudget(): void
+    {
+        $stock = $this->stock();
+        $boardFloat = 100.0 * 1.0e8 * 0.90;
+
+        $this->tracker()->updateStocks(
+            [$stock],
+            1.0 / 14400.0,
+            false,
+            new MacroStateDTO(sovereignFundTrade: 0.002 * $boardFloat, boardFloatCap: $boardFloat)
+        );
+
+        $this->assertGreaterThan(100.0, (float) $stock->getPrice(), 'The fund\'s buying moves the price.');
+        $this->assertSame(0.0, $stock->getImpactVarianceEma(), 'A flow that hits every name at once is systematic, not this name\'s own variance.');
+    }
+
+    public function testTheBoardIsReportedAsTheSovereignFundReadsIt(): void
+    {
+        $apex = $this->stock();
+        $beta = $this->secondStock();
+        $boardFloat = 9.0e9 + 5.0e9;
+
+        $result = $this->tracker()->updateStocks(
+            [$apex, $beta],
+            1.0 / 14400.0,
+            false,
+            new MacroStateDTO(sovereignFundTrade: 0.002 * $boardFloat, boardFloatCap: $boardFloat)
+        );
+
+        $apexReturn = ((float) $apex->getPrice() / 100.0) - 1.0;
+        $betaReturn = ((float) $beta->getPrice() / 50.0) - 1.0;
+        $this->assertEqualsWithDelta((9.0 * $apexReturn + 5.0 * $betaReturn) / 14.0, $result['board_price_return'], 1e-12, 'Float-weighted at the opening float.');
+        $this->assertEqualsWithDelta(array_sum($result['float_caps']), $result['board_float_cap'], 1e-3);
+        $this->assertSame(0.0, $result['board_dividend_cash']);
+    }
 }

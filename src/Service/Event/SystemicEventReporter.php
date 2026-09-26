@@ -47,6 +47,11 @@ class SystemicEventReporter
             'dsr_pct' => number_format($macro->householdDebtServiceRatio * 100.0, 1),
             'debt_to_income_pct' => number_format($macro->householdDebtToIncome * 100.0, 0),
             'credit_gap_pct' => number_format($macro->creditToGdpGapEma * 100.0, 1),
+            'swf_trade_pct' => number_format(abs($macro->sovereignFundRebalanceShare) * 100.0, 2),
+            'swf_weight_pct' => number_format($macro->sovereignFundDomesticWeight * 100.0, 2),
+            'swf_target_pct' => number_format($macro->sovereignFundTargetWeight * 100.0, 2),
+            'swf_size_gdp_pct' => number_format($macro->sovereignFundToGdp * 100.0, 0),
+            'swf_months' => number_format($macro->sovereignFundRebalanceMonthsLeft, 0),
         ];
 
         $monthMove = $this->priceChangeFeed->changeForTicker((string) $benchmark->getTicker(), (float) $benchmark->getPrice());

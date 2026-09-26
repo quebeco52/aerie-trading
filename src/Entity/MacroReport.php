@@ -692,6 +692,34 @@ class MacroReport
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
     private ?string $highYieldCreditSpread = null;
 
+    // --- Sovereign Reserve Fund ---
+    // The stationary readings only. The sleeves themselves are currency amounts that compound with the economy
+    // forever, so they live on the wire and in Redis; these ratios divide the economy back out.
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $sovereignFundToGdp = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 6, nullable: true)]
+    private ?string $sovereignFundDomesticWeight = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 6, nullable: true)]
+    private ?string $sovereignFundTargetWeight = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 6, nullable: true)]
+    private ?string $sovereignFundOwnershipShare = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 6, nullable: true)]
+    private ?string $sovereignFundDrawToGdp = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 6, nullable: true)]
+    private ?string $sovereignFundRebalanceShare = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $sovereignFundRebalanceMonthsLeft = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 15, scale: 4, nullable: true)]
+    private ?string $foreignEquityIndex = null;
+
     // --- Episode Markers ---
     // Simulated times, so they carry total_time's width rather than the vector's. They are what lets an
     // episode be cut out of the run by cause instead of by eye.
@@ -701,6 +729,9 @@ class MacroReport
 
     #[ORM\Column(type: Types::DECIMAL, precision: 14, scale: 6, nullable: true)]
     private ?string $lastCatastropheAt = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 14, scale: 6, nullable: true)]
+    private ?string $lastSovereignRebalanceAt = null;
 
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
     private ?string $lastCatastropheSeverity = null;

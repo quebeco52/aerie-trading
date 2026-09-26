@@ -402,14 +402,25 @@ class NarrativeEngine
                 ]
             ),
             ShockEvent::SOVEREIGN_WEALTH_DEPLOYMENT => $this->getRandomPhrase(
-                isset($context['erp_pct']) ? [
-                    "Cyclical valuation bottom reached: Equity risk premium expanded to {$context['erp_pct']}% as GDP output gap inflected upward" . (isset($context['output_gap_pct']) ? " ({$context['output_gap_pct']}%)" : "") . ", triggering broad institutional equity buying.",
-                    "Deep-value market inflection: Equity risk premium reached {$context['erp_pct']}%" . (isset($context['output_gap_pct']) ? " (output gap: {$context['output_gap_pct']}%)" : "") . ", driving counter-cyclical institutional equity inflows as economic growth bottomed.",
-                    "Counter-cyclical equity rally: Favorable equity risk premium ({$context['erp_pct']}%) and turning output momentum" . (isset($context['output_gap_pct']) ? " ({$context['output_gap_pct']}%)" : "") . " stimulated broad institutional value accumulation.",
+                isset($context['swf_trade_pct'], $context['swf_weight_pct'], $context['swf_target_pct'], $context['swf_months']) ? [
+                    "Sovereign Reserve Fund rebalances into equities: Its board holding fell to {$context['swf_weight_pct']}% of the fund against a {$context['swf_target_pct']}% policy weight, so it will buy about {$context['swf_trade_pct']}% of the free float over the next {$context['swf_months']} months.",
+                    "Rule-based buying: The Sovereign Reserve Fund's domestic equities slipped to {$context['swf_weight_pct']}% of the fund (policy weight {$context['swf_target_pct']}%), triggering purchases of roughly {$context['swf_trade_pct']}% of the float spread over {$context['swf_months']} months.",
+                    "Reserve fund buys the fall: With domestic equities down to {$context['swf_weight_pct']}% of a fund worth " . ($context['swf_size_gdp_pct'] ?? '—') . "% of GDP, the Sovereign Reserve Fund will add about {$context['swf_trade_pct']}% of the float to return to {$context['swf_target_pct']}%.",
                 ] : [
-                    "Cyclical valuation bottom reached: Elevated equity risk premium and recovering growth momentum triggered broad counter-cyclical institutional equity buying.",
-                    "Deep-value market inflection: Equity risk premium widened to deep-value levels, driving institutional inflows as economic growth bottomed.",
-                    "Counter-cyclical equity rally: Favorable equity risk premium and recovering output momentum stimulated broad institutional value accumulation.",
+                    "Sovereign Reserve Fund rebalances into equities: Its board holding fell through the band around its policy weight, and it will buy back to target over the coming months.",
+                    "Rule-based buying: The Sovereign Reserve Fund's domestic weight breached its deviation band, triggering purchases spread over the coming months.",
+                    "Reserve fund buys the fall: The Sovereign Reserve Fund will add to its board holding to return to its policy weight.",
+                ]
+            ),
+            ShockEvent::SOVEREIGN_WEALTH_TRIM => $this->getRandomPhrase(
+                isset($context['swf_trade_pct'], $context['swf_weight_pct'], $context['swf_target_pct'], $context['swf_months']) ? [
+                    "Sovereign Reserve Fund trims equities: Its board holding rose to {$context['swf_weight_pct']}% of the fund against a {$context['swf_target_pct']}% policy weight, so it will sell about {$context['swf_trade_pct']}% of the free float over the next {$context['swf_months']} months.",
+                    "Rule-based selling: The Sovereign Reserve Fund's domestic equities climbed to {$context['swf_weight_pct']}% of the fund (policy weight {$context['swf_target_pct']}%), triggering sales of roughly {$context['swf_trade_pct']}% of the float spread over {$context['swf_months']} months.",
+                    "Reserve fund takes profits by rule: With domestic equities up to {$context['swf_weight_pct']}% of a fund worth " . ($context['swf_size_gdp_pct'] ?? '—') . "% of GDP, the Sovereign Reserve Fund will sell about {$context['swf_trade_pct']}% of the float to return to {$context['swf_target_pct']}%.",
+                ] : [
+                    "Sovereign Reserve Fund trims equities: Its board holding rose through the band around its policy weight, and it will sell back to target over the coming months.",
+                    "Rule-based selling: The Sovereign Reserve Fund's domestic weight breached the top of its deviation band, triggering sales spread over the coming months.",
+                    "Reserve fund takes profits by rule: The Sovereign Reserve Fund will reduce its board holding to return to its policy weight.",
                 ]
             ),
             ShockEvent::PE_LEVERAGE_RECAPITALIZATION => $this->getRandomPhrase([

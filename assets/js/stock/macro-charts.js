@@ -15,6 +15,7 @@ let macroPropertyChartInstance = null;
 let macroTradeLogisticsChartInstance = null;
 let macroSentimentChartInstance = null;
 let macroGovtSpendingChartInstance = null;
+let macroSovereignFundChartInstance = null;
 let macroInterbankLiquidityChartInstance = null;
 let macroTermPremiumChartInstance = null;
 let macroGdpGrowthChartInstance = null;
@@ -70,6 +71,14 @@ function updateMacroHud(d) {
     const lastSpark = [...spreads.spark].reverse().find(v => v !== null && !isNaN(v));
     setHud('hud-macroEnergySpreadsChart', `Crack: $${last(d.crackSpreadData).toFixed(2)}/bbl | Power: ${lastPower === undefined ? '-' : '$' + lastPower.toFixed(1)} | Spark: ${lastSpark === undefined ? '-' : '$' + lastSpark.toFixed(1)}/MWh`);
     setHud('hud-macroTradeLogisticsChart', `FX: ${last(d.fxEmaData).toFixed(1)} | Freight: ${last(d.freightEmaData).toFixed(1)} | GSCPI: ${last(d.gscpiData) >= 0 ? '+' : ''}${last(d.gscpiData).toFixed(2)}σ`);
+    const lastFundSize = [...d.sovereignFundSizeData].reverse().find(v => v !== null && !isNaN(v));
+    const lastFundWeight = [...d.sovereignFundWeightData].reverse().find(v => v !== null && !isNaN(v));
+    const lastFundTarget = [...d.sovereignFundTargetData].reverse().find(v => v !== null && !isNaN(v));
+    const lastFundDraw = [...d.sovereignFundDrawData].reverse().find(v => v !== null && !isNaN(v));
+    const fundPct = (v) => v === undefined ? '-' : `${v.toFixed(2)}%`;
+    setHud('hud-macroSovereignFundChart', lastFundSize === undefined
+        ? 'No fund yet'
+        : `Fund: ${lastFundSize.toFixed(0)}% GDP | Draw: ${fundPct(lastFundDraw)} GDP | Board: ${fundPct(lastFundWeight)} (policy ${fundPct(lastFundTarget)})`);
     setHud('hud-macroGovtSpendingChart', `Tax: ${last(d.taxData).toFixed(1)}% | Debt: ${last(d.sovereignDebtData).toFixed(1)}% | Spread: ${last(d.sovereignRiskSpreadData).toFixed(0)} bps | Deficit: ${last(d.primaryDeficitData) >= 0 ? '+' : ''}${last(d.primaryDeficitData).toFixed(1)}%`);
     setHud('hud-macroTermPremiumChart', `10Y: ${last(d.yield10yData).toFixed(2)}% | Term: ${last(d.termPremiumData) >= 0 ? '+' : ''}${last(d.termPremiumData).toFixed(2)}%`);
     setHud('hud-macroGdpGrowthChart', `Real: ${last(d.realGdpGrowthData) >= 0 ? '+' : ''}${last(d.realGdpGrowthData).toFixed(1)}% | Rec: ${last(d.recessionProbData).toFixed(0)}%`);
@@ -132,6 +141,7 @@ export function updateMacroCharts(reports, timeframe = currentMacroTimeframe) {
     let householdDsrData = [], householdDtiData = [], creditToGdpGapData = [], ccybRateData = [];
     let foreignOutputGapData = [], foreignPolicyRateData = [], globalDemandGapData = [];
     let depositBetaData = [], mmfShareData = [];
+    let sovereignFundSizeData = [], sovereignFundWeightData = [], sovereignFundTargetData = [], sovereignFundOwnershipData = [], sovereignFundDrawData = [];
 
     const slicedReports = reports.slice(-limit);
     let qCount = slicedReports.length;
@@ -420,6 +430,16 @@ export function updateMacroCharts(reports, timeframe = currentMacroTimeframe) {
         let rawPrimDef = report.primary_deficit_to_gdp ?? report.primaryDeficitToGdp ?? 0.0;
         primaryDeficitData.push(parseFloat(rawPrimDef) * 100);
 
+        // Recorded only once the sovereign fund exists: quarters before it (or before the columns) stay gaps, not zeros.
+        const rawFundSize = parseFloat(report.sovereign_fund_to_gdp ?? report.sovereignFundToGdp ?? 0.0);
+        const fundExists = rawFundSize > 0;
+        const fundReading = (value) => fundExists && value !== null && value !== undefined ? parseFloat(value) * 100 : null;
+        sovereignFundSizeData.push(fundExists ? rawFundSize * 100 : null);
+        sovereignFundWeightData.push(fundReading(report.sovereign_fund_domestic_weight ?? report.sovereignFundDomesticWeight));
+        sovereignFundTargetData.push(fundReading(report.sovereign_fund_target_weight ?? report.sovereignFundTargetWeight));
+        sovereignFundOwnershipData.push(fundReading(report.sovereign_fund_ownership_share ?? report.sovereignFundOwnershipShare));
+        sovereignFundDrawData.push(fundReading(report.sovereign_fund_draw_to_gdp ?? report.sovereignFundDrawToGdp));
+
         let rawDsr = report.household_debt_service_ratio_ema ?? report.household_debt_service_ratio ?? report.householdDebtServiceRatioEma ?? report.householdDebtServiceRatio ?? 0.106;
         householdDsrData.push(parseFloat(rawDsr) * 100);
 
@@ -465,7 +485,8 @@ export function updateMacroCharts(reports, timeframe = currentMacroTimeframe) {
         naturalGasPriceData, goldPriceData, powerPriceIndexData, metalsEmaData, sovereignRiskSpreadData, primaryDeficitData,
         householdDsrData, householdDtiData, creditToGdpGapData, ccybRateData,
         foreignOutputGapData, foreignPolicyRateData, globalDemandGapData,
-        depositBetaData, mmfShareData
+        depositBetaData, mmfShareData,
+        sovereignFundSizeData, sovereignFundWeightData, sovereignFundTargetData, sovereignFundDrawData
     });
 
     ['5Y', '10Y', '25Y'].forEach(tf => {
@@ -494,6 +515,7 @@ export function updateMacroCharts(reports, timeframe = currentMacroTimeframe) {
     renderWhenVisible('macroTradeLogisticsChart', () => renderMacroTradeLogisticsChart(labels, fxEmaData, freightEmaData, gscpiData));
     renderWhenVisible('macroSentimentChart', () => renderMacroSentimentChart(labels, sentimentData, retailDefaultData, dealActivityData, corporateDefaultPctData));
     renderWhenVisible('macroGovtSpendingChart', () => renderMacroGovtSpendingChart(labels, govtSpendingEmaData, sovereignDebtData, sovereignRiskSpreadData, primaryDeficitData, taxData));
+    renderWhenVisible('macroSovereignFundChart', () => renderMacroSovereignFundChart(labels, sovereignFundWeightData, sovereignFundTargetData, sovereignFundOwnershipData));
     renderWhenVisible('macroInterbankLiquidityChart', () => renderMacroInterbankLiquidityChart(labels, interbankSpreadBpsData, creditSpreadBpsData));
     renderWhenVisible('macroTermPremiumChart', () => renderMacroTermPremiumChart(labels, yield10yData, riskNeutralData, termPremiumData, naturalRateData));
     renderWhenVisible('macroGdpGrowthChart', () => renderMacroGdpGrowthChart(labels, nominalGdpGrowthData, realGdpGrowthData, potentialGdpGrowthData, tfpGrowthData, recessionProbData));
@@ -1681,6 +1703,91 @@ function renderMacroSentimentChart(labels, sentimentData, retailDefaultData, dea
                     grid: { drawOnChartArea: false },
                     ticks: { callback: (val) => val.toFixed(1) + '%' },
                     title: { display: true, text: 'Default Rate (%)' }
+                },
+                x: {
+                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    ticks: { maxTicksLimit: 8 }
+                }
+            }
+        }
+    });
+}
+
+/**
+ * The sovereign reserve fund's position on the board: its domestic weight against the policy weight it rebalances
+ * to, and the share of the float it owns. All three are percentages of the same order, so they share one axis; the
+ * fund's size and its budget draw, which are not, are read off the card's latest line instead.
+ */
+function renderMacroSovereignFundChart(labels, weightData, targetData, ownershipData) {
+    const canvas = document.getElementById('macroSovereignFundChart');
+    if (!canvas) return;
+    macroSovereignFundChartInstance = destroyChartInstance(macroSovereignFundChartInstance);
+    const ctx = canvas.getContext('2d');
+    const pointRadius = labels.length > 50 ? 0 : 2;
+
+    macroSovereignFundChartInstance = new Chart(ctx, {
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    type: 'line',
+                    label: 'Domestic Weight (% of fund)',
+                    data: weightData,
+                    borderColor: '#0284c7',
+                    backgroundColor: 'rgba(2, 132, 199, 0.12)',
+                    borderWidth: 2,
+                    tension: 0.2,
+                    fill: false,
+                    spanGaps: false,
+                    pointRadius
+                },
+                {
+                    type: 'line',
+                    label: 'Policy Weight (% of fund)',
+                    data: targetData,
+                    borderColor: '#d97706',
+                    borderWidth: 2,
+                    borderDash: [5, 4],
+                    tension: 0,
+                    fill: false,
+                    spanGaps: false,
+                    pointRadius: 0
+                },
+                {
+                    type: 'line',
+                    label: 'Ownership (% of float)',
+                    data: ownershipData,
+                    borderColor: '#059669',
+                    backgroundColor: 'rgba(5, 150, 105, 0.12)',
+                    borderWidth: 2,
+                    tension: 0.2,
+                    fill: false,
+                    spanGaps: false,
+                    pointRadius
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+                legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } },
+                tooltip: {
+                    callbacks: {
+                        label: (ctx) => `${ctx.dataset.label}: ${ctx.raw !== null && ctx.raw !== undefined ? ctx.raw.toFixed(2) + '%' : 'N/A'}`
+                    }
+                }
+            },
+            scales: {
+                y: {
+                    type: 'linear',
+                    display: true,
+                    position: 'left',
+                    suggestedMin: 0,
+                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    ticks: { callback: (val) => val.toFixed(1) + '%' },
+                    title: { display: true, text: 'Percent' }
                 },
                 x: {
                     grid: { color: 'rgba(255, 255, 255, 0.05)' },
@@ -2950,7 +3057,7 @@ export function resizeMacroCharts() {
         macroEconomyChartInstance, macroRatesChartInstance, macroMortgageChartInstance,
         macroRiskChartInstance, macroLaborChartInstance, macroLaborCreditChartInstance, macroWealthEffectChartInstance,
         macroCommoditiesChartInstance, macroEnergySpreadsChartInstance, macroPropertyChartInstance, macroTradeLogisticsChartInstance,
-        macroSentimentChartInstance, macroGovtSpendingChartInstance, macroInterbankLiquidityChartInstance,
+        macroSentimentChartInstance, macroGovtSpendingChartInstance, macroSovereignFundChartInstance, macroInterbankLiquidityChartInstance,
         macroTermPremiumChartInstance, macroGdpGrowthChartInstance, macroBalanceSheetChartInstance,
         macroFciChartInstance, macroCostPushChartInstance,
         macroSectoralInflationChartInstance, macroCreditCliffChartInstance,
@@ -2981,6 +3088,7 @@ export function destroyMacroCharts() {
     macroTradeLogisticsChartInstance = destroyChartInstance(macroTradeLogisticsChartInstance);
     macroSentimentChartInstance = destroyChartInstance(macroSentimentChartInstance);
     macroGovtSpendingChartInstance = destroyChartInstance(macroGovtSpendingChartInstance);
+    macroSovereignFundChartInstance = destroyChartInstance(macroSovereignFundChartInstance);
     macroInterbankLiquidityChartInstance = destroyChartInstance(macroInterbankLiquidityChartInstance);
     macroTermPremiumChartInstance = destroyChartInstance(macroTermPremiumChartInstance);
     macroGdpGrowthChartInstance = destroyChartInstance(macroGdpGrowthChartInstance);

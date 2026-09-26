@@ -24,6 +24,7 @@ use App\Service\User\Portfolio;
 use App\Service\Event\SystemicEventReporter;
 use App\Service\Event\MarketEventPublisher;
 use App\Service\District\DistrictRoster;
+use App\Service\Math\MathUtility;
 use App\Entity\Etf;
 use Doctrine\DBAL\Exception\RetryableException;
 use Doctrine\ORM\EntityManagerInterface;
@@ -209,26 +210,7 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
      */
     public static function crossedSimulatedBoundary(float $totalTime, float $dt, float $periodYears): bool
     {
-        if ($periodYears <= 0.0 || $dt <= 0.0) {
-            return false;
-        }
-
-        // Half a tick, expressed in periods, applied to BOTH samples and to the floor above zero.
-        //
-        // Neither end of the comparison is exact. The previous sample is reconstructed as `$totalTime - $dt`
-        // rather than remembered, and that subtraction does not land back on the value the last tick held:
-        // at 14,400 ticks a year the tick after the second year reconstructs its predecessor as
-        // 1.99999999999999978, one ulp below a boundary it had already crossed, and the period fires twice.
-        // The current sample is no better, because the loop ACCUMULATES it: 252 additions of 1/252 reach
-        // 0.99999999999999989, so a plain `< $periodYears` guard rejects the first year outright and loses
-        // it. Both samples are supposed to be tick multiples, so they are snapped to the nearest one; a
-        // discrepancy smaller than half a tick is the float representation, not elapsed time.
-        $epsilon = $dt / $periodYears / 2.0;
-        $index = (int) floor($totalTime / $periodYears + $epsilon);
-        $previous = (int) floor(max(0.0, $totalTime - $dt) / $periodYears + $epsilon);
-
-        // Index zero is the period the simulation starts inside, which is entered rather than crossed.
-        return $index >= 1 && $index > $previous;
+        return MathUtility::crossedSimulatedBoundary($totalTime, $dt, $periodYears);
     }
 
     /** Whether a tick closes a history bar: the tick the bar count rolls over on. */
@@ -525,6 +507,10 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
 
         // Lag equity market cap across ticks to avoid simultaneous feedback loops in macro step.
         $lastEquityMarketCap = null;
+        // What the sovereign fund reads of the board, on the same one-tick lag as the capitalisation.
+        $lastBoardFloatCap = null;
+        $lastBoardPriceReturn = null;
+        $lastBoardDividendCash = null;
 
         $wireFrame = new WireFrame();
 
@@ -545,7 +531,16 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                 $output->writeln("Updating Market Prices... (Day: " . number_format($simTime * 365.0, 1) . ") [Tick: $tickCount]");
             }
 
-            $macroState = $this->macroEngine->updateMacroState($dt, $lastEquityMarketCap);
+            $macroState = $this->macroEngine->updateMacroState(
+                $dt,
+                $lastEquityMarketCap,
+                $lastBoardFloatCap,
+                $lastBoardPriceReturn,
+                $lastBoardDividendCash
+            );
+            // Flows are consumed once; a tick that prices no board must not replay the last one's return.
+            $lastBoardPriceReturn = null;
+            $lastBoardDividendCash = null;
             $simTime = $macroState->totalTime;
             $lap('macro');
 
@@ -602,6 +597,9 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                 // The index funds' levels are quotes on tradable instruments and are restated when those
                 // instruments split; capitalisation is the quantity itself and survives that untouched.
                 $lastEquityMarketCap = $totalMarketCap > 0.0 ? $totalMarketCap : $lastEquityMarketCap;
+                $lastBoardFloatCap = $result['board_float_cap'] > 0.0 ? $result['board_float_cap'] : $lastBoardFloatCap;
+                $lastBoardPriceReturn = $result['board_price_return'];
+                $lastBoardDividendCash = $result['board_dividend_cash'];
                 $marketVol = $result['market_vol'];
                 $events = $result['events'];
 

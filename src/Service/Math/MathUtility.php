@@ -115,6 +115,40 @@ class MathUtility
     }
 
     /**
+     * Whether this tick crossed a boundary of the given period in SIMULATED time.
+     *
+     * The ticker's retention job and the macro's calendar (a fund's month-end check, a budget year) all ask
+     * the clock the same question, and a naive `floor(t) > floor(t - dt)` gets it wrong at high tick rates.
+     *
+     * @param float $totalTime   Simulated time after this tick, in years.
+     * @param float $dt          The tick's length in years.
+     * @param float $periodYears The period whose boundaries are counted, in years.
+     */
+    public static function crossedSimulatedBoundary(float $totalTime, float $dt, float $periodYears): bool
+    {
+        if ($periodYears <= 0.0 || $dt <= 0.0) {
+            return false;
+        }
+
+        // Half a tick, expressed in periods, applied to BOTH samples and to the floor above zero.
+        //
+        // Neither end of the comparison is exact. The previous sample is reconstructed as `$totalTime - $dt`
+        // rather than remembered, and that subtraction does not land back on the value the last tick held:
+        // at 14,400 ticks a year the tick after the second year reconstructs its predecessor as
+        // 1.99999999999999978, one ulp below a boundary it had already crossed, and the period fires twice.
+        // The current sample is no better, because the loop ACCUMULATES it: 252 additions of 1/252 reach
+        // 0.99999999999999989, so a plain `< $periodYears` guard rejects the first year outright and loses
+        // it. Both samples are supposed to be tick multiples, so they are snapped to the nearest one; a
+        // discrepancy smaller than half a tick is the float representation, not elapsed time.
+        $epsilon = $dt / $periodYears / 2.0;
+        $index = (int) floor($totalTime / $periodYears + $epsilon);
+        $previous = (int) floor(max(0.0, $totalTime - $dt) / $periodYears + $epsilon);
+
+        // Index zero is the period the simulation starts inside, which is entered rather than crossed.
+        return $index >= 1 && $index > $previous;
+    }
+
+    /**
      * Generates a random float between 0 and 1 from a uniform distribution.
      *
      * @return float A random float in the interval [0, 1].

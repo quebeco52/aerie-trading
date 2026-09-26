@@ -10,6 +10,7 @@ use App\Service\Macro\Subsystem\CreditFiscalSubsystem;
 use App\Service\Macro\Subsystem\LaborMarketSubsystem;
 use App\Service\Macro\Subsystem\MacroAggregateSubsystem;
 use App\Service\Macro\Subsystem\MonetaryPolicySubsystem;
+use App\Service\Macro\Subsystem\SovereignFundSubsystem;
 use App\Service\Event\ShockEvent;
 use App\Service\Math\MathUtility;
 use Psr\Log\LoggerInterface;
@@ -172,6 +173,14 @@ class MacroEngine
     /** Baseline real gold price index: where gold settles with real rates, inflation expectations and confidence at their resting levels. */
     public const GOLD_BASELINE = 100.0;
 
+    // --- Exchange Rate ---
+    /** Stochastic volatility of exchange rate fluctuations (FX market noise); the reserve portfolio carries it in home terms. */
+    public const EXCHANGE_RATE_VOLATILITY = 0.08;
+
+    // --- Foreign Equity Market ---
+    /** Opening level of the foreign equity index the sovereign reserve portfolio holds. */
+    public const FOREIGN_EQUITY_BASELINE = 100.0;
+
     // --- GOVERNMENT SPENDING & FISCAL APPROPRIATIONS ---
     /** Baseline government spending index (neutral peacetime budget). */
     public const GOVT_SPENDING_BASELINE = 100.0;
@@ -211,6 +220,8 @@ class MacroEngine
     public const INITIAL_DEBT_TO_GDP = 0.93;
     /** Debt-to-GDP baseline level below which no excess fiscal term premium applies. */
     public const SOVEREIGN_DEBT_NEUTRAL_THRESHOLD = 0.70;
+    /** Baseline structural primary fiscal deficit as a fraction of GDP; the sovereign fund is sized so its opening draw funds it. */
+    public const SOVEREIGN_STRUCTURAL_DEFICIT = 0.020;
 
     // --- Federal Reserve G.17 Industrial Capacity Utilization Index ---
     /** Baseline long-run historical capacity utilization rate (~78.5%). */
@@ -348,8 +359,6 @@ class MacroEngine
     public const SYSTEMIC_RECESSION_DECLARE_GAP = -0.010;
     /** Sustained inversion duration (years) that historically precedes a downturn and trips the curve alarm. */
     public const SYSTEMIC_INVERSION_ALARM_YEARS = 0.75;
-    /** Equity risk premium above which capital is being deployed into genuinely distressed valuations. */
-    public const SYSTEMIC_DEPLOYMENT_ERP_THRESHOLD = 0.070;
 
     public function __construct(
         private readonly MathUtility $mathUtility,
@@ -364,6 +373,8 @@ class MacroEngine
         private readonly ?LoggerInterface $logger = null,
         /** Records the quarter's averages. Null in a test or a headless harness, off everywhere the ticker is not. */
         private readonly ?MacroDiagnosticsProbe $diagnostics = null,
+        /** The sovereign reserve fund. Null means the district has none, which is what a caller that builds the engine by hand gets. */
+        private readonly ?SovereignFundSubsystem $sovereignFundSubsystem = null,
     ) {}
 
     private function loadState(): MacroState
@@ -447,16 +458,33 @@ class MacroEngine
      * simulate command, the headless harness, the unit tests) leaves the capitalisation at zero, which the
      * wealth channel reads as "no market" and contributes exactly nothing for.
      *
-     * @param float      $dt              Time increment in years.
-     * @param float|null $equityMarketCap Whole-board capitalisation as of the previous tick, or null.
+     * The sovereign fund reads the board the same way and on the same lag: its float-adjusted capitalisation (a
+     * level, which stands when not reported) and the float-weighted price return and dividend cash of that tick
+     * (flows, which are zero when not reported, so a missing observation never replays the last one).
+     *
+     * @param float      $dt                Time increment in years.
+     * @param float|null $equityMarketCap   Whole-board capitalisation as of the previous tick, or null.
+     * @param float|null $boardFloatCap     Whole-board float-adjusted capitalisation as of the previous tick, or null.
+     * @param float|null $boardPriceReturn  The previous tick's float-weighted price return of the board, or null.
+     * @param float|null $boardDividendCash Dividend cash the board's float was paid on the previous tick, or null.
      */
-    public function updateMacroState(float $dt, ?float $equityMarketCap = null): \App\DTO\MacroStateDTO
-    {
+    public function updateMacroState(
+        float $dt,
+        ?float $equityMarketCap = null,
+        ?float $boardFloatCap = null,
+        ?float $boardPriceReturn = null,
+        ?float $boardDividendCash = null,
+    ): \App\DTO\MacroStateDTO {
         $state = $this->loadState();
 
         if ($equityMarketCap !== null && $equityMarketCap > 0.0) {
             $state->equityMarketCap = $equityMarketCap;
         }
+        if ($boardFloatCap !== null && $boardFloatCap > 0.0) {
+            $state->boardFloatCap = $boardFloatCap;
+        }
+        $state->boardPriceReturn = $boardPriceReturn ?? 0.0;
+        $state->boardDividendCash = $boardDividendCash ?? 0.0;
 
         // Advance physical simulation time in years
         $state->totalTime += $dt;
@@ -556,6 +584,8 @@ class MacroEngine
         $this->creditFiscalSubsystem->calculateCorporateDefaultRate($state, $dt);
 
         $this->aggregateSubsystem->calculatePotentialAndNominalGdp($state, $dt, $productivityGrowthRate);
+        // Singapore NIR draw and a GPIF-style rebalancing band: struck on this tick's GDP, before the budget reads the draw.
+        $this->sovereignFundSubsystem?->update($state, $dt);
         $this->creditFiscalSubsystem->calculateDynamicFiscalPolicy($state, $dt);
         $this->creditFiscalSubsystem->calculateSovereignDebt($state, $dt);
         $this->creditFiscalSubsystem->calculateSovereignRiskSpread($state, $dt);
@@ -625,7 +655,11 @@ class MacroEngine
         if ($state->eventCooldownTimer > 0.0) {
             $state->eventCooldownTimer = max(0.0, $state->eventCooldownTimer - $dt);
             // Preserves unhandled edge-triggered systemic shocks during refractory cooldown.
-            if ($state->lastCatastropheAt !== $state->totalTime && $state->lastCreditCrisisAt !== $state->totalTime && $state->lastQeLaunchAt !== $state->totalTime) {
+            if ($state->lastCatastropheAt !== $state->totalTime
+                && $state->lastCreditCrisisAt !== $state->totalTime
+                && $state->lastQeLaunchAt !== $state->totalTime
+                && $state->lastSovereignRebalanceAt !== $state->totalTime
+            ) {
                 return;
             }
         }
@@ -638,6 +672,13 @@ class MacroEngine
             // Launch of an asset-purchase programme: one headline per programme, reported on the tick it starts.
             $state->lastQeLaunchAt === $state->totalTime
             => ShockEvent::TITAN_INTERVENTION,
+
+            // The sovereign fund starts a rebalance: one headline per programme, buying after a fall or trimming after a run.
+            $state->lastSovereignRebalanceAt === $state->totalTime && $state->sovereignFundRebalanceBacklog > 0.0
+            => ShockEvent::SOVEREIGN_WEALTH_DEPLOYMENT,
+
+            $state->lastSovereignRebalanceAt === $state->totalTime && $state->sovereignFundRebalanceBacklog < 0.0
+            => ShockEvent::SOVEREIGN_WEALTH_TRIM,
 
             $state->interbankLiquiditySpread >= self::SYSTEMIC_LIQUIDITY_FREEZE_SPREAD
             => ShockEvent::SYSTEMIC_LIQUIDITY_FREEZE,
@@ -663,12 +704,6 @@ class MacroEngine
 
             $state->inversionDuration >= self::SYSTEMIC_INVERSION_ALARM_YEARS
             => ShockEvent::YIELD_CURVE_INVERSION_ALARM,
-
-            // Countercyclical sovereign wealth deployment at deep value distress valuations.
-            $state->equityRiskPremium >= self::SYSTEMIC_DEPLOYMENT_ERP_THRESHOLD
-                && $state->outputGapEma < 0.0
-                && $state->outputGap > $state->outputGapEma
-            => ShockEvent::SOVEREIGN_WEALTH_DEPLOYMENT,
 
             // Scheduled democratic political election shock event (Nordhaus 1975).
             $state->lastElectionAt === $state->totalTime

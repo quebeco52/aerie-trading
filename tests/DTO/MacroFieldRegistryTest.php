@@ -51,6 +51,17 @@ class MacroFieldRegistryTest extends TestCase
         'eventType' => 'Label of the event in flight, not a series.',
         'lastElectionAt' => 'Fixed-term calendar, derivable from the election period.',
         'lastQeLaunchAt' => 'Edge marker for the launch headline; qe_active and qe_intensity record the programme.',
+
+        'sovereignFundDomesticEquity' => 'Currency amount that compounds forever; sovereign_fund_to_gdp and the domestic weight record it.',
+        'sovereignFundForeignAssets' => 'Foreign-currency amount that compounds forever; sovereign_fund_to_gdp records the fund.',
+        'sovereignFundDollarsPerGdp' => 'Scale fixed at inception, not a series.',
+        'sovereignFundAnnualDraw' => 'Currency amount; sovereign_fund_draw_to_gdp records it.',
+        'sovereignFundRebalanceBacklog' => 'Currency amount; sovereign_fund_rebalance_share records it against the float.',
+        'sovereignFundRebalanceRate' => 'Currency pace of the programme in flight; the share and months left record it.',
+        'sovereignFundTrade' => 'Traded every tick, so a quarterly sample is one arbitrary tick.',
+        'boardFloatCap' => 'Currency amount fed back by the ticker; the ownership share records the fund against it.',
+        'boardPriceReturn' => 'One tick of the board, so a quarterly sample is one arbitrary tick of noise.',
+        'boardDividendCash' => 'One tick of dividend cash; same objection.',
     ];
 
     /**

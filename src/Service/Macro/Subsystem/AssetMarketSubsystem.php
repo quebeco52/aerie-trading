@@ -110,8 +110,6 @@ class AssetMarketSubsystem
     public const UIP_SENSITIVITY = 3.0;
     /** Mean-reversion speed of exchange rate toward purchasing power parity equilibrium. */
     public const EXCHANGE_RATE_MEAN_REVERSION = 0.60;
-    /** Stochastic volatility of exchange rate fluctuations (FX market noise). */
-    public const EXCHANGE_RATE_VOLATILITY = 0.08;
     /** Terms-of-trade FX elasticity (Chen-Rogoff 2003, importer sign): a dearer import basket weakens the currency. */
     public const FX_TERMS_OF_TRADE_SENSITIVITY = 0.30;
     /** Safe-haven FX elasticity (Ranaldo-Soderlind 2010): panic bids the reserve currency ~6% at 50% equity vol. */
@@ -495,7 +493,7 @@ class AssetMarketSubsystem
             currentPrice: $state->exchangeRateIndex,
             kappa: self::EXCHANGE_RATE_MEAN_REVERSION,
             theta: $targetFx,
-            sigma: self::EXCHANGE_RATE_VOLATILITY,
+            sigma: MacroEngine::EXCHANGE_RATE_VOLATILITY,
             dt: $dt,
             dW: $dW
         );

@@ -23,8 +23,10 @@ class ShockEvent
     /** Central bank emergency Quantitative Easing and asset purchases during contraction near zero lower bound. */
     public const TITAN_INTERVENTION = 'titan_intervention';
 
-    /** Cyclical valuation bottom and counter-cyclical institutional equity buying driven by deep-value ERP. */
+    /** The sovereign reserve fund starts buying the board: its domestic weight fell through the band and it trades back to target. */
     public const SOVEREIGN_WEALTH_DEPLOYMENT = 'sovereign_wealth_deployment';
+    /** The sovereign reserve fund starts selling down the board: its domestic weight rose through the band. */
+    public const SOVEREIGN_WEALTH_TRIM = 'sovereign_wealth_trim';
 
     /** A credit boom has gone bust (Schularick & Taylor): lenders are failing, households deleverage and wholesale funding runs. */
     public const BANKING_CRISIS = 'banking_crisis';

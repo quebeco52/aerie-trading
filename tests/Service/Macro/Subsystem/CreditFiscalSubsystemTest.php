@@ -578,7 +578,25 @@ class CreditFiscalSubsystemTest extends TestCase
 
         $this->subsystem->calculateSovereignDebt($state, 0.25);
 
-        $this->assertEqualsWithDelta(CreditFiscalSubsystem::SOVEREIGN_STRUCTURAL_DEFICIT, $state->primaryDeficitToGdp, 1e-9, 'At neutral spending and tax the primary deficit is the structural one.');
+        $this->assertEqualsWithDelta(MacroEngine::SOVEREIGN_STRUCTURAL_DEFICIT, $state->primaryDeficitToGdp, 1e-9, 'At neutral spending and tax the primary deficit is the structural one.');
+    }
+
+    public function testTheSovereignFundsDrawIsRevenueOneForOne(): void
+    {
+        $withoutFund = new MacroState();
+        $withoutFund->sovereignDebtToGdp = self::SOUND_DEBT_TO_GDP;
+        $withoutFund->nominalGdpIndex = 1.3;
+        $withoutFund->outputGap = 0.0;
+        $withoutFund->governmentSpendingIndex = 100.0;
+        $withoutFund->corporateTaxRate = MacroEngine::TARGET_CORPORATE_TAX_RATE;
+        $withFund = clone $withoutFund;
+        $withFund->sovereignFundDrawToGdp = 0.015;
+
+        $this->subsystem->calculateSovereignDebt($withoutFund, 0.25);
+        $this->subsystem->calculateSovereignDebt($withFund, 0.25);
+
+        $this->assertEqualsWithDelta(0.015, $withoutFund->primaryDeficitToGdp - $withFund->primaryDeficitToGdp, 1e-12);
+        $this->assertEqualsWithDelta(0.015 * 0.25, $withoutFund->sovereignDebtToGdp - $withFund->sovereignDebtToGdp, 1e-12, 'A quarter of the draw is a quarter less borrowing.');
     }
 
 

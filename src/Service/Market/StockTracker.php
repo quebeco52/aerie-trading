@@ -69,7 +69,7 @@ class StockTracker
      * @param bool    $recordHistory Whether to persist the new prices to the stock history table.
      * @param MacroStateDTO|null $macroState    The current state of the macroeconomic cycle.
      * 
-     * @return array{updates: array<mixed>, total_cap: float, float_caps: array<string, float>, half_spreads: array<string, float>, fund_flow: array<string, float>, dividend_points: array<string, float>, events: array<mixed>, market_vol: float, history: array<mixed>}
+     * @return array{updates: array<mixed>, total_cap: float, float_caps: array<string, float>, half_spreads: array<string, float>, fund_flow: array<string, float>, dividend_points: array<string, float>, board_float_cap: float, board_price_return: float, board_dividend_cash: float, events: array<mixed>, market_vol: float, history: array<mixed>}
      */
     public function updateStocks(array $stocks, float $dt, bool $recordHistory, ?\App\DTO\MacroStateDTO $macroState = null, int $tickCount = 0, int $ticksPerYear = 252): array
     {
@@ -85,6 +85,15 @@ class StockTracker
         $macroDTO = $macroState ?? new \App\DTO\MacroStateDTO();
         $marketZ = $macroDTO->marketZ;
         $marketVol = $macroDTO->marketVolatility;
+
+        // The sovereign fund's rebalance slice for this tick, in currency, spread over the float the way any
+        // cap-weighted holder's is: each name gets its share of the float the fund measured the board at.
+        $fundTrade = $macroDTO->sovereignFundTrade;
+        $fundBoardFloatCap = $macroDTO->boardFloatCap;
+
+        // The board as the fund reads it next tick: float-weighted price return and the dividend cash paid.
+        $boardFloatCapAtStart = 0.0;
+        $boardPriceGain = 0.0;
 
         // Everything that traded since the last tick, netted per ticker. Drained once for the whole book
         // rather than per stock: it is one round trip, and a quantity that has already moved the price must
@@ -215,6 +224,7 @@ class StockTracker
             $leveredBeta = $health->leveredBeta ?? (float) $stock->getBeta();
 
             $priceAtTickStart = (float) $stock->getPrice();
+            $floatCapAtTickStart = IndexCommittee::floatAdjustedCap($stock);
             $sectorZ = (float) ($macroDTO->sectorZ[$sectorName] ?? 0.0);
 
             $pricingCtx = new \App\DTO\MarketPricingContext(
@@ -285,20 +295,33 @@ class StockTracker
                 $stock->setCorporateFlowBacklog($corporateBacklog - $corporateSlice);
             }
 
-            $impactLogReturn = 0.0;
+            // The sovereign fund's slice: its share of the fund's trade in proportion to this name's float.
+            $fundShares = ($fundTrade !== 0.0 && $fundBoardFloatCap > 0.0 && $priceAtTickStart > 0.0)
+                ? $fundTrade * ($floatCapAtTickStart / $fundBoardFloatCap) / $priceAtTickStart
+                : 0.0;
 
-            if ($tickFlow !== 0.0) {
+            $impactLogReturn = 0.0;
+            $budgetedImpactLogReturn = 0.0;
+
+            if ($tickFlow !== 0.0 || $fundShares !== 0.0) {
                 // Bounded because this is the one price move that answers to nothing else: it is applied
                 // after the diffusion's own circuit breaker, and the per-order size cap the trade desk
                 // enforces says nothing about what a tick's NET flow adds up to — many orders, the players'
                 // and the agents' together, land in the same tick. The same per-move bound every jump in the
                 // system obeys applies here, so a pathological tick cannot dislocate a name without limit.
+                $flowImpact = $tickFlow !== 0.0 ? $this->liquidityEngine->permanentImpact($stock, $tickFlow) : 0.0;
+                $fundImpact = $fundShares !== 0.0 ? $this->liquidityEngine->permanentImpact($stock, $fundShares) : 0.0;
+
                 $impactLogReturn = max(
                     -FinancialConstants::MAX_TICK_IMPACT_LOG_RETURN,
-                    min(
-                        FinancialConstants::MAX_TICK_IMPACT_LOG_RETURN,
-                        $this->liquidityEngine->permanentImpact($stock, $tickFlow)
-                    )
+                    min(FinancialConstants::MAX_TICK_IMPACT_LOG_RETURN, $flowImpact + $fundImpact)
+                );
+                // Impact is linear in the quantity, so the fund's part separates exactly. It hits every name at
+                // once, which makes it SYSTEMATIC: the budget below is the name's idiosyncratic one and must not
+                // be charged for it, or every rebalance would quietly shrink single-name volatility.
+                $budgetedImpactLogReturn = max(
+                    -FinancialConstants::MAX_TICK_IMPACT_LOG_RETURN,
+                    min(FinancialConstants::MAX_TICK_IMPACT_LOG_RETURN, $flowImpact)
                 );
                 $newPrice = max(0.01, $newPrice * exp($impactLogReturn));
             }
@@ -308,7 +331,7 @@ class StockTracker
             // reclaiming variance it no longer supplies.
             if ($dt > 0.0) {
                 $impactPhi = exp(-$dt / FinancialConstants::IMPACT_VARIANCE_EMA_YEARS);
-                $annualizedTickVariance = ($impactLogReturn * $impactLogReturn) / $dt;
+                $annualizedTickVariance = ($budgetedImpactLogReturn * $budgetedImpactLogReturn) / $dt;
 
                 $stock->setImpactVarianceEma(
                     (($stock->getImpactVarianceEma() ?? 0.0) * $impactPhi) + ($annualizedTickVariance * (1.0 - $impactPhi))
@@ -351,6 +374,13 @@ class StockTracker
             $tickLogReturn = $priceAtTickStart > 0.0 && $currentPriceAfterEarnings > 0.0
                 ? log(($currentPriceAfterEarnings + $dividendPaidPerShare) / $priceAtTickStart)
                 : 0.0;
+
+            // The board's float-weighted price return, measured before any split like the trend is: the fund
+            // holds the float, so a name weighs what its float was worth when the tick began.
+            if ($floatCapAtTickStart > 0.0 && $priceAtTickStart > 0.0) {
+                $boardFloatCapAtStart += $floatCapAtTickStart;
+                $boardPriceGain += $floatCapAtTickStart * (($currentPriceAfterEarnings / $priceAtTickStart) - 1.0);
+            }
 
             // PRICE MOMENTUM (Jegadeesh & Titman 1993)
             // An exponentially weighted sum of log returns: trend_t = phi * trend_{t-1} + r_t, where phi is a
@@ -444,7 +474,7 @@ class StockTracker
             $halfSpread = $this->liquidityEngine->halfSpreadFraction($stock);
             $halfSpreads[$stock->getTicker()] = $halfSpread;
 
-            $tickVolume = $this->liquidityEngine->simulateTickVolume($stock, $dt, abs($tickFlow));
+            $tickVolume = $this->liquidityEngine->simulateTickVolume($stock, $dt, abs($tickFlow + $fundShares));
 
             // What the name prints on an ordinary tick, which is what makes the realized figure abnormal
             // or not. The level alone is a size statistic: a mega-cap always prints more than a micro-cap
@@ -545,6 +575,9 @@ class StockTracker
             'half_spreads' => $halfSpreads,
             'fund_flow' => array_diff_key($netOrderFlow, $halfSpreads),
             'dividend_points' => $dividendPoints,
+            'board_float_cap' => (float) array_sum($floatAdjustedCaps),
+            'board_price_return' => $boardFloatCapAtStart > 0.0 ? $boardPriceGain / $boardFloatCapAtStart : 0.0,
+            'board_dividend_cash' => (float) array_sum($dividendPoints),
             'events' => $events,
             'market_vol' => $marketVol
         ];
