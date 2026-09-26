@@ -275,7 +275,8 @@ readonly class MacroStateDTO
         public float $moneySupplyGrowth = MacroEngine::M2_BASE_GROWTH,
         public float $moneySupplyGrowthEma = MacroEngine::M2_BASE_GROWTH,
         public float $sovereignFundDomesticEquity = 0.0,
-        public float $sovereignFundForeignAssets = 0.0,
+        public float $sovereignFundForeignEquity = 0.0,
+        public float $sovereignFundForeignBonds = 0.0,
         public float $sovereignFundTargetWeight = 0.0,
         public float $sovereignFundDollarsPerGdp = 0.0,
         public float $sovereignFundAnnualDraw = 0.0,
@@ -287,12 +288,14 @@ readonly class MacroStateDTO
         public float $lastSovereignRebalanceAt = -1.0,
         public float $sovereignFundToGdp = 0.0,
         public float $sovereignFundDomesticWeight = 0.0,
+        public float $sovereignFundEquityShare = 0.0,
         public float $sovereignFundOwnershipShare = 0.0,
         public float $sovereignFundDrawToGdp = 0.0,
         public float $foreignEquityIndex = MacroEngine::FOREIGN_EQUITY_BASELINE,
         public float $boardFloatCap = 0.0,
         public float $boardPriceReturn = 0.0,
         public float $boardDividendCash = 0.0,
+        public float $boardNetIssuance = 0.0,
     ) {}
 
     /**

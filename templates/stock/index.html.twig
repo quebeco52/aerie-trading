@@ -490,7 +490,7 @@
 										<div class="py-2 flex justify-between items-center">
 											<dt class="group relative cursor-help text-sm font-semibold text-on-surface-variant" tabindex="0">
 												<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Sovereign Reserve</span>
-												{{ _self.tooltip('The district\'s sovereign fund holds the same share of every listed company\'s float and trades only when its board weight leaves its band around the policy weight.', 'left', 'w-64') }}
+												{{ _self.tooltip('The district\'s sovereign fund holds the same share of every listed company\'s float and trades only when its board weight, or its whole equity share, leaves its band around policy.', 'left', 'w-64') }}
 											</dt>
 											<dd class="font-bold text-on-surface font-mono tabular-nums">{{ (macro.sovereignFundOwnershipShare * asset.publicFloatPercentage * 100)|number_format(2) }}% of shares</dd>
 										</div>
@@ -803,7 +803,7 @@
 										<div class="py-2 flex justify-between items-center">
 											<dt class="group relative cursor-help text-sm font-semibold text-on-surface-variant" tabindex="0">
 												<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Sovereign Reserve</span>
-												{{ _self.tooltip('The district\'s sovereign fund holds the same share of every constituent\'s float, and so of this float-adjusted cap. It buys after a fall and trims after a run only when its board weight leaves its band.', 'left', 'w-72') }}
+												{{ _self.tooltip('The district\'s sovereign fund holds the same share of every constituent\'s float, and so of this float-adjusted cap. It buys after a fall and trims after a run only when its board weight, or its whole equity share, leaves its band.', 'left', 'w-72') }}
 											</dt>
 											<dd class="font-bold text-on-surface font-mono tabular-nums">{{ (macro.sovereignFundOwnershipShare * 100)|number_format(2) }}% of float</dd>
 										</div>

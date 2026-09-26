@@ -459,14 +459,15 @@ class MacroEngine
      * wealth channel reads as "no market" and contributes exactly nothing for.
      *
      * The sovereign fund reads the board the same way and on the same lag: its float-adjusted capitalisation (a
-     * level, which stands when not reported) and the float-weighted price return and dividend cash of that tick
-     * (flows, which are zero when not reported, so a missing observation never replays the last one).
+     * level, which stands when not reported) and the float-weighted price return, dividend cash and net issuance of
+     * that tick (flows, which are zero when not reported, so a missing observation never replays the last one).
      *
      * @param float      $dt                Time increment in years.
      * @param float|null $equityMarketCap   Whole-board capitalisation as of the previous tick, or null.
      * @param float|null $boardFloatCap     Whole-board float-adjusted capitalisation as of the previous tick, or null.
      * @param float|null $boardPriceReturn  The previous tick's float-weighted price return of the board, or null.
      * @param float|null $boardDividendCash Dividend cash the board's float was paid on the previous tick, or null.
+     * @param float|null $boardNetIssuance  Float the companies' own issuance added on the previous tick (buybacks negative), or null.
      */
     public function updateMacroState(
         float $dt,
@@ -474,6 +475,7 @@ class MacroEngine
         ?float $boardFloatCap = null,
         ?float $boardPriceReturn = null,
         ?float $boardDividendCash = null,
+        ?float $boardNetIssuance = null,
     ): \App\DTO\MacroStateDTO {
         $state = $this->loadState();
 
@@ -485,6 +487,7 @@ class MacroEngine
         }
         $state->boardPriceReturn = $boardPriceReturn ?? 0.0;
         $state->boardDividendCash = $boardDividendCash ?? 0.0;
+        $state->boardNetIssuance = $boardNetIssuance ?? 0.0;
 
         // Advance physical simulation time in years
         $state->totalTime += $dt;

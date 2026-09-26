@@ -320,11 +320,12 @@ class MacroState
     public float $policyUncertaintyIndexEma;
     public float $lastElectionAt;
 
-    // Sovereign reserve fund (App\Service\Macro\Subsystem\SovereignFundSubsystem). The two sleeves: a slice of the
-    // board in currency, and the foreign reserve portfolio in FOREIGN units (its home value is units / exchangeRateIndex).
+    // Sovereign reserve fund (App\Service\Macro\Subsystem\SovereignFundSubsystem). The three sleeves: a slice of the
+    // board in currency, and foreign equities and foreign paper in FOREIGN units (home value is units / exchangeRateIndex).
     // Zero until the fund incepts on the first tick that carries a board; a run with no market never has one.
     public float $sovereignFundDomesticEquity;
-    public float $sovereignFundForeignAssets;
+    public float $sovereignFundForeignEquity;
+    public float $sovereignFundForeignBonds;
     // The mandate, fixed at inception: the domestic policy weight and the currency value of one unit of the GDP index.
     public float $sovereignFundTargetWeight;
     public float $sovereignFundDollarsPerGdp;
@@ -340,16 +341,19 @@ class MacroState
     // Stationary readings of the fund, the ones macro_report keeps.
     public float $sovereignFundToGdp;
     public float $sovereignFundDomesticWeight;
+    public float $sovereignFundEquityShare;
     public float $sovereignFundOwnershipShare;
     public float $sovereignFundDrawToGdp;
     // The foreign equity market the reserve portfolio holds, in its own currency.
     public float $foreignEquityIndex;
 
     // The board as the ticker measured it on the PREVIOUS tick, like equityMarketCap: its float-adjusted
-    // capitalisation, the float-weighted price return of that tick, and the dividend cash the float was paid.
+    // capitalisation, the float-weighted price return of that tick, the dividend cash the float was paid, and the
+    // float the companies' own issuance added (buybacks negative), at that tick's prices.
     public float $boardFloatCap;
     public float $boardPriceReturn;
     public float $boardDividendCash;
+    public float $boardNetIssuance;
 
     public function __construct()
     {

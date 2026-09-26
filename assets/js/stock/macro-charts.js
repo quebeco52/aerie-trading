@@ -75,10 +75,11 @@ function updateMacroHud(d) {
     const lastFundWeight = [...d.sovereignFundWeightData].reverse().find(v => v !== null && !isNaN(v));
     const lastFundTarget = [...d.sovereignFundTargetData].reverse().find(v => v !== null && !isNaN(v));
     const lastFundDraw = [...d.sovereignFundDrawData].reverse().find(v => v !== null && !isNaN(v));
+    const lastFundEquity = [...d.sovereignFundEquityData].reverse().find(v => v !== null && !isNaN(v));
     const fundPct = (v) => v === undefined ? '-' : `${v.toFixed(2)}%`;
     setHud('hud-macroSovereignFundChart', lastFundSize === undefined
         ? 'No fund yet'
-        : `Fund: ${lastFundSize.toFixed(0)}% GDP | Draw: ${fundPct(lastFundDraw)} GDP | Board: ${fundPct(lastFundWeight)} (policy ${fundPct(lastFundTarget)})`);
+        : `Fund: ${lastFundSize.toFixed(0)}% GDP | Draw: ${fundPct(lastFundDraw)} GDP | Board: ${fundPct(lastFundWeight)} (policy ${fundPct(lastFundTarget)}) | Equities: ${lastFundEquity === undefined ? '-' : lastFundEquity.toFixed(1) + '%'}`);
     setHud('hud-macroGovtSpendingChart', `Tax: ${last(d.taxData).toFixed(1)}% | Debt: ${last(d.sovereignDebtData).toFixed(1)}% | Spread: ${last(d.sovereignRiskSpreadData).toFixed(0)} bps | Deficit: ${last(d.primaryDeficitData) >= 0 ? '+' : ''}${last(d.primaryDeficitData).toFixed(1)}%`);
     setHud('hud-macroTermPremiumChart', `10Y: ${last(d.yield10yData).toFixed(2)}% | Term: ${last(d.termPremiumData) >= 0 ? '+' : ''}${last(d.termPremiumData).toFixed(2)}%`);
     setHud('hud-macroGdpGrowthChart', `Real: ${last(d.realGdpGrowthData) >= 0 ? '+' : ''}${last(d.realGdpGrowthData).toFixed(1)}% | Rec: ${last(d.recessionProbData).toFixed(0)}%`);
@@ -141,7 +142,7 @@ export function updateMacroCharts(reports, timeframe = currentMacroTimeframe) {
     let householdDsrData = [], householdDtiData = [], creditToGdpGapData = [], ccybRateData = [];
     let foreignOutputGapData = [], foreignPolicyRateData = [], globalDemandGapData = [];
     let depositBetaData = [], mmfShareData = [];
-    let sovereignFundSizeData = [], sovereignFundWeightData = [], sovereignFundTargetData = [], sovereignFundOwnershipData = [], sovereignFundDrawData = [];
+    let sovereignFundSizeData = [], sovereignFundWeightData = [], sovereignFundTargetData = [], sovereignFundOwnershipData = [], sovereignFundDrawData = [], sovereignFundEquityData = [];
 
     const slicedReports = reports.slice(-limit);
     let qCount = slicedReports.length;
@@ -439,6 +440,7 @@ export function updateMacroCharts(reports, timeframe = currentMacroTimeframe) {
         sovereignFundTargetData.push(fundReading(report.sovereign_fund_target_weight ?? report.sovereignFundTargetWeight));
         sovereignFundOwnershipData.push(fundReading(report.sovereign_fund_ownership_share ?? report.sovereignFundOwnershipShare));
         sovereignFundDrawData.push(fundReading(report.sovereign_fund_draw_to_gdp ?? report.sovereignFundDrawToGdp));
+        sovereignFundEquityData.push(fundReading(report.sovereign_fund_equity_share ?? report.sovereignFundEquityShare));
 
         let rawDsr = report.household_debt_service_ratio_ema ?? report.household_debt_service_ratio ?? report.householdDebtServiceRatioEma ?? report.householdDebtServiceRatio ?? 0.106;
         householdDsrData.push(parseFloat(rawDsr) * 100);
@@ -486,7 +488,7 @@ export function updateMacroCharts(reports, timeframe = currentMacroTimeframe) {
         householdDsrData, householdDtiData, creditToGdpGapData, ccybRateData,
         foreignOutputGapData, foreignPolicyRateData, globalDemandGapData,
         depositBetaData, mmfShareData,
-        sovereignFundSizeData, sovereignFundWeightData, sovereignFundTargetData, sovereignFundDrawData
+        sovereignFundSizeData, sovereignFundWeightData, sovereignFundTargetData, sovereignFundDrawData, sovereignFundEquityData
     });
 
     ['5Y', '10Y', '25Y'].forEach(tf => {

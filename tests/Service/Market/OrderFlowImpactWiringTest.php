@@ -82,7 +82,8 @@ class OrderFlowImpactWiringTest extends TestCase
 
     private function tracker(
         ?MarketPricingContext &$captured = null,
-        ?\App\Service\Market\Agent\AgentStateStoreInterface $agentStateStore = null
+        ?\App\Service\Market\Agent\AgentStateStoreInterface $agentStateStore = null,
+        ?\Closure $onEarnings = null
     ): StockTracker {
         $marketEngine = $this->createStub(MarketEngine::class);
         $marketEngine->method('calculateNextPrice')->willReturnCallback(
@@ -114,7 +115,14 @@ class OrderFlowImpactWiringTest extends TestCase
         $debtEngine->method('analyzeDebtHealth')->willReturn($this->debtHealth());
 
         $earnings = $this->createStub(EarningsEngine::class);
-        $earnings->method('calculate')->willReturn(null);
+        // A report can issue or retire stock; a test that needs one hands in what the report does to the company.
+        $earnings->method('calculate')->willReturnCallback(static function (Stock $stock) use ($onEarnings): ?array {
+            if ($onEarnings !== null) {
+                $onEarnings($stock);
+            }
+
+            return null;
+        });
         $earnings->method('evaluatePreAnnouncement')->willReturn([]);
 
         $ma = $this->createStub(MergerAndAcquisitionEngine::class);
@@ -492,5 +500,22 @@ class OrderFlowImpactWiringTest extends TestCase
         $this->assertEqualsWithDelta((9.0 * $apexReturn + 5.0 * $betaReturn) / 14.0, $result['board_price_return'], 1e-12, 'Float-weighted at the opening float.');
         $this->assertEqualsWithDelta(array_sum($result['float_caps']), $result['board_float_cap'], 1e-3);
         $this->assertSame(0.0, $result['board_dividend_cash']);
+    }
+
+    public function testTheBoardReportsTheCompaniesOwnIssuanceNetOfBuybacks(): void
+    {
+        $apex = $this->stock();
+        $beta = $this->secondStock();
+
+        // APEX retires 1% of its shares on its report, BETA issues 2%.
+        $onEarnings = static function (Stock $stock): void {
+            $factor = $stock->getTicker() === 'APEX' ? 0.99 : 1.02;
+            $stock->setSharesOutstanding((string) ((float) $stock->getSharesOutstanding() * $factor));
+        };
+        $result = $this->tracker(onEarnings: $onEarnings)->updateStocks([$apex, $beta], 1.0 / 14400.0, false, new MacroStateDTO());
+
+        $expected = (-0.01 * 1.0e8 * 0.90 * 100.0) + (0.02 * 2.0e8 * 0.50 * 50.0);
+        $this->assertEqualsWithDelta($expected, $result['board_net_issuance'], 1e-3, 'Float issued less float retired, at the tick\'s price.');
+        $this->assertSame(0.0, $this->tracker()->updateStocks([$this->stock()], 1.0 / 14400.0, false, new MacroStateDTO())['board_net_issuance']);
     }
 }

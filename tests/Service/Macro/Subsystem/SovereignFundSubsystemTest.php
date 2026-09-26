@@ -54,19 +54,19 @@ class SovereignFundSubsystemTest extends TestCase
         $equityLeg = SovereignFundSubsystem::FOREIGN_EQUITY_SHARE * SovereignFundSubsystem::FOREIGN_EQUITY_VOLATILITY;
         $variance = ($equityLeg * $equityLeg) + (MacroEngine::EXCHANGE_RATE_VOLATILITY * MacroEngine::EXCHANGE_RATE_VOLATILITY);
 
-        $this->assertEqualsWithDelta($arithmetic - (0.5 * $variance), $fund->expectedCompoundRealReturn($state, 0.0), 1e-15);
+        $this->assertEqualsWithDelta($arithmetic - (0.5 * $variance), $fund->policyCompoundRealReturn($state, 0.0), 1e-15);
 
         // All on the board: the natural rate plus the premium, less half the market's variance.
         $boardVariance = MacroEngine::MACRO_VOL_BASE_ANCHOR * MacroEngine::MACRO_VOL_BASE_ANCHOR;
         $this->assertEqualsWithDelta(
             $state->naturalRate + MacroEngine::BASE_EQUITY_RISK_PREMIUM - (0.5 * $boardVariance),
-            $fund->expectedCompoundRealReturn($state, 1.0),
+            $fund->policyCompoundRealReturn($state, 1.0),
             1e-15
         );
 
         // Diversification: a blend compounds faster than the weighted compound returns of its parts.
-        $blend = $fund->expectedCompoundRealReturn($state, 0.3);
-        $parts = (0.3 * $fund->expectedCompoundRealReturn($state, 1.0)) + (0.7 * $fund->expectedCompoundRealReturn($state, 0.0));
+        $blend = $fund->policyCompoundRealReturn($state, 0.3);
+        $parts = (0.3 * $fund->policyCompoundRealReturn($state, 1.0)) + (0.7 * $fund->policyCompoundRealReturn($state, 0.0));
         $this->assertGreaterThan($parts, $blend);
     }
 
@@ -96,7 +96,8 @@ class SovereignFundSubsystemTest extends TestCase
         $openingDraw = $state->sovereignFundAnnualDraw;
 
         // The reserve portfolio doubles in the middle of the year; the draw does not move until the year turns.
-        $state->sovereignFundForeignAssets *= 2.0;
+        $state->sovereignFundForeignEquity *= 2.0;
+        $state->sovereignFundForeignBonds *= 2.0;
         for ($i = 0; $i < intdiv($tpy, 2); ++$i) {
             $this->step($fund, $state, $dt);
         }
@@ -135,6 +136,50 @@ class SovereignFundSubsystemTest extends TestCase
             $breach = $band / (($weight * (1.0 - $weight)) + ($weight * $band));
             $this->assertEqualsWithDelta($gpifBreach, $breach, 1e-12, "At weight {$weight} the band must trip on GPIF's move, about 30%.");
         }
+    }
+
+    public function testTheEquityBandIsGpifsOwnGlobalLimitAtGpifsOwnEquityShare(): void
+    {
+        $fund = new SovereignFundSubsystem(new MathUtility());
+
+        $this->assertEqualsWithDelta(
+            SovereignFundSubsystem::GPIF_GLOBAL_EQUITY_DEVIATION_LIMIT,
+            $fund->equityBand(SovereignFundSubsystem::GPIF_GLOBAL_EQUITY_TARGET),
+            1e-15
+        );
+    }
+
+    public function testAGlobalCrashTripsTheEquityBandAndBuysTheBoard(): void
+    {
+        $tpy = 360;
+        $dt = 1.0 / $tpy;
+        $fund = new SovereignFundSubsystem($this->stillMarket());
+        $state = $this->openFund($fund, $tpy);
+        $targetEquity = $fund->policyEquityShare($state->sovereignFundTargetWeight);
+
+        // Every equity market falls 35% together: the board barely moves against the rest of the fund, so the domestic
+        // band alone would stay quiet, but the fund's equity share falls through its own band.
+        $this->crashDomestic($state, 0.35);
+        $state->sovereignFundForeignEquity *= 0.65;
+        $this->runToMonthEnd($fund, $state, $dt);
+
+        $this->assertSame(SovereignFundSubsystem::REBALANCE_EXECUTION_MONTHS, $state->sovereignFundRebalanceMonthsLeft);
+        $this->assertSame($state->totalTime, $state->lastSovereignRebalanceAt);
+        $this->assertGreaterThan(0.0, $state->sovereignFundTrade, 'It buys the board back toward its policy weight.');
+
+        // The foreign sleeves are back on their 65/35 split at once.
+        $foreignEquity = $fund->foreignEquityHomeValue($state);
+        $this->assertEqualsWithDelta(SovereignFundSubsystem::FOREIGN_EQUITY_SHARE, $foreignEquity / $fund->foreignHomeValue($state), 1e-12);
+        $this->assertGreaterThan($targetEquity - 0.02, $state->sovereignFundEquityShare, 'Equities topped back up from paper.');
+    }
+
+    public function testAThirtyFivePercentFallInTheBoardAloneDoesNotTripTheEquityBand(): void
+    {
+        $fund = new SovereignFundSubsystem(new MathUtility());
+        $target = $fund->policyEquityShare(0.035);
+
+        // The board is a few percent of the fund, so even a deep District-only fall moves the equity share by a point.
+        $this->assertLessThan($fund->equityBand($target), 0.035 * 0.35);
     }
 
     public function testAThirtyOnePercentFallBreachesTheBandAndTwentySevenDoesNot(): void
@@ -219,6 +264,45 @@ class SovereignFundSubsystemTest extends TestCase
         }
         $this->assertEqualsWithDelta(SovereignFundSubsystem::MAX_OWNERSHIP_SHARE, $state->sovereignFundOwnershipShare, 1e-9, 'It stops at the ceiling.');
         $this->assertSame(0.0, $state->sovereignFundRebalanceMonthsLeft, 'With no room left there is no programme to run or announce.');
+    }
+
+    public function testTheFundTendersIntoBuybacksAndKeepsItsOwnership(): void
+    {
+        $tpy = 720;
+        $dt = 1.0 / $tpy;
+        $fund = new SovereignFundSubsystem($this->stillMarket());
+        $state = $this->openFund($fund, $tpy);
+        $state->sovereignFundAnnualDraw = 0.0;
+        $ownership = $state->sovereignFundOwnershipShare;
+        $foreignBefore = $fund->foreignHomeValue($state);
+
+        // The companies retire 2% of the float this tick: the float shrinks, the fund tenders its share for cash.
+        $buyback = -0.02 * $state->boardFloatCap;
+        $state->boardFloatCap += $buyback;
+        $state->boardNetIssuance = $buyback;
+        $this->step($fund, $state, $dt);
+
+        $this->assertEqualsWithDelta($ownership, $state->sovereignFundOwnershipShare, 1e-12, 'Ownership is untouched by the companies\' own flow.');
+        $this->assertEqualsWithDelta(-$ownership * $buyback, $fund->foreignHomeValue($state) - $foreignBefore, 1e-3, 'Tendered for cash.');
+    }
+
+    public function testTheFundTakesUpItsShareOfAnIssue(): void
+    {
+        $tpy = 720;
+        $dt = 1.0 / $tpy;
+        $fund = new SovereignFundSubsystem($this->stillMarket());
+        $state = $this->openFund($fund, $tpy);
+        $state->sovereignFundAnnualDraw = 0.0;
+        $ownership = $state->sovereignFundOwnershipShare;
+        $before = $fund->fundValue($state);
+
+        $issue = 0.01 * $state->boardFloatCap;
+        $state->boardFloatCap += $issue;
+        $state->boardNetIssuance = $issue;
+        $this->step($fund, $state, $dt);
+
+        $this->assertEqualsWithDelta($ownership, $state->sovereignFundOwnershipShare, 1e-12);
+        $this->assertEqualsWithDelta($before, $fund->fundValue($state), 1e-3, 'Paid for out of the paper sleeve, not handed over.');
     }
 
     public function testATradeMovesMoneyBetweenTheSleevesWithoutChangingTheFund(): void
@@ -307,6 +391,7 @@ class SovereignFundSubsystemTest extends TestCase
         $fund->update($state, $dt);
         $state->boardPriceReturn = 0.0;
         $state->boardDividendCash = 0.0;
+        $state->boardNetIssuance = 0.0;
     }
 
     /** Steps until the tick that crosses the next month end, inclusive. */

@@ -69,7 +69,7 @@ class StockTracker
      * @param bool    $recordHistory Whether to persist the new prices to the stock history table.
      * @param MacroStateDTO|null $macroState    The current state of the macroeconomic cycle.
      * 
-     * @return array{updates: array<mixed>, total_cap: float, float_caps: array<string, float>, half_spreads: array<string, float>, fund_flow: array<string, float>, dividend_points: array<string, float>, board_float_cap: float, board_price_return: float, board_dividend_cash: float, events: array<mixed>, market_vol: float, history: array<mixed>}
+     * @return array{updates: array<mixed>, total_cap: float, float_caps: array<string, float>, half_spreads: array<string, float>, fund_flow: array<string, float>, dividend_points: array<string, float>, board_float_cap: float, board_price_return: float, board_dividend_cash: float, board_net_issuance: float, events: array<mixed>, market_vol: float, history: array<mixed>}
      */
     public function updateStocks(array $stocks, float $dt, bool $recordHistory, ?\App\DTO\MacroStateDTO $macroState = null, int $tickCount = 0, int $ticksPerYear = 252): array
     {
@@ -91,9 +91,11 @@ class StockTracker
         $fundTrade = $macroDTO->sovereignFundTrade;
         $fundBoardFloatCap = $macroDTO->boardFloatCap;
 
-        // The board as the fund reads it next tick: float-weighted price return and the dividend cash paid.
+        // The board as the fund reads it next tick: float-weighted price return, the dividend cash paid, and the float
+        // the companies' own issuance and buybacks added, which an index holder takes up or tenders into pro rata.
         $boardFloatCapAtStart = 0.0;
         $boardPriceGain = 0.0;
+        $boardNetIssuance = 0.0;
 
         // Everything that traded since the last tick, netted per ticker. Drained once for the whole book
         // rather than per stock: it is one round trip, and a quantity that has already moved the price must
@@ -145,6 +147,11 @@ class StockTracker
                 ];
                 continue;
             }
+
+            // Float shares before anything this tick can issue or retire stock: an acquisition paid in stock is struck
+            // ahead of the earnings engine's buybacks, offerings and vested awards.
+            $floatSharesAtTickStart = (float) $stock->getSharesOutstanding()
+                * max(0.0, min(1.0, (float) $stock->getPublicFloatPercentage()));
 
             // Determine Volatility
             $baselineVol = (float) $stock->getVolatility();
@@ -410,6 +417,12 @@ class StockTracker
             // Read again here rather than reusing the count from the top of the tick: issuance and buybacks
             // in the earnings engine change it, and only a split should reach the agents as a share ratio.
             $preSplitShares = (float) $stock->getSharesOutstanding();
+
+            // The company's own issuance net of buybacks, as float at this tick's price, measured in pre-split shares so
+            // a split -- a change of units, not of ownership -- never reads as either.
+            $boardNetIssuance += (($preSplitShares * max(0.0, min(1.0, (float) $stock->getPublicFloatPercentage()))) - $floatSharesAtTickStart)
+                * $currentPriceAfterEarnings;
+
             $splitResult = $this->corporateActionEngine->processSplits(
                 $stock,
                 $currentPriceAfterEarnings,
@@ -578,6 +591,7 @@ class StockTracker
             'board_float_cap' => (float) array_sum($floatAdjustedCaps),
             'board_price_return' => $boardFloatCapAtStart > 0.0 ? $boardPriceGain / $boardFloatCapAtStart : 0.0,
             'board_dividend_cash' => (float) array_sum($dividendPoints),
+            'board_net_issuance' => $boardNetIssuance,
             'events' => $events,
             'market_vol' => $marketVol
         ];

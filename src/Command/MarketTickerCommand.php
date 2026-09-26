@@ -511,6 +511,7 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
         $lastBoardFloatCap = null;
         $lastBoardPriceReturn = null;
         $lastBoardDividendCash = null;
+        $lastBoardNetIssuance = null;
 
         $wireFrame = new WireFrame();
 
@@ -536,11 +537,13 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                 $lastEquityMarketCap,
                 $lastBoardFloatCap,
                 $lastBoardPriceReturn,
-                $lastBoardDividendCash
+                $lastBoardDividendCash,
+                $lastBoardNetIssuance
             );
             // Flows are consumed once; a tick that prices no board must not replay the last one's return.
             $lastBoardPriceReturn = null;
             $lastBoardDividendCash = null;
+            $lastBoardNetIssuance = null;
             $simTime = $macroState->totalTime;
             $lap('macro');
 
@@ -600,6 +603,7 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                 $lastBoardFloatCap = $result['board_float_cap'] > 0.0 ? $result['board_float_cap'] : $lastBoardFloatCap;
                 $lastBoardPriceReturn = $result['board_price_return'];
                 $lastBoardDividendCash = $result['board_dividend_cash'];
+                $lastBoardNetIssuance = $result['board_net_issuance'];
                 $marketVol = $result['market_vol'];
                 $events = $result['events'];
 
