@@ -128,15 +128,11 @@ class MacroAggregateSubsystem
     /** Fixed-rate share (corporate bonds, mortgages, auto and term loans) priced off the 5-year benchmark; measured 2026-09-19 the mix moves only the cycle period, not its shape. */
     public const BORROWING_YIELD5Y_WEIGHT = 0.50;
 
-    // --- Forward-Looking TIPS Breakeven & Phillips Expectations ---
-    /** Weight on anchored central bank target in TIPS breakeven inflation expectation. */
-    public const TIPS_TARGET_WEIGHT = 0.40;
-    /** Weight on adaptive trend inflation in TIPS breakeven inflation expectation. */
-    public const TIPS_TREND_WEIGHT = 0.40;
-    /** Weight on forward-looking output gap pressure in TIPS breakeven inflation expectation. */
-    public const TIPS_CYCLICAL_WEIGHT = 0.20;
-    /** Pflueger & Viceira (2011) inflation risk premium sensitivity to excess inflation and supply shocks. */
-    public const TIPS_INFLATION_RISK_PREMIUM_SCALE = 0.25;
+    // --- Ten-Year Breakeven Inflation (Gurkaynak, Sack & Wright 2010) ---
+    /** Ten-year breakeven per point of core inflation over target: US T10YIE on core CPI, 2003-2026 monthly, 0.080 (Newey-West se 0.024), holding the headline-core wedge and the GZ excess bond premium. */
+    public const BREAKEVEN_CORE_LOADING = 0.080;
+    /** Ten-year breakeven per point of headline over core, the energy and food pass-through: the same regression, 0.137 (se 0.029). */
+    public const BREAKEVEN_NONCORE_LOADING = 0.137;
 
     // --- Distributed Lag Transmission Constants ---
     /** Characteristic half-life time constant in years for energy cost-push pass-through into core inflation. */
@@ -395,9 +391,8 @@ class MacroAggregateSubsystem
         $demandZ = $this->mathUtility->generateStandardNormal();
         $outZ = $this->mathUtility->generateStandardNormal();
 
-        // Curdia & Woodford (2010) ex-ante real borrowing cost deflated by expected inflation.
-        // Strips inflation risk premium from TIPS breakeven on the 5-year leg.
-        $expectedInflation5y = $state->tipsBreakeven - $this->inflationRiskPremium($state, MacroEngine::TARGET_INFLATION);
+        // Curdia & Woodford (2010) ex-ante real borrowing cost, the 5-year leg deflated by the market's breakeven.
+        $expectedInflation5y = $state->tipsBreakeven;
         $realRate = (self::BORROWING_POLICY_WEIGHT * ($state->policyRate - $expectedInflation))
             + (self::BORROWING_YIELD5Y_WEIGHT * ($yield5y - $expectedInflation5y));
 
@@ -690,45 +685,39 @@ class MacroAggregateSubsystem
     }
 
     /**
-     * Gurkaynak, Sack & Wright (2010) TIPS Breakeven Inflation Expectation Model.
+     * Gurkaynak, Sack & Wright (2010) ten-year TIPS breakeven: expected inflation over the bond's life plus its risk
+     * premium, less the TIPS liquidity premium, fitted as one reduced form on the inflation the market sees.
      *
-     * Derives market-implied 10Y forward inflation expectations by weighting anchored central bank
-     * targets, adaptive core trends, forward Phillips curve capacity, and inflation volatility risk premium.
+     * The US ten-year moves 0.08 per point of core inflation over target and 0.14 per point of headline over core, so
+     * an energy spike that adds a point to headline adds a seventh of a point here: long expectations are anchored,
+     * and a commodity shock is priced as passing. The output gap adds nothing once inflation is held (CBO gap 0.02,
+     * se 0.02). The fit also holds the excess bond premium, whose liquidity squeeze on TIPS (-0.31 per point, 2008
+     * and March 2020) is not modelled here. Fit: var/harness/breakeven_fit.py.
      *
      * @param MacroState $state           Current macroeconomic state.
      * @param float      $targetInflation Central bank inflation target.
-     * @param float      $dt              Time increment in years.
-     * @return float 10-Year TIPS breakeven inflation expectation.
+     * @return float Ten-year breakeven inflation.
      */
-    public function calculateTipsBreakeven(MacroState $state, float $targetInflation, float $dt): float
+    public function calculateTipsBreakeven(MacroState $state, float $targetInflation): float
     {
-        $cyclicalForecast = $this->mathUtility->calculateConvexPhillipsCurve(
-            outputGap: $state->outputGapEma,
-            maxCapacity: self::PHILLIPS_MAX_CAPACITY,
-            kappa: self::PHILLIPS_CONVEX_KAPPA,
-            downwardRigidityFactor: self::PHILLIPS_DOWNWARD_RIGIDITY_FACTOR
-        );
+        // Headline runs over core by the lagged energy and food pass-through the commodity basket adds.
+        $headlineOverCore = $state->energyCostPushLag + $state->agriCostPushLag;
 
-        $inflationRiskPremium = $this->inflationRiskPremium($state, $targetInflation);
-
-        $fundamentalBreakeven = (self::TIPS_TARGET_WEIGHT * $targetInflation)
-            + (self::TIPS_TREND_WEIGHT * $state->inflationEma)
-            + (self::TIPS_CYCLICAL_WEIGHT * ($targetInflation + $cyclicalForecast))
-            + $inflationRiskPremium;
-
-        return max(-0.01, min(0.15, $fundamentalBreakeven));
+        return $targetInflation
+            + (self::BREAKEVEN_CORE_LOADING * (self::coreInflationEma($state) - $targetInflation))
+            + (self::BREAKEVEN_NONCORE_LOADING * $headlineOverCore);
     }
 
     /**
-     * Pflueger & Viceira (2011) inflation risk premium: upside inflation uncertainty from realized inflation above
-     * target and cost-push supply shocks. Part of the breakeven, not of expected inflation.
+     * Core inflation, less food and energy: supercore services and core goods at their basket weights, renormalised.
+     *
+     * @param MacroState $state Current macroeconomic state.
+     * @return float Smoothed core inflation rate.
      */
-    private function inflationRiskPremium(MacroState $state, float $targetInflation): float
+    public static function coreInflationEma(MacroState $state): float
     {
-        $excessInflation = max(0.0, $state->inflationEma - $targetInflation);
-        $costPushStress = $state->energyCostPushLag + $state->agriCostPushLag;
-
-        return ($excessInflation + $costPushStress) * self::TIPS_INFLATION_RISK_PREMIUM_SCALE;
+        return ((self::INFLATION_WEIGHT_SUPERCORE * $state->supercoreInflationEma) + (self::INFLATION_WEIGHT_GOODS * $state->coreGoodsInflationEma))
+            / (self::INFLATION_WEIGHT_SUPERCORE + self::INFLATION_WEIGHT_GOODS);
     }
 
     /**

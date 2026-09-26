@@ -97,8 +97,8 @@ class MacroEngine
     public const ZLB_PROXIMITY_THRESHOLD = 0.015;
 
     // --- Central Bank Effective Lower Bound & Shadow Rates ---
-    /** Wu-Xia (2016) Effective Lower Bound on nominal policy rates (ECB deposit facility floor). */
-    public const EFFECTIVE_LOWER_BOUND = -0.005;
+    /** Effective lower bound on the policy rate: with the target range at 0-0.25% the US effective funds rate sat near 0.1% (0.05-0.22%, 2009-15 and 2020-22). */
+    public const EFFECTIVE_LOWER_BOUND = 0.001;
     /** Structural upper bound ceiling for nominal monetary policy target rate. */
     public const POLICY_RATE_CEILING = 0.20;
 
@@ -477,7 +477,7 @@ class MacroEngine
         $this->laborSubsystem->calculateLaborMarketAndWages($state, $productivityGrowthRate, $dt);
 
         // 4. Gurkaynak, Sack & Wright (2010) TIPS breakeven inflation expectations.
-        $state->tipsBreakeven = $this->aggregateSubsystem->calculateTipsBreakeven($state, self::TARGET_INFLATION, $dt);
+        $state->tipsBreakeven = $this->aggregateSubsystem->calculateTipsBreakeven($state, self::TARGET_INFLATION);
 
         // 5. Taylor (1993) monetary policy target and Clarida-Gali-Gertler (2000) rate inertia.
         $state->targetRate = $this->monetarySubsystem->calculateTargetRate($state, self::TARGET_INFLATION, $state->naturalRate, $dt);

@@ -524,8 +524,8 @@ class MonetaryPolicySubsystemTest extends TestCase
             'Higher breakevens must move the term premium by the inflation risk premium only; the level shift belongs to the risk-neutral rate.'
         );
 
-        // Only the model-consistent share of the anchor carries the breakeven; the Kozicki-Tinsley endpoint does not.
-        $levelShift = (1.0 - MonetaryPolicySubsystem::KOZICKI_TINSLEY_ENDPOINT_WEIGHT) * (1.0 - MonetaryPolicySubsystem::LONG_RUN_INFLATION_ANCHOR_WEIGHT) * 0.02;
+        // The model-consistent endpoint carries the breakeven in full; the Kozicki-Tinsley endpoint does not.
+        $levelShift = (1.0 - MonetaryPolicySubsystem::KOZICKI_TINSLEY_ENDPOINT_WEIGHT) * 0.02;
         $this->assertGreaterThan(
             $curveAnchored['risk_neutral_10y'] + 0.5 * $levelShift,
             $curveUnanchored['risk_neutral_10y'],

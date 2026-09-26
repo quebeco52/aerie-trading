@@ -20,8 +20,6 @@ class MonetaryPolicySubsystem
     public const TAYLOR_LONG_RATE_OFFSET = 0.50;
 
     // --- Nelson-Siegel-Svensson Term Structure Dynamics (Svensson 1994) ---
-    /** Weight on the central bank target in the ten-year inflation expectation that anchors the curve's long end. Well-anchored expectations (surveys barely move) are what let the policy rate swing against a steady long end and invert the curve; a level that tracked the current breakeven would follow the short end up and never invert. */
-    public const LONG_RUN_INFLATION_ANCHOR_WEIGHT = 0.75;
     /** Kozicki-Tinsley (2001) shifting endpoint: weight on the market's adaptive long-run policy rate in the curve's anchor, against the model-consistent r* plus expected inflation. A decade at 5% lifts the anchor so the curve flattens like 1995-1999 instead of staying inverted; a decade at the floor drags the ten-year toward the 2% of 2012-2016. */
     public const KOZICKI_TINSLEY_ENDPOINT_WEIGHT = 0.50;
     /** Speed at which the perceived long-run policy rate learns from the realized rate (half-life ~5 years): slow enough that a two-year hiking cycle still inverts the curve, fast enough that a decade-long era reprices the long end, the slow adaptive expectations of Kozicki-Tinsley. */
@@ -204,10 +202,8 @@ class MonetaryPolicySubsystem
      */
     private function realizedCoreInflation(MacroState $state, float $targetInflation): float
     {
-        $coreWeight = MacroAggregateSubsystem::INFLATION_WEIGHT_SUPERCORE + MacroAggregateSubsystem::INFLATION_WEIGHT_GOODS;
-        if ($coreWeight > 0 && ($state->supercoreInflationEma !== $targetInflation || $state->coreGoodsInflationEma !== $targetInflation)) {
-            return ((MacroAggregateSubsystem::INFLATION_WEIGHT_SUPERCORE * $state->supercoreInflationEma)
-                + (MacroAggregateSubsystem::INFLATION_WEIGHT_GOODS * $state->coreGoodsInflationEma)) / $coreWeight;
+        if ($state->supercoreInflationEma !== $targetInflation || $state->coreGoodsInflationEma !== $targetInflation) {
+            return MacroAggregateSubsystem::coreInflationEma($state);
         }
 
         return $state->inflationEma;
@@ -598,10 +594,9 @@ class MonetaryPolicySubsystem
         $totalBaseTermPremium = max(self::MIN_TERM_PREMIUM_10Y, $structuralTermPremium + $inflationRiskPremium + $cyclicalTermPremium - $flightToSafetyShift - $restrictiveCompression);
 
         // Nelson-Siegel (1987) & Diebold-Li (2006) asymptotic risk-neutral rate level beta0.
-        $expectedInflation10y = (self::LONG_RUN_INFLATION_ANCHOR_WEIGHT * MacroEngine::TARGET_INFLATION)
-            + ((1.0 - self::LONG_RUN_INFLATION_ANCHOR_WEIGHT) * $state->tipsBreakeven);
-        // Kozicki & Tinsley (2001) shifting endpoint perception of long-run neutral policy rate.
-        $modelEndpoint = $naturalRate + $expectedInflation10y;
+        // Kozicki & Tinsley (2001) shifting endpoint perception of long-run neutral policy rate. The model-consistent
+        // endpoint prices inflation at the ten-year breakeven, which is already as anchored as the US one.
+        $modelEndpoint = $naturalRate + $state->tipsBreakeven;
         $level = ((1.0 - self::KOZICKI_TINSLEY_ENDPOINT_WEIGHT) * $modelEndpoint)
             + (self::KOZICKI_TINSLEY_ENDPOINT_WEIGHT * $state->perceivedNeutralRate);
         $nsBeta1 = $state->policyRate - $level;

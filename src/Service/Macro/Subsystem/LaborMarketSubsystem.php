@@ -93,11 +93,10 @@ class LaborMarketSubsystem
      * and no supply shock could outlive its own impulse -- the spiral had only its downstream half, wages
      * pushing the supercore basket through SUPERCORE_WAGE_TRANSMISSION and unit labour cost into the PPI.
      *
-     * The anchoring lives in the expectation itself, not here: calculateTipsBreakeven() already holds 40%
-     * of the breakeven on the central bank's target, so a credible regime damps the pass-through at source
-     * and a regime losing its anchor stops damping it. The resulting loop gain is
-     * 0.55 x 0.25 (wages into headline) x 0.65 (headline into the breakeven) = 0.089, comfortably
-     * inside unity, so the spiral converges to roughly a tenth more inflation rather than running away.
+     * The anchoring lives in the expectation itself, not here: calculateTipsBreakeven() is the US ten-year
+     * breakeven, which moves 0.08 per point of core inflation, so a credible regime damps the pass-through at
+     * source. The expectations loop gain is 0.55 x 0.25 (wages into headline) x 0.08 = 0.011; the second round
+     * of a price shock comes through the level error correction below, as real wages fall behind.
      *
      * Wages also error-correct on their LEVEL (Sargan 1964; Blanchard & Katz 1999): a real wage above its
      * potential-productivity path slows wage growth until the labor share returns. Growth equations alone leave the

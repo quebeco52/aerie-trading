@@ -1125,25 +1125,6 @@ class MacroEngineTest extends TestCase
         $this->assertGreaterThan($infAnchored, $infHigh, 'Un-anchored expectations must result in higher inflation drift.');
     }
 
-    public function testTipsBreakevenInflationExpectationsResponseToOutputGapAndVolatility(): void
-    {
-        $stateOverheated = new \App\Service\Macro\MacroState();
-        $stateOverheated->outputGapEma = 0.04;
-        $stateOverheated->inflationEma = 0.04;
-        $stateOverheated->marketVolatilityEma = 0.25;
-
-        $stateNeutral = new \App\Service\Macro\MacroState();
-        $stateNeutral->outputGapEma = 0.00;
-        $stateNeutral->inflationEma = 0.02;
-        $stateNeutral->marketVolatilityEma = 0.15;
-
-        $breakevenOverheated = $this->aggregateSubsystem->calculateTipsBreakeven($stateOverheated, MacroEngine::TARGET_INFLATION, 0.25);
-        $breakevenNeutral = $this->aggregateSubsystem->calculateTipsBreakeven($stateNeutral, MacroEngine::TARGET_INFLATION, 0.25);
-
-        $this->assertEqualsWithDelta(MacroEngine::TARGET_INFLATION, $breakevenNeutral, 0.0001, 'Neutral state must produce 2.0% TIPS breakeven expectation.');
-        $this->assertGreaterThan($breakevenNeutral, $breakevenOverheated, 'Overheated economy and elevated volatility must drive forward TIPS breakeven inflation above neutral.');
-    }
-
     public function testSvenssonYieldCurveSecondaryCurvatureFiscalSupply(): void
     {
         $stateHighDeficit = new \App\Service\Macro\MacroState();
@@ -1902,45 +1883,6 @@ class MacroEngineTest extends TestCase
             -0.10,
             $stateGoldilocks->financialConditionsIndex,
             'Goldilocks conditions (tight spreads, steep curve, low vol) must produce negative (accommodative) FCI.'
-        );
-    }
-
-    public function testPfluegerViceiraTipsBreakevenDropsDuringDeflationaryRecessionDespiteHighEquityVolatility(): void
-    {
-        $aggregateSubsystem = new \App\Service\Macro\Subsystem\MacroAggregateSubsystem($this->mathUtilityMock);
-
-        // Recession state with market panic (high VIX = 40%), but low inflation (1.2%) and slack output gap (-2.5%)
-        $stateRecessionPanic = new \App\Service\Macro\MacroState();
-        $stateRecessionPanic->inflationEma = 0.012;
-        $stateRecessionPanic->outputGapEma = -0.025;
-        $stateRecessionPanic->marketVolatilityEma = 0.40; // Panic volatility
-        $stateRecessionPanic->energyCostPushLag = 0.0;
-        $stateRecessionPanic->agriCostPushLag = 0.0;
-
-        $tipsRecession = $aggregateSubsystem->calculateTipsBreakeven($stateRecessionPanic, MacroEngine::TARGET_INFLATION, 0.25);
-
-        // TIPS breakeven must drop below 2.0% target reflecting deflation/slack risk, NOT spike from equity panic
-        $this->assertLessThan(
-            MacroEngine::TARGET_INFLATION,
-            $tipsRecession,
-            'Under Pflueger & Viceira (2011), TIPS breakeven must drop below 2.0% during deflationary recessions even if equity VIX is high.'
-        );
-
-        // Inflation shock state (inflation 4.5% + energy spike)
-        $stateInflationShock = new \App\Service\Macro\MacroState();
-        $stateInflationShock->inflationEma = 0.045;
-        $stateInflationShock->outputGapEma = 0.020;
-        $stateInflationShock->marketVolatilityEma = 0.20;
-        $stateInflationShock->energyCostPushLag = 0.010; // 100 bps energy cost push
-        $stateInflationShock->agriCostPushLag = 0.005;
-
-        $tipsShock = $aggregateSubsystem->calculateTipsBreakeven($stateInflationShock, MacroEngine::TARGET_INFLATION, 0.25);
-
-        // TIPS breakeven must price in both fundamental expected inflation and positive inflation risk premium
-        $this->assertGreaterThan(
-            0.040,
-            $tipsShock,
-            'TIPS breakeven must incorporate substantial inflation risk premium when inflation and cost-push shocks are elevated.'
         );
     }
 

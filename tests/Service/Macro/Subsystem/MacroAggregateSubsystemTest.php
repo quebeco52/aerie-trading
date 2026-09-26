@@ -897,22 +897,73 @@ class MacroAggregateSubsystemTest extends TestCase
         return $state;
     }
 
-    /** The risk premium inside the breakeven is not expected inflation: a breakeven lifted only by the premium leaves the real five-year unchanged. */
-    public function testTheInflationRiskPremiumDoesNotEaseTheRealFiveYear(): void
+    // --- Ten-Year Breakeven ---
+
+    /** Core on target and nothing passing through: the ten-year prices the target, where the US fit is anchored. */
+    public function testTheBreakevenPricesTheTargetWhenCoreIsOnTargetAndNothingPassesThrough(): void
     {
-        $anchored = $this->neutralBorrowingState();
-
-        $stressed = $this->neutralBorrowingState();
-        $stressed->inflationEma = 0.03; // 1pp of excess inflation adds TIPS_INFLATION_RISK_PREMIUM_SCALE x 1pp of premium.
-        $premium = 0.01 * MacroAggregateSubsystem::TIPS_INFLATION_RISK_PREMIUM_SCALE;
-        $stressed->tipsBreakeven = MacroEngine::TARGET_INFLATION + $premium;
-
-        $gapAnchored = $this->subsystem->calculateOutputGap($anchored, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0);
-        $gapStressed = $this->subsystem->calculateOutputGap($stressed, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0);
-
-        $this->assertEqualsWithDelta($gapAnchored, $gapStressed, 1e-12, 'A breakeven lifted only by its risk premium must not read as easier money.');
+        $this->assertEqualsWithDelta(MacroEngine::TARGET_INFLATION, $this->breakeven($this->onTargetInflationState()), 1e-15);
     }
 
+    /** The ten-year moves by the fitted loadings: per point of core over target, and per point of headline over core. */
+    public function testTheBreakevenMovesByItsLoadingsOnCoreAndOnHeadlineOverCore(): void
+    {
+        $base = $this->onTargetInflationState();
+        $core = $this->onTargetInflationState();
+        $core->supercoreInflationEma += 0.01;
+        $core->coreGoodsInflationEma += 0.01;
+        $commodity = $this->onTargetInflationState();
+        $commodity->energyCostPushLag = 0.006;
+        $commodity->agriCostPushLag = 0.004;
+
+        $this->assertEqualsWithDelta(MacroAggregateSubsystem::BREAKEVEN_CORE_LOADING * 0.01, $this->breakeven($core) - $this->breakeven($base), 1e-15);
+        $this->assertEqualsWithDelta(MacroAggregateSubsystem::BREAKEVEN_NONCORE_LOADING * 0.01, $this->breakeven($commodity) - $this->breakeven($base), 1e-15);
+    }
+
+    /**
+     * A commodity spike is priced as passing. The pass-through adds itself to headline one for one, and the US ten-year
+     * takes 0.14-0.20 of that across samples; the blend this replaced took two thirds, and an oil shock lifted the rule.
+     */
+    public function testAnEnergySpikeReachesTheTenYearOnlyAsFarAsItDoesInTheUs(): void
+    {
+        $spike = $this->onTargetInflationState();
+        $spike->energyCostPushLag = 0.015;
+
+        $share = ($this->breakeven($spike) - MacroEngine::TARGET_INFLATION) / $spike->energyCostPushLag;
+
+        $this->assertGreaterThan(0.10, $share);
+        $this->assertLessThan(0.20, $share);
+    }
+
+    /** The gap adds nothing once inflation is held (CBO gap 0.02, se 0.02), and neither headline noise nor equity panic is an expectation. */
+    public function testTheBreakevenIgnoresTheGapHeadlineNoiseAndEquityVolatility(): void
+    {
+        $hot = $this->onTargetInflationState();
+        $hot->outputGap = 0.04;
+        $hot->outputGapEma = 0.04;
+        $hot->inflation = 0.05;
+        $hot->inflationEma = 0.045;
+        $hot->marketVolatilityEma = 0.45;
+
+        $this->assertSame($this->breakeven($this->onTargetInflationState()), $this->breakeven($hot));
+    }
+
+    private function breakeven(MacroState $state): float
+    {
+        return $this->subsystem->calculateTipsBreakeven($state, MacroEngine::TARGET_INFLATION);
+    }
+
+    /** Core at target and no energy or food pass-through. */
+    private function onTargetInflationState(): MacroState
+    {
+        $state = new MacroState();
+        $state->supercoreInflationEma = MacroEngine::TARGET_INFLATION;
+        $state->coreGoodsInflationEma = MacroEngine::TARGET_INFLATION;
+        $state->energyCostPushLag = 0.0;
+        $state->agriCostPushLag = 0.0;
+
+        return $state;
+    }
 
     /** Baker, Bloom & Davis (2016): spikes in policy uncertainty cost output (Bloom 2009 wait-and-see), but calm does not stimulate. */
     public function testPolicyUncertaintyDragsDemandInLogs(): void
