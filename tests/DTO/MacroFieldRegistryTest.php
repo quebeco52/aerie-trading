@@ -50,9 +50,6 @@ class MacroFieldRegistryTest extends TestCase
 
         'eventType' => 'Label of the event in flight, not a series.',
         'lastElectionAt' => 'Fixed-term calendar, derivable from the election period.',
-        'strikeSector' => 'Bookkeeping for a strike in flight, not a series.',
-        'strikeRemainingYears' => 'Bookkeeping for a strike in flight, not a series.',
-        'strikeStartedAt' => 'Bookkeeping for a strike in flight, not a series.',
     ];
 
     /**

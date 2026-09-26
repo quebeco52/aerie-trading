@@ -332,9 +332,6 @@ class MacroEngine
     /** Productivity offset subtracted from the annual reimbursement update (ACA s.3401 multifactor-productivity adjustment, ~0.6pp a year). Read by the fiscal subsystem and by the state's opening value. */
     public const REIMBURSEMENT_PRODUCTIVITY_OFFSET = 0.006;
 
-    // --- Work Stoppages ---
-    /** Sector demand lost per year of stoppage, in units of the sector factor's standard deviation: a five-week stoppage costs the struck sector about half a standard deviation of its persistent demand, which the one-year factor then unwinds. */
-    public const STRIKE_SECTOR_DEMAND_LOSS_PER_YEAR = 5.0;
 
     // --- District-Wide Systemic Event Triggers ---
     /** Minimum simulated years between district-wide events, so a sustained crisis reports once rather than every tick. */
@@ -476,7 +473,6 @@ class MacroEngine
         $this->aggregateSubsystem->calculateNaturalRate($state, $productivityGrowthRate, $dt);
 
         // 3. Okun (1962) & Diamond-Mortensen-Pissarides (1994) labor market dynamics.
-        $this->laborSubsystem->advanceWorkStoppages($state, $dt);
         $this->laborSubsystem->calculateUnemployment($state, $dt);
         $this->laborSubsystem->calculateLaborMarketAndWages($state, $productivityGrowthRate, $dt);
 
@@ -605,11 +601,6 @@ class MacroEngine
             $previous = (float) ($state->sectorDemandZ[$sector] ?? 0.0);
             $state->sectorDemandZ[$sector] = ($decay * $previous) + ($innovationScale * $this->mathUtility->generateStandardNormal());
         }
-
-        // Sector output loss from labor work stoppage shocks (Ashenfelter & Johnson 1969).
-        if ($state->strikeSector !== null && isset($state->sectorDemandZ[$state->strikeSector])) {
-            $state->sectorDemandZ[$state->strikeSector] -= self::STRIKE_SECTOR_DEMAND_LOSS_PER_YEAR * $dt;
-        }
     }
 
     /**
@@ -681,17 +672,13 @@ class MacroEngine
             $state->lastElectionAt === $state->totalTime
             => ShockEvent::ELECTION_HELD,
 
-            // Industry-level labor union work stoppage strike event (Hicks 1932).
-            $state->strikeSector !== null && $state->strikeStartedAt === $state->totalTime
-            => ShockEvent::SECTOR_STRIKE,
-
             default => null,
         };
 
         if ($eventType !== null) {
             $state->eventType = $eventType;
             // District-wide systemic crisis refractory cooldown timer arming.
-            if ($eventType !== ShockEvent::SECTOR_STRIKE && $eventType !== ShockEvent::ELECTION_HELD) {
+            if ($eventType !== ShockEvent::ELECTION_HELD) {
                 $state->eventCooldownTimer = self::SYSTEMIC_EVENT_COOLDOWN_YEARS;
             }
         }

@@ -401,7 +401,7 @@ class FinancialInvariantTest extends TestCase
 
     public function testBeveridgeCurveHyperbolicSlackAndWagePhillipsTransmission(): void
     {
-        $labor = new LaborMarketSubsystem(new MathUtility());
+        $labor = new LaborMarketSubsystem();
 
         $tightState = new MacroState();
         $tightState->unemploymentRate = 0.035; // Tight labor market (3.5%)

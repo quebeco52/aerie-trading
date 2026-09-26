@@ -390,17 +390,6 @@ class NarrativeEngine
                     "Election result declared: Boards that had deferred decisions through the campaign now know the regime they face.",
                 ]
             ),
-            ShockEvent::SECTOR_STRIKE => $this->getRandomPhrase(
-                isset($context['strike_sector']) ? [
-                    "Work stoppage: Unions across the {$context['strike_sector']} sector walked out, halting output at the district's largest employers in the industry.",
-                    "Strike action: A sector-wide stoppage in {$context['strike_sector']} shut production lines and service desks pending a settlement.",
-                    "Labor dispute: {$context['strike_sector']} employers face a coordinated walkout, with lost output mounting until a wage settlement is reached.",
-                ] : [
-                    "Work stoppage: A sector-wide walkout halted output at several of the district's largest employers.",
-                    "Strike action: A coordinated stoppage shut production lines and service desks pending a settlement.",
-                    "Labor dispute: Employers face a sector-wide walkout, with lost output mounting until a wage settlement is reached.",
-                ]
-            ),
             ShockEvent::TITAN_INTERVENTION => $this->getRandomPhrase(
                 isset($context['qe_intensity_pct']) ? [
                     "Central bank Quantitative Easing: Monetary authority expanded asset purchases (QE intensity: {$context['qe_intensity_pct']}%) to compress bond yields and inject liquidity" . (isset($context['output_gap_pct']) ? " amid negative output gap ({$context['output_gap_pct']}%)" : "") . ".",

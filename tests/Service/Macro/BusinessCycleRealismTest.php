@@ -195,7 +195,7 @@ class BusinessCycleRealismTest extends TestCase
                 $this->inMemoryRedis(),
                 new MacroSnapshotRecorder(),
                 new MonetaryPolicySubsystem($mathUtility),
-                new LaborMarketSubsystem($mathUtility),
+                new LaborMarketSubsystem(),
                 new MacroAggregateSubsystem($mathUtility),
                 new CommodityLogisticsSubsystem($mathUtility),
                 new AssetMarketSubsystem($mathUtility),

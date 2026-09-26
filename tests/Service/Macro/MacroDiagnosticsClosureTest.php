@@ -43,7 +43,7 @@ class MacroDiagnosticsClosureTest extends TestCase
             self::inMemoryRedis(),
             new MacroSnapshotRecorder(),
             new MonetaryPolicySubsystem($math, $diagnostics),
-            new LaborMarketSubsystem($math),
+            new LaborMarketSubsystem(),
             new MacroAggregateSubsystem($math, $gapProbe, $diagnostics),
             new CommodityLogisticsSubsystem($math, $diagnostics),
             new AssetMarketSubsystem($math),

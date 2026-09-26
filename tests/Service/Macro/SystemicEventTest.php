@@ -193,40 +193,12 @@ class SystemicEventTest extends TestCase
     }
 
 
-    public function testAWorkStoppageIsReportedOnTheTickItBeginsAndNotAfter(): void
-    {
-        $state = new MacroState();
-        $state->totalTime = 2.5;
-        $state->strikeSector = 'Industrials';
-        $state->strikeRemainingYears = 0.10;
-        $state->strikeStartedAt = 2.5;
 
-        $this->assertSame(ShockEvent::SECTOR_STRIKE, $this->fire($state));
-
-        $state->eventCooldownTimer = 0.0;
-        $state->totalTime += 1.0 / self::TICKS_PER_YEAR;
-        $this->assertNull($this->fire($state), 'A stoppage already under way is old news.');
-    }
-
-    public function testAFundingFreezeOutranksAWorkStoppage(): void
-    {
-        $state = new MacroState();
-        $state->totalTime = 2.5;
-        $state->strikeSector = 'Industrials';
-        $state->strikeStartedAt = 2.5;
-        $state->interbankLiquiditySpread = MacroEngine::SYSTEMIC_LIQUIDITY_FREEZE_SPREAD + 0.005;
-
-        $this->assertSame(ShockEvent::SYSTEMIC_LIQUIDITY_FREEZE, $this->fire($state));
-    }
-
-
-    public function testAnElectionIsReportedOnTheDayAndOutranksAStoppage(): void
+    public function testAnElectionIsReportedOnTheDayOnly(): void
     {
         $state = new MacroState();
         $state->totalTime = 4.0;
         $state->lastElectionAt = 4.0;
-        $state->strikeSector = 'Industrials';
-        $state->strikeStartedAt = 4.0;
 
         $this->assertSame(ShockEvent::ELECTION_HELD, $this->fire($state));
 
@@ -289,18 +261,6 @@ class SystemicEventTest extends TestCase
         $state->lastCatastropheAt = -1.0;
         $state->householdDebtToIncome = 1.30;
         $this->assertNull($this->fire($state), 'A burden households are still borrowing into is not yet a deleveraging.');
-    }
-
-    public function testWorkStoppageDoesNotArmDistrictCooldown(): void
-    {
-        $state = new MacroState();
-        $state->totalTime = 2.5;
-        $state->strikeSector = 'Industrials';
-        $state->strikeRemainingYears = 0.10;
-        $state->strikeStartedAt = 2.5;
-
-        $this->assertSame(ShockEvent::SECTOR_STRIKE, $this->fire($state));
-        $this->assertSame(0.0, $state->eventCooldownTimer, 'Sector strike news must not arm the district event cooldown.');
     }
 
     public function testCatastropheFiresDuringActiveDistrictCooldown(): void

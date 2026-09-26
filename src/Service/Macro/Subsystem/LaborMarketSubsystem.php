@@ -2,10 +2,8 @@
 
 namespace App\Service\Macro\Subsystem;
 
-use App\Data\Sectors;
 use App\Service\Macro\MacroEngine;
 use App\Service\Macro\MacroState;
-use App\Service\Math\MathUtility;
 
 /**
  * Handles labor market dynamics, unemployment frictional adjustments,
@@ -46,52 +44,6 @@ class LaborMarketSubsystem
     // --- Wage Error Correction (Blanchard & Katz 1999) ---
     /** Annual pull of wage growth against the real wage's gap to trend productivity: US nonfarm business 1960-1999, wages on the lagged labor share (se 0.10; var/harness/labor_real.py). */
     public const WAGE_ERROR_CORRECTION_SPEED = 0.12;
-
-    // --- Work Stoppages (BLS major work stoppages) ---
-    /** Notable stoppages per year across the district. The BLS counts 20-30 major (1,000+ worker) stoppages a year in a US-scale economy; scaled to a district of some sixty listed employers. */
-    public const STRIKE_ARRIVAL_PER_YEAR = 1.5;
-    /** Mean stoppage length in years (~5 weeks): BLS major stoppages run from days to months and average about a month. */
-    public const STRIKE_MEAN_DURATION_YEARS = 0.10;
-    /** Settlement premium on the economy-wide wage target while a stoppage runs (~20 bps): the pattern-bargaining spillover of a headline settlement. */
-    public const STRIKE_WAGE_SETTLEMENT_BUMP = 0.002;
-
-    public function __construct(
-        private readonly MathUtility $mathUtility,
-    ) {}
-
-    /**
-     * Work stoppages: a Poisson arrival of one struck sector at a time, held for an exponential duration.
-     *
-     * Only the clock lives here. The lost output is applied to the struck sector's persistent demand factor
-     * by the engine, after the factor's own step, and the settlement premium enters the wage target below,
-     * so the Okun and Beveridge mechanics stay deterministic for a given state.
-     *
-     * @param MacroState $state Current macroeconomic state.
-     * @param float      $dt    Time increment in years.
-     */
-    public function advanceWorkStoppages(MacroState $state, float $dt): void
-    {
-        if ($state->strikeSector !== null) {
-            $state->strikeRemainingYears -= $dt;
-            if ($state->strikeRemainingYears <= 0.0) {
-                $state->strikeSector = null;
-                $state->strikeRemainingYears = 0.0;
-            }
-
-            return;
-        }
-
-        if (!$this->mathUtility->checkProbability(self::STRIKE_ARRIVAL_PER_YEAR * $dt)) {
-            return;
-        }
-
-        $sectors = array_keys(Sectors::MACRO_SECTORS);
-        $index = min(count($sectors) - 1, (int) floor($this->mathUtility->generateUniform() * count($sectors)));
-
-        $state->strikeSector = $sectors[$index];
-        $state->strikeRemainingYears = max($dt, $this->mathUtility->generateExponential(1.0 / self::STRIKE_MEAN_DURATION_YEARS));
-        $state->strikeStartedAt = $state->totalTime;
-    }
 
     /**
      * Dynamic Okun's Law (Okun 1962) with Convex Search-Matching Friction (Knotek 2007).
@@ -169,9 +121,8 @@ class LaborMarketSubsystem
         $state->jobVacanciesRate = max(0.01, min(0.12, $beveridgeConstant / $effectiveUnemployment));
         $state->laborTightness = $state->jobVacanciesRate / $effectiveUnemployment;
 
-        $settlementPremium = $state->strikeSector !== null ? self::STRIKE_WAGE_SETTLEMENT_BUMP : 0.0;
         $errorCorrection = self::WAGE_ERROR_CORRECTION_SPEED * $state->realWageGap;
-        $targetWageGrowth = $tfpGrowthRate + $state->tipsBreakevenEma + (self::WAGE_TIGHTNESS_SENSITIVITY * ($state->laborTightness - MacroEngine::NATURAL_LABOR_TIGHTNESS)) + $settlementPremium - $errorCorrection;
+        $targetWageGrowth = $tfpGrowthRate + $state->tipsBreakevenEma + (self::WAGE_TIGHTNESS_SENSITIVITY * ($state->laborTightness - MacroEngine::NATURAL_LABOR_TIGHTNESS)) - $errorCorrection;
         $targetWageGrowth = max(0.0, min(0.08, $targetWageGrowth));
 
         $wageGap = $targetWageGrowth - $state->wageGrowth;

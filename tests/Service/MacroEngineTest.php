@@ -42,7 +42,7 @@ class MacroEngineTest extends TestCase
 
         $this->snapshotRecorder = new MacroSnapshotRecorder();
         $this->monetarySubsystem = new MonetaryPolicySubsystem($this->mathUtilityMock);
-        $this->laborSubsystem = new LaborMarketSubsystem($this->mathUtilityMock);
+        $this->laborSubsystem = new LaborMarketSubsystem();
         $this->aggregateSubsystem = new MacroAggregateSubsystem($this->mathUtilityMock);
         $this->commoditySubsystem = new CommodityLogisticsSubsystem($this->mathUtilityMock);
         $this->assetSubsystem = new AssetMarketSubsystem($this->mathUtilityMock);
@@ -1732,7 +1732,7 @@ class MacroEngineTest extends TestCase
 
     public function testNairuHysteresisScarsAfterDeepRecession(): void
     {
-        $laborSubsystem = new \App\Service\Macro\Subsystem\LaborMarketSubsystem($this->mathUtilityMock);
+        $laborSubsystem = new \App\Service\Macro\Subsystem\LaborMarketSubsystem();
 
         $state = new \App\Service\Macro\MacroState();
         $state->nairu = 0.04;
@@ -1750,7 +1750,7 @@ class MacroEngineTest extends TestCase
 
     public function testNairuRecoveryDuringTightLaborMarket(): void
     {
-        $laborSubsystem = new \App\Service\Macro\Subsystem\LaborMarketSubsystem($this->mathUtilityMock);
+        $laborSubsystem = new \App\Service\Macro\Subsystem\LaborMarketSubsystem();
 
         $state = new \App\Service\Macro\MacroState();
         $state->nairu = 0.06; // Scarred from prior downturn
@@ -1768,7 +1768,7 @@ class MacroEngineTest extends TestCase
 
     public function testDownwardWageRigidity(): void
     {
-        $laborSubsystem = new \App\Service\Macro\Subsystem\LaborMarketSubsystem($this->mathUtilityMock);
+        $laborSubsystem = new \App\Service\Macro\Subsystem\LaborMarketSubsystem();
         $dt = 0.25;
         $tfpGrowth = MacroEngine::TFP_DRIFT;
 
@@ -2160,22 +2160,4 @@ class MacroEngineTest extends TestCase
     }
 
 
-    public function testAWorkStoppageDrainsTheStruckSectorsDemandFactorOnly(): void
-    {
-        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
-
-        $state = new \App\Service\Macro\MacroState();
-        foreach (array_keys(\App\Data\Sectors::MACRO_SECTORS) as $sector) {
-            $state->sectorDemandZ[$sector] = 0.0;
-        }
-        $state->strikeSector = 'Industrials';
-        $state->strikeRemainingYears = 0.10;
-
-        $dt = 0.05;
-        $update = new \ReflectionMethod(MacroEngine::class, 'updateSectorFactors');
-        $update->invokeArgs($this->engine, [$state, $dt]);
-
-        $this->assertEqualsWithDelta(-MacroEngine::STRIKE_SECTOR_DEMAND_LOSS_PER_YEAR * $dt, $state->sectorDemandZ['Industrials'], 1e-9, 'Lost output is a flow out of the struck sector for as long as the stoppage runs.');
-        $this->assertSame(0.0, $state->sectorDemandZ['Energy'], 'Every other sector is untouched.');
-    }
 }

@@ -45,8 +45,6 @@ class ShockEvent
     public const NATURAL_CATASTROPHE = 'natural_catastrophe';
     /** A scheduled district election has been held; the policy regime is settled for another term. */
     public const ELECTION_HELD = 'election_held';
-    /** A work stoppage has begun in one macro sector: lost output for that sector for as long as it runs. */
-    public const SECTOR_STRIKE = 'sector_strike';
 
     // Sector-Specific Shocks
     public const VOLATILITY_SURGE = 'volatility_surge';

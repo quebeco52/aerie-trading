@@ -271,9 +271,6 @@ readonly class MacroStateDTO
         public float $policyUncertaintyIndex = MacroEngine::EPU_BASELINE,
         public float $policyUncertaintyIndexEma = MacroEngine::EPU_BASELINE,
         public float $lastElectionAt = -1.0,
-        public ?string $strikeSector = null,
-        public float $strikeRemainingYears = 0.0,
-        public float $strikeStartedAt = -1.0,
         public float $moneySupplyGrowth = MacroEngine::M2_BASE_GROWTH,
         public float $moneySupplyGrowthEma = MacroEngine::M2_BASE_GROWTH,
     ) {}
@@ -306,7 +303,7 @@ readonly class MacroStateDTO
             $args[$field] = match ($field) {
                 'sectorZ', 'sectorDemandZ' => is_array($data[$key]) ? array_map('floatval', $data[$key]) : [],
                 'qeActive', 'qtActive' => (bool) $data[$key],
-                'eventType', 'strikeSector' => (string) $data[$key],
+                'eventType' => (string) $data[$key],
                 default => (float) $data[$key],
             };
         }

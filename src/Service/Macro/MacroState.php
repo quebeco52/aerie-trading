@@ -318,11 +318,6 @@ class MacroState
     public float $policyUncertaintyIndexEma;
     public float $lastElectionAt;
 
-    // Work stoppage in progress: the struck macro sector, time left, and the tick it began (for the event pulse).
-    public ?string $strikeSector;
-    public float $strikeRemainingYears;
-    public float $strikeStartedAt;
-
     public function __construct()
     {
         foreach (MacroFieldRegistry::defaults() as $field => $opening) {
@@ -359,7 +354,7 @@ class MacroState
             $state->$field = match ($field) {
                 'sectorZ', 'sectorDemandZ' => is_array($data[$key]) ? array_map('floatval', $data[$key]) : [],
                 'qeActive', 'qtActive' => (bool) $data[$key],
-                'eventType', 'strikeSector' => (string) $data[$key],
+                'eventType' => (string) $data[$key],
                 default => (float) $data[$key],
             };
         }

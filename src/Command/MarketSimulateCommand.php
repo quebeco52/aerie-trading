@@ -195,7 +195,6 @@ class MarketSimulateCommand extends Command
                         'inversion_months' => number_format($macroState->inversionDuration * 12.0, 1),
                         'erp_pct' => number_format($macroState->equityRiskPremium * 100.0, 2),
                         'qe_intensity_pct' => number_format($macroState->qeIntensity * 100.0, 2),
-                        'strike_sector' => $macroState->strikeSector ?? 'the district',
                         'epu_index' => number_format($macroState->policyUncertaintyIndexEma, 0),
                         'sovereign_spread_bps' => number_format($macroState->sovereignRiskSpread * 10000.0, 0),
                         'debt_to_gdp_pct' => number_format($macroState->sovereignDebtToGdp * 100.0, 0),
@@ -210,7 +209,6 @@ class MarketSimulateCommand extends Command
                             ShockEvent::ELECTION_HELD => 0.0,
                             ShockEvent::NATURAL_CATASTROPHE => -2.0,
                             ShockEvent::HOUSEHOLD_DELEVERAGING => -3.0,
-                            ShockEvent::SECTOR_STRIKE => -1.0,
                             default => -5.0,
                         };
                     $this->marketEvent->publish($lbi, 'SHOCK', $desc, $shockPct);
