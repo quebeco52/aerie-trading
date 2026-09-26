@@ -113,6 +113,25 @@ class MarketEventPublisherTest extends TestCase
         $this->assertSame(-12.5, $result['change_percent']);
     }
 
+    /** News whose price effect is not known is published without a number rather than with a made-up one. */
+    public function testAnEventWithoutAKnownMoveCarriesNoNumber(): void
+    {
+        $etf = new Etf();
+        $etf->setTicker('LBI');
+
+        $this->emMock->expects($this->once())
+            ->method('persist')
+            ->with($this->callback(fn (mixed $entity): bool => $entity instanceof EtfEvent && $entity->getChangePercent() === null));
+
+        ob_start();
+        $result = $this->publisher->publish($etf, 'SHOCK', 'Systemic liquidity freeze.', null);
+        $output = ob_get_clean();
+
+        $this->assertNull($result['change_percent']);
+        $this->assertNull($result['presented']['changePercent']);
+        $this->assertStringContainsString('MARKET SHOCK on LBI: n/a', $output);
+    }
+
     /** The live feed renders the card the page renders on load, so the wire copy carries it, JSON-safe. */
     public function testTheWireCopyCarriesThePresentedCard(): void
     {

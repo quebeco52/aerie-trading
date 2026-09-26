@@ -108,14 +108,10 @@ class MonetaryPolicySubsystem
     public const MIN_TERM_PREMIUM_REGIME = 0.0;
 
     // --- Central Bank Balance Sheet (QE & QT) ---
-    /** Policy rate threshold below which QE bond purchases can be initiated during recessions. */
-    public const QE_ACTIVATION_RATE_THRESHOLD = 0.025;
-    /** Negative output gap threshold below which central bank initiates QE bond purchases. */
-    public const QE_ACTIVATION_GAP_THRESHOLD = -0.005;
     /** Ten-year yield suppression under full-scale QE (~100bps): Gagnon et al. (2011) and Bonis-Ihrig-Wei (2017) put the whole QE1-QE3 stock near 100bps at its 2013 peak. */
     public const QE_MAX_SUPPRESSION = 0.01;
-    /** QE dose per unit of negative output gap: full-scale purchases need a ~-2.5% gap with the policy rate at the floor, not a mild slowdown. */
-    public const QE_SEVERITY_MULTIPLIER = 0.40;
+    /** Cut the floor forbids that the full programme stands in for: the Wu-Xia (2016) shadow rate bottomed near -3% in 2014 with the QE1-QE3 stock at its peak. */
+    public const QE_FULL_PROGRAM_SHORTFALL = 0.03;
     /** Annual ramp speed of central bank balance sheet expansion and contraction. */
     public const BALANCE_SHEET_RAMP_SPEED = 1.0;
     /** Positive output gap threshold above which central bank initiates Quantitative Tightening. */
@@ -413,9 +409,9 @@ class MonetaryPolicySubsystem
     /**
      * Central Bank Balance Sheet Operations (Bernanke 2020, Vayanos & Vila 2021).
      *
-     * Evaluates quantitative asset purchase/runoff targets based on conventional rate room,
-     * recession severity, and economic overheating. Manages the reinvestment hold timer
-     * and exponential dynamic adjustment speed toward the balance sheet target.
+     * Purchases begin only when the policy rule asks for a rate below the floor and are sized by how far below, the
+     * shortfall a shadow rate measures; the US bought only at the floor (2008, 2020). Runoff follows a reinvestment
+     * hold, sooner when the economy overheats. Manages the hold timer and the exponential adjustment toward target.
      *
      * The intensity is a STOCK of duration extraction and is floored at zero. Letting it go negative made the
      * bank net short duration whenever the economy ran hot -- measured over 480 simulated years it was negative
@@ -434,14 +430,10 @@ class MonetaryPolicySubsystem
      */
     public function calculateBalanceSheetOperations(MacroState $state, float $dt): array
     {
-        $rateRoomProximity = min(1.0, max(0.0, (self::QE_ACTIVATION_RATE_THRESHOLD - $state->policyRate) / self::QE_ACTIVATION_RATE_THRESHOLD));
-        $recessionSeverity = max(0.0, -$state->outputGap);
-
-        if ($rateRoomProximity > 0.0 && $state->outputGap < self::QE_ACTIVATION_GAP_THRESHOLD) {
-            $qeYieldSuppressionTarget = min(self::QE_MAX_SUPPRESSION, $rateRoomProximity * $recessionSeverity * self::QE_SEVERITY_MULTIPLIER);
-        } else {
-            $qeYieldSuppressionTarget = 0.0;
-        }
+        // Purchases stand in for the cut the floor forbids (Wu & Xia 2016): none while the rule's own rate is reachable,
+        // the full programme once the rule asks for the shadow rate the 2014 stock delivered.
+        $floorShortfall = max(0.0, MacroEngine::EFFECTIVE_LOWER_BOUND - $state->targetRate);
+        $qeYieldSuppressionTarget = min(self::QE_MAX_SUPPRESSION, self::QE_MAX_SUPPRESSION * $floorShortfall / self::QE_FULL_PROGRAM_SHORTFALL);
 
         // Overheating does not create a tightening position out of nothing: it ends the reinvestment phase early
         // and speeds the runoff of whatever is held. Its scale is a rate, not a yield.

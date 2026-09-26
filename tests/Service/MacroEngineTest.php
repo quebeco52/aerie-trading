@@ -133,6 +133,44 @@ class MacroEngineTest extends TestCase
         $this->assertGreaterThan(MacroEngine::BASE_EQUITY_RISK_PREMIUM, $result->equityRiskPremium, 'ERP should rise during a recession.');
     }
 
+    /** A productivity level shock opens a supply gap but leaves r* alone: it moves potential, not its trend growth (HLW's sigma_y*). */
+    public function testAProductivityLevelShockLeavesTheNaturalRateAlone(): void
+    {
+        $calm = ['natural_rate' => MacroEngine::BASE_NATURAL_RATE, 'tfp_shock_level' => 0.0];
+        $shocked = ['tfp_shock_level' => 0.05] + $calm;
+        $this->redisMock->method('get')->willReturnOnConsecutiveCalls(json_encode($calm), json_encode($shocked));
+        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
+
+        $withoutShock = $this->engine->updateMacroState(0.25);
+        $withShock = $this->engine->updateMacroState(0.25);
+
+        $this->assertGreaterThan($withoutShock->productivitySupplyGap, $withShock->productivitySupplyGap, 'The shock reaches output before potential.');
+        $this->assertSame($withoutShock->naturalRate, $withShock->naturalRate);
+    }
+
+    /** The tick a purchase programme starts is stamped, and that is the tick its one headline goes out. */
+    public function testTheTickAPurchaseProgrammeStartsIsStampedAndReported(): void
+    {
+        $this->redisMock->method('get')->willReturn(json_encode([
+            'output_gap' => -0.06,
+            'output_gap_ema' => -0.05,
+            'inflation' => 0.005,
+            'inflation_ema' => 0.005,
+            'policy_rate' => MacroEngine::EFFECTIVE_LOWER_BOUND,
+            'policy_rate_ema' => MacroEngine::EFFECTIVE_LOWER_BOUND,
+            'balance_sheet_intensity' => 0.0,
+            'qe_active' => false,
+        ]));
+        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
+
+        $result = $this->engine->updateMacroState(0.25);
+
+        $this->assertLessThan(MacroEngine::EFFECTIVE_LOWER_BOUND, $result->targetRate, 'The slump asks for a rate below the floor.');
+        $this->assertTrue($result->qeActive);
+        $this->assertSame($result->totalTime, $result->lastQeLaunchAt);
+        $this->assertSame(\App\Service\Event\ShockEvent::TITAN_INTERVENTION, $result->eventType);
+    }
+
     public function testUpdateMacroStateDuringSevereInflationBoom(): void
     {
         $existingState = [
@@ -592,8 +630,8 @@ class MacroEngineTest extends TestCase
             'inflation_ema' => 0.020,
             'output_gap' => -0.010,
             'output_gap_ema' => -0.010,
-            'policy_rate' => 0.01,
-            'policy_rate_ema' => 0.01,
+            'policy_rate' => MacroEngine::EFFECTIVE_LOWER_BOUND,
+            'policy_rate_ema' => MacroEngine::EFFECTIVE_LOWER_BOUND,
             'yield_5y' => 0.02,
         ];
 
@@ -606,7 +644,7 @@ class MacroEngineTest extends TestCase
         $result = $this->engine->updateMacroState(0.25);
 
         // Evans Rule holds the policy rate at the ZLB (does not hike), while targetRate reflects the unconstrained shadow rate
-        $this->assertEquals(0.01, $result->policyRate, 'Evans Rule must lock policy rate at ZLB while unemployment exceeds 5.0% and inflation is below 2.5%.');
+        $this->assertEquals(MacroEngine::EFFECTIVE_LOWER_BOUND, $result->policyRate, 'Evans Rule must lock policy rate at ZLB while unemployment exceeds 5.0% and inflation is below 2.5%.');
         $this->assertGreaterThan(0.00, $result->targetRate, 'Wu-Xia shadow target rate remains continuous and positive.');
     }
 
@@ -672,8 +710,8 @@ class MacroEngineTest extends TestCase
             'inflation_ema' => 0.021,
             'output_gap' => -0.010,
             'output_gap_ema' => -0.010,
-            'policy_rate' => 0.015,
-            'policy_rate_ema' => 0.015,
+            'policy_rate' => MacroEngine::EFFECTIVE_LOWER_BOUND,
+            'policy_rate_ema' => MacroEngine::EFFECTIVE_LOWER_BOUND,
             'yield_5y' => 0.025,
         ];
 
@@ -685,7 +723,7 @@ class MacroEngineTest extends TestCase
 
         $result = $this->engine->updateMacroState(0.25);
 
-        $this->assertLessThanOrEqual(0.015, $result->policyRate, 'Evans Rule must prevent rate hikes while unemployment is above 5.0% and inflation is below 2.5%.');
+        $this->assertLessThanOrEqual(MacroEngine::EFFECTIVE_LOWER_BOUND, $result->policyRate, 'Evans Rule must prevent rate hikes while unemployment is above 5.0% and inflation is below 2.5%.');
         $this->assertGreaterThan(0.00, $result->targetRate, 'Taylor shadow target rate calculates continuously without artificial zero clamping.');
     }
 
@@ -699,8 +737,8 @@ class MacroEngineTest extends TestCase
             'inflation_ema' => 0.020,
             'output_gap' => -0.010,
             'output_gap_ema' => -0.010,
-            'policy_rate' => 0.01,
-            'policy_rate_ema' => 0.01,
+            'policy_rate' => MacroEngine::EFFECTIVE_LOWER_BOUND,
+            'policy_rate_ema' => MacroEngine::EFFECTIVE_LOWER_BOUND,
             'yield_5y' => 0.02,
         ];
 
@@ -712,7 +750,7 @@ class MacroEngineTest extends TestCase
 
         $result = $this->engine->updateMacroState(0.25);
 
-        $this->assertEquals(0.01, $result->policyRate, 'Evans Rule must anchor on trend unemployment (EMA) to avoid premature liftoff from single-period noise.');
+        $this->assertEquals(MacroEngine::EFFECTIVE_LOWER_BOUND, $result->policyRate, 'Evans Rule must anchor on trend unemployment (EMA) to avoid premature liftoff from single-period noise.');
     }
 
     public function testCapitalOverhangDragsOutputGap(): void
@@ -1312,11 +1350,12 @@ class MacroEngineTest extends TestCase
 
     public function testBalanceSheetHoldsThroughReinvestmentThenRunsOff(): void
     {
-        // Purchases first: a deep recession at the lower bound.
+        // Purchases first: a deep recession at the lower bound, the rule asking for two points the floor forbids.
         $state = new \App\Service\Macro\MacroState();
         $state->outputGap = -0.025;
         $state->inflation = 0.010;
-        $state->policyRate = 0.002;
+        $state->policyRate = MacroEngine::EFFECTIVE_LOWER_BOUND;
+        $state->targetRate = -0.02;
         $state->tipsBreakeven = 0.015;
 
         for ($i = 0; $i < 8; $i++) {
@@ -1331,6 +1370,7 @@ class MacroEngineTest extends TestCase
         $state->outputGap = 0.002;
         $state->inflation = 0.019;
         $state->policyRate = 0.02;
+        $state->targetRate = 0.02;
 
         $step = $this->monetarySubsystem->calculateBalanceSheetOperations($state, 0.25);
         $this->assertEqualsWithDelta($peak, $step['new_balance_sheet_intensity'], 1e-9, 'The reinvestment hold keeps the portfolio flat.');
@@ -1931,21 +1971,22 @@ class MacroEngineTest extends TestCase
         $this->assertLessThan(0.0, $spread2s10sTight, '2s10s spread must invert when policy rate is overtightened.');
     }
 
-    public function testQuantitativeEasingActivatesWhenPolicyRateLowDuringRecession(): void
+    public function testQuantitativeEasingActivatesWhenTheRuleAsksForARateBelowTheFloor(): void
     {
         $monetarySubsystem = new \App\Service\Macro\Subsystem\MonetaryPolicySubsystem($this->mathUtilityMock);
         $dt = 0.25;
 
-        // Low rates (1.5%) and negative output gap (-2.0%)
+        // At the floor in a -2% slump, the rule asking for -1.5%
         $recessionState = new \App\Service\Macro\MacroState();
         $recessionState->outputGap = -0.020;
-        $recessionState->policyRate = 0.015;
+        $recessionState->policyRate = MacroEngine::EFFECTIVE_LOWER_BOUND;
+        $recessionState->targetRate = -0.015;
         $recessionState->inflation = 0.012;
         $recessionState->tipsBreakeven = 0.015;
 
         $yieldData = $monetarySubsystem->calculateYieldCurveAndQE($recessionState, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, $dt);
 
-        $this->assertGreaterThan(0.0, $yieldData['new_balance_sheet_intensity'], 'QE intensity must expand when policy rates are low during a recession.');
+        $this->assertGreaterThan(0.0, $yieldData['new_balance_sheet_intensity'], 'QE intensity must expand when the rule asks for a rate below the floor.');
         $this->assertGreaterThan(0.0, $yieldData['new_qe_intensity'], 'QE asset purchase intensity must be positive.');
         $this->assertEquals(0.0, $yieldData['new_qt_intensity'], 'QT runoff must be zero when QE is active.');
     }

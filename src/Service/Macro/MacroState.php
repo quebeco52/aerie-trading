@@ -128,6 +128,8 @@ class MacroState
     public float $qtIntensity;
     public float $balanceSheetIntensity;
     public float $balanceSheetHoldTimer;
+    // When the last asset-purchase programme was launched, for the one headline it earns.
+    public float $lastQeLaunchAt;
 
     public float $inversionDuration;
     public float $corporateTaxRate;

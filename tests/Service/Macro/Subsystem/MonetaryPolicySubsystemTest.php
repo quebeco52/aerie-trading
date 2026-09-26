@@ -97,6 +97,22 @@ class MonetaryPolicySubsystemTest extends TestCase
         $this->assertEquals(0.00, $newPolicyRate, 'Evans Rule must lock policy rate at 0.00% when at ZLB with elevated unemployment.');
     }
 
+    /** Threshold guidance was a floor policy (FOMC, Dec 2012): with a point of rate room left, the rule's hikes go ahead. */
+    public function testEvansRuleDoesNotHoldARateAboveTheFloor(): void
+    {
+        $state = new MacroState();
+        $state->policyRate = 0.010;
+        $state->unemploymentRateEma = 0.075;
+        $state->nairu = MacroEngine::NATURAL_UNEMPLOYMENT;
+        $state->inflationEma = 0.018;
+        $state->tipsBreakeven = 0.018;
+
+        $newPolicyRate = $this->subsystem->updatePolicyRate($state, 0.02, 0.25);
+
+        $this->assertGreaterThan(0.010, $newPolicyRate);
+        $this->assertSame(0.0, $this->constraintsFor($state, 0.02)['evansHold']);
+    }
+
     public function testEvansRuleDoesNotFireDuringNormalExpansion(): void
     {
         $state = new MacroState();
@@ -336,23 +352,25 @@ class MonetaryPolicySubsystemTest extends TestCase
         $this->assertEqualsWithDelta(-0.020, $shift10y, 0.0001, '10Y yield suppression under 200bps QE intensity must be exactly -200bps');
     }
 
-    public function testQeActivationRespectsRateRoomThreshold(): void
+    public function testQeActivationWaitsForTheFloor(): void
     {
         $dt = 0.25;
 
-        // Rate above threshold (3.0% > 2.5% threshold): conventional room remains, no QE even in recession
-        $stateHighRate = new MacroState();
-        $stateHighRate->policyRate = 0.030;
-        $stateHighRate->outputGap = -0.020;
-        $highRateCurve = $this->subsystem->calculateYieldCurveAndQE($stateHighRate, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, $dt);
-        $this->assertEquals(0.0, $highRateCurve['new_qe_intensity'], 'QE must not activate when policy rate has conventional cutting room (> 2.5%)');
+        // A point and a half of rate room in a recession: the bank cuts, it does not buy (the old 2.5% trigger did).
+        $stateWithRoom = new MacroState();
+        $stateWithRoom->policyRate = 0.015;
+        $stateWithRoom->targetRate = 0.010;
+        $stateWithRoom->outputGap = -0.020;
+        $roomCurve = $this->subsystem->calculateYieldCurveAndQE($stateWithRoom, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, $dt);
+        $this->assertEquals(0.0, $roomCurve['new_qe_intensity'], 'QE must not activate while the rule\'s rate is reachable.');
 
-        // Rate below threshold (1.5% < 2.5% threshold): conventional room exhausted, QE triggers
-        $stateLowRate = new MacroState();
-        $stateLowRate->policyRate = 0.015;
-        $stateLowRate->outputGap = -0.020;
-        $lowRateCurve = $this->subsystem->calculateYieldCurveAndQE($stateLowRate, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, $dt);
-        $this->assertGreaterThan(0.0, $lowRateCurve['new_qe_intensity'], 'QE must activate when policy rate is low and output gap is negative');
+        // At the floor with the rule asking for less: purchases begin.
+        $stateAtFloor = new MacroState();
+        $stateAtFloor->policyRate = MacroEngine::EFFECTIVE_LOWER_BOUND;
+        $stateAtFloor->targetRate = -0.015;
+        $stateAtFloor->outputGap = -0.020;
+        $floorCurve = $this->subsystem->calculateYieldCurveAndQE($stateAtFloor, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, $dt);
+        $this->assertGreaterThan(0.0, $floorCurve['new_qe_intensity'], 'QE must activate once the rule asks for a rate below the floor.');
     }
 
     public function testTighteningCompressionDecaysWithProlongedRestrictiveStance(): void
@@ -381,7 +399,8 @@ class MonetaryPolicySubsystemTest extends TestCase
     public function testCalculateBalanceSheetOperationsDirectly(): void
     {
         $state = new MacroState();
-        $state->policyRate = 0.010;
+        $state->policyRate = MacroEngine::EFFECTIVE_LOWER_BOUND;
+        $state->targetRate = -0.02; // the rule wants two points the floor forbids
         $state->outputGap = -0.025;
         $state->balanceSheetIntensity = 0.0;
 
@@ -391,6 +410,26 @@ class MonetaryPolicySubsystemTest extends TestCase
         $this->assertGreaterThan(0.0, $bs['new_qe_intensity']);
         $this->assertEquals(0.0, $bs['new_qt_intensity']);
         $this->assertEquals(0.0, $bs['new_hold_timer']);
+    }
+
+    /** The programme is sized by the cut the floor forbids: a point short buys a third of the full stock, three points buy all of it. */
+    public function testPurchasesScaleWithTheShortfallBelowTheFloor(): void
+    {
+        $dt = 0.25;
+        $ramp = 1.0 - exp(-MonetaryPolicySubsystem::BALANCE_SHEET_RAMP_SPEED * $dt);
+        $doseFor = function (float $shortfall) use ($dt): float {
+            $state = new MacroState();
+            $state->policyRate = MacroEngine::EFFECTIVE_LOWER_BOUND;
+            $state->targetRate = MacroEngine::EFFECTIVE_LOWER_BOUND - $shortfall;
+            $state->outputGap = -0.03;
+            $state->balanceSheetIntensity = 0.0;
+
+            return $this->subsystem->calculateBalanceSheetOperations($state, $dt)['new_balance_sheet_intensity'];
+        };
+
+        $this->assertEqualsWithDelta(MonetaryPolicySubsystem::QE_MAX_SUPPRESSION / 3.0 * $ramp, $doseFor(0.01), 1e-12);
+        $this->assertEqualsWithDelta(MonetaryPolicySubsystem::QE_MAX_SUPPRESSION * $ramp, $doseFor(MonetaryPolicySubsystem::QE_FULL_PROGRAM_SHORTFALL), 1e-12);
+        $this->assertEqualsWithDelta(MonetaryPolicySubsystem::QE_MAX_SUPPRESSION * $ramp, $doseFor(0.05), 1e-12, 'Past the full programme the dose is capped.');
     }
 
     public function testCalculateYieldCurveDirectly(): void

@@ -35,11 +35,9 @@ class MacroAggregateSubsystem
     /** Headline inflation per unit farm-price shock (~13% food CPI weight at ~15% pass-through), symmetric in both directions. */
     public const AGRI_COST_PUSH_TRANSMISSION = 0.020;
 
-    // --- Sector Demand Factor ---
-    /** Sensitivity of natural rate r* to annual secular TFP productivity growth deviations from drift. */
-    public const NATURAL_RATE_TFP_SENSITIVITY = 0.50;
-    /** Laubach-Williams sensitivity of natural rate r* to cyclical output gap investment demand. */
-    public const NATURAL_RATE_OUTPUT_GAP_SENSITIVITY = 0.15;
+    // --- Natural Rate of Interest (Holston, Laubach & Williams 2017) ---
+    /** r* per point of trend growth, HLW's c: 1.113 for the US (2023 vintage, 1961-2026 sample). */
+    public const NATURAL_RATE_GROWTH_LOADING = 1.113;
     /** Speed of adjustment (kappa) of natural real rate toward fundamental equilibrium. */
     public const NATURAL_RATE_ADJUSTMENT_SPEED = 1.0;
 
@@ -292,21 +290,21 @@ class MacroAggregateSubsystem
     }
 
     /**
-     * Laubach & Williams (2003) Dynamic Natural Rate of Interest (r*).
+     * Holston, Laubach & Williams (2017) natural rate of interest: r* = c g + z.
      *
-     * Drifts equilibrium real rate r* tracking secular Total Factor Productivity (TFP)
-     * growth deviations from long-term trend, via continuous Ornstein-Uhlenbeck adjustment.
+     * r* moves with the TREND growth of potential. A level shock to potential (their sigma_y*, here a productivity
+     * shock being absorbed) shifts output, not its trend, and leaves r* alone; the output gap does not enter r* at
+     * all, it enters the IS curve r* is the neutral point of. HLW's one-sided estimate does move with the cycle,
+     * but that is the filter reading IS residuals as z, not the natural rate. Their z, the slow drift from
+     * demographics and safe-asset demand, is not modelled.
      *
-     * @param MacroState $state         Current macroeconomic state.
-     * @param float      $tfpGrowthRate Productivity growth potential output is built on (trend plus absorbed shocks).
-     * @param float      $dt            Time increment in years.
+     * @param MacroState $state           Current macroeconomic state.
+     * @param float      $trendGrowthRate Trend productivity growth from calculateTotalFactorProductivity(), before absorbed level shocks.
+     * @param float      $dt              Time increment in years.
      */
-    public function calculateNaturalRate(MacroState $state, float $tfpGrowthRate, float $dt): void
+    public function calculateNaturalRate(MacroState $state, float $trendGrowthRate, float $dt): void
     {
-        // Holston, Laubach & Williams (2017) natural rate tracking secular TFP drift and investment demand.
-        $tfpEffect = self::NATURAL_RATE_TFP_SENSITIVITY * ($tfpGrowthRate - MacroEngine::TFP_DRIFT);
-        $demandEffect = self::NATURAL_RATE_OUTPUT_GAP_SENSITIVITY * $state->outputGapEma;
-        $targetNaturalRate = MacroEngine::BASE_NATURAL_RATE + $tfpEffect + $demandEffect;
+        $targetNaturalRate = MacroEngine::BASE_NATURAL_RATE + (self::NATURAL_RATE_GROWTH_LOADING * ($trendGrowthRate - MacroEngine::TFP_DRIFT));
         $targetNaturalRate = max(MacroEngine::MIN_NATURAL_RATE, min(MacroEngine::MAX_NATURAL_RATE, $targetNaturalRate));
 
         $state->naturalRate += self::NATURAL_RATE_ADJUSTMENT_SPEED * ($targetNaturalRate - $state->naturalRate) * $dt;

@@ -21,7 +21,7 @@ use App\Service\Math\FinancialConstants;
 use App\Service\Macro\MacroEngine;
 use App\Service\Market\MarketOperator;
 use App\Service\User\Portfolio;
-use App\Service\Event\NarrativeEngine;
+use App\Service\Event\SystemicEventReporter;
 use App\Service\Event\MarketEventPublisher;
 use App\Service\District\DistrictRoster;
 use App\Entity\Etf;
@@ -264,7 +264,7 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
         private MarketOperator $marketOperator,
         private Portfolio $portfolio,
         private \Redis $redis,
-        private NarrativeEngine $narrativeEngine,
+        private SystemicEventReporter $systemicEvents,
         private MarketEventPublisher $marketEvent,
         private DistrictRoster $districtRoster,
         private \App\Service\Market\OptionDeskService $optionDesk,
@@ -605,35 +605,9 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                 $marketVol = $result['market_vol'];
                 $events = $result['events'];
 
-                if ($macroState->eventType !== null) {
-                    $benchmarkFund = $indexFunds[MarketIndex::benchmark()->value] ?? null;
-                    if ($benchmarkFund !== null) {
-                        $macroContext = [
-                            'interbank_spread_bps' => number_format($macroState->interbankLiquiditySpread * 10000.0, 0),
-                            'hy_spread_pct' => number_format($macroState->highYieldCreditSpread * 100.0, 2),
-                            'recession_prob_pct' => number_format($macroState->recessionProbability * 100.0, 1),
-                            'output_gap_pct' => number_format($macroState->outputGap * 100.0, 2),
-                            'inversion_months' => number_format($macroState->inversionDuration * 12.0, 1),
-                            'erp_pct' => number_format($macroState->equityRiskPremium * 100.0, 2),
-                            'qe_intensity_pct' => number_format($macroState->qeIntensity * 100.0, 2),
-                            'epu_index' => number_format($macroState->policyUncertaintyIndexEma, 0),
-                            'sovereign_spread_bps' => number_format($macroState->sovereignRiskSpread * 10000.0, 0),
-                            'debt_to_gdp_pct' => number_format($macroState->sovereignDebtToGdp * 100.0, 0),
-                            'cat_severity' => number_format($macroState->lastCatastropheSeverity, 1),
-                            'dsr_pct' => number_format($macroState->householdDebtServiceRatio * 100.0, 1),
-                            'debt_to_income_pct' => number_format($macroState->householdDebtToIncome * 100.0, 0),
-                            'credit_gap_pct' => number_format($macroState->creditToGdpGapEma * 100.0, 1),
-                        ];
-                        $desc = $this->narrativeEngine->generateLore($macroState->eventType, $macroContext);
-                        $shockPct = match ($macroState->eventType) {
-                                \App\Service\Event\ShockEvent::TITAN_INTERVENTION, \App\Service\Event\ShockEvent::SOVEREIGN_WEALTH_DEPLOYMENT => 5.0,
-                                \App\Service\Event\ShockEvent::ELECTION_HELD => 0.0,
-                                \App\Service\Event\ShockEvent::NATURAL_CATASTROPHE => -2.0,
-                                \App\Service\Event\ShockEvent::HOUSEHOLD_DELEVERAGING => -3.0,
-                                default => -5.0,
-                            };
-                        $events[] = $this->marketEvent->publish($benchmarkFund, 'SHOCK', $desc, $shockPct);
-                    }
+                $benchmarkFund = $indexFunds[MarketIndex::benchmark()->value] ?? null;
+                if ($benchmarkFund !== null && ($headline = $this->systemicEvents->report($macroState, $benchmarkFund)) !== null) {
+                    $events[] = $headline;
                 }
 
                 if (!empty($operatorEvents)) {

@@ -49,6 +49,32 @@ class MacroAggregateSubsystemTest extends TestCase
         $this->assertGreaterThan(0.0, $state->naturalRate);
     }
 
+    /** HLW's r* has no gap term: a boom at trend growth leaves the natural rate where it was. */
+    public function testTheNaturalRateIgnoresTheOutputGap(): void
+    {
+        $state = new MacroState();
+        $state->naturalRate = MacroEngine::BASE_NATURAL_RATE;
+        $state->outputGap = 0.03;
+        $state->outputGapEma = 0.03;
+
+        $this->subsystem->calculateNaturalRate($state, MacroEngine::TFP_DRIFT, 0.25);
+
+        $this->assertSame(MacroEngine::BASE_NATURAL_RATE, $state->naturalRate);
+    }
+
+    /** r* moves c points per point of trend growth (HLW c = 1.113), approached at the adjustment speed. */
+    public function testTheNaturalRateLoadsOnTrendGrowthAtHlwsC(): void
+    {
+        $state = new MacroState();
+        $state->naturalRate = MacroEngine::BASE_NATURAL_RATE;
+        $dt = 0.1;
+
+        $this->subsystem->calculateNaturalRate($state, MacroEngine::TFP_DRIFT + 0.01, $dt);
+
+        $expectedStep = MacroAggregateSubsystem::NATURAL_RATE_ADJUSTMENT_SPEED * MacroAggregateSubsystem::NATURAL_RATE_GROWTH_LOADING * 0.01 * $dt;
+        $this->assertEqualsWithDelta(MacroEngine::BASE_NATURAL_RATE + $expectedStep, $state->naturalRate, 1e-15);
+    }
+
     public function testOutputGapAndInflationRespondToShocks(): void
     {
         $state = new MacroState();

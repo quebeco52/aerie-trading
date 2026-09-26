@@ -93,8 +93,8 @@ class MacroEngine
     // --- Taylor Rule & The Evans Rule (Forward Guidance) ---
     /** Inflation panic threshold above which central bank accelerates hiking to Volcker speed. */
     public const CB_INFLATION_PANIC_THRESHOLD = 0.035;
-    /** Policy rate threshold determining proximity to the Zero Lower Bound. */
-    public const ZLB_PROXIMITY_THRESHOLD = 0.015;
+    /** Policy rate that counts as at the floor, the top of the 0-0.25% target range the FOMC held from 2008 to 2015 and in 2020-22. */
+    public const ZLB_PROXIMITY_THRESHOLD = 0.0025;
 
     // --- Central Bank Effective Lower Bound & Shadow Rates ---
     /** Effective lower bound on the policy rate: with the target range at 0-0.25% the US effective funds rate sat near 0.1% (0.05-0.22%, 2009-15 and 2020-22). */
@@ -348,8 +348,6 @@ class MacroEngine
     public const SYSTEMIC_RECESSION_DECLARE_GAP = -0.010;
     /** Sustained inversion duration (years) that historically precedes a downturn and trips the curve alarm. */
     public const SYSTEMIC_INVERSION_ALARM_YEARS = 0.75;
-    /** Balance sheet expansion intensity marking an intervention large enough to read as a policy backstop. */
-    public const SYSTEMIC_INTERVENTION_QE_INTENSITY = 0.005;
     /** Equity risk premium above which capital is being deployed into genuinely distressed valuations. */
     public const SYSTEMIC_DEPLOYMENT_ERP_THRESHOLD = 0.070;
 
@@ -466,11 +464,11 @@ class MacroEngine
         // 1. Solow-Swan (1956) Total Factor Productivity (TFP) secular drift and endogenous growth.
         $tfpTrendGrowthRate = $this->aggregateSubsystem->calculateTotalFactorProductivity($state, $dt);
         // Basu, Fernald & Kimball (2006): potential absorbs a productivity shock gradually; everything built on
-        // productivity growth (r*, wage bargains, unit labour cost, money demand, potential GDP) reads that path.
+        // productivity growth (wage bargains, unit labour cost, money demand, potential GDP) reads that path.
         $productivityGrowthRate = $this->aggregateSubsystem->absorbProductivityShocks($state, $tfpTrendGrowthRate, $dt);
 
-        // 2. Laubach & Williams (2003) dynamic natural rate of interest (r*).
-        $this->aggregateSubsystem->calculateNaturalRate($state, $productivityGrowthRate, $dt);
+        // 2. Holston, Laubach & Williams (2017) natural rate of interest (r*), on trend growth only.
+        $this->aggregateSubsystem->calculateNaturalRate($state, $tfpTrendGrowthRate, $dt);
 
         // 3. Okun (1962) & Diamond-Mortensen-Pissarides (1994) labor market dynamics.
         $this->laborSubsystem->calculateUnemployment($state, $dt);
@@ -489,7 +487,11 @@ class MacroEngine
         $state->balanceSheetIntensity = $balanceSheetData['new_balance_sheet_intensity'];
         $state->balanceSheetHoldTimer = $balanceSheetData['new_hold_timer'];
         $state->qeIntensity = $balanceSheetData['new_qe_intensity'];
+        $qeWasActive = $state->qeActive;
         $state->qeActive = $state->qeIntensity > self::BALANCE_SHEET_ACTIVE_THRESHOLD;
+        if ($state->qeActive && !$qeWasActive) {
+            $state->lastQeLaunchAt = $state->totalTime;
+        }
         $state->qtIntensity = $balanceSheetData['new_qt_intensity'];
         $state->qtActive = $state->qtIntensity > self::BALANCE_SHEET_ACTIVE_THRESHOLD;
 
@@ -623,7 +625,7 @@ class MacroEngine
         if ($state->eventCooldownTimer > 0.0) {
             $state->eventCooldownTimer = max(0.0, $state->eventCooldownTimer - $dt);
             // Preserves unhandled edge-triggered systemic shocks during refractory cooldown.
-            if ($state->lastCatastropheAt !== $state->totalTime && $state->lastCreditCrisisAt !== $state->totalTime) {
+            if ($state->lastCatastropheAt !== $state->totalTime && $state->lastCreditCrisisAt !== $state->totalTime && $state->lastQeLaunchAt !== $state->totalTime) {
                 return;
             }
         }
@@ -633,6 +635,10 @@ class MacroEngine
             $state->lastCreditCrisisAt === $state->totalTime
             => ShockEvent::BANKING_CRISIS,
 
+            // Launch of an asset-purchase programme: one headline per programme, reported on the tick it starts.
+            $state->lastQeLaunchAt === $state->totalTime
+            => ShockEvent::TITAN_INTERVENTION,
+
             $state->interbankLiquiditySpread >= self::SYSTEMIC_LIQUIDITY_FREEZE_SPREAD
             => ShockEvent::SYSTEMIC_LIQUIDITY_FREEZE,
 
@@ -641,10 +647,6 @@ class MacroEngine
 
             $state->sovereignRiskSpread >= self::SYSTEMIC_SOVEREIGN_STRESS_SPREAD
             => ShockEvent::SOVEREIGN_DOWNGRADE,
-
-            // Central bank emergency liquidity backstop intervention under recessionary conditions.
-            $state->qeIntensity >= self::SYSTEMIC_INTERVENTION_QE_INTENSITY && $state->outputGapEma < 0.0
-            => ShockEvent::TITAN_INTERVENTION,
 
             $state->recessionProbability >= self::SYSTEMIC_RECESSION_DECLARE_PROBABILITY
                 && $state->outputGap <= self::SYSTEMIC_RECESSION_DECLARE_GAP

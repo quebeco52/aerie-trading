@@ -84,19 +84,35 @@ class SystemicEventTest extends TestCase
         $this->assertSame(ShockEvent::YIELD_CURVE_INVERSION_ALARM, $this->fire($state));
     }
 
-    public function testPolicyBackstopOnlyReadsAsInterventionDuringStress(): void
+    /** A programme is news the day it launches; the months of purchases that follow are not a headline each. */
+    public function testAnAssetPurchaseLaunchIsReportedOnceOnTheDay(): void
     {
-        $expansionaryQe = new MacroState();
-        $expansionaryQe->qeIntensity = MacroEngine::SYSTEMIC_INTERVENTION_QE_INTENSITY + 0.01;
-        $expansionaryQe->outputGapEma = 0.02; // Balance sheet growth during a boom is not a rescue.
+        $state = new MacroState();
+        $state->totalTime = 8.25;
+        $state->lastQeLaunchAt = 8.25;
+        $state->qeActive = true;
+        $state->qeIntensity = 0.004;
+        $state->outputGapEma = -0.03;
 
-        $this->assertNull($this->fire($expansionaryQe), 'QE in an expansion must not be reported as a bailout.');
+        $this->assertSame(ShockEvent::TITAN_INTERVENTION, $this->fire($state));
 
-        $rescue = new MacroState();
-        $rescue->qeIntensity = MacroEngine::SYSTEMIC_INTERVENTION_QE_INTENSITY + 0.01;
-        $rescue->outputGapEma = -0.02;
+        // A year into the programme, the cooldown long spent and the stock still growing: no second launch headline.
+        $state->totalTime += 1.0;
+        $state->eventCooldownTimer = 0.0;
+        $state->qeIntensity = 0.009;
+        $this->assertNull($this->fire($state), 'A programme in progress is not a new intervention.');
+    }
 
-        $this->assertSame(ShockEvent::TITAN_INTERVENTION, $this->fire($rescue));
+    public function testAnAssetPurchaseLaunchIsNotLostToAnActiveCooldown(): void
+    {
+        $state = new MacroState();
+        $state->totalTime = 12.5;
+        $state->highYieldCreditSpread = MacroEngine::SYSTEMIC_CREDIT_SEIZURE_SPREAD + 0.02;
+        $this->assertSame(ShockEvent::CREDIT_MARKET_SEIZURE, $this->fire($state));
+
+        $state->totalTime += 1.0 / self::TICKS_PER_YEAR;
+        $state->lastQeLaunchAt = $state->totalTime;
+        $this->assertSame(ShockEvent::TITAN_INTERVENTION, $this->fire($state), 'The launch lands on one tick and must be reported through the cooldown.');
     }
 
     public function testDeepValueDeploymentRequiresTheCycleToBeTurningUp(): void

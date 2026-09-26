@@ -50,6 +50,7 @@ class MacroFieldRegistryTest extends TestCase
 
         'eventType' => 'Label of the event in flight, not a series.',
         'lastElectionAt' => 'Fixed-term calendar, derivable from the election period.',
+        'lastQeLaunchAt' => 'Edge marker for the launch headline; qe_active and qe_intensity record the programme.',
     ];
 
     /**

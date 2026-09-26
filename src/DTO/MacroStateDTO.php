@@ -171,6 +171,7 @@ readonly class MacroStateDTO
         public float $qtIntensity = 0.0,
         public float $balanceSheetIntensity = 0.0,
         public float $balanceSheetHoldTimer = 0.0,
+        public float $lastQeLaunchAt = -1.0,
         public float $inversionDuration = 0.0,
         public float $nsLevel = MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION,
         public float $nsSlope = self::OPENING_YIELD_10Y - self::OPENING_POLICY_RATE,

@@ -7,8 +7,7 @@ namespace App\Tests\Command;
 use App\Command\MarketSimulateCommand;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
-use App\Service\Event\MarketEventPublisher;
-use App\Service\Event\NarrativeEngine;
+use App\Service\Event\SystemicEventReporter;
 use App\Service\Macro\MacroEngine;
 use App\Service\Market\EtfTracker;
 use App\Service\Market\Index\InMemoryIndexMembershipStore;
@@ -42,8 +41,7 @@ class MarketSimulateCommandTest extends TestCase
         $fundAccountant = new IndexFundAccountant($emMock);
         $macroEngineMock = $this->createMock(MacroEngine::class);
         $marketOperatorMock = $this->createStub(MarketOperator::class);
-        $marketEventMock = $this->createStub(MarketEventPublisher::class);
-        $narrativeEngineMock = $this->createStub(NarrativeEngine::class);
+        $systemicEventsStub = $this->createStub(SystemicEventReporter::class);
         $redisMock = $this->createStub(\Redis::class);
 
         $connStub = $this->createStub(Connection::class);
@@ -82,8 +80,7 @@ class MarketSimulateCommandTest extends TestCase
             $fundAccountant,
             $macroEngineMock,
             $marketOperatorMock,
-            $marketEventMock,
-            $narrativeEngineMock,
+            $systemicEventsStub,
             $redisMock
         );
 

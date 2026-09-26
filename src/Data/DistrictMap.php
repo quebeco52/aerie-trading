@@ -615,7 +615,7 @@ class DistrictMap
                 // MacroEngine::SYSTEMIC_INVERSION_ALARM_YEARS — a yield curve inversion that has persisted long enough to count as a systemic alarm.
                 ['field' => 'inversion_duration', 'op' => self::OP_GTE, 'value' => 0.75],
                 // MacroEngine::ZLB_PROXIMITY_THRESHOLD — policy rate pinned near the zero lower bound.
-                ['field' => 'policy_rate_ema', 'op' => self::OP_LTE, 'value' => 0.015],
+                ['field' => 'policy_rate_ema', 'op' => self::OP_LTE, 'value' => 0.0025],
             ],
         ],
         'credit-registry' => [

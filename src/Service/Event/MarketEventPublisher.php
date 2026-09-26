@@ -28,9 +28,11 @@ class MarketEventPublisher
      * The wire copy carries the presented card, so the live feed renders exactly what a page load renders
      * rather than re-deriving it from the type string in the browser.
      *
-     * @return array{type: string, ticker: string, description: string, change_percent: float, presented: array<string, mixed>}
+     * A null change publishes the event without a number, for news whose price effect is not known.
+     *
+     * @return array{type: string, ticker: string, description: string, change_percent: float|null, presented: array<string, mixed>}
      */
-    public function publish(Stock|Etf $asset, string $type, string $description, float $changePercent): array
+    public function publish(Stock|Etf $asset, string $type, string $description, ?float $changePercent): array
     {
         // Create the Doctrine Entity
         if ($asset instanceof Stock) {
@@ -42,14 +44,15 @@ class MarketEventPublisher
         }
         $event->setEventType($type);
         $event->setDescription($description);
-        $event->setChangePercent((string) round($changePercent, 2));
+        $event->setChangePercent($changePercent === null ? null : (string) round($changePercent, 2));
 
         $this->entityManager->persist($event);
 
         // Log it beautifully for the terminal
-        $color = $changePercent >= 0 ? "\033[32m" : "\033[31m";
+        $color = ($changePercent ?? 0.0) >= 0 ? "\033[32m" : "\033[31m";
         if ($type === 'SHOCK') {
-            echo " [!] {$color}MARKET SHOCK on {$asset->getTicker()}: " . number_format($changePercent, 2) . "% \033[0m\n";
+            $move = $changePercent === null ? 'n/a' : number_format($changePercent, 2) . '%';
+            echo " [!] {$color}MARKET SHOCK on {$asset->getTicker()}: {$move} \033[0m\n";
         } else {
             $this->logger->info("[{$type}] {$asset->getTicker()}: {$description}");
         }
@@ -58,7 +61,7 @@ class MarketEventPublisher
             'type' => $type,
             'ticker' => $asset->getTicker(),
             'description' => $description,
-            'change_percent' => round($changePercent, 2)
+            'change_percent' => $changePercent === null ? null : round($changePercent, 2)
         ];
         $eventData['presented'] = $this->presenter->presentForWire($eventData);
 
