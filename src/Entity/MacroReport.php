@@ -723,6 +723,9 @@ class MacroReport
     #[ORM\Column(type: Types::DECIMAL, precision: 15, scale: 4, nullable: true)]
     private ?string $foreignEquityIndex = null;
 
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 6, nullable: true)]
+    private ?string $foreignEquityRiskPremium = null;
+
     // --- Episode Markers ---
     // Simulated times, so they carry total_time's width rather than the vector's. They are what lets an
     // episode be cut out of the run by cause instead of by eye.

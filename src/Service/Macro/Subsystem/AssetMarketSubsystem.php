@@ -26,6 +26,8 @@ class AssetMarketSubsystem
     public const HABIT_RISK_AVERSION_COEFF = 9.0;
     /** Structural floor: equities must logically yield more than risk-free T-bills. */
     public const MIN_EQUITY_RISK_PREMIUM = 0.02;
+    /** Campbell & Shiller (1988) log-linearisation constant, annual: rho = 1 / (1 + mean dividend yield), ~0.96 on the long US sample. */
+    public const CAMPBELL_SHILLER_RHO = 0.96;
 
     // --- GARCH-MIDAS Macroeconomic Volatility Constants (Engle, Ghysels, & Sohn 2013 Eq. 5) ---
     /** Log volatility per unit of output gap contraction (1.1, se 2.1): ln VIX on the gap AND the excess bond premium, 1990-2026. Alone the gap takes ~4 by standing in for the omitted premium; 2010's VIX averaged 22 with the gap still -3.5%. */
@@ -339,12 +341,39 @@ class AssetMarketSubsystem
      * Derives macroeconomic aggregate equity risk premium as an exponential function of surplus consumption:
      * as the output gap contracts, risk aversion surges, demanding a wider required equity risk premium.
      *
+     * The foreign bloc's investors price their own cycle the same way, and its equity market re-rates on the premium by
+     * the Campbell-Shiller present value: a premium that decays at the cycle's persistence phi moves the log price by
+     * -(premium - base) / (1 - rho * phi). The valuation's change is handed on for the reserve fund's foreign equities.
+     *
      * @param MacroState $state Current macroeconomic state.
      */
     public function calculateEquityRiskPremium(MacroState $state): void
     {
-        $habitErp = MacroEngine::BASE_EQUITY_RISK_PREMIUM * exp(-self::HABIT_RISK_AVERSION_COEFF * $state->outputGapEma);
-        $state->equityRiskPremium = max(self::MIN_EQUITY_RISK_PREMIUM, min(0.12, $habitErp));
+        $state->equityRiskPremium = $this->habitEquityRiskPremium($state->outputGapEma);
+
+        $state->foreignEquityRiskPremium = $this->habitEquityRiskPremium($state->foreignOutputGapEma);
+        $valuation = -self::foreignValuationDuration() * ($state->foreignEquityRiskPremium - MacroEngine::BASE_EQUITY_RISK_PREMIUM);
+        $state->foreignEquityValuationChange = $valuation - $state->foreignEquityValuation;
+        $state->foreignEquityValuation = $valuation;
+    }
+
+    /**
+     * Log price response of the foreign equity market to one unit of premium held at the foreign cycle's persistence.
+     *
+     * The present value of a premium shock that decays by phi a year, discounted at rho: 1 / (1 - rho * phi), where phi
+     * is the foreign output gap's own annual persistence, exp(-FOREIGN_GAP_REVERSION).
+     */
+    public static function foreignValuationDuration(): float
+    {
+        return 1.0 / (1.0 - (self::CAMPBELL_SHILLER_RHO * exp(-self::FOREIGN_GAP_REVERSION)));
+    }
+
+    /** The habit premium at an output gap, floored at a positive premium and capped at the ceiling it has always had. */
+    private function habitEquityRiskPremium(float $outputGapEma): float
+    {
+        $habitErp = MacroEngine::BASE_EQUITY_RISK_PREMIUM * exp(-self::HABIT_RISK_AVERSION_COEFF * $outputGapEma);
+
+        return max(self::MIN_EQUITY_RISK_PREMIUM, min(0.12, $habitErp));
     }
 
     /**

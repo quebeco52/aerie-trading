@@ -165,6 +165,10 @@ class SovereignFundSubsystem
      * its dividends arrive as cash in the paper sleeve, and it tenders into buybacks and takes up issues pro rata. The
      * foreign equity market loads on the home market factor at its measured correlation; the paper earns the foreign
      * rate. Neither is rebalanced here: between the fund's own reviews each sleeve drifts with its market.
+     *
+     * The foreign market also re-rates on its own business cycle (AssetMarketSubsystem's habit premium on the foreign
+     * gap, valued Campbell-Shiller). That term moves at the cycle's frequency, so it adds well under 1% to the monthly
+     * variance the diffusion's volatility was pinned to, and the diffusion keeps its measured value.
      */
     private function markToMarket(MacroState $state, float $dt): void
     {
@@ -184,6 +188,7 @@ class SovereignFundSubsystem
             marketZ: $state->marketZ,
             w1: $this->mathUtility->generateStandardNormal()
         );
+        $state->foreignEquityIndex *= exp($state->foreignEquityValuationChange);
         if ($previousIndex > 0.0) {
             $state->sovereignFundForeignEquity *= $state->foreignEquityIndex / $previousIndex;
         }

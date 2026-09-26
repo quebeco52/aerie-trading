@@ -33,6 +33,30 @@ class AssetMarketSubsystemTest extends TestCase
         $this->assertGreaterThan(MacroEngine::BASE_EQUITY_RISK_PREMIUM, $state->equityRiskPremium);
     }
 
+    public function testTheForeignBlocPricesItsOwnCycleAndReRatesItsEquities(): void
+    {
+        $state = new MacroState();
+        $this->subsystem->calculateEquityRiskPremium($state);
+        $this->assertEqualsWithDelta(MacroEngine::BASE_EQUITY_RISK_PREMIUM, $state->foreignEquityRiskPremium, 1e-15, 'At trend, the base premium.');
+        $this->assertEqualsWithDelta(0.0, $state->foreignEquityValuation, 1e-15);
+
+        // A foreign recession, with the district itself at trend: only the foreign premium and valuation move.
+        $state->foreignOutputGapEma = -0.03;
+        $this->subsystem->calculateEquityRiskPremium($state);
+
+        $premium = MacroEngine::BASE_EQUITY_RISK_PREMIUM * exp(AssetMarketSubsystem::HABIT_RISK_AVERSION_COEFF * 0.03);
+        $duration = 1.0 / (1.0 - (AssetMarketSubsystem::CAMPBELL_SHILLER_RHO * exp(-AssetMarketSubsystem::FOREIGN_GAP_REVERSION)));
+        $this->assertEqualsWithDelta($premium, $state->foreignEquityRiskPremium, 1e-15);
+        $this->assertEqualsWithDelta(MacroEngine::BASE_EQUITY_RISK_PREMIUM, $state->equityRiskPremium, 1e-15);
+        $this->assertEqualsWithDelta(-$duration * ($premium - MacroEngine::BASE_EQUITY_RISK_PREMIUM), $state->foreignEquityValuation, 1e-15);
+        $this->assertEqualsWithDelta($state->foreignEquityValuation, $state->foreignEquityValuationChange, 1e-15, 'The change from trend is handed on.');
+        $this->assertLessThan(-0.03, $state->foreignEquityValuation, 'A 3% foreign slump re-rates foreign equities by a few percent.');
+
+        // The same state again: no further re-rating to hand on.
+        $this->subsystem->calculateEquityRiskPremium($state);
+        $this->assertEqualsWithDelta(0.0, $state->foreignEquityValuationChange, 1e-15);
+    }
+
     public function testRealEstateIndicesMeanRevertWithinBounds(): void
     {
         $state = new MacroState();

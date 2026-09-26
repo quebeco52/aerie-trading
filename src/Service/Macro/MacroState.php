@@ -344,8 +344,12 @@ class MacroState
     public float $sovereignFundEquityShare;
     public float $sovereignFundOwnershipShare;
     public float $sovereignFundDrawToGdp;
-    // The foreign equity market the reserve portfolio holds, in its own currency.
+    // The foreign equity market the reserve portfolio holds, in its own currency, and the habit premium its investors
+    // demand on their own cycle, with the log re-rating it implies and that re-rating's change this tick.
     public float $foreignEquityIndex;
+    public float $foreignEquityRiskPremium;
+    public float $foreignEquityValuation;
+    public float $foreignEquityValuationChange;
 
     // The board as the ticker measured it on the PREVIOUS tick, like equityMarketCap: its float-adjusted
     // capitalisation, the float-weighted price return of that tick, the dividend cash the float was paid, and the

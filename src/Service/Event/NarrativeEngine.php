@@ -405,11 +405,11 @@ class NarrativeEngine
                 isset($context['swf_trade_pct'], $context['swf_weight_pct'], $context['swf_target_pct'], $context['swf_months']) ? [
                     "Sovereign Reserve Fund rebalances into equities: Its board holding fell to {$context['swf_weight_pct']}% of the fund against a {$context['swf_target_pct']}% policy weight, so it will buy about {$context['swf_trade_pct']}% of the free float over the next {$context['swf_months']} months.",
                     "Rule-based buying: The Sovereign Reserve Fund's domestic equities slipped to {$context['swf_weight_pct']}% of the fund (policy weight {$context['swf_target_pct']}%), triggering purchases of roughly {$context['swf_trade_pct']}% of the float spread over {$context['swf_months']} months.",
-                    "Reserve fund buys the fall: With domestic equities down to {$context['swf_weight_pct']}% of a fund worth " . ($context['swf_size_gdp_pct'] ?? '—') . "% of GDP, the Sovereign Reserve Fund will add about {$context['swf_trade_pct']}% of the float to return to {$context['swf_target_pct']}%.",
+                    "Reserve fund tops up the board: With domestic equities at {$context['swf_weight_pct']}% of a fund worth " . ($context['swf_size_gdp_pct'] ?? '—') . "% of GDP, the Sovereign Reserve Fund will add about {$context['swf_trade_pct']}% of the float to return to {$context['swf_target_pct']}%.",
                 ] : [
                     "Sovereign Reserve Fund rebalances into equities: Its board holding fell through the band around its policy weight, and it will buy back to target over the coming months.",
                     "Rule-based buying: The Sovereign Reserve Fund's domestic weight breached its deviation band, triggering purchases spread over the coming months.",
-                    "Reserve fund buys the fall: The Sovereign Reserve Fund will add to its board holding to return to its policy weight.",
+                    "Reserve fund tops up the board: The Sovereign Reserve Fund will add to its board holding to return to its policy weight.",
                 ]
             ),
             ShockEvent::SOVEREIGN_WEALTH_TRIM => $this->getRandomPhrase(

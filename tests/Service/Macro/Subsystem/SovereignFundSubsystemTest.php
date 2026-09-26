@@ -266,6 +266,25 @@ class SovereignFundSubsystemTest extends TestCase
         $this->assertSame(0.0, $state->sovereignFundRebalanceMonthsLeft, 'With no room left there is no programme to run or announce.');
     }
 
+    public function testAForeignReRatingMovesTheForeignEquitySleeveAndNothingElse(): void
+    {
+        $tpy = 720;
+        $dt = 1.0 / $tpy;
+        $fund = new SovereignFundSubsystem($this->stillMarket());
+        $state = $this->openFund($fund, $tpy);
+        $state->sovereignFundAnnualDraw = 0.0;
+        $equity = $fund->foreignEquityHomeValue($state);
+        $paper = $fund->foreignHomeValue($state) - $equity;
+        $index = $state->foreignEquityIndex;
+
+        $state->foreignEquityValuationChange = -0.05;
+        $this->step($fund, $state, $dt);
+
+        $this->assertEqualsWithDelta($index * exp(-0.05), $state->foreignEquityIndex, 1e-9);
+        $this->assertEqualsWithDelta($equity * exp(-0.05), $fund->foreignEquityHomeValue($state), 1e-3);
+        $this->assertEqualsWithDelta($paper, $fund->foreignHomeValue($state) - $fund->foreignEquityHomeValue($state), 1e-3);
+    }
+
     public function testTheFundTendersIntoBuybacksAndKeepsItsOwnership(): void
     {
         $tpy = 720;
@@ -392,6 +411,7 @@ class SovereignFundSubsystemTest extends TestCase
         $state->boardPriceReturn = 0.0;
         $state->boardDividendCash = 0.0;
         $state->boardNetIssuance = 0.0;
+        $state->foreignEquityValuationChange = 0.0;
     }
 
     /** Steps until the tick that crosses the next month end, inclusive. */

@@ -63,6 +63,8 @@ class MacroFieldRegistryTest extends TestCase
         'boardFloatCap' => 'Currency amount fed back by the ticker; the ownership share records the fund against it.',
         'boardPriceReturn' => 'One tick of the board, so a quarterly sample is one arbitrary tick of noise.',
         'boardDividendCash' => 'One tick of dividend cash; same objection.',
+        'foreignEquityValuation' => 'A function of foreign_equity_risk_premium, which is recorded.',
+        'foreignEquityValuationChange' => 'One tick of re-rating; foreign_equity_index records its effect.',
         'boardNetIssuance' => 'One tick of the companies\' own issuance and buybacks; same objection.',
     ];
 
