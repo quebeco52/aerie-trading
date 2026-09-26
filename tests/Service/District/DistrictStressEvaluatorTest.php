@@ -93,7 +93,7 @@ class DistrictStressEvaluatorTest extends TestCase
 
     public function testStatisticalOfficeStressedByElevatedUnemployment(): void
     {
-        $macro = new MacroStateDTO(unemploymentRateEma: MacroEngine::EVANS_RULE_UNEMPLOYMENT);
+        $macro = new MacroStateDTO(unemploymentRateEma: 0.050);
 
         $this->assertTrue($this->evaluator->evaluate($macro)['statistical-office']);
     }

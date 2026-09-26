@@ -2183,7 +2183,8 @@ class MathUtilityTest extends TestCase
     }
 
     /**
-     * Jarrow-Lando-Turnbull: the HY tranche gaps away from IG in a contraction rather than tracking it.
+     * The HY tranche is a fixed multiple of IG, cycle and crisis alike (ICE HY/IG ~3.3x in calm years and at the
+     * December 2008 peak), and both legs respect their clamps.
      */
     public function testDualTrancheCreditSpreadsWidenAsymmetricallyAndRespectTheirClamps(): void
     {
@@ -2222,28 +2223,20 @@ class MathUtilityTest extends TestCase
             'Vol and contagion must add linearly onto the cycle spread.'
         );
 
-        // The fallen-angel cliff: in a contraction HY widens by proportionally more than IG.
+        // A contraction widens IG through distance-to-default, and HY keeps its multiple of it.
         $recession = $this->mathUtility->calculateDualTrancheCreditSpreads(MacroEngine::BASE_CREDIT_SPREAD, -0.04, 0.10, 0.0);
-        $this->assertGreaterThan($neutral['ig'], $recession['ig'], 'A contraction must widen investment grade.');
-        $this->assertGreaterThan(
-            $recession['ig'] / $neutral['ig'],
-            $recession['hy'] / $neutral['hy'],
-            'High yield must gap away from investment grade, not track it.'
-        );
+        $this->assertEqualsWithDelta(MacroEngine::BASE_CREDIT_SPREAD * exp(MacroEngine::MERTON_LEVERAGE_SENSITIVITY * 0.04), $recession['ig'], 1e-12, 'A contraction must widen investment grade.');
+        $this->assertEqualsWithDelta($recession['ig'] / $neutral['ig'], $recession['hy'] / $neutral['hy'], 1e-12, 'High yield tracks investment grade at its base multiple.');
 
         // Both legs clamp: a depression cannot produce an unbounded spread.
         $depression = $this->mathUtility->calculateDualTrancheCreditSpreads(MacroEngine::BASE_CREDIT_SPREAD, -1.0, 2.0, 1.0);
         $this->assertSame(MacroEngine::MAX_CREDIT_SPREAD, $depression['ig'], 'The IG spread must clamp at its ceiling.');
-        $this->assertSame(MacroEngine::MAX_HY_CREDIT_SPREAD, $depression['hy'], 'The HY spread must clamp at its ceiling.');
+        $this->assertEqualsWithDelta(MacroEngine::MAX_CREDIT_SPREAD * MacroEngine::HY_BASE_SPREAD_MULTIPLIER, $depression['hy'], 1e-12, 'The HY spread tops out at its multiple of the IG record.');
 
         // A boom floors IG, and HY never compresses inside its minimum multiple of IG.
         $boom = $this->mathUtility->calculateDualTrancheCreditSpreads(MacroEngine::BASE_CREDIT_SPREAD, 0.50, 0.0, 0.0);
         $this->assertSame(MacroEngine::MIN_CREDIT_SPREAD, $boom['ig'], 'The IG spread must floor at its minimum.');
-        $this->assertGreaterThanOrEqual(
-            $boom['ig'] * MacroEngine::HY_MIN_SPREAD_MULTIPLIER,
-            $boom['hy'],
-            'HY must never compress inside its minimum multiple of IG.'
-        );
+        $this->assertEqualsWithDelta($boom['ig'] * MacroEngine::HY_BASE_SPREAD_MULTIPLIER, $boom['hy'], 1e-12, 'HY floors with IG at its multiple.');
     }
 
     /**

@@ -665,7 +665,7 @@ class DistrictMap
                 ['field' => 'inflation_ema', 'op' => self::OP_GTE, 'value' => 0.035],
                 // MacroEngine::SYSTEMIC_RECESSION_DECLARE_GAP — a recessionary output gap.
                 ['field' => 'output_gap_ema', 'op' => self::OP_LTE, 'value' => -0.010],
-                // MacroEngine::EVANS_RULE_UNEMPLOYMENT — unemployment past the Evans Rule level.
+                // A point of unemployment over MacroEngine::NATURAL_UNEMPLOYMENT: labour-market slack.
                 ['field' => 'unemployment_rate_ema', 'op' => self::OP_GTE, 'value' => 0.050],
             ],
         ],

@@ -234,8 +234,7 @@ class CreditFiscalSubsystem
             marketVolEma: $state->marketVolatilityEma,
             interbankStress: $interbankStress,
             excessBondPremium: $state->excessBondPremium,
-            hyBaseMultiplier: MacroEngine::HY_BASE_SPREAD_MULTIPLIER,
-            fallenAngelSens: MacroEngine::FALLEN_ANGEL_CLIFF_SENSITIVITY
+            hyBaseMultiplier: MacroEngine::HY_BASE_SPREAD_MULTIPLIER
         );
 
         // Dual-tranche credit spread boundary clamping (Merton 1974 structural model).

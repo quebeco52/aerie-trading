@@ -75,7 +75,7 @@ class CreditFiscalSubsystemTest extends TestCase
         $this->assertLessThan(0.21, $state->corporateTaxRate);
     }
 
-    public function testDualTrancheCreditSpreadsReflectFallenAngelCliff(): void
+    public function testHighYieldWidensAtItsBaseMultipleOfInvestmentGrade(): void
     {
         $stateNormal = new MacroState();
         $stateNormal->outputGapEma = 0.01;
@@ -94,9 +94,9 @@ class CreditFiscalSubsystemTest extends TestCase
         $this->subsystem->calculateMacroCreditSpread($stateRecession);
         // Investment grade widens moderately
         $this->assertGreaterThan($stateNormal->macroCreditSpread, $stateRecession->macroCreditSpread);
-        // High yield blows out exponentially due to fallen angel downgrade cliff
+        // High yield keeps its base multiple of investment grade, so it widens as IG does
         $this->assertGreaterThan($stateNormal->highYieldCreditSpread * 2.0, $stateRecession->highYieldCreditSpread);
-        $this->assertGreaterThan($stateRecession->macroCreditSpread * 2.5, $stateRecession->highYieldCreditSpread);
+        $this->assertEqualsWithDelta(MacroEngine::HY_BASE_SPREAD_MULTIPLIER, $stateRecession->highYieldCreditSpread / $stateRecession->macroCreditSpread, 1e-12);
     }
 
     /**
@@ -114,8 +114,7 @@ class CreditFiscalSubsystemTest extends TestCase
 
         $this->assertEqualsWithDelta(MacroEngine::MAX_CREDIT_SPREAD, $state->macroCreditSpread, 1e-12);
         $this->assertLessThanOrEqual(0.065, MacroEngine::MAX_CREDIT_SPREAD, 'IG OAS never exceeded ~620 bps (Dec 2008).');
-        $this->assertLessThanOrEqual(MacroEngine::MAX_HY_CREDIT_SPREAD, $state->highYieldCreditSpread);
-        $this->assertGreaterThan($state->macroCreditSpread, $state->highYieldCreditSpread);
+        $this->assertEqualsWithDelta(MacroEngine::MAX_CREDIT_SPREAD * MacroEngine::HY_BASE_SPREAD_MULTIPLIER, $state->highYieldCreditSpread, 1e-12, 'HY peaks at its multiple of the IG record, near the 21.8% of Dec 2008.');
     }
 
     public function testInterbankContagionWidensIgSpreadByTheCalibratedCoefficient(): void
@@ -297,6 +296,7 @@ class CreditFiscalSubsystemTest extends TestCase
         $boom->outputGapEma = 0.03;
         $boom->marketVolatilityEma = 0.13;
         $boom->interbankLiquiditySpreadEma = MacroEngine::INTERBANK_BASELINE_SPREAD;
+        $boom->sovereignRiskSpreadEma = 0.0; // a sound fiscal position, so the cycle alone sets the spread
 
         $crisis = new MacroState();
         $crisis->outputGapEma = -0.04;
@@ -314,7 +314,7 @@ class CreditFiscalSubsystemTest extends TestCase
         // Crisis: IG beyond 400 bps and HY beyond 1,500 bps, a 2008-type blowout rather than a 260 bps wobble.
         $this->assertGreaterThan(0.040, $crisis->macroCreditSpread);
         $this->assertGreaterThan(0.150, $crisis->highYieldCreditSpread);
-        $this->assertLessThanOrEqual(MacroEngine::MAX_HY_CREDIT_SPREAD, $crisis->highYieldCreditSpread);
+        $this->assertLessThanOrEqual(MacroEngine::MAX_CREDIT_SPREAD * MacroEngine::HY_BASE_SPREAD_MULTIPLIER, $crisis->highYieldCreditSpread);
     }
 
     public function testInterbankSpreadMeanTracksTheBondPremium(): void
@@ -1129,7 +1129,7 @@ class CreditFiscalSubsystemTest extends TestCase
         $capped = new MacroState();
         $capped->macroCreditSpread = MacroEngine::MAX_CREDIT_SPREAD;
         $capped->macroCreditSpreadEma = MacroEngine::MAX_CREDIT_SPREAD;
-        $capped->highYieldCreditSpread = MacroEngine::MAX_HY_CREDIT_SPREAD;
+        $capped->highYieldCreditSpread = MacroEngine::MAX_CREDIT_SPREAD * MacroEngine::HY_BASE_SPREAD_MULTIPLIER;
 
         $this->assertSame($assets->calculateMarketVolatility($calm, 0.25), $assets->calculateMarketVolatility($capped, 0.25), 'Volatility does not read the spread.');
 
@@ -1172,7 +1172,7 @@ class CreditFiscalSubsystemTest extends TestCase
         $state->sloosTighteningIndex = 0.85;
 
         $credit->calculateMacroCreditSpread($state);
-        $this->assertSame(MacroEngine::MAX_CREDIT_SPREAD, $state->macroCreditSpread, 'October 2008 conditions start at the cap.');
+        $this->assertGreaterThan(0.055, $state->macroCreditSpread, 'October 2008 conditions start near the IG record.');
         $defaultRisk = MacroEngine::BASE_CREDIT_SPREAD * exp(-MacroEngine::MERTON_LEVERAGE_SENSITIVITY * -0.07);
 
         $dt = 1.0 / 52.0;
@@ -1187,7 +1187,7 @@ class CreditFiscalSubsystemTest extends TestCase
             $credit->calculateSloosCreditStandards($state, $dt);
 
             if ($week === 13) {
-                $this->assertLessThan(MacroEngine::MAX_CREDIT_SPREAD, $state->macroCreditSpread, 'A quarter on the spread is already off its cap.');
+                $this->assertLessThan(0.055, $state->macroCreditSpread, 'A quarter on the spread is already off its peak.');
             }
             if ($week === 52) {
                 $this->assertLessThan(0.5 * (MacroEngine::MAX_CREDIT_SPREAD - $defaultRisk), $state->macroCreditSpread - $defaultRisk, 'A year on the spread has given back over half its excess over default risk, the gap unchanged.');

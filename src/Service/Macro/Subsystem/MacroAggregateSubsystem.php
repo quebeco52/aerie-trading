@@ -97,9 +97,9 @@ class MacroAggregateSubsystem
     /** Probability a disaster is an upside demand surprise. Barro's disaster set is one-sided; a quarter weight keeps booms possible while leaving the left tail three times heavier. */
     public const DEMAND_DISASTER_UP_PROBABILITY = 0.25;
     /** Exponential rate of the upside jump: mean 3.5pp/yr of demand, three quarters of the downside, so expansions build gradually and slumps arrive whole; sized with DEMAND_SHOCK_SIGMA. */
-    public const DEMAND_DISASTER_UP_RATE = 13.6;
+    public const DEMAND_DISASTER_UP_RATE = 28.6;
     /** Exponential rate of the downside jump: mean 4.7pp/yr of demand, a 10pp/yr shock once per ~57y; sized with DEMAND_SHOCK_SIGMA. */
-    public const DEMAND_DISASTER_DOWN_RATE = 12.4;
+    public const DEMAND_DISASTER_DOWN_RATE = 21.4;
     /** Cap on one disaster (17.5pp/yr of demand, about four mean down-jumps). Guards the tail of the exponential draw without binding on the calibrated range. */
     public const DEMAND_DISASTER_CAP = 0.175;
 

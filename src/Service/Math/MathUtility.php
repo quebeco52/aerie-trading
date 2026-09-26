@@ -2145,14 +2145,13 @@ class MathUtility
     }
 
     /**
-     * Calculates Investment Grade (IG) and High Yield (HY) corporate credit spreads
-     * incorporating the Jarrow, Lando, & Turnbull (1997) rating migration model and "fallen angel" cliff.
+     * Calculates Investment Grade (IG) and High Yield (HY) corporate credit spreads.
      *
      * The IG spread is Gilchrist & Zakrajsek's (2012) decomposition: a default-risk part (Merton leverage on the
      * output gap and equity volatility) plus the excess bond premium lenders charge on top of it, plus interbank
-     * contagion. During severe macroeconomic contractions, corporate credit rating transitions migrate toward
-     * speculative grades, where institutional investment mandates trigger forced selling, exponentially blowing
-     * out HY spreads.
+     * contagion. HY is a fixed multiple of it: at the December 2008 peak ICE HY and IG OAS stood near 21.8% and
+     * 6.5%, the same ~3.3x as in calm years, so a blowout rides on IG's volatility and premium legs, which fade
+     * within a year of a crash, rather than on a separate cliff that held HY wide for as long as the gap stayed low.
      *
      * @param float $baseIgSpread      Baseline investment-grade spread (e.g. 0.020).
      * @param float $outputGapEma      Smoothed macroeconomic output gap.
@@ -2160,16 +2159,13 @@ class MathUtility
      * @param float $interbankStress   Wholesale interbank liquidity stress above baseline.
      * @param float $excessBondPremium Excess bond premium (GZ units, signed).
      * @param float $premiumLoading    IG spread per unit of excess bond premium.
-     * @param float $hyBaseMultiplier  Baseline multiple of HY spread over IG spread (e.g. 2.4x).
-     * @param float $fallenAngelSens  Sensitivity coefficient for non-linear HY spread blowout on contractions.
+     * @param float $hyBaseMultiplier  Multiple of HY spread over IG spread (e.g. 3.3x).
      * @param float $leverageSens     Merton distance-to-default sensitivity of the IG spread to the output gap.
      * @param float $volSens          IG spread widening per unit of equity volatility above the threshold.
      * @param float $volThreshold     Equity volatility below which no volatility premium is charged.
      * @param float $contagionSens    IG spread widening per unit of interbank stress.
      * @param float $minIgSpread      Floor on the IG spread.
      * @param float $maxIgSpread      Cap on the IG spread.
-     * @param float $hyMinMultiplier  Floor multiple of HY over IG.
-     * @param float $maxHySpread      Cap on the HY spread.
      * @return array{ig: float, hy: float} Calculated IG and HY credit spreads.
      */
     public function calculateDualTrancheCreditSpreads(
@@ -2180,15 +2176,12 @@ class MathUtility
         float $excessBondPremium = 0.0,
         float $premiumLoading = MacroEngine::CREDIT_SPREAD_PREMIUM_LOADING,
         float $hyBaseMultiplier = MacroEngine::HY_BASE_SPREAD_MULTIPLIER,
-        float $fallenAngelSens = MacroEngine::FALLEN_ANGEL_CLIFF_SENSITIVITY,
         float $leverageSens = MacroEngine::MERTON_LEVERAGE_SENSITIVITY,
         float $volSens = MacroEngine::MERTON_VOL_SENSITIVITY,
         float $volThreshold = MacroEngine::CREDIT_SPREAD_EXCESS_VOL_THRESHOLD,
         float $contagionSens = MacroEngine::INTERBANK_CREDIT_CONTAGION_SENSITIVITY,
         float $minIgSpread = MacroEngine::MIN_CREDIT_SPREAD,
-        float $maxIgSpread = MacroEngine::MAX_CREDIT_SPREAD,
-        float $hyMinMultiplier = MacroEngine::HY_MIN_SPREAD_MULTIPLIER,
-        float $maxHySpread = MacroEngine::MAX_HY_CREDIT_SPREAD
+        float $maxIgSpread = MacroEngine::MAX_CREDIT_SPREAD
     ): array {
         $cycleSpread = $baseIgSpread * exp(-$leverageSens * $outputGapEma);
         $excessVol = max(0.0, $marketVolEma - $volThreshold);
@@ -2198,10 +2191,8 @@ class MathUtility
 
         $igSpread = max($minIgSpread, min($maxIgSpread, $cycleSpread + $volSpread + $premiumSpread + $contagionSpread));
 
-        // Jarrow-Lando-Turnbull (1997): Speculative-grade default intensity surges exponentially during recessions
-        $contractionDepth = max(0.0, -$outputGapEma);
-        $fallenAngelMultiplier = exp($fallenAngelSens * $contractionDepth);
-        $hySpread = max($igSpread * $hyMinMultiplier, min($maxHySpread, $igSpread * $hyBaseMultiplier * $fallenAngelMultiplier));
+        // The IG caps bound it: at the IG record the tranche sits at the ~21.8% HY record of December 2008.
+        $hySpread = $igSpread * $hyBaseMultiplier;
 
         return [
             'ig' => $igSpread,

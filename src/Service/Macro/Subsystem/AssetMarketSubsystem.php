@@ -163,6 +163,8 @@ class AssetMarketSubsystem
     public const RESIDENTIAL_MIN_LABOR_FACTOR = 0.30;
     /** Upper bound multiplier on residential spatial labor demand during peak labor market expansions. */
     public const RESIDENTIAL_MAX_LABOR_FACTOR = 1.80;
+    /** Elasticity of the fundamental house price to the user cost: Glaeser, Gottlieb & Gyourko (2010) measure about 7-8% per 100bp fall in real rates, half the ~17% a unit elasticity gives at the 6.85% neutral user cost, so collapsing long rates at the floor no longer inflate prices in a slump. */
+    public const RESIDENTIAL_USER_COST_ELASTICITY = 0.5;
     /** Mean-reversion speed of residential property valuations toward fundamental user-cost equilibrium. */
     public const RESIDENTIAL_MEAN_REVERSION = 0.15;
     /** Fundamental price per unit of net lending tightening (Duca, Muellbauer & Murphy 2011; Favara & Imbs 2015): the ~80% tightening of a crisis takes a fifth off, the post-crisis decline in Reinhart & Rogoff. */
@@ -309,7 +311,7 @@ class AssetMarketSubsystem
         $incomeFactor = 1.0 + ($state->outputGapEma * self::RESIDENTIAL_INCOME_ELASTICITY);
         $demandMultiplier = max(self::RESIDENTIAL_MIN_LABOR_FACTOR, min(self::RESIDENTIAL_MAX_LABOR_FACTOR, $laborFactor * $incomeFactor));
 
-        $affordabilityFactor = (self::RESIDENTIAL_NEUTRAL_USER_COST / $userCost) * $demandMultiplier;
+        $affordabilityFactor = ((self::RESIDENTIAL_NEUTRAL_USER_COST / $userCost) ** self::RESIDENTIAL_USER_COST_ELASTICITY) * $demandMultiplier;
         // Hallegatte et al. (2007) physical housing stock destruction and post-disaster replacement.
         $damageFactor = 1.0 - (self::CATASTROPHE_PROPERTY_DAMAGE_SHARE * max(0.0, $state->catastropheLossIndexEma - 1.0));
         $creditConditionsFactor = 1.0 - (self::RESIDENTIAL_CREDIT_STANDARDS_ELASTICITY * $state->sloosTighteningIndexEma);

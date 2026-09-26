@@ -126,12 +126,12 @@ class FinancialInvariantTest extends TestCase
                 "HY spread must exceed IG spread in {$name}: HY={$hySpread}, IG={$igSpread}"
             );
 
-            // Invariant 3: High Yield / IG spread ratio must be at least 2.0x (credit cliff)
+            // Invariant 3: High Yield / IG spread ratio must be at least 2.0x
             $ratio = $hySpread / $igSpread;
             $this->assertGreaterThanOrEqual(
                 2.0,
                 $ratio,
-                "Fallen Angel cliff multiplier must maintain >= 2.0x spread ratio in {$name}"
+                "HY must keep at least 2.0x the IG spread in {$name}"
             );
         }
     }

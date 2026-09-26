@@ -456,7 +456,7 @@
 
     const POLICY_LABELS = {
         naturalRate: 'Natural rate r*', inflationTarget: 'Inflation target', coreInflationGap: 'Core inflation gap',
-        expectationsGap: 'Expectations gap', outputGap: 'Output gap', longRateOffset: 'Long-rate offset', qeShadow: 'QE shadow',
+        expectationsGap: 'Expectations gap', outputGap: 'Output gap', longRateOffset: 'Long-rate offset',
     };
     // Stacked as the deviation from neutral (r* + target), which the table carries on its own lines.
     const POLICY_SERIES = [
@@ -464,7 +464,6 @@
         { label: 'Expectations gap', terms: ['expectationsGap'] },
         { label: 'Output gap', terms: ['outputGap'] },
         { label: 'Long-rate offset', terms: ['longRateOffset'] },
-        { label: 'QE shadow', terms: ['qeShadow'] },
     ];
     const CONSTRAINT_LABELS = {
         lowerBound: 'At the lower bound', evansHold: 'Evans-rule hold', hikeCeiling: 'Hike-pace ceiling',

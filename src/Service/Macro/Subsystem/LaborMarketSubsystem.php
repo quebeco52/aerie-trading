@@ -34,7 +34,7 @@ class LaborMarketSubsystem
     public const NAIRU_HYSTERESIS_SPEED = 0.10;
     /** Excess unemployment above NAIRU required before structural scarring activates. */
     public const NAIRU_HYSTERESIS_THRESHOLD = 0.005;
-    /** Annual speed at which scarring is re-absorbed once the labour market is no longer slack (Ball 2009): the mirror of the scarring speed, a ~7 year half-life. */
+    /** Annual speed at which scarring heals toward the natural rate (Ball 2009), always on: a ~7 year half-life, and with slack held steady the NAIRU settles where scarring and healing balance instead of ratcheting. */
     public const NAIRU_REABSORPTION_SPEED = 0.10;
     /** Structural floor for NAIRU (frictional minimum). */
     public const MIN_NAIRU = 0.025;
@@ -107,11 +107,10 @@ class LaborMarketSubsystem
         $excessSlack = max(0.0, $state->unemploymentRateEma - $state->nairu - self::NAIRU_HYSTERESIS_THRESHOLD);
         $state->nairu += self::NAIRU_HYSTERESIS_SPEED * $excessSlack * $dt;
 
-        // Ball (2009) NAIRU hysteresis re-absorption in tight labor markets.
-        if ($state->unemploymentRateEma <= $state->nairu) {
-            $reabsorption = max(0.0, $state->nairu - MacroEngine::NATURAL_UNEMPLOYMENT) * self::NAIRU_REABSORPTION_SPEED;
-            $state->nairu -= $reabsorption * $dt;
-        }
+        // Ball (2009) partial hysteresis: scarring heals toward the natural rate throughout, not only once unemployment
+        // has fallen below the NAIRU. Gated on that, it froze at its peak through every recovery from above.
+        $reabsorption = max(0.0, $state->nairu - MacroEngine::NATURAL_UNEMPLOYMENT) * self::NAIRU_REABSORPTION_SPEED;
+        $state->nairu -= $reabsorption * $dt;
 
         $state->nairu = max(self::MIN_NAIRU, min(self::MAX_NAIRU, $state->nairu));
 

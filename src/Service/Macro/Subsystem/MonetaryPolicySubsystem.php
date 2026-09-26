@@ -74,6 +74,8 @@ class MonetaryPolicySubsystem
     public const TAYLOR_GAP_FORECAST_CAP = 0.020;
     /** Evans Rule forward guidance: Maximum inflation ceiling tolerated while holding rates at ZLB. */
     public const EVANS_RULE_INFLATION_CAP = 0.025;
+    /** Unemployment over the NAIRU above which forward guidance holds the rate at the floor: the FOMC's 6.5% threshold (Dec 2012) sat 0.9pp over the 5.6% midpoint of its longer-run range (5.2-6.0), so the hold ends at the same slack however much the NAIRU has scarred. */
+    public const EVANS_RULE_UNEMPLOYMENT_GAP = 0.009;
     /** Partial-adjustment speed of the policy rate toward its target, the same cutting as hiking (US: 15% vs 13% of the distance closed a quarter, se 4-6%): the rate trails its target by a quarter, and like the funds rate (1985-2008) peaks 2q after the gap. */
     public const CB_SMOOTHING_SPEED = 4.0;
     /** Inflation panic reaction multiplier accelerating rate hikes during extreme inflation spikes. */
@@ -82,10 +84,6 @@ class MonetaryPolicySubsystem
     public const CB_MAX_HIKE_PANIC_SPEED = 3.0;
     /** Fastest the policy rate rises, per year: the FOMC's largest modern step (75bp) at each of its eight meetings, 2022's pace (+150bp in Q3); cuts are not capped, the fastest US cuts (-200bp in 2008Q1, with intermeeting moves) outran it. */
     public const CB_MAX_HIKE_VELOCITY = 0.06;
-
-    // --- Central Bank Effective Lower Bound & Shadow Rates ---
-    /** Shadow-rate accommodation per unit of QE yield suppression: full-scale QE (100bps) reads as a -3% shadow rate, the Wu-Xia trough of 2014. */
-    public const WU_XIA_QE_SHADOW_SENSITIVITY = 3.0;
 
     // --- Nelson-Siegel-Svensson Term Structure Dynamics (Svensson 1994) ---
     /** Flight-to-safety sensitivity: recessions compress term premium via safe-haven demand (Campbell et al. 2017). */
@@ -269,8 +267,14 @@ class MonetaryPolicySubsystem
      * @param MacroState $state           Current macroeconomic state.
      * @param float      $targetInflation Statutory central bank target inflation.
      * @param float      $naturalRate     Dynamic natural real rate of interest (r*).
+     * QE is not subtracted from the rule. Its measured effect on yields (about 100bp on the ten-year, Gagnon et al.
+     * 2011) already reaches demand through the balance sheet's term-premium channel in the curve, and the Wu & Xia
+     * (2016) shadow rate is a summary of that curve which equals the policy rate once the floor stops binding.
+     * Subtracting the held stock here counted QE twice and, through the reinvestment hold after liftoff, kept the
+     * rate about 3pp under the rule into the following boom.
+     *
      * @param float      $dt              Time increment in years.
-     * @return float Unclamped equilibrium policy rate target (Wu-Xia shadow rate).
+     * @return float Unclamped rule rate; below the lower bound it reads the cuts the floor forbids.
      */
     public function calculateTargetRate(MacroState $state, float $targetInflation, float $naturalRate, float $dt = 0.25): float
     {
@@ -286,9 +290,7 @@ class MonetaryPolicySubsystem
             + self::TAYLOR_OUTPUT_GAP_WEIGHT * $cyclicalGap
             - $longRateOffset;
 
-        // Wu-Xia (2016) / Krippner (2013) shadow rate reflecting unconventional QE accommodation at ZLB.
-        $qeShadowAccommodation = $state->qeIntensity * self::WU_XIA_QE_SHADOW_SENSITIVITY;
-        $target = $unclampedTarget - $qeShadowAccommodation;
+        $target = $unclampedTarget;
 
         // The inflation measure is a blend weighted to one, so its level and the response to its gap split exactly
         // into a realized-core leg and an expectations leg on top of r* and the target.
@@ -301,7 +303,6 @@ class MonetaryPolicySubsystem
                 'expectationsGap' => $inflationResponse * self::TAYLOR_INFLATION_ANCHOR_WEIGHT * ($state->tipsBreakeven - $targetInflation),
                 'outputGap' => self::TAYLOR_OUTPUT_GAP_WEIGHT * $cyclicalGap,
                 'longRateOffset' => -$longRateOffset,
-                'qeShadow' => -$qeShadowAccommodation,
             ], $target, $dt);
         }
 
@@ -383,7 +384,7 @@ class MonetaryPolicySubsystem
         // Evans Rule (FOMC 2012) forward guidance threshold keeping rates at lower bound.
         $evansHold = $currentPolicyRate <= MacroEngine::ZLB_PROXIMITY_THRESHOLD
             && $effectiveTarget > $currentPolicyRate
-            && $state->unemploymentRateEma > MacroEngine::EVANS_RULE_UNEMPLOYMENT
+            && $state->unemploymentRateEma > $state->nairu + self::EVANS_RULE_UNEMPLOYMENT_GAP
             && max($state->inflationEma, $state->tipsBreakeven) < self::EVANS_RULE_INFLATION_CAP;
         if ($evansHold) {
             $effectiveTarget = $currentPolicyRate;

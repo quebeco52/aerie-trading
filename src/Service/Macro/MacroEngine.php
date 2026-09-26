@@ -91,8 +91,6 @@ class MacroEngine
     public const SVJJ_MU_V = 0.015;
 
     // --- Taylor Rule & The Evans Rule (Forward Guidance) ---
-    /** Evans Rule forward guidance: Unemployment threshold required before lifting off from ZLB. */
-    public const EVANS_RULE_UNEMPLOYMENT = 0.050;
     /** Inflation panic threshold above which central bank accelerates hiking to Volcker speed. */
     public const CB_INFLATION_PANIC_THRESHOLD = 0.035;
     /** Policy rate threshold determining proximity to the Zero Lower Bound. */
@@ -127,8 +125,8 @@ class MacroEngine
     public const CREDIT_SPREAD_PREMIUM_LOADING = 0.58;
     /** Through-the-cycle investment-grade spread (130 bps), the long-run median of IG OAS. */
     public const BASE_CREDIT_SPREAD = 0.013;
-    /** Log-elasticity of the IG spread to the output gap (distance-to-default): a -3% gap widens IG ~1.35x, a +3% gap tightens it to ~0.74x. */
-    public const MERTON_LEVERAGE_SENSITIVITY = 10.0;
+    /** Log-elasticity of the IG spread to the output gap (distance-to-default): the GZ default-risk part (spread less premium) on the gap holding VIX fixed, 1990-2026, -6.2 (se 1.3). The level alone explains none of it (R2 0.01, 1973-2026): in 2010 it was back at its pre-crisis 2.5% with the gap still -4%. */
+    public const MERTON_LEVERAGE_SENSITIVITY = 6.2;
     /** IG default-risk widening per unit of equity volatility above the threshold (0.037): the GZ default-risk part on VIX, 0.047 (se 0.009), at the 0.78 GZ-to-IG scale. 45% vol adds ~90 bps; the rest of a crisis spread is the premium. */
     public const MERTON_VOL_SENSITIVITY = 0.037;
     /** Floor on the investment-grade spread (80 bps), the tightest IG OAS of the 2000s cycle. */
@@ -138,15 +136,9 @@ class MacroEngine
     /** Equity volatility above which credit charges a vol premium (~20%, the long-run VIX median), so ordinary vol does not widen IG. */
     public const CREDIT_SPREAD_EXCESS_VOL_THRESHOLD = 0.20;
 
-    // --- Dual-Tranche Corporate Credit Spreads & Rating Migration (Jarrow-Lando-Turnbull 1997) ---
-    /** Baseline multiple of HY over IG spread (~3.3x): 130 bps IG pairs with ~430 bps HY through the cycle. */
+    // --- Dual-Tranche Corporate Credit Spreads ---
+    /** Multiple of HY over IG spread (~3.3x): 130 bps IG pairs with ~430 bps HY through the cycle, and the ~6.5% IG peak of December 2008 with its ~21.8% HY peak. */
     public const HY_BASE_SPREAD_MULTIPLIER = 3.3;
-    /** Log-sensitivity of the HY/IG ratio to contraction depth: a -4% gap lifts the ratio ~1.27x, matching the ~4x HY/IG seen at 2008-type troughs. */
-    public const FALLEN_ANGEL_CLIFF_SENSITIVITY = 6.0;
-    /** Floor multiple of HY over IG spread; HY never trades inside 1.5x IG even at the tightest point of the cycle. */
-    public const HY_MIN_SPREAD_MULTIPLIER = 1.5;
-    /** Statutory ceiling cap for aggregate high-yield corporate credit spread. */
-    public const MAX_HY_CREDIT_SPREAD = 0.25;
 
     // --- Barro Tax-Smoothing & Automatic Fiscal Stabilizers (Barro 1979) ---
     /** Structural baseline statutory corporate tax rate. */

@@ -1108,6 +1108,47 @@ class MonetaryPolicySubsystemTest extends TestCase
         $this->assertLessThan(MacroEngine::SYSTEM_DEPOSIT_BETA_BASE + 0.002, $state->systemDepositBeta, 'One trading day moves the system beta by a fraction of a point.');
     }
 
+    /**
+     * The Evans hold is a gap to the NAIRU, not a fixed unemployment rate: once hysteresis has scarred the NAIRU past
+     * the old 5% line, unemployment at the NAIRU is full employment and must not keep the rate at the floor.
+     */
+    public function testTheEvansHoldIsMeasuredAgainstTheNairu(): void
+    {
+        $scarred = new MacroState();
+        $scarred->policyRate = 0.0;
+        $scarred->nairu = 0.052;
+        $scarred->unemploymentRateEma = 0.053; // over the old absolute 5%, a tenth of a point over this NAIRU
+        $scarred->inflationEma = 0.018;
+        $scarred->tipsBreakeven = 0.018;
+
+        $this->assertGreaterThan(0.0, $this->subsystem->updatePolicyRate($scarred, 0.03, 0.25), 'Full employment at a scarred NAIRU lifts off.');
+
+        $slack = clone $scarred;
+        $slack->unemploymentRateEma = $scarred->nairu + MonetaryPolicySubsystem::EVANS_RULE_UNEMPLOYMENT_GAP + 0.002;
+        $this->assertSame(0.0, $this->subsystem->updatePolicyRate($slack, 0.03, 0.25), 'Slack past the threshold still holds the floor.');
+    }
+
+    /**
+     * The balance sheet reaches demand through the curve, so the rule does not read it again: a held stock must not
+     * pull the target under the rule once the economy has recovered.
+     */
+    public function testTheHeldBalanceSheetDoesNotLowerTheRule(): void
+    {
+        $recovered = new MacroState();
+        $recovered->policyRate = 0.02;
+        $recovered->outputGap = 0.012;
+        $recovered->outputGapEma = 0.012;
+        $recovered->qeIntensity = 0.0;
+        // Only the QE reading the rule used to subtract; the stock's own term-premium channel is the curve's business.
+        $withStock = clone $recovered;
+        $withStock->qeIntensity = 0.0095;
+
+        $this->assertSame(
+            $this->subsystem->calculateTargetRate($recovered, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE),
+            $this->subsystem->calculateTargetRate($withStock, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE)
+        );
+    }
+
     // --- Diagnostics: what held the rate ---
 
     /** @return array<string, float> Constraint => share of one recorded tick. */

@@ -141,6 +141,41 @@ class LaborMarketSubsystemTest extends TestCase
         );
     }
 
+    /**
+     * Held slack scars the NAIRU to where scarring and healing balance, (u - threshold + natural) / 2 at equal
+     * speeds, rather than ratcheting it for as long as the slump lasts.
+     */
+    public function testSustainedSlackScarsTheNairuToABalanceNotARatchet(): void
+    {
+        $state = new MacroState();
+        $state->nairu = MacroEngine::NATURAL_UNEMPLOYMENT;
+        $state->unemploymentRate = 0.07;
+        $state->outputGap = -0.06;
+        for ($quarter = 0; $quarter < 160; $quarter++) {
+            $state->unemploymentRateEma = 0.07;
+            $this->subsystem->calculateUnemployment($state, 0.25);
+        }
+
+        $balance = ((LaborMarketSubsystem::NAIRU_HYSTERESIS_SPEED * (0.07 - LaborMarketSubsystem::NAIRU_HYSTERESIS_THRESHOLD))
+            + (LaborMarketSubsystem::NAIRU_REABSORPTION_SPEED * MacroEngine::NATURAL_UNEMPLOYMENT))
+            / (LaborMarketSubsystem::NAIRU_HYSTERESIS_SPEED + LaborMarketSubsystem::NAIRU_REABSORPTION_SPEED);
+        $this->assertEqualsWithDelta($balance, $state->nairu, 0.0005);
+    }
+
+    /** A recovery from above, unemployment still a little over the NAIRU but inside the scarring threshold, heals it. */
+    public function testScarringHealsWhileUnemploymentApproachesFromAbove(): void
+    {
+        $state = new MacroState();
+        $state->nairu = 0.052;
+        $state->unemploymentRate = 0.054;
+        $state->outputGap = -0.004;
+        $state->unemploymentRateEma = 0.054;
+
+        $this->subsystem->calculateUnemployment($state, 1.0);
+
+        $this->assertLessThan(0.052, $state->nairu, 'Inside the threshold nothing scars, so the healing must show.');
+    }
+
     public function testWageDemandsIndexToExpectedInflationOneForOne(): void
     {
         $anchored = $this->convergedWageGrowth(0.02);
