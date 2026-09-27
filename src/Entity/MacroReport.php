@@ -607,10 +607,10 @@ class MacroReport
 
     // A whole-board capitalisation runs to eleven figures, so this is the one column the DECIMAL(10, 4) the
     // rest of the vector uses would overflow rather than merely round.
-    #[ORM\Column(type: Types::DECIMAL, precision: 22, scale: 2, nullable: true)]
+    #[ORM\Column(type: Types::DECIMAL, precision: 30, scale: 2, nullable: true)]
     private ?string $equityMarketCap = null;
 
-    #[ORM\Column(type: Types::DECIMAL, precision: 22, scale: 2, nullable: true)]
+    #[ORM\Column(type: Types::DECIMAL, precision: 30, scale: 2, nullable: true)]
     private ?string $equityMarketCapEma = null;
 
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]

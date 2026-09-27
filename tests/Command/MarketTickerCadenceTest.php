@@ -66,32 +66,32 @@ class MarketTickerCadenceTest extends TestCase
         $this->assertSame(1, MarketTickerCommand::reloadIntervalBars(12));
     }
 
-    public function testBondHistoryIsSampledOncePerTradingDayNotOncePerBar(): void
+    public function testTheBondLadderIsMarkedOncePerTradingDayNotOncePerBar(): void
     {
         $ticksPerYear = 14400;
-        $bars = MarketTickerCommand::bondHistoryIntervalBars($ticksPerYear);
+        $bars = MarketTickerCommand::bondMarkIntervalBars($ticksPerYear);
 
-        // Ten equity bars to one bond row: the ladder writes a tenth of the rows the board does, per bond.
+        // Ten equity bars to one mark: the ladder is revalued, written and sampled a tenth as often as the board.
         $this->assertSame(10, $bars);
 
         $rows = 0;
         for ($tick = 1; $tick <= $ticksPerYear; $tick++) {
-            if (MarketTickerCommand::isBondHistoryTick($tick, $ticksPerYear)) {
+            if (MarketTickerCommand::isBondMarkTick($tick, $ticksPerYear)) {
                 $rows++;
             }
         }
 
         $this->assertEqualsWithDelta(
-            MarketTickerCommand::BOND_HISTORY_POINTS_PER_YEAR,
+            MarketTickerCommand::BOND_MARKS_PER_YEAR,
             $rows,
-            MarketTickerCommand::BOND_HISTORY_POINTS_PER_YEAR * 0.1
+            MarketTickerCommand::BOND_MARKS_PER_YEAR * 0.1
         );
     }
 
-    public function testACoarseTickRateStillSamplesBondsOnEveryBar(): void
+    public function testACoarseTickRateStillMarksBondsOnEveryBar(): void
     {
-        $this->assertSame(1, MarketTickerCommand::bondHistoryIntervalBars(252));
-        $this->assertSame(1, MarketTickerCommand::bondHistoryIntervalBars(12));
+        $this->assertSame(1, MarketTickerCommand::bondMarkIntervalBars(252));
+        $this->assertSame(1, MarketTickerCommand::bondMarkIntervalBars(12));
     }
 
     public function testTheDayJobsDoNotShareABar(): void
@@ -101,12 +101,12 @@ class MarketTickerCadenceTest extends TestCase
 
         for ($bar = 0; $bar < 1000; $bar++) {
             if (MarketTickerCommand::isReloadBar($bar, $ticksPerYear)
-                && MarketTickerCommand::isBondHistoryBar($bar, $ticksPerYear)) {
+                && MarketTickerCommand::isBondMarkBar($bar, $ticksPerYear)) {
                 $shared++;
             }
         }
 
-        $this->assertSame(0, $shared, 'One tick must not pay for both the reload and the bond sample.');
+        $this->assertSame(0, $shared, 'One tick must not pay for both the reload and the bond mark.');
     }
 
     /**
@@ -130,15 +130,15 @@ class MarketTickerCadenceTest extends TestCase
         }
     }
 
-    /** The same for the bond sample, which has to carry a mark struck on the tick that writes it. */
-    public function testABondSampleOnlyEverHappensOnATickThatMarkedTheLadder(): void
+    /** The same for the bond mark, whose history row is written inside the bar block. */
+    public function testABondMarkOnlyEverHappensOnABarTick(): void
     {
         foreach ([3600, 7200, 14400, 54000] as $ticksPerYear) {
             for ($tick = 1; $tick <= 20000; $tick++) {
-                if (MarketTickerCommand::isBondHistoryTick($tick, $ticksPerYear)) {
+                if (MarketTickerCommand::isBondMarkTick($tick, $ticksPerYear)) {
                     $this->assertTrue(
                         MarketTickerCommand::isHistoryTick($tick, $ticksPerYear),
-                        "Tick {$tick} samples the ladder without a mark at {$ticksPerYear} ticks/year."
+                        "Tick {$tick} marks the ladder off the bar grid at {$ticksPerYear} ticks/year."
                     );
                 }
             }
@@ -158,7 +158,7 @@ class MarketTickerCadenceTest extends TestCase
 
             for ($tick = 1; $tick <= 20000; $tick++) {
                 if (MarketTickerCommand::isReloadTick($tick, $ticksPerYear)
-                    && MarketTickerCommand::isBondHistoryTick($tick, $ticksPerYear)) {
+                    && MarketTickerCommand::isBondMarkTick($tick, $ticksPerYear)) {
                     $shared++;
                 }
             }

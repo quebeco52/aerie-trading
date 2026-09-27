@@ -19,16 +19,16 @@ class CorporateReport
     #[ORM\JoinColumn(nullable: false, onDelete: 'CASCADE')]
     private Stock $stock;
 
-    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, nullable: true)]
+    #[ORM\Column(type: Types::DECIMAL, precision: 30, scale: 4, nullable: true)]
     private ?string $netIncome = null;
 
-    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, nullable: true)]
+    #[ORM\Column(type: Types::DECIMAL, precision: 30, scale: 4, nullable: true)]
     private ?string $equity = null;
 
-    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, nullable: true)]
+    #[ORM\Column(type: Types::DECIMAL, precision: 30, scale: 4, nullable: true)]
     private ?string $totalDebt = null;
 
-    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, nullable: true)]
+    #[ORM\Column(type: Types::DECIMAL, precision: 30, scale: 4, nullable: true)]
     private ?string $treasury = null;
 
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
@@ -53,7 +53,7 @@ class CorporateReport
     #[ORM\Column(type: Types::DATETIME_MUTABLE)]
     private \DateTimeInterface $recordedAt;
 
-    #[ORM\Column(type: 'decimal', precision: 20, scale: 4)]
+    #[ORM\Column(type: 'decimal', precision: 30, scale: 4)]
     private string $interestExpense = '0.0000';
 
     #[ORM\Column(type: 'decimal', precision: 10, scale: 6)]
@@ -62,37 +62,37 @@ class CorporateReport
     #[ORM\Column(type: 'decimal', precision: 10, scale: 6)]
     private string $dynamicSpread = '0.000000';
 
-    #[ORM\Column(type: 'decimal', precision: 20, scale: 4)]
+    #[ORM\Column(type: 'decimal', precision: 30, scale: 4)]
     private string $revenue = '0.0000';
 
-    #[ORM\Column(type: 'decimal', precision: 20, scale: 4)]
+    #[ORM\Column(type: 'decimal', precision: 30, scale: 4)]
     private string $interestIncome = '0.0000';
 
-    #[ORM\Column(type: 'decimal', precision: 20, scale: 4)]
+    #[ORM\Column(type: 'decimal', precision: 30, scale: 4)]
     private string $capitalExpenditures = '0.0000';
 
-    #[ORM\Column(type: 'decimal', precision: 20, scale: 4, options: ['default' => '0.0000'])]
+    #[ORM\Column(type: 'decimal', precision: 30, scale: 4, options: ['default' => '0.0000'])]
     private string $operatingCosts = '0.0000';
 
-    #[ORM\Column(type: 'decimal', precision: 20, scale: 4, options: ['default' => '0.0000'])]
+    #[ORM\Column(type: 'decimal', precision: 30, scale: 4, options: ['default' => '0.0000'])]
     private string $ebit = '0.0000';
 
-    #[ORM\Column(type: 'decimal', precision: 20, scale: 4, options: ['default' => '0.0000'])]
+    #[ORM\Column(type: 'decimal', precision: 30, scale: 4, options: ['default' => '0.0000'])]
     private string $preTaxIncome = '0.0000';
 
-    #[ORM\Column(type: 'decimal', precision: 20, scale: 4, options: ['default' => '0.0000'])]
+    #[ORM\Column(type: 'decimal', precision: 30, scale: 4, options: ['default' => '0.0000'])]
     private string $taxPaid = '0.0000';
 
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4)]
     private ?string $wacc = null;
 
-    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 2, nullable: true)]
+    #[ORM\Column(type: Types::DECIMAL, precision: 30, scale: 2, nullable: true)]
     private ?string $eva = null;
 
-    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, options: ['default' => '0.0000'])]
+    #[ORM\Column(type: Types::DECIMAL, precision: 30, scale: 4, options: ['default' => '0.0000'])]
     private string $dividendPaid = '0.0000';
 
-    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, options: ['default' => '0.0000'])]
+    #[ORM\Column(type: Types::DECIMAL, precision: 30, scale: 4, options: ['default' => '0.0000'])]
     private string $stockBuybacks = '0.0000';
 
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
@@ -116,35 +116,35 @@ class CorporateReport
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
     private ?string $cashYield = null;
 
-    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, nullable: true)]
+    #[ORM\Column(type: Types::DECIMAL, precision: 30, scale: 4, nullable: true)]
     private ?string $freeCashFlow = null;
 
     /** Depreciation expensed this quarter, the line separating EBITDA from EBIT. */
-    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, nullable: true)]
+    #[ORM\Column(type: Types::DECIMAL, precision: 30, scale: 4, nullable: true)]
     private ?string $depreciation = null;
 
     /** Earnings before interest, tax, depreciation and amortization. */
-    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, nullable: true)]
+    #[ORM\Column(type: Types::DECIMAL, precision: 30, scale: 4, nullable: true)]
     private ?string $ebitda = null;
 
     /** Historical cost of property, plant and equipment placed in service. */
-    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, nullable: true)]
+    #[ORM\Column(type: Types::DECIMAL, precision: 30, scale: 4, nullable: true)]
     private ?string $grossPpe = null;
 
     /** Gross loans, securities and other earning assets of a balance-sheet business at quarter end. */
-    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, nullable: true)]
+    #[ORM\Column(type: Types::DECIMAL, precision: 30, scale: 4, nullable: true)]
     private ?string $earningAssets = null;
 
     /** Allowance for credit losses carried against the earning assets (ASC 326). */
-    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, nullable: true)]
+    #[ORM\Column(type: Types::DECIMAL, precision: 30, scale: 4, nullable: true)]
     private ?string $creditLossAllowance = null;
 
     /** Provision for credit losses charged to earnings this quarter, net of any reserve release. */
-    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, nullable: true)]
+    #[ORM\Column(type: Types::DECIMAL, precision: 30, scale: 4, nullable: true)]
     private ?string $creditLossProvision = null;
 
     /** Loans written off against the allowance this quarter. */
-    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, nullable: true)]
+    #[ORM\Column(type: Types::DECIMAL, precision: 30, scale: 4, nullable: true)]
     private ?string $netChargeOffs = null;
 
     /**
@@ -152,19 +152,19 @@ class CorporateReport
      * available-for-sale share is already inside total equity; the held-to-maturity share is disclosed here
      * and nowhere else, which is the gap between what this filing reports and what the firm is worth.
      */
-    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, nullable: true)]
+    #[ORM\Column(type: Types::DECIMAL, precision: 30, scale: 4, nullable: true)]
     private ?string $unrealizedSecuritiesMark = null;
 
     /** Cash deployed into new earning assets, net of assets sold: the investing flow of a lender. */
-    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, nullable: true)]
+    #[ORM\Column(type: Types::DECIMAL, precision: 30, scale: 4, nullable: true)]
     private ?string $netLoanOriginations = null;
 
     /** Loss realized on earning assets sold below carrying value to meet withdrawals or maturities. */
-    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, nullable: true)]
+    #[ORM\Column(type: Types::DECIMAL, precision: 30, scale: 4, nullable: true)]
     private ?string $assetSaleLoss = null;
 
     /** Customer deposits (or policyholder float) at quarter end, the part of total debt that is not wholesale. */
-    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, nullable: true)]
+    #[ORM\Column(type: Types::DECIMAL, precision: 30, scale: 4, nullable: true)]
     private ?string $customerDeposits = null;
 
     /** Common equity tier 1 ratio, equity over risk-weighted assets, for a regulated bank. */
@@ -176,79 +176,79 @@ class CorporateReport
     private ?string $netInterestMargin = null;
 
     /** Net book value of property, plant and equipment. */
-    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, nullable: true)]
+    #[ORM\Column(type: Types::DECIMAL, precision: 30, scale: 4, nullable: true)]
     private ?string $netPpe = null;
 
     /** Trade receivables net of the expected credit loss allowance. */
-    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, nullable: true)]
+    #[ORM\Column(type: Types::DECIMAL, precision: 30, scale: 4, nullable: true)]
     private ?string $receivables = null;
 
     /** Inventory carried at cost after any writedown. */
-    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, nullable: true)]
+    #[ORM\Column(type: Types::DECIMAL, precision: 30, scale: 4, nullable: true)]
     private ?string $inventory = null;
 
     /** Trade payables outstanding. */
-    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, nullable: true)]
+    #[ORM\Column(type: Types::DECIMAL, precision: 30, scale: 4, nullable: true)]
     private ?string $payables = null;
 
     /** Lower-of-cost-or-NRV writedown charged against inventory this quarter (ASC 330). */
-    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, nullable: true)]
+    #[ORM\Column(type: Types::DECIMAL, precision: 30, scale: 4, nullable: true)]
     private ?string $inventoryWriteDown = null;
 
     /** Expected credit loss provision charged against receivables this quarter (ASC 326). */
-    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, nullable: true)]
+    #[ORM\Column(type: Types::DECIMAL, precision: 30, scale: 4, nullable: true)]
     private ?string $receivablesProvision = null;
 
     /** Portion of the tax expense postponed by accelerated tax depreciation (ASC 740). */
-    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, nullable: true)]
+    #[ORM\Column(type: Types::DECIMAL, precision: 30, scale: 4, nullable: true)]
     private ?string $deferredTaxExpense = null;
 
     /** Accumulated deferred tax liability at the end of the quarter. */
-    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, nullable: true)]
+    #[ORM\Column(type: Types::DECIMAL, precision: 30, scale: 4, nullable: true)]
     private ?string $deferredTaxLiability = null;
 
     /** Tax that actually left the company this quarter. */
-    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, nullable: true)]
+    #[ORM\Column(type: Types::DECIMAL, precision: 30, scale: 4, nullable: true)]
     private ?string $cashTaxPaid = null;
 
     /** Construction in progress: capital committed but not yet earning. */
-    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, nullable: true)]
+    #[ORM\Column(type: Types::DECIMAL, precision: 30, scale: 4, nullable: true)]
     private ?string $cip = null;
 
     /** Goodwill carried from past acquisitions. */
-    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, nullable: true)]
+    #[ORM\Column(type: Types::DECIMAL, precision: 30, scale: 4, nullable: true)]
     private ?string $goodwill = null;
 
     /** Capitalized operating lease obligation (IFRS 16 / ASC 842). */
-    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, nullable: true)]
+    #[ORM\Column(type: Types::DECIMAL, precision: 30, scale: 4, nullable: true)]
     private ?string $leaseLiability = null;
 
     /** Total assets at the end of the quarter. */
-    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, nullable: true)]
+    #[ORM\Column(type: Types::DECIMAL, precision: 30, scale: 4, nullable: true)]
     private ?string $totalAssets = null;
 
     /** Total liabilities at the end of the quarter. */
-    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, nullable: true)]
+    #[ORM\Column(type: Types::DECIMAL, precision: 30, scale: 4, nullable: true)]
     private ?string $totalLiabilities = null;
 
     /** Net cash generated by operations. */
-    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, nullable: true)]
+    #[ORM\Column(type: Types::DECIMAL, precision: 30, scale: 4, nullable: true)]
     private ?string $operatingCashFlow = null;
 
     /** Net cash used in investing; negative means the firm is a net investor. */
-    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, nullable: true)]
+    #[ORM\Column(type: Types::DECIMAL, precision: 30, scale: 4, nullable: true)]
     private ?string $investingCashFlow = null;
 
     /** Net cash from financing; negative means capital was returned rather than raised. */
-    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, nullable: true)]
+    #[ORM\Column(type: Types::DECIMAL, precision: 30, scale: 4, nullable: true)]
     private ?string $financingCashFlow = null;
 
     /** Non-cash equity compensation expensed this quarter (ASC 718). */
-    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, nullable: true)]
+    #[ORM\Column(type: Types::DECIMAL, precision: 30, scale: 4, nullable: true)]
     private ?string $stockCompensation = null;
 
     /** Goodwill written off in the annual impairment test (ASC 350). */
-    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, nullable: true)]
+    #[ORM\Column(type: Types::DECIMAL, precision: 30, scale: 4, nullable: true)]
     private ?string $goodwillImpairment = null;
 
     /** Dickinson (2011) life-cycle stage implied by this quarter's three cash-flow signs. */

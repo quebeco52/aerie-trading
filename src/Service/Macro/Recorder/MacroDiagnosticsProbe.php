@@ -19,6 +19,10 @@ use App\Service\Macro\MacroState;
  * tick of a quarter against a quarter's mean; the shares of time the policy rate spent under each constraint; and a
  * log of the jumps each stochastic process drew.
  *
+ * Satellite blocks keep their own accounts in named sections: a LEVEL account splits a quantity into terms that sum
+ * to it (time-averaged, like inflation); a FLOW account books what moved a stock over the window, so its terms sum
+ * to the stock's change; plain values are time averages beside them.
+ *
  * Off unless the ticker turns it on, like App\Service\Macro\Recorder\OutputGapProbe, and rolled on the same quarter
  * boundary: the open window goes over Redis to the admin view, the closed one into its quarter's macro_report row.
  */
@@ -49,6 +53,8 @@ final class MacroDiagnosticsProbe
         'marketVolatility',
         'creditToGdpGap',
         'monetaryStanceTransmitted',
+        'productivitySupplyGap',
+        'nairu',
     ];
 
     private bool $enabled = false;
@@ -88,6 +94,15 @@ final class MacroDiagnosticsProbe
 
     /** @var array<string, float> Shock => sum of its innovations over the window. */
     private array $shocks = [];
+
+    /** @var array<string, array<string, array{terms: array<string, float>, integral: float, years: float}>> Section => account => level account. */
+    private array $levelAccounts = [];
+
+    /** @var array<string, array<string, array<string, float>>> Section => account => flow => sum over the window. */
+    private array $flowAccounts = [];
+
+    /** @var array<string, array<string, array{integral: float, years: float}>> Section => value => its time integral. */
+    private array $values = [];
 
     /** @var array<string, mixed>|null The last completed window, so the panel reads something early in a new one. */
     private ?array $previous = null;
@@ -223,6 +238,70 @@ final class MacroDiagnosticsProbe
         $this->shocks[$name] = ($this->shocks[$name] ?? 0.0) + $value;
     }
 
+    /**
+     * Folds one tick of a satellite quantity's terms into a level account of its section.
+     *
+     * @param string               $section Section the account is reported under.
+     * @param string               $account Account name.
+     * @param array<string, float> $terms   Term name => its part of this tick's value; they sum to $value.
+     * @param float                $value   The tick's value of the quantity.
+     * @param float                $dt      Time increment in years.
+     */
+    public function recordLevel(string $section, string $account, array $terms, float $value, float $dt): void
+    {
+        if (!$this->enabled) {
+            return;
+        }
+
+        $this->windowOpen = true;
+        $entry = $this->levelAccounts[$section][$account] ?? ['terms' => [], 'integral' => 0.0, 'years' => 0.0];
+        foreach ($terms as $name => $term) {
+            $entry['terms'][$name] = ($entry['terms'][$name] ?? 0.0) + ($term * $dt);
+        }
+        $entry['integral'] += $value * $dt;
+        $entry['years'] += $dt;
+        $this->levelAccounts[$section][$account] = $entry;
+    }
+
+    /**
+     * Books one tick's movements of a stock into a flow account of its section.
+     *
+     * @param string               $section Section the account is reported under.
+     * @param string               $account Account name.
+     * @param array<string, float> $flows   Flow name => what it moved the stock this tick; they sum to the tick's change.
+     */
+    public function recordFlows(string $section, string $account, array $flows): void
+    {
+        if (!$this->enabled) {
+            return;
+        }
+
+        $this->windowOpen = true;
+        foreach ($flows as $name => $flow) {
+            $this->flowAccounts[$section][$account][$name] = ($this->flowAccounts[$section][$account][$name] ?? 0.0) + $flow;
+        }
+    }
+
+    /**
+     * Folds one tick of plain values into their section's time averages.
+     *
+     * @param string               $section Section the values are reported under.
+     * @param array<string, float> $values  Value name => the tick's value (a 0/1 flag averages to a share of time).
+     * @param float                $dt      Time increment in years.
+     */
+    public function recordValues(string $section, array $values, float $dt): void
+    {
+        if (!$this->enabled) {
+            return;
+        }
+
+        $this->windowOpen = true;
+        foreach ($values as $name => $value) {
+            $entry = $this->values[$section][$name] ?? ['integral' => 0.0, 'years' => 0.0];
+            $this->values[$section][$name] = ['integral' => $entry['integral'] + ($value * $dt), 'years' => $entry['years'] + $dt];
+        }
+    }
+
     /** Closes the open window and starts a new one, keeping the closed one for the panel. */
     public function rollWindow(): void
     {
@@ -246,6 +325,9 @@ final class MacroDiagnosticsProbe
         $this->ticks = 0;
         $this->events = [];
         $this->shocks = [];
+        $this->levelAccounts = [];
+        $this->flowAccounts = [];
+        $this->values = [];
         $this->windowOpen = false;
     }
 
@@ -286,7 +368,39 @@ final class MacroDiagnosticsProbe
             'averages' => $this->averageYears > 0.0 ? self::divide($this->averages, $this->averageYears) : [],
             'events' => $this->events,
             'shocks' => $this->shocks,
-        ];
+        ] + $this->sections();
+    }
+
+    /**
+     * The satellite sections: each level account as its average and time-averaged terms, each flow account as its
+     * change and the flows that made it, each plain value as its time average.
+     *
+     * @return array<string, array<string, mixed>>
+     */
+    private function sections(): array
+    {
+        $sections = [];
+        foreach ($this->levelAccounts as $section => $accounts) {
+            foreach ($accounts as $account => $entry) {
+                if ($entry['years'] > 0.0) {
+                    $sections[$section][$account] = ['average' => $entry['integral'] / $entry['years'], 'terms' => self::divide($entry['terms'], $entry['years'])];
+                }
+            }
+        }
+        foreach ($this->flowAccounts as $section => $accounts) {
+            foreach ($accounts as $account => $flows) {
+                $sections[$section][$account] = ['change' => array_sum($flows), 'terms' => $flows];
+            }
+        }
+        foreach ($this->values as $section => $values) {
+            foreach ($values as $name => $entry) {
+                if ($entry['years'] > 0.0) {
+                    $sections[$section][$name] = $entry['integral'] / $entry['years'];
+                }
+            }
+        }
+
+        return $sections;
     }
 
     /**

@@ -152,7 +152,7 @@ class Bond
     private string $convexity = '0.000000';
 
     /** Face amount sold at auction. Sets how large a position the desk can absorb. */
-    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 2, options: ['default' => '0.00'])]
+    #[ORM\Column(type: Types::DECIMAL, precision: 30, scale: 2, options: ['default' => '0.00'])]
     private string $outstandingFace = '0.00';
 
     #[ORM\Column(type: Types::DATETIME_MUTABLE)]

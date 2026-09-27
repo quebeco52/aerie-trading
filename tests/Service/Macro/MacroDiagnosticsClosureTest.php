@@ -26,7 +26,7 @@ class MacroDiagnosticsClosureTest extends TestCase
     private const TICKS_PER_YEAR = 72;
     private const QUARTERS = 12;
 
-    /** @var list<array{gap: array<string, mixed>, diagnostics: array<string, mixed>, gaps: list<float>}> */
+    /** @var list<array{gap: array<string, mixed>, diagnostics: array<string, mixed>, gaps: list<float>, unemployment: float, nairu: float}> */
     private static array $quarters = [];
 
     public static function setUpBeforeClass(): void
@@ -43,10 +43,10 @@ class MacroDiagnosticsClosureTest extends TestCase
             self::inMemoryRedis(),
             new MacroSnapshotRecorder(),
             new MonetaryPolicySubsystem($math, $diagnostics),
-            new LaborMarketSubsystem(),
+            new LaborMarketSubsystem($diagnostics),
             new MacroAggregateSubsystem($math, $gapProbe, $diagnostics),
             new CommodityLogisticsSubsystem($math, $diagnostics),
-            new AssetMarketSubsystem($math),
+            new AssetMarketSubsystem($math, $diagnostics),
             new CreditFiscalSubsystem($math, $diagnostics),
             null,
             $diagnostics,
@@ -55,8 +55,12 @@ class MacroDiagnosticsClosureTest extends TestCase
         $perQuarter = intdiv(self::TICKS_PER_YEAR, 4);
         for ($quarter = 0; $quarter < self::QUARTERS; ++$quarter) {
             $gaps = [];
+            $unemployment = $nairu = 0.0;
             for ($tick = 0; $tick < $perQuarter; ++$tick) {
-                $gaps[] = $engine->updateMacroState(1.0 / self::TICKS_PER_YEAR)->outputGap;
+                $state = $engine->updateMacroState(1.0 / self::TICKS_PER_YEAR);
+                $gaps[] = $state->outputGap;
+                $unemployment = $state->unemploymentRate;
+                $nairu = $state->nairu;
             }
             $gapProbe->rollWindow();
             $diagnostics->rollWindow();
@@ -64,6 +68,8 @@ class MacroDiagnosticsClosureTest extends TestCase
                 'gap' => $gapProbe->snapshot()['previous'],
                 'diagnostics' => $diagnostics->snapshot()['previous'],
                 'gaps' => $gaps,
+                'unemployment' => $unemployment,
+                'nairu' => $nairu,
             ];
         }
     }
@@ -111,6 +117,44 @@ class MacroDiagnosticsClosureTest extends TestCase
         foreach (self::$quarters as $index => $quarter) {
             $mean = array_sum($quarter['gaps']) / count($quarter['gaps']);
             $this->assertEqualsWithDelta($mean, $quarter['diagnostics']['averages']['outputGap'], 1e-12, "Quarter {$index}");
+        }
+    }
+
+    /** The rule's gap response is reported as the whole projected gap and the productivity part it sees through. */
+    public function testTheRuleReportsTheProductivityPartItSeesThrough(): void
+    {
+        foreach (self::$quarters as $index => $quarter) {
+            $terms = $quarter['diagnostics']['policy']['terms'];
+            $this->assertArrayHasKey('outputGap', $terms, "Quarter {$index}");
+            $this->assertArrayHasKey('productivitySeenThrough', $terms, "Quarter {$index}");
+            $this->assertArrayHasKey('productivitySupplyGap', $quarter['diagnostics']['averages'], "Quarter {$index}");
+        }
+    }
+
+    /** Unemployment and the NAIRU have one writer each, so their flows rebuild each quarter's change exactly. */
+    public function testTheLabourFlowsRebuildEachQuartersChange(): void
+    {
+        for ($index = 1; $index < count(self::$quarters); ++$index) {
+            $labour = self::$quarters[$index]['diagnostics']['labour'];
+            $unemploymentChange = self::$quarters[$index]['unemployment'] - self::$quarters[$index - 1]['unemployment'];
+            $nairuChange = self::$quarters[$index]['nairu'] - self::$quarters[$index - 1]['nairu'];
+            $this->assertEqualsWithDelta($unemploymentChange, $labour['unemployment']['change'], 1e-12, "Quarter {$index}");
+            $this->assertEqualsWithDelta($labour['unemployment']['change'], array_sum($labour['unemployment']['terms']), 1e-15, "Quarter {$index}");
+            $this->assertEqualsWithDelta($nairuChange, $labour['nairu']['change'], 1e-12, "Quarter {$index}");
+            $this->assertGreaterThanOrEqual(0.0, $labour['firingShare']);
+            $this->assertLessThanOrEqual(1.0 + 1e-12, $labour['firingShare']);
+        }
+    }
+
+    /** Wage growth, the house-price fundamental and sentiment's fundamental each split exactly into their terms. */
+    public function testTheLevelAccountsSumToTheirAverages(): void
+    {
+        foreach (self::$quarters as $index => $quarter) {
+            $d = $quarter['diagnostics'];
+            foreach ([$d['labour']['wageGrowth'], $d['households']['houseFundamental'], $d['households']['sentimentFundamental']] as $account) {
+                $this->assertEqualsWithDelta($account['average'], array_sum($account['terms']), 1e-9, "Quarter {$index}");
+            }
+            $this->assertArrayHasKey('housePriceToFundamental', $d['households'], "Quarter {$index}");
         }
     }
 

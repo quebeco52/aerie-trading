@@ -285,7 +285,8 @@ class MonetaryPolicySubsystem
         $target = $unclampedTarget;
 
         // The inflation measure is a blend weighted to one, so its level and the response to its gap split exactly
-        // into a realized-core leg and an expectations leg on top of r* and the target.
+        // into a realized-core leg and an expectations leg on top of r* and the target. The gap response splits into
+        // the answer to the whole projected gap and the productivity part the rule sees through.
         if ($this->diagnostics?->isEnabled()) {
             $inflationResponse = 1.0 + self::TAYLOR_INFLATION_WEIGHT;
             $this->diagnostics->recordPolicyTarget([
@@ -293,7 +294,8 @@ class MonetaryPolicySubsystem
                 'inflationTarget' => $targetInflation * (self::TAYLOR_INFLATION_CORE_WEIGHT + self::TAYLOR_INFLATION_ANCHOR_WEIGHT),
                 'coreInflationGap' => $inflationResponse * self::TAYLOR_INFLATION_CORE_WEIGHT * ($this->realizedCoreInflation($state, $targetInflation) - $targetInflation),
                 'expectationsGap' => $inflationResponse * self::TAYLOR_INFLATION_ANCHOR_WEIGHT * ($state->tipsBreakeven - $targetInflation),
-                'outputGap' => self::TAYLOR_OUTPUT_GAP_WEIGHT * $cyclicalGap,
+                'outputGap' => self::TAYLOR_OUTPUT_GAP_WEIGHT * ($cyclicalGap + $state->productivitySupplyGap),
+                'productivitySeenThrough' => -self::TAYLOR_OUTPUT_GAP_WEIGHT * $state->productivitySupplyGap,
                 'longRateOffset' => -$longRateOffset,
             ], $target, $dt);
         }

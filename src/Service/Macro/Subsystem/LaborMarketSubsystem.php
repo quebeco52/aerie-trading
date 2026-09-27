@@ -4,6 +4,7 @@ namespace App\Service\Macro\Subsystem;
 
 use App\Service\Macro\MacroEngine;
 use App\Service\Macro\MacroState;
+use App\Service\Macro\Recorder\MacroDiagnosticsProbe;
 
 /**
  * Handles labor market dynamics, unemployment frictional adjustments,
@@ -45,6 +46,11 @@ class LaborMarketSubsystem
     /** Annual pull of wage growth against the real wage's gap to trend productivity: US nonfarm business 1960-1999, wages on the lagged labor share (se 0.10; var/harness/labor_real.py). */
     public const WAGE_ERROR_CORRECTION_SPEED = 0.12;
 
+    public function __construct(
+        /** Records what moved unemployment, the NAIRU and wages. Null in a test or a headless harness, off everywhere the ticker is not. */
+        private readonly ?MacroDiagnosticsProbe $diagnostics = null
+    ) {}
+
     /**
      * Dynamic Okun's Law (Okun 1962) with Convex Search-Matching Friction (Knotek 2007).
      *
@@ -57,13 +63,15 @@ class LaborMarketSubsystem
     public function calculateUnemployment(MacroState $state, float $dt): void
     {
         $excessSlack = max(0.0, $state->unemploymentRateEma - $state->nairu - self::NAIRU_HYSTERESIS_THRESHOLD);
-        $state->nairu += self::NAIRU_HYSTERESIS_SPEED * $excessSlack * $dt;
+        $scarring = self::NAIRU_HYSTERESIS_SPEED * $excessSlack * $dt;
+        $state->nairu += $scarring;
 
         // Ball (2009) partial hysteresis: scarring heals toward the natural rate throughout, not only once unemployment
         // has fallen below the NAIRU. Gated on that, it froze at its peak through every recovery from above.
-        $reabsorption = max(0.0, $state->nairu - MacroEngine::NATURAL_UNEMPLOYMENT) * self::NAIRU_REABSORPTION_SPEED;
-        $state->nairu -= $reabsorption * $dt;
+        $healing = max(0.0, $state->nairu - MacroEngine::NATURAL_UNEMPLOYMENT) * self::NAIRU_REABSORPTION_SPEED * $dt;
+        $state->nairu -= $healing;
 
+        $unclampedNairu = $state->nairu;
         $state->nairu = max(self::MIN_NAIRU, min(self::MAX_NAIRU, $state->nairu));
 
         if ($state->outputGap <= 0.0) {
@@ -75,6 +83,16 @@ class LaborMarketSubsystem
 
         $unemploymentGap = $targetUnemployment - $state->unemploymentRate;
         $adjustmentSpeed = $unemploymentGap > 0 ? self::OKUNS_FIRING_SPEED : self::OKUNS_HIRING_SPEED;
+
+        // The move splits into the output gap pushing unemployment off the NAIRU and the pull back onto it.
+        if ($this->diagnostics?->isEnabled()) {
+            $this->diagnostics->recordFlows('labour', 'nairu', ['scarring' => $scarring, 'healing' => -$healing, 'clamp' => $state->nairu - $unclampedNairu]);
+            $this->diagnostics->recordFlows('labour', 'unemployment', [
+                'outputGap' => $adjustmentSpeed * ($targetUnemployment - $state->nairu) * $dt,
+                'towardNairu' => $adjustmentSpeed * ($state->nairu - $state->unemploymentRate) * $dt,
+            ]);
+            $this->diagnostics->recordValues('labour', ['okunTarget' => $targetUnemployment, 'firingShare' => $unemploymentGap > 0 ? 1.0 : 0.0], $dt);
+        }
 
         $state->unemploymentRate += $adjustmentSpeed * $unemploymentGap * $dt;
     }
@@ -121,8 +139,9 @@ class LaborMarketSubsystem
         $state->laborTightness = $state->jobVacanciesRate / $effectiveUnemployment;
 
         $errorCorrection = self::WAGE_ERROR_CORRECTION_SPEED * $state->realWageGap;
-        $targetWageGrowth = $tfpGrowthRate + $state->tipsBreakevenEma + (self::WAGE_TIGHTNESS_SENSITIVITY * ($state->laborTightness - MacroEngine::NATURAL_LABOR_TIGHTNESS)) - $errorCorrection;
-        $targetWageGrowth = max(0.0, min(0.08, $targetWageGrowth));
+        $tightnessPush = self::WAGE_TIGHTNESS_SENSITIVITY * ($state->laborTightness - MacroEngine::NATURAL_LABOR_TIGHTNESS);
+        $unclampedTarget = $tfpGrowthRate + $state->tipsBreakevenEma + $tightnessPush - $errorCorrection;
+        $targetWageGrowth = max(0.0, min(0.08, $unclampedTarget));
 
         $wageGap = $targetWageGrowth - $state->wageGrowth;
         $adjustmentSpeed = $wageGap > 0
@@ -130,6 +149,19 @@ class LaborMarketSubsystem
             : self::WAGE_ADJUSTMENT_SPEED * self::WAGE_DOWNWARD_RIGIDITY_FACTOR;
 
         $state->wageGrowth += $adjustmentSpeed * $wageGap * $dt;
+
+        // The settlement splits into the target's legs and the distance wages still trail it by.
+        if ($this->diagnostics?->isEnabled()) {
+            $this->diagnostics->recordLevel('labour', 'wageGrowth', [
+                'productivity' => $tfpGrowthRate,
+                'expectations' => $state->tipsBreakevenEma,
+                'tightness' => $tightnessPush,
+                'errorCorrection' => -$errorCorrection,
+                'clamp' => $targetWageGrowth - $unclampedTarget,
+                'stickyLag' => $state->wageGrowth - $targetWageGrowth,
+            ], $state->wageGrowth, $dt);
+            $this->diagnostics->recordValues('labour', ['downwardRigidShare' => $wageGap > 0 ? 0.0 : 1.0], $dt);
+        }
 
         // The wage level against prices and potential productivity: what a unit of output costs in labour.
         $state->realWageGap += ($state->wageGrowth - $state->inflation - $tfpGrowthRate) * $dt;

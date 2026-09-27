@@ -246,9 +246,16 @@ final class OptionDeskService
     {
         $traded = 0.0;
 
-        foreach ($this->gammaEngine->hedgeMarket($stocks) as $ticker => $shares) {
-            $this->orderFlow->record($ticker, $shares);
-            $traded += abs($shares);
+        // One pipeline for the whole book, committed before the tick drains the flow it belongs to.
+        $this->orderFlow->beginBatch();
+
+        try {
+            foreach ($this->gammaEngine->hedgeMarket($stocks) as $ticker => $shares) {
+                $this->orderFlow->record($ticker, $shares);
+                $traded += abs($shares);
+            }
+        } finally {
+            $this->orderFlow->commitBatch();
         }
 
         return $traded;

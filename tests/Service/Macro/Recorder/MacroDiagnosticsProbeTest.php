@@ -101,6 +101,48 @@ class MacroDiagnosticsProbeTest extends TestCase
         $this->assertArrayNotHasKey('catastrophe', $probe->snapshot()['current']['events']);
     }
 
+    // --- Satellite sections ---
+
+    /** A level account is time-averaged like inflation; a flow account sums what moved the stock; values average. */
+    public function testSectionsKeepLevelFlowAndValueAccounts(): void
+    {
+        $probe = new MacroDiagnosticsProbe();
+        $probe->enable();
+        $probe->recordLevel('labour', 'wageGrowth', ['expectations' => 0.02, 'tightness' => 0.01], 0.03, 0.75);
+        $probe->recordLevel('labour', 'wageGrowth', ['expectations' => 0.02, 'tightness' => -0.02], 0.0, 0.25);
+        $probe->recordFlows('labour', 'unemployment', ['outputGap' => 0.002, 'towardNairu' => -0.0005]);
+        $probe->recordFlows('labour', 'unemployment', ['outputGap' => 0.001, 'towardNairu' => -0.0010]);
+        $probe->recordValues('labour', ['firingShare' => 1.0], 0.75);
+        $probe->recordValues('labour', ['firingShare' => 0.0], 0.25);
+
+        $labour = $probe->snapshot()['current']['labour'];
+
+        $this->assertEqualsWithDelta(0.0225, $labour['wageGrowth']['average'], 1e-15);
+        $this->assertEqualsWithDelta(0.0025, $labour['wageGrowth']['terms']['tightness'], 1e-15);
+        $this->assertEqualsWithDelta($labour['wageGrowth']['average'], array_sum($labour['wageGrowth']['terms']), 1e-15);
+        $this->assertEqualsWithDelta(0.0015, $labour['unemployment']['change'], 1e-15);
+        $this->assertEqualsWithDelta(0.003, $labour['unemployment']['terms']['outputGap'], 1e-15);
+        $this->assertEqualsWithDelta(0.75, $labour['firingShare'], 1e-15);
+    }
+
+    public function testSectionsStartCleanAfterTheRollAndStayOffWhenDisabled(): void
+    {
+        $probe = new MacroDiagnosticsProbe();
+        $probe->recordFlows('labour', 'nairu', ['scarring' => 0.001]);
+        $this->assertNull($probe->snapshot()['current'], 'A disabled probe opens no window.');
+
+        $probe->enable();
+        $probe->recordFlows('labour', 'nairu', ['scarring' => 0.001]);
+        $probe->rollWindow();
+        $probe->recordValues('households', ['housePriceToFundamental' => 0.02], 0.25);
+
+        $snapshot = $probe->snapshot();
+
+        $this->assertSame(0.001, $snapshot['previous']['labour']['nairu']['change']);
+        $this->assertArrayNotHasKey('labour', $snapshot['current']);
+        $this->assertEqualsWithDelta(0.02, $snapshot['current']['households']['housePriceToFundamental'], 1e-15);
+    }
+
     // --- The gap probe's external bucket ---
 
     /** A write to the gap between ticks is the one leak no per-tick check can see, so it is booked on its own. */

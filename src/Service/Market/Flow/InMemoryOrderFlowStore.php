@@ -28,4 +28,9 @@ final class InMemoryOrderFlowStore implements OrderFlowStoreInterface
 
         return $drained;
     }
+
+    /** Already process-local: a batch has nothing to save here. */
+    public function beginBatch(): void {}
+
+    public function commitBatch(): void {}
 }

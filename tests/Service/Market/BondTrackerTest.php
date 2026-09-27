@@ -198,7 +198,7 @@ class BondTrackerTest extends TestCase
     public function testAnActiveIssueQuotesAndOptionallyRecordsHistory(): void
     {
         $ledger = $this->createStub(BondLedgerService::class);
-        $bond = $this->bond(10.0, 0.05);
+        $bond = $this->persisted($this->bond(10.0, 0.05), 11);
 
         $withoutHistory = $this->tracker($ledger)->updateBonds([$bond], $this->macroAt(1.25), false);
         $this->assertCount(1, $withoutHistory['updates']);
@@ -294,13 +294,79 @@ class BondTrackerTest extends TestCase
     {
         $sent = [];
         $tracker = $this->observedTracker($this->createStub(BondLedgerService::class), $sent);
-        $bond = $this->persisted($this->bond(10.0, 0.05), 11);
+        // Paid up to the current period: a coupon falling due would strike and write it for its own reason.
+        $bond = $this->persisted($this->bond(10.0, 0.05), 11)->setLastCouponTime(1.0);
 
         $result = $tracker->updateBonds([$bond], $this->macroAt(1.25), false, [], false);
 
         $this->assertCount(1, $result['updates']);
         $this->assertGreaterThan(0.0, $result['updates'][0]['price']);
         $this->assertSame([], $sent, 'Valued for the quote, but a pass that is not a mark writes nothing.');
+    }
+
+    public function testAnIssueWithoutARowYetIsLeftOutOfTheHistorySample(): void
+    {
+        // bond_history.bond_id is NOT NULL: one id-less row fails the whole multi-row insert, and with it the tick.
+        $result = $this->tracker($this->createStub(BondLedgerService::class))
+            ->updateBonds([$this->bond(10.0, 0.05)], $this->macroAt(1.25), true);
+
+        $this->assertCount(1, $result['updates']);
+        $this->assertSame([], $result['history']);
+    }
+
+    public function testOnlyTheIssuesValuedThisPassAreReportedAsStruck(): void
+    {
+        $sent = [];
+        $tracker = $this->observedTracker($this->createStub(BondLedgerService::class), $sent);
+
+        $first = $this->persisted($this->bond(10.0, 0.05), 11);
+        $second = $this->persisted($this->bond(2.0, 0.03), 12)->setTicker('G02-001');
+
+        $marked = $tracker->updateBonds([$first, $second], $this->macroAt(1.25), false, [], true);
+        $this->assertCount(2, $marked['struck'], 'A mark strikes the whole ladder.');
+
+        $quoted = $tracker->updateBonds([$first, $second], $this->macroAt(1.26), false, [], false);
+        $this->assertCount(2, $quoted['updates'], 'Every issue is still quoted between marks.');
+        $this->assertSame([], $quoted['struck'], 'Nothing between marks moved.');
+
+        // A new issue has nothing to quote from, so it is valued at once and is the only thing that moved.
+        $fresh = $this->bond(5.0, 0.04)->setTicker('G05-001');
+        $withNewIssue = $tracker->updateBonds([$first, $second, $fresh], $this->macroAt(1.27), false, [], false);
+        $this->assertCount(3, $withNewIssue['updates']);
+        $this->assertSame(['G05-001'], array_column($withNewIssue['struck'], 'ticker'));
+    }
+
+    public function testACouponPaidBetweenMarksStrikesTheIssueAndWritesIt(): void
+    {
+        // The last mark's dirty price holds the accrual the coupon has just paid out in cash. Quoted until the
+        // next day's mark, every portfolio holding the issue would count that coupon twice.
+        $sent = [];
+        $ledger = $this->createMock(BondLedgerService::class);
+        $ledger->expects($this->once())->method('processCouponPayment');
+
+        $tracker = $this->observedTracker($ledger, $sent);
+        $bond = $this->persisted($this->bond(10.0, 0.05), 11);
+
+        $marked = $tracker->updateBonds([$bond], $this->macroAt(0.40), false, [], true);
+        $afterCoupon = $tracker->updateBonds([$bond], $this->macroAt(0.55), false, [], false);
+
+        $this->assertCount(2, $sent, 'The coupon strike is written like a mark.');
+        $this->assertSame(['G10-001'], array_column($afterCoupon['struck'], 'ticker'));
+        $this->assertLessThan($marked['updates'][0]['accrued_interest'], $afterCoupon['updates'][0]['accrued_interest']);
+        $this->assertLessThan($marked['updates'][0]['price'], $afterCoupon['updates'][0]['price']);
+    }
+
+    public function testTheOnTheRunFlagIsCurrentBetweenMarks(): void
+    {
+        // An auction demotes the previous benchmark on whatever tick it happens, not on the next mark.
+        $tracker = $this->tracker($this->createStub(BondLedgerService::class));
+        $bond = $this->bond(10.0, 0.05)->setIsOnTheRun(true);
+
+        $tracker->updateBonds([$bond], $this->macroAt(1.25), false, [], true);
+        $bond->setIsOnTheRun(false);
+        $quoted = $tracker->updateBonds([$bond], $this->macroAt(1.26), false, [], false);
+
+        $this->assertFalse($quoted['updates'][0]['is_on_the_run']);
     }
 
     public function testAnIssueWithoutARowYetIsQuotedButLeftForTheNextMarkToWrite(): void

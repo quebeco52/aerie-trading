@@ -12,7 +12,7 @@ use PHPUnit\Framework\TestCase;
  * Production always has the bcmath extension; the CLI sandbox does not, and tests/bootstrap.php fills in
  * for it. That polyfill used to route every operation through `(float)` and `number_format`, which
  * diverges from real bcmath in two ways that matter to this schema: doubles carry about 16 significant
- * digits while share counts run to 9.2e18 and money is stored at DECIMAL(20,4), and number_format ROUNDS
+ * digits while share counts run to 9.2e18 and money is stored at DECIMAL(30,4), and number_format ROUNDS
  * where bcmath TRUNCATES. Tests calibrated against that were not testing the arithmetic that ships.
  *
  * These cases assert the semantics both implementations must satisfy, so they are meaningful whether the

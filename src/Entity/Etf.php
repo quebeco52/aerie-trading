@@ -65,15 +65,15 @@ class Etf
     private string $basketPerShare = '1.000000000000';
 
     /** Dividend cash received from constituents and not yet distributed, per fund share. Carried in the price until it is paid out. */
-    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 8, options: ['default' => '0.00000000'])]
+    #[ORM\Column(type: Types::DECIMAL, precision: 30, scale: 8, options: ['default' => '0.00000000'])]
     private string $accruedIncome = '0.00000000';
 
     /** Fees charged over the fund's life, per share. The basket only records what had to be SOLD to meet a fee; almost all of it is met out of income, and a holder who read the basket alone would think the fund had cost them nothing. */
-    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 8, options: ['default' => '0.00000000'])]
+    #[ORM\Column(type: Types::DECIMAL, precision: 30, scale: 8, options: ['default' => '0.00000000'])]
     private string $cumulativeFeesPaid = '0.00000000';
 
     /** Spread the fund has crossed rebalancing itself, per share, over its life. Separate from the fee because it is a different cost with a different cause: the fee is what the manager charges, this is what the index's own turnover costs to follow. */
-    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 8, options: ['default' => '0.00000000'])]
+    #[ORM\Column(type: Types::DECIMAL, precision: 30, scale: 8, options: ['default' => '0.00000000'])]
     private string $cumulativeTradingCosts = '0.00000000';
 
     /**

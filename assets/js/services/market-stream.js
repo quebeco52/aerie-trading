@@ -17,23 +17,24 @@
  */
 
 /**
- * The per-tick points of one quote, as `[price, volume]` pairs in tick order, for the live chart.
+ * The per-tick points of one quote, as `[price, volume, tick]` in tick order, for the live chart.
  *
- * A quote with no `points` (a payload from before the frame contract) yields itself once, read from
- * `priceKey`, so the chart advances one tick per point either way.
+ * The tick lets the chart restore ticks a series was not sent on (price-chart.js, utils/tick-gaps.js). A
+ * quote with no `points` (a payload from before the frame contract) yields itself once, read from
+ * `priceKey`, with no tick, so the chart advances one tick per point either way.
  *
  * @param {object} quote An entry of a `market:update` payload's `stocks`.
  * @param {string} priceKey The quote field to fall back on when there are no points.
- * @returns {Array<[number, number]>}
+ * @returns {Array<[number, number, (number|null)]>}
  */
 export function tickPoints(quote, priceKey = 'price') {
     if (Array.isArray(quote.points) && quote.points.length > 0) {
         return quote.points
-            .map(([, price, volume]) => [parseFloat(price), Number(volume) || 0])
+            .map(([tick, price, volume]) => [parseFloat(price), Number(volume) || 0, Number.isInteger(tick) ? tick : null])
             .filter(([price]) => Number.isFinite(price));
     }
     const price = parseFloat(quote[priceKey]);
-    return Number.isFinite(price) ? [[price, Number(quote.volume) || 0]] : [];
+    return Number.isFinite(price) ? [[price, Number(quote.volume) || 0, null]] : [];
 }
 
 let isConnected = false;

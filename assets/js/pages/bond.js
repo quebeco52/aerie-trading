@@ -90,7 +90,7 @@ function onMarketUpdate(event) {
     const quote = quoteFor(event);
     if (!quote) return;
     // A bond's points already carry the clean price (see the frame contract in market-stream.js).
-    queueLivePricePoints(tickPoints(quote, 'clean_price').map(([price]) => [price, 0]));
+    queueLivePricePoints(tickPoints(quote, 'clean_price').map(([price, , tick]) => [price, 0, tick]));
 }
 
 /** The coalesced frame (market-stream.js), for everything written to the page. */

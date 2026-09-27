@@ -25,7 +25,22 @@ interface OrderFlowStoreInterface
     /**
      * Takes every accumulated total and resets them, atomically.
      *
+     * Includes anything recorded inside a batch that has not been committed yet: a batch changes when flow
+     * is sent, never which drain consumes it.
+     *
      * @return array<string, float> ticker => signed shares since the last drain.
      */
     public function drain(): array;
+
+    /**
+     * Holds every record() from here until commitBatch(), netted per ticker in process.
+     *
+     * For a caller that records once per name in a loop — the agent population every tick, the option
+     * desk's hedge every bar. Outside a batch each record is its own write, which is what the web process
+     * needs: nothing there would ever commit.
+     */
+    public function beginBatch(): void;
+
+    /** Sends everything held since beginBatch() in one write and returns to writing through. */
+    public function commitBatch(): void;
 }

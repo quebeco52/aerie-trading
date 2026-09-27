@@ -36,6 +36,11 @@ use Doctrine\ORM\EntityManagerInterface;
  * working-set reload; every reader that wants the mark reads the row. Between marks the tracker quotes
  * the valuation it last struck, kept per ticker in memory: a price nothing has re-marked is by
  * definition the last one.
+ *
+ * The ladder is marked once a trading day, so two events cannot wait for the mark. A new issue has no
+ * valuation to quote. A coupon paid since the mark leaves the dirty price still carrying the accrual the
+ * holder has just been paid in cash, which would count the coupon twice in every portfolio holding the issue
+ * until the next day. Either one strikes that issue on the tick it happens, and a coupon strike writes its row.
  */
 class BondTracker
 {
@@ -53,9 +58,9 @@ class BondTracker
     ];
 
     /**
-     * The last valuation struck per ticker, quoted on the ticks between marks.
+     * The last valuation struck per ticker, and the wire row built from it, reused on the ticks between marks.
      *
-     * @var array<string, array{valuation: \App\DTO\BondValuationDTO, spread: float}>
+     * @var array<string, array{valuation: \App\DTO\BondValuationDTO, update: array<string, mixed>}>
      */
     private array $lastMarks = [];
 
@@ -71,11 +76,14 @@ class BondTracker
      * @param array<int, Bond> $bonds         Outstanding issues.
      * @param MacroStateDTO    $macroState    Live macro state carrying the fitted curve.
      * @param bool             $recordHistory Whether this tick writes a history point.
-     * @return array{updates: array<int, array<string, mixed>>, history: array<int, array<string, mixed>>, matured: array<int, Bond>, curve: array<int, array{tenor: float, yield: float}>}
+     * @return array{updates: array<int, array<string, mixed>>, struck: array<int, array<string, mixed>>, history: array<int, array<string, mixed>>, matured: array<int, Bond>, curve: array<int, array{tenor: float, yield: float}>}
+     *         `updates` quotes every active issue; `struck` is the subset valued this pass, the only quotes
+     *         that can have moved since the last one.
      * @param array<int, float> $issuerSpreads Live credit spread per issuer id, so marking the corporate
      *                                         ladder does not lazy-load a company for every bond on it.
      * @param bool              $mark          Whether the ladder is revalued and written this pass. Off, every
-     *                                         issue quotes the valuation it was last marked at.
+     *                                         issue quotes the valuation it was last marked at, except one
+     *                                         that is new or has just paid a coupon.
      */
     public function updateBonds(
         array $bonds,
@@ -89,6 +97,7 @@ class BondTracker
         $now = new \DateTime();
 
         $updates = [];
+        $struckUpdates = [];
         $history = [];
         $matured = [];
 
@@ -101,7 +110,7 @@ class BondTracker
                 continue;
             }
 
-            $this->payDueCoupons($bond, $currentTime, $now);
+            $couponPaid = $this->payDueCoupons($bond, $currentTime, $now);
 
             if ($bond->isMatured($currentTime)) {
                 $this->ledger->processRedemption($bond, $currentTime, $now);
@@ -123,9 +132,8 @@ class BondTracker
                 continue;
             }
 
-            // Remark bond ladder periodically, revaluing newly listed or uninitialized bonds immediately.
             $ticker = $bond->getTicker();
-            $struck = $mark || !isset($this->lastMarks[$ticker]);
+            $struck = $mark || $couponPaid || !isset($this->lastMarks[$ticker]);
 
             if ($struck) {
                 // The spread comes from the issuer map the caller already holds rather than from the bond's
@@ -140,11 +148,33 @@ class BondTracker
                 }
 
                 $valuation = $this->pricingEngine->value($bond, $curve, $currentTime, $spread);
-                $this->lastMarks[$ticker] = ['valuation' => $valuation, 'spread' => $spread];
+
+                // Wire precision: what a screen shows, not what the valuation carries. The history row below
+                // keeps the full figure.
+                $update = [
+                    'ticker' => $ticker,
+                    'asset_type' => 'BOND',
+                    'name' => $bond->getName(),
+                    'price' => round($valuation->dirtyPrice, 4),
+                    'clean_price' => round($valuation->cleanPrice, 4),
+                    'accrued_interest' => round($valuation->accruedInterest, 4),
+                    'yield_to_maturity' => round($valuation->yieldToMaturity, 6),
+                    'modified_duration' => round($valuation->modifiedDuration, 4),
+                    'convexity' => round($valuation->convexity, 2),
+                    'tenor_years' => (float) $bond->getTenorYears(),
+                    'years_to_maturity' => round($bond->yearsToMaturity($currentTime), 4),
+                    'coupon_rate' => (float) $bond->getCouponRate(),
+                    'is_on_the_run' => $bond->isOnTheRun(),
+                    'issuer' => $bond->getIssuer()?->getTicker(),
+                    'credit_spread' => round($spread, 6),
+                ];
+                $this->lastMarks[$ticker] = ['valuation' => $valuation, 'update' => $update];
+                $struckUpdates[] = $update;
 
                 // Written below in bulk; an issue not yet flushed has no row to write to and is picked up
-                // by the next mark, after the flush has given it one.
-                if ($mark && $bond->getId() !== null) {
+                // by the next mark, after the flush has given it one. A new issue quoted between marks is
+                // not written: its row still holds the price it was issued at, which is the right one.
+                if (($mark || $couponPaid) && $bond->getId() !== null) {
                     $markRows[$bond->getId()] = [
                         (string) $valuation->dirtyPrice,
                         (string) $valuation->cleanPrice,
@@ -157,31 +187,18 @@ class BondTracker
                     ];
                 }
             } else {
+                // The mark's own row, with the two fields that move without one: time, and the on-the-run
+                // flag an auction takes away from the issue it replaces.
                 $valuation = $this->lastMarks[$ticker]['valuation'];
-                $spread = $this->lastMarks[$ticker]['spread'];
+                $update = $this->lastMarks[$ticker]['update'];
+                $update['years_to_maturity'] = round($bond->yearsToMaturity($currentTime), 4);
+                $update['is_on_the_run'] = $bond->isOnTheRun();
             }
 
-            // Wire precision: what a screen shows, not what the valuation carries. The history row below
-            // keeps the full figure.
-            $updates[] = [
-                'ticker' => $bond->getTicker(),
-                'asset_type' => 'BOND',
-                'name' => $bond->getName(),
-                'price' => round($valuation->dirtyPrice, 4),
-                'clean_price' => round($valuation->cleanPrice, 4),
-                'accrued_interest' => round($valuation->accruedInterest, 4),
-                'yield_to_maturity' => round($valuation->yieldToMaturity, 6),
-                'modified_duration' => round($valuation->modifiedDuration, 4),
-                'convexity' => round($valuation->convexity, 2),
-                'tenor_years' => (float) $bond->getTenorYears(),
-                'years_to_maturity' => round($bond->yearsToMaturity($currentTime), 4),
-                'coupon_rate' => (float) $bond->getCouponRate(),
-                'is_on_the_run' => $bond->isOnTheRun(),
-                'issuer' => $bond->getIssuer()?->getTicker(),
-                'credit_spread' => round($spread, 6),
-            ];
+            $updates[] = $update;
 
-            if ($recordHistory) {
+            // An issue sold since the last flush has no id for bond_history to key on yet.
+            if ($recordHistory && $bond->getId() !== null) {
                 $history[] = [
                     'bond_id' => $bond->getId(),
                     'clean_price' => $valuation->cleanPrice,
@@ -197,6 +214,7 @@ class BondTracker
 
         return [
             'updates' => $updates,
+            'struck' => $struckUpdates,
             'history' => $history,
             'matured' => $matured,
             'curve' => $this->sampleCurve($curve),
@@ -235,18 +253,32 @@ class BondTracker
      * @param Bond               $bond        The issue.
      * @param float              $currentTime Simulation time in years.
      * @param \DateTimeInterface $now         Timestamp for the ledger rows.
+     * @return bool Whether a coupon was paid, which leaves the last mark's dirty price holding it twice.
      */
-    private function payDueCoupons(Bond $bond, float $currentTime, \DateTimeInterface $now): void
+    private function payDueCoupons(Bond $bond, float $currentTime, \DateTimeInterface $now): bool
     {
         $period = $bond->couponPeriodYears();
-        $couponAmount = $bond->couponAmount();
 
-        if ($couponAmount <= 0.0 || $period <= 0.0) {
-            return;
+        if ($period <= 0.0) {
+            return false;
         }
 
+        // Every issue is checked every tick and almost none is due, so the date test comes before anything
+        // that has to read the coupon off its decimal columns.
         $nextCouponTime = $bond->getLastCouponTime() + $period;
+
+        if ($nextCouponTime > $currentTime + FinancialConstants::BOND_MATURITY_EPSILON) {
+            return false;
+        }
+
+        $couponAmount = $bond->couponAmount();
+
+        if ($couponAmount <= 0.0) {
+            return false;
+        }
+
         $finalCouponCutoff = $bond->getMaturesAtTime() - FinancialConstants::BOND_MATURITY_EPSILON;
+        $paid = false;
 
         while ($nextCouponTime <= $currentTime + FinancialConstants::BOND_MATURITY_EPSILON) {
             if ($nextCouponTime >= $finalCouponCutoff) {
@@ -261,7 +293,10 @@ class BondTracker
             $this->entityManager->persist($bond);
 
             $nextCouponTime += $period;
+            $paid = true;
         }
+
+        return $paid;
     }
 
     /**

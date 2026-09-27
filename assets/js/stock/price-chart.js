@@ -1,5 +1,6 @@
 import { THEME_COLORS } from '../utils/colors.js';
 import { CHART_FONT_MONO } from '../utils/fonts.js';
+import { fillTickGaps } from '../utils/tick-gaps.js';
 
 let lwChart = null;
 let areaSeries = null;
@@ -54,6 +55,8 @@ let playoutRaf = null;
 let lastPaintAt = 0;
 let lastFrameArrival = 0;
 let frameIntervalMs = INITIAL_FRAME_INTERVAL_MS;
+/** @type {{tick: number, price: number}|null} The last point queued, for filling the ticks a series skips. */
+let lastQueuedPoint = null;
 
 export function initPriceChart(container, ticker, ticksPerYear = 54000) {
     if (!container || typeof LightweightCharts === 'undefined') return null;
@@ -259,10 +262,16 @@ export async function loadPriceHistory(range) {
  * server published, drawn up to one wire frame and one paint late. A frame that arrives while the last is still playing does not
  * wait for it: the older ticks are already due, so the next paint applies them first.
  *
- * @param {Array<[number, number]>} points `[price, volume]` per tick, in tick order (market-stream.js tickPoints()).
+ * A series sent only on some ticks — a bond, on history bars — has the ticks between restored at its last price
+ * first (utils/tick-gaps.js), since the clock below advances one tick per point.
+ *
+ * @param {Array<[number, number, (number|null)]>} received `[price, volume, tick]` per tick, in tick order (market-stream.js tickPoints()).
  */
-export function queueLivePricePoints(points) {
-    if (points.length === 0 || !areaSeries) return;
+export function queueLivePricePoints(received) {
+    if (received.length === 0 || !areaSeries) return;
+
+    const { points, last } = fillTickGaps(received, lastQueuedPoint);
+    lastQueuedPoint = last;
 
     const now = performance.now();
     const gap = now - lastFrameArrival;
@@ -304,6 +313,7 @@ function clearPendingPoints() {
     playoutRaf = null;
     pendingPoints = [];
     lastFrameArrival = 0;
+    lastQueuedPoint = null;
 }
 
 function updateLivePricePoint(newPrice, volume = 0) {

@@ -4,6 +4,7 @@ namespace App\Service\Macro\Subsystem;
 
 use App\Service\Macro\MacroEngine;
 use App\Service\Macro\MacroState;
+use App\Service\Macro\Recorder\MacroDiagnosticsProbe;
 use App\Service\Math\MathUtility;
 
 /**
@@ -251,7 +252,9 @@ class AssetMarketSubsystem
     public const MAX_HOUSING_STARTS = 220.0;
 
     public function __construct(
-        private readonly MathUtility $mathUtility
+        private readonly MathUtility $mathUtility,
+        /** Records what set the house-price fundamental and consumer sentiment. Null in a test or a headless harness, off everywhere the ticker is not. */
+        private readonly ?MacroDiagnosticsProbe $diagnostics = null
     ) {}
 
     /**
@@ -333,6 +336,23 @@ class AssetMarketSubsystem
         );
 
         $state->residentialPropertyIndex = max(self::RESIDENTIAL_MIN_INDEX, min(self::RESIDENTIAL_MAX_INDEX, $newIndex));
+
+        // The fundamental is a product of factors, so its log splits exactly into theirs; the floors and the band
+        // land in the clamp term. The index's distance from it is the sticky part the reversion has not closed.
+        if ($this->diagnostics?->isEnabled()) {
+            $logFundamental = log($fundamentalPrice / self::RESIDENTIAL_BASELINE);
+            $terms = [
+                'userCost' => self::RESIDENTIAL_USER_COST_ELASTICITY * log(self::RESIDENTIAL_NEUTRAL_USER_COST / $userCost),
+                'unemployment' => log(max(1e-9, $laborFactor)),
+                'income' => log(max(1e-9, $incomeFactor)),
+                'catastropheDamage' => log(max(0.5, $damageFactor)),
+                'lendingStandards' => log(max(0.5, $creditConditionsFactor)),
+                'creditSupply' => log(max(0.5, $creditSupplyFactor)),
+            ];
+            $terms['clamp'] = $logFundamental - array_sum($terms);
+            $this->diagnostics->recordLevel('households', 'houseFundamental', $terms, $logFundamental, $dt);
+            $this->diagnostics->recordValues('households', ['housePriceToFundamental' => log($state->residentialPropertyIndex / $fundamentalPrice)], $dt);
+        }
     }
 
     /**
@@ -559,11 +579,20 @@ class AssetMarketSubsystem
         $gasPanic = max(0.0, $state->energyPriceShock) * self::SENTIMENT_ENERGY_PANIC_SCALE;
         $disasterPenalty = max(0.0, $state->catastropheLossIndexEma - 1.0) * self::SENTIMENT_CATASTROPHE_MULTIPLIER;
 
-        $fundamentalSentiment = MacroEngine::SENTIMENT_BASELINE - $miseryPenalty - $momentumPenalty - $fearPenalty - $ratePenalty - $gasPanic - $disasterPenalty;
-        if ($state->outputGap > 0.0) {
-            $fundamentalSentiment += ($state->outputGap * self::SENTIMENT_EXPANSION_MULTIPLIER);
-        } else {
-            $fundamentalSentiment += ($state->outputGap * self::SENTIMENT_CONTRACTION_MULTIPLIER);
+        $gapTerm = $state->outputGap * ($state->outputGap > 0.0 ? self::SENTIMENT_EXPANSION_MULTIPLIER : self::SENTIMENT_CONTRACTION_MULTIPLIER);
+        $fundamentalSentiment = MacroEngine::SENTIMENT_BASELINE - $miseryPenalty - $momentumPenalty - $fearPenalty - $ratePenalty - $gasPanic - $disasterPenalty + $gapTerm;
+
+        if ($this->diagnostics?->isEnabled()) {
+            $this->diagnostics->recordLevel('households', 'sentimentFundamental', [
+                'baseline' => MacroEngine::SENTIMENT_BASELINE,
+                'misery' => -$miseryPenalty,
+                'momentum' => -$momentumPenalty,
+                'fear' => -$fearPenalty,
+                'rates' => -$ratePenalty,
+                'energy' => -$gasPanic,
+                'catastrophe' => -$disasterPenalty,
+                'outputGap' => $gapTerm,
+            ], $fundamentalSentiment, $dt);
         }
 
         $currentSentiment = $state->consumerSentimentIndex ?? MacroEngine::SENTIMENT_BASELINE;

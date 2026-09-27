@@ -90,6 +90,7 @@ final class AgentFlowEngine
     public function beginTick(): void
     {
         $this->stateStore->beginBatch();
+        $this->orderFlow->beginBatch();
         $this->loadMarket();
     }
 
@@ -122,6 +123,9 @@ final class AgentFlowEngine
         $this->mispricingSum = 0.0;
 
         $this->stateStore->commitBatch();
+
+        // Drained at the top of the next tick, exactly as each trade's own write used to be.
+        $this->orderFlow->commitBatch();
     }
 
     /**

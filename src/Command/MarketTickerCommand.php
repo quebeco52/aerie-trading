@@ -60,17 +60,18 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
     /** Times per simulated year the identity map is cleared and the working set re-read from the database: once a trading day. */
     public const WORKING_SET_RELOADS_PER_YEAR = 252;
 
-    // --- Bond History Sampling ---
+    // --- Bond Marking ---
     /**
-     * Bond history points written per simulated year: one per trading day, as a bond is quoted.
+     * Times per simulated year the whole bond ladder is revalued and written: once a trading day, end of day.
      *
      * A bond's price is a function of a curve that moves in basis points over weeks, and the market convention
-     * for a fixed income series is an end-of-day mark rather than a print. Sampling the ladder at the equity
-     * rate wrote two hundred rows eight times a second — more rows per real day than the whole equity board
-     * writes in a week — and the insert into a table that size was half of the history tick's overrun. The
-     * short-range chart is unaffected: it reads the Redis buffer, which still takes every tick.
+     * for fixed income is an end-of-day mark. Riding the equity bar instead revalued ~290 issues 2,400 times a
+     * simulated year for a series recorded 252 times; a profile put the ladder at 24% of the ticker. Every
+     * mark is also the day's bond_history row, so a row always carries the mark struck on its own tick.
+     * Between marks an issue quotes its last mark; one that pays a coupon or is newly issued is struck at once
+     * (see BondTracker). The short-range chart still reads the Redis buffer, which takes every tick.
      */
-    public const BOND_HISTORY_POINTS_PER_YEAR = 252;
+    public const BOND_MARKS_PER_YEAR = 252;
 
     // --- Diagnostics ---
     /** Phases named in a lag warning, most expensive first. */
@@ -100,14 +101,14 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
     }
 
     /**
-     * History bars between bond history rows.
+     * History bars between marks of the bond ladder.
      *
-     * Counted in bars because a bond is only revalued on the history cadence, and a history row has to carry
-     * a mark from the tick that wrote it rather than the last one it happens to remember.
+     * Counted in bars so the mark lands on a tick the loop already treats as a bar, where the history row it
+     * writes belongs.
      */
-    public static function bondHistoryIntervalBars(int $ticksPerYear): int
+    public static function bondMarkIntervalBars(int $ticksPerYear): int
     {
-        return self::intervalBars($ticksPerYear, self::BOND_HISTORY_POINTS_PER_YEAR);
+        return self::intervalBars($ticksPerYear, self::BOND_MARKS_PER_YEAR);
     }
 
     /** History bars between events that should happen a given number of times a simulated year. */
@@ -142,25 +143,25 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
     }
 
     /**
-     * Whether a history bar samples the bond ladder into bond_history.
+     * Whether a history bar marks the bond ladder, and samples that mark into bond_history.
      *
      * Offset half an interval from the reload bar. Both are once-a-day jobs counted in the same bars, and
-     * at the same offset every bond history insert would land on the tick that had just thrown its working
-     * set away and re-read it — one tick paying for both, which is the shape of an outlier rather than of a
-     * cost. Away from each other they are two ordinary bars.
+     * at the same offset every ladder mark would land on the tick that had just thrown its working set away
+     * and re-read it — one tick paying for both, which is the shape of an outlier rather than of a cost.
+     * Away from each other they are two ordinary bars.
      */
-    public static function isBondHistoryBar(int $bar, int $ticksPerYear): bool
+    public static function isBondMarkBar(int $bar, int $ticksPerYear): bool
     {
-        $bars = self::bondHistoryIntervalBars($ticksPerYear);
+        $bars = self::bondMarkIntervalBars($ticksPerYear);
 
         return $bar % $bars === intdiv($bars, 2);
     }
 
-    /** Whether a TICK samples the bond ladder: see isReloadTick() for why this is addressed by tick. */
-    public static function isBondHistoryTick(int $tickCount, int $ticksPerYear): bool
+    /** Whether a TICK marks the bond ladder: see isReloadTick() for why this is addressed by tick. */
+    public static function isBondMarkTick(int $tickCount, int $ticksPerYear): bool
     {
         return self::isHistoryTick($tickCount, $ticksPerYear)
-            && self::isBondHistoryBar(self::barIndex($tickCount, $ticksPerYear), $ticksPerYear);
+            && self::isBondMarkBar(self::barIndex($tickCount, $ticksPerYear), $ticksPerYear);
     }
 
     /**
@@ -755,16 +756,15 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                     }
                 }
 
-                // Marked on the history cadence, but only sampled into bond_history once a trading day:
-                // see BOND_HISTORY_POINTS_PER_YEAR.
-                $isBondHistoryTick = self::isBondHistoryTick($tickCount, $this->ticksPerYear);
+                // Marked once a trading day, and every mark is that day's bond_history row: see BOND_MARKS_PER_YEAR.
+                $isBondMarkTick = self::isBondMarkTick($tickCount, $this->ticksPerYear);
 
                 $bondResult = $this->bondTracker->updateBonds(
                     $bonds,
                     $macroState,
-                    $isBondHistoryTick,
+                    $isBondMarkTick,
                     $issuerSpreads,
-                    $isHistoryTick
+                    $isBondMarkTick
                 );
                 $lap('bonds');
 
@@ -866,8 +866,10 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
 
                 // Limit Order Check. The whole book's bounds come over in one MGET: a GET per instrument
                 // was a synchronous round trip for every stock, the index and every bond, every tick.
+                // A bond's quote only moves when it is struck — its daily mark, a coupon, or its first quote —
+                // so only those are checked; between marks a resting bond order cannot have crossed.
                 $tradable = array_values(array_filter(
-                    $published,
+                    array_merge($stockUpdates, $etfUpdates, $bondResult['struck']),
                     static fn (array $update): bool => empty($update['is_bankrupt'])
                 ));
                 $boundsKeys = array_map(static fn (array $update): string => "limit_bounds:{$update['ticker']}", $tradable);
@@ -951,8 +953,7 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                     // The bar is written; the next one opens at the next tick's price.
                     $bars = [];
 
-                    // Empty on nine bars in ten: the ladder is sampled once a trading day, so this is a
-                    // two-hundred-row insert a tenth as often rather than on every bar.
+                    // Empty except on the day's mark: see BOND_MARKS_PER_YEAR.
                     $this->bondTracker->recordHistory($bondResult['history']);
 
                     // The funds' own rows, accrued during the ETF phase above and written here as data for

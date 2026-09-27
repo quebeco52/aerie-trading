@@ -91,8 +91,8 @@ class EarningsEngine
     // --- Trailing Twelve Month Earnings ---
     /** Number of reported quarters summed into the trailing twelve month earnings figure. */
     public const TTM_QUARTERS = 4;
-    /** Absolute clamp on stored trailing net income, matching the guard on the EPS bridge and the DECIMAL(20,4) column. */
-    public const MAX_ABSOLUTE_NET_INCOME = 999999999999999.0;
+    /** Absolute clamp on stored trailing net income, just inside the DECIMAL(30, 4) money column the EPS bridge also guards (Stock::MAX_MONEY_AMOUNT). */
+    public const MAX_ABSOLUTE_NET_INCOME = 9.9e25;
 
     /**
      * Constructor.

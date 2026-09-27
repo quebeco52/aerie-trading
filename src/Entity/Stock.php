@@ -14,6 +14,10 @@ use Doctrine\ORM\Mapping as ORM;
 #[ORM\Table(name: 'stocks')]
 class Stock
 {
+    // --- Storage Bounds ---
+    /** Largest dollar amount a DECIMAL(30, 4) money column holds; totals rebuilt from a per-share figure clamp here. */
+    public const MAX_MONEY_AMOUNT = '99999999999999999999999999.9999';
+
     #[ORM\Id]
     #[ORM\GeneratedValue]
     #[ORM\Column]
@@ -69,7 +73,7 @@ class Stock
     /**
      * @var string Absolute cash and liquid reserves held by the corporation.
      */
-    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, options: ['default' => '0.0000'])]
+    #[ORM\Column(type: Types::DECIMAL, precision: 30, scale: 4, options: ['default' => '0.0000'])]
     private string $corporateTreasury = '0.0000';
 
     /**
@@ -87,31 +91,31 @@ class Stock
     /**
      * @var string Absolute total net income. Used to mathematically derive EPS dynamically.
      */
-    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, options: ['default' => '0.0000'])]
+    #[ORM\Column(type: Types::DECIMAL, precision: 30, scale: 4, options: ['default' => '0.0000'])]
     private string $totalNetIncome = '0.0000';
 
     /**
      * @var string Absolute total revenue.
      */
-    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, options: ['default' => '0.0000'])]
+    #[ORM\Column(type: Types::DECIMAL, precision: 30, scale: 4, options: ['default' => '0.0000'])]
     private string $totalRevenue = '0.0000';
 
     /**
      * @var string Quarter-over-quarter revenue tracker for calculating change in net working capital (ΔNWC).
      */
-    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, options: ['default' => '0.0000'])]
+    #[ORM\Column(type: Types::DECIMAL, precision: 30, scale: 4, options: ['default' => '0.0000'])]
     private string $previousRevenue = '0.0000';
 
     /**
      * @var string|null Trade receivables: revenue billed and not yet collected. Null until first seeded.
      */
-    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, nullable: true)]
+    #[ORM\Column(type: Types::DECIMAL, precision: 30, scale: 4, nullable: true)]
     private ?string $receivables = null;
 
     /**
      * @var string|null Inventory carried at cost. Null until first seeded.
      */
-    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, nullable: true)]
+    #[ORM\Column(type: Types::DECIMAL, precision: 30, scale: 4, nullable: true)]
     private ?string $inventory = null;
 
     /**
@@ -120,46 +124,46 @@ class Stock
      *             rebuilt from the trade cycle every quarter and a cut would be restored at once, with the
      *             restoration booked as a cash outflow the same quarter. Unwinds as the impaired stock turns.
      */
-    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, options: ['default' => '0.0000'])]
+    #[ORM\Column(type: Types::DECIMAL, precision: 30, scale: 4, options: ['default' => '0.0000'])]
     private string $inventoryAllowance = '0.0000';
 
     /**
      * @var string|null Trade payables: input costs incurred and not yet paid, a source of funding.
      */
-    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, nullable: true)]
+    #[ORM\Column(type: Types::DECIMAL, precision: 30, scale: 4, nullable: true)]
     private ?string $payables = null;
 
     /**
      * @var string Expected credit loss allowance held against receivables (ASC 326).
      */
-    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, options: ['default' => '0.0000'])]
+    #[ORM\Column(type: Types::DECIMAL, precision: 30, scale: 4, options: ['default' => '0.0000'])]
     private string $receivablesAllowance = '0.0000';
 
     /**
      * @var string|null Absolute total free cash flow (FCF). Used to mathematically derive FCF per share.
      */
-    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, nullable: true)]
+    #[ORM\Column(type: Types::DECIMAL, precision: 30, scale: 4, nullable: true)]
     private ?string $totalFreeCashFlow = null;
 
     /**
      * @var string Absolute total equity (Book Value).
      */
-    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, options: ['default' => '0.0000'])]
+    #[ORM\Column(type: Types::DECIMAL, precision: 30, scale: 4, options: ['default' => '0.0000'])]
     private string $totalEquity = '0.0000';
 
     /**
      * @var string Accumulated retained earnings over the company's lifespan.
      */
-    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, options: ['default' => '0.0000'])]
+    #[ORM\Column(type: Types::DECIMAL, precision: 30, scale: 4, options: ['default' => '0.0000'])]
     private string $retainedEarnings = '0.0000';
 
     /**
      * @var string Accumulated Net Operating Losses (NOLs) carried forward to shield future profits from taxes.
      */
-    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, options: ['default' => '0.0000'])]
+    #[ORM\Column(type: Types::DECIMAL, precision: 30, scale: 4, options: ['default' => '0.0000'])]
     private string $netOperatingLoss = '0.0000';
 
-    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, options: ['default' => '0.0000'])]
+    #[ORM\Column(type: Types::DECIMAL, precision: 30, scale: 4, options: ['default' => '0.0000'])]
     private string $wholesaleDebt = '0.0000';
 
     /**
@@ -198,40 +202,40 @@ class Stock
     /**
      * @var string Intangible assets and premiums paid during M&A (Goodwill).
      */
-    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, options: ['default' => '0.0000'])]
+    #[ORM\Column(type: Types::DECIMAL, precision: 30, scale: 4, options: ['default' => '0.0000'])]
     private string $goodwill = '0.0000';
 
     /**
      * @var string Construction in Progress (CIP) Balance for continuous CapEx integration.
      */
-    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, options: ['default' => '0.0000'])]
+    #[ORM\Column(type: Types::DECIMAL, precision: 30, scale: 4, options: ['default' => '0.0000'])]
     private string $cipBalance = '0.0000';
 
     /**
      * @var string|null Historical cost of property, plant and equipment placed in service; null until the
      *                  fixed-asset ledger is seeded on the first earnings report.
      */
-    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, nullable: true)]
+    #[ORM\Column(type: Types::DECIMAL, precision: 30, scale: 4, nullable: true)]
     private ?string $grossPpe = null;
 
     /**
      * @var string Depreciation charged against gross PP&E to date; net book value is the difference.
      */
-    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, options: ['default' => '0.0000'])]
+    #[ORM\Column(type: Types::DECIMAL, precision: 30, scale: 4, options: ['default' => '0.0000'])]
     private string $accumulatedDepreciation = '0.0000';
 
     /**
      * @var string|null Remaining tax basis of PP&E. Tax depreciation runs on its own accelerated schedule,
      *                  so this diverges from book net PP&E and the gap is what creates deferred tax.
      */
-    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, nullable: true)]
+    #[ORM\Column(type: Types::DECIMAL, precision: 30, scale: 4, nullable: true)]
     private ?string $ppeTaxBasis = null;
 
     /**
      * @var string Deferred tax liability (ASC 740): tax deferred by depreciating faster for the tax
      *             authority than for shareholders. Payable eventually, interest free until then.
      */
-    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, options: ['default' => '0.0000'])]
+    #[ORM\Column(type: Types::DECIMAL, precision: 30, scale: 4, options: ['default' => '0.0000'])]
     private string $deferredTaxLiability = '0.0000';
 
     /**
@@ -247,14 +251,14 @@ class Stock
      *                  insurer, broker, fund) has deployed its funding into. Null until the ledger is seeded
      *                  on the first earnings report; a non-financial firm never opens it.
      */
-    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, nullable: true)]
+    #[ORM\Column(type: Types::DECIMAL, precision: 30, scale: 4, nullable: true)]
     private ?string $earningAssets = null;
 
     /**
      * @var string Allowance for credit losses on the earning assets (ASC 326): the lifetime loss already
      *             expected, carried as a contra-asset. Provisions build it and charge-offs consume it.
      */
-    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, options: ['default' => '0.0000'])]
+    #[ORM\Column(type: Types::DECIMAL, precision: 30, scale: 4, options: ['default' => '0.0000'])]
     private string $creditLossAllowance = '0.0000';
 
     /**
@@ -268,7 +272,7 @@ class Stock
     private ?string $analystPriceTarget = null;
 
     /** @var string|null What a sphere's listed anchor stakes sit at on the balance sheet, remarked at every report. Null for the firms that hold none. */
-    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, nullable: true)]
+    #[ORM\Column(type: Types::DECIMAL, precision: 30, scale: 4, nullable: true)]
     private ?string $listedStakesCarrying = null;
 
     /**
@@ -292,7 +296,7 @@ class Stock
      *             disclosed here and nowhere else, which is how a firm stays adequately capitalized on every
      *             published figure until the quarter it is forced to sell.
      */
-    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, options: ['default' => '0.0000'])]
+    #[ORM\Column(type: Types::DECIMAL, precision: 30, scale: 4, options: ['default' => '0.0000'])]
     private string $unrealizedSecuritiesMark = '0.0000';
 
     /**
@@ -434,7 +438,7 @@ class Stock
     /**
      * @var string Absolute dollar amount remaining in the board-authorized buyback program.
      */
-    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, options: ['default' => '0.0000'])]
+    #[ORM\Column(type: Types::DECIMAL, precision: 30, scale: 4, options: ['default' => '0.0000'])]
     private string $buybackAuthorization = '0.0000';
 
     #[ORM\Column(type: 'float', nullable: true)]
@@ -605,13 +609,13 @@ class Stock
     #[ORM\Column(length: 16, nullable: true)]
     private ?string $lifecycleStage = null;
 
-    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 2, nullable: true)]
+    #[ORM\Column(type: Types::DECIMAL, precision: 30, scale: 2, nullable: true)]
     private ?string $customerDeposits = '0.00';
 
     /**
      * @var string|null Last quarter's analyst revenue consensus estimate, used for anchoring bias.
      */
-    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, nullable: true)]
+    #[ORM\Column(type: Types::DECIMAL, precision: 30, scale: 4, nullable: true)]
     private ?string $lastAnalystRevenue = null;
 
     /**
@@ -649,7 +653,7 @@ class Stock
      *             grows and does not shrink because a bad quarter shrank revenue, which is what makes it a
      *             backstop rather than a line that vanishes exactly when it is needed.
      */
-    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, options: ['default' => '0.0000'])]
+    #[ORM\Column(type: Types::DECIMAL, precision: 30, scale: 4, options: ['default' => '0.0000'])]
     private string $revolverCommitment = '0.0000';
 
     /**
@@ -657,7 +661,7 @@ class Stock
      *             does not amortise: booking a draw into the term ladder made every draw enlarge the next
      *             quarter's maturity wall, so covering one maturity manufactured a larger one.
      */
-    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, options: ['default' => '0.0000'])]
+    #[ORM\Column(type: Types::DECIMAL, precision: 30, scale: 4, options: ['default' => '0.0000'])]
     private string $revolverDrawn = '0.0000';
 
     /**
@@ -1777,10 +1781,10 @@ class Stock
         if ($earningsPerShare !== null) {
             $sharesStr = self::cleanBcStr((float) $this->sharesOutstanding < 1.0 ? '1.00000000' : $this->sharesOutstanding, 8);
             $totalNi = \bcmul(self::cleanBcStr($earningsPerShare, 8), $sharesStr, 4);
-            if (\bccomp($totalNi, '999999999999999.0000', 4) > 0) {
-                $totalNi = '999999999999999.0000';
-            } elseif (\bccomp($totalNi, '-999999999999999.0000', 4) < 0) {
-                $totalNi = '-999999999999999.0000';
+            if (\bccomp($totalNi, self::MAX_MONEY_AMOUNT, 4) > 0) {
+                $totalNi = self::MAX_MONEY_AMOUNT;
+            } elseif (\bccomp($totalNi, '-' . self::MAX_MONEY_AMOUNT, 4) < 0) {
+                $totalNi = '-' . self::MAX_MONEY_AMOUNT;
             }
             $this->totalNetIncome = self::cleanBcStr($totalNi, 4);
         } else {
@@ -1811,10 +1815,10 @@ class Stock
         if ($freeCashFlowPerShare !== null) {
             $sharesStr = self::cleanBcStr((float) $this->sharesOutstanding < 1.0 ? '1.00000000' : $this->sharesOutstanding, 8);
             $totalFcf = \bcmul(self::cleanBcStr($freeCashFlowPerShare, 8), $sharesStr, 4);
-            if (\bccomp($totalFcf, '999999999999999.0000', 4) > 0) {
-                $totalFcf = '999999999999999.0000';
-            } elseif (\bccomp($totalFcf, '-999999999999999.0000', 4) < 0) {
-                $totalFcf = '-999999999999999.0000';
+            if (\bccomp($totalFcf, self::MAX_MONEY_AMOUNT, 4) > 0) {
+                $totalFcf = self::MAX_MONEY_AMOUNT;
+            } elseif (\bccomp($totalFcf, '-' . self::MAX_MONEY_AMOUNT, 4) < 0) {
+                $totalFcf = '-' . self::MAX_MONEY_AMOUNT;
             }
             $this->totalFreeCashFlow = self::cleanBcStr($totalFcf, 4);
         } else {
