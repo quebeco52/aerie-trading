@@ -19,6 +19,8 @@ class ReserveControllerTest extends WebTestCase
         $this->assertSelectorExists('#reserve-duty');
         $this->assertSelectorExists('#reserve-ownership');
         $this->assertSelectorExists('#reserve-programme');
+        $this->assertSelectorExists('#reserve-return-year');
+        $this->assertSelectorExists('#reserve-net-debt');
         $this->assertSelectorExists('a[href="/economy"]');
     }
 

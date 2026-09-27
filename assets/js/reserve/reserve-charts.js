@@ -23,6 +23,10 @@ function percentTooltip(ctx) {
     return `${ctx.dataset.label}: ${ctx.raw === null || ctx.raw === undefined ? 'N/A' : ctx.raw.toFixed(2) + '%'}`;
 }
 
+function indexTooltip(ctx) {
+    return `${ctx.dataset.label}: ${ctx.raw === null || ctx.raw === undefined ? 'N/A' : ctx.raw.toFixed(1)}`;
+}
+
 function lineDataset(label, data, color, extra = {}) {
     return {
         type: 'line',
@@ -54,7 +58,8 @@ function bandDatasets(weightLabel, weightData, policy, band, color, fillColor) {
     ];
 }
 
-function chartOptions({ legend = true } = {}) {
+/** Shared chart options; `index` plots a level (a return index) rather than a percentage. */
+function chartOptions({ legend = true, index = false } = {}) {
     return {
         responsive: true,
         maintainAspectRatio: false,
@@ -67,13 +72,13 @@ function chartOptions({ legend = true } = {}) {
             },
             tooltip: {
                 filter: (item) => !item.dataset.isBandEdge,
-                callbacks: { label: percentTooltip }
+                callbacks: { label: index ? indexTooltip : percentTooltip }
             }
         },
         scales: {
             y: {
                 grid: { color: GRID_COLOR },
-                ticks: { callback: (val) => val.toFixed(1) + '%' }
+                ticks: { callback: (val) => index ? val.toFixed(0) : val.toFixed(1) + '%' }
             },
             x: {
                 grid: { color: GRID_COLOR },
@@ -90,6 +95,55 @@ function draw(id, datasets, labels, options) {
         charts[id] = destroyChartInstance(charts[id]);
         charts[id] = new Chart(canvas.getContext('2d'), { data: { labels, datasets }, options });
     });
+}
+
+/**
+ * The recorded quarters of the fund's return indices, in time order. A fund that opened before the index existed has
+ * quarters with no index; they are left out, so the history starts where the index does.
+ *
+ * @param {Array<Object>} reports macro_report rows in chronological order
+ * @returns {Array<{time: number, index: number, real: number}>}
+ */
+export function returnHistory(reports) {
+    return reports
+        .map(r => ({
+            time: parseFloat(r.total_time),
+            index: parseFloat(r.sovereign_fund_return_index),
+            real: parseFloat(r.sovereign_fund_real_return_index)
+        }))
+        .filter(p => Number.isFinite(p.time) && p.index > 0 && p.real > 0);
+}
+
+/**
+ * The annualised return on an index from a recorded point to now: (now / then) ^ (1 / years) - 1.
+ *
+ * With `lookback` it starts from the latest point at least that many years back, so a quarterly record gives a span a
+ * little over the lookback, annualised over what it actually is. Without it, from the first point recorded.
+ *
+ * @param {Array<{time: number, index: number, real: number}>} history
+ * @param {{time: number, index: number, real: number}} now
+ * @param {'index'|'real'} key
+ * @param {number|null} lookback years
+ * @returns {{rate: number, years: number}|null} null when the record is shorter than the lookback, or than a year
+ */
+export function annualisedReturn(history, now, key, lookback = null) {
+    let start = null;
+    if (lookback === null) {
+        start = history[0] ?? null;
+    } else {
+        for (let i = history.length - 1; i >= 0; i--) {
+            if (history[i].time <= now.time - lookback + 1e-9) {
+                start = history[i];
+                break;
+            }
+        }
+    }
+    if (!start || !(start[key] > 0) || !(now[key] > 0)) return null;
+
+    const years = now.time - start.time;
+    if (years < Math.max(1, lookback ?? 0) - 1e-9) return null;
+
+    return { rate: Math.pow(now[key] / start[key], 1 / years) - 1, years };
 }
 
 /**
@@ -131,7 +185,33 @@ export function renderReserveCharts(reports, bands) {
         lineDataset('Stamp duty', duty, FLOW_COLORS.duty)
     ], labels, chartOptions());
 
+    renderReturnChart(returnHistory(reports));
+
     return rows.length;
+}
+
+/**
+ * The return index, real and nominal, rebased to 100 at the first quarter shown. The real line is the fund's own
+ * colour; the nominal one is a muted reference, since the real return is the one the spending rule is written on.
+ */
+function renderReturnChart(history) {
+    const note = document.getElementById('reserveReturnChartNote');
+    if (history.length < 2) {
+        note?.classList.remove('hidden');
+        return;
+    }
+    note?.classList.add('hidden');
+
+    const first = history[0];
+    const labels = history.map((_, i) => {
+        const back = history.length - i - 1;
+        return back === 0 ? 'Now' : `-${back}Q`;
+    });
+
+    draw('reserveReturnChart', [
+        lineDataset('Real', history.map(p => (100 * p.real) / first.real), THEME_COLORS.primary),
+        lineDataset('Nominal', history.map(p => (100 * p.index) / first.index), REFERENCE_COLOR, { borderDash: [5, 4], borderWidth: 1.5, pointRadius: 0 })
+    ], labels, chartOptions({ index: true }));
 }
 
 export function resizeReserveCharts() {

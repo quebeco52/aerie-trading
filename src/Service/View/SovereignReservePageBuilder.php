@@ -39,7 +39,8 @@ class SovereignReservePageBuilder
     /**
      * @return array{
      *     incepted: bool,
-     *     summary: array{value: float, toGdp: float, annualDraw: float, drawToGdp: float, stampDutyToGdp: float, stampDutyYearToDate: float, ownership: float},
+     *     summary: array{value: float, toGdp: float, annualDraw: float, drawToGdp: float, stampDutyToGdp: float, stampDutyYearToDate: float, ownership: float, grossDebtToGdp: float, netDebtToGdp: float},
+     *     returns: array{index: float, realIndex: float, assumedReal: float, bondYield: float},
      *     programme: array{active: bool, buying: bool, share: float, monthsLeft: float, monthsSinceLast: float|null},
      *     sleeves: list<array{key: string, label: string, weight: float, policy: float, value: float}>,
      *     bands: list<array{key: string, label: string, weight: float, policy: float, band: float, breachingMove: float}>,
@@ -70,6 +71,15 @@ class SovereignReservePageBuilder
                 'stampDutyToGdp' => $macro->sovereignFundStampDutyToGdp,
                 'stampDutyYearToDate' => $macro->sovereignFundStampDutyYearToDate,
                 'ownership' => $macro->sovereignFundOwnershipShare,
+                'grossDebtToGdp' => $macro->sovereignDebtToGdp,
+                'netDebtToGdp' => $macro->sovereignNetDebtToGdp,
+            ],
+            // The index levels only: trailing returns need the recorded history, which the page reads from macro_report.
+            'returns' => [
+                'index' => $macro->sovereignFundReturnIndex,
+                'realIndex' => $macro->sovereignFundRealReturnIndex,
+                'assumedReal' => $macro->sovereignFundExpectedRealReturn,
+                'bondYield' => $macro->foreignBondYield,
             ],
             'programme' => [
                 'active' => $macro->sovereignFundRebalanceMonthsLeft > 0.0,
@@ -108,6 +118,8 @@ class SovereignReservePageBuilder
             'mandate' => [
                 'spendingShare' => SovereignFundSubsystem::NIR_SPENDING_SHARE,
                 'foreignEquityShare' => SovereignFundSubsystem::FOREIGN_EQUITY_SHARE,
+                'foreignBondDuration' => SovereignFundSubsystem::FOREIGN_BOND_DURATION,
+                'returnIndexBase' => SovereignFundSubsystem::RETURN_INDEX_BASE,
                 'openingOwnership' => SovereignFundSubsystem::DOMESTIC_OWNERSHIP_OPENING,
                 'ownershipCeiling' => SovereignFundSubsystem::MAX_OWNERSHIP_SHARE,
                 'gpifDomesticTarget' => SovereignFundSubsystem::GPIF_DOMESTIC_EQUITY_TARGET,

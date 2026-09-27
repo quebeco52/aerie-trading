@@ -414,6 +414,10 @@ class CreditFiscalSubsystem
         $dDebt = ($primaryDeficit / max(0.1, $state->nominalGdpIndex)) + $interestCost - $growthErosion;
         $state->sovereignDebtToGdp += $dDebt * $dt;
         $state->sovereignDebtToGdp = max(0.20, min(2.50, $state->sovereignDebtToGdp));
+
+        // IMF GFSM 2014 net debt: gross debt less the debt instruments the government holds, which here is the
+        // sovereign fund's paper sleeve (its equities are not debt instruments). Equal to gross with no fund.
+        $state->sovereignNetDebtToGdp = $state->sovereignDebtToGdp - $state->sovereignFundBondsToGdp;
     }
 
     /**
@@ -585,15 +589,20 @@ class CreditFiscalSubsystem
      *
      * One-sided on the debt stock above the level at which an advanced sovereign is re-rated. The premium is
      * a level the whole curve carries (it enters the term premium, the corporate IG base through the
-     * sovereign ceiling, and the currency), repriced over budget rounds rather than ticks. At the seeded
-     * 60% debt it is zero, and it stays zero through the 85-90% the fiscal reaction settles at.
+     * sovereign ceiling, and the currency), repriced over budget rounds rather than ticks. It stays zero
+     * through the 85-90% the fiscal reaction settles at.
+     *
+     * The stock is NET debt, gross less the sovereign fund's bonds: spreads price net rather than gross debt
+     * (Hadzi-Vaskov & Ricci 2016, IMF WP/16/148), which is how Singapore's gross debt of over 150% of GDP
+     * carries no premium at all. What the budget and the bond market's duration supply read stays gross:
+     * the coupons are paid on gross debt, and the fund holds foreign paper, not the District's.
      *
      * @param MacroState $state Current macroeconomic state.
      * @param float      $dt    Time increment in years.
      */
     public function calculateSovereignRiskSpread(MacroState $state, float $dt): void
     {
-        $excessDebt = max(0.0, $state->sovereignDebtToGdpEma - self::SOVEREIGN_RISK_DEBT_THRESHOLD);
+        $excessDebt = max(0.0, $state->sovereignNetDebtToGdpEma - self::SOVEREIGN_RISK_DEBT_THRESHOLD);
         $target = min(self::MAX_SOVEREIGN_RISK_SPREAD, self::LAUBACH_DEBT_YIELD_SENSITIVITY * $excessDebt);
 
         $state->sovereignRiskSpread = $this->mathUtility->calculateDistributedLag(

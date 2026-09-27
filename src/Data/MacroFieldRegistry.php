@@ -177,6 +177,7 @@ final class MacroFieldRegistry
         'energyBasePrice' => 'energyPriceIndex',
         'supercoreInflation' => 'inflation',
         'coreGoodsInflation' => 'inflation',
+        'sovereignNetDebtToGdp' => 'sovereignDebtToGdp',
     ];
 
     /**

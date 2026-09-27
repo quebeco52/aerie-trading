@@ -367,6 +367,9 @@ class MacroReport
     private ?string $sovereignDebtToGdpEma = null;
 
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $sovereignNetDebtToGdp = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
     private ?string $financialConditionsIndex = null;
 
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
@@ -726,8 +729,20 @@ class MacroReport
     #[ORM\Column(type: Types::DECIMAL, precision: 15, scale: 4, nullable: true)]
     private ?string $foreignEquityIndex = null;
 
+    #[ORM\Column(type: Types::DECIMAL, precision: 15, scale: 4, nullable: true)]
+    private ?string $sovereignFundReturnIndex = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 15, scale: 4, nullable: true)]
+    private ?string $sovereignFundRealReturnIndex = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 6, nullable: true)]
+    private ?string $sovereignFundExpectedRealReturn = null;
+
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 6, nullable: true)]
     private ?string $foreignEquityRiskPremium = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 6, nullable: true)]
+    private ?string $foreignBondYield = null;
 
     // --- Episode Markers ---
     // Simulated times, so they carry total_time's width rather than the vector's. They are what lets an

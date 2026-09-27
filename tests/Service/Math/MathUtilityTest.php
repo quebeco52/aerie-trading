@@ -2138,6 +2138,20 @@ class MathUtilityTest extends TestCase
         $this->assertLessThan($twos, $thirties, 'QE must bite hardest at the long end.');
     }
 
+    /** The forward premium is the derivative of tau x S(tau): what a constant-maturity zero earns, yield plus roll-down. */
+    public function testTheTermPremiumForwardScaleIsTheForwardOfTheDurationScale(): void
+    {
+        foreach ([0.5, 2.0, 6.17, 10.0, 30.0] as $tau) {
+            $step = 1.0e-5;
+            $numerical = ((($tau + $step) * MathUtility::calculateTermPremiumDurationScale($tau + $step))
+                - (($tau - $step) * MathUtility::calculateTermPremiumDurationScale($tau - $step))) / (2.0 * $step);
+            $this->assertEqualsWithDelta($numerical, MathUtility::calculateTermPremiumForwardScale($tau), 1e-8, "tau {$tau}");
+            $this->assertGreaterThan(MathUtility::calculateTermPremiumDurationScale($tau), MathUtility::calculateTermPremiumForwardScale($tau), 'On a rising premium curve the forward sits above the yield.');
+        }
+
+        $this->assertSame(0.0, MathUtility::calculateTermPremiumForwardScale(0.0), 'Overnight money earns no term premium.');
+    }
+
     /**
      * The three cash-conversion-cycle legs move on separate drivers and are not interchangeable.
      */

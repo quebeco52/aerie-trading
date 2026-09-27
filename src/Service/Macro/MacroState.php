@@ -135,6 +135,10 @@ class MacroState
     public float $corporateTaxRate;
     public float $sovereignDebtToGdp;
     public float $sovereignDebtToGdpEma;
+    // Gross debt less the debt instruments the sovereign fund holds (IMF GFSM 2014 net debt): what the market prices
+    // default risk on. Equal to the gross ratio in a run with no fund.
+    public float $sovereignNetDebtToGdp;
+    public float $sovereignNetDebtToGdpEma;
     public ?string $eventType;
     public float $eventCooldownTimer;
     public float $equityRiskPremium;
@@ -347,12 +351,23 @@ class MacroState
     // The District's stamp duty on share trading, paid into the fund: this budget year so far, and last year's over GDP.
     public float $sovereignFundStampDutyYearToDate;
     public float $sovereignFundStampDutyToGdp;
+    // The paper sleeve over GDP, the fund's holding of debt instruments that net debt deducts.
+    public float $sovereignFundBondsToGdp;
+    // Performance: the fund's value at the last close (currency), and its time-weighted return index, nominal and
+    // deflated by the District's inflation, both 100 at inception. The expected compound real return the current
+    // budget year's draw was set from, for the realized return to be read against.
+    public float $sovereignFundValueAtClose;
+    public float $sovereignFundReturnIndex;
+    public float $sovereignFundRealReturnIndex;
+    public float $sovereignFundExpectedRealReturn;
     // The foreign equity market the reserve portfolio holds, in its own currency, and the habit premium its investors
     // demand on their own cycle, with the log re-rating it implies and that re-rating's change this tick.
     public float $foreignEquityIndex;
     public float $foreignEquityRiskPremium;
     public float $foreignEquityValuation;
     public float $foreignEquityValuationChange;
+    // Yield on the foreign sovereign index the paper sleeve holds, at its duration, at the last close. Zero until priced.
+    public float $foreignBondYield;
 
     // The board as the ticker measured it on the PREVIOUS tick, like equityMarketCap: its float-adjusted
     // capitalisation, the float-weighted price return of that tick, the dividend cash the float was paid, and the

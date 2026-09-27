@@ -58,6 +58,12 @@ class SovereignReservePageBuilderTest extends TestCase
             sovereignFundDrawToGdp: 0.0192,
             sovereignFundStampDutyYearToDate: 1.2e9,
             sovereignFundStampDutyToGdp: 0.0017,
+            sovereignDebtToGdp: 0.81,
+            sovereignNetDebtToGdp: 0.29,
+            sovereignFundReturnIndex: 131.5,
+            sovereignFundRealReturnIndex: 112.25,
+            sovereignFundExpectedRealReturn: 0.0324,
+            foreignBondYield: 0.0331,
         );
     }
 
@@ -85,6 +91,19 @@ class SovereignReservePageBuilderTest extends TestCase
         $this->assertEqualsWithDelta(1.6 * 1.0e10 * 120.0, $page['summary']['value'], 1.0);
         $this->assertSame(2.3e10, $page['summary']['annualDraw']);
         $this->assertSame(0.0017, $page['summary']['stampDutyToGdp']);
+    }
+
+    public function testReturnsAndDebtAreTheFundsPublishedReadings(): void
+    {
+        $page = $this->builder()->build($this->incepted());
+
+        $this->assertSame(131.5, $page['returns']['index']);
+        $this->assertSame(112.25, $page['returns']['realIndex']);
+        $this->assertSame(0.0324, $page['returns']['assumedReal'], 'The return the draw was set from, to read the realized one against.');
+        $this->assertSame(0.0331, $page['returns']['bondYield']);
+        $this->assertSame(0.81, $page['summary']['grossDebtToGdp']);
+        $this->assertSame(0.29, $page['summary']['netDebtToGdp']);
+        $this->assertSame(SovereignFundSubsystem::FOREIGN_BOND_DURATION, $page['mandate']['foreignBondDuration']);
     }
 
     public function testSleevesPartitionTheFundAndItsPolicy(): void

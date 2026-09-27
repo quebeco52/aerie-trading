@@ -1,11 +1,14 @@
 import { setupChartDefaults } from '../utils/chart-config.js';
 import { showLoading, showError, hideStatus } from '../utils/fetch-status.js';
 import { formatLarge } from '../utils/formatters.js';
-import { renderReserveCharts, resizeReserveCharts, destroyReserveCharts } from '../reserve/reserve-charts.js';
+import { renderReserveCharts, resizeReserveCharts, destroyReserveCharts, returnHistory, annualisedReturn } from '../reserve/reserve-charts.js';
 import { onPageLoad } from '../utils/page-init.js';
 
 let marketFrameHandler = null;
 let resizeHandler = null;
+/** The recorded quarters of the return index, and the live reading the trailing returns run up to. */
+let recordedReturns = [];
+let liveReturn = null;
 
 function setText(id, text) {
     const el = document.getElementById(id);
@@ -13,6 +16,28 @@ function setText(id, text) {
 }
 
 const pct = (v, d = 2) => `${(v * 100).toFixed(d)}%`;
+
+/**
+ * The trailing returns: a year and ten years real, and the whole record real and nominal, each annualised. They run
+ * from the recorded quarters up to the live index, or up to the last quarter until the first live frame arrives.
+ */
+function paintReturns() {
+    const now = liveReturn ?? recordedReturns[recordedReturns.length - 1];
+    if (!now) return;
+
+    const year = annualisedReturn(recordedReturns, now, 'real', 1);
+    setText('reserve-return-year', year ? pct(year.rate) : '-');
+    setText('reserve-return-year-detail', year ? `Over ${year.years.toFixed(1)} years, a year` : 'Under a year recorded');
+
+    const decade = annualisedReturn(recordedReturns, now, 'real', 10);
+    setText('reserve-return-decade', decade ? pct(decade.rate) : '-');
+
+    const spanReal = annualisedReturn(recordedReturns, now, 'real');
+    const spanNominal = annualisedReturn(recordedReturns, now, 'index');
+    setText('reserve-return-span-real', spanReal ? pct(spanReal.rate) : '-');
+    setText('reserve-return-span-nominal', spanNominal ? pct(spanNominal.rate) : '-');
+    setText('reserve-return-span', spanReal ? `A year over ${spanReal.years.toFixed(1)} years` : 'Under a year recorded');
+}
 
 /**
  * Where a gauge's track starts and ends: the band twice over either side of policy, widened to keep the weight on it.
@@ -82,6 +107,15 @@ function paintReserve(m) {
             : 'None since inception');
     }
 
+    setText('reserve-net-debt', `${(m.sovereign_net_debt_to_gdp * 100).toFixed(0)}% of GDP`);
+    setText('reserve-gross-debt', `Gross ${(m.sovereign_debt_to_gdp * 100).toFixed(0)}% less the fund's bonds`);
+    setText('reserve-bond-yield', pct(m.foreign_bond_yield));
+    setText('reserve-return-assumed', pct(m.sovereign_fund_expected_real_return));
+    if (m.sovereign_fund_return_index > 0) {
+        liveReturn = { time: m.total_time, index: m.sovereign_fund_return_index, real: m.sovereign_fund_real_return_index };
+        paintReturns();
+    }
+
     const weight = m.sovereign_fund_domestic_weight;
     const equity = m.sovereign_fund_equity_share;
     const sleeves = { 'district': weight, 'foreign-equities': equity - weight, 'foreign-bonds': 1 - equity };
@@ -137,6 +171,8 @@ function initReservePage() {
                 if (isAborted) return;
 
                 hideStatus('reserveChartsStatus');
+                recordedReturns = returnHistory(data);
+                paintReturns();
                 if (renderReserveCharts(data, bands) === 0) {
                     showLoading('reserveChartsStatus', 'No quarter has closed since the fund opened. The history fills in one point a quarter.');
                 }
@@ -160,6 +196,8 @@ function initReservePage() {
 
 function cleanupPageResources() {
     destroyReserveCharts();
+    recordedReturns = [];
+    liveReturn = null;
 
     if (marketFrameHandler) {
         document.removeEventListener('market:frame', marketFrameHandler);

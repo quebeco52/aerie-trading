@@ -503,11 +503,12 @@ class CreditFiscalSubsystemTest extends TestCase
 
     // --- Sovereign Risk Premium ---
 
-    /** Runs the repricing lag to its target so the level, not the speed, is under test. */
+    /** Runs the repricing lag to its target so the level, not the speed, is under test; a sovereign with no fund, net = gross. */
     private function settledSovereignSpread(float $debtToGdpEma): float
     {
         $state = new MacroState();
         $state->sovereignDebtToGdpEma = $debtToGdpEma;
+        $state->sovereignNetDebtToGdpEma = $debtToGdpEma;
         $state->sovereignRiskSpread = 0.0;
         for ($i = 0; $i < 2000; $i++) {
             $this->subsystem->calculateSovereignRiskSpread($state, 0.01);
@@ -542,6 +543,7 @@ class CreditFiscalSubsystemTest extends TestCase
     {
         $state = new MacroState();
         $state->sovereignDebtToGdpEma = CreditFiscalSubsystem::SOVEREIGN_RISK_DEBT_THRESHOLD + 0.30;
+        $state->sovereignNetDebtToGdpEma = $state->sovereignDebtToGdpEma;
         $state->sovereignRiskSpread = 0.0; // from no premium at all
 
         $this->subsystem->calculateSovereignRiskSpread($state, 1.0 / 252.0);
@@ -549,6 +551,65 @@ class CreditFiscalSubsystemTest extends TestCase
         $target = 0.30 * CreditFiscalSubsystem::LAUBACH_DEBT_YIELD_SENSITIVITY;
         $this->assertGreaterThan(0.0, $state->sovereignRiskSpread);
         $this->assertLessThan(0.02 * $target, $state->sovereignRiskSpread, 'One trading day closes under two percent of the gap.');
+    }
+
+    /**
+     * Two sovereigns thirty points of gross debt past the risk line; one holds half of GDP in bonds in its reserve fund.
+     * The market prices what is owed net of those bonds (Hadzi-Vaskov & Ricci 2016), so only the other pays for its debt.
+     */
+    public function testTheMarketPricesDebtNetOfTheFundsBonds(): void
+    {
+        $unfunded = new MacroState();
+        $unfunded->sovereignDebtToGdpEma = CreditFiscalSubsystem::SOVEREIGN_RISK_DEBT_THRESHOLD + 0.30;
+        $unfunded->sovereignNetDebtToGdpEma = $unfunded->sovereignDebtToGdpEma;
+        $unfunded->sovereignRiskSpread = 0.0;
+        $funded = clone $unfunded;
+        $funded->sovereignNetDebtToGdpEma = $funded->sovereignDebtToGdpEma - 0.50;
+
+        for ($i = 0; $i < 2000; $i++) {
+            $this->subsystem->calculateSovereignRiskSpread($unfunded, 0.01);
+            $this->subsystem->calculateSovereignRiskSpread($funded, 0.01);
+        }
+
+        $this->assertEqualsWithDelta(0.30 * CreditFiscalSubsystem::LAUBACH_DEBT_YIELD_SENSITIVITY, $unfunded->sovereignRiskSpread, 1e-6);
+        $this->assertSame(0.0, $funded->sovereignRiskSpread, 'Net of its bonds the funded sovereign sits under the line.');
+    }
+
+    public function testNetDebtIsGrossLessTheFundsBondsAndGrossWithoutAFund(): void
+    {
+        $withoutFund = new MacroState();
+        $withoutFund->sovereignDebtToGdp = 1.20;
+        $withoutFund->nominalGdpIndex = 1.0;
+        $withoutFund->outputGap = 0.0;
+        $withoutFund->governmentSpendingIndex = 100.0;
+        $withoutFund->corporateTaxRate = MacroEngine::TARGET_CORPORATE_TAX_RATE;
+        $withFund = clone $withoutFund;
+        $withFund->sovereignFundBondsToGdp = 0.50;
+
+        $this->subsystem->calculateSovereignDebt($withoutFund, 0.25);
+        $this->subsystem->calculateSovereignDebt($withFund, 0.25);
+
+        $this->assertSame($withoutFund->sovereignDebtToGdp, $withoutFund->sovereignNetDebtToGdp, 'No fund, nothing to net.');
+        $this->assertEqualsWithDelta($withFund->sovereignDebtToGdp - 0.50, $withFund->sovereignNetDebtToGdp, 1e-12);
+
+        // What the government itself answers to stays gross: the coupons it pays and the Bohn reaction on its own debt.
+        $this->assertSame($withoutFund->sovereignDebtToGdp, $withFund->sovereignDebtToGdp, 'Holding bonds does not change what the budget owes or how it reacts.');
+    }
+
+    public function testTheSequesterAnswersToGrossDebt(): void
+    {
+        $unfunded = new MacroState();
+        $unfunded->totalTime = 4.001;
+        $unfunded->inflationEma = 0.03;
+        $unfunded->sovereignDebtToGdpEma = CreditFiscalSubsystem::SOVEREIGN_RISK_DEBT_THRESHOLD + 0.30;
+        $unfunded->sovereignNetDebtToGdpEma = $unfunded->sovereignDebtToGdpEma;
+        $funded = clone $unfunded;
+        $funded->sovereignNetDebtToGdpEma = 0.20;
+
+        $this->subsystem->calculateReimbursementRate($unfunded, 0.01);
+        $this->subsystem->calculateReimbursementRate($funded, 0.01);
+
+        $this->assertSame($unfunded->reimbursementRateGrowth, $funded->reimbursementRateGrowth, 'A legislated cut is written on the debt the budget carries.');
     }
 
     public function testTheSovereignCeilingLiftsTheCorporateBase(): void

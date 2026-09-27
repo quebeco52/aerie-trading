@@ -17,7 +17,7 @@
 
 		{# --- HEADER: THE FUND AT A GLANCE --- #}
 		<div class="bg-surface-container-low rounded-lg p-6 lg:p-7 border border-outline-variant/15">
-			<div class="flex flex-col lg:flex-row lg:justify-between lg:items-start gap-6">
+			<div class="flex flex-col xl:flex-row xl:justify-between xl:items-start gap-6">
 				<div class="min-w-0">
 					<div class="flex items-center gap-2 mb-2">
 						<span class="w-2 h-2 rounded-full bg-secondary"></span>
@@ -36,7 +36,7 @@
 				</div>
 
 				{# Repainted in place from the live frame by pages/reserve.js. #}
-				<dl class="grid grid-cols-2 sm:grid-cols-3 gap-3 shrink-0 lg:min-w-[34rem]">
+				<dl class="grid grid-cols-2 sm:grid-cols-4 gap-3 shrink-0 xl:min-w-[46rem]">
 					<div class="bg-surface-container-lowest rounded border border-outline-variant/20 px-4 py-3">
 						<dt class="text-2xs font-bold uppercase tracking-wider text-on-surface-variant">Fund value</dt>
 						<dd class="text-lg font-bold font-mono tabular-nums text-on-surface mt-0.5" id="reserve-value">{{ incepted ? summary.value|format_large('$') : '-' }}</dd>
@@ -44,6 +44,12 @@
 					<div class="bg-surface-container-lowest rounded border border-outline-variant/20 px-4 py-3">
 						<dt class="text-2xs font-bold uppercase tracking-wider text-on-surface-variant">Size</dt>
 						<dd class="text-lg font-bold font-mono tabular-nums text-on-surface mt-0.5" id="reserve-to-gdp">{{ incepted ? (summary.toGdp * 100)|number_format(0) ~ '% of GDP' : '-' }}</dd>
+					</div>
+					{# Needs the recorded history a year back, so pages/reserve.js fills it once the history loads. #}
+					<div class="bg-surface-container-lowest rounded border border-outline-variant/20 px-4 py-3">
+						<dt class="text-2xs font-bold uppercase tracking-wider text-on-surface-variant">Real return</dt>
+						<dd class="text-lg font-bold font-mono tabular-nums text-on-surface mt-0.5" id="reserve-return-year">-</dd>
+						<p class="text-3xs font-mono tabular-nums text-on-surface-variant mt-0.5" id="reserve-return-year-detail">Last 12 months</p>
 					</div>
 					<div class="bg-surface-container-lowest rounded border border-outline-variant/20 px-4 py-3">
 						<dt class="text-2xs font-bold uppercase tracking-wider text-on-surface-variant">Budget draw</dt>
@@ -59,6 +65,11 @@
 						<dt class="text-2xs font-bold uppercase tracking-wider text-on-surface-variant">Board ownership</dt>
 						<dd class="text-lg font-bold font-mono tabular-nums text-on-surface mt-0.5" id="reserve-ownership">{{ incepted ? (summary.ownership * 100)|number_format(2) ~ '% of float' : '-' }}</dd>
 						<p class="text-3xs font-mono tabular-nums text-on-surface-variant mt-0.5">Ceiling {{ (mandate.ownershipCeiling * 100)|number_format(0) }}%</p>
+					</div>
+					<div class="bg-surface-container-lowest rounded border border-outline-variant/20 px-4 py-3">
+						<dt class="text-2xs font-bold uppercase tracking-wider text-on-surface-variant" title="What bond markets price: the District's debt less the government bonds the fund holds (IMF net debt)">Net public debt</dt>
+						<dd class="text-lg font-bold font-mono tabular-nums text-on-surface mt-0.5" id="reserve-net-debt">{{ (summary.netDebtToGdp * 100)|number_format(0) }}% of GDP</dd>
+						<p class="text-3xs font-mono tabular-nums text-on-surface-variant mt-0.5" id="reserve-gross-debt">Gross {{ (summary.grossDebtToGdp * 100)|number_format(0) }}% less the fund's bonds</p>
 					</div>
 					<div class="bg-surface-container-lowest rounded border border-outline-variant/20 px-4 py-3">
 						<dt class="text-2xs font-bold uppercase tracking-wider text-on-surface-variant">Rebalancing</dt>
@@ -135,6 +146,8 @@
 					<span class="inline-block w-px h-2.5 bg-on-surface align-middle mr-1" aria-hidden="true"></span>
 					Policy split. Foreign money is held {{ (mandate.foreignEquityShare * 100)|number_format(0) }}/{{ ((1 - mandate.foreignEquityShare) * 100)|number_format(0) }}
 					in equities and government bonds, marked in foreign currency and converted at today's exchange rate.
+					The bonds are a {{ mandate.foreignBondDuration|number_format(1) }}-year index of foreign government paper,
+					yielding <span class="font-mono tabular-nums" id="reserve-bond-yield">{{ (returns.bondYield * 100)|number_format(2) }}%</span>.
 				</p>
 			</section>
 
@@ -174,6 +187,50 @@
 				</div>
 			</section>
 		</div>
+
+		{# --- RETURNS: time-weighted, so the money paid in and drawn out is not performance --- #}
+		<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/15" aria-labelledby="reserve-returns-heading">
+			<h2 id="reserve-returns-heading" class="text-sm font-bold text-on-surface">Returns</h2>
+			<p class="text-3xs text-on-surface-variant mt-0.5 max-w-3xl">
+				Time-weighted and valued every tick, so the stamp duty and dividends paid in and the budget's draw are not
+				counted as performance. Real returns are after District inflation. Annualised over the recorded history.
+			</p>
+
+			{# Filled by pages/reserve.js from the quarterly history and the live index. #}
+			<dl class="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4" id="reserveReturns" data-index-base="{{ mandate.returnIndexBase }}">
+				<div class="bg-surface-container-lowest rounded border border-outline-variant/20 px-4 py-3">
+					<dt class="text-2xs font-bold uppercase tracking-wider text-on-surface-variant">Real, 10 years</dt>
+					<dd class="text-lg font-bold font-mono tabular-nums text-on-surface mt-0.5" id="reserve-return-decade">-</dd>
+					<p class="text-3xs font-mono tabular-nums text-on-surface-variant mt-0.5">A year</p>
+				</div>
+				<div class="bg-surface-container-lowest rounded border border-outline-variant/20 px-4 py-3">
+					<dt class="text-2xs font-bold uppercase tracking-wider text-on-surface-variant">Real, all recorded</dt>
+					<dd class="text-lg font-bold font-mono tabular-nums text-on-surface mt-0.5" id="reserve-return-span-real">-</dd>
+					<p class="text-3xs font-mono tabular-nums text-on-surface-variant mt-0.5" id="reserve-return-span">A year</p>
+				</div>
+				<div class="bg-surface-container-lowest rounded border border-outline-variant/20 px-4 py-3">
+					<dt class="text-2xs font-bold uppercase tracking-wider text-on-surface-variant">Nominal, all recorded</dt>
+					<dd class="text-lg font-bold font-mono tabular-nums text-on-surface mt-0.5" id="reserve-return-span-nominal">-</dd>
+					<p class="text-3xs font-mono tabular-nums text-on-surface-variant mt-0.5">A year, in District dollars</p>
+				</div>
+				<div class="bg-surface-container-lowest rounded border border-outline-variant/20 px-4 py-3">
+					<dt class="text-2xs font-bold uppercase tracking-wider text-on-surface-variant">Spending rule assumes</dt>
+					<dd class="text-lg font-bold font-mono tabular-nums text-on-surface mt-0.5" id="reserve-return-assumed">{{ (returns.assumedReal * 100)|number_format(2) }}%</dd>
+					<p class="text-3xs font-mono tabular-nums text-on-surface-variant mt-0.5">Real a year, compound; the draw is half of it</p>
+				</div>
+			</dl>
+
+			<div class="mt-5">
+				<h3 class="text-xs font-bold text-on-surface">Return index</h3>
+				<p class="text-3xs text-on-surface-variant">Real and nominal, 100 at the first quarter shown</p>
+				<div class="h-64 md:h-72 w-full relative mt-3">
+					<canvas id="reserveReturnChart"></canvas>
+				</div>
+				<p id="reserveReturnChartNote" class="hidden text-3xs text-on-surface-variant mt-2" role="status">
+					The index draws once two quarters of it are recorded.
+				</p>
+			</div>
+		</section>
 
 		{# --- STRATEGIC HOLDING: the District's, beside the fund rather than in it --- #}
 		{% if strategic is not empty %}
@@ -313,8 +370,8 @@
 				},
 				{
 					name: 'Reference portfolio',
-					text: 'Money off the board is held ' ~ (mandate.foreignEquityShare * 100)|number_format(0) ~ '% in global equities and ' ~ ((1 - mandate.foreignEquityShare) * 100)|number_format(0) ~ '% in foreign government bonds.',
-					source: 'GIC Reference Portfolio (2013)'
+					text: 'Money off the board is held ' ~ (mandate.foreignEquityShare * 100)|number_format(0) ~ '% in global equities and ' ~ ((1 - mandate.foreignEquityShare) * 100)|number_format(0) ~ '% in foreign government bonds. The bonds are held at a constant duration of ' ~ mandate.foreignBondDuration|number_format(1) ~ ' years, so they earn their yield and roll-down and gain when foreign rates fall.',
+					source: 'GIC Reference Portfolio (2013); duration of the Bloomberg Global Aggregate (2026)'
 				},
 				{
 					name: 'District equity band',
@@ -340,6 +397,11 @@
 					name: 'Corporate actions',
 					text: 'Tenders its share into buybacks and takes up its share of new issues, so a company\'s own flow never changes the fund\'s ownership.',
 					source: 'Index-holder practice'
+				},
+				{
+					name: 'Returns',
+					text: 'Reported as a time-weighted return, valued every tick, so money paid in and the budget\'s draw are not performance. The real return is after District inflation, and is set against the return the spending rule assumed.',
+					source: 'GIPS time-weighted return, as GPFG and GIC report'
 				},
 				{
 					name: 'Stamp duty',

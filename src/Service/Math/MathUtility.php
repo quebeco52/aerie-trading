@@ -1143,6 +1143,20 @@ class MathUtility
     }
 
     /**
+     * The instantaneous forward term premium that duration scale implies, d(tau x S(tau)) / dtau, on the same
+     * ten-year normalization. A constant-maturity zero held on an unchanging curve earns the forward rate at its
+     * maturity, the yield plus its roll-down (f = y + tau x dy/dtau), so this is the premium such an index
+     * earns over the short rate in steady state: 1 - e^(-tau/H) + (tau/H) e^(-tau/H), over 1 - e^(-10/H).
+     */
+    public static function calculateTermPremiumForwardScale(float $tau, float $horizonYears = 10.0): float
+    {
+        $horizon = max(0.01, $horizonYears);
+        $x = max(0.0, $tau) / $horizon;
+
+        return (1.0 - exp(-$x) + ($x * exp(-$x))) / (1.0 - exp(-10.0 / $horizon));
+    }
+
+    /**
      * Nelson-Siegel-Svensson (1994) zero-coupon yield with the Bliss (1997) extension: the slope factor may
      * decay at its own rate, separate from the primary curvature. When the level and slope are pinned to
      * economics rather than fitted, the slope decay is the market's belief about how fast the policy rate

@@ -15,7 +15,8 @@ use App\Service\Math\MathUtility;
  *    growth keeps pace with the economy. "Long-term" is the COMPOUND rate: spending half the arithmetic mean of a
  *    volatile portfolio overspends by half its variance every year and erodes the fund it is meant to preserve.
  *  - It holds three sleeves at policy weights: a cap-weighted slice of the whole board, and foreign equities and
- *    foreign sovereign paper on GIC's 65/35 reference mix. Each drifts with its own market between rebalances.
+ *    foreign sovereign paper on GIC's 65/35 reference mix. Each drifts with its own market between rebalances; the
+ *    paper is a constant-duration index on the foreign curve, so it carries, rolls down and reprices with the foreign rate.
  *  - At a month end it checks two deviation limits the way GPIF does: the domestic equity weight against its band,
  *    and the whole fund's equity share against its band. A breach of either trades every sleeve back to its policy
  *    weight, the board over the following months (Norges Bank's rebalancing rule) and the foreign sleeves at once,
@@ -28,7 +29,8 @@ use App\Service\Math\MathUtility;
  * It holds the float as an index holder does: it tenders its share into buybacks and takes up its share of issues, so
  * a company's own flow never moves its ownership. Its two inflows are the District's stamp duty on share trading, paid
  * to the fund rather than the budget, and the cash from the District's strategic stakes (App\Data\StrategicHoldings),
- * which the fund does not hold but is paid. The fund incepts on the first tick that carries a board and books no
+ * which the fund does not hold but is paid. Its performance is a time-weighted return index, nominal and real, that
+ * none of that money moves. The fund incepts on the first tick that carries a board and books no
  * trade doing so: a structural holder opens at its holding. A run with no market (the simulate command, the macro
  * harnesses, unit tests) never has a fund.
  */
@@ -47,6 +49,8 @@ class SovereignFundSubsystem
     public const FOREIGN_EQUITY_VOLATILITY = 0.144;
     /** Correlation of foreign equities with the home market factor (same sample: 0.773 in home currency, 0.885 in local currency). */
     public const FOREIGN_EQUITY_MARKET_CORRELATION = 0.885;
+    /** Duration of the foreign paper, held as a constant-maturity zero of that term (Bloomberg Global Aggregate effective duration 6.17y, SPDR GLAD factsheet 31 Aug 2026). */
+    public const FOREIGN_BOND_DURATION = 6.17;
 
     // --- Deviation Limits (GPIF policy asset mix, 5th medium-term period, FY2025) ---
     /** Share of the board's float the fund holds at inception (GPIF owned 5.8% of the Japanese market in 2016). */
@@ -68,6 +72,10 @@ class SovereignFundSubsystem
     /** Months over which the board is traded back to its policy weight; NBIM trades gradually but does not publish the pace. */
     public const REBALANCE_EXECUTION_MONTHS = 3.0;
 
+    // --- Performance Reporting (GIPS time-weighted return) ---
+    /** Level of the nominal and real return indices at inception. */
+    public const RETURN_INDEX_BASE = 100.0;
+
     // --- Numerics ---
     /** Room under the ownership ceiling smaller than this share of the float is rounding, not capacity. */
     private const ROOM_TOLERANCE = 1.0e-9;
@@ -86,7 +94,8 @@ class SovereignFundSubsystem
     }
 
     /**
-     * Advances the fund one tick: incept, mark to market, pay the budget, review the bands, trade.
+     * Advances the fund one tick: incept, mark to market, chain the return index, take in the District's money, pay
+     * the budget, review the bands, trade.
      *
      * Runs after nominal GDP is struck and before the fiscal accounts read the draw.
      *
@@ -105,9 +114,11 @@ class SovereignFundSubsystem
         }
 
         $this->markToMarket($state, $dt);
+        $this->chainReturnIndices($state, $dt);
+        $this->receiveInflows($state);
 
         if (MathUtility::crossedSimulatedBoundary($state->totalTime, $dt, self::DRAW_RESET_PERIOD_YEARS)) {
-            $state->sovereignFundAnnualDraw = $this->calculateAnnualDraw($state);
+            $this->setAnnualDraw($state);
             $this->closeStampDutyYear($state);
         }
         $this->payDraw($state, $dt);
@@ -156,7 +167,10 @@ class SovereignFundSubsystem
         $state->sovereignFundDomesticEquity = $domestic;
         $state->sovereignFundTargetWeight = $domestic / ($domestic + $foreign);
         $this->resetForeignSplit($state, $foreign);
-        $state->sovereignFundAnnualDraw = $this->calculateAnnualDraw($state);
+        $state->foreignBondYield = $this->foreignZeroYield($state, self::FOREIGN_BOND_DURATION);
+        $state->sovereignFundReturnIndex = self::RETURN_INDEX_BASE;
+        $state->sovereignFundRealReturnIndex = self::RETURN_INDEX_BASE;
+        $this->setAnnualDraw($state);
 
         return true;
     }
@@ -166,8 +180,9 @@ class SovereignFundSubsystem
      *
      * The domestic sleeve is a cap-weighted slice of the float, so it earns the board's float-weighted price return;
      * its dividends arrive as cash in the paper sleeve, and it tenders into buybacks and takes up issues pro rata. The
-     * foreign equity market loads on the home market factor at its measured correlation; the paper earns the foreign
-     * rate. Neither is rebalanced here: between the fund's own reviews each sleeve drifts with its market.
+     * foreign equity market loads on the home market factor at its measured correlation; the paper is marked on the
+     * foreign curve. Neither is rebalanced here: between the fund's own reviews each sleeve drifts with its market.
+     * Everything booked here is return; money paid in from outside arrives after, in receiveInflows().
      *
      * The foreign market also re-rates on its own business cycle (AssetMarketSubsystem's habit premium on the foreign
      * gap, valued Campbell-Shiller). That term moves at the cycle's frequency, so it adds well under 1% to the monthly
@@ -195,7 +210,7 @@ class SovereignFundSubsystem
         if ($previousIndex > 0.0) {
             $state->sovereignFundForeignEquity *= $state->foreignEquityIndex / $previousIndex;
         }
-        $state->sovereignFundForeignBonds *= 1.0 + ($state->foreignPolicyRate * $dt);
+        $this->markForeignBonds($state, $dt);
 
         if ($state->boardFloatCap > 0.0) {
             // The float the fund held a share of before the companies' own issuance and buybacks landed.
@@ -207,7 +222,87 @@ class SovereignFundSubsystem
             $state->sovereignFundDomesticEquity = max(0.0, $state->sovereignFundDomesticEquity + $participation);
             $state->sovereignFundForeignBonds += ($dividends - $participation) * $state->exchangeRateIndex;
         }
+    }
 
+    /**
+     * One tick of the paper sleeve: a constant-maturity index of foreign sovereign zeros at the reference duration,
+     * bought at the last close's yield and valued a tick later, one tick shorter, on today's curve, then rolled.
+     *
+     * Carry, roll-down and the rate move come out of one exact price ratio, exp(y_then x D - y_now(D - dt) x (D - dt)),
+     * so the sleeve compounds the same at any tick size. A sleeve with no yield on record (a fund incepted before the
+     * paper was marked) is priced here and earns that yield's carry for the tick; the foreign curve never gets near
+     * zero, since the foreign rate is floored at zero and the term premium sits on top.
+     */
+    private function markForeignBonds(MacroState $state, float $dt): void
+    {
+        $boughtAt = $state->foreignBondYield;
+        $state->foreignBondYield = $this->foreignZeroYield($state, self::FOREIGN_BOND_DURATION);
+
+        if ($boughtAt <= 0.0) {
+            $logReturn = $state->foreignBondYield * $dt;
+        } else {
+            $held = max(0.0, self::FOREIGN_BOND_DURATION - $dt);
+            $logReturn = ($boughtAt * self::FOREIGN_BOND_DURATION) - ($this->foreignZeroYield($state, $held) * $held);
+        }
+
+        $state->sovereignFundForeignBonds *= exp($logReturn);
+    }
+
+    /**
+     * The foreign sovereign zero-coupon yield at a maturity, on the domestic curve's own building blocks: the foreign
+     * policy rate's expected path back to its neutral level at the Bliss slope decay (the Vasicek expectations loading),
+     * plus the Adrian-Crump-Moench term premium scaled for duration. The foreign bloc has no curve shocks of its own,
+     * so the paper reprices only as the foreign rate moves with the foreign cycle.
+     */
+    public function foreignZeroYield(MacroState $state, float $maturity): float
+    {
+        $neutral = MacroEngine::GLOBAL_BASELINE_RATE;
+        $expectationsYield = $this->mathUtility->calculateSvenssonYield(
+            level: $neutral,
+            slope: $state->foreignPolicyRate - $neutral,
+            curvature1: 0.0,
+            curvature2: 0.0,
+            tau: $maturity,
+            slopeLambda: MacroEngine::SVENSSON_SLOPE_LAMBDA
+        );
+
+        return $expectationsYield
+            + (MacroEngine::NS_BASE_TERM_PREMIUM * MathUtility::calculateTermPremiumDurationScale($maturity, MacroEngine::TERM_PREMIUM_DURATION_HORIZON_YEARS));
+    }
+
+    /**
+     * The premium the paper earns over the foreign short rate on a steady curve: a constant-maturity zero earns the
+     * forward rate at its maturity, which is the yield plus its roll-down, so the forward term premium at the duration.
+     */
+    public static function foreignBondExpectedPremium(): float
+    {
+        return MacroEngine::NS_BASE_TERM_PREMIUM
+            * MathUtility::calculateTermPremiumForwardScale(self::FOREIGN_BOND_DURATION, MacroEngine::TERM_PREMIUM_DURATION_HORIZON_YEARS);
+    }
+
+    /**
+     * Chains the time-weighted return indices over the tick (GIPS): the fund marked to market against its last close,
+     * before any money arrives or leaves. Valued every tick, the chain is exact, so the District's payments in and the
+     * budget's draw never read as performance, and a rebalance, which swaps one sleeve for another at market, cannot.
+     * The real index deflates by the District's inflation over the tick. A fund with no index yet, one incepted before
+     * the index existed, opens it at the base here and books no return for the tick.
+     */
+    private function chainReturnIndices(MacroState $state, float $dt): void
+    {
+        if ($state->sovereignFundReturnIndex <= 0.0 || $state->sovereignFundValueAtClose <= 0.0) {
+            $state->sovereignFundReturnIndex = self::RETURN_INDEX_BASE;
+            $state->sovereignFundRealReturnIndex = self::RETURN_INDEX_BASE;
+            return;
+        }
+
+        $growth = $this->fundValue($state) / $state->sovereignFundValueAtClose;
+        $state->sovereignFundReturnIndex *= $growth;
+        $state->sovereignFundRealReturnIndex *= $growth * exp(-$state->inflation * $dt);
+    }
+
+    /** The money paid in from outside the fund over the last tick, parked in the paper sleeve like any cash it receives. */
+    private function receiveInflows(MacroState $state): void
+    {
         // The stamp duty on the board's trading is paid into the fund rather than the budget, as Singapore's land-sale
         // proceeds go to its reserves: new money, parked in the paper sleeve like any cash the fund receives.
         $state->sovereignFundForeignBonds += $state->boardStampDuty * $state->exchangeRateIndex;
@@ -226,6 +321,13 @@ class SovereignFundSubsystem
         $state->sovereignFundStampDutyYearToDate = 0.0;
     }
 
+    /** Sets this budget year's draw, and publishes the expected return it was set from. */
+    private function setAnnualDraw(MacroState $state): void
+    {
+        $state->sovereignFundExpectedRealReturn = $this->currentExpectedRealReturn($state);
+        $state->sovereignFundAnnualDraw = $this->calculateAnnualDraw($state);
+    }
+
     /**
      * This budget year's draw: half the expected long-term (compound) real return on the fund at the start of the year.
      *
@@ -233,18 +335,22 @@ class SovereignFundSubsystem
      */
     public function calculateAnnualDraw(MacroState $state): float
     {
+        return self::NIR_SPENDING_SHARE * max(0.0, $this->currentExpectedRealReturn($state)) * $this->fundValue($state);
+    }
+
+    /** The expected compound real return on the fund at its sleeve weights today; zero for an empty fund. */
+    public function currentExpectedRealReturn(MacroState $state): float
+    {
         $fund = $this->fundValue($state);
         if ($fund <= 0.0) {
             return 0.0;
         }
 
-        $expected = $this->expectedCompoundRealReturn(
+        return $this->expectedCompoundRealReturn(
             $state,
             $state->sovereignFundDomesticEquity / $fund,
             $this->foreignEquityHomeValue($state) / $fund
         );
-
-        return self::NIR_SPENDING_SHARE * max(0.0, $expected) * $fund;
     }
 
     /**
@@ -252,7 +358,9 @@ class SovereignFundSubsystem
      *
      * The variance is the Markowitz sum over the three sleeves in home terms. Foreign equities carry their own market
      * and the currency, foreign paper the currency alone, and the two co-move with the board only through the equity
-     * leg's loading on the home market factor.
+     * leg's loading on the home market factor. The paper's own rate risk is left out: at the index's 4.1% volatility
+     * (GLAD, 3 years to Aug 2026), with a third of the fund in it and a stock-bond correlation of -0.3, it and its
+     * covariance with the equity leg move the variance drag by under 0.1pp.
      *
      * @param float $domesticWeight      Share of the fund in the board.
      * @param float $foreignEquityWeight Share of the fund in foreign equities; foreign paper is the remainder.
@@ -266,7 +374,7 @@ class SovereignFundSubsystem
         $foreignRealRate = MacroEngine::GLOBAL_BASELINE_RATE - MacroEngine::TARGET_INFLATION;
         $arithmetic = ($domestic * $this->domesticExpectedRealReturn($state))
             + ($equity * ($foreignRealRate + MacroEngine::BASE_EQUITY_RISK_PREMIUM))
-            + ($paper * $foreignRealRate);
+            + ($paper * ($foreignRealRate + self::foreignBondExpectedPremium()));
 
         $boardVol = MacroEngine::MACRO_VOL_BASE_ANCHOR;
         $equityVol = self::FOREIGN_EQUITY_VOLATILITY;
@@ -456,6 +564,10 @@ class SovereignFundSubsystem
         $state->sovereignFundOwnershipShare = $state->boardFloatCap > 0.0 ? $state->sovereignFundDomesticEquity / $state->boardFloatCap : 0.0;
         $state->sovereignFundDrawToGdp = $gdpDollars > 0.0 ? $state->sovereignFundAnnualDraw / $gdpDollars : 0.0;
         $state->sovereignFundRebalanceShare = $state->boardFloatCap > 0.0 ? $state->sovereignFundRebalanceBacklog / $state->boardFloatCap : 0.0;
+        $state->sovereignFundBondsToGdp = ($gdpDollars > 0.0 && $state->exchangeRateIndex > 0.0)
+            ? ($state->sovereignFundForeignBonds / $state->exchangeRateIndex) / $gdpDollars
+            : 0.0;
+        $state->sovereignFundValueAtClose = $fund;
     }
 
     /** The whole fund in home currency. */
