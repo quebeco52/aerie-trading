@@ -22,8 +22,8 @@ class LaborMarketSubsystem
     public const WAGE_TIGHTNESS_SENSITIVITY = 0.010;
     /** Annual adjustment speed of nominal wage settlements toward market-clearing equilibrium. */
     public const WAGE_ADJUSTMENT_SPEED = 2.0;
-    /** Okun's beta: sensitivity of equilibrium unemployment deviation to the GDP output gap. */
-    public const OKUNS_COEFFICIENT = 0.5;
+    /** Okun's beta on the level gap, set for a steadier labour market than the US: the engine's Ball-Leigh-Loungani (2017) slope (HP 1600, both sides) then reads -0.37, Canada's and the Netherlands' 1996-2019, against the US -0.59 and the UK -0.26 (var/harness/okun_real.py). */
+    public const OKUNS_COEFFICIENT = 0.7;
     /** Annual adjustment speed of employment expansion during economic recoveries (search & matching friction). */
     public const OKUNS_HIRING_SPEED = 1.5;
     /** Annual adjustment speed of workforce reduction during economic contractions (rapid labor shedding). */

@@ -26,6 +26,31 @@ class LaborMarketSubsystemTest extends TestCase
         $this->assertGreaterThan(0.04, $state->unemploymentRate);
     }
 
+    /**
+     * Unemployment settles on Okun's law against the WHOLE gap, the part a productivity gain opens included: US
+     * unemployment falls 0.37pp ten quarters after a 1% Fernald TFP gain, as Okun on the CBO gap predicts.
+     */
+    public function testUnemploymentSettlesOnOkunsLawAgainstTheWholeGap(): void
+    {
+        $settle = function (float $supplyGap): float {
+            $state = new MacroState();
+            $state->nairu = MacroEngine::NATURAL_UNEMPLOYMENT;
+            $state->unemploymentRate = MacroEngine::NATURAL_UNEMPLOYMENT;
+            $state->unemploymentRateEma = MacroEngine::NATURAL_UNEMPLOYMENT; // no scarring, so the NAIRU holds
+            $state->outputGap = -0.02;
+            $state->productivitySupplyGap = $supplyGap;
+            for ($i = 0; $i < 400; $i++) {
+                $this->subsystem->calculateUnemployment($state, 0.05);
+            }
+
+            return $state->unemploymentRate;
+        };
+
+        $expected = MacroEngine::NATURAL_UNEMPLOYMENT + (LaborMarketSubsystem::OKUNS_COEFFICIENT * 0.02);
+        $this->assertEqualsWithDelta($expected, $settle(0.0), 1e-6);
+        $this->assertEqualsWithDelta($expected, $settle(-0.01), 1e-6, 'The productivity part of the gap moves unemployment like any other.');
+    }
+
     public function testBeveridgeMatchingDeterminesVacanciesAndWageGrowth(): void
     {
         $state = new MacroState();
