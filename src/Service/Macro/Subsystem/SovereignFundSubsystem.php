@@ -26,8 +26,9 @@ use App\Service\Math\MathUtility;
  * band; that is how a fixed-weight rebalancer behaves in the record (GPFG in 2008-09 and 2020).
  *
  * It holds the float as an index holder does: it tenders its share into buybacks and takes up its share of issues, so
- * a company's own flow never moves its ownership. Its one inflow is the District's stamp duty on share trading, which
- * is paid to the fund rather than the budget. The fund incepts on the first tick that carries a board and books no
+ * a company's own flow never moves its ownership. Its two inflows are the District's stamp duty on share trading, paid
+ * to the fund rather than the budget, and the cash from the District's strategic stakes (App\Data\StrategicHoldings),
+ * which the fund does not hold but is paid. The fund incepts on the first tick that carries a board and books no
  * trade doing so: a structural holder opens at its holding. A run with no market (the simulate command, the macro
  * harnesses, unit tests) never has a fund.
  */
@@ -76,8 +77,8 @@ class SovereignFundSubsystem
     private const MIN_COMPOUND_RETURN = 0.005;
 
     // --- Currency Bridge (World Bank) ---
-    /** Listed-company capitalisation over GDP at inception (World Bank CM.MKT.LCAP.GD.ZS, US median 1975-2024; Singapore 1.56, world 0.74). */
-    public const MARKET_CAP_TO_GDP = 1.15;
+    /** Listed-company capitalisation over GDP at inception: a financial centre's, Singapore's 1.56 (World Bank CM.MKT.LCAP.GD.ZS; US median 1.15, world 0.74). */
+    public const MARKET_CAP_TO_GDP = 1.56;
 
     public function __construct(
         private readonly MathUtility $mathUtility,
@@ -211,6 +212,10 @@ class SovereignFundSubsystem
         // proceeds go to its reserves: new money, parked in the paper sleeve like any cash the fund receives.
         $state->sovereignFundForeignBonds += $state->boardStampDuty * $state->exchangeRateIndex;
         $state->sovereignFundStampDutyYearToDate += $state->boardStampDuty;
+
+        // The District's strategic stakes sit outside the fund, but their cash is paid into it (and a subscription to an
+        // issue paid out of it), as the dividends on Norway's 67% of Equinor reach the GPFG.
+        $state->sovereignFundForeignBonds += $state->strategicStakeCash * $state->exchangeRateIndex;
     }
 
     /** Publishes the budget year's stamp duty over GDP and starts the next year's count. */
@@ -395,10 +400,16 @@ class SovereignFundSubsystem
         return $domesticTargetWeight + (self::FOREIGN_EQUITY_SHARE * (1.0 - $domesticTargetWeight));
     }
 
+    /** The relative fall of a sleeve against the rest of the fund that breaches GPIF's limit L on weight T: L / (T(1 - T) + TL). */
+    public static function breachingMove(float $gpifTarget, float $gpifLimit): float
+    {
+        return $gpifLimit / (($gpifTarget * (1.0 - $gpifTarget)) + ($gpifTarget * $gpifLimit));
+    }
+
     /** A weight's band: the move in it that the relative fall breaching GPIF's limit L on weight T would make. */
     private function breachingBand(float $weight, float $gpifTarget, float $gpifLimit): float
     {
-        $breachingMove = $gpifLimit / (($gpifTarget * (1.0 - $gpifTarget)) + ($gpifTarget * $gpifLimit));
+        $breachingMove = self::breachingMove($gpifTarget, $gpifLimit);
 
         return $weight * (1.0 - $weight) * $breachingMove / (1.0 - ($weight * $breachingMove));
     }

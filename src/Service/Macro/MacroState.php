@@ -362,6 +362,9 @@ class MacroState
     public float $boardDividendCash;
     public float $boardNetIssuance;
     public float $boardStampDuty;
+    // Cash the District's strategic stakes (App\Data\StrategicHoldings) paid it on the previous tick, a flow like the
+    // board's: dividends, plus its share of buybacks less its share of issues. Held outside the fund, paid into it.
+    public float $strategicStakeCash;
 
     public function __construct()
     {

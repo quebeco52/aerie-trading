@@ -101,6 +101,26 @@ class MacroEngineTest extends TestCase
         $this->assertGreaterThan(0.0, $result->freightRateIndex);
     }
 
+    public function testAStrategicDividendIsReadForItsOwnTickAndNeverReplayed(): void
+    {
+        $saved = false;
+        $this->redisMock->method('get')->willReturnCallback(static function () use (&$saved) {
+            return $saved;
+        });
+        $this->redisMock->method('set')->willReturnCallback(static function (string $key, string $value) use (&$saved): bool {
+            $saved = $value;
+
+            return true;
+        });
+        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
+
+        $paid = $this->engine->updateMacroState(1.0 / 360.0, strategicStakeCash: 2.5e8);
+        $this->assertSame(2.5e8, $paid->strategicStakeCash);
+
+        $next = $this->engine->updateMacroState(1.0 / 360.0);
+        $this->assertSame(0.0, $next->strategicStakeCash, 'A flow the ticker did not report is zero, not the last one again.');
+    }
+
     public function testUpdateMacroStateWithExistingStateAndRecessionShock(): void
     {
         $existingState = [

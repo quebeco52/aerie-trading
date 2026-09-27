@@ -49,7 +49,7 @@ class StockPageBuilderTest extends TestCase
         'isFinancial', 'isInsurer', 'lifecycleStage', 'lifecycleStages', 'macro', 'management', 'marketCap',
         'marketShare', 'netAssetValue', 'openOrders', 'optionDealerGamma', 'optionDealerGammaPerPercent',
         'optionExpiries', 'optionMultiplier', 'optionOpenInterest', 'optionsListed', 'optionsReason',
-        'peRatio', 'peers', 'pieData', 'pieLabels', 'quote', 'sharesMap', 'shortUtilization', 'targetPE',
+        'peRatio', 'peers', 'pieData', 'pieLabels', 'quote', 'sharesMap', 'shortUtilization', 'strategicStake', 'targetPE',
         'ticksPerYear', 'userAvgCost', 'userDividendIncome', 'userQuantity', 'userTrades',
         'userUnrealizedPnL', 'userUnrealizedPnLPercent'
     ];

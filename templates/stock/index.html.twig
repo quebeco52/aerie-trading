@@ -495,6 +495,16 @@
 										<dt class="text-sm font-semibold text-on-surface-variant">Shares Out</dt>
 										<dd class="font-bold text-on-surface font-mono tabular-nums" id="stat-shares">{{ asset.sharesOutstanding|number_format }}</dd>
 									</div>
+									{% if strategicStake > 0 and not asset.bankrupt %}
+										{# The District's own stake, off the float and outside the fund; its dividends are paid into the fund. #}
+										<div class="py-2 flex justify-between items-center">
+											<dt class="group relative cursor-help text-sm font-semibold text-on-surface-variant" tabindex="0">
+												<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">District Strategic Stake</span>
+												{{ _self.tooltip('The District holds this stake itself, outside the Sovereign Reserve Fund, as Singapore holds its exchange. It is off the float and never traded, and its dividends are paid into the fund.', 'left', 'w-64') }}
+											</dt>
+											<dd class="font-bold font-mono tabular-nums"><a href="/reserve" class="text-on-surface hover:text-primary hover:underline">{{ (strategicStake * 100)|number_format(2) }}% of shares</a></dd>
+										</div>
+									{% endif %}
 									{% if macro.sovereignFundOwnershipShare > 0 and not asset.bankrupt %}
 										{# The fund holds the same share of every name's float, so its stake here is that share of this float. #}
 										<div class="py-2 flex justify-between items-center">
@@ -502,7 +512,7 @@
 												<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Sovereign Reserve</span>
 												{{ _self.tooltip('The district\'s sovereign fund holds the same share of every listed company\'s float and trades only when its board weight, or its whole equity share, leaves its band around policy.', 'left', 'w-64') }}
 											</dt>
-											<dd class="font-bold text-on-surface font-mono tabular-nums">{{ (macro.sovereignFundOwnershipShare * asset.publicFloatPercentage * 100)|number_format(2) }}% of shares</dd>
+											<dd class="font-bold font-mono tabular-nums"><a href="/reserve" class="text-on-surface hover:text-primary hover:underline">{{ (macro.sovereignFundOwnershipShare * asset.publicFloatPercentage * 100)|number_format(2) }}% of shares</a></dd>
 										</div>
 									{% endif %}
 									<div class="py-2 flex justify-between items-center">
@@ -815,7 +825,7 @@
 												<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Sovereign Reserve</span>
 												{{ _self.tooltip('The district\'s sovereign fund holds the same share of every constituent\'s float, and so of this float-adjusted cap. It buys after a fall and trims after a run only when its board weight, or its whole equity share, leaves its band.', 'left', 'w-72') }}
 											</dt>
-											<dd class="font-bold text-on-surface font-mono tabular-nums">{{ (macro.sovereignFundOwnershipShare * 100)|number_format(2) }}% of float</dd>
+											<dd class="font-bold font-mono tabular-nums"><a href="/reserve" class="text-on-surface hover:text-primary hover:underline">{{ (macro.sovereignFundOwnershipShare * 100)|number_format(2) }}% of float</a></dd>
 										</div>
 									{% endif %}
 									<div class="py-2 flex justify-between items-center">

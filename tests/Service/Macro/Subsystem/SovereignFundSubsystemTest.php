@@ -35,12 +35,18 @@ class SovereignFundSubsystemTest extends TestCase
         $this->assertSame(0.0, $state->sovereignFundTrade, 'A structural holder opens at its holding, with no order.');
         $this->assertSame(-1.0, $state->lastSovereignRebalanceAt);
 
-        // About 1.4x GDP with a domestic weight near 4% at the World Bank bridge: funding 2% of GDP out of half a
-        // compound real return of roughly 2.8% takes a fund near one and a half times the economy.
+        // Funding 2% of GDP out of half a compound real return of roughly 2.8% takes a fund near one and a half times the
+        // economy, whatever the economy is worth in currency.
         $this->assertGreaterThan(1.3, $state->sovereignFundToGdp);
         $this->assertLessThan(1.6, $state->sovereignFundToGdp);
-        $this->assertGreaterThan(0.025, $state->sovereignFundTargetWeight);
-        $this->assertLessThan(0.05, $state->sovereignFundTargetWeight);
+
+        // GDP in currency is the board over the capitalisation ratio, so the opening holding fixes the board weight.
+        $gdpDollars = $state->equityMarketCap / SovereignFundSubsystem::MARKET_CAP_TO_GDP;
+        $this->assertEqualsWithDelta(
+            SovereignFundSubsystem::DOMESTIC_OWNERSHIP_OPENING * $state->boardFloatCap / ($state->sovereignFundToGdp * $gdpDollars),
+            $state->sovereignFundTargetWeight,
+            1e-12
+        );
     }
 
     public function testTheDrawIsHalfTheCompoundReturnNotTheArithmeticMean(): void
@@ -398,6 +404,26 @@ class SovereignFundSubsystemTest extends TestCase
         $this->assertEqualsWithDelta(SovereignFundSubsystem::DOMESTIC_OWNERSHIP_OPENING * 1.0e9, $fund->foreignHomeValue($state) - $before, 1e-3);
     }
 
+    /** The District's strategic stake is not the fund's, so its dividends arrive whole, as cash, and touch no board holding. */
+    public function testStrategicDividendsArriveWholeAsCashWithoutChangingTheBoardHolding(): void
+    {
+        $tpy = 720;
+        $dt = 1.0 / $tpy;
+        $fund = new SovereignFundSubsystem($this->stillMarket());
+        $state = $this->openFund($fund, $tpy);
+        $state->sovereignFundAnnualDraw = 0.0;
+
+        $before = $fund->foreignHomeValue($state);
+        $domestic = $state->sovereignFundDomesticEquity;
+        $ownership = $state->sovereignFundOwnershipShare;
+        $state->strategicStakeCash = 2.5e8;
+        $this->step($fund, $state, $dt);
+
+        $this->assertEqualsWithDelta(2.5e8, $fund->foreignHomeValue($state) - $before, 1e-3);
+        $this->assertSame($domestic, $state->sovereignFundDomesticEquity);
+        $this->assertSame($ownership, $state->sovereignFundOwnershipShare);
+    }
+
     public function testTheDomesticSleeveEarnsTheBoardsPriceReturn(): void
     {
         $fund = new SovereignFundSubsystem($this->stillMarket());
@@ -442,6 +468,7 @@ class SovereignFundSubsystemTest extends TestCase
         $state->boardNetIssuance = 0.0;
         $state->foreignEquityValuationChange = 0.0;
         $state->boardStampDuty = 0.0;
+        $state->strategicStakeCash = 0.0;
     }
 
     /** Steps until the tick that crosses the next month end, inclusive. */

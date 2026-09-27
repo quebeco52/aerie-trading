@@ -76,10 +76,10 @@ final class AnchorHoldings
         return self::STAKES[$ticker] ?? [];
     }
 
-    /** Fraction of a company locked away by anchor holders, and so absent from its free float. */
+    /** Fraction of a company locked away by anchor holders and the District's strategic stake, and so absent from its free float. */
     public static function closelyHeldShare(string $ticker): float
     {
-        $held = 0.0;
+        $held = StrategicHoldings::stake($ticker);
 
         foreach (self::STAKES as $stakes) {
             $held += isset($stakes[$ticker]) ? $stakes[$ticker]->fraction() : 0.0;

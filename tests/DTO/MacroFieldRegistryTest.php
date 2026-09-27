@@ -67,6 +67,7 @@ class MacroFieldRegistryTest extends TestCase
         'foreignEquityValuationChange' => 'One tick of re-rating; foreign_equity_index records its effect.',
         'sovereignFundStampDutyYearToDate' => 'Currency accumulator for the budget year; sovereign_fund_stamp_duty_to_gdp records the year.',
         'boardStampDuty' => 'One tick of stamp duty; sovereign_fund_stamp_duty_to_gdp records the year.',
+        'strategicStakeCash' => 'One tick of cash from the District\'s strategic stakes, credited to the fund at once.',
         'boardNetIssuance' => 'One tick of the companies\' own issuance and buybacks; same objection.',
     ];
 

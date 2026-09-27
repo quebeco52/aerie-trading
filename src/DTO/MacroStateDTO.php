@@ -302,6 +302,7 @@ readonly class MacroStateDTO
         public float $boardDividendCash = 0.0,
         public float $boardNetIssuance = 0.0,
         public float $boardStampDuty = 0.0,
+        public float $strategicStakeCash = 0.0,
     ) {}
 
     /**

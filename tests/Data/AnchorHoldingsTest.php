@@ -8,6 +8,7 @@ use App\Data\AnchorHoldings;
 use App\Data\AnchorStake;
 use App\Data\InitialMarket;
 use App\Data\Sectors;
+use App\Data\StrategicHoldings;
 use App\Service\Model\Sector\InvestmentCompanyBusinessModel;
 use PHPUnit\Framework\TestCase;
 
@@ -124,8 +125,9 @@ class AnchorHoldingsTest extends TestCase
             $this->assertEqualsWithDelta($declared - $closelyHeld, $tradable, 1e-9, $ticker);
         }
 
-        // A stake in a ticker the float loop never sees locks away nothing, which is how a list starts lying.
-        $declaredHoldings = [];
+        // A stake in a ticker the float loop never sees locks away nothing, which is how a list starts lying. The
+        // District's strategic stakes are closely held the same way.
+        $declaredHoldings = array_keys(StrategicHoldings::STAKES);
 
         foreach (AnchorHoldings::STAKES as $stakes) {
             $declaredHoldings = [...$declaredHoldings, ...array_keys($stakes)];

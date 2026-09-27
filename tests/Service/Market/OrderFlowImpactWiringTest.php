@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\Market;
 
+use App\Data\StrategicHoldings;
 use App\DTO\MacroStateDTO;
 use App\DTO\MarketPricingContext;
 use App\Entity\Stock;
@@ -115,13 +116,12 @@ class OrderFlowImpactWiringTest extends TestCase
         $debtEngine->method('analyzeDebtHealth')->willReturn($this->debtHealth());
 
         $earnings = $this->createStub(EarningsEngine::class);
-        // A report can issue or retire stock; a test that needs one hands in what the report does to the company.
+        // A report can issue or retire stock, or pay a dividend; a test that needs one hands in what the report does to
+        // the company, and the events it raises if any.
         $earnings->method('calculate')->willReturnCallback(static function (Stock $stock) use ($onEarnings): ?array {
-            if ($onEarnings !== null) {
-                $onEarnings($stock);
-            }
+            $events = $onEarnings !== null ? $onEarnings($stock) : null;
 
-            return null;
+            return is_array($events) ? $events : null;
         });
         $earnings->method('evaluatePreAnnouncement')->willReturn([]);
 
@@ -533,5 +533,41 @@ class OrderFlowImpactWiringTest extends TestCase
         }
         $this->assertGreaterThan(0.0, $result['board_stamp_duty']);
         $this->assertEqualsWithDelta(2.0 * FinancialConstants::STAMP_DUTY_RATE * $traded, $result['board_stamp_duty'], 2.0 * FinancialConstants::STAMP_DUTY_RATE * 200.0);
+    }
+
+    public function testTheDistrictsStrategicStakeIsPaidItsShareOfEveryShareOfTheDividend(): void
+    {
+        $clearinghouse = $this->stock()->setTicker('ACC');
+        $beta = $this->secondStock();
+        $onEarnings = static fn (Stock $stock): array => [['type' => 'EARNINGS', 'ticker' => $stock->getTicker(), 'dividend_per_share' => 0.50]];
+
+        $result = $this->tracker(onEarnings: $onEarnings)->updateStocks([$clearinghouse, $beta], 1.0 / 14400.0, false, new MacroStateDTO());
+
+        // The stake is a share of shares outstanding, off the float; BETA carries none.
+        $this->assertEqualsWithDelta(0.50 * 1.0e8 * StrategicHoldings::CLEARINGHOUSE_STAKE, $result['strategic_stake_cash'], 1e-6);
+        // The board's own cash is the float's, which the stake is not part of.
+        $this->assertEqualsWithDelta(0.50 * ((1.0e8 * 0.90) + (2.0e8 * 0.50)), $result['board_dividend_cash'], 1e-6);
+        $this->assertSame(0.0, $this->tracker()->updateStocks([$this->stock()->setTicker('ACC')], 1.0 / 14400.0, false, new MacroStateDTO())['strategic_stake_cash'], 'No dividend, no cash.');
+    }
+
+    /** The District keeps its percentage by tendering into a buyback and subscribing to an issue, and is paid or pays for it. */
+    public function testTheDistrictsStakeTendersIntoABuybackAndSubscribesToAnIssue(): void
+    {
+        $retire = static function (Stock $stock): void {
+            $stock->setSharesOutstanding((string) ((float) $stock->getSharesOutstanding() * 0.99));
+        };
+        $issue = static function (Stock $stock): void {
+            $stock->setSharesOutstanding((string) ((float) $stock->getSharesOutstanding() * 1.02));
+        };
+
+        $bought = $this->stock()->setTicker('ACC');
+        $result = $this->tracker(onEarnings: $retire)->updateStocks([$bought], 1.0 / 14400.0, false, new MacroStateDTO());
+        $this->assertEqualsWithDelta(StrategicHoldings::CLEARINGHOUSE_STAKE * 0.01 * 1.0e8 * (float) $bought->getPrice(), $result['strategic_stake_cash'], 1e-3, 'Paid for its share of the shares retired.');
+
+        $issued = $this->stock()->setTicker('ACC');
+        $result = $this->tracker(onEarnings: $issue)->updateStocks([$issued], 1.0 / 14400.0, false, new MacroStateDTO());
+        $this->assertEqualsWithDelta(-StrategicHoldings::CLEARINGHOUSE_STAKE * 0.02 * 1.0e8 * (float) $issued->getPrice(), $result['strategic_stake_cash'], 1e-3, 'Pays for its share of the new shares.');
+
+        $this->assertSame(0.0, $this->tracker(onEarnings: $retire)->updateStocks([$this->stock()], 1.0 / 14400.0, false, new MacroStateDTO())['strategic_stake_cash'], 'A company the District holds no stake in pays it nothing.');
     }
 }

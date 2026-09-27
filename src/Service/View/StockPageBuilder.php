@@ -6,6 +6,7 @@ namespace App\Service\View;
 
 use App\Data\LifecycleStage;
 use App\Data\StockInfo;
+use App\Data\StrategicHoldings;
 use App\Entity\Etf;
 use App\Entity\Stock;
 use App\Entity\User;
@@ -103,6 +104,8 @@ class StockPageBuilder
             'peers' => $this->peerTable->build($stock),
             // What a permanent-capital sphere actually owns; null for every firm that owns no stakes.
             'anchorPortfolio' => $this->anchorPortfolio->build($stock),
+            // The District's own stake in this company, held off the float; zero for every company but its clearinghouse.
+            'strategicStake' => StrategicHoldings::stake($stock->getTicker()),
             'allAssets' => [],
             'pieLabels' => [],
             'pieData' => [],
@@ -182,6 +185,7 @@ class StockPageBuilder
             'financialSummary' => [],
             'peers' => [],
             'anchorPortfolio' => null,
+            'strategicStake' => 0.0,
             'advShares' => 0.0,
             'halfSpread' => FinancialConstants::ETF_HALF_SPREAD,
             'borrowFee' => 0.0,

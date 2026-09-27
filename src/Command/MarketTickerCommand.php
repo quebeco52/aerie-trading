@@ -513,6 +513,7 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
         $lastBoardDividendCash = null;
         $lastBoardNetIssuance = null;
         $lastBoardStampDuty = null;
+        $lastStrategicStakeCash = null;
 
         $wireFrame = new WireFrame();
 
@@ -540,13 +541,15 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                 $lastBoardPriceReturn,
                 $lastBoardDividendCash,
                 $lastBoardNetIssuance,
-                $lastBoardStampDuty
+                $lastBoardStampDuty,
+                $lastStrategicStakeCash
             );
             // Flows are consumed once; a tick that prices no board must not replay the last one's return.
             $lastBoardPriceReturn = null;
             $lastBoardDividendCash = null;
             $lastBoardNetIssuance = null;
             $lastBoardStampDuty = null;
+            $lastStrategicStakeCash = null;
             $simTime = $macroState->totalTime;
             $lap('macro');
 
@@ -608,6 +611,7 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                 $lastBoardDividendCash = $result['board_dividend_cash'];
                 $lastBoardNetIssuance = $result['board_net_issuance'];
                 $lastBoardStampDuty = $result['board_stamp_duty'];
+                $lastStrategicStakeCash = $result['strategic_stake_cash'];
                 $marketVol = $result['market_vol'];
                 $events = $result['events'];
 
