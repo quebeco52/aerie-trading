@@ -20,7 +20,8 @@ use Doctrine\ORM\EntityManagerInterface;
  * per-ticker Redis list of recent prices for the stock page's short-range charts, and that buffer
  * answers this question for free:
  *
- *     chart_buffer:{TICKER}   newest-first, lTrim'd to ceil(ticksPerYear / 12) entries
+ *     chart_buffer:{TICKER}   newest-first, lTrim'd to one month of entries (ChartRange::bufferLength):
+ *                             one per tick, or one per daily mark for a bond
  *
  * So the oldest entry still in the buffer is the price one simulated month ago. Reading index -1
  * rather than a fixed depth is deliberate: a buffer that has not filled yet (a freshly started

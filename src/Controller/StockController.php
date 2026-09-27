@@ -8,6 +8,7 @@ use App\Repository\StockRepository;
 use App\Service\View\StockPageBuilder;
 use App\Entity\Etf;
 use App\Entity\User;
+use App\Service\Market\ChartRange;
 use App\Service\Market\PriceBarAggregator;
 use Doctrine\ORM\EntityManagerInterface;
 use Redis;
@@ -58,44 +59,38 @@ class StockController extends AbstractController
     public function history(Request $request, EntityManagerInterface $entityManager, \Redis $redis, PriceBarAggregator $barAggregator): JsonResponse
     {
         $ticker = $request->query->get('ticker');
-        $range = $request->query->get('range', '1y');
+        $range = (string) $request->query->get('range', ChartRange::DEFAULT_RANGE);
 
         if (!$ticker) return $this->json([]);
 
         // The line and the candle rendering of a range do not share a bar grid: a candle has a legible
         // minimum width, a line does not, and the finer grid is what keeps the live tail moving rather
         // than lurching a whole bar at a time. The chart asks for the one it is about to draw.
-        $targetBars = $request->query->get('style') === 'line'
-            ? PriceBarAggregator::LINE_TARGET_BARS
-            : PriceBarAggregator::TARGET_BARS;
+        $isLine = $request->query->get('style') === 'line';
+        $targetBars = $isLine ? PriceBarAggregator::LINE_TARGET_BARS : PriceBarAggregator::TARGET_BARS;
+        $minRowsPerBar = $isLine ? PriceBarAggregator::LINE_MIN_ROWS_PER_BAR : PriceBarAggregator::MIN_ROWS_PER_BAR;
 
         $ticksPerYear = (int) ($_ENV['SIM_TICKS_PER_YEAR'] ?? 14400);
-        $ticksPerMonth = (int) ceil($ticksPerYear / 12);
-        $ticksPerWeek = (int) ceil($ticksPerYear / 52);
 
-        // Redis cache for short timeframes
-        if (in_array($range, ['1w', '1m'])) {
-            $limit = $range === '1w' ? $ticksPerWeek : $ticksPerMonth;
+        // Redis cache for short timeframes, counted in the buffer's own entries: a bond pushes its day's mark
+        // and nothing between, everything else pushes every tick.
+        if (ChartRange::isBuffered($range)) {
+            $isBond = $entityManager->getRepository(\App\Entity\Bond::class)->count(['ticker' => $ticker]) > 0;
+            $entriesPerYear = $isBond
+                ? \App\Command\MarketTickerCommand::bondMarksPerYear($ticksPerYear)
+                : $ticksPerYear;
+
             $cacheKey = "chart_buffer:{$ticker}";
-            $redisData = $redis->lRange($cacheKey, 0, $limit - 1);
+            $redisData = $redis->lRange($cacheKey, 0, ChartRange::entries($range, $entriesPerYear) - 1);
             $results = [];
             foreach ($redisData as $jsonStr) {
                 $results[] = json_decode($jsonStr, true);
             }
 
             // Buffered points are single ticks, so the bar has to be built here or every candle is a doji.
-            return $this->json($barAggregator->aggregate($results, count($results), $targetBars));
+            return $this->json($barAggregator->aggregate($results, count($results), $targetBars, $minRowsPerBar));
         }
 
-        // Derive row limit for simulated timeframe based on configured history sampling rate.
-        $pointsPerYear = \App\Command\MarketTickerCommand::historyPointsPerYear($ticksPerYear);
-        $rangeYears = ['3m' => 0.25, '6m' => 0.5, '1y' => 1.0, '3y' => 3.0, '5y' => 5.0, '10y' => 10.0];
-
-        $limit = $range === 'max'
-            ? 999999
-            : (int) ceil(($rangeYears[$range] ?? 1.0) * $pointsPerYear);
-
-        $dbLimit = min($limit, 500000);
         $conn = $entityManager->getConnection();
 
         // Fetch the target asset ID
@@ -125,14 +120,32 @@ class StockController extends AbstractController
             }
         }
 
+        // The range is a span of the series' own simulated time, not a row count: stock and fund history is
+        // written once a bar and bond history once a mark, so no single rows-per-year is right for all three.
+        $newestSimTime = $conn->fetchOne(
+            sprintf('SELECT MAX(sim_time) FROM %s WHERE %s = :id', $tableName, $foreignKey),
+            ['id' => $targetId]
+        );
+        $simTimeFloor = ChartRange::simTimeFloor(
+            $range,
+            $newestSimTime === null || $newestSimTime === false ? null : (float) $newestSimTime
+        );
+
+        $where = sprintf('%s = :id', $foreignKey);
+        $params = ['id' => $targetId];
+        if ($simTimeFloor !== null) {
+            $where .= ' AND sim_time >= :floor';
+            $params['floor'] = $simTimeFloor;
+        }
+
         // Row count sets the bucket width the aggregator folds into bars.
         $countSql = sprintf(
-            'SELECT COUNT(id) FROM (SELECT id FROM %s WHERE %s = :id ORDER BY sim_time DESC, id DESC LIMIT %d) as sub',
+            'SELECT COUNT(id) FROM (SELECT id FROM %s WHERE %s ORDER BY sim_time DESC, id DESC LIMIT %d) as sub',
             $tableName,
-            $foreignKey,
-            (int)$dbLimit
+            $where,
+            ChartRange::MAX_ROWS
         );
-        $actualCount = (int) $conn->fetchOne($countSql, ['id' => $targetId]);
+        $actualCount = (int) $conn->fetchOne($countSql, $params);
 
         if ($actualCount === 0) return $this->json([]);
 
@@ -144,18 +157,18 @@ class StockController extends AbstractController
 
         $sql = sprintf(
             // Order by sim_time and id descending using the sim_time index to preserve intra-tick candle order.
-            'SELECT id, %s AS price%s, recorded_at FROM %s WHERE %s = :id ORDER BY sim_time DESC, id DESC LIMIT %d',
+            'SELECT id, %s AS price%s, recorded_at FROM %s WHERE %s ORDER BY sim_time DESC, id DESC LIMIT %d',
             $priceColumn,
             $barColumns,
             $tableName,
-            $foreignKey,
-            (int)$dbLimit
+            $where,
+            ChartRange::MAX_ROWS
         );
 
-        $stmt = $conn->executeQuery($sql, ['id' => $targetId]);
+        $stmt = $conn->executeQuery($sql, $params);
 
         // Aggregate rows into candles via bucketed bar aggregation to preserve price extremes.
-        return $this->json($barAggregator->aggregate($stmt->iterateAssociative(), $actualCount, $targetBars));
+        return $this->json($barAggregator->aggregate($stmt->iterateAssociative(), $actualCount, $targetBars, $minRowsPerBar));
     }
 
     /**

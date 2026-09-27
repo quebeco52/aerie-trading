@@ -63,26 +63,28 @@ class PriceBarAggregatorTest extends TestCase
     }
 
     /**
-     * The tick rate this project actually runs at writes rows spanning one or two ticks, which is a bar
-     * with no usable range of its own. If this ever fails the candle chart is back to drawing dojis.
+     * At any tick rate up to the sampling target a stored row spans one tick, which is a bar with no usable
+     * range of its own; so is every Redis buffer entry and every fund and bond row at any rate. If this ever
+     * fails the candle chart is back to drawing dojis.
      */
-    public function testTheConfiguredTickRateWritesSingleTickRowsWithNoRangeOfTheirOwn(): void
+    public function testATickRateAtTheTargetWritesSingleTickRowsWithNoRangeOfTheirOwn(): void
     {
-        $ticksPerYear = 3600;
-        $singleTickRows = 0;
+        foreach ([720, MarketTickerCommand::TARGET_HISTORY_POINTS_PER_YEAR] as $ticksPerYear) {
+            $singleTickRows = 0;
 
-        for ($tick = 2; $tick <= 1000; $tick++) {
-            if (MarketTickerCommand::isHistoryTick($tick, $ticksPerYear)
-                && MarketTickerCommand::isHistoryTick($tick - 1, $ticksPerYear)) {
-                $singleTickRows++;
+            for ($tick = 2; $tick <= 1000; $tick++) {
+                if (MarketTickerCommand::isHistoryTick($tick, $ticksPerYear)
+                    && MarketTickerCommand::isHistoryTick($tick - 1, $ticksPerYear)) {
+                    $singleTickRows++;
+                }
             }
-        }
 
-        self::assertGreaterThan(
-            0,
-            $singleTickRows,
-            'A stored row can span a single tick and cannot carry a range, so the bar has to be built on read.'
-        );
+            self::assertGreaterThan(
+                0,
+                $singleTickRows,
+                "At {$ticksPerYear} ticks/year a stored row spans a single tick and cannot carry a range, so the bar has to be built on read."
+            );
+        }
     }
 
     public function testSingleObservationRowsStillProduceBarsWithARange(): void
@@ -232,7 +234,7 @@ class PriceBarAggregatorTest extends TestCase
             $rows = $this->rows($this->sawtooth($rowsPerYear * $years));
 
             $candleBars = count($this->aggregator->aggregate($rows, $rowsPerYear * $years, PriceBarAggregator::TARGET_BARS));
-            $lineBars = count($this->aggregator->aggregate($rows, $rowsPerYear * $years, PriceBarAggregator::LINE_TARGET_BARS));
+            $lineBars = count($this->aggregator->aggregate($rows, $rowsPerYear * $years, PriceBarAggregator::LINE_TARGET_BARS, PriceBarAggregator::LINE_MIN_ROWS_PER_BAR));
 
             $candleDwell = ($ticksPerYear * $years) / $candleBars;
             $lineDwell = ($ticksPerYear * $years) / $lineBars;
@@ -256,20 +258,56 @@ class PriceBarAggregatorTest extends TestCase
      */
     public function testTheLineGridNeverServesASlotNarrowerThanATick(): void
     {
+        foreach ([252, 720, MarketTickerCommand::TARGET_HISTORY_POINTS_PER_YEAR, 3600, 14400] as $ticksPerYear) {
+            $rowsPerYear = MarketTickerCommand::historyPointsPerYear($ticksPerYear);
+
+            $bars = $this->aggregator->aggregate(
+                $this->rows($this->sawtooth($rowsPerYear)),
+                $rowsPerYear,
+                PriceBarAggregator::LINE_TARGET_BARS,
+                PriceBarAggregator::LINE_MIN_ROWS_PER_BAR
+            );
+
+            self::assertLessThanOrEqual(
+                $ticksPerYear,
+                count($bars),
+                "More slots than ticks at {$ticksPerYear} ticks/year would leave the grid finer than the clock that advances it."
+            );
+        }
+    }
+
+    /**
+     * Coarser history must not coarsen the live tail.
+     *
+     * The chart steps one slot at a time, so a line served two rows a slot at 1,200 rows a year would dwell six
+     * ticks where it dwelt three at 2,400. A close needs no range of its own, so a line is served one row a
+     * slot up to its target, and the short ranges keep the three-tick step they had.
+     */
+    public function testALineIsServedOneRowPerSlotUpToItsTarget(): void
+    {
         $ticksPerYear = 3600;
         $rowsPerYear = MarketTickerCommand::historyPointsPerYear($ticksPerYear);
 
-        $bars = $this->aggregator->aggregate(
-            $this->rows($this->sawtooth($rowsPerYear)),
-            $rowsPerYear,
-            PriceBarAggregator::LINE_TARGET_BARS
-        );
+        foreach (['3m' => 0.25, '1y' => 1.0] as $range => $years) {
+            $rowCount = (int) round($rowsPerYear * $years);
+            $bars = count($this->aggregator->aggregate(
+                $this->rows($this->sawtooth($rowCount)),
+                $rowCount,
+                PriceBarAggregator::LINE_TARGET_BARS,
+                PriceBarAggregator::LINE_MIN_ROWS_PER_BAR
+            ));
 
-        self::assertLessThanOrEqual(
-            $ticksPerYear,
-            count($bars),
-            'More slots than ticks would leave the grid finer than the clock that advances it.'
-        );
+            self::assertSame($rowCount, $bars, "The {$range} line merged rows it had room to draw.");
+            self::assertLessThanOrEqual(3.0, $ticksPerYear * $years / $bars, "The {$range} line dwells longer than it did at 2,400 rows a year.");
+        }
+    }
+
+    /** A candle still takes at least two rows: one observation has no range, and drawing it would be a doji. */
+    public function testACandleStillTakesAtLeastTwoRows(): void
+    {
+        $bars = $this->aggregator->aggregate($this->rows($this->sawtooth(300)), 300, PriceBarAggregator::TARGET_BARS);
+
+        self::assertCount(150, $bars);
     }
 
     public function testAnEmptySeriesProducesNoBars(): void

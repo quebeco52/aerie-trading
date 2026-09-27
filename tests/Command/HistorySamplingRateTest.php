@@ -102,23 +102,27 @@ final class HistorySamplingRateTest extends TestCase
         }
     }
 
-    /** And the controller derives its range limits rather than carrying tick counts of its own. */
-    public function testHistoryEndpointDoesNotHardcodeTickCounts(): void
+    /**
+     * And the controller selects stored ranges as spans of simulated time rather than as row counts.
+     *
+     * A row count is right for one table at one rate: bond history is written once a mark, not once a bar,
+     * and counting its rows at the bar rate drew nine and a half years under "1Y". See ChartRangeTest.
+     */
+    public function testHistoryEndpointDoesNotHardcodeRowCounts(): void
     {
         $source = file_get_contents(\dirname(__DIR__, 2) . '/src/Controller/StockController.php');
         $this->assertIsString($source);
 
         $this->assertStringContainsString(
-            'MarketTickerCommand::historyPointsPerYear',
+            'ChartRange::simTimeFloor',
             $source,
-            'Range limits must be derived from the sampling rate, not hardcoded.'
+            'Stored ranges must be selected by simulated time, not by a row count.'
         );
         // A bare integer against a range name is a row count; a fraction is a span of years.
         $this->assertDoesNotMatchRegularExpression(
-            "/'(?:3m|6m|1y|3y|5y|10y)'\s*=>\s*\d+\s*[,\]]/",
+            "/'(?:1w|1m|3m|6m|1y|3y|5y|10y)'\s*=>\s*\d+\s*[,\]]/",
             $source,
             'A hardcoded row count for a named range pins the chart to one tick rate.'
         );
-        $this->assertStringContainsString("'3m' => 0.25", $source, 'Ranges are declared as spans of years.');
     }
 }

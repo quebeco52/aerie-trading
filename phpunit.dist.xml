@@ -89,6 +89,8 @@
             <file>tests/Service/Market/AuthorizedParticipantTest.php</file>
             <file>tests/Service/View/CompanySnapshotNavTest.php</file>
             <file>tests/Service/View/AnchorPortfolioBuilderTest.php</file>
+            <file>tests/Service/Market/ChartRangeTest.php</file>
+            <file>tests/Command/ChartBufferWritesTest.php</file>
             <directory>tests/Support</directory>
         </testsuite>
 

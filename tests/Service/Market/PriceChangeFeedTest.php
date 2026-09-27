@@ -214,14 +214,14 @@ class PriceChangeFeedTest extends TestCase
 
     public function testOneLookbackIsOneMonthOfHistoryRowsAtTheConfiguredRate(): void
     {
-        // A month of BARS, not of ticks. At 3,600 ticks a year the board writes 2,400 rows — the sampling
-        // target, which is coarser than the tick rate — so a month on file is two hundred of them. Reading
+        // A month of BARS, not of ticks. At 3,600 ticks a year the board writes 1,200 rows — the sampling
+        // target, which is coarser than the tick rate — so a month on file is a hundred of them. Reading
         // a row count off the tick rate instead asks for three hundred and silently walks past the window.
         $this->assertSame(
             (int) ceil(MarketTickerCommand::historyPointsPerYear(self::TICKS_PER_YEAR) * PriceChangeFeed::LOOKBACK_YEARS),
             $this->feed->historyRowsPerLookback()
         );
-        $this->assertSame(200, $this->feed->historyRowsPerLookback());
+        $this->assertSame(100, $this->feed->historyRowsPerLookback());
     }
 
     public function testAColdBufferFallsBackToTheOldestPersistedCloseInTheLookback(): void

@@ -36,6 +36,9 @@ class PriceBarAggregator
     /** Rows per bar floor: a bar built from one observation is a doji by construction and says nothing the line does not. */
     public const MIN_ROWS_PER_BAR = 2;
 
+    /** Rows per slot floor for a LINE: a close needs no range of its own, and a row is never finer than the tick that advances the live tail. */
+    public const LINE_MIN_ROWS_PER_BAR = 1;
+
     /**
      * Folds a newest-first row stream into oldest-first OHLCV bars.
      *
@@ -45,13 +48,14 @@ class PriceBarAggregator
      * @param iterable<array<string, mixed>> $newestFirstRows Rows carrying at least a 'price'.
      * @param int                            $rowCount        Rows the stream will yield; sets the bucket width.
      * @param int                            $targetBars      Bars to aim for across the range.
+     * @param int                            $minRowsPerBar   Rows a bar spans at least: MIN_ROWS_PER_BAR for candles, LINE_MIN_ROWS_PER_BAR for a line.
      *
      * @return list<array<string, mixed>> Oldest-first bars keyed as the history rows they replace.
      */
-    public function aggregate(iterable $newestFirstRows, int $rowCount, int $targetBars = self::TARGET_BARS): array
+    public function aggregate(iterable $newestFirstRows, int $rowCount, int $targetBars = self::TARGET_BARS, int $minRowsPerBar = self::MIN_ROWS_PER_BAR): array
     {
         $bucketWidth = max(
-            self::MIN_ROWS_PER_BAR,
+            max(1, $minRowsPerBar),
             (int) ceil($rowCount / max(1, $targetBars))
         );
 

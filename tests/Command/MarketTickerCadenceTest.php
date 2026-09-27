@@ -18,7 +18,8 @@ class MarketTickerCadenceTest extends TestCase
     {
         $ticksPerYear = 14400;
 
-        $this->assertSame(10, MarketTickerCommand::reloadIntervalBars($ticksPerYear));
+        // 1,200 bars a year over 252 trading days: a reload every fifth bar.
+        $this->assertSame(5, MarketTickerCommand::reloadIntervalBars($ticksPerYear));
         $this->assertEqualsWithDelta(
             MarketTickerCommand::WORKING_SET_RELOADS_PER_YEAR,
             self::reloadsPerYear($ticksPerYear),
@@ -71,8 +72,8 @@ class MarketTickerCadenceTest extends TestCase
         $ticksPerYear = 14400;
         $bars = MarketTickerCommand::bondMarkIntervalBars($ticksPerYear);
 
-        // Ten equity bars to one mark: the ladder is revalued, written and sampled a tenth as often as the board.
-        $this->assertSame(10, $bars);
+        // Five equity bars to one mark: the ladder is revalued, written and sampled a fifth as often as the board.
+        $this->assertSame(5, $bars);
 
         $rows = 0;
         for ($tick = 1; $tick <= $ticksPerYear; $tick++) {

@@ -189,8 +189,9 @@ export async function loadPriceHistory(range) {
         const anchorTime = Math.floor(Date.now() / 1000);
 
         // A slot shorter than a tick cannot be advanced one tick at a time: the live clock would outrun the
-        // grid and the tail would fall further behind the price on every point. The row floor the aggregator
-        // applies keeps the served grid well clear of it, so this only ever binds on a misconfigured rate.
+        // grid and the tail would fall further behind the price on every point. A buffered line is served one
+        // tick per slot, and a week over its whole number of ticks comes out a little under one; this puts the
+        // slot back on the tick.
         currentStepSize = Math.max(
             secondsPerTick,
             Math.floor((rangeSpans[range] || 31536000) / data.length)

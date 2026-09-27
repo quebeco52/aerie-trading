@@ -6,6 +6,7 @@ use App\Entity\Bond;
 use App\Entity\Stock;
 use App\Service\Market\BondTracker;
 use App\Service\Market\StockTracker;
+use App\Service\Market\ChartRange;
 use App\Service\Market\CorporateBondDesk;
 use App\Service\Market\IndexCommittee;
 use App\Service\Market\Index\MarketIndex;
@@ -53,8 +54,8 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
     public const RECONSTITUTION_TICKERS_SHOWN = 8;
 
     // --- History Sampling ---
-    /** Target price history rows written per simulated year; the actual rate is this or one row per tick, whichever is coarser. */
-    public const TARGET_HISTORY_POINTS_PER_YEAR = 2400;
+    /** Target history bars per simulated year (~4.8 a trading day), each paying the flush, the tick-column write and a history row; the actual rate is this or one per tick, whichever is coarser. */
+    public const TARGET_HISTORY_POINTS_PER_YEAR = 1200;
 
     // --- Working Set ---
     /** Times per simulated year the identity map is cleared and the working set re-read from the database: once a trading day. */
@@ -69,7 +70,7 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
      * simulated year for a series recorded 252 times; a profile put the ladder at 24% of the ticker. Every
      * mark is also the day's bond_history row, so a row always carries the mark struck on its own tick.
      * Between marks an issue quotes its last mark; one that pays a coupon or is newly issued is struck at once
-     * (see BondTracker). The short-range chart still reads the Redis buffer, which takes every tick.
+     * (see BondTracker). The Redis chart buffer takes the mark too, and nothing between: see bondMarksPerYear().
      */
     public const BOND_MARKS_PER_YEAR = 252;
 
@@ -109,6 +110,41 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
     public static function bondMarkIntervalBars(int $ticksPerYear): int
     {
         return self::intervalBars($ticksPerYear, self::BOND_MARKS_PER_YEAR);
+    }
+
+    /**
+     * Marks the bond ladder actually receives per simulated year, which is also the rate its chart buffer fills.
+     *
+     * BOND_MARKS_PER_YEAR is the target; the mark rides the bar grid in whole bars, so the realised rate is
+     * the bar rate over that interval (240 at 1,200 bars). The short chart ranges count buffer entries at
+     * this rate, and a bond's buffer is trimmed at it.
+     */
+    public static function bondMarksPerYear(int $ticksPerYear): float
+    {
+        return self::historyPointsPerYear($ticksPerYear) / self::bondMarkIntervalBars($ticksPerYear);
+    }
+
+    /**
+     * The chart buffers one tick writes: which quotes, the length each list is trimmed to, and whether it trims.
+     *
+     * Stocks and funds buffer every tick and are trimmed once a bar. A bond buffers its day's mark and nothing
+     * between, because its clean price moves on nothing else: pushing the same number every tick was three
+     * quarters of the buffer pipeline. Each list keeps the month the short ranges read, counted in its own
+     * entries (see ChartRange).
+     *
+     * @param array<int, array<string, mixed>> $equityUpdates Stock and fund quotes.
+     * @param array<int, array<string, mixed>> $bondUpdates
+     * @return list<array{0: array<int, array<string, mixed>>, 1: int, 2: bool}>
+     */
+    public static function chartBufferWrites(array $equityUpdates, array $bondUpdates, int $tickCount, int $ticksPerYear): array
+    {
+        $writes = [[$equityUpdates, ChartRange::bufferLength($ticksPerYear), self::isHistoryTick($tickCount, $ticksPerYear)]];
+
+        if (self::isBondMarkTick($tickCount, $ticksPerYear)) {
+            $writes[] = [$bondUpdates, ChartRange::bufferLength(self::bondMarksPerYear($ticksPerYear)), true];
+        }
+
+        return $writes;
     }
 
     /** History bars between events that should happen a given number of times a simulated year. */
@@ -185,8 +221,8 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
      *
      * THE BAR GRID IS RATIONAL, NOT A WHOLE NUMBER OF TICKS. Spacing bars by dividing the tick rate by the
      * target and truncating only lands on the target when one divides the other, and truncation is biased
-     * toward writing too many at every rate where it does not: 7,000 ticks a year wants a bar every 2.9
-     * ticks and gets one every 2, which is 3,500 rows against a target of 2,400. At 3,600 the quotient is
+     * toward writing too many at every rate where it does not: against the then target of 2,400, 7,000 ticks
+     * a year wanted a bar every 2.9 ticks and got one every 2, which is 3,500 rows. At 3,600 the quotient was
      * 1.5, truncation reached the floor of 1, and a bar closed on EVERY tick — with the flush, the bond
      * mark, the tick-column write and the working-set reload all riding a flag that is never meant to be
      * true every tick. The tick rate is a resolution knob and nothing more; it must not decide which jobs
@@ -973,36 +1009,39 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                 }
 
                 $nowStr = (new \DateTime())->format('Y-m-d H:i:s');
-                $redisBufferSize = (int) ceil($this->ticksPerYear / 12);
+
+                // A bond buffers its day's mark and nothing between: see chartBufferWrites().
+                $buffers = self::chartBufferWrites(array_merge($stockUpdates, $etfUpdates), $bondResult['updates'], $tickCount, $this->ticksPerYear);
 
                 $pipeline = $this->redis->multi(\Redis::PIPELINE);
 
-                foreach ($allUpdates as $update) {
-                    if (!empty($update['is_bankrupt'])) {
-                        continue; // Keep chart buffer frozen in place
-                    }
+                foreach ($buffers as [$bufferedUpdates, $redisBufferSize, $trim]) {
+                    foreach ($bufferedUpdates as $update) {
+                        if (!empty($update['is_bankrupt'])) {
+                            continue; // Keep chart buffer frozen in place
+                        }
 
-                    $cacheKey = "chart_buffer:{$update['ticker']}";
+                        $cacheKey = "chart_buffer:{$update['ticker']}";
 
-                    // Bonds buffer the CLEAN price, because that is what bond_history stores. Buffering the
-                    // dirty price instead would splice an accrual sawtooth onto a flat historical series at
-                    // the join between the two, and the chart would show a jump the instrument never made.
-                    $chartPrice = $update['clean_price'] ?? $update['price'];
+                        // Bonds buffer the CLEAN price, because that is what bond_history stores. Buffering the
+                        // dirty price instead would splice an accrual sawtooth onto a flat historical series at
+                        // the join between the two, and the chart would show a jump the instrument never made.
+                        $chartPrice = $update['clean_price'] ?? $update['price'];
 
-                    // Volume rides along so the short ranges can draw the same bar the history table does.
-                    // ETFs and bonds have no share volume; the key stays absent rather than zero, which is
-                    // what tells the chart to draw no histogram at all instead of an empty one.
-                    $point = ['price' => $chartPrice, 'recorded_at' => $nowStr];
-                    if (isset($update['volume'])) {
-                        $point['volume'] = $update['volume'];
-                    }
-                    $point = json_encode($point);
+                        // Volume rides along so the short ranges can draw the same bar the history table does.
+                        // ETFs and bonds have no share volume; the key stays absent rather than zero, which is
+                        // what tells the chart to draw no histogram at all instead of an empty one.
+                        $point = ['price' => $chartPrice, 'recorded_at' => $nowStr];
+                        if (isset($update['volume'])) {
+                            $point['volume'] = $update['volume'];
+                        }
+                        $point = json_encode($point);
 
-                    $pipeline->lPush($cacheKey, $point);
+                        $pipeline->lPush($cacheKey, $point);
 
-                    // Trim buffer once per history bar to cap list size efficiently.
-                    if ($isHistoryTick) {
-                        $pipeline->lTrim($cacheKey, 0, $redisBufferSize - 1);
+                        if ($trim) {
+                            $pipeline->lTrim($cacheKey, 0, $redisBufferSize - 1);
+                        }
                     }
                 }
 
