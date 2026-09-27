@@ -364,6 +364,11 @@
 					source: 'Singapore Net Investment Returns framework (2008)'
 				},
 				{
+					name: 'Budget rule',
+					text: 'The budget spends what the fund pays: the structural deficit is the draw, so a fund that grows faster than the economy widens spending with it rather than piling up surpluses. The District keeps at least ' ~ (mandate.debtFloor * 100)|number_format(0) ~ '% of GDP in gross debt outstanding for its benchmark curve, and a surplus that would take debt below that buys bonds for the fund instead.',
+					source: 'Norway\'s fiscal rule (2001); Singapore\'s budget surpluses accrue to its reserves'
+				},
+				{
 					name: 'Opening size',
 					text: 'Sized when it opened so its first draw covered the ' ~ (mandate.structuralDeficit * 100)|number_format(1) ~ '% of GDP structural deficit, holding ' ~ (mandate.openingOwnership * 100)|number_format(1) ~ '% of the board\'s float.',
 					source: 'Opening stake: GPIF\'s share of the Japanese market (2016)'

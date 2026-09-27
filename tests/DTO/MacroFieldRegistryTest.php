@@ -68,6 +68,7 @@ class MacroFieldRegistryTest extends TestCase
         'sovereignFundStampDutyYearToDate' => 'Currency accumulator for the budget year; sovereign_fund_stamp_duty_to_gdp records the year.',
         'boardStampDuty' => 'One tick of stamp duty; sovereign_fund_stamp_duty_to_gdp records the year.',
         'strategicStakeCash' => 'One tick of cash from the District\'s strategic stakes, credited to the fund at once.',
+        'sovereignFundBudgetInflow' => 'One tick of the budget surplus below the debt floor, credited to the fund on the next tick; sovereign_fund_to_gdp records the fund.',
         'sovereignFundValueAtClose' => 'Currency amount that compounds forever; sovereign_fund_return_index records its performance.',
         'sovereignFundBondsToGdp' => 'The difference between sovereign_debt_to_gdp and sovereign_net_debt_to_gdp, both recorded.',
         'sovereignNetDebtToGdpEma' => 'Smoothing of sovereign_net_debt_to_gdp, which is recorded.',

@@ -436,6 +436,27 @@ class SovereignFundSubsystemTest extends TestCase
         $this->assertSame($ownership, $state->sovereignFundOwnershipShare);
     }
 
+    /** A budget surplus the debt floor leaves nothing to retire lands in the paper sleeve once, and is not performance. */
+    public function testABudgetSurplusIsPaidIntoThePaperOnceAndIsNotPerformance(): void
+    {
+        $tpy = 720;
+        $dt = 1.0 / $tpy;
+        $fund = new SovereignFundSubsystem($this->stillMarket());
+        $state = $this->openFund($fund, $tpy);
+        $state->sovereignFundAnnualDraw = 0.0;
+
+        $before = $fund->foreignHomeValue($state);
+        $equity = $state->sovereignFundForeignEquity;
+        $state->sovereignFundBudgetInflow = 3.0e8;
+        $this->step($fund, $state, $dt);
+        $this->step($fund, $state, $dt);
+
+        $this->assertEqualsWithDelta(3.0e8, $fund->foreignHomeValue($state) - $before, 1e-3, 'Paid in once, not every tick.');
+        $this->assertSame($equity, $state->sovereignFundForeignEquity, 'Cash parks in the paper.');
+        $this->assertSame(0.0, $state->sovereignFundBudgetInflow);
+        $this->assertEqualsWithDelta(SovereignFundSubsystem::RETURN_INDEX_BASE, $state->sovereignFundReturnIndex, 1e-9);
+    }
+
     public function testTheDomesticSleeveEarnsTheBoardsPriceReturn(): void
     {
         $fund = new SovereignFundSubsystem($this->stillMarket());

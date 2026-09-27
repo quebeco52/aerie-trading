@@ -380,6 +380,9 @@ class MacroState
     // Cash the District's strategic stakes (App\Data\StrategicHoldings) paid it on the previous tick, a flow like the
     // board's: dividends, plus its share of buybacks less its share of issues. Held outside the fund, paid into it.
     public float $strategicStakeCash;
+    // Currency the budget paid into the fund on the last tick: the surplus below the sovereign debt floor, with no debt
+    // left to retire. Set by the fiscal accounts after the fund's update, so the fund takes it in on the next tick.
+    public float $sovereignFundBudgetInflow;
 
     public function __construct()
     {

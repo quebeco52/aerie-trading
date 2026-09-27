@@ -27,9 +27,10 @@ use App\Service\Math\MathUtility;
  * band; that is how a fixed-weight rebalancer behaves in the record (GPFG in 2008-09 and 2020).
  *
  * It holds the float as an index holder does: it tenders its share into buybacks and takes up its share of issues, so
- * a company's own flow never moves its ownership. Its two inflows are the District's stamp duty on share trading, paid
- * to the fund rather than the budget, and the cash from the District's strategic stakes (App\Data\StrategicHoldings),
- * which the fund does not hold but is paid. Its performance is a time-weighted return index, nominal and real, that
+ * a company's own flow never moves its ownership. Its inflows are the District's stamp duty on share trading, paid
+ * to the fund rather than the budget, the cash from the District's strategic stakes (App\Data\StrategicHoldings),
+ * which the fund does not hold but is paid, and any budget surplus the sovereign debt floor leaves no debt to retire.
+ * The budget spends the draw (CreditFiscalSubsystem::calculateSovereignDebt), so that last one is rare. Its performance is a time-weighted return index, nominal and real, that
  * none of that money moves. The fund incepts on the first tick that carries a board and books no
  * trade doing so: a structural holder opens at its holding. A run with no market (the simulate command, the macro
  * harnesses, unit tests) never has a fund.
@@ -311,6 +312,11 @@ class SovereignFundSubsystem
         // The District's strategic stakes sit outside the fund, but their cash is paid into it (and a subscription to an
         // issue paid out of it), as the dividends on Norway's 67% of Equinor reach the GPFG.
         $state->sovereignFundForeignBonds += $state->strategicStakeCash * $state->exchangeRateIndex;
+
+        // A budget surplus with no debt left to retire above the floor is paid in, as Singapore's surpluses accrue to
+        // its reserves. Taken in once: the fiscal accounts strike the next one after this update.
+        $state->sovereignFundForeignBonds += $state->sovereignFundBudgetInflow * $state->exchangeRateIndex;
+        $state->sovereignFundBudgetInflow = 0.0;
     }
 
     /** Publishes the budget year's stamp duty over GDP and starts the next year's count. */

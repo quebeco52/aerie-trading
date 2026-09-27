@@ -130,6 +130,7 @@ class SovereignReservePageBuilder
                 'executionMonths' => SovereignFundSubsystem::REBALANCE_EXECUTION_MONTHS,
                 'stampDutyRate' => FinancialConstants::STAMP_DUTY_RATE,
                 'structuralDeficit' => MacroEngine::SOVEREIGN_STRUCTURAL_DEFICIT,
+                'debtFloor' => MacroEngine::SOVEREIGN_DEBT_FLOOR,
                 'marketCapToGdp' => SovereignFundSubsystem::MARKET_CAP_TO_GDP,
                 'clearinghouseStake' => StrategicHoldings::CLEARINGHOUSE_STAKE,
             ],

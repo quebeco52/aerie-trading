@@ -24,8 +24,10 @@ class CreditFiscalSubsystem
     public const INTERBANK_JUMP_VOL = 0.50;
 
     // --- Sovereign Debt Dynamics (Greenwood-Vayanos 2014) ---
-    /** Bohn (1998, 2008) fiscal reaction: primary surplus response per unit of debt above the neutral threshold (~0.10, the upper end of advanced-economy estimates), which stabilizes debt near 90% against a 2% structural deficit. */
+    /** Bohn (1998, 2008) fiscal reaction: primary surplus response per unit of debt above the neutral threshold (~0.10, the upper end of advanced-economy estimates), which stabilizes debt near 90% against a 2% structural deficit, and just above the 70% threshold once a sovereign fund's draw pays that deficit. */
     public const BOHN_FISCAL_REACTION_SENSITIVITY = 0.10;
+    /** Runaway guard on gross debt, about Japan's postwar peak (~2.6x GDP, IMF WEO 2020); the Bohn reaction holds debt far below it. */
+    public const SOVEREIGN_DEBT_CEILING = 2.50;
 
     // --- Sovereign Risk Premium (Laubach 2009) ---
     /** Debt-to-GDP above which the market prices fiscal risk (Reinhart & Rogoff 2010's 90% line). Deliberately above the 70% the Bohn reaction defends: the engine's own steady state runs 85-90%, and a premium charged for that normal state was measured to lift IG 30 bps and 2s10s 45 bps everywhere. */
@@ -383,8 +385,16 @@ class CreditFiscalSubsystem
      *
      * Accumulates sovereign debt-to-GDP ratio from primary deficit flow, net interest expenses,
      * and nominal GDP growth erosion:
-     *   d(Debt/GDP) = [ (G - T - NIRC)/GDP + (r_10y - g_nominal) * (Debt/GDP) ] * dt
-     * where NIRC is the sovereign fund's draw on its expected returns, revenue like a tax.
+     *   d(Debt/GDP) = [ (G - T + S - NIRC)/GDP + (r_10y - g_nominal) * (Debt/GDP) ] * dt
+     * where S is the structural deficit and NIRC the sovereign fund's draw on its expected returns, revenue like a tax.
+     *
+     * With a fund the budget spends the draw: S is the draw itself, as Norway's fiscal rule sets the structural non-oil
+     * deficit at the fund's expected real return. The draw is sized to the fund and the fund compounds with its markets,
+     * so a fixed S would turn a fund that outgrows the economy into a standing surplus with nothing left to retire.
+     *
+     * Gross debt has a floor, the stock the benchmark curve is kept on. A surplus that would take debt below it buys
+     * assets instead: it is paid into the fund (sovereignFundBudgetInflow, credited on the fund's next tick), as
+     * Singapore's budget surpluses accrue to its reserves. With no fund there is nothing to buy and the floor holds.
      *
      * @param MacroState $state Current macroeconomic state.
      * @param float      $dt    Time increment in years.
@@ -399,10 +409,13 @@ class CreditFiscalSubsystem
         $excessDebt = max(0.0, $state->sovereignDebtToGdp - MacroEngine::SOVEREIGN_DEBT_NEUTRAL_THRESHOLD);
         $bohnFiscalAdjustment = self::BOHN_FISCAL_REACTION_SENSITIVITY * $excessDebt * $state->nominalGdpIndex;
 
-        // Singapore's Net Investment Returns Contribution: the sovereign fund's draw is budget revenue (zero with no fund).
+        // Singapore's Net Investment Returns Contribution: the sovereign fund's draw is budget revenue (zero with no fund),
+        // and with a fund the structural deficit is that draw, spent. The fund's currency bridge is set only at inception.
+        $funded = $state->sovereignFundDollarsPerGdp > 0.0;
         $fundContribution = $state->sovereignFundDrawToGdp * $state->nominalGdpIndex;
+        $structuralDeficitToGdp = $funded ? $state->sovereignFundDrawToGdp : MacroEngine::SOVEREIGN_STRUCTURAL_DEFICIT;
 
-        $primaryDeficit = ($govtSpendingFlow - $taxRevenue) + (MacroEngine::SOVEREIGN_STRUCTURAL_DEFICIT * $state->nominalGdpIndex) - $bohnFiscalAdjustment - $fundContribution;
+        $primaryDeficit = ($govtSpendingFlow - $taxRevenue) + ($structuralDeficitToGdp * $state->nominalGdpIndex) - $bohnFiscalAdjustment - $fundContribution;
         $state->primaryDeficitToGdp = $primaryDeficit / max(0.1, $state->nominalGdpIndex);
         $interestCost = $state->yield10yEma * $state->sovereignDebtToGdp;
 
@@ -413,7 +426,12 @@ class CreditFiscalSubsystem
 
         $dDebt = ($primaryDeficit / max(0.1, $state->nominalGdpIndex)) + $interestCost - $growthErosion;
         $state->sovereignDebtToGdp += $dDebt * $dt;
-        $state->sovereignDebtToGdp = max(0.20, min(2.50, $state->sovereignDebtToGdp));
+
+        $belowFloor = MacroEngine::SOVEREIGN_DEBT_FLOOR - $state->sovereignDebtToGdp;
+        $state->sovereignFundBudgetInflow = ($funded && $belowFloor > 0.0)
+            ? $belowFloor * $state->sovereignFundDollarsPerGdp * $state->nominalGdpIndex
+            : 0.0;
+        $state->sovereignDebtToGdp = max(MacroEngine::SOVEREIGN_DEBT_FLOOR, min(self::SOVEREIGN_DEBT_CEILING, $state->sovereignDebtToGdp));
 
         // IMF GFSM 2014 net debt: gross debt less the debt instruments the government holds, which here is the
         // sovereign fund's paper sleeve (its equities are not debt instruments). Equal to gross with no fund.

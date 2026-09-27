@@ -220,8 +220,10 @@ class MacroEngine
     public const INITIAL_DEBT_TO_GDP = 0.93;
     /** Debt-to-GDP baseline level below which no excess fiscal term premium applies. */
     public const SOVEREIGN_DEBT_NEUTRAL_THRESHOLD = 0.70;
-    /** Baseline structural primary fiscal deficit as a fraction of GDP; the sovereign fund is sized so its opening draw funds it. */
+    /** Structural primary fiscal deficit as a fraction of GDP with no sovereign fund; a fund is sized so its opening draw funds it, and from then on the structural deficit is the draw, spent. */
     public const SOVEREIGN_STRUCTURAL_DEFICIT = 0.020;
+    /** Gross debt kept outstanding with no borrowing need, for the benchmark curve to price (Singapore and Hong Kong issue for market development through surpluses); below it a surplus buys the fund's paper instead. */
+    public const SOVEREIGN_DEBT_FLOOR = 0.20;
 
     // --- Federal Reserve G.17 Industrial Capacity Utilization Index ---
     /** Baseline long-run historical capacity utilization rate (~78.5%). */

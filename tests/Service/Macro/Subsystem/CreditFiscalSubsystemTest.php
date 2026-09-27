@@ -642,22 +642,94 @@ class CreditFiscalSubsystemTest extends TestCase
         $this->assertEqualsWithDelta(MacroEngine::SOVEREIGN_STRUCTURAL_DEFICIT, $state->primaryDeficitToGdp, 1e-9, 'At neutral spending and tax the primary deficit is the structural one.');
     }
 
-    public function testTheSovereignFundsDrawIsRevenueOneForOne(): void
+    /**
+     * Norway's fiscal rule: with a fund the structural deficit is the draw, spent. At neutral spending and tax the
+     * budget balances whatever the fund pays, so a fund that outgrows the economy cannot turn into a standing surplus.
+     */
+    public function testWithAFundTheBudgetSpendsTheDraw(): void
     {
-        $withoutFund = new MacroState();
-        $withoutFund->sovereignDebtToGdp = self::SOUND_DEBT_TO_GDP;
-        $withoutFund->nominalGdpIndex = 1.3;
-        $withoutFund->outputGap = 0.0;
-        $withoutFund->governmentSpendingIndex = 100.0;
-        $withoutFund->corporateTaxRate = MacroEngine::TARGET_CORPORATE_TAX_RATE;
-        $withFund = clone $withoutFund;
-        $withFund->sovereignFundDrawToGdp = 0.015;
+        $small = $this->neutralBudget(self::SOUND_DEBT_TO_GDP, 1.3);
+        $small->sovereignFundDollarsPerGdp = 2.0e13;
+        $small->sovereignFundDrawToGdp = 0.015;
+        $large = clone $small;
+        $large->sovereignFundDrawToGdp = 0.06;
+        $unfunded = $this->neutralBudget(self::SOUND_DEBT_TO_GDP, 1.3);
 
-        $this->subsystem->calculateSovereignDebt($withoutFund, 0.25);
-        $this->subsystem->calculateSovereignDebt($withFund, 0.25);
+        $this->subsystem->calculateSovereignDebt($small, 0.25);
+        $this->subsystem->calculateSovereignDebt($large, 0.25);
+        $this->subsystem->calculateSovereignDebt($unfunded, 0.25);
 
-        $this->assertEqualsWithDelta(0.015, $withoutFund->primaryDeficitToGdp - $withFund->primaryDeficitToGdp, 1e-12);
-        $this->assertEqualsWithDelta(0.015 * 0.25, $withoutFund->sovereignDebtToGdp - $withFund->sovereignDebtToGdp, 1e-12, 'A quarter of the draw is a quarter less borrowing.');
+        $this->assertEqualsWithDelta(0.0, $small->primaryDeficitToGdp, 1e-12, 'The draw pays the structural deficit it finances.');
+        $this->assertEqualsWithDelta(0.0, $large->primaryDeficitToGdp, 1e-12, 'Four times the draw is four times the spending, not a surplus.');
+        $this->assertSame($small->sovereignDebtToGdp, $large->sovereignDebtToGdp);
+        $this->assertEqualsWithDelta(MacroEngine::SOVEREIGN_STRUCTURAL_DEFICIT, $unfunded->primaryDeficitToGdp, 1e-12, 'With no fund the structural deficit is borrowed.');
+    }
+
+    /**
+     * Below the floor a surplus has no debt left to retire, so it buys the fund's paper: debt retired plus money paid in
+     * equals the surplus, and none of it is lost to the clamp.
+     */
+    public function testASurplusBelowTheDebtFloorIsPaidIntoTheFund(): void
+    {
+        $dt = 0.5;
+        $dollarsPerGdp = 2.0e13;
+        $surplus = 0.04;
+        // Above the floor and under the Bohn threshold: the whole surplus retires debt.
+        $reference = $this->surplusBudget(0.50, $surplus);
+        $reference->sovereignFundDollarsPerGdp = $dollarsPerGdp;
+        $atFloor = $this->surplusBudget(MacroEngine::SOVEREIGN_DEBT_FLOOR + 0.005, $surplus);
+        $atFloor->sovereignFundDollarsPerGdp = $dollarsPerGdp;
+
+        $this->subsystem->calculateSovereignDebt($reference, $dt);
+        $this->subsystem->calculateSovereignDebt($atFloor, $dt);
+
+        $retired = 0.50 - $reference->sovereignDebtToGdp;
+        $this->assertEqualsWithDelta($surplus * $dt, $retired, 1e-12, 'At r = g the debt falls by the surplus.');
+        $this->assertSame(0.0, $reference->sovereignFundBudgetInflow, 'Above the floor nothing is paid in.');
+        $this->assertSame(MacroEngine::SOVEREIGN_DEBT_FLOOR, $atFloor->sovereignDebtToGdp);
+        $this->assertEqualsWithDelta(
+            ($retired - 0.005) * $dollarsPerGdp * $atFloor->nominalGdpIndex,
+            $atFloor->sovereignFundBudgetInflow,
+            1e-3,
+            'What the floor stops from retiring debt is paid into the fund.'
+        );
+    }
+
+    public function testWithNoFundTheDebtFloorSimplyHolds(): void
+    {
+        $state = $this->surplusBudget(MacroEngine::SOVEREIGN_DEBT_FLOOR + 0.005, 0.04);
+
+        $this->subsystem->calculateSovereignDebt($state, 0.5);
+
+        $this->assertSame(MacroEngine::SOVEREIGN_DEBT_FLOOR, $state->sovereignDebtToGdp);
+        $this->assertSame(0.0, $state->sovereignFundBudgetInflow, 'No fund, nothing to buy.');
+    }
+
+    /** A budget at neutral spending and tax with output at trend. */
+    private function neutralBudget(float $debtToGdp, float $nominalGdpIndex = 1.0): MacroState
+    {
+        $state = new MacroState();
+        $state->sovereignDebtToGdp = $debtToGdp;
+        $state->nominalGdpIndex = $nominalGdpIndex;
+        $state->outputGap = 0.0;
+        $state->governmentSpendingIndex = 100.0;
+        $state->corporateTaxRate = MacroEngine::TARGET_CORPORATE_TAX_RATE;
+
+        return $state;
+    }
+
+    /**
+     * A budget running a primary surplus of $surplus of GDP (taxes that much above neutral, with no fund draw), with the
+     * long yield at nominal trend growth so r - g is zero and the debt moves by the surplus alone.
+     */
+    private function surplusBudget(float $debtToGdp, float $surplus): MacroState
+    {
+        $state = $this->neutralBudget($debtToGdp);
+        $state->corporateTaxRate = MacroEngine::TARGET_CORPORATE_TAX_RATE + $surplus;
+        $state->inflationEma = MacroEngine::TARGET_INFLATION;
+        $state->yield10yEma = MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE + MacroEngine::TFP_DRIFT + MacroEngine::TARGET_INFLATION;
+
+        return $state;
     }
 
 
