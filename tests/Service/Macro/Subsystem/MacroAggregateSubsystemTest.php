@@ -379,7 +379,8 @@ class MacroAggregateSubsystemTest extends TestCase
         $gapBaseline = $this->subsystem->calculateOutputGap($baseline, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0);
         $gapStimulus = $this->subsystem->calculateOutputGap($stimulus, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0);
 
-        $expectedImpulse = MacroAggregateSubsystem::KALDOR_GOVT_SPENDING_MULTIPLIER * 0.10 * 0.25;
+        // Domestic demand reaches GDP on its share; the finance the District lives on does not answer purchases.
+        $expectedImpulse = MacroAggregateSubsystem::DOMESTIC_GAP_WEIGHT * MacroAggregateSubsystem::KALDOR_GOVT_SPENDING_MULTIPLIER * 0.10 * 0.25;
         $this->assertEqualsWithDelta(
             $expectedImpulse,
             $gapStimulus - $gapBaseline,
@@ -418,14 +419,14 @@ class MacroAggregateSubsystemTest extends TestCase
         $gapShortfall = $this->subsystem->calculateOutputGap($shortfall, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0);
 
         $this->assertEqualsWithDelta(
-            -MacroAggregateSubsystem::KALDOR_CAPITAL_DRAG * $overhang * 0.25,
+            -MacroAggregateSubsystem::DOMESTIC_GAP_WEIGHT * MacroAggregateSubsystem::KALDOR_CAPITAL_DRAG * $overhang * 0.25,
             $gapExcess - $gapNeutral,
             1e-9,
             'Excess capacity must subtract its calibrated drag from the output gap drift.'
         );
 
         $this->assertEqualsWithDelta(
-            MacroAggregateSubsystem::KALDOR_CAPITAL_REBOUND_DRAG * $overhang * 0.25,
+            MacroAggregateSubsystem::DOMESTIC_GAP_WEIGHT * MacroAggregateSubsystem::KALDOR_CAPITAL_REBOUND_DRAG * $overhang * 0.25,
             $gapShortfall - $gapNeutral,
             1e-9,
             'A capital shortfall must return demand at its own, slower rate.'
@@ -758,7 +759,7 @@ class MacroAggregateSubsystemTest extends TestCase
 
         // The disturbance is stepped before the drift reads it, so the tick applies the already-decayed level.
         $applied = 0.01 * (1.0 - (MacroAggregateSubsystem::DEMAND_SHOCK_REVERSION * $dt));
-        $this->assertEqualsWithDelta($applied * $dt, $shockedGap - $baseGap, 1e-9);
+        $this->assertEqualsWithDelta(MacroAggregateSubsystem::DOMESTIC_GAP_WEIGHT * $applied * $dt, $shockedGap - $baseGap, 1e-9);
     }
 
     /**
@@ -790,7 +791,7 @@ class MacroAggregateSubsystemTest extends TestCase
 
         // One percentage point of expected inflation on a 0.50 policy leg is 50bps of real easing, through the drag
         // coefficient over a quarter, of which a one-quarter step has passed w^2 through the two Pascal stages.
-        $expectedLift = MacroAggregateSubsystem::KALDOR_MONETARY_DRAG_ACCOMMODATIVE * MacroAggregateSubsystem::BORROWING_POLICY_WEIGHT * 0.01 * $this->pascalPassThrough(0.25) * 0.25;
+        $expectedLift = MacroAggregateSubsystem::DOMESTIC_GAP_WEIGHT * MacroAggregateSubsystem::KALDOR_MONETARY_DRAG_ACCOMMODATIVE * MacroAggregateSubsystem::BORROWING_POLICY_WEIGHT * 0.01 * $this->pascalPassThrough(0.25) * 0.25;
         $this->assertEqualsWithDelta($expectedLift, $gapUnanchored - $gapAnchored, 1e-9);
     }
 
@@ -808,7 +809,7 @@ class MacroAggregateSubsystemTest extends TestCase
         $gapTightened = $this->subsystem->calculateOutputGap($tightened, 0.035, MacroEngine::BASE_NATURAL_RATE, 0.0, 0.25, 1.0);
         $this->assertGreaterThan(0.0, $anchored->monetaryStanceTransmitted, 'Both legs sit on the restrictive side.');
 
-        $expectedDrag = MacroAggregateSubsystem::KALDOR_MONETARY_DRAG_RESTRICTIVE * MacroAggregateSubsystem::BORROWING_POLICY_WEIGHT * 0.01 * $this->pascalPassThrough(0.25) * 0.25;
+        $expectedDrag = MacroAggregateSubsystem::DOMESTIC_GAP_WEIGHT * MacroAggregateSubsystem::KALDOR_MONETARY_DRAG_RESTRICTIVE * MacroAggregateSubsystem::BORROWING_POLICY_WEIGHT * 0.01 * $this->pascalPassThrough(0.25) * 0.25;
         $this->assertEqualsWithDelta(-$expectedDrag, $gapTightened - $gapAnchored, 1e-9);
     }
 
@@ -847,7 +848,7 @@ class MacroAggregateSubsystemTest extends TestCase
         $gapAdverse = $this->subsystem->calculateOutputGap($adverse, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0);
         $gapFavorable = $this->subsystem->calculateOutputGap($favorable, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0);
 
-        $this->assertEqualsWithDelta(-MacroAggregateSubsystem::KALDOR_EXCESS_BOND_PREMIUM_DRAG_ADVERSE * 0.01 * 0.25, $gapAdverse - $gapNeutral, 1e-12);
+        $this->assertEqualsWithDelta(-MacroAggregateSubsystem::DOMESTIC_GAP_WEIGHT * MacroAggregateSubsystem::KALDOR_EXCESS_BOND_PREMIUM_DRAG_ADVERSE * 0.01 * 0.25, $gapAdverse - $gapNeutral, 1e-12);
         $this->assertEqualsWithDelta(MacroAggregateSubsystem::KALDOR_EXCESS_BOND_PREMIUM_DRAG_FAVORABLE * 0.01 * 0.25, $gapFavorable - $gapNeutral, 1e-12);
         $this->assertLessThan($gapNeutral - $gapAdverse, $gapFavorable - $gapNeutral, 'Easy credit must lift demand by less than tight credit cuts it.');
     }
@@ -862,7 +863,7 @@ class MacroAggregateSubsystemTest extends TestCase
         $gapAnchored = $this->subsystem->calculateOutputGap($anchored, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0);
         $gapRepriced = $this->subsystem->calculateOutputGap($repriced, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0);
 
-        $expectedLift = MacroAggregateSubsystem::KALDOR_MONETARY_DRAG_ACCOMMODATIVE * MacroAggregateSubsystem::BORROWING_YIELD5Y_WEIGHT * 0.01 * $this->pascalPassThrough(0.25) * 0.25;
+        $expectedLift = MacroAggregateSubsystem::DOMESTIC_GAP_WEIGHT * MacroAggregateSubsystem::KALDOR_MONETARY_DRAG_ACCOMMODATIVE * MacroAggregateSubsystem::BORROWING_YIELD5Y_WEIGHT * 0.01 * $this->pascalPassThrough(0.25) * 0.25;
         $this->assertEqualsWithDelta($expectedLift, $gapRepriced - $gapAnchored, 1e-9);
     }
 
@@ -1005,7 +1006,7 @@ class MacroAggregateSubsystemTest extends TestCase
         $gapDoubled = $this->subsystem->calculateOutputGap($doubled, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, $dt, 1.0);
         $gapHalved = $this->subsystem->calculateOutputGap($halved, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, $dt, 1.0);
 
-        $expected = MacroAggregateSubsystem::KALDOR_EPU_DRAG * log(2.0) * $dt;
+        $expected = MacroAggregateSubsystem::DOMESTIC_GAP_WEIGHT * MacroAggregateSubsystem::KALDOR_EPU_DRAG * log(2.0) * $dt;
         $this->assertEqualsWithDelta(-$expected, $gapDoubled - $gapNeutral, 1e-9, 'A doubling of the index takes the drag off demand over the quarter.');
         $this->assertEqualsWithDelta(0.0, $gapHalved - $gapNeutral, 1e-9, 'A halving does not stimulate: uncertainty drag is one-sided.');
     }
@@ -1026,12 +1027,12 @@ class MacroAggregateSubsystemTest extends TestCase
         $gapStormy = $this->subsystem->calculateOutputGap($stormy, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, $dt, 1.0);
 
         $this->assertEqualsWithDelta($gapAverage, $gapQuiet, 1e-12, 'A quiet season is not a boom.');
-        $this->assertEqualsWithDelta(-MacroAggregateSubsystem::KALDOR_CATASTROPHE_DRAG * 2.0 * $dt, $gapStormy - $gapAverage, 1e-9);
+        $this->assertEqualsWithDelta(-MacroAggregateSubsystem::DOMESTIC_GAP_WEIGHT * MacroAggregateSubsystem::KALDOR_CATASTROPHE_DRAG * 2.0 * $dt, $gapStormy - $gapAverage, 1e-9);
     }
 
 
-    /** Obstfeld & Rogoff (1996): the foreign bloc's boom is the district's exports. */
-    public function testAForeignBoomLiftsDemandThroughExports(): void
+    /** IMF WEO October 2015, Ch. 3: exports move 2.3 times the mainland's demand, and they are a level part of the gap. */
+    public function testAMainlandBoomLiftsTheGapThroughExportsAtOnce(): void
     {
         $home = new MacroState();
         $abroad = new MacroState();
@@ -1041,7 +1042,18 @@ class MacroAggregateSubsystemTest extends TestCase
         $gapHome = $this->subsystem->calculateOutputGap($home, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, $dt, 1.0);
         $gapAbroad = $this->subsystem->calculateOutputGap($abroad, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, $dt, 1.0);
 
-        $this->assertEqualsWithDelta(MacroAggregateSubsystem::KALDOR_FOREIGN_DEMAND * 0.03 * $dt, $gapAbroad - $gapHome, 1e-9);
+        $exports = MacroAggregateSubsystem::DISTRICT_EXPORT_SHARE * MacroAggregateSubsystem::EXPORT_DEMAND_ELASTICITY * 0.03;
+        $this->assertEqualsWithDelta($exports, $abroad->netExportGap, 1e-12);
+        $this->assertEqualsWithDelta($exports, $gapAbroad - $gapHome, 1e-9, 'The export level reaches the gap whole, not at a rate.');
+
+        // The domestic-demand equation does not pull the export level back: held, it stays in the gap.
+        $home->outputGap = $gapHome;
+        $abroad->outputGap = $gapAbroad;
+        for ($i = 0; $i < 40; $i++) {
+            $home->outputGap = $gapHome = $this->subsystem->calculateOutputGap($home, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, $dt, 1.0);
+            $abroad->outputGap = $gapAbroad = $this->subsystem->calculateOutputGap($abroad, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, $dt, 1.0);
+        }
+        $this->assertEqualsWithDelta($exports, $gapAbroad - $gapHome, 1e-6);
     }
 
 
@@ -1060,8 +1072,8 @@ class MacroAggregateSubsystemTest extends TestCase
         $gapRepaying = $this->subsystem->calculateOutputGap($repaying, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, $dt, 1.0);
 
         $this->assertGreaterThan(0.0, MacroAggregateSubsystem::KALDOR_HOUSEHOLD_NEW_BORROWING);
-        $this->assertEqualsWithDelta(MacroAggregateSubsystem::KALDOR_HOUSEHOLD_NEW_BORROWING * 0.03 * $dt, $gapBorrowing - $gapNeutral, 1e-9, 'Three points of income borrowed a year are spent.');
-        $this->assertEqualsWithDelta(-MacroAggregateSubsystem::KALDOR_HOUSEHOLD_NEW_BORROWING * 0.03 * $dt, $gapRepaying - $gapNeutral, 1e-9, 'Paying the stock down is the same flow the other way.');
+        $this->assertEqualsWithDelta(MacroAggregateSubsystem::DOMESTIC_GAP_WEIGHT * MacroAggregateSubsystem::KALDOR_HOUSEHOLD_NEW_BORROWING * 0.03 * $dt, $gapBorrowing - $gapNeutral, 1e-9, 'Three points of income borrowed a year are spent.');
+        $this->assertEqualsWithDelta(-MacroAggregateSubsystem::DOMESTIC_GAP_WEIGHT * MacroAggregateSubsystem::KALDOR_HOUSEHOLD_NEW_BORROWING * 0.03 * $dt, $gapRepaying - $gapNeutral, 1e-9, 'Paying the stock down is the same flow the other way.');
     }
 
     /** Drehmann, Juselius & Korinek (2018): service below its average leaves income to spend; above it, repayment drags. */
@@ -1078,8 +1090,8 @@ class MacroAggregateSubsystemTest extends TestCase
         $gapCarried = $this->subsystem->calculateOutputGap($carried, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, $dt, 1.0);
         $gapRepaying = $this->subsystem->calculateOutputGap($repaying, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, $dt, 1.0);
 
-        $this->assertEqualsWithDelta(MacroAggregateSubsystem::KALDOR_HOUSEHOLD_DEBT_SERVICE * 0.02 * $dt, $gapCarried - $gapNeutral, 1e-9, 'Two points of service below average leave a point a year of demand.');
-        $this->assertEqualsWithDelta(-MacroAggregateSubsystem::KALDOR_HOUSEHOLD_DEBT_SERVICE * 0.02 * $dt, $gapRepaying - $gapNeutral, 1e-9, 'Two points over it take a point a year off demand.');
+        $this->assertEqualsWithDelta(MacroAggregateSubsystem::DOMESTIC_GAP_WEIGHT * MacroAggregateSubsystem::KALDOR_HOUSEHOLD_DEBT_SERVICE * 0.02 * $dt, $gapCarried - $gapNeutral, 1e-9, 'Two points of service below average leave a point a year of demand.');
+        $this->assertEqualsWithDelta(-MacroAggregateSubsystem::DOMESTIC_GAP_WEIGHT * MacroAggregateSubsystem::KALDOR_HOUSEHOLD_DEBT_SERVICE * 0.02 * $dt, $gapRepaying - $gapNeutral, 1e-9, 'Two points over it take a point a year off demand.');
     }
 
     public function testCrisisDeleveragingAndLendingStandardsDragDemandOneForOne(): void
@@ -1096,9 +1108,9 @@ class MacroAggregateSubsystemTest extends TestCase
         $run = fn(MacroState $state): float => $this->subsystem->calculateOutputGap($state, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, $dt, 1.0);
         $gapNeutral = $run($neutral);
 
-        $this->assertEqualsWithDelta(-0.02 * $dt, $run($deleveraging) - $gapNeutral, 1e-9, 'The crisis drag enters the drift at face value: two points a year off demand.');
-        $this->assertEqualsWithDelta(-MacroAggregateSubsystem::KALDOR_LENDING_STANDARDS_DRAG * 0.80 * $dt, $run($tightStandards) - $gapNeutral, 1e-9, 'Standards at the 80% of 2008 are a quantity constraint no rate cut reaches.');
-        $this->assertEqualsWithDelta(MacroAggregateSubsystem::KALDOR_LENDING_STANDARDS_DRAG * 0.20 * $dt, $run($looseStandards) - $gapNeutral, 1e-9, 'Easing standards lend into demand.');
+        $this->assertEqualsWithDelta(-MacroAggregateSubsystem::DOMESTIC_GAP_WEIGHT * 0.02 * $dt, $run($deleveraging) - $gapNeutral, 1e-9, 'The crisis drag enters the drift at face value: two points a year off demand, on demand\'s share of GDP.');
+        $this->assertEqualsWithDelta(-MacroAggregateSubsystem::DOMESTIC_GAP_WEIGHT * MacroAggregateSubsystem::KALDOR_LENDING_STANDARDS_DRAG * 0.80 * $dt, $run($tightStandards) - $gapNeutral, 1e-9, 'Standards at the 80% of 2008 are a quantity constraint no rate cut reaches.');
+        $this->assertEqualsWithDelta(MacroAggregateSubsystem::DOMESTIC_GAP_WEIGHT * MacroAggregateSubsystem::KALDOR_LENDING_STANDARDS_DRAG * 0.20 * $dt, $run($looseStandards) - $gapNeutral, 1e-9, 'Easing standards lend into demand.');
     }
 
     /**
@@ -1159,7 +1171,7 @@ class MacroAggregateSubsystemTest extends TestCase
         [$diffusionGap, $diffusionShock] = $run(0.0, 1.0);
         $this->assertEqualsWithDelta($neutralShock, $diffusionShock, 1e-15, 'A diffusion innovation must not enter the demand disturbance');
         $this->assertEqualsWithDelta(
-            MacroAggregateSubsystem::OUTPUT_GAP_DIFFUSION_SIGMA * sqrt($dt),
+            MacroAggregateSubsystem::DOMESTIC_GAP_WEIGHT * MacroAggregateSubsystem::OUTPUT_GAP_DIFFUSION_SIGMA * sqrt($dt),
             $diffusionGap - $neutralGap,
             1e-12
         );
@@ -1168,7 +1180,7 @@ class MacroAggregateSubsystemTest extends TestCase
         [$demandGap, $demandShock] = $run(1.0, 0.0);
         $expectedShock = MacroAggregateSubsystem::DEMAND_SHOCK_SIGMA * sqrt($dt);
         $this->assertEqualsWithDelta($expectedShock, $demandShock - $neutralShock, 1e-15);
-        $this->assertEqualsWithDelta($expectedShock * $dt, $demandGap - $neutralGap, 1e-12);
+        $this->assertEqualsWithDelta(MacroAggregateSubsystem::DOMESTIC_GAP_WEIGHT * $expectedShock * $dt, $demandGap - $neutralGap, 1e-12);
     }
 
     /**
@@ -1229,7 +1241,7 @@ class MacroAggregateSubsystemTest extends TestCase
 
         $this->assertSame(0.0, $contribution(0.0));
         $this->assertEqualsWithDelta(
-            MacroAggregateSubsystem::KALDOR_GOVT_SPENDING_MULTIPLIER * 0.01 / MacroEngine::TARGET_CORPORATE_TAX_RATE,
+            MacroAggregateSubsystem::DOMESTIC_GAP_WEIGHT * MacroAggregateSubsystem::KALDOR_GOVT_SPENDING_MULTIPLIER * 0.01 / MacroEngine::TARGET_CORPORATE_TAX_RATE,
             $contribution(0.01),
             1e-15,
             'A point of GDP is a purchases shift of one over the purchases share.'
@@ -1276,7 +1288,7 @@ class MacroAggregateSubsystemTest extends TestCase
         );
 
         // Every channel in the drift is named, so the panel cannot silently drop one.
-        $this->assertCount(27, $window['contributions']);
+        $this->assertCount(28, $window['contributions']);
         $this->assertArrayHasKey('productivitySupply', $window['contributions']);
         $this->assertArrayHasKey('fundStabilisation', $window['contributions']);
         $this->assertArrayHasKey('premiumDrag', $window['contributions']);
@@ -1467,7 +1479,7 @@ class MacroAggregateSubsystemTest extends TestCase
         $window = $probe->snapshot()['current'];
 
         // A 2pp/yr drag held for a quarter delivers half a point of gap, and delivers it negative.
-        $this->assertEqualsWithDelta(-0.02 * 0.25, $window['contributions']['crisisDeleveragingDrag'], 1e-12);
+        $this->assertEqualsWithDelta(-MacroAggregateSubsystem::DOMESTIC_GAP_WEIGHT * 0.02 * 0.25, $window['contributions']['crisisDeleveragingDrag'], 1e-12);
         $contributions = $window['contributions'];
         asort($contributions);
         $this->assertSame(
@@ -1497,7 +1509,7 @@ class MacroAggregateSubsystemTest extends TestCase
 
         [$calmDrag, $calmCompensator] = $crisisChannels(0.0);
         $this->assertSame(0.0, $calmDrag);
-        $this->assertEqualsWithDelta(MacroAggregateSubsystem::KALDOR_CRISIS_DRAG_COMPENSATOR, $calmCompensator, 1e-12, 'With no crisis running the compensator is its whole long-run average.');
+        $this->assertEqualsWithDelta(MacroAggregateSubsystem::DOMESTIC_GAP_WEIGHT * MacroAggregateSubsystem::KALDOR_CRISIS_DRAG_COMPENSATOR, $calmCompensator, 1e-12, 'With no crisis running the compensator is its whole long-run average, on demand\'s share of GDP.');
 
         [$drag, $compensator] = $crisisChannels(MacroAggregateSubsystem::KALDOR_CRISIS_DRAG_COMPENSATOR);
         $this->assertEqualsWithDelta(0.0, $drag + $compensator, 1e-12, 'A drag at its long-run average nets to nothing.');
@@ -1596,7 +1608,9 @@ class MacroAggregateSubsystemTest extends TestCase
     }
 
     /**
-     * The elasticity the term exists for still has to bite when the currency moves away from that normal.
+     * The elasticity the term exists for still has to bite when the currency moves away from that normal: a 10% real
+     * depreciation below trend lifts net exports by the IMF's footnote-21 amount at the district's trade shares,
+     * most of it inside the first year.
      */
     public function testACurrencyBelowItsTrendStillLiftsNetExports(): void
     {
@@ -1608,17 +1622,100 @@ class MacroAggregateSubsystemTest extends TestCase
         $depreciated->exchangeRateTrend = 97.3;
         $depreciated->exchangeRateIndexEma = 97.3 * 0.90;
 
-        $gapSettled = $this->subsystem->calculateOutputGap($settled, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0);
-        $gapDepreciated = $this->subsystem->calculateOutputGap($depreciated, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0);
+        $dt = 0.01;
+        for ($i = 0; $i < 100; $i++) {
+            $settled->outputGap = $gapSettled = $this->subsystem->calculateOutputGap($settled, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, $dt, 1.0);
+            $depreciated->outputGap = $gapDepreciated = $this->subsystem->calculateOutputGap($depreciated, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, $dt, 1.0);
+        }
 
-        $expected = MacroAggregateSubsystem::KALDOR_FX_ELASTICITY * 0.10 * 0.25;
+        $priceResponse = (MacroAggregateSubsystem::EXPORT_PRICE_PASS_THROUGH * MacroAggregateSubsystem::EXPORT_PRICE_ELASTICITY * MacroAggregateSubsystem::DISTRICT_EXPORT_SHARE)
+            + (MacroAggregateSubsystem::IMPORT_PRICE_PASS_THROUGH * MacroAggregateSubsystem::IMPORT_PRICE_ELASTICITY * MacroAggregateSubsystem::DISTRICT_IMPORT_SHARE);
+        $longTerm = -$priceResponse * log(0.90);
+
+        $this->assertSame(0.0, $settled->netExportGap, 'A currency sitting at its own trend moves no trade.');
+        $this->assertEqualsWithDelta(0.87 * $longTerm, $depreciated->netExportGap, 0.002 * $longTerm, 'A year on, 87% of the long-term lift, as the IMF\'s one-year effects give.');
+        $this->assertEqualsWithDelta($depreciated->netExportGap, $gapDepreciated - $gapSettled, 1e-9, 'and it is in the gap.');
+        $this->assertGreaterThan(0.005, $longTerm, 'A 10% real depreciation is worth well over half a point of GDP at a fifth of GDP exported');
+        $this->assertLessThan(0.015, $longTerm, 'and less than the 1.5% the IMF sample\'s 42% trade shares give.');
+    }
+
+    /**
+     * GDP by industry with ESA 2010 deflated-balance volumes: the District's funds and brokers produce as the value of what
+     * they manage does, so a bear market is a District recession on the day it happens, whatever demand does after.
+     */
+    public function testABearMarketIsADistrictRecession(): void
+    {
+        $calm = $this->neutralBorrowingState();
+        $calm->equityWealthRatio = 1.0;
+        $calm->equityWealthTrend = 1.0;
+        $crash = $this->neutralBorrowingState();
+        $crash->equityWealthRatio = 0.60;
+        $crash->equityWealthTrend = 1.0;
+
+        $gapCalm = $this->subsystem->calculateOutputGap($calm, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.01, 1.0);
+        $gapCrash = $this->subsystem->calculateOutputGap($crash, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.01, 1.0);
+
+        $financeLoss = MacroAggregateSubsystem::FINANCE_GAP_WEIGHT * MacroAggregateSubsystem::FINANCE_MARKET_SHARE * log(0.60);
+        $this->assertEqualsWithDelta($financeLoss, $crash->financeOutputGap, 1e-12);
+        $this->assertEqualsWithDelta($financeLoss - $calm->financeOutputGap, $gapCrash - $gapCalm, 1e-9, 'The lost fees are lost output, at once.');
+        $this->assertLessThan(-0.03, $financeLoss, 'A 40% fall in managed assets costs the District over 3% of GDP.');
+    }
+
+    /** Bank output follows deflated loan balances: a credit boom is bank output, a bust takes it back. */
+    public function testACreditBoomIsBankOutput(): void
+    {
+        $boom = $this->neutralBorrowingState();
+        $boom->creditToGdpTrend = 1.0;
+        $boom->creditToGdpGap = 0.10;
+        $this->subsystem->calculateOutputGap($boom, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.01, 1.0);
 
         $this->assertEqualsWithDelta(
-            $expected,
-            $gapDepreciated - $gapSettled,
-            1e-12,
-            'A 10% depreciation below trend must still deliver the full Mundell-Fleming export lift.'
+            MacroAggregateSubsystem::FINANCE_GAP_WEIGHT * MacroAggregateSubsystem::FINANCE_CREDIT_SHARE * log(1.10),
+            $boom->financeOutputGap,
+            1e-12
         );
+    }
+
+    /**
+     * The finance weight is only the finance the District has beyond what the US-fitted demand equation already holds:
+     * the two weights split GDP, and a District with the US's finance share would add no finance cycle at all.
+     */
+    public function testTheFinanceWeightIsTheShareBeyondTheFittedEconomy(): void
+    {
+        $this->assertEqualsWithDelta(
+            1.0,
+            MacroAggregateSubsystem::DOMESTIC_GAP_WEIGHT + (MacroAggregateSubsystem::FINANCE_GAP_WEIGHT * (MacroAggregateSubsystem::FINANCE_CREDIT_SHARE + MacroAggregateSubsystem::FINANCE_MARKET_SHARE)),
+            1e-15
+        );
+        $us = MacroAggregateSubsystem::US_FINANCE_SHARE;
+        $this->assertEqualsWithDelta(0.0, $us - ((1.0 - $us) * $us / (1.0 - $us)), 1e-15, 'At the US share the weight vanishes.');
+        $this->assertGreaterThan(0.2, MacroAggregateSubsystem::FINANCE_GAP_WEIGHT);
+        $this->assertLessThan(MacroAggregateSubsystem::DISTRICT_FINANCE_SHARE, MacroAggregateSubsystem::FINANCE_GAP_WEIGHT);
+    }
+
+    /**
+     * Import prices (IMF WEO October 2015, Ch. 3; Burstein, Neves & Rebelo 2003): an appreciation lowers the price
+     * level by the imported share of the basket times the pass-through of all but the distribution margin, and the
+     * currency's level at rest adds nothing to inflation.
+     */
+    public function testAnAppreciationLowersThePriceLevelThroughImports(): void
+    {
+        $atRest = $this->neutralBorrowingState();
+        $appreciated = $this->neutralBorrowingState();
+        $appreciated->exchangeRateIndexEma = 110.0;
+        $appreciated->importPriceLevel = MacroAggregateSubsystem::importPriceLevelTarget($atRest->exchangeRateIndexEma);
+
+        $dt = 0.01;
+        $levelGap = 0.0;
+        for ($i = 0; $i < 3000; $i++) {
+            $restInflation = $this->subsystem->calculateInflation($atRest, MacroEngine::TARGET_INFLATION, 1.0, $dt);
+            $levelGap += ($this->subsystem->calculateInflation($appreciated, MacroEngine::TARGET_INFLATION, 1.0, $dt) - $restInflation) * $dt;
+        }
+
+        $importedShare = MacroAggregateSubsystem::INFLATION_WEIGHT_GOODS + MacroAggregateSubsystem::INFLATION_WEIGHT_COMMODITY;
+        $expected = -$importedShare * (1.0 - MacroAggregateSubsystem::IMPORT_DISTRIBUTION_SHARE) * MacroAggregateSubsystem::IMPORT_PRICE_PASS_THROUGH * log(1.10);
+        $this->assertEqualsWithDelta($expected, $levelGap, 0.0005, 'A 10% appreciation takes about 1.6% off the price level.');
+        $this->assertEqualsWithDelta(MacroAggregateSubsystem::importPriceLevelTarget($appreciated->exchangeRateIndexEma), $appreciated->importPriceLevel, 1e-9, 'and import prices have settled.');
     }
 
     /**

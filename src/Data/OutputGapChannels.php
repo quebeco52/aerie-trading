@@ -71,9 +71,9 @@ final class OutputGapChannels
             ],
         ],
         'wealth' => [
-            'label' => 'Wealth effects',
+            'label' => 'Markets & wealth',
             'colour' => '#d55181',
-            'channels' => ['housingWealthEffect', 'equityWealthEffect'],
+            'channels' => ['housingWealthEffect', 'equityWealthEffect', 'financeOutput'],
         ],
         'supply' => [
             'label' => 'Supply shocks',
@@ -83,7 +83,7 @@ final class OutputGapChannels
         'external' => [
             'label' => 'External demand',
             'colour' => '#9085e9',
-            'channels' => ['netExportDrag'],
+            'channels' => ['netExports'],
         ],
         'capacity' => [
             'label' => 'Capacity & inventory',

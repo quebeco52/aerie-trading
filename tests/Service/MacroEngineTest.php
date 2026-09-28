@@ -228,10 +228,11 @@ class MacroEngineTest extends TestCase
     public function testExchangeRateAppreciatesDuringHighDomesticRates(): void
     {
         $existingState = [
-            'policy_rate' => 0.06, // 6% policy rate (well above 2.5% global baseline)
+            'policy_rate' => 0.06, // 6% policy rate, well above the mainland Fed's 3.5% neutral
             'policy_rate_ema' => 0.06,
             'exchange_rate_index' => 100.0,
             'exchange_rate_index_ema' => 100.0,
+            'exchange_rate_deviation' => 1.0, // at its fundamental, so the index is parity alone
             'inflation' => 0.02,
             'inflation_ema' => 0.02,
             'output_gap' => 0.0,
@@ -255,10 +256,11 @@ class MacroEngineTest extends TestCase
     public function testExchangeRateDepreciatesDuringLowDomesticRates(): void
     {
         $existingState = [
-            'policy_rate' => 0.005, // 0.5% policy rate (well below 2.5% global baseline)
+            'policy_rate' => 0.005, // 0.5% policy rate, well below the mainland Fed's 3.5% neutral
             'policy_rate_ema' => 0.005,
             'exchange_rate_index' => 100.0,
             'exchange_rate_index_ema' => 100.0,
+            'exchange_rate_deviation' => 1.0, // at its fundamental, so the index is parity alone
             'inflation' => 0.02,
             'inflation_ema' => 0.02,
             'output_gap' => 0.0,

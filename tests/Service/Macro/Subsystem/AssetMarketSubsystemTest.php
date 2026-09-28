@@ -5,6 +5,7 @@ namespace App\Tests\Service\Macro\Subsystem;
 use App\Service\Macro\MacroEngine;
 use App\Service\Macro\MacroState;
 use App\Service\Macro\Subsystem\AssetMarketSubsystem;
+use App\Service\Macro\Subsystem\MacroAggregateSubsystem;
 use App\Service\Math\MathUtility;
 use PHPUnit\Framework\TestCase;
 
@@ -556,6 +557,32 @@ class AssetMarketSubsystemTest extends TestCase
         $this->assertSame(MacroEngine::EFFECTIVE_LOWER_BOUND, $state->foreignPolicyRate, 'A deep mainland slump takes the funds rate to the floor and no further.');
     }
 
+    /**
+     * Dornbusch (1976): the currency is an asset price. A rate move reprices it at once by the parity loading, and only
+     * its departure from that fundamental decays, at the purchasing-power reversion speed.
+     */
+    public function testTheCurrencyJumpsWithItsFundamentalAndOnlyItsDeviationDecays(): void
+    {
+        $state = new MacroState();
+        $state->policyRate = MacroEngine::MAINLAND_NEUTRAL_RATE;
+        $state->foreignPolicyRate = MacroEngine::MAINLAND_NEUTRAL_RATE;
+        $state->exchangeRateDeviation = 1.0;
+        $this->subsystem->calculateExchangeRate($state, 0.001);
+        $before = $state->exchangeRateIndex;
+
+        $state->policyRate += 0.01;
+        $this->subsystem->calculateExchangeRate($state, 0.001);
+        $this->assertEqualsWithDelta(exp(AssetMarketSubsystem::UIP_SENSITIVITY * 0.01), $state->exchangeRateIndex / $before, 1e-4, 'A point of rate differential is 3% on the currency within the tick.');
+        $this->assertEqualsWithDelta(AssetMarketSubsystem::exchangeRateFundamental($state) * $state->exchangeRateDeviation, $state->exchangeRateIndex, 1e-9);
+
+        // A 10% overvaluation against the fundamental decays like the log-OU it is.
+        $state->exchangeRateDeviation = 1.10;
+        $this->subsystem->calculateExchangeRate($state, 1.0);
+        $decay = exp(-AssetMarketSubsystem::EXCHANGE_RATE_MEAN_REVERSION);
+        $itoMean = -(MacroEngine::EXCHANGE_RATE_VOLATILITY ** 2) / (2.0 * AssetMarketSubsystem::EXCHANGE_RATE_MEAN_REVERSION);
+        $this->assertEqualsWithDelta((log(1.10) * $decay) + ($itoMean * (1.0 - $decay)), log($state->exchangeRateDeviation), 1e-12);
+    }
+
     /** UIP: the district's currency is priced on the differential against the Fed's rate, not a constant. */
     public function testTheCurrencyReadsTheForeignPolicyRate(): void
     {
@@ -571,15 +598,29 @@ class AssetMarketSubsystemTest extends TestCase
     {
         $home = new MacroState();
         $home->outputGap = 0.0;
+        // The mainland boom's exports, already part of the gap they lift, with domestic demand unmoved.
+        $exports = MacroAggregateSubsystem::netExportGapAt(0.03, 0.0);
         $abroad = new MacroState();
-        $abroad->outputGap = 0.0;
-        $abroad->foreignOutputGap = 0.03;
+        $abroad->netExportGap = $exports;
+        $abroad->outputGap = $exports;
         for ($i = 0; $i < 400; $i++) {
             $this->subsystem->calculateTradeBalance($home, 0.01);
             $this->subsystem->calculateTradeBalance($abroad, 0.01);
         }
 
-        $this->assertEqualsWithDelta(AssetMarketSubsystem::TRADE_BALANCE_GAP_ELASTICITY * 0.03, $abroad->tradeBalanceToGdp - $home->tradeBalanceToGdp, 0.0005, 'Their absorption is our exports, at the same elasticity as ours is their exports.');
+        $this->assertEqualsWithDelta($exports, $abroad->tradeBalanceToGdp - $home->tradeBalanceToGdp, 0.0005, 'Their demand is our exports, and nothing else moves the balance.');
+
+        // Domestic demand draws in imports at 1.4 times itself on the import share.
+        $booming = new MacroState();
+        $booming->outputGap = 0.03;
+        for ($i = 0; $i < 400; $i++) {
+            $this->subsystem->calculateTradeBalance($booming, 0.01);
+        }
+        $this->assertEqualsWithDelta(
+            -MacroAggregateSubsystem::DISTRICT_IMPORT_SHARE * MacroAggregateSubsystem::IMPORT_DEMAND_ELASTICITY * 0.03,
+            $booming->tradeBalanceToGdp - $home->tradeBalanceToGdp,
+            0.0005
+        );
     }
 
     public function testLendingStandardsMoveTheHousePriceFundamental(): void

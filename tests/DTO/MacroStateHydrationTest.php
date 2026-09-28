@@ -7,6 +7,8 @@ namespace App\Tests\DTO;
 use App\DTO\MacroStateDTO;
 use App\Service\Macro\MacroEngine;
 use App\Service\Macro\MacroState;
+use App\Service\Macro\Subsystem\AssetMarketSubsystem;
+use App\Service\Macro\Subsystem\MacroAggregateSubsystem;
 use App\Service\Macro\Subsystem\MonetaryPolicySubsystem;
 use App\Service\Math\MathUtility;
 use PHPUnit\Framework\TestCase;
@@ -156,6 +158,42 @@ class MacroStateHydrationTest extends TestCase
         $dto = MacroStateDTO::fromArray(['sector_z' => 'not-an-array']);
 
         $this->assertSame([], $dto->sectorZ);
+    }
+
+    /**
+     * A live state saved before the open-economy levels existed opens them where the currency and the mainland stand,
+     * so the first tick after the upgrade reprices neither import prices nor trade volumes.
+     */
+    public function testAPayloadPredatingTheOpenEconomyOpensItAtRest(): void
+    {
+        $payload = ['exchange_rate_index_ema' => 92.0, 'exchange_rate_trend' => 100.0, 'foreign_output_gap_ema' => 0.012];
+        $state = MacroState::fromArray($payload);
+
+        $this->assertEqualsWithDelta(MacroAggregateSubsystem::importPriceLevelTarget(92.0), $state->importPriceLevel, 1e-15);
+        $this->assertEqualsWithDelta(log(0.92), $state->realExchangeRateTradeLag, 1e-15);
+        $this->assertEqualsWithDelta(MacroAggregateSubsystem::netExportGapAt(0.012, log(0.92)), $state->netExportGap, 1e-15);
+        $this->assertGreaterThan(0.0, $state->netExportGap, 'A cheap currency and a mainland boom both sell exports.');
+
+        // Finance output opens where the credit and market balances stand, so the upgrade reprices no output.
+        $financed = ['credit_to_gdp_gap' => 0.05, 'credit_to_gdp_trend' => 1.0, 'equity_wealth_ratio' => 0.9, 'equity_wealth_trend' => 1.0];
+        $expected = MacroAggregateSubsystem::financeOutputGapAt(log(1.05), log(0.9));
+        $this->assertEqualsWithDelta($expected, MacroState::fromArray($financed)->financeOutputGap, 1e-15);
+        $this->assertEqualsWithDelta($expected, MacroStateDTO::fromArray($financed)->financeOutputGap, 1e-15);
+        $this->assertSame(MacroStateDTO::fromMacroState($state)->toArray(), MacroStateDTO::fromArray($payload)->toArray(), 'The snapshot reader opens them the same way.');
+    }
+
+    /** A saved currency keeps its level across the split into fundamental and deviation: the deviation takes up the difference. */
+    public function testASavedCurrencyKeepsItsLevel(): void
+    {
+        $payload = ['exchange_rate_index' => 104.0, 'policy_rate' => 0.05, 'foreign_policy_rate' => 0.03];
+        $state = MacroState::fromArray($payload);
+
+        $this->assertSame(104.0, $state->exchangeRateIndex);
+        $this->assertEqualsWithDelta(104.0, AssetMarketSubsystem::exchangeRateFundamental($state) * $state->exchangeRateDeviation, 1e-9);
+        $snapshot = MacroStateDTO::fromArray($payload);
+        $this->assertSame($state->exchangeRateDeviation, $snapshot->exchangeRateDeviation, 'The snapshot reader agrees.');
+        $this->assertSame(104.0, $snapshot->exchangeRateIndex);
+        $this->assertSame(1.0, MacroState::fromArray(['policy_rate' => 0.05])->exchangeRateDeviation, 'With no saved currency the opening deviation stands.');
     }
 
     /** A fresh engine, an empty snapshot and a DTO built with no arguments are one economy. */

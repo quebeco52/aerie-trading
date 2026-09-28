@@ -41,9 +41,45 @@ class MacroAggregateSubsystem
     /** Speed of adjustment (kappa) of natural real rate toward fundamental equilibrium. */
     public const NATURAL_RATE_ADJUSTMENT_SPEED = 1.0;
 
+    // --- Open Economy: Trade Volumes and Import Prices (IMF WEO October 2015, Ch. 3, Table 3.1: 60 economies, 1980-2014) ---
+    /** Exports over GDP, between the US's 13% and the UK's 30% (World Bank, 2010-19 averages): a closed-leaning economy that sells its finance abroad. */
+    public const DISTRICT_EXPORT_SHARE = 0.20;
+    /** Imports over GDP: exports less the structural trade balance. */
+    public const DISTRICT_IMPORT_SHARE = self::DISTRICT_EXPORT_SHARE - MacroEngine::TRADE_BALANCE_BASELINE;
+    /** Export volume per unit of trading-partner demand (2.3). */
+    public const EXPORT_DEMAND_ELASTICITY = 2.3;
+    /** Import volume per unit of domestic demand (1.4). */
+    public const IMPORT_DEMAND_ELASTICITY = 1.4;
+    /** Long-term pass-through of the real exchange rate to export prices in foreign currency (0.552, PPI-based). */
+    public const EXPORT_PRICE_PASS_THROUGH = 0.552;
+    /** Long-term price elasticity of export volumes (0.321). */
+    public const EXPORT_PRICE_ELASTICITY = 0.321;
+    /** Long-term pass-through of the real exchange rate to import prices in domestic currency (0.605). */
+    public const IMPORT_PRICE_PASS_THROUGH = 0.605;
+    /** Long-term price elasticity of import volumes (0.298). */
+    public const IMPORT_PRICE_ELASTICITY = 0.298;
+    /** Time constant (years) of the net-export response to the real exchange rate: at the district's shares the table's one-year effects give 87% of the long-term one. */
+    public const TRADE_VOLUME_ADJUSTMENT_YEARS = 0.49;
+    /** Time constant (years) of import-price pass-through: 0.580 one year out against 0.605 long-term, 96%. */
+    public const IMPORT_PRICE_ADJUSTMENT_YEARS = 0.31;
+    /** Share of an imported consumer good's retail price that is local distribution, which the exchange rate does not move (Burstein, Neves & Rebelo 2003: ~40% in the US). */
+    public const IMPORT_DISTRIBUTION_SHARE = 0.40;
+
+    // --- Financial Centre Output (GDP by industry; ESA 2010 §14.14 and Kornfeld 2021: service volumes as deflated balances) ---
+    /** Finance and insurance value added over GDP: the District was founded as a financial centre, and its finance is over 30% of it. */
+    public const DISTRICT_FINANCE_SHARE = 0.30;
+    /** US finance and insurance value added over GDP, 2005-2019 average (BEA via FRED VAPGDPFI, 7.18%): the share the US-fitted demand equation already carries. */
+    public const US_FINANCE_SHARE = 0.072;
+    /** Credit intermediation's share of the District's finance (banks, credit services, mortgage finance), by the seeded roster's book equity; its volume follows deflated loan balances. */
+    public const FINANCE_CREDIT_SHARE = 0.296;
+    /** Market-based finance's share (funds, brokerage, exchanges, clearing, investment banking), the same basis; its volume follows the deflated value of the assets it manages. The rest, insurance and holding companies, moves with the domestic economy. */
+    public const FINANCE_MARKET_SHARE = 0.302;
+    /** Weight of the finance cycle in the gap: the District's finance share less the US share the fitted equation carries on the District's smaller rest of the economy (0.246). */
+    public const FINANCE_GAP_WEIGHT = self::DISTRICT_FINANCE_SHARE - ((1.0 - self::DISTRICT_FINANCE_SHARE) * self::US_FINANCE_SHARE / (1.0 - self::US_FINANCE_SHARE));
+    /** Weight of domestic demand in the gap: everything but the market-driven finance (0.853). */
+    public const DOMESTIC_GAP_WEIGHT = 1.0 - (self::FINANCE_GAP_WEIGHT * (self::FINANCE_CREDIT_SHARE + self::FINANCE_MARKET_SHARE));
+
     // --- KALDOR-KALECKI 2D LIMIT CYCLE ---
-    /** Elasticity of aggregate demand to exchange rate deviations (Marshall-Lerner Net Export Drag). */
-    public const KALDOR_FX_ELASTICITY = 0.04;
     /** Linear self-reinforcement of demand; at 0.12 zero was an unstable point and the gap swept through it on a clockwork limit cycle, at 0.06 it rests inside ±1% 44% of quarters (Frisch-Slutsky shock-driven cycle) while keeping the left skew. */
     public const KALDOR_MOMENTUM = 0.06;
     /** Cubic capacity ceiling on the UPSIDE only (Friedman 1993 plucking; Dupraz, Nakamura & Steinsson 2019): output is plucked below a ceiling it cannot run above, and a slump has no floor of its own. */
@@ -78,8 +114,6 @@ class MacroAggregateSubsystem
     public const KALDOR_HOUSEHOLD_DEBT_SERVICE = 0.50;
     /** Demand per unit of new household borrowing, in debt to income a year: borrowed income is spent as it is borrowed. Fitted by running Drehmann, Juselius & Korinek's (2018) local projection on the engine: GDP growth +0.128 the year after a point of new borrowing to GDP (their Table 8 base, +0.126); the US lead of credit on the gap follows (var/harness/djk_an.py). */
     public const KALDOR_HOUSEHOLD_NEW_BORROWING = 1.0;
-    /** Demand from the foreign bloc's cycle: export volume per unit of foreign output gap (an export share of GDP near a fifth times an income elasticity of trade above one, Obstfeld & Rogoff 1996). */
-    public const KALDOR_FOREIGN_DEMAND = 0.08;
     /** Output lost per unit of catastrophe loss burden above an average year (Noy 2009; Hsiang & Jina 2014 give the sign): a year at twice the average burden costs ~0.4pp of output, before the rebuild the construction stream books. */
     public const KALDOR_CATASTROPHE_DRAG = 0.004;
     /** Demand drag per log unit of policy uncertainty ABOVE baseline: a doubling costs ~0.4pp a year, so the 2006-2011 rise integrates to the ~1% output loss Baker, Bloom & Davis attribute to it. One-sided: spikes cost output (Bloom 2009), calm does not stimulate. */
@@ -378,8 +412,9 @@ class MacroAggregateSubsystem
     /**
      * Kaldor (1940) Non-Linear Business Cycle with Modigliani Wealth Effect & Marshall-Lerner FX Drag.
      *
-     * Solves continuous macroeconomic aggregate demand dynamics:
-     *   dy = [Momentum - CapacityCeiling(y>0) - RealRateDrag + FiscalStimulus + AutomaticStabilisers - CapitalOverhang + WealthEffect - FxDrag + NewBorrowing - DebtService - CrisisDeleveraging - LendingStandards + DemandShock] * dt
+     * Solves continuous domestic demand dynamics, weighted by its share of GDP, to which the productivity supply part, net
+     * exports and the market-driven finance output are added as levels:
+     *   dy = [Momentum - CapacityCeiling(y>0) - RealRateDrag + FiscalStimulus + AutomaticStabilisers - CapitalOverhang + WealthEffect + NewBorrowing - DebtService - CrisisDeleveraging - LendingStandards + DemandShock] * dt
      *
      * @param MacroState $state             Current macroeconomic state.
      * @param float      $yield5y           5-Year Treasury yield benchmark for business borrowing.
@@ -391,14 +426,24 @@ class MacroAggregateSubsystem
      */
     public function calculateOutputGap(MacroState $state, float $yield5y, float $naturalRate, float $expectedInflation, float $dt, float $stressMultiplier): float
     {
-        // The gap is demand plus the supply part a productivity shock opens (absorbProductivityShocks). The demand
-        // equation below runs on the demand part only: momentum, stabilisers and drags answer spending, and the
-        // supply part already carries its own measured closing path.
+        // The gap is GDP by industry: domestic demand on its share of the economy, plus, as levels each on its own
+        // measured path, the supply part a productivity shock opens (absorbProductivityShocks), net exports, and the
+        // market-driven finance output. The demand equation below runs on domestic demand only: momentum,
+        // stabilisers and drags answer spending.
         $openingGap = $state->outputGap;
-        $y = $openingGap - $state->productivitySupplyGap;
+        $y = ($openingGap - $state->productivitySupplyGap - $state->netExportGap - $state->financeOutputGap) / self::DOMESTIC_GAP_WEIGHT;
         $supplyGap = $state->tfpOutputStage2 - $state->tfpPotentialAbsorbed;
         $supplyChange = $supplyGap - $state->productivitySupplyGap;
         $state->productivitySupplyGap = $supplyGap;
+        $netExportGap = $this->updateNetExportGap($state, $dt);
+        $tradeChange = $netExportGap - $state->netExportGap;
+        $state->netExportGap = $netExportGap;
+        $financeGap = self::financeOutputGapAt(
+            self::creditBalanceGap($state->creditToGdpGap, $state->creditToGdpTrend),
+            self::marketBalanceGap($state->equityWealthRatio, $state->equityWealthTrend)
+        );
+        $financeChange = $financeGap - $state->financeOutputGap;
+        $state->financeOutputGap = $financeGap;
         // Smets & Wouters (2007) estimate the demand disturbance and the measurement-frequency
         // component as separate innovations; one draw serving both correlates them at unity.
         $demandZ = $this->mathUtility->generateStandardNormal();
@@ -467,17 +512,6 @@ class MacroAggregateSubsystem
         $equityWealthEffect = ($equityWealthRatio > 0.0 && $state->equityWealthTrend > 0.0)
             ? max(-0.60, min(0.60, ($equityWealthRatio / $state->equityWealthTrend) - 1.0)) * self::KALDOR_EQUITY_WEALTH_ELASTICITY
             : 0.0;
-        // Against the currency's own trend, not the nominal PPP baseline. targetFx carries a rectified
-        // safe-haven bid and a one-sided sovereign risk discount, so the index cannot average 100 by
-        // construction -- it settles ~97.3 -- and read off a fixed 100 the Mundell-Fleming term became a
-        // permanent +0.11 pp/yr of demand instead of a cyclical one. Same fix as the housing wealth effect
-        // and the credit equation's SLOOS term.
-        $fxShift = $state->exchangeRateTrend > 0.0
-            ? ($state->exchangeRateIndexEma / $state->exchangeRateTrend) - 1.0
-            : 0.0;
-        // Mundell-Fleming net export drag via real exchange rate elasticity and foreign demand.
-        $netExportDrag = (self::KALDOR_FX_ELASTICITY * $fxShift) - (self::KALDOR_FOREIGN_DEMAND * $state->foreignOutputGapEma);
-
         // Bruno & Sachs (1985) and Blanchard & Gali (2007) symmetric energy supply shock drag.
         $energyShock = $state->energyPriceShock != 0.0
             ? $state->energyPriceShock
@@ -552,10 +586,11 @@ class MacroAggregateSubsystem
             $this->diagnostics?->recordEvent('demandDisaster', $disasterJump);
         }
 
-        // Every channel signed as it acts on demand, so a drag reads negative wherever it is looked at.
-        // This array IS the drift: it is summed below and handed to the probe unchanged, so a channel
-        // cannot reach the economy and miss the decomposition that explains it.
-        $contributions = [
+        // Every channel signed as it acts on demand, so a drag reads negative wherever it is looked at. Domestic
+        // demand's channels reach GDP on its share; the level parts arrive as their change. This array IS the
+        // drift: it is summed below and handed to the probe unchanged, so a channel cannot reach the economy and miss
+        // the decomposition that explains it.
+        $domesticDemand = [
             'momentum' => $momentum,
             'cubicConstraint' => -$cubicConstraint,
             'monetaryDrag' => -$monetaryDrag,
@@ -569,7 +604,6 @@ class MacroAggregateSubsystem
             'inventoryDrag' => -$inventoryDrag,
             'housingWealthEffect' => $housingWealthEffect,
             'equityWealthEffect' => $equityWealthEffect,
-            'netExportDrag' => -$netExportDrag,
             'energySupplyDrag' => -$energySupplyDrag,
             'freightSupplyDrag' => -$freightSupplyDrag,
             'policyUncertaintyDrag' => -$policyUncertaintyDrag,
@@ -582,12 +616,18 @@ class MacroAggregateSubsystem
             'demandShock' => $state->demandShock - $state->demandDisasterShock + $state->demandDisasterCompensation,
             'demandDisaster' => $state->demandDisasterShock,
             'disasterCompensator' => -$state->demandDisasterCompensation,
+        ];
+        $contributions = array_map(static fn (float $rate): float => self::DOMESTIC_GAP_WEIGHT * $rate, $domesticDemand) + [
             // Basu, Fernald & Kimball (2006): output catches up with a technology gain before potential does.
             'productivitySupply' => $supplyChange / $dt,
+            // Obstfeld & Rogoff (1996): the mainland's demand and the real exchange rate move what the district sells abroad.
+            'netExports' => $tradeChange / $dt,
+            // ESA 2010 deflated balances: the finance the District lives on produces as its loans and managed assets do.
+            'financeOutput' => $financeChange / $dt,
         ];
 
         $drift = array_sum($contributions) * $dt;
-        $diffusion = self::OUTPUT_GAP_DIFFUSION_SIGMA * $stressMultiplier * sqrt($dt) * $outZ;
+        $diffusion = self::DOMESTIC_GAP_WEIGHT * self::OUTPUT_GAP_DIFFUSION_SIGMA * $stressMultiplier * sqrt($dt) * $outZ;
         $preClampGap = $openingGap + $drift + $diffusion;
         $newGap = max(self::OUTPUT_GAP_FLOOR, min(self::OUTPUT_GAP_CEILING, $preClampGap));
 
@@ -601,6 +641,114 @@ class MacroAggregateSubsystem
         );
 
         return $newGap;
+    }
+
+    /**
+     * Net exports away from the structural trade balance, as a share of GDP (IMF WEO October 2015, Ch. 3).
+     *
+     * Exports follow the mainland's demand. The currency against its own trend moves both volumes through the prices
+     * it passes into, the price response building over about a year toward its long-term size.
+     *
+     * @param MacroState $state Current macroeconomic state.
+     * @param float      $dt    Time increment in years.
+     * @return float Net export gap (fraction of GDP).
+     */
+    private function updateNetExportGap(MacroState $state, float $dt): float
+    {
+        $state->realExchangeRateTradeLag = $this->mathUtility->calculateDistributedLag(
+            $state->realExchangeRateTradeLag,
+            self::realExchangeRateGap($state->exchangeRateIndexEma, $state->exchangeRateTrend),
+            $dt,
+            self::TRADE_VOLUME_ADJUSTMENT_YEARS
+        );
+
+        return self::netExportGapAt($state->foreignOutputGapEma, $state->realExchangeRateTradeLag);
+    }
+
+    /**
+     * The currency against its own trend, in logs: the competitiveness trade volumes answer. The trend, not the index's
+     * nominal baseline, is the reference, since the currency settles away from 100 by construction.
+     *
+     * @param float $exchangeRateIndexEma The currency index, smoothed over a quarter.
+     * @param float $exchangeRateTrend    The currency's own long-run trend.
+     * @return float Log real exchange rate gap; positive is an appreciation.
+     */
+    public static function realExchangeRateGap(float $exchangeRateIndexEma, float $exchangeRateTrend): float
+    {
+        return ($exchangeRateTrend > 0.0 && $exchangeRateIndexEma > 0.0) ? log($exchangeRateIndexEma / $exchangeRateTrend) : 0.0;
+    }
+
+    /**
+     * Net exports at a mainland gap and a (lagged) real exchange rate gap, as a share of GDP.
+     *
+     * Export volume moves 2.3 times the mainland's demand. A real appreciation raises export prices abroad by the
+     * export pass-through and loses their elasticity's worth of volume, and lowers import prices at home by the import
+     * pass-through and gains that elasticity's worth of imports, each weighted by its share of GDP (the chapter's
+     * footnote 21, which gives 1.5% of GDP per 10% at the sample's 42% and 41% shares).
+     *
+     * @param float $mainlandGap         Mainland output gap (fraction).
+     * @param float $realExchangeRateGap Log real exchange rate against its trend.
+     * @return float Net export gap (fraction of GDP).
+     */
+    public static function netExportGapAt(float $mainlandGap, float $realExchangeRateGap): float
+    {
+        $priceResponse = (self::EXPORT_PRICE_PASS_THROUGH * self::EXPORT_PRICE_ELASTICITY * self::DISTRICT_EXPORT_SHARE)
+            + (self::IMPORT_PRICE_PASS_THROUGH * self::IMPORT_PRICE_ELASTICITY * self::DISTRICT_IMPORT_SHARE);
+
+        return (self::DISTRICT_EXPORT_SHARE * self::EXPORT_DEMAND_ELASTICITY * $mainlandGap) - ($priceResponse * $realExchangeRateGap);
+    }
+
+    /**
+     * The market-driven part of the District's finance output, as a share of GDP. Service volumes follow balances
+     * deflated by a general price index (ESA 2010 §14.14; Kornfeld 2021): banks produce as their loans do and fund
+     * managers, brokers and exchanges as the value of the assets they manage and trade does, each against its trend.
+     *
+     * @param float $creditBalanceGap Log credit balances against their trend.
+     * @param float $marketBalanceGap Log market value of managed assets against its trend.
+     * @return float Finance output gap (fraction of GDP).
+     */
+    public static function financeOutputGapAt(float $creditBalanceGap, float $marketBalanceGap): float
+    {
+        return self::FINANCE_GAP_WEIGHT * ((self::FINANCE_CREDIT_SHARE * $creditBalanceGap) + (self::FINANCE_MARKET_SHARE * $marketBalanceGap));
+    }
+
+    /**
+     * Credit balances against their Basel trend, in logs: the credit-to-GDP ratio over its one-sided HP trend.
+     *
+     * @param float $creditToGdpGap   Credit-to-GDP less its trend.
+     * @param float $creditToGdpTrend The trend.
+     * @return float Log credit balance gap.
+     */
+    public static function creditBalanceGap(float $creditToGdpGap, float $creditToGdpTrend): float
+    {
+        return $creditToGdpTrend > 0.0 ? log(max(0.01, 1.0 + ($creditToGdpGap / $creditToGdpTrend))) : 0.0;
+    }
+
+    /**
+     * The market value the District's funds and brokers hold against its trend, in logs: the board's capitalisation
+     * over GDP against the level households have grown used to. Zero before a market is reported.
+     *
+     * @param float $equityWealthRatio Board capitalisation over nominal GDP.
+     * @param float $equityWealthTrend Its multi-year trend.
+     * @return float Log market balance gap.
+     */
+    public static function marketBalanceGap(float $equityWealthRatio, float $equityWealthTrend): float
+    {
+        return ($equityWealthRatio > 0.0 && $equityWealthTrend > 0.0) ? log($equityWealthRatio / $equityWealthTrend) : 0.0;
+    }
+
+    /**
+     * The log import price level, relative to domestic prices, that the currency settles it at: the long-term pass-through
+     * times the index against its baseline. Only its change is ever read, so the baseline sets no level of its own.
+     *
+     * @param float $exchangeRateIndexEma The currency index, smoothed over a quarter.
+     * @return float Log relative import price level.
+     */
+    public static function importPriceLevelTarget(float $exchangeRateIndexEma): float
+    {
+        $index = $exchangeRateIndexEma > 0.0 ? $exchangeRateIndexEma : AssetMarketSubsystem::EXCHANGE_RATE_BASELINE;
+
+        return -self::IMPORT_PRICE_PASS_THROUGH * log($index / AssetMarketSubsystem::EXCHANGE_RATE_BASELINE);
     }
 
     /**
@@ -637,12 +785,19 @@ class MacroAggregateSubsystem
         $wageCostPush = $wageGap * self::SUPERCORE_WAGE_TRANSMISSION;
         $targetSupercore = $targetInflation + $anchorSlip + $convexDemandPressure + $wageCostPush;
 
+        // Import prices (IMF WEO October 2015, Ch. 3): the real exchange rate passes into import prices relative to
+        // domestic ones within about a year. The peninsula makes no goods, so every good, fuel and food in the basket is
+        // imported, and all of its retail price but the local distribution margin reprices.
+        $priorImportPriceLevel = $state->importPriceLevel;
+        $state->importPriceLevel = $this->mathUtility->calculateDistributedLag($priorImportPriceLevel, self::importPriceLevelTarget($state->exchangeRateIndexEma), $dt, self::IMPORT_PRICE_ADJUSTMENT_YEARS);
+        $importPriceInflation = (1.0 - self::IMPORT_DISTRIBUTION_SHARE) * ($state->importPriceLevel - $priorImportPriceLevel) / $dt;
+
         // Shapiro (2022) Sector 2: Core goods intermediate supply chain and materials cost pressures.
         $freightShift = ($state->freightRateIndexEma / MacroEngine::FREIGHT_BASELINE) - 1.0;
         $metalsShift = ($state->industrialMetalsIndexEma / MacroEngine::METALS_BASELINE) - 1.0;
         $gscpiFriction = max(-0.01, $state->supplyChainPressureIndexEma * self::CORE_GOODS_GSCPI_SENSITIVITY);
         $goodsSupplyFriction = ($freightShift * self::CORE_GOODS_FREIGHT_SENSITIVITY) + ($metalsShift * self::CORE_GOODS_METALS_SENSITIVITY) + $gscpiFriction;
-        $targetCoreGoods = $targetInflation + $anchorSlip + (self::CORE_GOODS_DEMAND_SENSITIVITY * $convexDemandPressure) + $goodsSupplyFriction;
+        $targetCoreGoods = $targetInflation + $anchorSlip + (self::CORE_GOODS_DEMAND_SENSITIVITY * $convexDemandPressure) + $goodsSupplyFriction + $importPriceInflation;
 
         // Calvo (1983) sticky price dynamics via continuous AR(1) state adjustment.
         $reversionWeight = 1.0 - exp(-self::INFLATION_MEAN_REVERSION * $dt);
@@ -672,7 +827,8 @@ class MacroAggregateSubsystem
 
         // Shapiro (2022) commodity basket aggregation normalized by expenditure weight.
         $commodityBasketInflation = $targetInflation + $anchorSlip
-            + (($state->energyCostPushLag + $state->agriCostPushLag) / self::INFLATION_WEIGHT_COMMODITY);
+            + (($state->energyCostPushLag + $state->agriCostPushLag) / self::INFLATION_WEIGHT_COMMODITY)
+            + $importPriceInflation;
 
         // Shapiro (2022) expenditure-weighted headline consumer price aggregation.
         $blendedInflation = (self::INFLATION_WEIGHT_SUPERCORE * $state->supercoreInflation)
@@ -695,6 +851,7 @@ class MacroAggregateSubsystem
                 'goodsSupply' => $goodsSupplyFriction * self::INFLATION_WEIGHT_GOODS,
                 'energyPassThrough' => $state->energyCostPushLag,
                 'foodPassThrough' => $state->agriCostPushLag,
+                'importPrices' => $importPriceInflation * (self::INFLATION_WEIGHT_GOODS + self::INFLATION_WEIGHT_COMMODITY),
                 'stickyPriceLag' => (self::INFLATION_WEIGHT_SUPERCORE * ($state->supercoreInflation - $targetSupercore))
                     + (self::INFLATION_WEIGHT_GOODS * ($state->coreGoodsInflation - $targetCoreGoods)),
                 'noise' => $noise,

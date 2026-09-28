@@ -82,6 +82,9 @@ class MacroFieldRegistryTest extends TestCase
         'foreignCoreInflationLag1' => 'Mainland core inflation a quarter back, which the previous row records as foreign_core_inflation.',
         'foreignCoreInflationLag2' => 'Mainland core inflation two quarters back; same reason.',
         'foreignCoreInflationLag3' => 'Mainland core inflation three quarters back; same reason.',
+        'realExchangeRateTradeLag' => 'Latent lag behind net_export_gap, which is recorded with exchange_rate_index_ema and exchange_rate_trend.',
+        'importPriceLevel' => 'Latent level behind the import-price term of the quarter\'s inflation diagnostics.',
+        'exchangeRateDeviation' => 'exchange_rate_index over its fundamental; the index is recorded.',
     ];
 
     /**

@@ -244,10 +244,6 @@ class AssetMarketSubsystem
     public const DEAL_ACTIVITY_SIGMA = 0.15;
 
     // --- Mundell-Fleming Trade Balance & Net Exports ---
-    /** Marshall-Lerner elasticity of trade balance to currency exchange rate index deviations from neutral. */
-    public const TRADE_BALANCE_FX_ELASTICITY = 0.040;
-    /** Absorption elasticity of trade balance to cyclical domestic GDP output gap demand. */
-    public const TRADE_BALANCE_GAP_ELASTICITY = 0.080;
     /** Lower bound floor for trade balance deficit as a percentage of GDP (-8.0%). */
     public const MIN_TRADE_BALANCE = -0.080;
     /** Upper bound ceiling for trade balance surplus as a percentage of GDP (+3.0%). */
@@ -535,51 +531,93 @@ class AssetMarketSubsystem
     /**
      * Mundell-Fleming Open Economy (IS-LM-BOP) & Uncovered Interest Parity (Dornbusch 1976).
      *
-     * Models currency exchange rate index against global trading partners based on domestic-to-foreign
-     * interest rate differentials (UIP equilibrium target) with Schwartz (1997) commodity mean reversion.
-     *
-     * The parity target carries two further real-world loadings, because a rate differential alone leaves the
+     * The currency is an asset price: it moves to its fundamental the moment the fundamental moves, and only its
+     * departures from that fundamental, the purchasing-power deviations (Rogoff 1996), decay slowly. The fundamental
+     * is the parity level with two further real-world loadings, because a rate differential alone leaves the
      * currency deaf to the two events that move it most:
-     *   log(FX / FX*) = UIP * (i - i*) - TOT * ImportBasket + Haven * max(0, vol - threshold)
-     * A dearer import basket is a terms-of-trade loss for a district that buys its commodities, and a
-     * volatility panic bids its currency the way it already bids its bonds. A higher index is a STRONGER
-     * currency throughout, which is why net exports and the trade balance both read it negatively.
+     *   log(FX* / 100) = UIP * (i - i*) - TOT * ImportBasket + Haven * max(0, vol - threshold) - Fiscal * spread
+     * A dearer import basket is a terms-of-trade loss for a district that buys its commodities, and a volatility
+     * panic bids its currency the way it already bids its bonds. The index is that fundamental times a Schwartz (1997)
+     * deviation reverting to one. A higher index is a STRONGER currency throughout, which is why net exports and the
+     * trade balance both read it negatively.
+     *
+     * The fundamental used to be the level a single slow reversion headed toward, so a rate move reached the
+     * currency over a year and trade the year after, landing on demand once the rate channel had already closed the
+     * gap and ringing the policy loop past zero.
      *
      * @param MacroState $state Current macroeconomic state.
      * @param float      $dt    Time increment in years.
      */
     public function calculateExchangeRate(MacroState $state, float $dt): void
     {
-        $rateDiff = $state->policyRate - $state->foreignPolicyRate;
+        $state->exchangeRateDeviation = $this->mathUtility->calculateSchwartz1Factor(
+            currentPrice: $state->exchangeRateDeviation,
+            kappa: self::EXCHANGE_RATE_MEAN_REVERSION,
+            theta: 1.0,
+            sigma: MacroEngine::EXCHANGE_RATE_VOLATILITY,
+            dt: $dt,
+            dW: $this->mathUtility->generateStandardNormal()
+        );
+
+        $state->exchangeRateIndex = max(60.0, min(160.0, self::exchangeRateFundamental($state) * $state->exchangeRateDeviation));
+    }
+
+    /**
+     * The currency's fundamental level: parity on the rate differential, the terms of trade, the safe-haven bid and
+     * the sovereign risk discount.
+     *
+     * @param MacroState $state Current macroeconomic state.
+     * @return float Fundamental exchange rate index.
+     */
+    public static function exchangeRateFundamental(MacroState $state): float
+    {
+        return self::exchangeRateFundamentalAt(
+            $state->policyRate,
+            $state->foreignPolicyRate,
+            $state->energyPriceIndexEma,
+            $state->industrialMetalsIndexEma,
+            $state->marketVolatilityEma,
+            $state->sovereignRiskSpreadEma
+        );
+    }
+
+    /**
+     * The fundamental on its inputs, for the readers that hold them as values rather than as a state.
+     *
+     * @param float $policyRate              District policy rate.
+     * @param float $foreignPolicyRate       Mainland policy rate.
+     * @param float $energyPriceIndexEma     Smoothed energy price index.
+     * @param float $industrialMetalsIndexEma Smoothed industrial metals index.
+     * @param float $marketVolatilityEma     Smoothed equity volatility.
+     * @param float $sovereignRiskSpreadEma  Smoothed sovereign risk spread.
+     * @return float Fundamental exchange rate index.
+     */
+    public static function exchangeRateFundamentalAt(
+        float $policyRate,
+        float $foreignPolicyRate,
+        float $energyPriceIndexEma,
+        float $industrialMetalsIndexEma,
+        float $marketVolatilityEma,
+        float $sovereignRiskSpreadEma
+    ): float {
+        $rateDiff = $policyRate - $foreignPolicyRate;
 
         // Harrod-Balassa-Samuelson terms-of-trade import price effect on real exchange rates.
-        $energyShift = ($state->energyPriceIndexEma / MacroEngine::ENERGY_BASELINE) - 1.0;
-        $metalsShift = ($state->industrialMetalsIndexEma / MacroEngine::METALS_BASELINE) - 1.0;
+        $energyShift = ($energyPriceIndexEma / MacroEngine::ENERGY_BASELINE) - 1.0;
+        $metalsShift = ($industrialMetalsIndexEma / MacroEngine::METALS_BASELINE) - 1.0;
         $importBillShift = (MacroEngine::PPI_ENERGY_WEIGHT * $energyShift) + (MacroEngine::PPI_METALS_WEIGHT * $metalsShift);
         $termsOfTradeShift = self::FX_TERMS_OF_TRADE_SENSITIVITY * $importBillShift;
 
         // Caballero & Krishnamurthy (2008) safe-haven currency bid under global volatility flight to safety.
-        $panic = max(0.0, $state->marketVolatilityEma - MacroEngine::FLIGHT_TO_SAFETY_VOL_THRESHOLD);
+        $panic = max(0.0, $marketVolatilityEma - MacroEngine::FLIGHT_TO_SAFETY_VOL_THRESHOLD);
         $safeHavenBid = self::FX_SAFE_HAVEN_SENSITIVITY * $panic;
 
         // Della Corte et al. (2016) sovereign credit default risk discount on currency valuation.
-        $fiscalRiskDiscount = self::FX_FISCAL_RISK_SENSITIVITY * $state->sovereignRiskSpreadEma;
+        $fiscalRiskDiscount = self::FX_FISCAL_RISK_SENSITIVITY * $sovereignRiskSpreadEma;
 
-        $targetFx = self::EXCHANGE_RATE_BASELINE * exp(
+        return self::EXCHANGE_RATE_BASELINE * exp(
             (self::UIP_SENSITIVITY * $rateDiff) - $termsOfTradeShift + $safeHavenBid - $fiscalRiskDiscount
         );
-
-        $dW = $this->mathUtility->generateStandardNormal();
-        $newFx = $this->mathUtility->calculateSchwartz1Factor(
-            currentPrice: $state->exchangeRateIndex,
-            kappa: self::EXCHANGE_RATE_MEAN_REVERSION,
-            theta: $targetFx,
-            sigma: MacroEngine::EXCHANGE_RATE_VOLATILITY,
-            dt: $dt,
-            dW: $dW
-        );
-
-        $state->exchangeRateIndex = max(60.0, min(160.0, $newFx));
     }
 
     /**
@@ -770,23 +808,20 @@ class AssetMarketSubsystem
     /**
      * Mundell-Fleming Open Economy Trade Balance & Net Exports to GDP.
      *
-     * Models net export balance as a share of GDP (NX/Y) based on Marshall-Lerner real exchange rate
-     * deviations and domestic cyclical demand absorption:
-     *   NX/Y = Baseline - beta_FX * (FX/100 - 1) - beta_Y * OutputGap
+     * The structural balance, plus the net exports the output gap already carries (the mainland's demand and the real
+     * exchange rate: MacroAggregateSubsystem::netExportGapAt), less the imports domestic demand draws in (IMF WEO
+     * October 2015, Ch. 3: 1.4% of imports per 1% of domestic demand):
+     *   NX/Y = Baseline + NetExportGap - M/Y * 1.4 * (OutputGap - NetExportGap)
      *
      * @param MacroState $state Current macroeconomic state.
      * @param float      $dt    Time increment in years.
      */
     public function calculateTradeBalance(MacroState $state, float $dt): void
     {
-        $fxDeviation = ($state->exchangeRateIndex / self::EXCHANGE_RATE_BASELINE) - 1.0;
-        $cyclicalAbsorption = $state->outputGap;
-
-        // Mundell-Fleming foreign absorption spillover to domestic export demand.
+        $domesticDemandGap = $state->outputGap - $state->netExportGap;
         $targetTradeBalance = MacroEngine::TRADE_BALANCE_BASELINE
-            - (self::TRADE_BALANCE_FX_ELASTICITY * $fxDeviation)
-            - (self::TRADE_BALANCE_GAP_ELASTICITY * $cyclicalAbsorption)
-            + (self::TRADE_BALANCE_GAP_ELASTICITY * $state->foreignOutputGap);
+            + $state->netExportGap
+            - (MacroAggregateSubsystem::DISTRICT_IMPORT_SHARE * MacroAggregateSubsystem::IMPORT_DEMAND_ELASTICITY * $domesticDemandGap);
 
         $targetTradeBalance = max(self::MIN_TRADE_BALANCE, min(self::MAX_TRADE_BALANCE, $targetTradeBalance));
 

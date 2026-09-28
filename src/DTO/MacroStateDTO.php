@@ -7,6 +7,8 @@ namespace App\DTO;
 use App\Data\MacroFieldRegistry;
 use App\Service\Macro\MacroEngine;
 use App\Service\Macro\MacroState;
+use App\Service\Macro\Subsystem\AssetMarketSubsystem;
+use App\Service\Macro\Subsystem\MacroAggregateSubsystem;
 
 /**
  * Immutable Data Transfer Object representing a snapshot of the macroeconomic state.
@@ -89,6 +91,7 @@ readonly class MacroStateDTO
         public float $exchangeRateIndex = 100.0,
         public float $exchangeRateIndexEma = 100.0,
         public float $exchangeRateTrend = 100.0,
+        public float $exchangeRateDeviation = 1.0,
         public float $industrialMetalsIndex = 100.0,
         public float $industrialMetalsIndexEma = 100.0,
         public float $industrialMetalsIndexTrend = 0.0,
@@ -164,6 +167,10 @@ readonly class MacroStateDTO
         public float $tfpPotentialStage1 = 0.0,
         public float $tfpPotentialAbsorbed = 0.0,
         public float $productivitySupplyGap = 0.0,
+        public float $netExportGap = 0.0,
+        public float $financeOutputGap = 0.0,
+        public float $realExchangeRateTradeLag = 0.0,
+        public float $importPriceLevel = 0.0,
         public float $monetaryStanceStage1 = 0.0,
         public float $monetaryStanceTransmitted = 0.0,
         public float $financialConditionsIndex = 0.0,
@@ -405,6 +412,28 @@ readonly class MacroStateDTO
 
             $args[$field] = $resolve($seeds[$field]);
         }
+
+        // A saved currency that predates the split into fundamental and deviation keeps its level: the deviation is
+        // whatever it sits away from its fundamental. As MacroState::fromArray has it.
+        if (isset($data[$fields['exchangeRateIndex']]) && !isset($args['exchangeRateDeviation'])) {
+            $args['exchangeRateDeviation'] = $resolve('exchangeRateIndex') / AssetMarketSubsystem::exchangeRateFundamentalAt(
+                $resolve('policyRate'),
+                $resolve('foreignPolicyRate'),
+                $resolve('energyPriceIndexEma'),
+                $resolve('industrialMetalsIndexEma'),
+                $resolve('marketVolatilityEma'),
+                $resolve('sovereignRiskSpreadEma')
+            );
+        }
+
+        // The open-economy levels open where the currency and the mainland already stand, as MacroState::fromArray has them.
+        $args['importPriceLevel'] ??= MacroAggregateSubsystem::importPriceLevelTarget($resolve('exchangeRateIndexEma'));
+        $args['realExchangeRateTradeLag'] ??= MacroAggregateSubsystem::realExchangeRateGap($resolve('exchangeRateIndexEma'), $resolve('exchangeRateTrend'));
+        $args['netExportGap'] ??= MacroAggregateSubsystem::netExportGapAt($resolve('foreignOutputGapEma'), $resolve('realExchangeRateTradeLag'));
+        $args['financeOutputGap'] ??= MacroAggregateSubsystem::financeOutputGapAt(
+            MacroAggregateSubsystem::creditBalanceGap($resolve('creditToGdpGap'), $resolve('creditToGdpTrend')),
+            MacroAggregateSubsystem::marketBalanceGap($resolve('equityWealthRatio'), $resolve('equityWealthTrend'))
+        );
 
         return new self(...$args);
     }

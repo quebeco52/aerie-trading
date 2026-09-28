@@ -440,7 +440,7 @@
     const INFLATION_LABELS = {
         target: 'Target', expectationsSlip: 'Expectations slip', demandPull: 'Demand pull', wagePush: 'Wage push',
         goodsSupply: 'Goods supply', energyPassThrough: 'Energy pass-through', foodPassThrough: 'Food pass-through',
-        stickyPriceLag: 'Sticky-price lag', noise: 'Noise', clamp: 'Clamp',
+        importPrices: 'Import prices', stickyPriceLag: 'Sticky-price lag', noise: 'Noise', clamp: 'Clamp',
     };
     // The chart stacks the deviation from target, at most eight series in the validated slot order; noise and
     // clamp share the neutral residual, as the gap chart's diffusion does.
@@ -450,6 +450,7 @@
         { label: 'Wage push', terms: ['wagePush'] },
         { label: 'Goods supply', terms: ['goodsSupply'] },
         { label: 'Energy & food', terms: ['energyPassThrough', 'foodPassThrough'] },
+        { label: 'Import prices', terms: ['importPrices'] },
         { label: 'Sticky-price lag', terms: ['stickyPriceLag'] },
     ];
     const INFLATION_RESIDUAL = ['noise', 'clamp'];

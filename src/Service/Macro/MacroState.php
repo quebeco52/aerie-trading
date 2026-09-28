@@ -3,6 +3,8 @@
 namespace App\Service\Macro;
 
 use App\Data\MacroFieldRegistry;
+use App\Service\Macro\Subsystem\AssetMarketSubsystem;
+use App\Service\Macro\Subsystem\MacroAggregateSubsystem;
 
 /**
  * The macro engine's mutable working copy of the state vector, advanced in place every tick.
@@ -199,6 +201,15 @@ class MacroState
     public float $tfpPotentialStage1;
     public float $tfpPotentialAbsorbed;
     public float $productivitySupplyGap;
+    // Open economy: net exports away from the structural trade balance (a share of GDP, a level part of the gap), the
+    // real exchange rate gap as trade volumes have absorbed it, and the log import price level relative to domestic prices.
+    public float $netExportGap;
+    // The market-driven finance output (a share of GDP, a level part of the gap): loans and managed assets against their trends.
+    public float $financeOutputGap;
+    // The currency index over its fundamental: the purchasing-power deviation that decays while the fundamental jumps.
+    public float $exchangeRateDeviation;
+    public float $realExchangeRateTradeLag;
+    public float $importPriceLevel;
     // Monetary transmission: the real-rate stance through two Pascal stages (Solow 1960) on its way to demand.
     public float $monetaryStanceStage1;
     public float $monetaryStanceTransmitted;
@@ -476,6 +487,31 @@ class MacroState
             if (!isset($carried[$field])) {
                 $state->$field = $state->$source;
             }
+        }
+
+        // A saved currency that predates the split into fundamental and deviation keeps its level: the deviation is
+        // whatever it sits away from its fundamental.
+        if (isset($carried['exchangeRateIndex']) && !isset($carried['exchangeRateDeviation'])) {
+            $state->exchangeRateDeviation = $state->exchangeRateIndex / AssetMarketSubsystem::exchangeRateFundamental($state);
+        }
+
+        // The open-economy levels a payload predating them omits open where the currency and the mainland already stand,
+        // so their arrival reprices nothing: import prices have absorbed the currency, trade volumes too, and the net
+        // export level is already part of the gap the payload carries.
+        if (!isset($carried['importPriceLevel'])) {
+            $state->importPriceLevel = MacroAggregateSubsystem::importPriceLevelTarget($state->exchangeRateIndexEma);
+        }
+        if (!isset($carried['realExchangeRateTradeLag'])) {
+            $state->realExchangeRateTradeLag = MacroAggregateSubsystem::realExchangeRateGap($state->exchangeRateIndexEma, $state->exchangeRateTrend);
+        }
+        if (!isset($carried['netExportGap'])) {
+            $state->netExportGap = MacroAggregateSubsystem::netExportGapAt($state->foreignOutputGapEma, $state->realExchangeRateTradeLag);
+        }
+        if (!isset($carried['financeOutputGap'])) {
+            $state->financeOutputGap = MacroAggregateSubsystem::financeOutputGapAt(
+                MacroAggregateSubsystem::creditBalanceGap($state->creditToGdpGap, $state->creditToGdpTrend),
+                MacroAggregateSubsystem::marketBalanceGap($state->equityWealthRatio, $state->equityWealthTrend)
+            );
         }
 
         return $state;
