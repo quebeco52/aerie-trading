@@ -175,6 +175,12 @@ class CreditFiscalSubsystem
     /** Excess bond premium a crisis books on the day (216 bps): 2008's jump, EBP 1.24% in August to 3.40% in October, the one systemic crisis in the GZ record. The boom's size scales the drag (JST 2013), not this: nothing in the record says how the premium scales past 2008. */
     public const EBP_CRISIS_JUMP = 0.0216;
 
+    // --- Light-Touch Financial Centre (Jorda, Richter, Schularick & Taylor 2021) ---
+    /** Crisis logit shift for the District's wholesale-funded banks: loans at 108% of deposits (UK and Swiss banks 1995-2007, JST R6) against the US 87%, at JRST's post-war probit marginal effect of 0.05pp a year per point (se 0.01); the hazard at trend rises from 2.2% to 3.6%. */
+    public const DISTRICT_FUNDING_CRISIS_LOGIT_SHIFT = 0.485;
+    /** Crisis drag scale for the District's thin bank capital: equity 4.9% of assets (UK and Swiss banks 1995-2007, JST R6) against the US 7.6%, at JRST's 0.86pp of five-year output per point of capital over a 24.55pp financial-recession loss (Table 8). */
+    public const DISTRICT_THIN_CAPITAL_DRAG_SCALE = 1.095;
+
     // --- Excess Bond Premium (Gilchrist & Zakrajsek 2012), a displaced lognormal ---
     /** Displacement (141 bps): the premium plus this is lognormal. Profile maximum likelihood on the GZ series, 1973-2026 (95% CI 116-185 bps); in logs the shocks are the same size at every level, in levels they grow 2.8x from low to high. */
     public const EBP_DISPLACEMENT = 0.0141;
@@ -394,10 +400,14 @@ class CreditFiscalSubsystem
      *
      * where D0 is the level the budget year opened at. The gap is read against its own trailing average, as a
      * ministry's trend estimate averages the cycle to zero: read against potential itself, the engine's gap, whose
-     * mean is below zero (so is CBO's), would hold D above zero for good and drain the fund to pay for it. The budget is set twice a year, the October budget and the May
-     * revision, each on the gap as it then reads; the revision redoes the year's change from D0 rather than adding to
-     * it. The kappa term takes the level back to the rule path, since Norway's deviations from its rule are temporary.
-     * The fund is never asked for more than its foreign sleeves hold beside the rule draw. With no fund it is zero.
+     * mean is below zero (so is CBO's), would hold D above zero for good and drain the fund to pay for it. The budget is
+     * set twice a year, the October budget and the May revision, each on the gap as it then stands (Table 5 pairs a
+     * year's change with that year's gap); the revision redoes the year's change from D0 rather than adding to it. The
+     * rounds are the whole of the policy lag: a reading smoothed before the round and an appropriation smoothed after it
+     * added three quarters of a year between gap and demand, and the rule kept pushing after the gap turned (HP ACF4 of
+     * GDP 0.03 against the no-fund engine's 0.21; var/harness/stab_cycle.sh). The kappa term takes the level back to the
+     * rule path, since Norway's deviations from its rule are temporary. The fund is never asked for more than its
+     * foreign sleeves hold beside the rule draw. With no fund it is zero.
      *
      * @param MacroState $state Current macroeconomic state.
      * @param float      $dt    Time increment in years.
@@ -408,23 +418,24 @@ class CreditFiscalSubsystem
             $state->sovereignFundStabilisationToGdp = 0.0;
             return;
         }
+
+        if (MathUtility::crossedSimulatedBoundary($state->totalTime, $dt, MacroEngine::BUDGET_ROUND_PERIOD_YEARS)) {
+            // The round that opens a budget year closes the last one: its change is booked and the new year starts from its end.
+            if (MathUtility::crossedSimulatedBoundary($state->totalTime, $dt, 1.0)) {
+                $state->sovereignFundStabilisationLastChange = $state->sovereignFundStabilisationToGdp - $state->sovereignFundStabilisationYearStart;
+                $state->sovereignFundStabilisationYearStart = $state->sovereignFundStabilisationToGdp;
+            }
+
+            $change = -(MacroEngine::FUND_STABILISATION_GAP_RESPONSE * ($state->outputGap - $state->sovereignFundGapTrend))
+                - (MacroEngine::FUND_STABILISATION_IMPULSE_REVERSAL * $state->sovereignFundStabilisationLastChange)
+                - (MacroEngine::FUND_STABILISATION_PERSISTENCE * $state->sovereignFundStabilisationYearStart);
+            $affordable = max(0.0, ($state->sovereignFundToGdp * (1.0 - $state->sovereignFundDomesticWeight)) - $state->sovereignFundDrawToGdp);
+
+            $state->sovereignFundStabilisationToGdp = min($affordable, $state->sovereignFundStabilisationYearStart + $change);
+        }
+
+        // The average is of the readings before this one, so a round compares today's gap with the past's.
         $state->sovereignFundGapTrend += (1.0 - exp(-$dt / MacroEngine::FUND_STABILISATION_GAP_TREND_YEARS)) * ($state->outputGap - $state->sovereignFundGapTrend);
-        if (!MathUtility::crossedSimulatedBoundary($state->totalTime, $dt, MacroEngine::BUDGET_ROUND_PERIOD_YEARS)) {
-            return;
-        }
-
-        // The round that opens a budget year closes the last one: its change is booked and the new year starts from its end.
-        if (MathUtility::crossedSimulatedBoundary($state->totalTime, $dt, 1.0)) {
-            $state->sovereignFundStabilisationLastChange = $state->sovereignFundStabilisationToGdp - $state->sovereignFundStabilisationYearStart;
-            $state->sovereignFundStabilisationYearStart = $state->sovereignFundStabilisationToGdp;
-        }
-
-        $change = -(MacroEngine::FUND_STABILISATION_GAP_RESPONSE * ($state->outputGapEma - $state->sovereignFundGapTrend))
-            - (MacroEngine::FUND_STABILISATION_IMPULSE_REVERSAL * $state->sovereignFundStabilisationLastChange)
-            - (MacroEngine::FUND_STABILISATION_PERSISTENCE * $state->sovereignFundStabilisationYearStart);
-        $affordable = max(0.0, ($state->sovereignFundToGdp * (1.0 - $state->sovereignFundDomesticWeight)) - $state->sovereignFundDrawToGdp);
-
-        $state->sovereignFundStabilisationToGdp = min($affordable, $state->sovereignFundStabilisationYearStart + $change);
     }
 
     /**
@@ -578,6 +589,10 @@ class CreditFiscalSubsystem
      * the same tick forces the wholesale funding run in the interbank spread. The hazard is off for a
      * refractory window afterwards: the bust resets the stock the hazard reads.
      *
+     * The District is a light-touch financial centre, so both legs depart from the JST panel as Jorda, Richter,
+     * Schularick & Taylor (2021) measure: banks funded beyond their deposits raise the hazard, and thin capital
+     * deepens the recession a crisis brings (capital does not predict crises, only how hard they land).
+     *
      * @param MacroState $state Current macroeconomic state.
      * @param float      $dt    Time increment in years.
      */
@@ -593,7 +608,7 @@ class CreditFiscalSubsystem
 
         $state->creditCrisisHazard = $this->mathUtility->calculateSchularickTaylorCrisisHazard(
             creditGap: $state->creditToGdpGapEma,
-            beta0: self::CREDIT_CRISIS_LOGIT_INTERCEPT,
+            beta0: self::CREDIT_CRISIS_LOGIT_INTERCEPT + self::DISTRICT_FUNDING_CRISIS_LOGIT_SHIFT,
             betaGap: self::CREDIT_CRISIS_LOGIT_GAP
         );
 
@@ -602,7 +617,8 @@ class CreditFiscalSubsystem
         }
 
         $state->lastCreditCrisisAt = $state->totalTime;
-        $crisisDrag = self::CREDIT_CRISIS_DRAG_BASE + (self::CREDIT_CRISIS_DRAG_PER_GAP * max(0.0, $state->creditToGdpGapEma));
+        $crisisDrag = self::DISTRICT_THIN_CAPITAL_DRAG_SCALE
+            * (self::CREDIT_CRISIS_DRAG_BASE + (self::CREDIT_CRISIS_DRAG_PER_GAP * max(0.0, $state->creditToGdpGapEma)));
         $state->creditCrisisDrag += $crisisDrag;
         $this->diagnostics?->recordEvent('creditCrisis', $crisisDrag);
         // Gilchrist & Zakrajsek (2012): lenders' capital is hit on the day, so the premium they charge jumps with it.

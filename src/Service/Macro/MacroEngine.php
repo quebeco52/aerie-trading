@@ -228,7 +228,7 @@ class MacroEngine
     // --- Fund-Financed Fiscal Stabilisation (IMF Norway Selected Issues 2025, Table 5) ---
     /** Budget rounds a year apart by half: the National Budget each October and the Revised National Budget each May (Norway's Ministry of Finance). */
     public const BUDGET_ROUND_PERIOD_YEARS = 0.5;
-    /** Fund-financed rise in the structural balance per unit of output gap a budget round: fitted by indirect inference so the engine's whole discretionary balance, tax leg included, answers the annual gap at Norway's 0.450 (se 0.194) (var/harness/stab_fit.py). */
+    /** Fund-financed rise in the structural balance per unit of output gap a budget round: fitted by indirect inference so the engine's whole discretionary balance, tax leg included, answers the annual gap at Norway's 0.450 (se 0.194); 0.43 with the round reading the gap as it stands (var/harness/stab_cycle.sh). */
     public const FUND_STABILISATION_GAP_RESPONSE = 0.47;
     /** Share of last year's fund-financed impulse reversed this year: Norway's lagged-change coefficient, -0.452 (se 0.093). */
     public const FUND_STABILISATION_IMPULSE_REVERSAL = 0.452;

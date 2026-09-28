@@ -722,17 +722,30 @@ class CreditFiscalSubsystemTest extends TestCase
     /** The budget answers the cycle, not where the gap sits on average: a gap at its long-run mean asks for nothing. */
     public function testTheBudgetReadsTheGapAgainstItsLongRunAverage(): void
     {
-        // The current gap sits on the average, so the tick does not move it and only the smoothed reading differs.
         $atMean = $this->fundedBudget(-0.01);
-        $atMean->outputGap = $atMean->sovereignFundGapTrend = -0.01;
+        $atMean->sovereignFundGapTrend = -0.01;
         $belowMean = $this->fundedBudget(-0.03);
-        $belowMean->outputGap = $belowMean->sovereignFundGapTrend = -0.01;
+        $belowMean->sovereignFundGapTrend = -0.01;
 
         $this->budgetRound($atMean, 0.5);
         $this->budgetRound($belowMean, 0.5);
 
         $this->assertEqualsWithDelta(0.0, $atMean->sovereignFundStabilisationToGdp, 1e-15);
         $this->assertEqualsWithDelta(MacroEngine::FUND_STABILISATION_GAP_RESPONSE * 0.02, $belowMean->sovereignFundStabilisationToGdp, 1e-15);
+    }
+
+    /**
+     * The round reads the gap as it stands, not a smoothing of it: the round is the whole policy lag. A reading smoothed
+     * before the round, with the appropriation smoothed again after it, left the rule pushing after the gap had turned.
+     */
+    public function testTheRoundReadsTheGapAsItStands(): void
+    {
+        $state = $this->fundedBudget(-0.03);
+        $state->outputGapEma = 0.0;
+
+        $this->budgetRound($state, 0.5);
+
+        $this->assertEqualsWithDelta(MacroEngine::FUND_STABILISATION_GAP_RESPONSE * 0.03, $state->sovereignFundStabilisationToGdp, 1e-15, 'A slump that has only just begun is answered in full at the round.');
     }
 
     /** The average is a slow one: a gap held for one trend horizon moves it by 1 - 1/e of the way. */
@@ -756,7 +769,7 @@ class CreditFiscalSubsystemTest extends TestCase
         $this->budgetRound($state, 0.5);
         $set = $state->sovereignFundStabilisationToGdp;
 
-        $state->outputGapEma = -0.06;
+        $state->outputGap = -0.06;
         $state->totalTime = 0.8;
         $this->subsystem->calculateFundStabilisation($state, 0.01);
 
@@ -768,10 +781,12 @@ class CreditFiscalSubsystemTest extends TestCase
     {
         $state = $this->fundedBudget(-0.02);
         $this->budgetRound($state, 1.0);
-        $state->outputGapEma = -0.04;
+        $state->outputGap = -0.04;
+        // The October tick moved the long-run average a sliver toward its gap; May reads against where it now stands.
+        $average = $state->sovereignFundGapTrend;
         $this->budgetRound($state, 1.5);
 
-        $this->assertEqualsWithDelta(MacroEngine::FUND_STABILISATION_GAP_RESPONSE * 0.04, $state->sovereignFundStabilisationToGdp, 1e-15);
+        $this->assertEqualsWithDelta(MacroEngine::FUND_STABILISATION_GAP_RESPONSE * (0.04 + $average), $state->sovereignFundStabilisationToGdp, 1e-15);
     }
 
     /** A new year books last year's change, gives back a share of it, and decays the level toward the rule path. */
@@ -839,8 +854,7 @@ class CreditFiscalSubsystemTest extends TestCase
             $state = $this->fundedBudget(0.0);
             for ($tick = 1; $tick <= 2 * $tpy; ++$tick) {
                 $state->totalTime = $tick * $dt;
-                $state->outputGapEma = $state->totalTime < 1.2 ? -0.03 : 0.01;
-                $state->outputGap = $state->outputGapEma;
+                $state->outputGap = $state->totalTime < 1.2 ? -0.03 : 0.01;
                 $this->subsystem->calculateFundStabilisation($state, $dt);
             }
 
@@ -853,11 +867,11 @@ class CreditFiscalSubsystemTest extends TestCase
         $this->assertEqualsWithDelta($path(180), $path(3600), 2e-5);
     }
 
-    /** A funded budget whose gap reads $gap, with room in the fund for any stabilisation the rule could ask. */
+    /** A funded budget whose gap stands at $gap, with room in the fund for any stabilisation the rule could ask. */
     private function fundedBudget(float $gap): MacroState
     {
         $state = new MacroState();
-        $state->outputGapEma = $gap;
+        $state->outputGap = $gap;
         $state->sovereignFundDollarsPerGdp = 2.0e13;
         $state->sovereignFundToGdp = 1.5;
         $state->sovereignFundDomesticWeight = 0.05;
@@ -1166,7 +1180,12 @@ class CreditFiscalSubsystemTest extends TestCase
         $calm = new MacroState();
         $calm->totalTime = 20.0;
         $subsystem->calculateCreditCrisisHazard($calm, 0.25);
-        $this->assertEqualsWithDelta(1.0 / (1.0 + exp(-CreditFiscalSubsystem::CREDIT_CRISIS_LOGIT_INTERCEPT)), $calm->creditCrisisHazard, 1e-12, 'With no boom the hazard is the panel\'s base rate, 2.2% a year.');
+        $this->assertEqualsWithDelta(
+            1.0 / (1.0 + exp(-(CreditFiscalSubsystem::CREDIT_CRISIS_LOGIT_INTERCEPT + CreditFiscalSubsystem::DISTRICT_FUNDING_CRISIS_LOGIT_SHIFT))),
+            $calm->creditCrisisHazard,
+            1e-12,
+            'With no boom the hazard is the District\'s base rate: the panel\'s, shifted for its wholesale funding.'
+        );
 
         $recovering = new MacroState();
         $recovering->totalTime = 20.0;
@@ -1195,10 +1214,11 @@ class CreditFiscalSubsystemTest extends TestCase
 
         $this->assertSame(12.5, $state->lastCreditCrisisAt, 'The crisis is dated to the tick it lands on.');
         $this->assertEqualsWithDelta(
-            CreditFiscalSubsystem::CREDIT_CRISIS_DRAG_BASE + (CreditFiscalSubsystem::CREDIT_CRISIS_DRAG_PER_GAP * 0.10),
+            CreditFiscalSubsystem::DISTRICT_THIN_CAPITAL_DRAG_SCALE
+                * (CreditFiscalSubsystem::CREDIT_CRISIS_DRAG_BASE + (CreditFiscalSubsystem::CREDIT_CRISIS_DRAG_PER_GAP * 0.10)),
             $state->creditCrisisDrag,
             1e-9,
-            'Credit bites back: the drag is the base loss plus a share of the boom behind it.'
+            'Credit bites back: the drag is the base loss plus a share of the boom behind it, deepened by thin capital.'
         );
 
         $state->interbankLiquiditySpread = MacroEngine::INTERBANK_BASELINE_SPREAD;
@@ -1211,6 +1231,34 @@ class CreditFiscalSubsystemTest extends TestCase
         $quiet->interbankLiquiditySpread = MacroEngine::INTERBANK_BASELINE_SPREAD;
         $subsystem->calculateInterbankLiquiditySpread($quiet, 1.0 / 3600.0);
         $this->assertEqualsWithDelta(MacroEngine::INTERBANK_BASELINE_SPREAD, $quiet->interbankLiquiditySpread, 1e-5, 'A crisis already six months old does not re-run the funding market.');
+    }
+
+    public function testTheDistrictsWholesaleFundingLiftsTheCrisisHazardAboveThePanel(): void
+    {
+        $calm = new MacroState();
+        $calm->totalTime = 20.0;
+        $this->quietSubsystem()->calculateCreditCrisisHazard($calm, 0.25);
+
+        $panel = 1.0 / (1.0 + exp(-CreditFiscalSubsystem::CREDIT_CRISIS_LOGIT_INTERCEPT));
+        $this->assertEqualsWithDelta(0.022, $panel, 0.001, 'The JST post-war panel runs a 2.2% hazard at trend.');
+        $this->assertEqualsWithDelta(0.036, $calm->creditCrisisHazard, 0.001, 'Loans at 108% of deposits against the US 87% lift it to 3.6% a year (JRST 2021).');
+    }
+
+    public function testThinCapitalDeepensEveryCrisisDrag(): void
+    {
+        $math = new class extends MathUtility {
+            public function checkProbability(float $probability): bool { return true; }
+        };
+        $state = new MacroState();
+        $state->totalTime = 12.5;
+        (new CreditFiscalSubsystem($math))->calculateCreditCrisisHazard($state, 1.0 / 3600.0);
+
+        $this->assertEqualsWithDelta(
+            1.095 * CreditFiscalSubsystem::CREDIT_CRISIS_DRAG_BASE,
+            $state->creditCrisisDrag,
+            1e-12,
+            'With equity 4.9% of assets against the US 7.6%, a crisis with no boom behind it still lands 9.5% harder (JRST 2021, Table 8).'
+        );
     }
 
     public function testTheCrisisDragDecaysAtItsTimeConstant(): void

@@ -1191,7 +1191,8 @@ class MacroAggregateSubsystemTest extends TestCase
 
     /**
      * The sovereign fund's stabilisation is spending: one point of GDP of it is worth what one point of GDP of purchases
-     * is through the purchases channel, and without it the channel is silent.
+     * is through the purchases channel, and without it the channel is silent. The budget round that set it is its
+     * legislative lag, so demand answers the rate the round set from the tick it is set, not a smoothing of it.
      */
     public function testTheFundsStabilisationReachesDemandAsPurchasesDo(): void
     {
@@ -1201,7 +1202,7 @@ class MacroAggregateSubsystemTest extends TestCase
             $probe = new OutputGapProbe();
             $probe->enable();
             $state = $this->probedState();
-            $state->sovereignFundStabilisationToGdpEma = $stabilisation;
+            $state->sovereignFundStabilisationToGdp = $stabilisation;
             $this->probedSubsystem($probe, 0.0)->calculateOutputGap($state, 0.03, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, $dt, 1.0);
 
             return $probe->snapshot()['current']['contributions']['fundStabilisation'] / $dt;

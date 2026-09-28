@@ -294,7 +294,6 @@ readonly class MacroStateDTO
         public float $sovereignFundOwnershipShare = 0.0,
         public float $sovereignFundDrawToGdp = 0.0,
         public float $sovereignFundStabilisationToGdp = 0.0,
-        public float $sovereignFundStabilisationToGdpEma = 0.0,
         public float $sovereignFundStabilisationYearStart = 0.0,
         public float $sovereignFundStabilisationLastChange = 0.0,
         public float $sovereignFundGapTrend = 0.0,

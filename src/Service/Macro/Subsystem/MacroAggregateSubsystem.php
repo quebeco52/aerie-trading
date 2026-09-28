@@ -431,9 +431,9 @@ class MacroAggregateSubsystem
         $spendingShift = ($state->governmentSpendingIndexEma / MacroEngine::GOVT_SPENDING_BASELINE) - 1.0;
         $discretionaryFiscal = (self::KALDOR_FISCAL_MULTIPLIER * (MacroEngine::TARGET_CORPORATE_TAX_RATE - $state->corporateTaxRate))
             + (self::KALDOR_GOVT_SPENDING_MULTIPLIER * $spendingShift);
-        // The sovereign fund's stabilisation is spending like any other and passes the same legislative lag: it reaches
-        // demand through the purchases channel, on purchases that are the target tax take of GDP.
-        $fundStabilisation = self::KALDOR_GOVT_SPENDING_MULTIPLIER * $state->sovereignFundStabilisationToGdpEma / MacroEngine::TARGET_CORPORATE_TAX_RATE;
+        // The sovereign fund's stabilisation reaches demand through the purchases channel, on purchases that are the target
+        // tax take of GDP. Its legislative lag is the budget round that sets it, so it flows at the rate the round sets.
+        $fundStabilisation = self::KALDOR_GOVT_SPENDING_MULTIPLIER * $state->sovereignFundStabilisationToGdp / MacroEngine::TARGET_CORPORATE_TAX_RATE;
 
         // Blanchard & Perotti (2002) AUTOMATIC stabilisers and Friedman (1957) income smoothing, on the
         // contemporaneous gap: nobody decides them, so they carry no lag and act as a spring rather than an anti-damper.
@@ -812,7 +812,6 @@ class MacroAggregateSubsystem
             ? $state->industrialMetalsIndexTrend + ($commodityTrendWeight * ($state->industrialMetalsIndex - $state->industrialMetalsIndexTrend))
             : $state->industrialMetalsIndex;
         $state->governmentSpendingIndexEma += $emaWeight * ($state->governmentSpendingIndex - $state->governmentSpendingIndexEma);
-        $state->sovereignFundStabilisationToGdpEma += $emaWeight * ($state->sovereignFundStabilisationToGdp - $state->sovereignFundStabilisationToGdpEma);
         $state->retailDefaultRateEma += $emaWeight * ($state->retailDefaultRate - $state->retailDefaultRateEma);
         $state->agriculturalCommodityIndexEma += $emaWeight * ($state->agriculturalCommodityIndex - $state->agriculturalCommodityIndexEma);
         $state->agriculturalCommodityIndexTrend = $state->agriculturalCommodityIndexTrend > 0.0
