@@ -82,21 +82,37 @@ class AssetMarketSubsystem
     /** Stochastic diffusion volatility (sigma) of consumer animal spirits. */
     public const ANIMAL_SPIRITS_VOLATILITY = 2.5;
 
-    // --- Foreign Bloc (two-country Mundell-Fleming, Obstfeld & Rogoff 1996) ---
-    /** Mean reversion of the foreign output gap (half-life ~2 years, a cycle of the same length as the district's). */
-    public const FOREIGN_GAP_REVERSION = 0.35;
-    /** Annual diffusion of the foreign gap: a stationary spread of ~1.4%, the domestic gap's own. */
-    public const FOREIGN_GAP_SIGMA = 0.012;
-    /** Share of the district's cycle that reaches the foreign bloc's demand: the district's imports are a small part of the world's exports. */
+    // --- The Mainland (Rudebusch & Svensson 1999, re-estimated on US data 1985-2019: var/harness/mainland_fit.py) ---
+    /** The mainland's statistics and its central bank's decisions arrive once a quarter, the frequency its equations are estimated at. */
+    public const MAINLAND_QUARTERS_PER_YEAR = 4;
+    /** First autoregressive coefficient of the mainland gap on the CBO gap (1.197, se 0.143); the real-rate term estimates at zero on this sample (-0.006, se 0.037) and is left out. */
+    public const MAINLAND_GAP_AR1 = 1.197;
+    /** Second autoregressive coefficient of the mainland gap (-0.296, se 0.159). */
+    public const MAINLAND_GAP_AR2 = -0.296;
+    /** Quarterly innovation of the mainland gap, the regression's residual sd (0.503pp); the stationary sd it gives is 1.37% against the CBO gap's 1.62%. */
+    public const MAINLAND_GAP_SIGMA = 0.00503;
+    /** Annualized quarterly core PCE inflation on its own four lags (sum 0.885), the Rudebusch-Svensson Phillips curve; its fitted mean is 1.96%, so it is anchored at the 2% target. */
+    public const MAINLAND_INFLATION_LAGS = [0.381, 0.217, 0.141, 0.146];
+    /** Mainland core inflation per unit of last quarter's gap (0.004, se 0.028): the flat Phillips curve of the era (Hazell, Herreño, Nakamura & Steinsson 2022). */
+    public const MAINLAND_INFLATION_GAP_SLOPE = 0.004;
+    /** Quarterly innovation of annualized mainland core inflation, the regression's residual sd (0.586pp). */
+    public const MAINLAND_INFLATION_SIGMA = 0.00586;
+    /** Share of the district's cycle that reaches the mainland's demand in the long run: its imports are the mainland's exports. */
     public const FOREIGN_IMPORT_SPILLOVER = 0.15;
-    /** The foreign central bank's Taylor (1993) output coefficient; its inflation is taken as anchored, so the gap is all it reacts to. */
-    public const FOREIGN_TAYLOR_GAP_COEFF = 0.50;
-    /** Time constant (years) over which the foreign policy rate reaches its rule. */
-    public const FOREIGN_POLICY_ADJUSTMENT_YEARS = 0.50;
-    /** Bounds on the foreign gap. */
+    /** Guard on the mainland gap, beyond the deepest postwar CBO gap; the fitted process does not reach it. */
     public const MAX_FOREIGN_GAP = 0.10;
-    /** Bounds on the foreign policy rate. */
-    public const MAX_FOREIGN_POLICY_RATE = 0.10;
+
+    // --- The Fed (Clarida, Gali & Gertler 2000 smoothed rule, 1987Q3-2008Q3: var/harness/mainland_fit.py) ---
+    /** Share of last quarter's funds rate the Fed keeps (0.836, se 0.039). */
+    public const FED_RULE_SMOOTHING = 0.836;
+    /** Long-run response of the funds rate to four-quarter core inflation over target (1.66). */
+    public const FED_RULE_INFLATION_RESPONSE = 1.66;
+    /** Long-run response of the funds rate to the mainland gap (1.80). */
+    public const FED_RULE_GAP_RESPONSE = 1.80;
+    /** Quarterly policy shock, the rule's residual sd (0.392pp). */
+    public const FED_RULE_SIGMA = 0.00392;
+    /** Guard on the funds rate; the fitted rule does not reach it. */
+    public const MAX_FOREIGN_POLICY_RATE = 0.20;
 
     // --- MUNDELL-FLEMING OPEN ECONOMY (IS-LM-BOP) ---
     /**
@@ -395,11 +411,13 @@ class AssetMarketSubsystem
      * Log price response of the foreign equity market to one unit of premium held at the foreign cycle's persistence.
      *
      * The present value of a premium shock that decays by phi a year, discounted at rho: 1 / (1 - rho * phi), where phi
-     * is the foreign output gap's own annual persistence, exp(-FOREIGN_GAP_REVERSION).
+     * is the mainland gap's own annual persistence, its AR(2) autocorrelation four quarters out.
      */
     public static function foreignValuationDuration(): float
     {
-        return 1.0 / (1.0 - (self::CAMPBELL_SHILLER_RHO * exp(-self::FOREIGN_GAP_REVERSION)));
+        $annualPersistence = MathUtility::calculateAr2Autocorrelation(self::MAINLAND_GAP_AR1, self::MAINLAND_GAP_AR2, self::MAINLAND_QUARTERS_PER_YEAR);
+
+        return 1.0 / (1.0 - (self::CAMPBELL_SHILLER_RHO * $annualPersistence));
     }
 
     /** The habit premium at an output gap, floored at a positive premium and capped at the ceiling it has always had. */
@@ -679,35 +697,74 @@ class AssetMarketSubsystem
     }
 
     /**
-     * The foreign bloc: an output gap of its own, the policy rate its Taylor rule sets on it, and the global
-     * demand composite the district's commodities actually clear against.
+     * The mainland (the United States the district split from): its output gap, its core inflation, the funds rate
+     * the Fed sets on them, and the global demand composite the district's commodities clear against.
      *
-     * Two-country Mundell-Fleming (Obstfeld & Rogoff 1996 for the structure): the foreign gap is a mean-
-     * reverting disturbance whose mean the district's own cycle shifts a little (its imports are the bloc's
-     * exports), the foreign central bank follows a Taylor rule on that gap with anchored inflation, and world
-     * demand for metals, freight and fuel is the weighted pair. Everything else -- the currency through the
-     * rate differential, the trade balance through foreign absorption, exports through the IS curve -- reads
-     * these three series.
+     * A compact model rather than a second engine: the Rudebusch & Svensson (1999) backward-looking gap and Phillips
+     * curve re-estimated on US data 1985-2019, and the Fed's Clarida, Gali & Gertler (2000) smoothed rule fitted over
+     * Greenspan and Bernanke. Simulated together they give the CBO gap's persistence, core PCE's level and spread and
+     * the funds rate's (var/harness/mainland_fit.py). The equations are quarterly and are stepped at each quarter's
+     * turn, which is also how the district sees them: a statistical release and a rate decision. The district's own
+     * cycle moves the mainland gap's mean a little (two-country Mundell-Fleming, Obstfeld & Rogoff 1996), and
+     * everything else -- the currency through the rate differential, the trade balance and exports through the
+     * mainland gap -- reads these series.
      *
-     * @param MacroState $state Current macroeconomic state.
+     * @param MacroState $state Current macroeconomic state; its clock has already been advanced by dt.
      * @param float      $dt    Time increment in years.
      */
     public function calculateForeignEconomy(MacroState $state, float $dt): void
     {
-        $meanGap = self::FOREIGN_IMPORT_SPILLOVER * $state->outputGapEma;
-        $innovation = self::FOREIGN_GAP_SIGMA * sqrt($dt) * $this->mathUtility->generateStandardNormal();
-        $state->foreignOutputGap += (self::FOREIGN_GAP_REVERSION * ($meanGap - $state->foreignOutputGap) * $dt) + $innovation;
-        $state->foreignOutputGap = max(-self::MAX_FOREIGN_GAP, min(self::MAX_FOREIGN_GAP, $state->foreignOutputGap));
-
-        $ruleRate = MacroEngine::GLOBAL_BASELINE_RATE + (self::FOREIGN_TAYLOR_GAP_COEFF * $state->foreignOutputGapEma);
-        $state->foreignPolicyRate = $this->mathUtility->calculateDistributedLag(
-            currentLaggedValue: $state->foreignPolicyRate,
-            targetValue: max(0.0, min(self::MAX_FOREIGN_POLICY_RATE, $ruleRate)),
-            dt: $dt,
-            lagTimeConstant: self::FOREIGN_POLICY_ADJUSTMENT_YEARS
-        );
+        $quartersTurned = self::quarterCount($state->totalTime) - self::quarterCount($state->totalTime - $dt);
+        for ($quarter = 0; $quarter < $quartersTurned; $quarter++) {
+            $this->stepMainlandQuarter($state);
+        }
 
         $state->globalDemandGap = (MacroEngine::DOMESTIC_DEMAND_WEIGHT * $state->outputGapEma) + ((1.0 - MacroEngine::DOMESTIC_DEMAND_WEIGHT) * $state->foreignOutputGapEma);
+    }
+
+    /** Quarters completed by a simulated time; the tolerance absorbs the clock's accumulated rounding at a quarter's turn. */
+    private static function quarterCount(float $totalTime): int
+    {
+        return (int) floor(($totalTime * self::MAINLAND_QUARTERS_PER_YEAR) + 1e-9);
+    }
+
+    /**
+     * One quarter of the mainland: the gap on its two lags around the mean the district's imports set, core inflation
+     * on its four lags and last quarter's gap, then the Fed's partial adjustment toward its rule on four-quarter core
+     * inflation and the new gap, floored at the effective lower bound.
+     */
+    private function stepMainlandQuarter(MacroState $state): void
+    {
+        $spilloverMean = self::FOREIGN_IMPORT_SPILLOVER * $state->outputGapEma;
+        $lastGap = $state->foreignOutputGap;
+        $gap = ((1.0 - self::MAINLAND_GAP_AR1 - self::MAINLAND_GAP_AR2) * $spilloverMean)
+            + (self::MAINLAND_GAP_AR1 * $lastGap)
+            + (self::MAINLAND_GAP_AR2 * $state->foreignOutputGapLag)
+            + (self::MAINLAND_GAP_SIGMA * $this->mathUtility->generateStandardNormal());
+
+        $lags = [$state->foreignCoreInflation, $state->foreignCoreInflationLag1, $state->foreignCoreInflationLag2, $state->foreignCoreInflationLag3];
+        $inflation = (1.0 - array_sum(self::MAINLAND_INFLATION_LAGS)) * MacroEngine::TARGET_INFLATION;
+        foreach (self::MAINLAND_INFLATION_LAGS as $j => $coefficient) {
+            $inflation += $coefficient * $lags[$j];
+        }
+        $inflation += (self::MAINLAND_INFLATION_GAP_SLOPE * $lastGap) + (self::MAINLAND_INFLATION_SIGMA * $this->mathUtility->generateStandardNormal());
+
+        $state->foreignOutputGapLag = $lastGap;
+        $state->foreignOutputGap = max(-self::MAX_FOREIGN_GAP, min(self::MAX_FOREIGN_GAP, $gap));
+        $state->foreignCoreInflationLag3 = $state->foreignCoreInflationLag2;
+        $state->foreignCoreInflationLag2 = $state->foreignCoreInflationLag1;
+        $state->foreignCoreInflationLag1 = $state->foreignCoreInflation;
+        $state->foreignCoreInflation = $inflation;
+
+        // Four quarters of annualized log inflation average to the year-on-year rate the rule is fitted on.
+        $yearOnYear = ($state->foreignCoreInflation + $state->foreignCoreInflationLag1 + $state->foreignCoreInflationLag2 + $state->foreignCoreInflationLag3) / 4.0;
+        $ruleRate = MacroEngine::MAINLAND_NEUTRAL_RATE
+            + (self::FED_RULE_INFLATION_RESPONSE * ($yearOnYear - MacroEngine::TARGET_INFLATION))
+            + (self::FED_RULE_GAP_RESPONSE * $state->foreignOutputGap);
+        $rate = (self::FED_RULE_SMOOTHING * $state->foreignPolicyRate)
+            + ((1.0 - self::FED_RULE_SMOOTHING) * $ruleRate)
+            + (self::FED_RULE_SIGMA * $this->mathUtility->generateStandardNormal());
+        $state->foreignPolicyRate = max(MacroEngine::EFFECTIVE_LOWER_BOUND, min(self::MAX_FOREIGN_POLICY_RATE, $rate));
     }
 
     /**

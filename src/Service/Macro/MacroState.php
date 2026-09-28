@@ -286,9 +286,15 @@ class MacroState
     public float $creditCrisisDrag;
     public float $lastCreditCrisisAt;
 
-    // Foreign bloc: its output gap, the policy rate its Taylor rule sets, and the global demand composite.
+    // The mainland: its output gap and the gap a quarter back, annualized core inflation and its three quarterly lags,
+    // the funds rate the Fed sets on them, and the global demand composite.
     public float $foreignOutputGap;
     public float $foreignOutputGapEma;
+    public float $foreignOutputGapLag;
+    public float $foreignCoreInflation;
+    public float $foreignCoreInflationLag1;
+    public float $foreignCoreInflationLag2;
+    public float $foreignCoreInflationLag3;
     public float $foreignPolicyRate;
     public float $foreignPolicyRateEma;
     public float $globalDemandGap;

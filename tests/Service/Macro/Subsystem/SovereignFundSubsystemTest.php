@@ -35,9 +35,10 @@ class SovereignFundSubsystemTest extends TestCase
         $this->assertSame(0.0, $state->sovereignFundTrade, 'A structural holder opens at its holding, with no order.');
         $this->assertSame(-1.0, $state->lastSovereignRebalanceAt);
 
-        // Half a compound real return of roughly 3.3% on a fund 0.41 times the economy pays the budget about 0.7% of GDP.
-        $this->assertGreaterThan(0.005, $state->sovereignFundDrawToGdp);
-        $this->assertLessThan(0.009, $state->sovereignFundDrawToGdp);
+        // Half a compound real return of roughly 4.4% (the mainland's 1.5% real rate under its premia) on a fund 0.41
+        // times the economy pays the budget about 0.9% of GDP.
+        $this->assertGreaterThan(0.007, $state->sovereignFundDrawToGdp);
+        $this->assertLessThan(0.011, $state->sovereignFundDrawToGdp);
 
         // The draw is struck on the expected return it publishes.
         $this->assertEqualsWithDelta(
@@ -64,7 +65,7 @@ class SovereignFundSubsystemTest extends TestCase
 
         // All in the reserve portfolio: its arithmetic real return less half the variance of equity leg plus currency.
         // The paper earns the forward term premium at its duration over the foreign rate.
-        $foreignReal = MacroEngine::GLOBAL_BASELINE_RATE - MacroEngine::TARGET_INFLATION;
+        $foreignReal = MacroEngine::MAINLAND_NEUTRAL_RATE - MacroEngine::TARGET_INFLATION;
         $arithmetic = $foreignReal
             + (SovereignFundSubsystem::FOREIGN_EQUITY_SHARE * MacroEngine::BASE_EQUITY_RISK_PREMIUM)
             + ((1.0 - SovereignFundSubsystem::FOREIGN_EQUITY_SHARE) * SovereignFundSubsystem::foreignBondExpectedPremium());
@@ -579,7 +580,7 @@ class SovereignFundSubsystemTest extends TestCase
         $fund = new SovereignFundSubsystem(new MathUtility());
         $state = new MacroState();
         $tau = SovereignFundSubsystem::FOREIGN_BOND_DURATION;
-        $neutral = MacroEngine::GLOBAL_BASELINE_RATE;
+        $neutral = MacroEngine::MAINLAND_NEUTRAL_RATE;
         $premium = MacroEngine::NS_BASE_TERM_PREMIUM * MathUtility::calculateTermPremiumDurationScale($tau, MacroEngine::TERM_PREMIUM_DURATION_HORIZON_YEARS);
 
         $state->foreignPolicyRate = $neutral;
@@ -597,12 +598,12 @@ class SovereignFundSubsystemTest extends TestCase
     {
         $dt = 1.0 / 720.0;
         $fund = new SovereignFundSubsystem($this->stillMarket(flatCurve: false));
-        $state = $this->openFund($fund, 720, MacroEngine::GLOBAL_BASELINE_RATE);
+        $state = $this->openFund($fund, 720, MacroEngine::MAINLAND_NEUTRAL_RATE);
         $state->sovereignFundAnnualDraw = 0.0;
         $yieldBefore = $state->foreignBondYield;
         $paperBefore = $state->sovereignFundForeignBonds;
 
-        $state->foreignPolicyRate = MacroEngine::GLOBAL_BASELINE_RATE + 0.01;
+        $state->foreignPolicyRate = MacroEngine::MAINLAND_NEUTRAL_RATE + 0.01;
         $this->step($fund, $state, $dt);
 
         $yieldMove = $state->foreignBondYield - $yieldBefore;
@@ -621,10 +622,10 @@ class SovereignFundSubsystemTest extends TestCase
      */
     public function testOnASteadyCurveThePaperEarnsTheForwardRateAtAnyTickRate(): void
     {
-        $expected = MacroEngine::GLOBAL_BASELINE_RATE + SovereignFundSubsystem::foreignBondExpectedPremium();
+        $expected = MacroEngine::MAINLAND_NEUTRAL_RATE + SovereignFundSubsystem::foreignBondExpectedPremium();
 
         foreach ([72, 720, 7200] as $tpy) {
-            $growth = $this->paperLogGrowthOverAYear($tpy, static fn (float $time): float => MacroEngine::GLOBAL_BASELINE_RATE);
+            $growth = $this->paperLogGrowthOverAYear($tpy, static fn (float $time): float => MacroEngine::MAINLAND_NEUTRAL_RATE);
             $this->assertEqualsWithDelta($expected, $growth, 1e-5, "tpy {$tpy}: the paper earns the forward rate, not the yield.");
         }
     }
@@ -632,14 +633,14 @@ class SovereignFundSubsystemTest extends TestCase
     public function testThePaperOverAMovingRateIsTheSameAtAnyTickRate(): void
     {
         // A year of easing from neutral to 150bp below it.
-        $path = static fn (float $time): float => MacroEngine::GLOBAL_BASELINE_RATE - (0.015 * min(1.0, $time));
+        $path = static fn (float $time): float => MacroEngine::MAINLAND_NEUTRAL_RATE - (0.015 * min(1.0, $time));
 
         $reference = $this->paperLogGrowthOverAYear(7200, $path);
         foreach ([72, 720] as $tpy) {
             $this->assertEqualsWithDelta($reference, $this->paperLogGrowthOverAYear($tpy, $path), 1e-4, "tpy {$tpy}");
         }
         $this->assertGreaterThan(
-            MacroEngine::GLOBAL_BASELINE_RATE + SovereignFundSubsystem::foreignBondExpectedPremium(),
+            MacroEngine::MAINLAND_NEUTRAL_RATE + SovereignFundSubsystem::foreignBondExpectedPremium(),
             $reference,
             'Paper rallies while the foreign rate falls.'
         );

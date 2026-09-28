@@ -78,6 +78,10 @@ class MacroFieldRegistryTest extends TestCase
         'boardNetIssuance' => 'One tick of the companies\' own issuance and buybacks; same objection.',
         'residentialPriceMomentum' => 'A year\'s average of the log change in residential_property_index, which is recorded.',
         'householdNewBorrowing' => 'A year\'s average of the change in household_debt_to_income, which is recorded.',
+        'foreignOutputGapLag' => 'The mainland gap a quarter back, which the previous quarter\'s row records as foreign_output_gap.',
+        'foreignCoreInflationLag1' => 'Mainland core inflation a quarter back, which the previous row records as foreign_core_inflation.',
+        'foreignCoreInflationLag2' => 'Mainland core inflation two quarters back; same reason.',
+        'foreignCoreInflationLag3' => 'Mainland core inflation three quarters back; same reason.',
     ];
 
     /**

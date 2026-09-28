@@ -158,8 +158,8 @@ class MacroEngine
     public const BALANCE_SHEET_ACTIVE_THRESHOLD = 0.0005;
 
     // --- MUNDELL-FLEMING OPEN ECONOMY (IS-LM-BOP) ---
-    /** The foreign bloc's neutral policy rate (a G7 average), the level its Taylor rule and the UIP differential rest on. */
-    public const GLOBAL_BASELINE_RATE = 0.025;
+    /** The mainland Fed's neutral policy rate: its smoothed rule, fitted 1987-2008, rests at 3.43% with core inflation at 2% and the gap closed (var/harness/mainland_fit.py), the district's r* plus target. */
+    public const MAINLAND_NEUTRAL_RATE = self::BASE_NATURAL_RATE + self::TARGET_INFLATION;
     /** Weight of the district's own gap in the global demand that prices its commodities: a developed economy that is small in world demand. */
     public const DOMESTIC_DEMAND_WEIGHT = 0.35;
     /** Equity volatility above which flight-to-safety flows begin, for both the FX bid and the term premium. */

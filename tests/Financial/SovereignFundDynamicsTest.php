@@ -57,26 +57,36 @@ class SovereignFundDynamicsTest extends TestCase
             $withoutFund[$seed] = $this->simulate($seed, false);
         }
 
-        // Log change in size over the run. It compounds at about 2.8% real, pays half, and the economy grows 2%, so
-        // the expected drift is about -0.6% a year, -0.48 over 79 years; one seed's noise over that span is about
-        // 1.1, so six seeds pin the mean to +/-0.44 and the bounds are three of those. The spending arithmetic
-        // itself is pinned exactly in SovereignFundSubsystemTest; this guards a fund that bleeds away or explodes.
+        // Log change in size over the run. It compounds at about 4.4% real on the mainland's 1.5% real rate, pays half,
+        // and the economy grows about 2%, so the expected drift is about +0.2% a year, +0.16 over 79 years; one seed's
+        // noise over that span is about 1.1, so six seeds pin the mean to +/-0.44 and the bounds are three of those.
+        // The spending arithmetic itself is pinned exactly in SovereignFundSubsystemTest; this guards a fund that
+        // bleeds away or explodes.
         $logChanges = array_map(
             static fn (array $run): float => log($run['sizes'][count($run['sizes']) - 1] / $run['sizes'][0]),
             $withFund
         );
         $meanLogChange = array_sum($logChanges) / count($logChanges);
-        $this->assertGreaterThan(-1.8, $meanLogChange, 'The fund must not bleed away; it keeps half its compound return.');
-        $this->assertLessThan(0.85, $meanLogChange, 'Nor compound without bound; it pays the other half.');
+        $this->assertGreaterThan(-1.16, $meanLogChange, 'The fund must not bleed away; it keeps half its compound return.');
+        $this->assertLessThan(1.48, $meanLogChange, 'Nor compound without bound; it pays the other half.');
 
         // Rebalancing holds the domestic sleeve at its policy weight: the band trips at a quarter's relative move and the
         // market carries on while a programme trades. The board footprint is that weight times the fund's size, so it
-        // is bounded below by the size check above, not here: a fund run down by a slump it paid for owns less.
+        // is bounded below by the size check above, not here: a fund run down by a slump it paid for owns less. A fund
+        // grown large against the board meets the ownership ceiling first, and the ceiling overrides the weight by
+        // design, so the weight is judged only in the years the ceiling leaves it free.
+        $ownership = array_merge(...array_values(array_map(static fn (array $run): array => $run['ownership'], $withFund)));
         $weights = array_merge(...array_values(array_map(static fn (array $run): array => $run['weights'], $withFund)));
-        $this->assertGreaterThan(0.6, min($weights), 'Rebalancing keeps the fund on the board at its policy weight.');
+        $weightOwnership = array_merge(...array_values(array_map(static fn (array $run): array => $run['weightOwnership'], $withFund)));
+        $freeWeights = array_values(array_filter(
+            $weights,
+            static fn (int $year): bool => $weightOwnership[$year] < SovereignFundSubsystem::MAX_OWNERSHIP_SHARE * 0.95,
+            ARRAY_FILTER_USE_KEY
+        ));
+        $this->assertGreaterThan(count($weights) / 2, count($freeWeights), 'The ceiling binds in the tail, not as a rule.');
+        $this->assertGreaterThan(0.6, min($freeWeights), 'Rebalancing keeps the fund on the board at its policy weight.');
         $this->assertLessThan(1.5, max($weights), 'And off it when the board runs up.');
         // A fund that bought a fall to the 10% ceiling can drift past it only by the board falling further.
-        $ownership = array_merge(...array_values(array_map(static fn (array $run): array => $run['ownership'], $withFund)));
         $this->assertLessThan(0.15, max($ownership), 'And the ownership ceiling keeps its footprint bounded.');
 
         $rebalances = array_sum(array_map(static fn (array $run): int => $run['rebalances'], $withFund));
@@ -91,7 +101,7 @@ class SovereignFundDynamicsTest extends TestCase
     }
 
     /**
-     * @return array{sizes: list<float>, ownership: list<float>, weights: list<float>, rebalances: int, lateDebt: list<float>}
+     * @return array{sizes: list<float>, ownership: list<float>, weights: list<float>, weightOwnership: list<float>, rebalances: int, lateDebt: list<float>}
      */
     private function simulate(int $seed, bool $withFund): array
     {
@@ -122,6 +132,7 @@ class SovereignFundDynamicsTest extends TestCase
         $sizes = [];
         $ownership = [];
         $weights = [];
+        $weightOwnership = [];
         $lateDebt = [];
         $rebalances = 0;
         $lastRebalance = -1.0;
@@ -148,6 +159,7 @@ class SovereignFundDynamicsTest extends TestCase
                 $ownership[] = $macro->sovereignFundOwnershipShare;
                 if ($macro->sovereignFundTargetWeight > 0.0) {
                     $weights[] = $macro->sovereignFundDomesticWeight / $macro->sovereignFundTargetWeight;
+                    $weightOwnership[] = $macro->sovereignFundOwnershipShare;
                 }
                 if ($tick > (self::YEARS - 30) * self::TICKS_PER_YEAR) {
                     $lateDebt[] = $macro->sovereignDebtToGdp;
@@ -155,7 +167,7 @@ class SovereignFundDynamicsTest extends TestCase
             }
         }
 
-        return ['sizes' => $sizes, 'ownership' => $ownership, 'weights' => $weights, 'rebalances' => $rebalances, 'lateDebt' => $lateDebt];
+        return ['sizes' => $sizes, 'ownership' => $ownership, 'weights' => $weights, 'weightOwnership' => $weightOwnership, 'rebalances' => $rebalances, 'lateDebt' => $lateDebt];
     }
 
     /** @param list<float> $values */

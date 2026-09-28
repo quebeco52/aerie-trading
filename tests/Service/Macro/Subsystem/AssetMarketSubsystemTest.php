@@ -45,7 +45,8 @@ class AssetMarketSubsystemTest extends TestCase
         $this->subsystem->calculateEquityRiskPremium($state);
 
         $premium = MacroEngine::BASE_EQUITY_RISK_PREMIUM * exp(AssetMarketSubsystem::HABIT_RISK_AVERSION_COEFF * 0.03);
-        $duration = 1.0 / (1.0 - (AssetMarketSubsystem::CAMPBELL_SHILLER_RHO * exp(-AssetMarketSubsystem::FOREIGN_GAP_REVERSION)));
+        $annualPersistence = MathUtility::calculateAr2Autocorrelation(AssetMarketSubsystem::MAINLAND_GAP_AR1, AssetMarketSubsystem::MAINLAND_GAP_AR2, 4);
+        $duration = 1.0 / (1.0 - (AssetMarketSubsystem::CAMPBELL_SHILLER_RHO * $annualPersistence));
         $this->assertEqualsWithDelta($premium, $state->foreignEquityRiskPremium, 1e-15);
         $this->assertEqualsWithDelta(MacroEngine::BASE_EQUITY_RISK_PREMIUM, $state->equityRiskPremium, 1e-15);
         $this->assertEqualsWithDelta(-$duration * ($premium - MacroEngine::BASE_EQUITY_RISK_PREMIUM), $state->foreignEquityValuation, 1e-15);
@@ -435,58 +436,132 @@ class AssetMarketSubsystemTest extends TestCase
     }
 
 
-    // --- Foreign Bloc ---
+    // --- The Mainland ---
 
-    /** The foreign gap is a cycle of its own: stationary, with the district's own gap's spread, and only lightly tied to the district. */
-    public function testTheForeignGapIsAStationaryCycleOfItsOwn(): void
+    /** Advances the clock one quarter at a time, the way the engine's clock reaches each quarter's turn. */
+    private function runMainlandQuarters(AssetMarketSubsystem $subsystem, MacroState $state, int $quarters, ?callable $beforeEach = null): void
     {
-        mt_srand(20260919);
+        for ($q = 0; $q < $quarters; $q++) {
+            if ($beforeEach !== null) {
+                $beforeEach($state);
+            }
+            $state->totalTime += 0.25;
+            $subsystem->calculateForeignEconomy($state, 0.25);
+            $state->foreignOutputGapEma = $state->foreignOutputGap; // the engine's EMA step, stood in for here
+        }
+    }
+
+    /** The mainland gap is the fitted US cycle: the AR(2)'s stationary spread and its persistence a year out. */
+    public function testTheMainlandGapHasTheFittedUsSpreadAndPersistence(): void
+    {
+        mt_srand(20260928);
         $subsystem = new AssetMarketSubsystem(new MathUtility()); // real draws: the fixture's stub is silent
         $state = new MacroState();
         $state->outputGapEma = 0.0;
         $samples = [];
-        for ($i = 0; $i < 60 * 252; $i++) {
-            $subsystem->calculateForeignEconomy($state, 1.0 / 252.0);
-            if ($i > 5 * 252 && $i % 63 === 0) {
+        for ($q = 0; $q < 40000; $q++) {
+            $this->runMainlandQuarters($subsystem, $state, 1);
+            if ($q >= 40) {
                 $samples[] = $state->foreignOutputGap;
             }
         }
         $count = count($samples);
         $mean = array_sum($samples) / $count;
-        $variance = 0.0;
-        foreach ($samples as $x) {
-            $variance += ($x - $mean) ** 2;
-        }
-        $expectedSd = AssetMarketSubsystem::FOREIGN_GAP_SIGMA / sqrt(2.0 * AssetMarketSubsystem::FOREIGN_GAP_REVERSION);
-        $this->assertEqualsWithDelta(0.0, $mean, 0.006, 'A cycle averages nothing.');
-        $this->assertEqualsWithDelta($expectedSd, sqrt($variance / $count), 0.004, 'and its spread is the OU stationary one.');
+        $deviations = array_map(static fn (float $x): float => $x - $mean, $samples);
+        $variance = array_sum(array_map(static fn (float $d): float => $d * $d, $deviations));
+        $covariance = array_sum(array_map(
+            static fn (float $d, float $yearBack): float => $d * $yearBack,
+            array_slice($deviations, 4),
+            array_slice($deviations, 0, $count - 4)
+        ));
+
+        $a1 = AssetMarketSubsystem::MAINLAND_GAP_AR1;
+        $a2 = AssetMarketSubsystem::MAINLAND_GAP_AR2;
+        // Yule-Walker: gamma_0 = sigma^2 / (1 - a1 rho_1 - a2 rho_2).
+        $expectedSd = AssetMarketSubsystem::MAINLAND_GAP_SIGMA
+            / sqrt(1.0 - ($a1 * MathUtility::calculateAr2Autocorrelation($a1, $a2, 1)) - ($a2 * MathUtility::calculateAr2Autocorrelation($a1, $a2, 2)));
+        $this->assertEqualsWithDelta(0.0, $mean, 0.002, 'With the district at trend the mainland cycle averages nothing.');
+        $this->assertEqualsWithDelta($expectedSd, sqrt($variance / $count), 0.001, 'Its spread is the fitted AR(2)\'s, ~1.37%.');
+        $this->assertEqualsWithDelta(MathUtility::calculateAr2Autocorrelation($a1, $a2, 4), $covariance / $variance, 0.04, 'and a year on it still carries ~0.59 of itself, as the CBO gap does.');
     }
 
-    public function testTheDistrictsBoomSpillsIntoTheForeignBlocOnlyInPart(): void
+    /** The mainland's statistics and its rate decision arrive at the quarter's turn, not between. */
+    public function testTheMainlandMovesOnlyAtTheTurnOfAQuarter(): void
     {
-        $quiet = new class extends MathUtility {
-            public function generateStandardNormal(): float { return 0.0; }
+        $draws = new class extends MathUtility {
+            public int $calls = 0;
+            public function generateStandardNormal(): float { $this->calls++; return 0.0; }
         };
-        $subsystem = new AssetMarketSubsystem($quiet);
+        $subsystem = new AssetMarketSubsystem($draws);
         $state = new MacroState();
         $state->outputGapEma = 0.04;
-        for ($i = 0; $i < 2000; $i++) {
-            $subsystem->calculateForeignEconomy($state, 0.01);
-            $state->foreignOutputGapEma = $state->foreignOutputGap; // the engine's EMA step, stood in for here
-        }
 
-        $this->assertEqualsWithDelta(0.04 * AssetMarketSubsystem::FOREIGN_IMPORT_SPILLOVER, $state->foreignOutputGap, 0.0005, 'The bloc feels the district\'s imports, not its whole cycle.');
-        $this->assertGreaterThan(MacroEngine::GLOBAL_BASELINE_RATE, $state->foreignPolicyRate, 'and its central bank leans against the demand it does feel.');
-        $expectedGlobal = (MacroEngine::DOMESTIC_DEMAND_WEIGHT * 0.04) + ((1.0 - MacroEngine::DOMESTIC_DEMAND_WEIGHT) * $state->foreignOutputGapEma);
-        $this->assertEqualsWithDelta($expectedGlobal, $state->globalDemandGap, 1e-5, 'World demand weights the district as a small economy.');
+        $state->totalTime = 0.10;
+        $subsystem->calculateForeignEconomy($state, 0.01);
+        $this->assertSame(0, $draws->calls, 'Inside a quarter nothing is released.');
+        $this->assertSame(0.0, $state->foreignOutputGap);
+
+        $state->totalTime = 0.25;
+        $subsystem->calculateForeignEconomy($state, 0.01);
+        $this->assertSame(3, $draws->calls, 'The turn releases the gap, core inflation and the rate decision once.');
+        $this->assertGreaterThan(0.0, $state->foreignOutputGap, 'and the district\'s boom shows in the mainland gap.');
+
+        $state->totalTime = 1.25;
+        $subsystem->calculateForeignEconomy($state, 1.0);
+        $this->assertSame(15, $draws->calls, 'A year-long step releases four quarters.');
     }
 
-    /** UIP: the district's currency is priced on the differential against the foreign rule rate, not a constant. */
+    public function testTheDistrictsBoomSpillsIntoTheMainlandOnlyInPart(): void
+    {
+        $state = new MacroState();
+        $state->outputGapEma = 0.04;
+        $this->runMainlandQuarters($this->subsystem, $state, 400);
+
+        $this->assertEqualsWithDelta(0.04 * AssetMarketSubsystem::FOREIGN_IMPORT_SPILLOVER, $state->foreignOutputGap, 1e-6, 'The mainland feels the district\'s imports, not its whole cycle.');
+        $this->assertGreaterThan(MacroEngine::MAINLAND_NEUTRAL_RATE, $state->foreignPolicyRate, 'and the Fed leans against the demand it does feel.');
+        $expectedGlobal = (MacroEngine::DOMESTIC_DEMAND_WEIGHT * 0.04) + ((1.0 - MacroEngine::DOMESTIC_DEMAND_WEIGHT) * $state->foreignOutputGapEma);
+        $this->assertEqualsWithDelta($expectedGlobal, $state->globalDemandGap, 1e-9, 'World demand weights the two economies.');
+    }
+
+    /** The Taylor principle: held a point higher, four-quarter core inflation takes the funds rate up by the fitted 1.66 points. */
+    public function testTheFedAnswersInflationMoreThanOneForOne(): void
+    {
+        $settle = function (float $inflation): array {
+            $state = new MacroState();
+            $state->outputGapEma = 0.0;
+            $this->runMainlandQuarters($this->subsystem, $state, 200, static function (MacroState $s) use ($inflation): void {
+                $s->foreignCoreInflation = $s->foreignCoreInflationLag1 = $s->foreignCoreInflationLag2 = $s->foreignCoreInflationLag3 = $inflation;
+            });
+            $yearOnYear = ($state->foreignCoreInflation + $state->foreignCoreInflationLag1 + $state->foreignCoreInflationLag2 + $state->foreignCoreInflationLag3) / 4.0;
+
+            return [$yearOnYear, $state->foreignPolicyRate];
+        };
+        [$atTarget, $neutral] = $settle(MacroEngine::TARGET_INFLATION);
+        [$above, $tight] = $settle(MacroEngine::TARGET_INFLATION + 0.01);
+
+        $this->assertEqualsWithDelta(MacroEngine::MAINLAND_NEUTRAL_RATE, $neutral, 1e-9, 'At target with the gap closed the Fed rests at neutral.');
+        $response = ($tight - $neutral) / ($above - $atTarget);
+        $this->assertEqualsWithDelta(AssetMarketSubsystem::FED_RULE_INFLATION_RESPONSE, $response, 1e-6);
+        $this->assertGreaterThan(1.0, $response, 'Real rates rise when inflation does.');
+    }
+
+    public function testTheFedStopsAtTheLowerBound(): void
+    {
+        $state = new MacroState();
+        $state->outputGapEma = 0.0;
+        $this->runMainlandQuarters($this->subsystem, $state, 60, static function (MacroState $s): void {
+            $s->foreignOutputGap = $s->foreignOutputGapLag = -0.06;
+        });
+
+        $this->assertSame(MacroEngine::EFFECTIVE_LOWER_BOUND, $state->foreignPolicyRate, 'A deep mainland slump takes the funds rate to the floor and no further.');
+    }
+
+    /** UIP: the district's currency is priced on the differential against the Fed's rate, not a constant. */
     public function testTheCurrencyReadsTheForeignPolicyRate(): void
     {
         $neutral = $this->settledFx();
-        $foreignHikes = $this->settledFx(['foreignPolicyRate' => MacroEngine::GLOBAL_BASELINE_RATE + 0.02]);
-        $districtHikes = $this->settledFx(['policyRate' => 0.025 + 0.02]);
+        $foreignHikes = $this->settledFx(['foreignPolicyRate' => MacroEngine::MAINLAND_NEUTRAL_RATE + 0.02]);
+        $districtHikes = $this->settledFx(['policyRate' => MacroEngine::MAINLAND_NEUTRAL_RATE + 0.02]);
 
         $this->assertLessThan($neutral, $foreignHikes, 'A foreign hiking cycle sells the district\'s currency.');
         $this->assertGreaterThan($neutral, $districtHikes, 'A district hiking cycle with the bloc on hold buys it.');

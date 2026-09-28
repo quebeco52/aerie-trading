@@ -1215,6 +1215,29 @@ class MathUtility
     }
 
     /**
+     * Autocorrelation of a stationary AR(2) at a lag, from the Yule-Walker equations (Box & Jenkins 1970):
+     * rho_1 = a1 / (1 - a2), then rho_k = a1 rho_{k-1} + a2 rho_{k-2}.
+     *
+     * @param float $a1  First autoregressive coefficient.
+     * @param float $a2  Second autoregressive coefficient.
+     * @param int   $lag Lag in periods of the process.
+     * @return float Autocorrelation at that lag.
+     */
+    public static function calculateAr2Autocorrelation(float $a1, float $a2, int $lag): float
+    {
+        $previous = 1.0;
+        $current = $a1 / (1.0 - $a2);
+        if ($lag <= 0) {
+            return 1.0;
+        }
+        for ($k = 2; $k <= $lag; $k++) {
+            [$previous, $current] = [$current, ($a1 * $current) + ($a2 * $previous)];
+        }
+
+        return $current;
+    }
+
+    /**
      * Calculates an exponential distributed lag step (discrete recursive lag filter).
      * Models delayed transmission and economic stickiness (e.g., cost-push pass-through).
      *

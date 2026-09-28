@@ -97,7 +97,7 @@ function updateMacroHud(d) {
     setHud('hud-macroPolicyRuleChart', `Rate vs rule: ${last(d.policyRuleGapBpsData) >= 0 ? '+' : ''}${last(d.policyRuleGapBpsData).toFixed(0)} bps`);
     setHud('hud-macroLeadingIndicatorsChart', `PMI: ${last(d.pmiData).toFixed(1)} | Starts: ${last(d.housingStartsData).toFixed(0)} | M2: ${last(d.moneySupplyGrowthData) >= 0 ? '+' : ''}${last(d.moneySupplyGrowthData).toFixed(1)}% | Trade: ${last(d.tradeBalanceData) >= 0 ? '+' : ''}${last(d.tradeBalanceData).toFixed(1)}%`);
     setHud('hud-macroHouseholdCreditChart', `DSR: ${last(d.householdDsrData).toFixed(1)}% | DTI: ${last(d.householdDtiData).toFixed(1)}% | CCyB: ${last(d.ccybRateData).toFixed(2)}% | Gap: ${last(d.creditToGdpGapData) >= 0 ? '+' : ''}${last(d.creditToGdpGapData).toFixed(1)}%`);
-    setHud('hud-macroGlobalCycleChart', `Dom: ${last(d.outputGapData) >= 0 ? '+' : ''}${last(d.outputGapData).toFixed(1)}% | For: ${last(d.foreignOutputGapData) >= 0 ? '+' : ''}${last(d.foreignOutputGapData).toFixed(1)}% | Global: ${last(d.globalDemandGapData) >= 0 ? '+' : ''}${last(d.globalDemandGapData).toFixed(1)}% | For Rate: ${last(d.foreignPolicyRateData).toFixed(2)}%`);
+    setHud('hud-macroGlobalCycleChart', `Dom: ${last(d.outputGapData) >= 0 ? '+' : ''}${last(d.outputGapData).toFixed(1)}% | Mainland: ${last(d.foreignOutputGapData) >= 0 ? '+' : ''}${last(d.foreignOutputGapData).toFixed(1)}% | Global: ${last(d.globalDemandGapData) >= 0 ? '+' : ''}${last(d.globalDemandGapData).toFixed(1)}% | Fed: ${last(d.foreignPolicyRateData).toFixed(2)}%`);
     setHud('hud-macroBankingLiquidityChart', `Beta: ${last(d.depositBetaData).toFixed(1)}% | MMF: ${last(d.mmfShareData).toFixed(1)}% | Spread: ${last(d.interbankSpreadBpsData) !== null && !isNaN(last(d.interbankSpreadBpsData)) ? last(d.interbankSpreadBpsData).toFixed(0) + ' bps' : '-'}`);
 }
 
@@ -463,7 +463,7 @@ export function updateMacroCharts(reports, timeframe = currentMacroTimeframe) {
         let rawForGap = report.foreign_output_gap_ema ?? report.foreign_output_gap ?? report.foreignOutputGapEma ?? report.foreignOutputGap ?? 0.0;
         foreignOutputGapData.push(parseFloat(rawForGap) * 100);
 
-        let rawForRate = report.foreign_policy_rate_ema ?? report.foreign_policy_rate ?? report.foreignPolicyRateEma ?? report.foreignPolicyRate ?? 0.025;
+        let rawForRate = report.foreign_policy_rate_ema ?? report.foreign_policy_rate ?? report.foreignPolicyRateEma ?? report.foreignPolicyRate ?? 0.035;
         foreignPolicyRateData.push(parseFloat(rawForRate) * 100);
 
         let rawGlobGap = report.global_demand_gap_ema ?? report.global_demand_gap ?? report.globalDemandGapEma ?? report.globalDemandGap ?? 0.0;

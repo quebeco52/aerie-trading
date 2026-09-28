@@ -249,7 +249,7 @@ class SovereignFundSubsystem
      */
     public function foreignZeroYield(MacroState $state, float $maturity): float
     {
-        $neutral = MacroEngine::GLOBAL_BASELINE_RATE;
+        $neutral = MacroEngine::MAINLAND_NEUTRAL_RATE;
         $expectationsYield = $this->mathUtility->calculateSvenssonYield(
             level: $neutral,
             slope: $state->foreignPolicyRate - $neutral,
@@ -369,7 +369,7 @@ class SovereignFundSubsystem
         $equity = max(0.0, min(1.0 - $domestic, $foreignEquityWeight));
         $paper = 1.0 - $domestic - $equity;
 
-        $foreignRealRate = MacroEngine::GLOBAL_BASELINE_RATE - MacroEngine::TARGET_INFLATION;
+        $foreignRealRate = MacroEngine::MAINLAND_NEUTRAL_RATE - MacroEngine::TARGET_INFLATION;
         $arithmetic = ($domestic * $this->domesticExpectedRealReturn($state))
             + ($equity * ($foreignRealRate + MacroEngine::BASE_EQUITY_RISK_PREMIUM))
             + ($paper * ($foreignRealRate + self::foreignBondExpectedPremium()));

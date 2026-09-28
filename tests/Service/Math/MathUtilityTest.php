@@ -914,6 +914,36 @@ class MathUtilityTest extends TestCase
         $this->assertEqualsWithDelta(0.0, $this->mathUtility->calculateAsymmetricResponse(1e-12, 3.0, 0.5) - $this->mathUtility->calculateAsymmetricResponse(-1e-12, 3.0, 0.5), 1e-11);
     }
 
+    /** Yule-Walker: an AR(1) decays geometrically, and an AR(2)'s first autocorrelation is a1 / (1 - a2). */
+    public function testAr2AutocorrelationFollowsTheYuleWalkerRecursion(): void
+    {
+        $this->assertSame(1.0, MathUtility::calculateAr2Autocorrelation(1.2, -0.3, 0));
+        for ($lag = 1; $lag <= 8; $lag++) {
+            $this->assertEqualsWithDelta(0.8 ** $lag, MathUtility::calculateAr2Autocorrelation(0.8, 0.0, $lag), 1e-12, 'With no second lag it is an AR(1).');
+        }
+        $this->assertEqualsWithDelta(1.2 / 1.3, MathUtility::calculateAr2Autocorrelation(1.2, -0.3, 1), 1e-12);
+
+        // Against the sample autocorrelation of a long simulated AR(2).
+        mt_srand(20260928);
+        $math = new MathUtility();
+        [$previous, $current] = [0.0, 0.0];
+        $series = [];
+        for ($t = 0; $t < 200000; $t++) {
+            [$previous, $current] = [$current, (1.2 * $current) - (0.3 * $previous) + $math->generateStandardNormal()];
+            $series[] = $current;
+        }
+        $mean = array_sum($series) / count($series);
+        $variance = 0.0;
+        $covariance = 0.0;
+        foreach ($series as $t => $x) {
+            $variance += ($x - $mean) ** 2;
+            if ($t >= 4) {
+                $covariance += ($x - $mean) * ($series[$t - 4] - $mean);
+            }
+        }
+        $this->assertEqualsWithDelta(MathUtility::calculateAr2Autocorrelation(1.2, -0.3, 4), $covariance / $variance, 0.02);
+    }
+
     public function testCalculateAsymmetricCostStickinessCompressesMarginsOnRevenueDecline(): void
     {
         $baselineVariableCostRatio = 0.70; // 70% variable cost ratio (30% gross margin)
