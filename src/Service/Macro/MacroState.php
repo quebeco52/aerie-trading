@@ -206,6 +206,9 @@ class MacroState
     public float $netExportGap;
     // The market-driven finance output (a share of GDP, a level part of the gap): loans and managed assets against their trends.
     public float $financeOutputGap;
+    // Potential finance output: the one-sided HP(1600) trend of managed market value over GDP, and its log slope a quarter.
+    public float $financeMarketTrend;
+    public float $financeMarketTrendSlope;
     // The currency index over its fundamental: the purchasing-power deviation that decays while the fundamental jumps.
     public float $exchangeRateDeviation;
     public float $realExchangeRateTradeLag;
@@ -507,10 +510,14 @@ class MacroState
         if (!isset($carried['netExportGap'])) {
             $state->netExportGap = MacroAggregateSubsystem::netExportGapAt($state->foreignOutputGapEma, $state->realExchangeRateTradeLag);
         }
+        // The finance trend a state predating it omits opens on the trend it replaced, so the finance level is unmoved.
+        if (!isset($carried['financeMarketTrend']) && $state->equityWealthTrend > 0.0) {
+            $state->financeMarketTrend = $state->equityWealthTrend;
+        }
         if (!isset($carried['financeOutputGap'])) {
             $state->financeOutputGap = MacroAggregateSubsystem::financeOutputGapAt(
                 MacroAggregateSubsystem::creditBalanceGap($state->creditToGdpGap, $state->creditToGdpTrend),
-                MacroAggregateSubsystem::marketBalanceGap($state->equityWealthRatio, $state->equityWealthTrend)
+                MacroAggregateSubsystem::marketBalanceGap($state->equityWealthRatio, $state->financeMarketTrend)
             );
         }
 

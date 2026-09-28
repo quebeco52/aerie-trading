@@ -169,6 +169,8 @@ readonly class MacroStateDTO
         public float $productivitySupplyGap = 0.0,
         public float $netExportGap = 0.0,
         public float $financeOutputGap = 0.0,
+        public float $financeMarketTrend = 0.0,
+        public float $financeMarketTrendSlope = 0.0,
         public float $realExchangeRateTradeLag = 0.0,
         public float $importPriceLevel = 0.0,
         public float $monetaryStanceStage1 = 0.0,
@@ -430,9 +432,13 @@ readonly class MacroStateDTO
         $args['importPriceLevel'] ??= MacroAggregateSubsystem::importPriceLevelTarget($resolve('exchangeRateIndexEma'));
         $args['realExchangeRateTradeLag'] ??= MacroAggregateSubsystem::realExchangeRateGap($resolve('exchangeRateIndexEma'), $resolve('exchangeRateTrend'));
         $args['netExportGap'] ??= MacroAggregateSubsystem::netExportGapAt($resolve('foreignOutputGapEma'), $resolve('realExchangeRateTradeLag'));
+        // The finance trend a state predating it omits opens on the trend it replaced, so the finance level is unmoved.
+        if (!isset($args['financeMarketTrend']) && $resolve('equityWealthTrend') > 0.0) {
+            $args['financeMarketTrend'] = $resolve('equityWealthTrend');
+        }
         $args['financeOutputGap'] ??= MacroAggregateSubsystem::financeOutputGapAt(
             MacroAggregateSubsystem::creditBalanceGap($resolve('creditToGdpGap'), $resolve('creditToGdpTrend')),
-            MacroAggregateSubsystem::marketBalanceGap($resolve('equityWealthRatio'), $resolve('equityWealthTrend'))
+            MacroAggregateSubsystem::marketBalanceGap($resolve('equityWealthRatio'), $resolve('financeMarketTrend'))
         );
 
         return new self(...$args);

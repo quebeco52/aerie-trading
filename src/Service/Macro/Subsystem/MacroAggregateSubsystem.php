@@ -20,10 +20,18 @@ class MacroAggregateSubsystem
     // --- KALDOR-KALECKI 2D LIMIT CYCLE ---
     /** Demand drift per unit of purchases above baseline, fitted on the engine's own response to a purchases shock (var/harness/govt_irf.sh) to Ramey & Zubairy's (2018) cumulative multipliers, 2y 0.54-0.76 and 4y 0.78-0.84 (Blanchard-Perotti and news shocks): 0.79 and 0.64 here, Taylor offset included. */
     public const KALDOR_GOVT_SPENDING_MULTIPLIER = 0.45;
-    /** Demand per unit of housing wealth above the level households are used to: Mian, Rao & Sufi (2013) put the MPC out of housing wealth at 5-7c on a stock worth 1.5-2x GDP. */
-    public const KALDOR_WEALTH_EFFECT_ELASTICITY = 0.05;
-    /** Elasticity to EQUITY wealth; Carroll-Otsuka-Slacalek (2011) put the MPC out of financial wealth at about half that out of housing. */
-    public const KALDOR_EQUITY_WEALTH_ELASTICITY = 0.01;
+    /** The rate the demand equation settles a sustained drive at, its automatic stabiliser less its momentum: a drive of c a year holds the gap at c over this, so an effect on the level of spending enters the drift times it. */
+    public const DEMAND_OWN_PULL = self::KALDOR_AUTOMATIC_STABILISER - self::KALDOR_MOMENTUM;
+    /** Marginal propensity to consume out of a dollar of housing wealth, a year (Mian, Rao & Sufi 2013: 5-7 cents; the low end). */
+    public const HOUSING_WEALTH_MPC = 0.05;
+    /** Household real estate over GDP, 1985-2019 mean (Fed Z.1 via FRED, HNOREMQ027S over GDP: 1.40). */
+    public const HOUSING_WEALTH_TO_GDP = 1.40;
+    /** Demand drift per unit of housing wealth above the level households are used to: the MPC on the stock's size, at the pull that turns a level of spending into a drift. */
+    public const KALDOR_WEALTH_EFFECT_ELASTICITY = self::DEMAND_OWN_PULL * self::HOUSING_WEALTH_MPC * self::HOUSING_WEALTH_TO_GDP;
+    /** Marginal propensity to consume out of a dollar of stock market wealth, a year (Chodorow-Reich, Nenov & Simsek 2021: 3.2 cents). */
+    public const EQUITY_WEALTH_MPC = 0.032;
+    /** Demand drift per unit of equity wealth above the level households are used to: the MPC on the board's value, which is sized against District GDP already, so domestic demand's share is undone. */
+    public const KALDOR_EQUITY_WEALTH_ELASTICITY = self::DEMAND_OWN_PULL * self::EQUITY_WEALTH_MPC * SovereignFundSubsystem::MARKET_CAP_TO_GDP / self::DOMESTIC_GAP_WEIGHT;
     /** Years over which a valuation level stops being news and becomes the household's normal (Carroll et al. slow adjustment). */
     public const EQUITY_WEALTH_TREND_HORIZON_YEARS = 3.0;
     /** The same horizon for houses, longer because housing wealth is revalued by sales that are years apart (Carroll, Otsuka & Slacalek 2011); a house price cycle runs about twice this, so the cycle still reads as deviation. */
@@ -78,16 +86,42 @@ class MacroAggregateSubsystem
     public const FINANCE_GAP_WEIGHT = self::DISTRICT_FINANCE_SHARE - ((1.0 - self::DISTRICT_FINANCE_SHARE) * self::US_FINANCE_SHARE / (1.0 - self::US_FINANCE_SHARE));
     /** Weight of domestic demand in the gap: everything but the market-driven finance (0.853). */
     public const DOMESTIC_GAP_WEIGHT = 1.0 - (self::FINANCE_GAP_WEIGHT * (self::FINANCE_CREDIT_SHARE + self::FINANCE_MARKET_SHARE));
+    /** Steady-state Kalman level gain of the one-sided HP filter at Hodrick & Prescott's quarterly lambda of 1600, the trend managed market value is measured against: it follows a steady trend without the lag a moving average carries (var/harness/hp_kalman.py). */
+    public const FINANCE_MARKET_TREND_LEVEL_GAIN = 0.200556;
+    /** Steady-state Kalman slope gain of the same filter. */
+    public const FINANCE_MARKET_TREND_SLOPE_GAIN = 0.02235291;
 
     // --- KALDOR-KALECKI 2D LIMIT CYCLE ---
     /** Linear self-reinforcement of demand; at 0.12 zero was an unstable point and the gap swept through it on a clockwork limit cycle, at 0.06 it rests inside ±1% 44% of quarters (Frisch-Slutsky shock-driven cycle) while keeping the left skew. */
     public const KALDOR_MOMENTUM = 0.06;
     /** Cubic capacity ceiling on the UPSIDE only (Friedman 1993 plucking; Dupraz, Nakamura & Steinsson 2019): output is plucked below a ceiling it cannot run above, and a slump has no floor of its own. */
     public const KALDOR_CAPACITY = 600.0;
-    /** Demand per unit of a RESTRICTIVE transmitted real-rate stance: tightening binds collateral constraints (Guerrieri & Iacoviello 2017); fitted with the accommodative slope, the premium legs and the rule by indirect inference (var/harness/asym_an.py: ACF, sd, rule, timing, US rate path, sign-split premium projection, Barnichon-Matthes 2018). The fit is flat from 1.3 to 3.5; 1.3 is the strongest whose deterministic ring-down stays clean -- above it a boom swings into a policy-made bust and back. */
-    public const KALDOR_MONETARY_DRAG_RESTRICTIVE = 1.6;
-    /** Demand per unit of an ACCOMMODATIVE stance, about half the restrictive slope: easing pushes on a string (Tenreyro & Thwaites 2016; Barnichon & Matthes 2018 put the expansionary peak at a third of the contractionary); the same fit. */
-    public const KALDOR_MONETARY_DRAG_ACCOMMODATIVE = 0.9;
+    /** Demand per unit of a RESTRICTIVE transmitted real-rate stance: tightening binds collateral constraints (Guerrieri & Iacoviello 2017); fitted at 1.6 with the accommodative slope, the premium legs and the rule by indirect inference (var/harness/asym_an.py: ACF, sd, rule, timing, US rate path, sign-split premium projection, Barnichon-Matthes 2018), less the wealth and trade routes that fit absorbed and the engine now models (FITTED_DRAG_NOW_EXPLICIT). */
+    public const KALDOR_MONETARY_DRAG_RESTRICTIVE = 1.6 - self::FITTED_DRAG_NOW_EXPLICIT;
+    /** Demand per unit of an ACCOMMODATIVE stance, about half the restrictive slope: easing pushes on a string (Tenreyro & Thwaites 2016; Barnichon & Matthes 2018 put the expansionary peak at a third of the contractionary); the same fit, 0.9, less the same routes. */
+    public const KALDOR_MONETARY_DRAG_ACCOMMODATIVE = 0.9 - self::FITTED_DRAG_NOW_EXPLICIT;
+
+    // --- Monetary Transmission the Fitted Drag Carried and the Engine Now Models Explicitly ---
+    /** US broad stock index response per unit of policy rate (Bernanke & Kuttner 2005: about 1% per 25bp surprise). */
+    public const US_STOCK_RESPONSE_TO_RATES = 4.0;
+    /** US house price response per unit of policy rate (Jarocinski & Smets 2008: 0.5% per 25bp at ten quarters). */
+    public const US_HOUSE_PRICE_RESPONSE_TO_RATES = 2.0;
+    /** US household stock wealth over GDP, 1985-2019 mean (Fed Z.1 via FRED: corporate equities HNOCEAQ027S plus mutual fund shares HNOMFAQ027S, 0.78). */
+    public const US_STOCK_WEALTH_TO_GDP = 0.78;
+    /** US exports over GDP, 2010-19 mean (World Bank NE.EXP.GNFS.ZS, 13%). */
+    public const US_EXPORT_SHARE = 0.13;
+    /** US imports over GDP, 2010-19 mean (World Bank NE.IMP.GNFS.ZS, 16%). */
+    public const US_IMPORT_SHARE = 0.16;
+    /** Housing wealth drift the engine carried when the rate slopes were fitted; the fitting harness reported no board, so equity carried none. */
+    public const FIT_HOUSING_WEALTH_DRIFT = 0.05;
+    /** Currency drift the engine carried when the rate slopes were fitted, per unit of the currency against its trend. */
+    public const FIT_EXCHANGE_RATE_DRIFT = 0.04;
+    /** Drift per unit of stance the fitted slopes absorbed for routes the engine now models itself: the US wealth route (stocks and houses at their MPCs) and the US dollar's trade route (IMF footnote 21 at US shares, through parity), each less what the engine already carried when fitted (0.35). */
+    public const FITTED_DRAG_NOW_EXPLICIT = (self::DEMAND_OWN_PULL * ((self::US_STOCK_RESPONSE_TO_RATES * self::EQUITY_WEALTH_MPC * self::US_STOCK_WEALTH_TO_GDP)
+            + (self::US_HOUSE_PRICE_RESPONSE_TO_RATES * self::HOUSING_WEALTH_MPC * self::HOUSING_WEALTH_TO_GDP)))
+        - (self::FIT_HOUSING_WEALTH_DRIFT * self::US_HOUSE_PRICE_RESPONSE_TO_RATES)
+        + (AssetMarketSubsystem::UIP_SENSITIVITY * ((self::DEMAND_OWN_PULL * ((self::EXPORT_PRICE_PASS_THROUGH * self::EXPORT_PRICE_ELASTICITY * self::US_EXPORT_SHARE)
+            + (self::IMPORT_PRICE_PASS_THROUGH * self::IMPORT_PRICE_ELASTICITY * self::US_IMPORT_SHARE))) - self::FIT_EXCHANGE_RATE_DRIFT));
     /** Time constant of each of the two Pascal stages the real-rate stance passes through before it moves demand (Solow 1960): mean lag 0.8y against Rudebusch-Svensson's year average lagged a quarter (0.6y); the same fit. */
     public const MONETARY_TRANSMISSION_LAG_YEARS = 0.3;
     /** Demand per unit of excess credit and interbank spread: the Bernanke-Gertler-Gilchrist (1999) accelerator's price leg only, well under Gilchrist-Zakrajsek's reduced-form 1.5-2.0 because the quantity and deleveraging legs are booked separately. */
@@ -440,7 +474,7 @@ class MacroAggregateSubsystem
         $state->netExportGap = $netExportGap;
         $financeGap = self::financeOutputGapAt(
             self::creditBalanceGap($state->creditToGdpGap, $state->creditToGdpTrend),
-            self::marketBalanceGap($state->equityWealthRatio, $state->equityWealthTrend)
+            self::marketBalanceGap($state->equityWealthRatio, $state->financeMarketTrend)
         );
         $financeChange = $financeGap - $state->financeOutputGap;
         $state->financeOutputGap = $financeGap;
@@ -726,15 +760,16 @@ class MacroAggregateSubsystem
 
     /**
      * The market value the District's funds and brokers hold against its trend, in logs: the board's capitalisation
-     * over GDP against the level households have grown used to. Zero before a market is reported.
+     * over GDP against its one-sided HP trend, so a steady rise in what they manage is potential output, not a boom.
+     * Zero before a market is reported.
      *
-     * @param float $equityWealthRatio Board capitalisation over nominal GDP.
-     * @param float $equityWealthTrend Its multi-year trend.
+     * @param float $equityWealthRatio  Board capitalisation over nominal GDP.
+     * @param float $financeMarketTrend The trend of that ratio.
      * @return float Log market balance gap.
      */
-    public static function marketBalanceGap(float $equityWealthRatio, float $equityWealthTrend): float
+    public static function marketBalanceGap(float $equityWealthRatio, float $financeMarketTrend): float
     {
-        return ($equityWealthRatio > 0.0 && $equityWealthTrend > 0.0) ? log($equityWealthRatio / $equityWealthTrend) : 0.0;
+        return ($equityWealthRatio > 0.0 && $financeMarketTrend > 0.0) ? log($equityWealthRatio / $financeMarketTrend) : 0.0;
     }
 
     /**
@@ -957,6 +992,23 @@ class MacroAggregateSubsystem
             $state->equityWealthTrend = $state->equityWealthTrend > 0.0
                 ? $state->equityWealthTrend + ($trendWeight * ($state->equityWealthRatio - $state->equityWealthTrend))
                 : $state->equityWealthRatio;
+
+            // Potential finance output: the one-sided HP trend of managed market value, defined on quarterly data, so it
+            // steps on the quarter.
+            if ($state->financeMarketTrend <= 0.0) {
+                $state->financeMarketTrend = $state->equityWealthRatio;
+                $state->financeMarketTrendSlope = 0.0;
+            } elseif (floor($state->totalTime * 4.0) > floor(($state->totalTime - $dt) * 4.0)) {
+                $trend = $this->mathUtility->calculateOneSidedHpStep(
+                    trendLevel: log($state->financeMarketTrend),
+                    trendSlope: $state->financeMarketTrendSlope,
+                    observation: log($state->equityWealthRatio),
+                    levelGain: self::FINANCE_MARKET_TREND_LEVEL_GAIN,
+                    slopeGain: self::FINANCE_MARKET_TREND_SLOPE_GAIN
+                );
+                $state->financeMarketTrend = exp($trend['level']);
+                $state->financeMarketTrendSlope = $trend['slope'];
+            }
         }
 
         $state->naturalRateEma += $emaWeight * ($state->naturalRate - $state->naturalRateEma);

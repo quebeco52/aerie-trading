@@ -96,12 +96,8 @@ class InitialMarket
         ],
         [
             'ticker' => 'OWLS',
-            'management_style' => 'fortress', // Sits on towering cash for years and refuses to overpay; deploys only in panics
+            'management_style' => 'fortress',
             'name' => 'Owl Capital Partners',
-            // Sector stays Financials, as Berkshire Hathaway's own GICS classification does, because the
-            // firm is read as an investment house. The INDUSTRY carries the economics, and those are a
-            // holding company's: permanent capital and wholly-owned subsidiaries upstreaming cash, not a
-            // manager charging a fee on somebody else's assets. It was priced on fee weights it does not earn.
             'sector' => 'Financials',
             'industry' => 'Conglomerates',
             'systemic_importance' => 'systemic',
@@ -110,10 +106,6 @@ class InitialMarket
             'beta' => 0.20,
             'jump_intensity' => 0.20,
             'jump_vol' => 0.08,
-            // A holding company is measured on the capital actually deployed, not on equity. More than half
-            // of OWLS's book sits in cash and sovereign paper, so its return on invested capital is strong
-            // while its return on EQUITY is dragged down by the hoard, which is exactly what the description
-            // means by lagging through frothy bull markets.
             'baseline_roic' => 0.22,
             'capex_ratio' => 0.02,
             'target_payout_ratio' => 0.40,
@@ -215,7 +207,6 @@ class InitialMarket
             'historical_fixed_rate' => 0.045,
             'credit_spread' => 0.0150,
             'depreciation_rate' => 0.02,
-            // 15% of the wholesale book, the prime-brokerage target cash backing.
             'corporate_treasury' => 102_000_000_000.00,
             'total_equity' => 210_000_000_000.00,
             'customer_deposits' => 0.00,
@@ -256,7 +247,7 @@ class InitialMarket
         ],
         [
             'ticker' => 'SAFE',
-            'management_style' => 'fortress', // Solvency is the product: reserves are held against the tail rather than distributed
+            'management_style' => 'fortress',
             'name' => 'Safe Harbor Reinsurance',
             'sector' => 'Financials',
             'industry' => 'Insurance - Reinsurance',
@@ -271,15 +262,8 @@ class InitialMarket
             'target_payout_ratio' => 0.30,
             'dividendSpeed' => 0.015,
             'fixed_cost_ratio' => 0.20,
-            // A 95.5% combined ratio, which is what a diversified global reinsurer averages through the
-            // cycle. The old 0.08 was a 92% combined ratio held forever, and on top of a float 3.3x its
-            // own equity it printed an 18-21% ROE against the 14% tuned here: the balance sheet earned
-            // half again what the seed said it did from its first report, and the gap compounded.
             'operating_margin' => 0.045,
             'public_float' => 0.70,
-            // 3.5T addressable retrocession market. At 2.5T the firm's own equity was 60% of its market,
-            // past the 50% Penrose diseconomy threshold, so the district's backstop opened its first
-            // quarter already paying a saturation penalty on capital it is supposed to hold.
             'sam_ratio' => 3.50,
             'floating_debt_ratio' => 0.05,
             'historical_fixed_rate' => 0.025,

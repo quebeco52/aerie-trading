@@ -7,6 +7,7 @@ use App\Service\Macro\MacroState;
 use App\Service\Macro\Subsystem\AssetMarketSubsystem;
 use App\Service\Macro\Recorder\OutputGapProbe;
 use App\Service\Macro\Subsystem\MacroAggregateSubsystem;
+use App\Service\Macro\Subsystem\SovereignFundSubsystem;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\SemiconductorBusinessModel;
 use PHPUnit\Framework\TestCase;
@@ -498,6 +499,64 @@ class MacroAggregateSubsystemTest extends TestCase
             MacroAggregateSubsystem::KALDOR_EQUITY_WEALTH_ELASTICITY,
             'The MPC out of financial wealth is the smaller one.'
         );
+    }
+
+    /**
+     * The coefficients are MPCs on stocks, entered as drifts at the demand equation's own pull (Mian, Rao & Sufi 2013;
+     * Chodorow-Reich, Nenov & Simsek 2021). Held, a wealth gain settles domestic demand where that pull, less the
+     * restocking the inventory cycle's lean cyclical target sets off, balances it: the MPC on the stock, raised by the
+     * restocking, before policy answers any of it. Measured in slack, below the capacity ceiling.
+     */
+    public function testAHeldWealthGainSettlesSpendingAtTheMpcOnTheStock(): void
+    {
+        $settle = function (float $housing, float $equity): float {
+            $state = $this->neutralBorrowingState();
+            $state->creditCrisisDrag = 0.06;
+            $state->residentialWealthTrend = 100.0;
+            $state->residentialPropertyIndexEma = 100.0 * (1.0 + $housing);
+            $state->equityMarketCapEma = self::TEST_MARKET_CAP * (1.0 + $equity);
+            $state->nominalGdpIndex = 1.0;
+            $state->equityWealthTrend = self::TEST_MARKET_CAP;
+            for ($i = 0; $i < 3000; $i++) {
+                $state->outputGap = $this->subsystem->calculateOutputGap($state, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.01, 1.0);
+                $state->outputGapEma = $state->outputGap;
+            }
+            $this->assertLessThan(0.0, $state->outputGap, 'Measured below the capacity ceiling.');
+
+            return $state->outputGap;
+        };
+        $base = $settle(0.0, 0.0);
+        $restockingPull = MacroAggregateSubsystem::DEMAND_OWN_PULL
+            - (MacroAggregateSubsystem::METZLER_INVENTORY_DRAG * MacroAggregateSubsystem::INVENTORY_CYCLICAL_DEMAND_SENSITIVITY);
+        $amplification = MacroAggregateSubsystem::DEMAND_OWN_PULL / $restockingPull;
+
+        $housingLevel = MacroAggregateSubsystem::DOMESTIC_GAP_WEIGHT * MacroAggregateSubsystem::HOUSING_WEALTH_MPC * MacroAggregateSubsystem::HOUSING_WEALTH_TO_GDP * 0.10;
+        // Within 3%: the inventory surprise reads the smoothed whole gap against domestic demand, a small cross-term.
+        $this->assertEqualsWithDelta($amplification * $housingLevel, $settle(0.10, 0.0) - $base, 0.03 * $housingLevel, 'Ten percent on the houses is ~0.6% of GDP of spending, and restocking adds a quarter.');
+
+        $equityLevel = MacroAggregateSubsystem::EQUITY_WEALTH_MPC * SovereignFundSubsystem::MARKET_CAP_TO_GDP * 0.10;
+        $this->assertEqualsWithDelta($amplification * $equityLevel, $settle(0.0, 0.10) - $base, 0.03 * $equityLevel, 'Ten percent on the board is ~0.5% of GDP.');
+    }
+
+    /**
+     * The rate slopes were fitted on US moments with the engine's wealth and currency channels a fraction of their size,
+     * so they absorbed the US routes through stocks, houses and the dollar. With those channels at their measured size
+     * the absorbed part comes out, once: rebuilt at US scale, the explicit routes plus the slope give the fitted total.
+     */
+    public function testTheRateSlopesCarryOnlyWhatNoExplicitChannelDoes(): void
+    {
+        $pull = MacroAggregateSubsystem::DEMAND_OWN_PULL;
+        $usWealthRoute = $pull * ((MacroAggregateSubsystem::US_STOCK_RESPONSE_TO_RATES * MacroAggregateSubsystem::EQUITY_WEALTH_MPC * MacroAggregateSubsystem::US_STOCK_WEALTH_TO_GDP)
+            + (MacroAggregateSubsystem::US_HOUSE_PRICE_RESPONSE_TO_RATES * MacroAggregateSubsystem::HOUSING_WEALTH_MPC * MacroAggregateSubsystem::HOUSING_WEALTH_TO_GDP));
+        $usDollarRoute = AssetMarketSubsystem::UIP_SENSITIVITY * $pull * ((MacroAggregateSubsystem::EXPORT_PRICE_PASS_THROUGH * MacroAggregateSubsystem::EXPORT_PRICE_ELASTICITY * MacroAggregateSubsystem::US_EXPORT_SHARE)
+            + (MacroAggregateSubsystem::IMPORT_PRICE_PASS_THROUGH * MacroAggregateSubsystem::IMPORT_PRICE_ELASTICITY * MacroAggregateSubsystem::US_IMPORT_SHARE));
+        $carriedWhenFitted = (MacroAggregateSubsystem::FIT_HOUSING_WEALTH_DRIFT * MacroAggregateSubsystem::US_HOUSE_PRICE_RESPONSE_TO_RATES)
+            + (MacroAggregateSubsystem::FIT_EXCHANGE_RATE_DRIFT * AssetMarketSubsystem::UIP_SENSITIVITY);
+
+        $this->assertEqualsWithDelta(1.6, MacroAggregateSubsystem::KALDOR_MONETARY_DRAG_RESTRICTIVE + $usWealthRoute + $usDollarRoute - $carriedWhenFitted, 1e-12, 'The fitted restrictive total, routed.');
+        $this->assertEqualsWithDelta(0.9, MacroAggregateSubsystem::KALDOR_MONETARY_DRAG_ACCOMMODATIVE + $usWealthRoute + $usDollarRoute - $carriedWhenFitted, 1e-12, 'The fitted accommodative total, routed.');
+        $this->assertGreaterThan(0.0, MacroAggregateSubsystem::KALDOR_MONETARY_DRAG_ACCOMMODATIVE, 'Easing still lifts demand directly.');
+        $this->assertLessThan(MacroAggregateSubsystem::KALDOR_MONETARY_DRAG_RESTRICTIVE, MacroAggregateSubsystem::KALDOR_MONETARY_DRAG_ACCOMMODATIVE, 'and still pushes on a string.');
     }
 
     /**
@@ -1647,10 +1706,10 @@ class MacroAggregateSubsystemTest extends TestCase
     {
         $calm = $this->neutralBorrowingState();
         $calm->equityWealthRatio = 1.0;
-        $calm->equityWealthTrend = 1.0;
+        $calm->financeMarketTrend = 1.0;
         $crash = $this->neutralBorrowingState();
         $crash->equityWealthRatio = 0.60;
-        $crash->equityWealthTrend = 1.0;
+        $crash->financeMarketTrend = 1.0;
 
         $gapCalm = $this->subsystem->calculateOutputGap($calm, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.01, 1.0);
         $gapCrash = $this->subsystem->calculateOutputGap($crash, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.01, 1.0);
@@ -1659,6 +1718,29 @@ class MacroAggregateSubsystemTest extends TestCase
         $this->assertEqualsWithDelta($financeLoss, $crash->financeOutputGap, 1e-12);
         $this->assertEqualsWithDelta($financeLoss - $calm->financeOutputGap, $gapCrash - $gapCalm, 1e-9, 'The lost fees are lost output, at once.');
         $this->assertLessThan(-0.03, $financeLoss, 'A 40% fall in managed assets costs the District over 3% of GDP.');
+    }
+
+    /**
+     * Potential finance output is the one-sided HP trend of what it manages: a market that climbs steadily is growth, not a
+     * boom. The three-year habituation trend the household wealth effect reads lags that climb by three years of it.
+     */
+    public function testASteadyBullMarketIsPotentialFinanceOutputNotABoom(): void
+    {
+        $state = new MacroState();
+        $state->nominalGdpIndex = 1.0;
+        $cap = 1.0e12;
+        for ($quarter = 0; $quarter < 200; $quarter++) {
+            $cap *= exp(0.032 / 4.0);
+            $state->equityMarketCap = $cap;
+            for ($tick = 0; $tick < 25; $tick++) {
+                $state->totalTime += 0.01;
+                $this->subsystem->updateExponentialMovingAverages($state, 0.01);
+            }
+        }
+
+        // The trend steps on the quarter, so between steps the market can sit up to a quarter's climb above it.
+        $this->assertEqualsWithDelta(0.0, MacroAggregateSubsystem::marketBalanceGap($state->equityWealthRatio, $state->financeMarketTrend), 0.032 / 4.0, 'A steady 3.2% a year is the trend itself.');
+        $this->assertGreaterThan(0.08, log($state->equityWealthRatio / $state->equityWealthTrend), 'The three-year habituation trend sits ~9.6% behind it.');
     }
 
     /** Bank output follows deflated loan balances: a credit boom is bank output, a bust takes it back. */
