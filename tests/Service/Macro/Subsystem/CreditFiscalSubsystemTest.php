@@ -639,7 +639,7 @@ class CreditFiscalSubsystemTest extends TestCase
 
         $this->subsystem->calculateSovereignDebt($state, 0.25);
 
-        $this->assertEqualsWithDelta(MacroEngine::SOVEREIGN_STRUCTURAL_DEFICIT, $state->primaryDeficitToGdp, 1e-9, 'At neutral spending and tax the primary deficit is the structural one.');
+        $this->assertEqualsWithDelta(CreditFiscalSubsystem::SOVEREIGN_STRUCTURAL_DEFICIT, $state->primaryDeficitToGdp, 1e-9, 'At neutral spending and tax the primary deficit is the structural one.');
     }
 
     /**
@@ -662,7 +662,7 @@ class CreditFiscalSubsystemTest extends TestCase
         $this->assertEqualsWithDelta(0.0, $small->primaryDeficitToGdp, 1e-12, 'The draw pays the structural deficit it finances.');
         $this->assertEqualsWithDelta(0.0, $large->primaryDeficitToGdp, 1e-12, 'Four times the draw is four times the spending, not a surplus.');
         $this->assertSame($small->sovereignDebtToGdp, $large->sovereignDebtToGdp);
-        $this->assertEqualsWithDelta(MacroEngine::SOVEREIGN_STRUCTURAL_DEFICIT, $unfunded->primaryDeficitToGdp, 1e-12, 'With no fund the structural deficit is borrowed.');
+        $this->assertEqualsWithDelta(CreditFiscalSubsystem::SOVEREIGN_STRUCTURAL_DEFICIT, $unfunded->primaryDeficitToGdp, 1e-12, 'With no fund the structural deficit is borrowed.');
     }
 
     /**

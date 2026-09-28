@@ -103,8 +103,8 @@
 				<span class="material-symbols-outlined text-on-surface-variant" aria-hidden="true">hourglass_empty</span>
 				<p class="text-sm text-on-surface-variant">
 					The fund opens on the first tick the market ticker runs. It opens holding
-					{{ (mandate.openingOwnership * 100)|number_format(1) }}% of the board's float, sized so its first draw
-					covers the District's {{ (mandate.structuralDeficit * 100)|number_format(1) }}% of GDP structural deficit.
+					{{ (mandate.openingOwnership * 100)|number_format(1) }}% of the board's float, at
+					{{ (mandate.openingSize * 100)|number_format(0) }}% of the District's GDP.
 				</p>
 			</div>
 		{% else %}
@@ -383,8 +383,8 @@
 				},
 				{
 					name: 'Opening size',
-					text: 'Sized when it opened so its first draw covered the ' ~ (mandate.structuralDeficit * 100)|number_format(1) ~ '% of GDP structural deficit, holding ' ~ (mandate.openingOwnership * 100)|number_format(1) ~ '% of the board\'s float.',
-					source: 'Opening stake: GPIF\'s share of the Japanese market (2016)'
+					text: 'Opened at ' ~ (mandate.openingSize * 100)|number_format(0) ~ '% of GDP, holding ' ~ (mandate.openingOwnership * 100)|number_format(1) ~ '% of the board\'s float.',
+					source: 'GPIF: its assets against Japan\'s GDP (FY2024) and its share of the Japanese market (2016)'
 				},
 				{
 					name: 'Reference portfolio',

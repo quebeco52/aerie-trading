@@ -80,10 +80,10 @@ class SovereignFundSubsystem
     // --- Numerics ---
     /** Room under the ownership ceiling smaller than this share of the float is rounding, not capacity. */
     private const ROOM_TOLERANCE = 1.0e-9;
-    /** Fixed-point passes that size the opening fund; the return moves only through the variance, so a few suffice. */
-    private const SIZING_PASSES = 20;
-    /** Floor on the compound return the sizing divides by, so a pathological calibration cannot divide by zero. */
-    private const MIN_COMPOUND_RETURN = 0.005;
+
+    // --- Opening Size (GPIF, FY2024) ---
+    /** Fund over GDP at inception: GPIF's scale, ¥250T of assets on ¥609T of FY2024 nominal GDP (GPIF annual report FY2024; Cabinet Office). */
+    public const OPENING_FUND_TO_GDP = 0.41;
 
     // --- Currency Bridge (World Bank) ---
     /** Listed-company capitalisation over GDP at inception: a financial centre's, Singapore's 1.56 (World Bank CM.MKT.LCAP.GD.ZS; US median 1.15, world 0.74). */
@@ -139,11 +139,9 @@ class SovereignFundSubsystem
     }
 
     /**
-     * Opens the fund on the first observed board, sized so its opening draw funds the structural deficit.
-     *
-     * With draw = NIR x g(w) x F, where g is the portfolio's compound real return at domestic weight w = D / F, the
-     * opening fund solves NIR x g(D / F) x F = d x GDP. g moves only through the portfolio variance, so the fixed
-     * point F = d x GDP / (NIR x g(D / F)) settles in a handful of passes. The policy weight is whatever D / F comes to.
+     * Opens the fund on the first observed board at GPIF's size against the economy, holding its opening share of the
+     * float. The policy weight is whatever D / F comes to, and the first draw is the spending rule on that fund; the
+     * budget spends it (CreditFiscalSubsystem::calculateSovereignDebt), so the size sets spending, not borrowing.
      *
      * @return bool Whether the fund incepted this tick.
      */
@@ -156,13 +154,7 @@ class SovereignFundSubsystem
         $dollarsPerGdp = $state->equityMarketCap / (self::MARKET_CAP_TO_GDP * $state->nominalGdpIndex);
         $gdpDollars = $dollarsPerGdp * $state->nominalGdpIndex;
         $domestic = self::DOMESTIC_OWNERSHIP_OPENING * $state->boardFloatCap;
-
-        $spendable = MacroEngine::SOVEREIGN_STRUCTURAL_DEFICIT * $gdpDollars / self::NIR_SPENDING_SHARE;
-        $fund = $spendable / max(self::MIN_COMPOUND_RETURN, $this->policyCompoundRealReturn($state, 0.0));
-        for ($pass = 0; $pass < self::SIZING_PASSES; ++$pass) {
-            $fund = $spendable / max(self::MIN_COMPOUND_RETURN, $this->policyCompoundRealReturn($state, $domestic / $fund));
-        }
-        $foreign = max(0.0, $fund - $domestic);
+        $foreign = max(0.0, (self::OPENING_FUND_TO_GDP * $gdpDollars) - $domestic);
 
         $state->sovereignFundDollarsPerGdp = $dollarsPerGdp;
         $state->sovereignFundDomesticEquity = $domestic;

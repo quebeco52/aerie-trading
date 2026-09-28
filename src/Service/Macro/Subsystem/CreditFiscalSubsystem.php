@@ -24,6 +24,8 @@ class CreditFiscalSubsystem
     public const INTERBANK_JUMP_VOL = 0.50;
 
     // --- Sovereign Debt Dynamics (Greenwood-Vayanos 2014) ---
+    /** Structural primary fiscal deficit as a fraction of GDP with no sovereign fund; with one, the structural deficit is the fund's draw, spent. */
+    public const SOVEREIGN_STRUCTURAL_DEFICIT = 0.020;
     /** Bohn (1998, 2008) fiscal reaction: primary surplus response per unit of debt above the neutral threshold (~0.10, the upper end of advanced-economy estimates), which stabilizes debt near 90% against a 2% structural deficit, and just above the 70% threshold once a sovereign fund's draw pays that deficit. */
     public const BOHN_FISCAL_REACTION_SENSITIVITY = 0.10;
     /** Runaway guard on gross debt, about Japan's postwar peak (~2.6x GDP, IMF WEO 2020); the Bohn reaction holds debt far below it. */
@@ -475,7 +477,7 @@ class CreditFiscalSubsystem
         $funded = $state->sovereignFundDollarsPerGdp > 0.0;
         $fundPaidToGdp = $state->sovereignFundDrawToGdp + $state->sovereignFundStabilisationToGdp;
         $fundContribution = $fundPaidToGdp * $state->nominalGdpIndex;
-        $structuralDeficitToGdp = $funded ? $fundPaidToGdp : MacroEngine::SOVEREIGN_STRUCTURAL_DEFICIT;
+        $structuralDeficitToGdp = $funded ? $fundPaidToGdp : self::SOVEREIGN_STRUCTURAL_DEFICIT;
 
         $primaryDeficit = ($govtSpendingFlow - $taxRevenue) + ($structuralDeficitToGdp * $state->nominalGdpIndex) - $bohnFiscalAdjustment - $fundContribution;
         $state->primaryDeficitToGdp = $primaryDeficit / max(0.1, $state->nominalGdpIndex);

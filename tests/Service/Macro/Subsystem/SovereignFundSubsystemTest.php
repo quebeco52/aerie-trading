@@ -23,22 +23,21 @@ class SovereignFundSubsystemTest extends TestCase
 
     private const BOARD_TOTAL_CAP = 1.2e12;
 
-    public function testInceptionFundsTheStructuralDeficitAndBooksNoTrade(): void
+    public function testInceptionOpensAtGpifScaleAndBooksNoTrade(): void
     {
         $fund = new SovereignFundSubsystem(new MathUtility());
         $state = $this->openFund($fund, 720);
 
         $this->assertTrue($fund->isIncepted($state));
-        $this->assertEqualsWithDelta(MacroEngine::SOVEREIGN_STRUCTURAL_DEFICIT, $state->sovereignFundDrawToGdp, 1e-12, 'Sized so the opening draw funds the structural deficit.');
+        $this->assertEqualsWithDelta(SovereignFundSubsystem::OPENING_FUND_TO_GDP, $state->sovereignFundToGdp, 1e-12, 'It opens at its declared size against the economy.');
         $this->assertEqualsWithDelta(SovereignFundSubsystem::DOMESTIC_OWNERSHIP_OPENING, $state->sovereignFundOwnershipShare, 1e-12);
         $this->assertEqualsWithDelta($state->sovereignFundTargetWeight, $state->sovereignFundDomesticWeight, 1e-12, 'It opens at its policy weight.');
         $this->assertSame(0.0, $state->sovereignFundTrade, 'A structural holder opens at its holding, with no order.');
         $this->assertSame(-1.0, $state->lastSovereignRebalanceAt);
 
-        // Funding 2% of GDP out of half a compound real return of roughly 3.3% takes a fund about one and a fifth times
-        // the economy, whatever the economy is worth in currency.
-        $this->assertGreaterThan(1.1, $state->sovereignFundToGdp);
-        $this->assertLessThan(1.35, $state->sovereignFundToGdp);
+        // Half a compound real return of roughly 3.3% on a fund 0.41 times the economy pays the budget about 0.7% of GDP.
+        $this->assertGreaterThan(0.005, $state->sovereignFundDrawToGdp);
+        $this->assertLessThan(0.009, $state->sovereignFundDrawToGdp);
 
         // The draw is struck on the expected return it publishes.
         $this->assertEqualsWithDelta(
@@ -112,8 +111,10 @@ class SovereignFundSubsystemTest extends TestCase
         $fund = new SovereignFundSubsystem($this->stillMarket());
         $state = $this->openFund($fund, $tpy);
         $openingDraw = $state->sovereignFundAnnualDraw;
+        $grown = 2.0 - $state->sovereignFundTargetWeight;
 
-        // The reserve portfolio doubles in the middle of the year; the draw does not move until the year turns.
+        // The reserve portfolio doubles in the middle of the year, growing the fund by its foreign share; the draw does
+        // not move until the year turns.
         $state->sovereignFundForeignEquity *= 2.0;
         $state->sovereignFundForeignBonds *= 2.0;
         for ($i = 0; $i < intdiv($tpy, 2); ++$i) {
@@ -124,7 +125,7 @@ class SovereignFundSubsystemTest extends TestCase
         while ($state->totalTime < 1.0 + (0.5 * $dt)) {
             $this->step($fund, $state, $dt);
         }
-        $this->assertGreaterThan(1.8 * $openingDraw, $state->sovereignFundAnnualDraw, 'The new year is struck on the larger fund.');
+        $this->assertGreaterThan(0.9 * $grown * $openingDraw, $state->sovereignFundAnnualDraw, 'The new year is struck on the larger fund.');
         // Struck on the fund as the year turned, one tick of payment and trading before this reading.
         $this->assertEqualsWithDelta($fund->calculateAnnualDraw($state), $state->sovereignFundAnnualDraw, 1e-3 * $state->sovereignFundAnnualDraw);
     }
@@ -258,7 +259,9 @@ class SovereignFundSubsystemTest extends TestCase
 
         $this->assertSame(0.0, $state->sovereignFundRebalanceMonthsLeft);
         $this->assertSame(0.0, $state->sovereignFundTrade, 'The programme is over.');
-        $this->assertEqualsWithDelta($state->sovereignFundTargetWeight, $state->sovereignFundDomesticWeight, 1e-4, 'Back at the policy weight, give or take a month of the draw.');
+        // The last month's draw comes out of the foreign sleeves after the final tranche is set, lifting the weight by about w x draw / 12F.
+        $monthOfDraw = $state->sovereignFundTargetWeight * $state->sovereignFundAnnualDraw / (12.0 * $fund->fundValue($state));
+        $this->assertEqualsWithDelta($state->sovereignFundTargetWeight, $state->sovereignFundDomesticWeight, 1.5 * $monthOfDraw, 'Back at the policy weight, give or take a month of the draw.');
     }
 
     public function testTheFundNeverBuysPastTheOwnershipCeiling(): void
