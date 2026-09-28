@@ -74,16 +74,18 @@ class MacroAggregateSubsystem
     public const KALDOR_ENERGY_SUPPLY_DRAG = 0.012;
     /** Supply-side elasticity of output to excess freight/logistics costs. */
     public const KALDOR_FREIGHT_SUPPLY_DRAG = 0.002;
-    /** Demand per unit of household debt-service gap (Juselius & Drehmann 2015; Drehmann, Juselius & Korinek 2017): new borrowing lifts spending while service is below its average, and the service on the stock takes it back two to three years later; a point of income in extra service costs half a point of demand a year. */
+    /** Demand per unit of household debt-service gap (Juselius & Drehmann 2015; Drehmann, Juselius & Korinek 2018): the service a stock of debt commits to takes spending back years after the borrowing; a point of income in extra service costs half a point of demand a year. */
     public const KALDOR_HOUSEHOLD_DEBT_SERVICE = 0.50;
+    /** Demand per unit of new household borrowing, in debt to income a year: borrowed income is spent as it is borrowed. Fitted by running Drehmann, Juselius & Korinek's (2018) local projection on the engine: GDP growth +0.128 the year after a point of new borrowing to GDP (their Table 8 base, +0.126); the US lead of credit on the gap follows (var/harness/djk_an.py). */
+    public const KALDOR_HOUSEHOLD_NEW_BORROWING = 1.0;
     /** Demand from the foreign bloc's cycle: export volume per unit of foreign output gap (an export share of GDP near a fifth times an income elasticity of trade above one, Obstfeld & Rogoff 1996). */
     public const KALDOR_FOREIGN_DEMAND = 0.08;
     /** Output lost per unit of catastrophe loss burden above an average year (Noy 2009; Hsiang & Jina 2014 give the sign): a year at twice the average burden costs ~0.4pp of output, before the rebuild the construction stream books. */
     public const KALDOR_CATASTROPHE_DRAG = 0.004;
     /** Demand drag per log unit of policy uncertainty ABOVE baseline: a doubling costs ~0.4pp a year, so the 2006-2011 rise integrates to the ~1% output loss Baker, Bloom & Davis attribute to it. One-sided: spikes cost output (Bloom 2009), calm does not stimulate. */
     public const KALDOR_EPU_DRAG = 0.006;
-    /** Long-run average of the credit-crisis drag on the District's engine, 1.04pp a year (var/harness/fc_run.sh), booked back as its Merton (1976) compensator: crises bend the cycle without shifting its average, as the disasters and the premium are compensated. */
-    public const KALDOR_CRISIS_DRAG_COMPENSATOR = 0.0104;
+    /** Long-run average of the credit-crisis drag on the District's engine, 1.55pp a year (var/harness/fc_run.sh), booked back as its Merton (1976) compensator: crises bend the cycle without shifting its average, as the disasters and the premium are compensated. */
+    public const KALDOR_CRISIS_DRAG_COMPENSATOR = 0.0155;
 
     // --- Aggregate Demand Disturbance (Smets-Wouters 2007) ---
     /** Mean reversion speed of the aggregate demand disturbance: -4*ln(0.86) per year, from the estimated quarterly AR(1) coefficient. */
@@ -377,7 +379,7 @@ class MacroAggregateSubsystem
      * Kaldor (1940) Non-Linear Business Cycle with Modigliani Wealth Effect & Marshall-Lerner FX Drag.
      *
      * Solves continuous macroeconomic aggregate demand dynamics:
-     *   dy = [Momentum - CapacityCeiling(y>0) - RealRateDrag + FiscalStimulus + AutomaticStabilisers - CapitalOverhang + WealthEffect - FxDrag - CrisisDeleveraging - LendingStandards + DemandShock] * dt
+     *   dy = [Momentum - CapacityCeiling(y>0) - RealRateDrag + FiscalStimulus + AutomaticStabilisers - CapitalOverhang + WealthEffect - FxDrag + NewBorrowing - DebtService - CrisisDeleveraging - LendingStandards + DemandShock] * dt
      *
      * @param MacroState $state             Current macroeconomic state.
      * @param float      $yield5y           5-Year Treasury yield benchmark for business borrowing.
@@ -487,7 +489,9 @@ class MacroAggregateSubsystem
         $freightSupplyShift = ($freightRate - MacroEngine::FREIGHT_BASELINE) / MacroEngine::FREIGHT_BASELINE;
         $freightSupplyDrag = $freightSupplyShift * self::KALDOR_FREIGHT_SUPPLY_DRAG;
 
-        // Drehmann, Juselius & Korinek (2017) household debt service drag on demand.
+        // Drehmann, Juselius & Korinek (2018): new borrowing lifts spending now, and the debt service it commits to drags
+        // it later. Service peaks about four years after the borrowing, which is the credit boom's reversal.
+        $householdNewBorrowing = self::KALDOR_HOUSEHOLD_NEW_BORROWING * $state->householdNewBorrowing;
         $householdDeleveragingDrag = self::KALDOR_HOUSEHOLD_DEBT_SERVICE * $state->householdDebtServiceGap;
 
         // Hallegatte et al. (2007) physical capital destruction supply drag.
@@ -570,6 +574,7 @@ class MacroAggregateSubsystem
             'freightSupplyDrag' => -$freightSupplyDrag,
             'policyUncertaintyDrag' => -$policyUncertaintyDrag,
             'catastropheSupplyDrag' => -$catastropheSupplyDrag,
+            'householdNewBorrowing' => $householdNewBorrowing,
             'householdDeleveragingDrag' => -$householdDeleveragingDrag,
             'crisisDeleveragingDrag' => -$crisisDeleveragingDrag,
             'crisisCompensator' => self::KALDOR_CRISIS_DRAG_COMPENSATOR,

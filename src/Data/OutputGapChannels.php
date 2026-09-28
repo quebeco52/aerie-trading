@@ -66,6 +66,7 @@ final class OutputGapChannels
                 'crisisDeleveragingDrag',
                 'crisisCompensator',
                 'lendingStandardsDrag',
+                'householdNewBorrowing',
                 'householdDeleveragingDrag',
             ],
         ],

@@ -138,6 +138,8 @@ class CreditFiscalSubsystem
     public const CREDIT_GROWTH_SIGMA = 0.020;
     /** Extra annual credit contraction per unit of debt-service gap above the warning line (Mian & Sufi 2018): 1.75 (se 0.44), the same regression, so two points over the line repay 3.5% of the stock a year. */
     public const DELEVERAGING_SPEED = 1.75;
+    /** Horizon (years) of the new-borrowing flow spending answers: the year's borrowing Drehmann, Juselius & Korinek (2018) measure. */
+    public const HOUSEHOLD_NEW_BORROWING_HORIZON_YEARS = 1.0;
     /** Bounds on household debt to income. */
     public const MIN_HOUSEHOLD_DEBT_TO_INCOME = 0.40;
     /** Upper bound on household debt to income. */
@@ -536,7 +538,16 @@ class CreditFiscalSubsystem
             - (self::DELEVERAGING_SPEED * $excessDsr);
         $noise = self::CREDIT_GROWTH_SIGMA * sqrt($dt) * $this->mathUtility->generateStandardNormal();
 
+        $previousLeverage = $state->householdDebtToIncome;
         $state->householdDebtToIncome = max(self::MIN_HOUSEHOLD_DEBT_TO_INCOME, min(self::MAX_HOUSEHOLD_DEBT_TO_INCOME, $state->householdDebtToIncome * exp(($growth * $dt) + $noise)));
+        // Drehmann, Juselius & Korinek (2018) new borrowing, net of what holds leverage level: the year's average of
+        // the change in leverage. It averages zero because leverage reverts, so spending needs no compensator for it.
+        $state->householdNewBorrowing = $this->mathUtility->calculateDistributedLag(
+            currentLaggedValue: $state->householdNewBorrowing,
+            targetValue: ($state->householdDebtToIncome - $previousLeverage) / $dt,
+            dt: $dt,
+            lagTimeConstant: self::HOUSEHOLD_NEW_BORROWING_HORIZON_YEARS
+        );
 
         // BIS debt-service ratio annuity calculation (Drehmann, Illes, Juselius & Santos 2015).
         $annuityFactor = $effectiveRate > 0.0

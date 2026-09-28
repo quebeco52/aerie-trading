@@ -76,6 +76,8 @@ class MacroFieldRegistryTest extends TestCase
         'sovereignFundBondsToGdp' => 'The difference between sovereign_debt_to_gdp and sovereign_net_debt_to_gdp, both recorded.',
         'sovereignNetDebtToGdpEma' => 'Smoothing of sovereign_net_debt_to_gdp, which is recorded.',
         'boardNetIssuance' => 'One tick of the companies\' own issuance and buybacks; same objection.',
+        'residentialPriceMomentum' => 'A year\'s average of the log change in residential_property_index, which is recorded.',
+        'householdNewBorrowing' => 'A year\'s average of the change in household_debt_to_income, which is recorded.',
     ];
 
     /**

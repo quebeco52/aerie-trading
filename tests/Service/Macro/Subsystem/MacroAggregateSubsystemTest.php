@@ -1045,7 +1045,26 @@ class MacroAggregateSubsystemTest extends TestCase
     }
 
 
-    /** Drehmann, Juselius & Korinek (2017): service below its average is borrowing that lifts demand; above it, repayment that drags. */
+    /** Drehmann, Juselius & Korinek (2018): borrowed income is spent as it is borrowed, and income repaid out of the stock is not spent. */
+    public function testNewHouseholdBorrowingMovesDemandBothWays(): void
+    {
+        $neutral = new MacroState();
+        $borrowing = new MacroState();
+        $borrowing->householdNewBorrowing = 0.03;
+        $repaying = new MacroState();
+        $repaying->householdNewBorrowing = -0.03;
+
+        $dt = 0.25;
+        $gapNeutral = $this->subsystem->calculateOutputGap($neutral, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, $dt, 1.0);
+        $gapBorrowing = $this->subsystem->calculateOutputGap($borrowing, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, $dt, 1.0);
+        $gapRepaying = $this->subsystem->calculateOutputGap($repaying, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, $dt, 1.0);
+
+        $this->assertGreaterThan(0.0, MacroAggregateSubsystem::KALDOR_HOUSEHOLD_NEW_BORROWING);
+        $this->assertEqualsWithDelta(MacroAggregateSubsystem::KALDOR_HOUSEHOLD_NEW_BORROWING * 0.03 * $dt, $gapBorrowing - $gapNeutral, 1e-9, 'Three points of income borrowed a year are spent.');
+        $this->assertEqualsWithDelta(-MacroAggregateSubsystem::KALDOR_HOUSEHOLD_NEW_BORROWING * 0.03 * $dt, $gapRepaying - $gapNeutral, 1e-9, 'Paying the stock down is the same flow the other way.');
+    }
+
+    /** Drehmann, Juselius & Korinek (2018): service below its average leaves income to spend; above it, repayment drags. */
     public function testHouseholdDebtServiceMovesDemandBothWaysAroundItsAverage(): void
     {
         $neutral = new MacroState();
@@ -1059,7 +1078,7 @@ class MacroAggregateSubsystemTest extends TestCase
         $gapCarried = $this->subsystem->calculateOutputGap($carried, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, $dt, 1.0);
         $gapRepaying = $this->subsystem->calculateOutputGap($repaying, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, $dt, 1.0);
 
-        $this->assertEqualsWithDelta(MacroAggregateSubsystem::KALDOR_HOUSEHOLD_DEBT_SERVICE * 0.02 * $dt, $gapCarried - $gapNeutral, 1e-9, 'Two points of service below average is borrowing that adds a point a year.');
+        $this->assertEqualsWithDelta(MacroAggregateSubsystem::KALDOR_HOUSEHOLD_DEBT_SERVICE * 0.02 * $dt, $gapCarried - $gapNeutral, 1e-9, 'Two points of service below average leave a point a year of demand.');
         $this->assertEqualsWithDelta(-MacroAggregateSubsystem::KALDOR_HOUSEHOLD_DEBT_SERVICE * 0.02 * $dt, $gapRepaying - $gapNeutral, 1e-9, 'Two points over it take a point a year off demand.');
     }
 
@@ -1257,7 +1276,7 @@ class MacroAggregateSubsystemTest extends TestCase
         );
 
         // Every channel in the drift is named, so the panel cannot silently drop one.
-        $this->assertCount(26, $window['contributions']);
+        $this->assertCount(27, $window['contributions']);
         $this->assertArrayHasKey('productivitySupply', $window['contributions']);
         $this->assertArrayHasKey('fundStabilisation', $window['contributions']);
         $this->assertArrayHasKey('premiumDrag', $window['contributions']);

@@ -70,6 +70,8 @@ class MacroState
     // The price level households have got used to. Unlike the equity ratio below this index carries a
     // baseline scale, so it opens at that baseline instead of at the first reading.
     public float $residentialWealthTrend;
+    // The index's recent real growth, a year's average of its log change a year: the momentum buyers extrapolate.
+    public float $residentialPriceMomentum;
 
     public float $retailDefaultRate;
     public float $retailDefaultRateEma;
@@ -271,6 +273,8 @@ class MacroState
     // Zero means no service has been computed yet: the trend starts at the first observation so a cold start is silent.
     public float $householdDebtServiceTrend;
     public float $householdDebtServiceGap;
+    // New borrowing beyond what holds leverage level: a year's average of the change in debt to income a year.
+    public float $householdNewBorrowing;
     public float $creditToGdpTrend;
     public float $creditToGdpTrendSlope;
     public float $creditToGdpGap;

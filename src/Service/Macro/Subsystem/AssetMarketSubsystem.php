@@ -156,24 +156,28 @@ class AssetMarketSubsystem
      */
     public const RESIDENTIAL_BASELINE = 100.0;
 
-    /** Sensitivity of housing demand to unemployment rate shocks (foreclosure and affordability drag). */
-    public const RESIDENTIAL_UNEMPLOYMENT_SENSITIVITY = 5.0;
-    /** Elasticity of residential housing purchasing power to real macroeconomic income and GDP growth. */
-    public const RESIDENTIAL_INCOME_ELASTICITY = 2.0;
+    /** Fundamental price per point of unemployment above NAIRU (foreclosure and affordability drag), fitted with the income elasticity below and the dynamics further down: at 5.0 and 2.0 a -5% gap took a fifth off the fundamental, household credit followed through the collateral term and new borrowing returned it to demand one for one, and at the lower bound slumps sustained themselves (var/harness/boom_score.py: clamp traps in 3% of 35-year windows, 5-year slumps below -4% in 7%, against none in the US record). */
+    public const RESIDENTIAL_UNEMPLOYMENT_SENSITIVITY = 2.5;
+    /** Elasticity of the fundamental price to the output gap, a transitory income shock; the same fit. */
+    public const RESIDENTIAL_INCOME_ELASTICITY = 1.0;
     /** Lower bound multiplier on residential spatial labor demand during deep labor distress. */
     public const RESIDENTIAL_MIN_LABOR_FACTOR = 0.30;
     /** Upper bound multiplier on residential spatial labor demand during peak labor market expansions. */
     public const RESIDENTIAL_MAX_LABOR_FACTOR = 1.80;
     /** Elasticity of the fundamental house price to the user cost: Glaeser, Gottlieb & Gyourko (2010) measure about 7-8% per 100bp fall in real rates, half the ~17% a unit elasticity gives at the 6.85% neutral user cost, so collapsing long rates at the floor no longer inflate prices in a slump. */
     public const RESIDENTIAL_USER_COST_ELASTICITY = 0.5;
-    /** Mean-reversion speed of residential property valuations toward fundamental user-cost equilibrium. */
-    public const RESIDENTIAL_MEAN_REVERSION = 0.15;
+    /** Yearly reversion of real house prices toward their fundamental, fitted with the momentum and volatility below to US real house prices (FHFA / CPI, 1977-2019): annual growth sd 3.86%, autocorrelation 0.71 / 0.33 / 0.00 at one to three years, worst year -9.0%; the engine gives 3.65%, 0.67 / 0.26 / -0.06 and -10.1% at its 0.5th percentile (var/harness/boom_score.py). */
+    public const RESIDENTIAL_MEAN_REVERSION = 0.25;
     /** Fundamental price per unit of net lending tightening (Duca, Muellbauer & Murphy 2011; Favara & Imbs 2015): the ~80% tightening of a crisis takes a fifth off, the post-crisis decline in Reinhart & Rogoff. */
     public const RESIDENTIAL_CREDIT_STANDARDS_ELASTICITY = 0.25;
     /** House price response per unit of credit-to-GDP gap (Favara & Imbs 2015): the return leg of the collateral channel, without which Mian & Sufi's home-equity term is a one-way street. */
     public const RESIDENTIAL_CREDIT_SUPPLY_ELASTICITY = 0.25;
-    /** Stochastic volatility of residential home prices (stationary noise ~5% so the user-cost channel dominates). */
-    public const RESIDENTIAL_VOLATILITY = 0.03;
+    /** Volatility of real house prices around the path the fundamental and momentum set, the same fit. */
+    public const RESIDENTIAL_VOLATILITY = 0.018;
+    /** Share of the past year's real growth carried into this year's (Case & Shiller 1989; Capozza, Hendershott, Mack & Mayer 2002 serial correlation), the same fit; household credit follows house prices, so it also carries the persistence of new borrowing toward the US's (0.45 against 0.58, from 0.23). */
+    public const RESIDENTIAL_PRICE_MOMENTUM = 0.85;
+    /** Horizon (years) of the growth buyers extrapolate: the annual change the serial-correlation regressions are run on. */
+    public const RESIDENTIAL_MOMENTUM_HORIZON_YEARS = 1.0;
     /** Structural lower floor for the residential property index value. */
     public const RESIDENTIAL_MIN_INDEX = 30.0;
     /** Structural upper ceiling for the residential property index value. */
@@ -334,8 +338,18 @@ class AssetMarketSubsystem
             dt: $dt,
             dW: $dW
         );
+        // Capozza, Hendershott, Mack & Mayer (2002): real house prices carry serial correlation on top of their
+        // reversion to fundamental, so a boom keeps rising after its cause has passed and overshoots.
+        $newIndex *= exp(self::RESIDENTIAL_PRICE_MOMENTUM * $state->residentialPriceMomentum * $dt);
 
+        $previousIndex = $state->residentialPropertyIndex;
         $state->residentialPropertyIndex = max(self::RESIDENTIAL_MIN_INDEX, min(self::RESIDENTIAL_MAX_INDEX, $newIndex));
+        $state->residentialPriceMomentum = $this->mathUtility->calculateDistributedLag(
+            currentLaggedValue: $state->residentialPriceMomentum,
+            targetValue: log($state->residentialPropertyIndex / $previousIndex) / $dt,
+            dt: $dt,
+            lagTimeConstant: self::RESIDENTIAL_MOMENTUM_HORIZON_YEARS
+        );
 
         // The fundamental is a product of factors, so its log splits exactly into theirs; the floors and the band
         // land in the clamp term. The index's distance from it is the sticky part the reversion has not closed.

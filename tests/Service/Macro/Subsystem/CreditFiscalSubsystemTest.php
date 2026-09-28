@@ -988,6 +988,55 @@ class CreditFiscalSubsystemTest extends TestCase
         $this->assertEqualsWithDelta($expected, $boom->householdDebtToIncome, 1e-9);
     }
 
+    /** Drehmann, Juselius & Korinek (2018): new borrowing is the flow into the stock, read as the year's average of the change in leverage. */
+    public function testNewBorrowingIsTheYearsAverageChangeInLeverage(): void
+    {
+        $subsystem = $this->quietSubsystem();
+
+        $boom = $this->householdStateAtNeutralRates();
+        $boom->residentialPropertyIndexEma = 1.20 * $boom->residentialWealthTrend;
+        $before = $boom->householdDebtToIncome;
+        $dt = 0.25;
+        $subsystem->calculateHouseholdCredit($boom, $dt);
+
+        $weight = 1.0 - exp(-$dt / CreditFiscalSubsystem::HOUSEHOLD_NEW_BORROWING_HORIZON_YEARS);
+        $this->assertGreaterThan($before, $boom->householdDebtToIncome);
+        $this->assertEqualsWithDelta($weight * ($boom->householdDebtToIncome - $before) / $dt, $boom->householdNewBorrowing, 1e-12);
+    }
+
+    /** A high stock that holds still borrows nothing new: once leverage stops rising the flow fades over the year it averages. */
+    public function testNewBorrowingFadesOnceLeverageHoldsStill(): void
+    {
+        $subsystem = $this->quietSubsystem();
+
+        $state = $this->householdStateAtNeutralRates();
+        $state->householdNewBorrowing = 0.05;
+        for ($quarter = 0; $quarter < 4; $quarter++) {
+            $subsystem->calculateHouseholdCredit($state, 0.25);
+        }
+
+        $this->assertEqualsWithDelta(MacroEngine::HOUSEHOLD_DEBT_TO_INCOME_BASELINE, $state->householdDebtToIncome, 1e-12, 'At baseline leverage with no lift the stock holds.');
+        $this->assertEqualsWithDelta(0.05 * exp(-1.0 / CreditFiscalSubsystem::HOUSEHOLD_NEW_BORROWING_HORIZON_YEARS), $state->householdNewBorrowing, 1e-12);
+    }
+
+    /** The flow is the average of a change, so it must read the same at any tick rate. */
+    public function testNewBorrowingIsTimestepNeutral(): void
+    {
+        $subsystem = $this->quietSubsystem();
+        $flows = [];
+        foreach ([4, 360] as $ticksPerYear) {
+            $state = $this->householdStateAtNeutralRates();
+            $state->residentialPropertyIndexEma = 1.20 * $state->residentialWealthTrend;
+            for ($tick = 0; $tick < 2 * $ticksPerYear; $tick++) {
+                $subsystem->calculateHouseholdCredit($state, 1.0 / $ticksPerYear);
+            }
+            $flows[$ticksPerYear] = $state->householdNewBorrowing;
+        }
+
+        $this->assertGreaterThan(0.03, $flows[360], 'A twenty percent collateral lift borrows several points of income a year.');
+        $this->assertEqualsWithDelta($flows[360], $flows[4], 0.03 * $flows[360], 'Quarterly and daily ticks read the same flow.');
+    }
+
     /**
      * US household credit does not answer business-loan standards, the policy stance or the gap once house prices
      * are in (1976-2019: +0.002, +0.12 and +0.04, none significant). Those act through the collateral and the

@@ -525,6 +525,51 @@ class AssetMarketSubsystemTest extends TestCase
         $this->assertGreaterThan($calm->residentialPropertyIndex, $loose->residentialPropertyIndex, 'Loosening standards lift what buyers can bid.');
     }
 
+    /** Capozza, Hendershott, Mack & Mayer (2002): the market carries its past year's real growth into this year's. */
+    public function testHousePricesCarryLastYearsGrowth(): void
+    {
+        $flat = new MacroState();
+        $rising = new MacroState();
+        $rising->residentialPriceMomentum = 0.05;
+
+        $dt = 0.25;
+        $this->subsystem->calculateResidentialPropertyIndex($flat, MacroEngine::TARGET_INFLATION, $dt);
+        $this->subsystem->calculateResidentialPropertyIndex($rising, MacroEngine::TARGET_INFLATION, $dt);
+
+        $this->assertEqualsWithDelta(
+            exp(AssetMarketSubsystem::RESIDENTIAL_PRICE_MOMENTUM * 0.05 * $dt),
+            $rising->residentialPropertyIndex / $flat->residentialPropertyIndex,
+            1e-12,
+            'Five percent a year of recent growth carries on at the fitted share.'
+        );
+
+        $weight = 1.0 - exp(-$dt / AssetMarketSubsystem::RESIDENTIAL_MOMENTUM_HORIZON_YEARS);
+        $expected = 0.05 + ($weight * ((log($rising->residentialPropertyIndex / 100.0) / $dt) - 0.05));
+        $this->assertEqualsWithDelta($expected, $rising->residentialPriceMomentum, 1e-12, 'The momentum is the year\'s average of the index\'s own log growth.');
+    }
+
+    /** Serial correlation on top of reversion to fundamental makes a housing boom overshoot the level that justifies it, then correct. */
+    public function testAHousingBoomOvershootsItsFundamental(): void
+    {
+        $state = new MacroState();
+        for ($quarter = 0; $quarter < 240; $quarter++) {
+            $this->subsystem->calculateResidentialPropertyIndex($state, MacroEngine::TARGET_INFLATION, 0.25);
+        }
+        $start = $state->residentialPropertyIndex;
+
+        // Loose lending lifts what buyers can bid: a permanent rise in the fundamental.
+        $state->sloosTighteningIndexEma = -0.40;
+        $peak = $start;
+        for ($quarter = 0; $quarter < 240; $quarter++) {
+            $this->subsystem->calculateResidentialPropertyIndex($state, MacroEngine::TARGET_INFLATION, 0.25);
+            $peak = max($peak, $state->residentialPropertyIndex);
+        }
+        $settled = $state->residentialPropertyIndex;
+
+        $this->assertGreaterThan($start, $settled);
+        $this->assertGreaterThan($start + (1.10 * ($settled - $start)), $peak, 'The boom runs past the new fundamental by more than a tenth of the move.');
+    }
+
     /** Favara & Imbs (2015): the quantity of credit outstanding is housing demand in its own right, which closes the collateral loop against CreditFiscalSubsystem's Mian & Sufi home-equity term. */
     public function testCreditSupplyIsHousingDemandInItsOwnRight(): void
     {
