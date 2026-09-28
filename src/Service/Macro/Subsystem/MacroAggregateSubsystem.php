@@ -18,8 +18,8 @@ use App\Service\Math\MathUtility;
 class MacroAggregateSubsystem
 {
     // --- KALDOR-KALECKI 2D LIMIT CYCLE ---
-    /** Demand impulse per unit of public spending above baseline (~20% GDP share x unit multiplier): +10% spending adds ~1pp/yr to the gap drift. */
-    public const KALDOR_GOVT_SPENDING_MULTIPLIER = 0.10;
+    /** Demand drift per unit of purchases above baseline, fitted on the engine's own response to a purchases shock (var/harness/govt_irf.sh) to Ramey & Zubairy's (2018) cumulative multipliers, 2y 0.54-0.76 and 4y 0.78-0.84 (Blanchard-Perotti and news shocks): 0.79 and 0.64 here, Taylor offset included. */
+    public const KALDOR_GOVT_SPENDING_MULTIPLIER = 0.45;
     /** Demand per unit of housing wealth above the level households are used to: Mian, Rao & Sufi (2013) put the MPC out of housing wealth at 5-7c on a stock worth 1.5-2x GDP. */
     public const KALDOR_WEALTH_EFFECT_ELASTICITY = 0.05;
     /** Elasticity to EQUITY wealth; Carroll-Otsuka-Slacalek (2011) put the MPC out of financial wealth at about half that out of housing. */
