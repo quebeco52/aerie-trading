@@ -39,7 +39,7 @@ class SovereignReservePageBuilder
     /**
      * @return array{
      *     incepted: bool,
-     *     summary: array{value: float, toGdp: float, annualDraw: float, drawToGdp: float, stampDutyToGdp: float, stampDutyYearToDate: float, ownership: float, grossDebtToGdp: float, netDebtToGdp: float},
+     *     summary: array{value: float, toGdp: float, annualDraw: float, drawToGdp: float, stabilisationToGdp: float, stampDutyToGdp: float, stampDutyYearToDate: float, ownership: float, grossDebtToGdp: float, netDebtToGdp: float},
      *     returns: array{index: float, realIndex: float, assumedReal: float, bondYield: float},
      *     programme: array{active: bool, buying: bool, share: float, monthsLeft: float, monthsSinceLast: float|null},
      *     sleeves: list<array{key: string, label: string, weight: float, policy: float, value: float}>,
@@ -68,6 +68,7 @@ class SovereignReservePageBuilder
                 'toGdp' => $macro->sovereignFundToGdp,
                 'annualDraw' => $macro->sovereignFundAnnualDraw,
                 'drawToGdp' => $macro->sovereignFundDrawToGdp,
+                'stabilisationToGdp' => $macro->sovereignFundStabilisationToGdp,
                 'stampDutyToGdp' => $macro->sovereignFundStampDutyToGdp,
                 'stampDutyYearToDate' => $macro->sovereignFundStampDutyYearToDate,
                 'ownership' => $macro->sovereignFundOwnershipShare,
@@ -131,6 +132,11 @@ class SovereignReservePageBuilder
                 'stampDutyRate' => FinancialConstants::STAMP_DUTY_RATE,
                 'structuralDeficit' => MacroEngine::SOVEREIGN_STRUCTURAL_DEFICIT,
                 'debtFloor' => MacroEngine::SOVEREIGN_DEBT_FLOOR,
+                'budgetRoundMonths' => 12.0 * MacroEngine::BUDGET_ROUND_PERIOD_YEARS,
+                'stabilisationGapResponse' => MacroEngine::FUND_STABILISATION_GAP_RESPONSE,
+                'stabilisationReversal' => MacroEngine::FUND_STABILISATION_IMPULSE_REVERSAL,
+                'stabilisationPersistence' => MacroEngine::FUND_STABILISATION_PERSISTENCE,
+                'stabilisationTrendYears' => MacroEngine::FUND_STABILISATION_GAP_TREND_YEARS,
                 'marketCapToGdp' => SovereignFundSubsystem::MARKET_CAP_TO_GDP,
                 'clearinghouseStake' => StrategicHoldings::CLEARINGHOUSE_STAKE,
             ],

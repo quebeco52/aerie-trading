@@ -5,7 +5,7 @@ import { renderWhenVisible, resetLazyCharts } from '../utils/lazy-chart.js';
 /** The sleeve colours the page's allocation bar uses, so a sleeve reads the same in every panel. */
 const SLEEVE_COLORS = { district: '#0284c7', equities: '#059669' };
 /** The two flows on the money chart; validated as a pair against the dark surface. */
-const FLOW_COLORS = { draw: '#8b5cf6', duty: '#0891b2' };
+const FLOW_COLORS = { draw: '#8b5cf6', stabilisation: '#d95926', duty: '#0891b2' };
 const REFERENCE_COLOR = THEME_COLORS.textMuted;
 const GRID_COLOR = 'rgba(255, 255, 255, 0.05)';
 
@@ -171,6 +171,7 @@ export function renderReserveCharts(reports, bands) {
     const weight = rows.map(r => pct(r, 'sovereign_fund_domestic_weight'));
     const equity = rows.map(r => pct(r, 'sovereign_fund_equity_share'));
     const drawToGdp = rows.map(r => pct(r, 'sovereign_fund_draw_to_gdp'));
+    const stabilisation = rows.map(r => pct(r, 'sovereign_fund_stabilisation_to_gdp'));
     // Zero until the fund's first budget year closes: a gap, not a reading.
     const duty = rows.map(r => {
         const v = pct(r, 'sovereign_fund_stamp_duty_to_gdp');
@@ -182,6 +183,7 @@ export function renderReserveCharts(reports, bands) {
     draw('reserveEquityChart', bandDatasets('Equity share', equity, bands.equityPolicy, bands.equityBand, SLEEVE_COLORS.equities, 'rgba(5, 150, 105, 0.15)'), labels, chartOptions());
     draw('reserveFlowsChart', [
         lineDataset('Budget draw', drawToGdp, FLOW_COLORS.draw),
+        lineDataset('Stabilisation', stabilisation, FLOW_COLORS.stabilisation),
         lineDataset('Stamp duty', duty, FLOW_COLORS.duty)
     ], labels, chartOptions());
 

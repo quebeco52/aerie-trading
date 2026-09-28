@@ -87,6 +87,10 @@ function paintReserve(m) {
     setText('reserve-to-gdp', `${(m.sovereign_fund_to_gdp * 100).toFixed(0)}% of GDP`);
     setText('reserve-draw', `${pct(m.sovereign_fund_draw_to_gdp)} of GDP`);
     setText('reserve-draw-value', `${formatLarge(m.sovereign_fund_annual_draw, '$')} this year`);
+    const stabilisation = m.sovereign_fund_stabilisation_to_gdp ?? 0;
+    setText('reserve-stabilisation', stabilisation === 0
+        ? 'No stabilisation'
+        : `${stabilisation > 0 ? 'Slump spending +' : 'Boom saving '}${pct(Math.abs(stabilisation))} of GDP`);
 
     const lastYearDuty = m.sovereign_fund_stamp_duty_to_gdp;
     setText('reserve-duty', lastYearDuty > 0 ? `${pct(lastYearDuty)} of GDP` : '-');

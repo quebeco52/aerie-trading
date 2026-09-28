@@ -705,6 +705,174 @@ class CreditFiscalSubsystemTest extends TestCase
         $this->assertSame(0.0, $state->sovereignFundBudgetInflow, 'No fund, nothing to buy.');
     }
 
+    // --- Fund-financed stabilisation (IMF Norway 2025, Table 5) ---
+
+    public function testASlumpSpendsFromTheFundAndABoomSavesIntoIt(): void
+    {
+        $slump = $this->fundedBudget(-0.02);
+        $boom = $this->fundedBudget(0.02);
+
+        $this->budgetRound($slump, 0.5);
+        $this->budgetRound($boom, 0.5);
+
+        $this->assertEqualsWithDelta(MacroEngine::FUND_STABILISATION_GAP_RESPONSE * 0.02, $slump->sovereignFundStabilisationToGdp, 1e-15);
+        $this->assertEqualsWithDelta(-$slump->sovereignFundStabilisationToGdp, $boom->sovereignFundStabilisationToGdp, 1e-15, 'Symmetric: a boom saves what a slump spends.');
+    }
+
+    /** The budget answers the cycle, not where the gap sits on average: a gap at its long-run mean asks for nothing. */
+    public function testTheBudgetReadsTheGapAgainstItsLongRunAverage(): void
+    {
+        // The current gap sits on the average, so the tick does not move it and only the smoothed reading differs.
+        $atMean = $this->fundedBudget(-0.01);
+        $atMean->outputGap = $atMean->sovereignFundGapTrend = -0.01;
+        $belowMean = $this->fundedBudget(-0.03);
+        $belowMean->outputGap = $belowMean->sovereignFundGapTrend = -0.01;
+
+        $this->budgetRound($atMean, 0.5);
+        $this->budgetRound($belowMean, 0.5);
+
+        $this->assertEqualsWithDelta(0.0, $atMean->sovereignFundStabilisationToGdp, 1e-15);
+        $this->assertEqualsWithDelta(MacroEngine::FUND_STABILISATION_GAP_RESPONSE * 0.02, $belowMean->sovereignFundStabilisationToGdp, 1e-15);
+    }
+
+    /** The average is a slow one: a gap held for one trend horizon moves it by 1 - 1/e of the way. */
+    public function testTheGapAverageMovesAtItsHorizon(): void
+    {
+        $state = $this->fundedBudget(0.0);
+        $state->outputGap = -0.02;
+        $dt = 1.0 / 360.0;
+        $ticks = (int) round(MacroEngine::FUND_STABILISATION_GAP_TREND_YEARS * 360);
+        for ($tick = 1; $tick <= $ticks; ++$tick) {
+            $state->totalTime = $tick * $dt;
+            $this->subsystem->calculateFundStabilisation($state, $dt);
+        }
+
+        $this->assertEqualsWithDelta(-0.02 * (1.0 - exp(-1.0)), $state->sovereignFundGapTrend, 1e-9);
+    }
+
+    public function testNothingMovesBetweenBudgetRounds(): void
+    {
+        $state = $this->fundedBudget(-0.02);
+        $this->budgetRound($state, 0.5);
+        $set = $state->sovereignFundStabilisationToGdp;
+
+        $state->outputGapEma = -0.06;
+        $state->totalTime = 0.8;
+        $this->subsystem->calculateFundStabilisation($state, 0.01);
+
+        $this->assertSame($set, $state->sovereignFundStabilisationToGdp, 'An appropriation holds until the next budget.');
+    }
+
+    /** The May revision redoes the year's change on the new reading; it does not add a second change on top of October's. */
+    public function testTheMayRevisionReplacesTheYearsChange(): void
+    {
+        $state = $this->fundedBudget(-0.02);
+        $this->budgetRound($state, 1.0);
+        $state->outputGapEma = -0.04;
+        $this->budgetRound($state, 1.5);
+
+        $this->assertEqualsWithDelta(MacroEngine::FUND_STABILISATION_GAP_RESPONSE * 0.04, $state->sovereignFundStabilisationToGdp, 1e-15);
+    }
+
+    /** A new year books last year's change, gives back a share of it, and decays the level toward the rule path. */
+    public function testLastYearsChangePartlyReversesAndTheLevelDecays(): void
+    {
+        $state = $this->fundedBudget(0.0);
+        $state->sovereignFundStabilisationToGdp = 0.01;
+
+        $this->budgetRound($state, 2.0);
+
+        $this->assertEqualsWithDelta(0.01, $state->sovereignFundStabilisationLastChange, 1e-15);
+        $this->assertEqualsWithDelta(0.01, $state->sovereignFundStabilisationYearStart, 1e-15);
+        $this->assertEqualsWithDelta(
+            0.01 * (1.0 - MacroEngine::FUND_STABILISATION_IMPULSE_REVERSAL - MacroEngine::FUND_STABILISATION_PERSISTENCE),
+            $state->sovereignFundStabilisationToGdp,
+            1e-15
+        );
+    }
+
+    public function testWithNoFundThereIsNoStabilisation(): void
+    {
+        $state = $this->fundedBudget(-0.05);
+        $state->outputGap = -0.05;
+        $state->sovereignFundDollarsPerGdp = 0.0;
+
+        $this->budgetRound($state, 0.5);
+
+        $this->assertSame(0.0, $state->sovereignFundStabilisationToGdp);
+        $this->assertSame(0.0, $state->sovereignFundGapTrend, 'No budget rule, no average kept.');
+    }
+
+    public function testTheFundIsNeverAskedForMoreThanItsForeignSleevesHoldBesideTheDraw(): void
+    {
+        $state = $this->fundedBudget(-0.10);
+        $state->sovereignFundToGdp = 0.03;
+        $state->sovereignFundDomesticWeight = 0.5;
+        $state->sovereignFundDrawToGdp = 0.01;
+
+        $this->budgetRound($state, 0.5);
+
+        $this->assertEqualsWithDelta(0.005, $state->sovereignFundStabilisationToGdp, 1e-15, 'Foreign 1.5% of GDP less the 1% draw.');
+    }
+
+    /** The fund pays: spending and fund revenue rise together, so neither the deficit nor the debt moves. */
+    public function testTheStabilisationLeavesTheDeficitAndDebtWhereTheyWere(): void
+    {
+        $without = $this->neutralBudget(self::SOUND_DEBT_TO_GDP, 1.3);
+        $without->sovereignFundDollarsPerGdp = 2.0e13;
+        $without->sovereignFundDrawToGdp = 0.02;
+        $with = clone $without;
+        $with->sovereignFundStabilisationToGdp = 0.012;
+
+        $this->subsystem->calculateSovereignDebt($without, 0.25);
+        $this->subsystem->calculateSovereignDebt($with, 0.25);
+
+        $this->assertSame($without->primaryDeficitToGdp, $with->primaryDeficitToGdp);
+        $this->assertSame($without->sovereignDebtToGdp, $with->sovereignDebtToGdp);
+    }
+
+    /** Budget rounds are dates, not tick counts: two years under a scripted gap end at the same level at any tick rate. */
+    public function testTheStabilisationPathIsTheSameAtAnyTickRate(): void
+    {
+        $path = function (int $tpy): float {
+            $dt = 1.0 / $tpy;
+            $state = $this->fundedBudget(0.0);
+            for ($tick = 1; $tick <= 2 * $tpy; ++$tick) {
+                $state->totalTime = $tick * $dt;
+                $state->outputGapEma = $state->totalTime < 1.2 ? -0.03 : 0.01;
+                $state->outputGap = $state->outputGapEma;
+                $this->subsystem->calculateFundStabilisation($state, $dt);
+            }
+
+            return $state->sovereignFundStabilisationToGdp;
+        };
+
+        $this->assertNotSame(0.0, $path(180));
+        // The scripted gap steps at t = 1.2 and a 2-day tick carries the new value for the whole of it, so the slow
+        // average differs by an order-dt sliver; a round counted in ticks rather than dates would be off by a whole round.
+        $this->assertEqualsWithDelta($path(180), $path(3600), 2e-5);
+    }
+
+    /** A funded budget whose gap reads $gap, with room in the fund for any stabilisation the rule could ask. */
+    private function fundedBudget(float $gap): MacroState
+    {
+        $state = new MacroState();
+        $state->outputGapEma = $gap;
+        $state->sovereignFundDollarsPerGdp = 2.0e13;
+        $state->sovereignFundToGdp = 1.5;
+        $state->sovereignFundDomesticWeight = 0.05;
+        $state->sovereignFundDrawToGdp = 0.02;
+
+        return $state;
+    }
+
+    /** One tick that crosses the budget round at $time. */
+    private function budgetRound(MacroState $state, float $time): void
+    {
+        $state->totalTime = $time + 0.001;
+        $this->subsystem->calculateFundStabilisation($state, 0.01);
+    }
+
     /** A budget at neutral spending and tax with output at trend. */
     private function neutralBudget(float $debtToGdp, float $nominalGdpIndex = 1.0): MacroState
     {

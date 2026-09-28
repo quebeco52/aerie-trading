@@ -57,6 +57,7 @@ class SovereignReservePageBuilderTest extends TestCase
             sovereignFundEquityShare: $equityShare,
             sovereignFundOwnershipShare: 0.058,
             sovereignFundDrawToGdp: 0.0192,
+            sovereignFundStabilisationToGdp: 0.0045,
             sovereignFundStampDutyYearToDate: 1.2e9,
             sovereignFundStampDutyToGdp: 0.0017,
             sovereignDebtToGdp: 0.81,
@@ -103,9 +104,12 @@ class SovereignReservePageBuilderTest extends TestCase
         $this->assertSame(0.0324, $page['returns']['assumedReal'], 'The return the draw was set from, to read the realized one against.');
         $this->assertSame(0.0331, $page['returns']['bondYield']);
         $this->assertSame(0.81, $page['summary']['grossDebtToGdp']);
+        $this->assertSame(0.0045, $page['summary']['stabilisationToGdp']);
         $this->assertSame(0.29, $page['summary']['netDebtToGdp']);
         $this->assertSame(SovereignFundSubsystem::FOREIGN_BOND_DURATION, $page['mandate']['foreignBondDuration']);
         $this->assertSame(MacroEngine::SOVEREIGN_DEBT_FLOOR, $page['mandate']['debtFloor']);
+        $this->assertSame(MacroEngine::FUND_STABILISATION_GAP_RESPONSE, $page['mandate']['stabilisationGapResponse']);
+        $this->assertSame(6.0, $page['mandate']['budgetRoundMonths']);
     }
 
     public function testSleevesPartitionTheFundAndItsPolicy(): void

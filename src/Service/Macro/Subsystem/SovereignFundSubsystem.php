@@ -401,10 +401,15 @@ class SovereignFundSubsystem
         return $this->expectedCompoundRealReturn($state, $domesticWeight, self::FOREIGN_EQUITY_SHARE * (1.0 - $domesticWeight));
     }
 
-    /** Pays the year's draw out of the foreign sleeves in proportion to their size, at an even pace. */
+    /**
+     * Pays the year's draw out of the foreign sleeves in proportion to their size, at an even pace, together with the
+     * budget's stabilisation (CreditFiscalSubsystem::calculateFundStabilisation): spending in a slump, and in a boom
+     * a negative amount, the budget's saving paid back in.
+     */
     private function payDraw(MacroState $state, float $dt): void
     {
-        $this->withdrawForeign($state, $state->sovereignFundAnnualDraw * $dt);
+        $stabilisation = $state->sovereignFundStabilisationToGdp * $state->sovereignFundDollarsPerGdp * $state->nominalGdpIndex;
+        $this->withdrawForeign($state, ($state->sovereignFundAnnualDraw + $stabilisation) * $dt);
     }
 
     /**

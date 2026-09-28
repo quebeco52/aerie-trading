@@ -348,6 +348,15 @@ class MacroState
     public float $sovereignFundEquityShare;
     public float $sovereignFundOwnershipShare;
     public float $sovereignFundDrawToGdp;
+    // Fund-financed stabilisation spending above the rule draw, over GDP (negative: saved into the fund), set at the
+    // budget rounds; its smoothed reading, the one demand answers to; and the budget year's opening level and last
+    // year's change, which the rule steps from.
+    public float $sovereignFundStabilisationToGdp;
+    public float $sovereignFundStabilisationToGdpEma;
+    public float $sovereignFundStabilisationYearStart;
+    public float $sovereignFundStabilisationLastChange;
+    // The budget's long-run average of the output gap, the level its cycle is measured from.
+    public float $sovereignFundGapTrend;
     // The District's stamp duty on share trading, paid into the fund: this budget year so far, and last year's over GDP.
     public float $sovereignFundStampDutyYearToDate;
     public float $sovereignFundStampDutyToGdp;

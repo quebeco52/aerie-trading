@@ -11,6 +11,7 @@
 
 {% block body %}
 	{% set programme_months = programme.monthsLeft|number_format(0) %}
+	{% set stabilisation = summary.stabilisationToGdp %}
 	{# The sleeve colours, shared with pages/reserve.js's charts. #}
 	{% set sleeve_colors = { 'district': '#0284c7', 'foreign-equities': '#059669', 'foreign-bonds': '#d97706' } %}
 	<div class="max-w-400 mx-auto px-4 sm:px-6 lg:px-8 py-5 w-full space-y-5" id="reservePage">
@@ -55,6 +56,13 @@
 						<dt class="text-2xs font-bold uppercase tracking-wider text-on-surface-variant">Budget draw</dt>
 						<dd class="text-lg font-bold font-mono tabular-nums text-on-surface mt-0.5" id="reserve-draw">{{ incepted ? (summary.drawToGdp * 100)|number_format(2) ~ '% of GDP' : '-' }}</dd>
 						<p class="text-3xs font-mono tabular-nums text-on-surface-variant mt-0.5" id="reserve-draw-value">{{ incepted ? summary.annualDraw|format_large('$') ~ ' this year' : '' }}</p>
+						<p class="text-3xs font-mono tabular-nums text-on-surface-variant" id="reserve-stabilisation" title="Spending the fund pays for above the draw when output is below trend, or the budget's saving paid into it when above">
+							{%- if incepted and stabilisation != 0 -%}
+								{{ stabilisation > 0 ? 'Slump spending +' : 'Boom saving ' }}{{ (stabilisation|abs * 100)|number_format(2) }}% of GDP
+							{%- elseif incepted -%}
+								No stabilisation
+							{%- endif -%}
+						</p>
 					</div>
 					<div class="bg-surface-container-lowest rounded border border-outline-variant/20 px-4 py-3">
 						<dt class="text-2xs font-bold uppercase tracking-wider text-on-surface-variant">Stamp duty inflow</dt>
@@ -299,7 +307,7 @@
 					{ id: 'reserveSizeChart', title: 'Fund size', note: 'Percent of GDP' },
 					{ id: 'reserveWeightChart', title: 'District equity weight', note: 'Percent of the fund, against policy and band' },
 					{ id: 'reserveEquityChart', title: 'Whole equity share', note: 'District and foreign equities, percent of the fund, against policy and band' },
-					{ id: 'reserveFlowsChart', title: 'Money out and in', note: 'Budget draw and stamp duty, percent of GDP' }
+					{ id: 'reserveFlowsChart', title: 'Money out and in', note: 'Budget draw, stabilisation (positive: spent from the fund) and stamp duty, percent of GDP' }
 				] %}
 					<div class="bg-surface-container-low border border-outline-variant/15 rounded-lg p-5">
 						<h3 class="text-xs font-bold text-on-surface">{{ chart.title }}</h3>
@@ -362,6 +370,11 @@
 					name: 'Spending rule',
 					text: 'Each budget year the fund pays the budget ' ~ (mandate.spendingShare * 100)|number_format(0) ~ '% of its expected long-term real return on its value. The return is the compound one, the average less half the variance, so volatility is never spent.',
 					source: 'Singapore Net Investment Returns framework (2008)'
+				},
+				{
+					name: 'Stabilisation rule',
+					text: 'At each budget round, every ' ~ mandate.budgetRoundMonths|number_format(0) ~ ' months, the budget spends ' ~ mandate.stabilisationGapResponse|number_format(2) ~ '% of GDP from the fund, beyond the draw, for each point output is below trend, and pays the same into the fund for each point above it. The cycle is read against the gap\'s own ' ~ mandate.stabilisationTrendYears|number_format(0) ~ '-year average, so over time the spending and the saving balance. The next year ' ~ (mandate.stabilisationReversal * 100)|number_format(0) ~ '% of the year\'s change is given back, and the whole of it fades toward zero by ' ~ (mandate.stabilisationPersistence * 100)|number_format(1) ~ '% a year. Together with tax policy, the budget answers the business cycle as strongly as Norway\'s does. The fund\'s own market swings never reach the budget.',
+					source: 'IMF Norway Selected Issues (2025), Table 5: structural balance +0.45 per point of output gap; insulated from the fund\'s value, as the IMF recommends'
 				},
 				{
 					name: 'Budget rule',

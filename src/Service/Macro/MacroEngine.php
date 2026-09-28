@@ -225,6 +225,18 @@ class MacroEngine
     /** Gross debt kept outstanding with no borrowing need, for the benchmark curve to price (Singapore and Hong Kong issue for market development through surpluses); below it a surplus buys the fund's paper instead. */
     public const SOVEREIGN_DEBT_FLOOR = 0.20;
 
+    // --- Fund-Financed Fiscal Stabilisation (IMF Norway Selected Issues 2025, Table 5) ---
+    /** Budget rounds a year apart by half: the National Budget each October and the Revised National Budget each May (Norway's Ministry of Finance). */
+    public const BUDGET_ROUND_PERIOD_YEARS = 0.5;
+    /** Fund-financed rise in the structural balance per unit of output gap a budget round: fitted by indirect inference so the engine's whole discretionary balance, tax leg included, answers the annual gap at Norway's 0.450 (se 0.194) (var/harness/stab_fit.py). */
+    public const FUND_STABILISATION_GAP_RESPONSE = 0.47;
+    /** Share of last year's fund-financed impulse reversed this year: Norway's lagged-change coefficient, -0.452 (se 0.093). */
+    public const FUND_STABILISATION_IMPULSE_REVERSAL = 0.452;
+    /** Yearly decay of the stabilisation back to the rule path: the Auerbach (2002) persistence the tax leg is fitted to, 4.7% a quarter. */
+    public const FUND_STABILISATION_PERSISTENCE = 0.175;
+    /** Horizon of the long-run average the budget reads the gap against, so the cycle it answers averages to zero: the 15-year window Drehmann & Juselius (2012) separate a cycle from its trend with, about 2.5 postwar NBER cycles. */
+    public const FUND_STABILISATION_GAP_TREND_YEARS = 15.0;
+
     // --- Federal Reserve G.17 Industrial Capacity Utilization Index ---
     /** Baseline long-run historical capacity utilization rate (~78.5%). */
     public const CU_BASELINE = 0.785;
@@ -597,6 +609,7 @@ class MacroEngine
         $this->aggregateSubsystem->calculatePotentialAndNominalGdp($state, $dt, $productivityGrowthRate);
         // Singapore NIR draw and a GPIF-style rebalancing band: struck on this tick's GDP, before the budget reads the draw.
         $this->sovereignFundSubsystem?->update($state, $dt);
+        $this->creditFiscalSubsystem->calculateFundStabilisation($state, $dt);
         $this->creditFiscalSubsystem->calculateDynamicFiscalPolicy($state, $dt);
         $this->creditFiscalSubsystem->calculateSovereignDebt($state, $dt);
         $this->creditFiscalSubsystem->calculateSovereignRiskSpread($state, $dt);

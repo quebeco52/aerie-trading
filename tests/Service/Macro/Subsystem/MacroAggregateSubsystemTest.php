@@ -1190,6 +1190,34 @@ class MacroAggregateSubsystemTest extends TestCase
     }
 
     /**
+     * The sovereign fund's stabilisation is spending: one point of GDP of it is worth what one point of GDP of purchases
+     * is through the purchases channel, and without it the channel is silent.
+     */
+    public function testTheFundsStabilisationReachesDemandAsPurchasesDo(): void
+    {
+        $dt = 1.0 / 3600.0;
+        // The probe books each channel's move over the window, so one tick's is its drift times the tick.
+        $contribution = function (float $stabilisation) use ($dt): float {
+            $probe = new OutputGapProbe();
+            $probe->enable();
+            $state = $this->probedState();
+            $state->sovereignFundStabilisationToGdpEma = $stabilisation;
+            $this->probedSubsystem($probe, 0.0)->calculateOutputGap($state, 0.03, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, $dt, 1.0);
+
+            return $probe->snapshot()['current']['contributions']['fundStabilisation'] / $dt;
+        };
+
+        $this->assertSame(0.0, $contribution(0.0));
+        $this->assertEqualsWithDelta(
+            MacroAggregateSubsystem::KALDOR_GOVT_SPENDING_MULTIPLIER * 0.01 / MacroEngine::TARGET_CORPORATE_TAX_RATE,
+            $contribution(0.01),
+            1e-15,
+            'A point of GDP is a purchases shift of one over the purchases share.'
+        );
+        $this->assertEqualsWithDelta(-$contribution(0.01), $contribution(-0.01), 1e-15, 'Saving in a boom drags as much as spending lifts.');
+    }
+
+    /**
      * The decomposition has to add up to the move it claims to explain.
      *
      * The probe is a second reading of a sum the subsystem also computes, and a second reading is worth
@@ -1228,8 +1256,9 @@ class MacroAggregateSubsystemTest extends TestCase
         );
 
         // Every channel in the drift is named, so the panel cannot silently drop one.
-        $this->assertCount(24, $window['contributions']);
+        $this->assertCount(25, $window['contributions']);
         $this->assertArrayHasKey('productivitySupply', $window['contributions']);
+        $this->assertArrayHasKey('fundStabilisation', $window['contributions']);
         $this->assertArrayHasKey('premiumDrag', $window['contributions']);
         $this->assertArrayHasKey('premiumCompensator', $window['contributions']);
         $this->assertArrayHasKey('demandDisaster', $window['contributions']);

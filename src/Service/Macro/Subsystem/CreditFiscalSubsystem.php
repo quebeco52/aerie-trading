@@ -381,6 +381,53 @@ class CreditFiscalSubsystem
     }
 
     /**
+     * Fund-financed fiscal stabilisation: the budget leans against the cycle and the sovereign fund pays for it.
+     *
+     * Norway's structural non-oil balance answers the output gap (IMF Norway Selected Issues 2025, Table 5, a Golinelli &
+     * Momigliano 2009 reaction function on annual data): each year it rises 0.450 per point of gap and gives back 0.452 of
+     * the year before's change. That is the discretionary balance as a whole, so the fund's leg is what the tax leg
+     * leaves: spending above the rule draw in a slump, saving into the fund in a boom. The US record has no such leg
+     * (purchases do not lean against the cycle, Auerbach 2002); the fund is the fiscal space that lets the District run
+     * one (Romer & Romer 2019). Its swings in market value are kept out, as the IMF advises Norway to do.
+     *
+     *   D = D0 + change,  change = -beta x (gap - its long-run average) - phi x (last year's change) - kappa x D0
+     *
+     * where D0 is the level the budget year opened at. The gap is read against its own trailing average, as a
+     * ministry's trend estimate averages the cycle to zero: read against potential itself, the engine's gap, whose
+     * mean is below zero (so is CBO's), would hold D above zero for good and drain the fund to pay for it. The budget is set twice a year, the October budget and the May
+     * revision, each on the gap as it then reads; the revision redoes the year's change from D0 rather than adding to
+     * it. The kappa term takes the level back to the rule path, since Norway's deviations from its rule are temporary.
+     * The fund is never asked for more than its foreign sleeves hold beside the rule draw. With no fund it is zero.
+     *
+     * @param MacroState $state Current macroeconomic state.
+     * @param float      $dt    Time increment in years.
+     */
+    public function calculateFundStabilisation(MacroState $state, float $dt): void
+    {
+        if ($state->sovereignFundDollarsPerGdp <= 0.0) {
+            $state->sovereignFundStabilisationToGdp = 0.0;
+            return;
+        }
+        $state->sovereignFundGapTrend += (1.0 - exp(-$dt / MacroEngine::FUND_STABILISATION_GAP_TREND_YEARS)) * ($state->outputGap - $state->sovereignFundGapTrend);
+        if (!MathUtility::crossedSimulatedBoundary($state->totalTime, $dt, MacroEngine::BUDGET_ROUND_PERIOD_YEARS)) {
+            return;
+        }
+
+        // The round that opens a budget year closes the last one: its change is booked and the new year starts from its end.
+        if (MathUtility::crossedSimulatedBoundary($state->totalTime, $dt, 1.0)) {
+            $state->sovereignFundStabilisationLastChange = $state->sovereignFundStabilisationToGdp - $state->sovereignFundStabilisationYearStart;
+            $state->sovereignFundStabilisationYearStart = $state->sovereignFundStabilisationToGdp;
+        }
+
+        $change = -(MacroEngine::FUND_STABILISATION_GAP_RESPONSE * ($state->outputGapEma - $state->sovereignFundGapTrend))
+            - (MacroEngine::FUND_STABILISATION_IMPULSE_REVERSAL * $state->sovereignFundStabilisationLastChange)
+            - (MacroEngine::FUND_STABILISATION_PERSISTENCE * $state->sovereignFundStabilisationYearStart);
+        $affordable = max(0.0, ($state->sovereignFundToGdp * (1.0 - $state->sovereignFundDomesticWeight)) - $state->sovereignFundDrawToGdp);
+
+        $state->sovereignFundStabilisationToGdp = min($affordable, $state->sovereignFundStabilisationYearStart + $change);
+    }
+
+    /**
      * Sovereign Debt-to-GDP Stock Accumulation (Blanchard 2019, Greenwood-Vayanos 2014).
      *
      * Accumulates sovereign debt-to-GDP ratio from primary deficit flow, net interest expenses,
@@ -410,10 +457,12 @@ class CreditFiscalSubsystem
         $bohnFiscalAdjustment = self::BOHN_FISCAL_REACTION_SENSITIVITY * $excessDebt * $state->nominalGdpIndex;
 
         // Singapore's Net Investment Returns Contribution: the sovereign fund's draw is budget revenue (zero with no fund),
-        // and with a fund the structural deficit is that draw, spent. The fund's currency bridge is set only at inception.
+        // and with a fund the structural deficit is that draw, spent, together with the stabilisation the fund pays for.
+        // The fund's currency bridge is set only at inception.
         $funded = $state->sovereignFundDollarsPerGdp > 0.0;
-        $fundContribution = $state->sovereignFundDrawToGdp * $state->nominalGdpIndex;
-        $structuralDeficitToGdp = $funded ? $state->sovereignFundDrawToGdp : MacroEngine::SOVEREIGN_STRUCTURAL_DEFICIT;
+        $fundPaidToGdp = $state->sovereignFundDrawToGdp + $state->sovereignFundStabilisationToGdp;
+        $fundContribution = $fundPaidToGdp * $state->nominalGdpIndex;
+        $structuralDeficitToGdp = $funded ? $fundPaidToGdp : MacroEngine::SOVEREIGN_STRUCTURAL_DEFICIT;
 
         $primaryDeficit = ($govtSpendingFlow - $taxRevenue) + ($structuralDeficitToGdp * $state->nominalGdpIndex) - $bohnFiscalAdjustment - $fundContribution;
         $state->primaryDeficitToGdp = $primaryDeficit / max(0.1, $state->nominalGdpIndex);
