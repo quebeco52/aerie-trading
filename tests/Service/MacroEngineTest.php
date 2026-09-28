@@ -907,9 +907,11 @@ class MacroEngineTest extends TestCase
         $stateNeutral->corporateTaxRate = 0.21;
         $stateNeutral->capitalStockOverhang = 0.0;
 
-        // Neutral credit: spreads at the baselines the credit legs measure their drag from
+        // Neutral credit: spreads at the baselines the credit legs measure their drag from, and the compensated
+        // crisis drag at its long-run average
         $stateNeutral->macroCreditSpreadEma = MacroEngine::BASE_CREDIT_SPREAD;
         $stateNeutral->interbankLiquiditySpreadEma = MacroEngine::INTERBANK_BASELINE_SPREAD;
+        $stateNeutral->creditCrisisDrag = $aggregateSubsystem->stationaryCrisisDrag();
 
         // Neutral Housing & Commodity Markets
         $stateNeutral->residentialPropertyIndexEma = 100.0;

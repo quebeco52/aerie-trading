@@ -82,6 +82,8 @@ class MacroAggregateSubsystem
     public const KALDOR_CATASTROPHE_DRAG = 0.004;
     /** Demand drag per log unit of policy uncertainty ABOVE baseline: a doubling costs ~0.4pp a year, so the 2006-2011 rise integrates to the ~1% output loss Baker, Bloom & Davis attribute to it. One-sided: spikes cost output (Bloom 2009), calm does not stimulate. */
     public const KALDOR_EPU_DRAG = 0.006;
+    /** Long-run average of the credit-crisis drag on the District's engine, 1.04pp a year (var/harness/fc_run.sh), booked back as its Merton (1976) compensator: crises bend the cycle without shifting its average, as the disasters and the premium are compensated. */
+    public const KALDOR_CRISIS_DRAG_COMPENSATOR = 0.0104;
 
     // --- Aggregate Demand Disturbance (Smets-Wouters 2007) ---
     /** Mean reversion speed of the aggregate demand disturbance: -4*ln(0.86) per year, from the estimated quarterly AR(1) coefficient. */
@@ -308,6 +310,17 @@ class MacroAggregateSubsystem
         $targetNaturalRate = max(MacroEngine::MIN_NATURAL_RATE, min(MacroEngine::MAX_NATURAL_RATE, $targetNaturalRate));
 
         $state->naturalRate += self::NATURAL_RATE_ADJUSTMENT_SPEED * ($targetNaturalRate - $state->naturalRate) * $dt;
+    }
+
+    /**
+     * Long-run average of the credit-crisis drag, the level its compensator books back. A state holding the drag here
+     * reads as average credit: the crisis leg and its compensator net to nothing.
+     *
+     * @return float Mean crisis drag on demand (pp of gap a year, as a fraction).
+     */
+    public function stationaryCrisisDrag(): float
+    {
+        return self::KALDOR_CRISIS_DRAG_COMPENSATOR;
     }
 
     /**
@@ -559,6 +572,7 @@ class MacroAggregateSubsystem
             'catastropheSupplyDrag' => -$catastropheSupplyDrag,
             'householdDeleveragingDrag' => -$householdDeleveragingDrag,
             'crisisDeleveragingDrag' => -$crisisDeleveragingDrag,
+            'crisisCompensator' => self::KALDOR_CRISIS_DRAG_COMPENSATOR,
             'lendingStandardsDrag' => -$lendingStandardsDrag,
             'demandShock' => $state->demandShock - $state->demandDisasterShock + $state->demandDisasterCompensation,
             'demandDisaster' => $state->demandDisasterShock,

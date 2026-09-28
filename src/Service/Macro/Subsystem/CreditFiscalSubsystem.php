@@ -166,12 +166,12 @@ class CreditFiscalSubsystem
     public const CREDIT_CRISIS_LOGIT_GAP = 11.44;
     /** Years after a crisis during which the hazard is off: the bust resets the credit stock, and the panel's crises are decades apart. */
     public const CREDIT_CRISIS_REFRACTORY_YEARS = 5.0;
-    /** Demand drag (pp/yr) a crisis books on impact without any boom behind it: a financial recession runs ~1pp a year deeper than a normal one (JST 2013). */
+    /** Demand drag (pp/yr) a crisis books on impact with no boom behind it: a financial recession runs ~1pp a year deeper than a normal one (JST 2013), as the 1984 S&L crisis passed with no recession at all. */
     public const CREDIT_CRISIS_DRAG_BASE = 0.010;
-    /** Extra drag per unit of credit gap at the crisis: "credit bites back", each ten points of boom cost another ~1.5pp a year. */
-    public const CREDIT_CRISIS_DRAG_PER_GAP = 0.15;
-    /** Decay of the crisis drag (four-year time constant, ~29% still running at year five): JST 2013 track output for five years after a credit-boom recession and the excess-credit effect is still clearly negative there. At the 0.5 this was until 2026-09-21 only 8% survived to year five, so a drag spent inside two years was offset as it arrived by a policy loop that responds in four to five quarters -- depth comes from OUTLASTING that loop, not from a bigger impact. */
-    public const CREDIT_CRISIS_DRAG_DECAY = 0.25;
+    /** Extra drag per unit of credit gap at the crisis ("credit bites back", JST 2013), fitted with the decay below so the US boom at the end of 2007 (+10pp of debt to income on the engine's Basel filter) costs the gap what 2008 cost the CBO gap beyond a normal recession, -3.2 -3.2 -3.6 -3.4 -2.5 -2.0 -1.2 -0.9 over years 1-8 (var/harness/crisis_irf.sh: -3.7 -4.8 -3.5 -2.5 -1.9 -1.7 -1.4 -1.1); a typical +3pp boom costs half that. At 0.15 a crisis cost almost nothing beyond a normal recession (JRST 2021 replication, var/harness/jrst_an.py). */
+    public const CREDIT_CRISIS_DRAG_PER_GAP = 0.765;
+    /** Decay of the crisis drag (eight-year time constant, 55% still running at year five), the same fit: the CBO gap was still below -2% five years after Lehman. Depth comes from OUTLASTING a policy loop that responds in four to five quarters; a drag spent inside two years is offset as it arrives. */
+    public const CREDIT_CRISIS_DRAG_DECAY = 0.12;
     /** Excess bond premium a crisis books on the day (216 bps): 2008's jump, EBP 1.24% in August to 3.40% in October, the one systemic crisis in the GZ record. The boom's size scales the drag (JST 2013), not this: nothing in the record says how the premium scales past 2008. */
     public const EBP_CRISIS_JUMP = 0.0216;
 

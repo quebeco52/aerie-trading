@@ -64,6 +64,7 @@ final class OutputGapChannels
                 'premiumDrag',
                 'premiumCompensator',
                 'crisisDeleveragingDrag',
+                'crisisCompensator',
                 'lendingStandardsDrag',
                 'householdDeleveragingDrag',
             ],

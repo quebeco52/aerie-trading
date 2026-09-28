@@ -1308,7 +1308,7 @@ class CreditFiscalSubsystemTest extends TestCase
 
     /**
      * A crisis reaches lending standards through the premium it books, so standards tighten on the day and ease
-     * as the premium passes, while the crisis drag on demand still has most of its four-year life to run.
+     * as the premium passes, while the crisis drag on demand still has most of its eight-year life to run.
      * 2008: net tightening 84% in October, 32% by July 2009, easing by January 2010 with the gap at -4%.
      */
     public function testACrisisTightensLendingStandardsThroughThePremiumItBooks(): void

@@ -88,6 +88,7 @@ class PolicyLoopRingDownTest extends TestCase
             $engine = new MacroEngine($math, $redis, new MacroSnapshotRecorder(), new MonetaryPolicySubsystem($math), new LaborMarketSubsystem(),
                 new MacroAggregateSubsystem($math), new CommodityLogisticsSubsystem($math), new AssetMarketSubsystem($math), new CreditFiscalSubsystem($math));
             for ($tick = 0; $tick < self::BURN_IN_YEARS * self::TICKS_PER_YEAR; $tick++) {
+                $this->holdCrisisDragAtItsAverage($redis);
                 $engine->updateMacroState($dt);
             }
             if ($kick !== 0.0) {
@@ -97,6 +98,7 @@ class PolicyLoopRingDownTest extends TestCase
             }
             $path = [];
             for ($tick = 1; $tick <= self::OBSERVE_YEARS * self::TICKS_PER_YEAR; $tick++) {
+                $this->holdCrisisDragAtItsAverage($redis);
                 $macro = $engine->updateMacroState($dt);
                 if ($tick % $perQuarter === 0) {
                     $path[] = $macro->outputGap;
@@ -106,6 +108,22 @@ class PolicyLoopRingDownTest extends TestCase
         }
 
         return array_map(static fn (float $kicked, float $control): float => ($kicked - $control) / $kickSize, $paths[1], $paths[0]);
+    }
+
+    /**
+     * With every jump gate shut no crisis can land, yet the crisis drag's compensator still lifts demand; held at its
+     * long-run average the crisis channels net to nothing, so the free response is the policy loop's alone, around the
+     * operating point a world with crises averages.
+     */
+    private function holdCrisisDragAtItsAverage(\Redis $redis): void
+    {
+        $payload = $redis->get(MacroEngine::REDIS_MACRO_STATE);
+        if ($payload === false) {
+            return;
+        }
+        $state = json_decode((string) $payload, true);
+        $state['credit_crisis_drag'] = MacroAggregateSubsystem::KALDOR_CRISIS_DRAG_COMPENSATOR;
+        $redis->set(MacroEngine::REDIS_MACRO_STATE, json_encode($state, JSON_PRESERVE_ZERO_FRACTION));
     }
 
     /** The bootstrap's Redis stand-in forgets everything; the engine needs its state back each tick. */

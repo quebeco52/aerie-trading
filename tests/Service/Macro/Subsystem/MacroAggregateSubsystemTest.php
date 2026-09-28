@@ -1257,7 +1257,7 @@ class MacroAggregateSubsystemTest extends TestCase
         );
 
         // Every channel in the drift is named, so the panel cannot silently drop one.
-        $this->assertCount(25, $window['contributions']);
+        $this->assertCount(26, $window['contributions']);
         $this->assertArrayHasKey('productivitySupply', $window['contributions']);
         $this->assertArrayHasKey('fundStabilisation', $window['contributions']);
         $this->assertArrayHasKey('premiumDrag', $window['contributions']);
@@ -1456,6 +1456,32 @@ class MacroAggregateSubsystemTest extends TestCase
             array_key_first($contributions),
             'The crisis is the heaviest drag on a state built around it'
         );
+    }
+
+    /**
+     * The crisis drag is one-sided, so it carries its Merton compensator as its own channel, as the disasters and the
+     * premium do: a calm quarter reads a small lift, and a drag at its long-run average nets to nothing.
+     */
+    public function testTheCrisisDragIsCompensatedByItsLongRunAverage(): void
+    {
+        $dt = 1.0 / 3600.0;
+        $crisisChannels = function (float $drag) use ($dt): array {
+            $probe = new OutputGapProbe();
+            $probe->enable();
+            $state = $this->probedState();
+            $state->creditCrisisDrag = $drag;
+            $this->probedSubsystem($probe, 0.0)->calculateOutputGap($state, 0.03, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, $dt, 1.0);
+            $contributions = $probe->snapshot()['current']['contributions'];
+
+            return [$contributions['crisisDeleveragingDrag'] / $dt, $contributions['crisisCompensator'] / $dt];
+        };
+
+        [$calmDrag, $calmCompensator] = $crisisChannels(0.0);
+        $this->assertSame(0.0, $calmDrag);
+        $this->assertEqualsWithDelta(MacroAggregateSubsystem::KALDOR_CRISIS_DRAG_COMPENSATOR, $calmCompensator, 1e-12, 'With no crisis running the compensator is its whole long-run average.');
+
+        [$drag, $compensator] = $crisisChannels(MacroAggregateSubsystem::KALDOR_CRISIS_DRAG_COMPENSATOR);
+        $this->assertEqualsWithDelta(0.0, $drag + $compensator, 1e-12, 'A drag at its long-run average nets to nothing.');
     }
 
     /**
