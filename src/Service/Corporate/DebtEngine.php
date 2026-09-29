@@ -597,8 +597,10 @@ class DebtEngine
         // A recapitalisation moves the firm toward the leverage its MANAGER targets (Bertrand & Schoar 2003
         // find the fixed effect in leverage; Graham 2000 the persistently conservative borrower), so the
         // test is struck at the same share of the tolerance the manager draws of its debt capacity. Capped at
-        // one: several models already set their recap target within 15% of the limit itself.
-        $isUnderLeveraged = $strategy->isUnderLeveraged(
+        // one: several models already set their recap target within 15% of the limit itself. An institution
+        // steering to its own capital ratio is never under-leveraged in this sense: its capital target sets
+        // its distributions (Berger et al. 2008), and its return is struck on equity, so no recap raises it.
+        $isUnderLeveraged = $strategy->getTargetCapitalRatio($stock) === null && $strategy->isUnderLeveraged(
             $currentDebtRatio,
             $macroDebtTolerance * min(1.0, $stock->getManagementProfile()->leverageBias()),
             $interestCoverage,

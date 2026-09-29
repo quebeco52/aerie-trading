@@ -56,7 +56,7 @@ class TreasuryEngineTest extends TestCase
     public function testUnderleveragedInvestmentBankIssuesDebtEvenWhenMarginalReturnIsBelowHurdle(): void
     {
         $stock = new Stock();
-        $stock->setTicker('PERE');
+        $stock->setTicker('IBNK');
         $stock->setIndustry('Investment Banking');
         $stock->setTotalEquity('1000000000.00'); // $1B Equity
         $stock->setWholesaleDebt('0.00'); // $0 debt -> severely under-leveraged
@@ -135,6 +135,94 @@ class TreasuryEngineTest extends TestCase
         $this->assertTrue($ctx->debtActionTaken);
         $this->assertTrue($ctx->recapActionTaken);
         $this->assertGreaterThan(0.0, $ctx->debtIssued);
+    }
+
+    /**
+     * A dealer's return is struck on its equity, so the debt a 20% return invites past its capital target earns
+     * nothing and only adds leverage. The same book, return and appetite borrow when the firm has no target and
+     * stay put when it already sits at the ratio it steers to.
+     */
+    public function testADealerAtItsCapitalTargetDoesNotBorrowPastIt(): void
+    {
+        $issued = [];
+        $this->debtEngine->method('issueDebt')->willReturnCallback(
+            static function (Stock $stock, float $amount) use (&$issued): void {
+                $issued[$stock->getTicker()] = $amount;
+            }
+        );
+        $this->corporateMetrics->method('calculateLiveInvestedCapital')->willReturn(4_187_500_000.0);
+        $this->corporateMetrics->method('calculateMarginalReturn')->willReturn(0.20);
+
+        foreach (['PERE', 'IBNK'] as $ticker) {
+            $this->treasuryEngine->executeCorporateStrategy($this->dealerAtSeededLeverage($ticker));
+        }
+
+        $this->assertGreaterThan(0.0, $issued['IBNK'] ?? 0.0, 'Control: without a target the return pulls the dealer into the bond market.');
+        // PERE opens at its 21.05% target: whatever it borrows still leaves 1bn of equity on at least that share of 4.75bn of assets.
+        $this->assertGreaterThanOrEqual(0.2105, 1_000_000_000.0 / (4_750_000_000.0 + ($issued['PERE'] ?? 0.0)));
+    }
+
+    /** PERE's seeded book at a thousandth of the scale: 1bn of equity on 3.75bn of wholesale funding, 15% of it held in cash. */
+    private function dealerAtSeededLeverage(string $ticker): CapitalAllocationContext
+    {
+        $stock = new Stock();
+        $stock->setTicker($ticker);
+        $stock->setIndustry('Investment Banking');
+        $stock->setManagementStyle(ManagementStyle::EmpireBuilder);
+        $stock->setManagementIntensity(\App\Data\ManagementProfile::MAX_INTENSITY);
+        $stock->setTotalEquity('1000000000.00');
+        $stock->setWholesaleDebt('3750000000.00');
+        $stock->setCorporateTreasury('562500000.00');
+        $stock->setEarningAssets('4187500000.00');
+        $stock->setCreditSpread('0.015');
+
+        $ctx = new CapitalAllocationContext(
+            stock: $stock,
+            macroState: MacroStateDTO::fromArray(['policy_rate_ema' => 0.04, 'yield_5y_ema' => 0.045]),
+            actualAnnualEps: 2.5,
+            quarterlyFcfPerShare: 0.6,
+            currentPrice: 40.0,
+            sharesOutstanding: 100_000_000,
+            actualTotalNetIncome: 62_500_000
+        );
+        $ctx->strategy = new InvestmentBankBusinessModel();
+        $ctx->businessModel = 'investment_bank';
+        $ctx->isFinancial = true;
+        $ctx->newTreasury = 562_500_000.0;
+        $ctx->operatingBase = 1_000_000_000.0;
+        $ctx->wholesaleDebt = 3_750_000_000.0;
+        $ctx->customerDeposits = 0.0;
+        $ctx->health = new DebtHealthDTO(
+            grossCost: 0.05,
+            effectiveCost: 0.05,
+            cashYield: 0.04,
+            isNegativeCarry: false,
+            isSevereNegativeCarry: false,
+            interestCoverage: 10.0,
+            wantsToPaydownDebt: false,
+            canIssueDebt: true,
+            debtTolerance: 8.0,
+            wacc: 0.08,
+            costOfEquity: 0.10,
+            leveredBeta: 1.0,
+            rawMetrics: new DebtMetricsDTO(
+                interestExpense: 190_000_000.0,
+                blendedRate: 0.05,
+                historicalFixedRate: 0.05,
+                dynamicSpread: 0.015,
+                currentMarketRate: 0.05,
+                wholesaleRate: 0.05,
+                ebit: 330_000_000.0,
+                revenue: 750_000_000.0,
+                depreciation: 15_000_000.0,
+                ebitda: 345_000_000.0
+            ),
+            isLiquidityCrisis: false,
+            isLiquidityWarning: false,
+            isUnderLeveraged: false
+        );
+
+        return $ctx;
     }
 
     public function testCommercialBankDoesNotUseWholesaleDebtForUnderleveraged(): void

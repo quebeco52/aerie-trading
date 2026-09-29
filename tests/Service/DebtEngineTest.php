@@ -1323,6 +1323,25 @@ class DebtEngineTest extends TestCase
     }
 
     /**
+     * A dealer's return is struck on its equity, so shrinking the equity under it cannot raise that return, and
+     * an institution holding its own capital ratio (Berger et al. 2008) distributes by that ratio. The same book
+     * at 3x debt to equity, under half the 8x wholesale limit, is recapitalised only when it has no such target.
+     */
+    public function testAnInstitutionSteeringToItsCapitalTargetIsNotRecapitalised(): void
+    {
+        $engine = new DebtEngine(new MathUtility(), new CorporateMetrics(), $this->creditRatingAgency, $this->marketEventPublisherMock);
+        $macro = $this->leverageMacro();
+
+        $untargeted = $this->leverageFixture('Investment Banking', '240000000', '36000000');
+        $this->assertTrue($engine->analyzeDebtHealth($untargeted, $macro)->isUnderLeveraged, 'the fixture must sit under the recap threshold');
+
+        $targeted = $this->leverageFixture('Investment Banking', '240000000', '36000000');
+        $targeted->setTicker('PERE');
+        $this->assertNotNull(\App\Data\Sectors::strategyFor('Investment Banking')->getTargetCapitalRatio($targeted));
+        $this->assertFalse($engine->analyzeDebtHealth($targeted, $macro)->isUnderLeveraged);
+    }
+
+    /**
      * A producer's cash flow swings with the price deck, so its sector carries half the book leverage of the
      * market (Damodaran, Jan 2026: E&P 0.50 book D/E against 0.93 for all non-financials). The balance sheet a
      * conglomerate would call under-levered is already at a producer's norm, and is not recapitalised.

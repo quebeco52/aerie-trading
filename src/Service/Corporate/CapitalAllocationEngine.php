@@ -496,6 +496,19 @@ class CapitalAllocationEngine
         return ($equity - ($endRatio * $assets)) / (1.0 - $endRatio);
     }
 
+    /**
+     * The most an institution can borrow and still hold its target capital ratio. Borrowed cash lands on the
+     * asset side, so E / (A + D) = target caps the new debt D at E / target - A.
+     */
+    public static function capitalTargetBorrowingCapacity(float $equity, float $assets, float $targetRatio): float
+    {
+        if ($targetRatio <= 0.0 || $equity <= 0.0) {
+            return 0.0;
+        }
+
+        return max(0.0, ($equity / $targetRatio) - $assets);
+    }
+
     private function finalizeLiquidity(CapitalAllocationContext $ctx): void
     {
         $this->treasuryEngine->finalizeLiquidity($ctx);

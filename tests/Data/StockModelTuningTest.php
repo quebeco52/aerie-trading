@@ -157,15 +157,15 @@ class StockModelTuningTest extends TestCase
 
     /**
      * A bank's capital target is the ratio it was built with (Gropp & Heider 2010), so every deposit-funded
-     * institution carries one and it matches its seeded book equity over equity plus funding. A seed edited
-     * without its target would have the bank steer toward a balance sheet it never had.
+     * institution and every dealer carries one and it matches its seeded book equity over equity plus funding.
+     * A seed edited without its target would have the bank steer toward a balance sheet it never had.
      */
     public function testEveryBankTargetsTheCapitalRatioItWasSeededAt(): void
     {
         $checked = 0;
         foreach (InitialMarket::STOCKS as $stock) {
             $model = Sectors::INDUSTRY_METRICS[$stock['industry'] ?? 'General']['business_model'] ?? 'none';
-            if (!in_array($model, ['commercial_bank', 'clearing_house'], true)) {
+            if (!in_array($model, ['commercial_bank', 'clearing_house', 'investment_bank', 'brokerage'], true)) {
                 continue;
             }
 
@@ -177,7 +177,7 @@ class StockModelTuningTest extends TestCase
             $checked++;
         }
 
-        $this->assertGreaterThanOrEqual(3, $checked, 'The board carries at least the two banks and the clearinghouse.');
+        $this->assertGreaterThanOrEqual(7, $checked, 'The board carries at least the two banks, the clearinghouse and the four dealers.');
     }
 
     public function testStreamWeightSumsAreStrictlyNormalized(): void

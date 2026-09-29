@@ -252,6 +252,14 @@ class TreasuryEngine
                 $depreciation
             );
 
+            // An institution steering to its own capital ratio grows its balance sheet with its equity
+            // (Adrian & Shin 2010): it borrows up to the leverage its target implies, not to the sector limit.
+            $targetCapitalRatio = $ctx->strategy->getTargetCapitalRatio($stock);
+            if ($targetCapitalRatio !== null) {
+                $assets = $stock->getTotalAssets() - max(0.0, (float) $stock->getCorporateTreasury()) + max(0.0, $ctx->newTreasury);
+                $trueExpansionCapacity = min($trueExpansionCapacity, CapitalAllocationEngine::capitalTargetBorrowingCapacity($preBuybackEquity, $assets, $targetCapitalRatio));
+            }
+
             // Subtract excess cash from the TOTAL balance sheet capacity first
             $targetCashReserves = $manager->appliedTargetCash($ctx->strategy->calculateTargetOperatingCash($ctx->operatingBase, $ctx->customerDeposits, $ctx->wholesaleDebt)) * 1.20;
             $excessCash = max(0.0, $ctx->newTreasury - $targetCashReserves);

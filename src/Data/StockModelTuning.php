@@ -35,6 +35,7 @@ class StockModelTuning
             ModelParam::TradingRevenueWeight->value        => 0.40,
             ModelParam::OptionsPremiumIncomeWeight->value => 0.60,
             ModelParam::VixArbitrageScalar->value          => 1.80,
+            ModelParam::TargetCapitalRatio->value          => 0.2105, // Its seeded book equity/assets
         ],
 
         // --- Kingfisher Capital (KING) ---
@@ -44,6 +45,7 @@ class StockModelTuning
             ModelParam::AdvisoryRevenueWeight->value => 0.75,
             ModelParam::TradingRevenueWeight->value  => 0.25,
             ModelParam::VixArbitrageScalar->value    => 1.20,
+            ModelParam::TargetCapitalRatio->value    => 0.2941, // Its seeded book equity/assets
         ],
 
         // --- Rook Proprietary Trading (ROOK) ---
@@ -51,6 +53,7 @@ class StockModelTuning
         'ROOK' => [
             ModelParam::AdvisoryRevenueWeight->value => 0.15,
             ModelParam::TradingRevenueWeight->value  => 0.85,
+            ModelParam::TargetCapitalRatio->value    => 0.4667, // Its seeded book equity/assets
         ],
 
         // --- Corvid Strategic Arbitrage (CORV) ---
@@ -60,6 +63,7 @@ class StockModelTuning
             ModelParam::AdvisoryRevenueWeight->value => 0.25,
             ModelParam::TradingRevenueWeight->value  => 0.75,
             ModelParam::VixArbitrageScalar->value    => 2.00,
+            ModelParam::TargetCapitalRatio->value    => 0.2360, // Its seeded book equity/assets
         ],
 
         // =====================================================================

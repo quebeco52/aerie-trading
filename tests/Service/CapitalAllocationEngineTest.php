@@ -595,6 +595,20 @@ class CapitalAllocationEngineTest extends TestCase
     }
 
     /**
+     * Borrowed cash lands on the asset side, so the most an institution can borrow at its target ratio is what
+     * carries equity over assets exactly onto the target, and nothing once it is already there or below it.
+     */
+    public function testBorrowingCapacityStopsAtTheTargetCapitalRatio(): void
+    {
+        $capacity = CapitalAllocationEngine::capitalTargetBorrowingCapacity(12.5, 100.0, 0.10);
+        $this->assertEqualsWithDelta(25.0, $capacity, 1e-12);
+        $this->assertEqualsWithDelta(0.10, 12.5 / (100.0 + $capacity), 1e-12);
+
+        $this->assertSame(0.0, CapitalAllocationEngine::capitalTargetBorrowingCapacity(10.0, 100.0, 0.10), 'At target there is no room.');
+        $this->assertSame(0.0, CapitalAllocationEngine::capitalTargetBorrowingCapacity(8.0, 100.0, 0.10), 'Below target it borrows nothing.');
+    }
+
+    /**
      * Banks lend out their cash, so the cash-pile tests never see a bank's surplus; its capital ratio does. The
      * same balance sheet above target is returned by the bank that manages toward one and kept by one that does not.
      */
