@@ -57,8 +57,8 @@ class MacroAggregateSubsystem
     /** Imports over GDP: exports less the structural trade balance. */
     public const DISTRICT_IMPORT_SHARE = self::DISTRICT_EXPORT_SHARE - MacroEngine::TRADE_BALANCE_BASELINE;
     /** The seeded Aerospace & Defense makers' first-year revenue (GRIP, PTAR), all of it sold to allied governments (full-market harness). */
-    public const DISTRICT_DEFENSE_EXPORTS_USD = 340.0e9;
-    /** Arms exports over GDP, part of the exports above (2.8%). */
+    public const DISTRICT_DEFENSE_EXPORTS_USD = 170.0e9;
+    /** Arms exports over GDP, part of the exports above (1.4%). */
     public const DISTRICT_DEFENSE_EXPORT_SHARE = self::DISTRICT_DEFENSE_EXPORTS_USD / MacroEngine::DISTRICT_GDP_USD;
     /** Mean lag (years) from an allied arms order to its delivery as exports: the makers' cost-plus backlog burns 15% a quarter (DefenseContractorBusinessModel). */
     public const DEFENSE_DELIVERY_LAG_YEARS = 1.0 / (4.0 * 0.15);
@@ -87,9 +87,9 @@ class MacroAggregateSubsystem
     /** US finance and insurance value added over GDP, 2005-2019 average (BEA via FRED VAPGDPFI, 7.18%): the share the US-fitted demand equation already carries. */
     public const US_FINANCE_SHARE = 0.072;
     /** Credit intermediation's share of the District's finance (banks, credit services, mortgage finance), by the seeded roster's book equity; its volume follows deflated loan balances. */
-    public const FINANCE_CREDIT_SHARE = 0.346;
+    public const FINANCE_CREDIT_SHARE = 0.367;
     /** Market-based finance's share (funds, brokerage, exchanges, clearing, investment banking), the same basis; its volume follows the deflated value of the assets it manages. The rest, insurance and holding companies, moves with the domestic economy. */
-    public const FINANCE_MARKET_SHARE = 0.302;
+    public const FINANCE_MARKET_SHARE = 0.259;
     /** Weight of the finance cycle in the gap: the District's finance share less the US share the fitted equation carries on the District's smaller rest of the economy (0.246). */
     public const FINANCE_GAP_WEIGHT = self::DISTRICT_FINANCE_SHARE - ((1.0 - self::DISTRICT_FINANCE_SHARE) * self::US_FINANCE_SHARE / (1.0 - self::US_FINANCE_SHARE));
     /** Domestic demand the District's imports carry abroad beyond the leak the fitted (US) equation already has: imports move 1.4 times domestic demand (IMF WEO 2015) on the District's import share less the US's (0.231). */

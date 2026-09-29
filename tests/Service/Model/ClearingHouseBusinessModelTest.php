@@ -250,11 +250,12 @@ class ClearingHouseBusinessModelTest extends TestCase
         $this->assertTrue(\App\Data\Sectors::isFinancial($industryConfig['business_model']));
 
         // Lean equity calibration (CME / ICE model)
-        $this->assertSame(50_000_000_000.00, (float) $accConfig['total_equity'], 'ACC total equity must be $50B (lean equity)');
-        $this->assertSame(1_300_000_000_000.00, (float) $accConfig['customer_deposits'], 'ACC customer deposits must be $1.3T (collateral float)');
-        $this->assertSame(1_315_000_000_000.00, (float) $accConfig['corporate_treasury'], 'ACC corporate treasury must cover 100% margin float + $15B operating buffer');
-        $this->assertSame(15_000_000_000.00, (float) $accConfig['wholesale_debt'], 'ACC wholesale debt must be $15B');
-        $this->assertSame(20_000_000_000.00, (float) $accConfig['retained_earnings'], 'ACC retained earnings must be $20B');
+        // At the District's $12T scale.
+        $this->assertSame(25_000_000_000.00, (float) $accConfig['total_equity'], 'ACC total equity must be $25B (lean equity)');
+        $this->assertSame(650_000_000_000.00, (float) $accConfig['customer_deposits'], 'ACC customer deposits must be $650B (collateral float)');
+        $this->assertSame(657_500_000_000.00, (float) $accConfig['corporate_treasury'], 'ACC corporate treasury must cover 100% margin float + $7.5B operating buffer');
+        $this->assertSame(7_500_000_000.00, (float) $accConfig['wholesale_debt'], 'ACC wholesale debt must be $7.5B');
+        $this->assertSame(10_000_000_000.00, (float) $accConfig['retained_earnings'], 'ACC retained earnings must be $10B');
         $this->assertSame(0.26, (float) $accConfig['baseline_roe'], 'ACC baseline ROE must be 26%');
 
         // Extreme collateral leverage (> 25x customer deposits to equity)

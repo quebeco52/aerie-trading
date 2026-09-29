@@ -467,7 +467,7 @@ class FinancialConstants
     /** Default portfolio duration in years for a financial with no seeded figure; the middle of the range large lenders run. */
     public const DEFAULT_SECURITIES_DURATION_YEARS = 4.5;
     /** Balance-sheet size above which an institution loses the AOCI filter and marks its capital to the curve. The advanced-approaches rule in form, set to this district's scale rather than a US figure: it takes the systemically important lenders and leaves the mid-tier the election. */
-    public const AOCI_FILTER_SIZE_THRESHOLD = 1_500_000_000_000.0;
+    public const AOCI_FILTER_SIZE_THRESHOLD = 750_000_000_000.0;
 
     // --- Equity Issuance & TAM Scaling Limits ---
     /** Maximum fraction of market capitalization that can be raised in a distressed emergency equity offering (25%). */
@@ -489,8 +489,8 @@ class FinancialConstants
     public const BOND_AUCTION_TENORS = [2.0, 5.0, 10.0, 30.0];
     /** Floor on a struck coupon. A zero-coupon issue is legitimate at the lower bound; a negative one is not. */
     public const BOND_MIN_COUPON_RATE = 0.0;
-    /** Face amount issued per tenor per auction, in currency units. Sets the size of the tradable float. */
-    public const BOND_ISSUE_SIZE = 5.0e9;
+    /** Face amount issued per tenor per auction, in currency units, at the District's $12T scale. Sets the size of the tradable float. */
+    public const BOND_ISSUE_SIZE = 2.5e9;
     /** Ceiling on years-to-maturity treated as outstanding; past it the issue is redeemed and stops trading. */
     public const BOND_MATURITY_EPSILON = 1.0e-6;
     /** Tenors the curve is sampled at for display. Dense at the front, where the curve actually bends. */

@@ -21,8 +21,8 @@ use App\Service\Corporate\Industry\IndustryShareLedger;
 class MergerAndAcquisitionEngine
 {
     // --- M&A Deal Parameters ---
-    /** Minimum size for a deal to be executed. */
-    public const MA_MIN_DEAL_SIZE = 1_000_000_000.0;
+    /** Minimum size for a deal to be executed, at the District's $12T scale. */
+    public const MA_MIN_DEAL_SIZE = 500_000_000.0;
     /** Probability for overvalued companies. */
     public const MA_OVERVALUED_PROB = 0.15;
     /** Probability for empire builders. */
@@ -37,13 +37,13 @@ class MergerAndAcquisitionEngine
     public const MA_MOD_LEVERAGE_PROB = 0.05;
     /** Fallback probability if using cash. */
     public const MA_CASH_FALLBACK_PROB = 0.05;
-    /** Threshold for cash fallback. */
-    public const MA_CASH_FALLBACK_THRESHOLD = 15_000_000_000.0;
+    /** Threshold for cash fallback, at the District's $12T scale. */
+    public const MA_CASH_FALLBACK_THRESHOLD = 7_500_000_000.0;
     
-    /** Minimum buying power for empire builders. */
-    public const MA_EMPIRE_BUILDER_MIN_POWER = 2_000_000_000.0;
-    /** Minimum buying power for LBO. */
-    public const MA_LBO_MIN_POWER = 5_000_000_000.0;
+    /** Minimum buying power for empire builders, at the District's $12T scale. */
+    public const MA_EMPIRE_BUILDER_MIN_POWER = 1_000_000_000.0;
+    /** Minimum buying power for LBO, at the District's $12T scale. */
+    public const MA_LBO_MIN_POWER = 2_500_000_000.0;
     /** Low utilization threshold. */
     public const MA_LOW_UTIL_THRESHOLD = 0.30;
     /** Moderate utilization threshold. */
@@ -135,8 +135,8 @@ class MergerAndAcquisitionEngine
 
     /** P/E threshold for divestiture consideration. */
     public const DIV_PE_THRESHOLD = 30.0;
-    /** Minimum net income for divestiture consideration. */
-    public const DIV_MIN_NET_INCOME = 5_000_000_000.0;
+    /** Minimum net income for divestiture consideration, at the District's $12T scale. */
+    public const DIV_MIN_NET_INCOME = 2_500_000_000.0;
     /** EVA threshold for distressed divestiture. */
     public const DIV_DISTRESS_EVA_THRESHOLD = -0.02;
     /** Return threshold for dying divestiture. */
