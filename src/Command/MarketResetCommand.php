@@ -14,7 +14,7 @@ use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
 use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 use App\Service\Math\FinancialConstants;
-use App\Service\Math\MathUtility;
+use App\Service\Market\OpeningBoardBuilder;
 
 #[AsCommand(
     name: 'app:market-reset',
@@ -26,11 +26,8 @@ class MarketResetCommand extends Command
         private EntityManagerInterface $entityManager,
         private \Redis $redis,
         private UserPasswordHasherInterface $passwordHasher,
-        private MathUtility $mathUtility,
-        private \App\Service\Market\MarketEngine $marketEngine,
-        private \App\Service\Corporate\DebtEngine $debtEngine,
         private \App\Service\Market\TreasuryAuctionService $treasuryAuction,
-        private \App\Service\Corporate\Holdings\AnchorStakeLedger $anchorStakes
+        private OpeningBoardBuilder $openingBoard
     ) {
         parent::__construct();
     }
@@ -103,357 +100,45 @@ class MarketResetCommand extends Command
         $io->text('2. Flushing Redis cache...');
         $this->redis->flushAll();
 
-        $io->text('3. Resetting Stock Prices & Absolute Values...');
+        $io->text('3. Reopening every firm on its seed row...');
 
         // The board is priced against the economy the macro engine opens in, so the first tick does not revalue it.
         $openingMacro = new MacroStateDTO();
 
-        // The reset prices the board through throwaway entities, kept here to mark the spheres against.
-        $pricedBoard = [];
+        // Every listed firm, kept so the anchor spheres can be marked against the finished board below.
+        $board = [];
+        $spheres = [];
 
         foreach (InitialMarket::STOCKS as $stockData) {
-            $margin = $stockData['operating_margin'] ?? 0.15;
-
-            $historicalRate = $stockData['historical_fixed_rate'] ?? 0.04;
-            $wholesaleDebt = $stockData['wholesale_debt'] ?? 0.0;
-            $customerDeposits = $stockData['customer_deposits'] ?? 0.0;
-            $treasury = $stockData['corporate_treasury'] ?? 0.0;
-
-            $businessModel = \App\Data\Sectors::businessModelFor($stockData['industry'] ?? null);
-            $strategy = \App\Data\Sectors::getBusinessModelStrategy($businessModel);
-            $isFinancial = \App\Data\Sectors::isFinancial($businessModel);
-
-            // Create a temporary entity to leverage the proper business model physics
-            $tempStock = new Stock();
-            $tempStock->setTicker($stockData['ticker']);
-            $tempStock->setName($stockData['name']);
-            $tempStock->setTotalEquity((string) ($stockData['total_equity'] ?? 0.0));
-            $tempStock->setWholesaleDebt((string) $wholesaleDebt);
-            $tempStock->setCustomerDeposits((string) $customerDeposits);
-            $tempStock->setCorporateTreasury((string) $treasury);
-            $tempStock->setFloatingDebtRatio((string) ($stockData['floating_debt_ratio'] ?? 0.30));
-            $tempStock->setHistoricalFixedRate((string) $historicalRate);
-            $tempStock->setOperatingMargin((string) $margin);
-            $tempStock->setIndustry($stockData['industry'] ?? 'General');
-            $tempStock->setBaselineRoe((string) ($isFinancial ? ($stockData['baseline_roe'] ?? $stockData['baseline_roic'] ?? 0.10) : 0.10));
-            $tempStock->setBaselineRoic((string) ($isFinancial ? 0.10 : ($stockData['baseline_roic'] ?? 0.10)));
-
-            // Query the exact structural metrics the engine uses to prevent massive gravity explosions on tick 1
-            $targetMetrics = $strategy->getTargetMetrics($tempStock, $openingMacro, $this->mathUtility);
-            $investedCapital = $targetMetrics['invested_capital'];
-            $operatingYield = max(0.01, (float) $targetMetrics['baseline_roic']);
-            $taxRate = $openingMacro->corporateTaxRate ?? 0.21;
-            $preTaxYield = $operatingYield / (1.0 - $taxRate);
-            $revenue = $margin > 0 ? ($investedCapital * ($preTaxYield / $margin)) : 0.0;
-
-            $impliedPricingRoic = $isFinancial
-                ? max(0.01, (float) $tempStock->getBaselineRoe())
-                : $operatingYield;
-
-            $shares = $stockData['shares_outstanding'] ?? 1_000_000_000;
-            $bookValuePerShare = $shares > 0 ? ((float) ($stockData['total_equity'] ?? 0.0)) / $shares : 0.0;
-
-            // Set required temporary values for debt engine
-            $tempStock->setTotalRevenue((string)$revenue);
-            $tempStock->setSharesOutstanding((string)$shares);
-            $tempStock->setPrice((string)$bookValuePerShare);
-
-            $debtHealth = $this->debtEngine->analyzeDebtHealth($tempStock, $openingMacro, $revenue, $margin);
-
-            if ($isFinancial) {
-                $netIncome = ((float) ($stockData['total_equity'] ?? 0.0)) * (float) $tempStock->getBaselineRoe();
+            // Reopened in place, so the row keeps the id the rest of the schema refers to, and opened exactly as a
+            // fresh seed opens it: a reset market is the market the seed would have opened. A firm added to the
+            // seed since this market was first opened is listed now rather than left missing.
+            $stock = $this->entityManager->getRepository(Stock::class)->findOneBy(['ticker' => $stockData['ticker']]);
+            if ($stock === null) {
+                $stock = new Stock();
+                $stock->setTicker($stockData['ticker']);
             } else {
-                $ebit = $revenue * $margin;
-                $interestExpense = $debtHealth->interestExpense ?? 0.0;
-                $interestIncome = $strategy->calculateInterestIncome($tempStock, $openingMacro, $this->mathUtility);
-                $ebt = $ebit - $interestExpense + $interestIncome;
-                $effectiveTaxRate = $strategy->getEffectiveTaxRate($taxRate);
-                $netIncome = max(0.0, $ebt * (1.0 - $effectiveTaxRate));
+                $stock->resetToUnseeded();
             }
 
-            $annualEps = $shares > 0 ? ($netIncome / $shares) : 0.0;
-            $tempStock->setEarningsPerShare((string)$annualEps);
-            $targetPayout = $stockData['target_payout_ratio'] ?? 0.30;
-            $startingDividend = ($annualEps / 4.0) * ($targetPayout * 0.50);
+            $sphere = $this->openingBoard->open($stock, $stockData, $openingMacro);
+            if ($sphere !== null) {
+                $spheres[] = $sphere;
+            }
 
-            // The reset price must be struck on the SAME fundamentals StockTracker feeds the engine on the
-            // next tick, or the market re-rates immediately. Both default inside the DTO (2% growth, zero
-            // net debt), which priced every firm as a median-growth, debt-free business.
-            $resetSecularGrowth = $strategy->getSecularGrowthRate($tempStock);
-            $resetNetDebtPerShare = $shares > 0
-                ? max(0.0, (
-                    (float) ($stockData['wholesale_debt'] ?? 0.0)
-                    + (float) ($stockData['customer_deposits'] ?? 0.0)
-                    - (float) ($stockData['corporate_treasury'] ?? 1000000000.00)
-                ) / $shares)
-                : 0.0;
-
-            $pricingCtx = new \App\DTO\MarketPricingContext(
-                currentPrice: $bookValuePerShare,
-                currentVolatility: (float) ($stockData['volatility'] ?? 0.15),
-                longTermVolatility: (float) ($stockData['volatility'] ?? 0.15),
-                earningsPerShare: $annualEps,
-                dt: 0.0,
-                lambda: (float) ($stockData['jump_intensity'] ?? 2.0),
-                jumpVol: (float) ($stockData['jump_vol'] ?? 0.05),
-                beta: (float) ($stockData['beta'] ?? 1.0),
-                marketZ: 0.0,
-                marketVol: 0.15,
-                macroState: $openingMacro,
-                fcfPerShare: null,
-                bookValuePerShare: $bookValuePerShare,
-                maShock: 0.0,
-                currentRoic: $impliedPricingRoic,
-                roicTtm: $impliedPricingRoic,
-                dividendPerShare: $startingDividend,
-                liveWacc: $debtHealth->wacc ?? 0.08,
-                baselineIndustryPE: \App\Data\Sectors::baselineIndustryPe($stockData['industry'] ?? null),
-                revenuePerShare: $shares > 0 ? $revenue / $shares : 0.0,
-                businessModel: $businessModel,
-                liveCostOfEquity: $debtHealth->costOfEquity ?? 0.10,
-                netDebtPerShare: $resetNetDebtPerShare,
-                secularGrowth: $resetSecularGrowth,
-                baselineRoic: $impliedPricingRoic,
-                baselineMargin: (float) ($stockData['operating_margin'] ?? 0.20),
-                // The reset writes the balance sheet by SQL rather than through the entity, so capital per share
-                // is built from the same seed figures with the entity's own formula.
-                investedCapitalPerShare: \App\Service\Math\CorporateMetrics::getInstance()->calculateLiveInvestedCapital(
-                    (float) ($stockData['total_equity'] ?? 0.0),
-                    (float) ($stockData['wholesale_debt'] ?? 0.0) + (float) ($stockData['customer_deposits'] ?? 0.0),
-                    (float) ($stockData['corporate_treasury'] ?? 1000000000.00)
-                ) / max(1.0, (float) ($stockData['shares_outstanding'] ?? 1000000000))
-            );
-
-            $marketCalc = $this->marketEngine->calculateNextPrice($pricingCtx);
-
-            // Use the engine's perceived fair value as the neutral Analyst Consensus
-            $neutralPrice = $marketCalc['perceived_fair_value'];
-            $tempStock->setPrice((string) $neutralPrice);
-            $pricedBoard[$stockData['ticker']] = $tempStock;
-            // Solved on the reset's own capital structure and price, as MarketSeedCommand does.
-            $tempStock->setVolatility((string) $stockData['volatility']);
-            $assetVolatility = $this->debtEngine->calibrateAssetVolatility($tempStock, $openingMacro->policyRateEma);
-
-            $conn->executeStatement(
-                'UPDATE stocks SET 
-                    name = :name,
-                    sector = :sector,
-                    price = :price, 
-                    shares_outstanding = :shares,
-                    volatility = :vol,
-                    current_volatility = :current_vol,
-                    asset_volatility = :asset_vol,
-                    beta = :beta,
-                    jump_intensity = :jump_int,
-                    systemic_importance = :importance,
-                    jump_vol = :jump_vol,
-                    baseline_roic = :roic,
-                    current_roic = :roic,
-                    baseline_roe = :roe,
-                    current_roe = :roe,
-                    capex_ratio = :capex,
-                    target_payout_ratio = :payout,
-                    dividend_speed = :div_speed,
-                    fixed_cost_ratio = :fixed_cost,
-                    depreciation_rate = :depreciation_rate,
-                    corporate_treasury = :treasury,
-                    floating_debt_ratio = :floating_ratio,
-                    wholesale_debt = :wholesale_debt,
-                    customer_deposits = :customer_deposits,
-                    operating_margin = :margin,
-                    public_float_percentage = :float_pct,
-                    total_net_income = :net_income,
-                    total_equity = :equity,
-                    retained_earnings = :retained,
-                    total_revenue = :revenue,
-                    previous_revenue = :revenue,
-                    total_free_cash_flow = NULL,
-                    last_analyst_revenue = :analyst_revenue,
-                    roe_ttm = :roe_ttm,
-                    roic_ttm = :roic_ttm,
-                    goodwill = 0.00,
-                    cip_balance = 0.00,
-                    historical_fixed_rate = :historical_rate,
-                    credit_spread = :credit_spread,
-                    -- Opens at the baseline: until the first tick builds a Merton spread and an
-                    -- accelerator premium on top of it, the baseline is what the credit costs.
-                    dynamic_credit_spread = :credit_spread,
-                    buyback_authorization = 0.00,
-                    last_dividend = :last_dividend,
-                    description = :description,
-                    sam_ratio = :sam_ratio,
-                    industry = :industry,
-                    management_style = :management_style,
-                    ceo_tenure_years = :ceo_tenure_years,
-                    management_intensity = :management_intensity,
-                    earnings_momentum_z = NULL,
-                    is_bankrupt = 0,
-                    payment_default = 0,
-                    quarters_in_default = 0,
-                    revolver_commitment = 0.0000,
-                    revolver_drawn = 0.0000,
-                    committed_cost_scale = 1.000000,
-                    accruals_ratio = 0.0,
-                    net_operating_loss = 0.0000,
-                    credit_rating = :credit_rating,
-                    -- Every ledger and learned parameter goes back to its unseeded state. Each of these is
-                    -- nullable (or defaulted) precisely so the engine can re-seed it on the first earnings
-                    -- report; leaving stale values behind would carry the old market into the new one.
-                    receivables = NULL,
-                    inventory = NULL,
-                    payables = NULL,
-                    receivables_allowance = 0.0000,
-                    inventory_allowance = 0.0000,
-                    gross_ppe = NULL,
-                    accumulated_depreciation = 0.0000,
-                    ppe_vintage_deflator = NULL,
-                    ppe_tax_basis = NULL,
-                    deferred_tax_liability = 0.0000,
-                    earning_assets = NULL,
-                    credit_loss_allowance = 0.0000,
-                    listed_stakes_carrying = NULL,
-                    -- Rate risk needs a cross-section or every lender lives and dies together: the seed
-                    -- names a duration where a book is distinctive and the rest take the model default.
-                    -- The carrying yield opens null so the first report strikes it at the prevailing curve
-                    -- and the book starts marked flat rather than carrying a loss it never took.
-                    -- Coverage is re-initiated on the first tick of the new market. A target carried over
-                    -- would be a standing opinion about a company that no longer exists.
-                    analyst_price_target = NULL,
-                    securities_duration = :securities_duration,
-                    securities_carrying_yield = NULL,
-                    unrealized_securities_mark = 0.0000,
-                    aoci_filtered = :aoci_filtered,
-                    asset_turnover = NULL,
-                    lifecycle_stage = NULL,
-                    inflation_pass_through = NULL,
-                    -- The CIR variable-cost process starts at its own long-run mean, which EarningsEngine
-                    -- derives with the depreciation carve-out applied. Computing it here from margin and
-                    -- fixed-cost ratio alone overstated the cost ratio by a median 2% and up to 16% on
-                    -- capital-intensive names, always in the same direction, so every reset opened those
-                    -- firms on a cost base they were not reverting toward.
-                    structural_variable_margin = NULL,
-                    pre_announced_shortfall = 0.0,
-                    last_reported_cost_ratio = NULL,
-                    last_book_to_bill = NULL,
-                    lagged_demand_gap = NULL,
-                    managed_accrual_bank = 0.0000,
-                    price_momentum_trend = 0.0,
-                    last_split_at = NULL,
-                    turnover_ratio = :turnover_ratio,
-                    impact_variance_ema = 0.0,
-                    -- Reopened at the structural variance rather than at zero, for the same reason the seed
-                    -- does: the index screens rank on this, and a board that reads as perfectly quiet on
-                    -- day one seats its low-volatility index on nothing.
-                    realized_variance_ema = :realized_variance,
-                    corporate_flow_backlog = 0.0,
-                    lendable_supply_ratio = :lendable_supply_ratio,
-                    short_interest_shares = 0.00,
-                    reported_operating_margin = NULL,
-                    quarterly_net_income_history = NULL,
-                    quarterly_operating_history = NULL,
-                    earnings_surprise_history = NULL
-                WHERE ticker = :ticker',
-                [
-                    'credit_rating' => 'BBB',
-                    'price' => $neutralPrice,
-                    'shares' => $stockData['shares_outstanding'],
-                    'vol' => $stockData['volatility'],
-                    // Structural, derived from the name's own volatility rather than stored per ticker, so
-                    // a retuned volatility cannot leave a turnover behind that no longer matches it.
-                    'turnover_ratio' => \App\Service\Market\LiquidityEngine::structuralTurnoverRatio((float) $stockData['volatility']),
-                    'lendable_supply_ratio' => FinancialConstants::DEFAULT_LENDABLE_SUPPLY_RATIO,
-                    'realized_variance' => (float) $stockData['volatility'] ** 2,
-                    'current_vol' => $stockData['volatility'],
-                    'asset_vol' => $assetVolatility,
-                    'beta' => $stockData['beta'],
-                    'jump_int' => $stockData['jump_intensity'],
-                    'jump_vol' => $stockData['jump_vol'],
-                    'importance' => $stockData['systemic_importance'] ?? 'none',
-                    'roic' => $isFinancial ? 0.10 : ($stockData['baseline_roic'] ?? 0.10),
-                    'roe' => $isFinancial ? ($stockData['baseline_roe'] ?? $stockData['baseline_roic'] ?? 0.10) : 0.10,
-                    'capex' => $stockData['capex_ratio'] ?? 0.20,
-                    'payout' => $stockData['target_payout_ratio'] ?? 0.30,
-                    'div_speed' => $stockData['dividendSpeed'] ?? 0.20,
-                    'fixed_cost' => $stockData['fixed_cost_ratio'] ?? 0.50,
-                    'depreciation_rate' => $stockData['depreciation_rate'] ?? \App\Data\Sectors::metricsFor($stockData['industry'] ?? null)['depreciation'],
-                    'treasury' => $stockData['corporate_treasury'] ?? 1000000000.00,
-                    'floating_ratio' => $stockData['floating_debt_ratio'] ?? 0.30,
-                    'wholesale_debt' => $stockData['wholesale_debt'] ?? 0.00,
-                    'customer_deposits' => $stockData['customer_deposits'] ?? 0.00,
-                    'margin' => $stockData['operating_margin'] ?? 0.15,
-                    'float_pct' => \App\Data\AnchorHoldings::tradableFloat(
-                        $stockData['ticker'],
-                        (float) ($stockData['public_float'] ?? 0.90)
-                    ),
-                    'net_income' => $netIncome,
-                    'equity' => $stockData['total_equity'] ?? 0.00,
-                    'retained' => $stockData['retained_earnings'] ?? 0.00,
-                    'revenue' => $revenue,
-                    'analyst_revenue' => $revenue / 4.0,
-                    'roe_ttm' => $isFinancial ? ($stockData['baseline_roe'] ?? $stockData['baseline_roic'] ?? 0.10) : 0.10,
-                    'roic_ttm' => $isFinancial ? 0.10 : ($stockData['baseline_roic'] ?? 0.10),
-                    'historical_rate' => $stockData['historical_fixed_rate'] ?? 0.0400,
-                    'credit_spread' => $stockData['credit_spread'] ?? 0.0100,
-                    'securities_duration' => (float) ($stockData['securities_duration'] ?? $strategy->getDefaultSecuritiesDuration()),
-                    'aoci_filtered' => (int) (bool) ($stockData['aoci_filtered'] ?? (
-                        // The filter is an election the largest institutions do not get. Sized rather than
-                        // listed per firm, so the dispersion maintains itself as the seed changes: a bank big
-                        // enough to be systemically important marks its capital to the curve, and a small one
-                        // does not. Without the split every lender would react to rates identically.
-                        ((float) ($stockData['total_equity'] ?? 0.0)
-                            + (float) ($stockData['wholesale_debt'] ?? 0.0)
-                            + (float) ($stockData['customer_deposits'] ?? 0.0))
-                        < FinancialConstants::AOCI_FILTER_SIZE_THRESHOLD
-                    )),
-                    'last_dividend' => $startingDividend,
-                    'name' => $stockData['name'],
-                    'sector' => $stockData['sector'],
-                    'description' => \App\Data\StockInfo::DESCRIPTIONS[$stockData['ticker']] ?? null,
-                    'sam_ratio' => $stockData['sam_ratio'] ?? 1.00,
-                    'industry' => $stockData['industry'] ?? null,
-                    'management_style' => $stockData['management_style'] ?? null,
-                    'ceo_tenure_years' => \App\Service\Corporate\ManagementSuccessionEngine::drawSeedTenure($this->mathUtility),
-                    'management_intensity' => \App\Data\ManagementProfile::drawIntensity($this->mathUtility),
-                    'ticker' => $stockData['ticker']
-                ]
-            );
+            $board[$stockData['ticker']] = $stock;
+            $this->entityManager->persist($stock);
         }
 
-        // Every sphere opens carrying what its holdings are worth at these prices. Written by SQL like the
-        // rest of the reset, but it is the same ledger arithmetic on the same board, so a reset market
-        // opens on the NAV a marked one would report rather than on a book that has not seen its portfolio.
-        $this->anchorStakes->beginTick($pricedBoard);
+        try {
+            $this->openingBoard->openSpheres($spheres, $board, $openingMacro);
+        } catch (\DomainException $misfit) {
+            $io->error($misfit->getMessage());
 
-        foreach (array_keys(\App\Data\AnchorHoldings::STAKES) as $holder) {
-            $stakeValue = isset($pricedBoard[$holder])
-                ? $this->anchorStakes->resolveStakeValue($pricedBoard[$holder])
-                : null;
-
-            if ($stakeValue === null) {
-                continue;
-            }
-
-            // Same check the seed makes: a portfolio that swallows the book leaves the consolidated stream
-            // with no residual to be drawn from.
-            $fit = \App\Data\AnchorHoldings::consolidatedShare($stakeValue, $pricedBoard[$holder]->getInvestedCapital());
-
-            if ($fit < \App\Data\AnchorHoldings::MIN_CONSOLIDATED_SHARE) {
-                $io->error(sprintf(
-                    '%s holds a portfolio worth %.1f%% of its capital employed, leaving %.1f%% for its subsidiaries (minimum %.0f%%). Trim its stakes in AnchorHoldings or raise its balance sheet in InitialMarket.',
-                    $holder,
-                    100.0 * (1.0 - $fit),
-                    100.0 * $fit,
-                    100.0 * \App\Data\AnchorHoldings::MIN_CONSOLIDATED_SHARE
-                ));
-
-                return Command::FAILURE;
-            }
-
-            $conn->executeStatement(
-                'UPDATE stocks SET listed_stakes_carrying = :value WHERE ticker = :ticker',
-                ['value' => number_format($stakeValue, 4, '.', ''), 'ticker' => $holder]
-            );
+            return Command::FAILURE;
         }
+
+        $this->entityManager->flush();
 
         $io->text('4. Resetting ETF Prices...');
         foreach (InitialMarket::ETFS as $etfData) {

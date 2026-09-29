@@ -90,6 +90,7 @@
             <file>tests/Service/Market/AuthorizedParticipantTest.php</file>
             <file>tests/Service/View/CompanySnapshotNavTest.php</file>
             <file>tests/Service/View/CompanySnapshotValuationTest.php</file>
+            <file>tests/Service/Market/OpeningBoardBuilderTest.php</file>
             <file>tests/Service/View/AnchorPortfolioBuilderTest.php</file>
             <file>tests/Service/Market/ChartRangeTest.php</file>
             <file>tests/Command/ChartBufferWritesTest.php</file>
@@ -121,6 +122,8 @@
             <exclude>tests/Service/Market/CorporateDefaultServiceTest.php</exclude>
             <exclude>tests/Service/Market/IndexCommitteeTest.php</exclude>
             <exclude>tests/Service/Market/IndexFundAccountantTest.php</exclude>
+            <exclude>tests/Service/View/CompanySnapshotValuationTest.php</exclude>
+            <exclude>tests/Service/Market/OpeningBoardBuilderTest.php</exclude>
         </testsuite>
 
         <testsuite name="Functional">

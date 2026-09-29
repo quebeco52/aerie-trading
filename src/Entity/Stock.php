@@ -696,6 +696,20 @@ class Stock
         return $this->id;
     }
 
+    /**
+     * Returns every field but the row's identity to the value a new listing starts with, so a firm reopened on a
+     * reset carries nothing of the market it left: no ledger, learned parameter or accumulator survives. Read off
+     * a fresh instance rather than listed, so a field added to the entity is cleared without anyone remembering to.
+     */
+    public function resetToUnseeded(): void
+    {
+        foreach (get_object_vars(new self()) as $field => $unseeded) {
+            if ($field !== 'id') {
+                $this->$field = $unseeded;
+            }
+        }
+    }
+
     public function getTicker(): string
     {
         return $this->ticker;
