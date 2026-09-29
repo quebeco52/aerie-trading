@@ -997,6 +997,19 @@ class MathUtility
     }
 
     /**
+     * The growth a firm can fund from what it keeps (Damodaran: g = return on capital x reinvestment rate; Higgins
+     * 1977): the outlook's growth, capped at what its return earns on the share of earnings its payout policy
+     * retains. The value-driver multiple assumes the firm reinvests g / ROIC of its earnings, so a firm that pays
+     * that out instead cannot be priced as if it grew at the outlook.
+     */
+    public function calculateFundableGrowth(float $expectedGrowth, float $returnOnCapital, float $payoutRatio): float
+    {
+        $retention = 1.0 - max(0.0, min(1.0, $payoutRatio));
+
+        return min($expectedGrowth, max(0.0, $returnOnCapital * $retention));
+    }
+
+    /**
      * The intrinsic fair-value P/E net of the earnings-quality discount: Damodaran multiple shrunk toward
      * the sector prior, less the Sloan (1996) accruals penalty, floored at the distressed multiple.
      * One function so the market's anchor and management's are the same number.
@@ -1109,9 +1122,14 @@ class MathUtility
         float $inflation,
         float $moatSpread,
         ?float $sectorMultiple,
-        float $accrualsRatio
+        float $accrualsRatio,
+        float $payoutRatio
     ): float {
-        $expectedGrowth = $this->calculateExpectedNominalGrowth($secularGrowth, $outputGap, $beta, $inflation, $moatSpread);
+        $expectedGrowth = $this->calculateFundableGrowth(
+            $this->calculateExpectedNominalGrowth($secularGrowth, $outputGap, $beta, $inflation, $moatSpread),
+            $trueReturn,
+            $payoutRatio
+        );
 
         return $this->calculateQualityAdjustedFairValuePE($hurdleRate, $trueReturn, $expectedGrowth, $sectorMultiple, $accrualsRatio);
     }

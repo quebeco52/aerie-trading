@@ -139,7 +139,7 @@ class CapitalAllocationEngine
         
         // Bertrand & Schoar (2003): payout policy carries a persistent manager fixed effect. An empire
         // builder retains what a steward would distribute, from the same balance sheet.
-        $targetPayout = (float) $stock->getTargetPayoutRatio() * $stock->getManagementProfile()->payoutBias();
+        $targetPayout = $stock->getPolicyPayoutRatio();
         $speed = (float) $stock->getDividendSpeed();
         $lastDividend = (float) $stock->getLastDividend();
         $isAristocrat = $speed <= 0.03;
@@ -381,7 +381,8 @@ class CapitalAllocationEngine
             $ctx->macroState->inflation,
             $ctx->strategy->getMoatSpread(),
             \App\Data\Sectors::baselineIndustryPe($stock->getIndustry()),
-            (float) ($stock->getAccrualsRatio() ?? 0.0)
+            (float) ($stock->getAccrualsRatio() ?? 0.0),
+            $stock->getPolicyPayoutRatio()
         );
 
         $ctx->newShares = $ctx->sharesOutstanding;

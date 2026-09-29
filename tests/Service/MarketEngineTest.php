@@ -216,17 +216,23 @@ class MarketEngineTest extends TestCase
         $this->assertSame(0.01, $income(1.0, 0.0, 0.10), 'No dividend policy, no income value.');
     }
 
-    /** An operating company is worth what it earns and owns; how much of it is paid out is no input (Miller & Modigliani 1961). */
-    public function testAnOperatingCompanysFairValueDoesNotTurnOnItsDividend(): void
+    /**
+     * An operating company is worth what it earns and owns (Miller & Modigliani 1961). The cheque it last paid is
+     * no input at all, and its payout policy reaches value only through investment: while what it retains funds
+     * the outlook's growth the payout changes nothing, and a payout that leaves too little to fund it lowers the
+     * growth, and the multiple, it is priced on.
+     */
+    public function testAnOperatingCompanysDividendReachesValueOnlyThroughTheGrowthItsRetentionFunds(): void
     {
         $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
         $this->mathUtilityMock->method('checkProbability')->willReturn(false);
         $fairValue = fn (float $dividend, float $payout): float => $this->engine->calculateNextPrice($this->incomeContext($dividend, $payout, 0.05, 'tech'))['perceived_fair_value'];
 
         $paying = $fairValue(1.0, 0.5);
-        $this->assertEqualsWithDelta($paying, $fairValue(0.0, 0.5), 1e-9);
-        $this->assertEqualsWithDelta($paying, $fairValue(0.0, 0.0), 1e-9);
-        $this->assertEqualsWithDelta($paying, $fairValue(3.0, 0.9), 1e-9);
+        $this->assertEqualsWithDelta($paying, $fairValue(0.0, 0.5), 1e-9, 'The cheque itself is no input.');
+        $this->assertEqualsWithDelta($paying, $fairValue(3.0, 0.5), 1e-9);
+        $this->assertEqualsWithDelta($paying, $fairValue(1.0, 0.0), 1e-9, 'Half of a 12% return funds the outlook, so paying it out costs nothing.');
+        $this->assertLessThan($paying, $fairValue(1.0, 0.95), 'Keeping 5% of a 12% return funds 0.6% growth, short of the outlook.');
     }
 
     public function testTechSectorIgnoresBookValueInValuation(): void

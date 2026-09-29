@@ -182,8 +182,7 @@ class OpeningBoardBuilder
 
         // A board that has been paying opens where its policy has already brought it (Lintner 1956): the target
         // payout, carrying the manager's payout fixed effect, and never below a distribution the law requires.
-        $targetPayout = (float) ($stockData['target_payout_ratio'] ?? 0.30) * $stock->getManagementProfile()->payoutBias();
-        $startingDividend = max(0.0, $annualEps / 4.0) * max($targetPayout, $strategy->getMinimumDistributionRatio());
+        $startingDividend = max(0.0, $annualEps / 4.0) * max($stock->getPolicyPayoutRatio(), $strategy->getMinimumDistributionRatio());
         $stock->setLastDividend((string) $startingDividend);
 
         $sphere = null;

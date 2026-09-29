@@ -2454,13 +2454,28 @@ class MathUtilityTest extends TestCase
         $this->assertSame(0.0, $this->mathUtility->calculateExpectedNominalGrowth(-0.10, 0.0, 1.0, 0.0, 0.0));
     }
 
+    /**
+     * Damodaran's fundamental growth: a firm grows at its return on capital times the share of earnings it keeps.
+     * The outlook's growth stands while retention funds it and is cut to what retention funds when it does not;
+     * a firm that keeps nothing, or earns nothing, grows at nothing.
+     */
+    public function testFundableGrowthIsTheOutlookCappedAtWhatRetentionFunds(): void
+    {
+        $this->assertEqualsWithDelta(0.045, $this->mathUtility->calculateFundableGrowth(0.045, 0.15, 0.40), 1e-12);
+        $this->assertEqualsWithDelta(0.15 * 0.10, $this->mathUtility->calculateFundableGrowth(0.045, 0.15, 0.90), 1e-12);
+        $this->assertSame(0.0, $this->mathUtility->calculateFundableGrowth(0.045, 0.15, 1.20));
+        $this->assertSame(0.0, $this->mathUtility->calculateFundableGrowth(0.045, -0.05, 0.40));
+    }
+
     public function testManagementAndTheMarketStrikeTheSameFairValueMultiple(): void
     {
-        $growth = $this->mathUtility->calculateExpectedNominalGrowth(0.03, 0.01, 1.2, 0.025, 0.02);
+        $growth = $this->mathUtility->calculateFundableGrowth($this->mathUtility->calculateExpectedNominalGrowth(0.03, 0.01, 1.2, 0.025, 0.02), 0.18, 0.40);
         $market = $this->mathUtility->calculateQualityAdjustedFairValuePE(0.09, 0.18, $growth, 22.0, 0.04);
-        $management = $this->mathUtility->calculateManagementFairValuePE(0.09, 0.18, 0.03, 0.01, 1.2, 0.025, 0.02, 22.0, 0.04);
+        $management = $this->mathUtility->calculateManagementFairValuePE(0.09, 0.18, 0.03, 0.01, 1.2, 0.025, 0.02, 22.0, 0.04, 0.40);
 
         $this->assertSame($market, $management);
+        // A payout that leaves too little to fund the outlook lowers management's multiple exactly as the market's.
+        $this->assertLessThan($management, $this->mathUtility->calculateManagementFairValuePE(0.09, 0.18, 0.03, 0.01, 1.2, 0.025, 0.02, 22.0, 0.04, 0.95));
         // The Sloan discount is inside the shared figure, floored at the distressed multiple.
         $clean = $this->mathUtility->calculateQualityAdjustedFairValuePE(0.09, 0.18, $growth, 22.0, 0.0);
         $this->assertEqualsWithDelta($clean - 0.04 * FinancialConstants::ACCRUALS_ANOMALY_PE_PENALTY_SCALE, $market, 1e-12);

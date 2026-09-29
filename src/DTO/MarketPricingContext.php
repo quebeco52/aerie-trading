@@ -127,8 +127,7 @@ class MarketPricingContext
             investedCapitalPerShare: $stock->getInvestedCapital() / $shares,
             orderFlowVariance: (float) ($stock->getImpactVarianceEma() ?? 0.0),
             tangibleBookValuePerShare: $stock->getTangibleEquity() / $shares,
-            // The target the allocation engine steers the dividend to, the manager's payout fixed effect included.
-            targetPayoutRatio: (float) $stock->getTargetPayoutRatio() * $stock->getManagementProfile()->payoutBias(),
+            targetPayoutRatio: $stock->getPolicyPayoutRatio(),
             dividendAdjustmentSpeed: (float) $stock->getDividendSpeed()
         );
     }

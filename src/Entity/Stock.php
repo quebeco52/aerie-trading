@@ -941,6 +941,12 @@ class Stock
         return $this;
     }
 
+    /** The payout ratio the dividend policy steers to: the target, carrying the manager's payout fixed effect (Bertrand & Schoar 2003). */
+    public function getPolicyPayoutRatio(): float
+    {
+        return (float) $this->targetPayoutRatio * $this->getManagementProfile()->payoutBias();
+    }
+
     public function getDividendSpeed(): ?string
     {
         return $this->dividendSpeed;

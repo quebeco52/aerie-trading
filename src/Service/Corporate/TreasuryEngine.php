@@ -579,7 +579,8 @@ class TreasuryEngine
             $ctx->macroState->inflation,
             $ctx->strategy->getMoatSpread(),
             \App\Data\Sectors::baselineIndustryPe($stock->getIndustry()),
-            (float) ($stock->getAccrualsRatio() ?? 0.0)
+            (float) ($stock->getAccrualsRatio() ?? 0.0),
+            $stock->getPolicyPayoutRatio()
         );
 
         $bookValuePerShare = max(0.01, (float) $stock->getTotalEquity() / max(1, $ctx->sharesOutstanding));

@@ -597,12 +597,16 @@ class MarketEngine
         // 1. MACRO FORWARD GUIDANCE & FUNDAMENTAL P/E
         // The growth transmission and the Sloan accruals discount live in MathUtility because the corporate
         // engines strike the same multiple when management decides on a buyback, an offering or a deal.
-        $expectedGrowth = $this->mathUtility->calculateExpectedNominalGrowth(
-            $secularGrowth,
-            $outputGap,
-            $beta,
-            $inflation,
-            $strategy->getMoatSpread()
+        $expectedGrowth = $this->mathUtility->calculateFundableGrowth(
+            $this->mathUtility->calculateExpectedNominalGrowth(
+                $secularGrowth,
+                $outputGap,
+                $beta,
+                $inflation,
+                $strategy->getMoatSpread()
+            ),
+            $structuralRoic,
+            $targetPayoutRatio
         );
 
         $fairValuePE = $this->mathUtility->calculateQualityAdjustedFairValuePE(
