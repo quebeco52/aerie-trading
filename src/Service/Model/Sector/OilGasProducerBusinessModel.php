@@ -142,7 +142,7 @@ class OilGasProducerBusinessModel extends StandardCorporateBusinessModel
      * from its equilibrium, the same smoothed price its revenue is struck at. The EMA supplies the lag the
      * elasticity peaks at.
      */
-    public function getCapexCycleSignal(MacroStateDTO $macroState): float
+    public function getCapexCycleSignal(Stock $stock, MacroStateDTO $macroState): float
     {
         if ($macroState->energyPriceIndexEma <= 0.0) {
             return 0.0;

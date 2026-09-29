@@ -100,8 +100,8 @@ class MiningBusinessModel extends StandardCorporateBusinessModel
     public const MIN_OPERATING_MARGIN_FLOOR = 0.02;
     /** Structural maximum operating margin ceiling at mid-cycle prices, set by the cost of the marginal tonne. */
     public const MAX_OPERATING_MARGIN_CEILING = 0.32;
-    /** Mining CapEx swings hard with the price deck: expansions are sanctioned in booms and deferred in busts. */
-    public const CAPEX_CYCLICALITY = 3.0;
+    /** Mine CapEx follows the price deck: US mining structures investment (BEA B320RA3A086NBEA) on the real IMF metals cycle (PMETAINDEXM/CPIAUCSL), HP(6.25) annual 1992-2024, elasticity 0.60. */
+    public const CAPEX_CYCLICALITY = 0.60;
     /** Baseline secular growth rate for a mature producer. */
     public const SECULAR_GROWTH = 0.01;
     /** Share of construction in progress completed each quarter (about two years for a brownfield expansion). */
@@ -135,6 +135,21 @@ class MiningBusinessModel extends StandardCorporateBusinessModel
     public function getCapexCyclicality(): float
     {
         return self::CAPEX_CYCLICALITY;
+    }
+
+    /**
+     * A miner budgets against its own price deck, not the domestic economy: the log of its product mix priced
+     * at the smoothed benchmarks its revenue is struck at, so a diversified major's budget follows its basket.
+     */
+    public function getCapexCycleSignal(Stock $stock, MacroStateDTO $macroState): float
+    {
+        $benchmarks = $this->resolveStreamPriceRelatives($macroState);
+        $deck = 0.0;
+        foreach ($this->resolveProductMix($stock) as $stream => $weight) {
+            $deck += $weight * $benchmarks[$stream];
+        }
+
+        return $deck > 0.0 ? log($deck) : 0.0;
     }
 
     public function getSurpriseBlendWeights(): array

@@ -1168,7 +1168,7 @@ class EarningsEngine
         if ($ctx->sharesOutstanding <= 0) {
             $fcfData = ['fcf_per_share' => 0.0, 'capex' => 0.0, 'direct_capex' => 0.0];
         } else {
-            $cycleSignal = $ctx->strategy->getCapexCycleSignal($ctx->macroState);
+            $cycleSignal = $ctx->strategy->getCapexCycleSignal($stock, $ctx->macroState);
             $capexCyclicality = $ctx->strategy->getCapexCyclicality();
             $cycleCapExModifier = max(0.50, min(1.50, 1.00 + ($cycleSignal * $capexCyclicality)));
 

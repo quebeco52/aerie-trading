@@ -27,7 +27,7 @@ trait StandardOperatingPhysicsTrait
     }
 
     /** Most firms budget against the domestic business cycle. */
-    public function getCapexCycleSignal(\App\DTO\MacroStateDTO $macroState): float
+    public function getCapexCycleSignal(Stock $stock, \App\DTO\MacroStateDTO $macroState): float
     {
         return $macroState->outputGapEma;
     }

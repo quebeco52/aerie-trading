@@ -59,15 +59,15 @@ final class OilGasProducerBusinessModelTest extends TestCase
      */
     public function testTheCapexCycleIsTheOilPriceNotTheOutputGap(): void
     {
-        $this->assertEqualsWithDelta(0.0, $this->model->getCapexCycleSignal($this->macro(100.0, macro: ['outputGapEma' => -0.06])), 1e-12);
-        $this->assertEqualsWithDelta(log(0.5), $this->model->getCapexCycleSignal($this->macro(50.0)), 1e-12);
-        $this->assertEqualsWithDelta(log(1.5), $this->model->getCapexCycleSignal($this->macro(150.0)), 1e-12);
+        $this->assertEqualsWithDelta(0.0, $this->model->getCapexCycleSignal(new Stock(), $this->macro(100.0, macro: ['outputGapEma' => -0.06])), 1e-12);
+        $this->assertEqualsWithDelta(log(0.5), $this->model->getCapexCycleSignal(new Stock(), $this->macro(50.0)), 1e-12);
+        $this->assertEqualsWithDelta(log(1.5), $this->model->getCapexCycleSignal(new Stock(), $this->macro(150.0)), 1e-12);
     }
 
     /** The fitted elasticity of US oil & gas drilling to the real oil price cycle: a halved price cuts the budget by about a third. */
     public function testAHalvedOilPriceCutsTheCapitalBudgetByAboutAThird(): void
     {
-        $modifier = 1.0 + ($this->model->getCapexCycleSignal($this->macro(50.0)) * $this->model->getCapexCyclicality());
+        $modifier = 1.0 + ($this->model->getCapexCycleSignal(new Stock(), $this->macro(50.0)) * $this->model->getCapexCyclicality());
 
         $this->assertSame(0.58, $this->model->getCapexCyclicality());
         $this->assertEqualsWithDelta(0.598, $modifier, 0.001);

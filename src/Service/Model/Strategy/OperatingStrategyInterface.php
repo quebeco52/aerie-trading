@@ -48,7 +48,7 @@ interface OperatingStrategyInterface
     public function getSecularGrowthRate(Stock $stock): float;
     public function getCapexCyclicality(): float;
     /** The cycle the capital budget answers to, as a log deviation; getCapexCyclicality() is its elasticity. */
-    public function getCapexCycleSignal(\App\DTO\MacroStateDTO $macroState): float;
+    public function getCapexCycleSignal(Stock $stock, MacroStateDTO $macroState): float;
     public function getSurpriseBlendWeights(): array;
     public function getEffectiveReturn(Stock $stock): float;
     public function getTrueReturn(Stock $stock): float;

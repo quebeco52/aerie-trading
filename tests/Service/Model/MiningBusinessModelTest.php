@@ -187,4 +187,37 @@ final class MiningBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta($cost / 1.5, $boom->clampedMargin, 1e-9);
         $this->assertEqualsWithDelta(100.0 * $cost, $boom->actualVariableCosts, 1e-9);
     }
+
+    private function miner(string $ticker = 'GEN_MINER'): Stock
+    {
+        return (new Stock())->setTicker($ticker);
+    }
+
+    /**
+     * The capital budget answers to the price deck, not the domestic economy: a metals slump with the output gap
+     * closed cuts it, and a deep recession at equilibrium prices leaves it alone.
+     */
+    public function testTheCapexCycleIsTheMetalsPriceNotTheOutputGap(): void
+    {
+        $this->assertEqualsWithDelta(0.0, $this->model->getCapexCycleSignal($this->miner(), $this->macro(100.0, ['outputGapEma' => -0.06])), 1e-12);
+        $this->assertEqualsWithDelta(log(0.7), $this->model->getCapexCycleSignal($this->miner(), $this->macro(70.0)), 1e-12);
+    }
+
+    /** A diversified major budgets against its whole basket: a gold rally offsets part of a base-metals slump. */
+    public function testADiversifiedMajorBudgetsAgainstItsBasket(): void
+    {
+        $downturn = $this->macro(70.0, ['goldPriceIndexEma' => 115.0]);
+        $deck = (0.70 * 0.70) + (0.10 * 1.15) + 0.12 + 0.08;
+
+        $this->assertEqualsWithDelta(log($deck), $this->model->getCapexCycleSignal($this->miner('CNDR'), $downturn), 1e-12);
+    }
+
+    /** The fitted elasticity of US mine investment to the real metals cycle: a 30% slump trims the budget by about a fifth. */
+    public function testAThirtyPercentMetalsSlumpTrimsTheCapitalBudgetByAboutAFifth(): void
+    {
+        $modifier = 1.0 + ($this->model->getCapexCycleSignal($this->miner(), $this->macro(70.0)) * $this->model->getCapexCyclicality());
+
+        $this->assertSame(0.60, $this->model->getCapexCyclicality());
+        $this->assertEqualsWithDelta(0.786, $modifier, 0.001);
+    }
 }

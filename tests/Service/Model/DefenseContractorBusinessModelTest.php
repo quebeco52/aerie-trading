@@ -88,10 +88,10 @@ class DefenseContractorBusinessModelTest extends TestCase
     {
         $model = new DefenseContractorBusinessModel();
 
-        $this->assertEqualsWithDelta(0.0, $model->getCapexCycleSignal(new MacroStateDTO(outputGapEma: -0.06, alliedDefenseSpendingIndexEma: 100.0)), 1e-12);
+        $this->assertEqualsWithDelta(0.0, $model->getCapexCycleSignal(new Stock(), new MacroStateDTO(outputGapEma: -0.06, alliedDefenseSpendingIndexEma: 100.0)), 1e-12);
         $this->assertEqualsWithDelta(
             MacroEngine::ALLIED_PROCUREMENT_ELASTICITY * log(0.8),
-            $model->getCapexCycleSignal(new MacroStateDTO(alliedDefenseSpendingIndexEma: 80.0)),
+            $model->getCapexCycleSignal(new Stock(), new MacroStateDTO(alliedDefenseSpendingIndexEma: 80.0)),
             1e-12
         );
     }
@@ -100,7 +100,7 @@ class DefenseContractorBusinessModelTest extends TestCase
     public function testTheCapitalBudgetAnswersTheOrderGapWithTheInvestmentAccelerator(): void
     {
         $model = new DefenseContractorBusinessModel();
-        $modifier = 1.0 + ($model->getCapexCycleSignal(new MacroStateDTO(alliedDefenseSpendingIndexEma: 95.0)) * $model->getCapexCyclicality());
+        $modifier = 1.0 + ($model->getCapexCycleSignal(new Stock(), new MacroStateDTO(alliedDefenseSpendingIndexEma: 95.0)) * $model->getCapexCyclicality());
 
         $this->assertSame(2.52, $model->getCapexCyclicality());
         $this->assertEqualsWithDelta(0.801, $modifier, 0.001);

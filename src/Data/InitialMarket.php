@@ -1510,7 +1510,7 @@ class InitialMarket
             'corporate_treasury' => 5_500_000_000.00,
             'total_equity' => 40_000_000_000.00,
             'customer_deposits' => 0.00,
-            'wholesale_debt' => 30_000_000_000.00,
+            'wholesale_debt' => 17_500_000_000.00, // Book D/E 0.44: the US metals & mining average, about BHP's.
             'retained_earnings' => 20_000_000_000.00
         ],
         [

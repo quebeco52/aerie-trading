@@ -174,7 +174,7 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
      * A prime budgets plant against its own order book, not the domestic economy: the allied procurement gap
      * that sets its awards, the same term the backlog is fed with.
      */
-    public function getCapexCycleSignal(MacroStateDTO $macroState): float
+    public function getCapexCycleSignal(Stock $stock, MacroStateDTO $macroState): float
     {
         return MacroEngine::ALLIED_PROCUREMENT_ELASTICITY * MacroAggregateSubsystem::alliedDefenseGap($macroState->alliedDefenseSpendingIndexEma);
     }

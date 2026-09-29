@@ -552,7 +552,7 @@ final class StandardOperatingPhysicsTraitTest extends TestCase
         $this->assertSame(0.02, $this->model->getSecularGrowthRate($stock), 'Trend growth for a firm with no declared secular story.');
         $this->assertSame(1.5, $this->model->getCapexCyclicality(), 'Capex is more cyclical than output.');
         $this->assertGreaterThan(1.0, $this->model->getCapexCyclicality(), 'Investment must swing harder than the cycle it responds to.');
-        $this->assertSame(-0.03, $this->model->getCapexCycleSignal(new MacroStateDTO(outputGapEma: -0.03, energyPriceIndexEma: 50.0)), 'The domestic output gap is the cycle; a commodity price is not.');
+        $this->assertSame(-0.03, $this->model->getCapexCycleSignal($stock, new MacroStateDTO(outputGapEma: -0.03, energyPriceIndexEma: 50.0)), 'The domestic output gap is the cycle; a commodity price is not.');
         $this->assertSame(0.10, $this->model->getWorkingCapitalIntensity($stock));
         $this->assertSame(0.33, $this->model->getCapExCompletionRate($stock), 'Construction in progress completes over about three quarters.');
         $this->assertSame(4.0, $this->model->getMarginReversionSpeed());
