@@ -22,6 +22,9 @@ use PHPUnit\Framework\TestCase;
  */
 class PriceBarAggregatorTest extends TestCase
 {
+    /** The history bar rate at the configured 3,600 ticks a year. */
+    private const ROWS_PER_YEAR = 1200.0;
+
     private PriceBarAggregator $aggregator;
 
     protected function setUp(): void
@@ -34,14 +37,15 @@ class PriceBarAggregatorTest extends TestCase
      *
      * @param list<float>            $oldestFirstPrices
      * @param array<int, float>|null $volumes
+     * @param float                  $rowsPerYear       Rows a simulated year: they are stamped on that grid.
      *
      * @return list<array<string, mixed>>
      */
-    private function rows(array $oldestFirstPrices, ?array $volumes = null): array
+    private function rows(array $oldestFirstPrices, ?array $volumes = null, float $rowsPerYear = self::ROWS_PER_YEAR): array
     {
         $rows = [];
         foreach ($oldestFirstPrices as $index => $price) {
-            $row = ['price' => $price, 'recorded_at' => '2026-09-10 12:00:00'];
+            $row = ['price' => $price, 'sim_time' => $index / $rowsPerYear];
             if ($volumes !== null) {
                 $row['volume'] = $volumes[$index] ?? 0;
             }
@@ -49,6 +53,17 @@ class PriceBarAggregatorTest extends TestCase
         }
 
         return array_reverse($rows);
+    }
+
+    /**
+     * Bars over rows on the uniform grid rows() stamps, spanning the time those rows cover.
+     *
+     * @param list<array<string, mixed>> $rows
+     * @return list<array<string, mixed>>
+     */
+    private function bars(array $rows, int $rowCount, int $targetBars = PriceBarAggregator::TARGET_BARS, int $minRowsPerBar = PriceBarAggregator::MIN_ROWS_PER_BAR, float $rowsPerYear = self::ROWS_PER_YEAR): array
+    {
+        return $this->aggregator->aggregate($rows, $rowCount / $rowsPerYear, $rowsPerYear, $targetBars, $minRowsPerBar)['bars'];
     }
 
     /** A sawtooth walk: every step reverses, so a bar spanning several of them must show a real range. */
@@ -89,7 +104,7 @@ class PriceBarAggregatorTest extends TestCase
 
     public function testSingleObservationRowsStillProduceBarsWithARange(): void
     {
-        $bars = $this->aggregator->aggregate($this->rows($this->sawtooth(800)), 800);
+        $bars = $this->bars($this->rows($this->sawtooth(800)), 800);
 
         self::assertNotEmpty($bars);
 
@@ -110,7 +125,7 @@ class PriceBarAggregatorTest extends TestCase
     public function testNoObservationIsDiscardedByTheReduction(): void
     {
         $prices = $this->sawtooth(5000);
-        $bars = $this->aggregator->aggregate($this->rows($prices), 5000);
+        $bars = $this->bars($this->rows($prices), 5000);
 
         // Decimation drops rows outright; bucketing has to keep every one of them inside some bar's range.
         foreach ($prices as $price) {
@@ -131,7 +146,7 @@ class PriceBarAggregatorTest extends TestCase
         $prices = array_fill(0, 1000, 100.0);
         $prices[437] = 180.0;
 
-        $bars = $this->aggregator->aggregate($this->rows($prices), 1000);
+        $bars = $this->bars($this->rows($prices), 1000);
 
         $highest = max(array_column($bars, 'high_price'));
         self::assertEqualsWithDelta(180.0, $highest, 1e-9, 'The spike must reach the high of the bar containing it.');
@@ -140,7 +155,7 @@ class PriceBarAggregatorTest extends TestCase
     public function testBarsAreContiguousAcrossTheWholeSeries(): void
     {
         $prices = $this->sawtooth(2000);
-        $bars = $this->aggregator->aggregate($this->rows($prices), 2000);
+        $bars = $this->bars($this->rows($prices), 2000);
 
         // Bucket k's open is the row immediately after bucket k-1's close, so the series has no holes: the
         // opens and closes interleave in the order the observations arrived.
@@ -156,7 +171,7 @@ class PriceBarAggregatorTest extends TestCase
     public function testTheFirstBarOpensAtTheOldestPriceAndTheLastClosesAtTheNewest(): void
     {
         $prices = $this->sawtooth(1200);
-        $bars = $this->aggregator->aggregate($this->rows($prices), 1200);
+        $bars = $this->bars($this->rows($prices), 1200);
 
         self::assertEqualsWithDelta($prices[0], $bars[0]['open_price'], 1e-9);
         self::assertEqualsWithDelta(end($prices), $bars[count($bars) - 1]['price'], 1e-9);
@@ -166,11 +181,11 @@ class PriceBarAggregatorTest extends TestCase
     {
         // A row written at a tick rate fast enough to aggregate carries a wick the close never touches.
         $rows = [
-            ['price' => 101.0, 'open_price' => 100.0, 'high_price' => 140.0, 'low_price' => 90.0, 'volume' => 10],
-            ['price' => 100.0, 'open_price' => 99.0, 'high_price' => 105.0, 'low_price' => 60.0, 'volume' => 5],
+            ['price' => 101.0, 'open_price' => 100.0, 'high_price' => 140.0, 'low_price' => 90.0, 'volume' => 10, 'sim_time' => 1.0 / self::ROWS_PER_YEAR],
+            ['price' => 100.0, 'open_price' => 99.0, 'high_price' => 105.0, 'low_price' => 60.0, 'volume' => 5, 'sim_time' => 0.0],
         ];
 
-        $bars = $this->aggregator->aggregate($rows, 2);
+        $bars = $this->bars($rows, 2);
 
         self::assertCount(1, $bars);
         self::assertEqualsWithDelta(140.0, $bars[0]['high_price'], 1e-9, 'The stored high must survive.');
@@ -184,7 +199,7 @@ class PriceBarAggregatorTest extends TestCase
         $prices = array_fill(0, 1000, 100.0);
         $volumes = array_fill(0, 1000, 7.0);
 
-        $bars = $this->aggregator->aggregate($this->rows($prices, $volumes), 1000);
+        $bars = $this->bars($this->rows($prices, $volumes), 1000);
 
         self::assertSame(7000, (int) array_sum(array_column($bars, 'volume')), 'Every row\'s volume is in a bar.');
     }
@@ -193,7 +208,7 @@ class PriceBarAggregatorTest extends TestCase
     {
         // ETF and bond history are a single price series. A zero histogram would claim nothing traded;
         // the truth is that the instrument has no share volume to report.
-        $bars = $this->aggregator->aggregate($this->rows($this->sawtooth(500)), 500);
+        $bars = $this->bars($this->rows($this->sawtooth(500)), 500);
 
         foreach ($bars as $bar) {
             self::assertNull($bar['volume']);
@@ -202,7 +217,7 @@ class PriceBarAggregatorTest extends TestCase
 
     public function testTheBarCountStaysNearTheTargetForALongRange(): void
     {
-        $bars = $this->aggregator->aggregate($this->rows($this->sawtooth(36000)), 36000);
+        $bars = $this->bars($this->rows($this->sawtooth(36000)), 36000);
 
         self::assertLessThanOrEqual(PriceBarAggregator::TARGET_BARS, count($bars));
         self::assertGreaterThan(PriceBarAggregator::TARGET_BARS / 2, count($bars));
@@ -210,7 +225,7 @@ class PriceBarAggregatorTest extends TestCase
 
     public function testAShortSeriesStillAggregatesRatherThanEmittingDojis(): void
     {
-        $bars = $this->aggregator->aggregate($this->rows($this->sawtooth(70)), 70);
+        $bars = $this->bars($this->rows($this->sawtooth(70)), 70);
 
         self::assertCount((int) ceil(70 / PriceBarAggregator::MIN_ROWS_PER_BAR), $bars);
         foreach ($bars as $bar) {
@@ -231,10 +246,10 @@ class PriceBarAggregatorTest extends TestCase
         $rowsPerYear = TickCadence::historyPointsPerYear($ticksPerYear);
 
         foreach ([1, 3, 10] as $years) {
-            $rows = $this->rows($this->sawtooth($rowsPerYear * $years));
+            $rows = $this->rows($this->sawtooth($rowsPerYear * $years), null, $rowsPerYear);
 
-            $candleBars = count($this->aggregator->aggregate($rows, $rowsPerYear * $years, PriceBarAggregator::TARGET_BARS));
-            $lineBars = count($this->aggregator->aggregate($rows, $rowsPerYear * $years, PriceBarAggregator::LINE_TARGET_BARS, PriceBarAggregator::LINE_MIN_ROWS_PER_BAR));
+            $candleBars = count($this->bars($rows, $rowsPerYear * $years, PriceBarAggregator::TARGET_BARS, PriceBarAggregator::MIN_ROWS_PER_BAR, $rowsPerYear));
+            $lineBars = count($this->bars($rows, $rowsPerYear * $years, PriceBarAggregator::LINE_TARGET_BARS, PriceBarAggregator::LINE_MIN_ROWS_PER_BAR, $rowsPerYear));
 
             $candleDwell = ($ticksPerYear * $years) / $candleBars;
             $lineDwell = ($ticksPerYear * $years) / $lineBars;
@@ -261,11 +276,12 @@ class PriceBarAggregatorTest extends TestCase
         foreach ([252, 720, TickCadence::TARGET_HISTORY_POINTS_PER_YEAR, 3600, 14400] as $ticksPerYear) {
             $rowsPerYear = TickCadence::historyPointsPerYear($ticksPerYear);
 
-            $bars = $this->aggregator->aggregate(
-                $this->rows($this->sawtooth($rowsPerYear)),
+            $bars = $this->bars(
+                $this->rows($this->sawtooth($rowsPerYear), null, $rowsPerYear),
                 $rowsPerYear,
                 PriceBarAggregator::LINE_TARGET_BARS,
-                PriceBarAggregator::LINE_MIN_ROWS_PER_BAR
+                PriceBarAggregator::LINE_MIN_ROWS_PER_BAR,
+                $rowsPerYear
             );
 
             self::assertLessThanOrEqual(
@@ -290,11 +306,12 @@ class PriceBarAggregatorTest extends TestCase
 
         foreach (['3m' => 0.25, '1y' => 1.0] as $range => $years) {
             $rowCount = (int) round($rowsPerYear * $years);
-            $bars = count($this->aggregator->aggregate(
-                $this->rows($this->sawtooth($rowCount)),
+            $bars = count($this->bars(
+                $this->rows($this->sawtooth($rowCount), null, $rowsPerYear),
                 $rowCount,
                 PriceBarAggregator::LINE_TARGET_BARS,
-                PriceBarAggregator::LINE_MIN_ROWS_PER_BAR
+                PriceBarAggregator::LINE_MIN_ROWS_PER_BAR,
+                $rowsPerYear
             ));
 
             self::assertSame($rowCount, $bars, "The {$range} line merged rows it had room to draw.");
@@ -305,27 +322,73 @@ class PriceBarAggregatorTest extends TestCase
     /** A candle still takes at least two rows: one observation has no range, and drawing it would be a doji. */
     public function testACandleStillTakesAtLeastTwoRows(): void
     {
-        $bars = $this->aggregator->aggregate($this->rows($this->sawtooth(300)), 300, PriceBarAggregator::TARGET_BARS);
+        $bars = $this->bars($this->rows($this->sawtooth(300)), 300, PriceBarAggregator::TARGET_BARS);
 
         self::assertCount(150, $bars);
     }
 
     public function testAnEmptySeriesProducesNoBars(): void
     {
-        self::assertSame([], $this->aggregator->aggregate([], 0));
+        self::assertSame([], $this->aggregator->aggregate([], 0.0, self::ROWS_PER_YEAR)['bars']);
     }
 
-    public function testRowsWithoutAPriceAreSkipped(): void
+    /** A row with no price, or with no simulated time to place it by, is not an observation the chart can draw. */
+    public function testRowsWithoutAPriceOrASimTimeAreSkipped(): void
     {
         $rows = [
-            ['price' => 102.0],
-            ['recorded_at' => '2026-09-10 12:00:00'],
-            ['price' => 100.0],
+            ['price' => 102.0, 'sim_time' => 2.0 / self::ROWS_PER_YEAR],
+            ['sim_time' => 1.0 / self::ROWS_PER_YEAR],
+            ['price' => 100.0, 'sim_time' => 0.0],
+            ['price' => 98.0],
         ];
 
-        $bars = $this->aggregator->aggregate($rows, 3);
+        $bars = $this->bars($rows, 3);
 
         self::assertNotEmpty($bars);
         self::assertEqualsWithDelta(100.0, $bars[0]['open_price'], 1e-9);
+    }
+
+    /** Every bar is a whole number of equal slices of simulated time behind the newest row, and the newest is now. */
+    public function testBarsAreEqualSlicesOfSimulatedTime(): void
+    {
+        $result = $this->aggregator->aggregate($this->rows($this->sawtooth(3600)), 3.0, self::ROWS_PER_YEAR, PriceBarAggregator::LINE_TARGET_BARS, PriceBarAggregator::LINE_MIN_ROWS_PER_BAR);
+        $bars = $result['bars'];
+        $width = $result['bar_years'];
+
+        self::assertEqualsWithDelta(3.0 / PriceBarAggregator::LINE_TARGET_BARS, $width, 1e-12);
+        self::assertSame(0.0, $bars[count($bars) - 1]['age'], 'The right edge is the newest row.');
+
+        $previous = INF;
+        foreach ($bars as $bar) {
+            $slices = $bar['age'] / $width;
+            self::assertEqualsWithDelta(round($slices), $slices, 1e-6, 'A bar is dated on the slice grid.');
+            self::assertLessThan($previous, $bar['age'], 'Bars run oldest to newest.');
+            $previous = $bar['age'];
+        }
+    }
+
+    /**
+     * Thinned history is placed by the time it covers, not by the rows left in it. Four years kept weekly behind a
+     * year at full resolution: the oldest bar is four-odd years behind the newest year, not a few bars behind it.
+     */
+    public function testThinnedHistoryIsDatedByTheTimeItCovers(): void
+    {
+        $rows = [];
+        for ($week = 0; $week < 208; $week++) {
+            $rows[] = ['price' => 50.0 + $week * 0.1, 'sim_time' => $week / 52.0];
+        }
+        for ($row = 0; $row < 1200; $row++) {
+            $rows[] = ['price' => 80.0, 'sim_time' => 4.0 + $row / self::ROWS_PER_YEAR];
+        }
+        $newest = 4.0 + 1199 / self::ROWS_PER_YEAR;
+
+        $result = $this->aggregator->aggregate(array_reverse($rows), $newest, self::ROWS_PER_YEAR, PriceBarAggregator::LINE_TARGET_BARS, PriceBarAggregator::LINE_MIN_ROWS_PER_BAR);
+        $oldest = $result['bars'][0];
+
+        self::assertEqualsWithDelta($newest, $oldest['age'], $result['bar_years'], 'The first weekly row is dated at its own time.');
+        self::assertEqualsWithDelta(50.0, $oldest['open_price'], 1e-9);
+
+        $weekly = array_filter($result['bars'], static fn (array $bar): bool => $bar['age'] > 1.0);
+        self::assertCount(208, $weekly, 'Each thinned row is its own bar, never merged with its neighbours for want of rows.');
     }
 }

@@ -84,12 +84,19 @@ class StockController extends AbstractController
             $cacheKey = "chart_buffer:{$ticker}";
             $redisData = $redis->lRange($cacheKey, 0, ChartRange::entries($range, $entriesPerYear) - 1);
             $results = [];
-            foreach ($redisData as $jsonStr) {
-                $results[] = json_decode($jsonStr, true);
+            foreach ($redisData as $age => $jsonStr) {
+                $point = json_decode($jsonStr, true);
+                if (!is_array($point)) {
+                    continue;
+                }
+                // A buffer entry carries no simulated time, but the buffer takes one a tick (a bond, one a mark),
+                // so an entry's age is its place in the list.
+                $point['sim_time'] = -$age / $entriesPerYear;
+                $results[] = $point;
             }
 
             // Buffered points are single ticks, so the bar has to be built here or every candle is a doji.
-            return $this->json($barAggregator->aggregate($results, count($results), $targetBars, $minRowsPerBar));
+            return $this->json($barAggregator->aggregate($results, count($results) / $entriesPerYear, $entriesPerYear, $targetBars, $minRowsPerBar));
         }
 
         $conn = $entityManager->getConnection();
@@ -139,16 +146,18 @@ class StockController extends AbstractController
             $params['floor'] = $simTimeFloor;
         }
 
-        // Row count sets the bucket width the aggregator folds into bars.
-        $countSql = sprintf(
-            'SELECT COUNT(id) FROM (SELECT id FROM %s WHERE %s ORDER BY sim_time DESC, id DESC LIMIT %d) as sub',
-            $tableName,
-            $where,
-            ChartRange::MAX_ROWS
+        // The span the rows actually cover sets the slice width the aggregator cuts them into.
+        $oldestSimTime = $conn->fetchOne(
+            sprintf(
+                'SELECT MIN(sim_time) FROM (SELECT sim_time FROM %s WHERE %s ORDER BY sim_time DESC, id DESC LIMIT %d) as sub',
+                $tableName,
+                $where,
+                ChartRange::MAX_ROWS
+            ),
+            $params
         );
-        $actualCount = (int) $conn->fetchOne($countSql, $params);
 
-        if ($actualCount === 0) return $this->json([]);
+        if ($oldestSimTime === null || $oldestSimTime === false || $newestSimTime === null || $newestSimTime === false) return $this->json([]);
 
         // Stocks carry a full bar; ETFs and bonds are a single series and select the close alone. Asking
         // for open_price on etf_history would be a SQL error rather than a null.
@@ -158,7 +167,7 @@ class StockController extends AbstractController
 
         $sql = sprintf(
             // Order by sim_time and id descending using the sim_time index to preserve intra-tick candle order.
-            'SELECT id, %s AS price%s, recorded_at FROM %s WHERE %s ORDER BY sim_time DESC, id DESC LIMIT %d',
+            'SELECT id, %s AS price%s, sim_time FROM %s WHERE %s ORDER BY sim_time DESC, id DESC LIMIT %d',
             $priceColumn,
             $barColumns,
             $tableName,
@@ -168,8 +177,19 @@ class StockController extends AbstractController
 
         $stmt = $conn->executeQuery($sql, $params);
 
-        // Aggregate rows into candles via bucketed bar aggregation to preserve price extremes.
-        return $this->json($barAggregator->aggregate($stmt->iterateAssociative(), $actualCount, $targetBars, $minRowsPerBar));
+        // A bond is written once a mark, everything else once a history bar.
+        $rowsPerYear = $tableName === 'bond_history'
+            ? TickCadence::bondMarksPerYear($ticksPerYear)
+            : TickCadence::historyPointsPerYear($ticksPerYear);
+
+        // Aggregate rows into bars of equal simulated time, preserving price extremes.
+        return $this->json($barAggregator->aggregate(
+            $stmt->iterateAssociative(),
+            (float) $newestSimTime - (float) $oldestSimTime,
+            $rowsPerYear,
+            $targetBars,
+            $minRowsPerBar
+        ));
     }
 
     /**

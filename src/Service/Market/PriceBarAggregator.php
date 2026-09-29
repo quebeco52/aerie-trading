@@ -39,33 +39,54 @@ class PriceBarAggregator
     /** Rows per slot floor for a LINE: a close needs no range of its own, and a row is never finer than the tick that advances the live tail. */
     public const LINE_MIN_ROWS_PER_BAR = 1;
 
+    // --- Bucketing ---
+    /** Tolerance on a row's bucket index, so a row stamped on a bar boundary is not pushed one bar older by float error. */
+    private const BUCKET_EPSILON = 1e-6;
+
     /**
-     * Folds a newest-first row stream into oldest-first OHLCV bars.
+     * Folds a newest-first row stream into oldest-first OHLCV bars, each an equal slice of simulated time.
      *
      * Both sources are newest-first natively — the Redis buffer is lPush'd, the history tables are read
-     * ORDER BY id DESC — and the stream is consumed once, so a ten-year range never materialises its rows.
+     * ORDER BY sim_time DESC — and the stream is consumed once, so a ten-year range never materialises its rows.
      *
-     * @param iterable<array<string, mixed>> $newestFirstRows Rows carrying at least a 'price'.
-     * @param int                            $rowCount        Rows the stream will yield; sets the bucket width.
-     * @param int                            $targetBars      Bars to aim for across the range.
+     * The bars are cut in simulated time rather than in rows because the chart places them by index: a bar
+     * per so many rows put thinned history (HistoryPruner) at the density of full-resolution history, so a
+     * decade of it took the width of a week. Slices are counted back from the newest row, so the right edge
+     * is always a whole bar, and each bar is dated by its age in slices: a slice with no rows yields no bar.
+     *
+     * @param iterable<array<string, mixed>> $newestFirstRows Rows carrying a 'price' and a 'sim_time'.
+     * @param float                          $spanYears       Simulated years the rows cover.
+     * @param float                          $rowsPerYear     Rows the series is written per simulated year, for the width floor.
+     * @param int                            $targetBars      Bars to aim for across the span.
      * @param int                            $minRowsPerBar   Rows a bar spans at least: MIN_ROWS_PER_BAR for candles, LINE_MIN_ROWS_PER_BAR for a line.
      *
-     * @return list<array<string, mixed>> Oldest-first bars keyed as the history rows they replace.
+     * @return array{bar_years: float, bars: list<array<string, mixed>>} The slice width and the oldest-first bars,
+     *         keyed as the history rows they replace plus 'age', the simulated years from the bar's end to the newest row.
      */
-    public function aggregate(iterable $newestFirstRows, int $rowCount, int $targetBars = self::TARGET_BARS, int $minRowsPerBar = self::MIN_ROWS_PER_BAR): array
+    public function aggregate(iterable $newestFirstRows, float $spanYears, float $rowsPerYear, int $targetBars = self::TARGET_BARS, int $minRowsPerBar = self::MIN_ROWS_PER_BAR): array
     {
-        $bucketWidth = max(
-            max(1, $minRowsPerBar),
-            (int) ceil($rowCount / max(1, $targetBars))
+        $barYears = max(
+            max(1, $minRowsPerBar) / max(1e-9, $rowsPerYear),
+            max(0.0, $spanYears) / max(1, $targetBars)
         );
 
         $bars = [];
         $bucket = null;
-        $seen = 0;
+        $bucketIndex = null;
+        $newestSimTime = null;
 
         foreach ($newestFirstRows as $row) {
-            if (!isset($row['price'])) {
+            if (!isset($row['price'], $row['sim_time'])) {
                 continue;
+            }
+
+            $simTime = (float) $row['sim_time'];
+            $newestSimTime ??= $simTime;
+            $index = (int) floor(($newestSimTime - $simTime) / $barYears + self::BUCKET_EPSILON);
+
+            if ($bucket !== null && $index !== $bucketIndex) {
+                $bars[] = $bucket;
+                $bucket = null;
             }
 
             $close = (float) $row['price'];
@@ -78,7 +99,8 @@ class PriceBarAggregator
             $low = isset($row['low_price']) ? (float) $row['low_price'] : $close;
 
             if ($bucket === null) {
-                // The first row of a newest-first bucket is the bar's close and dates it.
+                // The first row of a newest-first bucket is the bar's close.
+                $bucketIndex = $index;
                 $bucket = [
                     'price' => $close,
                     'open_price' => $open,
@@ -86,7 +108,7 @@ class PriceBarAggregator
                     'low_price' => $low,
                     'volume' => 0.0,
                     'has_volume' => false,
-                    'recorded_at' => $row['recorded_at'] ?? null,
+                    'age' => $index * $barYears,
                 ];
             } else {
                 $bucket['high_price'] = max($bucket['high_price'], $high);
@@ -99,28 +121,24 @@ class PriceBarAggregator
                 $bucket['volume'] += (float) $row['volume'];
                 $bucket['has_volume'] = true;
             }
-
-            if (++$seen % $bucketWidth === 0) {
-                $bars[] = $bucket;
-                $bucket = null;
-            }
         }
 
-        // The trailing partial bucket is the OLDEST rows, since the stream runs backwards. The bar still
-        // forming at the right edge is always whole.
         if ($bucket !== null) {
             $bars[] = $bucket;
         }
 
-        return array_reverse(array_map(static function (array $bar): array {
-            $hasVolume = $bar['has_volume'];
-            unset($bar['has_volume']);
+        return [
+            'bar_years' => $barYears,
+            'bars' => array_reverse(array_map(static function (array $bar): array {
+                $hasVolume = $bar['has_volume'];
+                unset($bar['has_volume']);
 
-            // Absent is not zero. An ETF series has no volume at all, and publishing zeroes would draw an
-            // empty histogram pane under it rather than none.
-            $bar['volume'] = $hasVolume ? (int) round($bar['volume']) : null;
+                // Absent is not zero. An ETF series has no volume at all, and publishing zeroes would draw an
+                // empty histogram pane under it rather than none.
+                $bar['volume'] = $hasVolume ? (int) round($bar['volume']) : null;
 
-            return $bar;
-        }, $bars));
+                return $bar;
+            }, $bars)),
+        ];
     }
 }

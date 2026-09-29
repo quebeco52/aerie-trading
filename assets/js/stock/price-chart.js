@@ -20,6 +20,13 @@ let candleData = [];
 let volumeData = [];
 
 /**
+ * Axis seconds one simulated year is drawn as: a calendar year, so the axis reads in simulated years counted back
+ * from now. Each bar is an equal slice of simulated time dated by its age (PriceBarAggregator), so the axis reads
+ * the time the history covers rather than a count of its rows.
+ */
+const SECONDS_PER_SIM_YEAR = 31536000;
+
+/**
  * Points the live series are allowed to reach before the oldest are dropped.
  *
  * Paint cost is set by the VISIBLE slots, not by the total, so this is a memory bound rather than a frame
@@ -64,7 +71,7 @@ export function initPriceChart(container, ticker, ticksPerYear = 54000) {
     destroyPriceChart();
     container.innerHTML = '';
     currentTicker = ticker;
-    secondsPerTick = Math.round(31536000 / (ticksPerYear || 54000));
+    secondsPerTick = Math.round(SECONDS_PER_SIM_YEAR / (ticksPerYear || 54000));
 
     lwChart = LightweightCharts.createChart(container, {
         layout: {
@@ -172,40 +179,24 @@ export async function loadPriceHistory(range) {
         const res = await fetch(`/api/history?ticker=${encodeURIComponent(currentTicker)}&range=${encodeURIComponent(range)}&style=${style}`);
         if (!res.ok) return;
         const data = await res.json();
-        if (!data || data.length === 0 || !areaSeries) return;
-
-        const rangeSpans = {
-            '1w': 604800,
-            '1m': 2592000,
-            '3m': 7776000,
-            '6m': 15552000,
-            '1y': 31536000,
-            '3y': 94608000,
-            '5y': 157680000,
-            '10y': 315360000,
-            'max': 630720000
-        };
+        const bars = Array.isArray(data?.bars) ? data.bars : [];
+        if (bars.length === 0 || !areaSeries) return;
 
         const anchorTime = Math.floor(Date.now() / 1000);
 
-        // A slot shorter than a tick cannot be advanced one tick at a time: the live clock would outrun the
-        // grid and the tail would fall further behind the price on every point. A buffered line is served one
-        // tick per slot, and a week over its whole number of ticks comes out a little under one; this puts the
-        // slot back on the tick.
-        currentStepSize = Math.max(
-            secondsPerTick,
-            Math.floor((rangeSpans[range] || 31536000) / data.length)
-        );
+        // Every bar is one slice of simulated time, dated by its age behind the newest. A slot shorter than a tick
+        // cannot be advanced one tick at a time, so the live tail never steps finer than the clock that drives it.
+        currentStepSize = Math.max(secondsPerTick, Math.round((Number(data.bar_years) || 0) * SECONDS_PER_SIM_YEAR));
 
         chartData = [];
         candleData = [];
         volumeData = [];
 
-        data.forEach((d, i) => {
+        bars.forEach(d => {
             const close = parseFloat(d.price);
             if (isNaN(close)) return;
 
-            const time = anchorTime - (((data.length - 1) - i) * currentStepSize);
+            const time = anchorTime - Math.round((Number(d.age) || 0) * SECONDS_PER_SIM_YEAR);
             chartData.push({ time, value: close });
 
             // The server aggregates history rows into the bars this range renders, so a bar arrives whole.
