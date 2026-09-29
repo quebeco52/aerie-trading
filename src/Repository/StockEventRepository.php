@@ -14,6 +14,8 @@ use Doctrine\Persistence\ManagerRegistry;
  */
 class StockEventRepository extends ServiceEntityRepository
 {
+    use NewestPerStockTrait;
+
     public function __construct(ManagerRegistry $registry)
     {
         parent::__construct($registry, StockEvent::class);
@@ -30,28 +32,26 @@ class StockEventRepository extends ServiceEntityRepository
     }
 
     /**
-     * Events for a set of companies, grouped by company and newest first within each.
+     * Each company's newest $perStock events, grouped by company and newest first within each.
      *
-     * One query for the whole set rather than one per company. Doctrine has no portable way to
-     * express a per-company limit in a single query, so the overall cap is the caller's row budget
-     * and the grouping is done in PHP; the (stock_id, recorded_at) index keeps this an index scan
-     * as history accumulates.
+     * One query for the whole set rather than one per company, and the limit is per company, so
+     * a tenant with a long history cannot crowd its neighbours out of the result.
      *
      * @param  list<Stock>       $stocks
      * @return list<StockEvent>
      */
-    public function findForStocksNewestFirst(array $stocks, int $limit): array
+    public function findForStocksNewestFirst(array $stocks, int $perStock): array
     {
         if ($stocks === []) {
             return [];
         }
 
         return $this->createQueryBuilder('e')
-            ->andWhere('e.stock IN (:stocks)')
-            ->setParameter('stocks', $stocks)
+            ->andWhere('e.id IN (:ids)')
+            ->setParameter('ids', $this->newestIdsPerStock($stocks, $perStock))
             ->orderBy('e.stock', 'ASC')
             ->addOrderBy('e.recordedAt', 'DESC')
-            ->setMaxResults($limit)
+            ->addOrderBy('e.id', 'DESC')
             ->getQuery()
             ->getResult();
     }

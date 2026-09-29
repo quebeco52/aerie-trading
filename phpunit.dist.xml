@@ -42,6 +42,7 @@
             <directory>tests/Financial</directory>
             <directory>tests/Service</directory>
             <directory>tests/Support</directory>
+            <directory>tests/Repository</directory>
             <directory>tests/Controller</directory>
         </testsuite>
 
@@ -96,6 +97,7 @@
 
         <testsuite name="Integration">
             <directory>tests/Service</directory>
+            <directory>tests/Repository</directory>
             <directory>tests/Command</directory>
             <directory>tests/MessageHandler</directory>
             <directory>tests/EventSubscriber</directory>

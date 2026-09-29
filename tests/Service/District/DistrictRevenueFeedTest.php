@@ -89,8 +89,9 @@ class DistrictRevenueFeedTest extends TestCase
         $lake = $this->makeStock('LAKE');
         $swan = $this->makeStock('SWAN');
 
-        $this->repository->expects($this->once())->method('findForStocksNewestFirst');
-        $this->repository->method('findForStocksNewestFirst')->willReturn([]);
+        $this->repository->expects($this->once())->method('findForStocksNewestFirst')
+            ->with([$lake, $swan], DistrictRevenueFeed::HISTORY_QUARTERS)
+            ->willReturn([]);
 
         $this->feed->latestRevenueMixByTicker([$lake, $swan]);
     }

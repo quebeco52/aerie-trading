@@ -24,15 +24,7 @@ use Symfony\Component\Clock\NativeClock;
 class DistrictEventFeed
 {
     /** Recent events shown per building before the list is truncated. */
-    private const EVENTS_PER_TICKER = 6;
-
-    /**
-     * Rows fetched per tenant before grouping, bounding hydration as history accumulates.
-     *
-     * Wider than EVENTS_PER_TICKER because the query cannot limit per company, so a tenant filing
-     * far more often than its neighbours would otherwise crowd them out of the result entirely.
-     */
-    private const ROWS_SCANNED_PER_TICKER = 20;
+    public const EVENTS_PER_TICKER = 6;
 
     /**
      * @param int $ticksPerYear   simulated ticks in a year (app.ticks_per_year)
@@ -74,13 +66,9 @@ class DistrictEventFeed
             return $eventsByTicker;
         }
 
-        // One query for every tenant instead of one per tenant — StockEvent carries an
-        // (stock_id, recorded_at) index (see its class attributes), so this stays a single
-        // efficient index scan as history accumulates. Grouped in PHP rather than with a
-        // per-stock SQL LIMIT, which Doctrine has no portable way to express in one query.
-        // Capped at 20 rows per tenant so accumulated history never causes unbounded hydration.
+        // One query for every tenant, limited per tenant, so accumulated history never grows hydration.
         $rows = $this->entityManager->getRepository(StockEvent::class)
-            ->findForStocksNewestFirst($stocks, count($stocks) * self::ROWS_SCANNED_PER_TICKER);
+            ->findForStocksNewestFirst($stocks, self::EVENTS_PER_TICKER);
 
         $windowOpensAt = $this->clock->now()->getTimestamp() - $this->badgeWindowSeconds();
 

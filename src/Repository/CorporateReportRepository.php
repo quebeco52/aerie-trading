@@ -14,6 +14,8 @@ use Doctrine\Persistence\ManagerRegistry;
  */
 class CorporateReportRepository extends ServiceEntityRepository
 {
+    use NewestPerStockTrait;
+
     public function __construct(ManagerRegistry $registry)
     {
         parent::__construct($registry, CorporateReport::class);
@@ -28,7 +30,7 @@ class CorporateReportRepository extends ServiceEntityRepository
     }
 
     /**
-     * Every filing for a set of companies, grouped by company and newest first within each.
+     * Each company's newest $perStock filings, grouped by company and newest first within each.
      *
      * One query for the whole set rather than one per company, because the caller is rendering a
      * street of tenants and a query per tile is a query per row of the page.
@@ -36,17 +38,18 @@ class CorporateReportRepository extends ServiceEntityRepository
      * @param  list<Stock>           $stocks
      * @return list<CorporateReport>
      */
-    public function findForStocksNewestFirst(array $stocks): array
+    public function findForStocksNewestFirst(array $stocks, int $perStock): array
     {
         if ($stocks === []) {
             return [];
         }
 
         return $this->createQueryBuilder('r')
-            ->andWhere('r.stock IN (:stocks)')
-            ->setParameter('stocks', $stocks)
+            ->andWhere('r.id IN (:ids)')
+            ->setParameter('ids', $this->newestIdsPerStock($stocks, $perStock))
             ->orderBy('r.stock', 'ASC')
             ->addOrderBy('r.recordedAt', 'DESC')
+            ->addOrderBy('r.id', 'DESC')
             ->getQuery()
             ->getResult();
     }

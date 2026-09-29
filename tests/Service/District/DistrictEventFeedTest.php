@@ -117,8 +117,9 @@ class DistrictEventFeedTest extends TestCase
         $lake = $this->makeStock('LAKE');
         $swan = $this->makeStock('SWAN');
 
-        $this->repository->expects($this->once())->method('findForStocksNewestFirst');
-        $this->repository->method('findForStocksNewestFirst')->willReturn([]);
+        $this->repository->expects($this->once())->method('findForStocksNewestFirst')
+            ->with([$lake, $swan], DistrictEventFeed::EVENTS_PER_TICKER)
+            ->willReturn([]);
 
         $this->feed->recentEventsByTicker([$lake, $swan]);
     }

@@ -72,10 +72,10 @@ class DistrictRevenueFeed
             return $mixByTicker;
         }
 
-        // Rows arrive grouped by stock and newest-first within a stock, so the first
-        // HISTORY_QUARTERS rows seen for a ticker are its history, newest first; the rest are skipped.
+        // Rows arrive grouped by stock, newest-first and at most HISTORY_QUARTERS per stock, so a long-running
+        // market never hydrates its whole filing history here.
         $rows = $this->entityManager->getRepository(CorporateReport::class)
-            ->findForStocksNewestFirst($stocks);
+            ->findForStocksNewestFirst($stocks, self::HISTORY_QUARTERS);
 
         /** @var array<string, list<CorporateReport>> $historyByTicker */
         $historyByTicker = [];
