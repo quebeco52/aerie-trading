@@ -10,6 +10,7 @@ use App\Entity\Etf;
 use App\Entity\User;
 use App\Service\Market\ChartRange;
 use App\Service\Market\PriceBarAggregator;
+use App\Service\Market\HistoryPruner;
 use App\Service\Market\TickCadence;
 use Doctrine\ORM\EntityManagerInterface;
 use Redis;
@@ -177,10 +178,15 @@ class StockController extends AbstractController
 
         $stmt = $conn->executeQuery($sql, $params);
 
-        // A bond is written once a mark, everything else once a history bar.
+        // A bond is written once a mark, everything else once a history bar. A range reaching past the
+        // full-resolution window reaches history thinned to a row a week, and bars finer than that would leave
+        // empty slices the chart closes up, drawing the thinned years narrower than the time they cover.
         $rowsPerYear = $tableName === 'bond_history'
             ? TickCadence::bondMarksPerYear($ticksPerYear)
             : TickCadence::historyPointsPerYear($ticksPerYear);
+        if ((float) $oldestSimTime < HistoryPruner::thinnedBefore((float) $newestSimTime)) {
+            $rowsPerYear = min($rowsPerYear, HistoryPruner::THINNED_ROWS_PER_YEAR);
+        }
 
         // Aggregate rows into bars of equal simulated time, preserving price extremes.
         return $this->json($barAggregator->aggregate(

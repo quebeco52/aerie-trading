@@ -32,8 +32,9 @@ class Schedule implements ScheduleProviderInterface
                 RecurringMessage::cron(
                     '0 3 * * *',
                     new RunCommandMessage(sprintf(
-                        'app:prune-history --years=%s --ratio=1000',
-                        HistoryPruner::DEFAULT_YEARS_KEPT
+                        'app:prune-history --years=%s --per-year=%d',
+                        HistoryPruner::DEFAULT_YEARS_KEPT,
+                        HistoryPruner::THINNED_ROWS_PER_YEAR
                     ))
                 )
             );

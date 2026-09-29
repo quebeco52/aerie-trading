@@ -61,10 +61,6 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
     /** Simulated years the tick counter may imply away from the clock before the start-up reports it as a divergence. */
     public const CLOCK_DIVERGENCE_TOLERANCE_YEARS = 0.01;
 
-    // --- Retention ---
-    /** Simulated years between retention passes, matching the units the cutoffs themselves are written in. */
-    public const PRUNE_INTERVAL_YEARS = 1.0;
-
     /** Ticks a steady-state phase report covers. Long enough that the slowest cadence in the tick — the option sweep, at a pass every few dozen ticks — is averaged over several of its own passes. */
     public const PHASE_REPORT_INTERVAL_TICKS = 600;
 
@@ -408,10 +404,10 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
             // down and one repeated after it restarts both cost a second look at rows already too old to
             // keep. The work itself goes to the worker; only the dispatch happens here, once a simulated
             // year, which is why it carries no lap of its own.
-            if (TickCadence::crossedSimulatedBoundary($simTime, $dt, self::PRUNE_INTERVAL_YEARS)) {
+            if (TickCadence::crossedSimulatedBoundary($simTime, $dt, \App\Service\Market\HistoryPruner::PRUNE_INTERVAL_YEARS)) {
                 $this->messageBus->dispatch(new \App\Message\PruneHistoryMessage(
                     \App\Service\Market\HistoryPruner::DEFAULT_YEARS_KEPT,
-                    \App\Service\Market\HistoryPruner::DEFAULT_KEEP_RATIO
+                    \App\Service\Market\HistoryPruner::THINNED_ROWS_PER_YEAR
                 ));
             }
 

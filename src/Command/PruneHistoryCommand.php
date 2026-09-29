@@ -31,19 +31,19 @@ class PruneHistoryCommand extends Command
     protected function configure(): void
     {
         $this->addOption('years', 'y', InputOption::VALUE_OPTIONAL, 'Simulated years of full-resolution history to keep?', (string) HistoryPruner::DEFAULT_YEARS_KEPT);
-        $this->addOption('ratio', 'r', InputOption::VALUE_OPTIONAL, 'Keep 1 out of every X records?', HistoryPruner::DEFAULT_KEEP_RATIO);
+        $this->addOption('per-year', 'p', InputOption::VALUE_OPTIONAL, 'Rows each series keeps per simulated year beyond that?', (string) HistoryPruner::THINNED_ROWS_PER_YEAR);
     }
 
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
         $io = new SymfonyStyle($input, $output);
         $years = (float) $input->getOption('years');
-        $ratio = (int) $input->getOption('ratio');
+        $rowsPerYear = (int) $input->getOption('per-year');
 
-        $io->title("Downsampling Market History (Older than $years simulated years | Keeping 1 in $ratio)");
+        $io->title("Downsampling Market History (Older than $years simulated years | Keeping $rowsPerYear a simulated year per series)");
 
         try {
-            $report = $this->pruner->prune($years, $ratio);
+            $report = $this->pruner->prune($years, $rowsPerYear);
         } catch (\Exception $e) {
             $io->error("An error occurred: " . $e->getMessage());
 

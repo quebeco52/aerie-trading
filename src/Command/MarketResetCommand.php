@@ -15,6 +15,7 @@ use Symfony\Component\Console\Style\SymfonyStyle;
 use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 use App\Service\Math\FinancialConstants;
 use App\Service\Market\OpeningBoardBuilder;
+use App\Service\Market\StockTickColumns;
 
 #[AsCommand(
     name: 'app:market-reset',
@@ -138,6 +139,10 @@ class MarketResetCommand extends Command
             return Command::FAILURE;
         }
 
+        // The opening price and the other per-tick columns are mapped non-updatable, so the flush below leaves a
+        // reopened row carrying the old market's price on the new market's share count. They are written here, as
+        // the ticker writes them; a firm listed for the first time is an INSERT, which carries every column.
+        StockTickColumns::write($conn, array_values($board));
         $this->entityManager->flush();
 
         $io->text('4. Resetting ETF Prices...');

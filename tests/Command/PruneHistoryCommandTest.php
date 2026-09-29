@@ -48,6 +48,13 @@ class PruneHistoryCommandTest extends TestCase
                 return 150;
             }
         );
+        $connection->method('transactional')->willReturnCallback(
+            static function (\Closure $work) use ($connection, &$sent): mixed {
+                $sent[] = ['BEGIN', []];
+
+                return $work($connection);
+            }
+        );
 
         return $connection;
     }
@@ -58,7 +65,7 @@ class PruneHistoryCommandTest extends TestCase
         $em->method('getConnection')->willReturn($connection);
 
         $tester = new CommandTester(new PruneHistoryCommand(new HistoryPruner($em)));
-        $this->assertSame(Command::SUCCESS, $tester->execute(['--years' => '5', '--ratio' => '100']));
+        $this->assertSame(Command::SUCCESS, $tester->execute(['--years' => '5', '--per-year' => '52']));
 
         return $tester;
     }
@@ -69,20 +76,23 @@ class PruneHistoryCommandTest extends TestCase
         // One batch per table, every row in it older than the cutoff.
         $tester = $this->runPrune($this->connection(1, static fn (int $lo): array => [self::BATCH, self::BATCH], $sent));
 
-        $downsampled = array_values(array_filter($sent, static fn (array $call): bool => !str_contains($call[0], 'option_contracts')));
+        $downsampled = $this->deletes($sent);
         $this->assertCount(3, $downsampled);
 
         // Retention is measured on the SIMULATION clock, not the wall clock: keeping five simulated years of
         // a market that stands at year twelve cuts at year seven, whatever the container's uptime has been.
         // Each statement is bounded by a primary-key range so it is never one transaction the size of the table.
-        foreach ($downsampled as [$sql, $params]) {
-            $this->assertStringContainsString('sim_time IS NULL OR sim_time < :cutoff', $sql);
-            $this->assertStringContainsString('id >= :lo AND id < :hi', $sql);
-            $this->assertStringContainsString('id % :ratio != 0', $sql);
+        // Each series keeps its last row in every slice of its own time, so no series can be thinned away.
+        foreach (array_map(null, array_keys(HistoryPruner::HISTORY_TABLES), $downsampled) as [$table, [$sql, $params]]) {
+            $this->assertStringContainsString("DELETE h FROM $table h", $sql);
+            $this->assertStringContainsString('h.sim_time IS NULL OR (h.sim_time < :cutoff AND h.id <> slices.kept_id)', $sql);
+            $this->assertStringContainsString('h.id >= :lo AND h.id < :hi', $sql);
+            $this->assertStringContainsString('GROUP BY ' . HistoryPruner::HISTORY_TABLES[$table] . ', FLOOR(sim_time * :perYear)', $sql);
+            $this->assertStringContainsString('MAX(id) AS kept_id', $sql);
             $this->assertEqualsWithDelta(7.0, $params['cutoff'], 1e-9);
             $this->assertSame(1, $params['lo']);
             $this->assertSame(1 + self::BATCH, $params['hi']);
-            $this->assertSame(100, $params['ratio']);
+            $this->assertSame(52, $params['perYear']);
         }
 
         // A settled contract is not a chart, so there is nothing to downsample and no ratio to keep: it is
@@ -123,7 +133,7 @@ class PruneHistoryCommandTest extends TestCase
 
         $this->runPrune($this->connection(5, $probe, $sent));
 
-        $deletes = array_values(array_filter($sent, static fn (array $call): bool => !str_contains($call[0], 'option_contracts')));
+        $deletes = $this->deletes($sent);
 
         // Three tables × three old batches; the empty region costs a probe and no DELETE.
         $this->assertCount(9, $deletes);
@@ -134,6 +144,52 @@ class PruneHistoryCommandTest extends TestCase
         // cutoff ends the old region: the fifth batch is never read. Three tables, five batches probed each.
         $this->assertCount(15, $probed);
         $this->assertSame(1 + 4 * self::BATCH, max($probed));
+    }
+
+    /**
+     * A bar table folds each thinned slice's bar into the row it keeps, before the delete and in the same
+     * transaction: the week keeps its open, its extremes and its whole volume, and a retry cannot sum a volume
+     * twice. A fund or bond series is a close alone, so it has nothing to fold.
+     */
+    public function testABarTableFoldsTheSliceIntoTheKeptRowInTheSameTransaction(): void
+    {
+        $sent = [];
+        $this->runPrune($this->connection(1, static fn (int $lo): array => [self::BATCH, self::BATCH], $sent));
+
+        $history = array_values(array_filter($sent, static fn (array $call): bool => !str_contains($call[0], 'option_contracts')));
+        $statements = array_map(static fn (array $call): string => strtok(trim($call[0]), ' ') ?: '', $history);
+
+        // stock_history: BEGIN, UPDATE, DELETE; etf_history and bond_history: BEGIN, DELETE.
+        $this->assertSame(['BEGIN', 'UPDATE', 'DELETE', 'BEGIN', 'DELETE', 'BEGIN', 'DELETE'], $statements);
+
+        [$fold, $params] = $history[1];
+        $this->assertStringContainsString('UPDATE stock_history kept', $fold);
+        $this->assertStringContainsString('HAVING COUNT(*) > 1', $fold);
+        $this->assertStringContainsString('SUM(volume) AS volume', $fold);
+        $this->assertStringContainsString('MAX(COALESCE(high_price, price))', $fold);
+        $this->assertStringContainsString('MIN(COALESCE(low_price, price))', $fold);
+        $this->assertStringContainsString('kept.open_price = COALESCE(opener.open_price, opener.price)', $fold);
+        $this->assertSame(52, $params['perYear']);
+    }
+
+    /**
+     * @param list<array{0: string, 1: array<string, mixed>}> $sent
+     * @return list<array{0: string, 1: array<string, mixed>}> The history DELETEs, in the order sent.
+     */
+    private function deletes(array $sent): array
+    {
+        return array_values(array_filter($sent, static fn (array $call): bool => str_starts_with(trim($call[0]), 'DELETE h FROM')));
+    }
+
+    /**
+     * The chart reads thinned history at a row a week, so it has to know where thinning stops: at the cutoff of
+     * the pass the ticker ran on the last year-end the series has crossed, not five years behind its newest row.
+     */
+    public function testThinnedHistoryEndsAtTheLastPassesCutoff(): void
+    {
+        $this->assertEqualsWithDelta(17.0, HistoryPruner::thinnedBefore(22.758), 1e-9);
+        $this->assertEqualsWithDelta(18.0, HistoryPruner::thinnedBefore(23.0), 1e-9);
+        $this->assertLessThan(0.0, HistoryPruner::thinnedBefore(4.9), 'Nothing is thinned before the first pass has a cutoff.');
     }
 
     public function testEmptyTableIsLeftAlone(): void

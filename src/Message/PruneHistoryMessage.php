@@ -16,7 +16,7 @@ final readonly class PruneHistoryMessage
     public function __construct(
         /** Simulated years of full-resolution history to keep. */
         public float $years,
-        /** Rows kept out of every N when a history table is downsampled. */
-        public int $ratio,
+        /** Rows each series keeps per simulated year once older than that. */
+        public int $rowsPerYear,
     ) {}
 }

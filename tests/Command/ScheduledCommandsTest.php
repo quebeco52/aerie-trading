@@ -86,6 +86,6 @@ class ScheduledCommandsTest extends TestCase
         $input->bind($prune->getDefinition());
 
         $this->assertEqualsWithDelta(HistoryPruner::DEFAULT_YEARS_KEPT, (float) $input->getOption('years'), 1e-9);
-        $this->assertSame(1000, (int) $input->getOption('ratio'));
+        $this->assertSame(HistoryPruner::THINNED_ROWS_PER_YEAR, (int) $input->getOption('per-year'));
     }
 }

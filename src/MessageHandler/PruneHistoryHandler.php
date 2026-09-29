@@ -19,7 +19,7 @@ final readonly class PruneHistoryHandler
 
     public function __invoke(PruneHistoryMessage $message): void
     {
-        $report = $this->pruner->prune($message->years, $message->ratio);
+        $report = $this->pruner->prune($message->years, $message->rowsPerYear);
 
         // Logged rather than returned: nothing waits on this, and the row counts are the only evidence that
         // the retention is being enforced at all — the failure this exists to fix was silent for years.

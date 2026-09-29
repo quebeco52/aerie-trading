@@ -27,6 +27,9 @@ final class HistoryPruner
     /** Simulated years of full-resolution history kept by default; beyond it a chart is reading bars, not ticks. */
     public const DEFAULT_YEARS_KEPT = 5.0;
 
+    /** Simulated years between retention passes, matching the units the cutoffs themselves are written in: the ticker runs one on each crossing. */
+    public const PRUNE_INTERVAL_YEARS = 1.0;
+
     /** Simulated years a settled option contract is kept after expiry; the listing grid only reaches four months out. */
     public const EXPIRED_OPTION_YEARS_KEPT = 1.0;
 
@@ -41,24 +44,36 @@ final class HistoryPruner
      */
     public const MACRO_QUARTERS_KEPT = 480;
 
-    /** Rows kept out of every N when a history table is downsampled. */
-    public const DEFAULT_KEEP_RATIO = 1000;
+    /** Rows a series keeps per simulated year once older than the full-resolution window: one a week, the bar a chart of that span is drawn in. */
+    public const THINNED_ROWS_PER_YEAR = 52;
 
     // --- Batching ---
     /** Primary-key ids one DELETE spans. Short statements keep the row locks and undo log small while the ticker keeps inserting behind them. */
     public const DELETE_BATCH_IDS = 50000;
 
-    /** History tables carrying a sim_time stamp, all downsampled on the same cutoff. */
-    public const HISTORY_TABLES = ['stock_history', 'etf_history', 'bond_history'];
+    /** History tables carrying a sim_time stamp, all downsampled on the same cutoff: table => the column naming its series. */
+    public const HISTORY_TABLES = ['stock_history' => 'stock_id', 'etf_history' => 'etf_id', 'bond_history' => 'bond_id'];
+
+    /** History tables whose rows are OHLCV bars, folded into the row a thinned week keeps. */
+    public const BAR_TABLES = ['stock_history'];
 
     public function __construct(private readonly EntityManagerInterface $em) {}
+
+    /**
+     * The simulated time below which a series has been thinned by the default retention: the cutoff of the pass
+     * the ticker ran at the last interval boundary its newest row has crossed.
+     */
+    public static function thinnedBefore(float $newestSimTime): float
+    {
+        return floor($newestSimTime / self::PRUNE_INTERVAL_YEARS) * self::PRUNE_INTERVAL_YEARS - self::DEFAULT_YEARS_KEPT;
+    }
 
     /**
      * Applies every retention rule once and reports what it removed.
      *
      * @return array{now: float, cutoff: float, optionCutoff: float, tables: array<string, int>, options: int, macro: int}
      */
-    public function prune(float $years, int $ratio): array
+    public function prune(float $years, int $rowsPerYear): array
     {
         $conn = $this->em->getConnection();
 
@@ -72,8 +87,8 @@ final class HistoryPruner
 
         $tables = [];
 
-        foreach (self::HISTORY_TABLES as $table) {
-            $tables[$table] = $this->downsampleTable($conn, $table, $cutoff, $ratio);
+        foreach (self::HISTORY_TABLES as $table => $seriesColumn) {
+            $tables[$table] = $this->downsampleTable($conn, $table, $seriesColumn, $cutoff, $rowsPerYear);
         }
 
         return [
@@ -87,16 +102,24 @@ final class HistoryPruner
     }
 
     /**
-     * Downsamples one history table below the cutoff, walking the primary key in batches.
+     * Downsamples one history table below the cutoff to the last row of each series in each slice of simulated
+     * time, walking the primary key in batches.
+     *
+     * Thinning by slice of each series' own time is what keeps every series charted. The rule it replaced kept
+     * rows whose id was a multiple of the ratio, and every bar writes one row per stock in the same order, so the
+     * kept ids fell on the same one or two stocks every time and every other stock lost all its old history.
+     * A bar table first folds each slice's bar into the row it keeps (the first open, the extremes, the volume
+     * summed), in the same transaction as the delete, so a thinned week still charts as the week it was and a
+     * retry cannot count a volume twice.
      *
      * A single DELETE over the whole table was one transaction the size of the history: hours of row locks
      * and undo log against a ticker inserting thousands of rows a second, and the sim_time predicate has no
      * index of its own (every history index leads with the asset id). Ids are assigned in insertion order,
      * so simulated time is monotonic in id: the walk starts at the lowest id and stops at the first batch
-     * that holds rows and none of them older than the cutoff. A batch with no rows at all is a region an
-     * earlier run already thinned, and the walk continues through it.
+     * that holds rows and none of them older than the cutoff. A slice split across two batches keeps a row in
+     * each until a later run's batches put it in one.
      */
-    private function downsampleTable(Connection $conn, string $table, float $cutoff, int $ratio): int
+    private function downsampleTable(Connection $conn, string $table, string $seriesColumn, float $cutoff, int $rowsPerYear): int
     {
         /** @var array{0: int|string|null, 1: int|string|null}|false $bounds */
         $bounds = $conn->fetchNumeric("SELECT MIN(id), MAX(id) FROM $table");
@@ -107,6 +130,7 @@ final class HistoryPruner
         $lo = (int) $bounds[0];
         $max = (int) $bounds[1];
         $deleted = 0;
+        $sliceColumns = "SELECT $seriesColumn AS series, FLOOR(sim_time * :perYear) AS slice, MIN(id) AS first_id, MAX(id) AS kept_id";
 
         while ($lo <= $max) {
             $hi = $lo + self::DELETE_BATCH_IDS;
@@ -128,13 +152,41 @@ final class HistoryPruner
             }
 
             if ($old > 0) {
-                $deleted += (int) $conn->executeStatement(
-                    "DELETE FROM $table
-                     WHERE id >= :lo AND id < :hi
-                       AND (sim_time IS NULL OR sim_time < :cutoff)
-                       AND id % :ratio != 0",
-                    $range + ['ratio' => $ratio]
-                );
+                $params = $range + ['perYear' => $rowsPerYear];
+                $deleted += (int) $conn->transactional(static function (Connection $conn) use ($table, $seriesColumn, $sliceColumns, $params): int {
+                    if (in_array($table, self::BAR_TABLES, true)) {
+                        $conn->executeStatement(
+                            "UPDATE $table kept
+                             JOIN ($sliceColumns,
+                                          MAX(COALESCE(high_price, price)) AS high_price,
+                                          MIN(COALESCE(low_price, price)) AS low_price,
+                                          SUM(volume) AS volume
+                                   FROM $table
+                                   WHERE id >= :lo AND id < :hi AND sim_time < :cutoff
+                                   GROUP BY $seriesColumn, FLOOR(sim_time * :perYear)
+                                   HAVING COUNT(*) > 1) slices ON kept.id = slices.kept_id
+                             JOIN $table opener ON opener.id = slices.first_id
+                             SET kept.open_price = COALESCE(opener.open_price, opener.price),
+                                 kept.high_price = slices.high_price,
+                                 kept.low_price = slices.low_price,
+                                 kept.volume = slices.volume",
+                            $params
+                        );
+                    }
+
+                    // A row with no simulated time cannot be placed on a chart at all, so it goes whole.
+                    return (int) $conn->executeStatement(
+                        "DELETE h FROM $table h
+                         LEFT JOIN ($sliceColumns
+                                    FROM $table
+                                    WHERE id >= :lo AND id < :hi AND sim_time < :cutoff
+                                    GROUP BY $seriesColumn, FLOOR(sim_time * :perYear)) slices
+                                ON slices.series = h.$seriesColumn AND slices.slice = FLOOR(h.sim_time * :perYear)
+                         WHERE h.id >= :lo AND h.id < :hi
+                           AND (h.sim_time IS NULL OR (h.sim_time < :cutoff AND h.id <> slices.kept_id))",
+                        $params
+                    );
+                });
             }
 
             $lo = $hi;
