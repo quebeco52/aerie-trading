@@ -30,7 +30,6 @@ class MarketPricingContext
         public float $kappa = \App\Service\Market\MarketEngine::BASE_VARIANCE_REVERSION_SPEED,
         public float $volOfVol = 0.3,
         public ?MacroStateDTO $macroState = null,
-        public ?float $fcfPerShare = null,
         public float $bookValuePerShare = 0.0,
         public float $maShock = 0.0,
         public float $currentRoic = 0.10,
@@ -101,7 +100,6 @@ class MarketPricingContext
             marketJumpMultiplier: $macroState->marketJumpMultiplier,
             marketVol: $macroState->marketVolatility,
             macroState: $macroState,
-            fcfPerShare: $stock->getFreeCashFlowPerShare() !== null ? (float) $stock->getFreeCashFlowPerShare() : null,
             // A sphere's filed book moves once a quarter; the listed portfolio inside it moves every
             // tick, and fair value is struck on the second.
             bookValuePerShare: $anchorStakes->resolveMarkedBookValuePerShare($stock) ?? (float) $stock->getBookValuePerShare(),

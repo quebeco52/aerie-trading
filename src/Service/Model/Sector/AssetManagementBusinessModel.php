@@ -460,11 +460,6 @@ class AssetManagementBusinessModel extends BaseFinancialBusinessModel
         return max(0.0, $baseCapacity - $excessCash);
     }
 
-    public function calculateEarningsValue(float $revenueFloorValue, float $peFairValue, ?float $fcfPerShare, float $liveWacc, MathUtility $mathUtility): float
-    {
-        return max($revenueFloorValue, $peFairValue);
-    }
-
     /** Asset managers, hedge funds and private equity trade on fee-related earnings and carry, not on book value. */
     protected function getFairValueBookWeight(float $normalizedEps): float
     {

@@ -122,7 +122,7 @@ class FinancialConstants
     // --- Relative Valuation Shrinkage (Vasicek 1973) ---
     /** Spread (cost of equity less growth) at which a firm's own Gordon multiple and its sector's carry equal weight. */
     public const INTRINSIC_PE_SHRINKAGE_SPREAD = 0.03;
-    /** Fundamental cap on free cash flow capitalization multiple (~33.3x or 3% FCF yield). */
+    /** Cap on a Gordon capitalization multiple (~33.3x, a 3% yield). */
     public const MAX_DCF_MULTIPLIER = 33.33;
     /** Minimum price-to-sales multiple clamp during valuation stress. */
     public const MIN_PS_FALLBACK_MULT = 0.2;

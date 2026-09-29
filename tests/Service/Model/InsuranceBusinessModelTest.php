@@ -86,14 +86,13 @@ class InsuranceBusinessModelTest extends TestCase
     public function testCalculateEarningsValueWithFranchiseFloor(): void
     {
         $model = new InsuranceBusinessModel();
-        $mathUtility = new MathUtility();
 
         // 1. When PE fair value is healthy ($100), returns PE fair value
-        $earningsValNormal = $model->calculateEarningsValue(50.0, 100.0, 5.0, 0.08, $mathUtility);
+        $earningsValNormal = $model->calculateEarningsValue(50.0, 100.0);
         $this->assertEquals(100.0, $earningsValNormal);
 
         // 2. When PE fair value collapses to $0 (e.g. catastrophe claims), franchise floor cushions value (0.70 * $50 = $35)
-        $earningsValLoss = $model->calculateEarningsValue(50.0, 0.0, -10.0, 0.08, $mathUtility);
+        $earningsValLoss = $model->calculateEarningsValue(50.0, 0.0);
         $this->assertEquals(35.0, $earningsValLoss);
     }
 
@@ -373,9 +372,10 @@ class InsuranceBusinessModelTest extends TestCase
         // Rates at the level the book was priced at: the whole capacity is worth writing.
         $this->assertEqualsWithDelta(1.0, $writtenCapacity($this->underwriterAtShare(0.40)), 0.001);
 
-        // Capital a third past the market's optimal scale: rates soften far enough that the marginal treaty costs
-        // more than it brings in, and the book is cut back rather than written at a loss.
-        $soft = $writtenCapacity($this->underwriterAtShare(0.65));
+        // Capital past the market's optimal scale: rates soften far enough that the marginal treaty costs more than it
+        // brings in, and the book is cut back rather than written at a loss. The hurdle is the long yield plus the
+        // premium, which the float's yield covers for only a short stretch past that scale.
+        $soft = $writtenCapacity($this->underwriterAtShare(0.58));
         $this->assertLessThan(1.0, $soft);
         $this->assertGreaterThan(InsuranceBusinessModel::MIN_WRITTEN_CAPACITY, $soft);
 
@@ -385,9 +385,9 @@ class InsuranceBusinessModelTest extends TestCase
 
         // The manager's own hurdle decides where that line falls (Jensen's agency cost, in its underwriting
         // form): an empire builder keeps writing a market a fortress has already withdrawn from.
-        $fortress = $this->underwriterAtShare(0.65);
+        $fortress = $this->underwriterAtShare(0.58);
         $fortress->setManagementStyle(\App\Data\ManagementStyle::Fortress);
-        $empireBuilder = $this->underwriterAtShare(0.65);
+        $empireBuilder = $this->underwriterAtShare(0.58);
         $empireBuilder->setManagementStyle(\App\Data\ManagementStyle::EmpireBuilder);
         $this->assertGreaterThan($writtenCapacity($fortress), $writtenCapacity($empireBuilder));
     }

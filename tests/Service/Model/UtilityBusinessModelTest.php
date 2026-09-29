@@ -52,26 +52,10 @@ class UtilityBusinessModelTest extends TestCase
         $this->assertGreaterThan(1000.0, $result->actualRevenue);
     }
 
-    public function testRateBaseCapexBurnValuation(): void
+    /** Rate-base build-out spends cash on plant the allowed return pays for, so it discounts nothing: the multiple is the value. */
+    public function testRateBaseBuildOutDoesNotDiscountTheEarningsValue(): void
     {
-        $model = new UtilityBusinessModel();
-
-        $revenueFloorValue = 80.0;
-        $peFairValue = 100.0;
-        $fcfPerShare = -0.50; // Negative FCF due to rate-base T&D expansion CapEx
-        $liveWacc = 0.06;
-        $mathUtility = new MathUtility();
-
-        $fairValue = $model->calculateEarningsValue(
-            $revenueFloorValue,
-            $peFairValue,
-            $fcfPerShare,
-            $liveWacc,
-            $mathUtility
-        );
-
-        $expected = max(80.0, 100.0 * UtilityBusinessModel::NEGATIVE_FCF_VAL_DISCOUNT);
-        $this->assertEquals($expected, $fairValue);
+        $this->assertSame(100.0, (new UtilityBusinessModel())->calculateEarningsValue(80.0, 100.0));
     }
 
     public function testUtilityIsUnderLeveraged(): void

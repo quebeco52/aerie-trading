@@ -282,7 +282,7 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
 
         // Saturation measures the firm's size in its market, so it reads the whole book, goodwill included.
         $saturationPenalty = \App\Service\Math\CorporateMetrics::getInstance()->calculateMarketSaturationPenalty($stock, max(1.0, $stock->getAmortizedCostEquity()), $macroState);
-        $waccBase = $macroState->policyRate + $macroState->equityRiskPremium;
+        $waccBase = $macroState->yield10yEma + $macroState->equityRiskPremium;
         // Cap baseline return at capacity ROIC to prevent margin compression from inflating implied turnover.
         $baselineRoic = min($capacityRoic, max($waccBase, $baselineRoic - $saturationPenalty));
 
@@ -396,7 +396,7 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
         }
 
         $floatReturn = ($this->calculateInterestIncome($stock, $macroState, $mathUtility) * (1.0 - $macroState->corporateTaxRate)) / $operatingEquity;
-        $hurdle = $stock->getManagementProfile()->appliedHurdle($macroState->policyRate + $macroState->equityRiskPremium);
+        $hurdle = $stock->getManagementProfile()->appliedHurdle($macroState->yield10yEma + $macroState->equityRiskPremium);
 
         return max(self::MIN_WRITTEN_CAPACITY, min(1.0, ($hurdle - $floatReturn) / $underwritingReturn));
     }
@@ -895,7 +895,7 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
         // Insurance companies should fund expansion using their premium float (excess cash) first
         return max(0.0, $baseCapacity - $excessCash);
     }
-    public function calculateEarningsValue(float $revenueFloorValue, float $peFairValue, ?float $fcfPerShare, float $liveWacc, MathUtility $mathUtility): float
+    public function calculateEarningsValue(float $revenueFloorValue, float $peFairValue): float
     {
         $franchiseFloor = $revenueFloorValue * self::PREMIUM_FRANCHISE_FLOOR_MULT;
         return max($franchiseFloor, $peFairValue);

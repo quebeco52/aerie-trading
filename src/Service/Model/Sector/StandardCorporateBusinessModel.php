@@ -84,14 +84,6 @@ class StandardCorporateBusinessModel implements BusinessModelInterface
     public const BASE_COVERAGE_VISIBILITY = 0.20;
     public const BASE_COVERAGE_ERROR = 0.06;
 
-    // --- DCF & Valuation Rails ---
-    /** Assumed perpetual terminal growth rate for DCF fair value estimation. */
-    public const DCF_TERMINAL_GROWTH_RATE = 0.02;
-    /** Cap on DCF valuation relative to P/E fair value to prevent infinite perpetual expansion. */
-    public const MAX_DCF_TO_PE_CAP_MULT   = 1.50;
-    /** Valuation discount applied when FCF is negative due to heavy capex or burn. */
-    public const NEGATIVE_FCF_VAL_DISCOUNT = 0.75;
-
     // --- Capital Reinvestment & Asset Depreciation Physics ---
     /** Quarterly efficiency decay rate per unit of underinvestment below replacement CapEx. */
     public const DEPRECIATION_DECAY_RATE      = 0.020;

@@ -27,12 +27,10 @@ class ClearingHouseBusinessModelTest extends TestCase
 
     public function testCalculateEarningsValue(): void
     {
-        $mathMock = $this->createStub(MathUtility::class);
-
-        $val1 = $this->model->calculateEarningsValue(100.0, 150.0, 5.0, 0.08, $mathMock);
+        $val1 = $this->model->calculateEarningsValue(100.0, 150.0);
         $this->assertSame(150.0, $val1);
 
-        $val2 = $this->model->calculateEarningsValue(200.0, 150.0, 5.0, 0.08, $mathMock);
+        $val2 = $this->model->calculateEarningsValue(200.0, 150.0);
         $this->assertSame(200.0, $val2);
     }
 

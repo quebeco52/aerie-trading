@@ -470,14 +470,6 @@ class MathUtilityTest extends TestCase
         $this->assertSame($raw, $this->mathUtility->calculateIntrinsicFairValuePE(0.10, 0.15, 0.03, -5.0));
     }
 
-    public function testCalculateDcfMultiplier(): void
-    {
-        // WACC = 8%, Growth = 2% -> Spread = 6% -> Multiplier = 1.02 / 0.06 = 17.0
-        $multiplier = $this->mathUtility->calculateDcfMultiplier(0.08, 0.02);
-
-        $this->assertEqualsWithDelta(17.0, $multiplier, 0.001, 'DCF terminal multiplier calculation failed.');
-    }
-
     public function testCalculateDividendDiscountModel(): void
     {
         // Gordon: next year's dividend 2.0 x 1.05 = 2.10 over 10% - 5% = 42.0.
@@ -513,15 +505,6 @@ class MathUtilityTest extends TestCase
 
         $this->assertGreaterThanOrEqual(FinancialConstants::MIN_INTRINSIC_PE, $pe);
         $this->assertLessThanOrEqual(FinancialConstants::MAX_INTRINSIC_PE, $pe);
-    }
-
-    public function testCalculateDcfMultiplierAbsoluteBounds(): void
-    {
-        // WACC below 4% should be floored to MIN_COST_OF_EQUITY (0.04)
-        $multiplier = $this->mathUtility->calculateDcfMultiplier(0.02, 0.02);
-
-        $this->assertGreaterThanOrEqual(1.0, $multiplier);
-        $this->assertLessThanOrEqual(FinancialConstants::MAX_DCF_MULTIPLIER, $multiplier);
     }
 
     public function testCalculateMeanRevertingWeight(): void

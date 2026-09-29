@@ -115,7 +115,6 @@ final class PriceFormationInvariantTest extends TestCase
                 marketJumpMultiplier: $jumpMultiplier,
                 marketVol: $marketVol,
                 macroState: $macro,
-                fcfPerShare: 4.0,
                 bookValuePerShare: 40.0,
                 currentRoic: 0.125,
                 roicTtm: 0.125,

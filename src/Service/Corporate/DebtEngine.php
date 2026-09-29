@@ -472,7 +472,6 @@ class DebtEngine
         $equity = (float) $stock->getTotalEquity();
         $stockPrice = (float) $stock->getPrice();
         $marketCap = $stockPrice > 0.0 ? ($stockPrice * max(1.0, (float) $stock->getSharesOutstanding())) : max(1.0, $equity);
-        $policyRate = $macroState->policyRateEma;
         $corporateTaxRate = $macroState->corporateTaxRate;
 
         $industry = $stock->getIndustry() ?: 'General';
@@ -520,9 +519,12 @@ class DebtEngine
 
         $leveredBeta = $strategy->calculateLeveredBeta($baseBeta, $impliedTaxShieldRate, $effectiveDebtToEquity, $this->mathUtility);
 
-        // Cost of Equity (CAPM) - Unified to Policy Rate to perfectly match MarketEngine valuation physics
+        // Cost of Equity (CAPM) on the long government yield: the riskless rate matched to the duration of the cash
+        // flows being valued (Damodaran 2008, "What is the riskfree rate?"), which is also the rate the premium is
+        // measured over. The policy rate is the return on bills; discounting a perpetuity at it understates the
+        // hurdle by the term spread and swings every valuation with the short end of the monetary cycle.
         $equityRiskPremium = $macroState->equityRiskPremium;
-        $costOfEquity = $this->mathUtility->calculateCAPM($policyRate, $leveredBeta, $equityRiskPremium);
+        $costOfEquity = $this->mathUtility->calculateCAPM($macroState->yield10yEma, $leveredBeta, $equityRiskPremium);
 
         // Absolute priority hurdle: cost of equity floored at marginal market borrowing rate.
         $costOfEquity = max($debtMetrics->currentMarketRate, $costOfEquity);

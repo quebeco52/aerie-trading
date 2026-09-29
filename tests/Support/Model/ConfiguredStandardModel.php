@@ -31,14 +31,6 @@ final class ConfiguredStandardModel extends BareStandardModel
     /** Share of the debt tolerance below which the firm counts as under-levered. */
     public const UNDERLEVERAGED_DEBT_RATIO = 0.30;
 
-    // --- Valuation ---
-    /** Perpetual growth assumed in the DCF terminal value. */
-    public const DCF_TERMINAL_GROWTH_RATE = 0.01;
-    /** Cap on the DCF relative to the P/E fair value. */
-    public const MAX_DCF_TO_PE_CAP_MULT = 3.00;
-    /** Discount applied to the earnings multiple when free cash flow is negative. */
-    public const NEGATIVE_FCF_VAL_DISCOUNT = 0.40;
-
     // --- Operating Physics: Coverage ---
     /** Analyst visibility into the quarter before the systemic-importance uplift. */
     public const BASE_COVERAGE_VISIBILITY = 0.55;

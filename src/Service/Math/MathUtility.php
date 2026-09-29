@@ -1135,27 +1135,6 @@ class MathUtility
     }
 
     /**
-     * Calculates the terminal value multiplier for a Discounted Cash Flow (DCF) using the Gordon Growth Model.
-     *
-     * @param float $wacc               The Weighted Average Cost of Capital.
-     * @param float $terminalGrowthRate The expected perpetual growth rate.
-     * @return float The DCF terminal multiplier.
-     */
-    public function calculateDcfMultiplier(
-        float $wacc,
-        float $terminalGrowthRate = FinancialConstants::DEFAULT_PERPETUAL_GROWTH_RATE
-    ): float {
-        $effectiveWacc = max(FinancialConstants::MIN_COST_OF_EQUITY, $wacc);
-        $clampedGrowth = max(FinancialConstants::MIN_PERPETUAL_GROWTH_RATE, min(FinancialConstants::MAX_PERPETUAL_GROWTH_RATE, $terminalGrowthRate));
-        $effectiveGrowth = min($clampedGrowth, $effectiveWacc - 0.005);
-
-        $spread = max(0.005, $effectiveWacc - $effectiveGrowth);
-        $multiplier = (1.0 + $effectiveGrowth) / $spread;
-
-        return max(1.0, min(FinancialConstants::MAX_DCF_MULTIPLIER, $multiplier));
-    }
-
-    /**
      * Gordon (1962) growth model: next year's dividend, the current one grown once, over the spread of the
      * required return above perpetual growth.
      *

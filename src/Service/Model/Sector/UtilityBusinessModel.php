@@ -151,8 +151,6 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
     public const MAX_OPERATING_MARGIN_CEILING = 0.30;
 
     // --- Rate-Base CapEx & Capital Structure Rails ---
-    /** Valuation discount on the earnings multiple while rate-base T&D expansion CapEx keeps FCF negative. */
-    public const NEGATIVE_FCF_VAL_DISCOUNT    = 0.92;
     public const MIN_RECAP_ICR_FLOOR          = 2.5;
     public const WACC_ARBITRAGE_THRESHOLD     = 0.01;
     public const UNDERLEVERAGED_DEBT_RATIO    = 0.70;

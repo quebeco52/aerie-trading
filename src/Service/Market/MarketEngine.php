@@ -222,7 +222,6 @@ class MarketEngine
         $kappa = $ctx->kappa;
         $volOfVol = $ctx->volOfVol;
         $macroState = $ctx->macroState;
-        $fcfPerShare = $ctx->fcfPerShare;
         $bookValuePerShare = $ctx->bookValuePerShare;
         $investedCapitalPerShare = $ctx->investedCapitalPerShare;
         $maShock = $ctx->maShock;
@@ -416,7 +415,6 @@ class MarketEngine
             $earningsPerShare,
             $currentRoic,
             $roicTtm,
-            $fcfPerShare,
             $riskFreeRate,
             $bookValuePerShare,
             $dividendPerShare,
@@ -526,7 +524,6 @@ class MarketEngine
      * @param float $earningsPerShare    The current EPS (Earnings Per Share).
      * @param float $currentRoic         The current Return on Invested Capital (or ROE for banks).
      * @param float $roicTtm             The Trailing Twelve Month ROIC (or ROE).
-     * @param float|null $fcfPerShare    The Free Cash Flow per share (null for banks).
      * @param float $riskFreeRate        The central bank's policy rate.
      * @param float $bookValuePerShare   The equity value per share.
      * @param float $dividendPerShare    The absolute quarterly dividend per share.
@@ -555,7 +552,6 @@ class MarketEngine
         float $earningsPerShare,
         float $currentRoic,
         float $roicTtm,
-        ?float $fcfPerShare,
         float $riskFreeRate,
         float $bookValuePerShare,
         float $dividendPerShare,
@@ -656,8 +652,8 @@ class MarketEngine
         $revenueFloorValue = $revenuePerShare * $psMultiple;
         $revenueFloorEquityValue = max(0.01, $revenueFloorValue - $netDebtPerShare);
 
-        // THE BANKING DCF BYPASS
-        $earningsValue = $strategy->calculateEarningsValue($revenueFloorEquityValue, $peFairValue, $fcfPerShare, $liveWacc, $this->mathUtility);
+        // The earnings leg: the value-driver P/E value, never below what the model's revenue floor is worth.
+        $earningsValue = $strategy->calculateEarningsValue($revenueFloorEquityValue, $peFairValue);
 
         // Dividend Discount Model (Gordon 1962) on the dividends the firm's own policy will pay: its target payout of
         // normalized earnings, growing at the rate its retained earnings compound at (Higgins 1977), plus the present

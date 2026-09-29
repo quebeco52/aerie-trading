@@ -125,6 +125,30 @@ class OpeningBoardBuilderTest extends TestCase
         $this->assertGreaterThanOrEqual(4, $incomePriced, 'The REITs and utilities, priced on income, do lose value.');
     }
 
+    /**
+     * The board opens before any firm has reported a cash flow, and its first report must not re-rate it. Fair value
+     * used to average the multiple with a DCF on one quarter's free cash flow: absent at the open, it switched on at
+     * the first report and marked the board down about 10%, a thin positive cash flow halving a firm's earnings value.
+     */
+    public function testAReportedFreeCashFlowDoesNotRerateTheOpeningBoard(): void
+    {
+        $openingMacro = new MacroStateDTO();
+
+        foreach ($this->openBoard($openingMacro) as $ticker => $stock) {
+            $fairValue = function () use ($stock, $openingMacro): float {
+                $health = $this->debtEngine->analyzeDebtHealth($stock, $openingMacro);
+
+                return $this->marketEngine->calculateNextPrice(MarketPricingContext::forStock($stock, $openingMacro, $health, $this->ledger))['perceived_fair_value'];
+            };
+            $opening = $fairValue();
+
+            foreach (['0.01', '-5.00', '12.00'] as $freeCashFlowPerShare) {
+                $stock->setFreeCashFlowPerShare($freeCashFlowPerShare);
+                $this->assertEqualsWithDelta($opening, $fairValue(), $opening * 1e-9, "{$ticker} re-rates on a free cash flow of {$freeCashFlowPerShare} a share.");
+            }
+        }
+    }
+
     /** Opening earnings are struck after the interest the firm's debt costs, at no less than its credit spread. */
     public function testALeveredFirmOpensOnEarningsAfterItsInterestBill(): void
     {

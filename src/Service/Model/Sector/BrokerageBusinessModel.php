@@ -345,11 +345,6 @@ class BrokerageBusinessModel extends BaseFinancialBusinessModel
         return max($operatingBase * self::MIN_CASH_BACKING_RATIO, $wholesaleDebt * self::MIN_CASH_BACKING_RATIO);
     }
 
-    public function calculateEarningsValue(float $revenueFloorValue, float $peFairValue, ?float $fcfPerShare, float $liveWacc, MathUtility $mathUtility): float
-    {
-        return max($revenueFloorValue, $peFairValue);
-    }
-
     /**
      * Brokerages and Investment Banks rely on wholesale repo and debt facilities to fund trading desks and margin loans.
      */

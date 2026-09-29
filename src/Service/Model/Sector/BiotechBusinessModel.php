@@ -193,10 +193,6 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
     /** Secular growth for unprotected generic manufacturing, where volume gains offset relentless price erosion. */
     public const GENERIC_SECULAR_GROWTH_RATE  = 0.010;
 
-    // --- R&D Pipeline Valuation Rails ---
-    /** Valuation discount on the earnings multiple while clinical trial funding keeps FCF negative. */
-    public const NEGATIVE_FCF_VAL_DISCOUNT = 0.88;
-
     public function getReversionSpeed(): float
     {
         return 0.15;

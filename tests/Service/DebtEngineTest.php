@@ -933,6 +933,32 @@ class DebtEngineTest extends TestCase
     }
 
     /**
+     * The cost of equity is struck on the long government yield, the riskless rate matched to the duration of the
+     * cash flows it discounts and the rate the equity premium is measured over (Damodaran 2008). The policy rate is
+     * the bill rate: striking the hurdle on it understated every hurdle by the term spread and re-rated the whole
+     * board with each hiking cycle while the long yield barely moved.
+     */
+    public function testCostOfEquityIsStruckOnTheLongYieldNotThePolicyRate(): void
+    {
+        $engine = $this->costOfCapitalEngine();
+        $macro = static fn (float $policyRate, float $longYield): MacroStateDTO => new MacroStateDTO(
+            inflationEma: 0.02,
+            policyRateEma: $policyRate,
+            yield5yEma: 0.045,
+            yield10yEma: $longYield,
+            macroCreditSpreadEma: 0.02,
+            corporateTaxRate: 0.21,
+            equityRiskPremium: 0.045
+        );
+        $costOfEquity = fn (float $policyRate, float $longYield): float => $engine->analyzeDebtHealth($this->leveredFirm('MID', '0.80', '0.006'), $macro($policyRate, $longYield))->costOfEquity;
+
+        $base = $costOfEquity(0.04, 0.048);
+
+        $this->assertEqualsWithDelta($base, $costOfEquity(0.06, 0.048), 1e-12, 'A hike in the policy rate alone must not move the hurdle.');
+        $this->assertEqualsWithDelta($base + 0.01, $costOfEquity(0.04, 0.058), 1e-9, 'The hurdle moves one for one with the long yield.');
+    }
+
+    /**
      * Hamada multiplies, so leverage scales the magnitude of systematic exposure and can never flip its
      * sign. A levered hedge is a bigger hedge. The engine previously levered max(0.5, |beta|), which handed
      * every inverse-beta name a positive exposure and made it look like a leveraged market bet.

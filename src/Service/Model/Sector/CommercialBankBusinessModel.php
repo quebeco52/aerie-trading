@@ -764,7 +764,7 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
         return max(0.0, $baseCapacity - $excessCash);
     }
 
-    public function calculateEarningsValue(float $revenueFloorValue, float $peFairValue, ?float $fcfPerShare, float $liveWacc, MathUtility $mathUtility): float
+    public function calculateEarningsValue(float $revenueFloorValue, float $peFairValue): float
     {
         return $peFairValue;
     }

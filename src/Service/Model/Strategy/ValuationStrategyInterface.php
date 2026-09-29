@@ -10,7 +10,11 @@ use App\Service\Math\MathUtility;
 
 interface ValuationStrategyInterface
 {
-    public function calculateEarningsValue(float $revenueFloorValue, float $peFairValue, ?float $fcfPerShare, float $liveWacc, MathUtility $mathUtility): float;
+    /**
+     * The earnings leg of fair value: the value-driver P/E value, bounded below by what the model's revenue floor
+     * is worth. The multiple already capitalises the cash flow the firm's growth leaves after reinvestment.
+     */
+    public function calculateEarningsValue(float $revenueFloorValue, float $peFairValue): float;
     public function calculateFairValue(float $earningsValue, float $pbFairValue, float $normalizedEps, float $dividendSupportValue = 0.0): float;
     /**
      * @param float|null $investedCapitalPerShare The firm's real capital employed per share when the caller has

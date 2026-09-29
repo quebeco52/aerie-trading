@@ -402,26 +402,13 @@ class BiotechBusinessModelTest extends TestCase
         $this->assertLessThan($observed[0], $observed[1]);
     }
 
-    public function testBiotechResearchBurnValuation(): void
+    /** A trial burn reaches value through the earnings the multiple is struck on, not as a second discount on top. */
+    public function testResearchBurnDoesNotDiscountTheEarningsValueTwice(): void
     {
         $model = new BiotechBusinessModel();
 
-        $revenueFloorValue = 50.0;
-        $peFairValue = 100.0;
-        $fcfPerShare = -1.50; // Negative FCF due to R&D clinical trial burn
-        $liveWacc = 0.09;
-        $mathUtility = new MathUtility();
-
-        $fairValue = $model->calculateEarningsValue(
-            $revenueFloorValue,
-            $peFairValue,
-            $fcfPerShare,
-            $liveWacc,
-            $mathUtility
-        );
-
-        $expected = max(50.0, 100.0 * BiotechBusinessModel::NEGATIVE_FCF_VAL_DISCOUNT);
-        $this->assertEquals($expected, $fairValue);
+        $this->assertSame(100.0, $model->calculateEarningsValue(50.0, 100.0));
+        $this->assertSame(50.0, $model->calculateEarningsValue(50.0, 20.0), 'The revenue floor still binds under a thin multiple.');
     }
 
     public function testCoverageProfileAndModelTraits(): void
