@@ -11,6 +11,7 @@ use App\Data\MacroFieldCatalog;
 use App\Data\Sectors;
 use App\Service\Corporate\DebtEngine;
 use App\Service\Macro\MacroEngine;
+use App\Service\Macro\Subsystem\MacroAggregateSubsystem;
 use App\Service\Model\Sector\MiningBusinessModel;
 use App\Service\Model\Sector\PrivateEquityBusinessModel;
 use App\Service\Model\Sector\RefiningBusinessModel;
@@ -548,14 +549,21 @@ class EarningsReportSubscriber implements EventSubscriberInterface
 
             case 'security_protection':
             case 'defense_contractor':
-                if (in_array($streamKey, ['government_contracts', 'government_defense_procurement', 'defense_systems', 'defense_procurement'])) {
-                    $govShift = ($macro->governmentSpendingIndexEma - 100.0) / 100.0;
-                    $drivers[] = [
-                        'label'  => 'Fiscal & Defense Appropriations',
-                        'impact' => round($govShift * 0.45, 4),
-                        'type'   => 'macro',
-                        'fields' => ['government_spending_index_ema'],
-                    ];
+                if (in_array($streamKey, ['government_contracts', 'cost_plus_procurement', 'fixed_price_development'])) {
+                    // Security contracts are the District's own purchases; arms programmes are its allies' budgets.
+                    $drivers[] = $streamKey === 'government_contracts'
+                        ? [
+                            'label'  => 'Fiscal Appropriations',
+                            'impact' => round((($macro->governmentSpendingIndexEma - 100.0) / 100.0) * 0.45, 4),
+                            'type'   => 'macro',
+                            'fields' => ['government_spending_index_ema'],
+                        ]
+                        : [
+                            'label'  => 'Allied Defence Appropriations',
+                            'impact' => round(MacroEngine::ALLIED_PROCUREMENT_ELASTICITY * MacroAggregateSubsystem::alliedDefenseGap($macro->alliedDefenseSpendingIndexEma), 4),
+                            'type'   => 'macro',
+                            'fields' => ['allied_defense_spending_index_ema'],
+                        ];
                     if ($macro->inflationEma > 0.02) {
                         $drivers[] = [
                             'label'  => 'Cost-Plus Inflation Escalation',

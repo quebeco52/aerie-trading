@@ -519,7 +519,9 @@ class MacroAggregateSubsystemTest extends TestCase
             $state->equityWealthTrend = self::TEST_MARKET_CAP;
             for ($i = 0; $i < 3000; $i++) {
                 $state->outputGap = $this->subsystem->calculateOutputGap($state, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.01, 1.0);
+                // A held state holds no sales surprise: both averages sit on their series.
                 $state->outputGapEma = $state->outputGap;
+                $state->domesticDemandGapEma = MacroAggregateSubsystem::domesticDemandGap($state);
             }
             $this->assertLessThan(0.0, $state->outputGap, 'Measured below the capacity ceiling.');
 
@@ -531,11 +533,11 @@ class MacroAggregateSubsystemTest extends TestCase
         $amplification = MacroAggregateSubsystem::DEMAND_OWN_PULL / $restockingPull;
 
         $housingLevel = MacroAggregateSubsystem::DOMESTIC_GAP_WEIGHT * MacroAggregateSubsystem::HOUSING_WEALTH_MPC * MacroAggregateSubsystem::HOUSING_WEALTH_TO_GDP * 0.10;
-        // Within 3%: the inventory surprise reads the smoothed whole gap against domestic demand, a small cross-term.
-        $this->assertEqualsWithDelta($amplification * $housingLevel, $settle(0.10, 0.0) - $base, 0.03 * $housingLevel, 'Ten percent on the houses is ~0.6% of GDP of spending, and restocking adds a quarter.');
+        $this->assertEqualsWithDelta($amplification * $housingLevel, $settle(0.10, 0.0) - $base, 0.005 * $housingLevel, 'Ten percent on the houses is ~0.6% of GDP of spending, and restocking adds a quarter.');
 
-        $equityLevel = MacroAggregateSubsystem::EQUITY_WEALTH_MPC * SovereignFundSubsystem::MARKET_CAP_TO_GDP * 0.10;
-        $this->assertEqualsWithDelta($amplification * $equityLevel, $settle(0.0, 0.10) - $base, 0.03 * $equityLevel, 'Ten percent on the board is ~0.5% of GDP.');
+        // Households own a fifth of the board; the rest of the world spends its gains at home.
+        $equityLevel = MacroAggregateSubsystem::EQUITY_WEALTH_MPC * MacroAggregateSubsystem::DISTRICT_HOUSEHOLD_EQUITY_SHARE * SovereignFundSubsystem::MARKET_CAP_TO_GDP * 0.10;
+        $this->assertEqualsWithDelta($amplification * $equityLevel, $settle(0.0, 0.10) - $base, 0.005 * $equityLevel, 'Ten percent on the board is ~0.1% of GDP of District spending.');
     }
 
     /**
@@ -1101,7 +1103,8 @@ class MacroAggregateSubsystemTest extends TestCase
         $gapHome = $this->subsystem->calculateOutputGap($home, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, $dt, 1.0);
         $gapAbroad = $this->subsystem->calculateOutputGap($abroad, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, $dt, 1.0);
 
-        $exports = MacroAggregateSubsystem::DISTRICT_EXPORT_SHARE * MacroAggregateSubsystem::EXPORT_DEMAND_ELASTICITY * 0.03;
+        // The mainland's demand buys the civilian exports; the arms makers sell into allied budgets instead.
+        $exports = (MacroAggregateSubsystem::DISTRICT_EXPORT_SHARE - MacroAggregateSubsystem::DISTRICT_DEFENSE_EXPORT_SHARE) * MacroAggregateSubsystem::EXPORT_DEMAND_ELASTICITY * 0.03;
         $this->assertEqualsWithDelta($exports, $abroad->netExportGap, 1e-12);
         $this->assertEqualsWithDelta($exports, $gapAbroad - $gapHome, 1e-9, 'The export level reaches the gap whole, not at a rate.');
 
@@ -1115,6 +1118,48 @@ class MacroAggregateSubsystemTest extends TestCase
         $this->assertEqualsWithDelta($exports, $gapAbroad - $gapHome, 1e-6);
     }
 
+
+    /**
+     * The District fields no army: an allied build-up is its arms makers' order book, and reaches GDP as exports once
+     * the backlog delivers it, at the makers' share of GDP and the procurement elasticity. The civilian export share
+     * does not answer it.
+     */
+    public function testAnAlliedBuildUpReachesExportsThroughTheArmsBacklog(): void
+    {
+        $home = new MacroState();
+        $armed = new MacroState();
+        $armed->alliedDefenseSpendingIndexEma = 150.0;
+
+        $dt = 0.25;
+        $gapHome = $this->subsystem->calculateOutputGap($home, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, $dt, 1.0);
+        $gapArmed = $this->subsystem->calculateOutputGap($armed, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, $dt, 1.0);
+
+        $delivered = MacroAggregateSubsystem::DISTRICT_DEFENSE_EXPORT_SHARE * MacroEngine::ALLIED_PROCUREMENT_ELASTICITY * log(1.5);
+        $firstQuarter = 1.0 - exp(-$dt / MacroAggregateSubsystem::DEFENSE_DELIVERY_LAG_YEARS);
+        $this->assertEqualsWithDelta($firstQuarter * $delivered, $armed->netExportGap, 1e-12, 'A quarter delivers the backlog\'s first slice, not the order.');
+        $this->assertEqualsWithDelta($firstQuarter * $delivered, $gapArmed - $gapHome, 1e-9);
+
+        $home->outputGap = $gapHome;
+        $armed->outputGap = $gapArmed;
+        for ($i = 0; $i < 60; $i++) {
+            $home->outputGap = $gapHome = $this->subsystem->calculateOutputGap($home, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, $dt, 1.0);
+            $armed->outputGap = $gapArmed = $this->subsystem->calculateOutputGap($armed, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, $dt, 1.0);
+        }
+        $this->assertEqualsWithDelta($delivered, $armed->netExportGap, 1e-5, 'Held, the whole order book is delivered.');
+        $this->assertEqualsWithDelta($delivered, $gapArmed - $gapHome, 1e-5, 'And it stays in the gap as a level.');
+        $this->assertGreaterThan(0.005, $delivered, 'A half again allied budget is worth more than half a point of District GDP.');
+    }
+
+    /** The mainland's cycle does not buy arms, and an allied build-up does not buy the civilian exports. */
+    public function testArmsExportsAnswerAlliedBudgetsNotTheMainlandCycle(): void
+    {
+        $mainlandBoom = MacroAggregateSubsystem::netExportGapAt(0.03, 0.0, 0.0);
+        $this->assertEqualsWithDelta((MacroAggregateSubsystem::DISTRICT_EXPORT_SHARE - MacroAggregateSubsystem::DISTRICT_DEFENSE_EXPORT_SHARE) * MacroAggregateSubsystem::EXPORT_DEMAND_ELASTICITY * 0.03, $mainlandBoom, 1e-15);
+
+        $buildUp = MacroAggregateSubsystem::netExportGapAt(0.0, 0.0, 0.2);
+        $this->assertEqualsWithDelta(MacroAggregateSubsystem::DISTRICT_DEFENSE_EXPORT_SHARE * MacroEngine::ALLIED_PROCUREMENT_ELASTICITY * 0.2, $buildUp, 1e-15);
+        $this->assertEqualsWithDelta($mainlandBoom + $buildUp, MacroAggregateSubsystem::netExportGapAt(0.03, 0.0, 0.2), 1e-15, 'The two export markets add.');
+    }
 
     /** Drehmann, Juselius & Korinek (2018): borrowed income is spent as it is borrowed, and income repaid out of the stock is not spent. */
     public function testNewHouseholdBorrowingMovesDemandBothWays(): void
@@ -1766,13 +1811,39 @@ class MacroAggregateSubsystemTest extends TestCase
     {
         $this->assertEqualsWithDelta(
             1.0,
-            MacroAggregateSubsystem::DOMESTIC_GAP_WEIGHT + (MacroAggregateSubsystem::FINANCE_GAP_WEIGHT * (MacroAggregateSubsystem::FINANCE_CREDIT_SHARE + MacroAggregateSubsystem::FINANCE_MARKET_SHARE)),
+            (MacroAggregateSubsystem::DOMESTIC_GAP_WEIGHT / (1.0 - MacroAggregateSubsystem::EXCESS_IMPORT_LEAKAGE))
+                + (MacroAggregateSubsystem::FINANCE_GAP_WEIGHT * (MacroAggregateSubsystem::FINANCE_CREDIT_SHARE + MacroAggregateSubsystem::FINANCE_MARKET_SHARE)),
             1e-15
         );
         $us = MacroAggregateSubsystem::US_FINANCE_SHARE;
         $this->assertEqualsWithDelta(0.0, $us - ((1.0 - $us) * $us / (1.0 - $us)), 1e-15, 'At the US share the weight vanishes.');
         $this->assertGreaterThan(0.2, MacroAggregateSubsystem::FINANCE_GAP_WEIGHT);
         $this->assertLessThan(MacroAggregateSubsystem::DISTRICT_FINANCE_SHARE, MacroAggregateSubsystem::FINANCE_GAP_WEIGHT);
+    }
+
+    /**
+     * An open economy's demand leaks abroad: the District's imports take 1.4 times each move in domestic demand at
+     * their share of GDP (IMF WEO 2015), and the fitted US equation already leaks at the US's share, so only the
+     * excess comes out. At the US's import share nothing does.
+     */
+    public function testDomesticDemandLeaksTheDistrictsExcessImportsAbroad(): void
+    {
+        $this->assertEqualsWithDelta(
+            MacroAggregateSubsystem::IMPORT_DEMAND_ELASTICITY * (MacroAggregateSubsystem::DISTRICT_IMPORT_SHARE - MacroAggregateSubsystem::US_IMPORT_SHARE),
+            MacroAggregateSubsystem::EXCESS_IMPORT_LEAKAGE,
+            1e-15
+        );
+        $this->assertEqualsWithDelta(0.0, MacroAggregateSubsystem::IMPORT_DEMAND_ELASTICITY * (MacroAggregateSubsystem::US_IMPORT_SHARE - MacroAggregateSubsystem::US_IMPORT_SHARE), 1e-15, 'At the US share nothing extra leaks.');
+        $this->assertGreaterThan(0.2, MacroAggregateSubsystem::EXCESS_IMPORT_LEAKAGE, 'Twice the US import share leaks about a quarter of every demand swing.');
+
+        // A demand impulse reaches the gap net of the leak.
+        $dt = 0.25;
+        $calm = $this->neutralBorrowingState();
+        $shocked = $this->neutralBorrowingState();
+        $shocked->demandShock = 0.02;
+        $delta = $this->subsystem->calculateOutputGap($shocked, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, $dt, 1.0)
+            - $this->subsystem->calculateOutputGap($calm, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, $dt, 1.0);
+        $this->assertLessThan(0.02 * $dt * (1.0 - MacroAggregateSubsystem::EXCESS_IMPORT_LEAKAGE) + 1e-6, $delta, 'The impulse is net of the excess imports.');
     }
 
     /**

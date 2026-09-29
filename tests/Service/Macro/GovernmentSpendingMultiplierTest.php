@@ -50,8 +50,11 @@ class GovernmentSpendingMultiplierTest extends TestCase
         }
         $multiplier = $outputSum / $purchasesSum;
 
-        $this->assertGreaterThanOrEqual(0.54, $multiplier, 'At least Ramey-Zubairy\'s Blanchard-Perotti 2-year integral.');
-        $this->assertLessThanOrEqual(1.0, $multiplier, 'Within Ramey\'s (2019) 0.6-1.0 range for aggregate purchases.');
+        // The US range, net of the imports an open economy's extra spending draws in (Ilzetzki, Mendoza & Vegh 2013:
+        // open economies' multipliers are smaller).
+        $leak = 1.0 - MacroAggregateSubsystem::EXCESS_IMPORT_LEAKAGE;
+        $this->assertGreaterThanOrEqual(0.54 * $leak, $multiplier, 'At least Ramey-Zubairy\'s Blanchard-Perotti 2-year integral, net of the leak.');
+        $this->assertLessThanOrEqual(1.0 * $leak, $multiplier, 'Within Ramey\'s (2019) 0.6-1.0 range for aggregate purchases, net of the leak.');
     }
 
     /** @return list<array{gap: float, gov: float}> */

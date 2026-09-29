@@ -125,7 +125,7 @@ class EarningsReportSubscriberTest extends TestCase
         // Check drivers were identified
         $driverLabels = array_column($gov['drivers'], 'label');
         $this->assertContains('Strong Operational Execution', $driverLabels);
-        $this->assertContains('Fiscal & Defense Appropriations', $driverLabels);
+        $this->assertContains('Fiscal Appropriations', $driverLabels);
         $this->assertContains('Cost-Plus Inflation Escalation', $driverLabels);
 
         // Check expeditionary_ops VIX fear premium

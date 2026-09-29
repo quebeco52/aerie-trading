@@ -97,8 +97,10 @@ class AssetMarketSubsystem
     public const MAINLAND_INFLATION_GAP_SLOPE = 0.004;
     /** Quarterly innovation of annualized mainland core inflation, the regression's residual sd (0.586pp). */
     public const MAINLAND_INFLATION_SIGMA = 0.00586;
-    /** Share of the district's cycle that reaches the mainland's demand in the long run: its imports are the mainland's exports. */
-    public const FOREIGN_IMPORT_SPILLOVER = 0.15;
+    /** The mainland's (US) GDP, 2023: $27.8T (World Bank NY.GDP.MKTP.CD). */
+    public const MAINLAND_GDP_USD = 27.81e12;
+    /** Share of the district's cycle that reaches the mainland's demand in the long run: its imports are the mainland's exports, moving 1.4 times its demand (IMF WEO 2015) at their share of its GDP, scaled to the mainland's size (0.20). */
+    public const FOREIGN_IMPORT_SPILLOVER = MacroAggregateSubsystem::IMPORT_DEMAND_ELASTICITY * MacroAggregateSubsystem::DISTRICT_IMPORT_SHARE * MacroEngine::DISTRICT_GDP_USD / self::MAINLAND_GDP_USD;
     /** Guard on the mainland gap, beyond the deepest postwar CBO gap; the fitted process does not reach it. */
     public const MAX_FOREIGN_GAP = 0.10;
 
@@ -113,6 +115,22 @@ class AssetMarketSubsystem
     public const FED_RULE_SIGMA = 0.00392;
     /** Guard on the funds rate; the fitted rule does not reach it. */
     public const MAX_FOREIGN_POLICY_RATE = 0.20;
+
+    // --- Allied Defence Spending (SIPRI constant-dollar milex over GDP, 1951-2019: var/harness/allied_fit.py) ---
+    /** Reversion speed of the log allied defence burden off its trend (0.489/yr, half-life 1.4y), corrected for annual averaging. */
+    public const ALLIED_DEFENSE_MEAN_REVERSION = 0.489;
+    /** Diffusion of the log allied defence burden, the Merton (1976) MLE on the annual residuals, scaled for the same averaging. */
+    public const ALLIED_DEFENSE_VOLATILITY = 0.0932;
+    /** Mobilisations a year, the same MLE (LR 31.6 against Gaussian): Korea is the sample's, so about one a generation. */
+    public const ALLIED_MOBILISATION_PROBABILITY = 0.029;
+    /** Mean log size of a mobilisation, the same MLE: allied spending rises three quarters above trend. */
+    public const ALLIED_MOBILISATION_MEAN = 0.5716;
+    /** Volatility of the log mobilisation size, the same MLE. */
+    public const ALLIED_MOBILISATION_VOL = 0.0542;
+    /** Guards on the allied index, a quarter of trend to four times; the fitted process does not reach them. */
+    public const MIN_ALLIED_DEFENSE_INDEX = 25.0;
+    /** Upper guard on the allied index, beyond two stacked mobilisations. */
+    public const MAX_ALLIED_DEFENSE_INDEX = 400.0;
 
     // --- MUNDELL-FLEMING OPEN ECONOMY (IS-LM-BOP) ---
     /**
@@ -758,6 +776,41 @@ class AssetMarketSubsystem
         }
 
         $state->globalDemandGap = (MacroEngine::DOMESTIC_DEMAND_WEIGHT * $state->outputGapEma) + ((1.0 - MacroEngine::DOMESTIC_DEMAND_WEIGHT) * $state->foreignOutputGapEma);
+    }
+
+    /**
+     * Allied defence spending, the demand the District's arms makers export into: the mainland's and its allies'
+     * military spending over their GDP against its trend, a Schwartz (1997) log-OU with Merton (1976) mobilisation
+     * jumps, fitted to SIPRI's constant-dollar series for NATO, Japan, South Korea, Australia, New Zealand and Israel,
+     * 1951-2019. The District fields no army of its own, so its wars are its customers'.
+     *
+     * @param MacroState $state Current macroeconomic state.
+     * @param float      $dt    Time increment in years.
+     */
+    public function calculateAlliedDefenseSpending(MacroState $state, float $dt): void
+    {
+        // Merton compensator: the target nets out the jumps' expected drift, lambda * (E[e^J] - 1) / kappa in log.
+        $jumpDrift = self::ALLIED_MOBILISATION_PROBABILITY * (exp(self::ALLIED_MOBILISATION_MEAN + ((self::ALLIED_MOBILISATION_VOL ** 2) / 2.0)) - 1.0);
+        $baseProcess = $this->mathUtility->calculateSchwartz1Factor(
+            currentPrice: $state->alliedDefenseSpendingIndex,
+            kappa: self::ALLIED_DEFENSE_MEAN_REVERSION,
+            theta: MacroEngine::ALLIED_DEFENSE_BASELINE * exp(-$jumpDrift / self::ALLIED_DEFENSE_MEAN_REVERSION),
+            sigma: self::ALLIED_DEFENSE_VOLATILITY,
+            dt: $dt,
+            dW: $this->mathUtility->generateStandardNormal()
+        );
+
+        $jumpData = $this->mathUtility->calculateJumpDiffusion(
+            lambda: self::ALLIED_MOBILISATION_PROBABILITY,
+            jumpMean: self::ALLIED_MOBILISATION_MEAN,
+            jumpVol: self::ALLIED_MOBILISATION_VOL,
+            dt: $dt
+        );
+
+        $state->alliedDefenseSpendingIndex = max(self::MIN_ALLIED_DEFENSE_INDEX, min(self::MAX_ALLIED_DEFENSE_INDEX, $baseProcess * $jumpData['multiplier']));
+        if ($jumpData['exponent'] !== null) {
+            $this->diagnostics?->recordEvent('alliedMobilisation', $jumpData['exponent']);
+        }
     }
 
     /** Quarters completed by a simulated time; the tolerance absorbs the clock's accumulated rounding at a quarter's turn. */

@@ -56,6 +56,7 @@ final class MacroFieldCatalog
         'market_volatility_ema' => ['label' => 'Implied Volatility', 'unit' => self::UNIT_PERCENT],
         'consumer_sentiment_index_ema' => ['label' => 'Consumer Sentiment', 'unit' => self::UNIT_INDEX],
         'government_spending_index_ema' => ['label' => 'Government Spending', 'unit' => self::UNIT_INDEX],
+        'allied_defense_spending_index_ema' => ['label' => 'Allied Defence Spending', 'unit' => self::UNIT_INDEX],
         'reimbursement_rate_growth' => ['label' => 'Reimbursement Update', 'unit' => self::UNIT_PERCENT],
         'system_deposit_beta_ema' => ['label' => 'Deposit Beta', 'unit' => self::UNIT_PERCENT],
         'money_market_fund_share_ema' => ['label' => 'Money-Market Share', 'unit' => self::UNIT_PERCENT],

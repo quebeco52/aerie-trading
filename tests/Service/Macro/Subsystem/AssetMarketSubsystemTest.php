@@ -410,6 +410,55 @@ class AssetMarketSubsystemTest extends TestCase
     }
 
 
+    /**
+     * Allied defence spending is its customers' budgets: a build-up fades on the fitted SIPRI half-life
+     * (1.4 years) toward a trend set below the baseline by the mobilisations' Merton compensator and the Ito term.
+     */
+    public function testAnAlliedBuildUpFadesOnItsFittedHalfLife(): void
+    {
+        $quiet = new class extends MathUtility {
+            public function generateStandardNormal(): float { return 0.0; }
+            public function checkProbability(float $probability): bool { return false; }
+        };
+        $subsystem = new AssetMarketSubsystem($quiet);
+        $state = new MacroState();
+        $state->alliedDefenseSpendingIndex = 150.0;
+
+        $kappa = AssetMarketSubsystem::ALLIED_DEFENSE_MEAN_REVERSION;
+        $jumpDrift = AssetMarketSubsystem::ALLIED_MOBILISATION_PROBABILITY
+            * (exp(AssetMarketSubsystem::ALLIED_MOBILISATION_MEAN + ((AssetMarketSubsystem::ALLIED_MOBILISATION_VOL ** 2) / 2.0)) - 1.0);
+        $logTrend = log(MacroEngine::ALLIED_DEFENSE_BASELINE) - ($jumpDrift / $kappa) - ((AssetMarketSubsystem::ALLIED_DEFENSE_VOLATILITY ** 2) / (2.0 * $kappa));
+
+        $dt = 1.0 / 360.0;
+        $halfLife = log(2.0) / $kappa;
+        for ($i = 0, $n = (int) round($halfLife / $dt); $i < $n; $i++) {
+            $subsystem->calculateAlliedDefenseSpending($state, $dt);
+        }
+        $elapsed = round($halfLife / $dt) * $dt;
+        $this->assertEqualsWithDelta((log(150.0) - $logTrend) * exp(-$kappa * $elapsed), log($state->alliedDefenseSpendingIndex) - $logTrend, 1e-9);
+        $this->assertLessThan(MacroEngine::ALLIED_DEFENSE_BASELINE, exp($logTrend), 'Quiet years sit under the trend the mobilisations average up to.');
+    }
+
+    /** A mobilisation lifts allied spending by the fitted jump at once, before any reversion to speak of. */
+    public function testAnAlliedMobilisationArrivesWhole(): void
+    {
+        $mobilised = new class extends MathUtility {
+            public function generateStandardNormal(): float { return 0.0; }
+            public function checkProbability(float $probability): bool { return true; }
+        };
+        $quiet = new class extends MathUtility {
+            public function generateStandardNormal(): float { return 0.0; }
+            public function checkProbability(float $probability): bool { return false; }
+        };
+        $war = new MacroState();
+        $peace = new MacroState();
+        (new AssetMarketSubsystem($mobilised))->calculateAlliedDefenseSpending($war, 1.0 / 360.0);
+        (new AssetMarketSubsystem($quiet))->calculateAlliedDefenseSpending($peace, 1.0 / 360.0);
+
+        $this->assertEqualsWithDelta(exp(AssetMarketSubsystem::ALLIED_MOBILISATION_MEAN), $war->alliedDefenseSpendingIndex / $peace->alliedDefenseSpendingIndex, 1e-12);
+        $this->assertGreaterThan(1.7, $war->alliedDefenseSpendingIndex / $peace->alliedDefenseSpendingIndex, 'A Korea-scale mobilisation: allied budgets up by three quarters.');
+    }
+
     public function testAStormSeasonDentsConfidenceAndTheHousingStock(): void
     {
         $quiet = new class extends MathUtility {
@@ -599,7 +648,7 @@ class AssetMarketSubsystemTest extends TestCase
         $home = new MacroState();
         $home->outputGap = 0.0;
         // The mainland boom's exports, already part of the gap they lift, with domestic demand unmoved.
-        $exports = MacroAggregateSubsystem::netExportGapAt(0.03, 0.0);
+        $exports = MacroAggregateSubsystem::netExportGapAt(0.03, 0.0, 0.0);
         $abroad = new MacroState();
         $abroad->netExportGap = $exports;
         $abroad->outputGap = $exports;

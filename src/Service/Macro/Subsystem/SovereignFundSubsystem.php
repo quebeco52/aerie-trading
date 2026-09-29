@@ -86,8 +86,10 @@ class SovereignFundSubsystem
     public const OPENING_FUND_TO_GDP = 0.41;
 
     // --- Currency Bridge (World Bank) ---
-    /** Listed-company capitalisation over GDP at inception: a financial centre's, Singapore's 1.56 (World Bank CM.MKT.LCAP.GD.ZS; US median 1.15, world 0.74). */
-    public const MARKET_CAP_TO_GDP = 1.56;
+    /** The seeded board's value at the opening, measured on the full-market harness (var/harness/FullMarketHarnessTest.php, first quarter, seeds 11-12). */
+    public const BOARD_OPENING_CAP_USD = 32.0e12;
+    /** Listed-company capitalisation over GDP at inception: the board over District GDP, 2.67, a financial centre's that headquarters global firms (World Bank CM.MKT.LCAP.GD.ZS 2015-22: Switzerland 2.0-2.8, Hong Kong 10-18; US 1.4-2.1). */
+    public const MARKET_CAP_TO_GDP = self::BOARD_OPENING_CAP_USD / MacroEngine::DISTRICT_GDP_USD;
 
     public function __construct(
         private readonly MathUtility $mathUtility,

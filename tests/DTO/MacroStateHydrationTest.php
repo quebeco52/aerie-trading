@@ -161,6 +161,26 @@ class MacroStateHydrationTest extends TestCase
     }
 
     /**
+     * A saved state carrying allied spending but no delivery lag opens the lag where allied spending stands, so the
+     * arms exports are already in the net export level and the first tick reprices nothing. Both readers agree.
+     */
+    public function testAlliedArmsDeliveriesOpenWhereAlliedSpendingStands(): void
+    {
+        $payload = ['allied_defense_spending_index_ema' => 130.0, 'foreign_output_gap_ema' => 0.01, 'exchange_rate_index_ema' => 100.0, 'exchange_rate_trend' => 100.0];
+        $state = MacroState::fromArray($payload);
+        $dto = MacroStateDTO::fromArray($payload);
+
+        $this->assertEqualsWithDelta(log(1.3), $state->alliedDefenseDeliveryLag, 1e-15);
+        $this->assertEqualsWithDelta(MacroAggregateSubsystem::netExportGapAt(0.01, 0.0, log(1.3)), $state->netExportGap, 1e-15);
+        $this->assertEqualsWithDelta($state->alliedDefenseDeliveryLag, $dto->alliedDefenseDeliveryLag, 1e-15);
+        $this->assertEqualsWithDelta($state->netExportGap, $dto->netExportGap, 1e-15);
+
+        $legacy = MacroState::fromArray(['foreign_output_gap_ema' => 0.01]);
+        $this->assertSame(MacroEngine::ALLIED_DEFENSE_BASELINE, $legacy->alliedDefenseSpendingIndex, 'A state predating allied spending opens it at trend.');
+        $this->assertSame(0.0, $legacy->alliedDefenseDeliveryLag);
+    }
+
+    /**
      * A live state saved before the open-economy levels existed opens them where the currency and the mainland stand,
      * so the first tick after the upgrade reprices neither import prices nor trade volumes.
      */
@@ -171,7 +191,7 @@ class MacroStateHydrationTest extends TestCase
 
         $this->assertEqualsWithDelta(MacroAggregateSubsystem::importPriceLevelTarget(92.0), $state->importPriceLevel, 1e-15);
         $this->assertEqualsWithDelta(log(0.92), $state->realExchangeRateTradeLag, 1e-15);
-        $this->assertEqualsWithDelta(MacroAggregateSubsystem::netExportGapAt(0.012, log(0.92)), $state->netExportGap, 1e-15);
+        $this->assertEqualsWithDelta(MacroAggregateSubsystem::netExportGapAt(0.012, log(0.92), 0.0), $state->netExportGap, 1e-15);
         $this->assertGreaterThan(0.0, $state->netExportGap, 'A cheap currency and a mainland boom both sell exports.');
 
         // Finance output opens where the credit and market balances stand, so the upgrade reprices no output.

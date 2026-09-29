@@ -29,11 +29,11 @@ class InitialMarket
             'historical_fixed_rate' => 0.025,
             'credit_spread' => 0.0015,
             'depreciation_rate' => 0.02,
-            'corporate_treasury' => 2_750_000_000_000.00,
-            'total_equity' => 2_568_125_000_000.00,
-            'customer_deposits' => 27_500_000_000_000.00,
-            'wholesale_debt' => 500_000_000_000.00,
-            'retained_earnings' => 1_750_000_000_000.00,
+            'corporate_treasury' => 1_925_000_000_000.00,
+            'total_equity' => 1_797_687_500_000.00,
+            'customer_deposits' => 19_250_000_000_000.00,
+            'wholesale_debt' => 350_000_000_000.00,
+            'retained_earnings' => 1_225_000_000_000.00,
         ],
         [
             'ticker' => 'SWAN',
@@ -58,11 +58,11 @@ class InitialMarket
             'historical_fixed_rate' => 0.030,
             'credit_spread' => 0.0035,
             'depreciation_rate' => 0.02,
-            'corporate_treasury' => 270_000_000_000.00,
-            'total_equity' => 2_017_500_000_000.00,
+            'corporate_treasury' => 121_500_000_000.00,
+            'total_equity' => 907_875_000_000.00,
             'customer_deposits' => 0.00,
-            'wholesale_debt' => 4_800_000_000_000.00,
-            'retained_earnings' => 500_000_000_000.00,
+            'wholesale_debt' => 2_160_000_000_000.00,
+            'retained_earnings' => 225_000_000_000.00,
         ],
         [
             'ticker' => 'HUMM',
@@ -269,11 +269,11 @@ class InitialMarket
             'historical_fixed_rate' => 0.025,
             'credit_spread' => 0.0030,
             'depreciation_rate' => 0.02,
-            'corporate_treasury' => 5_000_000_000_000.00,
-            'total_equity' => 1_507_140_000_000.00,
-            'customer_deposits' => 5_000_000_000_000.00,
-            'wholesale_debt' => 820_000_000_000.00,
-            'retained_earnings' => 300_000_000_000.00
+            'corporate_treasury' => 2_300_000_000_000.00,
+            'total_equity' => 693_284_400_000.00,
+            'customer_deposits' => 2_300_000_000_000.00,
+            'wholesale_debt' => 377_200_000_000.00,
+            'retained_earnings' => 138_000_000_000.00
         ],
         [
             'ticker' => 'DOVE',
@@ -1277,16 +1277,16 @@ class InitialMarket
             'historical_fixed_rate' => 0.030,
             'credit_spread' => 0.0035,
             'depreciation_rate' => 0.03,
-            'corporate_treasury' => 250_000_000_000.00,
+            'corporate_treasury' => 135_000_000_000.00,
             // A trust whose holdings are worth more is worth more itself. The engineering and machinery
             // pillars it stewards were recapitalized, which lifted the declared portfolio to 1,423B against
             // 1,770B of capital employed and left its own operating subsidiaries below the 20% of the
             // balance sheet AnchorHoldings::MIN_CONSOLIDATED_SHARE requires them to be — a trust whose
             // stakes swallow it has no operations left to draw a stream from. 2,010B puts them back at 25%.
-            'total_equity' => 2_090_000_000_000.00,
+            'total_equity' => 1_128_600_000_000.00,
             'customer_deposits' => 0.00,
-            'wholesale_debt' => 140_000_000_000.00,
-            'retained_earnings' => 1_200_000_000_000.00
+            'wholesale_debt' => 75_600_000_000.00,
+            'retained_earnings' => 648_000_000_000.00
         ],
         [
             'ticker' => 'ELDE',

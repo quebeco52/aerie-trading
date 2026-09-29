@@ -99,6 +99,8 @@ readonly class MacroStateDTO
         public float $metalsXi = 4.60517,
         public float $governmentSpendingIndex = 100.0,
         public float $governmentSpendingIndexEma = 100.0,
+        public float $alliedDefenseSpendingIndex = MacroEngine::ALLIED_DEFENSE_BASELINE,
+        public float $alliedDefenseSpendingIndexEma = MacroEngine::ALLIED_DEFENSE_BASELINE,
         public float $commercialPropertyIndex = 100.0,
         public float $commercialPropertyIndexEma = 100.0,
         public float $residentialPropertyIndex = 100.0,
@@ -168,10 +170,12 @@ readonly class MacroStateDTO
         public float $tfpPotentialAbsorbed = 0.0,
         public float $productivitySupplyGap = 0.0,
         public float $netExportGap = 0.0,
+        public float $domesticDemandGapEma = 0.0,
         public float $financeOutputGap = 0.0,
         public float $financeMarketTrend = 0.0,
         public float $financeMarketTrendSlope = 0.0,
         public float $realExchangeRateTradeLag = 0.0,
+        public float $alliedDefenseDeliveryLag = 0.0,
         public float $importPriceLevel = 0.0,
         public float $monetaryStanceStage1 = 0.0,
         public float $monetaryStanceTransmitted = 0.0,
@@ -431,7 +435,8 @@ readonly class MacroStateDTO
         // The open-economy levels open where the currency and the mainland already stand, as MacroState::fromArray has them.
         $args['importPriceLevel'] ??= MacroAggregateSubsystem::importPriceLevelTarget($resolve('exchangeRateIndexEma'));
         $args['realExchangeRateTradeLag'] ??= MacroAggregateSubsystem::realExchangeRateGap($resolve('exchangeRateIndexEma'), $resolve('exchangeRateTrend'));
-        $args['netExportGap'] ??= MacroAggregateSubsystem::netExportGapAt($resolve('foreignOutputGapEma'), $resolve('realExchangeRateTradeLag'));
+        $args['alliedDefenseDeliveryLag'] ??= MacroAggregateSubsystem::alliedDefenseGap($resolve('alliedDefenseSpendingIndexEma'));
+        $args['netExportGap'] ??= MacroAggregateSubsystem::netExportGapAt($resolve('foreignOutputGapEma'), $resolve('realExchangeRateTradeLag'), $resolve('alliedDefenseDeliveryLag'));
         // The finance trend a state predating it omits opens on the trend it replaced, so the finance level is unmoved.
         if (!isset($args['financeMarketTrend']) && $resolve('equityWealthTrend') > 0.0) {
             $args['financeMarketTrend'] = $resolve('equityWealthTrend');
@@ -440,6 +445,7 @@ readonly class MacroStateDTO
             MacroAggregateSubsystem::creditBalanceGap($resolve('creditToGdpGap'), $resolve('creditToGdpTrend')),
             MacroAggregateSubsystem::marketBalanceGap($resolve('equityWealthRatio'), $resolve('financeMarketTrend'))
         );
+        $args['domesticDemandGapEma'] ??= MacroAggregateSubsystem::domesticDemandGapAt($resolve('outputGapEma'), $resolve('productivitySupplyGap'), $resolve('netExportGap'), $resolve('financeOutputGap'));
 
         return new self(...$args);
     }

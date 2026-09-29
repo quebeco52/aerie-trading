@@ -71,7 +71,8 @@ class CompanySnapshotNavTest extends TestCase
         $sphere = $this->sphere(1_316.0);
         $sphere->setListedStakesCarrying('1118700000000');
 
-        $snapshot = $this->builder($this->board(200_000_000_000.0))->build($sphere, new MacroStateDTO());
+        // Six holdings at $350bn: a portfolio worth ~$840bn at the sphere's stake fractions, above its quote.
+        $snapshot = $this->builder($this->board(350_000_000_000.0))->build($sphere, new MacroStateDTO());
 
         $this->assertNotNull($snapshot['netAssetValue']);
         $this->assertGreaterThan(0.0, $snapshot['netAssetValue']['perShare']);

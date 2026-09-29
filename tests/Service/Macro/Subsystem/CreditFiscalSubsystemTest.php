@@ -34,7 +34,7 @@ class CreditFiscalSubsystemTest extends TestCase
         $this->assertGreaterThan(MacroEngine::BASE_CREDIT_SPREAD, $state->macroCreditSpread);
     }
 
-    /** Purchases do not lean against the cycle (US 1949-2019), and a surge fades on the fitted 1.8-year half-life. */
+    /** Purchases do not lean against the cycle (US civilian 1985-2019), and a surge fades on the fitted 2.3-year half-life. */
     public function testGovernmentSpendingIgnoresTheGapAndASurgeFadesOverYears(): void
     {
         $subsystem = $this->quietSubsystem();
@@ -45,7 +45,7 @@ class CreditFiscalSubsystemTest extends TestCase
             $state->outputGapEma = $gap;
             $state->governmentSpendingIndex = 125.0;
             $path = [];
-            for ($year = 1; $year <= 3; $year++) {
+            for ($year = 1; $year <= 4; $year++) {
                 for ($i = 0; $i < 360; $i++) {
                     $subsystem->calculateGovernmentSpending($state, 1.0 / 360.0);
                 }
@@ -55,14 +55,13 @@ class CreditFiscalSubsystemTest extends TestCase
         }
 
         $this->assertSame($paths[0], $paths[1], 'A slump and a boom leave purchases on the same path.');
-        $settle = $paths[0][2];
         for ($i = 0; $i < 360 * 40; $i++) {
             $subsystem->calculateGovernmentSpending($state, 1.0 / 360.0);
         }
         $share = static fn (float $index): float => log($index / $state->governmentSpendingIndex) / log(125.0 / $state->governmentSpendingIndex);
-        $this->assertGreaterThan(0.5, $share($paths[0][1]), 'More than half of a Korea-sized surge is still there after a year.');
-        $this->assertLessThan(0.5, $share($settle), 'Less than half is left after two.');
-        $this->assertGreaterThan(0.25, $share($settle), 'A mobilisation is still a quarter there after two years.');
+        $this->assertGreaterThan(0.5, $share($paths[0][2]), 'More than half of a spending surge is still there after two years.');
+        $this->assertLessThan(0.5, $share($paths[0][3]), 'Less than half is left after three.');
+        $this->assertGreaterThan(0.25, $share($paths[0][4]), 'A quarter is still there after four years.');
     }
 
     public function testBarroFiscalPolicyCutsCorporateTaxInRecession(): void

@@ -30,8 +30,10 @@ class MacroAggregateSubsystem
     public const KALDOR_WEALTH_EFFECT_ELASTICITY = self::DEMAND_OWN_PULL * self::HOUSING_WEALTH_MPC * self::HOUSING_WEALTH_TO_GDP;
     /** Marginal propensity to consume out of a dollar of stock market wealth, a year (Chodorow-Reich, Nenov & Simsek 2021: 3.2 cents). */
     public const EQUITY_WEALTH_MPC = 0.032;
-    /** Demand drift per unit of equity wealth above the level households are used to: the MPC on the board's value, which is sized against District GDP already, so domestic demand's share is undone. */
-    public const KALDOR_EQUITY_WEALTH_ELASTICITY = self::DEMAND_OWN_PULL * self::EQUITY_WEALTH_MPC * SovereignFundSubsystem::MARKET_CAP_TO_GDP / self::DOMESTIC_GAP_WEIGHT;
+    /** Share of the board District households own themselves, directly and through funds (the holdings the MPC is measured on): a financial centre whose listed giants earn abroad, the UK's 20.4% (ONS, Ownership of UK quoted shares 2020: individuals 12.0%, unit trusts 7.4%, investment trusts 1.0%; the rest of the world holds 56.3%). */
+    public const DISTRICT_HOUSEHOLD_EQUITY_SHARE = 0.204;
+    /** Demand drift per unit of equity wealth above the level households are used to: the MPC on the part of the board households own, which is sized against District GDP already, so domestic demand's share is undone. Foreign holders spend their gains abroad. */
+    public const KALDOR_EQUITY_WEALTH_ELASTICITY = self::DEMAND_OWN_PULL * self::EQUITY_WEALTH_MPC * self::DISTRICT_HOUSEHOLD_EQUITY_SHARE * SovereignFundSubsystem::MARKET_CAP_TO_GDP / self::DOMESTIC_GAP_WEIGHT;
     /** Years over which a valuation level stops being news and becomes the household's normal (Carroll et al. slow adjustment). */
     public const EQUITY_WEALTH_TREND_HORIZON_YEARS = 3.0;
     /** The same horizon for houses, longer because housing wealth is revalued by sales that are years apart (Carroll, Otsuka & Slacalek 2011); a house price cycle runs about twice this, so the cycle still reads as deviation. */
@@ -50,10 +52,16 @@ class MacroAggregateSubsystem
     public const NATURAL_RATE_ADJUSTMENT_SPEED = 1.0;
 
     // --- Open Economy: Trade Volumes and Import Prices (IMF WEO October 2015, Ch. 3, Table 3.1: 60 economies, 1980-2014) ---
-    /** Exports over GDP, between the US's 13% and the UK's 30% (World Bank, 2010-19 averages): a closed-leaning economy that sells its finance abroad. */
-    public const DISTRICT_EXPORT_SHARE = 0.20;
+    /** Exports over GDP, the UK's 30% (World Bank NE.EXP.GNFS.ZS, 2010-19 average): a financial centre that sells its finance and its arms abroad, at a third of the world's size. */
+    public const DISTRICT_EXPORT_SHARE = 0.30;
     /** Imports over GDP: exports less the structural trade balance. */
     public const DISTRICT_IMPORT_SHARE = self::DISTRICT_EXPORT_SHARE - MacroEngine::TRADE_BALANCE_BASELINE;
+    /** The seeded Aerospace & Defense makers' first-year revenue (GRIP, PTAR), all of it sold to allied governments (full-market harness). */
+    public const DISTRICT_DEFENSE_EXPORTS_USD = 340.0e9;
+    /** Arms exports over GDP, part of the exports above (2.8%). */
+    public const DISTRICT_DEFENSE_EXPORT_SHARE = self::DISTRICT_DEFENSE_EXPORTS_USD / MacroEngine::DISTRICT_GDP_USD;
+    /** Mean lag (years) from an allied arms order to its delivery as exports: the makers' cost-plus backlog burns 15% a quarter (DefenseContractorBusinessModel). */
+    public const DEFENSE_DELIVERY_LAG_YEARS = 1.0 / (4.0 * 0.15);
     /** Export volume per unit of trading-partner demand (2.3). */
     public const EXPORT_DEMAND_ELASTICITY = 2.3;
     /** Import volume per unit of domestic demand (1.4). */
@@ -79,13 +87,15 @@ class MacroAggregateSubsystem
     /** US finance and insurance value added over GDP, 2005-2019 average (BEA via FRED VAPGDPFI, 7.18%): the share the US-fitted demand equation already carries. */
     public const US_FINANCE_SHARE = 0.072;
     /** Credit intermediation's share of the District's finance (banks, credit services, mortgage finance), by the seeded roster's book equity; its volume follows deflated loan balances. */
-    public const FINANCE_CREDIT_SHARE = 0.296;
+    public const FINANCE_CREDIT_SHARE = 0.346;
     /** Market-based finance's share (funds, brokerage, exchanges, clearing, investment banking), the same basis; its volume follows the deflated value of the assets it manages. The rest, insurance and holding companies, moves with the domestic economy. */
     public const FINANCE_MARKET_SHARE = 0.302;
     /** Weight of the finance cycle in the gap: the District's finance share less the US share the fitted equation carries on the District's smaller rest of the economy (0.246). */
     public const FINANCE_GAP_WEIGHT = self::DISTRICT_FINANCE_SHARE - ((1.0 - self::DISTRICT_FINANCE_SHARE) * self::US_FINANCE_SHARE / (1.0 - self::US_FINANCE_SHARE));
-    /** Weight of domestic demand in the gap: everything but the market-driven finance (0.853). */
-    public const DOMESTIC_GAP_WEIGHT = 1.0 - (self::FINANCE_GAP_WEIGHT * (self::FINANCE_CREDIT_SHARE + self::FINANCE_MARKET_SHARE));
+    /** Domestic demand the District's imports carry abroad beyond the leak the fitted (US) equation already has: imports move 1.4 times domestic demand (IMF WEO 2015) on the District's import share less the US's (0.231). */
+    public const EXCESS_IMPORT_LEAKAGE = self::IMPORT_DEMAND_ELASTICITY * (self::DISTRICT_IMPORT_SHARE - self::US_IMPORT_SHARE);
+    /** Weight of domestic demand in the gap: everything but the market-driven finance, net of the excess imports it draws in (0.647). */
+    public const DOMESTIC_GAP_WEIGHT = (1.0 - (self::FINANCE_GAP_WEIGHT * (self::FINANCE_CREDIT_SHARE + self::FINANCE_MARKET_SHARE))) * (1.0 - self::EXCESS_IMPORT_LEAKAGE);
     /** Steady-state Kalman level gain of the one-sided HP filter at Hodrick & Prescott's quarterly lambda of 1600, the trend managed market value is measured against: it follows a steady trend without the lag a moving average carries (var/harness/hp_kalman.py). */
     public const FINANCE_MARKET_TREND_LEVEL_GAIN = 0.200556;
     /** Steady-state Kalman slope gain of the same filter. */
@@ -465,7 +475,7 @@ class MacroAggregateSubsystem
         // market-driven finance output. The demand equation below runs on domestic demand only: momentum,
         // stabilisers and drags answer spending.
         $openingGap = $state->outputGap;
-        $y = ($openingGap - $state->productivitySupplyGap - $state->netExportGap - $state->financeOutputGap) / self::DOMESTIC_GAP_WEIGHT;
+        $y = self::domesticDemandGap($state);
         $supplyGap = $state->tfpOutputStage2 - $state->tfpPotentialAbsorbed;
         $supplyChange = $supplyGap - $state->productivitySupplyGap;
         $state->productivitySupplyGap = $supplyGap;
@@ -573,11 +583,12 @@ class MacroAggregateSubsystem
         // Baker, Bloom & Davis (2016) real options investment deferral under policy uncertainty.
         $policyUncertaintyDrag = self::KALDOR_EPU_DRAG * max(0.0, log(max(1.0, $state->policyUncertaintyIndexEma) / MacroEngine::EPU_BASELINE));
 
-        // Metzler (1941) & Blinder (1982) inventory investment cycle step.
+        // Metzler (1941) & Blinder (1982) inventory investment cycle step, on domestic demand against its own average:
+        // like with like, so the level parts riding beside the demand equation set off no surprise.
         $state->inventoryStockGap = $this->mathUtility->calculateInventoryCycleStep(
             currentInventoryGap: $state->inventoryStockGap,
             outputGap: $y,
-            outputGapEma: $state->outputGapEma,
+            outputGapEma: $state->domesticDemandGapEma,
             speed: self::INVENTORY_ADJUSTMENT_SPEED,
             surpriseSens: self::INVENTORY_SURPRISE_SENSITIVITY,
             dt: $dt,
@@ -695,8 +706,51 @@ class MacroAggregateSubsystem
             $dt,
             self::TRADE_VOLUME_ADJUSTMENT_YEARS
         );
+        $state->alliedDefenseDeliveryLag = $this->mathUtility->calculateDistributedLag(
+            $state->alliedDefenseDeliveryLag,
+            self::alliedDefenseGap($state->alliedDefenseSpendingIndexEma),
+            $dt,
+            self::DEFENSE_DELIVERY_LAG_YEARS
+        );
 
-        return self::netExportGapAt($state->foreignOutputGapEma, $state->realExchangeRateTradeLag);
+        return self::netExportGapAt($state->foreignOutputGapEma, $state->realExchangeRateTradeLag, $state->alliedDefenseDeliveryLag);
+    }
+
+    /**
+     * The domestic-demand part of the gap, at domestic demand's own scale: the gap less the level parts that ride
+     * beside the demand equation (supply, net exports, market-driven finance), over domestic demand's weight.
+     *
+     * @param MacroState $state Current macroeconomic state.
+     * @return float Domestic demand gap (fraction).
+     */
+    public static function domesticDemandGap(MacroState $state): float
+    {
+        return self::domesticDemandGapAt($state->outputGap, $state->productivitySupplyGap, $state->netExportGap, $state->financeOutputGap);
+    }
+
+    /**
+     * The domestic-demand part of a gap made of the given level parts, at domestic demand's own scale.
+     *
+     * @param float $outputGap        The whole output gap (fraction).
+     * @param float $supplyGap        The productivity supply gap riding beside demand.
+     * @param float $netExportGap     Net exports away from the structural balance (share of GDP).
+     * @param float $financeOutputGap The market-driven finance output (share of GDP).
+     * @return float Domestic demand gap (fraction).
+     */
+    public static function domesticDemandGapAt(float $outputGap, float $supplyGap, float $netExportGap, float $financeOutputGap): float
+    {
+        return ($outputGap - $supplyGap - $netExportGap - $financeOutputGap) / self::DOMESTIC_GAP_WEIGHT;
+    }
+
+    /**
+     * Allied defence spending against its trend, in logs: the orders the District's arms makers take.
+     *
+     * @param float $alliedDefenseSpendingIndexEma The allied defence index, smoothed over a quarter.
+     * @return float Log allied defence gap; positive is a build-up.
+     */
+    public static function alliedDefenseGap(float $alliedDefenseSpendingIndexEma): float
+    {
+        return $alliedDefenseSpendingIndexEma > 0.0 ? log($alliedDefenseSpendingIndexEma / MacroEngine::ALLIED_DEFENSE_BASELINE) : 0.0;
     }
 
     /**
@@ -713,23 +767,28 @@ class MacroAggregateSubsystem
     }
 
     /**
-     * Net exports at a mainland gap and a (lagged) real exchange rate gap, as a share of GDP.
+     * Net exports at a mainland gap, a (lagged) real exchange rate gap and the allied defence spending delivered, as a
+     * share of GDP.
      *
-     * Export volume moves 2.3 times the mainland's demand. A real appreciation raises export prices abroad by the
+     * Civilian export volume moves 2.3 times the mainland's demand; arms exports move with the allied procurement their
+     * makers sell into, at its elasticity to defence spending. A real appreciation raises export prices abroad by the
      * export pass-through and loses their elasticity's worth of volume, and lowers import prices at home by the import
      * pass-through and gains that elasticity's worth of imports, each weighted by its share of GDP (the chapter's
      * footnote 21, which gives 1.5% of GDP per 10% at the sample's 42% and 41% shares).
      *
      * @param float $mainlandGap         Mainland output gap (fraction).
      * @param float $realExchangeRateGap Log real exchange rate against its trend.
+     * @param float $alliedDefenseGap    Log allied defence spending against its trend, as deliveries have reached it.
      * @return float Net export gap (fraction of GDP).
      */
-    public static function netExportGapAt(float $mainlandGap, float $realExchangeRateGap): float
+    public static function netExportGapAt(float $mainlandGap, float $realExchangeRateGap, float $alliedDefenseGap): float
     {
         $priceResponse = (self::EXPORT_PRICE_PASS_THROUGH * self::EXPORT_PRICE_ELASTICITY * self::DISTRICT_EXPORT_SHARE)
             + (self::IMPORT_PRICE_PASS_THROUGH * self::IMPORT_PRICE_ELASTICITY * self::DISTRICT_IMPORT_SHARE);
 
-        return (self::DISTRICT_EXPORT_SHARE * self::EXPORT_DEMAND_ELASTICITY * $mainlandGap) - ($priceResponse * $realExchangeRateGap);
+        return ((self::DISTRICT_EXPORT_SHARE - self::DISTRICT_DEFENSE_EXPORT_SHARE) * self::EXPORT_DEMAND_ELASTICITY * $mainlandGap)
+            + (self::DISTRICT_DEFENSE_EXPORT_SHARE * MacroEngine::ALLIED_PROCUREMENT_ELASTICITY * $alliedDefenseGap)
+            - ($priceResponse * $realExchangeRateGap);
     }
 
     /**
@@ -974,6 +1033,7 @@ class MacroAggregateSubsystem
         $commodityTrendWeight = 1.0 - exp(-$dt / self::COMMODITY_TREND_HORIZON_YEARS);
 
         $state->outputGapEma += $emaWeight * ($state->outputGap - $state->outputGapEma);
+        $state->domesticDemandGapEma += $emaWeight * (self::domesticDemandGap($state) - $state->domesticDemandGapEma);
         $state->policyRateEma += $emaWeight * ($state->policyRate - $state->policyRateEma);
         $state->inflationEma += $emaWeight * ($state->inflation - $state->inflationEma);
         $state->tipsBreakevenEma += $emaWeight * ($state->tipsBreakeven - $state->tipsBreakevenEma);
@@ -1040,6 +1100,7 @@ class MacroAggregateSubsystem
             ? $state->industrialMetalsIndexTrend + ($commodityTrendWeight * ($state->industrialMetalsIndex - $state->industrialMetalsIndexTrend))
             : $state->industrialMetalsIndex;
         $state->governmentSpendingIndexEma += $emaWeight * ($state->governmentSpendingIndex - $state->governmentSpendingIndexEma);
+        $state->alliedDefenseSpendingIndexEma += $emaWeight * ($state->alliedDefenseSpendingIndex - $state->alliedDefenseSpendingIndexEma);
         $state->retailDefaultRateEma += $emaWeight * ($state->retailDefaultRate - $state->retailDefaultRateEma);
         $state->agriculturalCommodityIndexEma += $emaWeight * ($state->agriculturalCommodityIndex - $state->agriculturalCommodityIndexEma);
         $state->agriculturalCommodityIndexTrend = $state->agriculturalCommodityIndexTrend > 0.0

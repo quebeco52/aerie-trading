@@ -432,7 +432,7 @@ class DefenseContractorBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta(1.0, $totalActiveWeight, 0.0001);
     }
 
-    public function testGovernmentSpendingAndFmsFxSensitivity(): void
+    public function testAlliedDefenceSpendingAndFmsFxSensitivity(): void
     {
         $model = new DefenseContractorBusinessModel();
         $stock = new Stock();
@@ -440,12 +440,12 @@ class DefenseContractorBusinessModelTest extends TestCase
         $stock->setBeta('0.8');
 
         $baseMacro = new MacroStateDTO(
-            governmentSpendingIndexEma: 100.0,
+            alliedDefenseSpendingIndexEma: 100.0,
             exchangeRateIndexEma: 100.0
         );
 
         $shockMacro = new MacroStateDTO(
-            governmentSpendingIndexEma: 120.0,
+            alliedDefenseSpendingIndexEma: 120.0, // an allied build-up is the makers' order book
             exchangeRateIndexEma: 120.0 // Strong dollar creates FMS export headwind
         );
 
@@ -458,6 +458,26 @@ class DefenseContractorBusinessModelTest extends TestCase
         $this->assertGreaterThan($baseResult->streamRevenue['cost_plus_procurement'], $shockResult->streamRevenue['cost_plus_procurement']);
         $this->assertLessThan($baseResult->streamRevenue['foreign_military_sales'], $shockResult->streamRevenue['foreign_military_sales']);
     }
+    /** The District fields no army: its own purchases buy no arms, and its makers' programmes follow allied budgets. */
+    public function testDistrictPurchasesBuyNoArmsButAlliedBudgetsDo(): void
+    {
+        $model = new DefenseContractorBusinessModel();
+        $mathMock = $this->createStub(MathUtility::class);
+        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+        $programmes = function (MacroStateDTO $macro) use ($model, $mathMock): float {
+            $stock = new Stock();
+            $stock->setTicker('GRIP');
+            $stock->setBeta('0.8');
+            $result = $model->computeActualFinancials($stock, 100_000_000.0, 0.30, 20_000_000.0, 0.0, $macro, $mathMock);
+
+            return $result->streamRevenue['cost_plus_procurement'] + $result->streamRevenue['fixed_price_development'];
+        };
+
+        $base = $programmes(new MacroStateDTO());
+        $this->assertSame($base, $programmes(new MacroStateDTO(governmentSpendingIndexEma: 130.0)), 'A District spending surge buys no arms.');
+        $this->assertGreaterThan($base, $programmes(new MacroStateDTO(alliedDefenseSpendingIndexEma: 130.0)), 'An allied build-up fills the programme book.');
+    }
+
     public function testTailEventPersistsAsAMarkovRegimeWithRandomExit(): void
     {
         $model = new DefenseContractorBusinessModel();

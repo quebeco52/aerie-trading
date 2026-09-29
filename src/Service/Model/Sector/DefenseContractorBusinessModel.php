@@ -14,6 +14,7 @@ use App\DTO\StreamContext;
 use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
 use App\Service\Macro\MacroEngine;
+use App\Service\Macro\Subsystem\MacroAggregateSubsystem;
 use App\Service\Math\MathUtility;
 
 /**
@@ -21,10 +22,11 @@ use App\Service\Math\MathUtility;
  * 
  * Financial Physics:
  * - Tri-Stream Defense Engine:
- *      1. Cost-Plus Sovereign Procurement: Protected by FAR 16.3 inflation escalators.
+ *      1. Cost-Plus Allied Procurement: the mainland's and its allies' orders, protected by FAR 16.3 inflation escalators.
  *      2. Fixed-Price Development (EMD): ASC 606 reach-forward losses; vulnerable to general inflation.
  *      3. Foreign Military Sales (FMS): High-margin exports where Wright's Law drives margin expansion.
- * - Sovereign Fiscal Physics: Immune to consumer recessions; exposed to Continuing Resolution (CR) budget freezes.
+ * - Allied Fiscal Physics: the District fields no army, so its makers export into allied defence budgets; immune to
+ *   consumer recessions, exposed to mobilisations and to Continuing Resolution (CR) budget freezes.
  * - FAR Progress Payment Withholding: Program overruns/defects trigger working capital expansion (FAR 32.503-6).
  * - Classified Tooling & Platform Modernization: Multi-decade tooling tech debt vs next-gen franchise margin expansion.
  */
@@ -230,9 +232,10 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
         $fmsZ        = $streams->generateZ('foreign_military_sales', 0.20);
         $eventZ      = $streams->generateExogenousZ('event', 0.10);
 
-        // --- Sovereign Procurement & Cost-Plus Fiscal Physics ---
+        // --- Allied Procurement & Cost-Plus Fiscal Physics ---
         $inflation = $macroState->inflationEma;
-        $govSpendShift = ($macroState->governmentSpendingIndexEma - 100.0) / 100.0;
+        // Programme awards are defence investment, which moves 1.54 times the allied budgets it comes out of.
+        $alliedOrders = MacroEngine::ALLIED_PROCUREMENT_ELASTICITY * MacroAggregateSubsystem::alliedDefenseGap($macroState->alliedDefenseSpendingIndexEma);
 
         // FAR 16.3 Cost-Plus contracts pass through excess inflation as nominal revenue growth
         $costPlusBonus = $inflation > MacroEngine::TARGET_INFLATION
@@ -296,9 +299,9 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
         // Contract awards fund a multi-year backlog; revenue is recognized on percentage of completion, so
         // appropriations, continuing resolutions and export bans hit ORDERS in full and revenue gradually.
         $costPlusBook = $streams->recognizeBacklog('cost_plus_procurement', $expectedRevenue * $costPlusWeight,
-            max(0.0, (1.0 + ($costPlusZ * $baselineVol * self::COST_PLUS_VARIANCE_SCALAR) + $costPlusBonus + ($govSpendShift * 0.40)) * $costPlusMultiplier), self::COST_PLUS_BACKLOG_BURN_RATE);
+            max(0.0, (1.0 + ($costPlusZ * $baselineVol * self::COST_PLUS_VARIANCE_SCALAR) + $costPlusBonus + $alliedOrders) * $costPlusMultiplier), self::COST_PLUS_BACKLOG_BURN_RATE);
         $fixedPriceBook = $streams->recognizeBacklog('fixed_price_development', $expectedRevenue * $fixedPriceWeight,
-            max(0.0, (1.0 + ($fixedPriceZ * $baselineVol * self::FIXED_PRICE_DEV_VARIANCE_SCALAR) + ($govSpendShift * 0.40)) * $fixedPriceMultiplier), self::FIXED_PRICE_BACKLOG_BURN_RATE);
+            max(0.0, (1.0 + ($fixedPriceZ * $baselineVol * self::FIXED_PRICE_DEV_VARIANCE_SCALAR) + $alliedOrders) * $fixedPriceMultiplier), self::FIXED_PRICE_BACKLOG_BURN_RATE);
         $fmsBook = $streams->recognizeBacklog('foreign_military_sales', $expectedRevenue * $fmsWeight,
             max(0.0, (1.0 + ($fmsZ * $baselineVol * self::FMS_VARIANCE_SCALAR) + $this->resolveFxDemandShift($macroState)) * $fmsMultiplier), self::FMS_BACKLOG_BURN_RATE);
 
@@ -373,8 +376,8 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
     public function getOperatingMacroFields(): array
     {
         return [
+            'allied_defense_spending_index_ema',
             'exchange_rate_index_ema',
-            'government_spending_index_ema',
             'industrial_metals_index_ema',
             'inflation_ema',
             'macro_credit_spread_ema',

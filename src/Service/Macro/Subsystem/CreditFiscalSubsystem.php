@@ -54,16 +54,10 @@ class CreditFiscalSubsystem
     public const MAX_CORPORATE_TAX_RATE = 0.30;
 
     // --- GOVERNMENT SPENDING & FISCAL APPROPRIATIONS ---
-    /** Reversion speed of log real purchases / potential (half-life 1.8y): US 1949-2019 AR(1) on a trend, corrected for NIPA quarterly averaging (Working 1960); no countercyclical response to the lagged gap (+0.16, se 0.10). */
-    public const GOVT_SPENDING_MEAN_REVERSION = 0.383;
-    /** Diffusion of log purchases / potential: the Merton (1976) MLE on the US 1949-2019 quarterly residuals, scaled for the same averaging. */
-    public const GOVT_SPENDING_VOLATILITY = 0.0255;
-    /** Poisson intensity of spending jumps, the same MLE: the fat tail is the Korea mobilisation (+25% in 1951's first three quarters), the Vietnam build-up and the demobilisations. */
-    public const GEOPOLITICAL_JUMP_PROBABILITY = 0.34;
-    /** Mean log size of a spending jump, the same MLE; Merton-compensated in the target so jumps add variance, not level. */
-    public const GEOPOLITICAL_JUMP_MEAN = 0.009;
-    /** Volatility of the log spending jump, the same MLE. */
-    public const GEOPOLITICAL_JUMP_VOL = 0.046;
+    /** Reversion speed of log real civilian purchases / potential (half-life 2.3y): US federal non-defence plus state and local, 1985-2019 AR(1) on a trend, corrected for NIPA quarterly averaging (Working 1960); the District fields no army, so its purchases are civilian (var/harness/gov_fit.py). */
+    public const GOVT_SPENDING_MEAN_REVERSION = 0.298;
+    /** Diffusion of log civilian purchases / potential, the same fit; jumps are not significant (LR 2.1), so the process is Gaussian. */
+    public const GOVT_SPENDING_VOLATILITY = 0.0148;
 
     // --- VASICEK ASRF RETAIL DEFAULT RATE ---
     /** Basel II/III consumer asset correlation factor for retail exposures. */
@@ -339,38 +333,25 @@ class CreditFiscalSubsystem
     }
 
     /**
-     * Government purchases as an exogenous process: a Schwartz (1997) log-OU with Merton (1976) jumps, all four
-     * fitted to US real purchases over potential, 1949-2019 (var/harness/gov_fit.py). US purchases do not lean against the cycle
-     * (Auerbach 2002; the fit's lagged-gap term is zero or procyclical), so the countercyclical fiscal leg is the
-     * tax rule alone.
+     * Government purchases as an exogenous process: a Schwartz (1997) log-OU fitted to US civilian purchases (federal
+     * non-defence plus state and local) over potential, 1985-2019 (var/harness/gov_fit.py). The District fields no army,
+     * so the wartime surges that fatten the US total are its customers' (AssetMarketSubsystem::calculateAlliedDefenseSpending).
+     * Purchases do not lean against the cycle (Auerbach 2002; the fit's lagged-gap term is insignificant), so the
+     * countercyclical fiscal leg is the tax rule alone.
      *
      * @param MacroState $state Current macroeconomic state.
      * @param float      $dt    Time increment in years.
      */
     public function calculateGovernmentSpending(MacroState $state, float $dt): void
     {
-        // Merton compensator: the target nets out the jumps' expected drift, lambda * (E[e^J] - 1) / kappa in log.
-        $jumpDrift = self::GEOPOLITICAL_JUMP_PROBABILITY * (exp(self::GEOPOLITICAL_JUMP_MEAN + ((self::GEOPOLITICAL_JUMP_VOL ** 2) / 2.0)) - 1.0);
-        $baseProcess = $this->mathUtility->calculateSchwartz1Factor(
+        $state->governmentSpendingIndex = max(60.0, min(200.0, $this->mathUtility->calculateSchwartz1Factor(
             currentPrice: $state->governmentSpendingIndex,
             kappa: self::GOVT_SPENDING_MEAN_REVERSION,
-            theta: MacroEngine::GOVT_SPENDING_BASELINE * exp(-$jumpDrift / self::GOVT_SPENDING_MEAN_REVERSION),
+            theta: MacroEngine::GOVT_SPENDING_BASELINE,
             sigma: self::GOVT_SPENDING_VOLATILITY,
             dt: $dt,
             dW: $this->mathUtility->generateStandardNormal()
-        );
-
-        $jumpData = $this->mathUtility->calculateJumpDiffusion(
-            lambda: self::GEOPOLITICAL_JUMP_PROBABILITY,
-            jumpMean: self::GEOPOLITICAL_JUMP_MEAN,
-            jumpVol: self::GEOPOLITICAL_JUMP_VOL,
-            dt: $dt
-        );
-
-        $state->governmentSpendingIndex = max(60.0, min(200.0, $baseProcess * $jumpData['multiplier']));
-        if ($jumpData['exponent'] !== null) {
-            $this->diagnostics?->recordEvent('governmentSpending', $jumpData['exponent']);
-        }
+        )));
     }
 
     /**

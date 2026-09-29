@@ -160,8 +160,14 @@ class MacroEngine
     // --- MUNDELL-FLEMING OPEN ECONOMY (IS-LM-BOP) ---
     /** The mainland Fed's neutral policy rate: its smoothed rule, fitted 1987-2008, rests at 3.43% with core inflation at 2% and the gap closed (var/harness/mainland_fit.py), the district's r* plus target. */
     public const MAINLAND_NEUTRAL_RATE = self::BASE_NATURAL_RATE + self::TARGET_INFLATION;
-    /** Weight of the district's own gap in the global demand that prices its commodities: a developed economy that is small in world demand. */
-    public const DOMESTIC_DEMAND_WEIGHT = 0.35;
+    /** Weight of the district's own gap in the global demand that prices its commodities: its share of world GDP. */
+    public const DOMESTIC_DEMAND_WEIGHT = self::DISTRICT_GDP_USD / self::WORLD_GDP_USD;
+
+    // --- The District in Dollars (World Bank NY.GDP.MKTP.CD, 2023) ---
+    /** District GDP at the opening: the world's third economy, between China's $18.3T and Germany's $4.6T. */
+    public const DISTRICT_GDP_USD = 12.0e12;
+    /** World GDP: $107.35T. */
+    public const WORLD_GDP_USD = 107.35e12;
     /** Equity volatility above which flight-to-safety flows begin, for both the FX bid and the term premium. */
     public const FLIGHT_TO_SAFETY_VOL_THRESHOLD = 0.25;
 
@@ -184,6 +190,10 @@ class MacroEngine
     // --- GOVERNMENT SPENDING & FISCAL APPROPRIATIONS ---
     /** Baseline government spending index (neutral peacetime budget). */
     public const GOVT_SPENDING_BASELINE = 100.0;
+    /** Allied defence spending against its trend burden, as an index; the mainland and its allies buy the District's arms. */
+    public const ALLIED_DEFENSE_BASELINE = 100.0;
+    /** Arms makers' orders per unit of allied defence spending: US defence investment (equipment, structures, R&D) moves 1.54 times total defence purchases (BEA NIPA, annual log changes 1949-2019, se 0.07). */
+    public const ALLIED_PROCUREMENT_ELASTICITY = 1.54;
 
     // --- VASICEK ASRF RETAIL DEFAULT RATE ---
     /** Baseline long-run average through-the-cycle retail consumer probability of default. */
@@ -575,6 +585,7 @@ class MacroEngine
         $this->commoditySubsystem->calculateIndustrialMetalsIndex($state, $dt);
         $this->commoditySubsystem->calculateGoldPriceIndex($state, $dt);
         $this->creditFiscalSubsystem->calculateGovernmentSpending($state, $dt);
+        $this->assetSubsystem->calculateAlliedDefenseSpending($state, $dt);
         $this->assetSubsystem->calculateCommercialPropertyIndex($state, $dt);
         $this->creditFiscalSubsystem->calculateHouseholdCredit($state, $dt);
         $this->creditFiscalSubsystem->calculateCreditCrisisHazard($state, $dt);

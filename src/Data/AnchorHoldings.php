@@ -42,13 +42,6 @@ final class AnchorHoldings
             'KSTL' => AnchorStake::Anchor,   // Rail corridors, held for the right of way rather than the rolling stock
             'BIRD' => AnchorStake::Anchor,   // Regulated electric: the municipal concession the Trust was chartered around
             'ERNE' => AnchorStake::Anchor,   // Communication equipment, the grid's nervous system
-            'SNDR' => AnchorStake::Control, // Industrial machinery, a seat and nomination rights
-            'RIVE' => AnchorStake::Anchor, // Industrial machinery, the smaller of the two machinery holdings
-            'EIDR' => AnchorStake::Anchor, // Vehicle manufacturing, the cyclical edge of the portfolio
-            'NUTH' => AnchorStake::Minority, // Building products, the materials half of the infrastructure programme
-            'BUZT' => AnchorStake::Minority, // Heavy construction machinery, cyclical and held through the cycle
-            'IBIS' => AnchorStake::Minority, //
-
         ],
     ];
 

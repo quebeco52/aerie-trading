@@ -703,7 +703,7 @@ class DistrictMap
         'freight-authority' => [
             'label' => 'The Freight Authority',
             'short_label' => 'FREIGHT',
-            'fields' => ['freight_rate_index_ema', 'supply_chain_pressure_index_ema', 'trade_balance_to_gdp_ema', 'foreign_output_gap_ema', 'global_demand_gap_ema'],
+            'fields' => ['freight_rate_index_ema', 'supply_chain_pressure_index_ema', 'trade_balance_to_gdp_ema', 'foreign_output_gap_ema', 'global_demand_gap_ema', 'allied_defense_spending_index_ema'],
             'readouts' => [
                 ['field' => 'freight_rate_index_ema', 'label' => 'FREIGHT', 'unit' => self::UNIT_INDEX],
                 ['field' => 'supply_chain_pressure_index_ema', 'label' => 'GSCPI', 'unit' => self::UNIT_INDEX],

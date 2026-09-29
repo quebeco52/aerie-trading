@@ -63,6 +63,9 @@ class MacroState
 
     public float $governmentSpendingIndex;
     public float $governmentSpendingIndexEma;
+    // Allied defence spending against its trend burden, the demand the District's arms makers export into, and its EMA.
+    public float $alliedDefenseSpendingIndex;
+    public float $alliedDefenseSpendingIndexEma;
 
     public float $commercialPropertyIndex;
     public float $commercialPropertyIndexEma;
@@ -204,6 +207,8 @@ class MacroState
     // Open economy: net exports away from the structural trade balance (a share of GDP, a level part of the gap), the
     // real exchange rate gap as trade volumes have absorbed it, and the log import price level relative to domestic prices.
     public float $netExportGap;
+    // Domestic demand's part of the gap, smoothed like the gap: what the inventory cycle's sales surprise is read against.
+    public float $domesticDemandGapEma;
     // The market-driven finance output (a share of GDP, a level part of the gap): loans and managed assets against their trends.
     public float $financeOutputGap;
     // Potential finance output: the one-sided HP(1600) trend of managed market value over GDP, and its log slope a quarter.
@@ -212,6 +217,8 @@ class MacroState
     // The currency index over its fundamental: the purchasing-power deviation that decays while the fundamental jumps.
     public float $exchangeRateDeviation;
     public float $realExchangeRateTradeLag;
+    // The log allied defence shift the District's arms exports have delivered, orders reaching exports through the backlog.
+    public float $alliedDefenseDeliveryLag;
     public float $importPriceLevel;
     // Monetary transmission: the real-rate stance through two Pascal stages (Solow 1960) on its way to demand.
     public float $monetaryStanceStage1;
@@ -507,8 +514,11 @@ class MacroState
         if (!isset($carried['realExchangeRateTradeLag'])) {
             $state->realExchangeRateTradeLag = MacroAggregateSubsystem::realExchangeRateGap($state->exchangeRateIndexEma, $state->exchangeRateTrend);
         }
+        if (!isset($carried['alliedDefenseDeliveryLag'])) {
+            $state->alliedDefenseDeliveryLag = MacroAggregateSubsystem::alliedDefenseGap($state->alliedDefenseSpendingIndexEma);
+        }
         if (!isset($carried['netExportGap'])) {
-            $state->netExportGap = MacroAggregateSubsystem::netExportGapAt($state->foreignOutputGapEma, $state->realExchangeRateTradeLag);
+            $state->netExportGap = MacroAggregateSubsystem::netExportGapAt($state->foreignOutputGapEma, $state->realExchangeRateTradeLag, $state->alliedDefenseDeliveryLag);
         }
         // The finance trend a state predating it omits opens on the trend it replaced, so the finance level is unmoved.
         if (!isset($carried['financeMarketTrend']) && $state->equityWealthTrend > 0.0) {
@@ -519,6 +529,11 @@ class MacroState
                 MacroAggregateSubsystem::creditBalanceGap($state->creditToGdpGap, $state->creditToGdpTrend),
                 MacroAggregateSubsystem::marketBalanceGap($state->equityWealthRatio, $state->financeMarketTrend)
             );
+        }
+        // The inventory cycle's reference opens where domestic demand's smoothed part of the gap stands, so the upgrade
+        // sets off no sales surprise.
+        if (!isset($carried['domesticDemandGapEma'])) {
+            $state->domesticDemandGapEma = MacroAggregateSubsystem::domesticDemandGapAt($state->outputGapEma, $state->productivitySupplyGap, $state->netExportGap, $state->financeOutputGap);
         }
 
         return $state;
