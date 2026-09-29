@@ -26,6 +26,12 @@ trait StandardOperatingPhysicsTrait
         return 1.5; // DEFAULT_CAPEX_CYCLICALITY
     }
 
+    /** Most firms budget against the domestic business cycle. */
+    public function getCapexCycleSignal(\App\DTO\MacroStateDTO $macroState): float
+    {
+        return $macroState->outputGapEma;
+    }
+
     public function getSurpriseBlendWeights(): array
     {
         return ['eps_weight' => 0.50, 'revenue_weight' => 0.50];

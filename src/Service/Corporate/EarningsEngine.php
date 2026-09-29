@@ -1168,9 +1168,9 @@ class EarningsEngine
         if ($ctx->sharesOutstanding <= 0) {
             $fcfData = ['fcf_per_share' => 0.0, 'capex' => 0.0, 'direct_capex' => 0.0];
         } else {
-            $outputGap = $ctx->macroState->outputGapEma;
+            $cycleSignal = $ctx->strategy->getCapexCycleSignal($ctx->macroState);
             $capexCyclicality = $ctx->strategy->getCapexCyclicality();
-            $cycleCapExModifier = max(0.50, min(1.50, 1.00 + ($outputGap * $capexCyclicality)));
+            $cycleCapExModifier = max(0.50, min(1.50, 1.00 + ($cycleSignal * $capexCyclicality)));
 
             // Operational CapEx:
             // 1. Maintenance CapEx: replaces depreciating physical capital in ongoing operations.

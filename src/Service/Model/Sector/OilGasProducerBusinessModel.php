@@ -100,8 +100,8 @@ class OilGasProducerBusinessModel extends StandardCorporateBusinessModel
     public const MIN_OPERATING_MARGIN_FLOOR = 0.02;
     /** Structural maximum operating margin ceiling at mid-cycle prices, set by the lifting cost of the marginal barrel. */
     public const MAX_OPERATING_MARGIN_CEILING = 0.32;
-    /** Upstream CapEx swings hard with the price deck (rig counts follow the strip). */
-    public const CAPEX_CYCLICALITY = 3.0;
+    /** Upstream CapEx follows the price deck: US oil & gas drilling (FRED IPN213111S) on the real WTI cycle (WTISPLC/CPIAUCSL), HP(1600) quarterly 1972-2024, peak elasticity 0.58 at a 1-2 quarter lag. */
+    public const CAPEX_CYCLICALITY = 0.58;
     /** Baseline secular growth rate for a mature producer. */
     public const SECULAR_GROWTH = 0.01;
     /** Share of construction in progress completed each quarter (about two years from sanction to first production). */
@@ -135,6 +135,20 @@ class OilGasProducerBusinessModel extends StandardCorporateBusinessModel
     public function getCapexCyclicality(): float
     {
         return self::CAPEX_CYCLICALITY;
+    }
+
+    /**
+     * A producer budgets against the oil price, not the domestic economy: the smoothed price's log deviation
+     * from its equilibrium, the same smoothed price its revenue is struck at. The EMA supplies the lag the
+     * elasticity peaks at.
+     */
+    public function getCapexCycleSignal(MacroStateDTO $macroState): float
+    {
+        if ($macroState->energyPriceIndexEma <= 0.0) {
+            return 0.0;
+        }
+
+        return log($macroState->energyPriceIndexEma / MacroEngine::ENERGY_BASELINE);
     }
 
     public function getSurpriseBlendWeights(): array

@@ -47,6 +47,8 @@ interface OperatingStrategyInterface
     public function updateDynamicRoic(Stock $stock, float $actualTotalNetIncome, float $investedCapital, float $ebit, float $corporateTaxRate, float $wacc = 0.08, float $costOfEquity = 0.10, ?\App\DTO\MacroStateDTO $macroState = null, float $depreciation = 0.0): float;
     public function getSecularGrowthRate(Stock $stock): float;
     public function getCapexCyclicality(): float;
+    /** The cycle the capital budget answers to, as a log deviation; getCapexCyclicality() is its elasticity. */
+    public function getCapexCycleSignal(\App\DTO\MacroStateDTO $macroState): float;
     public function getSurpriseBlendWeights(): array;
     public function getEffectiveReturn(Stock $stock): float;
     public function getTrueReturn(Stock $stock): float;

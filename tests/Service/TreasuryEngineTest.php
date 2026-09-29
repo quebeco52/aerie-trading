@@ -891,10 +891,10 @@ class TreasuryEngineTest extends TestCase
     }
 
     /**
-     * A breached maintenance covenant is an Event of Default under the credit agreement, so it bars new draws
-     * exactly as a missed payment does. The maturity the bond market refused is then a payment default, and
-     * the commitment is neither terminated (the breach can cure) nor upsized (no bank enlarges a line to a
-     * borrower in breach).
+     * A breached maintenance covenant is an Event of Default under the credit agreement, so once the going
+     * concern no longer covers the debt the lenders refuse new draws exactly as for a missed payment. The
+     * maturity the bond market refused is then a payment default, and the commitment is neither terminated
+     * (the breach can cure) nor upsized (no bank enlarges a line to a borrower in breach).
      */
     public function testACovenantBreachBarsNewRevolverDrawsSoARefusedMaturityDefaults(): void
     {
@@ -912,6 +912,7 @@ class TreasuryEngineTest extends TestCase
         $this->debtEngine->method('rollMaturities')->willReturn(
             new MaturityRollDTO(maturingPrincipal: 3_000_000_000.0, refinanced: false, principalRepaid: 10_000_000.0, unfundedShortfall: 2_990_000_000.0)
         );
+        $this->debtEngine->method('assessGoingConcern')->willReturn($this->goingConcern(assetValue: 15_000_000_000.0, claims: 20_000_000_000.0));
         $engine = new TreasuryEngine($this->corporateMetrics, $this->debtEngine, $this->capExEngine, $this->mathUtility);
 
         $engine->finalizeLiquidity($ctx);
@@ -926,6 +927,38 @@ class TreasuryEngineTest extends TestCase
         );
     }
 
+    /**
+     * Most breaches are waived (Roberts & Sufi 2009): a borrower whose assets still cover every claim keeps its
+     * line, because forcing a default on it gains the lenders nothing.
+     */
+    public function testLendersWaiveTheBreachOfABorrowerWhoseAssetsStillCoverItsDebt(): void
+    {
+        $stock = $this->createSolventCorporate();
+        $stock->setWholesaleDebt('2000000000.00');
+        $stock->setRevolverCommitment('150000000.00');
+
+        $ctx = $this->createAllocationContext($stock, stockCompensation: 0.0, currentPrice: 0.0);
+        $ctx->wholesaleDebt = 2_000_000_000.0;
+        $ctx->newTreasury = 35_000_000.0;
+        $ctx->health = $this->healthInCovenantBreach($ctx->health);
+
+        $this->debtEngine = $this->createMock(DebtEngine::class);
+        $this->debtEngine->method('rollMaturities')->willReturn(
+            new MaturityRollDTO(maturingPrincipal: 100_000_000.0, refinanced: false, principalRepaid: 5_000_000.0, unfundedShortfall: 95_000_000.0)
+        );
+        $this->debtEngine->method('assessGoingConcern')->willReturn($this->goingConcern(assetValue: 3_000_000_000.0, claims: 2_000_000_000.0));
+        $engine = new TreasuryEngine($this->corporateMetrics, $this->debtEngine, $this->capExEngine, $this->mathUtility);
+
+        $engine->finalizeLiquidity($ctx);
+
+        $this->assertEqualsWithDelta(95_000_000.0, (float) $stock->getRevolverDrawn(), 1.0, 'the waived line funds the maturity');
+        $this->assertFalse($stock->isPaymentDefault());
+        $this->assertNotContains(
+            'Lenders refused a $0.10B draw on its revolving credit facility while it is in breach of its leverage covenant.',
+            array_column($ctx->events, 'description')
+        );
+    }
+
     /** The commitment survived the breach, so the quarter leverage is back inside the covenant the line funds again. */
     public function testTheRevolverReopensOnceLeverageIsBackInsideTheCovenant(): void
     {
@@ -936,6 +969,7 @@ class TreasuryEngineTest extends TestCase
 
         $this->debtEngine = $this->createMock(DebtEngine::class);
         $this->debtEngine->method('rollMaturities')->willReturn($roll);
+        $this->debtEngine->method('assessGoingConcern')->willReturn($this->goingConcern(assetValue: 1_500_000_000.0, claims: 2_000_000_000.0));
         $engine = new TreasuryEngine($this->corporateMetrics, $this->debtEngine, $this->capExEngine, $this->mathUtility);
 
         $breached = $this->createAllocationContext($stock, stockCompensation: 0.0, currentPrice: 0.0);
@@ -1010,6 +1044,11 @@ class TreasuryEngineTest extends TestCase
             isLiquidityWarning: $health->isLiquidityWarning,
             isUnderLeveraged: $health->isUnderLeveraged
         );
+    }
+
+    private function goingConcern(float $assetValue, float $claims): \App\DTO\GoingConcernDTO
+    {
+        return new \App\DTO\GoingConcernDTO(trailingEbit: 150_000_000.0, trailingEbitda: 170_000_000.0, assetValue: $assetValue, cash: 10_000_000.0, claims: $claims);
     }
 
     /** No market will lend, and net debt / EBITDA stands past the 3.0x covenant. */

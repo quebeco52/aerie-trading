@@ -668,8 +668,11 @@ class TreasuryEngine
      * Committed is not unconditional. A breached maintenance covenant is an Event of Default under the credit
      * agreement just as a missed payment is, and the same condition precedent bars new draws while it stands:
      * lines are contingent on the borrower's cash flow (Sufi 2009), and lenders cut them to violators
-     * (Chodorow-Reich & Falato 2022). The commitment survives the breach, so the line reopens once leverage is
-     * back inside the covenant.
+     * (Chodorow-Reich & Falato 2022). Most breaches are waived all the same (Roberts & Sufi 2009): a lender
+     * whose borrower's assets still cover every claim gains nothing by forcing a default, so the line is
+     * refused only once the going concern no longer covers the debt, the same overhang test the rescue raise
+     * applies. The commitment survives the breach, so the line reopens once leverage is back inside the
+     * covenant.
      */
     private function processRevolverDraw(CapitalAllocationContext $ctx): void
     {
@@ -694,8 +697,9 @@ class TreasuryEngine
             return;
         }
 
-        $covenantBreached = $this->isInCovenantBreach($ctx);
-        $drawn = $covenantBreached ? 0.0 : min($overdraft + $maturity, $stock->getRevolverUndrawn());
+        $drawRefused = $this->isInCovenantBreach($ctx)
+            && !$this->debtEngine->assessGoingConcern($stock, $ctx->macroState, $ctx->health)->isSolvent();
+        $drawn = $drawRefused ? 0.0 : min($overdraft + $maturity, $stock->getRevolverUndrawn());
         if ($drawn > 0.0) {
             $stock->setRevolverDrawn((string) ((float) $stock->getRevolverDrawn() + $drawn));
             $ctx->newTreasury += $drawn;
@@ -742,7 +746,7 @@ class TreasuryEngine
         // News, not a price move of its own: the market prices what the refusal leads to (the emergency
         // paper, the rescue raise or the default), each of which carries its own reaction.
         $refused = min($overdraft + $maturity, $stock->getRevolverUndrawn());
-        if ($covenantBreached && $refused > 500_000_000.0) {
+        if ($drawRefused && $refused > 500_000_000.0) {
             $amtB = number_format($refused / 1_000_000_000, 2);
             $ctx->events[] = [
                 'description' => "Lenders refused a \${$amtB}B draw on its revolving credit facility while it is in breach of its leverage covenant.",
