@@ -1323,6 +1323,21 @@ class DebtEngineTest extends TestCase
     }
 
     /**
+     * A producer's cash flow swings with the price deck, so its sector carries half the book leverage of the
+     * market (Damodaran, Jan 2026: E&P 0.50 book D/E against 0.93 for all non-financials). The balance sheet a
+     * conglomerate would call under-levered is already at a producer's norm, and is not recapitalised.
+     */
+    public function testAProducerAtItsIndustryLeverageIsNotRecapitalised(): void
+    {
+        $engine = new DebtEngine(new MathUtility(), new CorporateMetrics(), $this->creditRatingAgency, $this->marketEventPublisherMock);
+        $macro = $this->leverageMacro();
+
+        $this->assertTrue($engine->analyzeDebtHealth($this->leverageFixture('Conglomerates', '40000000', '10000000'), $macro)->isUnderLeveraged);
+        $this->assertFalse($engine->analyzeDebtHealth($this->leverageFixture('Oil & Gas E&P', '40000000', '10000000'), $macro)->isUnderLeveraged);
+        $this->assertSame(0.50, \App\Data\Sectors::INDUSTRY_METRICS['Oil & Gas E&P']['equity_limit']);
+    }
+
+    /**
      * The whole reason the covenant has to exist: interest coverage is rate-sensitive and this is not, so
      * cheap debt keeps the ICR gate open while cash-flow leverage runs past the sector limit.
      */

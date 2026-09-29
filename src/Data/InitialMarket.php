@@ -729,7 +729,7 @@ class InitialMarket
             'corporate_treasury' => 9_000_000_000.00,
             'total_equity' => 75_000_000_000.00,
             'customer_deposits' => 0.00,
-            'wholesale_debt' => 47_500_000_000.00,
+            'wholesale_debt' => 37_500_000_000.00,
             'retained_earnings' => 22_500_000_000.00
         ],
         [

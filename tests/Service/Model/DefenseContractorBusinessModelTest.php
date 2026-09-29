@@ -80,6 +80,32 @@ class DefenseContractorBusinessModelTest extends TestCase
         return $mock;
     }
 
+    /**
+     * A prime budgets plant against its order book: an allied drawdown cuts the capital budget with the domestic
+     * economy at potential, and a domestic recession with allied budgets on trend leaves it alone.
+     */
+    public function testTheCapexCycleIsTheAlliedOrderGapNotTheOutputGap(): void
+    {
+        $model = new DefenseContractorBusinessModel();
+
+        $this->assertEqualsWithDelta(0.0, $model->getCapexCycleSignal(new MacroStateDTO(outputGapEma: -0.06, alliedDefenseSpendingIndexEma: 100.0)), 1e-12);
+        $this->assertEqualsWithDelta(
+            MacroEngine::ALLIED_PROCUREMENT_ELASTICITY * log(0.8),
+            $model->getCapexCycleSignal(new MacroStateDTO(alliedDefenseSpendingIndexEma: 80.0)),
+            1e-12
+        );
+    }
+
+    /** The US investment accelerator: a 5% allied cut takes about a fifth off the capital budget. */
+    public function testTheCapitalBudgetAnswersTheOrderGapWithTheInvestmentAccelerator(): void
+    {
+        $model = new DefenseContractorBusinessModel();
+        $modifier = 1.0 + ($model->getCapexCycleSignal(new MacroStateDTO(alliedDefenseSpendingIndexEma: 95.0)) * $model->getCapexCyclicality());
+
+        $this->assertSame(2.52, $model->getCapexCyclicality());
+        $this->assertEqualsWithDelta(0.801, $modifier, 0.001);
+    }
+
     public function testWrightsLawLearningCurveImprovesVariableMargin(): void
     {
         $model = new DefenseContractorBusinessModel();

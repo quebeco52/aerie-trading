@@ -150,6 +150,10 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
     /** Structural maximum operating margin ceiling for next-gen platform franchises. */
     public const MAX_OPERATING_MARGIN_CEILING = 0.22;
 
+    // --- Capital Budget ---
+    /** Investment's elasticity to its own demand cycle: US private nonresidential investment on real GDP (FRED PNFI/GDPDEF, GDPC1), HP(1600) cycles 1953-2019, peak 2.52 at a one-quarter lag. */
+    public const CAPEX_CYCLICALITY = 2.52;
+
     // --- Working Capital & FAR Progress Payment Withholding ---
     /** Baseline net working capital intensity under standard FAR progress payment schedules. */
     public const BASE_NWC_INTENSITY = 0.10;
@@ -163,7 +167,16 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
 
     public function getCapexCyclicality(): float
     {
-        return 0.30;
+        return self::CAPEX_CYCLICALITY;
+    }
+
+    /**
+     * A prime budgets plant against its own order book, not the domestic economy: the allied procurement gap
+     * that sets its awards, the same term the backlog is fed with.
+     */
+    public function getCapexCycleSignal(MacroStateDTO $macroState): float
+    {
+        return MacroEngine::ALLIED_PROCUREMENT_ELASTICITY * MacroAggregateSubsystem::alliedDefenseGap($macroState->alliedDefenseSpendingIndexEma);
     }
 
     public function getSurpriseBlendWeights(): array
