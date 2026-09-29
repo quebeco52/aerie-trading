@@ -14,6 +14,17 @@ interface OperatingStrategyInterface
 {
     public function getTargetMetrics(Stock $stock, MacroStateDTO $macroState, MathUtility $mathUtility): array;
     public function computeActualFinancials(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, MacroStateDTO $macroState, MathUtility $mathUtility): ActualFinancialsDTO;
+
+    /**
+     * How far each macro input moved each revenue stream this quarter, measured by re-running the stream physics
+     * with that input neutral on the quarter's own draws.
+     *
+     * @param array{uniforms: list<float>, spare: ?float}      $draws
+     * @param array<string, array{0: MacroStateDTO, 1: float}> $counterfactuals Field => [state with it neutral, expected revenue under it].
+     * @param array<string, float>                             $actualStreams
+     * @return array<string, array<string, float>> Stream => field => actual over counterfactual revenue, less one.
+     */
+    public function measureStreamMacroEffects(Stock $stock, array $draws, array $counterfactuals, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, array $actualStreams): array;
     public function getCoverageProfile(Stock $stock): SectorCoverageProfile;
     public function getMacroPhysics(Stock $stock, MacroStateDTO $macroState): array;
     /**
@@ -80,13 +91,13 @@ interface OperatingStrategyInterface
     /** Propensity of this sector's management to steer reported earnings toward consensus with accruals (EARNINGS_MANAGEMENT_PROPENSITY). */
     public function getEarningsManagementPropensity(Stock $stock): float;
 
-    /** Share of revenue whose competitiveness moves with the trade-weighted exchange rate (FX_REVENUE_EXPOSURE). */
     /** Years for a move in the output gap to reach this firm's order book (DEMAND_LAG_YEARS). */
     public function getDemandLagYears(): float;
 
-    /** The output gap as it has actually reached the firm, distributed over its transmission lag. */
-    public function resolveLaggedOutputGap(Stock $stock, MacroStateDTO $macroState): float;
+    /** The output gap as it has actually reached the firm: the macro's published lag at DEMAND_LAG_YEARS. */
+    public function resolveLaggedOutputGap(MacroStateDTO $macroState): float;
 
+    /** Share of revenue whose competitiveness moves with the trade-weighted exchange rate (FX_REVENUE_EXPOSURE). */
     public function getFxRevenueExposure(): float;
 
     /** Signed demand shift from the trade-weighted exchange rate, at the model's exposure or a channel-level override. */

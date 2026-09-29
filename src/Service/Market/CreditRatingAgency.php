@@ -25,8 +25,6 @@ class CreditRatingAgency
     public const THRESHOLD_BB  = 1.5;
     /** Distance to Default threshold center for B rating bracket. */
     public const THRESHOLD_B   = 1.0;
-    /** Distance to Default floor: CCC is the lowest bracket a market-implied d2 can reach, so nothing sits below it. */
-    public const THRESHOLD_CCC = 0.5;
 
     // --- Hysteresis Buffer ---
     /** Hysteresis buffer requiring d2 to exceed threshold +/- buffer to prevent border oscillation. */

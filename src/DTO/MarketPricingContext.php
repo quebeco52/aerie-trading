@@ -110,7 +110,9 @@ class MarketPricingContext
             revenuePerShare: (float) $stock->getTotalRevenue() / $shares,
             businessModel: Sectors::businessModelFor($stock->getIndustry()),
             liveCostOfEquity: $health->costOfEquity,
-            netDebtPerShare: max(0.0, ((float) $stock->getTotalDebt() - (float) $stock->getCorporateTreasury()) / $shares),
+            // The model's own net debt, as DebtEngine reads it: a lender's deposits and a clearinghouse's margin fund
+            // its book rather than finance it, so they are no claim ahead of the equity.
+            netDebtPerShare: max(0.0, $strategy->getNetDebtCapital((float) $stock->getTotalDebt(), (float) $stock->getWholesaleDebt(), (float) $stock->getCorporateTreasury())) / $shares,
             recentPriceTrend: (float) ($stock->getPriceMomentumTrend() ?? 0.0),
             secularGrowth: $strategy->getSecularGrowthRate($stock),
             // The anchor the firm's own model measures it by: a lender or underwriter carries a placeholder in

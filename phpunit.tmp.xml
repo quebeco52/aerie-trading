@@ -69,7 +69,7 @@
             <file>tests/Service/Market/IndexFundAccountantTest.php</file>
             <file>tests/Service/Market/BulkRowUpdateTest.php</file>
             <file>tests/Service/Market/StockTickColumnsTest.php</file>
-            <file>tests/Command/MarketTickerCadenceTest.php</file>
+            <file>tests/Service/Market/TickCadenceTest.php</file>
             <file>tests/Service/Market/OptionDeskSweepTest.php</file>
             <file>tests/Service/Market/OptionSettlementBatchTest.php</file>
             <file>tests/Service/Market/OptionChainListingTest.php</file>

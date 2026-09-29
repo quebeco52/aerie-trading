@@ -163,7 +163,7 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
 
         // Regulated Utilities are virtually immune to economic output gaps (essential service).
         // Only industrial/commercial power load fluctuates slightly with GDP.
-        $outputGap = $this->resolveLaggedOutputGap($stock, $macroState);
+        $outputGap = $this->resolveLaggedOutputGap($macroState);
         $beta = $this->getOperatingCyclicality($stock);
         $physics['macro_demand_shift'] = $outputGap * $beta * self::MACRO_DEMAND_SCALAR;
 

@@ -56,6 +56,7 @@ trait FinancialPhysicsTrait
         return $equity > 0 ? ($quarterlyNopatOrIncome / $equity) * 4.0 : 0.0;
     }
 
+    /** A balance-sheet firm is measured on its return on equity, required to earn its cost of equity. */
     public function updateDynamicRoic(
         Stock $stock,
         float $actualTotalNetIncome,
@@ -67,28 +68,22 @@ trait FinancialPhysicsTrait
         ?\App\DTO\MacroStateDTO $macroState = null,
         float $depreciation = 0.0
     ): float {
-        $kappa = $this->getReversionSpeed();
-        $moatSpread = $this->getMoatSpread();
-
         $equity = (float) $stock->getTotalEquity();
-        $truePostTaxReturn = $equity > 0 ? ($actualTotalNetIncome / $equity) * 4.0 : 0.0;
+        $truePostTaxReturn = $equity > 0 ? ($actualTotalNetIncome / $equity) * FinancialConstants::QUARTERS_PER_YEAR : 0.0;
+        $reportedReturn = max(FinancialConstants::MIN_REPORTED_RETURN, min(FinancialConstants::MAX_REPORTED_RETURN, $truePostTaxReturn));
 
-        $stock->setCurrentRoe((string) max(-0.50, min(1.0, $truePostTaxReturn)));
+        $stock->setCurrentRoe((string) $reportedReturn);
+        $stock->setRoeTtm((string) $this->revertTrailingReturn(
+            $stock,
+            (float) $stock->getRoeTtm(),
+            $truePostTaxReturn,
+            $costOfEquity,
+            static::TTM_ROE_WEIGHT,
+            max(1.0, $equity),
+            $macroState
+        ));
 
-        $oldTtm = (float) $stock->getRoeTtm();
-        $newTtm = $oldTtm === 0.0 ? $truePostTaxReturn : ($truePostTaxReturn * \App\Service\Math\FinancialConstants::TTM_SMOOTHING_NEW_WEIGHT) + ($oldTtm * \App\Service\Math\FinancialConstants::TTM_SMOOTHING_OLD_WEIGHT);
-        $scaledKappa = $kappa / (defined('static::TTM_ROE_WEIGHT') ? static::TTM_ROE_WEIGHT : 0.50);
-
-        $saturationPenalty = 0.0;
-        if ($macroState !== null) {
-            $saturationPenalty = \App\Service\Math\CorporateMetrics::getInstance()->calculateMarketSaturationPenalty($stock, max(1.0, $equity), $macroState);
-        }
-
-        $effectiveMoat = max(0.0, $moatSpread - $saturationPenalty);
-        $newTtm += \App\Service\Math\MathUtility::getInstance()->calculateReversionPull($newTtm, $costOfEquity, $scaledKappa, $effectiveMoat);
-        $stock->setRoeTtm((string) max(-0.50, min(1.0, $newTtm)));
-
-        return max(-0.50, min(1.0, $truePostTaxReturn));
+        return $reportedReturn;
     }
 
     public function calculateCapacityModifier(float $totalDebt, float $equity, float $equityLimit, ?float $coreLiabilities = null): float

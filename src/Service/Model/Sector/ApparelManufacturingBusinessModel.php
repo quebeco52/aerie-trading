@@ -225,7 +225,7 @@ class ApparelManufacturingBusinessModel extends StandardCorporateBusinessModel
         ]);
         $pricingPower = max(0.0, min(1.0, $params[ModelParam::PricingPowerIndex]));
 
-        $outputGap = $this->resolveLaggedOutputGap($stock, $macroState);
+        $outputGap = $this->resolveLaggedOutputGap($macroState);
         $sentimentShift = $macroState->sentimentDeviation();
         $beta = $this->getOperatingCyclicality($stock);
 
@@ -387,6 +387,7 @@ class ApparelManufacturingBusinessModel extends StandardCorporateBusinessModel
             'foreign_output_gap_ema',
             'inventory_stock_gap_ema',
             'output_gap_ema',
+            'output_gap_lag_6m',
             'tips_breakeven_ema',
             'trade_balance_to_gdp_ema',
             'real_wage_gap',

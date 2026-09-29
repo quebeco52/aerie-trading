@@ -199,7 +199,7 @@ class ConstructionBusinessModel extends StandardCorporateBusinessModel
         $eventZ       = $streams->generateExogenousZ('event', 0.10);
 
         // --- Macro Sensitivities (hit ORDERS in full; the backlog below cushions recognized revenue) ---
-        $outputGap = $this->resolveLaggedOutputGap($stock, $macroState);
+        $outputGap = $this->resolveLaggedOutputGap($macroState);
         $policyRate = $macroState->policyRateEma;
         $residentialShift = ($macroState->residentialPropertyIndexEma - 100.0) / 100.0;
         $commercialPropertyShift = ($macroState->commercialPropertyIndexEma - 100.0) / 100.0;
@@ -309,7 +309,7 @@ class ConstructionBusinessModel extends StandardCorporateBusinessModel
             'housing_starts_index_ema',
             'industrial_metals_index_ema',
             'natural_rate_ema',
-            'output_gap_ema',
+            'output_gap_lag_18m',
             'policy_rate_ema',
             'residential_property_index_ema',
             'sloos_tightening_index_ema',

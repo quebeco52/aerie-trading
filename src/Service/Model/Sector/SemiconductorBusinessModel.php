@@ -111,10 +111,6 @@ class SemiconductorBusinessModel extends StandardCorporateBusinessModel
     public const WAFER_SCRAP_PENALTY       = 0.08;
 
 
-    /** Upper clamp for realized variable margin. */
-    public const MAX_VARIABLE_MARGIN_CLAMP = 1.50;
-    /** Lower clamp for realized variable margin. */
-    public const MIN_VARIABLE_MARGIN_CLAMP = 0.01;
 
     // --- Geopolitical & Export Ban Physics ---
     /** Negative z-score threshold triggering geopolitical export restrictions (`Z < -2.20`). */
@@ -149,7 +145,7 @@ class SemiconductorBusinessModel extends StandardCorporateBusinessModel
 
     public function getMacroPhysics(Stock $stock, \App\DTO\MacroStateDTO $macroState): array
     {
-        $outputGap = $this->resolveLaggedOutputGap($stock, $macroState);
+        $outputGap = $this->resolveLaggedOutputGap($macroState);
         $beta = $this->getOperatingCyclicality($stock);
 
         // Semiconductors are highly cyclical and levered to global tech capital expenditure cycles
@@ -316,6 +312,7 @@ class SemiconductorBusinessModel extends StandardCorporateBusinessModel
             'inventory_stock_gap_ema',
             'manufacturing_pmi_ema',
             'output_gap_ema',
+            'output_gap_lag_3m',
             'tips_breakeven_ema',
             'real_wage_gap',
         ];

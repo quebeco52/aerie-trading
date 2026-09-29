@@ -15,6 +15,7 @@ use App\Entity\Stock;
 use App\Service\Math\MathUtility;
 use App\Service\Event\ShockEvent;
 use App\Service\Macro\MacroEngine;
+use App\Service\Math\FinancialConstants;
 
 /**
  * Earnings strategy for Real Estate Investment Trusts (REITs).
@@ -87,16 +88,6 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
     public const TARGET_EBIT_WEIGHT         = 0.50;
     /** Weight of trailing twelve month ROIC when blending with target EBIT yield. */
     public const TTM_ROIC_WEIGHT            = 0.50;
-    /** Annualization multiplier applied to quarterly Net Operating Income / Invested Capital. */
-    public const ROIC_ANNUALIZATION_MULT    = 4.00;
-    /** Minimum allowable ROIC floor for distressed real estate portfolios. */
-    public const MIN_ROIC_CLAMP             = -0.50;
-    /** Maximum allowable ROIC ceiling to prevent unrealistic runaway property yields. */
-    public const MAX_ROIC_CLAMP             = 1.00;
-    /** Weight given to current quarter NOI return when updating ROIC EMA. */
-    public const ROIC_TTM_EMA_WEIGHT        = 0.25;
-    /** Weight given to historical trailing twelve month ROIC when updating ROIC EMA. */
-    public const ROIC_TTM_HIST_WEIGHT       = 0.75;
 
     // --- Macro Demand Sensitivity ---
     /** Sensitivity of contractual lease demand and hospitality utilization to real GDP output gap. */
@@ -134,10 +125,6 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
     public const DEBT_MATURITY_ROLLOVER_RATE    = 0.035;
     /** Minimum operating efficiency ratio (operating revenue / fixed costs) floor. */
     public const MIN_EFFICIENCY_RATIO           = 0.35;
-    /** Upper clamp for realized variable margin. */
-    public const MAX_VARIABLE_MARGIN_CLAMP      = 1.50;
-    /** Lower clamp for realized variable margin. */
-    public const MIN_VARIABLE_MARGIN_CLAMP      = 0.01;
 
     // --- Housing Supply & Tenant Default Transmission ---
     /** Sensitivity of new building supply competition to residential housing starts. */
@@ -188,12 +175,6 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
     public const DEBT_EXPANSION_AGGR_MULT   = 0.25;
 
     // --- Valuation & Lease Resistance Moat ---
-    /** Weight given to earnings capitalization in REIT intrinsic fair value blending. */
-    public const FAIR_VALUE_EARNINGS_WEIGHT = 0.30;
-    /** Weight given to net asset value (P/B) in REIT intrinsic fair value blending. */
-    public const FAIR_VALUE_BOOK_WEIGHT     = 0.40;
-    /** Weight given to dividend discount model (DDM) in REIT intrinsic fair value blending. */
-    public const FAIR_VALUE_DDM_WEIGHT      = 0.30;
     /** Half-life speed (quarters) at which long-term lease margins revert toward sector equilibrium. */
     public const LEASE_REVERSION_SPEED      = 2.0;
 
@@ -234,7 +215,7 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
         $physics['pricing_power_multiplier'] = 1.0;
         // Inflation is carried inside this model's own stream physics: neither price nor cost base inflates at the engine level.
         $physics['input_cost_multiplier'] = 1.0;
-        $outputGap = $this->resolveLaggedOutputGap($stock, $macroState);
+        $outputGap = $this->resolveLaggedOutputGap($macroState);
         $beta = $this->getOperatingCyclicality($stock);
         // REITs hold domestic real estate with sticky contracted leases; scale output gap demand shift appropriately
         $physics['macro_demand_shift'] = $outputGap * self::MACRO_DEMAND_SCALAR * $beta;
@@ -404,34 +385,24 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
 
     public function updateDynamicRoic(Stock $stock, float $actualTotalNetIncome, float $investedCapital, float $ebit, float $corporateTaxRate, float $wacc = 0.08, float $costOfEquity = 0.10, ?\App\DTO\MacroStateDTO $macroState = null, float $depreciation = 0.0): float
     {
-        $kappa = $this->getReversionSpeed();
-        $moatSpread = $this->getMoatSpread();
-
         // Net Operating Income is property income before depreciation, and it is the numerator of the cap
         // rate this return reverts toward below. EBIT is now struck after depreciation like every other
         // model, so the charge is added back here to recover NOI.
         $effectiveCapital = max(1.0, abs($investedCapital));
-        $truePostTaxReturn = (($ebit + $depreciation) / $effectiveCapital) * self::ROIC_ANNUALIZATION_MULT;
+        $truePostTaxReturn = (($ebit + $depreciation) / $effectiveCapital) * FinancialConstants::QUARTERS_PER_YEAR;
 
-        $stock->setCurrentRoic((string) max(self::MIN_ROIC_CLAMP, min(self::MAX_ROIC_CLAMP, $truePostTaxReturn)));
+        $stock->setCurrentRoic((string) max(FinancialConstants::MIN_REPORTED_RETURN, min(FinancialConstants::MAX_REPORTED_RETURN, $truePostTaxReturn)));
 
-        $oldTtm = (float) $stock->getRoicTtm();
-        $newTtm = $oldTtm === 0.0 ? $truePostTaxReturn : ($truePostTaxReturn * self::ROIC_TTM_EMA_WEIGHT) + ($oldTtm * self::ROIC_TTM_HIST_WEIGHT);
-        $scaledKappa = $kappa / self::TTM_ROIC_WEIGHT;
-
-        $saturationPenalty = 0.0;
+        // The return a property book is required to earn is the cap rate the market prices it on.
         $targetYield = $wacc;
         if ($macroState !== null) {
             $yield10y = $macroState->yield10yEma;
             $realEstateRiskPremium = $macroState->equityRiskPremium;
             $creditSpreadDrag = $macroState->macroCreditSpreadEma * self::CAP_RATE_SPREAD_SENSITIVITY;
             $targetYield = max($yield10y, $yield10y + $realEstateRiskPremium + $creditSpreadDrag);
-            $saturationPenalty = \App\Service\Math\CorporateMetrics::getInstance()->calculateMarketSaturationPenalty($stock, abs($investedCapital), $macroState);
         }
 
-        $effectiveMoat = max(0.0, $moatSpread - $saturationPenalty);
-        $newTtm += MathUtility::getInstance()->calculateReversionPull($newTtm, $targetYield, $scaledKappa, $effectiveMoat);
-        $stock->setRoicTtm((string) max(self::MIN_ROIC_CLAMP, min(self::MAX_ROIC_CLAMP, $newTtm)));
+        $stock->setRoicTtm((string) $this->revertTrailingReturn($stock, (float) $stock->getRoicTtm(), $truePostTaxReturn, $targetYield, self::TTM_ROIC_WEIGHT, abs($investedCapital), $macroState));
 
         return $truePostTaxReturn;
     }
@@ -443,7 +414,7 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
 
     public function calculateEconomicReturn(Stock $stock, float $quarterlyNopat, float $investedCapital): float
     {
-        return $investedCapital > 0 ? ($quarterlyNopat / $investedCapital) * self::ROIC_ANNUALIZATION_MULT : 0.0;
+        return $investedCapital > 0 ? ($quarterlyNopat / $investedCapital) * FinancialConstants::QUARTERS_PER_YEAR : 0.0;
     }
 
     public function getInterestCoverage(float $ebit, float $interestExpense, float $depreciation = 0.0, float $interestIncome = 0.0): float
@@ -538,7 +509,7 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
             'household_debt_service_gap',
             'housing_starts_index_ema',
             'inflation_ema',
-            'output_gap_ema',
+            'output_gap_lag_18m',
             'residential_property_index_ema',
             'retail_default_rate_ema',
             'tips_breakeven_ema',

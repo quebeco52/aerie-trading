@@ -46,12 +46,32 @@ trait StandardValuationTrait
         return 0.0;
     }
 
+    /**
+     * The consensus fair value: earnings value and book value blended at the model's book weight, then, for a firm
+     * that pays, blended with the dividend discount value at the model's dividend weight. Models differ only in the
+     * two weights, which they declare through getFairValueBookWeight() and getFairValueDividendWeight().
+     */
     public function calculateFairValue(float $earningsValue, float $pbFairValue, float $normalizedEps, float $dividendSupportValue = 0.0): float
     {
-        $baseConsensus = ($earningsValue * FinancialConstants::FAIR_VALUE_EARNINGS_WEIGHT) + ($pbFairValue * FinancialConstants::FAIR_VALUE_BOOK_WEIGHT);
+        $bookWeight = $this->getFairValueBookWeight($normalizedEps);
+        $baseConsensus = ($earningsValue * (1.0 - $bookWeight)) + ($pbFairValue * $bookWeight);
+        $dividendWeight = $this->getFairValueDividendWeight();
+
         return $dividendSupportValue > 0.0
-            ? ($baseConsensus * (1.0 - FinancialConstants::FAIR_VALUE_DDM_WEIGHT)) + ($dividendSupportValue * FinancialConstants::FAIR_VALUE_DDM_WEIGHT)
+            ? ($baseConsensus * (1.0 - $dividendWeight)) + ($dividendSupportValue * $dividendWeight)
             : $baseConsensus;
+    }
+
+    /** Weight of book value against earnings value in the consensus, given the firm's normalised earnings. */
+    protected function getFairValueBookWeight(float $normalizedEps): float
+    {
+        return FinancialConstants::FAIR_VALUE_BOOK_WEIGHT;
+    }
+
+    /** Weight of the dividend discount value in fair value, for a firm that pays one. */
+    protected function getFairValueDividendWeight(): float
+    {
+        return FinancialConstants::FAIR_VALUE_DDM_WEIGHT;
     }
 
     public function calculateStructuralEps(float $bookValuePerShare, float $structuralRoic, float $revenuePerShare, float $riskFreeRate, ?float $investedCapitalPerShare = null): float

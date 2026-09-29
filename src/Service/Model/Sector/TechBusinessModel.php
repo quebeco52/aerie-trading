@@ -101,10 +101,6 @@ class TechBusinessModel extends StandardCorporateBusinessModel
     // --- Revenue Volatility ---
     /** Volatility multiplier for top-line revenue shocks reflecting rapid software user scaling and churn. */
     public const REVENUE_VARIANCE_SCALAR   = 0.20;
-    /** Upper clamp for realized variable margin. */
-    public const MAX_VARIABLE_MARGIN_CLAMP = 1.50;
-    /** Lower clamp for realized variable margin. */
-    public const MIN_VARIABLE_MARGIN_CLAMP = 0.01;
 
     // --- Fat Tail Event Lore & Shock Thresholds ---
     /** Negative z-score threshold indicating major regulatory anti-trust fines or data breaches. */
@@ -299,12 +295,10 @@ class TechBusinessModel extends StandardCorporateBusinessModel
         return self::PLATFORM_MODERNIZATION_GAIN_RATE;
     }
 
-    public function calculateFairValue(float $earningsValue, float $pbFairValue, float $normalizedEps, float $dividendSupportValue = 0.0): float
+    /** Asset-light platforms trade on cash earnings, DCF and recurring revenue power, not on book value. */
+    protected function getFairValueBookWeight(float $normalizedEps): float
     {
-        // Asset-light software & tech equities trade on cash earnings, DCF, and recurring revenue power, not Book Value.
-        return $dividendSupportValue > 0.0
-            ? ($earningsValue * (1.0 - FinancialConstants::FAIR_VALUE_DDM_WEIGHT)) + ($dividendSupportValue * FinancialConstants::FAIR_VALUE_DDM_WEIGHT)
-            : $earningsValue;
+        return 0.0;
     }
 
     /**
@@ -318,6 +312,7 @@ class TechBusinessModel extends StandardCorporateBusinessModel
         return [
             'exchange_rate_index_ema',
             'output_gap_ema',
+            'output_gap_lag_6m',
             'tips_breakeven_ema',
             'real_wage_gap',
         ];

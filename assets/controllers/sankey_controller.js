@@ -41,6 +41,7 @@ function formatMacroReading(reading) {
     if (!Number.isFinite(value)) return `${reading.label} —`;
     if (reading.unit === 'bps') return `${reading.label} ${Math.round(value * 10000)} bps`;
     if (reading.unit === 'pct') return `${reading.label} ${(value * 100).toFixed(2)}%`;
+    if (reading.unit === 'level') return `${reading.label} ${new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 }).format(value)}`;
     return `${reading.label} ${value.toFixed(1)}`;
 }
 
@@ -167,10 +168,10 @@ export default class extends Controller {
                                 if (params.data && Array.isArray(params.data.drivers) && params.data.drivers.length > 0) {
                                     html += `<div class="mt-2 pt-2 border-t border-slate-700 space-y-1">`;
                                     html += `<div class="text-3xs font-bold uppercase tracking-wider text-slate-400 mb-1">Key Drivers</div>`;
-                                    // A driver's `impact` is an unpriced model coefficient, not a
-                                    // share of revenue — it never reconciled against the QoQ figure
-                                    // above, so it is shown as direction and strength, with the
-                                    // observed macro readings App\Data\MacroFieldCatalog resolved.
+                                    // A measured driver carries `share`: how much higher (or lower) the stream
+                                    // is than it would be with that input at its neutral reading, measured by
+                                    // the model's own physics. Older reports carry only an unpriced `impact`,
+                                    // so the share is printed only where it exists.
                                     params.data.drivers.forEach(d => {
                                         const isPos = (d.direction ?? ((d.impact || 0) >= 0 ? 1 : -1)) >= 0;
                                         const tag = DRIVER_TYPE_TAGS[d.type] || DRIVER_TYPE_TAGS.company;
@@ -178,7 +179,7 @@ export default class extends Controller {
                                         const readings = Array.isArray(d.readings) ? d.readings : [];
                                         html += `<div class="flex items-center justify-between text-2xs gap-3">
                                             <span class="text-slate-300"><span class="text-4xs uppercase tracking-wider text-slate-500">${tag}</span> ${d.label}</span>
-                                            <span class="font-mono font-bold ${colorClass}">${strengthMeter(d.strength, isPos)}</span>
+                                            <span class="font-mono font-bold ${colorClass}">${typeof d.share === 'number' ? `${d.share >= 0 ? '+' : '−'}${Math.abs(d.share * 100).toFixed(1)}% ` : ''}${strengthMeter(d.strength, isPos)}</span>
                                         </div>`;
                                         if (readings.length > 0) {
                                             html += `<div class="text-3xs font-mono text-slate-500 pl-4">${readings.map(formatMacroReading).join('  ·  ')}</div>`;

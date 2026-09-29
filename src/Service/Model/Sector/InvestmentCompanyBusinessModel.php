@@ -91,8 +91,6 @@ class InvestmentCompanyBusinessModel extends ConglomerateBusinessModel
     /** Revenue the treasury books per unit of its value: blended yield on cash, short sovereign paper and the credit book. */
     public const TREASURY_INCOME_YIELD = 0.040;
 
-    /** An investment company owns no factories directly; the parent's industrial stream is switched off. */
-    public const INDUSTRIAL_CONGLOMERATE_WEIGHT = 0.00;
 
     // --- Stream Volatility Scalars ---
     /** Volatility multiplier for consolidated subsidiary sales: real operating businesses, priced as such. */
@@ -164,7 +162,7 @@ class InvestmentCompanyBusinessModel extends ConglomerateBusinessModel
 
         // --- Dividends received: the cycle as it was, not as it is ---
         // Declared out of trailing earnings, then smoothed by the board: delay and damping are separate.
-        $laggedGap = $this->resolveLaggedOutputGap($stock, $macroState);
+        $laggedGap = $this->resolveLaggedOutputGap($macroState);
         $listedMacroBoost = $laggedGap * self::LISTED_DIVIDEND_MACRO_SCALAR;
 
         // --- Treasury: the parent's contrarian float book, unchanged ---
@@ -285,6 +283,7 @@ class InvestmentCompanyBusinessModel extends ConglomerateBusinessModel
             'macro_credit_spread',
             'macro_credit_spread_ema',
             'output_gap_ema',
+            'output_gap_lag_18m',
             'perceived_neutral_rate',
             'policy_rate_ema',
             'tips_breakeven_ema',
@@ -315,11 +314,15 @@ class InvestmentCompanyBusinessModel extends ConglomerateBusinessModel
      * Net asset value, blended with the dividend it distributes out of what it receives. $pbFairValue IS
      * NAV per share here, because the multiple above is one; the earnings leg is deliberately unread.
      */
-    public function calculateFairValue(float $earningsValue, float $pbFairValue, float $normalizedEps, float $dividendSupportValue = 0.0): float
+    /** A closed-end holding company is priced on its net asset value, with any dividend it pays discounted beside it. */
+    protected function getFairValueBookWeight(float $normalizedEps): float
     {
-        return $dividendSupportValue > 0.0
-            ? ($pbFairValue * (1.0 - self::NAV_DDM_WEIGHT)) + ($dividendSupportValue * self::NAV_DDM_WEIGHT)
-            : $pbFairValue;
+        return 1.0;
+    }
+
+    protected function getFairValueDividendWeight(): float
+    {
+        return self::NAV_DDM_WEIGHT;
     }
 
     /**

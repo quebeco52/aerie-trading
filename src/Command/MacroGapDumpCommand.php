@@ -13,6 +13,7 @@ use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
+use App\Service\Math\FinancialConstants;
 
 /**
  * Writes the recorded macro run out as newline-delimited JSON, one object per simulated quarter.
@@ -49,8 +50,6 @@ class MacroGapDumpCommand extends Command
     /** Default destination, inside the repo so the file is readable beside the code it is used to change. */
     public const DEFAULT_RELATIVE_PATH = 'var/macro-gap-history.jsonl';
 
-    /** Quarters per simulated year; the table is written once per quarter, so this converts the --years option. */
-    private const QUARTERS_PER_YEAR = 4;
 
     /** Columns that are neither part of the macro vector nor a decomposition, and are dropped from the dump. */
     private const NON_SERIES_COLUMNS = ['id', 'recorded_at'];
@@ -105,7 +104,7 @@ class MacroGapDumpCommand extends Command
         // oldest rows instead would hand back the start of the run, which is the one stretch of it that
         // is still converging off its seed.
         $limit = $years > 0.0
-            ? (int) ceil($years * self::QUARTERS_PER_YEAR)
+            ? (int) ceil($years * FinancialConstants::QUARTERS_PER_YEAR)
             : HistoryPruner::MACRO_QUARTERS_KEPT;
 
         $rows = $conn->fetchAllAssociative(
@@ -153,7 +152,7 @@ class MacroGapDumpCommand extends Command
         $io->success(sprintf(
             'Wrote %d quarters (%.2f simulated years, %s) to %s.',
             \count($rows),
-            ($last - $first) + (1.0 / self::QUARTERS_PER_YEAR),
+            ($last - $first) + (1.0 / FinancialConstants::QUARTERS_PER_YEAR),
             sprintf('year %.4f to %.4f', $first, $last),
             $path
         ));

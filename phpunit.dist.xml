@@ -70,7 +70,7 @@
             <file>tests/Service/Market/IndexFundAccountantTest.php</file>
             <file>tests/Service/Market/BulkRowUpdateTest.php</file>
             <file>tests/Service/Market/StockTickColumnsTest.php</file>
-            <file>tests/Command/MarketTickerCadenceTest.php</file>
+            <file>tests/Service/Market/TickCadenceTest.php</file>
             <file>tests/Service/Market/OptionDeskSweepTest.php</file>
             <file>tests/Service/Market/OptionSettlementBatchTest.php</file>
             <file>tests/Service/Market/OptionChainListingTest.php</file>
@@ -91,9 +91,10 @@
             <file>tests/Service/View/CompanySnapshotNavTest.php</file>
             <file>tests/Service/View/CompanySnapshotValuationTest.php</file>
             <file>tests/Service/Market/OpeningBoardBuilderTest.php</file>
+            <file>tests/Service/Corporate/MacroDriverAttributionTest.php</file>
             <file>tests/Service/View/AnchorPortfolioBuilderTest.php</file>
             <file>tests/Service/Market/ChartRangeTest.php</file>
-            <file>tests/Command/ChartBufferWritesTest.php</file>
+            <file>tests/Service/Market/ChartBufferWritesTest.php</file>
             <directory>tests/Support</directory>
         </testsuite>
 
@@ -124,6 +125,9 @@
             <exclude>tests/Service/Market/IndexFundAccountantTest.php</exclude>
             <exclude>tests/Service/View/CompanySnapshotValuationTest.php</exclude>
             <exclude>tests/Service/Market/OpeningBoardBuilderTest.php</exclude>
+            <exclude>tests/Service/Market/TickCadenceTest.php</exclude>
+            <exclude>tests/Service/Market/ChartBufferWritesTest.php</exclude>
+            <exclude>tests/Service/Corporate/MacroDriverAttributionTest.php</exclude>
         </testsuite>
 
         <testsuite name="Functional">

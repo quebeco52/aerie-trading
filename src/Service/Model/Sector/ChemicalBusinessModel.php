@@ -222,7 +222,7 @@ class ChemicalBusinessModel extends StandardCorporateBusinessModel
 
     public function getMacroPhysics(Stock $stock, MacroStateDTO $macroState): array
     {
-        $outputGap = $this->resolveLaggedOutputGap($stock, $macroState);
+        $outputGap = $this->resolveLaggedOutputGap($macroState);
         $metalsShift = ($macroState->industrialMetalsIndexEma - 100.0) / 100.0;
         $agriShift = ($macroState->agriculturalCommodityIndexEma - 100.0) / 100.0;
         $beta = $this->getOperatingCyclicality($stock);
@@ -393,6 +393,7 @@ class ChemicalBusinessModel extends StandardCorporateBusinessModel
             'manufacturing_pmi',
             'natural_gas_price_index_ema',
             'output_gap_ema',
+            'output_gap_lag_6m',
             'refining_crack_spread',
             'tips_breakeven_ema',
             'real_wage_gap',

@@ -33,8 +33,8 @@ readonly class MacroStateDTO
      * Seeds this snapshot adds to the shared set, for openings only a snapshot needs.
      *
      * App\Data\MacroFieldRegistry::seeds() already carries the seeds both readers share — every
-     * `*Ema` pair, plus the three declared in its SEED_OVERRIDES (energyBasePrice,
-     * supercoreInflation, coreGoodsInflation) that the naming convention does not describe. These
+     * `*Ema` pair, plus the pairs declared in its SEED_OVERRIDES that the naming convention does not
+     * describe. These
      * two are on top of those, and are not seeded when the engine's own state is hydrated: a
      * snapshot is read by the pricing surfaces, which cannot be handed a stale breakeven or structural
      * slope just because the payload predates that field.
@@ -45,6 +45,16 @@ readonly class MacroStateDTO
         'tipsBreakeven' => 'inflation',
         'structuralSlope' => 'nsSlope',
     ];
+
+    // --- Demand Transmission Lags ---
+
+    /** The output gap as it reaches order books 3 to 18 months behind the economy (MacroAggregateSubsystem::demandTransmissionLagField). */
+    public float $outputGapLag3m;
+    public float $outputGapLag6m;
+    public float $outputGapLag9m;
+    public float $outputGapLag12m;
+    public float $outputGapLag15m;
+    public float $outputGapLag18m;
 
     /**
      * The macro vector's fields, and the one place their opening values are declared.
@@ -63,6 +73,12 @@ readonly class MacroStateDTO
         public float $totalTime = 0.0,
         public float $outputGap = 0.0,
         public float $outputGapEma = 0.0,
+        ?float $outputGapLag3m = null,
+        ?float $outputGapLag6m = null,
+        ?float $outputGapLag9m = null,
+        ?float $outputGapLag12m = null,
+        ?float $outputGapLag15m = null,
+        ?float $outputGapLag18m = null,
         public float $capitalStockOverhang = 0.0,
         public float $capitalStockOverhangEma = 0.0,
         public float $unemploymentRate = MacroEngine::NATURAL_UNEMPLOYMENT,
@@ -336,7 +352,15 @@ readonly class MacroStateDTO
         public float $boardStampDuty = 0.0,
         public float $strategicStakeCash = 0.0,
         public float $sovereignFundBudgetInflow = 0.0,
-    ) {}
+    ) {
+        // A state given its gap but not its lags is one where the gap has stood long enough to reach every order book.
+        $this->outputGapLag3m = $outputGapLag3m ?? $outputGapEma;
+        $this->outputGapLag6m = $outputGapLag6m ?? $outputGapEma;
+        $this->outputGapLag9m = $outputGapLag9m ?? $outputGapEma;
+        $this->outputGapLag12m = $outputGapLag12m ?? $outputGapEma;
+        $this->outputGapLag15m = $outputGapLag15m ?? $outputGapEma;
+        $this->outputGapLag18m = $outputGapLag18m ?? $outputGapEma;
+    }
 
     /**
      * Constructs a MacroStateDTO from the snake_case payload Redis carries.
@@ -467,6 +491,21 @@ readonly class MacroStateDTO
             longEndPremium: $this->nsLongEndPremium,
             balanceSheetIntensity: $this->balanceSheetIntensity,
         );
+    }
+
+    /**
+     * The output gap as it has reached an order book the given number of years behind the economy: one of the
+     * distributed lags the macro publishes, or the gap itself at zero.
+     *
+     * @throws \InvalidArgumentException When the lag is not one the macro publishes.
+     */
+    public function laggedOutputGap(float $lagYears): float
+    {
+        if ($lagYears <= 0.0) {
+            return $this->outputGapEma;
+        }
+
+        return $this->{MacroAggregateSubsystem::demandTransmissionLagField($lagYears)};
     }
 
     /**

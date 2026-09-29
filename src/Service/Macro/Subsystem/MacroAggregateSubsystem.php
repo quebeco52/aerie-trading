@@ -45,6 +45,17 @@ class MacroAggregateSubsystem
     /** Headline inflation per unit farm-price shock (~13% food CPI weight at ~15% pass-through), symmetric in both directions. */
     public const AGRI_COST_PUSH_TRANSMISSION = 0.020;
 
+    // --- Demand Transmission Lags ---
+    /** The output gap as it reaches order books, one first-order lag of output_gap_ema per delay a business model can declare (DEMAND_LAG_YEARS): field => mean lag in years. */
+    public const DEMAND_TRANSMISSION_LAGS = [
+        'outputGapLag3m' => 0.25,
+        'outputGapLag6m' => 0.50,
+        'outputGapLag9m' => 0.75,
+        'outputGapLag12m' => 1.00,
+        'outputGapLag15m' => 1.25,
+        'outputGapLag18m' => 1.50,
+    ];
+
     // --- Natural Rate of Interest (Holston, Laubach & Williams 2017) ---
     /** r* per point of trend growth, HLW's c: 1.113 for the US (2023 vintage, 1961-2026 sample). */
     public const NATURAL_RATE_GROWTH_LOADING = 1.113;
@@ -743,6 +754,24 @@ class MacroAggregateSubsystem
     }
 
     /**
+     * The field that carries the output gap at a given demand lag. The macro publishes the gap at a fixed set of lags
+     * rather than at whatever each business model asks for, so a model declaring any other lag is a configuration error.
+     *
+     * @param float $lagYears Mean demand lag in years, as a business model declares it.
+     * @return string MacroState property name.
+     * @throws \InvalidArgumentException When the lag is not one DEMAND_TRANSMISSION_LAGS publishes.
+     */
+    public static function demandTransmissionLagField(float $lagYears): string
+    {
+        $field = array_search($lagYears, self::DEMAND_TRANSMISSION_LAGS, true);
+        if (!is_string($field)) {
+            throw new \InvalidArgumentException(sprintf('The macro publishes no output gap lag of %s years; add one to DEMAND_TRANSMISSION_LAGS.', $lagYears));
+        }
+
+        return $field;
+    }
+
+    /**
      * Allied defence spending against its trend, in logs: the orders the District's arms makers take.
      *
      * @param float $alliedDefenseSpendingIndexEma The allied defence index, smoothed over a quarter.
@@ -1033,6 +1062,9 @@ class MacroAggregateSubsystem
         $commodityTrendWeight = 1.0 - exp(-$dt / self::COMMODITY_TREND_HORIZON_YEARS);
 
         $state->outputGapEma += $emaWeight * ($state->outputGap - $state->outputGapEma);
+        foreach (self::DEMAND_TRANSMISSION_LAGS as $field => $lagYears) {
+            $state->$field = $this->mathUtility->calculateDistributedLag($state->$field, $state->outputGapEma, $dt, $lagYears);
+        }
         $state->domesticDemandGapEma += $emaWeight * (self::domesticDemandGap($state) - $state->domesticDemandGapEma);
         $state->policyRateEma += $emaWeight * ($state->policyRate - $state->policyRateEma);
         $state->inflationEma += $emaWeight * ($state->inflation - $state->inflationEma);

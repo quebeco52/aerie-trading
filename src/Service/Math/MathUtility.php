@@ -25,6 +25,10 @@ class MathUtility
     /** Ratio of a zero-mean normal variable's mean absolute deviation to its sigma, sqrt(2 / pi). */
     public const MEAN_ABSOLUTE_DEVIATION_TO_SIGMA = 0.7978845608028654;
 
+    // --- Draw Replay ---
+    /** Uniform a replay hands out once its recording runs out: the median, so a branch the recording never reached draws nothing extreme. */
+    public const REPLAY_EXHAUSTED_DRAW = 0.5;
+
     // --- SVJJ Jump Process ---
     /** Mean variance jump on an UP price jump, as a share of the mean on a down jump; crashes spike volatility harder than rallies. */
     public const VARIANCE_JUMP_UPSIDE_MEAN_SHARE = 0.50;
@@ -71,6 +75,17 @@ class MathUtility
 
     private float $randMaxInverse;
     private float $twoPi;
+
+    /** @var list<float>|null Uniforms drawn since beginDrawLog(); null when nothing is recording. */
+    private ?array $drawLog = null;
+
+    /** The cached Box-Muller normal when the recording began, which a replay has to start from. */
+    private ?float $drawLogSpare = null;
+
+    /** @var list<float>|null The recorded uniforms a replaying instance hands out in place of fresh draws. */
+    private ?array $replayDraws = null;
+
+    private int $replayCursor = 0;
 
     /**
      * Constructor for MathUtility.
@@ -155,7 +170,52 @@ class MathUtility
      */
     public function generateUniform(): float
     {
-        return mt_rand() * $this->randMaxInverse;
+        if ($this->replayDraws !== null) {
+            return $this->replayDraws[$this->replayCursor++] ?? self::REPLAY_EXHAUSTED_DRAW;
+        }
+
+        $draw = mt_rand() * $this->randMaxInverse;
+        if ($this->drawLog !== null) {
+            $this->drawLog[] = $draw;
+        }
+
+        return $draw;
+    }
+
+    /** Starts recording every uniform this instance draws, so a calculation can later be re-run on the same draws. */
+    public function beginDrawLog(): void
+    {
+        $this->drawLog = [];
+        $this->drawLogSpare = $this->spareNormal;
+    }
+
+    /**
+     * Stops recording and hands back what was drawn.
+     *
+     * @return array{uniforms: list<float>, spare: ?float}
+     */
+    public function endDrawLog(): array
+    {
+        $log = ['uniforms' => $this->drawLog ?? [], 'spare' => $this->drawLogSpare];
+        $this->drawLog = null;
+
+        return $log;
+    }
+
+    /**
+     * An instance that hands out a recorded sequence of draws instead of fresh ones, for re-running a calculation on
+     * the draws it was first run with. It never touches the global generator, so a re-run leaves the simulation's
+     * own random path exactly where it was.
+     *
+     * @param array{uniforms?: list<float>, spare?: ?float} $log From endDrawLog(); an empty log replays nothing.
+     */
+    public static function replaying(array $log): self
+    {
+        $replay = new self();
+        $replay->replayDraws = $log['uniforms'] ?? [];
+        $replay->spareNormal = $log['spare'] ?? null;
+
+        return $replay;
     }
 
     /**

@@ -448,6 +448,8 @@ class EarningsEngine
         $annualTurnover = $this->resolveAnnualCapitalTurnover($ctx);
         $assetTurnover = min(self::MAX_QUARTERLY_ASSET_TURNOVER, $annualTurnover / 4.0);
 
+        // The firm as the macro physics first reads it, kept so the drivers can be measured on it afterwards.
+        $ctx->macroPhysicsBasis = clone $stock;
         $macroPhysics = $strategy->getMacroPhysics($stock, $macroState);
         $macroDemandShift = $macroPhysics['macro_demand_shift'];
         $pricingPowerMultiplier = $macroPhysics['pricing_power_multiplier'];
@@ -503,8 +505,10 @@ class EarningsEngine
         $secularGrowthRate = $strategy->getSecularGrowthRate($stock);
         $secularDrift = $secularGrowthRate * $ctx->dt;
 
-        $rawUtilization = $ctx->seasonalFactor * (1.0 + $secularDrift + $macroDemandShift + $idiosyncraticDemandShock + $jumpMagnitude);
-        $ctx->capacityUtilization = max(self::MIN_CAPACITY_UTILIZATION, min(self::MAX_CAPACITY_UTILIZATION, $rawUtilization));
+        $ctx->secularDrift = $secularDrift;
+        $ctx->idiosyncraticDemandShock = $idiosyncraticDemandShock;
+        $ctx->jumpMagnitude = $jumpMagnitude;
+        $ctx->capacityUtilization = $this->capacityUtilizationAt($ctx, $macroDemandShift);
         // Capital tied up in construction earns nothing yet, but only so much of the base may be excluded:
         // a firm mid-megaproject still runs the plant it already has. Goodwill earns nothing either — it is
         // the premium paid over the plant — so an impairment cannot shrink capacity. A financial's base is
@@ -515,23 +519,9 @@ class EarningsEngine
             $strategy->isFinancial() ? 0.0 : (float) $stock->getGoodwill()
         );
 
-        $structuralRevenue = max(1.0, $revenueGeneratingCapital * $assetTurnover * $pricingPowerMultiplier);
-
-        // The firm's addressable market in the unit its capacity is measured in: its own structural revenue
-        // scaled up to a full addressable share, on the base every share reading uses (equity for a lender,
-        // whose book turns over a leveraged multiple of it; invested capital otherwise). The cap used to
-        // compare quarterly revenue against the CAPITAL figure of the market, six times too loose to bind.
-        $fullMarketRevenue = $ctx->addressableShare > 0.0 ? $structuralRevenue / $ctx->addressableShare : INF;
-        $maxSectorCapacity = $fullMarketRevenue * FinancialConstants::MAX_SECTOR_TAM_CAPACITY_RATIO;
-        
-        if (!$strategy->isFinancial()) {
-            $ctx->structuralRevenue = min($maxSectorCapacity, $structuralRevenue);
-            $ctx->expectedRevenue = min($maxSectorCapacity * self::EXPECTED_REVENUE_TAM_HEADROOM, $ctx->structuralRevenue * $ctx->capacityUtilization);
-        } else {
-            $maxFinancialCapacity = $fullMarketRevenue * FinancialConstants::MAX_FINANCIAL_SECTOR_TAM_CAPACITY_RATIO;
-            $ctx->structuralRevenue = min($maxFinancialCapacity, $structuralRevenue);
-            $ctx->expectedRevenue = min($maxFinancialCapacity * self::EXPECTED_REVENUE_TAM_HEADROOM, $ctx->structuralRevenue * $ctx->capacityUtilization);
-        }
+        $ctx->revenueGeneratingCapital = $revenueGeneratingCapital;
+        $ctx->assetTurnover = $assetTurnover;
+        [$ctx->structuralRevenue, $ctx->expectedRevenue] = $this->capacityRevenueAt($ctx, $pricingPowerMultiplier, $ctx->capacityUtilization);
 
         // Industry capacity balance: total industry capacity relative to trend demand scales realized price level.
         $industryPriceLevel = $this->resolveIndustryPriceLevel($ctx);
@@ -563,6 +553,41 @@ class EarningsEngine
 
         $structuralVariableCosts = $cashStructuralCosts - ($cashStructuralCosts * $fixedCostRatio);
         $ctx->baselineVariableMargin = $structuralVariableCosts / $ctx->structuralRevenue;
+    }
+
+    /**
+     * Capacity utilisation the quarter runs at under a given macro demand shift: the seasonal run rate lifted by
+     * trend, demand and the quarter's own shocks, within the plant's physical bounds.
+     */
+    private function capacityUtilizationAt(EarningsSimulationContext $ctx, float $macroDemandShift): float
+    {
+        $rawUtilization = $ctx->seasonalFactor * (1.0 + $ctx->secularDrift + $macroDemandShift + $ctx->idiosyncraticDemandShock + $ctx->jumpMagnitude);
+
+        return max(self::MIN_CAPACITY_UTILIZATION, min(self::MAX_CAPACITY_UTILIZATION, $rawUtilization));
+    }
+
+    /**
+     * Structural and expected revenue at a given price level and utilisation, before the industry's price level:
+     * the firm's capital turned over at that price, capped at its addressable market, and run at that utilisation.
+     *
+     * @return array{0: float, 1: float} Structural revenue, expected revenue.
+     */
+    private function capacityRevenueAt(EarningsSimulationContext $ctx, float $pricingPowerMultiplier, float $capacityUtilization): array
+    {
+        $structuralRevenue = max(1.0, $ctx->revenueGeneratingCapital * $ctx->assetTurnover * $pricingPowerMultiplier);
+
+        // The firm's addressable market in the unit its capacity is measured in: its own structural revenue
+        // scaled up to a full addressable share, on the base every share reading uses (equity for a lender,
+        // whose book turns over a leveraged multiple of it; invested capital otherwise). The cap used to
+        // compare quarterly revenue against the CAPITAL figure of the market, six times too loose to bind.
+        $fullMarketRevenue = $ctx->addressableShare > 0.0 ? $structuralRevenue / $ctx->addressableShare : INF;
+        $maxCapacity = $fullMarketRevenue * ($ctx->strategy->isFinancial()
+            ? FinancialConstants::MAX_FINANCIAL_SECTOR_TAM_CAPACITY_RATIO
+            : FinancialConstants::MAX_SECTOR_TAM_CAPACITY_RATIO);
+
+        $cappedStructuralRevenue = min($maxCapacity, $structuralRevenue);
+
+        return [$cappedStructuralRevenue, min($maxCapacity * self::EXPECTED_REVENUE_TAM_HEADROOM, $cappedStructuralRevenue * $capacityUtilization)];
     }
 
     /**
@@ -784,8 +809,50 @@ class EarningsEngine
         return $surprise * (($demandShockZ - $sectorShockZ) / $demandShockZ);
     }
 
+    /**
+     * What each macro input the model reads did to each of its revenue streams this quarter, through both paths it
+     * takes: the firm-wide demand and pricing the macro physics sets, and the model's own stream physics. For each
+     * input, the macro physics is re-read with that input neutral and the quarter's expected revenue rebuilt from it
+     * through the same utilisation and capacity steps; the stream physics then runs on that. See MacroDriverAttribution.
+     *
+     * @param array{uniforms: list<float>, spare: ?float} $draws
+     * @param array<string, float>                        $actualStreams
+     */
+    private function attributeMacroDrivers(EarningsSimulationContext $ctx, Stock $streamBasis, array $draws, array $actualStreams): void
+    {
+        if ($actualStreams === [] || $ctx->macroPhysicsBasis === null) {
+            return;
+        }
+
+        $counterfactuals = [];
+        foreach (MacroDriverAttribution::counterfactualStates($ctx->strategy, $ctx->macroState) as $field => $state) {
+            $macroPhysics = $ctx->strategy->getMacroPhysics(clone $ctx->macroPhysicsBasis, $state);
+            $pricingPowerMultiplier = $macroPhysics['pricing_power_multiplier'];
+            $inputCostMultiplier = (float) ($macroPhysics['input_cost_multiplier'] ?? $pricingPowerMultiplier);
+            $macroDemandShift = $macroPhysics['macro_demand_shift']
+                + $ctx->rivalShareDrain
+                - ($ctx->strategy->getPriceElasticityOfDemand() * ($pricingPowerMultiplier - $inputCostMultiplier));
+
+            [, $expectedRevenue] = $this->capacityRevenueAt($ctx, $pricingPowerMultiplier, $this->capacityUtilizationAt($ctx, $macroDemandShift));
+            $counterfactuals[$field] = [$state, $expectedRevenue * $ctx->industryPriceLevel];
+        }
+
+        $ctx->streamMacroEffects = $ctx->strategy->measureStreamMacroEffects(
+            $streamBasis,
+            $draws,
+            $counterfactuals,
+            $ctx->realizedVariableMargin,
+            $ctx->fixedCosts,
+            $ctx->baselineVol,
+            $actualStreams
+        );
+    }
+
     private function calculateExpectedVsActualFinancials(EarningsSimulationContext $ctx): void
     {
+        // The firm and the draws the stream physics runs on, kept so its macro drivers can be measured on them.
+        $streamBasis = clone $ctx->stock;
+        $this->mathUtility->beginDrawLog();
         $actuals = $ctx->strategy->computeActualFinancials(
             $ctx->stock,
             $ctx->expectedRevenue,
@@ -795,6 +862,7 @@ class EarningsEngine
             $ctx->macroState,
             $this->mathUtility
         );
+        $this->attributeMacroDrivers($ctx, $streamBasis, $this->mathUtility->endDrawLog(), $actuals->streamRevenue);
         $ctx->actualRevenue = $actuals->actualRevenue;
         $ctx->actualVariableCosts = $actuals->actualVariableCosts;
 

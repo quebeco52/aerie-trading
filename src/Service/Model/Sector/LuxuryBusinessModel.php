@@ -90,10 +90,6 @@ class LuxuryBusinessModel extends StandardCorporateBusinessModel
     public const BRAND_BOOM_REV_MULT       = 1.15;
     /** Variable margin bonus applied during viral luxury collection sell-outs. */
     public const BRAND_BOOM_MARGIN_BONUS   = -0.04;
-    /** Upper clamp for realized variable margin. */
-    public const MAX_VARIABLE_MARGIN_CLAMP = 1.50;
-    /** Lower clamp for realized variable margin. */
-    public const MIN_VARIABLE_MARGIN_CLAMP = 0.01;
 
     // --- Analyst Visibility & Error ---
     // Moved to getCoverageProfile() — see MarketConsensusEngine.
@@ -116,7 +112,7 @@ class LuxuryBusinessModel extends StandardCorporateBusinessModel
 
     public function getMacroPhysics(Stock $stock, \App\DTO\MacroStateDTO $macroState): array
     {
-        $outputGap = $this->resolveLaggedOutputGap($stock, $macroState);
+        $outputGap = $this->resolveLaggedOutputGap($macroState);
         $sentimentShift = $macroState->sentimentDeviation();
         $beta = $this->getOperatingCyclicality($stock);
 

@@ -39,10 +39,6 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
     public const NETWORK_REVENUE_WEIGHT  = 0.35;
 
     // --- ROE & Target Architecture ---
-    /** Divisor on the trailing ROE's reversion speed: it reverts toward cost of equity plus moat at kappa / this. */
-    public const TTM_ROE_WEIGHT      = 0.50;
-    /** Default 5Y Treasury spread over policy rate when yield curve data is absent. */
-    public const DEFAULT_5Y_YIELD_PREMIUM = 0.005;
     /** Minimum lending EBIT floor as a fraction of core debt liabilities. */
     public const MIN_LENDING_EBIT_YIELD   = 0.05;
 
@@ -106,8 +102,6 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
 
     public const BASE_COVERAGE_VISIBILITY = 0.50;
     public const BASE_COVERAGE_ERROR = 0.10;
-    /** Upper clamp for realized variable margin. */
-    public const MAX_VARIABLE_MARGIN_CLAMP = 0.95;
 
     // --- CECL Forward Reserve (ASC 326 lifetime allowance conditioned on the macro forecast) ---
     /** Baseline investment-grade credit spread (macro through-the-cycle IG); the lifetime loss estimate is struck at 1.0x here. */
@@ -472,7 +466,7 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
             'macro_credit_spread_ema',
             'money_market_fund_share',
             'money_market_fund_share_ema',
-            'output_gap_ema',
+            'output_gap_lag_9m',
             'policy_rate_ema',
             'recession_probability_ema',
             'retail_default_rate_ema',

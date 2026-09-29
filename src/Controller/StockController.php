@@ -10,6 +10,7 @@ use App\Entity\Etf;
 use App\Entity\User;
 use App\Service\Market\ChartRange;
 use App\Service\Market\PriceBarAggregator;
+use App\Service\Market\TickCadence;
 use Doctrine\ORM\EntityManagerInterface;
 use Redis;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -77,7 +78,7 @@ class StockController extends AbstractController
         if (ChartRange::isBuffered($range)) {
             $isBond = $entityManager->getRepository(\App\Entity\Bond::class)->count(['ticker' => $ticker]) > 0;
             $entriesPerYear = $isBond
-                ? \App\Command\MarketTickerCommand::bondMarksPerYear($ticksPerYear)
+                ? TickCadence::bondMarksPerYear($ticksPerYear)
                 : $ticksPerYear;
 
             $cacheKey = "chart_buffer:{$ticker}";

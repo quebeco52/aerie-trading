@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace App\Tests\Command;
+namespace App\Tests\Service\Market;
 
-use App\Command\MarketTickerCommand;
+use App\Service\Market\TickCadence;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -20,8 +20,8 @@ final class HistorySamplingRateTest extends TestCase
     /** Below the target a bar cannot be finer than a tick, so the rate is the tick rate itself. */
     public function testTickRatesBelowTheTargetRecordEveryTick(): void
     {
-        $this->assertSame(252, MarketTickerCommand::historyPointsPerYear(252));
-        $this->assertSame(720, MarketTickerCommand::historyPointsPerYear(720));
+        $this->assertSame(252, TickCadence::historyPointsPerYear(252));
+        $this->assertSame(720, TickCadence::historyPointsPerYear(720));
     }
 
     /**
@@ -35,8 +35,8 @@ final class HistorySamplingRateTest extends TestCase
     {
         foreach ([2401, 3600, 7000, 7200, 14400, 54000, 864000] as $ticksPerYear) {
             $this->assertSame(
-                MarketTickerCommand::TARGET_HISTORY_POINTS_PER_YEAR,
-                MarketTickerCommand::historyPointsPerYear($ticksPerYear),
+                TickCadence::TARGET_HISTORY_POINTS_PER_YEAR,
+                TickCadence::historyPointsPerYear($ticksPerYear),
                 "Sampling overshoots the target at {$ticksPerYear} ticks/year."
             );
         }
@@ -46,7 +46,7 @@ final class HistorySamplingRateTest extends TestCase
     public function testRateIsAlwaysPositive(): void
     {
         foreach ([1, 4, 252, 365, 3600, 7200, 14400, 54000, 864000] as $ticksPerYear) {
-            $this->assertGreaterThan(0, MarketTickerCommand::historyPointsPerYear($ticksPerYear));
+            $this->assertGreaterThan(0, TickCadence::historyPointsPerYear($ticksPerYear));
         }
     }
 
@@ -63,13 +63,13 @@ final class HistorySamplingRateTest extends TestCase
             $bars = 0;
 
             for ($tick = 1; $tick <= $ticksPerYear; $tick++) {
-                if (MarketTickerCommand::isHistoryTick($tick, $ticksPerYear)) {
+                if (TickCadence::isHistoryTick($tick, $ticksPerYear)) {
                     $bars++;
                 }
             }
 
             $this->assertSame(
-                MarketTickerCommand::historyPointsPerYear($ticksPerYear),
+                TickCadence::historyPointsPerYear($ticksPerYear),
                 $bars,
                 "Sampling rate disagrees with the ticker's own write cadence at {$ticksPerYear} ticks/year."
             );
@@ -89,7 +89,7 @@ final class HistorySamplingRateTest extends TestCase
             $bars = 0;
 
             for ($tick = 1; $tick <= $ticksPerYear; $tick++) {
-                if (MarketTickerCommand::isHistoryTick($tick, $ticksPerYear)) {
+                if (TickCadence::isHistoryTick($tick, $ticksPerYear)) {
                     $bars++;
                 }
             }
@@ -110,7 +110,7 @@ final class HistorySamplingRateTest extends TestCase
      */
     public function testHistoryEndpointDoesNotHardcodeRowCounts(): void
     {
-        $source = file_get_contents(\dirname(__DIR__, 2) . '/src/Controller/StockController.php');
+        $source = file_get_contents(\dirname(__DIR__, 3) . '/src/Controller/StockController.php');
         $this->assertIsString($source);
 
         $this->assertStringContainsString(

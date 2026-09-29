@@ -73,10 +73,6 @@ class FinancialDataBusinessModel extends StandardCorporateBusinessModel
     // --- Revenue & Shock Physics ---
     /** Volatility multiplier for top-line revenue shocks in subscription data models. */
     public const REVENUE_VARIANCE_SCALAR   = 0.05;
-    /** Upper clamp for realized variable margin. */
-    public const MAX_VARIABLE_MARGIN_CLAMP = 1.50;
-    /** Lower clamp for realized variable margin. */
-    public const MIN_VARIABLE_MARGIN_CLAMP = 0.01;
 
     // --- Analyst Visibility & Error ---
     // Moved to getCoverageProfile() — see MarketConsensusEngine.

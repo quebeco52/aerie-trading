@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace App\Tests\Command;
+namespace App\Tests\Service\Market;
 
-use App\Command\MarketTickerCommand;
+use App\Service\Market\TickCadence;
 use App\Service\Market\OptionDeskService;
 use PHPUnit\Framework\TestCase;
 
@@ -12,18 +12,18 @@ use PHPUnit\Framework\TestCase;
  * The working-set reload is counted in history bars, because a clear() that does not follow a flush loses
  * the tick's changes. These pin the cadence at the shipped tick rate and at the edges.
  */
-class MarketTickerCadenceTest extends TestCase
+class TickCadenceTest extends TestCase
 {
     public function testAtTheShippedRateTheWorkingSetReloadsAboutOnceATradingDay(): void
     {
         $ticksPerYear = 14400;
 
         // 1,200 bars a year over 252 trading days: a reload every fifth bar.
-        $this->assertSame(5, MarketTickerCommand::reloadIntervalBars($ticksPerYear));
+        $this->assertSame(5, TickCadence::reloadIntervalBars($ticksPerYear));
         $this->assertEqualsWithDelta(
-            MarketTickerCommand::WORKING_SET_RELOADS_PER_YEAR,
+            TickCadence::WORKING_SET_RELOADS_PER_YEAR,
             self::reloadsPerYear($ticksPerYear),
-            MarketTickerCommand::WORKING_SET_RELOADS_PER_YEAR * 0.1
+            TickCadence::WORKING_SET_RELOADS_PER_YEAR * 0.1
         );
     }
 
@@ -38,9 +38,9 @@ class MarketTickerCadenceTest extends TestCase
     {
         foreach ([3600, 7200, 14400, 54000] as $ticksPerYear) {
             $this->assertEqualsWithDelta(
-                MarketTickerCommand::WORKING_SET_RELOADS_PER_YEAR,
+                TickCadence::WORKING_SET_RELOADS_PER_YEAR,
                 self::reloadsPerYear($ticksPerYear),
-                MarketTickerCommand::WORKING_SET_RELOADS_PER_YEAR * 0.1,
+                TickCadence::WORKING_SET_RELOADS_PER_YEAR * 0.1,
                 "The working set does not reload once a trading day at {$ticksPerYear} ticks/year."
             );
         }
@@ -52,7 +52,7 @@ class MarketTickerCadenceTest extends TestCase
         $reloads = 0;
 
         for ($tick = 1; $tick <= $ticksPerYear; $tick++) {
-            if (MarketTickerCommand::isReloadTick($tick, $ticksPerYear)) {
+            if (TickCadence::isReloadTick($tick, $ticksPerYear)) {
                 $reloads++;
             }
         }
@@ -63,36 +63,36 @@ class MarketTickerCadenceTest extends TestCase
     public function testACoarseTickRateStillReloadsOnEveryBarRatherThanNever(): void
     {
         // 252 ticks a year: one tick is a day and one bar is a tick, so the reload is every bar.
-        $this->assertSame(1, MarketTickerCommand::reloadIntervalBars(252));
-        $this->assertSame(1, MarketTickerCommand::reloadIntervalBars(12));
+        $this->assertSame(1, TickCadence::reloadIntervalBars(252));
+        $this->assertSame(1, TickCadence::reloadIntervalBars(12));
     }
 
     public function testTheBondLadderIsMarkedOncePerTradingDayNotOncePerBar(): void
     {
         $ticksPerYear = 14400;
-        $bars = MarketTickerCommand::bondMarkIntervalBars($ticksPerYear);
+        $bars = TickCadence::bondMarkIntervalBars($ticksPerYear);
 
         // Five equity bars to one mark: the ladder is revalued, written and sampled a fifth as often as the board.
         $this->assertSame(5, $bars);
 
         $rows = 0;
         for ($tick = 1; $tick <= $ticksPerYear; $tick++) {
-            if (MarketTickerCommand::isBondMarkTick($tick, $ticksPerYear)) {
+            if (TickCadence::isBondMarkTick($tick, $ticksPerYear)) {
                 $rows++;
             }
         }
 
         $this->assertEqualsWithDelta(
-            MarketTickerCommand::BOND_MARKS_PER_YEAR,
+            TickCadence::BOND_MARKS_PER_YEAR,
             $rows,
-            MarketTickerCommand::BOND_MARKS_PER_YEAR * 0.1
+            TickCadence::BOND_MARKS_PER_YEAR * 0.1
         );
     }
 
     public function testACoarseTickRateStillMarksBondsOnEveryBar(): void
     {
-        $this->assertSame(1, MarketTickerCommand::bondMarkIntervalBars(252));
-        $this->assertSame(1, MarketTickerCommand::bondMarkIntervalBars(12));
+        $this->assertSame(1, TickCadence::bondMarkIntervalBars(252));
+        $this->assertSame(1, TickCadence::bondMarkIntervalBars(12));
     }
 
     public function testTheDayJobsDoNotShareABar(): void
@@ -101,8 +101,8 @@ class MarketTickerCadenceTest extends TestCase
         $shared = 0;
 
         for ($bar = 0; $bar < 1000; $bar++) {
-            if (MarketTickerCommand::isReloadBar($bar, $ticksPerYear)
-                && MarketTickerCommand::isBondMarkBar($bar, $ticksPerYear)) {
+            if (TickCadence::isReloadBar($bar, $ticksPerYear)
+                && TickCadence::isBondMarkBar($bar, $ticksPerYear)) {
                 $shared++;
             }
         }
@@ -121,9 +121,9 @@ class MarketTickerCadenceTest extends TestCase
     {
         foreach ([3600, 7200, 14400, 54000] as $ticksPerYear) {
             for ($tick = 1; $tick <= 20000; $tick++) {
-                if (MarketTickerCommand::isReloadTick($tick, $ticksPerYear)) {
+                if (TickCadence::isReloadTick($tick, $ticksPerYear)) {
                     $this->assertTrue(
-                        MarketTickerCommand::isHistoryTick($tick, $ticksPerYear),
+                        TickCadence::isHistoryTick($tick, $ticksPerYear),
                         "Tick {$tick} reloads the working set without having flushed at {$ticksPerYear} ticks/year."
                     );
                 }
@@ -136,9 +136,9 @@ class MarketTickerCadenceTest extends TestCase
     {
         foreach ([3600, 7200, 14400, 54000] as $ticksPerYear) {
             for ($tick = 1; $tick <= 20000; $tick++) {
-                if (MarketTickerCommand::isBondMarkTick($tick, $ticksPerYear)) {
+                if (TickCadence::isBondMarkTick($tick, $ticksPerYear)) {
                     $this->assertTrue(
-                        MarketTickerCommand::isHistoryTick($tick, $ticksPerYear),
+                        TickCadence::isHistoryTick($tick, $ticksPerYear),
                         "Tick {$tick} marks the ladder off the bar grid at {$ticksPerYear} ticks/year."
                     );
                 }
@@ -158,8 +158,8 @@ class MarketTickerCadenceTest extends TestCase
             $shared = 0;
 
             for ($tick = 1; $tick <= 20000; $tick++) {
-                if (MarketTickerCommand::isReloadTick($tick, $ticksPerYear)
-                    && MarketTickerCommand::isBondMarkTick($tick, $ticksPerYear)) {
+                if (TickCadence::isReloadTick($tick, $ticksPerYear)
+                    && TickCadence::isBondMarkTick($tick, $ticksPerYear)) {
                     $shared++;
                 }
             }
@@ -176,7 +176,7 @@ class MarketTickerCadenceTest extends TestCase
 
         for ($tick = 0; $tick < $sweep * 24; $tick++) {
             if (OptionDeskService::isSweepTick($tick, $sweep)
-                && MarketTickerCommand::isHistoryTick($tick, $ticksPerYear)) {
+                && TickCadence::isHistoryTick($tick, $ticksPerYear)) {
                 $collisions++;
             }
         }
@@ -201,7 +201,7 @@ class MarketTickerCadenceTest extends TestCase
     public function testTheReloadNeverOutrunsAFullBar(): void
     {
         foreach ([252, 720, 3600, 14400, 54000, 864000] as $ticksPerYear) {
-            $this->assertGreaterThanOrEqual(1, MarketTickerCommand::reloadIntervalBars($ticksPerYear), (string) $ticksPerYear);
+            $this->assertGreaterThanOrEqual(1, TickCadence::reloadIntervalBars($ticksPerYear), (string) $ticksPerYear);
         }
     }
 
@@ -225,7 +225,7 @@ class MarketTickerCadenceTest extends TestCase
             for ($tick = 1; $tick <= 3 * $ticksPerYear; $tick++) {
                 $accumulated += $dt;
 
-                if (MarketTickerCommand::crossedSimulatedBoundary($accumulated, $dt, 1.0)) {
+                if (TickCadence::crossedSimulatedBoundary($accumulated, $dt, 1.0)) {
                     $fired[] = $tick;
                 }
             }
@@ -243,9 +243,9 @@ class MarketTickerCadenceTest extends TestCase
     {
         $dt = 1.0 / 3600;
 
-        $this->assertFalse(MarketTickerCommand::crossedSimulatedBoundary(0.5, $dt, 1.0));
-        $this->assertFalse(MarketTickerCommand::crossedSimulatedBoundary(0.0, $dt, 1.0));
-        $this->assertFalse(MarketTickerCommand::crossedSimulatedBoundary(5.0, $dt, 0.0));
-        $this->assertFalse(MarketTickerCommand::crossedSimulatedBoundary(5.0, 0.0, 1.0));
+        $this->assertFalse(TickCadence::crossedSimulatedBoundary(0.5, $dt, 1.0));
+        $this->assertFalse(TickCadence::crossedSimulatedBoundary(0.0, $dt, 1.0));
+        $this->assertFalse(TickCadence::crossedSimulatedBoundary(5.0, $dt, 0.0));
+        $this->assertFalse(TickCadence::crossedSimulatedBoundary(5.0, 0.0, 1.0));
     }
 }

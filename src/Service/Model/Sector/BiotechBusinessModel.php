@@ -488,10 +488,15 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
         return $this->resolveMarginCeiling($stock);
     }
 
-    public function calculateFairValue(float $earningsValue, float $pbFairValue, float $normalizedEps, float $dividendSupportValue = 0.0): float
+    /** Clinical-stage biotechs trade entirely on pipeline rNPV and cash runway: no book, and no dividend to discount. */
+    protected function getFairValueBookWeight(float $normalizedEps): float
     {
-        // Clinical-stage biotechnology firms trade entirely on clinical pipeline rNPV and cash runway, not Book Value.
-        return $earningsValue;
+        return 0.0;
+    }
+
+    protected function getFairValueDividendWeight(): float
+    {
+        return 0.0;
     }
 
     /**

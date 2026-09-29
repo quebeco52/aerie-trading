@@ -54,12 +54,12 @@ class PriceChangeFeed
 
     /**
      * Persisted history rows one lookback window spans at the configured tick rate. History is
-     * sampled at MarketTickerCommand::historyPointsPerYear(), not one row per tick, so the depth
+     * sampled at TickCadence::historyPointsPerYear(), not one row per tick, so the depth
      * has to be asked of the sampler rather than assumed.
      */
     public function historyRowsPerLookback(): int
     {
-        return max(1, (int) ceil(MarketTickerCommand::historyPointsPerYear($this->ticksPerYear) * self::LOOKBACK_YEARS));
+        return max(1, (int) ceil(TickCadence::historyPointsPerYear($this->ticksPerYear) * self::LOOKBACK_YEARS));
     }
 
     /**

@@ -178,7 +178,7 @@ class SpecialtyIndustrialMachineryBusinessModel extends HeavyManufacturingBusine
         $overhangDrag = $macroState->capitalStockOverhangEma * self::CAPITAL_OVERHANG_SCALAR;
         $cuEquipmentBoost = MathUtility::calculateCapacityUtilizationShift($macroState->capacityUtilizationRateEma, MacroEngine::CU_BASELINE, self::CU_EQUIPMENT_EXPANSION_SENSITIVITY);
         $pmiEquipmentBoost = MathUtility::calculatePmiDemandShift($macroState->manufacturingPmiEma, MacroEngine::PMI_BASELINE, self::PMI_EQUIPMENT_SENSITIVITY);
-        $macroEquipmentBoost = ($this->resolveLaggedOutputGap($stock, $macroState) * self::MACRO_GDP_SENSITIVITY * $beta) - $overhangDrag + $cuEquipmentBoost + $pmiEquipmentBoost;
+        $macroEquipmentBoost = ($this->resolveLaggedOutputGap($macroState) * self::MACRO_GDP_SENSITIVITY * $beta) - $overhangDrag + $cuEquipmentBoost + $pmiEquipmentBoost;
 
         // --- Tail Risk Events ---
         $dealMultiplier = 1.0;
@@ -287,7 +287,7 @@ class SpecialtyIndustrialMachineryBusinessModel extends HeavyManufacturingBusine
             'exchange_rate_index_ema',
             'industrial_metals_index_ema',
             'manufacturing_pmi_ema',
-            'output_gap_ema',
+            'output_gap_lag_15m',
             'supply_chain_pressure_index_ema',
             'tips_breakeven_ema',
             'real_wage_gap',

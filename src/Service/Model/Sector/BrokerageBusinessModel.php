@@ -80,16 +80,7 @@ class BrokerageBusinessModel extends BaseFinancialBusinessModel
     // --- Revenue & Shock Physics ---
     /** Volatility multiplier for top-line revenue shocks in transaction-driven markets. */
     public const REVENUE_VARIANCE_SCALAR = 0.20;
-    /** Upper clamp for realized variable margin. */
-    public const MAX_VARIABLE_MARGIN_CLAMP = 1.50;
-    /** Lower clamp for realized variable margin. */
-    public const MIN_VARIABLE_MARGIN_CLAMP = 0.01;
 
-    // --- ROE & Target Architecture ---
-    /** Divisor on the trailing ROE's reversion speed: it reverts toward cost of equity plus moat at kappa / this. */
-    public const TTM_ROE_WEIGHT      = 0.50;
-    /** Default 5Y Treasury spread over policy rate when yield curve data is absent. */
-    public const DEFAULT_5Y_YIELD_PREMIUM = 0.005;
 
     // --- Structural Yield Rails ---
     /** Minimum structural operating EBIT floor as a fraction of earning assets. */
@@ -105,7 +96,7 @@ class BrokerageBusinessModel extends BaseFinancialBusinessModel
 
     public function getMacroPhysics(Stock $stock, \App\DTO\MacroStateDTO $macroState): array
     {
-        $outputGap = $this->resolveLaggedOutputGap($stock, $macroState);
+        $outputGap = $this->resolveLaggedOutputGap($macroState);
         $m2Shift = MathUtility::calculateBroadMoneyLiquidityShift($macroState->moneySupplyGrowthEma, sensitivity: self::M2_RETAIL_TRADING_SENSITIVITY);
         $beta = $this->getOperatingCyclicality($stock);
 

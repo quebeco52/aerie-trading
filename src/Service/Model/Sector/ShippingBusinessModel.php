@@ -96,10 +96,6 @@ class ShippingBusinessModel extends StandardCorporateBusinessModel
     /** Spot freight rate surge multiplier per unit of NY Fed global supply chain pressure. */
     public const GSCPI_FREIGHT_BOOST_SCALAR = 0.10;
 
-    /** Upper clamp for realized variable margin. */
-    public const MAX_VARIABLE_MARGIN_CLAMP = 1.50;
-    /** Lower clamp for realized variable margin. */
-    public const MIN_VARIABLE_MARGIN_CLAMP = 0.01;
 
     // --- Event Lore Thresholds ---
     /** Positive z-score threshold required during trade booms to trigger port congestion lore. */
@@ -138,9 +134,15 @@ class ShippingBusinessModel extends StandardCorporateBusinessModel
     /** Structural maximum operating margin ceiling for state-of-the-art eco-fuel vessel fleets. */
     public const MAX_OPERATING_MARGIN_CEILING = 0.38;
 
+    // --- Valuation ---
+    /** Book (fleet replacement value) weight in fair value through a freight trough, when normalised EPS is not positive. */
+    public const TROUGH_BOOK_WEIGHT = 0.65;
+    /** Book weight in fair value through the rest of the freight cycle. */
+    public const MID_CYCLE_BOOK_WEIGHT = 0.30;
+
     public function getMacroPhysics(Stock $stock, \App\DTO\MacroStateDTO $macroState): array
     {
-        $outputGap = $this->resolveLaggedOutputGap($stock, $macroState);
+        $outputGap = $this->resolveLaggedOutputGap($macroState);
         $tradeShift = MathUtility::calculateTradeBalanceShift($macroState->tradeBalanceToGdpEma, sensitivity: self::TRADE_BALANCE_SENSITIVITY)
             + MathUtility::calculateForeignDemandShift($macroState->foreignOutputGapEma, sensitivity: self::FOREIGN_DEMAND_SENSITIVITY);
         $beta = $this->getOperatingCyclicality($stock);
@@ -269,17 +271,10 @@ class ShippingBusinessModel extends StandardCorporateBusinessModel
         return self::ECO_FLEET_MODERNIZATION_RATE;
     }
 
-    public function calculateFairValue(float $earningsValue, float $pbFairValue, float $normalizedEps, float $dividendSupportValue = 0.0): float
+    /** A fleet trades on its net asset value (replacement cost) through a freight trough and on earnings otherwise. */
+    protected function getFairValueBookWeight(float $normalizedEps): float
     {
-        // Maritime shipping is deeply asset-heavy. During cyclical freight troughs (negative normalized EPS),
-        // valuation shifts heavily toward Tangible Net Asset Value (P/B book replacement value) rather than discounted trough earnings.
-        $bookWeight = $normalizedEps <= 0.0 ? 0.65 : 0.30;
-        $earningsWeight = 1.0 - $bookWeight;
-
-        $baseConsensus = ($earningsValue * $earningsWeight) + ($pbFairValue * $bookWeight);
-        return $dividendSupportValue > 0.0
-            ? ($baseConsensus * (1.0 - FinancialConstants::FAIR_VALUE_DDM_WEIGHT)) + ($dividendSupportValue * FinancialConstants::FAIR_VALUE_DDM_WEIGHT)
-            : $baseConsensus;
+        return $normalizedEps <= 0.0 ? self::TROUGH_BOOK_WEIGHT : self::MID_CYCLE_BOOK_WEIGHT;
     }
 
     /**

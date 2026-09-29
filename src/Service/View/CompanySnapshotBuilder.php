@@ -15,6 +15,7 @@ use App\Service\Corporate\Holdings\AnchorStakeLedger;
 use App\Service\Market\MarketEngine;
 use App\Service\Model\Sector\CommercialBankBusinessModel;
 use App\Service\Model\Sector\InsuranceBusinessModel;
+use App\Service\Math\FinancialConstants;
 
 /**
  * Builds the headline valuation block on a company's page: size, multiple, yield, and where the
@@ -25,8 +26,6 @@ use App\Service\Model\Sector\InsuranceBusinessModel;
  */
 class CompanySnapshotBuilder
 {
-    /** Quarters in a year: lastDividend is one Lintner step, and a yield is an annual rate. */
-    private const DIVIDEND_PERIODS_PER_YEAR = 4.0;
 
     public function __construct(
         private readonly MarketEngine $marketEngine,
@@ -63,7 +62,7 @@ class CompanySnapshotBuilder
             // Dickinson (2011) stage stored by the last quarterly report; null until the first lands.
             'lifecycleStage' => $stock->getLifecycleStage(),
             'dividendYield' => (!$isBankrupt && $price > 0.0 && $lastDividend > 0.0)
-                ? ($lastDividend * self::DIVIDEND_PERIODS_PER_YEAR) / $price
+                ? ($lastDividend * FinancialConstants::QUARTERS_PER_YEAR) / $price
                 : 0.0,
             'analystTargets' => $isBankrupt ? null : $this->analystTargets($stock, $macroState),
             'netAssetValue' => $isBankrupt ? null : $this->netAssetValue($stock, $macroState, $businessModel, $price),

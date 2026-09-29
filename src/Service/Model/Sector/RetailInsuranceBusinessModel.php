@@ -159,6 +159,7 @@ class RetailInsuranceBusinessModel extends InsuranceBusinessModel
             'market_volatility_ema',
             'nominal_gdp_index',
             'output_gap_ema',
+            'output_gap_lag_6m',
             'policy_rate_ema',
             'yield_10y_ema',
         ];

@@ -158,7 +158,7 @@ class RefiningBusinessModel extends StandardCorporateBusinessModel
         // Product prices live in the crude and crack indices the physics reads, so neither the selling price nor
         // the cost base inflates at the engine level. Throughput follows product demand.
         return [
-            'macro_demand_shift' => ($this->resolveLaggedOutputGap($stock, $macroState) * $this->getOperatingCyclicality($stock))
+            'macro_demand_shift' => ($this->resolveLaggedOutputGap($macroState) * $this->getOperatingCyclicality($stock))
                 + $this->resolveFxDemandShift($macroState),
             'pricing_power_multiplier' => 1.0,
             'input_cost_multiplier' => 1.0,
@@ -270,16 +270,10 @@ class RefiningBusinessModel extends StandardCorporateBusinessModel
         );
     }
 
-    public function calculateFairValue(float $earningsValue, float $pbFairValue, float $normalizedEps, float $dividendSupportValue = 0.0): float
+    /** Refiners anchor to book (replacement cost of the plant) at trough earnings and to mid-cycle earnings otherwise. */
+    protected function getFairValueBookWeight(float $normalizedEps): float
     {
-        // Refiners anchor to book (replacement cost of the plant) at trough earnings and to mid-cycle earnings otherwise.
-        $bookWeight = $normalizedEps < 0 ? self::TROUGH_BOOK_WEIGHT : self::MID_CYCLE_BOOK_WEIGHT;
-        $earningsWeight = 1.0 - $bookWeight;
-
-        $baseConsensus = ($earningsValue * $earningsWeight) + ($pbFairValue * $bookWeight);
-        return $dividendSupportValue > 0.0
-            ? ($baseConsensus * (1.0 - FinancialConstants::FAIR_VALUE_DDM_WEIGHT)) + ($dividendSupportValue * FinancialConstants::FAIR_VALUE_DDM_WEIGHT)
-            : $baseConsensus;
+        return $normalizedEps < 0 ? self::TROUGH_BOOK_WEIGHT : self::MID_CYCLE_BOOK_WEIGHT;
     }
 
     /**

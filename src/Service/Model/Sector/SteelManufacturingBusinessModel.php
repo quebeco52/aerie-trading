@@ -81,6 +81,12 @@ class SteelManufacturingBusinessModel extends StandardCorporateBusinessModel
     /** Structural maximum operating margin ceiling for optimized modern electric arc furnace steelmakers. */
     public const MAX_OPERATING_MARGIN_CEILING = 0.28;
 
+    // --- Valuation ---
+    /** Book (replacement cost) weight in fair value when normalised EPS is negative: trough cyclicals trade on assets. */
+    public const TROUGH_BOOK_WEIGHT = 0.70;
+    /** Book weight in fair value through the rest of the cycle. */
+    public const MID_CYCLE_BOOK_WEIGHT = 0.40;
+
     public function getWholesaleLeverageLimit(): float { return 2.5; }
     public function getReversionSpeed(): float { return 0.1; }
     public function getMoatSpread(): float { return 0.01; }
@@ -110,7 +116,7 @@ class SteelManufacturingBusinessModel extends StandardCorporateBusinessModel
     public function getMacroPhysics(Stock $stock, \App\DTO\MacroStateDTO $macroState): array
     {
         $physics = parent::getMacroPhysics($stock, $macroState);
-        $outputGap = $this->resolveLaggedOutputGap($stock, $macroState);
+        $outputGap = $this->resolveLaggedOutputGap($macroState);
         $beta = $this->getOperatingCyclicality($stock);
         $pmiShift = MathUtility::calculatePmiDemandShift($macroState->manufacturingPmiEma, MacroEngine::PMI_BASELINE, self::PMI_DEMAND_SENSITIVITY);
 
@@ -197,16 +203,10 @@ class SteelManufacturingBusinessModel extends StandardCorporateBusinessModel
         );
     }
 
-    public function calculateFairValue(float $earningsValue, float $pbFairValue, float $normalizedEps, float $dividendSupportValue = 0.0): float
+    /** Steelmakers anchor to book (replacement cost) at trough earnings and to mid-cycle earnings through expansions. */
+    protected function getFairValueBookWeight(float $normalizedEps): float
     {
-        // Cyclical steel manufacturers anchor to Book Value (replacement cost) during trough earnings and mid-cycle earnings during expansions
-        $bookWeight = $normalizedEps < 0 ? 0.70 : 0.40;
-        $earningsWeight = 1.0 - $bookWeight;
-
-        $baseConsensus = ($earningsValue * $earningsWeight) + ($pbFairValue * $bookWeight);
-        return $dividendSupportValue > 0.0
-            ? ($baseConsensus * (1.0 - FinancialConstants::FAIR_VALUE_DDM_WEIGHT)) + ($dividendSupportValue * FinancialConstants::FAIR_VALUE_DDM_WEIGHT)
-            : $baseConsensus;
+        return $normalizedEps < 0 ? self::TROUGH_BOOK_WEIGHT : self::MID_CYCLE_BOOK_WEIGHT;
     }
 
     /** Blast furnace wear & refractory thermal degradation toward floor */
@@ -236,6 +236,7 @@ class SteelManufacturingBusinessModel extends StandardCorporateBusinessModel
             'industrial_metals_index_ema',
             'manufacturing_pmi_ema',
             'output_gap_ema',
+            'output_gap_lag_9m',
             'tips_breakeven_ema',
             'real_wage_gap',
         ];

@@ -79,10 +79,6 @@ class StandardCorporateBusinessModel implements BusinessModelInterface
     // --- Revenue & Shock Physics ---
     /** Variance scalar applied to baseline volatility for sales volume shocks. */
     public const REVENUE_VARIANCE_SCALAR = 0.15;
-    /** Upper clamp for realized variable margin under severe supply chain inflation. */
-    public const MAX_VARIABLE_MARGIN_CLAMP = 1.50;
-    /** Lower clamp for realized variable margin. */
-    public const MIN_VARIABLE_MARGIN_CLAMP = 0.01;
 
     // --- Analyst Visibility & Error ---
     public const BASE_COVERAGE_VISIBILITY = 0.20;
@@ -133,7 +129,7 @@ class StandardCorporateBusinessModel implements BusinessModelInterface
     {
         $macroSensitivityMultiplier = self::MIN_BETA_PRICING_POWER_FLOOR + $this->resolvePricingPower($stock);
 
-        $outputGap = $this->resolveLaggedOutputGap($stock, $macroState);
+        $outputGap = $this->resolveLaggedOutputGap($macroState);
         $beta = $this->getOperatingCyclicality($stock);
 
         return [
@@ -249,30 +245,13 @@ class StandardCorporateBusinessModel implements BusinessModelInterface
      */
     public function updateDynamicRoic(Stock $stock, float $actualTotalNetIncome, float $investedCapital, float $ebit, float $corporateTaxRate, float $wacc = 0.08, float $costOfEquity = 0.10, ?\App\DTO\MacroStateDTO $macroState = null, float $depreciation = 0.0): float
     {
-        $kappa = $this->getReversionSpeed();
-        $moatSpread = $this->getMoatSpread();
-
         $nopatProxy = $ebit > 0 ? $ebit * (1.0 - $corporateTaxRate) : $ebit;
 
         $effectiveCapital = max(1.0, abs($investedCapital));
-        $truePostTaxReturn = ($nopatProxy / $effectiveCapital) * 4.0;
+        $truePostTaxReturn = ($nopatProxy / $effectiveCapital) * FinancialConstants::QUARTERS_PER_YEAR;
 
-        $stock->setCurrentRoic((string) max(-0.50, min(1.0, $truePostTaxReturn)));
-
-        $oldTtm = (float) $stock->getRoicTtm();
-        $newTtm = $oldTtm === 0.0 ? $truePostTaxReturn : ($truePostTaxReturn * FinancialConstants::TTM_SMOOTHING_NEW_WEIGHT) + ($oldTtm * FinancialConstants::TTM_SMOOTHING_OLD_WEIGHT);
-        // Scale kappa so the blended target in getTargetMetrics moves at exactly $kappa
-        $scaledKappa = $kappa / self::TTM_ROIC_WEIGHT;
-
-        $saturationPenalty = 0.0;
-        if ($macroState !== null) {
-            $saturationPenalty = \App\Service\Math\CorporateMetrics::getInstance()->calculateMarketSaturationPenalty($stock, abs($investedCapital), $macroState);
-        }
-
-        // Scale diseconomies reduce excess moat spread above WACC rather than reducing returns below WACC.
-        $effectiveMoat = max(0.0, $moatSpread - $saturationPenalty);
-        $newTtm += MathUtility::getInstance()->calculateReversionPull($newTtm, $wacc, $scaledKappa, $effectiveMoat);
-        $stock->setRoicTtm((string) max(-0.50, min(1.0, $newTtm)));
+        $stock->setCurrentRoic((string) max(FinancialConstants::MIN_REPORTED_RETURN, min(FinancialConstants::MAX_REPORTED_RETURN, $truePostTaxReturn)));
+        $stock->setRoicTtm((string) $this->revertTrailingReturn($stock, (float) $stock->getRoicTtm(), $truePostTaxReturn, $wacc, self::TTM_ROIC_WEIGHT, abs($investedCapital), $macroState));
 
         return $truePostTaxReturn;
     }

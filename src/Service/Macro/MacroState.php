@@ -20,6 +20,13 @@ class MacroState
     public float $inflationEma;
     public float $outputGap;
     public float $outputGapEma;
+    // The output gap as it reaches order books 3 to 18 months behind the economy (MacroAggregateSubsystem::demandTransmissionLagField).
+    public float $outputGapLag3m;
+    public float $outputGapLag6m;
+    public float $outputGapLag9m;
+    public float $outputGapLag12m;
+    public float $outputGapLag15m;
+    public float $outputGapLag18m;
     public float $capitalStockOverhang;
     public float $capitalStockOverhangEma;
 

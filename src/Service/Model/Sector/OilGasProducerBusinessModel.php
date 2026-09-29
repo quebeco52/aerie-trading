@@ -319,16 +319,10 @@ class OilGasProducerBusinessModel extends StandardCorporateBusinessModel
         return $deliveredStrike;
     }
 
-    public function calculateFairValue(float $earningsValue, float $pbFairValue, float $normalizedEps, float $dividendSupportValue = 0.0): float
+    /** Producers anchor to book (replacement cost of reserves and plant) at trough earnings and to mid-cycle earnings otherwise. */
+    protected function getFairValueBookWeight(float $normalizedEps): float
     {
-        // Producers anchor to book (replacement cost of reserves and plant) at trough earnings and to mid-cycle earnings otherwise.
-        $bookWeight = $normalizedEps < 0 ? self::TROUGH_BOOK_WEIGHT : self::MID_CYCLE_BOOK_WEIGHT;
-        $earningsWeight = 1.0 - $bookWeight;
-
-        $baseConsensus = ($earningsValue * $earningsWeight) + ($pbFairValue * $bookWeight);
-        return $dividendSupportValue > 0.0
-            ? ($baseConsensus * (1.0 - FinancialConstants::FAIR_VALUE_DDM_WEIGHT)) + ($dividendSupportValue * FinancialConstants::FAIR_VALUE_DDM_WEIGHT)
-            : $baseConsensus;
+        return $normalizedEps < 0 ? self::TROUGH_BOOK_WEIGHT : self::MID_CYCLE_BOOK_WEIGHT;
     }
 
     /**

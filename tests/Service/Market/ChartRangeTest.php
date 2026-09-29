@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\Market;
 
-use App\Command\MarketTickerCommand;
+use App\Service\Market\TickCadence;
 use App\Service\Market\ChartRange;
 use PHPUnit\Framework\TestCase;
 
@@ -60,7 +60,7 @@ final class ChartRangeTest extends TestCase
     /** Whatever a series is pushed at, its list holds the longest range read from it and no more. */
     public function testTheBufferHoldsExactlyTheLongestRangeReadFromIt(): void
     {
-        foreach ([3600.0, 14400.0, MarketTickerCommand::bondMarksPerYear(3600), MarketTickerCommand::bondMarksPerYear(14400)] as $perYear) {
+        foreach ([3600.0, 14400.0, TickCadence::bondMarksPerYear(3600), TickCadence::bondMarksPerYear(14400)] as $perYear) {
             foreach (['1w', '1m'] as $range) {
                 $this->assertLessThanOrEqual(ChartRange::bufferLength($perYear), ChartRange::entries($range, $perYear));
             }

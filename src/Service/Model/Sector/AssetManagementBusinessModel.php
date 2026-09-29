@@ -83,11 +83,6 @@ class AssetManagementBusinessModel extends BaseFinancialBusinessModel
         );
     }
 
-    // --- ROE & Target Architecture ---
-    /** Divisor on the trailing ROE's reversion speed: it reverts toward cost of equity plus moat at kappa / this. */
-    public const TTM_ROE_WEIGHT      = 0.50;
-    /** Default 5Y Treasury spread over policy rate when yield curve data is absent. */
-    public const DEFAULT_5Y_YIELD_PREMIUM = 0.005;
 
     // --- Structural Yield Rails ---
     /** Minimum structural operating EBIT floor as a fraction of operating equity. */
@@ -96,14 +91,10 @@ class AssetManagementBusinessModel extends BaseFinancialBusinessModel
     public const MAX_TURNOVER_CAP         = 2.00;
 
     // --- Macro & Shock Physics ---
-    /** Macroeconomic demand shift sensitivity to output gap. */
-    public const MACRO_DEMAND_SCALAR      = 0.50;
     /** Volatility multiplier for top-line revenue shocks in sticky fee models. */
     public const REVENUE_VARIANCE_SCALAR  = 0.10;
     /** Upper clamp for realized variable margin. */
     public const MAX_VARIABLE_MARGIN_CLAMP = 1.50;
-    /** Lower clamp for realized variable margin. */
-    public const MIN_VARIABLE_MARGIN_CLAMP = 0.01;
 
     // --- Dual-Stream Fee Architecture ---
     /** Baseline fraction of revenue derived from sticky recurring AUM management fees. */
@@ -154,16 +145,6 @@ class AssetManagementBusinessModel extends BaseFinancialBusinessModel
     public const LORE_FUND_OUTFLOWS_Z      = -1.80;
 
     // --- AUM Market Beta & Performance Fee Physics ---
-    /** Annualization multiplier applied to quarterly net income to derive annualized ROE. */
-    public const ROE_ANNUALIZATION_MULT   = 4.00;
-    /** Minimum allowable ROE floor to prevent catastrophic negative overflow. */
-    public const MIN_ROE_CLAMP            = -0.50;
-    /** Maximum allowable ROE ceiling to prevent unrealistic hyperinflation. */
-    public const MAX_ROE_CLAMP            = 1.00;
-    /** Weight given to current quarter ROE when updating trailing twelve-month ROE EMA. */
-    public const ROE_TTM_EMA_WEIGHT       = 0.25;
-    /** Weight given to historical trailing twelve-month ROE when updating ROE EMA. */
-    public const ROE_TTM_HIST_WEIGHT      = 0.75;
 
     // --- Liquidity & Cash Reserves ---
     /** Target operating cash reserve ratio applied to corporate operating base. */
@@ -178,10 +159,6 @@ class AssetManagementBusinessModel extends BaseFinancialBusinessModel
     public const MEGA_HOARDER_THRESHOLD   = 0.50;
 
     // --- Treasury Yield & 60/40 Portfolio ---
-    /** Default policy rate fallback when macroeconomic state data is missing. */
-    public const DEFAULT_POLICY_RATE_FALLBACK = 0.02;
-    /** Default 10Y Treasury spread over policy rate. */
-    public const DEFAULT_10Y_SPREAD       = 0.01;
     /** Baseline structural equity market return in neutral macroeconomic conditions. */
     public const BASE_EQUITY_RETURN       = 0.07;
     /** Output gap multiplier scaling equity market returns during booms and busts. */
@@ -202,6 +179,10 @@ class AssetManagementBusinessModel extends BaseFinancialBusinessModel
     public const DEBT_EXPANSION_AGGR_MULT = 0.10;
     /** Minimum fraction of newly issued debt that must be deployed into organic capex or fund seeding. */
     public const DEBT_CAPEX_DEPLOYMENT    = 0.90;
+
+    // --- Valuation ---
+    /** Weight of the dividend discount value in fair value beside fee-related earnings, for a manager that pays. */
+    public const FEE_EARNINGS_DDM_WEIGHT = 0.20;
 
     /**
      * Asset Managers scale EBIT to cover their target ROE and any operational wholesale debt.
@@ -488,12 +469,15 @@ class AssetManagementBusinessModel extends BaseFinancialBusinessModel
         return max($revenueFloorValue, $peFairValue);
     }
 
-    public function calculateFairValue(float $earningsValue, float $pbFairValue, float $normalizedEps, float $dividendSupportValue = 0.0): float
+    /** Asset managers, hedge funds and private equity trade on fee-related earnings and carry, not on book value. */
+    protected function getFairValueBookWeight(float $normalizedEps): float
     {
-        // Asset managers, hedge funds, and private equity trade on Fee-Related Earnings (FRE) and carry multiples, not physical Book Value.
-        return $dividendSupportValue > 0.0
-            ? ($earningsValue * 0.80) + ($dividendSupportValue * 0.20)
-            : $earningsValue;
+        return 0.0;
+    }
+
+    protected function getFairValueDividendWeight(): float
+    {
+        return self::FEE_EARNINGS_DDM_WEIGHT;
     }
 
     /**

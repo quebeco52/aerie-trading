@@ -99,8 +99,6 @@ class HedgeFundBusinessModel extends AssetManagementBusinessModel
     public const COMPOSITE_ALPHA_DIR_WEIGHT = 0.60;
     /** Weight assigned to quant Z-score when computing composite fund alpha for performance fees. */
     public const COMPOSITE_ALPHA_QUANT_WEIGHT = 0.40;
-    /** Macro demand shift scalar for macroeconomic output gap. */
-    public const MACRO_DEMAND_SCALAR = 1.0;
     /** Sensitivity of AUM management fee base to macroeconomic output gap. */
     public const AUM_MARKET_BETA_SCALAR = 1.0;
     /** Sensitivity of hedge fund AUM allocations and prime brokerage liquidity to M2 money supply growth. */

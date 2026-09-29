@@ -198,7 +198,7 @@ final class MarketResetCompletenessTest extends TestCase
     public function testLearnedParametersOpenUnset(): void
     {
         foreach ($this->openBoard($this->newListings()) as $ticker => $stock) {
-            foreach (['structuralVariableMargin', 'inflationPassThrough', 'assetTurnover', 'reportedOperatingMargin', 'laggedDemandGap'] as $property) {
+            foreach (['structuralVariableMargin', 'inflationPassThrough', 'assetTurnover', 'reportedOperatingMargin'] as $property) {
                 $this->assertNull((new \ReflectionProperty(Stock::class, $property))->getValue($stock), sprintf('%s opens with "%s" already set.', $ticker, $property));
             }
         }

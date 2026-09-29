@@ -99,4 +99,30 @@ class MarketPricingContextTest extends TestCase
         $this->assertSame(0.9, $context->marketJumpMultiplier);
         $this->assertSame(0.7, $context->sectorZ);
     }
+
+    /** Net debt is the model's own: deposits fund a lender's book rather than finance it, so they are no claim ahead of equity. */
+    public function testALendersDepositsAreNotDebtAheadOfItsEquity(): void
+    {
+        $macroState = new MacroStateDTO();
+        $bank = $this->firm('BANK', 'Banks - Diversified');
+        $bank->setCustomerDeposits('500000000000');
+        $bank->setWholesaleDebt('20000000000');
+        $bank->setCorporateTreasury('5000000000');
+
+        $context = MarketPricingContext::forStock($bank, $macroState, $this->health($bank, $macroState), new AnchorStakeLedger());
+
+        $this->assertEqualsWithDelta(20.0, $context->netDebtPerShare, 1e-9);
+    }
+
+    public function testAnIndustrialsDebtIsNettedAgainstItsCash(): void
+    {
+        $macroState = new MacroStateDTO();
+        $software = $this->firm('SOFT', 'Software - Infrastructure');
+        $software->setWholesaleDebt('20000000000');
+        $software->setCorporateTreasury('5000000000');
+
+        $context = MarketPricingContext::forStock($software, $macroState, $this->health($software, $macroState), new AnchorStakeLedger());
+
+        $this->assertEqualsWithDelta(15.0, $context->netDebtPerShare, 1e-9);
+    }
 }

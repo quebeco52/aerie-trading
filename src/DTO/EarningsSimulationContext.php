@@ -112,6 +112,25 @@ class EarningsSimulationContext
     public float $ownPriceVolumeShift = 0.0;
     /** Realized price level relative to a balanced industry: below one when the industry's installed capacity outruns trend demand. */
     public float $industryPriceLevel = 1.0;
+    /** Trend growth in utilisation over the quarter: the secular growth rate times the step. */
+    public float $secularDrift = 0.0;
+    /** The quarter's idiosyncratic demand shock to utilisation. */
+    public float $idiosyncraticDemandShock = 0.0;
+    /** The quarter's fundamental jump in utilisation. */
+    public float $jumpMagnitude = 0.0;
+    /** Capital that earns revenue: invested capital less construction in progress and, outside finance, goodwill. */
+    public float $revenueGeneratingCapital = 0.0;
+    /** Quarterly revenue per unit of revenue-generating capital at a balanced price level. */
+    public float $assetTurnover = 0.0;
+    /** The firm as the macro physics first read it this quarter, before any lag state was stepped. */
+    public ?Stock $macroPhysicsBasis = null;
+    /**
+     * What each macro input the model reads did to each revenue stream this quarter: stream => field => the stream's
+     * revenue over what it would have been with that input at its neutral reading, less one.
+     *
+     * @var array<string, array<string, float>>
+     */
+    public array $streamMacroEffects = [];
     /** Quarterly stock-based compensation (ASC 718): non-cash expense inside the cost base, settled in shares. */
     public float $stockCompensation = 0.0;
     /** Goodwill written down this quarter under the annual impairment test (ASC 350), non-cash. */

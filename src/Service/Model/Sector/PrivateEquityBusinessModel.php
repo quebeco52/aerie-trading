@@ -147,18 +147,6 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
     /** Z-score contraction threshold triggering PE Deal Drought lore. */
     public const LORE_BUST_Z_SCORE         = -1.50;
 
-    // --- ROE Smoothing Constants ---
-    /** Multiplier to annualize quarterly return on equity metrics. */
-    public const ROE_ANNUALIZATION_MULT    = 4.00;
-    /** Absolute lower bound clamp for realized ROE to prevent math explosions. */
-    public const MIN_ROE_CLAMP             = -0.50;
-    /** Absolute upper bound clamp for realized ROE. */
-    public const MAX_ROE_CLAMP             = 1.00;
-    /** Weight assigned to the current quarter's ROE when blending the TTM EMA. */
-    public const ROE_TTM_EMA_WEIGHT        = 0.20;
-    /** Weight assigned to the historical TTM ROE when blending the TTM EMA. */
-    public const ROE_TTM_HIST_WEIGHT       = 0.80;
-
     private function calculateLeverageAggression(Stock $stock): float
     {
         $equity = (float) $stock->getTotalEquity();
@@ -444,36 +432,6 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
     public function calculateMinOperatingCash(float $operatingBase, float $currentLiability, float $wholesaleDebt): float
     {
         return max($operatingBase * self::MIN_OPERATING_BUFFER, $wholesaleDebt * self::MIN_OPERATING_BUFFER);
-    }
-
-    public function updateDynamicRoic(Stock $stock, float $actualTotalNetIncome, float $investedCapital, float $ebit, float $corporateTaxRate, float $wacc = 0.08, float $costOfEquity = 0.10, ?\App\DTO\MacroStateDTO $macroState = null, float $depreciation = 0.0): float
-    {
-        $kappa = $this->getReversionSpeed();
-        $moatSpread = $this->getMoatSpread();
-
-        $equity = (float) $stock->getTotalEquity();
-        $truePostTaxReturn = $equity > 0 ? ($actualTotalNetIncome / $equity) * self::ROE_ANNUALIZATION_MULT : 0.0;
-
-        $stock->setCurrentRoe((string) max(self::MIN_ROE_CLAMP, min(self::MAX_ROE_CLAMP, $truePostTaxReturn)));
-
-        $oldTtm = (float) $stock->getRoeTtm();
-        $newTtm = $oldTtm === 0.0 ? $truePostTaxReturn : ($truePostTaxReturn * self::ROE_TTM_EMA_WEIGHT) + ($oldTtm * self::ROE_TTM_HIST_WEIGHT);
-
-        $scaledKappa = $kappa / self::TTM_ROE_WEIGHT;
-
-        $saturationPenalty = 0.0;
-        if ($macroState !== null) {
-            $saturationPenalty = \App\Service\Math\CorporateMetrics::getInstance()->calculateMarketSaturationPenalty($stock, max(1.0, $equity), $macroState);
-        }
-
-        $theoreticalTarget = ($costOfEquity + $moatSpread) - $saturationPenalty;
-        $flooredTarget = max($costOfEquity, $theoreticalTarget);
-        $effectiveMoat = $flooredTarget - $costOfEquity;
-
-        $newTtm += MathUtility::getInstance()->calculateReversionPull($newTtm, $costOfEquity, $scaledKappa, $effectiveMoat);
-        $stock->setRoeTtm((string) max(self::MIN_ROE_CLAMP, min(self::MAX_ROE_CLAMP, $newTtm)));
-
-        return $truePostTaxReturn;
     }
 
     public function getAcquisitionType(string $defaultType): string

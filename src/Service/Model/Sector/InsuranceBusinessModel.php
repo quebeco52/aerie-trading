@@ -77,8 +77,6 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
     public const BASELINE_ROIC_WEIGHT     = 0.50;
     /** Weight given to TTM ROE when blending with historical baseline ROIC. */
     public const TTM_ROIC_WEIGHT          = 0.50;
-    /** Weight given to TTM ROE when scaling reversion speed kappa in financial models. */
-    public const TTM_ROE_WEIGHT           = 0.50;
     /** Minimum structural through-the-cycle ROE floor for TTM valuation to prevent catastrophe whipsaw. */
     public const MIN_STRUCTURAL_ROE_FLOOR = 0.03;
 
@@ -131,10 +129,6 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
     public const BENIGN_CLAIM_BONUS       = -0.08;
     /** Cummins & Danzon (1997) soft-market underwriting combined ratio compression sensitivity to high float yields. */
     public const SOFT_MARKET_CYCLE_BETA   = 1.50;
-    /** Upper clamp for realized variable margin. */
-    public const MAX_VARIABLE_MARGIN_CLAMP = 1.50;
-    /** Lower clamp for realized variable margin. */
-    public const MIN_VARIABLE_MARGIN_CLAMP = 0.01;
 
     // --- Event Lore Thresholds ---
     /** Severe claim z-score threshold indicating major systemic disaster and catastrophic claim losses. */
@@ -173,8 +167,6 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
     public const MAX_RETAINED_BUYBACK_MULT = 0.40;
     /** Infinite interest coverage fallback for insurance companies without operating debt. */
     public const INFINITE_ICR_FALLBACK    = 999.0;
-    /** Minimum fraction of newly issued debt that must be deployed into organic capex or platform growth. */
-    public const DEBT_CAPEX_DEPLOYMENT    = 0.80;
     /** Baseline probability of initiating debt expansion when spreads are neutral. */
     public const DEBT_EXPANSION_BASE_PROB = 0.40;
     /** Multiplier scaling debt expansion probability with spread attractiveness. */
@@ -187,8 +179,6 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
     // --- Float Portfolio Yield (15/75/10 Allocation) ---
     /** Default policy rate fallback when macroeconomic state data is missing. */
     public const DEFAULT_POLICY_RATE_FALLBACK = 0.02;
-    /** Default 10Y Treasury spread over policy rate. */
-    public const DEFAULT_10Y_SPREAD       = 0.01;
     /** Equity market return sensitivity to macroeconomic output gaps. */
     public const EQUITY_RETURN_GAP_MULT   = 1.50;
     /** Weight allocated to short-term T-Bills and liquid cash in float portfolios. */
@@ -205,8 +195,6 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
     // --- Valuation & Fair Value Weights ---
     /** Weight given to book value in profitable quarters (50% Book / 35% Earnings / 15% DDM). */
     public const FAIR_VALUE_BOOK_POS_EPS        = 0.50;
-    /** Weight given to Dividend Discount Model yield support when blending insurance fair value. */
-    public const FAIR_VALUE_DDM_WEIGHT          = 0.15;
     /** Franchise floor multiplier applied to revenue floor value for sticky premium & float franchise. */
     public const PREMIUM_FRANCHISE_FLOOR_MULT   = 0.70;
 
@@ -217,8 +205,6 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
     public const EXPANSION_GAP_MULT       = 0.50;
     /** Output gap multiplier scaling systemic float contraction during economic recessions. Insurance float is sticky. */
     public const RECESSION_GAP_MULT       = 0.50;
-    /** Quarterly conversion divisor for annual systemic float growth rates. */
-    public const QUARTERLY_GROWTH_DIVISOR = 4.00;
     /** Minimum stock beta clamp applied to liability float growth sensitivity. */
     public const MIN_BETA_GROWTH_CLAMP    = 0.75;
     /** Maximum stock beta clamp applied to liability float growth sensitivity. */
@@ -308,7 +294,7 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
 
     public function getMacroPhysics(Stock $stock, \App\DTO\MacroStateDTO $macroState): array
     {
-        $outputGap = $this->resolveLaggedOutputGap($stock, $macroState);
+        $outputGap = $this->resolveLaggedOutputGap($macroState);
         $beta = $this->getOperatingCyclicality($stock);
 
         return [
@@ -915,20 +901,10 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
         return max($franchiseFloor, $peFairValue);
     }
 
-    public function calculateFairValue(float $earningsValue, float $pbFairValue, float $normalizedEps, float $dividendSupportValue = 0.0): float
+    /** An underwriter trades on earnings and book together while profitable, and wholly on book through a loss. */
+    protected function getFairValueBookWeight(float $normalizedEps): float
     {
-        if ($normalizedEps > 0.0) {
-            $bookWeight = self::FAIR_VALUE_BOOK_POS_EPS;
-            $earningsWeight = 1.0 - $bookWeight;
-            $baseConsensus = ($earningsValue * $earningsWeight) + ($pbFairValue * $bookWeight);
-        } else {
-            // Loss quarter: Full 100% anchor to Book Value (do NOT discard value by multiplying by 0.80)
-            $baseConsensus = $pbFairValue;
-        }
-
-        return $dividendSupportValue > 0.0
-            ? ($baseConsensus * (1.0 - self::FAIR_VALUE_DDM_WEIGHT)) + ($dividendSupportValue * self::FAIR_VALUE_DDM_WEIGHT)
-            : $baseConsensus;
+        return $normalizedEps > 0.0 ? self::FAIR_VALUE_BOOK_POS_EPS : 1.0;
     }
 
     public function calculateStructuralRoic(float $roicTtm, float $baselineRoic, float $revenuePerShare, float $bookValuePerShare, float $baselineMargin): float
@@ -958,7 +934,7 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
         $equityLimit = \App\Data\Sectors::equityLimit($stock->getIndustry());
 
         // Nominal Systemic Growth: The Float grows naturally alongside the M2 Money Supply.
-        $systemicGrowthQuarterly = ($macroState->inflationEma + self::BASE_ECONOMIC_GROWTH_ADD + (($macroState->outputGapEma > 0.0 ? $macroState->outputGapEma * self::EXPANSION_GAP_MULT : $macroState->outputGapEma * self::RECESSION_GAP_MULT))) / self::QUARTERLY_GROWTH_DIVISOR;
+        $systemicGrowthQuarterly = ($macroState->inflationEma + self::BASE_ECONOMIC_GROWTH_ADD + (($macroState->outputGapEma > 0.0 ? $macroState->outputGapEma * self::EXPANSION_GAP_MULT : $macroState->outputGapEma * self::RECESSION_GAP_MULT))) / FinancialConstants::QUARTERS_PER_YEAR;
 
         // Premium-to-Surplus Capacity constraint (Kenney Rule) throttles growth if they don't have enough equity to back the policies.
         $capacityMultiplier = $this->calculateFloatCapacityMultiplier($totalDebt, $equity, $equityLimit, $currentLiabilities);
@@ -1035,6 +1011,7 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
             'market_volatility_ema',
             'nominal_gdp_index',
             'output_gap_ema',
+            'output_gap_lag_6m',
             'policy_rate_ema',
             'residential_property_index_ema',
             'yield_10y_ema',

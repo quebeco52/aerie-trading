@@ -689,9 +689,9 @@ class CommercialBankBusinessModelTest extends TestCase
             corporateTaxRate: 0.21
         );
 
-        $this->assertLessThanOrEqual(CommercialBankBusinessModel::ROE_CLAMP_MAX, $roic);
-        $this->assertGreaterThanOrEqual(CommercialBankBusinessModel::ROE_CLAMP_MIN, $roic);
-        $this->assertEqualsWithDelta(CommercialBankBusinessModel::ROE_CLAMP_MAX, (float) $stock->getCurrentRoe(), 0.0001);
+        $this->assertLessThanOrEqual(\App\Service\Math\FinancialConstants::MAX_REPORTED_RETURN, $roic);
+        $this->assertGreaterThanOrEqual(\App\Service\Math\FinancialConstants::MIN_REPORTED_RETURN, $roic);
+        $this->assertEqualsWithDelta(\App\Service\Math\FinancialConstants::MAX_REPORTED_RETURN, (float) $stock->getCurrentRoe(), 0.0001);
     }
 
     /**

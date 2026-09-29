@@ -263,8 +263,7 @@ class AutoManufacturerBusinessModelTest extends TestCase
      */
     public function testMildSlowdownCutsVolumeByAnEleventhNotAQuarterAndPmiDoesNotStack(): void
     {
-        // A fresh stock per reading: resolveLaggedOutputGap() opens the demand lag at whatever gap it first
-        // sees and carries it on the entity, so scenarios sharing one stock would read each other's cycle.
+        // Each scenario's gap has stood long enough to reach the order book: a state given no lags opens them at its gap.
         $shift = function (MacroStateDTO $macroState): float {
             $stock = new Stock();
             $stock->setTicker('AUTO');

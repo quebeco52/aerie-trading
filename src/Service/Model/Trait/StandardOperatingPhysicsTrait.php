@@ -148,26 +148,14 @@ trait StandardOperatingPhysicsTrait
     /**
      * The output gap as it has actually reached this firm, distributed over its transmission lag.
      *
-     * The lag state persists on the stock, so a firm carries its own position in the cycle rather than
-     * re-deriving it: mid-downturn a long-lag builder is still working through a boom-era book while a
-     * spot seller is already in the slump. At zero lag the helper returns the macro series untouched.
+     * The lag is the economy's, not the firm's: every firm with the same delay meets the same cycle, so the macro
+     * publishes it (MacroAggregateSubsystem::DEMAND_TRANSMISSION_LAGS) and the model only reads it. Mid-downturn a
+     * long-lag builder is still working through a boom-era book while a spot seller is already in the slump. At
+     * zero lag the helper returns the macro series untouched.
      */
-    public function resolveLaggedOutputGap(Stock $stock, MacroStateDTO $macroState): float
+    public function resolveLaggedOutputGap(MacroStateDTO $macroState): float
     {
-        $lagYears = $this->getDemandLagYears();
-        if ($lagYears <= 0.0) {
-            return $macroState->outputGapEma;
-        }
-
-        $lagged = MathUtility::getInstance()->calculateDistributedLag(
-            currentLaggedValue: $stock->getLaggedDemandGap() ?? $macroState->outputGapEma,
-            targetValue: $macroState->outputGapEma,
-            dt: \App\Service\Corporate\EarningsEngine::QUARTERLY_TIME_STEP,
-            lagTimeConstant: $lagYears
-        );
-        $stock->setLaggedDemandGap($lagged);
-
-        return $lagged;
+        return $macroState->laggedOutputGap($this->getDemandLagYears());
     }
 
     // --- FX Exposure ---
@@ -502,6 +490,37 @@ trait StandardOperatingPhysicsTrait
     public function clampMargin(float $rawMargin, float $minMargin = 0.01, float $maxMargin = 1.50): float
     {
         return min($maxMargin, max($minMargin, $rawMargin));
+    }
+
+    /**
+     * Re-runs the quarter's stream physics once per counterfactual — one macro input at its neutral reading, with the
+     * expected revenue that reading implies — on the draws the quarter was actually run on, and reports how far each
+     * stream's revenue moved. Every run works on a copy of the firm and a replay of the draws, so neither the firm nor
+     * the simulation's random path is touched. See App\Service\Corporate\MacroDriverAttribution.
+     *
+     * @param Stock                                            $stock           The firm as the stream physics first read it.
+     * @param array{uniforms: list<float>, spare: ?float}      $draws           The draws the quarter's stream physics was run on.
+     * @param array<string, array{0: MacroStateDTO, 1: float}> $counterfactuals Field => [macro state with it neutral, expected revenue under it].
+     * @param array<string, float>                             $actualStreams   The quarter's stream revenue.
+     * @return array<string, array<string, float>> Stream => field => actual over counterfactual revenue, less one.
+     */
+    public function measureStreamMacroEffects(Stock $stock, array $draws, array $counterfactuals, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, array $actualStreams): array
+    {
+        $effects = [];
+
+        foreach ($counterfactuals as $field => [$state, $expectedRevenue]) {
+            $physics = $this->calculateSectorPhysics(clone $stock, $expectedRevenue, $realizedVariableMargin, $fixedCosts, $baselineVol, $state, MathUtility::replaying($draws));
+            $this->takeActiveStreamContext();
+
+            foreach ($actualStreams as $stream => $revenue) {
+                $counterfactual = (float) ($physics->streamRevenue[$stream] ?? 0.0);
+                if ($counterfactual > 0.0) {
+                    $effects[$stream][$field] = $revenue / $counterfactual - 1.0;
+                }
+            }
+        }
+
+        return $effects;
     }
 
     public function computeActualFinancials(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, MacroStateDTO $macroState, MathUtility $mathUtility): ActualFinancialsDTO

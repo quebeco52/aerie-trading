@@ -188,7 +188,7 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
         $beta = $this->getOperatingCyclicality($stock);
 
         // Model consumer durable demand using lagged output gap and FX demand shift.
-        $physics['macro_demand_shift'] = ($this->resolveLaggedOutputGap($stock, $macroState) * $beta)
+        $physics['macro_demand_shift'] = ($this->resolveLaggedOutputGap($macroState) * $beta)
             + $this->resolveFxDemandShift($macroState);
 
         // High policy rates destroy debt-financed consumer auto purchases
@@ -390,7 +390,7 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
             'inflation_ema',
             'macro_credit_spread',
             'manufacturing_pmi_ema',
-            'output_gap_ema',
+            'output_gap_lag_12m',
             'policy_rate_ema',
             'qe_active',
             'qe_intensity',

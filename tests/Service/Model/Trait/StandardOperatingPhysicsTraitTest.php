@@ -138,40 +138,19 @@ final class StandardOperatingPhysicsTraitTest extends TestCase
     // --- Demand transmission ---
 
     /**
-     * A spot business feels the cycle the quarter it turns; a long-lag business is still working through an
-     * older book. At zero lag the macro series must pass through untouched and nothing is persisted.
+     * A spot business feels the cycle the quarter it turns; a long-lag business reads the gap the macro publishes at
+     * its declared delay. Reading it moves nothing, so a model may consult it as often as its physics needs.
      */
-    public function testLaggedOutputGapPassesThroughAtZeroLagAndPartiallyAdjustsOtherwise(): void
+    public function testLaggedOutputGapPassesThroughAtZeroLagAndReadsThePublishedLagOtherwise(): void
     {
-        $macro = new MacroStateDTO(outputGapEma: -0.04);
+        $macro = new MacroStateDTO(outputGapEma: -0.04, outputGapLag18m: -0.01);
 
-        $spot = (new Stock())->setTicker('SPOT');
-        $this->assertSame(-0.04, $this->model->resolveLaggedOutputGap($spot, $macro), 'A spot business sees the macro gap directly.');
-        $this->assertNull($spot->getLaggedDemandGap(), 'With no lag there is no state to carry.');
+        $this->assertSame(-0.04, $this->model->resolveLaggedOutputGap($macro), 'A spot business sees the macro gap directly.');
 
-        // A firm entering the downturn from trend only partially adjusts in one quarter.
         $lagged = new ConfiguredStandardModel();
-        $builder = (new Stock())->setTicker('BUILD');
-        $builder->setLaggedDemandGap(0.0);
-        $firstQuarter = $lagged->resolveLaggedOutputGap($builder, $macro);
-
-        $this->assertGreaterThan(-0.04, $firstQuarter, 'A lagged firm cannot arrive at the macro gap in one quarter.');
-        $this->assertLessThan(0.0, $firstQuarter, 'But it must move toward it.');
-        $this->assertEqualsWithDelta($firstQuarter, $builder->getLaggedDemandGap(), 0.0000001, 'The lag state persists on the stock.');
-
-        // Held at the same gap, the firm converges rather than oscillating or overshooting.
-        $previous = $firstQuarter;
-        for ($quarter = 0; $quarter < 20; $quarter++) {
-            $next = $lagged->resolveLaggedOutputGap($builder, $macro);
-            $this->assertLessThan($previous, $next, 'Convergence must be monotone.');
-            $this->assertGreaterThanOrEqual(-0.04, $next, 'It must never overshoot the macro gap.');
-            $previous = $next;
-        }
-        $this->assertEqualsWithDelta(-0.04, $previous, 0.005, 'After five years the firm has substantially arrived.');
-
-        // A firm with no history starts at the macro gap rather than at zero, so it is not born mid-cycle.
-        $fresh = (new Stock())->setTicker('FRESH');
-        $this->assertEqualsWithDelta(-0.04, $lagged->resolveLaggedOutputGap($fresh, $macro), 0.0000001, 'A firm with no cost history starts at the prevailing gap.');
+        $this->assertSame(1.50, $lagged->getDemandLagYears());
+        $this->assertSame(-0.01, $lagged->resolveLaggedOutputGap($macro), 'An 18-month book reads the 18-month lag.');
+        $this->assertSame(-0.01, $lagged->resolveLaggedOutputGap($macro), 'A second read is the same read.');
     }
 
     /**

@@ -80,9 +80,6 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
     public function getWorkingCapitalIntensity(Stock $stock): float { return self::THRESHOLD_NWC_INTENSITY; }
     public function getCapExCompletionRate(Stock $stock): float { return self::THRESHOLD_CAPEX_COMPLETION_RATE; }
 
-    // --- ROE & Target Metrics ---
-    /** Divisor on the trailing ROE's reversion speed: it reverts toward cost of equity plus moat at kappa / this. */
-    public const TTM_ROE_WEIGHT      = 0.50;
 
     // --- Dual-Stream Banking Architecture ---
     /** Baseline fraction of bank revenue derived from Net Interest Income (NII). */
@@ -193,8 +190,6 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
     public const MEGA_HOARDING_THRESHOLD_DEBT_RATIO = 0.18;
 
     // --- Bank Valuation Weights ---
-    /** Weight given to Dividend Discount Model yield support when blending bank fair value. */
-    public const FAIR_VALUE_DDM_WEIGHT = 0.15;
     /** Weight given to Price-to-Book value when EPS is positive. */
     public const FAIR_VALUE_BOOK_WEIGHT_PROFIT = 0.40;
     /** Weight given to Price-to-Book value when EPS is negative (liquidation value focus). */
@@ -263,16 +258,6 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
     public const SHOCK_WEIGHT_RETAIL_DEFAULT = 0.05;
     /** Minimum duration gap multiplier acting as a hedge floor. */
     public const HEDGE_FLOOR_MULTIPLIER = 0.10;
-    /** Weight for current quarter when calculating TTM ROE. */
-    public const TTM_CURRENT_QUARTER_WEIGHT = 0.25;
-    /** Weight for historical TTM ROE when updating with current quarter. */
-    public const TTM_HISTORICAL_WEIGHT = 0.75;
-    /** Annualization multiplier for quarterly returns. */
-    public const ANNUALIZATION_FACTOR = 4.0;
-    /** Maximum clamped ROE reported to the stock. */
-    public const ROE_CLAMP_MAX = 1.0;
-    /** Minimum clamped ROE reported to the stock. */
-    public const ROE_CLAMP_MIN = -0.50;
     /** Minimum base expansion probability floor. */
     public const DEBT_EXPANSION_PROB_MIN = 0.05;
     /** Minimum base expansion aggressiveness floor. */
@@ -408,7 +393,7 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
 
     public function getMacroPhysics(Stock $stock, MacroStateDTO $macroState): array
     {
-        $outputGap = $this->resolveLaggedOutputGap($stock, $macroState);
+        $outputGap = $this->resolveLaggedOutputGap($macroState);
         $beta = $this->getOperatingCyclicality($stock);
 
         return [
@@ -500,12 +485,12 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
         $annualLossDelta = $conditionalEl - $baselineEl;
 
         // Convert annual loan loss rate delta to quarterly dollar credit provision shock
-        $quarterlyDollarLoss = ($annualLossDelta / self::ANNUALIZATION_FACTOR) * $earningAssets;
+        $quarterlyDollarLoss = ($annualLossDelta / FinancialConstants::QUARTERS_PER_YEAR) * $earningAssets;
         $provisionCostAddon = $quarterlyDollarLoss / max(1.0, $actualRevenue);
 
         // What actually went bad this quarter: the conditional loss rate on the book. The through-the-cycle
         // part of it is already inside the stable cost base; only the excess reaches the margin below.
-        $netChargeOffs = max(0.0, $conditionalEl / self::ANNUALIZATION_FACTOR) * $earningAssets;
+        $netChargeOffs = max(0.0, $conditionalEl / FinancialConstants::QUARTERS_PER_YEAR) * $earningAssets;
 
         $sentimentShift = $macroState->sentimentDeviation();
         $retailDefaultShift = MathUtility::excessOverBaseline($macroState->retailDefaultRateEma, MacroEngine::RETAIL_DEFAULT_BASELINE);
@@ -671,34 +656,6 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
         return $excessCash * $this->calculateCashYield($macroState);
     }
 
-    /**
-     * Financial companies are evaluated strictly on Return on Equity (ROE), not ROIC.
-     */
-    public function updateDynamicRoic(Stock $stock, float $actualTotalNetIncome, float $investedCapital, float $ebit, float $corporateTaxRate, float $wacc = 0.08, float $costOfEquity = 0.10, ?\App\DTO\MacroStateDTO $macroState = null, float $depreciation = 0.0): float
-    {
-        $kappa = $this->getReversionSpeed();
-        $moatSpread = $this->getMoatSpread();
-
-        $equity = (float) $stock->getTotalEquity();
-        $truePostTaxReturn = $equity > 0 ? ($actualTotalNetIncome / $equity) * self::ANNUALIZATION_FACTOR : 0.0;
-
-        $stock->setCurrentRoe((string) max(self::ROE_CLAMP_MIN, min(self::ROE_CLAMP_MAX, $truePostTaxReturn)));
-
-        $oldTtm = (float) $stock->getRoeTtm();
-        $newTtm = $oldTtm === 0.0 ? $truePostTaxReturn : ($truePostTaxReturn * self::TTM_CURRENT_QUARTER_WEIGHT) + ($oldTtm * self::TTM_HISTORICAL_WEIGHT);
-        $scaledKappa = $kappa / self::TTM_ROE_WEIGHT;
-
-        $saturationPenalty = 0.0;
-        if ($macroState !== null) {
-            $saturationPenalty = \App\Service\Math\CorporateMetrics::getInstance()->calculateMarketSaturationPenalty($stock, max(1.0, $equity), $macroState);
-        }
-
-        $effectiveMoat = max(0.0, $moatSpread - $saturationPenalty);
-        $newTtm += MathUtility::getInstance()->calculateReversionPull($newTtm, $costOfEquity, $scaledKappa, $effectiveMoat);
-        $stock->setRoeTtm((string) max(self::ROE_CLAMP_MIN, min(self::ROE_CLAMP_MAX, $newTtm)));
-
-        return max(self::ROE_CLAMP_MIN, min(self::ROE_CLAMP_MAX, $truePostTaxReturn));
-    }
 
     public function calculateTargetOperatingCash(float $operatingBase, float $currentLiability, float $wholesaleDebt): float
     {
@@ -812,16 +769,10 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
         return $peFairValue;
     }
 
-    public function calculateFairValue(float $earningsValue, float $pbFairValue, float $normalizedEps, float $dividendSupportValue = 0.0): float
+    /** Banks trade heavily on book; when earnings collapse, investors look almost entirely to the loan book's liquidation value. */
+    protected function getFairValueBookWeight(float $normalizedEps): float
     {
-        // Balance Sheet Heavy: Banks trade heavily on their Book Value (Equity).
-        // If earnings collapse, investors focus almost entirely (80% weight) on the liquidation value of the loan book.
-        $bookWeight = $normalizedEps > 0 ? self::FAIR_VALUE_BOOK_WEIGHT_PROFIT : self::FAIR_VALUE_BOOK_WEIGHT_LOSS;
-        $earningsWeight = 1.0 - $bookWeight;
-        $baseConsensus = ($earningsValue * $earningsWeight) + ($pbFairValue * $bookWeight);
-        return $dividendSupportValue > 0.0
-            ? ($baseConsensus * (1.0 - self::FAIR_VALUE_DDM_WEIGHT)) + ($dividendSupportValue * self::FAIR_VALUE_DDM_WEIGHT)
-            : $baseConsensus;
+        return $normalizedEps > 0 ? self::FAIR_VALUE_BOOK_WEIGHT_PROFIT : self::FAIR_VALUE_BOOK_WEIGHT_LOSS;
     }
 
     public function processPassiveLiabilityGrowth(Stock $stock, MacroStateDTO $macroState, array &$state, MathUtility $mathUtility): void
@@ -842,7 +793,7 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
         // income: realized inflation plus potential real growth. The rate channel is the migration into money
         // funds as the deposit spread opens, and back out as it closes (Drechsler, Savov & Schnabl 2017); the
         // smoothed share lags the level by about a quarter's move.
-        $trendGrowthQuarterly = ($macroState->inflationEma + MacroEngine::TFP_DRIFT + MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE) / self::ANNUALIZATION_FACTOR;
+        $trendGrowthQuarterly = ($macroState->inflationEma + MacroEngine::TFP_DRIFT + MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE) / FinancialConstants::QUARTERS_PER_YEAR;
         $mmfMigrationQuarterly = ($macroState->moneyMarketFundShare - $macroState->moneyMarketFundShareEma) * self::MMF_MIGRATION_DEPOSIT_DRAG;
         $growthQuarterly = $trendGrowthQuarterly - $mmfMigrationQuarterly + ($mathUtility->generateStandardNormal() * self::LIABILITY_GROWTH_DRIFT_STD);
         $liabilityChange = $currentLiabilities * max(-self::LIABILITY_MAX_CHANGE_LIMIT, min(self::LIABILITY_MAX_CHANGE_LIMIT, $growthQuarterly));
@@ -1017,6 +968,7 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
             'money_market_fund_share_ema',
             'money_supply_growth_ema',
             'output_gap_ema',
+            'output_gap_lag_9m',
             'policy_rate_ema',
             'recession_probability_ema',
             'residential_property_index_ema',

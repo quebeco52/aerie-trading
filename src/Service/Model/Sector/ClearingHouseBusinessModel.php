@@ -97,10 +97,6 @@ class ClearingHouseBusinessModel extends BaseFinancialBusinessModel
     public const HEALTHY_CREDIT_BONUS    = -0.02;
     /** Extreme default z-score threshold triggering apocalyptic clearinghouse bailout lore. */
     public const LORE_DEFAULT_Z_THRESHOLD = -3.00;
-    /** Upper clamp for realized variable margin. */
-    public const MAX_VARIABLE_MARGIN_CLAMP = 1.50;
-    /** Lower clamp for realized variable margin. */
-    public const MIN_VARIABLE_MARGIN_CLAMP = 0.01;
 
     // --- Analyst Visibility & Error ---
     // Moved to getCoverageProfile() — see MarketConsensusEngine.

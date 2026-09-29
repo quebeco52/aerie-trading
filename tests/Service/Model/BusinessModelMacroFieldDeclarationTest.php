@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\Model;
 
+use App\Data\MacroFieldRegistry;
 use App\DTO\MacroStateDTO;
+use App\Service\Macro\Subsystem\MacroAggregateSubsystem;
 use App\Service\Model\Strategy\OperatingStrategyInterface;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
@@ -115,10 +117,13 @@ final class BusinessModelMacroFieldDeclarationTest extends TestCase
             $actual = array_values(array_unique($actual));
         }
 
-        // Same for the demand transmission lag: the helper lives in a trait, but a model that reads the
-        // cycle through it is reading the output gap however long the delay it declares.
+        // Same for the demand transmission lag: the helper lives in a trait, but a model that reads the cycle
+        // through it reads the gap at the delay it declares, which the macro publishes as a series of its own.
         if ($this->invokesHelper($modelClass, 'resolveLaggedOutputGap(')) {
-            $actual[] = 'output_gap_ema';
+            $lagYears = $model->getDemandLagYears();
+            $actual[] = $lagYears > 0.0
+                ? MacroFieldRegistry::wireKeys()[MacroAggregateSubsystem::demandTransmissionLagField($lagYears)]
+                : 'output_gap_ema';
             $actual = array_values(array_unique($actual));
         }
 

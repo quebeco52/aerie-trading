@@ -46,8 +46,6 @@ class MerchantHouseBusinessModel extends ConglomerateBusinessModel
     /** Baseline fraction of revenue from secured inventory financing, trade credit and treasury buffers. */
     public const CONTRARIAN_FLOAT_WEIGHT = 0.15;
 
-    /** A merchant house owns no factories; the parent's industrial stream is switched off entirely. */
-    public const INDUSTRIAL_CONGLOMERATE_WEIGHT = 0.00;
 
     /** A price taker on the cargo, a monopolist on the berth. */
     public const PRICING_POWER_INDEX = 0.55;

@@ -9,6 +9,7 @@ use App\Entity\CorporateReport;
 use App\Entity\Stock;
 use App\Repository\CorporateReportRepository;
 use App\Service\Model\Sector\InsuranceBusinessModel;
+use App\Service\Math\FinancialConstants;
 
 /**
  * The handful of numbers an analyst reads first off the last report, chosen by what the business is.
@@ -25,8 +26,6 @@ class FinancialSummaryBuilder
     /** Tiles on the strip; beyond this the summary stops being a summary. */
     private const MAX_TILES = 6;
 
-    /** Quarters in a year: a quarter's charge-offs and income annualize by four. */
-    private const QUARTERS_PER_YEAR = 4.0;
 
     /** Operating KPIs the business models report, as label and display format; anything else is not shown. */
     private const KPI_LABELS = [
@@ -96,7 +95,7 @@ class FinancialSummaryBuilder
                 ? $this->tile('CET1 Ratio', $report->getCet1Ratio(), 'percent')
                 : $this->tile('Capital Ratio', $report->getCapitalRatio(), 'percent'),
             $this->tile('Reserve / Book', (float) $report->getCreditLossAllowance() / $book, 'percent'),
-            $this->tile('Net Charge-Off Rate', ((float) $report->getNetChargeOffs() * self::QUARTERS_PER_YEAR) / $book, 'percent'),
+            $this->tile('Net Charge-Off Rate', ((float) $report->getNetChargeOffs() * FinancialConstants::QUARTERS_PER_YEAR) / $book, 'percent'),
             $this->tile('ROE', $report->getReturnOnEquity(), 'percent'),
         ];
     }

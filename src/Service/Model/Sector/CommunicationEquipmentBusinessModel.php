@@ -233,7 +233,7 @@ class CommunicationEquipmentBusinessModel extends StandardCorporateBusinessModel
         $overhangDrag = $macroState->capitalStockOverhangEma * self::CAPITAL_OVERHANG_SCALAR;
         $tradeShift = MathUtility::calculateTradeBalanceShift($macroState->tradeBalanceToGdpEma, sensitivity: self::TRADE_BALANCE_SENSITIVITY)
             + MathUtility::calculateForeignDemandShift($macroState->foreignOutputGapEma, sensitivity: self::FOREIGN_DEMAND_SENSITIVITY);
-        $carrierCapexShift = ($this->resolveLaggedOutputGap($stock, $macroState) * self::CARRIER_CAPEX_GDP_SENSITIVITY * $beta)
+        $carrierCapexShift = ($this->resolveLaggedOutputGap($macroState) * self::CARRIER_CAPEX_GDP_SENSITIVITY * $beta)
             - $overhangDrag
             + $this->resolveFxDemandShift($macroState)
             + $tradeShift;
@@ -403,7 +403,7 @@ class CommunicationEquipmentBusinessModel extends StandardCorporateBusinessModel
             'foreign_output_gap_ema',
             'industrial_metals_index_ema',
             'inventory_stock_gap_ema',
-            'output_gap_ema',
+            'output_gap_lag_12m',
             'supply_chain_pressure_index_ema',
             'tips_breakeven_ema',
             'trade_balance_to_gdp_ema',

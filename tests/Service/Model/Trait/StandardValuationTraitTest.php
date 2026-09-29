@@ -115,10 +115,9 @@ final class StandardValuationTraitTest extends TestCase
     {
         $earnings = 100.0;
         $book = 50.0;
-        $base = ($earnings * FinancialConstants::FAIR_VALUE_EARNINGS_WEIGHT) + ($book * FinancialConstants::FAIR_VALUE_BOOK_WEIGHT);
+        $base = ($earnings * (1.0 - FinancialConstants::FAIR_VALUE_BOOK_WEIGHT)) + ($book * FinancialConstants::FAIR_VALUE_BOOK_WEIGHT);
 
         $this->assertEqualsWithDelta($base, $this->model->calculateFairValue($earnings, $book, 5.0), 0.0000001, 'Without a dividend the blend is earnings and book only.');
-        $this->assertEqualsWithDelta(1.0, FinancialConstants::FAIR_VALUE_EARNINGS_WEIGHT + FinancialConstants::FAIR_VALUE_BOOK_WEIGHT, 0.0000001, 'The two weights must partition the blend.');
 
         $withDividend = $this->model->calculateFairValue($earnings, $book, 5.0, 120.0);
         $this->assertEqualsWithDelta(

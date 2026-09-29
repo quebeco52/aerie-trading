@@ -47,6 +47,10 @@ abstract class BaseFinancialBusinessModel implements BusinessModelInterface
         FinancialPhysicsTrait::calculateStructuralEps insteadof StandardValuationTrait;
     }
 
+    // --- Return Reversion ---
+    /** Divisor on the trailing ROE's reversion speed: it reverts toward cost of equity plus moat at kappa / this. */
+    public const TTM_ROE_WEIGHT = 0.50;
+
     // --- Industry Share Dynamics ---
     /** Share of an idiosyncratic gain taken from same-industry peers; funds, mandates and deposits move between houses only in part. */
     public const INDUSTRY_SUBSTITUTABILITY = FinancialConstants::DEFAULT_FINANCIAL_INDUSTRY_SUBSTITUTABILITY;

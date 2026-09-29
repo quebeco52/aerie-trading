@@ -52,10 +52,6 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
     public const MIN_OPERATING_EBIT_YIELD = 0.015;
 
     // --- ROE & Target Architecture ---
-    /** Divisor on the trailing ROE's reversion speed: it reverts toward cost of equity plus moat at kappa / this. */
-    public const TTM_ROE_WEIGHT      = 0.50;
-    /** Default 5Y Treasury spread over policy rate when yield curve data is absent. */
-    public const DEFAULT_5Y_YIELD_PREMIUM = 0.005;
     /** Target operating cash reserve ratio applied to corporate operating base. */
     public const TARGET_OPERATING_BUFFER  = 0.05;
     /** Hard ceiling on gross asset yield to prevent reverse-engineered revenue hyperinflation. */
@@ -88,10 +84,6 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
     public const SHOCK_WEIGHT_DSR_DEFAULT = 0.15;
     /** Structural minimum operating cost-to-revenue ratio for non-bank lending operations. */
     public const MIN_EFFICIENCY_RATIO      = 0.45;
-    /** Upper clamp for realized variable margin. */
-    public const MAX_VARIABLE_MARGIN_CLAMP = 1.50;
-    /** Lower clamp for realized variable margin. */
-    public const MIN_VARIABLE_MARGIN_CLAMP = 0.01;
 
     // --- Private Credit & Corporate Default Physics ---
     /** Baseline investment-grade credit spread for normal shadow bank portfolio lending, the macro through-the-cycle IG spread. */
@@ -396,6 +388,7 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
             'money_market_fund_share_ema',
             'money_supply_growth_ema',
             'output_gap_ema',
+            'output_gap_lag_9m',
             'policy_rate_ema',
             'recession_probability_ema',
             'residential_property_index_ema',

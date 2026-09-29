@@ -66,7 +66,6 @@ class FinancialConstants
     /** Minimum individual downside jump floor (-30% or log(0.70)) keeping market shocks bounded. */
     public const MIN_JUMP_LOG_RETURN = -0.3567;
 
-    // --- EPS Smoothing ---
 
     // --- Price Gap Dampening ---
     /** Liquidity dampener slowing instantaneous price convergence to fundamental fair value. */
@@ -173,11 +172,17 @@ class FinancialConstants
         'default'  => 1.00,
     ];
 
+    // --- Reporting Calendar ---
+    /** Reporting quarters in a year: the factor between a quarterly flow and its annual rate. */
+    public const QUARTERS_PER_YEAR = 4.0;
+
     // --- Operating Physics ---
     /** Weight of current quarter financial performance in trailing twelve month updates. */
     public const TTM_SMOOTHING_NEW_WEIGHT = 0.25;
-    /** Weight of historical financial performance in trailing twelve month updates. */
-    public const TTM_SMOOTHING_OLD_WEIGHT = 0.75;
+    /** Floor on a reported annualised return on capital, so one quarter's loss on a thin base cannot read as a -300% return. */
+    public const MIN_REPORTED_RETURN = -0.50;
+    /** Ceiling on a reported annualised return on capital. */
+    public const MAX_REPORTED_RETURN = 1.00;
     /** Speed of competitive return erosion toward cost of capital for high-ROIC firms. */
     public const REVERSION_COMPETITIVE_EROSION_ALPHA = 0.50;
     /** Autoregressive persistence parameter maintaining margin drag during financial distress. */
@@ -320,14 +325,6 @@ class FinancialConstants
     public const DEFAULT_WACC_FALLBACK = 0.08;
     /** Fraction of fixed-rate debt that matures and reprices at market each quarter (5-year average tenor). */
     public const DEFAULT_QUARTERLY_DEBT_ROLLOVER = 0.05;
-    /** Base quarterly probability of evaluating balance sheet debt expansion. */
-    public const DEBT_EXPANSION_BASE_PROB = 0.40;
-    /** Sensitivity scaling debt issuance probability when ROIC exceeds WACC. */
-    public const DEBT_EXPANSION_PROB_MULT = 0.50;
-    /** Baseline percentage of borrowing capacity utilized during debt expansion. */
-    public const DEBT_EXPANSION_BASE_AGGR = 0.05;
-    /** Aggressiveness multiplier scaling debt issuance with economic spread (ROIC - WACC). */
-    public const DEBT_EXPANSION_AGGR_MULT = 0.35;
     /** Minimum hurdle spread (100 bps) required between ROIC and WACC before issuing debt. */
     public const WACC_ARBITRAGE_BUFFER = 0.01;
     /** Debt-to-equity ratio threshold below which a corporate entity is underleveraged. */
@@ -354,8 +351,6 @@ class FinancialConstants
     public const PAYMENT_DEFAULT_GRACE_QUARTERS = 1;
 
     // --- Valuation Consensus Weights ---
-    /** Consensus weight given to earnings/DCF intrinsic fair value in valuation blending. */
-    public const FAIR_VALUE_EARNINGS_WEIGHT = 0.90;
     /** Consensus weight given to book value/liquidation fair value in valuation blending. */
     public const FAIR_VALUE_BOOK_WEIGHT = 0.10;
     /** Weight given to Dividend Discount Model fair value when dividend support is active. */

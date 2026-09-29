@@ -287,16 +287,10 @@ class MiningBusinessModel extends StandardCorporateBusinessModel
         );
     }
 
-    public function calculateFairValue(float $earningsValue, float $pbFairValue, float $normalizedEps, float $dividendSupportValue = 0.0): float
+    /** Miners anchor to book (replacement cost of the mine and mill) at trough earnings and to mid-cycle earnings otherwise. */
+    protected function getFairValueBookWeight(float $normalizedEps): float
     {
-        // Miners anchor to book (replacement cost of the mine and mill) at trough earnings and to mid-cycle earnings otherwise.
-        $bookWeight = $normalizedEps < 0 ? self::TROUGH_BOOK_WEIGHT : self::MID_CYCLE_BOOK_WEIGHT;
-        $earningsWeight = 1.0 - $bookWeight;
-
-        $baseConsensus = ($earningsValue * $earningsWeight) + ($pbFairValue * $bookWeight);
-        return $dividendSupportValue > 0.0
-            ? ($baseConsensus * (1.0 - FinancialConstants::FAIR_VALUE_DDM_WEIGHT)) + ($dividendSupportValue * FinancialConstants::FAIR_VALUE_DDM_WEIGHT)
-            : $baseConsensus;
+        return $normalizedEps < 0 ? self::TROUGH_BOOK_WEIGHT : self::MID_CYCLE_BOOK_WEIGHT;
     }
 
     /**

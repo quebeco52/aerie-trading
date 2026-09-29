@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\Market;
 
-use App\Command\MarketTickerCommand;
+use App\Service\Market\TickCadence;
 use App\Service\Market\PriceBarAggregator;
 use PHPUnit\Framework\TestCase;
 
@@ -69,12 +69,12 @@ class PriceBarAggregatorTest extends TestCase
      */
     public function testATickRateAtTheTargetWritesSingleTickRowsWithNoRangeOfTheirOwn(): void
     {
-        foreach ([720, MarketTickerCommand::TARGET_HISTORY_POINTS_PER_YEAR] as $ticksPerYear) {
+        foreach ([720, TickCadence::TARGET_HISTORY_POINTS_PER_YEAR] as $ticksPerYear) {
             $singleTickRows = 0;
 
             for ($tick = 2; $tick <= 1000; $tick++) {
-                if (MarketTickerCommand::isHistoryTick($tick, $ticksPerYear)
-                    && MarketTickerCommand::isHistoryTick($tick - 1, $ticksPerYear)) {
+                if (TickCadence::isHistoryTick($tick, $ticksPerYear)
+                    && TickCadence::isHistoryTick($tick - 1, $ticksPerYear)) {
                     $singleTickRows++;
                 }
             }
@@ -228,7 +228,7 @@ class PriceBarAggregatorTest extends TestCase
     public function testTheLineGridDwellsFewerTicksPerSlotThanTheCandleGrid(): void
     {
         $ticksPerYear = 3600;
-        $rowsPerYear = MarketTickerCommand::historyPointsPerYear($ticksPerYear);
+        $rowsPerYear = TickCadence::historyPointsPerYear($ticksPerYear);
 
         foreach ([1, 3, 10] as $years) {
             $rows = $this->rows($this->sawtooth($rowsPerYear * $years));
@@ -258,8 +258,8 @@ class PriceBarAggregatorTest extends TestCase
      */
     public function testTheLineGridNeverServesASlotNarrowerThanATick(): void
     {
-        foreach ([252, 720, MarketTickerCommand::TARGET_HISTORY_POINTS_PER_YEAR, 3600, 14400] as $ticksPerYear) {
-            $rowsPerYear = MarketTickerCommand::historyPointsPerYear($ticksPerYear);
+        foreach ([252, 720, TickCadence::TARGET_HISTORY_POINTS_PER_YEAR, 3600, 14400] as $ticksPerYear) {
+            $rowsPerYear = TickCadence::historyPointsPerYear($ticksPerYear);
 
             $bars = $this->aggregator->aggregate(
                 $this->rows($this->sawtooth($rowsPerYear)),
@@ -286,7 +286,7 @@ class PriceBarAggregatorTest extends TestCase
     public function testALineIsServedOneRowPerSlotUpToItsTarget(): void
     {
         $ticksPerYear = 3600;
-        $rowsPerYear = MarketTickerCommand::historyPointsPerYear($ticksPerYear);
+        $rowsPerYear = TickCadence::historyPointsPerYear($ticksPerYear);
 
         foreach (['3m' => 0.25, '1y' => 1.0] as $range => $years) {
             $rowCount = (int) round($rowsPerYear * $years);

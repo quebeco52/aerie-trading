@@ -71,7 +71,6 @@ class DistressedDebtBusinessModel extends AssetManagementBusinessModel
 
     public const ADVISORY_VARIANCE_SCALAR = 0.15;
     public const RECOVERY_VARIANCE_SCALAR = 0.45;
-    public const REVENUE_VARIANCE_SCALAR  = 0.20;
 
     // --- Tail Risk Events ---
     public const LORE_RESTRUCTURING_Z_SCORE     = 1.00;

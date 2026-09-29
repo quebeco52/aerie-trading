@@ -33,11 +33,24 @@ class MacroFieldCatalogTest extends TestCase
 
     public function testEveryCataloguedFieldDeclaresALabelAndAKnownUnit(): void
     {
-        $units = [MacroFieldCatalog::UNIT_PERCENT, MacroFieldCatalog::UNIT_BPS, MacroFieldCatalog::UNIT_INDEX];
+        $units = [MacroFieldCatalog::UNIT_PERCENT, MacroFieldCatalog::UNIT_BPS, MacroFieldCatalog::UNIT_INDEX, MacroFieldCatalog::UNIT_LEVEL];
 
         foreach (MacroFieldCatalog::FIELDS as $field => $meta) {
             $this->assertNotSame('', $meta['label'], "Field '{$field}' has no label.");
             $this->assertContains($meta['unit'], $units, "Field '{$field}' declares an unknown unit.");
+        }
+    }
+
+    /** A stream driver is named for the input it was measured on, so every input a model declares must be catalogued. */
+    public function testEveryInputAModelReadsIsCatalogued(): void
+    {
+        foreach (array_keys(\App\Data\Sectors::BUSINESS_MODELS) as $identifier) {
+            foreach (\App\Data\Sectors::getBusinessModelStrategy($identifier)->getOperatingMacroFields() as $field) {
+                if (in_array($field, \App\Service\Corporate\MacroDriverAttribution::TREND_FIELDS, true)) {
+                    continue;
+                }
+                $this->assertArrayHasKey($field, MacroFieldCatalog::FIELDS, "{$identifier} reads '{$field}', which the catalog cannot name.");
+            }
         }
     }
 

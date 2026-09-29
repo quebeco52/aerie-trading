@@ -77,6 +77,11 @@ class EarningsReportSubscriberTest extends TestCase
             'corporate_retainers'  => 3000000.0,
             'expeditionary_ops'    => 2000000.0,
         ];
+        // What the engine measured each input doing to each stream (EarningsEngine::attributeMacroDrivers).
+        $ctx->streamMacroEffects = [
+            'government_contracts' => ['allied_defense_spending_index_ema' => 0.034, 'inflation_ema' => 0.012, 'output_gap_ema' => 0.0001],
+            'expeditionary_ops'    => ['market_volatility_ema' => 0.08, 'macro_credit_spread_ema' => -0.02],
+        ];
         $ctx->reportedActualNetIncome = 1500000.0;
         $ctx->trueOperatingMargin = 0.20;
         $ctx->operatingCosts = 8000000.0;
@@ -122,17 +127,20 @@ class EarningsReportSubscriberTest extends TestCase
         $this->assertEquals(0.5, $gov['share']);
         $this->assertEquals(0.0, $gov['qoq_delta']); // No previous report -> 0 QoQ delta
 
-        // Check drivers were identified
-        $driverLabels = array_column($gov['drivers'], 'label');
-        $this->assertContains('Strong Operational Execution', $driverLabels);
-        $this->assertContains('Fiscal Appropriations', $driverLabels);
-        $this->assertContains('Cost-Plus Inflation Escalation', $driverLabels);
+        // The measured drivers, named by the catalog and ranked by the share of the stream they account for; an
+        // effect below materiality is dropped, and momentum follows on its own scale.
+        $this->assertSame(
+            ['Allied Defence Spending', 'CPI Inflation', 'Strong Operational Execution'],
+            array_column($gov['drivers'], 'label')
+        );
+        $this->assertSame(0.034, $gov['drivers'][0]['share']);
+        $this->assertSame([1, 2], [$gov['drivers'][0]['direction'], $gov['drivers'][0]['strength']]);
+        $this->assertSame(['allied_defense_spending_index_ema'], array_column($gov['drivers'][0]['readings'], 'field'));
 
-        // Check expeditionary_ops VIX fear premium
         $exp = $streamDetails['expeditionary_ops'];
-        $expLabels = array_column($exp['drivers'], 'label');
-        $this->assertContains('VIX Geopolitical Fear Premium', $expLabels);
-        $this->assertContains('Credit Distress Demand', $expLabels);
+        $this->assertSame(['Implied Volatility', 'IG Credit Spread'], array_slice(array_column($exp['drivers'], 'label'), 0, 2));
+        $this->assertSame([1, 3], [$exp['drivers'][0]['direction'], $exp['drivers'][0]['strength']]);
+        $this->assertSame([-1, 2], [$exp['drivers'][1]['direction'], $exp['drivers'][1]['strength']]);
     }
 
     /**
@@ -489,6 +497,9 @@ class EarningsReportSubscriberTest extends TestCase
             'fee_income'          => 60000000.0,
             'proprietary_dividend'=> 40000000.0,
         ];
+        $ctx->streamMacroEffects = [
+            'net_interest_income' => ['output_gap_ema' => 0.015, 'yield_10y_ema' => 0.041, 'macro_credit_spread_ema' => -0.006],
+        ];
         $ctx->reportedActualNetIncome = 80000000.0;
         $ctx->trueOperatingMargin = 0.35;
         $ctx->operatingCosts = 195000000.0;
@@ -527,29 +538,17 @@ class EarningsReportSubscriberTest extends TestCase
         $this->assertArrayHasKey('net_interest_income', $streamDetails);
         $nii = $streamDetails['net_interest_income'];
         
-        $driverLabels = array_column($nii['drivers'], 'label');
-        // The spread is no longer baked into the label — it ships as a resolved reading instead,
-        // so the same variable prints in the same unit here and everywhere else it appears.
-        $this->assertContains('Yield Curve & NIM Spread', $driverLabels);
-        $this->assertContains('Commercial Loan Demand', $driverLabels);
-        $this->assertContains('Credit Spread & CECL Reserves', $driverLabels);
-        $this->assertContains('Operational Headwinds', $driverLabels);
+        $this->assertSame(['10Y Yield', 'Output Gap', 'IG Credit Spread', 'Operational Headwinds'], array_column($nii['drivers'], 'label'));
 
-        $nimDriver = array_values(array_filter(
-            $nii['drivers'],
-            static fn (array $driver): bool => $driver['label'] === 'Yield Curve & NIM Spread',
-        ))[0];
-        $readingFields = array_column($nimDriver['readings'], 'field');
-        $this->assertSame(['interbank_liquidity_spread_ema', 'yield_10y_ema', 'yield_2y_ema'], $readingFields);
-        $this->assertContains($nimDriver['direction'], [-1, 0, 1]);
-        $this->assertGreaterThanOrEqual(1, $nimDriver['strength']);
-        $this->assertLessThanOrEqual(3, $nimDriver['strength']);
-        // `impact` is an unpriced coefficient, so the field the panel may print must never be it.
-        $this->assertArrayNotHasKey('fields', $nimDriver);
+        $yieldDriver = $nii['drivers'][0];
+        // Each driver prints the reading of the input it was measured on, and its share of the stream.
+        $this->assertSame(['yield_10y_ema'], array_column($yieldDriver['readings'], 'field'));
+        $this->assertSame(0.041, $yieldDriver['share']);
+        $this->assertSame([1, 2], [$yieldDriver['direction'], $yieldDriver['strength']]);
 
-        // Strongest first — the panel prints the head of this list, so the ranking must be the
-        // mix's, not the order the business-model switch happened to append drivers in.
-        $impacts = array_map(static fn (array $d): float => abs((float) $d['impact']), $nii['drivers']);
+        // Strongest first among the measured drivers: the panel prints the head of this list.
+        $macro = array_values(array_filter($nii['drivers'], static fn (array $d): bool => $d['type'] === 'macro'));
+        $impacts = array_map(static fn (array $d): float => abs((float) $d['impact']), $macro);
         $sorted = $impacts;
         rsort($sorted);
         $this->assertSame($sorted, $impacts);

@@ -142,10 +142,11 @@ final class MacroFieldRegistry
 
     /**
      * The opening value of every field: the economy at trend, declared once as MacroStateDTO's constructor
-     * defaults. A fresh MacroState, a snapshot read before the ticker has published, and a payload that
-     * omits a field all open here.
+     * defaults and read off a snapshot built from them, so a field that opens level with another (the output
+     * gap's lags) opens where the constructor puts it. A fresh MacroState, a snapshot read before the ticker
+     * has published, and a payload that omits a field all open here.
      *
-     * @return array<string, mixed> Field name => the constructor's declared default.
+     * @return array<string, mixed> Field name => its value in a snapshot built from the constructor's defaults.
      */
     public static function defaults(): array
     {
@@ -153,12 +154,10 @@ final class MacroFieldRegistry
             return self::$defaults;
         }
 
+        $opening = new MacroStateDTO();
         $defaults = [];
-        $constructor = (new \ReflectionClass(MacroStateDTO::class))->getConstructor();
-        foreach ($constructor?->getParameters() ?? [] as $parameter) {
-            $defaults[$parameter->getName()] = $parameter->isDefaultValueAvailable()
-                ? $parameter->getDefaultValue()
-                : null;
+        foreach (array_keys(self::wireKeys()) as $field) {
+            $defaults[$field] = $opening->$field;
         }
 
         return self::$defaults = $defaults;
@@ -178,6 +177,12 @@ final class MacroFieldRegistry
         'supercoreInflation' => 'inflation',
         'coreGoodsInflation' => 'inflation',
         'sovereignNetDebtToGdp' => 'sovereignDebtToGdp',
+        'outputGapLag3m' => 'outputGapEma',
+        'outputGapLag6m' => 'outputGapEma',
+        'outputGapLag9m' => 'outputGapEma',
+        'outputGapLag12m' => 'outputGapEma',
+        'outputGapLag15m' => 'outputGapEma',
+        'outputGapLag18m' => 'outputGapEma',
     ];
 
     /**
