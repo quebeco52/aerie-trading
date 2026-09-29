@@ -61,4 +61,10 @@ trait StandardCapitalAllocationTrait
     {
         return null;
     }
+
+    /** A taxable corporation owes no distribution: its payout is a policy, not a condition of its tax status. */
+    public function getMinimumDistributionRatio(): float
+    {
+        return 0.0;
+    }
 }

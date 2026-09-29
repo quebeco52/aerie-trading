@@ -1138,9 +1138,10 @@ class MathUtility
     }
 
     /**
-     * Calculates Fair Value using the Dividend Discount Model (DDM).
+     * Gordon (1962) growth model: next year's dividend, the current one grown once, over the spread of the
+     * required return above perpetual growth.
      *
-     * @param float $annualDividend The total dividend paid over the last 12 months.
+     * @param float $annualDividend The current annual dividend.
      * @param float $discountRate   The required rate of return (Cost of Equity).
      * @param float $growthRate     The expected perpetual dividend growth rate.
      * @return float The intrinsic value of the stock based purely on its dividend stream.
@@ -1160,11 +1161,29 @@ class MathUtility
 
         // Prevent Division by Zero. The denominator must be at least 50 bps (0.005)
         $denominator = max(0.005, $effectiveDiscountRate - $effectiveGrowthRate);
-        $multiplier = 1.0 / $denominator;
+        $multiplier = (1.0 + $effectiveGrowthRate) / $denominator;
 
         $clampedMultiplier = min(FinancialConstants::MAX_DCF_MULTIPLIER, $multiplier);
 
         return $annualDividend * $clampedMultiplier;
+    }
+
+    /**
+     * Present value of the gap between a firm's current dividend and its target while partial adjustment closes
+     * it (Lintner 1956): each quarter the dividend moves the given share of the remaining distance, so the gap
+     * decays geometrically and is discounted at the required return. Positive while the dividend runs above
+     * target, negative while it lags behind.
+     *
+     * @param float $annualGap      Current annual dividend less the target annual dividend.
+     * @param float $discountRate   Annual required return (cost of equity).
+     * @param float $quarterlySpeed Share of the remaining gap closed each quarter, in [0, 1].
+     */
+    public function calculateDividendAdjustmentValue(float $annualGap, float $discountRate, float $quarterlySpeed): float
+    {
+        $quarterlyRate = ((1.0 + max(FinancialConstants::MIN_COST_OF_EQUITY, $discountRate)) ** 0.25) - 1.0;
+        $persistence = (1.0 - max(0.0, min(1.0, $quarterlySpeed))) / (1.0 + $quarterlyRate);
+
+        return ($annualGap / 4.0) * $persistence / (1.0 - $persistence);
     }
 
     /**

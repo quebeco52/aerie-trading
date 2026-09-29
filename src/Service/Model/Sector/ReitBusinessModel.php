@@ -50,6 +50,10 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
     /** Years for a move in the output gap to reach the order book. Rent rolls turn over on multi-year leases: a downturn reaches a landlord only as space comes up for renewal. */
     public const DEMAND_LAG_YEARS = 1.50;
 
+    // --- District REIT Distribution Rule ---
+    /** Share of taxable income a District REIT must distribute each year to stay a pass-through (US: 90% under IRC 857, 85% calendar-year excise floor under IRC 4981). */
+    public const DISTRIBUTION_REQUIREMENT = 0.85;
+
     // --- Analyst Visibility & Error ---
     /** Base analyst visibility into predictable contracted commercial real estate cash flows. */
     public const BASE_COVERAGE_VISIBILITY = 0.70;
@@ -466,6 +470,12 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
     public function getSustainableDividendBase(Stock $stock, float $quarterlyEps, float $investedCapital, float $depRate): float
     {
         return $quarterlyEps;
+    }
+
+    /** Pass-through status is conditional on distributing taxable income; the trust pays no corporate tax on what it distributes. */
+    public function getMinimumDistributionRatio(): float
+    {
+        return self::DISTRIBUTION_REQUIREMENT;
     }
 
     public function getMarginReversionSpeed(): float

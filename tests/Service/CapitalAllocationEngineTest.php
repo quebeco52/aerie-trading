@@ -29,6 +29,7 @@ class CapitalAllocationEngineTest extends TestCase
     private MathUtility&Stub $mathUtilityMock;
     private TreasuryEngine&Stub $treasuryEngineMock;
     private CapitalAllocationEngine $engine;
+    private DebtHealthDTO $debtHealth;
 
     protected function setUp(): void
     {
@@ -79,6 +80,7 @@ class CapitalAllocationEngineTest extends TestCase
             isUnderLeveraged: false
         );
 
+        $this->debtHealth = $debtHealthMock;
         $this->debtEngineMock->method('analyzeDebtHealth')->willReturn($debtHealthMock);
         $this->debtEngineMock->method('analyzeTrailingDebtHealth')->willReturn($debtHealthMock);
 
@@ -183,6 +185,92 @@ class CapitalAllocationEngineTest extends TestCase
         return $stock;
     }
 
+    /**
+     * The District REIT rule is a floor under the smoothing: a trust paying well under its requirement and moving
+     * toward target at an aristocrat's pace still distributes 85% of the quarter's taxable income. Taxable income is
+     * net income, not the FFO the payout target is struck on, so the floor sits below the FFO target.
+     */
+    public function testAReitDistributesTheDistrictMinimumOfItsTaxableIncome(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('TEST_REIT');
+        $stock->setIndustry('REIT - Diversified');
+        $stock->setSharesOutstanding('1000000');
+        $stock->setPrice('100.00');
+        $stock->setTotalEquity('100000000');
+        $stock->setCorporateTreasury('50000000');
+        $stock->setTargetPayoutRatio('0.85');
+        $stock->setDividendSpeed('0.02');
+        $stock->setLastDividend('0.40');
+        $stock->setRetainedEarnings('50000000.00');
+        $stock->setDepreciationRate('0.05');
+        $stock->setTotalRevenue('10000000.00');
+        $stock->setOperatingMargin('0.20');
+        $stock->setWholesaleDebt('10000000.00');
+        $stock->setCustomerDeposits('0.00');
+
+        // $1.00 of quarterly net income and $2.25 of FFO per share.
+        $result = $this->engine->allocateCapital($stock, 9.00, 2.00, 100.00, 1000000.0, new MacroStateDTO(corporateTaxRate: 0.21), 1_000_000.0);
+
+        $this->assertEqualsWithDelta(0.85, $result['dividend_paid'], 1e-9);
+    }
+
+    /**
+     * A REIT owes 85% of its taxable income whether or not its cash flow covers it. With nothing above its operating
+     * floor it borrows the distribution at its market rate while it can issue debt, and pays what its cash allows
+     * once its lenders will not fund it.
+     */
+    public function testAReitBorrowsTheDistributionItsCashCannotCover(): void
+    {
+        $issued = [];
+        $lender = $this->createStub(DebtEngine::class);
+        $lender->method('analyzeTrailingDebtHealth')->willReturn($this->debtHealth);
+        $lender->method('issueDebt')->willReturnCallback(static function (Stock $stock, float $amount, float $rate) use (&$issued): void {
+            $issued[] = [$amount, $rate];
+        });
+        $engine = new CapitalAllocationEngine($this->corporateLedgerServiceMock, $this->corporateMetricsMock, $lender, $this->mathUtilityMock, $this->treasuryEngineMock);
+
+        // $1.00 of quarterly taxable income on 1m shares; cash sits exactly on the 3% operating floor of a $5m base.
+        $result = $engine->allocateCapital($this->cashStrappedReit(), 9.00, 0.00, 100.00, 1000000.0, new MacroStateDTO(corporateTaxRate: 0.21), 1_000_000.0);
+        $this->assertEqualsWithDelta(0.85, $result['dividend_paid'], 1e-9);
+        $this->assertCount(1, $issued);
+        $this->assertEqualsWithDelta(850_000.0, $issued[0][0], 1e-6);
+        $this->assertSame(0.05, $issued[0][1], 'Borrowed at its market rate, not a distress rate.');
+
+        $refused = $this->createMock(DebtEngine::class);
+        $refused->method('analyzeTrailingDebtHealth')->willReturn(new DebtHealthDTO(
+            grossCost: 0.05, effectiveCost: 0.05, cashYield: 0.04, isNegativeCarry: false, isSevereNegativeCarry: false,
+            interestCoverage: 5.0, wantsToPaydownDebt: false, canIssueDebt: false, debtTolerance: 1.5, wacc: 0.06,
+            costOfEquity: 0.08, leveredBeta: 1.0, rawMetrics: $this->debtHealth->rawMetrics, isLiquidityCrisis: false,
+            isLiquidityWarning: false, isUnderLeveraged: false
+        ));
+        $refused->expects($this->never())->method('issueDebt');
+        $unfunded = (new CapitalAllocationEngine($this->corporateLedgerServiceMock, $this->corporateMetricsMock, $refused, $this->mathUtilityMock, $this->treasuryEngineMock))
+            ->allocateCapital($this->cashStrappedReit(), 9.00, 0.00, 100.00, 1000000.0, new MacroStateDTO(corporateTaxRate: 0.21), 1_000_000.0);
+        $this->assertSame(0.0, $unfunded['dividend_paid']);
+    }
+
+    private function cashStrappedReit(): Stock
+    {
+        $stock = new Stock();
+        $stock->setTicker('TEST_REIT');
+        $stock->setIndustry('REIT - Diversified');
+        $stock->setSharesOutstanding('1000000');
+        $stock->setPrice('100.00');
+        $stock->setTotalEquity('100000000');
+        $stock->setCorporateTreasury('150000');
+        $stock->setTargetPayoutRatio('0.85');
+        $stock->setDividendSpeed('0.02');
+        $stock->setLastDividend('0.40');
+        $stock->setRetainedEarnings('50000000.00');
+        $stock->setTotalRevenue('10000000.00');
+        $stock->setOperatingMargin('0.20');
+        $stock->setWholesaleDebt('10000000.00');
+        $stock->setCustomerDeposits('0.00');
+
+        return $stock;
+    }
+
     public function testReitFfoDividendCapacity(): void
     {
         $stock = new Stock();
@@ -208,7 +296,7 @@ class CapitalAllocationEngineTest extends TestCase
         // For 1M shares with $1.00 quarterly net income and $1.25 quarterly depreciation, FFO per share is $2.25 quarterly ($9.00 annual).
         // With an 80% target payout ratio on FFO, target quarterly dividend is $1.80 per share.
         $annualFfoEps = 9.00;
-        $result = $this->engine->allocateCapital($stock, $annualFfoEps, 2.00, 100.00, 1000000.0, $macroState);
+        $result = $this->engine->allocateCapital($stock, $annualFfoEps, 2.00, 100.00, 1000000.0, $macroState, 1_000_000.0);
 
         $this->assertEqualsWithDelta(1.80, $result['dividend_paid'], 0.0001, 'REIT dividend should reflect 80% target payout on FFO');
     }

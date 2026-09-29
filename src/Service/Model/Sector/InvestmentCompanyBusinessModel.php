@@ -54,9 +54,6 @@ class InvestmentCompanyBusinessModel extends ConglomerateBusinessModel
     /** Intrinsic multiple on book. One, because a trust's book is a portfolio carried at value — so pbFairValue becomes net asset value per share. */
     public const INTRINSIC_PB_MULTIPLE = 1.00;
 
-    /** Weight on the dividend discount leg. A trust distributes what it RECEIVES, so this is a separate claim on value and not a restatement of the unread earnings line. */
-    public const NAV_DDM_WEIGHT = 0.15;
-
     // --- Holding-Company Discount ---
     /** Long-run discount to NAV at a neutral cycle: control blocks are unsaleable at the screen price and a realised stake is taxed on exit. */
     public const NAV_DISCOUNT_BASE = 0.30;
@@ -311,18 +308,13 @@ class InvestmentCompanyBusinessModel extends ConglomerateBusinessModel
     }
 
     /**
-     * Net asset value, blended with the dividend it distributes out of what it receives. $pbFairValue IS
-     * NAV per share here, because the multiple above is one; the earnings leg is deliberately unread.
+     * A closed-end holding company is priced on its net asset value alone. $pbFairValue IS NAV per share here,
+     * because the multiple above is one; the earnings leg is deliberately unread, and a distribution is paid out
+     * of NAV, so it is no claim beside it.
      */
-    /** A closed-end holding company is priced on its net asset value, with any dividend it pays discounted beside it. */
     protected function getFairValueBookWeight(float $normalizedEps): float
     {
         return 1.0;
-    }
-
-    protected function getFairValueDividendWeight(): float
-    {
-        return self::NAV_DDM_WEIGHT;
     }
 
     /**

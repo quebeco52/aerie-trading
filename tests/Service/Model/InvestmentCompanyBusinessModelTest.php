@@ -70,17 +70,11 @@ class InvestmentCompanyBusinessModelTest extends TestCase
         );
     }
 
-    /** The distribution is funded by dividends the trust RECEIVES, so it is a separate claim on value. */
-    public function testDividendSupportBlendsIntoNetAssetValue(): void
+    /** A distribution is paid out of net asset value, so a dividend discount value is no claim beside it. */
+    public function testNetAssetValueIsTheWholeValueWhateverTheTrustDistributes(): void
     {
-        $blended = $this->model->calculateFairValue(0.0, 700.0, 40.0, 900.0);
-
-        $this->assertEqualsWithDelta(
-            (700.0 * (1.0 - InvestmentCompanyBusinessModel::NAV_DDM_WEIGHT))
-                + (900.0 * InvestmentCompanyBusinessModel::NAV_DDM_WEIGHT),
-            $blended,
-            1e-9
-        );
+        $this->assertSame(700.0, $this->model->calculateFairValue(0.0, 700.0, 40.0, 900.0));
+        $this->assertSame(700.0, $this->model->calculateFairValue(0.0, 700.0, 40.0));
     }
 
     /**

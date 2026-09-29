@@ -58,7 +58,11 @@ class MarketPricingContext
          */
         public float $orderFlowVariance = 0.0,
         /** Book equity less goodwill, per share; null when the caller has none, and the P/B leg then reads book. */
-        public ?float $tangibleBookValuePerShare = null
+        public ?float $tangibleBookValuePerShare = null,
+        /** The payout ratio the firm's dividend policy steers to; zero for a firm with no dividend policy. */
+        public float $targetPayoutRatio = 0.0,
+        /** Share of the gap to its target dividend the firm closes each quarter (Lintner 1956). */
+        public float $dividendAdjustmentSpeed = 1.0
     ) {}
 
     /**
@@ -122,7 +126,10 @@ class MarketPricingContext
             accrualsRatio: (float) ($stock->getAccrualsRatio() ?? 0.0),
             investedCapitalPerShare: $stock->getInvestedCapital() / $shares,
             orderFlowVariance: (float) ($stock->getImpactVarianceEma() ?? 0.0),
-            tangibleBookValuePerShare: $stock->getTangibleEquity() / $shares
+            tangibleBookValuePerShare: $stock->getTangibleEquity() / $shares,
+            // The target the allocation engine steers the dividend to, the manager's payout fixed effect included.
+            targetPayoutRatio: (float) $stock->getTargetPayoutRatio() * $stock->getManagementProfile()->payoutBias(),
+            dividendAdjustmentSpeed: (float) $stock->getDividendSpeed()
         );
     }
 }

@@ -101,17 +101,13 @@ class InsuranceBusinessModelTest extends TestCase
     {
         $model = new InsuranceBusinessModel();
 
-        // 1. Profitable regime (normalized EPS > 0): 50% Book ($100) / 35% Earnings ($120) / 15% DDM ($80)
-        // Base consensus = (120 * 0.50) + (100 * 0.50) = 60 + 50 = 110
-        // Blended with DDM = (110 * 0.85) + (80 * 0.15) = 93.5 + 12 = 105.5
-        $fairValProfit = $model->calculateFairValue(120.0, 100.0, 5.0, 80.0);
-        $this->assertEquals(105.5, $fairValProfit);
+        // 1. Profitable regime (normalized EPS > 0): half book ($100), half earnings ($120) = 110. The dividend
+        // discount value is no input: an underwriter's payout does not change what it is worth.
+        $this->assertEquals(110.0, $model->calculateFairValue(120.0, 100.0, 5.0, 80.0));
+        $this->assertEquals(110.0, $model->calculateFairValue(120.0, 100.0, 5.0));
 
-        // 2. Catastrophe loss regime (normalized EPS <= 0): 100% Book ($100) blended with DDM ($80)
-        // Base consensus = 100
-        // Blended with DDM = (100 * 0.85) + (80 * 0.15) = 85 + 12 = 97.0
-        $fairValLoss = $model->calculateFairValue(0.0, 100.0, -2.0, 80.0);
-        $this->assertEquals(97.0, $fairValLoss);
+        // 2. Catastrophe loss regime (normalized EPS <= 0): all book.
+        $this->assertEquals(100.0, $model->calculateFairValue(0.0, 100.0, -2.0, 80.0));
     }
 
     public function testUpdateDynamicRoicStandardCalculation(): void

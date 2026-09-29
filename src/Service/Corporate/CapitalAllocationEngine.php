@@ -227,6 +227,28 @@ class CapitalAllocationEngine
 
         $ctx->newDividend = max(0.0, $lastDividend + ($speed * ($targetDividend - $lastDividend)));
 
+        // A pass-through keeps its tax status only by distributing its taxable income, so while the quarter is
+        // profitable no payout preference, smoothing or distress rung above can take the dividend below it.
+        // Taxable income is net income: a REIT's EPS here is FFO, depreciation added back, which the rule
+        // does not reach.
+        $taxableIncomePerShare = max(0.0, $ctx->quarterlyNetIncome) / max(1.0, $ctx->sharesOutstanding);
+        $requiredDividend = $taxableIncomePerShare * $ctx->strategy->getMinimumDistributionRatio();
+        $ctx->newDividend = max($ctx->newDividend, $requiredDividend);
+
+        // Taxable income is struck on historic-cost depreciation, so when replacing the property costs more than
+        // the book charge the trust owes a distribution its cash flow does not cover. It borrows the gap at its
+        // market rate while its lenders will fund it, as REITs draw their lines to pay required distributions.
+        $distributionShortfall = ($requiredDividend * $ctx->sharesOutstanding) - max(0.0, $ctx->newTreasury - $minOperatingCash);
+        if ($requiredDividend > 0.0 && $distributionShortfall > 0.0 && $ctx->health->canIssueDebt && $ctx->health->hasLeverageHeadroom) {
+            $this->debtEngine->issueDebt($stock, $distributionShortfall, $ctx->health->rawMetrics->currentMarketRate ?? ($ctx->macroState->yield5yEma + (float) $stock->getCreditSpread()));
+            $ctx->wholesaleDebt = (float) $stock->getWholesaleDebt();
+            $ctx->newTreasury += $distributionShortfall;
+
+            if ($distributionShortfall > 500_000_000.0) {
+                $ctx->events[] = ['description' => "Borrowed \$" . number_format($distributionShortfall / 1_000_000_000, 2) . "B to fund its required REIT distribution.", 'shock' => 0.0];
+            }
+        }
+
         $usableCash = max(0.0, $ctx->newTreasury - $minOperatingCash);
         $distributableSurplus = max(0.0, (float) $stock->getRetainedEarnings() + ($ctx->quarterlyEps * $ctx->sharesOutstanding));
 

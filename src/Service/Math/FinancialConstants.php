@@ -353,8 +353,6 @@ class FinancialConstants
     // --- Valuation Consensus Weights ---
     /** Consensus weight given to book value/liquidation fair value in valuation blending. */
     public const FAIR_VALUE_BOOK_WEIGHT = 0.10;
-    /** Weight given to Dividend Discount Model fair value when dividend support is active. */
-    public const FAIR_VALUE_DDM_WEIGHT = 0.15;
 
     // --- Corporate Taxation ---
     /** Max % of taxable income that can be shielded by NOLs (e.g. 80% post-TCJA). */

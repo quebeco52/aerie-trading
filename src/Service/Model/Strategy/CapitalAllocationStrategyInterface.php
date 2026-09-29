@@ -39,4 +39,10 @@ interface CapitalAllocationStrategyInterface
      * capital target and distributes on its earnings and cash instead.
      */
     public function getTargetCapitalRatio(Stock $stock): ?float;
+
+    /**
+     * The share of taxable income the firm must distribute each year to keep a pass-through tax status, or
+     * zero for a firm whose payout is its own choice.
+     */
+    public function getMinimumDistributionRatio(): float;
 }

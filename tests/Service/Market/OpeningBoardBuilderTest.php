@@ -75,6 +75,56 @@ class OpeningBoardBuilderTest extends TestCase
         }
     }
 
+    /**
+     * A market that has been trading opens where each board's dividend policy has already brought it (Lintner
+     * 1956): the target payout with the manager's fixed effect, and never under a distribution the law requires.
+     * Opening at half the target left every payer to grow into the rest, a drift nothing in the business caused.
+     */
+    public function testEveryFirmOpensPayingItsTargetPayout(): void
+    {
+        $payers = 0;
+        foreach ($this->openBoard(new MacroStateDTO()) as $ticker => $stock) {
+            $strategy = Sectors::strategyFor((string) $stock->getIndustry());
+            $quarterlyEps = max(0.0, (float) $stock->getTotalNetIncome() / (float) $stock->getSharesOutstanding() / 4.0);
+            $payout = max((float) $stock->getTargetPayoutRatio() * $stock->getManagementProfile()->payoutBias(), $strategy->getMinimumDistributionRatio());
+            $expected = $quarterlyEps * $payout;
+
+            // Within 2%: the opening price loop and the anchor-stake pass re-strike earnings after the dividend is set,
+            // and half the target, the old opening, is 50% away.
+            $this->assertEqualsWithDelta($expected, (float) $stock->getLastDividend(), max(1e-4, 0.02 * $expected), "{$ticker} opens off its target payout.");
+            $payers += $expected > 0.0 ? 1 : 0;
+        }
+
+        $this->assertGreaterThan(60, $payers);
+    }
+
+    /**
+     * Omitting a dividend is bad news in every study of it (Healy & Palepu 1988: about -7%), and it can never be
+     * good news for value. An operating company's fair value does not move at all; a trust or a utility, priced
+     * on the income its policy pays, loses the income missed while the dividend is rebuilt.
+     */
+    public function testCuttingADividendNeverRaisesAFirmsFairValue(): void
+    {
+        $openingMacro = new MacroStateDTO();
+        $incomePriced = 0;
+
+        foreach ($this->openBoard($openingMacro) as $ticker => $stock) {
+            $fairValue = function () use ($stock, $openingMacro): float {
+                $health = $this->debtEngine->analyzeDebtHealth($stock, $openingMacro);
+
+                return $this->marketEngine->calculateNextPrice(MarketPricingContext::forStock($stock, $openingMacro, $health, $this->ledger))['perceived_fair_value'];
+            };
+            $paying = $fairValue();
+            $stock->setLastDividend('0.00');
+            $omitted = $fairValue();
+
+            $this->assertLessThanOrEqual($paying * (1.0 + 1e-9), $omitted, "{$ticker} is worth more for omitting its dividend.");
+            $incomePriced += $omitted < $paying * (1.0 - 1e-6) ? 1 : 0;
+        }
+
+        $this->assertGreaterThanOrEqual(4, $incomePriced, 'The REITs and utilities, priced on income, do lose value.');
+    }
+
     /** Opening earnings are struck after the interest the firm's debt costs, at no less than its credit spread. */
     public function testALeveredFirmOpensOnEarningsAfterItsInterestBill(): void
     {

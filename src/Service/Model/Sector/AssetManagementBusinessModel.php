@@ -180,10 +180,6 @@ class AssetManagementBusinessModel extends BaseFinancialBusinessModel
     /** Minimum fraction of newly issued debt that must be deployed into organic capex or fund seeding. */
     public const DEBT_CAPEX_DEPLOYMENT    = 0.90;
 
-    // --- Valuation ---
-    /** Weight of the dividend discount value in fair value beside fee-related earnings, for a manager that pays. */
-    public const FEE_EARNINGS_DDM_WEIGHT = 0.20;
-
     /**
      * Asset Managers scale EBIT to cover their target ROE and any operational wholesale debt.
      * They do not use fractional customer deposits or float to generate leverage.
@@ -475,10 +471,6 @@ class AssetManagementBusinessModel extends BaseFinancialBusinessModel
         return 0.0;
     }
 
-    protected function getFairValueDividendWeight(): float
-    {
-        return self::FEE_EARNINGS_DDM_WEIGHT;
-    }
 
     /**
      * MacroStateDTO fields (snake_case) this model's operating physics genuinely reads in

@@ -180,8 +180,10 @@ class OpeningBoardBuilder
         $stock->setTotalNetIncome((string) $netIncome);
         $stock->setEarningsPerShare((string) round($annualEps, 2));
 
-        $targetPayout = $stockData['target_payout_ratio'] ?? 0.30;
-        $startingDividend = ($annualEps / 4.0) * ($targetPayout * 0.50);
+        // A board that has been paying opens where its policy has already brought it (Lintner 1956): the target
+        // payout, carrying the manager's payout fixed effect, and never below a distribution the law requires.
+        $targetPayout = (float) ($stockData['target_payout_ratio'] ?? 0.30) * $stock->getManagementProfile()->payoutBias();
+        $startingDividend = max(0.0, $annualEps / 4.0) * max($targetPayout, $strategy->getMinimumDistributionRatio());
         $stock->setLastDividend((string) $startingDividend);
 
         $sphere = null;

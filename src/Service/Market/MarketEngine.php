@@ -60,16 +60,10 @@ class MarketEngine
     private const MAX_IMPLIED_NET_MARGIN = 0.30;
 
     // --- Dividend Discount Support ---
-    /** Payout ratio assumed when a dividend payer has no positive trailing earnings to strike one against. */
-    private const UNEARNED_DIVIDEND_PAYOUT_RATIO = 1.5;
     /** Floor on the required yield used to discount the dividend stream. */
     private const MIN_DIVIDEND_REQUIRED_YIELD = 0.02;
     /** Cap on the fundamental growth a retained-earnings calculation may imply for the dividend stream. */
     private const MAX_DIVIDEND_IMPLIED_GROWTH = 0.04;
-    /** Value retained per unit of payout above one; a dividend funded by debt is discounted toward the floor below. */
-    private const DIVIDEND_SUSTAINABILITY_DECAY = 0.5;
-    /** Floor on the sustainability haircut, so even a wildly overcommitted dividend retains some support value. */
-    private const MIN_DIVIDEND_SUSTAINABILITY_HAIRCUT = 0.20;
 
     public function __construct(
         private MathUtility $mathUtility
@@ -438,7 +432,9 @@ class MarketEngine
             $accrualsRatio,
             $investedCapitalPerShare,
             $macroState,
-            $ctx->tangibleBookValuePerShare
+            $ctx->tangibleBookValuePerShare,
+            $ctx->targetPayoutRatio,
+            $ctx->dividendAdjustmentSpeed
         );
 
         $perceivedFairValue = $fundamentalState['perceived_fair_value'];
@@ -545,6 +541,8 @@ class MarketEngine
      * @param float $baselineMargin      The historical average net margin.
      * @param float $accrualsRatio       The accruals-to-assets ratio.
      * @param float|null $tangibleBookValuePerShare Book equity less goodwill per share; a financial's P/B leg is struck on it.
+     * @param float $targetPayoutRatio   The payout ratio the firm's dividend policy steers to.
+     * @param float $dividendAdjustmentSpeed Share of the gap to its target dividend the firm closes each quarter.
      * @return array{perceived_fair_value: float, dynamic_reversion: float, analyst_targets: array}
      */
     private function evaluateFundamentalState(
@@ -573,7 +571,9 @@ class MarketEngine
         float $accrualsRatio = 0.0,
         float $investedCapitalPerShare = 0.0,
         ?MacroStateDTO $macroState = null,
-        ?float $tangibleBookValuePerShare = null
+        ?float $tangibleBookValuePerShare = null,
+        float $targetPayoutRatio = 0.0,
+        float $dividendAdjustmentSpeed = 1.0
     ): array {
 
         $strategy = \App\Data\Sectors::getBusinessModelStrategy($businessModel);
@@ -655,42 +655,24 @@ class MarketEngine
         // THE BANKING DCF BYPASS
         $earningsValue = $strategy->calculateEarningsValue($revenueFloorEquityValue, $peFairValue, $fcfPerShare, $liveWacc, $this->mathUtility);
 
-        // Dividend Yield Support (The Dividend Discount Model)
+        // Dividend Discount Model (Gordon 1962) on the dividends the firm's own policy will pay: its target payout of
+        // normalized earnings, growing at the rate its retained earnings compound at (Higgins 1977), plus the present
+        // value of today's gap to that target while partial adjustment closes it (Lintner 1956). Struck on the policy
+        // rather than the last cheque, a cut costs what is missed while the dividend recovers, and there is no step at
+        // zero. Only the models that price on income read it; an operating company's value does not turn on its payout.
         $dividendSupportValue = 0.0;
-        if ($dividendPerShare > 0.0) {
-            $sustainableDividend = $dividendPerShare * 4.0;
+        if ($targetPayoutRatio > 0.0 && $normalizedEps > 0.0) {
             $requiredYield = max(self::MIN_DIVIDEND_REQUIRED_YIELD, $liveCostOfEquity);
+            $payoutRatio = min(1.0, $targetPayoutRatio);
+            $returnOnEquity = $bookValuePerShare > 0.0 ? $normalizedEps / $bookValuePerShare : 0.0;
+            $sustainableGrowth = max(0.0, min(self::MAX_DIVIDEND_IMPLIED_GROWTH, $returnOnEquity * (1.0 - $payoutRatio)));
+            $targetDividend = $normalizedEps * $payoutRatio;
 
-            // Calculate Payout Ratio to derive sustainable fundamental growth. The EPS on the context is
-            // already trailing twelve months (net income is the SUM of the last four reported quarters),
-            // so it is not annualized again: doing so read every payout at a quarter of its true size, which
-            // handed mature dividend payers a reinvestment rate they did not have and let a debt-funded
-            // dividend escape the sustainability haircut until it passed four times earnings.
-            $annualizedEps = max(0.0, $earningsPerShare);
-            $payoutRatio = $annualizedEps > 0.0
-                ? ($sustainableDividend / $annualizedEps)
-                : self::UNEARNED_DIVIDEND_PAYOUT_RATIO;
-
-            // Fundamental Growth = ROIC * Reinvestment Rate (1 - Payout Ratio)
-            $reinvestmentRate = max(0.0, 1.0 - $payoutRatio);
-            $assumedGrowth = max(0.0, min(self::MAX_DIVIDEND_IMPLIED_GROWTH, $structuralRoic * $reinvestmentRate));
-
-            $rawDdmValue = $this->mathUtility->calculateDividendDiscountModel(
-                $sustainableDividend,
-                $requiredYield,
-                $assumedGrowth
+            $dividendSupportValue = max(
+                0.0,
+                $this->mathUtility->calculateDividendDiscountModel($targetDividend, $requiredYield, $sustainableGrowth)
+                    + $this->mathUtility->calculateDividendAdjustmentValue(($dividendPerShare * 4.0) - $targetDividend, $requiredYield, $dividendAdjustmentSpeed)
             );
-
-            // Dividend Sustainability Haircut: Heavily discount debt-funded dividends (payout > 100%)
-            $sustainabilityHaircut = 1.0;
-            if ($payoutRatio > 1.0) {
-                $sustainabilityHaircut = max(
-                    self::MIN_DIVIDEND_SUSTAINABILITY_HAIRCUT,
-                    1.0 - (($payoutRatio - 1.0) * self::DIVIDEND_SUSTAINABILITY_DECAY)
-                );
-            }
-
-            $dividendSupportValue = $rawDdmValue * $sustainabilityHaircut;
         }
 
         // Intrinsic Price-to-Book (P/B) Valuation

@@ -1882,8 +1882,13 @@ class EarningsEngine
         }
         $operatingBase = $this->corporateMetrics->calculateOperatingBase((float) $stock->getTotalRevenue(), (float) $stock->getTotalEquity());
         $minOperatingCash = $ctx->strategy->calculateMinOperatingCash($operatingBase, (float) $stock->getCustomerDeposits(), (float) $stock->getWholesaleDebt());
-        $deployableCash = max(0.0, (float) $stock->getCorporateTreasury() - $minOperatingCash);
-        $internalCashFlow = $ctx->actualQuarterlyNetIncome + $ctx->quarterlyDepreciation - $deltaNwc - $maintenanceCapEx;
+        // Cash above the operating floor, negative below it: a treasury short of its floor is refilled from the
+        // quarter's cash flow before any of it goes into growth (Fazzari, Hubbard & Petersen 1988).
+        $deployableCash = (float) $stock->getCorporateTreasury() - $minOperatingCash;
+        // What a pass-through must distribute is not the firm's to reinvest: a REIT's acquisitions are funded
+        // from what the distribution rule leaves it, its spare cash and its borrowing, never from the dividend.
+        $requiredDistribution = max(0.0, $ctx->actualQuarterlyNetIncome) * $ctx->strategy->getMinimumDistributionRatio();
+        $internalCashFlow = $ctx->actualQuarterlyNetIncome + $ctx->quarterlyDepreciation - $deltaNwc - $maintenanceCapEx - $requiredDistribution;
         $fundingCapacity = max(0.0, $internalCashFlow + $deployableCash);
 
         return min($plannedGrowthCapEx, $fundingCapacity);

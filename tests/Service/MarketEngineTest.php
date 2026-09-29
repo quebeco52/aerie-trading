@@ -171,77 +171,62 @@ class MarketEngineTest extends TestCase
         );
     }
 
-    public function testDynamicDdmHaircutOnUnsustainableDividend(): void
+    /** A firm with a dividend policy, priced with no drift or shocks so only the dividend inputs vary. */
+    private function incomeContext(float $quarterlyDividend, float $targetPayout, float $speed, string $businessModel = 'none'): MarketPricingContext
     {
-        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
-        $this->mathUtilityMock->method('checkProbability')->willReturn(false);
-
-        // Sustainable dividend ($1.00 quarterly = $4.00 annual on $8.00 EPS => 50% payout)
-        $sustainableCtx = new MarketPricingContext(
+        return new MarketPricingContext(
             currentPrice: 100.0,
             currentVolatility: 0.2,
             longTermVolatility: 0.2,
             earningsPerShare: 8.0,
             dt: 1.0,
             lambda: 0.0,
-            dividendPerShare: 1.0,
-            currentRoic: 0.12,
-            roicTtm: 0.12,
-            liveCostOfEquity: 0.08
-        );
-        $sustainableResult = $this->engine->calculateNextPrice($sustainableCtx);
-
-        // Unsustainable debt-funded dividend ($3.00 quarterly = $12.00 annual on $4.00 EPS => 300% payout)
-        $unsustainableCtx = new MarketPricingContext(
-            currentPrice: 100.0,
-            currentVolatility: 0.2,
-            longTermVolatility: 0.2,
-            earningsPerShare: 4.0,
-            dt: 1.0,
-            lambda: 0.0,
-            dividendPerShare: 3.0,
-            currentRoic: 0.12,
-            roicTtm: 0.12,
-            liveCostOfEquity: 0.08
-        );
-        $unsustainableResult = $this->engine->calculateNextPrice($unsustainableCtx);
-
-        $this->assertArrayHasKey('income_analyst', $unsustainableResult['analyst_targets']);
-        // Income analyst target should be heavily discounted due to unsustainable payout
-        $this->assertGreaterThan(0.0, $unsustainableResult['analyst_targets']['income_analyst']);
-    }
-
-    /**
-     * The EPS on the pricing context is trailing twelve months, so the payout ratio is dividend over that
-     * figure with no further annualization. A dividend at three times earnings is a 300% payout and takes the
-     * floor haircut (20%); read as 75% it would have grown instead, and the income target would have risen
-     * with the size of the unfunded dividend.
-     */
-    public function testPayoutRatioReadsTrailingEpsWithoutAnnualizingItAgain(): void
-    {
-        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
-        $this->mathUtilityMock->method('checkProbability')->willReturn(false);
-
-        $context = static fn (float $quarterlyDividend): MarketPricingContext => new MarketPricingContext(
-            currentPrice: 100.0,
-            currentVolatility: 0.2,
-            longTermVolatility: 0.2,
-            earningsPerShare: 4.0, // trailing twelve months
-            dt: 1.0,
-            lambda: 0.0,
+            bookValuePerShare: 60.0,
             dividendPerShare: $quarterlyDividend,
             currentRoic: 0.12,
             roicTtm: 0.12,
-            liveCostOfEquity: 0.08
+            businessModel: $businessModel,
+            liveCostOfEquity: 0.08,
+            targetPayoutRatio: $targetPayout,
+            dividendAdjustmentSpeed: $speed
         );
+    }
 
-        // $1.00 a quarter is $4.00 a year on $4.00 of trailing EPS: a 100% payout, no growth and no haircut.
-        $fullPayout = $this->engine->calculateNextPrice($context(1.0))['analyst_targets']['income_analyst'];
-        // $3.00 a quarter is a 300% payout: same zero growth, haircut floored at 20%, so 3 x 0.2 = 0.6 of the above.
-        $triplePayout = $this->engine->calculateNextPrice($context(3.0))['analyst_targets']['income_analyst'];
+    /**
+     * The income value is the dividend the firm's policy will pay, not the last cheque. A gap to target that
+     * closes at once is worth nothing either way; one that closes slowly costs the income missed meanwhile, so a
+     * lagging dividend is worth less, but a dividend cut to nothing still leaves the policy's value, not a zero.
+     */
+    public function testIncomeValuePricesTheDividendPolicyNotTheLastCheque(): void
+    {
+        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
+        $this->mathUtilityMock->method('checkProbability')->willReturn(false);
+        $income = fn (float $dividend, float $payout, float $speed): float => $this->engine->calculateNextPrice($this->incomeContext($dividend, $payout, $speed))['analyst_targets']['income_analyst'];
 
-        $this->assertGreaterThan(0.0, $fullPayout);
-        $this->assertEqualsWithDelta(0.6, $triplePayout / $fullPayout, 1e-9);
+        $atOnce = $income(1.0, 0.5, 1.0);
+        $this->assertGreaterThan(1.0, $atOnce);
+        $this->assertEqualsWithDelta($atOnce, $income(0.0, 0.5, 1.0), 1e-9);
+        $this->assertEqualsWithDelta($atOnce, $income(3.0, 0.5, 1.0), 1e-9);
+
+        $cut = $income(0.0, 0.5, 0.10);
+        $this->assertGreaterThan(0.01, $cut, 'A cut dividend still has a policy to return to.');
+        $this->assertLessThan($income(1.0, 0.5, 0.10), $cut);
+        $this->assertLessThan($atOnce, $cut, 'The income missed while it recovers is a real loss.');
+
+        $this->assertSame(0.01, $income(1.0, 0.0, 0.10), 'No dividend policy, no income value.');
+    }
+
+    /** An operating company is worth what it earns and owns; how much of it is paid out is no input (Miller & Modigliani 1961). */
+    public function testAnOperatingCompanysFairValueDoesNotTurnOnItsDividend(): void
+    {
+        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
+        $this->mathUtilityMock->method('checkProbability')->willReturn(false);
+        $fairValue = fn (float $dividend, float $payout): float => $this->engine->calculateNextPrice($this->incomeContext($dividend, $payout, 0.05, 'tech'))['perceived_fair_value'];
+
+        $paying = $fairValue(1.0, 0.5);
+        $this->assertEqualsWithDelta($paying, $fairValue(0.0, 0.5), 1e-9);
+        $this->assertEqualsWithDelta($paying, $fairValue(0.0, 0.0), 1e-9);
+        $this->assertEqualsWithDelta($paying, $fairValue(3.0, 0.9), 1e-9);
     }
 
     public function testTechSectorIgnoresBookValueInValuation(): void

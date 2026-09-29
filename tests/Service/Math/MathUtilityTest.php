@@ -480,10 +480,29 @@ class MathUtilityTest extends TestCase
 
     public function testCalculateDividendDiscountModel(): void
     {
-        // Dividend = 2.0, COE = 10%, Growth = 5% -> Denominator = 0.05 -> Fair Value = 2.0 / 0.05 = 40.0
+        // Gordon: next year's dividend 2.0 x 1.05 = 2.10 over 10% - 5% = 42.0.
         $fairValue = $this->mathUtility->calculateDividendDiscountModel(2.0, 0.10, 0.05);
 
-        $this->assertEqualsWithDelta(40.0, $fairValue, 0.001, 'DDM fair value calculation failed.');
+        $this->assertEqualsWithDelta(42.0, $fairValue, 0.001, 'DDM fair value calculation failed.');
+    }
+
+    /**
+     * Lintner partial adjustment: a gap that closes at once is worth nothing, one that never closes is a
+     * perpetuity of the quarterly gap, and in between the value is the geometric sum of the shrinking gap.
+     */
+    public function testDividendAdjustmentValueDiscountsTheClosingGap(): void
+    {
+        $quarterlyRate = (1.10 ** 0.25) - 1.0;
+
+        $this->assertEqualsWithDelta(0.0, $this->mathUtility->calculateDividendAdjustmentValue(-4.0, 0.10, 1.0), 1e-12);
+        $this->assertEqualsWithDelta(-1.0 / $quarterlyRate, $this->mathUtility->calculateDividendAdjustmentValue(-4.0, 0.10, 0.0), 1e-9);
+
+        $persistence = 0.9 / (1.0 + $quarterlyRate);
+        $expected = 0.0;
+        for ($quarter = 1; $quarter <= 2000; $quarter++) {
+            $expected += -1.0 * $persistence ** $quarter;
+        }
+        $this->assertEqualsWithDelta($expected, $this->mathUtility->calculateDividendAdjustmentValue(-4.0, 0.10, 0.10), 1e-9);
     }
 
     public function testCalculateIntrinsicFairValuePEWithExtremeDistressAndNegativeGrowth(): void

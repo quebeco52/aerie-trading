@@ -488,16 +488,12 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
         return $this->resolveMarginCeiling($stock);
     }
 
-    /** Clinical-stage biotechs trade entirely on pipeline rNPV and cash runway: no book, and no dividend to discount. */
+    /** Clinical-stage biotechs trade entirely on pipeline rNPV and cash runway, not on book. */
     protected function getFairValueBookWeight(float $normalizedEps): float
     {
         return 0.0;
     }
 
-    protected function getFairValueDividendWeight(): float
-    {
-        return 0.0;
-    }
 
     /**
      * Structural operating margin ceiling, blended between a patent monopoly and commodity generic

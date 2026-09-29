@@ -109,25 +109,20 @@ final class StandardValuationTraitTest extends TestCase
     }
 
     /**
-     * Fair value is a fixed earnings/book blend, with the dividend model displacing part of it when present.
+     * Fair value is a fixed earnings/book blend, and what the firm pays out is not a further input (Miller &
+     * Modigliani 1961): a dividend discount value above or below the consensus leaves it where it is, so paying,
+     * raising or omitting a dividend cannot move an operating company's value by itself.
      */
-    public function testFairValueBlendsEarningsAndBookAndYieldsToDividendSupport(): void
+    public function testFairValueBlendsEarningsAndBookWhateverTheFirmPaysOut(): void
     {
         $earnings = 100.0;
         $book = 50.0;
         $base = ($earnings * (1.0 - FinancialConstants::FAIR_VALUE_BOOK_WEIGHT)) + ($book * FinancialConstants::FAIR_VALUE_BOOK_WEIGHT);
 
-        $this->assertEqualsWithDelta($base, $this->model->calculateFairValue($earnings, $book, 5.0), 0.0000001, 'Without a dividend the blend is earnings and book only.');
-
-        $withDividend = $this->model->calculateFairValue($earnings, $book, 5.0, 120.0);
-        $this->assertEqualsWithDelta(
-            ($base * (1.0 - FinancialConstants::FAIR_VALUE_DDM_WEIGHT)) + (120.0 * FinancialConstants::FAIR_VALUE_DDM_WEIGHT),
-            $withDividend,
-            0.0000001,
-            'Dividend support displaces its weight from the base consensus.'
-        );
-        $this->assertGreaterThan($base, $withDividend, 'Dividend support above the consensus must lift fair value.');
-        $this->assertSame($base, $this->model->calculateFairValue($earnings, $book, 5.0, 0.0), 'A zero dividend support is absent, not a zero valuation input.');
+        $this->assertEqualsWithDelta($base, $this->model->calculateFairValue($earnings, $book, 5.0), 0.0000001);
+        foreach ([0.0, 20.0, 120.0] as $dividendSupport) {
+            $this->assertEqualsWithDelta($base, $this->model->calculateFairValue($earnings, $book, 5.0, $dividendSupport), 0.0000001);
+        }
     }
 
     /**

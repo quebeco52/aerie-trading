@@ -47,19 +47,16 @@ trait StandardValuationTrait
     }
 
     /**
-     * The consensus fair value: earnings value and book value blended at the model's book weight, then, for a firm
-     * that pays, blended with the dividend discount value at the model's dividend weight. Models differ only in the
-     * two weights, which they declare through getFairValueBookWeight() and getFairValueDividendWeight().
+     * The consensus fair value: earnings value and book value blended at the model's book weight, declared through
+     * getFairValueBookWeight(). The dividend is not a further input: what a firm pays out leaves the firm, and for a
+     * given investment policy the split between paying and retaining does not change what it is worth (Miller &
+     * Modigliani 1961). Only a model whose payout is set for it, by statute or by its regulator, prices on income.
      */
     public function calculateFairValue(float $earningsValue, float $pbFairValue, float $normalizedEps, float $dividendSupportValue = 0.0): float
     {
         $bookWeight = $this->getFairValueBookWeight($normalizedEps);
-        $baseConsensus = ($earningsValue * (1.0 - $bookWeight)) + ($pbFairValue * $bookWeight);
-        $dividendWeight = $this->getFairValueDividendWeight();
 
-        return $dividendSupportValue > 0.0
-            ? ($baseConsensus * (1.0 - $dividendWeight)) + ($dividendSupportValue * $dividendWeight)
-            : $baseConsensus;
+        return ($earningsValue * (1.0 - $bookWeight)) + ($pbFairValue * $bookWeight);
     }
 
     /** Weight of book value against earnings value in the consensus, given the firm's normalised earnings. */
@@ -68,11 +65,6 @@ trait StandardValuationTrait
         return FinancialConstants::FAIR_VALUE_BOOK_WEIGHT;
     }
 
-    /** Weight of the dividend discount value in fair value, for a firm that pays one. */
-    protected function getFairValueDividendWeight(): float
-    {
-        return FinancialConstants::FAIR_VALUE_DDM_WEIGHT;
-    }
 
     public function calculateStructuralEps(float $bookValuePerShare, float $structuralRoic, float $revenuePerShare, float $riskFreeRate, ?float $investedCapitalPerShare = null): float
     {
