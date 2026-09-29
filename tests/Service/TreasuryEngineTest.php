@@ -891,6 +891,71 @@ class TreasuryEngineTest extends TestCase
     }
 
     /**
+     * A breached maintenance covenant is an Event of Default under the credit agreement, so it bars new draws
+     * exactly as a missed payment does. The maturity the bond market refused is then a payment default, and
+     * the commitment is neither terminated (the breach can cure) nor upsized (no bank enlarges a line to a
+     * borrower in breach).
+     */
+    public function testACovenantBreachBarsNewRevolverDrawsSoARefusedMaturityDefaults(): void
+    {
+        $stock = $this->createSolventCorporate();
+        $stock->setWholesaleDebt('20000000000.00');
+        $stock->setRevolverCommitment('1000000000.00');
+
+        $ctx = $this->createAllocationContext($stock, stockCompensation: 0.0, currentPrice: 0.0);
+        $ctx->wholesaleDebt = 20_000_000_000.0;
+        $ctx->newTreasury = 10_000_000.0;
+        $ctx->operatingBase = 100_000_000_000.0; // would size a far larger line, were the ratchet free
+        $ctx->health = $this->healthInCovenantBreach($ctx->health);
+
+        $this->debtEngine = $this->createMock(DebtEngine::class);
+        $this->debtEngine->method('rollMaturities')->willReturn(
+            new MaturityRollDTO(maturingPrincipal: 3_000_000_000.0, refinanced: false, principalRepaid: 10_000_000.0, unfundedShortfall: 2_990_000_000.0)
+        );
+        $engine = new TreasuryEngine($this->corporateMetrics, $this->debtEngine, $this->capExEngine, $this->mathUtility);
+
+        $engine->finalizeLiquidity($ctx);
+
+        $this->assertEqualsWithDelta(0.0, (float) $stock->getRevolverDrawn(), 1e-6, 'no new draw while the covenant is breached');
+        $this->assertTrue($stock->isPaymentDefault(), 'the refused maturity nobody funded is an event of default');
+        $this->assertEqualsWithDelta(2_990_000_000.0, $ctx->unfundedMaturity, 1.0);
+        $this->assertEqualsWithDelta(1_000_000_000.0, (float) $stock->getRevolverCommitment(), 1.0, 'the commitment survives the breach and is not upsized');
+        $this->assertContains(
+            'Lenders refused a $1.00B draw on its revolving credit facility while it is in breach of its leverage covenant.',
+            array_column($ctx->events, 'description')
+        );
+    }
+
+    /** The commitment survived the breach, so the quarter leverage is back inside the covenant the line funds again. */
+    public function testTheRevolverReopensOnceLeverageIsBackInsideTheCovenant(): void
+    {
+        $stock = $this->createSolventCorporate();
+        $stock->setWholesaleDebt('2000000000.00');
+        $stock->setRevolverCommitment('150000000.00');
+        $roll = new MaturityRollDTO(maturingPrincipal: 100_000_000.0, refinanced: false, principalRepaid: 5_000_000.0, unfundedShortfall: 95_000_000.0);
+
+        $this->debtEngine = $this->createMock(DebtEngine::class);
+        $this->debtEngine->method('rollMaturities')->willReturn($roll);
+        $engine = new TreasuryEngine($this->corporateMetrics, $this->debtEngine, $this->capExEngine, $this->mathUtility);
+
+        $breached = $this->createAllocationContext($stock, stockCompensation: 0.0, currentPrice: 0.0);
+        $breached->wholesaleDebt = 2_000_000_000.0;
+        $breached->newTreasury = 35_000_000.0;
+        $breached->health = $this->healthInCovenantBreach($breached->health);
+        $engine->finalizeLiquidity($breached);
+
+        $this->assertTrue($stock->isPaymentDefault());
+
+        $cured = $this->createAllocationContext($stock, stockCompensation: 0.0, currentPrice: 0.0);
+        $cured->wholesaleDebt = (float) $stock->getWholesaleDebt();
+        $cured->newTreasury = 35_000_000.0;
+        $engine->finalizeLiquidity($cured);
+
+        $this->assertEqualsWithDelta(95_000_000.0, (float) $stock->getRevolverDrawn(), 1.0, 'the line funds the maturity again');
+        $this->assertFalse($stock->isPaymentDefault(), 'and the funded quarter cures the default');
+    }
+
+    /**
      * A firm the primary market just refused cannot turn around and issue emergency paper into the same
      * closed market. Without this the maturity wall would be toothless: every refusal would be papered over
      * by penalty-rate borrowing from lenders who had just said no. The committed revolver is the one line
@@ -944,6 +1009,34 @@ class TreasuryEngineTest extends TestCase
             isLiquidityCrisis: $health->isLiquidityCrisis,
             isLiquidityWarning: $health->isLiquidityWarning,
             isUnderLeveraged: $health->isUnderLeveraged
+        );
+    }
+
+    /** No market will lend, and net debt / EBITDA stands past the 3.0x covenant. */
+    private function healthInCovenantBreach(\App\DTO\DebtHealthDTO $health): \App\DTO\DebtHealthDTO
+    {
+        $shut = $this->healthThatCannotIssue($health);
+
+        return new \App\DTO\DebtHealthDTO(
+            grossCost: $shut->grossCost,
+            effectiveCost: $shut->effectiveCost,
+            cashYield: $shut->cashYield,
+            isNegativeCarry: $shut->isNegativeCarry,
+            isSevereNegativeCarry: $shut->isSevereNegativeCarry,
+            interestCoverage: $shut->interestCoverage,
+            wantsToPaydownDebt: $shut->wantsToPaydownDebt,
+            canIssueDebt: false,
+            debtTolerance: $shut->debtTolerance,
+            wacc: $shut->wacc,
+            costOfEquity: $shut->costOfEquity,
+            leveredBeta: $shut->leveredBeta,
+            rawMetrics: $shut->rawMetrics,
+            isLiquidityCrisis: $shut->isLiquidityCrisis,
+            isLiquidityWarning: $shut->isLiquidityWarning,
+            isUnderLeveraged: $shut->isUnderLeveraged,
+            hasLeverageHeadroom: false,
+            netDebtToEbitda: 5.0,
+            ebitdaCovenantLimit: 3.0
         );
     }
 

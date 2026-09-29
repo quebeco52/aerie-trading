@@ -664,6 +664,12 @@ class TreasuryEngine
      * out of at a penalty; a maturity it cannot fund is an event of default. Funding the overdraft ahead of
      * the notes let one bad operating quarter consume the whole facility and then default the BOND, which is
      * the wrong claim to leave short.
+     *
+     * Committed is not unconditional. A breached maintenance covenant is an Event of Default under the credit
+     * agreement just as a missed payment is, and the same condition precedent bars new draws while it stands:
+     * lines are contingent on the borrower's cash flow (Sufi 2009), and lenders cut them to violators
+     * (Chodorow-Reich & Falato 2022). The commitment survives the breach, so the line reopens once leverage is
+     * back inside the covenant.
      */
     private function processRevolverDraw(CapitalAllocationContext $ctx): void
     {
@@ -688,7 +694,8 @@ class TreasuryEngine
             return;
         }
 
-        $drawn = min($overdraft + $maturity, $stock->getRevolverUndrawn());
+        $covenantBreached = $this->isInCovenantBreach($ctx);
+        $drawn = $covenantBreached ? 0.0 : min($overdraft + $maturity, $stock->getRevolverUndrawn());
         if ($drawn > 0.0) {
             $stock->setRevolverDrawn((string) ((float) $stock->getRevolverDrawn() + $drawn));
             $ctx->newTreasury += $drawn;
@@ -731,6 +738,23 @@ class TreasuryEngine
                 'shock' => -3.0
             ];
         }
+
+        // News, not a price move of its own: the market prices what the refusal leads to (the emergency
+        // paper, the rescue raise or the default), each of which carries its own reaction.
+        $refused = min($overdraft + $maturity, $stock->getRevolverUndrawn());
+        if ($covenantBreached && $refused > 500_000_000.0) {
+            $amtB = number_format($refused / 1_000_000_000, 2);
+            $ctx->events[] = [
+                'description' => "Lenders refused a \${$amtB}B draw on its revolving credit facility while it is in breach of its leverage covenant.",
+                'shock' => 0.0
+            ];
+        }
+    }
+
+    /** Net debt over EBITDA is past the sector's maintenance covenant; exempt sectors never breach. */
+    private function isInCovenantBreach(CapitalAllocationContext $ctx): bool
+    {
+        return $ctx->health !== null && !$ctx->health->hasLeverageHeadroom;
     }
 
     /**
@@ -740,12 +764,13 @@ class TreasuryEngine
      * grows, and it does NOT shrink because one bad quarter shrank revenue — which is what a commitment
      * recomputed every call from current revenue did, halving the backstop at the exact moment it was the
      * only thing standing between a solvent firm and an event of default. The ratchet is frozen while the
-     * firm is missing payments: a bank will not upsize a facility for a borrower already in default, though
-     * it stays bound to what it has already committed, which is what lets that firm cure.
+     * firm is missing payments or breaching its leverage covenant: a bank will not upsize a facility for a
+     * borrower already in default, though it stays bound to what it has already committed, which is what
+     * lets that firm cure.
      */
     private function sizeRevolverCommitment(CapitalAllocationContext $ctx): void
     {
-        if ($ctx->stock->isPaymentDefault()) {
+        if ($ctx->stock->isPaymentDefault() || $this->isInCovenantBreach($ctx)) {
             return;
         }
 

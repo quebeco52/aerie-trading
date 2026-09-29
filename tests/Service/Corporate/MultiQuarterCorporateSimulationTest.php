@@ -378,12 +378,18 @@ class MultiQuarterCorporateSimulationTest extends TestCase
      * is the distinction the engine could not previously express: the facility was recomputed from scratch
      * on every call and a draw was recycled straight back into wholesale debt, so it was in effect an
      * unlimited, self-renewing line, and nothing anywhere ever cleared the default flag once set.
+     *
+     * The committed line is not unconditional either: a borrower past its maintenance covenant cannot draw.
+     * So the property holds for every firm except one its lenders may lawfully refuse (covenant breached)
+     * whose business no longer covers its cash costs (trailing EBITDA at or below zero, the engine's own
+     * non-viability test). Such a firm is not a solvent issuer that the recession failed, and it may miss.
      */
     #[DataProvider('allIndustriesProvider')]
     public function testOrdinaryRecessionDoesNotDefaultSolventIssuers(string $industry, array $metrics): void
     {
         $stock = $this->createInitializedStock($industry, $metrics);
         $stock->setCreditRating('BBB');
+        $debtEngine = new DebtEngine($this->mathUtility, new CorporateMetrics());
 
         $recessionMacro = new MacroStateDTO(
             outputGapEma: -0.06,
@@ -405,11 +411,15 @@ class MultiQuarterCorporateSimulationTest extends TestCase
         for ($quarter = 1; $quarter <= 12; $quarter++) {
             $this->earningsEngine->calculate($stock, $recessionMacro, (($quarter - 1) * $ticksPerQuarter) + $reportingTick, 252);
 
-            $this->assertLessThanOrEqual(
-                FinancialConstants::PAYMENT_DEFAULT_GRACE_QUARTERS,
-                $stock->getQuartersInDefault(),
-                "{$industry} failed to cure a missed maturity within its grace period by Q{$quarter} of an ordinary recession"
-            );
+            $health = $debtEngine->analyzeTrailingDebtHealth($stock, $recessionMacro);
+            $lendersMayRefuse = !$health->hasLeverageHeadroom && $health->rawMetrics->ebitda <= 0.0;
+            if (!$lendersMayRefuse) {
+                $this->assertLessThanOrEqual(
+                    FinancialConstants::PAYMENT_DEFAULT_GRACE_QUARTERS,
+                    $stock->getQuartersInDefault(),
+                    "{$industry} failed to cure a missed maturity within its grace period by Q{$quarter} of an ordinary recession"
+                );
+            }
             $this->assertGreaterThan(
                 0.0,
                 (float) $stock->getTotalEquity(),
