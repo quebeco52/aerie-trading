@@ -113,7 +113,7 @@ class DebtEngine
 
         $floatingRatio = (float) $stock->getFloatingDebtRatio();
         $industry = $stock->getIndustry() ?: 'General';
-        $businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['business_model'] ?? 'none';
+        $businessModel = \App\Data\Sectors::businessModelFor($industry);
         $strategy = \App\Data\Sectors::getBusinessModelStrategy($businessModel);
 
         $revenue = $overrideRevenue ?? (float) $stock->getTotalRevenue();
@@ -178,7 +178,7 @@ class DebtEngine
         $totalEquity = (float) $stock->getTotalEquity();
 
         // Fetch our Dual Constraints
-        $metrics = \App\Data\Sectors::INDUSTRY_METRICS[$industry] ?? \App\Data\Sectors::INDUSTRY_METRICS['General'];
+        $metrics = \App\Data\Sectors::metricsFor($industry);
         $ebitdaLimit = $metrics['ebitda_limit'];
         $equityLimit = $metrics['equity_limit'];
 
@@ -283,8 +283,7 @@ class DebtEngine
      */
     public function resolveDistanceToDefault(Stock $stock, \App\DTO\MacroStateDTO $macroState): float
     {
-        $industry = $stock->getIndustry() ?: 'General';
-        $strategy = \App\Data\Sectors::getBusinessModelStrategy(\App\Data\Sectors::INDUSTRY_METRICS[$industry]['business_model'] ?? 'none');
+        $strategy = \App\Data\Sectors::strategyFor($stock->getIndustry());
         $totalDebtObligations = max(0.01, $strategy->getDeleveragingEvaluationDebt((float) $stock->getTotalDebt(), (float) $stock->getWholesaleDebt()));
         $marketCap = max(1.0, (float) $stock->getPrice() * max(1.0, (float) $stock->getSharesOutstanding()));
         $policyRate = $macroState->policyRateEma;
@@ -319,8 +318,8 @@ class DebtEngine
     public function resolveAssetVolatility(Stock $stock, float $equityValue, float $debtValue, float $riskFreeRate): float
     {
         $industry = $stock->getIndustry() ?: 'General';
-        $metrics = \App\Data\Sectors::INDUSTRY_METRICS[$industry] ?? \App\Data\Sectors::INDUSTRY_METRICS['General'];
-        $strategy = \App\Data\Sectors::getBusinessModelStrategy($metrics['business_model'] ?? 'none');
+        $metrics = \App\Data\Sectors::metricsFor($industry);
+        $strategy = \App\Data\Sectors::strategyFor($industry);
 
         // Average mean-reverting equity volatility over the Merton horizon.
         $spotVolatility = max(0.05, (float) ($stock->getCurrentVolatility() ?? $stock->getVolatility()));
@@ -361,9 +360,7 @@ class DebtEngine
      */
     public function calibrateAssetVolatility(Stock $stock, float $riskFreeRate): ?float
     {
-        $industry = $stock->getIndustry() ?: 'General';
-        $businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['business_model'] ?? 'none';
-        $strategy = \App\Data\Sectors::getBusinessModelStrategy($businessModel);
+        $strategy = \App\Data\Sectors::strategyFor($stock->getIndustry());
         if ($strategy->isFinancial()) {
             return null;
         }
@@ -435,8 +432,7 @@ class DebtEngine
     public function assessGoingConcern(Stock $stock, MacroStateDTO $macroState, ?\App\DTO\DebtHealthDTO $health = null): \App\DTO\GoingConcernDTO
     {
         $health ??= $this->analyzeTrailingDebtHealth($stock, $macroState);
-        $industry = $stock->getIndustry() ?: 'General';
-        $strategy = \App\Data\Sectors::getBusinessModelStrategy(\App\Data\Sectors::INDUSTRY_METRICS[$industry]['business_model'] ?? 'none');
+        $strategy = \App\Data\Sectors::strategyFor($stock->getIndustry());
 
         $equityValue = max(0.0, (float) $stock->getPrice() * (float) $stock->getSharesOutstanding());
         $debtValue = max(0.0, $strategy->getDeleveragingEvaluationDebt((float) $stock->getTotalDebt(), (float) $stock->getWholesaleDebt()));
@@ -480,9 +476,8 @@ class DebtEngine
         $corporateTaxRate = $macroState->corporateTaxRate;
 
         $industry = $stock->getIndustry() ?: 'General';
-        $metrics = \App\Data\Sectors::INDUSTRY_METRICS[$industry] ?? \App\Data\Sectors::INDUSTRY_METRICS['General'];
-        $businessModel = $metrics['business_model'] ?? 'none';
-        $strategy = \App\Data\Sectors::getBusinessModelStrategy($businessModel);
+        $metrics = \App\Data\Sectors::metricsFor($industry);
+        $strategy = \App\Data\Sectors::strategyFor($industry);
 
         $debtMetrics = $this->calculateInterestExpense($stock, $macroState, false, $overrideRevenue, $overrideMargin);
 
@@ -651,8 +646,7 @@ class DebtEngine
      */
     public function resolveTangibleCapitalBase(Stock $stock, float $revenue): array
     {
-        $industry = $stock->getIndustry() ?: 'General';
-        $strategy = \App\Data\Sectors::getBusinessModelStrategy(\App\Data\Sectors::INDUSTRY_METRICS[$industry]['business_model'] ?? 'none');
+        $strategy = \App\Data\Sectors::strategyFor($stock->getIndustry());
         $leaseLiability = $this->corporateMetrics->calculateLeaseLiability($revenue, $strategy->getLeaseIntensity());
 
         $totalAssets = $stock->hasBalanceSheetLedger()
@@ -684,9 +678,7 @@ class DebtEngine
         $retainedEarnings = (float) $stock->getRetainedEarnings();
         $shares = max(1.0, (float) $stock->getSharesOutstanding());
 
-        $industry = $stock->getIndustry() ?: 'General';
-        $businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['business_model'] ?? 'none';
-        $strategy = \App\Data\Sectors::getBusinessModelStrategy($businessModel);
+        $strategy = \App\Data\Sectors::strategyFor($stock->getIndustry());
 
         // IFRS 16 / ASC 842: the capitalized lease liability sits with debt and the right-of-use asset with assets.
         $leaseLiability = $this->corporateMetrics->calculateLeaseLiability($revenue, $strategy->getLeaseIntensity());
@@ -797,9 +789,7 @@ class DebtEngine
             return new \App\DTO\MaturityRollDTO(0.0, true, 0.0, 0.0);
         }
 
-        $industry = $stock->getIndustry() ?: 'General';
-        $businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['business_model'] ?? 'none';
-        $strategy = \App\Data\Sectors::getBusinessModelStrategy($businessModel);
+        $strategy = \App\Data\Sectors::strategyFor($stock->getIndustry());
 
         $maturing = $wholesaleDebt * max(0.0, $strategy->getDebtMaturityRolloverRate());
         if ($maturing <= 0.0) {

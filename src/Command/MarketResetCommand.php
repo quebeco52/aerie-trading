@@ -119,7 +119,7 @@ class MarketResetCommand extends Command
             $customerDeposits = $stockData['customer_deposits'] ?? 0.0;
             $treasury = $stockData['corporate_treasury'] ?? 0.0;
 
-            $businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$stockData['industry'] ?? 'General']['business_model'] ?? 'none';
+            $businessModel = \App\Data\Sectors::businessModelFor($stockData['industry'] ?? null);
             $strategy = \App\Data\Sectors::getBusinessModelStrategy($businessModel);
             $isFinancial = \App\Data\Sectors::isFinancial($businessModel);
 
@@ -207,7 +207,7 @@ class MarketResetCommand extends Command
                 roicTtm: $impliedPricingRoic,
                 dividendPerShare: $startingDividend,
                 liveWacc: $debtHealth->wacc ?? 0.08,
-                baselineIndustryPE: \App\Data\Sectors::INDUSTRY_METRICS[$stockData['industry'] ?? 'General']['pe'] ?? 20.0,
+                baselineIndustryPE: \App\Data\Sectors::baselineIndustryPe($stockData['industry'] ?? null),
                 revenuePerShare: $shares > 0 ? $revenue / $shares : 0.0,
                 businessModel: $businessModel,
                 liveCostOfEquity: $debtHealth->costOfEquity ?? 0.10,
@@ -375,7 +375,7 @@ class MarketResetCommand extends Command
                     'payout' => $stockData['target_payout_ratio'] ?? 0.30,
                     'div_speed' => $stockData['dividendSpeed'] ?? 0.20,
                     'fixed_cost' => $stockData['fixed_cost_ratio'] ?? 0.50,
-                    'depreciation_rate' => $stockData['depreciation_rate'] ?? \App\Data\Sectors::INDUSTRY_METRICS[$stockData['industry'] ?? 'General']['depreciation'] ?? 0.05,
+                    'depreciation_rate' => $stockData['depreciation_rate'] ?? \App\Data\Sectors::metricsFor($stockData['industry'] ?? null)['depreciation'],
                     'treasury' => $stockData['corporate_treasury'] ?? 1000000000.00,
                     'floating_ratio' => $stockData['floating_debt_ratio'] ?? 0.30,
                     'wholesale_debt' => $stockData['wholesale_debt'] ?? 0.00,

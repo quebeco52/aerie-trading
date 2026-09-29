@@ -73,8 +73,7 @@ class IndustryPositionBuilder
      */
     public function build(Stock $stock, MacroStateDTO $macroState): array
     {
-        $businessModel = Sectors::INDUSTRY_METRICS[$stock->getIndustry() ?? 'General']['business_model'] ?? 'none';
-        $strategy = Sectors::getBusinessModelStrategy($businessModel);
+        $strategy = Sectors::strategyFor($stock->getIndustry());
         $substitutability = $strategy->getIndustrySubstitutability();
         // A lender sells a yield, not a unit: the capacity balance is not struck for it (see EarningsEngine).
         $pricesCapacity = !$strategy->isFinancial() && $substitutability > 0.0;

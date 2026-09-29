@@ -122,7 +122,7 @@ class DistrictWardComposer
     private function describe(Stock $stock): ?array
     {
         $orderIndex = array_flip(DistrictMap::FRONTAGE_ORDER);
-        $businessModel = Sectors::INDUSTRY_METRICS[$stock->getIndustry() ?? 'General']['business_model'] ?? 'none';
+        $businessModel = Sectors::businessModelFor($stock->getIndustry());
         if (!isset($orderIndex[$businessModel])) {
             return null;
         }

@@ -2,6 +2,9 @@
 
 namespace App\Data;
 
+use App\Service\Model\BusinessModelInterface;
+use App\Service\Model\Sector;
+
 class Sectors
 {
     public const MACRO_SECTORS = [
@@ -220,12 +223,112 @@ class Sectors
         'General' => ['pe' => 18.00, 'depreciation' => 0.05, 'ebitda_limit' => 3.0, 'equity_limit' => 1.0, 'business_model' => 'none'],
     ];
 
+    // --- Business Model Registry ---
+    /** Every business model the simulation runs, keyed by the identifier INDUSTRY_METRICS names it with; the only list of them. */
+    public const BUSINESS_MODELS = [
+        'commercial_bank'                => Sector\CommercialBankBusinessModel::class,
+        'insurance'                      => Sector\InsuranceBusinessModel::class,
+        'brokerage'                      => Sector\BrokerageBusinessModel::class,
+        'resorts_casinos'                => Sector\ResortsCasinosBusinessModel::class,
+        'asset_manager'                  => Sector\AssetManagementBusinessModel::class,
+        'credit_services'                => Sector\CreditServicesBusinessModel::class,
+        'private_equity'                 => Sector\PrivateEquityBusinessModel::class,
+        'hedge_fund'                     => Sector\HedgeFundBusinessModel::class,
+        'shadow_bank'                    => Sector\ShadowBankBusinessModel::class,
+        'reit'                           => Sector\ReitBusinessModel::class,
+        'clearing_house'                 => Sector\ClearingHouseBusinessModel::class,
+        'utility'                        => Sector\UtilityBusinessModel::class,
+        'mining'                         => Sector\MiningBusinessModel::class,
+        'oil_gas_producer'               => Sector\OilGasProducerBusinessModel::class,
+        'refining'                       => Sector\RefiningBusinessModel::class,
+        'financial_data'                 => Sector\FinancialDataBusinessModel::class,
+        'medical_care_facility'          => Sector\MedicalCareFacilityBusinessModel::class,
+        'tech'                           => Sector\TechBusinessModel::class,
+        'consumer_staples'               => Sector\ConsumerStaplesBusinessModel::class,
+        'defense_contractor'             => Sector\DefenseContractorBusinessModel::class,
+        'security_protection'            => Sector\SecurityProtectionBusinessModel::class,
+        'biotech'                        => Sector\BiotechBusinessModel::class,
+        'luxury'                         => Sector\LuxuryBusinessModel::class,
+        'shipping'                       => Sector\ShippingBusinessModel::class,
+        'semiconductor'                  => Sector\SemiconductorBusinessModel::class,
+        'investment_bank'                => Sector\InvestmentBankBusinessModel::class,
+        'distressed_debt'                => Sector\DistressedDebtBusinessModel::class,
+        'heavy_manufacturing'            => Sector\HeavyManufacturingBusinessModel::class,
+        'auto_manufacturer'              => Sector\AutoManufacturerBusinessModel::class,
+        'specialty_industrial_machinery' => Sector\SpecialtyIndustrialMachineryBusinessModel::class,
+        'tools_and_accessories'          => Sector\ToolsAndAccessoriesBusinessModel::class,
+        'computer_hardware'              => Sector\ComputerHardwareBusinessModel::class,
+        'communication_equipment'        => Sector\CommunicationEquipmentBusinessModel::class,
+        'internet_retail'                => Sector\InternetRetailBusinessModel::class,
+        'restaurant'                     => Sector\RestaurantBusinessModel::class,
+        'law_firm'                       => Sector\LawFirmBusinessModel::class,
+        'advertising_agency'             => Sector\AdvertisingAgencyBusinessModel::class,
+        'education'                      => Sector\EducationBusinessModel::class,
+        'conglomerate'                   => Sector\ConglomerateBusinessModel::class,
+        'merchant_house'                 => Sector\MerchantHouseBusinessModel::class,
+        'investment_company'             => Sector\InvestmentCompanyBusinessModel::class,
+        'logistics'                      => Sector\LogisticsBusinessModel::class,
+        'railroad'                       => Sector\RailroadBusinessModel::class,
+        'steel_manufacturing'            => Sector\SteelManufacturingBusinessModel::class,
+        'construction'                   => Sector\ConstructionBusinessModel::class,
+        'retail_insurance'               => Sector\RetailInsuranceBusinessModel::class,
+        'reinsurance'                    => Sector\ReinsuranceBusinessModel::class,
+        'waste_management'               => Sector\WasteManagementBusinessModel::class,
+        'telecom'                        => Sector\TelecomBusinessModel::class,
+        'apparel_manufacturing'          => Sector\ApparelManufacturingBusinessModel::class,
+        'chemical'                       => Sector\ChemicalBusinessModel::class,
+        'none'                           => Sector\StandardCorporateBusinessModel::class,
+    ];
+
+    /** @var array<string, BusinessModelInterface> One shared instance per identifier: the models hold no state between calls. */
+    private static array $strategyInstances = [];
+
     /**
-     * Helper to determine if a business model belongs to a financial institution.
-     *
-     * @param string $businessModel
-     * @return bool
+     * The model registered under an identifier. An identifier the registry does not list runs as standard corporate
+     * physics, the same model the table assigns an industry with no specialised one.
      */
+    public static function getBusinessModelStrategy(string $businessModel): BusinessModelInterface
+    {
+        $businessModel = isset(self::BUSINESS_MODELS[$businessModel]) ? $businessModel : 'none';
+
+        return self::$strategyInstances[$businessModel] ??= new (self::BUSINESS_MODELS[$businessModel])();
+    }
+
+    /** Whether the model is a financial institution's: read off the model itself, so the answer has one owner. */
+    public static function isFinancial(string $businessModel): bool
+    {
+        return self::getBusinessModelStrategy($businessModel)->isFinancial();
+    }
+
+    /**
+     * The industry's row of the table, or the General row for an industry the table does not list. Every reader of a
+     * sector parameter goes through here, so an unlisted industry falls back the same way whichever parameter is read.
+     *
+     * @return array{pe: float, depreciation: float, ebitda_limit: float, equity_limit: float, business_model: string}
+     */
+    public static function metricsFor(?string $industry): array
+    {
+        return self::INDUSTRY_METRICS[$industry ?: 'General'] ?? self::INDUSTRY_METRICS['General'];
+    }
+
+    /** The business model identifier the industry runs on. */
+    public static function businessModelFor(?string $industry): string
+    {
+        return self::metricsFor($industry)['business_model'];
+    }
+
+    /** The business model the industry runs on. */
+    public static function strategyFor(?string $industry): BusinessModelInterface
+    {
+        return self::getBusinessModelStrategy(self::businessModelFor($industry));
+    }
+
+    /** The industry's book debt-to-equity limit: the leverage its balance sheets are sized and tested against. */
+    public static function equityLimit(?string $industry): float
+    {
+        return (float) self::metricsFor($industry)['equity_limit'];
+    }
+
     /**
      * The sector's baseline trading multiple, used as the cross-sectional prior when a firm's own Gordon
      * multiple is shrunk toward its peers. Every engine that forms a fair-value multiple must read it from
@@ -234,98 +337,6 @@ class Sectors
      */
     public static function baselineIndustryPe(?string $industry): float
     {
-        $metrics = self::INDUSTRY_METRICS[$industry ?: 'General'] ?? self::INDUSTRY_METRICS['General'];
-
-        return (float) $metrics['pe'];
-    }
-
-    public static function isFinancial(string $businessModel): bool
-    {
-        return in_array($businessModel, ['commercial_bank', 'insurance', 'retail_insurance', 'reinsurance', 'brokerage', 'asset_manager', 'credit_services', 'shadow_bank', 'private_equity', 'hedge_fund', 'clearing_house', 'investment_bank', 'distressed_debt']);
-    }
-
-    private static array $strategyInstances = [];
-    private static ?\App\Service\Model\BusinessModelRegistryInterface $registry = null;
-
-    public static function setBusinessModelRegistry(?\App\Service\Model\BusinessModelRegistryInterface $registry): void
-    {
-        self::$registry = $registry;
-    }
-
-    /**
-     * Factory method to retrieve the financial physics model for a given business type.
-     *
-     * @param string $businessModel
-     * @return \App\Service\Model\BusinessModelInterface
-     */
-    public static function getBusinessModelStrategy(string $businessModel): \App\Service\Model\BusinessModelInterface
-    {
-        if (self::$registry !== null) {
-            return self::$registry->get($businessModel);
-        }
-
-        if (isset(self::$strategyInstances[$businessModel])) {
-            return self::$strategyInstances[$businessModel];
-        }
-
-        $strategy = match ($businessModel) {
-            'commercial_bank' => new \App\Service\Model\Sector\CommercialBankBusinessModel(),
-            'insurance'       => new \App\Service\Model\Sector\InsuranceBusinessModel(),
-            'brokerage'       => new \App\Service\Model\Sector\BrokerageBusinessModel(),
-            'resorts_casinos' => new \App\Service\Model\Sector\ResortsCasinosBusinessModel(),
-            'asset_manager'   => new \App\Service\Model\Sector\AssetManagementBusinessModel(),
-            'credit_services' => new \App\Service\Model\Sector\CreditServicesBusinessModel(),
-            'private_equity'  => new \App\Service\Model\Sector\PrivateEquityBusinessModel(),
-            'hedge_fund'      => new \App\Service\Model\Sector\HedgeFundBusinessModel(),
-            'shadow_bank'     => new \App\Service\Model\Sector\ShadowBankBusinessModel(),
-            'reit'            => new \App\Service\Model\Sector\ReitBusinessModel(),
-            'clearing_house'  => new \App\Service\Model\Sector\ClearingHouseBusinessModel(),
-            'utility'         => new \App\Service\Model\Sector\UtilityBusinessModel(),
-            'mining'          => new \App\Service\Model\Sector\MiningBusinessModel(),
-            'oil_gas_producer' => new \App\Service\Model\Sector\OilGasProducerBusinessModel(),
-            'refining'        => new \App\Service\Model\Sector\RefiningBusinessModel(),
-            'financial_data'  => new \App\Service\Model\Sector\FinancialDataBusinessModel(),
-            'medical_care_facility' => new \App\Service\Model\Sector\MedicalCareFacilityBusinessModel(),
-            'tech'            => new \App\Service\Model\Sector\TechBusinessModel(),
-            'consumer_staples' => new \App\Service\Model\Sector\ConsumerStaplesBusinessModel(),
-            'defense_contractor' => new \App\Service\Model\Sector\DefenseContractorBusinessModel(),
-            'security_protection' => new \App\Service\Model\Sector\SecurityProtectionBusinessModel(),
-            'biotech'         => new \App\Service\Model\Sector\BiotechBusinessModel(),
-            'luxury'          => new \App\Service\Model\Sector\LuxuryBusinessModel(),
-            'shipping'        => new \App\Service\Model\Sector\ShippingBusinessModel(),
-            'semiconductor'   => new \App\Service\Model\Sector\SemiconductorBusinessModel(),
-            'investment_bank' => new \App\Service\Model\Sector\InvestmentBankBusinessModel(),
-            'distressed_debt' => new \App\Service\Model\Sector\DistressedDebtBusinessModel(),
-            'heavy_manufacturing' => new \App\Service\Model\Sector\HeavyManufacturingBusinessModel(),
-            'auto_manufacturer' => new \App\Service\Model\Sector\AutoManufacturerBusinessModel(),
-            'specialty_industrial_machinery' => new \App\Service\Model\Sector\SpecialtyIndustrialMachineryBusinessModel(),
-            'tools_and_accessories' => new \App\Service\Model\Sector\ToolsAndAccessoriesBusinessModel(),
-            'computer_hardware' => new \App\Service\Model\Sector\ComputerHardwareBusinessModel(),
-            'communication_equipment' => new \App\Service\Model\Sector\CommunicationEquipmentBusinessModel(),
-            'internet_retail' => new \App\Service\Model\Sector\InternetRetailBusinessModel(),
-            'restaurant'      => new \App\Service\Model\Sector\RestaurantBusinessModel(),
-            'law_firm'        => new \App\Service\Model\Sector\LawFirmBusinessModel(),
-            'advertising_agency' => new \App\Service\Model\Sector\AdvertisingAgencyBusinessModel(),
-            'education'       => new \App\Service\Model\Sector\EducationBusinessModel(),
-            'conglomerate'    => new \App\Service\Model\Sector\ConglomerateBusinessModel(),
-            'merchant_house'  => new \App\Service\Model\Sector\MerchantHouseBusinessModel(),
-            'investment_company' => new \App\Service\Model\Sector\InvestmentCompanyBusinessModel(),
-            'logistics'       => new \App\Service\Model\Sector\LogisticsBusinessModel(),
-            'railroad'        => new \App\Service\Model\Sector\RailroadBusinessModel(),
-            'steel_manufacturing' => new \App\Service\Model\Sector\SteelManufacturingBusinessModel(),
-            'construction'    => new \App\Service\Model\Sector\ConstructionBusinessModel(),
-            'retail_insurance' => new \App\Service\Model\Sector\RetailInsuranceBusinessModel(),
-            'reinsurance'     => new \App\Service\Model\Sector\ReinsuranceBusinessModel(),
-            'waste_management' => new \App\Service\Model\Sector\WasteManagementBusinessModel(),
-            'telecom'         => new \App\Service\Model\Sector\TelecomBusinessModel(),
-            'apparel_manufacturing' => new \App\Service\Model\Sector\ApparelManufacturingBusinessModel(),
-            'chemical'        => new \App\Service\Model\Sector\ChemicalBusinessModel(),
-            default           => new \App\Service\Model\Sector\StandardCorporateBusinessModel(),
-        };
-
-        $strategy->setModelIdentifier($businessModel);
-
-        self::$strategyInstances[$businessModel] = $strategy;
-        return $strategy;
+        return (float) self::metricsFor($industry)['pe'];
     }
 }

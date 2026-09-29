@@ -124,8 +124,7 @@ class EarningsEngine
             return null;
         }
 
-        $industry = $stock->getIndustry() ?: 'General';
-        $businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['business_model'] ?? 'none';
+        $businessModel = \App\Data\Sectors::businessModelFor($stock->getIndustry());
         $strategy = \App\Data\Sectors::getBusinessModelStrategy($businessModel);
 
         $ctx = new EarningsSimulationContext(

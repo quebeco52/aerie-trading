@@ -88,8 +88,6 @@ class AssetManagementBusinessModel extends BaseFinancialBusinessModel
     public const TTM_ROE_WEIGHT      = 0.50;
     /** Default 5Y Treasury spread over policy rate when yield curve data is absent. */
     public const DEFAULT_5Y_YIELD_PREMIUM = 0.005;
-    /** Default maximum financial leverage (Debt/Equity) limit if sector configuration is absent. */
-    public const DEFAULT_EQUITY_LIMIT     = 1.00;
 
     // --- Structural Yield Rails ---
     /** Minimum structural operating EBIT floor as a fraction of operating equity. */
@@ -230,8 +228,7 @@ class AssetManagementBusinessModel extends BaseFinancialBusinessModel
         // --- THE CLEAR BALANCE SHEET MATH ---
         // Asset managers scale EBIT from their active operating equity (AUM/Platform capacity).
         // Excess cash beyond target operating cash is considered idle and stripped from the ROE target.
-        $industry = $stock->getIndustry() ?: 'General';
-        $equityLimit = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['equity_limit'] ?? self::DEFAULT_EQUITY_LIMIT;
+        $equityLimit = \App\Data\Sectors::equityLimit($stock->getIndustry());
 
         $effectiveEquity = max(1.0, $equity);
 

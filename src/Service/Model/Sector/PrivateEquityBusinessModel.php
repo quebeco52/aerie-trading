@@ -168,8 +168,7 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
         }
 
         $actualLeverage = $debt / $equity;
-        $industry = $stock->getIndustry() ?: 'General';
-        $equityLimit = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['equity_limit'] ?? self::DEFAULT_EQUITY_LIMIT;
+        $equityLimit = \App\Data\Sectors::equityLimit($stock->getIndustry());
         $rawAggression = $actualLeverage / max(0.01, $equityLimit);
 
         return max(self::MIN_LEVERAGE_AGGRESSION, min(self::MAX_LEVERAGE_AGGRESSION, $rawAggression));
@@ -195,8 +194,7 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
 
         $blendedWholesaleRate = ($floatingRatio * $policyRate) + ((1.0 - $floatingRatio) * $yield5y) + $structuralSpread;
 
-        $industry = $stock->getIndustry() ?: 'General';
-        $baseEquityLimit = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['equity_limit'] ?? self::DEFAULT_EQUITY_LIMIT;
+        $baseEquityLimit = \App\Data\Sectors::equityLimit($stock->getIndustry());
 
         $effectiveEquityLimit = $baseEquityLimit * (0.5 + ($aggression * 0.5));
         $effectiveEquity = max(1.0, $equity);

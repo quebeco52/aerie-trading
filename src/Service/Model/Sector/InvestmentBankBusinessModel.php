@@ -240,8 +240,7 @@ class InvestmentBankBusinessModel extends BrokerageBusinessModel
 
         $blendedWholesaleRate = $this->calculateBlendedWholesaleRate($stock, $macroState);
 
-        $industry = $stock->getIndustry() ?: 'General';
-        $equityLimit = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['equity_limit'] ?? self::DEFAULT_EQUITY_LIMIT;
+        $equityLimit = \App\Data\Sectors::equityLimit($stock->getIndustry());
 
         $effectiveEquity = max(1.0, $equity);
 

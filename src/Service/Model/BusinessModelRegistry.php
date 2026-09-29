@@ -4,93 +4,32 @@ declare(strict_types=1);
 
 namespace App\Service\Model;
 
-use Symfony\Component\DependencyInjection\Attribute\AutowireIterator;
-use App\Service\Model\Sector\AssetManagementBusinessModel;
-use App\Service\Model\Sector\StandardCorporateBusinessModel;
+use App\Data\Sectors;
 
 /**
- * Registry service for business model strategies.
- * Manages model resolution, dependency injection, and strategy lifecycle.
+ * The business-model registry as a service, for code that takes its models by injection. It keeps no list of its
+ * own: every identifier resolves through Sectors::BUSINESS_MODELS to the same instance the static lookup hands out,
+ * so the injected and the static paths cannot disagree about which model an identifier runs.
  */
 class BusinessModelRegistry implements BusinessModelRegistryInterface
 {
-    /** @var array<string, BusinessModelInterface> */
-    private array $models = [];
-
-    /**
-     * Map of specific class names to canonical sector identifiers.
-     */
-    private const CLASS_MAP = [
-        AssetManagementBusinessModel::class => 'asset_manager',
-        StandardCorporateBusinessModel::class => 'none',
-    ];
-
-    /**
-     * @param iterable<BusinessModelInterface> $models
-     */
-    public function __construct(
-        #[AutowireIterator('app.business_model')]
-        iterable $models = []
-    ) {
-        foreach ($models as $model) {
-            $identifier = $this->resolveIdentifier($model);
-            $model->setModelIdentifier($identifier);
-            $this->models[$identifier] = $model;
-
-            // Register aliases if applicable
-            if ($identifier === 'none') {
-                $this->models['standard_corporate'] = $model;
-            } elseif ($identifier === 'asset_manager') {
-                $this->models['asset_management'] = $model;
-            } elseif ($identifier === 'medical_care_facility') {
-                $this->models['medical_facility'] = $model;
-            }
-        }
-    }
-
-    public function register(string $identifier, BusinessModelInterface $model): void
-    {
-        $model->setModelIdentifier($identifier);
-        $this->models[$identifier] = $model;
-    }
-
     public function get(string $identifier): BusinessModelInterface
     {
-        if (isset($this->models[$identifier])) {
-            return $this->models[$identifier];
-        }
-
-        // Fallback to standard corporate if not found
-        if (isset($this->models['none'])) {
-            return $this->models['none'];
-        }
-
-        $fallback = new StandardCorporateBusinessModel();
-        $fallback->setModelIdentifier($identifier);
-        return $fallback;
+        return Sectors::getBusinessModelStrategy($identifier);
     }
 
     public function has(string $identifier): bool
     {
-        return isset($this->models[$identifier]);
+        return isset(Sectors::BUSINESS_MODELS[$identifier]);
     }
 
     public function all(): array
     {
-        return $this->models;
-    }
-
-    private function resolveIdentifier(BusinessModelInterface $model): string
-    {
-        $class = get_class($model);
-        if (isset(self::CLASS_MAP[$class])) {
-            return self::CLASS_MAP[$class];
+        $models = [];
+        foreach (array_keys(Sectors::BUSINESS_MODELS) as $identifier) {
+            $models[$identifier] = Sectors::getBusinessModelStrategy($identifier);
         }
 
-        $shortName = (new \ReflectionClass($model))->getShortName();
-        $base = (string) preg_replace('/BusinessModel$/', '', $shortName);
-        $snake = strtolower((string) preg_replace('/(?<!^)[A-Z]/', '_$0', $base));
-
-        return $snake !== '' ? $snake : 'none';
+        return $models;
     }
 }

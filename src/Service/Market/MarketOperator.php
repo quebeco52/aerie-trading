@@ -101,8 +101,7 @@ class MarketOperator
      */
     private function applyRestructuringRule(Stock $stock, float $marketCap, string $name, MacroStateDTO $macroState): ?array
     {
-        $industry = $stock->getIndustry() ?: 'General';
-        $strategy = \App\Data\Sectors::getBusinessModelStrategy(\App\Data\Sectors::INDUSTRY_METRICS[$industry]['business_model'] ?? 'none');
+        $strategy = \App\Data\Sectors::strategyFor($stock->getIndustry());
         $isAccelerated = $stock->isPaymentDefault()
             && $stock->getQuartersInDefault() > \App\Service\Math\FinancialConstants::PAYMENT_DEFAULT_GRACE_QUARTERS;
 

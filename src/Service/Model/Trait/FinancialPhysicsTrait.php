@@ -268,8 +268,7 @@ trait FinancialPhysicsTrait
 
     public function getRegulatoryDividendCap(Stock $stock, float $currentTreasury, ?MacroStateDTO $macroState = null): ?float
     {
-        $industry = $stock->getIndustry() ?: 'General';
-        $equityLimit = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['equity_limit'] ?? 10.0;
+        $equityLimit = \App\Data\Sectors::equityLimit($stock->getIndustry());
         if ($macroState !== null && $macroState->countercyclicalBufferRateEma > 0.0) {
             $equityLimit = \App\Service\Math\MathUtility::calculateBufferedLeverageLimit($equityLimit, $macroState->countercyclicalBufferRateEma);
         }
@@ -293,8 +292,7 @@ trait FinancialPhysicsTrait
             return true;
         }
 
-        $industry = $stock->getIndustry() ?: 'General';
-        $equityLimit = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['equity_limit'] ?? 10.0;
+        $equityLimit = \App\Data\Sectors::equityLimit($stock->getIndustry());
         if ($macroState !== null && $macroState->countercyclicalBufferRateEma > 0.0) {
             $equityLimit = \App\Service\Math\MathUtility::calculateBufferedLeverageLimit($equityLimit, $macroState->countercyclicalBufferRateEma);
         }

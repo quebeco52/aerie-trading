@@ -90,8 +90,6 @@ class BrokerageBusinessModel extends BaseFinancialBusinessModel
     public const TTM_ROE_WEIGHT      = 0.50;
     /** Default 5Y Treasury spread over policy rate when yield curve data is absent. */
     public const DEFAULT_5Y_YIELD_PREMIUM = 0.005;
-    /** Default maximum financial leverage (Debt/Equity) limit if sector configuration is absent. */
-    public const DEFAULT_EQUITY_LIMIT     = 8.00;
 
     // --- Structural Yield Rails ---
     /** Minimum structural operating EBIT floor as a fraction of earning assets. */
@@ -209,8 +207,7 @@ class BrokerageBusinessModel extends BaseFinancialBusinessModel
 
         $blendedWholesaleRate = $this->calculateBlendedWholesaleRate($stock, $macroState);
 
-        $industry = $stock->getIndustry() ?: 'General';
-        $equityLimit = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['equity_limit'] ?? self::DEFAULT_EQUITY_LIMIT;
+        $equityLimit = \App\Data\Sectors::equityLimit($stock->getIndustry());
 
         $effectiveEquity = max(1.0, $equity);
 

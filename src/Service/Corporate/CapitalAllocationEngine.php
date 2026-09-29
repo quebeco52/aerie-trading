@@ -115,7 +115,7 @@ class CapitalAllocationEngine
         $ctx->investedCapital = $stock->getInvestedCapital();
         
         $ctx->industry = $stock->getIndustry() ?: 'General';
-        $ctx->businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$ctx->industry]['business_model'] ?? 'none';
+        $ctx->businessModel = \App\Data\Sectors::businessModelFor($ctx->industry);
         $ctx->isFinancial = \App\Data\Sectors::isFinancial($ctx->businessModel);
         $ctx->strategy = \App\Data\Sectors::getBusinessModelStrategy($ctx->businessModel);
         

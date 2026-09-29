@@ -84,7 +84,6 @@ class StockTracker
 
         // Pull systemic variables from the Macro Engine
         $macroDTO = $macroState ?? new \App\DTO\MacroStateDTO();
-        $marketZ = $macroDTO->marketZ;
         $marketVol = $macroDTO->marketVolatility;
 
         // The sovereign fund's rebalance slice for this tick, in currency, spread over the float the way any
@@ -159,10 +158,6 @@ class StockTracker
             $sharesAtTickStart = (float) $stock->getSharesOutstanding();
             $floatSharesAtTickStart = $sharesAtTickStart * max(0.0, min(1.0, (float) $stock->getPublicFloatPercentage()));
 
-            // Determine Volatility
-            $baselineVol = (float) $stock->getVolatility();
-            $currentVol = (float) ($stock->getCurrentVolatility() ?? $baselineVol);
-
             // M&A
             $maResult = $this->maEngine->evaluatePrivateAcquisition($stock, $macroDTO, $dt, $tickCount, $ticksPerYear);
             $maShock = 0.0;
@@ -192,18 +187,7 @@ class StockTracker
             );
 
             $sharesOutstanding = (float) $stock->getSharesOutstanding();
-            $shares = max(1.0, $sharesOutstanding);
-
-            // Fetch the industry limits and structural data
-            $industryKey = $stock->getIndustry() ?: 'General';
-            $metrics = \App\Data\Sectors::INDUSTRY_METRICS[$industryKey] ?? \App\Data\Sectors::INDUSTRY_METRICS['General'];
-            $businessModel = $metrics['business_model'] ?? 'none';
-            $strategy = \App\Data\Sectors::getBusinessModelStrategy($businessModel);
-            $baselineIndustryPE = $metrics['pe'] ?? 20.0;
-
-            // Use the annualized total_revenue from the stock entity directly
-            $revenuePerShare = (float) $stock->getTotalRevenue() / $shares;
-
+            $strategy = \App\Data\Sectors::strategyFor($stock->getIndustry());
             $effectiveRoic = $strategy->getEffectiveReturn($stock);
             $roicTtm = $strategy->getTrueReturn($stock);
 
@@ -223,66 +207,10 @@ class StockTracker
                 $events[] = $successionResult['event'];
             }
 
-            $totalDebt = (float) $stock->getTotalDebt();
-            $corporateTreasury = (float) $stock->getCorporateTreasury();
-            $netDebtPerShare = max(0.0, ($totalDebt - $corporateTreasury) / $shares);
-
-            $secularGrowth = $strategy->getSecularGrowthRate($stock);
-
-            // Leverage re-levers the magnitude of a firm's systematic exposure, never its sign. DebtEngine
-            // now levers the firm's own signed beta through Hamada, so its result is already the beta this
-            // diffusion wants and is used directly. This previously had to reconstruct the multiplier and
-            // reapply it, because DebtEngine levered max(0.5, |beta|) and would otherwise have turned an
-            // inverse hedge into a market-following name.
-            $leveredBeta = $health->leveredBeta ?? (float) $stock->getBeta();
-
             $priceAtTickStart = (float) $stock->getPrice();
             $floatCapAtTickStart = IndexCommittee::floatAdjustedCap($stock);
-            $sectorZ = (float) ($macroDTO->sectorZ[$sectorName] ?? 0.0);
 
-            $pricingCtx = new \App\DTO\MarketPricingContext(
-                currentPrice: (float) $stock->getPrice(),
-                currentVolatility: $currentVol,
-                longTermVolatility: $baselineVol,
-                // Fair value EPS basis: deduct guided shortfall from EPS until official quarterly report.
-                earningsPerShare: (float) $stock->getEarningsPerShare()
-                    - ($stock->getPreAnnouncedShortfall() / max(1.0, (float) $stock->getSharesOutstanding())),
-                dt: $dt,
-                lambda: (float) $stock->getJumpIntensity(),
-                jumpVol: (float) $stock->getJumpVol(),
-                beta: $leveredBeta,
-                marketZ: $marketZ,
-                sectorZ: $sectorZ,
-                marketJumpMultiplier: $macroDTO->marketJumpMultiplier,
-                marketVol: $marketVol,
-                macroState: $macroDTO,
-                fcfPerShare: $stock->getFreeCashFlowPerShare() !== null ? (float) $stock->getFreeCashFlowPerShare() : null,
-                // A sphere's filed book moves once a quarter; the listed portfolio inside it moves every
-                // tick, and fair value is struck on the second.
-                bookValuePerShare: $this->anchorStakes->resolveMarkedBookValuePerShare($stock)
-                    ?? (float) $stock->getBookValuePerShare(),
-                tangibleBookValuePerShare: $stock->getTangibleEquity() / $shares,
-                maShock: $maShock,
-                currentRoic: $effectiveRoic,
-                roicTtm: $roicTtm,
-                dividendPerShare: (float) $stock->getLastDividend(),
-                liveWacc: $health->wacc ?? 0.08,
-                baselineIndustryPE: $baselineIndustryPE,
-                revenuePerShare: $revenuePerShare,
-                businessModel: $businessModel,
-                liveCostOfEquity: $health->costOfEquity ?? 0.10,
-                netDebtPerShare: $netDebtPerShare,
-                recentPriceTrend: (float) ($stock->getPriceMomentumTrend() ?? 0.0),
-                secularGrowth: $secularGrowth,
-                // The anchor the firm's own model measures it by: a lender or underwriter carries a
-                // placeholder in baselineRoic, and pricing was reading that placeholder as its through-the
-                // -cycle return. MarketSeedCommand has always passed the ROE here for a financial.
-                baselineRoic: $strategy->getBaselineReturn($stock),
-                baselineMargin: (float) ($stock->getOperatingMargin() ?? 0.20),
-                accrualsRatio: (float) ($stock->getAccrualsRatio() ?? 0.0),
-                investedCapitalPerShare: $stock->getInvestedCapital() / max(1.0, (float) $stock->getSharesOutstanding()),
-                orderFlowVariance: (float) ($stock->getImpactVarianceEma() ?? 0.0)
-            );
+            $pricingCtx = \App\DTO\MarketPricingContext::forStock($stock, $macroDTO, $health, $this->anchorStakes, $dt, $maShock);
 
             // Calculate new price (GBM + SVJJ)
             $calculation = $this->marketEngine->calculateNextPrice($pricingCtx);

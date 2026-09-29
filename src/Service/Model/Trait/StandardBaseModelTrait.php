@@ -15,13 +15,6 @@ use App\Service\Math\MathUtility;
 
 trait StandardBaseModelTrait
 {
-    protected string $modelIdentifier = 'none';
-
-    public function setModelIdentifier(string $identifier): void
-    {
-        $this->modelIdentifier = $identifier;
-    }
-
     public function isFinancial(): bool
     {
         return false;

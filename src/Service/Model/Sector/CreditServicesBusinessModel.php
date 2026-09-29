@@ -43,8 +43,6 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
     public const TTM_ROE_WEIGHT      = 0.50;
     /** Default 5Y Treasury spread over policy rate when yield curve data is absent. */
     public const DEFAULT_5Y_YIELD_PREMIUM = 0.005;
-    /** Default maximum financial leverage (Debt/Equity) limit if sector configuration is absent. */
-    public const DEFAULT_EQUITY_LIMIT     = 10.00;
     /** Minimum lending EBIT floor as a fraction of core debt liabilities. */
     public const MIN_LENDING_EBIT_YIELD   = 0.05;
 
@@ -316,8 +314,7 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
         $structuralSpread = (float) $stock->getCreditSpread();
         $floatingRatio = (float) $stock->getFloatingDebtRatio();
 
-        $industry = $stock->getIndustry() ?: 'General';
-        $equityLimit = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['equity_limit'] ?? self::DEFAULT_EQUITY_LIMIT;
+        $equityLimit = \App\Data\Sectors::equityLimit($stock->getIndustry());
 
         $customerDeposits = (float) $stock->getCustomerDeposits();
         $depositRatio = $totalDebt > 0 ? ($customerDeposits / $totalDebt) : 0.0;

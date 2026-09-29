@@ -31,7 +31,7 @@ class CreditHealthBuilder
      */
     public function build(Stock $stock, MacroStateDTO $macroState): array
     {
-        $strategy = Sectors::getBusinessModelStrategy(Sectors::INDUSTRY_METRICS[$stock->getIndustry() ?? 'General']['business_model'] ?? 'none');
+        $strategy = Sectors::strategyFor($stock->getIndustry());
         if ($stock->isBankrupt() || $strategy->requiresAlternativeZScore()) {
             return ['creditHealth' => null];
         }

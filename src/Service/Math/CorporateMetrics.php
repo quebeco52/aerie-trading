@@ -18,7 +18,7 @@ class CorporateMetrics
 
     public function getIndustryDepreciationRate(string $industry): float
     {
-        return \App\Data\Sectors::INDUSTRY_METRICS[$industry]['depreciation'] ?? 0.05;
+        return \App\Data\Sectors::metricsFor($industry)['depreciation'];
     }
 
     /**
@@ -150,9 +150,7 @@ class CorporateMetrics
             return 0.0;
         }
 
-        $industry = $stock->getIndustry() ?: 'General';
-        $businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['business_model'] ?? 'none';
-        $strategy = \App\Data\Sectors::getBusinessModelStrategy($businessModel);
+        $strategy = \App\Data\Sectors::strategyFor($stock->getIndustry());
         $substitutability = $strategy->getIndustrySubstitutability();
         if ($strategy->isFinancial() || $substitutability <= 0.0) {
             return 0.0;

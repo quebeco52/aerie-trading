@@ -279,7 +279,7 @@ class MergerAndAcquisitionEngine
         $ctx->health = $this->debtEngine->analyzeTrailingDebtHealth($stock, $ctx->macroState);
         
         $ctx->industry = $stock->getIndustry() ?: 'General';
-        $ctx->businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$ctx->industry]['business_model'] ?? 'none';
+        $ctx->businessModel = \App\Data\Sectors::businessModelFor($ctx->industry);
         $ctx->strategy = \App\Data\Sectors::getBusinessModelStrategy($ctx->businessModel);
     }
 
@@ -301,7 +301,7 @@ class MergerAndAcquisitionEngine
         $manager = $stock->getManagementProfile();
         $ctx->costOfNewBorrowing = $ctx->health->rawMetrics->currentMarketRate ?? ($ctx->yield5y + (float) $stock->getCreditSpread());
 
-        $equityLimit = \App\Data\Sectors::INDUSTRY_METRICS[$ctx->industry]['equity_limit'] ?? 1.0;
+        $equityLimit = \App\Data\Sectors::equityLimit($ctx->industry);
 
         // A lender sizes acquisition debt the way it sizes any other: the balance sheet AND the interest the
         // firm can cover. Testing only book leverage let a thin-margin acquirer borrow to its equity limit on
@@ -868,7 +868,7 @@ class MergerAndAcquisitionEngine
         $ctx->wacc = $ctx->health->wacc ?? 0.08;
 
         $ctx->industry = $stock->getIndustry() ?: 'General';
-        $ctx->businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$ctx->industry]['business_model'] ?? 'none';
+        $ctx->businessModel = \App\Data\Sectors::businessModelFor($ctx->industry);
         $ctx->strategy = \App\Data\Sectors::getBusinessModelStrategy($ctx->businessModel);
         
         $ctx->currentReturn = $ctx->strategy->getTrueReturn($stock);

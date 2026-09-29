@@ -104,7 +104,7 @@ class MarketSeedCommand extends Command
                 $stock->setLendableSupplyRatio(FinancialConstants::DEFAULT_LENDABLE_SUPPLY_RATIO);
                 $stock->setShortInterestShares('0.00');
 
-                $businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$stockData['industry'] ?? 'General']['business_model'] ?? 'none';
+                $businessModel = \App\Data\Sectors::businessModelFor($stockData['industry'] ?? null);
                 $isFinancial = \App\Data\Sectors::isFinancial($businessModel);
 
                 if ($isFinancial) {
@@ -123,7 +123,7 @@ class MarketSeedCommand extends Command
                 $stock->setTargetPayoutRatio((string) ($stockData['target_payout_ratio'] ?? 0.30));
                 $stock->setDividendSpeed((string) ($stockData['dividendSpeed'] ?? 0.20));
                 $stock->setFixedCostRatio((float) ($stockData['fixed_cost_ratio'] ?? 0.35));
-                $stock->setDepreciationRate((string) ($stockData['depreciation_rate'] ?? \App\Data\Sectors::INDUSTRY_METRICS[$stockData['industry'] ?? 'General']['depreciation'] ?? 0.05));
+                $stock->setDepreciationRate((string) ($stockData['depreciation_rate'] ?? \App\Data\Sectors::metricsFor($stockData['industry'] ?? null)['depreciation']));
 
                 $stock->setCorporateTreasury((string) ($stockData['corporate_treasury'] ?? 1000000000.00));
                 $stock->setFloatingDebtRatio((string) ($stockData['floating_debt_ratio'] ?? 0.30));
@@ -268,7 +268,7 @@ class MarketSeedCommand extends Command
                     roicTtm: $impliedPricingRoic,
                     dividendPerShare: $startingDividend,
                     liveWacc: $debtHealth->wacc ?? 0.08,
-                    baselineIndustryPE: \App\Data\Sectors::INDUSTRY_METRICS[$stockData['industry'] ?? 'General']['pe'] ?? 20.0,
+                    baselineIndustryPE: \App\Data\Sectors::baselineIndustryPe($stockData['industry'] ?? null),
                     revenuePerShare: $shares > 0 ? $revenue / $shares : 0.0,
                     businessModel: $businessModel,
                     liveCostOfEquity: $debtHealth->costOfEquity ?? 0.10,

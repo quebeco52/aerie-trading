@@ -158,7 +158,7 @@ class HomeController extends AbstractController
             $shares    = (float) $stock->getSharesOutstanding();
             $marketCap = $price * $shares;
 
-            $businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$stock->getIndustry() ?? 'General']['business_model'] ?? 'none';
+            $businessModel = \App\Data\Sectors::businessModelFor($stock->getIndustry());
             $isFinancial   = \App\Data\Sectors::isFinancial($businessModel);
             $effectiveRoic = $isFinancial
                 ? ((float) $stock->getCurrentRoe() ?: (float) $stock->getBaselineRoe())

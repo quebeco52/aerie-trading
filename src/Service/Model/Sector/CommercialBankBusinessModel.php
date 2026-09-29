@@ -341,8 +341,7 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
         $earningAssets = $this->resolveEarningAssets($stock, $treasury);
         $baselineRoe = $this->resolveStructuralTargetRoe($stock, $macroState);
 
-        $industry = $stock->getIndustry() ?: 'General';
-        $equityLimit = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['equity_limit'] ?? 15.0;
+        $equityLimit = \App\Data\Sectors::equityLimit($stock->getIndustry());
 
         $policyRate = $macroState->policyRateEma;
         $yield5y = $macroState->yield5yEma;
@@ -834,8 +833,7 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
 
         $equity = (float) $stock->getTotalEquity();
         $totalDebt = $state['wholesaleDebt'] + $currentLiabilities;
-        $industry = $stock->getIndustry() ?: 'General';
-        $equityLimit = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['equity_limit'] ?? 15.0;
+        $equityLimit = \App\Data\Sectors::equityLimit($stock->getIndustry());
 
         $depositApyBeta = $this->calculateDepositBeta($totalDebt, $equity, $equityLimit, $currentLiabilities);
         $state['bank_apy'] = max(0.001, $policyRate * $this->resolveEffectiveDepositBeta($depositApyBeta, $macroState));

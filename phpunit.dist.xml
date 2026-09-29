@@ -89,6 +89,7 @@
             <file>tests/Service/Market/AnalystPriceTargetTest.php</file>
             <file>tests/Service/Market/AuthorizedParticipantTest.php</file>
             <file>tests/Service/View/CompanySnapshotNavTest.php</file>
+            <file>tests/Service/View/CompanySnapshotValuationTest.php</file>
             <file>tests/Service/View/AnchorPortfolioBuilderTest.php</file>
             <file>tests/Service/Market/ChartRangeTest.php</file>
             <file>tests/Command/ChartBufferWritesTest.php</file>

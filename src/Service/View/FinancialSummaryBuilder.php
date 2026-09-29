@@ -68,8 +68,7 @@ class FinancialSummaryBuilder
             return ['financialSummary' => []];
         }
 
-        $businessModel = Sectors::INDUSTRY_METRICS[$stock->getIndustry() ?? 'General']['business_model'] ?? 'none';
-        $strategy = Sectors::getBusinessModelStrategy($businessModel);
+        $strategy = Sectors::strategyFor($stock->getIndustry());
 
         $tiles = match (true) {
             (float) $report->getEarningAssets() > 0.0 && $strategy->isFinancial() => $this->lenderTiles($report),

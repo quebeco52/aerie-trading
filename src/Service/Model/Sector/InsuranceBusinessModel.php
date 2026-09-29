@@ -55,8 +55,6 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
     public const KENNEY_PREMIUM_QUARTERS  = 4.0;
     /** Implied runoff equity fraction of customer deposit float allowed for insolvent insurers. */
     public const IMPLIED_RUNOFF_EQUITY    = 0.10;
-    /** Default maximum financial leverage (Debt/Equity) limit if sector configuration is absent. */
-    public const DEFAULT_EQUITY_LIMIT     = 10.00;
     /** Baseline logistic inflection point (80% of equity limit) where capacity tightens for pure corporate debt. */
     public const CAPACITY_INFLECTION_BASE = 0.80;
     /** Inflection shift (10%) moving the regulatory midpoint to 80% for volatile policyholder float. */
@@ -957,7 +955,7 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
 
         $equity = (float) $stock->getTotalEquity();
         $totalDebt = $state['wholesaleDebt'] + $currentLiabilities;
-        $equityLimit = \App\Data\Sectors::INDUSTRY_METRICS[$stock->getIndustry() ?: 'General']['equity_limit'] ?? self::DEFAULT_EQUITY_LIMIT;
+        $equityLimit = \App\Data\Sectors::equityLimit($stock->getIndustry());
 
         // Nominal Systemic Growth: The Float grows naturally alongside the M2 Money Supply.
         $systemicGrowthQuarterly = ($macroState->inflationEma + self::BASE_ECONOMIC_GROWTH_ADD + (($macroState->outputGapEma > 0.0 ? $macroState->outputGapEma * self::EXPANSION_GAP_MULT : $macroState->outputGapEma * self::RECESSION_GAP_MULT))) / self::QUARTERLY_GROWTH_DIVISOR;

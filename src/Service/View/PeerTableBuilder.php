@@ -65,7 +65,7 @@ class PeerTableBuilder
      */
     private function returnOnCapital(Stock $peer): float
     {
-        $businessModel = Sectors::INDUSTRY_METRICS[$peer->getIndustry() ?? 'General']['business_model'] ?? 'none';
+        $businessModel = Sectors::businessModelFor($peer->getIndustry());
 
         if (Sectors::isFinancial($businessModel)) {
             return (float) ($peer->getCurrentRoe() ?: $peer->getBaselineRoe());

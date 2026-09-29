@@ -668,7 +668,7 @@ class DistrictMapBuilder
 
     private function businessModelOf(Stock $stock): string
     {
-        return Sectors::INDUSTRY_METRICS[$stock->getIndustry() ?? 'General']['business_model'] ?? 'none';
+        return Sectors::businessModelFor($stock->getIndustry());
     }
 
     /** @return list<string> institution ids, in DistrictMap::INSTITUTIONS declaration order */

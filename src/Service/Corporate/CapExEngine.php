@@ -22,10 +22,7 @@ class CapExEngine
      */
     public function processCipQueue(Stock $stock): float
     {
-        $industry = $stock->getIndustry() ?: 'General';
-        $businessModel = Sectors::INDUSTRY_METRICS[$industry]['business_model'] ?? 'none';
-
-        $strategy = Sectors::getBusinessModelStrategy($businessModel);
+        $strategy = Sectors::strategyFor($stock->getIndustry());
         $completionRate = $strategy->getCapExCompletionRate($stock);
 
         $cipBalance = (float) $stock->getCipBalance();

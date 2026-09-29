@@ -28,9 +28,6 @@ class CompanySnapshotBuilder
     /** Quarters in a year: lastDividend is one Lintner step, and a yield is an annual rate. */
     private const DIVIDEND_PERIODS_PER_YEAR = 4.0;
 
-    /** Multiple applied when an industry declares none of its own. */
-    private const FALLBACK_INDUSTRY_PE = 20.0;
-
     public function __construct(
         private readonly MarketEngine $marketEngine,
         private readonly DebtEngine $debtEngine,
@@ -43,13 +40,16 @@ class CompanySnapshotBuilder
      */
     public function build(Stock $stock, MacroStateDTO $macroState): array
     {
-        $businessModel = Sectors::INDUSTRY_METRICS[$stock->getIndustry() ?? 'General']['business_model'] ?? 'none';
+        $businessModel = Sectors::businessModelFor($stock->getIndustry());
         $isFinancial = Sectors::isFinancial($businessModel);
         $isBankrupt = $stock->isBankrupt();
 
         $price = (float) $stock->getPrice();
         $eps = $isBankrupt ? 0.0 : (float) $stock->getEarningsPerShare();
         $lastDividend = (float) $stock->getLastDividend();
+
+        // A sphere is priced on its listed holdings, so the board they trade on is read before anything is priced.
+        $this->primeAnchorStakes($stock);
 
         return [
             'isFinancial' => $isFinancial,
@@ -58,14 +58,14 @@ class CompanySnapshotBuilder
             'businessModel' => $businessModel,
             'marketCap' => $isBankrupt ? 0.0 : $price * (float) $stock->getSharesOutstanding(),
             'peRatio' => (!$isBankrupt && $eps > 0.0) ? $price / $eps : null,
-            'targetPE' => self::FALLBACK_INDUSTRY_PE,
+            'targetPE' => Sectors::baselineIndustryPe($stock->getIndustry()),
             'investedCapital' => $isBankrupt ? 0.0 : (float) $stock->getInvestedCapital(),
             // Dickinson (2011) stage stored by the last quarterly report; null until the first lands.
             'lifecycleStage' => $stock->getLifecycleStage(),
             'dividendYield' => (!$isBankrupt && $price > 0.0 && $lastDividend > 0.0)
                 ? ($lastDividend * self::DIVIDEND_PERIODS_PER_YEAR) / $price
                 : 0.0,
-            'analystTargets' => $isBankrupt ? null : $this->analystTargets($stock, $macroState, $businessModel),
+            'analystTargets' => $isBankrupt ? null : $this->analystTargets($stock, $macroState),
             'netAssetValue' => $isBankrupt ? null : $this->netAssetValue($stock, $macroState, $businessModel, $price),
             'capitalThresholds' => $this->capitalThresholds($businessModel),
             'capital' => $isBankrupt ? null : $this->capitalPosition($stock, $businessModel, $price),
@@ -129,6 +129,19 @@ class CompanySnapshotBuilder
     }
 
     /**
+     * Loads the prices of the companies a sphere holds into the stake ledger, so its book is marked to the board.
+     * The web process has its own ledger instance, primed here from the holdings alone.
+     */
+    private function primeAnchorStakes(Stock $stock): void
+    {
+        $held = array_keys(AnchorHoldings::forHolder($stock->getTicker()));
+
+        if ($held !== []) {
+            $this->anchorStakes->beginTick($this->stocks->findBy(['ticker' => $held]));
+        }
+    }
+
+    /**
      * Net asset value per share and where the market has it against that.
      *
      * The headline number on every closed-end factsheet. Shown for any model declaring a standing
@@ -147,12 +160,6 @@ class CompanySnapshotBuilder
             return null;
         }
 
-        $held = array_keys(AnchorHoldings::forHolder($stock->getTicker()));
-
-        if ($held !== []) {
-            $this->anchorStakes->beginTick($this->stocks->findBy(['ticker' => $held]));
-        }
-
         $navPerShare = $this->anchorStakes->resolveMarkedBookValuePerShare($stock)
             ?? (float) $stock->getBookValuePerShare();
 
@@ -169,46 +176,13 @@ class CompanySnapshotBuilder
      *
      * @return array<string, mixed>
      */
-    private function analystTargets(Stock $stock, MacroStateDTO $macroState, string $businessModel): array
+    private function analystTargets(Stock $stock, MacroStateDTO $macroState): array
     {
         $price = (float) $stock->getPrice();
-        $shares = max(1.0, (float) $stock->getSharesOutstanding());
-        $industry = $stock->getIndustry() ?: 'General';
-        $strategy = Sectors::getBusinessModelStrategy($businessModel);
         $health = $this->debtEngine->analyzeDebtHealth($stock, $macroState);
 
-        $netDebt = max(0.0, $strategy->getNetDebtCapital(
-            (float) $stock->getTotalDebt(),
-            (float) $stock->getWholesaleDebt(),
-            (float) $stock->getCorporateTreasury()
-        ));
-
         // dt is zero: this prices the company as it stands for display, and must not advance the path.
-        $context = new MarketPricingContext(
-            currentPrice: $price,
-            currentVolatility: (float) ($stock->getCurrentVolatility() ?? $stock->getVolatility()),
-            longTermVolatility: (float) $stock->getVolatility(),
-            earningsPerShare: (float) $stock->getEarningsPerShare(),
-            dt: 0.0,
-            beta: (float) $stock->getBeta(),
-            macroState: $macroState,
-            fcfPerShare: $stock->getFreeCashFlowPerShare() !== null ? (float) $stock->getFreeCashFlowPerShare() : null,
-            bookValuePerShare: (float) $stock->getBookValuePerShare(),
-            tangibleBookValuePerShare: $stock->getTangibleEquity() / $shares,
-            currentRoic: (float) ($stock->getCurrentRoic() ?: $stock->getBaselineRoic()),
-            roicTtm: (float) $stock->getRoicTtm(),
-            dividendPerShare: (float) $stock->getLastDividend(),
-            liveWacc: $health->wacc ?? 0.08,
-            baselineIndustryPE: Sectors::INDUSTRY_METRICS[$industry]['pe_ratio'] ?? self::FALLBACK_INDUSTRY_PE,
-            revenuePerShare: (float) $stock->getTotalRevenue() / $shares,
-            businessModel: $businessModel,
-            liveCostOfEquity: $health->costOfEquity ?? 0.10,
-            netDebtPerShare: $netDebt / $shares,
-            secularGrowth: $strategy->getSecularGrowthRate($stock),
-            baselineRoic: (float) ($stock->getBaselineRoic() ?? 0.10),
-            baselineMargin: (float) ($stock->getOperatingMargin() ?? 0.20),
-            investedCapitalPerShare: $stock->getInvestedCapital() / $shares
-        );
+        $context = MarketPricingContext::forStock($stock, $macroState, $health, $this->anchorStakes);
 
         // Priced once, not once per reading: the call draws, so a second one would hand the page a
         // consensus struck against a different fair value than the targets beside it.

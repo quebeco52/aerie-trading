@@ -37,8 +37,8 @@ class ReorganizationEngine
     public function planReorganization(Stock $stock, MacroStateDTO $macroState, GoingConcernDTO $going): ReorganizationPlanDTO
     {
         $industry = $stock->getIndustry() ?: 'General';
-        $metrics = \App\Data\Sectors::INDUSTRY_METRICS[$industry] ?? \App\Data\Sectors::INDUSTRY_METRICS['General'];
-        $strategy = \App\Data\Sectors::getBusinessModelStrategy($metrics['business_model'] ?? 'none');
+        $metrics = \App\Data\Sectors::metricsFor($industry);
+        $strategy = \App\Data\Sectors::strategyFor($industry);
 
         // The exit notes are fresh paper at the issuer's own spread; the Merton and recession legs reprice
         // on the reorganized balance sheet from the next tick.
