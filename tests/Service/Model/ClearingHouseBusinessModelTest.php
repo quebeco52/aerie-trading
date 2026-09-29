@@ -188,33 +188,67 @@ class ClearingHouseBusinessModelTest extends TestCase
         );
     }
 
-    public function testProcessPassiveLiabilityGrowthCapacityClamping(): void
+    /**
+     * Initial margin is positions times a VaR rate: with volatility unchanged, the pool grows with trend nominal
+     * income whatever the volatility LEVEL. Read as a rate, a quiet market (below the old 0.20 baseline) bled
+     * the pool away every quarter it stayed quiet.
+     */
+    public function testAQuietMarketNoLongerBleedsTheMarginPool(): void
     {
-        $stockMock = $this->createStub(\App\Entity\Stock::class);
-        $stockMock->method('getTotalEquity')->willReturn('35000000000.0'); // 35B
+        $macro = new MacroStateDTO(inflationEma: 0.02, marketVolatilityEma: 0.12);
+        $state = $this->rollMarginPool(1000.0, [ClearingHouseBusinessModel::STATE_MARGIN_RATE_CHANGE => 0.0], $macro);
 
-        $mathMock = $this->createStub(MathUtility::class);
-        $mathMock->method('generateStandardNormal')->willReturn(0.0);
+        $trend = (0.02 + \App\Service\Macro\MacroEngine::TFP_DRIFT + \App\Service\Macro\MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE) / 4.0;
+        $this->assertEqualsWithDelta(1000.0 * (1.0 + $trend), $state['customerDeposits'], 1e-9);
+        $this->assertEqualsWithDelta($state['customerDeposits'], $state['treasury'], 1e-9, 'Margin arrives as cash held against it.');
+    }
 
-        $macroState = new \App\DTO\MacroStateDTO(
-            inflationEma: 0.02,
-            outputGapEma: 0.0,
-            marketVolatilityEma: 0.20 // Neutral VIX
-        );
+    /** At fixed positions, a doubling of the volatility the margin is struck on doubles the pool (VaR scales with sigma). */
+    public function testTheMarginPoolScalesWithTheVolatilityItIsStruckOn(): void
+    {
+        $macro = new MacroStateDTO(inflationEma: 0.02, marketVolatilityEma: 0.30);
+        $state = $this->rollMarginPool(1000.0, [ClearingHouseBusinessModel::STATE_MARGIN_RATE_CHANGE => log(2.0)], $macro);
 
-        // Exceeding capacity limits (50x equity = 1.75T). Let's say deposits are 2T.
-        $stateOver = ['customerDeposits' => 2000000000000.0, 'treasury' => 2000000000000.0, 'events' => []];
-        $this->model->processPassiveLiabilityGrowth($stockMock, $macroState, $stateOver, $mathMock);
-        
-        // Growth should be negative because of capacity clamping
-        $this->assertLessThan(2000000000000.0, $stateOver['customerDeposits']);
-        
-        // Under capacity limit
-        $stateUnder = ['customerDeposits' => 500000000000.0, 'treasury' => 500000000000.0, 'events' => []];
-        $this->model->processPassiveLiabilityGrowth($stockMock, $macroState, $stateUnder, $mathMock);
-        
-        // Growth should be positive
-        $this->assertGreaterThan(500000000000.0, $stateUnder['customerDeposits']);
+        $trend = (0.02 + \App\Service\Macro\MacroEngine::TFP_DRIFT + \App\Service\Macro\MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE) / 4.0;
+        $this->assertEqualsWithDelta(2000.0 * (1.0 + $trend), $state['customerDeposits'], 1e-9);
+    }
+
+    /**
+     * Sector physics carries the quarter's change in the smoothed volatility to the treasury: none on the first
+     * report (no phantom margin call), then the log change from the volatility the pool was last struck on.
+     */
+    public function testSectorPhysicsCarriesTheChangeInMarginVolatility(): void
+    {
+        $stock = (new Stock())->setTicker('ACC');
+        $first = $this->model->computeActualFinancials($stock, 100.0, 0.30, 0.0, 0.20, new MacroStateDTO(marketVolatilityEma: 0.15), $this->quietDraws());
+        $this->assertEqualsWithDelta(0.0, $first->streamZ[ClearingHouseBusinessModel::STATE_MARGIN_RATE_CHANGE], 1e-12);
+
+        $stock->setEarningsMomentumZ($first->streamZ);
+        $second = $this->model->computeActualFinancials($stock, 100.0, 0.30, 0.0, 0.20, new MacroStateDTO(marketVolatilityEma: 0.30), $this->quietDraws());
+        $this->assertEqualsWithDelta(log(2.0), $second->streamZ[ClearingHouseBusinessModel::STATE_MARGIN_RATE_CHANGE], 1e-12);
+    }
+
+    /**
+     * @param array<string, float> $momentum
+     * @return array{customerDeposits: float, treasury: float, events: list<array<string, mixed>>}
+     */
+    private function rollMarginPool(float $deposits, array $momentum, MacroStateDTO $macro): array
+    {
+        $stock = (new Stock())->setTicker('ACC');
+        $stock->setEarningsMomentumZ($momentum);
+        $state = ['customerDeposits' => $deposits, 'treasury' => $deposits, 'events' => []];
+        $this->model->processPassiveLiabilityGrowth($stock, $macro, $state, $this->quietDraws());
+
+        return $state;
+    }
+
+    private function quietDraws(): MathUtility
+    {
+        $math = $this->createStub(MathUtility::class);
+        $math->method('generateStandardNormal')->willReturn(0.0);
+        $math->method('generatePersistentZ')->willReturn(0.0);
+
+        return $math;
     }
 
     public function testCalculateCashYieldUsesPolicyRate(): void

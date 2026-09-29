@@ -570,6 +570,71 @@ class CapitalAllocationEngineTest extends TestCase
         return $debtEngine;
     }
 
+    /**
+     * Partial adjustment toward a target capital ratio (Berger et al. 2008): the quarter's change, its retained
+     * earnings included, closes the same share of the gap, compounding to the cited annual speed. At target the
+     * bank returns exactly what it earned beyond holding the ratio; below target it keeps everything.
+     */
+    public function testACapitalSurplusClosesTheCitedShareOfTheGapEachYear(): void
+    {
+        $equity = 12.5;
+        $assets = 100.0;
+        for ($quarter = 0; $quarter < 4; $quarter++) {
+            $opening = $equity / $assets;
+            $equity += 0.4; // a quarter's retained earnings, held as cash
+            $assets += 0.4;
+            $repurchase = CapitalAllocationEngine::capitalTargetRepurchase($equity, $assets, 0.10, $opening);
+            $equity -= $repurchase;
+            $assets -= $repurchase;
+        }
+        $this->assertEqualsWithDelta(0.10 + (0.025 * (1.0 - CapitalAllocationEngine::CAPITAL_TARGET_ADJUSTMENT_SPEED)), $equity / $assets, 1e-12);
+
+        $atTarget = CapitalAllocationEngine::capitalTargetRepurchase(10.4, 100.4, 0.10, 0.10);
+        $this->assertEqualsWithDelta(0.10, (10.4 - $atTarget) / (100.4 - $atTarget), 1e-12, 'Holding the target, not drifting above it.');
+        $this->assertSame(0.0, CapitalAllocationEngine::capitalTargetRepurchase(8.4, 100.4, 0.10, 0.08), 'Below target the bank rebuilds by retaining.');
+    }
+
+    /**
+     * Banks lend out their cash, so the cash-pile tests never see a bank's surplus; its capital ratio does. The
+     * same balance sheet above target is returned by the bank that manages toward one and kept by one that does not.
+     */
+    public function testABankAboveItsCapitalTargetBuysBackWhatAnUntargetedBankKeeps(): void
+    {
+        $macroState = new MacroStateDTO(corporateTaxRate: 0.21);
+
+        $targeted = $this->buildLenderAboveTarget('RIVR');
+        $untargeted = $this->buildLenderAboveTarget('NO_TARGET_BANK');
+        $returned = $this->engine->allocateCapital($targeted, 1.20, 0.30, 15.00, 1000000000.0, $macroState, 300000000.0);
+        $kept = $this->engine->allocateCapital($untargeted, 1.20, 0.30, 15.00, 1000000000.0, $macroState, 300000000.0);
+
+        $this->assertSame(1000000000.0, $kept['new_shares'], 'Control: nothing else in this balance sheet triggers a repurchase.');
+        $this->assertLessThan(1000000000.0, $returned['new_shares'], 'RIVR sits above its 11.1% target and returns the surplus.');
+    }
+
+    private function buildLenderAboveTarget(string $ticker): Stock
+    {
+        $bank = new Stock();
+        $bank->setTicker($ticker);
+        $bank->setIndustry('Banks - Regional');
+        $bank->setSharesOutstanding('1000000000');
+        $bank->setPrice('15.00');
+        $bank->setTotalEquity('12500000000'); // 12.5% of assets
+        $bank->setCustomerDeposits('82500000000');
+        $bank->setWholesaleDebt('5000000000');
+        $bank->setCorporateTreasury('10000000000');
+        $bank->setEarningAssets('90000000000');
+        $bank->setCreditLossAllowance('0');
+        $bank->setTargetPayoutRatio('0.00');
+        $bank->setDividendSpeed('0.00');
+        $bank->setLastDividend('0.00');
+        $bank->setRetainedEarnings('5000000000.00');
+        $bank->setTotalRevenue('4000000000.00');
+        $bank->setOperatingMargin('0.30');
+        $bank->setRoeTtm('0.05');
+
+        return $bank;
+    }
+
     public function testBuybackPercentageCalculatesFromOriginalSharesOutstanding(): void
     {
         $engine = new CapitalAllocationEngine(

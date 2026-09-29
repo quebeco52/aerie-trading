@@ -322,6 +322,12 @@ class EarningsEngine
 
         $this->seedFixedAssetLedgerIfNeeded($ctx);
         $this->seedEarningAssetLedgerIfNeeded($ctx);
+
+        // Struck once the ledgers exist and before earnings or distributions move either side.
+        if ($ctx->strategy->getTargetCapitalRatio($stock) !== null) {
+            $openingAssets = $stock->getTotalAssets();
+            $ctx->openingCapitalRatio = $openingAssets > 0.0 ? (float) $stock->getTotalEquity() / $openingAssets : null;
+        }
     }
 
     /**
@@ -1266,7 +1272,8 @@ class EarningsEngine
             $ctx->sharesOutstanding,
             $ctx->macroState,
             $ctx->actualQuarterlyNetIncome,
-            $ctx->stockCompensation
+            $ctx->stockCompensation,
+            $ctx->openingCapitalRatio
         );
 
         $stock->setSharesOutstanding((string) $ctx->allocation['new_shares']);

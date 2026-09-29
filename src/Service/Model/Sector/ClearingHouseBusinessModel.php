@@ -114,14 +114,14 @@ class ClearingHouseBusinessModel extends BaseFinancialBusinessModel
     public const MIN_OPERATING_BUFFER    = 0.02;
 
     // --- Passive Margin Pool Growth ---
-    /** Baseline real GDP growth rate in neutral economic conditions. */
-    public const BASE_GDP_GROWTH_RATE    = 0.02;
-    /** GDP growth acceleration multiplier during economic expansions. */
-    public const EXPANSION_GDP_MULT      = 0.50;
-    /** GDP contraction multiplier during recessions. */
-    public const RECESSION_GDP_MULT      = 0.30;
-    /** Sensitivity scalar translating VIX shifts into customer margin pool expansion/contraction. */
+    /** Sensitivity of clearing demand to volatility above its baseline (high VIX brings hedging and liquidation flow). */
     public const VIX_POOL_GROWTH_SCALAR  = 0.50;
+    /** Elasticity of initial margin to the volatility it is struck on: IM is a VaR over the liquidation period, so at fixed positions it scales one-for-one with sigma (EMIR RTS 153/2013 Arts. 24-26; CFTC 17 CFR 39.13(g)). */
+    public const MARGIN_VOLATILITY_ELASTICITY = 1.0;
+    /** Persisted smoothed volatility the margin pool was last struck on. */
+    public const STATE_MARGIN_VOLATILITY = 'state:margin_volatility';
+    /** Persisted log change in the margin rate this quarter, applied to the pool when the treasury rolls it. */
+    public const STATE_MARGIN_RATE_CHANGE = 'state:margin_rate_change';
     /** Standard deviation of random noise applied to quarterly margin pool growth. */
     public const POOL_GROWTH_NOISE_STD   = 0.01;
     /** Threshold percentage change in customer deposits required to trigger margin pool lore. */
@@ -221,6 +221,13 @@ class ClearingHouseBusinessModel extends BaseFinancialBusinessModel
         $ratesVolBonus = $yieldCurveSlope > self::RATES_VOL_NEUTRAL_SLOPE ? ($yieldCurveSlope - self::RATES_VOL_NEUTRAL_SLOPE) * 2.0 : 0.0;
 
         $totalMacroBonus = $volatilityBonus + $ratesVolBonus;
+
+        // Initial margin is struck on the smoothed volatility, so the margin rate moves with its CHANGE. The
+        // log change is carried to the treasury, which rolls the pool later in the quarter.
+        $marginVolatility = max(1e-4, $vixEma);
+        $previousMarginVolatility = $streams->getPersistedState(self::STATE_MARGIN_VOLATILITY, $marginVolatility);
+        $streams->registerState(self::STATE_MARGIN_VOLATILITY, $marginVolatility);
+        $streams->registerState(self::STATE_MARGIN_RATE_CHANGE, self::MARGIN_VOLATILITY_ELASTICITY * log($marginVolatility / max(1e-4, $previousMarginVolatility)));
 
         // Interest Rate Shift on Custody Float:
         $policyRateEma = $macroState->policyRateEma;
@@ -363,39 +370,15 @@ class ClearingHouseBusinessModel extends BaseFinancialBusinessModel
             return;
         }
 
-        // 1. Annualized Systemic Growth quarterized
-        $inflation = $macroState->inflationEma;
-        $outputGap = $macroState->outputGapEma;
-        $realGdpGrowth = self::BASE_GDP_GROWTH_RATE + ($outputGap > 0.0 ? $outputGap * self::EXPANSION_GDP_MULT : $outputGap * self::RECESSION_GDP_MULT);
-        $systemicGrowthQuarterly = ($inflation + $realGdpGrowth) / 4.0;
-
-        // 2. Cyclical Elasticity (VIX Shifts)
-        // High VIX = aggressive margin calls (expansion). Low VIX = collateral release (contraction).
-        $vixEma = $macroState->marketVolatilityEma;
-        $vixDelta = $vixEma - self::VIX_BASELINE_THRESHOLD;
-        $volatilityShiftQuarterly = $vixDelta * self::VIX_POOL_GROWTH_SCALAR;
-
-        // 3. Capacity Constraints (Mean Reversion)
-        // A clearinghouse cannot grow its margin pool infinitely without commensurate equity backing.
-        $equity = max(1.0, (float) $stock->getTotalEquity());
-        $maxCapacity = $equity * 50.0; // statutory capacity limit
-
-        $capacityPressure = 0.0;
-        if ($currentLiabilities > $maxCapacity) {
-            // Strong downward reversion if exceeding capacity
-            $capacityPressure = -0.05 * ($currentLiabilities / $maxCapacity);
-        } elseif ($currentLiabilities < $maxCapacity * 0.5) {
-            // Gentle upward pull if severely under-utilized
-            $capacityPressure = 0.02;
-        }
-
-        $baseGrowth = $systemicGrowthQuarterly + $volatilityShiftQuarterly + $capacityPressure;
+        // Initial margin is open positions times a VaR rate. Positions grow with trend nominal income, the trend
+        // a bank's deposit base follows; the rate moves with the change in the volatility it is struck on, which
+        // sector physics carried here. A volatility LEVEL moves the pool's level, never its growth rate: read as a
+        // rate, a quiet market bled the pool away every quarter it stayed quiet.
+        $trendGrowthQuarterly = ($macroState->inflationEma + MacroEngine::TFP_DRIFT + MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE) * \App\Service\Corporate\EarningsEngine::QUARTERLY_TIME_STEP;
+        $marginRateChange = (float) (($stock->getEarningsMomentumZ() ?? [])[self::STATE_MARGIN_RATE_CHANGE] ?? 0.0);
         $noise = $mathUtility->generateStandardNormal() * self::POOL_GROWTH_NOISE_STD;
 
-        // Clamp quarterly margin pool volatility within realistic bounds (+/- 5%)
-        $growthRate = max(-0.05, min(0.05, $baseGrowth + $noise));
-
-        $liabilityChange = $currentLiabilities * $growthRate;
+        $liabilityChange = $currentLiabilities * (((1.0 + $trendGrowthQuarterly) * exp($marginRateChange + $noise)) - 1.0);
 
         if (abs($liabilityChange) > 0.0) {
             // Segregated margin accounting: outflows cannot exceed available deposits
@@ -473,7 +456,6 @@ class ClearingHouseBusinessModel extends BaseFinancialBusinessModel
             'corporate_default_rate_ema',
             'inflation_ema',
             'market_volatility_ema',
-            'output_gap_ema',
             'policy_rate_ema',
             'yield_10y_ema',
             'yield_2y_ema',

@@ -33,4 +33,10 @@ interface CapitalAllocationStrategyInterface
      * makes on capital. A closed-end structure is the exception, and it is why a trust's board buys at all.
      */
     public function resolveRepurchaseAccretion(Stock $stock, float $currentPrice): float;
+
+    /**
+     * The book equity-to-assets ratio the firm manages its capital toward, or null for a firm that runs no
+     * capital target and distributes on its earnings and cash instead.
+     */
+    public function getTargetCapitalRatio(Stock $stock): ?float;
 }

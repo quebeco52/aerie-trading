@@ -74,6 +74,7 @@ class StockModelTuning
             ModelParam::FeeRevenueWeight->value          => 0.20,
             ModelParam::NimInversionSensitivity->value   => 8.0,
             ModelParam::CreditRiskAppetite->value        => 0.40,
+            ModelParam::TargetCapitalRatio->value        => 0.084, // Its seeded book equity/assets (JPMorgan 8.6% at end-2024)
         ],
 
         // --- Riverstone Financial (RIVR) ---
@@ -83,6 +84,7 @@ class StockModelTuning
             ModelParam::FeeRevenueWeight->value          => 0.10,
             ModelParam::NimInversionSensitivity->value   => 12.0,
             ModelParam::CreditRiskAppetite->value        => 0.60,
+            ModelParam::TargetCapitalRatio->value        => 0.111, // Its seeded book equity/assets
         ],
 
         // --- Talon Credit (TALN) ---
@@ -173,6 +175,7 @@ class StockModelTuning
             ModelParam::ClearingFeeWeight->value      => 0.50,
             ModelParam::CustodyFloatWeight->value     => 0.30,
             ModelParam::DataSubscriptionWeight->value => 0.20,
+            ModelParam::TargetCapitalRatio->value     => 0.037, // Its seeded book equity/assets, member margin included
         ],
 
         // =====================================================================

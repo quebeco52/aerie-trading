@@ -55,4 +55,10 @@ trait StandardCapitalAllocationTrait
     {
         return 0.0;
     }
+
+    /** An operating company has no capital ratio to manage; its payout follows its earnings and cash. */
+    public function getTargetCapitalRatio(Stock $stock): ?float
+    {
+        return null;
+    }
 }

@@ -77,6 +77,8 @@ enum ModelParam: string
     case NetworkRevenueWeight = 'network_revenue_weight';
     case MortgageOriginationWeight = 'mortgage_origination_weight';
     case DirectLendingWeight = 'direct_lending_weight';
+    /** Book equity-to-assets ratio the institution manages its capital toward: its seeded ratio, since bank leverage converges to bank-specific, time-invariant targets (Gropp & Heider 2010). */
+    case TargetCapitalRatio = 'target_capital_ratio';
 
     // --- Clearinghouse ---
     case ClearingFeeWeight = 'clearing_fee_weight';

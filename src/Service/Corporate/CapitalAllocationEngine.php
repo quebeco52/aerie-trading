@@ -41,6 +41,10 @@ class CapitalAllocationEngine
     /** Catch-up ratio threshold (1.30x) where Aristocrats accelerate dividend adjustment speed. */
     private const ARISTOCRAT_CATCHUP_THRESHOLD = 1.30;
 
+    // --- Capital Ratio Targeting ---
+    /** Share of the gap to its target capital ratio a bank closes each year: large US BHCs adjust 28-41% a year (Berger, DeYoung, Flannery, Lee & Öztekin 2008). */
+    public const CAPITAL_TARGET_ADJUSTMENT_SPEED = 0.35;
+
     public function __construct(
         private CorporateLedgerService $corporateLedgerService,
         private CorporateMetrics $corporateMetrics,
@@ -60,7 +64,8 @@ class CapitalAllocationEngine
         float $sharesOutstanding,
         MacroStateDTO $macroState,
         float $actualTotalNetIncome = 0.0,
-        float $stockCompensation = 0.0
+        float $stockCompensation = 0.0,
+        ?float $openingCapitalRatio = null
     ): array {
         $ctx = new CapitalAllocationContext(
             $stock,
@@ -72,6 +77,7 @@ class CapitalAllocationEngine
             $actualTotalNetIncome,
             $stockCompensation
         );
+        $ctx->openingCapitalRatio = $openingCapitalRatio;
 
         $this->initializeContext($ctx);
         $this->executeDividends($ctx);
@@ -325,8 +331,11 @@ class CapitalAllocationEngine
         $isLiquidityCrisis = $ctx->health->interestCoverage < 1.0;
         $minBuybackIcr = $ctx->strategy->getBuybackMinIcr();
 
+        $capitalSurplusReturn = $this->resolveCapitalSurplusReturn($ctx);
+
         if ($isLiquidityCrisis || (!$isHoarder && (($ctx->health->wantsToPaydownDebt && !$canEasilyCoverDebt) || $ctx->health->interestCoverage < $minBuybackIcr))) {
-            if (!($ctx->strategy->isFinancial() && $isUnderLeveraged)) {
+            // A balance-sheet lender's distributions answer to its capital ratio, not to interest coverage.
+            if (!($ctx->strategy->isFinancial() && ($isUnderLeveraged || $capitalSurplusReturn > 0.0))) {
                 $ctx->newShares = $ctx->sharesOutstanding;
                 return;
             }
@@ -362,7 +371,7 @@ class CapitalAllocationEngine
         $repurchaseAccretion = $ctx->strategy->resolveRepurchaseAccretion($stock, $ctx->currentPrice);
         $isTradingBelowBook = $repurchaseAccretion >= FinancialConstants::MIN_ACCRETIVE_REPURCHASE_DISCOUNT;
 
-        if (($economicSpread > 0.02 && $ctx->currentPE < ($fairValuePE + 3.0)) || $isHoarder || $isUnderLeveraged || $saturationSeverity > 0.20 || $isTradingBelowBook) {
+        if (($economicSpread > 0.02 && $ctx->currentPE < ($fairValuePE + 3.0)) || $isHoarder || $isUnderLeveraged || $capitalSurplusReturn > 0.0 || $saturationSeverity > 0.20 || $isTradingBelowBook) {
             $maxWillingSpend = $ctx->strategy->calculateMaxBuybackSpend($excessCash, $ctx->retainedEarningsThisQuarter, $isMegaHoarder);
 
             // Saturation Buyback Unlock: Mature firms distribute non-reinvestable excess cash
@@ -386,11 +395,12 @@ class CapitalAllocationEngine
             $effectiveRegulatoryPct = $baseRegulatoryPct + (FinancialConstants::MAX_REGULATORY_SPEND_SATURATED - $baseRegulatoryPct) * $saturationSeverity;
             $maxRegulatorySpend = $marketCap * $effectiveRegulatoryPct;
 
-            if ($isUnderLeveraged) {
-                // Under-leveraged financials must crush equity bloat via buybacks to restore ROE.
-                // They can fund this from retained earnings even when idle excess cash is zero.
-                $recapBudget = max($excessCash, $ctx->retainedEarningsThisQuarter);
-                $maxWillingSpend = max($maxWillingSpend, $recapBudget);
+            if ($isUnderLeveraged || $capitalSurplusReturn > 0.0) {
+                // Under-leveraged financials must crush equity bloat via buybacks to restore ROE, and an
+                // institution above its capital target returns the surplus it is steering off. Both are
+                // funded from retained earnings even when idle excess cash is zero.
+                $recapBudget = $isUnderLeveraged ? max($excessCash, $ctx->retainedEarningsThisQuarter) : 0.0;
+                $maxWillingSpend = max($maxWillingSpend, $recapBudget, $capitalSurplusReturn);
                 $maxRegulatorySpend = max($maxRegulatorySpend, $marketCap * 0.05);
             }
 
@@ -412,6 +422,8 @@ class CapitalAllocationEngine
             $aggression = $isMegaHoarder ? 1.0 : min(1.0, 0.50 + $valuationDiscount);
 
             $actualSpend = $absoluteMaxSpend * $aggression * ($isHoarder ? 1.0 : (mt_rand(50, 100) / 100.0));
+            // The capital return is a plan, not an opportunistic purchase: price and appetite do not scale it.
+            $actualSpend = max($actualSpend, min($capitalSurplusReturn, $absoluteMaxSpend));
             $sharesRepurchased = (int) floor($actualSpend / max($ctx->currentPrice, 0.01));
             
             // Cap buybacks at 95% of currently outstanding shares per quarter.
@@ -439,6 +451,49 @@ class CapitalAllocationEngine
         }
         
         $ctx->newTreasury -= $ctx->totalCashSpent;
+    }
+
+    /**
+     * The repurchase that holds an institution's book capital ratio to one quarter's partial adjustment toward
+     * its own target. Zero for a bank that opened below target: it rebuilds by retaining, under the regulatory
+     * dividend cap that already governs it.
+     */
+    private function resolveCapitalSurplusReturn(CapitalAllocationContext $ctx): float
+    {
+        $target = $ctx->strategy->getTargetCapitalRatio($ctx->stock);
+        if ($target === null) {
+            return 0.0;
+        }
+
+        $stock = $ctx->stock;
+        $openingEquity = (float) $stock->getTotalEquity();
+        $equity = $openingEquity + $ctx->quarterlyNetIncome + $ctx->stockCompensation - $ctx->totalPaid;
+        // The earning-asset ledger already carries this quarter's deployment; the treasury is still the opening balance.
+        $assets = $stock->getTotalAssets() - max(0.0, (float) $stock->getCorporateTreasury()) + max(0.0, $ctx->newTreasury);
+        $openingRatio = $ctx->openingCapitalRatio ?? ($assets > 0.0 ? $openingEquity / $assets : 0.0);
+
+        return self::capitalTargetRepurchase($equity, $assets, $target, $openingRatio);
+    }
+
+    /**
+     * Partial adjustment toward a target capital ratio (Berger et al. 2008): the quarter's change in the ratio,
+     * this quarter's earnings included, closes the quarterly share of the gap it opened on. The repurchase B
+     * returns what would carry it past that, and retiring shares takes the cash with them, so (E - B) / (A - B)
+     * is the ratio the quarter ends on.
+     */
+    public static function capitalTargetRepurchase(float $equity, float $assets, float $targetRatio, float $openingRatio): float
+    {
+        if ($equity <= 0.0 || $assets <= $equity || $openingRatio < $targetRatio) {
+            return 0.0;
+        }
+
+        $quarterlySpeed = 1.0 - ((1.0 - self::CAPITAL_TARGET_ADJUSTMENT_SPEED) ** 0.25);
+        $endRatio = $openingRatio - ($quarterlySpeed * ($openingRatio - $targetRatio));
+        if ($equity / $assets <= $endRatio) {
+            return 0.0;
+        }
+
+        return ($equity - ($endRatio * $assets)) / (1.0 - $endRatio);
     }
 
     private function finalizeLiquidity(CapitalAllocationContext $ctx): void

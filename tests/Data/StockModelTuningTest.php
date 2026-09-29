@@ -155,6 +155,31 @@ class StockModelTuningTest extends TestCase
         return $source;
     }
 
+    /**
+     * A bank's capital target is the ratio it was built with (Gropp & Heider 2010), so every deposit-funded
+     * institution carries one and it matches its seeded book equity over equity plus funding. A seed edited
+     * without its target would have the bank steer toward a balance sheet it never had.
+     */
+    public function testEveryBankTargetsTheCapitalRatioItWasSeededAt(): void
+    {
+        $checked = 0;
+        foreach (InitialMarket::STOCKS as $stock) {
+            $model = Sectors::INDUSTRY_METRICS[$stock['industry'] ?? 'General']['business_model'] ?? 'none';
+            if (!in_array($model, ['commercial_bank', 'clearing_house'], true)) {
+                continue;
+            }
+
+            $equity = (float) $stock['total_equity'];
+            $seeded = $equity / ($equity + (float) ($stock['customer_deposits'] ?? 0.0) + (float) ($stock['wholesale_debt'] ?? 0.0));
+            $target = StockModelTuning::resolve($stock['ticker'], [ModelParam::TargetCapitalRatio->value => 0.0])[ModelParam::TargetCapitalRatio];
+
+            $this->assertEqualsWithDelta($seeded, $target, 0.001, "{$stock['ticker']} targets {$target} but was seeded at {$seeded}.");
+            $checked++;
+        }
+
+        $this->assertGreaterThanOrEqual(3, $checked, 'The board carries at least the two banks and the clearinghouse.');
+    }
+
     public function testStreamWeightSumsAreStrictlyNormalized(): void
     {
         // Define stream weight groups to verify they sum to 1.0 when configured

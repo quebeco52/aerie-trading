@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Service\Model\Sector;
 
+use App\Data\ModelParam;
+use App\Entity\Stock;
 use App\Service\Math\FinancialConstants;
 use App\Service\Model\BusinessModelInterface;
 use App\Service\Model\Trait\FinancialPhysicsTrait;
@@ -63,5 +65,16 @@ abstract class BaseFinancialBusinessModel implements BusinessModelInterface
     public function getSectorFactorLoading(): float
     {
         return static::SECTOR_FACTOR_LOADING;
+    }
+
+    /**
+     * An institution's leverage converges to its own time-invariant target (Gropp & Heider 2010), the ratio it
+     * was built with. One without a tuned target runs none.
+     */
+    public function getTargetCapitalRatio(Stock $stock): ?float
+    {
+        $target = $this->resolveModelParameters($stock, [ModelParam::TargetCapitalRatio->value => 0.0])[ModelParam::TargetCapitalRatio];
+
+        return $target > 0.0 ? $target : null;
     }
 }

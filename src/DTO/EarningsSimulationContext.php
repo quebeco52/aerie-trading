@@ -23,6 +23,8 @@ class EarningsSimulationContext
     public float $investedCapital = 0.0;
     public float $corporateTaxRate = 0.0;
     public float $baselineRoic = 0.0;
+    /** Book equity over total assets as the quarter opens, for a firm that manages toward a capital target; null otherwise. */
+    public ?float $openingCapitalRatio = null;
     public float $baselineVol = 0.0;
     public float $sharesOutstanding = 0.0;
     public float $stableMargin = 0.0;
