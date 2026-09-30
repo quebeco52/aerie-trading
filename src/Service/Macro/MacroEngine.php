@@ -624,7 +624,7 @@ class MacroEngine
         $this->creditFiscalSubsystem->calculateSovereignRiskSpread($state, $dt);
         $this->creditFiscalSubsystem->calculateReimbursementRate($state, $dt);
         $this->assetSubsystem->calculateEquityRiskPremium($state);
-        $this->assetSubsystem->calculateFinancialConditionsIndex($state, $dt);
+        $this->assetSubsystem->calculateFinancialConditionsIndex($state);
         $this->assetSubsystem->calculateConsumerSentiment($state, $dt);
         $this->monetarySubsystem->calculateRecessionProbability($state);
         $this->assetSubsystem->calculateCapitalMarketsDealIndex($state, $dt);

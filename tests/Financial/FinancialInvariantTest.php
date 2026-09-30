@@ -581,7 +581,7 @@ class FinancialInvariantTest extends TestCase
         $stateNormal->nsSlopeEma = 0.012; // Normal upward slope (+120 bps)
         $stateNormal->exchangeRateIndexEma = 100.0;
 
-        $assetSubsystem->calculateFinancialConditionsIndex($stateNormal, 0.25);
+        $assetSubsystem->calculateFinancialConditionsIndex($stateNormal);
 
         // Invariant 1: Normal expansion conditions must be accommodative (negative Z-score, green)
         $this->assertLessThan(
@@ -598,7 +598,7 @@ class FinancialInvariantTest extends TestCase
         $stateCrisis->nsSlopeEma = -0.010; // Inverted curve
         $stateCrisis->exchangeRateIndexEma = 110.0;
 
-        $assetSubsystem->calculateFinancialConditionsIndex($stateCrisis, 0.25);
+        $assetSubsystem->calculateFinancialConditionsIndex($stateCrisis);
 
         // Invariant 2: Crisis conditions must be restrictive (positive Z-score, red)
         $this->assertGreaterThan(
@@ -726,11 +726,13 @@ class FinancialInvariantTest extends TestCase
             ->build();
         $peakState->targetRate = 0.0525;
         $peakState->tipsBreakeven = 0.026;
+        // A low-premium era, as 2006 and 2023 were: the peaks that inverted. At a 2% premium (1995) the peak stayed positive.
+        $peakState->termPremiumRegime = 0.0;
 
         $curvePeak = $monetary->calculateYieldCurveAndQE($peakState, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 0.25);
         $spreadPeak = $curvePeak['yield_10y'] - $curvePeak['yield_2y'];
 
-        // Invariant 3: At the peak of monetary policy tightening, 2s10s spread must invert (< 0.0)
+        // Invariant 3: At the peak of monetary policy tightening in a low-premium era, 2s10s spread must invert (< 0.0)
         $this->assertLessThan(
             0.0,
             $spreadPeak,

@@ -238,8 +238,8 @@ class AssetMarketSubsystem
     public const FCI_ERP_MEAN = MacroEngine::BASE_EQUITY_RISK_PREMIUM;
     /** Historical standard deviation for equity risk premium in FCI normalization. */
     public const FCI_ERP_STD = 0.015;
-    /** Historical standard deviation for currency index deviations in FCI normalization. */
-    public const FCI_FX_STD = 10.0;
+    /** Standard deviation of the log currency gap to its trend in FCI normalization: ~10%, the real broad dollar's swing about its mean. */
+    public const FCI_FX_STD = 0.10;
     /** Neutral 10Y-minus-policy slope for FCI normalization: with policy at neutral the slope is the base ten-year premium. */
     public const FCI_SLOPE_MEAN = MacroEngine::NS_BASE_TERM_PREMIUM;
     /** Historical standard deviation for yield curve slope in FCI normalization. */
@@ -252,8 +252,6 @@ class AssetMarketSubsystem
     public const FCI_SLOOS_MEAN = 0.0;
     /** Historical standard deviation for SLOOS net tightening index in FCI normalization. */
     public const FCI_SLOOS_STD = 0.20;
-    /** OU smoothing speed of FCI toward fundamental composite value. */
-    public const FCI_MEAN_REVERSION = 2.0;
 
     // --- Jovanovic-Rousseau (2002) Capital Markets & M&A Deal Flow ---
     /** Mean-reversion speed (kappa) of deal activity toward fundamental valuation capacity. */
@@ -701,28 +699,26 @@ class AssetMarketSubsystem
      *   FCI > 0 indicates restrictive financial conditions; FCI < 0 indicates accommodative conditions.
      * The weights are loadings on unit-variance components whose stress moves together, so the plain weighted sum is
      * the composite: a 2008-type credit event reads ~+3 sigma, a mild recession ~+1.4, a boom ~-0.6 (Chicago Fed NFCI ranges).
+     * The currency is read against its own trend, since the index settles away from its nominal baseline. Like the NFCI,
+     * the index is a same-period reading of its components, which are already quarterly averages, so no lag is added.
      *
      * @param MacroState $state Current macroeconomic state.
-     * @param float      $dt    Time increment in years.
      */
-    public function calculateFinancialConditionsIndex(MacroState $state, float $dt): void
+    public function calculateFinancialConditionsIndex(MacroState $state): void
     {
         $creditZ = ($state->macroCreditSpreadEma - self::FCI_CREDIT_MEAN) / self::FCI_CREDIT_STD;
         $erpZ = ($state->equityRiskPremium - self::FCI_ERP_MEAN) / self::FCI_ERP_STD;
-        $fxZ = ($state->exchangeRateIndexEma - self::EXCHANGE_RATE_BASELINE) / self::FCI_FX_STD;
+        $fxZ = MacroAggregateSubsystem::realExchangeRateGap($state->exchangeRateIndexEma, $state->exchangeRateTrend) / self::FCI_FX_STD;
         $slopeZ = - ($state->nsSlopeEma - self::FCI_SLOPE_MEAN) / self::FCI_SLOPE_STD;
         $volZ = ($state->marketVolatilityEma - self::FCI_VOL_MEAN) / self::FCI_VOL_STD;
         $sloosZ = ($state->sloosTighteningIndexEma - self::FCI_SLOOS_MEAN) / self::FCI_SLOOS_STD;
 
-        $fundamentalFci = (self::FCI_CREDIT_SPREAD_WEIGHT * $creditZ)
+        $state->financialConditionsIndex = (self::FCI_CREDIT_SPREAD_WEIGHT * $creditZ)
             + (self::FCI_ERP_WEIGHT * $erpZ)
             + (self::FCI_EXCHANGE_RATE_WEIGHT * $fxZ)
             + (self::FCI_YIELD_SLOPE_WEIGHT * $slopeZ)
             + (self::FCI_VOLATILITY_WEIGHT * $volZ)
             + (self::FCI_SLOOS_WEIGHT * $sloosZ);
-
-        $state->financialConditionsIndex += self::FCI_MEAN_REVERSION
-            * ($fundamentalFci - $state->financialConditionsIndex) * $dt;
     }
 
     /**

@@ -490,7 +490,7 @@ class StockTracker
                 momentumTrend: (float) ($stock->getPriceMomentumTrend() ?? 0.0),
                 averageDailyVolume: $this->liquidityEngine->structuralDailyVolume($stock),
                 logReturn: $tickLogReturn,
-                financialConditions: $macroDTO->financialConditionsIndexEma,
+                financialConditions: $macroDTO->financialConditionsIndex,
                 dt: $dt,
                 riskFreeRate: $macroDTO->policyRate,
                 annualizedVolatility: (float) $nextVolatility,

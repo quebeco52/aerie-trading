@@ -37,7 +37,6 @@ class MacroSnapshotRecorderTest extends TestCase
         'ns_curvature2' => 'nsCurvature2',
         'manufacturing_pmi' => 'manufacturingPmi',
         'money_supply_growth_ema' => 'moneySupplyGrowthEma',
-        'restrictive_duration' => 'restrictiveDuration',
         // The regime flags, whose bool sentinels cannot tell one from the other on their own.
         'qe_active' => 'qeActive',
         'qt_active' => 'qtActive',

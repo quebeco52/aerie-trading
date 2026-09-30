@@ -156,7 +156,6 @@ readonly class MacroStateDTO
         public float $expectedPathShock = 0.0,
         public float $termPremiumRegime = MacroEngine::NS_BASE_TERM_PREMIUM,
         public float $perceivedNeutralRate = MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION,
-        public float $restrictiveDuration = 0.0,
         public float $marketVolatility = 0.14,
         public float $marketVolatilityEma = 0.14,
         public float $marketZ = 0.0,

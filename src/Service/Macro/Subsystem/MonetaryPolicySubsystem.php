@@ -92,12 +92,6 @@ class MonetaryPolicySubsystem
     public const FLIGHT_TO_SAFETY_SENSITIVITY = 0.015;
     /** Liability-driven long-end demand (Vayanos & Vila 2021 habitat investors; Greenwood & Vissing-Jorgensen 2018): pensions and insurers buy duration once the thirty-year clears the hurdle their liabilities are discounted at, and that demand comes out of the long-end premium. Loads through the half-again duration scale, so a quarter of the excess reaches the thirty-year; read one tick stale off the smoothed thirty-year. */
     public const HABITAT_LONG_END_DEMAND_SENSITIVITY = 0.50;
-    /** Restrictive stance term premium compression (ACM 2013): the premium is squeezed as the stance tightens, matching the near-zero ACM premium of 2023. With the Bliss slope decay the inversion itself comes from expected cuts, so this only needs to trim, not erase. */
-    public const TERM_PREMIUM_TIGHTENING_COMPRESSION = 0.45;
-    /** Annual attenuation speed at which tightening compression fades over a long restrictive phase (half-life ~2.8 years, so a normal two-year peak keeps most of it), as the market accepts higher-for-longer and demands the full premium again. Keyed to the restrictive-stance clock, not the sign of the slope, so a flat curve cannot keep resetting it. */
-    public const TERM_PREMIUM_COMPRESSION_DECAY_RATE = 0.25;
-    /** Speed at which the restrictive-stance clock unwinds once policy is back at or below neutral (half-life ~4 months). */
-    public const RESTRICTIVE_DURATION_UNWIND_RATE = 2.0;
 
     // --- Term Premium Dynamics (ACM 2013 persistence, Campbell-Pflueger-Viceira 2020 regimes) ---
     /** Annual volatility of transitory term premium shocks: a stationary spread of ~50bps and ~35bps quarterly moves (ACM 2013 quarterly changes run 30-35bps), so a taper tantrum is a two-sigma quarter. */
@@ -309,11 +303,8 @@ class MonetaryPolicySubsystem
      * The ten-year moves for reasons the policy rate does not set: the term premium drifting from its structural
      * baseline, and the market's perceived long-run policy rate drifting from the model-consistent endpoint.
      * Both tighten or loosen financial conditions (mortgages, cap rates, sentiment, business borrowing), so the
-     * rule offsets a share of them. The central bank's own footprint is excluded twice over: QE is meant to
-     * compress the premium and the rule must not undo it, and the compression a restrictive stance itself
-     * produces (calculateYieldCurve's tightening term) is not news about the premium either. Read as news, it
-     * was a loop: tightening compressed the premium, the rule leaned against the compression by tightening
-     * further, and the target sat ~0.4pp above its own rule through every late-cycle inversion.
+     * rule offsets a share of them. The central bank's own balance-sheet footprint is excluded: QE is meant to
+     * compress the premium and the rule must not undo it.
      *
      * @param MacroState $state       Current macroeconomic state.
      * @param float      $naturalRate Dynamic natural real rate of interest (r*).
@@ -326,8 +317,7 @@ class MonetaryPolicySubsystem
             tau: 10.0,
             habitatSensitivity: MacroEngine::PREFERRED_HABITAT_DURATION_SENSITIVITY
         );
-        $ownCompression = $this->restrictiveCompression($state, $naturalRate);
-        $premiumDeviation = ($state->termPremium10yEma - $habitatShiftAtTenYears + $ownCompression) - MacroEngine::NS_BASE_TERM_PREMIUM;
+        $premiumDeviation = ($state->termPremium10yEma - $habitatShiftAtTenYears) - MacroEngine::NS_BASE_TERM_PREMIUM;
 
         $slopeLoad10y = (1.0 - exp(-10.0 * MacroEngine::SVENSSON_SLOPE_LAMBDA)) / (10.0 * MacroEngine::SVENSSON_SLOPE_LAMBDA);
         $endpointDeviation = self::KOZICKI_TINSLEY_ENDPOINT_WEIGHT
@@ -335,24 +325,6 @@ class MonetaryPolicySubsystem
             * (1.0 - $slopeLoad10y);
 
         return $premiumDeviation + $endpointDeviation;
-    }
-
-    /**
-     * Term premium compression a restrictive stance produces, fading with the time spent restrictive.
-     *
-     * One definition shared by the curve, which subtracts it, and the long-rate gap, which must not read it
-     * as a premium move to lean against.
-     *
-     * @param MacroState $state       Current macroeconomic state.
-     * @param float      $naturalRate Dynamic natural real rate of interest (r*).
-     * @return float Premium compression in yield units, zero at or below neutral.
-     */
-    private function restrictiveCompression(MacroState $state, float $naturalRate): float
-    {
-        $rawTighteningCompression = self::TERM_PREMIUM_TIGHTENING_COMPRESSION * max(0.0, $state->policyRate - ($naturalRate + MacroEngine::TARGET_INFLATION));
-        $compressionDecay = exp(-self::TERM_PREMIUM_COMPRESSION_DECAY_RATE * $state->restrictiveDuration);
-
-        return $rawTighteningCompression * $compressionDecay;
     }
 
     /**
@@ -528,13 +500,11 @@ class MonetaryPolicySubsystem
     }
 
     /**
-     * Kozicki & Tinsley (2001) Shifting Endpoints and the restrictive-stance clock.
+     * Kozicki & Tinsley (2001) Shifting Endpoints.
      *
      * Long-horizon rate expectations are not pinned to the model's r* plus target: the market learns the
      * long-run policy rate slowly from what the central bank actually does, so a decade of 5% policy raises
-     * the perceived endpoint and a decade at the floor lowers it. Alongside, a clock accumulates time spent
-     * with policy above neutral and unwinds when it is not, so the premium compression of a tightening can
-     * fade with its duration instead of resetting whenever a flat curve crosses zero.
+     * the perceived endpoint and a decade at the floor lowers it.
      *
      * @param MacroState $state Current macroeconomic state.
      * @param float      $dt    Time increment in years.
@@ -542,13 +512,6 @@ class MonetaryPolicySubsystem
     public function updateMarketExpectations(MacroState $state, float $dt): void
     {
         $state->perceivedNeutralRate += self::KOZICKI_TINSLEY_ADAPTATION_SPEED * ($state->policyRate - $state->perceivedNeutralRate) * $dt;
-
-        $neutralNominalRate = $state->naturalRate + MacroEngine::TARGET_INFLATION;
-        if ($state->policyRate > $neutralNominalRate) {
-            $state->restrictiveDuration += $dt;
-        } else {
-            $state->restrictiveDuration *= exp(-self::RESTRICTIVE_DURATION_UNWIND_RATE * $dt);
-        }
     }
 
     /**
@@ -582,10 +545,9 @@ class MonetaryPolicySubsystem
         $inflationRiskPremium = self::TERM_PREMIUM_IRP_EXPECTATION_SCALE * max(0.0, $state->tipsBreakeven - MacroEngine::TARGET_INFLATION);
         $flightToSafetyShift = self::FLIGHT_TO_SAFETY_SENSITIVITY * max(0.0, $state->marketVolatilityEma - MacroEngine::FLIGHT_TO_SAFETY_VOL_THRESHOLD);
         $cyclicalTermPremium = $state->outputGap * self::NS_GAP_TERM_PREMIUM_SCALE;
-        $restrictiveCompression = $this->restrictiveCompression($state, $naturalRate);
         // Laubach (2009) structural fiscal debt-to-GDP term premium component.
         $structuralTermPremium = $state->termPremiumRegime + $state->termPremiumShock + $state->sovereignRiskSpreadEma;
-        $totalBaseTermPremium = max(self::MIN_TERM_PREMIUM_10Y, $structuralTermPremium + $inflationRiskPremium + $cyclicalTermPremium - $flightToSafetyShift - $restrictiveCompression);
+        $totalBaseTermPremium = max(self::MIN_TERM_PREMIUM_10Y, $structuralTermPremium + $inflationRiskPremium + $cyclicalTermPremium - $flightToSafetyShift);
 
         // Nelson-Siegel (1987) & Diebold-Li (2006) asymptotic risk-neutral rate level beta0.
         // Kozicki & Tinsley (2001) shifting endpoint perception of long-run neutral policy rate. The model-consistent
@@ -648,8 +610,8 @@ class MonetaryPolicySubsystem
      * Writes a fitted curve onto the state, derives the two reported slopes from it, and runs the inversion
      * clock the district's recession alarm is armed off.
      *
-     * The clock lives here rather than beside the restrictive-stance clock in updateMarketExpectations,
-     * which is where it looks like it belongs: it reads the STRUCTURAL slope, and that slope does not exist
+     * The clock lives here rather than in updateMarketExpectations, which is where it looks like it
+     * belongs: it reads the STRUCTURAL slope, and that slope does not exist
      * until this curve has been fitted, one step later in the tick. Run it a step early and it measures the
      * previous tick's curve, which is the reading SYSTEMIC_INVERSION_ALARM_YEARS is counting.
      *
@@ -824,7 +786,7 @@ class MonetaryPolicySubsystem
         $state->recessionProbability = $this->mathUtility->calculateEstrellaMishkinProbability(
             slope: $slope,
             termPremium: $state->termPremium10y,
-            fci: $state->financialConditionsIndexEma,
+            fci: $state->financialConditionsIndex,
             beta0: MacroEngine::RECESSION_PROBIT_BETA_0,
             betaSlope: MacroEngine::RECESSION_PROBIT_BETA_SLOPE,
             betaTp: MacroEngine::RECESSION_PROBIT_BETA_TP,

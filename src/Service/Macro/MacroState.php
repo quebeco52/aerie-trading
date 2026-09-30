@@ -134,7 +134,6 @@ class MacroState
     public float $expectedPathShock;
     public float $termPremiumRegime;
     public float $perceivedNeutralRate;
-    public float $restrictiveDuration;
 
     public bool $qeActive;
     public float $qeIntensity;

@@ -349,8 +349,8 @@ class MacroReport
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
     private ?string $termPremiumRegime = null;
 
-    // The curve's fitted premia, recomputed every tick from the regime, flight to safety, restrictive compression and
-    // the sovereign spread: the base premium the tenors are scaled from and the long end's habitat-adjusted premium.
+    // The curve's fitted premia, recomputed every tick from the regime, flight to safety and the sovereign
+    // spread: the base premium the tenors are scaled from and the long end's habitat-adjusted premium.
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
     private ?string $nsBaseTermPremium = null;
 
@@ -359,9 +359,6 @@ class MacroReport
 
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
     private ?string $perceivedNeutralRate = null;
-
-    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
-    private ?string $restrictiveDuration = null;
 
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
     private ?string $balanceSheetIntensity = null;

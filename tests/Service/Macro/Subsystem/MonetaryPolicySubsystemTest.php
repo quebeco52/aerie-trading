@@ -373,27 +373,29 @@ class MonetaryPolicySubsystemTest extends TestCase
         $this->assertGreaterThan(0.0, $floorCurve['new_qe_intensity'], 'QE must activate once the rule asks for a rate below the floor.');
     }
 
-    public function testTighteningCompressionDecaysWithProlongedRestrictiveStance(): void
+    /**
+     * Tightening raises term premia, it does not squeeze them (Hanson & Stein 2015; Gertler & Karadi 2015), and
+     * ACM's premium rose through the 1994 and 2022-23 hikes. A compression keyed to the stance ran the other way:
+     * past neutral each hike LOWERED the ten-year (slope loading 0.317 against a 0.45 squeeze), which pinned the
+     * premium to its floor through a live boom and put the no-fund curve inverted 24% of the time against the US 15%.
+     */
+    public function testARestrictiveStanceLiftsTheTenYearAndLeavesItsPremium(): void
     {
-        $stateFreshInversion = new MacroState();
-        $stateFreshInversion->policyRate = 0.055; // Restrictive policy rate well above r* + pi = 0.035
-        $stateFreshInversion->tipsBreakeven = 0.02;
-        $stateFreshInversion->outputGap = 0.01;
-        $stateFreshInversion->restrictiveDuration = 0.0; // Fresh tightening cycle
+        $neutral = new MacroState();
+        $neutral->policyRate = MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION;
+        $neutral->targetRate = $neutral->policyRate;
+        $neutral->tipsBreakeven = MacroEngine::TARGET_INFLATION;
 
-        $yieldsFresh = $this->subsystem->calculateYieldCurveAndQE($stateFreshInversion, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 0.25);
+        $restrictive = clone $neutral;
+        $restrictive->policyRate = $neutral->policyRate + 0.02;
+        $restrictive->targetRate = $restrictive->policyRate;
 
-        $stateProlongedInversion = new MacroState();
-        $stateProlongedInversion->policyRate = 0.055; // Same restrictive policy rate
-        $stateProlongedInversion->tipsBreakeven = 0.02;
-        $stateProlongedInversion->outputGap = 0.01;
-        $stateProlongedInversion->restrictiveDuration = 3.0; // 3 years of prolonged high rates
+        $curveNeutral = $this->subsystem->calculateYieldCurve($neutral, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE);
+        $curveRestrictive = $this->subsystem->calculateYieldCurve($restrictive, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE);
 
-        $yieldsProlonged = $this->subsystem->calculateYieldCurveAndQE($stateProlongedInversion, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 0.25);
-
-        // After 3 years of restrictive policy, compression decays and term premium rebounds
-        $this->assertGreaterThan($yieldsFresh['term_premium_10y'], $yieldsProlonged['term_premium_10y'], 'Prolonged restrictive stance must attenuate tightening compression and restore term premium');
-        $this->assertGreaterThan($yieldsFresh['yield_10y'], $yieldsProlonged['yield_10y'], '10Y yield must steepen as compression decays');
+        $slopeLoad10y = (1.0 - exp(-10.0 * MacroEngine::SVENSSON_SLOPE_LAMBDA)) / (10.0 * MacroEngine::SVENSSON_SLOPE_LAMBDA);
+        $this->assertEqualsWithDelta($curveNeutral['term_premium_10y'], $curveRestrictive['term_premium_10y'], 1e-12, 'The stance moves expectations, not the premium.');
+        $this->assertEqualsWithDelta($slopeLoad10y * 0.02, $curveRestrictive['yield_10y'] - $curveNeutral['yield_10y'], 1e-12, 'Two points of restriction lift the ten-year by its slope loading.');
     }
 
     public function testCalculateBalanceSheetOperationsDirectly(): void
@@ -458,7 +460,7 @@ class MonetaryPolicySubsystemTest extends TestCase
         $stateNormal->yield10y = 0.045;
         $stateNormal->policyRate = 0.025; // +200bps steep curve
         $stateNormal->termPremium10y = 0.005;
-        $stateNormal->financialConditionsIndexEma = 0.0;
+        $stateNormal->financialConditionsIndex = 0.0;
 
         $this->subsystem->calculateRecessionProbability($stateNormal);
         $this->assertLessThan(0.20, $stateNormal->recessionProbability, 'Steep curve and neutral financial conditions must yield low recession probability.');
@@ -467,7 +469,7 @@ class MonetaryPolicySubsystemTest extends TestCase
         $stateInverted->yield10y = 0.035;
         $stateInverted->policyRate = 0.055; // -200bps inverted curve
         $stateInverted->termPremium10y = -0.005;
-        $stateInverted->financialConditionsIndexEma = 1.80;
+        $stateInverted->financialConditionsIndex = 1.80;
 
         $this->subsystem->calculateRecessionProbability($stateInverted);
         $this->assertGreaterThan(0.70, $stateInverted->recessionProbability, 'Inverted yield curve and tight FCI must yield high recession probability.');
@@ -522,8 +524,10 @@ class MonetaryPolicySubsystemTest extends TestCase
     }
 
     /**
-     * A restrictive stance inverts the curve through two channels at once: the two-year prices the cuts
-     * that follow, and the premium is compressed toward nothing while policy sits well above neutral.
+     * A restrictive stance inverts the curve through expectations: the two-year prices the cuts that follow,
+     * and the ten-year carries only its slope loading of the stance. Whether that inverts the 2s10s depends on
+     * the premium the ten-year carries: the 2000, 2006 and 2023 peaks inverted, the 1995 peak at a ~2% premium
+     * did not. A low-premium era inverts; the baseline premium only flattens.
      */
     public function testRestrictiveStanceInvertsTheCurve(): void
     {
@@ -534,10 +538,23 @@ class MonetaryPolicySubsystemTest extends TestCase
         $state->outputGap = 0.005;
         $state->marketVolatilityEma = 0.15;
 
+        $neutral = clone $state;
+        $neutral->policyRate = MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION;
+        $neutral->targetRate = $neutral->policyRate;
+        $curveNeutral = $this->subsystem->calculateYieldCurve($neutral, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE);
         $curve = $this->subsystem->calculateYieldCurve($state, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE);
 
         $this->assertLessThan($state->policyRate, $curve['yield_2y'], 'the two-year prices the cuts ahead');
-        $this->assertLessThan(-0.0025, $curve['yield_10y'] - $curve['yield_2y'], 'the curve inverts by a meaningful margin');
+        $this->assertLessThan(
+            $curveNeutral['yield_10y'] - $curveNeutral['yield_2y'],
+            $curve['yield_10y'] - $curve['yield_2y'],
+            'at the baseline premium the stance flattens the curve'
+        );
+
+        $lowPremium = clone $state;
+        $lowPremium->termPremiumRegime = 0.0;
+        $curveLowPremium = $this->subsystem->calculateYieldCurve($lowPremium, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE);
+        $this->assertLessThan(-0.0025, $curveLowPremium['yield_10y'] - $curveLowPremium['yield_2y'], 'in a low-premium era the curve inverts by a meaningful margin');
     }
 
     public function testBreakevenShareOfTheLevelLandsInExpectationsNotTermPremium(): void
@@ -580,12 +597,13 @@ class MonetaryPolicySubsystemTest extends TestCase
         $state->tipsBreakeven = MacroEngine::TARGET_INFLATION;
         $state->outputGap = -0.03;
         $state->marketVolatilityEma = 0.60; // panic: flight to safety
+        $state->termPremiumRegime = 0.0; // the 2010s era
         $state->inversionDuration = 0.0;
         $this->holdSoundFiscalPosition($state); // the fiscal supply premium is not a compression channel
 
         $curve = $this->subsystem->calculateYieldCurve($state, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE);
 
-        $this->assertLessThan(0.0, $curve['term_premium_10y'], 'Restrictive policy plus flight to safety must push the ten-year term premium negative, as ACM shows for 2016-2021.');
+        $this->assertLessThan(0.0, $curve['term_premium_10y'], 'A low-premium era plus flight to safety must push the ten-year term premium negative, as ACM shows for 2016-2021.');
         $this->assertGreaterThanOrEqual(
             MonetaryPolicySubsystem::MIN_TERM_PREMIUM_10Y - 0.00001,
             $curve['term_premium_10y'],
@@ -671,7 +689,7 @@ class MonetaryPolicySubsystemTest extends TestCase
         $this->assertGreaterThan(0.015, $curve['yield_10y'] - $curve['yield_2y'], 'A lower-bound curve is steep, as 2010-2013 were.');
 
         // Ten-year expectations beta to the policy rate is about a third, the empirical value, not the 0.14 of the
-        // single-decay fit. Measured on the risk-neutral rate so the premium compression of a tightening does not blur it.
+        // single-decay fit, measured on the risk-neutral rate.
         $hiked = clone $zlb;
         $hiked->policyRate = 0.0425;
         $hiked->targetRate = 0.0425;
@@ -694,16 +712,6 @@ class MonetaryPolicySubsystemTest extends TestCase
         $closed = ($state->perceivedNeutralRate - $start) / (0.055 - $start);
         $this->assertEqualsWithDelta(1.0 - exp(-3.0 * MonetaryPolicySubsystem::KOZICKI_TINSLEY_ADAPTATION_SPEED), $closed, 0.01, 'Kozicki-Tinsley endpoint adapts at its slow learning speed.');
         $this->assertLessThan(0.5, $closed, 'Three years is not enough to convince the market that neutral has moved.');
-        $this->assertEqualsWithDelta(3.0, $state->restrictiveDuration, 0.01, 'The restrictive clock counts the whole stretch above neutral.');
-
-        // Back at neutral the clock unwinds within months instead of resetting to zero on the first tick.
-        $state->policyRate = 0.030;
-        $this->subsystem->updateMarketExpectations($state, 1.0 / 252.0);
-        $this->assertGreaterThan(2.9, $state->restrictiveDuration, 'A single tick at neutral must not erase the clock.');
-        for ($tick = 0; $tick < 252; $tick++) {
-            $this->subsystem->updateMarketExpectations($state, 1.0 / 252.0);
-        }
-        $this->assertLessThan(0.5, $state->restrictiveDuration, 'A year at neutral unwinds it.');
     }
 
     public function testADecadeOfHighPolicyRepricesTheLongEndAndUninvertsTheCurve(): void
@@ -713,13 +721,11 @@ class MonetaryPolicySubsystemTest extends TestCase
         $fresh->targetRate = 0.050;
         $fresh->tipsBreakeven = 0.027;
         $fresh->outputGap = 0.015;
-        $fresh->termPremiumRegime = 0.006; // a low-premium era, where the static anchor inverted for years
+        $fresh->termPremiumRegime = 0.0; // a low-premium era, where the static anchor inverted for years
         $fresh->perceivedNeutralRate = MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION;
-        $fresh->restrictiveDuration = 0.0;
 
         $decade = clone $fresh;
         $decade->perceivedNeutralRate = 0.048; // the market has learned that 5% is where policy lives
-        $decade->restrictiveDuration = 10.0;
 
         $curveFresh = $this->subsystem->calculateYieldCurve($fresh, MacroEngine::TARGET_INFLATION, 0.018);
         $curveDecade = $this->subsystem->calculateYieldCurve($decade, MacroEngine::TARGET_INFLATION, 0.018);
@@ -790,33 +796,6 @@ class MonetaryPolicySubsystemTest extends TestCase
         $this->assertEqualsWithDelta(0.0, $this->subsystem->calculateLongRateGap($qe, MacroEngine::BASE_NATURAL_RATE), 0.00001, 'Balance-sheet compression is excluded from the long-rate gap.');
     }
 
-    public function testTaylorRuleDoesNotLeanAgainstItsOwnTighteningCompression(): void
-    {
-        $state = new MacroState();
-        $state->inflation = MacroEngine::TARGET_INFLATION;
-        $state->inflationEma = MacroEngine::TARGET_INFLATION;
-        $state->tipsBreakeven = MacroEngine::TARGET_INFLATION;
-        $state->outputGap = 0.0;
-        $state->outputGapEma = 0.0;
-        $state->termPremium10yEma = MacroEngine::NS_BASE_TERM_PREMIUM;
-        $state->perceivedNeutralRate = MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION;
-
-        // Two points restrictive: the curve compresses the premium by TERM_PREMIUM_TIGHTENING_COMPRESSION x 2pp.
-        // Read as a premium move, that compression lifted the rule's own target ~0.4pp through every late-cycle
-        // inversion (measured 2026-09-20) and fed back into further tightening.
-        $restrictive = clone $state;
-        $restrictive->policyRate = MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION + 0.020;
-        $restrictive->restrictiveDuration = 0.0;
-        $restrictive->termPremium10yEma = MacroEngine::NS_BASE_TERM_PREMIUM - (MonetaryPolicySubsystem::TERM_PREMIUM_TIGHTENING_COMPRESSION * 0.020);
-
-        $this->assertEqualsWithDelta(0.0, $this->subsystem->calculateLongRateGap($restrictive, MacroEngine::BASE_NATURAL_RATE), 0.00001, 'The compression a restrictive stance produces is excluded from the long-rate gap.');
-
-        // Once the compression has faded with the restrictive clock, a premium still that low IS news.
-        $stale = clone $restrictive;
-        $stale->restrictiveDuration = 20.0;
-        $this->assertLessThan(-0.005, $this->subsystem->calculateLongRateGap($stale, MacroEngine::BASE_NATURAL_RATE), 'A compression the stance no longer explains is a genuine premium move.');
-    }
-
     public function testTaylorRuleLeansAgainstAMarketThatHasRepricedNeutralUpward(): void
     {
         $state = new MacroState();
@@ -850,7 +829,7 @@ class MonetaryPolicySubsystemTest extends TestCase
         $expectationsDriven->policyRate = 0.04;
         $expectationsDriven->yield10y = 0.045;
         $expectationsDriven->termPremium10y = 0.005;
-        $expectationsDriven->financialConditionsIndexEma = 0.0;
+        $expectationsDriven->financialConditionsIndex = 0.0;
 
         $premiumDriven = clone $expectationsDriven;
         $premiumDriven->termPremium10y = 0.020;
@@ -868,8 +847,8 @@ class MonetaryPolicySubsystemTest extends TestCase
 
     /**
      * The inversion clock is armed off the STRUCTURAL slope, which does not exist until the curve has been
-     * fitted. It therefore belongs with the fitted curve and not beside the restrictive-stance clock in
-     * updateMarketExpectations, which runs a step earlier and would hand it the previous tick's curve.
+     * fitted. It therefore belongs with the fitted curve and not in updateMarketExpectations, which runs a
+     * step earlier and would hand it the previous tick's curve.
      */
     public function testTheInversionClockRunsOffTheCurveItWasJustHanded(): void
     {

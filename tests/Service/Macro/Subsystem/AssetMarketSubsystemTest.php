@@ -776,4 +776,51 @@ class AssetMarketSubsystemTest extends TestCase
             'The house price response must carry the Favara-Imbs elasticity, not just its direction.'
         );
     }
+
+    /**
+     * A state with every FCI component at its neutral: credit, premium, slope and volatility at their means,
+     * lending standards unchanged, the currency on its trend.
+     */
+    private static function neutralFinancialConditions(float $exchangeRateLevel): MacroState
+    {
+        $state = new MacroState();
+        $state->macroCreditSpreadEma = AssetMarketSubsystem::FCI_CREDIT_MEAN;
+        $state->equityRiskPremium = AssetMarketSubsystem::FCI_ERP_MEAN;
+        $state->nsSlopeEma = AssetMarketSubsystem::FCI_SLOPE_MEAN;
+        $state->marketVolatilityEma = AssetMarketSubsystem::FCI_VOL_MEAN;
+        $state->sloosTighteningIndexEma = AssetMarketSubsystem::FCI_SLOOS_MEAN;
+        $state->exchangeRateIndexEma = $exchangeRateLevel;
+        $state->exchangeRateTrend = $exchangeRateLevel;
+
+        return $state;
+    }
+
+    public function testTheFinancialConditionsIndexReadsTheCurrencyAgainstItsTrend(): void
+    {
+        // A currency settled at 108 is its own neutral: the index was built on 100, but the rate differential holds it
+        // above that for decades, and scoring the level read a strong-but-settled currency as standing tightness.
+        $state = self::neutralFinancialConditions(108.0);
+        $this->subsystem->calculateFinancialConditionsIndex($state);
+        $this->assertEqualsWithDelta(0.0, $state->financialConditionsIndex, 1e-12, 'A currency on its trend adds no tightness, wherever the trend sits.');
+
+        // One standard deviation (in logs) above that trend is one unit of the FX component.
+        $state->exchangeRateIndexEma = 108.0 * exp(AssetMarketSubsystem::FCI_FX_STD);
+        $this->subsystem->calculateFinancialConditionsIndex($state);
+        $this->assertEqualsWithDelta(AssetMarketSubsystem::FCI_EXCHANGE_RATE_WEIGHT, $state->financialConditionsIndex, 1e-12);
+    }
+
+    public function testTheFinancialConditionsIndexIsTheSamePeriodComposite(): void
+    {
+        // A credit event: the index reads it on the tick it arrives, whatever it read before (the NFCI is weekly
+        // market prices), so a spread doubling cannot sit behind a stale reading for quarters.
+        $state = self::neutralFinancialConditions(100.0);
+        $state->financialConditionsIndex = -0.5;
+        $state->macroCreditSpreadEma = AssetMarketSubsystem::FCI_CREDIT_MEAN + (2.0 * AssetMarketSubsystem::FCI_CREDIT_STD);
+
+        $this->subsystem->calculateFinancialConditionsIndex($state);
+        $this->assertEqualsWithDelta(2.0 * AssetMarketSubsystem::FCI_CREDIT_SPREAD_WEIGHT, $state->financialConditionsIndex, 1e-12);
+
+        $this->subsystem->calculateFinancialConditionsIndex($state);
+        $this->assertEqualsWithDelta(2.0 * AssetMarketSubsystem::FCI_CREDIT_SPREAD_WEIGHT, $state->financialConditionsIndex, 1e-12, 'The same inputs give the same reading: no path dependence.');
+    }
 }

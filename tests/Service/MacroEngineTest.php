@@ -1674,6 +1674,7 @@ class MacroEngineTest extends TestCase
         $peakState->inflationEma = 0.035;
         $peakState->tipsBreakeven = 0.026;
         $peakState->marketVolatilityEma = 0.16;
+        $peakState->termPremiumRegime = 0.0; // a low-premium era, as 2006 and 2023 were; at a 2% premium (1995) the peak stayed positive
 
         $curvePeak = $this->monetarySubsystem->calculateYieldCurveAndQE($peakState, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 0.25);
 
@@ -1921,7 +1922,7 @@ class MacroEngineTest extends TestCase
         $stateCrisis->nsSlopeEma = -0.015;         // Inverted curve
         $stateCrisis->exchangeRateIndexEma = 115.0; // Strong dollar
 
-        $assetSubsystem->calculateFinancialConditionsIndex($stateCrisis, 0.25);
+        $assetSubsystem->calculateFinancialConditionsIndex($stateCrisis);
 
         $this->assertGreaterThan(
             0.20,
@@ -1941,7 +1942,7 @@ class MacroEngineTest extends TestCase
         $stateGoldilocks->nsSlopeEma = 0.020;          // Steep healthy curve
         $stateGoldilocks->exchangeRateIndexEma = 95.0; // Mildly soft currency
 
-        $assetSubsystem->calculateFinancialConditionsIndex($stateGoldilocks, 0.25);
+        $assetSubsystem->calculateFinancialConditionsIndex($stateGoldilocks);
 
         $this->assertLessThan(
             -0.10,
@@ -1987,6 +1988,7 @@ class MacroEngineTest extends TestCase
         $tightState->targetRate = 0.0400; // Target rate cooling as inflation contained
         $tightState->tipsBreakeven = 0.022;
         $tightState->marketVolatilityEma = 0.18;
+        $tightState->termPremiumRegime = 0.0; // a low-premium late cycle, as 2006-07 was
 
         $curveTight = $monetarySubsystem->calculateYieldCurveAndQE($tightState, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, $dt);
 
