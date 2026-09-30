@@ -101,6 +101,7 @@ class AppFixtures extends Fixture
             $stock->setCapexRatio((string) ($stockData['capex_ratio'] ?? 0.20));
             $stock->setTargetPayoutRatio((string) ($stockData['target_payout_ratio'] ?? 0.30));
             $stock->setDividendSpeed((string) ($stockData['dividendSpeed'] ?? 0.20));
+            $stock->setDividendAristocrat((bool) ($stockData['dividend_aristocrat'] ?? false));
             
             // Fixed Cost Ratio (Fallback to 0.35 if missing)
             $stock->setFixedCostRatio((float) ($stockData['fixed_cost_ratio'] ?? 0.35));

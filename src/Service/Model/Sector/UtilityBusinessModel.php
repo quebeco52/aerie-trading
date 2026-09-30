@@ -151,8 +151,9 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
     public const MAX_OPERATING_MARGIN_CEILING = 0.30;
 
     // --- Rate-Base CapEx & Capital Structure Rails ---
+    /** Interest coverage a regulated utility needs before it recapitalizes: rate-base cash flows carry thin coverage. */
     public const MIN_RECAP_ICR_FLOOR          = 2.5;
-    public const WACC_ARBITRAGE_THRESHOLD     = 0.01;
+    /** Target leverage as a share of the debt tolerance; below it the firm is under-levered. */
     public const UNDERLEVERAGED_DEBT_RATIO    = 0.70;
 
     public function getMacroPhysics(Stock $stock, MacroStateDTO $macroState): array

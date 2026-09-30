@@ -9,14 +9,14 @@ use App\DTO\DebtMetricsDTO;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
 use App\Tests\Support\Model\BareStandardModel;
+use App\Tests\Support\Model\ConfiguredStandardModel;
 use PHPUnit\Framework\TestCase;
 
 /**
- * The leverage policy a sector model inherits when it declares none of the three recapitalization rails.
+ * The leverage policy a sector model inherits when it declares neither recapitalization rail.
  *
- * Every shipped model declares at least some of WACC_ARBITRAGE_THRESHOLD, MIN_RECAP_ICR_FLOOR and
- * UNDERLEVERAGED_DEBT_RATIO, so the FinancialConstants fallbacks behind those `defined()` gates are the
- * behaviour a newly written sector model gets and the behaviour nothing currently covers.
+ * Several shipped models declare MIN_RECAP_ICR_FLOOR and UNDERLEVERAGED_DEBT_RATIO, so the FinancialConstants
+ * fallbacks behind those `defined()` gates are the behaviour a newly written sector model gets.
  */
 final class StandardDebtPhysicsTraitTest extends TestCase
 {
@@ -67,42 +67,42 @@ final class StandardDebtPhysicsTraitTest extends TestCase
     }
 
     /**
-     * Trade-off theory: all three rails must clear before a firm will lever up, so any one of them blocks.
+     * Static trade-off theory: a firm is under-levered below its target leverage while its coverage can carry more
+     * debt, and either rail alone blocks it. What equity costs against debt is no part of the test: equity always
+     * costs more, and borrowing raises it (Modigliani & Miller 1958, Proposition II).
      */
-    public function testUnderLeveragedRequiresArbitrageCoverageAndHeadroomTogether(): void
+    public function testUnderLeveragedIsBelowTheLeverageTargetWithTheCoverageToCarryMore(): void
     {
         $minIcr = $this->model->getMinIcr();
         $icrFloor = max(FinancialConstants::MIN_ABSOLUTE_ICR_BUFFER, $minIcr * FinancialConstants::REQUIRED_ICR_SAFETY_MULT);
-        $tolerance = 1.0;
-        $roomyRatio = 0.5 * FinancialConstants::CORPORATE_UNDERLEVERAGED_RATIO;
+        $tolerance = 1.2;
+        $target = $tolerance * FinancialConstants::CORPORATE_UNDERLEVERAGED_RATIO;
 
-        // All three rails clear: equity dear, coverage ample, leverage well inside tolerance.
+        $this->assertSame($target, $this->model->getLeverageTarget($tolerance), 'An undeclared model targets the default share of its tolerance.');
         $this->assertTrue(
-            $this->model->isUnderLeveraged($roomyRatio, $tolerance, $icrFloor + 1.0, $minIcr, 0.12, 0.04),
-            'Cheap debt, ample coverage and spare capacity together mean the firm is under-levered.'
+            $this->model->isUnderLeveraged(0.5 * $target, $tolerance, $icrFloor, $minIcr),
+            'Below target, with coverage at the floor, the firm is under-levered.'
         );
-
-        // Rail one: the equity/debt spread must exceed the arbitrage buffer, and the boundary is exclusive.
         $this->assertFalse(
-            $this->model->isUnderLeveraged($roomyRatio, $tolerance, $icrFloor + 1.0, $minIcr, 0.04 + FinancialConstants::WACC_ARBITRAGE_BUFFER, 0.04),
-            'Exactly at the arbitrage buffer there is no gain to capture.'
+            $this->model->isUnderLeveraged(0.5 * $target, $tolerance, $icrFloor - 0.01, $minIcr),
+            'Thin coverage blocks a recapitalization however far below target the firm sits.'
         );
-        $this->assertTrue(
-            $this->model->isUnderLeveraged($roomyRatio, $tolerance, $icrFloor + 1.0, $minIcr, 0.04 + FinancialConstants::WACC_ARBITRAGE_BUFFER + 0.001, 0.04),
-            'A hair above the buffer does qualify.'
-        );
-
-        // Rail two: coverage below the safety floor blocks regardless of how attractive the arbitrage is.
         $this->assertFalse(
-            $this->model->isUnderLeveraged($roomyRatio, $tolerance, $icrFloor - 0.01, $minIcr, 0.20, 0.03),
-            'Thin coverage must block a recapitalization however cheap the debt.'
+            $this->model->isUnderLeveraged($target, $tolerance, $icrFloor + 1.0, $minIcr),
+            'At its target the firm carries the leverage it means to.'
         );
+    }
 
-        // Rail three: leverage already at tolerance leaves no headroom.
-        $this->assertFalse(
-            $this->model->isUnderLeveraged($tolerance * FinancialConstants::CORPORATE_UNDERLEVERAGED_RATIO, $tolerance, $icrFloor + 1.0, $minIcr, 0.20, 0.03),
-            'At the leverage rail the firm is not under-levered.'
-        );
+    /** A sector's declared target share and coverage floor are the ones the test applies. */
+    public function testDeclaredRecapitalizationRailsReachTheTest(): void
+    {
+        $configured = new ConfiguredStandardModel();
+        $minIcr = $configured->getMinIcr();
+
+        $this->assertSame(1.2 * ConfiguredStandardModel::UNDERLEVERAGED_DEBT_RATIO, $configured->getLeverageTarget(1.2));
+        $this->assertTrue($configured->isUnderLeveraged(0.29, 1.0, ConfiguredStandardModel::MIN_RECAP_ICR_FLOOR, $minIcr));
+        $this->assertFalse($configured->isUnderLeveraged(0.29, 1.0, ConfiguredStandardModel::MIN_RECAP_ICR_FLOOR - 0.01, $minIcr), 'The declared floor, not the derived one, binds.');
+        $this->assertFalse($configured->isUnderLeveraged(0.31, 1.0, ConfiguredStandardModel::MIN_RECAP_ICR_FLOOR, $minIcr), 'The declared target, not the default share, binds.');
     }
 
     /**
@@ -206,7 +206,7 @@ final class StandardDebtPhysicsTraitTest extends TestCase
         $this->assertSame(0.30, $this->model->getMaxFloatingDebtRatio(), 'A corporate terms out most of its debt.');
         $this->assertSame(FinancialConstants::DEFAULT_QUARTERLY_DEBT_ROLLOVER, $this->model->getDebtMaturityRolloverRate());
         $this->assertFalse($this->model->requiresAlternativeZScore(), 'Altman Z applies to a normal balance sheet.');
-        $this->assertTrue($this->model->supportsUnderleveragedDebtExpansion());
+        $this->assertFalse($this->model->supportsUnderleveragedDebtExpansion(), 'An operating company recapitalizes by repurchase, not by borrowing into its treasury.');
         $this->assertTrue($this->model->shouldForceDeleveragingOnJunkOrHoarding());
     }
 

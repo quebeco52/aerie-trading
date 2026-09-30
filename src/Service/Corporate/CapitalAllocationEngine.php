@@ -19,31 +19,17 @@ use App\DTO\MacroStateDTO;
  */
 class CapitalAllocationEngine
 {
-    // --- Dividend Policy & Distress Thresholds ---
-    /** EVA spread floor (-800 bps) below which standard companies enter deep structural distress. */
-    private const DEEP_DISTRESS_EVA_SPREAD = -0.08;
-    /** EVA spread floor (-400 bps) for moderate distress when operating cash buffer is depleted. */
-    private const MODERATE_DISTRESS_EVA_SPREAD = -0.04;
-    /** Tolerance multiplier (1.5x) for Dividend Aristocrats to absorb negative economic spreads before distress. */
-    private const ARISTOCRAT_DISTRESS_MULTIPLIER = 1.5;
-    /** Standard distress multiplier (1.0x) for non-Aristocrat dividend payers. */
-    private const STANDARD_DISTRESS_MULTIPLIER = 1.0;
-    /** Operating cash buffer multiple (1.5x) required to avoid moderate distress cash penalties. */
+    // --- Dividend Liquidity ---
+    /** Operating cash buffer multiple (1.5x) below which coverage under the crisis threshold omits the dividend. */
     private const CASH_BUFFER_SAFETY_MULT = 1.5;
-    /** Rebased dividend retention floor (30%) for Aristocrats undergoing deep structural distress without liquidity failure. */
-    private const ARISTOCRAT_DISTRESS_REBASE_RATIO = 0.30;
-    /** Rebased dividend retention floor (50%) for moderate structural distress or critical cash rebasing. */
-    private const MODERATE_DISTRESS_REBASE_RATIO = 0.50;
-
-    // --- Dividend Policy & Lintner Model ---
-    /** Maximum catch-up growth adjustment speed for Dividend Aristocrats when target payout exceeds current dividend. */
-    private const ARISTOCRAT_MAX_CATCHUP_SPEED = 0.15;
-    /** Catch-up ratio threshold (1.30x) where Aristocrats accelerate dividend adjustment speed. */
-    private const ARISTOCRAT_CATCHUP_THRESHOLD = 1.30;
 
     // --- Capital Ratio Targeting ---
     /** Share of the gap to its target capital ratio a bank closes each year: large US BHCs adjust 28-41% a year (Berger, DeYoung, Flannery, Lee & Öztekin 2008). */
     public const CAPITAL_TARGET_ADJUSTMENT_SPEED = 0.35;
+
+    // --- Leverage Targeting ---
+    /** Share of the gap to its target leverage a firm closes each year: about a third (Flannery & Rangan 2006). */
+    public const LEVERAGE_TARGET_ADJUSTMENT_SPEED = 0.34;
 
     public function __construct(
         private CorporateLedgerService $corporateLedgerService,
@@ -142,7 +128,7 @@ class CapitalAllocationEngine
         $targetPayout = $stock->getPolicyPayoutRatio();
         $speed = (float) $stock->getDividendSpeed();
         $lastDividend = (float) $stock->getLastDividend();
-        $isAristocrat = $speed <= 0.03;
+        $isAristocrat = $stock->isDividendAristocrat();
 
         $customDepreciation = (float) $stock->getDepreciationRate();
         $depRate = $customDepreciation > 0.0 ? $customDepreciation : $this->corporateMetrics->getIndustryDepreciationRate($ctx->industry);
@@ -169,6 +155,8 @@ class CapitalAllocationEngine
             $sustainableBase = min($ctx->quarterlyFcfPerShare, $lastDividend / max(0.01, $effectiveTargetPayout));
         }
         $calculatedTarget = $sustainableBase > 0 ? ($sustainableBase * $effectiveTargetPayout) : 0.0;
+        // Managers are reluctant to cut (Lintner 1956), and one known for an unbroken record of increases does
+        // not cut by choice at all: it holds the dividend while earnings fall and cuts only when it is forced to.
         $targetDividend = $isAristocrat ? max($calculatedTarget, $lastDividend) : $calculatedTarget;
 
         $isRegulatoryDividendHalt = false;
@@ -182,53 +170,36 @@ class CapitalAllocationEngine
             }
         }
 
-        $hurdleRate = $ctx->strategy->getHurdleRate($ctx->health);
-
-        $evaSpread = $trueReturn - $hurdleRate;
-        $distressMultiplier = $isAristocrat ? self::ARISTOCRAT_DISTRESS_MULTIPLIER : self::STANDARD_DISTRESS_MULTIPLIER;
-
         $minOperatingCash = $ctx->strategy->calculateMinOperatingCash($ctx->operatingBase, (float) $stock->getCustomerDeposits(), (float) $stock->getWholesaleDebt());
         $hasCashBuffer = $ctx->newTreasury > ($minOperatingCash * self::CASH_BUFFER_SAFETY_MULT);
-        $isCriticalCash = $ctx->newTreasury < $minOperatingCash;
-
-        $isDeepDistress = $evaSpread < (self::DEEP_DISTRESS_EVA_SPREAD * $distressMultiplier);
-        $isModerateDistressNoCash = ($evaSpread < (self::MODERATE_DISTRESS_EVA_SPREAD * $distressMultiplier)) && !$hasCashBuffer;
 
         $crisisThreshold = $ctx->strategy->getDividendCrisisIcr();
         $isLiquidityCrisis = $ctx->health->interestCoverage < 1.0 || ($ctx->health->interestCoverage < $crisisThreshold && !$hasCashBuffer);
 
+        // Falling earnings cut the dividend through the target payout, at the firm's own adjustment speed: cuts
+        // follow losses (DeAngelo, DeAngelo & Skinner 1992), not a return below the hurdle on earnings that still
+        // cover it, and the cash and legal caps below bind when the treasury cannot pay. Only a liquidity crisis
+        // or a regulator stops the dividend outright.
         if ($isLiquidityCrisis || $isRegulatoryDividendHalt) {
             $targetDividend = 0.0;
             $speed = 1.0;
-        } elseif ($isDeepDistress) {
-            $targetDividend = $isAristocrat ? min($calculatedTarget, $lastDividend * self::ARISTOCRAT_DISTRESS_REBASE_RATIO) : 0.0;
-            $speed = min(1.0, $speed + 0.25);
-        } elseif ($isModerateDistressNoCash || ($isCriticalCash && $calculatedTarget < $lastDividend)) {
-            $targetDividend = min($calculatedTarget, $lastDividend * self::MODERATE_DISTRESS_REBASE_RATIO);
-            $speed = min(1.0, $speed + 0.15);
         }
 
         // The dividend leg of the same restricted-payments clause. A breach freezes the distribution where
         // it stands rather than cutting it: what lenders withhold consent for is an INCREASE in payments
-        // while the firm is out of compliance, and the distress ladder above already handles the case where
-        // cash flow has actually collapsed. min() keeps that ladder's cut winning whenever it is deeper.
+        // while the firm is out of compliance. min() keeps a deeper cut, from falling earnings or a crisis.
         if (!$ctx->health->hasLeverageHeadroom) {
             $targetDividend = min($targetDividend, $lastDividend);
         }
 
-        if ($lastDividend > 0 && $isAristocrat) {
-            $catchUpRatio = $calculatedTarget / $lastDividend;
-            if ($catchUpRatio > self::ARISTOCRAT_CATCHUP_THRESHOLD) {
-                $speed = min(self::ARISTOCRAT_MAX_CATCHUP_SPEED, $speed + (($catchUpRatio - self::ARISTOCRAT_CATCHUP_THRESHOLD) * 0.10));
-            }
-        } elseif (!$isAristocrat && $saturationSeverity > 0.20 && $calculatedTarget > $lastDividend) {
+        if ($saturationSeverity > 0.20 && $calculatedTarget > $lastDividend) {
             $speed = min(1.0, $speed + ($saturationSeverity * 0.10));
         }
 
         $ctx->newDividend = max(0.0, $lastDividend + ($speed * ($targetDividend - $lastDividend)));
 
         // A pass-through keeps its tax status only by distributing its taxable income, so while the quarter is
-        // profitable no payout preference, smoothing or distress rung above can take the dividend below it.
+        // profitable no payout preference, smoothing or crisis omission above can take the dividend below it.
         // Taxable income is net income: a REIT's EPS here is FFO, depreciation added back, which the rule
         // does not reach.
         $taxableIncomePerShare = max(0.0, $ctx->quarterlyNetIncome) / max(1.0, $ctx->sharesOutstanding);
@@ -238,14 +209,21 @@ class CapitalAllocationEngine
         // Taxable income is struck on historic-cost depreciation, so when replacing the property costs more than
         // the book charge the trust owes a distribution its cash flow does not cover. It borrows the gap at its
         // market rate while its lenders will fund it, as REITs draw their lines to pay required distributions.
-        $distributionShortfall = ($requiredDividend * $ctx->sharesOutstanding) - max(0.0, $ctx->newTreasury - $minOperatingCash);
-        if ($requiredDividend > 0.0 && $distributionShortfall > 0.0 && $ctx->health->canIssueDebt && $ctx->health->hasLeverageHeadroom) {
+        // An aristocrat does the same for the dividend its record holds it to: managers raise external funds
+        // before they cut (Brav, Graham, Harvey & Michaely 2005), so a quarter's cash shortfall is not a cut.
+        $heldDividend = $isAristocrat ? min($ctx->newDividend, $lastDividend) : 0.0;
+        $fundedDividend = max($requiredDividend, $heldDividend);
+        // Measured from the operating floor itself, so a treasury below it borrows enough to pay: the cash cap
+        // below reads the same floor.
+        $distributionShortfall = ($fundedDividend * $ctx->sharesOutstanding) - ($ctx->newTreasury - $minOperatingCash);
+        if ($fundedDividend > 0.0 && $distributionShortfall > 0.0 && $ctx->health->canIssueDebt && $ctx->health->hasLeverageHeadroom) {
             $this->debtEngine->issueDebt($stock, $distributionShortfall, $ctx->health->rawMetrics->currentMarketRate ?? ($ctx->macroState->yield5yEma + (float) $stock->getCreditSpread()));
             $ctx->wholesaleDebt = (float) $stock->getWholesaleDebt();
             $ctx->newTreasury += $distributionShortfall;
 
             if ($distributionShortfall > 500_000_000.0) {
-                $ctx->events[] = ['description' => "Borrowed \$" . number_format($distributionShortfall / 1_000_000_000, 2) . "B to fund its required REIT distribution.", 'shock' => 0.0];
+                $purpose = $requiredDividend >= $heldDividend ? 'its required REIT distribution' : 'its dividend';
+                $ctx->events[] = ['description' => "Borrowed \$" . number_format($distributionShortfall / 1_000_000_000, 2) . "B to fund {$purpose}.", 'shock' => 0.0];
             }
         }
 
@@ -256,6 +234,13 @@ class CapitalAllocationEngine
         $maxLegalDividendPerShare = $ctx->sharesOutstanding > 0 ? ($distributableSurplus / $ctx->sharesOutstanding) : 0.0;
 
         $ctx->newDividend = min($ctx->newDividend, $maxCashDividendPerShare, $maxLegalDividendPerShare);
+
+        // Any cut ends the record the aristocrat was known for, whatever forced it. Read at the four decimals a
+        // dividend is declared and stored in, so float dust from a funded shortfall is not a cut.
+        if ($isAristocrat && round($ctx->newDividend, 4) < $lastDividend) {
+            $stock->setDividendAristocrat(false);
+            $ctx->events[] = ['description' => 'Cut its dividend, ending its record of dividend increases.', 'shock' => 0.0];
+        }
         // Every share outstanding is paid, so the treasury debit below covers the whole register. Only
         // player-held shares are credited to a cash balance by the ledger service; the remainder is the
         // notional public float and simply leaves the company. The two are not meant to reconcile.
@@ -354,6 +339,7 @@ class CapitalAllocationEngine
         $minBuybackIcr = $ctx->strategy->getBuybackMinIcr();
 
         $capitalSurplusReturn = $this->resolveCapitalSurplusReturn($ctx);
+        $recapitalization = $this->resolveRecapitalizationRepurchase($ctx);
 
         if ($isLiquidityCrisis || (!$isHoarder && (($ctx->health->wantsToPaydownDebt && !$canEasilyCoverDebt) || $ctx->health->interestCoverage < $minBuybackIcr))) {
             // A balance-sheet lender's distributions answer to its capital ratio, not to interest coverage.
@@ -419,10 +405,10 @@ class CapitalAllocationEngine
             $maxRegulatorySpend = $marketCap * $effectiveRegulatoryPct;
 
             if ($isUnderLeveraged || $capitalSurplusReturn > 0.0) {
-                // Under-leveraged financials must crush equity bloat via buybacks to restore ROE, and an
-                // institution above its capital target returns the surplus it is steering off. Both are
-                // funded from retained earnings even when idle excess cash is zero.
-                $recapBudget = $isUnderLeveraged ? max($excessCash, $ctx->retainedEarningsThisQuarter) : 0.0;
+                // An under-levered firm hands back its idle cash and retires the equity its recapitalization
+                // replaces with debt, and an institution above its capital target returns the surplus it is
+                // steering off. Both are funded from retained earnings even when idle excess cash is zero.
+                $recapBudget = $isUnderLeveraged ? max($excessCash, $ctx->retainedEarningsThisQuarter, $recapitalization) : 0.0;
                 $maxWillingSpend = max($maxWillingSpend, $recapBudget, $capitalSurplusReturn);
                 $maxRegulatorySpend = max($maxRegulatorySpend, $marketCap * 0.05);
             }
@@ -433,8 +419,16 @@ class CapitalAllocationEngine
             $maxEquitySpend = max(0.0, $currentEquity * 0.50);
             $absoluteMaxSpend = min($absoluteMaxSpend, $maxEquitySpend);
 
-            // Hard Solvency Constraint: Cannot spend more cash than physically available in treasury above min operating buffer
             $minOperatingCash = $ctx->strategy->calculateMinOperatingCash($ctx->operatingBase, (float) $stock->getCustomerDeposits(), (float) $stock->getWholesaleDebt());
+
+            // Borrowed only for the part of the repurchase the firm can make that its excess cash cannot pay for. A
+            // treasury below its operating floor is refilled before any recapitalization: borrowing into it only
+            // plugged the hole, and the repurchase it was raised for never happened.
+            $recapitalization = $recapitalization > 0.0 && $ctx->newTreasury >= $minOperatingCash
+                ? $this->fundRecapitalization($ctx, min($recapitalization, $absoluteMaxSpend), $excessCash)
+                : 0.0;
+
+            // Hard Solvency Constraint: Cannot spend more cash than physically available in treasury above min operating buffer
             $availableCashBuffer = max(0.0, $ctx->newTreasury - $minOperatingCash);
             $absoluteMaxSpend = min($absoluteMaxSpend, $availableCashBuffer);
 
@@ -445,8 +439,9 @@ class CapitalAllocationEngine
             $aggression = $isMegaHoarder ? 1.0 : min(1.0, 0.50 + $valuationDiscount);
 
             $actualSpend = $absoluteMaxSpend * $aggression * ($isHoarder ? 1.0 : (mt_rand(50, 100) / 100.0));
-            // The capital return is a plan, not an opportunistic purchase: price and appetite do not scale it.
-            $actualSpend = max($actualSpend, min($capitalSurplusReturn, $absoluteMaxSpend));
+            // The capital return and the recapitalization are plans, not opportunistic purchases: price and
+            // appetite do not scale them.
+            $actualSpend = max($actualSpend, min(max($capitalSurplusReturn, $recapitalization), $absoluteMaxSpend));
             $sharesRepurchased = (int) floor($actualSpend / max($ctx->currentPrice, 0.01));
             
             // Cap buybacks at 95% of currently outstanding shares per quarter.
@@ -490,7 +485,7 @@ class CapitalAllocationEngine
 
         $stock = $ctx->stock;
         $openingEquity = (float) $stock->getTotalEquity();
-        $equity = $openingEquity + $ctx->quarterlyNetIncome + $ctx->stockCompensation - $ctx->totalPaid;
+        $equity = $this->resolvePreBuybackEquity($ctx);
         // The earning-asset ledger already carries this quarter's deployment; the treasury is still the opening balance.
         $assets = $stock->getTotalAssets() - max(0.0, (float) $stock->getCorporateTreasury()) + max(0.0, $ctx->newTreasury);
         $openingRatio = $ctx->openingCapitalRatio ?? ($assets > 0.0 ? $openingEquity / $assets : 0.0);
@@ -510,13 +505,99 @@ class CapitalAllocationEngine
             return 0.0;
         }
 
-        $quarterlySpeed = 1.0 - ((1.0 - self::CAPITAL_TARGET_ADJUSTMENT_SPEED) ** 0.25);
-        $endRatio = $openingRatio - ($quarterlySpeed * ($openingRatio - $targetRatio));
+        $endRatio = $openingRatio - (self::quarterlyAdjustmentSpeed(self::CAPITAL_TARGET_ADJUSTMENT_SPEED) * ($openingRatio - $targetRatio));
         if ($equity / $assets <= $endRatio) {
             return 0.0;
         }
 
         return ($equity - ($endRatio * $assets)) / (1.0 - $endRatio);
+    }
+
+    /**
+     * Partial adjustment toward a target debt-to-equity ratio (Flannery & Rangan 2006): the quarter's change in the
+     * ratio, this quarter's retained earnings included, closes the quarterly share of the gap it opened on. A
+     * repurchase R financed with debt moves the ratio to (D + R) / (E - R), so R = (L E - D) / (1 + L) is the one
+     * that ends the quarter on the ratio L.
+     */
+    public static function leverageTargetRepurchase(float $equity, float $debt, float $targetRatio, float $openingRatio): float
+    {
+        if ($equity <= 0.0 || $openingRatio >= $targetRatio) {
+            return 0.0;
+        }
+
+        $endRatio = $openingRatio + (self::quarterlyAdjustmentSpeed(self::LEVERAGE_TARGET_ADJUSTMENT_SPEED) * ($targetRatio - $openingRatio));
+
+        return max(0.0, (($endRatio * $equity) - $debt) / (1.0 + $endRatio));
+    }
+
+    /** The quarterly share of a gap that compounds to closing the annual share of it in a year. */
+    private static function quarterlyAdjustmentSpeed(float $annualSpeed): float
+    {
+        return 1.0 - ((1.0 - $annualSpeed) ** 0.25);
+    }
+
+    /**
+     * The repurchase that carries an under-levered operating company one quarter's partial adjustment toward its
+     * leverage target. A leveraged recapitalization exchanges debt for equity (Denis & Denis 1993): borrowing the
+     * cash to hold it recapitalized nothing, and left the idle proceeds for the capex gate to spend on plant a
+     * saturated firm had no use for. A lender levers up by lending, through TreasuryEngine's balance-sheet
+     * expansion, so a financial recapitalizes nothing here.
+     */
+    private function resolveRecapitalizationRepurchase(CapitalAllocationContext $ctx): float
+    {
+        if ($ctx->strategy->isFinancial() || !$ctx->health->isUnderLeveraged) {
+            return 0.0;
+        }
+
+        $leaseLiability = $this->corporateMetrics->calculateLeaseLiability($ctx->health->rawMetrics->revenue, $ctx->strategy->getLeaseIntensity());
+
+        return self::leverageTargetRepurchase(
+            $this->resolvePreBuybackEquity($ctx),
+            (float) $ctx->stock->getTotalDebt() + $leaseLiability,
+            $ctx->health->leverageTarget,
+            $ctx->health->debtToEquity
+        );
+    }
+
+    /** Book equity once this quarter's earnings, stock compensation and dividend are through it. */
+    private function resolvePreBuybackEquity(CapitalAllocationContext $ctx): float
+    {
+        return (float) $ctx->stock->getTotalEquity() + $ctx->quarterlyNetIncome + $ctx->stockCompensation - $ctx->totalPaid;
+    }
+
+    /**
+     * Funds a recapitalization repurchase from excess cash first and borrows the rest while the firm's lenders
+     * will fund it, up to its debt capacity. Returns the repurchase the firm can pay for.
+     */
+    private function fundRecapitalization(CapitalAllocationContext $ctx, float $repurchase, float $excessCash): float
+    {
+        $shortfall = $repurchase - $excessCash;
+        if ($shortfall <= 0.0) {
+            return $repurchase;
+        }
+
+        $stock = $ctx->stock;
+        $metrics = $ctx->health->rawMetrics;
+        $borrowing = 0.0;
+        if ($ctx->health->canIssueDebt && $ctx->health->hasLeverageHeadroom && !$ctx->health->isSevereNegativeCarry) {
+            $capacity = $ctx->strategy->calculateDebtExpansionCapacity($this->resolvePreBuybackEquity($ctx), (float) $stock->getTotalDebt(), $ctx->wholesaleDebt, $ctx->health, $metrics->currentMarketRate, $metrics->ebit, $metrics->depreciation);
+            $borrowing = max(0.0, min($shortfall, $capacity));
+        }
+
+        if ($borrowing > 0.0) {
+            $this->debtEngine->issueDebt($stock, $borrowing, $metrics->currentMarketRate);
+            $ctx->wholesaleDebt = (float) $stock->getWholesaleDebt();
+            $ctx->newTreasury += $borrowing;
+            $ctx->debtIssued += $borrowing;
+            $ctx->debtActionTaken = true;
+            $ctx->recapActionTaken = true;
+
+            if ($borrowing > 500_000_000.0) {
+                $ctx->events[] = ['description' => "Issued \$" . number_format($borrowing / 1_000_000_000, 2) . "B in bonds for recapitalization.", 'shock' => 0.5];
+            }
+        }
+
+        return $repurchase - $shortfall + $borrowing;
     }
 
     /**

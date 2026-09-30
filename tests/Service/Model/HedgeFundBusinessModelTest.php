@@ -497,8 +497,8 @@ class HedgeFundBusinessModelTest extends TestCase
         $this->assertFalse($this->model->supportsUnderleveragedDebtExpansion());
 
         // Wholesale leverage limit is 3.0. 50% of 3.0 is 1.50.
-        $this->assertTrue($this->model->isUnderLeveraged(1.4, 3.0, 5.0, 1.05, 0.12, 0.05));
-        $this->assertFalse($this->model->isUnderLeveraged(1.6, 3.0, 5.0, 1.05, 0.12, 0.05));
+        $this->assertTrue($this->model->isUnderLeveraged(1.4, 3.0, 5.0, 1.05));
+        $this->assertFalse($this->model->isUnderLeveraged(1.6, 3.0, 5.0, 1.05));
     }
 
     public function testAcquisitionTypeIsHostileTakeover(): void

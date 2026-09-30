@@ -492,18 +492,6 @@ class HedgeFundBusinessModel extends AssetManagementBusinessModel
         return new DebtExpansionAppetiteDTO(probability: self::DEBT_EXPANSION_BASE_PROB + ($spreadMultiplier * self::DEBT_EXPANSION_PROB_MULT), aggressiveness: self::DEBT_EXPANSION_BASE_AGGR + (self::DEBT_EXPANSION_AGGR_MULT * $spreadMultiplier));
     }
 
-    public function isUnderLeveraged(
-        float $currentDebtRatio,
-        float $targetDebtTolerance,
-        float $interestCoverage,
-        float $minIcr,
-        float $costOfEquity,
-        float $effectiveCostOfDebt
-    ): bool {
-        $limit = $targetDebtTolerance > 0.0 ? $targetDebtTolerance : $this->getWholesaleLeverageLimit();
-        return $currentDebtRatio < ($limit * 0.50);
-    }
-
     public function supportsUnderleveragedDebtExpansion(): bool
     {
         return false;

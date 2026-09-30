@@ -409,7 +409,7 @@ class ClearingHouseBusinessModel extends BaseFinancialBusinessModel
         return self::MONOPOLY_REVERSION_SPEED; // Toll-booth monopoly moat resists margin compression
     }
 
-    public function isUnderLeveraged(float $currentDebtRatio, float $targetDebtTolerance, float $interestCoverage, float $minIcr, float $costOfEquity, float $effectiveCostOfDebt): bool
+    public function isUnderLeveraged(float $currentDebtRatio, float $targetDebtTolerance, float $interestCoverage, float $minIcr): bool
     {
         // For a Central Counterparty Clearing House (CCP), Customer Deposits represent member initial margin collateral.
         // These deposits scale exogenously with clearing member trading volume and open interest rather than discretionary

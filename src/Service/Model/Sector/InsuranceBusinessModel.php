@@ -964,7 +964,7 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
         }
     }
 
-    public function isUnderLeveraged(float $currentDebtRatio, float $targetDebtTolerance, float $interestCoverage, float $minIcr, float $costOfEquity, float $effectiveCostOfDebt): bool
+    public function isUnderLeveraged(float $currentDebtRatio, float $targetDebtTolerance, float $interestCoverage, float $minIcr): bool
     {
         // For Insurance companies, Customer Deposits represent policyholder reserves ("The Float").
         // Float scales with underwriting policy volume and claim payout schedules, not discretionary capital

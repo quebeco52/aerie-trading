@@ -289,8 +289,8 @@ class PrivateEquityBusinessModelTest extends TestCase
         $this->assertTrue($this->model->supportsUnderleveragedDebtExpansion());
 
         // Wholesale leverage limit is 2.5. 85% of 2.5 is 2.125.
-        $this->assertTrue($this->model->isUnderLeveraged(2.0, 2.5, 5.0, 1.05, 0.12, 0.05));
-        $this->assertFalse($this->model->isUnderLeveraged(2.2, 2.5, 5.0, 1.05, 0.12, 0.05));
+        $this->assertTrue($this->model->isUnderLeveraged(2.0, 2.5, 5.0, 1.05));
+        $this->assertFalse($this->model->isUnderLeveraged(2.2, 2.5, 5.0, 1.05));
     }
 
     public function testASponsorIsOnlyUnderLeveredWhereItMayStillBorrow(): void
@@ -314,12 +314,12 @@ class PrivateEquityBusinessModelTest extends TestCase
         // a financial flagged under-levered skips investment and buys back stock, and one that also cannot
         // borrow is frozen there. TIER sat at 2.4x for twenty years with its book unchanged.
         for ($ratio = 0.0; $ratio <= $sectorTolerance; $ratio += 0.05) {
-            if ($this->model->isUnderLeveraged($ratio, $sectorTolerance, 5.0, 1.05, 0.12, 0.05)) {
+            if ($this->model->isUnderLeveraged($ratio, $sectorTolerance, 5.0, 1.05)) {
                 $headroom = $this->model->calculateDebtExpansionCapacity(100.0, $ratio * 100.0, $ratio * 100.0, $health, 0.05, 30.0, 5.0);
                 $this->assertGreaterThan(0.0, $headroom, sprintf('Under-levered at %.2fx with no capacity left to borrow.', $ratio));
             }
         }
-        $this->assertFalse($this->model->isUnderLeveraged(2.4, $sectorTolerance, 5.0, 1.05, 0.12, 0.05));
+        $this->assertFalse($this->model->isUnderLeveraged(2.4, $sectorTolerance, 5.0, 1.05));
     }
 
     public function testDealActivityIndexStimulatesPeCarriedInterest(): void

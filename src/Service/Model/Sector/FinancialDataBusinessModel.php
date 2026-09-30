@@ -100,11 +100,9 @@ class FinancialDataBusinessModel extends StandardCorporateBusinessModel
     public const MAX_OPERATING_MARGIN_CEILING = 0.65;
 
     // --- Asset-Light Subscription Capital Structure Rails ---
-    /** Minimum WACC arbitrage spread required before under-leveraged recapitalization is permitted. */
-    public const WACC_ARBITRAGE_THRESHOLD     = 0.02;
     /** Minimum interest coverage ratio required to permit recapitalization for subscription monopolies. */
     public const MIN_RECAP_ICR_FLOOR          = 6.0;
-    /** Maximum debt tolerance threshold fraction triggering under-leveraged status. */
+    /** Target leverage as a share of the debt tolerance; below it the firm is under-levered. */
     public const UNDERLEVERAGED_DEBT_RATIO    = 0.60;
 
     protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult

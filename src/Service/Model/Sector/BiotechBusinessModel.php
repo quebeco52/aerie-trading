@@ -168,11 +168,9 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
     // --- Patent Moat & Capital Structure Rails ---
     /** Operating margin mean reversion speed: slower speed reflects multi-year patent monopoly protection. */
     public const PATENT_REVERSION_SPEED    = 2.5;
-    /** Minimum WACC arbitrage spread required before under-leveraged recapitalization is permitted. */
-    public const WACC_ARBITRAGE_THRESHOLD  = 0.03;
     /** Minimum interest coverage ratio required to permit recapitalization for binary R&D models. */
     public const MIN_RECAP_ICR_FLOOR       = 15.0;
-    /** Maximum debt tolerance threshold fraction triggering under-leveraged status. */
+    /** Target leverage as a share of the debt tolerance; below it the firm is under-levered. */
     public const UNDERLEVERAGED_DEBT_RATIO = 0.50;
 
     // --- Patent Cliff & Blockbuster Capital Reinvestment Physics ---

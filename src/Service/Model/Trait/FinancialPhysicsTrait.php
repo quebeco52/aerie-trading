@@ -106,10 +106,15 @@ trait FinancialPhysicsTrait
         return $baseCapacity;
     }
 
-    public function isUnderLeveraged(float $currentDebtRatio, float $targetDebtTolerance, float $interestCoverage, float $minIcr, float $costOfEquity, float $effectiveCostOfDebt): bool
+    public function getLeverageTarget(float $targetDebtTolerance): float
     {
         $limit = $targetDebtTolerance > 0.0 ? $targetDebtTolerance : $this->getWholesaleLeverageLimit();
-        return $currentDebtRatio < ($limit * 0.50);
+        return $limit * 0.50;
+    }
+
+    public function isUnderLeveraged(float $currentDebtRatio, float $targetDebtTolerance, float $interestCoverage, float $minIcr): bool
+    {
+        return $currentDebtRatio < $this->getLeverageTarget($targetDebtTolerance);
     }
 
     public function supportsUnderleveragedDebtExpansion(): bool

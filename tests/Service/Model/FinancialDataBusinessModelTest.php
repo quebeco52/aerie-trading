@@ -70,15 +70,13 @@ class FinancialDataBusinessModelTest extends TestCase
     {
         $model = new FinancialDataBusinessModel();
 
-        // Ke > Kd + 0.02, ICR >= 6.0, debtRatio < tolerance * 0.60 -> True
+        // ICR >= 6.0, debtRatio < tolerance * 0.60 -> True
         $this->assertTrue(
             $model->isUnderLeveraged(
                 0.20,
                 0.50,
                 8.0,
-                3.0,
-                0.09,
-                0.05
+                3.0
             )
         );
 
@@ -88,9 +86,7 @@ class FinancialDataBusinessModelTest extends TestCase
                 0.20,
                 0.50,
                 5.0,
-                3.0,
-                0.09,
-                0.05
+                3.0
             )
         );
     }

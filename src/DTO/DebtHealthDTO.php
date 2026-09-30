@@ -31,6 +31,10 @@ class DebtHealthDTO
         /** Funded net debt over EBITDA, capped; the cash-flow leverage the covenant is tested on. */
         public readonly float $netDebtToEbitda = 0.0,
         /** The sector's Net Debt / EBITDA covenant level; a 999.0 sentinel means the sector is exempt. */
-        public readonly float $ebitdaCovenantLimit = 999.0
+        public readonly float $ebitdaCovenantLimit = 999.0,
+        /** Book debt, capitalized leases included, over book equity: the leverage the recapitalization test reads. */
+        public readonly float $debtToEquity = 0.0,
+        /** The debt-to-equity ratio the firm recapitalizes toward. */
+        public readonly float $leverageTarget = 0.0
     ) {}
 }

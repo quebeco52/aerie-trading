@@ -374,6 +374,13 @@ class Stock
     private string $dividendSpeed = '0.20';
 
     /**
+     * @var bool Whether the firm is known for an unbroken record of dividend increases, as an S&P 500 Dividend
+     * Aristocrat is for 25 consecutive years of them. Set when its books open; any cut ends it.
+     */
+    #[ORM\Column(type: Types::BOOLEAN, options: ['default' => false])]
+    private bool $dividendAristocrat = false;
+
+    /**
      * @var string The absolute value of the last paid dividend per share.
      */
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, options: ['default' => '0.00'])]
@@ -954,6 +961,16 @@ class Stock
     public function setDividendSpeed(string $dividendSpeed): static
     {
         $this->dividendSpeed = self::cleanBcStr($dividendSpeed, 4);
+        return $this;
+    }
+
+    public function isDividendAristocrat(): bool
+    {
+        return $this->dividendAristocrat;
+    }
+    public function setDividendAristocrat(bool $dividendAristocrat): static
+    {
+        $this->dividendAristocrat = $dividendAristocrat;
         return $this;
     }
 

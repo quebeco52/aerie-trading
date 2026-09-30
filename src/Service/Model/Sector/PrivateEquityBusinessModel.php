@@ -491,11 +491,11 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
      * stayed "under-levered" at a ratio it was not allowed to borrow past, and a financial in that state
      * neither invests nor borrows, it only buys back stock.
      */
-    public function isUnderLeveraged(float $currentDebtRatio, float $targetDebtTolerance, float $interestCoverage, float $minIcr, float $costOfEquity, float $effectiveCostOfDebt): bool
+    public function getLeverageTarget(float $targetDebtTolerance): float
     {
         $wholesaleLimit = $this->getWholesaleLeverageLimit();
         $limit = $targetDebtTolerance > 0.0 ? min($targetDebtTolerance, $wholesaleLimit) : $wholesaleLimit;
-        return $currentDebtRatio < ($limit * 0.85);
+        return $limit * 0.85;
     }
 
     public function supportsUnderleveragedDebtExpansion(): bool

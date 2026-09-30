@@ -889,9 +889,9 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
         return static::ASSET_DURATION_YEARS;
     }
 
-    public function isUnderLeveraged(float $currentDebtRatio, float $targetDebtTolerance, float $interestCoverage, float $minIcr, float $costOfEquity, float $effectiveCostOfDebt): bool
+    public function getLeverageTarget(float $targetDebtTolerance): float
     {
-        return $currentDebtRatio < ($targetDebtTolerance * self::UNDER_LEVERAGED_TOLERANCE);
+        return $targetDebtTolerance * self::UNDER_LEVERAGED_TOLERANCE;
     }
 
     /**

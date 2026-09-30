@@ -426,49 +426,129 @@ class CapitalAllocationEngineTest extends TestCase
         $this->assertGreaterThan(100000, 1000000.0 - $result['new_shares'], 'Should buy back over 100k shares using unlocked saturation buyback ratio');
     }
 
-    public function testDividendAristocratCatchupUnderSaturation(): void
+    /**
+     * Managers are reluctant to cut (Lintner 1956), and one known for an unbroken record of increases does not cut by
+     * choice at all. With earnings falling below what the dividend pays out, a firm follows its target payout down at
+     * its own adjustment speed; the same firm named an aristocrat holds its dividend and keeps its standing.
+     */
+    public function testAnAristocratHoldsTheDividendAPeerCutsOnFallingEarnings(): void
     {
-        $this->corporateMetricsMock = $this->createStub(CorporateMetrics::class);
-        $this->corporateMetricsMock->method('getIndustryDepreciationRate')->willReturn(0.05);
-        $this->corporateMetricsMock->method('calculateMarketSaturationPenalty')->willReturn(0.15);
-        $this->corporateMetricsMock->method('calculateSaturationSeverity')->willReturn(1.0);
-        $this->corporateMetricsMock->method('calculateLifeCyclePayoutRatio')->willReturn(0.85);
-        $this->corporateMetricsMock->method('calculateOperatingBase')->willReturn(5000000.0);
+        [$peer, $peerStock] = $this->payDividendOnFallingEarnings(false, $this->buildHealth());
+        [$aristocrat, $aristocratStock] = $this->payDividendOnFallingEarnings(true, $this->buildHealth());
 
-        $engine = new CapitalAllocationEngine(
-            $this->corporateLedgerServiceMock,
-            $this->corporateMetricsMock,
-            $this->debtEngineMock,
-            $this->mathUtilityMock,
-            $this->treasuryEngineMock
-        );
+        $target = 1.00 * $peerStock->getPolicyPayoutRatio();
+        $this->assertEqualsWithDelta(1.00 + (0.10 * ($target - 1.00)), $peer['dividend_paid'], 1e-9, 'A firm follows its target payout down at its own speed.');
+        $this->assertSame(1.00, $aristocrat['dividend_paid'], 'An aristocrat holds its dividend while earnings fall.');
+        $this->assertTrue($aristocratStock->isDividendAristocrat());
+    }
 
+    /** A cut ends the record the aristocrat was known for, even one a liquidity crisis forced on it. */
+    public function testAForcedCutEndsTheAristocratsRecord(): void
+    {
+        [$result, $stock] = $this->payDividendOnFallingEarnings(true, $this->buildHealth(interestCoverage: 0.5));
+
+        $this->assertSame(0.0, $result['dividend_paid'], 'Coverage below one omits the dividend, aristocrat or not.');
+        $this->assertFalse($stock->isDividendAristocrat());
+        $this->assertContains('Cut its dividend, ending its record of dividend increases.', array_column($result['events'], 'description'));
+    }
+
+    /**
+     * Managers raise external funds before they cut (Brav, Graham, Harvey & Michaely 2005). An aristocrat whose quarter
+     * leaves its treasury below its operating floor borrows the dividend it holds while its lenders will fund it; the
+     * same firm without the record pays what its cash allows.
+     */
+    public function testAnAristocratBorrowsRatherThanCutWhenAQuartersCashFallsShort(): void
+    {
+        [$aristocrat, $aristocratStock, $borrowed] = $this->payDividendShortOfCash(true);
+        [$peer, , $peerBorrowed] = $this->payDividendShortOfCash(false);
+
+        $this->assertEqualsWithDelta(1.00, $aristocrat['dividend_paid'], 1e-9);
+        $this->assertTrue($aristocratStock->isDividendAristocrat(), 'A funded dividend is not a cut.');
+        $this->assertCount(1, $borrowed);
+        $this->assertSame([], $peerBorrowed);
+        $this->assertSame(0.0, $peer['dividend_paid'], 'Control: without the record the cash cap takes the dividend.');
+    }
+
+    /**
+     * A firm that pays out $1.00 a quarter from a $0.5m treasury in a quarter whose free cash flow is -$1.00 a share.
+     *
+     * @return array{0: array<string, mixed>, 1: Stock, 2: list<float>} The allocation, the firm, and each amount borrowed.
+     */
+    private function payDividendShortOfCash(bool $aristocrat): array
+    {
         $stock = new Stock();
-        $stock->setTicker('TEST_ARISTOCRAT');
+        $stock->setTicker($aristocrat ? 'ARIS' : 'PEER');
+        $stock->setIndustry('Software - Infrastructure');
+        $stock->setSharesOutstanding('1000000');
+        $stock->setPrice('100.00');
+        $stock->setTotalEquity('100000000');
+        $stock->setCorporateTreasury('500000');
+        $stock->setTargetPayoutRatio('0.30');
+        $stock->setDividendSpeed('0.10');
+        $stock->setLastDividend('1.00');
+        $stock->setDividendAristocrat($aristocrat);
+        $stock->setRetainedEarnings('50000000.00');
+        $stock->setTotalRevenue('10000000.00');
+        $stock->setOperatingMargin('0.20');
+        $stock->setWholesaleDebt('10000000.00');
+        $stock->setCustomerDeposits('0.00');
+        $stock->setRoicTtm('0.12');
+
+        $borrowed = [];
+        $lender = $this->createStub(DebtEngine::class);
+        $lender->method('analyzeTrailingDebtHealth')->willReturn($this->buildHealth());
+        $lender->method('issueDebt')->willReturnCallback(static function (Stock $issuer, float $amount) use (&$borrowed): void {
+            $borrowed[] = $amount;
+        });
+
+        $result = $this->buildEngineWith($lender)->allocateCapital($stock, 4.00, -1.00, 100.00, 1000000.0, new MacroStateDTO(corporateTaxRate: 0.21));
+
+        return [$result, $stock, $borrowed];
+    }
+
+    /**
+     * Cuts follow losses (DeAngelo, DeAngelo & Skinner 1992), not a return below the hurdle on earnings that still
+     * cover the payout. A firm earning 1% on capital that costs it 10% follows its target payout like any other; the
+     * rule it replaces omitted the dividend of any firm 800bps under its hurdle.
+     */
+    public function testAFirmEarningBelowItsHurdleFollowsItsTargetPayoutRatherThanOmitting(): void
+    {
+        [$result, $stock] = $this->payDividendOnFallingEarnings(false, $this->buildHealth(wacc: 0.10), '0.01');
+
+        $target = 1.00 * $stock->getPolicyPayoutRatio();
+        $this->assertEqualsWithDelta(1.00 + (0.10 * ($target - 1.00)), $result['dividend_paid'], 1e-9);
+    }
+
+    /**
+     * A firm paying $1.00 a quarter at 0.10 adjustment speed whose earnings fall to $1.00 a quarter, against a 30%
+     * target payout.
+     *
+     * @return array{0: array<string, mixed>, 1: Stock}
+     */
+    private function payDividendOnFallingEarnings(bool $aristocrat, DebtHealthDTO $health, string $roic = '0.12'): array
+    {
+        $stock = new Stock();
+        $stock->setTicker($aristocrat ? 'ARIS' : 'PEER');
         $stock->setIndustry('Software - Infrastructure');
         $stock->setSharesOutstanding('1000000');
         $stock->setPrice('100.00');
         $stock->setTotalEquity('100000000');
         $stock->setCorporateTreasury('50000000');
         $stock->setTargetPayoutRatio('0.30');
-        $stock->setDividendSpeed('0.02'); // Aristocrat <= 0.03
+        $stock->setDividendSpeed('0.10');
         $stock->setLastDividend('1.00');
+        $stock->setDividendAristocrat($aristocrat);
         $stock->setRetainedEarnings('50000000.00');
         $stock->setTotalRevenue('10000000.00');
         $stock->setOperatingMargin('0.20');
         $stock->setWholesaleDebt('10000000.00');
         $stock->setCustomerDeposits('0.00');
-        $stock->setRoicTtm('0.08');
+        $stock->setRoicTtm($roic);
 
-        $macroState = new MacroStateDTO(corporateTaxRate: 0.21);
+        $result = $this->buildEngineWith($this->debtEngineReturning($health))
+            ->allocateCapital($stock, 4.00, 1.00, 100.00, 1000000.0, new MacroStateDTO(corporateTaxRate: 0.21));
 
-        // Quarterly EPS = $2.00 ($8.00 annual). Target is $1.70 per share.
-        // Catch-up ratio is 1.70 / 1.00 = 1.70 > 1.30.
-        // Speed accelerates from 0.02 to min(0.15, 0.02 + (1.70 - 1.30) * 0.10) = 0.06.
-        // New dividend = 1.00 + 0.06 * (1.70 - 1.00) = 1.042.
-        $result = $engine->allocateCapital($stock, 8.00, 2.00, 100.00, 1000000.0, $macroState);
-
-        $this->assertEqualsWithDelta(1.042, $result['dividend_paid'], 0.001, 'Aristocrat should accelerate dividend growth safely without jumping directly to $1.70');
+        return [$result, $stock];
     }
 
     public function testCommercialBankCapitalConservationBufferHaltsDividends(): void
@@ -561,7 +641,7 @@ class CapitalAllocationEngineTest extends TestCase
         return $stock;
     }
 
-    private function buildHealth(bool $hasLeverageHeadroom = true): DebtHealthDTO
+    private function buildHealth(bool $hasLeverageHeadroom = true, float $interestCoverage = 5.0, float $wacc = 0.06): DebtHealthDTO
     {
         return new DebtHealthDTO(
             grossCost: 0.05,
@@ -569,11 +649,11 @@ class CapitalAllocationEngineTest extends TestCase
             cashYield: 0.04,
             isNegativeCarry: false,
             isSevereNegativeCarry: false,
-            interestCoverage: 5.0,
+            interestCoverage: $interestCoverage,
             wantsToPaydownDebt: false,
             canIssueDebt: true,
             debtTolerance: 1.5,
-            wacc: 0.06,
+            wacc: $wacc,
             costOfEquity: 0.08,
             leveredBeta: 1.0,
             rawMetrics: new DebtMetricsDTO(
@@ -621,7 +701,7 @@ class CapitalAllocationEngineTest extends TestCase
 
     /**
      * The dividend leg is a freeze, not a cut: lenders withhold consent for an INCREASE in distributions
-     * while the firm is out of compliance, and the distress ladder already owns the collapse case.
+     * while the firm is out of compliance, and falling earnings or a liquidity crisis own the collapse case.
      */
     public function testCovenantBreachFreezesTheDividendRatherThanCuttingIt(): void
     {
@@ -646,7 +726,7 @@ class CapitalAllocationEngineTest extends TestCase
 
         $this->assertGreaterThan(0.20, $rising['dividend_paid'], 'Control must want to raise the dividend, or the freeze is untestable.');
         $this->assertSame(0.20, $frozen['dividend_paid'], 'A breach holds the distribution where it stands.');
-        $this->assertGreaterThan(0.0, $frozen['dividend_paid'], 'A freeze is not a cut: the existing distress ladder owns that case.');
+        $this->assertGreaterThan(0.0, $frozen['dividend_paid'], 'A freeze is not a cut: falling earnings and a liquidity crisis own that case.');
     }
 
     private function debtEngineReturning(DebtHealthDTO $health): DebtEngine
@@ -694,6 +774,154 @@ class CapitalAllocationEngineTest extends TestCase
 
         $this->assertSame(0.0, CapitalAllocationEngine::capitalTargetBorrowingCapacity(10.0, 100.0, 0.10), 'At target there is no room.');
         $this->assertSame(0.0, CapitalAllocationEngine::capitalTargetBorrowingCapacity(8.0, 100.0, 0.10), 'Below target it borrows nothing.');
+    }
+
+    /**
+     * Partial adjustment toward a target leverage (Flannery & Rangan 2006): each quarter's debt-financed repurchase
+     * closes the same share of the gap, retained earnings included, compounding to the cited annual speed. At or
+     * above target the firm recapitalizes nothing.
+     */
+    public function testALeverageGapClosesTheCitedShareOfItEachYear(): void
+    {
+        $equity = 100.0;
+        $debt = 20.0;
+        for ($quarter = 0; $quarter < 4; $quarter++) {
+            $opening = $debt / $equity;
+            $equity += 3.0; // a quarter's retained earnings
+            $repurchase = CapitalAllocationEngine::leverageTargetRepurchase($equity, $debt, 0.75, $opening);
+            $debt += $repurchase;
+            $equity -= $repurchase;
+        }
+        $this->assertEqualsWithDelta(0.75 - (0.55 * (1.0 - CapitalAllocationEngine::LEVERAGE_TARGET_ADJUSTMENT_SPEED)), $debt / $equity, 1e-12);
+
+        $this->assertSame(0.0, CapitalAllocationEngine::leverageTargetRepurchase(100.0, 75.0, 0.75, 0.75), 'At target there is nothing to recapitalize.');
+        $this->assertSame(0.0, CapitalAllocationEngine::leverageTargetRepurchase(100.0, 90.0, 0.75, 0.90), 'Above target the firm does not recapitalize.');
+    }
+
+    /**
+     * A leveraged recapitalization exchanges debt for equity (Denis & Denis 1993): the firm borrows what its excess
+     * cash cannot pay of the quarter's repurchase and spends it on that repurchase. Borrowing the cash to hold it
+     * left the leverage where it was and the proceeds for the capex gate to spend on plant.
+     */
+    public function testAnUnderLeveredFirmBorrowsOnlyToRetireTheEquityItsDebtReplaces(): void
+    {
+        [$result, $borrowed, $repurchase] = $this->recapitalize(hasLeverageHeadroom: true, excessCashInRepurchases: 0.0);
+
+        $this->assertCount(1, $borrowed);
+        $this->assertEqualsWithDelta($repurchase, $borrowed[0], 1e-6, 'With no excess cash the whole repurchase is borrowed.');
+        $this->assertEqualsWithDelta($repurchase, $result['total_cash_spent'], 50.0, 'Every dollar borrowed retires stock, to the nearest share.');
+
+        $endRatio = 0.20 + ((1.0 - ((1.0 - CapitalAllocationEngine::LEVERAGE_TARGET_ADJUSTMENT_SPEED) ** 0.25)) * (0.75 - 0.20));
+        $this->assertEqualsWithDelta($endRatio, (20_000_000.0 + $borrowed[0]) / (100_000_000.0 - $result['total_cash_spent']), 1e-5, 'The swap ends the quarter on its partial adjustment.');
+    }
+
+    /** Excess cash funds the recapitalization first; debt is raised only for what it cannot cover. */
+    public function testExcessCashFundsTheRecapitalizationBeforeAnyBorrowing(): void
+    {
+        [$result, $borrowed, $repurchase] = $this->recapitalize(hasLeverageHeadroom: true, excessCashInRepurchases: 3.0);
+
+        $this->assertSame([], $borrowed);
+        $this->assertGreaterThanOrEqual($repurchase - 50.0, $result['total_cash_spent'], 'The repurchase still happens, out of cash.');
+    }
+
+    /**
+     * Book leverage moves too slowly to register an earnings collapse, so a firm past its leverage covenant can still
+     * read as under-levered. The restricted-payments clause stops the repurchase, and with it the borrowing: this
+     * differs from the borrowing case above only in the covenant flag.
+     */
+    public function testACovenantBreachStopsTheRecapitalizationTheEquityRatioWouldWaveThrough(): void
+    {
+        [$result, $borrowed] = $this->recapitalize(hasLeverageHeadroom: false, excessCashInRepurchases: 0.0);
+
+        $this->assertSame([], $borrowed, 'A firm past its leverage covenant must not lever up to recapitalize.');
+        $this->assertSame(10_000_000.0, $result['new_shares']);
+    }
+
+    /**
+     * A treasury below its operating floor is refilled before any recapitalization: borrowing into it plugged the hole
+     * and the repurchase it was raised for never happened.
+     */
+    public function testAFirmShortOfItsOperatingCashDoesNotRecapitalize(): void
+    {
+        [$result, $borrowed] = $this->recapitalize(hasLeverageHeadroom: true, excessCashInRepurchases: -0.05);
+
+        $this->assertSame([], $borrowed);
+        $this->assertSame(10_000_000.0, $result['new_shares']);
+    }
+
+    /**
+     * An operating company at 0.2x debt to equity against a 0.75x target, holding its target cash plus the given
+     * multiple of the quarter's recapitalization repurchase.
+     *
+     * @return array{0: array<string, mixed>, 1: list<float>, 2: float} The allocation, each amount borrowed, and the repurchase the gap calls for.
+     */
+    private function recapitalize(bool $hasLeverageHeadroom, float $excessCashInRepurchases): array
+    {
+        $stock = new Stock();
+        $stock->setTicker('RCAP');
+        $stock->setIndustry('Integrated Freight & Logistics');
+        $stock->setSharesOutstanding('10000000');
+        $stock->setPrice('50.00');
+        $stock->setTotalEquity('100000000');
+        $stock->setWholesaleDebt('20000000');
+        $stock->setCustomerDeposits('0.00');
+        $stock->setTargetPayoutRatio('0.00');
+        $stock->setDividendSpeed('0.00');
+        $stock->setLastDividend('0.00');
+        $stock->setTotalRevenue('100000000.00');
+        $stock->setOperatingMargin('0.50');
+        $stock->setRoicTtm('0.12');
+
+        $strategy = \App\Data\Sectors::strategyFor('Integrated Freight & Logistics');
+        $targetCash = $stock->getManagementProfile()->appliedTargetCash($strategy->calculateTargetOperatingCash(5000000.0, 0.0, 20_000_000.0));
+        $repurchase = CapitalAllocationEngine::leverageTargetRepurchase(100_000_000.0, 20_000_000.0, 0.75, 0.20);
+        $stock->setCorporateTreasury((string) ($targetCash + ($excessCashInRepurchases * $repurchase)));
+
+        $health = new DebtHealthDTO(
+            grossCost: 0.05,
+            effectiveCost: 0.04,
+            cashYield: 0.04,
+            isNegativeCarry: false,
+            isSevereNegativeCarry: false,
+            interestCoverage: 50.0,
+            wantsToPaydownDebt: false,
+            canIssueDebt: true,
+            debtTolerance: 1.5,
+            wacc: 0.08,
+            costOfEquity: 0.10,
+            leveredBeta: 1.0,
+            rawMetrics: new DebtMetricsDTO(
+                interestExpense: 1_000_000.0,
+                blendedRate: 0.05,
+                historicalFixedRate: 0.05,
+                dynamicSpread: 0.02,
+                currentMarketRate: 0.05,
+                wholesaleRate: 0.05,
+                ebit: 50_000_000.0,
+                revenue: 100_000_000.0,
+                depreciation: 0.0,
+                ebitda: 50_000_000.0
+            ),
+            isLiquidityCrisis: false,
+            isLiquidityWarning: false,
+            isUnderLeveraged: true,
+            hasLeverageHeadroom: $hasLeverageHeadroom,
+            netDebtToEbitda: $hasLeverageHeadroom ? 0.4 : 4.5,
+            ebitdaCovenantLimit: 3.5,
+            debtToEquity: 0.20,
+            leverageTarget: 0.75
+        );
+
+        $borrowed = [];
+        $debtEngine = $this->createMock(DebtEngine::class);
+        $debtEngine->method('analyzeTrailingDebtHealth')->willReturn($health);
+        $debtEngine->method('issueDebt')->willReturnCallback(function (Stock $issuer, float $amount) use (&$borrowed): void {
+            $borrowed[] = $amount;
+        });
+
+        $result = $this->buildEngineWith($debtEngine)->allocateCapital($stock, 0.0, 0.0, 50.0, 10_000_000.0, new MacroStateDTO(corporateTaxRate: 0.21));
+
+        return [$result, $borrowed, $repurchase];
     }
 
     /**

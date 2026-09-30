@@ -128,11 +128,9 @@ class TechBusinessModel extends StandardCorporateBusinessModel
     // --- Innovation Competition Moat & Capital Structure ---
     /** Operating margin mean reversion speed: fast speed reflects rapid technological disruption and competition. */
     public const TECH_REVERSION_SPEED      = 5.0;
-    /** Minimum WACC arbitrage spread required before under-leveraged recapitalization is permitted. */
-    public const WACC_ARBITRAGE_THRESHOLD  = 0.03;
     /** Minimum interest coverage ratio required to permit recapitalization for intangible asset software models. */
     public const MIN_RECAP_ICR_FLOOR       = 15.0;
-    /** Maximum debt tolerance threshold fraction triggering under-leveraged status. */
+    /** Target leverage as a share of the debt tolerance; below it the firm is under-levered. */
     public const UNDERLEVERAGED_DEBT_RATIO = 0.50;
 
     // --- SaaS ARR Operating Leverage & Software Platform Reinvestment Physics ---

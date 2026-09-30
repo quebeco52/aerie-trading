@@ -99,6 +99,30 @@ class OpeningBoardBuilderTest extends TestCase
     }
 
     /**
+     * An aristocrat is a record of increases, not an adjustment speed. The seed names about the share of payers the
+     * S&P 500 Dividend Aristocrats are of that index (about 13%), and the board opens with exactly those firms
+     * carrying it. Reading it off a slow speed made 35 of 77 payers aristocrats.
+     */
+    public function testTheBoardOpensWithTheAristocratsTheSeedNames(): void
+    {
+        $board = $this->openBoard(new MacroStateDTO());
+        $payers = 0;
+        $aristocrats = 0;
+
+        foreach (InitialMarket::STOCKS as $row) {
+            $isPayer = (float) $row['target_payout_ratio'] > 0.0;
+            $named = (bool) ($row['dividend_aristocrat'] ?? false);
+
+            $this->assertSame($named, $board[$row['ticker']]->isDividendAristocrat(), "{$row['ticker']} opens with the wrong aristocrat standing.");
+            $this->assertTrue($isPayer || !$named, "{$row['ticker']} is named an aristocrat without paying a dividend.");
+            $payers += $isPayer ? 1 : 0;
+            $aristocrats += $named ? 1 : 0;
+        }
+
+        $this->assertEqualsWithDelta(0.13, $aristocrats / $payers, 0.03);
+    }
+
+    /**
      * Omitting a dividend is bad news in every study of it (Healy & Palepu 1988: about -7%), and it can never be
      * good news for value. An operating company's fair value does not move at all; a trust or a utility, priced
      * on the income its policy pays, loses the income missed while the dividend is rebuilt.

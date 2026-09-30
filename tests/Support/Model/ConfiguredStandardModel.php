@@ -24,11 +24,9 @@ final class ConfiguredStandardModel extends BareStandardModel
     public const SECTOR_FACTOR_LOADING = 0.30;
 
     // --- Debt Physics ---
-    /** Equity-over-debt spread demanded before levering up; far above the FinancialConstants buffer. */
-    public const WACC_ARBITRAGE_THRESHOLD = 0.05;
     /** Coverage floor demanded before levering up; far above the derived safety multiple. */
     public const MIN_RECAP_ICR_FLOOR = 12.0;
-    /** Share of the debt tolerance below which the firm counts as under-levered. */
+    /** Target leverage as a share of the debt tolerance; far below the FinancialConstants default. */
     public const UNDERLEVERAGED_DEBT_RATIO = 0.30;
 
     // --- Operating Physics: Coverage ---

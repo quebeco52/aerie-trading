@@ -62,15 +62,13 @@ class UtilityBusinessModelTest extends TestCase
     {
         $model = new UtilityBusinessModel();
 
-        // Ke > Kd + 0.01, ICR >= 2.5, debtRatio < tolerance * 0.70 -> True
+        // ICR >= 2.5, debtRatio < tolerance * 0.70 -> True
         $this->assertTrue(
             $model->isUnderLeveraged(
                 0.30,
                 0.60,
                 3.0,
-                2.0,
-                0.08,
-                0.05
+                2.0
             )
         );
 
@@ -80,9 +78,7 @@ class UtilityBusinessModelTest extends TestCase
                 0.30,
                 0.60,
                 2.0,
-                2.0,
-                0.08,
-                0.05
+                2.0
             )
         );
     }

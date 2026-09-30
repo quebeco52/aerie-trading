@@ -443,10 +443,10 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
         ];
     }
 
-    public function isUnderLeveraged(float $currentDebtRatio, float $targetDebtTolerance, float $interestCoverage, float $minIcr, float $costOfEquity, float $effectiveCostOfDebt): bool
+    public function getLeverageTarget(float $targetDebtTolerance): float
     {
         $bankEquityLimit = $targetDebtTolerance > 0.0 ? $targetDebtTolerance : $this->getWholesaleLeverageLimit();
-        return $currentDebtRatio < ($bankEquityLimit * 0.90);
+        return $bankEquityLimit * 0.90;
     }
 
     /**

@@ -32,34 +32,34 @@ trait StandardDebtPhysicsTrait
     }
     
     /**
-     * Trade-off theory recapitalization test: a firm is under-leveraged only when equity is clearly more
-     * expensive than debt, coverage leaves ample headroom, and leverage sits well below tolerance. Sector
-     * models tune the three rails through class constants: intangible-heavy software and biotech (high
-     * distress costs, near-zero optimal debt) demand a 300bps arbitrage and 15x coverage, while regulated
-     * utilities with rate-base backed cash flows accept far less.
+     * The sector's share of the debt tolerance: intangible-heavy software and biotech, whose distress costs are
+     * high, target a low one, and regulated utilities, whose rate base secures their cash flows, a high one.
      */
-    public function isUnderLeveraged(float $currentDebtRatio, float $targetDebtTolerance, float $interestCoverage, float $minIcr, float $costOfEquity, float $effectiveCostOfDebt): bool {
-        $arbitrageThreshold = defined('static::WACC_ARBITRAGE_THRESHOLD')
-            ? (float) static::WACC_ARBITRAGE_THRESHOLD
-            : \App\Service\Math\FinancialConstants::WACC_ARBITRAGE_BUFFER;
+    public function getLeverageTarget(float $targetDebtTolerance): float {
+        $targetShare = defined('static::UNDERLEVERAGED_DEBT_RATIO')
+            ? (float) static::UNDERLEVERAGED_DEBT_RATIO
+            : FinancialConstants::CORPORATE_UNDERLEVERAGED_RATIO;
+
+        return $targetDebtTolerance * $targetShare;
+    }
+
+    /**
+     * Static trade-off theory (Kraus & Litzenberger 1973; Myers 1984): debt is worth adding while its tax shield
+     * outweighs the expected cost of distress, so a firm is under-levered below its target leverage when its
+     * coverage can carry more. Equity costing more than debt is no reason to borrow: it always does, and
+     * borrowing raises it (Modigliani & Miller 1958, Proposition II).
+     */
+    public function isUnderLeveraged(float $currentDebtRatio, float $targetDebtTolerance, float $interestCoverage, float $minIcr): bool {
         $icrFloor = defined('static::MIN_RECAP_ICR_FLOOR')
             ? (float) static::MIN_RECAP_ICR_FLOOR
-            : max(\App\Service\Math\FinancialConstants::MIN_ABSOLUTE_ICR_BUFFER, $minIcr * \App\Service\Math\FinancialConstants::REQUIRED_ICR_SAFETY_MULT);
-        $debtRatioTolerance = defined('static::UNDERLEVERAGED_DEBT_RATIO')
-            ? (float) static::UNDERLEVERAGED_DEBT_RATIO
-            : \App\Service\Math\FinancialConstants::CORPORATE_UNDERLEVERAGED_RATIO;
+            : max(FinancialConstants::MIN_ABSOLUTE_ICR_BUFFER, $minIcr * FinancialConstants::REQUIRED_ICR_SAFETY_MULT);
 
-        if ($costOfEquity <= ($effectiveCostOfDebt + $arbitrageThreshold)) {
-            return false;
-        }
-        if ($interestCoverage < $icrFloor) {
-            return false;
-        }
-        return $currentDebtRatio < ($targetDebtTolerance * $debtRatioTolerance);
+        return $interestCoverage >= $icrFloor && $currentDebtRatio < $this->getLeverageTarget($targetDebtTolerance);
     }
-    
+
+    /** An operating company recapitalizes through a debt-financed repurchase; borrowing into its treasury recapitalizes nothing. */
     public function supportsUnderleveragedDebtExpansion(): bool {
-        return true;
+        return false;
     }
     
     public function getHurdleRate(DebtHealthDTO $health): float {

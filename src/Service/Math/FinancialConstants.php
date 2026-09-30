@@ -325,9 +325,7 @@ class FinancialConstants
     public const DEFAULT_WACC_FALLBACK = 0.08;
     /** Fraction of fixed-rate debt that matures and reprices at market each quarter (5-year average tenor). */
     public const DEFAULT_QUARTERLY_DEBT_ROLLOVER = 0.05;
-    /** Minimum hurdle spread (100 bps) required between ROIC and WACC before issuing debt. */
-    public const WACC_ARBITRAGE_BUFFER = 0.01;
-    /** Debt-to-equity ratio threshold below which a corporate entity is underleveraged. */
+    /** Target leverage as a share of the debt tolerance for a model without its own; below it the firm is under-levered. */
     public const CORPORATE_UNDERLEVERAGED_RATIO = 0.75;
     /** Safety coverage multiplier required above minimum interest coverage ratio. */
     public const REQUIRED_ICR_SAFETY_MULT = 1.50;

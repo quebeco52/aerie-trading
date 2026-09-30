@@ -21,7 +21,13 @@ interface DebtStrategyInterface
     public function getInterestCoverage(float $ebit, float $interestExpense, float $depreciation = 0.0): float;
     public function getDebtExpansionAggressiveness(float $spreadMultiplier, float $totalDebt = 0.0, float $customerDeposits = 0.0, float $targetOperatingCash = 0.0, float $currentTreasury = 0.0): DebtExpansionAppetiteDTO;
     public function getUnfundedExpansionCapacity(float $baseCapacity, float $excessCash): float;
-    public function isUnderLeveraged(float $currentDebtRatio, float $targetDebtTolerance, float $interestCoverage, float $minIcr, float $costOfEquity, float $effectiveCostOfDebt): bool;
+    /** The debt-to-equity ratio the firm recapitalizes toward, on the debt tolerance its manager draws. */
+    public function getLeverageTarget(float $targetDebtTolerance): float;
+    public function isUnderLeveraged(float $currentDebtRatio, float $targetDebtTolerance, float $interestCoverage, float $minIcr): bool;
+    /**
+     * Whether an under-levered firm closes the gap by borrowing to grow its balance sheet, as a wholesale-funded
+     * lender does. An operating company instead swaps debt for equity through a repurchase (CapitalAllocationEngine).
+     */
     public function supportsUnderleveragedDebtExpansion(): bool;
     public function getHurdleRate(DebtHealthDTO $health): float;
     public function getExpansionCapacityBasis(float $equity, float $totalDebt, float $investedCapital): float;
