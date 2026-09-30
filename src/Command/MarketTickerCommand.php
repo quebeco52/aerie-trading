@@ -104,6 +104,8 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
         private \App\Service\Market\Flow\OrderFlowStoreInterface $orderFlow,
         /** One limit-order check per instrument per retry window, not one per tick while the worker answers. */
         private \App\Service\Market\LimitOrderDispatchGate $limitOrderGate,
+        /** Writes the Diet's vote on the tick it is held. */
+        private \App\Service\Macro\Recorder\ElectionRecorder $electionRecorder,
 
         private int $tickIntervalUs,
         private int $ticksPerYear,
@@ -463,6 +465,7 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                 if ($benchmarkFund !== null && ($headline = $this->systemicEvents->report($macroState, $benchmarkFund)) !== null) {
                     $events[] = $headline;
                 }
+                $this->electionRecorder->record($macroState);
 
                 if (!empty($operatorEvents)) {
                     $events = array_merge($events, $operatorEvents);

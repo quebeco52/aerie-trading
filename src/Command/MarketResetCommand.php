@@ -65,6 +65,7 @@ class MarketResetCommand extends Command
         $conn->executeStatement('TRUNCATE TABLE portfolio_history');
         $conn->executeStatement('TRUNCATE TABLE corporate_report');
         $conn->executeStatement('TRUNCATE TABLE macro_report');
+        $conn->executeStatement('TRUNCATE TABLE diet_election');
 
         // The clock is part of the market's state, not of the installation. Leaving it behind would resume a
         // freshly emptied database part-way through a year it has no history for.

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\DTO;
 
+use App\Data\AerieDiet;
 use App\Data\MacroFieldRegistry;
 use App\Service\Macro\MacroEngine;
 use App\Service\Macro\MacroState;
@@ -309,6 +310,27 @@ readonly class MacroStateDTO
         public float $policyUncertaintyIndex = MacroEngine::EPU_BASELINE,
         public float $policyUncertaintyIndexEma = MacroEngine::EPU_BASELINE,
         public float $lastElectionAt = -1.0,
+        /** @var array<string, float> Diet seats by party (AerieDiet::PARTIES). */
+        public array $dietSeats = AerieDiet::SEED_SEATS,
+        /** @var array<string, float> Vote share by party at the last election. */
+        public array $dietVoteShares = AerieDiet::SEED_VOTE_SHARES,
+        /** @var array<string, float> Change in each party's vote share at the last election. */
+        public array $dietVoteSwings = [],
+        /** @var array<string, float> Each party's position on the axis it is not defined by. */
+        public array $partySecondaryPositions = AerieDiet::SEED_SECONDARY_POSITIONS,
+        /** @var array<string, float> 1.0 for a party in the governing coalition. */
+        public array $governingCoalition = AerieDiet::SEED_COALITION,
+        /** @var array<string, float> Each party's short-term log swing at the last vote, given back at the next. */
+        public array $partyShortTermShocks = [],
+        public float $coalitionFormedAt = 0.0,
+        public float $termStartedAt = -1.0,
+        public float $termStartDeflator = 0.0,
+        public float $campaignStartedAt = -1.0,
+        public float $campaignStartRealGdp = 0.0,
+        public float $ironHarborCrisisShift = 0.0,
+        public float $electionGrowthGap = 0.0,
+        public float $electionInflationGap = 0.0,
+        public float $electionIncumbentSwing = 0.0,
         public float $moneySupplyGrowth = MacroEngine::M2_BASE_GROWTH,
         public float $moneySupplyGrowthEma = MacroEngine::M2_BASE_GROWTH,
         public float $sovereignFundDomesticEquity = 0.0,
@@ -387,7 +409,8 @@ readonly class MacroStateDTO
             }
 
             $args[$field] = match ($field) {
-                'sectorZ', 'sectorDemandZ' => is_array($data[$key]) ? array_map('floatval', $data[$key]) : [],
+                'sectorZ', 'sectorDemandZ', 'dietSeats', 'dietVoteShares', 'dietVoteSwings', 'partySecondaryPositions', 'governingCoalition', 'partyShortTermShocks'
+                    => is_array($data[$key]) ? array_map('floatval', $data[$key]) : [],
                 'qeActive', 'qtActive' => (bool) $data[$key],
                 'eventType' => (string) $data[$key],
                 default => (float) $data[$key],

@@ -2,6 +2,7 @@
 
 namespace App\Service\Event;
 
+use App\Data\AerieDiet;
 use App\DTO\MacroStateDTO;
 use App\Entity\Etf;
 use App\Service\Market\PriceChangeFeed;
@@ -52,7 +53,7 @@ class SystemicEventReporter
             'swf_target_pct' => number_format($macro->sovereignFundTargetWeight * 100.0, 2),
             'swf_size_gdp_pct' => number_format($macro->sovereignFundToGdp * 100.0, 0),
             'swf_months' => number_format($macro->sovereignFundRebalanceMonthsLeft, 0),
-        ];
+        ] + self::electionContext($macro);
 
         $monthMove = $this->priceChangeFeed->changeForTicker((string) $benchmark->getTicker(), (float) $benchmark->getPrice());
 
@@ -62,5 +63,37 @@ class SystemicEventReporter
             $this->narrativeEngine->generateLore($macro->eventType, $context),
             $monthMove === null ? null : 100.0 * $monthMove
         );
+    }
+
+    /**
+     * The vote's result for an election headline: the government it formed, the largest party, and the biggest mover.
+     * Empty before the first vote has moved anything.
+     *
+     * @return array<string, string>
+     */
+    private static function electionContext(MacroStateDTO $macro): array
+    {
+        if ($macro->dietVoteSwings === []) {
+            return [];
+        }
+
+        // Each name as it reads mid-sentence: "the Vanguard", "the Civic Front".
+        $names = array_map(static fn(string $name): string => 'the ' . (preg_replace('/^The /', '', $name) ?? $name), AerieDiet::PARTY_NAMES);
+        $members = AerieDiet::governingParties($macro->governingCoalition);
+        $seats = array_map('intval', $macro->dietSeats);
+        arsort($seats);
+        $swings = $macro->dietVoteSwings;
+        uasort($swings, static fn(float $a, float $b): int => abs($b) <=> abs($a));
+        $mover = (string) array_key_first($swings);
+        $moverSwing = $swings[$mover] * 100.0;
+
+        return [
+            'coalition' => implode(' and ', array_map(static fn(string $party): string => $names[$party], $members)),
+            'diet_seats' => (string) AerieDiet::SEATS,
+            'coalition_seats' => (string) array_sum(array_map(static fn(string $party): int => $seats[$party] ?? 0, $members)),
+            'largest_party' => $names[(string) array_key_first($seats)],
+            'mover' => $names[$mover],
+            'mover_swing_pp' => ($moverSwing >= 0.0 ? '+' : '') . number_format($moverSwing, 1),
+        ];
     }
 }

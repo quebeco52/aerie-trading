@@ -1,0 +1,352 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}The Government - Aerie Exchange{% endblock %}
+
+{% block meta %}
+	<meta name="description" content="The Aerie District's government: the Diet and the coalition that governs it, the parties, the Council, and every election on record.">
+	<meta property="og:title" content="The Government | Aerie Exchange">
+	<meta property="og:description" content="Four parties, a 250-seat Diet elected every four years, and a thirteen-member Council that renews itself.">
+	<meta property="og:type" content="website">
+{% endblock %}
+
+{% block body %}
+	<div class="max-w-400 mx-auto px-4 sm:px-6 lg:px-8 py-5 w-full space-y-5" id="governmentPage">
+
+		{# --- HEADER: THE GOVERNMENT AT A GLANCE --- #}
+		<div class="bg-surface-container-low rounded-lg p-6 lg:p-7 border border-outline-variant/15">
+			<div class="flex flex-col xl:flex-row xl:justify-between xl:items-start gap-6">
+				<div class="min-w-0">
+					<div class="flex items-center gap-2 mb-2">
+						<span class="w-2 h-2 rounded-full bg-secondary"></span>
+						<span class="text-2xs font-semibold tracking-wide text-secondary uppercase">{{ simDate }}</span>
+					</div>
+					<h1 class="text-xl sm:text-2xl md:text-3xl font-bold text-on-surface tracking-tight leading-tight">The Government</h1>
+					<p class="text-sm text-on-surface-variant mt-2 max-w-2xl">
+						The District is governed by two institutions that share no members and answer to no one but themselves.
+						The Diet is elected every {{ rules.termYears|number_format(0) }} years and passes the budget and the laws.
+						The Council is {{ rules.councilSeats }} technocrats who choose their own successors, run the departments,
+						and hold a veto they almost never use.
+					</p>
+					<a href="/economy" class="inline-flex items-center gap-1 mt-3 text-xs font-bold text-primary hover:underline">
+						<span class="material-symbols-outlined text-sm" aria-hidden="true">arrow_back</span>
+						The District Economy
+					</a>
+				</div>
+
+				<dl class="grid grid-cols-2 sm:grid-cols-4 gap-3 shrink-0 xl:min-w-[46rem]">
+					<div class="bg-surface-container-lowest rounded border border-outline-variant/20 px-4 py-3 col-span-2">
+						<dt class="text-2xs font-bold uppercase tracking-wider text-on-surface-variant">Governing coalition</dt>
+						<dd class="text-base font-bold text-on-surface mt-1 flex flex-wrap gap-x-3 gap-y-1">
+							{% for member in government.members %}
+								<span class="inline-flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full" style="background-color: {{ member.color }}" aria-hidden="true"></span>{{ member.name }}</span>
+							{% endfor %}
+						</dd>
+						<p class="text-3xs font-mono tabular-nums text-on-surface-variant mt-1">Formed {{ government.formed }}</p>
+					</div>
+					<div class="bg-surface-container-lowest rounded border border-outline-variant/20 px-4 py-3">
+						<dt class="text-2xs font-bold uppercase tracking-wider text-on-surface-variant">Coalition seats</dt>
+						<dd class="text-lg font-bold font-mono tabular-nums text-on-surface mt-0.5">{{ government.seats }} / {{ rules.seats }}</dd>
+						<p class="text-3xs font-mono tabular-nums text-on-surface-variant mt-0.5">Majority {{ rules.majority }}{{ government.supermajority ? ' · three quarters held' : '' }}</p>
+					</div>
+					<div class="bg-surface-container-lowest rounded border border-outline-variant/20 px-4 py-3">
+						<dt class="text-2xs font-bold uppercase tracking-wider text-on-surface-variant">Next election</dt>
+						<dd class="text-lg font-bold font-mono tabular-nums text-on-surface mt-0.5">{{ election.next }}</dd>
+						<p class="text-3xs font-mono tabular-nums text-on-surface-variant mt-0.5">
+							{{ election.campaign ? 'Campaign under way · ' : '' }}in {{ election.yearsLeft|number_format(1) }} {{ election.yearsLeft|number_format(1) == '1.0' ? 'year' : 'years' }}
+						</p>
+					</div>
+					<div class="bg-surface-container-lowest rounded border border-outline-variant/20 px-4 py-3 col-span-2">
+						<dt class="text-2xs font-bold uppercase tracking-wider text-on-surface-variant" title="Baker, Bloom and Davis economic policy uncertainty: it builds into each election and falls back after it">Policy uncertainty</dt>
+						<dd class="text-lg font-bold font-mono tabular-nums text-on-surface mt-0.5">{{ election.policyUncertainty|number_format(0) }}</dd>
+						<p class="text-3xs text-on-surface-variant mt-0.5">Rises into a vote as firms put off investment until they know who governs</p>
+					</div>
+					<div class="bg-surface-container-lowest rounded border border-outline-variant/20 px-4 py-3 col-span-2">
+						<dt class="text-2xs font-bold uppercase tracking-wider text-on-surface-variant">Next Council vacancy</dt>
+						<dd class="text-base font-bold text-on-surface mt-0.5">Seat {{ council.nextVacancy.seat }} · {{ council.nextVacancy.termEndsLabel }}</dd>
+						<p class="text-3xs text-on-surface-variant mt-0.5">{{ council.nextVacancy.name }}'s term ends; the Council elects the successor</p>
+					</div>
+				</dl>
+			</div>
+		</div>
+
+		{# --- THE DIET AND THE POLICY SPACE --- #}
+		{# The chamber's seat positions are unit-radius; they are drawn at 100 units so text sizes stay whole. #}
+		<div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
+			<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/15" aria-labelledby="diet-heading">
+				<h2 id="diet-heading" class="text-sm font-bold text-on-surface">The Diet</h2>
+				<p class="text-3xs text-on-surface-variant mt-0.5">{{ rules.seats }} seats, from the largest state on the left to the smallest on the right. The governing parties' seats are solid.</p>
+
+				<svg viewBox="-108 -106 216 114" class="w-full mt-4 max-h-72" role="img" aria-label="Diet seats by party: {% for party in parties %}{{ party.name }} {{ party.seats }}{{ not loop.last ? ', ' : '' }}{% endfor %}">
+					{% for seat in hemicycle %}
+						<circle cx="{{ seat.x * 100 }}" cy="{{ -seat.y * 100 }}" r="2.8" fill="{{ seat.color }}" fill-opacity="{{ seat.governing ? 1 : 0.4 }}"></circle>
+					{% endfor %}
+					<text x="0" y="-13" text-anchor="middle" class="fill-on-surface font-bold" font-size="15">{{ government.seats }}</text>
+					<text x="0" y="-4" text-anchor="middle" class="fill-on-surface-variant" font-size="5.5">of {{ rules.majority }} needed</text>
+				</svg>
+
+				<table class="w-full mt-4 text-xs">
+					<thead>
+						<tr class="text-3xs uppercase tracking-wider text-on-surface-variant border-b border-outline-variant/15">
+							<th scope="col" class="text-left font-bold pb-2">Party</th>
+							<th scope="col" class="text-right font-bold pb-2">Seats</th>
+							<th scope="col" class="text-right font-bold pb-2">Vote</th>
+							<th scope="col" class="text-right font-bold pb-2">Change</th>
+						</tr>
+					</thead>
+					<tbody class="divide-y divide-outline-variant/10">
+						{% for party in parties %}
+							<tr>
+								<th scope="row" class="py-2 text-left font-normal">
+									<span class="inline-flex items-center gap-2">
+										<span class="w-2.5 h-2.5 rounded-full shrink-0" style="background-color: {{ party.color }}" aria-hidden="true"></span>
+										<span class="font-bold text-on-surface">{{ party.name }}</span>
+										{% if party.governing %}<span class="text-3xs font-bold uppercase tracking-wider text-secondary">In government</span>{% endif %}
+									</span>
+								</th>
+								<td class="py-2 text-right font-mono tabular-nums text-on-surface">{{ party.seats }}</td>
+								<td class="py-2 text-right font-mono tabular-nums text-on-surface">{{ (party.share * 100)|number_format(1) }}%</td>
+								<td class="py-2 text-right font-mono tabular-nums {{ party.swing is null ? 'text-on-surface-variant' : (party.swing >= 0 ? 'text-secondary' : 'text-error') }}">
+									{{- party.swing is null ? '-' : (party.swing >= 0 ? '+' : '') ~ (party.swing * 100)|number_format(1) ~ 'pp' -}}
+								</td>
+							</tr>
+						{% endfor %}
+					</tbody>
+				</table>
+			</section>
+
+			<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/15" aria-labelledby="compass-heading">
+				<h2 id="compass-heading" class="text-sm font-bold text-on-surface">The parties</h2>
+				<p class="text-3xs text-on-surface-variant mt-0.5">
+					Each party is fixed on the question it was founded on and drifts on the other between elections. The coalition is joined by
+					dashed lines; the diamond is the government's own position, its parties weighted by their seats. Faint trails are past positions.
+				</p>
+
+				{% set w = compass.halfWidth %}
+				<svg viewBox="{{ -w - 36 }} {{ -w - 16 }} {{ 2 * w + 72 }} {{ 2 * w + 32 }}" class="w-full mt-4 max-h-96" role="img" aria-label="Party positions: openness across, size of state up">
+					<rect x="{{ -w }}" y="{{ -w }}" width="{{ 2 * w }}" height="{{ 2 * w }}" fill="none" class="stroke-outline-variant" stroke-opacity="0.4" stroke-width="0.6"></rect>
+					<line x1="{{ -w }}" y1="0" x2="{{ w }}" y2="0" class="stroke-outline-variant" stroke-opacity="0.6" stroke-width="0.6"></line>
+					<line x1="0" y1="{{ -w }}" x2="0" y2="{{ w }}" class="stroke-outline-variant" stroke-opacity="0.6" stroke-width="0.6"></line>
+					<text x="0" y="{{ -w - 5 }}" text-anchor="middle" font-size="7" class="fill-on-surface-variant">Big state</text>
+					<text x="0" y="{{ w + 11 }}" text-anchor="middle" font-size="7" class="fill-on-surface-variant">Small state</text>
+					<text x="{{ -w - 4 }}" y="2" text-anchor="end" font-size="7" class="fill-on-surface-variant">Closed</text>
+					<text x="{{ w + 4 }}" y="2" text-anchor="start" font-size="7" class="fill-on-surface-variant">Open</text>
+
+					{% for party in compass.parties %}
+						{% if party.trail|length > 1 %}
+							<polyline points="{% for p in party.trail %}{{ p.x }},{{ p.y }} {% endfor %}" fill="none" stroke="{{ party.color }}" stroke-opacity="0.35" stroke-width="1.2"></polyline>
+						{% endif %}
+					{% endfor %}
+					{% for link in compass.links %}
+						<line x1="{{ link.x1 }}" y1="{{ link.y1 }}" x2="{{ link.x2 }}" y2="{{ link.y2 }}" class="stroke-on-surface" stroke-width="1" stroke-dasharray="3 2" stroke-opacity="0.7"></line>
+					{% endfor %}
+					{% for party in compass.parties %}
+						<circle cx="{{ party.x }}" cy="{{ party.y }}" r="{{ 3 + party.seats / 20 }}" fill="{{ party.color }}" fill-opacity="{{ party.governing ? 1 : 0.55 }}" class="stroke-surface" stroke-width="1"></circle>
+						<text x="{{ party.x }}" y="{{ party.y - 6 - party.seats / 20 }}" text-anchor="middle" font-size="7" font-weight="bold" class="fill-on-surface">{{ party.name }}</text>
+					{% endfor %}
+					<rect x="{{ compass.government.x - 3.5 }}" y="{{ compass.government.y - 3.5 }}" width="7" height="7" transform="rotate(45 {{ compass.government.x }} {{ compass.government.y }})" class="fill-on-surface"></rect>
+				</svg>
+
+				<table class="w-full mt-3 text-xs">
+					<caption class="sr-only">Party positions</caption>
+					<thead>
+						<tr class="text-3xs uppercase tracking-wider text-on-surface-variant border-b border-outline-variant/15">
+							<th scope="col" class="text-left font-bold pb-2">Party</th>
+							<th scope="col" class="text-right font-bold pb-2">Size of state</th>
+							<th scope="col" class="text-right font-bold pb-2">Openness</th>
+						</tr>
+					</thead>
+					<tbody class="divide-y divide-outline-variant/10">
+						{% for party in parties %}
+							<tr>
+								<th scope="row" class="py-1.5 text-left font-normal text-on-surface">{{ party.name }}</th>
+								<td class="py-1.5 text-right font-mono tabular-nums {{ party.primaryAxis == 'state' ? 'text-on-surface font-bold' : 'text-on-surface-variant' }}">{{ (party.state >= 0 ? '+' : '') ~ party.state|number_format(2) }}</td>
+								<td class="py-1.5 text-right font-mono tabular-nums {{ party.primaryAxis == 'openness' ? 'text-on-surface font-bold' : 'text-on-surface-variant' }}">{{ (party.openness >= 0 ? '+' : '') ~ party.openness|number_format(2) }}</td>
+							</tr>
+						{% endfor %}
+						<tr>
+							<th scope="row" class="py-1.5 text-left font-bold text-on-surface">Government</th>
+							<td class="py-1.5 text-right font-mono tabular-nums text-on-surface">{{ (government.state >= 0 ? '+' : '') ~ government.state|number_format(2) }}</td>
+							<td class="py-1.5 text-right font-mono tabular-nums text-on-surface">{{ (government.openness >= 0 ? '+' : '') ~ government.openness|number_format(2) }}</td>
+						</tr>
+					</tbody>
+				</table>
+				<p class="text-3xs text-on-surface-variant mt-2">Bold is the axis a party is defined by and never leaves.</p>
+			</section>
+		</div>
+
+		{# --- THE COUNCIL --- #}
+		<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/15" aria-labelledby="council-heading">
+			<h2 id="council-heading" class="text-sm font-bold text-on-surface">The Aerie Council</h2>
+			<p class="text-3xs text-on-surface-variant mt-0.5">
+				{{ rules.councilSeats }} seats on staggered {{ rules.councilTermYears|number_format(0) }}-year terms. When a term ends, the sitting members elect the successor.
+			</p>
+
+			<div class="grid grid-cols-1 lg:grid-cols-[1fr_22rem] gap-5 mt-4">
+				<div class="overflow-x-auto">
+					<table class="w-full text-xs">
+						<thead>
+							<tr class="text-3xs uppercase tracking-wider text-on-surface-variant border-b border-outline-variant/15">
+								<th scope="col" class="text-right font-bold pb-2 w-10">Seat</th>
+								<th scope="col" class="text-left font-bold pb-2 pl-4">Councillor</th>
+								<th scope="col" class="text-left font-bold pb-2">Seated</th>
+								<th scope="col" class="text-left font-bold pb-2">Term ends</th>
+							</tr>
+						</thead>
+						<tbody class="divide-y divide-outline-variant/10">
+							{% for seat in council.roster %}
+								<tr>
+									<td class="py-1.5 text-right font-mono tabular-nums text-on-surface-variant">{{ seat.seat }}</td>
+									<th scope="row" class="py-1.5 pl-4 text-left font-bold text-on-surface">{{ seat.name }}</th>
+									<td class="py-1.5 text-on-surface-variant font-mono tabular-nums">{{ seat.sinceLabel }}</td>
+									<td class="py-1.5 text-on-surface-variant font-mono tabular-nums {{ seat.seat == council.nextVacancy.seat ? 'text-primary font-bold' : '' }}">{{ seat.termEndsLabel }}</td>
+								</tr>
+							{% endfor %}
+						</tbody>
+					</table>
+				</div>
+
+				<div class="space-y-4">
+					<div>
+						<h3 class="text-xs font-bold text-on-surface">Departments</h3>
+						<p class="text-3xs text-on-surface-variant mt-0.5">The Council appoints each head; the departments then act on their own mandates.</p>
+						<ul class="mt-2 space-y-2">
+							{% for department in council.departments %}
+								<li class="text-xs">
+									{% if department.href %}
+										<a href="{{ department.href }}" class="font-bold text-primary hover:underline">{{ department.name }}</a>
+									{% else %}
+										<span class="font-bold text-on-surface">{{ department.name }}</span>
+									{% endif %}
+									<span class="block text-3xs text-on-surface-variant">{{ department.mandate }}</span>
+								</li>
+							{% endfor %}
+						</ul>
+					</div>
+					<div>
+						<h3 class="text-xs font-bold text-on-surface">Powers</h3>
+						<ul class="mt-2 space-y-2 text-3xs text-on-surface-variant">
+							<li><span class="font-bold text-on-surface">Veto.</span> The Council can veto any budget or law the Diet passes. It almost never does: the threat is enough.</li>
+							<li><span class="font-bold text-on-surface">Removal.</span> The Diet can remove a councillor with {{ rules.supermajority }} of its {{ rules.seats }} seats, three quarters. It never has.</li>
+							<li><span class="font-bold text-on-surface">Independence.</span> No party sits on the Council, and no councillor sits in the Diet. What passes between them runs on gentlemen's agreements.</li>
+						</ul>
+					</div>
+				</div>
+			</div>
+		</section>
+
+		{# --- ELECTION HISTORY --- #}
+		<section class="bg-surface-container-low rounded-lg border border-outline-variant/15 overflow-hidden" aria-labelledby="history-heading">
+			<div class="p-5 pb-3">
+				<h2 id="history-heading" class="text-sm font-bold text-on-surface">Elections</h2>
+				<p class="text-3xs text-on-surface-variant mt-0.5">Every vote on record, newest first, with the economy it was cast on.</p>
+			</div>
+			{% if history is empty %}
+				<p class="px-5 pb-5 text-xs text-on-surface-variant">No election has been held yet. The founding Diet sits until {{ election.next }}.</p>
+			{% else %}
+				<div class="overflow-x-auto">
+					<table class="w-full text-xs">
+						<thead class="bg-surface-container text-3xs uppercase tracking-wider text-on-surface-variant">
+							<tr>
+								<th scope="col" class="px-5 py-2.5 text-left font-bold">Held</th>
+								{% for party in parties %}
+									<th scope="col" class="px-3 py-2.5 text-right font-bold" title="{{ party.name }}"><span class="inline-block w-2 h-2 rounded-full mr-1" style="background-color: {{ party.color }}" aria-hidden="true"></span>{{ party.name|split(' ')|last }}</th>
+								{% endfor %}
+								<th scope="col" class="px-3 py-2.5 text-left font-bold">Government</th>
+								<th scope="col" class="px-3 py-2.5 text-right font-bold hidden md:table-cell" title="The outgoing government's change in combined vote share">Incumbent swing</th>
+								<th scope="col" class="px-3 py-2.5 text-right font-bold hidden md:table-cell" title="Growth over the campaign against trend, and inflation over the term against target">Growth / inflation</th>
+								<th scope="col" class="px-5 py-2.5 text-right font-bold hidden sm:table-cell" title="Pedersen index: the share of voters who changed party, net">Volatility</th>
+							</tr>
+						</thead>
+						<tbody class="divide-y divide-outline-variant/10">
+							{% for row in history %}
+								<tr>
+									<th scope="row" class="px-5 py-2 text-left font-mono tabular-nums font-normal text-on-surface">
+										{{ row.date }}
+										{% if row.crisisLift %}<span class="block text-3xs font-sans text-error" title="Held within {{ rules.crisisWindowYears|number_format(0) }} years of a financial crisis">After a crisis</span>{% endif %}
+									</th>
+									{% for cell in row.seats %}
+										<td class="px-3 py-2 text-right font-mono tabular-nums text-on-surface">
+											{{ cell.seats }}
+											<span class="block text-3xs {{ cell.swing >= 0 ? 'text-secondary' : 'text-error' }}">{{ (cell.swing >= 0 ? '+' : '') ~ (cell.swing * 100)|number_format(1) }}</span>
+										</td>
+									{% endfor %}
+									<td class="px-3 py-2">
+										<span class="flex flex-wrap gap-x-2 gap-y-0.5">
+											{% for member in row.coalition %}
+												<span class="inline-flex items-center gap-1 text-on-surface"><span class="w-2 h-2 rounded-full" style="background-color: {{ member.color }}" aria-hidden="true"></span>{{ member.name }}</span>
+											{% endfor %}
+										</span>
+										{% if row.changed %}<span class="text-3xs font-bold uppercase tracking-wider text-primary">New government</span>{% endif %}
+									</td>
+									<td class="px-3 py-2 text-right font-mono tabular-nums hidden md:table-cell {{ row.incumbentSwing >= 0 ? 'text-secondary' : 'text-error' }}">{{ (row.incumbentSwing >= 0 ? '+' : '') ~ (row.incumbentSwing * 100)|number_format(1) }}pp</td>
+									<td class="px-3 py-2 text-right font-mono tabular-nums text-on-surface-variant hidden md:table-cell">{{ (row.growthGap >= 0 ? '+' : '') ~ (row.growthGap * 100)|number_format(1) }} / {{ (row.inflationGap >= 0 ? '+' : '') ~ (row.inflationGap * 100)|number_format(1) }}</td>
+									<td class="px-5 py-2 text-right font-mono tabular-nums text-on-surface-variant hidden sm:table-cell">{{ (row.volatility * 100)|number_format(1) }}</td>
+								</tr>
+							{% endfor %}
+						</tbody>
+					</table>
+				</div>
+			{% endif %}
+		</section>
+
+		{# --- HOW THE DIET IS ELECTED --- #}
+		<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/15" aria-labelledby="rules-heading">
+			<h2 id="rules-heading" class="text-sm font-bold text-on-surface">How the Diet is elected</h2>
+			<p class="text-3xs text-on-surface-variant mt-0.5">Every rule the vote runs on, and the evidence it is taken from.</p>
+
+			{% set rules_list = [
+				{
+					name: 'The economic vote',
+					text: 'The governing parties gain ' ~ rules.growthSlope|number_format(2) ~ ' points of the vote for each point of growth above trend over the final ' ~ rules.campaignMonths|number_format(0) ~ ' months of the term, and lose ' ~ rules.inflationSlope|number_format(2) ~ ' points for each point of inflation above target over the term. Everything else voters weigh moves the result by about ' ~ (rules.residual * 100)|number_format(1) ~ ' points either way.',
+					source: 'Fair, presidential vote equation (2020 update)'
+				},
+				{
+					name: 'The cost of ruling',
+					text: 'Governing costs the governing parties ' ~ (rules.costOfRuling * 100)|number_format(1) ~ ' points of the vote each term, whatever the economy did. They are seen to lose more: governments are formed by the parties whose short-term swings carried the last vote, and those swings run off by the next. On average real governments have lost ' ~ (rules.recordedCostOfRuling * 100)|number_format(2) ~ ' points a term; the Diet\'s lose a little more.',
+					source: 'Nannestad & Paldam (2002): 282 elections in 19 democracies'
+				},
+				{
+					name: 'Who gains',
+					text: 'What the governing parties lose, the opposition gains, each party in proportion to its own vote. Within the government, each party takes its share of the swing.',
+					source: 'Proportional swing'
+				},
+				{
+					name: 'Short-term forces',
+					text: 'Each party also has a swing of its own at every vote: its candidates, its campaign, its scandals. It moves the party\'s vote by about ' ~ (rules.partyShock * 100)|number_format(0) ~ '% either way and does not carry into the next vote. With the cost of ruling, it makes the Diet about two thirds as volatile as Western Europe\'s parliaments have been on average. Much more, and governments would lose far more than real ones do; much less cost of ruling, and the party system would drift into one-party rule.',
+					source: 'Converse (1966) on short-term forces; Dassonneville & Hooghe (2017): average volatility of 10 across 21 Western European countries, 1950-2013'
+				},
+				{
+					name: 'After a financial crisis',
+					text: 'In the ' ~ rules.crisisWindowYears|number_format(0) ~ ' years after a financial crisis, the Iron Harbor Coalition\'s vote is lifted by ' ~ (rules.crisisLift * 100)|number_format(0) ~ '%. Its case that the outside world is a source of contagion lands. The lift is given back once the crisis is ' ~ rules.crisisWindowYears|number_format(0) ~ ' years past. Ordinary recessions bring no such lift.',
+					source: 'Funke, Schularick & Trebesch (2016): far-right vote after financial crises, 1870-2014'
+				},
+				{
+					name: 'Seats',
+					text: rules.seats ~ ' seats, allocated by the D\'Hondt method over the whole District.',
+					source: 'D\'Hondt highest averages'
+				},
+				{
+					name: 'Party positions',
+					text: 'A party never moves on the question it was founded on. On the other it moves between elections by as much as real parties revise their manifestos.',
+					source: 'Somer-Topcu (2009): 10 to 16 points on the 200-point left-right scale per election'
+				},
+				{
+					name: 'Forming a government',
+					text: 'The government is the coalition that commands a majority, needs every one of its members to, and spans the narrowest range of views. The Civic Front and the Vanguard govern together only when nothing narrower can.',
+					source: 'Riker (1962); de Swaan (1973); Martin & Stevenson (2001)'
+				}
+			] %}
+			<dl class="mt-4 divide-y divide-outline-variant/10">
+				{% for rule in rules_list %}
+					<div class="py-3 grid grid-cols-1 md:grid-cols-[12rem_1fr] gap-1 md:gap-4">
+						<dt class="text-xs font-bold text-on-surface">{{ rule.name }}</dt>
+						<dd class="text-xs text-on-surface-variant">
+							{{ rule.text }}
+							<span class="block text-3xs font-mono text-primary/80 mt-1">{{ rule.source }}</span>
+						</dd>
+					</div>
+				{% endfor %}
+			</dl>
+		</section>
+	</div>
+{% endblock %}

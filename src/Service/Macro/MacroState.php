@@ -361,6 +361,34 @@ class MacroState
     public float $policyUncertaintyIndexEma;
     public float $lastElectionAt;
 
+    // The Diet (App\Service\Macro\Subsystem\DistrictPoliticsSubsystem), each map keyed by party: seats, vote shares and
+    // their change at the last vote, the drifting position on each party's other axis, and the governing coalition.
+    /** @var array<string, float> */
+    public array $dietSeats;
+    /** @var array<string, float> */
+    public array $dietVoteShares;
+    /** @var array<string, float> */
+    public array $dietVoteSwings;
+    /** @var array<string, float> */
+    public array $partySecondaryPositions;
+    /** @var array<string, float> */
+    public array $governingCoalition;
+    // Each party's short-term swing at the last vote, in log share: candidates and campaigns that do not outlast the vote.
+    /** @var array<string, float> */
+    public array $partyShortTermShocks;
+    public float $coalitionFormedAt;
+    // What the vote reads: the deflator where the term began and real GDP where the campaign began (-1: not yet marked).
+    public float $termStartedAt;
+    public float $termStartDeflator;
+    public float $campaignStartedAt;
+    public float $campaignStartRealGdp;
+    // The post-crisis lift the last vote gave the closed-economy party, returned at the next.
+    public float $ironHarborCrisisShift;
+    // The last vote's economy against trend and target, and the governing coalition's change in share.
+    public float $electionGrowthGap;
+    public float $electionInflationGap;
+    public float $electionIncumbentSwing;
+
     // Sovereign reserve fund (App\Service\Macro\Subsystem\SovereignFundSubsystem). The three sleeves: a slice of the
     // board in currency, and foreign equities and foreign paper in FOREIGN units (home value is units / exchangeRateIndex).
     // Zero until the fund incepts on the first tick that carries a board; a run with no market never has one.
@@ -463,7 +491,8 @@ class MacroState
 
             $carried[$field] = true;
             $state->$field = match ($field) {
-                'sectorZ', 'sectorDemandZ' => is_array($data[$key]) ? array_map('floatval', $data[$key]) : [],
+                'sectorZ', 'sectorDemandZ', 'dietSeats', 'dietVoteShares', 'dietVoteSwings', 'partySecondaryPositions', 'governingCoalition', 'partyShortTermShocks'
+                    => is_array($data[$key]) ? array_map('floatval', $data[$key]) : [],
                 'qeActive', 'qtActive' => (bool) $data[$key],
                 'eventType' => (string) $data[$key],
                 default => (float) $data[$key],

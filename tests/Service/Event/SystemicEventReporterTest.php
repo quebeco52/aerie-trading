@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\Event;
 
+use App\Data\AerieDiet as Diet;
 use App\DTO\MacroStateDTO;
 use App\Entity\Etf;
 use App\Entity\EtfEvent;
@@ -61,6 +62,28 @@ class SystemicEventReporterTest extends TestCase
         $this->assertNotNull($headline);
         $this->assertNull($headline['change_percent']);
         $this->assertNull($this->persisted[0]->getChangePercent());
+    }
+
+    /** The election headline names the government the vote formed, its seats, and the party the vote moved most. */
+    public function testTheElectionHeadlineNamesTheNewGovernment(): void
+    {
+        $macro = new MacroStateDTO(
+            eventType: ShockEvent::ELECTION_HELD,
+            dietSeats: [Diet::CIVIC => 97.0, Diet::VANGUARD => 83.0, Diet::IRON_HARBOR => 36.0, Diet::EXCHANGE => 34.0],
+            dietVoteSwings: [Diet::CIVIC => 0.048, Diet::VANGUARD => -0.05, Diet::IRON_HARBOR => 0.004, Diet::EXCHANGE => -0.002],
+            governingCoalition: [Diet::CIVIC => 1.0, Diet::VANGUARD => 0.0, Diet::IRON_HARBOR => 1.0, Diet::EXCHANGE => 0.0],
+        );
+
+        // Every phrasing must name the coalition; draw until each has been seen.
+        $seen = [];
+        for ($i = 0; $i < 60; ++$i) {
+            $headline = $this->reporter(bufferedPrice: null)->report($macro, $this->benchmarkAt('100'));
+            $this->assertNotNull($headline);
+            $this->assertStringContainsString('the Civic Front and the Iron Harbor Coalition', $headline['description']);
+            $this->assertStringNotContainsString('{', $headline['description']);
+            $seen[$headline['description']] = true;
+        }
+        $this->assertGreaterThan(1, count($seen));
     }
 
     public function testATickWithoutAnEventPublishesNothing(): void

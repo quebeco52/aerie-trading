@@ -380,7 +380,11 @@ class NarrativeEngine
                 ]
             ),
             ShockEvent::ELECTION_HELD => $this->getRandomPhrase(
-                isset($context['epu_index']) ? [
+                isset($context['coalition'], $context['mover'], $context['mover_swing_pp'], $context['diet_seats']) ? [
+                    "Diet election: The vote moved {$context['mover_swing_pp']} points for {$context['mover']}, and a government of {$context['coalition']} takes office with {$context['coalition_seats']} of {$context['diet_seats']} seats.",
+                    "The District has voted: {$context['coalition']} will govern, with {$context['largest_party']} the largest party in the Diet. The biggest move of the night was {$context['mover']}, {$context['mover_swing_pp']} points.",
+                    "Polls closed: A coalition of {$context['coalition']} commands {$context['coalition_seats']} seats in the new Diet, resolving a campaign that had lifted policy uncertainty to {$context['epu_index']}.",
+                ] : (isset($context['epu_index']) ? [
                     "District election held: Voters returned a government for a fresh term, with the policy-uncertainty index at {$context['epu_index']} into the vote.",
                     "Polls closed: A new legislative term begins, resolving a campaign that had lifted policy uncertainty to {$context['epu_index']}.",
                     "Election result declared: Boards that had deferred decisions through a campaign at {$context['epu_index']} on the uncertainty index now know the regime they face.",
@@ -388,7 +392,7 @@ class NarrativeEngine
                     "District election held: Voters returned a government for a fresh term.",
                     "Polls closed: A new legislative term begins, resolving the campaign's policy uncertainty.",
                     "Election result declared: Boards that had deferred decisions through the campaign now know the regime they face.",
-                ]
+                ])
             ),
             ShockEvent::TITAN_INTERVENTION => $this->getRandomPhrase(
                 isset($context['qe_intensity_pct']) ? [

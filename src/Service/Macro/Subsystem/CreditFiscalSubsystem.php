@@ -88,8 +88,6 @@ class CreditFiscalSubsystem
     public const CORPORATE_DEFAULT_SLOOS_SENSITIVITY = 1.0;
 
     // --- Economic Policy Uncertainty (Baker, Bloom & Davis 2016) ---
-    /** Length of the fixed electoral term in years; the clock is derived from simulation time, never stored. */
-    public const ELECTION_TERM_YEARS = 4.0;
     /** Log lift of the index at the election, ramping in over the final year of the term (Julio & Yook 2012 locate the investment cut in the election year; the BBD index rises a quarter or so into a presidential vote). */
     public const EPU_ELECTION_LIFT = 0.25;
     /** Log lift per unit of recession probability above its unconditional level: the index roughly doubled through 2008-2011 as policy responses were debated. */
@@ -696,7 +694,7 @@ class CreditFiscalSubsystem
      * A log mean-reverting index whose level is set by two things the record ties it to: the calendar, since
      * uncertainty about the policy regime builds into a scheduled election and resolves after it (Julio &
      * Yook 2012), and the cycle, since a downturn brings the policy response itself into question. Unscheduled
-     * shocks arrive as jumps. The election is derived from simulation time -- a term of ELECTION_TERM_YEARS --
+     * shocks arrive as jumps. The election is derived from simulation time -- a term of MacroEngine::ELECTION_TERM_YEARS --
      * so nothing about the calendar is stored, only the tick the last vote fell on, for the event pulse.
      *
      * @param MacroState $state Current macroeconomic state.
@@ -704,7 +702,7 @@ class CreditFiscalSubsystem
      */
     public function calculatePolicyUncertainty(MacroState $state, float $dt): void
     {
-        $term = self::ELECTION_TERM_YEARS;
+        $term = MacroEngine::ELECTION_TERM_YEARS;
         $yearsToElection = $term - fmod($state->totalTime, $term);
         $electionProximity = max(0.0, 1.0 - $yearsToElection);
         $recessionExcess = max(0.0, $state->recessionProbabilityEma - self::EPU_STRESS_PROBABILITY_FLOOR);

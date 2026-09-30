@@ -7,6 +7,7 @@ use App\Service\Macro\Recorder\MacroSnapshotRecorder;
 use App\Service\Macro\Subsystem\AssetMarketSubsystem;
 use App\Service\Macro\Subsystem\CommodityLogisticsSubsystem;
 use App\Service\Macro\Subsystem\CreditFiscalSubsystem;
+use App\Service\Macro\Subsystem\DistrictPoliticsSubsystem;
 use App\Service\Macro\Subsystem\LaborMarketSubsystem;
 use App\Service\Macro\Subsystem\MacroAggregateSubsystem;
 use App\Service\Macro\Subsystem\MonetaryPolicySubsystem;
@@ -245,6 +246,28 @@ class MacroEngine
     /** Horizon of the long-run average the budget reads the gap against, so the cycle it answers averages to zero: the 15-year window Drehmann & Juselius (2012) separate a cycle from its trend with, about 2.5 postwar NBER cycles. */
     public const FUND_STABILISATION_GAP_TREND_YEARS = 15.0;
 
+    // --- The Diet's Election (Fair presidential vote equation, 2020 update; Nannestad & Paldam 2002) ---
+    /** Length of the fixed electoral term in years; the clock is derived from simulation time, never stored. */
+    public const ELECTION_TERM_YEARS = 4.0;
+    /** Final stretch of the term whose growth voters weigh (Fair's G: the first three quarters of the election year). */
+    public const ELECTION_CAMPAIGN_WINDOW_YEARS = 0.75;
+    /** Governing coalition's vote share per unit of annualised real per-capita growth over the campaign (Fair: 0.673 pp per pp). */
+    public const ELECTION_GROWTH_SLOPE = 0.673;
+    /** Governing coalition's vote share lost per unit of annualised inflation over the term (Fair: 0.721 pp per pp). */
+    public const ELECTION_INFLATION_SLOPE = 0.721;
+    /** Residual of the governing coalition's share, everything the economy does not explain (Fair: standard error 2.95 pp). */
+    public const ELECTION_RESIDUAL_SD = 0.0295;
+    /** Vote share the average government has lost over a term in the record (Nannestad & Paldam 2002: 282 elections in 19 democracies), the reference the Diet's own cost is read against. */
+    public const ELECTION_RECORDED_COST_OF_RULING = 0.0225;
+    /** Vote share governing costs the governing parties each term, beyond the short-term swings they were elected on running off. It is also what keeps the party system balanced: at 0.2 points the Diet drifts into one-party rule, and at the recorded 2.25 the run-off takes the average loss to 5.8 (var/harness replay of 2,500 elections). At 1.2, with ELECTION_PARTY_SHOCK_SD, the observed loss is about 2.8. */
+    public const ELECTION_COST_OF_RULING = 0.012;
+    /** Relative gain of the closed-economy party's vote after a financial crisis (Funke, Schularick & Trebesch 2016: far right +30%, none after ordinary recessions). */
+    public const ELECTION_CRISIS_CLOSED_PARTY_LIFT = 0.30;
+    /** Years after a financial crisis the lift lasts (Funke, Schularick & Trebesch 2016). */
+    public const ELECTION_CRISIS_WINDOW_YEARS = 5.0;
+    /** Each party's own short-term swing in log vote share, drawn at every vote and gone by the next (Converse 1966 short-term forces; additive logistic form, Katz & King 1999). Sized with ELECTION_COST_OF_RULING for a total volatility near 7, about two thirds of Western Europe's 10 (Dassonneville & Hooghe 2017, Pedersen index, 21 countries 1950-2013): the full 10 needs swings whose run-off costs governments twice the recorded loss. */
+    public const ELECTION_PARTY_SHOCK_SD = 0.12;
+
     // --- Federal Reserve G.17 Industrial Capacity Utilization Index ---
     /** Baseline long-run historical capacity utilization rate (~78.5%). */
     public const CU_BASELINE = 0.785;
@@ -397,6 +420,8 @@ class MacroEngine
         private readonly ?MacroDiagnosticsProbe $diagnostics = null,
         /** The sovereign reserve fund. Null means the district has none, which is what a caller that builds the engine by hand gets. */
         private readonly ?SovereignFundSubsystem $sovereignFundSubsystem = null,
+        /** The Diet's elections and coalitions. Null means no politics, which is what a caller that builds the engine by hand gets. */
+        private readonly ?DistrictPoliticsSubsystem $politicsSubsystem = null,
     ) {}
 
     private function loadState(): MacroState
@@ -628,6 +653,8 @@ class MacroEngine
         $this->assetSubsystem->calculateConsumerSentiment($state, $dt);
         $this->monetarySubsystem->calculateRecessionProbability($state);
         $this->assetSubsystem->calculateCapitalMarketsDealIndex($state, $dt);
+        // The Diet votes on the calendar's election tick, on this tick's real GDP and deflator.
+        $this->politicsSubsystem?->update($state, $dt);
 
         $this->updateSectorFactors($state, $dt);
         $this->evaluateSystemicEvent($state, $dt);
