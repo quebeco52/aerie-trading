@@ -8,6 +8,7 @@ use App\Data\AerieDiet as Diet;
 use App\DTO\MacroStateDTO;
 use App\Entity\DietElection;
 use App\Repository\DietElectionRepository;
+use App\Service\Macro\MacroEngine;
 use App\Service\View\GovernmentPageBuilder;
 use PHPUnit\Framework\TestCase;
 
@@ -66,6 +67,25 @@ class GovernmentPageBuilderTest extends TestCase
         foreach ($page['compass']['parties'] as $party) {
             $this->assertCount(2, $party['trail']);
         }
+    }
+
+    /** The founding government's cut waits on the Council while debt is over the line; a lever that costs no revenue waits only on the next round. */
+    public function testTheBudgetShowsWhatTheCouncilHolds(): void
+    {
+        $braked = $this->builder()->build(new MacroStateDTO(totalTime: 0.2, sovereignDebtToGdp: MacroEngine::SOVEREIGN_RISK_DEBT_THRESHOLD + 0.03));
+        $levers = array_column($braked['budget']['levers'], null, 'name');
+
+        $this->assertTrue($braked['budget']['braking']);
+        $this->assertSame('held', $levers['Corporate tax rate']['status']);
+        $this->assertLessThan(MacroEngine::TARGET_CORPORATE_TAX_RATE, $levers['Corporate tax rate']['platform']);
+        $this->assertSame(MacroEngine::TARGET_CORPORATE_TAX_RATE, $levers['Corporate tax rate']['enacted']);
+        $this->assertSame('enacted', $levers['Average tariff on imports']['status'], 'An open government has no tariff to levy.');
+        $this->assertSame('pending', $levers['Labour force growth']['status']);
+        $this->assertSame('Year 1 Q3', $braked['budget']['nextRound']);
+
+        $free = $this->builder()->build(new MacroStateDTO(totalTime: 0.2, sovereignDebtToGdp: 0.5));
+        $this->assertFalse($free['budget']['braking']);
+        $this->assertSame('pending', array_column($free['budget']['levers'], null, 'name')['Corporate tax rate']['status']);
     }
 
     public function testSimulationDatesCountFromTheFounding(): void

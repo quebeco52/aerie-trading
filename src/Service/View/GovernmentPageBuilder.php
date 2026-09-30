@@ -113,7 +113,20 @@ class GovernmentPageBuilder
                 'crisisLift' => MacroEngine::ELECTION_CRISIS_CLOSED_PARTY_LIFT,
                 'crisisWindowYears' => MacroEngine::ELECTION_CRISIS_WINDOW_YEARS,
                 'partyShock' => MacroEngine::ELECTION_PARTY_SHOCK_SD,
+                'neutralTaxRate' => MacroEngine::TARGET_CORPORATE_TAX_RATE,
+                'manifestoTaxGap' => MacroEngine::POLICY_MANIFESTO_CORPORATE_TAX_GAP,
+                'profitsToGdp' => MacroEngine::CORPORATE_PROFITS_TO_GDP,
+                'protectionistTariff' => MacroEngine::POLICY_PROTECTIONIST_TARIFF,
+                'retaliation' => MacroEngine::TARIFF_RETALIATION_RATIO,
+                'tariffOutputLoss' => MacroEngine::TARIFF_OUTPUT_LOSS,
+                'migrationClosed' => MacroEngine::MIGRATION_CLOSED_REGIME,
+                'migrationOpen' => MacroEngine::MIGRATION_OPEN_REGIME,
+                'structuralLaborGrowth' => MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE,
+                'housingElasticity' => MacroEngine::IMMIGRATION_HOUSING_ELASTICITY,
+                'debtBrake' => MacroEngine::SOVEREIGN_RISK_DEBT_THRESHOLD,
+                'budgetRoundMonths' => 12.0 * MacroEngine::BUDGET_ROUND_PERIOD_YEARS,
             ],
+            'budget' => $this->budget($macro, $coalitionPosition, $coalitionSeats),
             'parties' => $parties,
             'hemicycle' => $this->hemicycle($seats, $parties, $coalition),
             'compass' => $this->compass($parties, $history, $coalitionPosition, $coalition),
@@ -128,6 +141,66 @@ class GovernmentPageBuilder
                 'departments' => AerieCouncil::DEPARTMENTS,
             ],
             'history' => array_map(fn(DietElection $election): array => $this->historyRow($election), array_reverse($history)),
+        ];
+    }
+
+    /**
+     * The levers as the government's platform sets them and as the last budget enacted them, and whether the Council's
+     * debt brake stands between the two.
+     *
+     * @param array{state: float, openness: float} $position The coalition's seat-weighted position.
+     * @return array<string, mixed>
+     */
+    private function budget(MacroStateDTO $macro, array $position, int $coalitionSeats): array
+    {
+        $platform = DistrictPoliticsSubsystem::platform($position);
+        $braking = $macro->sovereignDebtToGdp > MacroEngine::SOVEREIGN_RISK_DEBT_THRESHOLD && $coalitionSeats < AerieDiet::SUPERMAJORITY_SEATS;
+        $round = MacroEngine::BUDGET_ROUND_PERIOD_YEARS;
+        $nextRound = self::simDate((floor($macro->totalTime / $round) + 1.0) * $round);
+
+        // A lever that cuts revenue waits on the Council while the brake is on; anything else waits on the next round.
+        $status = static function (float $platform, float $enacted, bool $cutsRevenue) use ($braking): string {
+            if (abs($platform - $enacted) < 1e-9) {
+                return 'enacted';
+            }
+
+            return $cutsRevenue && $braking ? 'held' : 'pending';
+        };
+        $taxPlatform = MacroEngine::TARGET_CORPORATE_TAX_RATE + $platform['corporateTax'];
+        $taxEnacted = MacroEngine::TARGET_CORPORATE_TAX_RATE + $macro->corporateTaxPolicyShift;
+
+        return [
+            'levers' => [
+                [
+                    'name' => 'Corporate tax rate',
+                    'axis' => AerieDiet::AXIS_STATE,
+                    'platform' => $taxPlatform,
+                    'enacted' => $taxEnacted,
+                    'status' => $status($taxPlatform, $taxEnacted, $taxPlatform < $taxEnacted),
+                    'note' => sprintf('Firms pay %.1f%% today, with the cyclical adjustment', 100.0 * $macro->corporateTaxRate),
+                ],
+                [
+                    'name' => 'Average tariff on imports',
+                    'axis' => AerieDiet::AXIS_OPENNESS,
+                    'platform' => $platform['tariff'],
+                    'enacted' => $macro->importTariffRate,
+                    'status' => $status($platform['tariff'], $macro->importTariffRate, $platform['tariff'] < $macro->importTariffRate),
+                    'note' => sprintf('Partners answer with %.1f%% on the District\'s exports', 100.0 * MacroEngine::TARIFF_RETALIATION_RATIO * $macro->importTariffRate),
+                ],
+                [
+                    'name' => 'Labour force growth',
+                    'axis' => AerieDiet::AXIS_OPENNESS,
+                    'platform' => $platform['laborGrowth'],
+                    'enacted' => $macro->laborForceGrowthRate,
+                    'status' => $status($platform['laborGrowth'], $macro->laborForceGrowthRate, false),
+                    'note' => sprintf('Immigration has added %+.1f%% to the population over the structural path', 100.0 * $macro->immigrationPopulationShift),
+                ],
+            ],
+            'debt' => $macro->sovereignDebtToGdp,
+            'braking' => $braking,
+            'lastBrake' => $macro->lastCouncilBrakeAt >= 0.0 ? self::simDate($macro->lastCouncilBrakeAt) : null,
+            'lastBudget' => $macro->lastBudgetEnactedAt >= 0.0 ? self::simDate($macro->lastBudgetEnactedAt) : null,
+            'nextRound' => $nextRound,
         ];
     }
 

@@ -5,6 +5,7 @@ namespace App\Service\Event;
 use App\Data\AerieDiet;
 use App\DTO\MacroStateDTO;
 use App\Entity\Etf;
+use App\Service\Macro\MacroEngine;
 use App\Service\Market\PriceChangeFeed;
 
 /**
@@ -53,7 +54,7 @@ class SystemicEventReporter
             'swf_target_pct' => number_format($macro->sovereignFundTargetWeight * 100.0, 2),
             'swf_size_gdp_pct' => number_format($macro->sovereignFundToGdp * 100.0, 0),
             'swf_months' => number_format($macro->sovereignFundRebalanceMonthsLeft, 0),
-        ] + self::electionContext($macro);
+        ] + self::electionContext($macro) + self::budgetContext($macro);
 
         $monthMove = $this->priceChangeFeed->changeForTicker((string) $benchmark->getTicker(), (float) $benchmark->getPrice());
 
@@ -63,6 +64,24 @@ class SystemicEventReporter
             $this->narrativeEngine->generateLore($macro->eventType, $context),
             $monthMove === null ? null : 100.0 * $monthMove
         );
+    }
+
+    /**
+     * What a budget round enacted, for the budget headline, and whether the Council's debt brake held part of it back.
+     *
+     * @return array<string, string>
+     */
+    private static function budgetContext(MacroStateDTO $macro): array
+    {
+        $names = array_map(static fn(string $name): string => preg_replace('/^The /', '', $name) ?? $name, AerieDiet::PARTY_NAMES);
+
+        return [
+            'government' => implode('-', array_map(static fn(string $party): string => $names[$party], AerieDiet::governingParties($macro->governingCoalition))),
+            'tax_rate_pct' => number_format((MacroEngine::TARGET_CORPORATE_TAX_RATE + $macro->corporateTaxPolicyShift) * 100.0, 1),
+            'tariff_pct' => number_format($macro->importTariffRate * 100.0, 1),
+            'labor_growth_pct' => number_format($macro->laborForceGrowthRate * 100.0, 2),
+            'council_held' => $macro->lastCouncilBrakeAt === $macro->totalTime ? 'yes' : 'no',
+        ];
     }
 
     /**

@@ -331,6 +331,13 @@ readonly class MacroStateDTO
         public float $electionGrowthGap = 0.0,
         public float $electionInflationGap = 0.0,
         public float $electionIncumbentSwing = 0.0,
+        public float $corporateTaxPolicyShift = 0.0,
+        public float $importTariffRate = 0.0,
+        public float $tariffTradeLag = 0.0,
+        public float $laborForceGrowthRate = MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE,
+        public float $immigrationPopulationShift = 0.0,
+        public float $lastBudgetEnactedAt = -1.0,
+        public float $lastCouncilBrakeAt = -1.0,
         public float $moneySupplyGrowth = MacroEngine::M2_BASE_GROWTH,
         public float $moneySupplyGrowthEma = MacroEngine::M2_BASE_GROWTH,
         public float $sovereignFundDomesticEquity = 0.0,
@@ -479,10 +486,10 @@ readonly class MacroStateDTO
         }
 
         // The open-economy levels open where the currency and the mainland already stand, as MacroState::fromArray has them.
-        $args['importPriceLevel'] ??= MacroAggregateSubsystem::importPriceLevelTarget($resolve('exchangeRateIndexEma'));
+        $args['importPriceLevel'] ??= MacroAggregateSubsystem::importPriceLevelTarget($resolve('exchangeRateIndexEma'), $resolve('importTariffRate'));
         $args['realExchangeRateTradeLag'] ??= MacroAggregateSubsystem::realExchangeRateGap($resolve('exchangeRateIndexEma'), $resolve('exchangeRateTrend'));
         $args['alliedDefenseDeliveryLag'] ??= MacroAggregateSubsystem::alliedDefenseGap($resolve('alliedDefenseSpendingIndexEma'));
-        $args['netExportGap'] ??= MacroAggregateSubsystem::netExportGapAt($resolve('foreignOutputGapEma'), $resolve('realExchangeRateTradeLag'), $resolve('alliedDefenseDeliveryLag'));
+        $args['netExportGap'] ??= MacroAggregateSubsystem::netExportGapAt($resolve('foreignOutputGapEma'), $resolve('realExchangeRateTradeLag'), $resolve('alliedDefenseDeliveryLag'), $resolve('tariffTradeLag'));
         // The finance trend a state predating it omits opens on the trend it replaced, so the finance level is unmoved.
         if (!isset($args['financeMarketTrend']) && $resolve('equityWealthTrend') > 0.0) {
             $args['financeMarketTrend'] = $resolve('equityWealthTrend');

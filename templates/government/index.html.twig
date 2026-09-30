@@ -174,6 +174,60 @@
 			</section>
 		</div>
 
+		{# --- THE BUDGET: WHAT THE GOVERNMENT HAS ENACTED --- #}
+		<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/15" aria-labelledby="budget-heading">
+			<div class="flex flex-col md:flex-row md:items-start md:justify-between gap-3">
+				<div>
+					<h2 id="budget-heading" class="text-sm font-bold text-on-surface">The budget</h2>
+					<p class="text-3xs text-on-surface-variant mt-0.5">
+						The government legislates its platform at the budget rounds, every {{ rules.budgetRoundMonths|number_format(0) }} months, starting with the round after it takes office.
+						Next round: <span class="font-mono tabular-nums">{{ budget.nextRound }}</span>{% if budget.lastBudget %} · last change <span class="font-mono tabular-nums">{{ budget.lastBudget }}</span>{% endif %}.
+					</p>
+				</div>
+				<div class="shrink-0 rounded border px-3 py-2 {{ budget.braking ? 'border-error/40 bg-error/5' : 'border-outline-variant/20 bg-surface-container-lowest' }}">
+					<p class="text-2xs font-bold uppercase tracking-wider {{ budget.braking ? 'text-error' : 'text-on-surface-variant' }}">Council debt brake {{ budget.braking ? 'on' : 'off' }}</p>
+					<p class="text-3xs font-mono tabular-nums text-on-surface-variant mt-0.5">
+						Debt {{ (budget.debt * 100)|number_format(1) }}% of GDP · line {{ (rules.debtBrake * 100)|number_format(0) }}%{% if budget.lastBrake %} · last held a bill {{ budget.lastBrake }}{% endif %}
+					</p>
+				</div>
+			</div>
+
+			<div class="overflow-x-auto mt-4">
+				<table class="w-full text-xs">
+					<thead>
+						<tr class="text-3xs uppercase tracking-wider text-on-surface-variant border-b border-outline-variant/15">
+							<th scope="col" class="text-left font-bold pb-2">Lever</th>
+							<th scope="col" class="text-right font-bold pb-2">Platform</th>
+							<th scope="col" class="text-right font-bold pb-2">In force</th>
+							<th scope="col" class="text-left font-bold pb-2 pl-4">Status</th>
+						</tr>
+					</thead>
+					<tbody class="divide-y divide-outline-variant/10">
+						{% for lever in budget.levers %}
+							<tr>
+								<th scope="row" class="py-2 text-left">
+									<span class="font-bold text-on-surface">{{ lever.name }}</span>
+									<span class="block text-3xs font-normal text-on-surface-variant">{{ lever.note }}</span>
+								</th>
+								<td class="py-2 text-right font-mono tabular-nums text-on-surface-variant">{{ (lever.platform * 100)|number_format(2) }}%</td>
+								<td class="py-2 text-right font-mono tabular-nums font-bold text-on-surface">{{ (lever.enacted * 100)|number_format(2) }}%</td>
+								<td class="py-2 pl-4 text-3xs">
+									{% if lever.status == 'held' %}
+										<span class="font-bold text-error">Held by the Council</span>
+										<span class="block text-on-surface-variant">A cut in revenue while debt is above the line</span>
+									{% elseif lever.status == 'pending' %}
+										<span class="font-bold text-primary">At the next budget</span>
+									{% else %}
+										<span class="text-on-surface-variant">Enacted</span>
+									{% endif %}
+								</td>
+							</tr>
+						{% endfor %}
+					</tbody>
+				</table>
+			</div>
+		</section>
+
 		{# --- THE COUNCIL --- #}
 		<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/15" aria-labelledby="council-heading">
 			<h2 id="council-heading" class="text-sm font-bold text-on-surface">The Aerie Council</h2>
@@ -225,7 +279,7 @@
 					<div>
 						<h3 class="text-xs font-bold text-on-surface">Powers</h3>
 						<ul class="mt-2 space-y-2 text-3xs text-on-surface-variant">
-							<li><span class="font-bold text-on-surface">Veto.</span> The Council can veto any budget or law the Diet passes. It almost never does: the threat is enough.</li>
+							<li><span class="font-bold text-on-surface">Veto.</span> The Council can veto any budget or law the Diet passes. It almost never does: the threat is enough. Its red line is the debt: above {{ (rules.debtBrake * 100)|number_format(0) }}% of GDP it would veto any bill that cuts revenue, so the Diet tables none.</li>
 							<li><span class="font-bold text-on-surface">Removal.</span> The Diet can remove a councillor with {{ rules.supermajority }} of its {{ rules.seats }} seats, three quarters. It never has.</li>
 							<li><span class="font-bold text-on-surface">Independence.</span> No party sits on the Council, and no councillor sits in the Diet. What passes between them runs on gentlemen's agreements.</li>
 						</ul>
@@ -336,6 +390,47 @@
 					source: 'Riker (1962); de Swaan (1973); Martin & Stevenson (2001)'
 				}
 			] %}
+			{{ _self.rules_table(rules_list) }}
+		</section>
+
+		{# --- HOW THE DIET LEGISLATES --- #}
+		<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/15" aria-labelledby="levers-heading">
+			<h2 id="levers-heading" class="text-sm font-bold text-on-surface">How the Diet legislates</h2>
+			<p class="text-3xs text-on-surface-variant mt-0.5">Each party at the end of an axis stands for a policy real parties have enacted; a government sits between them, where its members' seats put it.</p>
+
+			{% set levers_list = [
+				{
+					name: 'Corporate tax',
+					text: 'The Civic Front\'s manifesto rate is ' ~ (rules.manifestoTaxGap * 100)|number_format(0) ~ ' points above the Vanguard\'s, centred on ' ~ (rules.neutralTaxRate * 100)|number_format(0) ~ '%. A government legislates its place between them. The change is levied on corporate profits, ' ~ (rules.profitsToGdp * 100)|number_format(1) ~ '% of GDP, so a point on the rate is about a tenth of a point of GDP in revenue. Firms pay it on their earnings, and a cut lifts demand as corporate tax cuts have.',
+					source: 'US 2020 Democratic platform 28% vs the 2017 act\'s 21%; UK 2019 Labour 26% vs Conservatives 19%; Osterloh & Debus (2012); Mertens & Ravn (2013); BEA corporate profits 1985-2019'
+				},
+				{
+					name: 'Spending',
+					text: 'Neither side moves government purchases. In the US record the District\'s purchases are fitted to, the party in power shifted civilian purchases the wrong way, and across the rich democracies the gap between left and right governments on spending has faded since the 1990s.',
+					source: 'Engine fit on US civilian purchases 1985-2019 (var/harness/partisan_fit.py); Potrafke (2017), about 100 OECD panel studies'
+				},
+				{
+					name: 'Tariffs',
+					text: 'The Iron Harbor Coalition\'s platform raises the average tariff by ' ~ (rules.protectionistTariff * 100)|number_format(1) ~ ' points over the free port; an open government levies none. The duty passes into import prices in full, imports fall with their price, and trading partners answer with ' ~ (rules.retaliation * 100)|number_format(0) ~ '% of it on the District\'s civilian exports. Each point of tariff costs about ' ~ (rules.tariffOutputLoss)|number_format(2) ~ '% of output through productivity over the following years.',
+					source: 'Yale Budget Lab (2025): the US rise from 2.5% to 17.9%; Amiti, Redding & Weinstein (2019); Fajgelbaum, Goldberg, Kennedy & Khandelwal (2020); Furceri, Hannan, Ostry & Rose (2018)'
+				},
+				{
+					name: 'Immigration',
+					text: 'A closed regime admits ' ~ (rules.migrationClosed * 100)|number_format(2) ~ '% of the population a year, an open one ' ~ (rules.migrationOpen * 100)|number_format(2) ~ '%. The District opens between them, with its labour force growing ' ~ (rules.structuralLaborGrowth * 100)|number_format(2) ~ '% a year. Faster labour growth raises potential output and the natural rate of interest, and every point of population it adds raises house prices ' ~ rules.housingElasticity|number_format(0) ~ '%.',
+					source: 'World Bank net migration 2000-2019: Japan (closed), Canada and Australia (open); Holston, Laubach & Williams (2017); Saiz (2007)'
+				},
+				{
+					name: 'The Council\'s brake',
+					text: 'Above ' ~ (rules.debtBrake * 100)|number_format(0) ~ '% of GDP in debt, the Council would veto any bill that cuts revenue: a lower tax rate or a lower tariff. The Diet knows it and tables none, so the veto is never cast and the lever stays where it stands. A government holding three quarters of the Diet, enough to remove councillors, is not held.',
+					source: 'Romer & Rosenthal (1978), the agenda setter and the veto player; Reinhart & Rogoff (2010), the 90% line'
+				}
+			] %}
+			{{ _self.rules_table(levers_list) }}
+		</section>
+	</div>
+{% endblock %}
+
+{% macro rules_table(rules_list) %}
 			<dl class="mt-4 divide-y divide-outline-variant/10">
 				{% for rule in rules_list %}
 					<div class="py-3 grid grid-cols-1 md:grid-cols-[12rem_1fr] gap-1 md:gap-4">
@@ -347,6 +442,4 @@
 					</div>
 				{% endfor %}
 			</dl>
-		</section>
-	</div>
-{% endblock %}
+{% endmacro %}

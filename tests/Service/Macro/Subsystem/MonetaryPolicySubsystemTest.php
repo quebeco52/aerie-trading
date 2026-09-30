@@ -475,6 +475,24 @@ class MonetaryPolicySubsystemTest extends TestCase
         $this->assertGreaterThan(0.70, $stateInverted->recessionProbability, 'Inverted yield curve and tight FCI must yield high recession probability.');
     }
 
+    public function testBroadMoneyGrowsWithTheLabourForce(): void
+    {
+        $quiet = new MonetaryPolicySubsystem(new class extends MathUtility {
+            public function generateStandardNormal(): float { return 0.0; }
+        });
+        $neutralGrowth = MacroEngine::TARGET_INFLATION + MacroEngine::TFP_DRIFT + MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE;
+        $structural = new MacroState();
+        $structural->moneySupplyGrowth = $neutralGrowth;
+        $faster = clone $structural;
+        $faster->laborForceGrowthRate = MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE + 0.005;
+
+        $quiet->calculateMoneySupplyGrowth($structural, 0.25, MacroEngine::TFP_DRIFT);
+        $quiet->calculateMoneySupplyGrowth($faster, 0.25, MacroEngine::TFP_DRIFT);
+
+        $this->assertEqualsWithDelta($neutralGrowth, $structural->moneySupplyGrowth, 1e-12, 'At the structural rate money grows with neutral nominal GDP.');
+        $this->assertGreaterThan($structural->moneySupplyGrowth, $faster->moneySupplyGrowth, 'A faster-growing labour force needs faster money growth.');
+    }
+
     public function testCalculateMoneySupplyGrowth(): void
     {
         $dt = 0.25;

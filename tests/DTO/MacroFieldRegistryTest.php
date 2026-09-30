@@ -65,6 +65,10 @@ class MacroFieldRegistryTest extends TestCase
         'electionGrowthGap' => 'Moves only at a vote; recorded per election in diet_election.',
         'electionInflationGap' => 'Moves only at a vote; recorded per election in diet_election.',
         'electionIncumbentSwing' => 'Moves only at a vote; recorded per election in diet_election.',
+        'tariffTradeLag' => 'Net-export response building toward the tariff, which import_tariff_rate records.',
+        'immigrationPopulationShift' => 'Integral of labor_force_growth_rate over the structural rate, which is recorded.',
+        'lastBudgetEnactedAt' => 'Edge marker for the budget headline; the levers themselves are recorded.',
+        'lastCouncilBrakeAt' => 'Edge marker for the Council headline; sovereign_debt_to_gdp records what it answers.',
         'lastQeLaunchAt' => 'Edge marker for the launch headline; qe_active and qe_intensity record the programme.',
 
         'sovereignFundDomesticEquity' => 'Currency amount that compounds forever; sovereign_fund_to_gdp and the domestic weight record it.',

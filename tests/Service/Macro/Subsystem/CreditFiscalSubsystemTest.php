@@ -6,6 +6,7 @@ use App\Service\Macro\MacroEngine;
 use App\Service\Macro\MacroState;
 use App\Service\Macro\Subsystem\AssetMarketSubsystem;
 use App\Service\Macro\Subsystem\CreditFiscalSubsystem;
+use App\Service\Macro\Subsystem\MacroAggregateSubsystem;
 use App\Service\Math\MathUtility;
 use PHPUnit\Framework\TestCase;
 
@@ -382,12 +383,12 @@ class CreditFiscalSubsystemTest extends TestCase
         $solvent = new MacroState();
         $solvent->totalTime = 4.001;
         $solvent->inflationEma = 0.03;
-        $solvent->sovereignDebtToGdpEma = CreditFiscalSubsystem::SOVEREIGN_RISK_DEBT_THRESHOLD;
+        $solvent->sovereignDebtToGdpEma = MacroEngine::SOVEREIGN_RISK_DEBT_THRESHOLD;
 
         $indebted = new MacroState();
         $indebted->totalTime = 4.001;
         $indebted->inflationEma = 0.03;
-        $indebted->sovereignDebtToGdpEma = CreditFiscalSubsystem::SOVEREIGN_RISK_DEBT_THRESHOLD + 0.30;
+        $indebted->sovereignDebtToGdpEma = MacroEngine::SOVEREIGN_RISK_DEBT_THRESHOLD + 0.30;
 
         $this->subsystem->calculateReimbursementRate($solvent, 0.01);
         $this->subsystem->calculateReimbursementRate($indebted, 0.01);
@@ -474,17 +475,34 @@ class CreditFiscalSubsystemTest extends TestCase
         $subsystem = $this->quietSubsystem();
         $state = new MacroState();
 
-        $state->totalTime = 3.995;
+        // Times sit on the tick grid, as the engine's accumulated clock does to within a rounding error.
+        $state->totalTime = 3.99;
         $subsystem->calculatePolicyUncertainty($state, 0.01);
         $this->assertSame(-1.0, $state->lastElectionAt, 'No election before the term is up.');
 
-        $state->totalTime = 4.005;
+        $state->totalTime = 4.00;
         $subsystem->calculatePolicyUncertainty($state, 0.01);
-        $this->assertSame(4.005, $state->lastElectionAt, 'The vote falls on the tick that crosses the term boundary.');
+        $this->assertSame(4.00, $state->lastElectionAt, 'The vote falls on the tick that reaches the term boundary.');
 
-        $state->totalTime = 4.015;
+        $state->totalTime = 4.01;
         $subsystem->calculatePolicyUncertainty($state, 0.01);
-        $this->assertSame(4.005, $state->lastElectionAt, 'and is not re-held on the next tick.');
+        $this->assertSame(4.00, $state->lastElectionAt, 'and is not re-held on the next tick.');
+    }
+
+    public function testTheElectionFallsOnTheBoundaryTickWhenTheClockRunsAHairShort(): void
+    {
+        $subsystem = $this->quietSubsystem();
+        $state = new MacroState();
+
+        // 720 additions of 1/180 land just short of 4.0; the vote must still fall on that tick, with the budget round.
+        $dt = 1.0 / 180.0;
+        for ($tick = 1; $tick <= 720; ++$tick) {
+            $state->totalTime += $dt;
+            $subsystem->calculatePolicyUncertainty($state, $dt);
+        }
+
+        $this->assertSame($state->totalTime, $state->lastElectionAt);
+        $this->assertTrue(MathUtility::crossedSimulatedBoundary($state->totalTime, $dt, MacroEngine::BUDGET_ROUND_PERIOD_YEARS), 'The budget round falls on the same tick.');
     }
 
     public function testPolicyUncertaintyStaysInsideItsRecordedRange(): void
@@ -520,12 +538,12 @@ class CreditFiscalSubsystemTest extends TestCase
     {
         $this->assertSame(0.0, $this->settledSovereignSpread(self::SOUND_DEBT_TO_GDP));
         $this->assertSame(0.0, $this->settledSovereignSpread(MacroEngine::SOVEREIGN_DEBT_NEUTRAL_THRESHOLD), 'The Bohn threshold is where the fiscal reaction starts, not where the market re-rates.');
-        $this->assertSame(0.0, $this->settledSovereignSpread(CreditFiscalSubsystem::SOVEREIGN_RISK_DEBT_THRESHOLD), 'At the line itself there is nothing to charge for yet.');
+        $this->assertSame(0.0, $this->settledSovereignSpread(MacroEngine::SOVEREIGN_RISK_DEBT_THRESHOLD), 'At the line itself there is nothing to charge for yet.');
     }
 
     public function testDebtAboveTheRiskLineIsPricedAtLaubachsRate(): void
     {
-        $spread = $this->settledSovereignSpread(CreditFiscalSubsystem::SOVEREIGN_RISK_DEBT_THRESHOLD + 0.30);
+        $spread = $this->settledSovereignSpread(MacroEngine::SOVEREIGN_RISK_DEBT_THRESHOLD + 0.30);
 
         $this->assertEqualsWithDelta(0.30 * CreditFiscalSubsystem::LAUBACH_DEBT_YIELD_SENSITIVITY, $spread, 1e-6, 'Thirty points of excess debt cost about 105 bps: 3.5 bps a point.');
     }
@@ -533,7 +551,7 @@ class CreditFiscalSubsystemTest extends TestCase
     public function testTheSovereignSpreadIsCappedAtTheLossOfMarketAccess(): void
     {
         $atMaxDebt = $this->settledSovereignSpread(2.50);
-        $expected = min(CreditFiscalSubsystem::MAX_SOVEREIGN_RISK_SPREAD, (2.50 - CreditFiscalSubsystem::SOVEREIGN_RISK_DEBT_THRESHOLD) * CreditFiscalSubsystem::LAUBACH_DEBT_YIELD_SENSITIVITY);
+        $expected = min(CreditFiscalSubsystem::MAX_SOVEREIGN_RISK_SPREAD, (2.50 - MacroEngine::SOVEREIGN_RISK_DEBT_THRESHOLD) * CreditFiscalSubsystem::LAUBACH_DEBT_YIELD_SENSITIVITY);
         $this->assertEqualsWithDelta($expected, $atMaxDebt, 1e-6);
         $this->assertLessThanOrEqual(CreditFiscalSubsystem::MAX_SOVEREIGN_RISK_SPREAD, $atMaxDebt);
     }
@@ -541,7 +559,7 @@ class CreditFiscalSubsystemTest extends TestCase
     public function testTheSovereignSpreadRepricesOverBudgetRoundsNotTicks(): void
     {
         $state = new MacroState();
-        $state->sovereignDebtToGdpEma = CreditFiscalSubsystem::SOVEREIGN_RISK_DEBT_THRESHOLD + 0.30;
+        $state->sovereignDebtToGdpEma = MacroEngine::SOVEREIGN_RISK_DEBT_THRESHOLD + 0.30;
         $state->sovereignNetDebtToGdpEma = $state->sovereignDebtToGdpEma;
         $state->sovereignRiskSpread = 0.0; // from no premium at all
 
@@ -559,7 +577,7 @@ class CreditFiscalSubsystemTest extends TestCase
     public function testTheMarketPricesDebtNetOfTheFundsBonds(): void
     {
         $unfunded = new MacroState();
-        $unfunded->sovereignDebtToGdpEma = CreditFiscalSubsystem::SOVEREIGN_RISK_DEBT_THRESHOLD + 0.30;
+        $unfunded->sovereignDebtToGdpEma = MacroEngine::SOVEREIGN_RISK_DEBT_THRESHOLD + 0.30;
         $unfunded->sovereignNetDebtToGdpEma = $unfunded->sovereignDebtToGdpEma;
         $unfunded->sovereignRiskSpread = 0.0;
         $funded = clone $unfunded;
@@ -600,7 +618,7 @@ class CreditFiscalSubsystemTest extends TestCase
         $unfunded = new MacroState();
         $unfunded->totalTime = 4.001;
         $unfunded->inflationEma = 0.03;
-        $unfunded->sovereignDebtToGdpEma = CreditFiscalSubsystem::SOVEREIGN_RISK_DEBT_THRESHOLD + 0.30;
+        $unfunded->sovereignDebtToGdpEma = MacroEngine::SOVEREIGN_RISK_DEBT_THRESHOLD + 0.30;
         $unfunded->sovereignNetDebtToGdpEma = $unfunded->sovereignDebtToGdpEma;
         $funded = clone $unfunded;
         $funded->sovereignNetDebtToGdpEma = 0.20;
@@ -880,6 +898,60 @@ class CreditFiscalSubsystemTest extends TestCase
     }
 
     /** One tick that crosses the budget round at $time. */
+    // --- The Diet's levers in the budget ---
+
+    public function testTheTaxRateSettlesOnTheNeutralRatePlusTheLegislatedShift(): void
+    {
+        $state = new MacroState();
+        $state->outputGapEma = 0.0;
+        $state->corporateTaxRate = MacroEngine::TARGET_CORPORATE_TAX_RATE;
+        $state->corporateTaxPolicyShift = -0.025;
+
+        for ($i = 0; $i < 2000; ++$i) {
+            $this->subsystem->calculateDynamicFiscalPolicy($state, 0.01);
+        }
+
+        $this->assertEqualsWithDelta(MacroEngine::TARGET_CORPORATE_TAX_RATE - 0.025, $state->corporateTaxRate, 1e-6);
+    }
+
+    public function testALegislatedShiftIsLeviedOnCorporateProfitsNotOnGdp(): void
+    {
+        $neutral = $this->neutralBudget(0.60);
+        $raised = $this->neutralBudget(0.60);
+        $raised->corporateTaxPolicyShift = 0.03;
+        $raised->corporateTaxRate += 0.03;
+
+        $this->subsystem->calculateSovereignDebt($neutral, 0.25);
+        $this->subsystem->calculateSovereignDebt($raised, 0.25);
+
+        $this->assertEqualsWithDelta(-0.03 * MacroEngine::CORPORATE_PROFITS_TO_GDP, $raised->primaryDeficitToGdp - $neutral->primaryDeficitToGdp, 1e-12);
+    }
+
+    public function testATariffIsLeviedOnImportedGoodsAtTheirReducedVolume(): void
+    {
+        $neutral = $this->neutralBudget(0.60);
+        $tariffed = $this->neutralBudget(0.60);
+        $tariffed->importTariffRate = 0.10;
+
+        $this->subsystem->calculateSovereignDebt($neutral, 0.25);
+        $this->subsystem->calculateSovereignDebt($tariffed, 0.25);
+
+        $revenue = 0.10 * MacroAggregateSubsystem::DISTRICT_IMPORT_SHARE * MacroAggregateSubsystem::GOODS_SHARE_OF_IMPORTS * (1.10 ** -MacroAggregateSubsystem::IMPORT_PRICE_ELASTICITY);
+        $this->assertEqualsWithDelta(-$revenue, $tariffed->primaryDeficitToGdp - $neutral->primaryDeficitToGdp, 1e-12);
+    }
+
+    public function testDebtErodesAtTheLabourForcesGrowth(): void
+    {
+        $slow = $this->neutralBudget(1.0);
+        $fast = $this->neutralBudget(1.0);
+        $fast->laborForceGrowthRate = MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE + 0.01;
+
+        $this->subsystem->calculateSovereignDebt($slow, 0.25);
+        $this->subsystem->calculateSovereignDebt($fast, 0.25);
+
+        $this->assertEqualsWithDelta(-0.01 * 1.0 * 0.25, $fast->sovereignDebtToGdp - $slow->sovereignDebtToGdp, 1e-12);
+    }
+
     private function budgetRound(MacroState $state, float $time): void
     {
         $state->totalTime = $time + 0.001;

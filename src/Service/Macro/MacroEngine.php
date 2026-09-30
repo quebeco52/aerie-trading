@@ -233,6 +233,8 @@ class MacroEngine
     public const SOVEREIGN_DEBT_NEUTRAL_THRESHOLD = 0.70;
     /** Gross debt kept outstanding with no borrowing need, for the benchmark curve to price (Singapore and Hong Kong issue for market development through surpluses); below it a surplus buys the fund's paper instead. */
     public const SOVEREIGN_DEBT_FLOOR = 0.20;
+    /** Debt-to-GDP above which the market prices fiscal risk and the Council holds its veto over the budget (Reinhart & Rogoff 2010's 90% line). Deliberately above the 70% the Bohn reaction defends: the engine's own steady state runs 85-90%, and a premium charged for that normal state was measured to lift IG 30 bps and 2s10s 45 bps everywhere. */
+    public const SOVEREIGN_RISK_DEBT_THRESHOLD = 0.90;
 
     // --- Fund-Financed Fiscal Stabilisation (IMF Norway Selected Issues 2025, Table 5) ---
     /** Budget rounds a year apart by half: the National Budget each October and the Revised National Budget each May (Norway's Ministry of Finance). */
@@ -267,6 +269,28 @@ class MacroEngine
     public const ELECTION_CRISIS_WINDOW_YEARS = 5.0;
     /** Each party's own short-term swing in log vote share, drawn at every vote and gone by the next (Converse 1966 short-term forces; additive logistic form, Katz & King 1999). Sized with ELECTION_COST_OF_RULING for a total volatility near 7, about two thirds of Western Europe's 10 (Dassonneville & Hooghe 2017, Pedersen index, 21 countries 1950-2013): the full 10 needs swings whose run-off costs governments twice the recorded loss. */
     public const ELECTION_PARTY_SHOCK_SD = 0.12;
+
+    // --- The Diet's Levers: Corporate Tax (Osterloh & Debus 2012; Mertens & Ravn 2013) ---
+    /** Gap between the corporate rates the big-state and small-state manifestos set, the parties at the ends of the size-of-state axis: 7 points (US: the 2020 Democratic platform's 28% against the 21% of the 2017 Republican act; UK 2019: Labour's 26% against the Conservatives' 19%). Enacted rates follow manifesto ideology (Osterloh & Debus 2012, European panel). */
+    public const POLICY_MANIFESTO_CORPORATE_TAX_GAP = 0.07;
+    /** Corporate profits before tax over GDP, 1985-2019 mean (BEA NIPA via FRED, A053RC1Q027SBEA over GDP: 9.67%): the base a change in the corporate rate is levied on, so a point of rate is a tenth of a point of GDP in revenue. */
+    public const CORPORATE_PROFITS_TO_GDP = 0.0967;
+
+    // --- The Diet's Levers: Tariffs (Amiti, Redding & Weinstein 2019; Fajgelbaum et al. 2020; Furceri et al. 2018) ---
+    /** Average effective tariff the protectionist end of the openness axis enacts over the District's free port: the US's 2025 rise, 2.5% to 17.9% (Yale Budget Lab, State of U.S. Tariffs, 26 September 2025). Duties pass fully into import prices at the border (Amiti, Redding & Weinstein 2019; Fajgelbaum et al. 2020). */
+    public const POLICY_PROTECTIONIST_TARIFF = 0.154;
+    /** Average tariff partners put on the District's exports per point of its average tariff on imports: 0.60 in 2018, when US tariffs rose 14.0 points on 12.7% of imports and retaliation 13.1 points on 8.2% of exports (Fajgelbaum, Goldberg, Kennedy & Khandelwal 2020). */
+    public const TARIFF_RETALIATION_RATIO = (0.131 * 0.082) / (0.140 * 0.127);
+    /** Output lost per unit of average tariff, through productivity: a 3.6-point rise costs 0.4% of output five years on (Furceri, Hannan, Ostry & Rose 2018: 151 countries, 1963-2014; labour productivity -0.9%). Their symmetric baseline; they find cuts help less than rises hurt. */
+    public const TARIFF_OUTPUT_LOSS = 0.004 / 0.036;
+
+    // --- The Diet's Levers: Immigration (UN WPP via World Bank, 2000-2019; Saiz 2007) ---
+    /** Net migration a closed immigration regime admits, a year as a share of population: Japan's 0.11% (World Bank SM.POP.NETM over SP.POP.TOTL, 2000-2019 mean). */
+    public const MIGRATION_CLOSED_REGIME = 0.0011;
+    /** Net migration an open immigration regime admits: Canada's 0.73% and Australia's 0.86%, averaged (the same series). Midway between the two regimes sits the US's 0.50%, the structural labour growth the District opens with. */
+    public const MIGRATION_OPEN_REGIME = (0.00728 + 0.00859) / 2.0;
+    /** Rise in rents and house values per unit of population added by immigration (Saiz 2007: an inflow of 1% of a city's population raises rents and values about 1%); the District's land ends at the sounds. */
+    public const IMMIGRATION_HOUSING_ELASTICITY = 1.0;
 
     // --- Federal Reserve G.17 Industrial Capacity Utilization Index ---
     /** Baseline long-run historical capacity utilization rate (~78.5%). */
@@ -769,13 +793,17 @@ class MacroEngine
             $state->lastElectionAt === $state->totalTime
             => ShockEvent::ELECTION_HELD,
 
+            // A budget round that changed a lever (DistrictPoliticsSubsystem::enactBudget).
+            $state->lastBudgetEnactedAt === $state->totalTime
+            => ShockEvent::BUDGET_ENACTED,
+
             default => null,
         };
 
         if ($eventType !== null) {
             $state->eventType = $eventType;
-            // District-wide systemic crisis refractory cooldown timer arming.
-            if ($eventType !== ShockEvent::ELECTION_HELD) {
+            // District-wide systemic crisis refractory cooldown timer arming; the political calendar arms none.
+            if ($eventType !== ShockEvent::ELECTION_HELD && $eventType !== ShockEvent::BUDGET_ENACTED) {
                 $state->eventCooldownTimer = self::SYSTEMIC_EVENT_COOLDOWN_YEARS;
             }
         }

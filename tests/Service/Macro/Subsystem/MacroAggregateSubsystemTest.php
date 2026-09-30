@@ -1293,6 +1293,63 @@ class MacroAggregateSubsystemTest extends TestCase
      * The class fixture returns 0.0 from every normal, which is what most of these tests want and is
      * exactly wrong here: it would leave the diffusion and clamp legs of the accounting untested.
      */
+    // --- The Diet's levers ---
+
+    public function testATariffPassesIntoImportPricesInFull(): void
+    {
+        $this->assertEqualsWithDelta(log(1.10), MacroAggregateSubsystem::importPriceLevelTarget(92.0, 0.10) - MacroAggregateSubsystem::importPriceLevelTarget(92.0), 1e-15);
+    }
+
+    public function testATariffCompressesImportedGoodsAndDrawsRetaliationOnGoodsExports(): void
+    {
+        $duty = log(1.10);
+        $switching = MacroAggregateSubsystem::IMPORT_PRICE_ELASTICITY * MacroAggregateSubsystem::DISTRICT_IMPORT_SHARE * MacroAggregateSubsystem::GOODS_SHARE_OF_IMPORTS * $duty;
+        $retaliatedExports = (MacroAggregateSubsystem::DISTRICT_EXPORT_SHARE * MacroAggregateSubsystem::GOODS_SHARE_OF_EXPORTS) - MacroAggregateSubsystem::DISTRICT_DEFENSE_EXPORT_SHARE;
+        $retaliation = MacroAggregateSubsystem::EXPORT_PRICE_ELASTICITY * $retaliatedExports * log(1.0 + (MacroEngine::TARIFF_RETALIATION_RATIO * 0.10));
+
+        $netExports = MacroAggregateSubsystem::netExportGapAt(0.0, 0.0, 0.0, $duty);
+
+        $this->assertEqualsWithDelta($switching - $retaliation, $netExports, 1e-15);
+        $this->assertGreaterThan(0.0, $netExports, 'Retaliation takes back part of what the duty switches home,');
+        $this->assertLessThan($switching, $netExports, 'but only part (Furceri et al. 2018: little change in the trade balance).');
+    }
+
+    public function testATariffReachesTradeVolumesOverTheTradeLag(): void
+    {
+        $state = new MacroState();
+        $state->importTariffRate = 0.10;
+        $dt = 0.01;
+
+        $this->subsystem->calculateOutputGap($state, $state->yield5y, $state->naturalRate, MacroEngine::TARGET_INFLATION, $dt, 1.0);
+
+        $this->assertEqualsWithDelta(log(1.10) * (1.0 - exp(-$dt / MacroAggregateSubsystem::TRADE_VOLUME_ADJUSTMENT_YEARS)), $state->tariffTradeLag, 1e-12);
+    }
+
+    public function testTheNaturalRateRisesWithLabourForceGrowthAtHlwsC(): void
+    {
+        $state = new MacroState();
+        $state->naturalRate = MacroEngine::BASE_NATURAL_RATE;
+        $state->laborForceGrowthRate = MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE + 0.01;
+        $dt = 0.1;
+
+        $this->subsystem->calculateNaturalRate($state, MacroEngine::TFP_DRIFT, $dt);
+
+        $expectedStep = MacroAggregateSubsystem::NATURAL_RATE_ADJUSTMENT_SPEED * MacroAggregateSubsystem::NATURAL_RATE_GROWTH_LOADING * 0.01 * $dt;
+        $this->assertEqualsWithDelta(MacroEngine::BASE_NATURAL_RATE + $expectedStep, $state->naturalRate, 1e-15);
+    }
+
+    public function testPotentialAndPopulationGrowWithTheLabourForce(): void
+    {
+        $state = new MacroState();
+        $state->potentialGdpIndex = 1.0;
+        $state->laborForceGrowthRate = MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE + 0.004;
+
+        $this->subsystem->calculatePotentialAndNominalGdp($state, 0.25, MacroEngine::TFP_DRIFT);
+
+        $this->assertEqualsWithDelta(exp((MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE + 0.004 + MacroEngine::TFP_DRIFT) * 0.25), $state->potentialGdpIndex, 1e-15);
+        $this->assertEqualsWithDelta(0.004 * 0.25, $state->immigrationPopulationShift, 1e-15, 'The regime adds its excess inflow to the population.');
+    }
+
     private function probedSubsystem(OutputGapProbe $probe, float $normal): MacroAggregateSubsystem
     {
         $math = new class($normal) extends MathUtility {

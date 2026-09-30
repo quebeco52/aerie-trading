@@ -32,8 +32,6 @@ class CreditFiscalSubsystem
     public const SOVEREIGN_DEBT_CEILING = 2.50;
 
     // --- Sovereign Risk Premium (Laubach 2009) ---
-    /** Debt-to-GDP above which the market prices fiscal risk (Reinhart & Rogoff 2010's 90% line). Deliberately above the 70% the Bohn reaction defends: the engine's own steady state runs 85-90%, and a premium charged for that normal state was measured to lift IG 30 bps and 2s10s 45 bps everywhere. */
-    public const SOVEREIGN_RISK_DEBT_THRESHOLD = 0.90;
     /** Long yield per unit of debt-to-GDP above the risk threshold: 3-4 bps per percentage point (Laubach 2009; Engen & Hubbard 2004), so 0.035 per unit. Laubach's deficit coefficient is for PROJECTED structural deficits; the engine's primary deficit is cyclical, so it is published but not priced. */
     public const LAUBACH_DEBT_YIELD_SENSITIVITY = 0.035;
     /** Time constant (years) over which the market reprices the fiscal position: a projection revises over budget rounds, not ticks. */
@@ -357,13 +355,14 @@ class CreditFiscalSubsystem
      *
      * Adjusts the corporate tax rate continuously via an Ornstein-Uhlenbeck institutional process:
      * raises effective tax burden during economic booms to cool demand, and cuts taxes during recessions.
+     * The rate it returns to is the neutral rate plus the shift the Diet has legislated.
      *
      * @param MacroState $state Current macroeconomic state.
      * @param float      $dt    Time increment in years.
      */
     public function calculateDynamicFiscalPolicy(MacroState $state, float $dt): void
     {
-        $targetTaxRate = MacroEngine::TARGET_CORPORATE_TAX_RATE + (self::FISCAL_STABILIZER_SENSITIVITY * $state->outputGapEma);
+        $targetTaxRate = MacroEngine::TARGET_CORPORATE_TAX_RATE + $state->corporateTaxPolicyShift + (self::FISCAL_STABILIZER_SENSITIVITY * $state->outputGapEma);
         $targetTaxRate = max(self::MIN_CORPORATE_TAX_RATE, min(self::MAX_CORPORATE_TAX_RATE, $targetTaxRate));
 
         $state->corporateTaxRate += self::FISCAL_ADJUSTMENT_SPEED * ($targetTaxRate - $state->corporateTaxRate) * $dt;
@@ -429,6 +428,10 @@ class CreditFiscalSubsystem
      *   d(Debt/GDP) = [ (G - T + S - NIRC)/GDP + (r_10y - g_nominal) * (Debt/GDP) ] * dt
      * where S is the structural deficit and NIRC the sovereign fund's draw on its expected returns, revenue like a tax.
      *
+     * The tax rate's cyclical part is the whole budget's automatic response, so T books it on GDP as it was fitted. The
+     * shift the Diet legislates is a change in the corporate rate alone and is levied on corporate profits; the tariff is
+     * levied on imported goods, which shrink by their price elasticity as the duty raises their price.
+     *
      * With a fund the budget spends the draw: S is the draw itself, as Norway's fiscal rule sets the structural non-oil
      * deficit at the fund's expected real return. The draw is sized to the fund and the fund compounds with its markets,
      * so a fixed S would turn a fund that outgrows the economy into a standing surplus with nothing left to retire.
@@ -442,7 +445,11 @@ class CreditFiscalSubsystem
      */
     public function calculateSovereignDebt(MacroState $state, float $dt): void
     {
-        $taxRevenue = $state->corporateTaxRate * $state->nominalGdpIndex * (1.0 + $state->outputGap);
+        $output = $state->nominalGdpIndex * (1.0 + $state->outputGap);
+        $taxRevenue = (($state->corporateTaxRate - $state->corporateTaxPolicyShift) * $output)
+            + ($state->corporateTaxPolicyShift * MacroEngine::CORPORATE_PROFITS_TO_GDP * $output)
+            + ($state->importTariffRate * MacroAggregateSubsystem::DISTRICT_IMPORT_SHARE * MacroAggregateSubsystem::GOODS_SHARE_OF_IMPORTS
+                * ((1.0 + $state->importTariffRate) ** -MacroAggregateSubsystem::IMPORT_PRICE_ELASTICITY) * $output);
         $govtSpendingFlow = ($state->governmentSpendingIndex / MacroEngine::GOVT_SPENDING_BASELINE)
             * MacroEngine::TARGET_CORPORATE_TAX_RATE * $state->nominalGdpIndex;
 
@@ -463,7 +470,7 @@ class CreditFiscalSubsystem
         $interestCost = $state->yield10yEma * $state->sovereignDebtToGdp;
 
         // Blanchard (2019) sovereign debt accumulation driven by growth-adjusted real rate (r - g).
-        $realPotentialGrowth = MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE + MacroEngine::TFP_DRIFT;
+        $realPotentialGrowth = $state->laborForceGrowthRate + MacroEngine::TFP_DRIFT;
         $nominalGrowthRate = $realPotentialGrowth + $state->outputGap + $state->inflationEma;
         $growthErosion = $nominalGrowthRate * $state->sovereignDebtToGdp;
 
@@ -677,7 +684,7 @@ class CreditFiscalSubsystem
      */
     public function calculateSovereignRiskSpread(MacroState $state, float $dt): void
     {
-        $excessDebt = max(0.0, $state->sovereignNetDebtToGdpEma - self::SOVEREIGN_RISK_DEBT_THRESHOLD);
+        $excessDebt = max(0.0, $state->sovereignNetDebtToGdpEma - MacroEngine::SOVEREIGN_RISK_DEBT_THRESHOLD);
         $target = min(self::MAX_SOVEREIGN_RISK_SPREAD, self::LAUBACH_DEBT_YIELD_SENSITIVITY * $excessDebt);
 
         $state->sovereignRiskSpread = $this->mathUtility->calculateDistributedLag(
@@ -738,7 +745,9 @@ class CreditFiscalSubsystem
             $this->diagnostics?->recordEvent('policyUncertainty', $jumpData['exponent']);
         }
 
-        if (floor($state->totalTime / $term) > floor(($state->totalTime - $dt) / $term)) {
+        // Snapped to the tick grid, so the vote falls on the same tick as every other boundary of the calendar (a
+        // budget round) rather than one tick late when accumulated time lands a hair short of the term.
+        if (MathUtility::crossedSimulatedBoundary($state->totalTime, $dt, $term)) {
             $state->lastElectionAt = $state->totalTime;
         }
     }
@@ -762,7 +771,7 @@ class CreditFiscalSubsystem
             return;
         }
 
-        $excessDebt = max(0.0, $state->sovereignDebtToGdpEma - self::SOVEREIGN_RISK_DEBT_THRESHOLD);
+        $excessDebt = max(0.0, $state->sovereignDebtToGdpEma - MacroEngine::SOVEREIGN_RISK_DEBT_THRESHOLD);
         $update = $state->inflationEma
             - MacroEngine::REIMBURSEMENT_PRODUCTIVITY_OFFSET
             - (self::REIMBURSEMENT_FISCAL_CUT_SENSITIVITY * $excessDebt);

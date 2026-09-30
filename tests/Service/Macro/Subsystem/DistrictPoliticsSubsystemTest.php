@@ -375,6 +375,150 @@ class DistrictPoliticsSubsystemTest extends TestCase
      * A state on the tick of the first vote, with the campaign and term marks set so growth and inflation run the given
      * distance from trend and target.
      */
+    // --- The Budget ---
+
+    /** Each lever runs between the policies of the parties at the two ends of its axis. */
+    public function testThePlatformRunsBetweenThePartiesAtTheEndsOfEachAxis(): void
+    {
+        $civic = Politics::platform(Diet::position(Diet::CIVIC, 0.0));
+        $vanguard = Politics::platform(Diet::position(Diet::VANGUARD, 0.0));
+        $this->assertEqualsWithDelta(MacroEngine::POLICY_MANIFESTO_CORPORATE_TAX_GAP, $civic['corporateTax'] - $vanguard['corporateTax'], 1e-12, 'The two big parties are a manifesto gap apart.');
+        $this->assertEqualsWithDelta(0.0, $civic['corporateTax'] + $vanguard['corporateTax'], 1e-12, 'The gap is centred on the neutral rate.');
+
+        $harbor = Politics::platform(Diet::position(Diet::IRON_HARBOR, 0.0));
+        $exchange = Politics::platform(Diet::position(Diet::EXCHANGE, 0.0));
+        $this->assertEqualsWithDelta(MacroEngine::POLICY_PROTECTIONIST_TARIFF, $harbor['tariff'], 1e-12, 'The protectionist party enacts its own tariff.');
+        $this->assertSame(0.0, $exchange['tariff']);
+        $this->assertEqualsWithDelta(MacroEngine::MIGRATION_OPEN_REGIME - MacroEngine::MIGRATION_CLOSED_REGIME, $exchange['laborGrowth'] - $harbor['laborGrowth'], 1e-12, 'The two immigration regimes are a regime apart.');
+        $this->assertEqualsWithDelta(MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE, Politics::platform([Diet::AXIS_STATE => 0.0, Diet::AXIS_OPENNESS => 0.0])['laborGrowth'], 1e-12, 'A neutral government keeps the structural rate.');
+    }
+
+    public function testANeutralOrOpenGovernmentKeepsTheFreePort(): void
+    {
+        foreach ([0.0, 0.2, 1.0] as $openness) {
+            $this->assertSame(0.0, Politics::platform([Diet::AXIS_STATE => 0.0, Diet::AXIS_OPENNESS => $openness])['tariff']);
+        }
+        $this->assertGreaterThan(0.0, Politics::platform([Diet::AXIS_STATE => 0.0, Diet::AXIS_OPENNESS => -0.1])['tariff'], 'Any closed lean raises the tariff.');
+    }
+
+    public function testNoGovernmentGoesFurtherThanThePartyAtTheEndOfTheAxis(): void
+    {
+        $pole = Politics::platform([Diet::AXIS_STATE => Diet::PRIMARY_POSITION[Diet::CIVIC], Diet::AXIS_OPENNESS => Diet::PRIMARY_POSITION[Diet::IRON_HARBOR]]);
+
+        $this->assertSame($pole, Politics::platform([Diet::AXIS_STATE => 1.0, Diet::AXIS_OPENNESS => -1.0]));
+        $this->assertSame(
+            Politics::platform([Diet::AXIS_STATE => Diet::PRIMARY_POSITION[Diet::VANGUARD], Diet::AXIS_OPENNESS => Diet::PRIMARY_POSITION[Diet::EXCHANGE]]),
+            Politics::platform([Diet::AXIS_STATE => -1.0, Diet::AXIS_OPENNESS => 1.0])
+        );
+    }
+
+    public function testAGovernmentLegislatesAtTheRoundAfterItTakesOffice(): void
+    {
+        $subsystem = new Politics($this->quietMath());
+        $state = $this->electionTick();
+        $state->sovereignDebtToGdp = 0.5;
+
+        $subsystem->update($state, 0.01);
+        $this->assertSame(self::ELECTION_AT, $state->coalitionFormedAt);
+        $this->assertSame(0.0, $state->corporateTaxPolicyShift, 'Nothing is enacted on the tick the government forms, though it is a budget round.');
+        $this->assertSame(-1.0, $state->lastBudgetEnactedAt);
+
+        $state->totalTime = self::ELECTION_AT + MacroEngine::BUDGET_ROUND_PERIOD_YEARS - 0.01;
+        $subsystem->update($state, 0.01);
+        $this->assertSame(0.0, $state->corporateTaxPolicyShift, 'nor between rounds.');
+
+        $state->totalTime = self::ELECTION_AT + MacroEngine::BUDGET_ROUND_PERIOD_YEARS;
+        $subsystem->update($state, 0.01);
+        $platform = Politics::platform(Politics::coalitionPosition($state->governingCoalition, $state->dietSeats, $state->partySecondaryPositions));
+        $this->assertLessThan(0.0, $platform['corporateTax'], 'The Vanguard-led government cuts the rate');
+        $this->assertSame($platform['corporateTax'], $state->corporateTaxPolicyShift, 'and its first budget enacts the cut,');
+        $this->assertSame($platform['tariff'], $state->importTariffRate);
+        $this->assertSame($platform['laborGrowth'], $state->laborForceGrowthRate);
+        $this->assertSame($state->totalTime, $state->lastBudgetEnactedAt);
+        $this->assertSame(-1.0, $state->lastCouncilBrakeAt, 'with the debt below the line.');
+    }
+
+    public function testTheCouncilHoldsARevenueCutAboveTheDebtLine(): void
+    {
+        $state = $this->governedBy([Diet::VANGUARD => 100.0, Diet::EXCHANGE => 40.0], MacroEngine::SOVEREIGN_RISK_DEBT_THRESHOLD + 0.05);
+        $state->importTariffRate = 0.08;
+
+        Politics::enactBudget($state);
+
+        $this->assertSame(0.0, $state->corporateTaxPolicyShift, 'The tax cut is never tabled.');
+        $this->assertSame(0.08, $state->importTariffRate, 'Nor is the end of the tariff, which is revenue too.');
+        $this->assertGreaterThan(MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE, $state->laborForceGrowthRate, 'The immigration regime costs no revenue and passes.');
+        $this->assertSame($state->totalTime, $state->lastCouncilBrakeAt);
+    }
+
+    public function testTheCouncilLetsARevenueRiseThrough(): void
+    {
+        $state = $this->governedBy([Diet::CIVIC => 100.0, Diet::IRON_HARBOR => 40.0], MacroEngine::SOVEREIGN_RISK_DEBT_THRESHOLD + 0.05);
+
+        Politics::enactBudget($state);
+
+        $platform = Politics::platform(Politics::coalitionPosition($state->governingCoalition, $state->dietSeats, $state->partySecondaryPositions));
+        $this->assertGreaterThan(0.0, $platform['corporateTax']);
+        $this->assertGreaterThan(0.0, $platform['tariff']);
+        $this->assertSame($platform['corporateTax'], $state->corporateTaxPolicyShift);
+        $this->assertSame($platform['tariff'], $state->importTariffRate);
+        $this->assertSame(-1.0, $state->lastCouncilBrakeAt);
+    }
+
+    public function testAGovernmentThatCouldRemoveTheCouncilIsNotHeld(): void
+    {
+        $held = $this->governedBy([Diet::VANGUARD => Diet::SUPERMAJORITY_SEATS - 2.0, Diet::EXCHANGE => 1.0], MacroEngine::SOVEREIGN_RISK_DEBT_THRESHOLD + 0.05);
+        $free = $this->governedBy([Diet::VANGUARD => Diet::SUPERMAJORITY_SEATS - 1.0, Diet::EXCHANGE => 1.0], MacroEngine::SOVEREIGN_RISK_DEBT_THRESHOLD + 0.05);
+
+        Politics::enactBudget($held);
+        Politics::enactBudget($free);
+
+        $this->assertSame(0.0, $held->corporateTaxPolicyShift, 'One seat short of three quarters is held.');
+        $this->assertLessThan(0.0, $free->corporateTaxPolicyShift, 'Three quarters is not.');
+        $this->assertSame(-1.0, $free->lastCouncilBrakeAt);
+    }
+
+    public function testAtTheDebtLineItselfTheCouncilDoesNotStep(): void
+    {
+        $state = $this->governedBy([Diet::VANGUARD => 100.0, Diet::EXCHANGE => 40.0], MacroEngine::SOVEREIGN_RISK_DEBT_THRESHOLD);
+
+        Politics::enactBudget($state);
+
+        $this->assertLessThan(0.0, $state->corporateTaxPolicyShift);
+    }
+
+    public function testATariffCostsProductivityAndItsRepealGivesItBack(): void
+    {
+        $state = $this->governedBy([Diet::CIVIC => 100.0, Diet::IRON_HARBOR => 40.0], 0.5);
+        $index = $state->totalFactorProductivityIndex;
+
+        Politics::enactBudget($state);
+        $loss = -MacroEngine::TARIFF_OUTPUT_LOSS * $state->importTariffRate;
+        $this->assertLessThan(0.0, $loss);
+        $this->assertEqualsWithDelta($loss, $state->tfpShockLevel, 1e-15, 'The level potential absorbs falls by the output loss,');
+        $this->assertEqualsWithDelta($index * exp($loss), $state->totalFactorProductivityIndex, 1e-9, 'and productivity with it.');
+
+        Politics::enactBudget($state);
+        $this->assertEqualsWithDelta($loss, $state->tfpShockLevel, 1e-15, 'A tariff already in force costs nothing more.');
+
+        $state->governingCoalition = [Diet::CIVIC => 0.0, Diet::VANGUARD => 0.0, Diet::IRON_HARBOR => 0.0, Diet::EXCHANGE => 1.0];
+        $state->dietSeats = [Diet::CIVIC => 0.0, Diet::VANGUARD => 0.0, Diet::IRON_HARBOR => 0.0, Diet::EXCHANGE => 140.0];
+        Politics::enactBudget($state);
+        $this->assertSame(0.0, $state->importTariffRate);
+        $this->assertEqualsWithDelta(0.0, $state->tfpShockLevel, 1e-15, 'Repeal gives it back.');
+    }
+
+    public function testTheVoteReadsGrowthPerHead(): void
+    {
+        $subsystem = new Politics($this->quietMath());
+        $state = $this->electionTick();
+        $state->laborForceGrowthRate = MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE + 0.01;
+
+        $subsystem->update($state, 0.01);
+
+        $this->assertEqualsWithDelta(-0.01, $state->electionGrowthGap, 1e-9, 'Output growing only with the labour force is no growth per head.');
+    }
+
     private function electionTick(float $growthGap = 0.0, float $inflationGap = 0.0): MacroState
     {
         $state = new MacroState();
@@ -391,6 +535,26 @@ class DistrictPoliticsSubsystemTest extends TestCase
     }
 
     /** The same Diet a term later, on the tick of the next vote, with the economy at trend over the term just ended. */
+    /**
+     * A state between votes with the given parties governing on the given seats and the founding positions.
+     *
+     * @param array<string, float> $seats Seats of the governing parties; the rest of the Diet holds none.
+     */
+    private function governedBy(array $seats, float $debtToGdp): MacroState
+    {
+        $state = new MacroState();
+        $state->totalTime = 10.0;
+        $state->sovereignDebtToGdp = $debtToGdp;
+        $state->dietSeats = [];
+        $state->governingCoalition = [];
+        foreach (Diet::PARTIES as $party) {
+            $state->dietSeats[$party] = $seats[$party] ?? 0.0;
+            $state->governingCoalition[$party] = isset($seats[$party]) ? 1.0 : 0.0;
+        }
+
+        return $state;
+    }
+
     private function nextElectionTick(MacroState $previous): MacroState
     {
         $next = $this->electionTick();

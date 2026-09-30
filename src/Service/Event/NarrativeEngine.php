@@ -394,6 +394,17 @@ class NarrativeEngine
                     "Election result declared: Boards that had deferred decisions through the campaign now know the regime they face.",
                 ])
             ),
+            ShockEvent::BUDGET_ENACTED => $this->getRandomPhrase(
+                isset($context['government'], $context['tax_rate_pct'], $context['tariff_pct']) ? (($context['council_held'] ?? 'no') === 'yes' ? [
+                    "Budget passed: The {$context['government']} government holds the corporate rate at {$context['tax_rate_pct']}% and the tariff at {$context['tariff_pct']}%. With debt at {$context['debt_to_gdp_pct']}% of GDP, the Council let it be known it would veto any cut in revenue, and the Diet tabled none.",
+                    "Council draws its red line: The {$context['government']} government's budget leaves the corporate rate at {$context['tax_rate_pct']}% after councillors signalled a veto of any revenue cut while debt stands at {$context['debt_to_gdp_pct']}% of GDP.",
+                ] : [
+                    "Budget passed: The {$context['government']} government sets the corporate rate at {$context['tax_rate_pct']}% and the average tariff at {$context['tariff_pct']}%, with its immigration rules growing the labour force {$context['labor_growth_pct']}% a year.",
+                    "The Diet votes the budget: Firms will pay {$context['tax_rate_pct']}% on their profits and importers a {$context['tariff_pct']}% average duty under the {$context['government']} government.",
+                ]) : [
+                    "Budget passed: The Diet has voted the government's budget.",
+                ]
+            ),
             ShockEvent::TITAN_INTERVENTION => $this->getRandomPhrase(
                 isset($context['qe_intensity_pct']) ? [
                     "Central bank Quantitative Easing: Monetary authority expanded asset purchases (QE intensity: {$context['qe_intensity_pct']}%) to compress bond yields and inject liquidity" . (isset($context['output_gap_pct']) ? " amid negative output gap ({$context['output_gap_pct']}%)" : "") . ".",

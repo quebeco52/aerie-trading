@@ -86,6 +86,27 @@ class SystemicEventReporterTest extends TestCase
         $this->assertGreaterThan(1, count($seen));
     }
 
+    /** A budget the Council held back says so, and names the debt it answered; one it let through names the levers. */
+    public function testTheBudgetHeadlineSaysWhatTheCouncilHeld(): void
+    {
+        $governing = [Diet::CIVIC => 0.0, Diet::VANGUARD => 1.0, Diet::IRON_HARBOR => 0.0, Diet::EXCHANGE => 1.0];
+        $held = new MacroStateDTO(eventType: ShockEvent::BUDGET_ENACTED, totalTime: 4.5, governingCoalition: $governing, sovereignDebtToGdp: 0.93, lastBudgetEnactedAt: 4.5, lastCouncilBrakeAt: 4.5);
+        $passed = new MacroStateDTO(eventType: ShockEvent::BUDGET_ENACTED, totalTime: 4.5, governingCoalition: $governing, corporateTaxPolicyShift: -0.026, lastBudgetEnactedAt: 4.5);
+
+        for ($i = 0; $i < 30; ++$i) {
+            $headline = $this->reporter(bufferedPrice: null)->report($held, $this->benchmarkAt('100'));
+            $this->assertNotNull($headline);
+            $this->assertStringContainsString('Vanguard-Exchange Party government', $headline['description']);
+            $this->assertStringContainsString('93% of GDP', $headline['description']);
+            $this->assertStringNotContainsString('{', $headline['description']);
+
+            $headline = $this->reporter(bufferedPrice: null)->report($passed, $this->benchmarkAt('100'));
+            $this->assertNotNull($headline);
+            $this->assertStringContainsString('18.4%', $headline['description']);
+            $this->assertStringNotContainsString('{', $headline['description']);
+        }
+    }
+
     public function testATickWithoutAnEventPublishesNothing(): void
     {
         $this->assertNull($this->reporter(bufferedPrice: 100.0)->report(new MacroStateDTO(), $this->benchmarkAt('100')));

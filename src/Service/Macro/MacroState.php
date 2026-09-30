@@ -389,6 +389,18 @@ class MacroState
     public float $electionInflationGap;
     public float $electionIncumbentSwing;
 
+    // The levers the Diet enacts at its budget rounds: the corporate rate's shift from the neutral 21%, the average
+    // tariff on imports and the net export response building toward it, labour force growth with the immigration regime
+    // in it and the population that regime has added against the structural path (log), and when a budget last changed a
+    // lever and when the Council's debt brake last held one back (-1: never).
+    public float $corporateTaxPolicyShift;
+    public float $importTariffRate;
+    public float $tariffTradeLag;
+    public float $laborForceGrowthRate;
+    public float $immigrationPopulationShift;
+    public float $lastBudgetEnactedAt;
+    public float $lastCouncilBrakeAt;
+
     // Sovereign reserve fund (App\Service\Macro\Subsystem\SovereignFundSubsystem). The three sleeves: a slice of the
     // board in currency, and foreign equities and foreign paper in FOREIGN units (home value is units / exchangeRateIndex).
     // Zero until the fund incepts on the first tick that carries a board; a run with no market never has one.
@@ -544,7 +556,7 @@ class MacroState
         // so their arrival reprices nothing: import prices have absorbed the currency, trade volumes too, and the net
         // export level is already part of the gap the payload carries.
         if (!isset($carried['importPriceLevel'])) {
-            $state->importPriceLevel = MacroAggregateSubsystem::importPriceLevelTarget($state->exchangeRateIndexEma);
+            $state->importPriceLevel = MacroAggregateSubsystem::importPriceLevelTarget($state->exchangeRateIndexEma, $state->importTariffRate);
         }
         if (!isset($carried['realExchangeRateTradeLag'])) {
             $state->realExchangeRateTradeLag = MacroAggregateSubsystem::realExchangeRateGap($state->exchangeRateIndexEma, $state->exchangeRateTrend);
@@ -553,7 +565,7 @@ class MacroState
             $state->alliedDefenseDeliveryLag = MacroAggregateSubsystem::alliedDefenseGap($state->alliedDefenseSpendingIndexEma);
         }
         if (!isset($carried['netExportGap'])) {
-            $state->netExportGap = MacroAggregateSubsystem::netExportGapAt($state->foreignOutputGapEma, $state->realExchangeRateTradeLag, $state->alliedDefenseDeliveryLag);
+            $state->netExportGap = MacroAggregateSubsystem::netExportGapAt($state->foreignOutputGapEma, $state->realExchangeRateTradeLag, $state->alliedDefenseDeliveryLag, $state->tariffTradeLag);
         }
         // The finance trend a state predating it omits opens on the trend it replaced, so the finance level is unmoved.
         if (!isset($carried['financeMarketTrend']) && $state->equityWealthTrend > 0.0) {

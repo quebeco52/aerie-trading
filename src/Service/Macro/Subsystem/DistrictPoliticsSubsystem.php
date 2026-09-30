@@ -28,8 +28,17 @@ use App\Service\Math\MathUtility;
  * with the smallest ideological range (Riker 1962; de Swaan 1973; Martin & Stevenson 2001), so the drift is what lets
  * the two big parties change partners, and the grand coalition forms only when nothing tighter commands a majority.
  *
- * The calendar is CreditFiscalSubsystem's: the vote is held on the tick its election falls on. This subsystem moves no
- * macro lever. A run built by hand (a harness, a unit test) has none.
+ * The calendar is CreditFiscalSubsystem's: the vote is held on the tick its election falls on. A run built by hand (a
+ * harness, a unit test) has none.
+ *
+ * The government then legislates at the budget rounds after the one it was formed on. Its position, its members'
+ * weighted by seats, sets three levers between the policies real parties at the ends of each axis have enacted: the
+ * corporate rate on the size-of-state axis, and the tariff and the immigration regime on the openness axis. Size of
+ * state moves no purchases: in the US record the purchases process is fitted to, the party in power shifts civilian
+ * purchases the wrong way (-2% under Democratic presidents, var/harness/partisan_fit.py), and the panel evidence has
+ * faded since the 1990s (Potrafke 2017). Above the 90% debt line the Council would veto a bill that cuts revenue, and
+ * the Diet, knowing it, tables none (Romer & Rosenthal 1978), unless it holds the three quarters that could remove the
+ * Council.
  */
 class DistrictPoliticsSubsystem
 {
@@ -69,14 +78,92 @@ class DistrictPoliticsSubsystem
             $state->campaignStartRealGdp = $realGdp;
         }
 
-        if ($state->lastElectionAt !== $state->totalTime) {
-            return;
+        if ($state->lastElectionAt === $state->totalTime) {
+            $this->holdElection($state, $realGdp);
+
+            $state->termStartedAt = $state->totalTime;
+            $state->termStartDeflator = $state->gdpDeflator;
         }
 
-        $this->holdElection($state, $realGdp);
+        // A government's first budget is the round after the one it was formed on.
+        if ($state->coalitionFormedAt < $state->totalTime
+            && MathUtility::crossedSimulatedBoundary($state->totalTime, $dt, MacroEngine::BUDGET_ROUND_PERIOD_YEARS)) {
+            self::enactBudget($state);
+        }
+    }
 
-        $state->termStartedAt = $state->totalTime;
-        $state->termStartDeflator = $state->gdpDeflator;
+    /**
+     * The levers a government at this position legislates, each between the policies real parties at the two ends of
+     * its axis have enacted. A government leaning further than the party at the end of an axis enacts that party's
+     * policy and no more: nothing on record goes further.
+     *
+     * @param array{state: float, openness: float} $position The coalition's position (coalitionPosition()).
+     * @return array{corporateTax: float, tariff: float, laborGrowth: float} The corporate rate's shift from the neutral
+     *         rate, the average tariff on imports, and labour force growth.
+     */
+    public static function platform(array $position): array
+    {
+        // Each axis runs between the parties defined at its two ends, which stand for the real policies.
+        $smallState = AerieDiet::PRIMARY_POSITION[AerieDiet::VANGUARD];
+        $bigState = AerieDiet::PRIMARY_POSITION[AerieDiet::CIVIC];
+        $closed = AerieDiet::PRIMARY_POSITION[AerieDiet::IRON_HARBOR];
+        $open = AerieDiet::PRIMARY_POSITION[AerieDiet::EXCHANGE];
+        $state = max($smallState, min($bigState, $position[AerieDiet::AXIS_STATE]));
+        $openness = max($closed, min($open, $position[AerieDiet::AXIS_OPENNESS]));
+        $stateSpan = $bigState - $smallState;
+        $opennessSpan = $open - $closed;
+
+        return [
+            'corporateTax' => MacroEngine::POLICY_MANIFESTO_CORPORATE_TAX_GAP * $state / $stateSpan,
+            'tariff' => MacroEngine::POLICY_PROTECTIONIST_TARIFF * max(0.0, $openness / $closed),
+            'laborGrowth' => MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE
+                + ((MacroEngine::MIGRATION_OPEN_REGIME - MacroEngine::MIGRATION_CLOSED_REGIME) * $openness / $opennessSpan),
+        ];
+    }
+
+    /**
+     * A budget round: the government's platform becomes law, as far as the Council lets it.
+     *
+     * Above the debt line the Council's veto is a red line on revenue, and the Diet, as the agenda setter in Romer &
+     * Rosenthal (1978), tables nothing it would veto: a lever that would cut revenue stays where it stands. A government
+     * with the three quarters that could remove councillors is not held. A tariff's change moves productivity by
+     * Furceri et al.'s (2018) output loss, a level potential absorbs over the years that follow.
+     *
+     * @param MacroState $state Current macroeconomic state.
+     */
+    public static function enactBudget(MacroState $state): void
+    {
+        $platform = self::platform(self::coalitionPosition($state->governingCoalition, $state->dietSeats, $state->partySecondaryPositions));
+
+        $governingSeats = 0.0;
+        foreach (AerieDiet::governingParties($state->governingCoalition) as $party) {
+            $governingSeats += $state->dietSeats[$party] ?? 0.0;
+        }
+        $braked = false;
+        if ($state->sovereignDebtToGdp > MacroEngine::SOVEREIGN_RISK_DEBT_THRESHOLD && $governingSeats < AerieDiet::SUPERMAJORITY_SEATS) {
+            foreach (['corporateTax' => $state->corporateTaxPolicyShift, 'tariff' => $state->importTariffRate] as $lever => $standing) {
+                if ($platform[$lever] < $standing) {
+                    $platform[$lever] = $standing;
+                    $braked = true;
+                }
+            }
+        }
+        if ($braked) {
+            $state->lastCouncilBrakeAt = $state->totalTime;
+        }
+
+        $productivityLoss = -MacroEngine::TARIFF_OUTPUT_LOSS * ($platform['tariff'] - $state->importTariffRate);
+        $state->tfpShockLevel += $productivityLoss;
+        $state->totalFactorProductivityIndex *= exp($productivityLoss);
+
+        if ($platform['corporateTax'] !== $state->corporateTaxPolicyShift
+            || $platform['tariff'] !== $state->importTariffRate
+            || $platform['laborGrowth'] !== $state->laborForceGrowthRate) {
+            $state->lastBudgetEnactedAt = $state->totalTime;
+        }
+        $state->corporateTaxPolicyShift = $platform['corporateTax'];
+        $state->importTariffRate = $platform['tariff'];
+        $state->laborForceGrowthRate = $platform['laborGrowth'];
     }
 
     /**
@@ -91,7 +178,7 @@ class DistrictPoliticsSubsystem
         $shares = self::returnCrisisShift($shares, $state->ironHarborCrisisShift);
 
         $growthGap = self::annualisedLogChange($state->campaignStartRealGdp, $realGdp, $state->totalTime - $state->campaignStartedAt);
-        $growthGap = $growthGap === null ? 0.0 : $growthGap - MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE - MacroEngine::TFP_DRIFT;
+        $growthGap = $growthGap === null ? 0.0 : $growthGap - $state->laborForceGrowthRate - MacroEngine::TFP_DRIFT;
         $inflationGap = self::annualisedLogChange($state->termStartDeflator, $state->gdpDeflator, $state->totalTime - $state->termStartedAt);
         $inflationGap = $inflationGap === null ? 0.0 : $inflationGap - MacroEngine::TARGET_INFLATION;
 

@@ -331,7 +331,8 @@ class AssetMarketSubsystem
      * Calculates fundamental home prices from user cost of housing capital (mortgage rate + taxes - expected inflation)
      * and household real disposable income affordability, with sticky physical mean reversion. Credit conditions
      * enter the fundamental as in Duca, Muellbauer & Murphy (2011): the price a buyer can pay is the price a lender
-     * will finance, so net tightening in bank standards lowers it and loosening lifts it.
+     * will finance, so net tightening in bank standards lowers it and loosening lifts it. The population an immigration
+     * regime adds over the structural path bids for the same land, one for one (Saiz 2007).
      *
      * @param MacroState $state             Current macroeconomic state.
      * @param float      $expectedInflation Expected inflation (MonetaryPolicySubsystem::calculateExpectedInflation), the same measure the Taylor rule and IS curve use.
@@ -355,7 +356,8 @@ class AssetMarketSubsystem
         $creditSupplyFactor = $state->creditToGdpTrend > 0.0
             ? 1.0 + (self::RESIDENTIAL_CREDIT_SUPPLY_ELASTICITY * ($state->creditToGdpGapEma / $state->creditToGdpTrend))
             : 1.0;
-        $fundamentalPrice = self::RESIDENTIAL_BASELINE * max(0.30, min(2.50, $affordabilityFactor * max(0.5, $damageFactor) * max(0.5, $creditConditionsFactor) * max(0.5, $creditSupplyFactor)));
+        $immigrationFactor = exp(MacroEngine::IMMIGRATION_HOUSING_ELASTICITY * $state->immigrationPopulationShift);
+        $fundamentalPrice = self::RESIDENTIAL_BASELINE * max(0.30, min(2.50, $affordabilityFactor * max(0.5, $damageFactor) * max(0.5, $creditConditionsFactor) * max(0.5, $creditSupplyFactor) * $immigrationFactor));
 
         $dW = $this->mathUtility->generateStandardNormal();
         $newIndex = $this->mathUtility->calculateSchwartz1Factor(
@@ -390,6 +392,7 @@ class AssetMarketSubsystem
                 'catastropheDamage' => log(max(0.5, $damageFactor)),
                 'lendingStandards' => log(max(0.5, $creditConditionsFactor)),
                 'creditSupply' => log(max(0.5, $creditSupplyFactor)),
+                'immigration' => log($immigrationFactor),
             ];
             $terms['clamp'] = $logFundamental - array_sum($terms);
             $this->diagnostics->recordLevel('households', 'houseFundamental', $terms, $logFundamental, $dt);

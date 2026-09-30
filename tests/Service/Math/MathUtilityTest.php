@@ -2604,4 +2604,19 @@ class MathUtilityTest extends TestCase
         $capped = $this->mathUtility->calculateSchularickTaylorCrisisHazard(creditGap: 10.0, beta0: 5.0, betaGap: 10.0);
         $this->assertSame(0.99, $capped);
     }
+
+    public function testAnOwnStreamIsReproducibleAndLeavesTheGlobalStreamAlone(): void
+    {
+        mt_srand(4242);
+        $global = [mt_rand(), mt_rand()];
+
+        mt_srand(4242);
+        $first = MathUtility::ownStream(7);
+        $second = MathUtility::ownStream(7);
+        $drawn = [$first->generateStandardNormal(), $first->generateUniform()];
+
+        $this->assertSame($drawn, [$second->generateStandardNormal(), $second->generateUniform()], 'The same seed gives the same draws.');
+        $this->assertNotSame($drawn, [MathUtility::ownStream(8)->generateStandardNormal(), MathUtility::ownStream(8)->generateUniform()]);
+        $this->assertSame($global, [mt_rand(), mt_rand()], 'and none of them came out of the global stream.');
+    }
 }

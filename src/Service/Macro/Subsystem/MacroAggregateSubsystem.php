@@ -91,6 +91,10 @@ class MacroAggregateSubsystem
     public const IMPORT_PRICE_ADJUSTMENT_YEARS = 0.31;
     /** Share of an imported consumer good's retail price that is local distribution, which the exchange rate does not move (Burstein, Neves & Rebelo 2003: ~40% in the US). */
     public const IMPORT_DISTRIBUTION_SHARE = 0.40;
+    /** Goods in the District's imports, the part a tariff is levied on: the UK's 75.6% (World Bank TM.VAL.MRCH.CD.WT over NE.IMP.GNFS.CD, 2010-2019 mean); services cross no customs border. */
+    public const GOODS_SHARE_OF_IMPORTS = 0.756;
+    /** Goods in the District's exports, the part partners can tariff: the UK's 56.5% (World Bank TX.VAL.MRCH.CD.WT over NE.EXP.GNFS.CD, 2010-2019 mean). */
+    public const GOODS_SHARE_OF_EXPORTS = 0.565;
 
     // --- Financial Centre Output (GDP by industry; ESA 2010 §14.14 and Kornfeld 2021: service volumes as deflated balances) ---
     /** Finance and insurance value added over GDP: the District was founded as a financial centre, and its finance is over 30% of it. */
@@ -385,7 +389,8 @@ class MacroAggregateSubsystem
     /**
      * Holston, Laubach & Williams (2017) natural rate of interest: r* = c g + z.
      *
-     * r* moves with the TREND growth of potential. A level shock to potential (their sigma_y*, here a productivity
+     * r* moves with the TREND growth of potential, productivity's and the labour force's (which the immigration regime
+     * sets). A level shock to potential (their sigma_y*, here a productivity
      * shock being absorbed) shifts output, not its trend, and leaves r* alone; the output gap does not enter r* at
      * all, it enters the IS curve r* is the neutral point of. HLW's one-sided estimate does move with the cycle,
      * but that is the filter reading IS residuals as z, not the natural rate. Their z, the slow drift from
@@ -397,7 +402,8 @@ class MacroAggregateSubsystem
      */
     public function calculateNaturalRate(MacroState $state, float $trendGrowthRate, float $dt): void
     {
-        $targetNaturalRate = MacroEngine::BASE_NATURAL_RATE + (self::NATURAL_RATE_GROWTH_LOADING * ($trendGrowthRate - MacroEngine::TFP_DRIFT));
+        $trendPotentialGrowthGap = ($trendGrowthRate - MacroEngine::TFP_DRIFT) + ($state->laborForceGrowthRate - MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE);
+        $targetNaturalRate = MacroEngine::BASE_NATURAL_RATE + (self::NATURAL_RATE_GROWTH_LOADING * $trendPotentialGrowthGap);
         $targetNaturalRate = max(MacroEngine::MIN_NATURAL_RATE, min(MacroEngine::MAX_NATURAL_RATE, $targetNaturalRate));
 
         $state->naturalRate += self::NATURAL_RATE_ADJUSTMENT_SPEED * ($targetNaturalRate - $state->naturalRate) * $dt;
@@ -723,8 +729,10 @@ class MacroAggregateSubsystem
             $dt,
             self::DEFENSE_DELIVERY_LAG_YEARS
         );
+        // A duty reaches volumes as a price does, over the same year.
+        $state->tariffTradeLag = $this->mathUtility->calculateDistributedLag($state->tariffTradeLag, log(1.0 + $state->importTariffRate), $dt, self::TRADE_VOLUME_ADJUSTMENT_YEARS);
 
-        return self::netExportGapAt($state->foreignOutputGapEma, $state->realExchangeRateTradeLag, $state->alliedDefenseDeliveryLag);
+        return self::netExportGapAt($state->foreignOutputGapEma, $state->realExchangeRateTradeLag, $state->alliedDefenseDeliveryLag, $state->tariffTradeLag);
     }
 
     /**
@@ -805,19 +813,28 @@ class MacroAggregateSubsystem
      * pass-through and gains that elasticity's worth of imports, each weighted by its share of GDP (the chapter's
      * footnote 21, which gives 1.5% of GDP per 10% at the sample's 42% and 41% shares).
      *
+     * A tariff is a price with full pass-through (Amiti, Redding & Weinstein 2019): imported goods lose their price
+     * elasticity's worth of volume on the whole duty. Partners answer on the District's goods exports at the 2018
+     * retaliation ratio (Fajgelbaum et al. 2020), which lose theirs; allied governments do not tariff the arms they buy.
+     *
      * @param float $mainlandGap         Mainland output gap (fraction).
      * @param float $realExchangeRateGap Log real exchange rate against its trend.
      * @param float $alliedDefenseGap    Log allied defence spending against its trend, as deliveries have reached it.
+     * @param float $tariffDuty          Log of one plus the District's average tariff, as it has reached volumes.
      * @return float Net export gap (fraction of GDP).
      */
-    public static function netExportGapAt(float $mainlandGap, float $realExchangeRateGap, float $alliedDefenseGap): float
+    public static function netExportGapAt(float $mainlandGap, float $realExchangeRateGap, float $alliedDefenseGap, float $tariffDuty = 0.0): float
     {
         $priceResponse = (self::EXPORT_PRICE_PASS_THROUGH * self::EXPORT_PRICE_ELASTICITY * self::DISTRICT_EXPORT_SHARE)
             + (self::IMPORT_PRICE_PASS_THROUGH * self::IMPORT_PRICE_ELASTICITY * self::DISTRICT_IMPORT_SHARE);
+        $retaliatoryDuty = log(1.0 + (MacroEngine::TARIFF_RETALIATION_RATIO * (exp($tariffDuty) - 1.0)));
+        $retaliatedExportShare = (self::DISTRICT_EXPORT_SHARE * self::GOODS_SHARE_OF_EXPORTS) - self::DISTRICT_DEFENSE_EXPORT_SHARE;
 
         return ((self::DISTRICT_EXPORT_SHARE - self::DISTRICT_DEFENSE_EXPORT_SHARE) * self::EXPORT_DEMAND_ELASTICITY * $mainlandGap)
             + (self::DISTRICT_DEFENSE_EXPORT_SHARE * MacroEngine::ALLIED_PROCUREMENT_ELASTICITY * $alliedDefenseGap)
-            - ($priceResponse * $realExchangeRateGap);
+            - ($priceResponse * $realExchangeRateGap)
+            + (self::IMPORT_PRICE_ELASTICITY * self::DISTRICT_IMPORT_SHARE * self::GOODS_SHARE_OF_IMPORTS * $tariffDuty)
+            - (self::EXPORT_PRICE_ELASTICITY * $retaliatedExportShare * $retaliatoryDuty);
     }
 
     /**
@@ -861,17 +878,20 @@ class MacroAggregateSubsystem
     }
 
     /**
-     * The log import price level, relative to domestic prices, that the currency settles it at: the long-term pass-through
-     * times the index against its baseline. Only its change is ever read, so the baseline sets no level of its own.
+     * The log import price level, relative to domestic prices, that the currency and the tariff settle it at: the
+     * long-term pass-through times the index against its baseline, plus the whole duty, which passes into duty-inclusive
+     * prices in full (Amiti, Redding & Weinstein 2019; Fajgelbaum et al. 2020). Only its change is ever read, so the
+     * baseline sets no level of its own.
      *
      * @param float $exchangeRateIndexEma The currency index, smoothed over a quarter.
+     * @param float $importTariffRate     The average tariff on imports.
      * @return float Log relative import price level.
      */
-    public static function importPriceLevelTarget(float $exchangeRateIndexEma): float
+    public static function importPriceLevelTarget(float $exchangeRateIndexEma, float $importTariffRate = 0.0): float
     {
         $index = $exchangeRateIndexEma > 0.0 ? $exchangeRateIndexEma : AssetMarketSubsystem::EXCHANGE_RATE_BASELINE;
 
-        return -self::IMPORT_PRICE_PASS_THROUGH * log($index / AssetMarketSubsystem::EXCHANGE_RATE_BASELINE);
+        return (-self::IMPORT_PRICE_PASS_THROUGH * log($index / AssetMarketSubsystem::EXCHANGE_RATE_BASELINE)) + log(1.0 + $importTariffRate);
     }
 
     /**
@@ -912,7 +932,7 @@ class MacroAggregateSubsystem
         // domestic ones within about a year. The peninsula makes no goods, so every good, fuel and food in the basket is
         // imported, and all of its retail price but the local distribution margin reprices.
         $priorImportPriceLevel = $state->importPriceLevel;
-        $state->importPriceLevel = $this->mathUtility->calculateDistributedLag($priorImportPriceLevel, self::importPriceLevelTarget($state->exchangeRateIndexEma), $dt, self::IMPORT_PRICE_ADJUSTMENT_YEARS);
+        $state->importPriceLevel = $this->mathUtility->calculateDistributedLag($priorImportPriceLevel, self::importPriceLevelTarget($state->exchangeRateIndexEma, $state->importTariffRate), $dt, self::IMPORT_PRICE_ADJUSTMENT_YEARS);
         $importPriceInflation = (1.0 - self::IMPORT_DISTRIBUTION_SHARE) * ($state->importPriceLevel - $priorImportPriceLevel) / $dt;
 
         // Shapiro (2022) Sector 2: Core goods intermediate supply chain and materials cost pressures.
@@ -1037,9 +1057,11 @@ class MacroAggregateSubsystem
             $tfpGrowthRate = $this->calculateTotalFactorProductivity($state, $dt);
         }
 
-        $realPotentialGrowth = MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE + $tfpGrowthRate;
+        $realPotentialGrowth = $state->laborForceGrowthRate + $tfpGrowthRate;
         $currentPotential = $state->potentialGdpIndex > 0.0 ? $state->potentialGdpIndex : 1.0;
         $state->potentialGdpIndex = max(0.10, $currentPotential * exp($realPotentialGrowth * $dt));
+        // The population an immigration regime has added over the structural path (log), which bids for housing.
+        $state->immigrationPopulationShift += ($state->laborForceGrowthRate - MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE) * $dt;
 
         $currentDeflator = $state->gdpDeflator > 0.0 ? $state->gdpDeflator : 1.0;
         $state->gdpDeflator = max(0.01, $currentDeflator * exp($state->inflation * $dt));

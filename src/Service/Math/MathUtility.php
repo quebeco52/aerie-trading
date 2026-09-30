@@ -87,6 +87,9 @@ class MathUtility
 
     private int $replayCursor = 0;
 
+    /** A generator of this instance's own, in place of the global one; null draws from the global mt_rand stream. */
+    private ?\Random\Randomizer $privateGenerator = null;
+
     /**
      * Constructor for MathUtility.
      * Pre-calculates constants for random number generation.
@@ -174,7 +177,7 @@ class MathUtility
             return $this->replayDraws[$this->replayCursor++] ?? self::REPLAY_EXHAUSTED_DRAW;
         }
 
-        $draw = mt_rand() * $this->randMaxInverse;
+        $draw = ($this->privateGenerator !== null ? $this->privateGenerator->getInt(0, mt_getrandmax()) : mt_rand()) * $this->randMaxInverse;
         if ($this->drawLog !== null) {
             $this->drawLog[] = $draw;
         }
@@ -216,6 +219,20 @@ class MathUtility
         $replay->spareNormal = $log['spare'] ?? null;
 
         return $replay;
+    }
+
+    /**
+     * An instance with a Mersenne Twister of its own, so what it draws neither takes from nor shifts the simulation's
+     * global stream: a subsystem drawing here can be added to or left out of a seeded run without moving any other draw.
+     *
+     * @param int|null $seed Seed for a reproducible stream; null seeds it from the system's entropy.
+     */
+    public static function ownStream(?int $seed = null): self
+    {
+        $stream = new self();
+        $stream->privateGenerator = new \Random\Randomizer(new \Random\Engine\Mt19937($seed));
+
+        return $stream;
     }
 
     /**

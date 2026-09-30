@@ -47,6 +47,8 @@ class ShockEvent
     public const NATURAL_CATASTROPHE = 'natural_catastrophe';
     /** A scheduled district election has been held; the policy regime is settled for another term. */
     public const ELECTION_HELD = 'election_held';
+    /** A budget round changed the government's levers; the headline says what the Council held back, if anything. */
+    public const BUDGET_ENACTED = 'budget_enacted';
 
     // Sector-Specific Shocks
     public const VOLATILITY_SURGE = 'volatility_surge';

@@ -808,7 +808,7 @@ class MonetaryPolicySubsystem
      */
     public function calculateMoneySupplyGrowth(MacroState $state, float $dt, float $tfpGrowthRate): void
     {
-        $baseGrowth = MacroEngine::TARGET_INFLATION + $tfpGrowthRate + MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE;
+        $baseGrowth = MacroEngine::TARGET_INFLATION + $tfpGrowthRate + $state->laborForceGrowthRate;
 
         $dW = $this->mathUtility->generateStandardNormal();
 

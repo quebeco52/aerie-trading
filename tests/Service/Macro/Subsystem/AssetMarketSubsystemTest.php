@@ -316,6 +316,20 @@ class AssetMarketSubsystemTest extends TestCase
         $this->assertGreaterThan($anchored->residentialPropertyIndex, $unanchored->residentialPropertyIndex);
     }
 
+    public function testImmigrationBidsUpTheHouseFundamentalOneForOne(): void
+    {
+        $base = $this->neutralHousingState();
+        $grown = $this->neutralHousingState();
+        $grown->immigrationPopulationShift = 0.05;
+
+        $this->subsystem->calculateResidentialPropertyIndex($base, MacroEngine::TARGET_INFLATION, 0.25);
+        $this->subsystem->calculateResidentialPropertyIndex($grown, MacroEngine::TARGET_INFLATION, 0.25);
+
+        // The index closes its reversion's share of the step in the fundamental, which is the population's log times Saiz's elasticity.
+        $expected = (1.0 - exp(-AssetMarketSubsystem::RESIDENTIAL_MEAN_REVERSION * 0.25)) * MacroEngine::IMMIGRATION_HOUSING_ELASTICITY * 0.05;
+        $this->assertEqualsWithDelta($expected, log($grown->residentialPropertyIndex / $base->residentialPropertyIndex), 1e-12);
+    }
+
     private function neutralHousingState(): MacroState
     {
         $state = new MacroState();

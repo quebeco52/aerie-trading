@@ -259,6 +259,23 @@ class SystemicEventTest extends TestCase
     }
 
 
+    public function testABudgetIsReportedOnTheRoundItChangesALeverAndBelowAnElection(): void
+    {
+        $state = new MacroState();
+        $state->totalTime = 4.5;
+        $state->lastBudgetEnactedAt = 4.5;
+
+        $this->assertSame(ShockEvent::BUDGET_ENACTED, $this->fire($state));
+        $this->assertSame(0.0, $state->eventCooldownTimer, 'The political calendar arms no crisis cooldown.');
+
+        $state->lastElectionAt = 4.5;
+        $this->assertSame(ShockEvent::ELECTION_HELD, $this->fire($state), 'An election outranks a budget on the same tick.');
+
+        $state->lastElectionAt = 4.0;
+        $state->totalTime += 1.0 / self::TICKS_PER_YEAR;
+        $this->assertNull($this->fire($state), 'Last round\'s budget is not today\'s news.');
+    }
+
     public function testASovereignDowngradeIsReportedBelowACreditSeizureAndAboveARecession(): void
     {
         $state = new MacroState();

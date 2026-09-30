@@ -512,6 +512,16 @@ class MacroReport
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
     private ?string $primaryDeficitToGdp = null;
 
+    // The Diet's levers as enacted: six places, since a tariff or a migration rate is read in basis points.
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 6, nullable: true)]
+    private ?string $corporateTaxPolicyShift = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 6, nullable: true)]
+    private ?string $importTariffRate = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 6, nullable: true)]
+    private ?string $laborForceGrowthRate = null;
+
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
     private ?string $householdDebtToIncome = null;
 
