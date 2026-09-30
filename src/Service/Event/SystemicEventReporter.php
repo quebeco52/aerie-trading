@@ -6,6 +6,7 @@ use App\Data\AerieDiet;
 use App\DTO\MacroStateDTO;
 use App\Entity\Etf;
 use App\Service\Macro\MacroEngine;
+use App\Service\Macro\Subsystem\CoalitionFormation;
 use App\Service\Market\PriceChangeFeed;
 
 /**
@@ -86,8 +87,10 @@ class SystemicEventReporter
 
     /**
      * The vote's result for an election headline: the largest party, the biggest mover, and either the party that won a
-     * majority outright or the party that now leads the talks. The talks' outcome is never named here: it is settled
-     * on the day of the vote but not known until the cabinet takes office. Empty before the first vote has moved anything.
+     * majority outright or the party that opens the talks, which leads their first attempt and need not be the largest,
+     * and the larger bloc's leader and seats.
+     * The talks' outcome is never named here: it is settled on the day of the vote but not known until the cabinet takes
+     * office. Empty before the first vote has moved anything.
      *
      * @return array<string, string>
      */
@@ -99,8 +102,7 @@ class SystemicEventReporter
 
         $names = self::midSentenceNames();
         $seats = array_map('intval', $macro->dietSeats);
-        arsort($seats);
-        $largest = (string) array_key_first($seats);
+        $largest = CoalitionFormation::bySize($macro->dietSeats, $macro->dietVoteShares)[0];
         $swings = $macro->dietVoteSwings;
         uasort($swings, static fn(float $a, float $b): int => abs($b) <=> abs($a));
         $mover = (string) array_key_first($swings);
@@ -116,6 +118,18 @@ class SystemicEventReporter
         ];
         if ($seats[$largest] >= AerieDiet::MAJORITY_SEATS) {
             $context['majority_party'] = $names[$largest];
+        } elseif ($macro->formationLog !== []) {
+            $blocSeats = [];
+            foreach (CoalitionFormation::blocs($macro->partyPositions) as $party => $leader) {
+                $blocSeats[$leader] = ($blocSeats[$leader] ?? 0) + ($seats[$party] ?? 0);
+            }
+            arsort($blocSeats);
+            $context['bloc_leader'] = $names[(string) array_key_first($blocSeats)];
+            $context['bloc_seats'] = (string) reset($blocSeats);
+            $lead = $macro->formationLog[0]['formateur'];
+            $context['talks_opening'] = $lead === $largest
+                ? "{$names[$largest]}, the largest with {$seats[$largest]}, opens coalition talks"
+                : "{$names[$lead]} opens coalition talks, though {$names[$largest]} is the largest with {$seats[$largest]}";
         }
 
         return $context;

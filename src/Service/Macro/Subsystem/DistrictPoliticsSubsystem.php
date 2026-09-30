@@ -25,9 +25,11 @@ use App\Service\Math\MathUtility;
  * which lasts only the one vote (Converse 1966), sized so the Diet is as volatile as Western Europe's parliaments have
  * been on average. Seats are D'Hondt over the whole Diet.
  *
- * Each party is fixed on the axis it is defined by (size of state, openness, or the Council) and drifts on the other
- * two by the manifesto shift parties make between elections (Somer-Topcu 2009). After the vote the parties negotiate a
- * government (CoalitionFormation); until it takes office the outgoing cabinet stays on as caretaker and passes no budget.
+ * Each party is fixed on the axes it is defined by (size of state, openness, or the Council). On the others it strays
+ * from its home between elections and is pulled back toward it, at the pace real parties move in the Chapel Hill expert
+ * survey: an AR(1) around each party's own place, not a random walk, since parties keep their family's positions for
+ * decades (Budge, Ezrow & McDonald 2010). After the vote the parties negotiate a government (CoalitionFormation); until
+ * it takes office the outgoing cabinet stays on as caretaker and passes no budget.
  *
  * The calendar is CreditFiscalSubsystem's: the vote is held on the tick its election falls on. A run built by hand (a
  * harness, a unit test) has none.
@@ -45,9 +47,11 @@ use App\Service\Math\MathUtility;
  */
 class DistrictPoliticsSubsystem
 {
-    // --- Party Drift (Somer-Topcu 2009) ---
-    /** Per-election step on each axis a party is not defined by: the mean absolute manifesto shift of 10-16 of 200 RILE points is ~0.12 of this two-unit scale, sigma = 0.12 / sqrt(2/pi). */
-    public const POSITION_DRIFT_PER_ELECTION = 0.15;
+    // --- Party Positions (Chapel Hill expert survey 1999-2024, var/harness/politics/ches_fit.py) ---
+    /** Share of a party's distance from its home still there a year later, by axis: economic left-right for size of state, European integration for openness, anti-elite rhetoric for the Council; Western parties against their country's mean. */
+    public const POSITION_ANNUAL_PERSISTENCE = [AerieDiet::AXIS_STATE => 0.872, AerieDiet::AXIS_OPENNESS => 0.958, AerieDiet::AXIS_COUNCIL => 0.846];
+    /** How far a party strays from its home on each axis, the standard deviation around it, from the same fit (a full expert scale is two units). */
+    public const POSITION_WITHIN_SD = [AerieDiet::AXIS_STATE => 0.125, AerieDiet::AXIS_OPENNESS => 0.265, AerieDiet::AXIS_COUNCIL => 0.188];
 
     // --- Vote Shares ---
     /** Smallest vote share a party is carried at, so a collapse leaves it a rump rather than a negative share. */
@@ -114,10 +118,10 @@ class DistrictPoliticsSubsystem
     public static function platform(array $position): array
     {
         // Each axis runs between the parties defined at its two ends, which stand for the real policies.
-        $smallState = AerieDiet::PRIMARY_POSITION[AerieDiet::VANGUARD];
-        $bigState = AerieDiet::PRIMARY_POSITION[AerieDiet::CIVIC];
-        $closed = AerieDiet::PRIMARY_POSITION[AerieDiet::IRON_HARBOR];
-        $open = AerieDiet::PRIMARY_POSITION[AerieDiet::EXCHANGE];
+        $smallState = AerieDiet::FIXED_POSITIONS[AerieDiet::VANGUARD][AerieDiet::AXIS_STATE];
+        $bigState = AerieDiet::FIXED_POSITIONS[AerieDiet::CIVIC][AerieDiet::AXIS_STATE];
+        $closed = AerieDiet::FIXED_POSITIONS[AerieDiet::IRON_HARBOR][AerieDiet::AXIS_OPENNESS];
+        $open = AerieDiet::FIXED_POSITIONS[AerieDiet::EXCHANGE][AerieDiet::AXIS_OPENNESS];
         $state = max($smallState, min($bigState, $position[AerieDiet::AXIS_STATE] ?? 0.0));
         $openness = max($closed, min($open, $position[AerieDiet::AXIS_OPENNESS] ?? 0.0));
         $stateSpan = $bigState - $smallState;
@@ -283,9 +287,9 @@ class DistrictPoliticsSubsystem
         foreach (AerieDiet::PARTIES as $party) {
             $positions[$party] = AerieDiet::position($party, $state->partyPositions);
             foreach (AerieDiet::AXES as $axis) {
-                if ($axis !== AerieDiet::PRIMARY_AXIS[$party]) {
-                    $positions[$party][$axis] = self::reflect($positions[$party][$axis]
-                        + (self::POSITION_DRIFT_PER_ELECTION * $this->mathUtility->generateStandardNormal()));
+                if (!AerieDiet::isFixed($party, $axis)) {
+                    $positions[$party][$axis] = self::movePosition($positions[$party][$axis], AerieDiet::HOME_POSITIONS[$party][$axis], $axis,
+                        $this->mathUtility->generateStandardNormal());
                 }
             }
         }
@@ -560,6 +564,23 @@ class DistrictPoliticsSubsystem
         }
 
         return log($to / $from) / $years;
+    }
+
+    /**
+     * A party's position on an axis it is not defined by, one term on: what is left of its distance from home, plus the
+     * term's shock, sized so that a party left alone strays from home by POSITION_WITHIN_SD.
+     *
+     * @param float  $position Its position at the last vote.
+     * @param float  $home     Its home on the axis.
+     * @param string $axis     The axis.
+     * @param float  $draw     Standard normal draw.
+     */
+    public static function movePosition(float $position, float $home, string $axis, float $draw): float
+    {
+        $persistence = self::POSITION_ANNUAL_PERSISTENCE[$axis] ** MacroEngine::ELECTION_TERM_YEARS;
+
+        return self::reflect($home + ($persistence * ($position - $home))
+            + (self::POSITION_WITHIN_SD[$axis] * sqrt(1.0 - ($persistence ** 2)) * $draw));
     }
 
     /**

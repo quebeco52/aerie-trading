@@ -317,7 +317,7 @@ readonly class MacroStateDTO
         /** @var array<string, float> Change in each party's vote share at the last election. */
         public array $dietVoteSwings = [],
         /** @var array<string, array<string, float>> Each party's position by axis; the axis it is defined by never moves. */
-        public array $partyPositions = AerieDiet::SEED_POSITIONS,
+        public array $partyPositions = AerieDiet::HOME_POSITIONS,
         /** @var array<string, float> 1.0 for a party in the cabinet. */
         public array $governingCoalition = AerieDiet::SEED_COALITION,
         /** @var array<string, float> 1.0 for a party supporting a minority cabinet from outside. */
@@ -331,7 +331,7 @@ readonly class MacroStateDTO
         public array $pendingSupport = [],
         public float $coalitionTakesOfficeAt = -1.0,
         public float $lastGovernmentFormedAt = -1.0,
-        /** @var list<array{day: float, formateur: string, round: int, formed: bool, cabinet: list<string>, support: list<string>}> The last talks, attempt by attempt. */
+        /** @var list<array{day: float, formateur: string, formed: bool, cabinet: list<string>, support: list<string>}> The last talks, attempt by attempt. */
         public array $formationLog = [],
         public float $termStartedAt = -1.0,
         public float $termStartDeflator = 0.0,

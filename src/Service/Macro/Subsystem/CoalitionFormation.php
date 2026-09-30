@@ -9,25 +9,36 @@ use App\Service\Macro\MacroEngine;
 use App\Service\Math\MathUtility;
 
 /**
- * Forming a government after a vote: who leads the talks, how many attempts they take, and the cabinet they produce.
+ * Forming a government after a vote: how many attempts the talks take, who leads each, and the cabinet they produce.
  *
- * The largest party leads first. It seeks a cabinet with a majority of its own, and failing that a minority cabinet
- * other parties support from outside; the second-largest party then has the same two rounds, and after that the lead
- * passes back and forth between the two until a government forms. In each attempt the formateur weighs every cabinet
- * it could lead on Martin & Stevenson's (2010) conditional logit -- minority status, minimal winning status, the number
- * of parties, whether it holds the largest party, its ideological range, whether it is the outgoing cabinet -- with a
- * Gumbel draw on each, and the best takes office if it clears the bar of no deal at all. What widens as the talks go on
- * is what may be offered: from the second round a minority cabinet with support, which almost always clears the bar.
- * Each attempt lasts an exponential time. The bar and the attempt length are fitted to how often a first attempt fails
- * (Golder 2010) and how long formations take (Bäck, Hellström, Lindvall & Teorell 2023).
+ * Every cabinet the Diet could seat is weighed on Martin & Stevenson's (2010) conditional logit -- minority status,
+ * minimal winning status, the number of parties, whether it holds the largest party, its ideological range, whether it
+ * is the outgoing cabinet, whether its parties campaigned as one bloc or ruled each other out, and how far its parties
+ * stand from the constitutional middle -- over the same choice set they estimated it on: every set of parties, not only
+ * those holding a party chosen to lead (Diermeier & Merlo (2004) find no support for handing the lead out in order of
+ * size). In each attempt a Gumbel draw on every cabinet picks the one tried, which is drawn in proportion to its odds,
+ * and the attempt succeeds if its draw beats the bar of no deal at all, a bar that falls with every attempt that fails
+ * as the parties' patience runs out. The party leading an attempt is the largest in the cabinet it tries. Each attempt
+ * lasts an exponential time. The bar, its fall and the attempt length are fitted to how often a first attempt fails
+ * (Golder 2010) and how long formations take and how widely that varies (Bäck, Hellström, Lindvall & Teorell 2023).
  *
- * A minority cabinet's support parties are the outsiders that bring it to a majority with every one of them needed,
- * the set spanning the narrowest range with the cabinet (de Swaan 1973). A party that alone holds a majority governs
- * alone, with no talks.
+ * The Diet votes in two blocs, as the Scandinavian parliaments do: the two bloc leaders, rivals for the premiership,
+ * rule each other out, and every other party declares before the vote for the bloc whose core -- the leader and the
+ * party fixed beside it -- stands nearer on the economic questions. A government
+ * whose parties, cabinet and supporters alike, all come from one bloc is a pre-electoral pact, for what a Scandinavian
+ * party promises before the vote is to put its bloc's leader in office, not to sit in the cabinet; one holding both
+ * leaders is an anti-pact. A party that stands far from
+ * the Diet's middle on the Council axis, the question of the constitutional order itself, is hard to take into cabinet
+ * and usually sustains one from outside instead: Martin & Stevenson's anti-system term.
+ *
+ * A minority cabinet's support parties are the outsiders that bring it to a majority, the set spanning the narrowest
+ * range with the cabinet (de Swaan 1973), and never a party that ruled out governing with one of the cabinet's: the
+ * range the cabinet is weighed on is its majority's, supporters included, for they vote its budgets. A party that
+ * alone holds a majority governs alone, with no talks.
  */
 final class CoalitionFormation
 {
-    /** Attempts after which the formateur's likeliest cabinet takes office regardless; a supported minority cabinet clears the bar long before. */
+    /** Attempts after which the cabinet tried takes office regardless: a safeguard, since the falling bar ends every talks in the harness within a dozen attempts. */
     private const MAX_ATTEMPTS = 1000;
     /** Distances equal to within this are ties. */
     private const RANGE_TOLERANCE = 1e-9;
@@ -39,9 +50,9 @@ final class CoalitionFormation
      * @param array<string, float>                $shares    Vote shares by party, which order parties tied on seats.
      * @param array<string, array<string, float>> $positions Positions by party and axis.
      * @param list<string>                        $statusQuo The outgoing cabinet.
-     * @return array{cabinet: list<string>, support: list<string>, days: float, log: list<array{day: float, formateur: string, round: int, formed: bool, cabinet: list<string>, support: list<string>}>}
-     *         The cabinet and its support parties, the days the talks took, and each attempt: the day it ended, who led
-     *         it, its round, and the cabinet that formed or, when none did, the one the formateur was likeliest to form.
+     * @return array{cabinet: list<string>, support: list<string>, days: float, log: list<array{day: float, formateur: string, formed: bool, cabinet: list<string>, support: list<string>}>}
+     *         The cabinet and its support parties, the days the talks took, and each attempt: the day it ended, the
+     *         party that led it, whether it formed a government, and the cabinet it tried.
      */
     public static function talks(array $seats, array $shares, array $positions, array $statusQuo, MathUtility $draws): array
     {
@@ -51,64 +62,47 @@ final class CoalitionFormation
             return ['cabinet' => [$largest], 'support' => [], 'days' => 0.0, 'log' => []];
         }
 
+        $options = self::options($seats, $positions);
+        $utilities = array_map(
+            static fn(array $option): float => self::utility($option['cabinet'], $option['support'], $seats, $positions, $statusQuo, $largest),
+            $options
+        );
+
         $log = [];
         $day = 0.0;
         for ($attempt = 1; ; ++$attempt) {
-            [$formateur, $round] = self::lead($attempt, $order[0], $order[1]);
-            $options = self::options($formateur, $round, $seats, $positions);
-            $utilities = array_map(
-                static fn(array $option): float => self::utility($option['cabinet'], $seats, $positions, $statusQuo, $largest),
-                $options
-            );
-
             $day += MacroEngine::FORMATION_ATTEMPT_DAYS * $draws->generateExponential();
-            $formed = $draws->generateUniform() < self::successProbability($utilities, MacroEngine::FORMATION_RESERVATION);
-            $chosen = $formed ? self::drawOption($utilities, $draws) : self::likeliest($utilities);
-            $formed = $formed || $attempt >= self::MAX_ATTEMPTS;
+            $tried = $options[self::drawOption($utilities, $draws)];
+            $bar = MacroEngine::FORMATION_RESERVATION - (MacroEngine::FORMATION_RESERVATION_STEP * ($attempt - 1));
+            $formed = $draws->generateUniform() < self::successProbability($utilities, $bar) || $attempt >= self::MAX_ATTEMPTS;
 
-            $log[] = ['day' => $day, 'formateur' => $formateur, 'round' => $round, 'formed' => $formed] + $options[$chosen];
+            $log[] = ['day' => $day, 'formateur' => self::leader($tried['cabinet'], $order), 'formed' => $formed] + $tried;
             if ($formed) {
-                return $options[$chosen] + ['days' => $day, 'log' => $log];
+                return $tried + ['days' => $day, 'log' => $log];
             }
         }
     }
 
     /**
-     * The formateur and round of an attempt: the largest party's two rounds, the second-largest's two, then the two
-     * in turn.
-     *
-     * @return array{0: string, 1: int}
-     */
-    public static function lead(int $attempt, string $first, string $second): array
-    {
-        return match (true) {
-            $attempt === 1 => [$first, AerieDiet::ROUND_MAJORITY],
-            $attempt === 2 => [$first, AerieDiet::ROUND_SUPPORT],
-            $attempt === 3 => [$second, AerieDiet::ROUND_MAJORITY],
-            $attempt === 4 => [$second, AerieDiet::ROUND_SUPPORT],
-            default => [$attempt % 2 === 1 ? $first : $second, AerieDiet::ROUND_RUNOFF],
-        };
-    }
-
-    /**
-     * The cabinets a formateur can offer in a round: every set of parties holding it with a majority, and from the
-     * second round every minority set too, each with the support parties that would carry it.
+     * The cabinets the Diet could seat: every set of parties, a majority on its own or a minority with the support
+     * parties that would carry it; a minority no eligible outsiders can carry is not on offer.
      *
      * @param array<string, int|float>            $seats     Seats by party.
      * @param array<string, array<string, float>> $positions Positions by party and axis.
      * @return list<array{cabinet: list<string>, support: list<string>}>
      */
-    public static function options(string $formateur, int $round, array $seats, array $positions): array
+    public static function options(array $seats, array $positions): array
     {
+        $distances = self::distances($positions);
         $options = [];
         foreach (self::subsets(AerieDiet::PARTIES) as $cabinet) {
-            if (!in_array($formateur, $cabinet, true)) {
-                continue;
-            }
             if (self::coalitionSeats($cabinet, $seats) >= AerieDiet::MAJORITY_SEATS) {
                 $options[] = ['cabinet' => $cabinet, 'support' => []];
-            } elseif ($round !== AerieDiet::ROUND_MAJORITY) {
-                $options[] = ['cabinet' => $cabinet, 'support' => self::supportFor($cabinet, $seats, $positions)];
+                continue;
+            }
+            $support = self::supportFor($cabinet, $seats, $positions, $distances);
+            if ($support !== null) {
+                $options[] = ['cabinet' => $cabinet, 'support' => $support];
             }
         }
 
@@ -116,21 +110,44 @@ final class CoalitionFormation
     }
 
     /**
-     * A minority cabinet's support parties: of the sets of outsiders that give it a majority, the one spanning the
-     * narrowest range with the cabinet, ties to fewer parties. That set needs every one of its members: dropping a
-     * supporter the majority does not need never widens the range.
+     * The party that leads the talks for a cabinet: its largest member.
      *
-     * @param list<string>                        $cabinet   The cabinet's parties.
-     * @param array<string, int|float>            $seats     Seats by party.
-     * @param array<string, array<string, float>> $positions Positions by party and axis.
-     * @return list<string> The support parties, in party order.
+     * @param list<string> $cabinet The cabinet's parties.
+     * @param list<string> $bySize  The Diet's parties from the most seats to the fewest (bySize()).
      */
-    public static function supportFor(array $cabinet, array $seats, array $positions): array
+    public static function leader(array $cabinet, array $bySize): string
     {
-        $outsiders = array_values(array_diff(AerieDiet::PARTIES, $cabinet));
+        foreach ($bySize as $party) {
+            if (in_array($party, $cabinet, true)) {
+                return $party;
+            }
+        }
+
+        throw new \InvalidArgumentException('A cabinet needs at least one party.');
+    }
+
+    /**
+     * A minority cabinet's support parties: of the sets of outsiders that give it a majority, the one spanning the
+     * narrowest range with the cabinet, ties to fewer parties, leaving out any party that ruled out governing with one of
+     * the cabinet's. That set needs every one of its members: dropping a supporter the majority does not need never
+     * widens the range.
+     *
+     * @param list<string>                               $cabinet   The cabinet's parties.
+     * @param array<string, int|float>                   $seats     Seats by party.
+     * @param array<string, array<string, float>>        $positions Positions by party and axis.
+     * @param array<string, array<string, float>>|null   $distances Distances between parties (distances()), if already worked out.
+     * @return list<string>|null The support parties, in party order; null when the outsiders who may support it fall short.
+     */
+    public static function supportFor(array $cabinet, array $seats, array $positions, ?array $distances = null): ?array
+    {
+        $distances ??= self::distances($positions);
+        $outsiders = array_values(array_filter(
+            array_diff(AerieDiet::PARTIES, $cabinet),
+            static fn(string $party): bool => array_filter($cabinet, static fn(string $member): bool => self::rulesOut($party, $member)) === []
+        ));
         $cabinetSeats = self::coalitionSeats($cabinet, $seats);
 
-        $best = [];
+        $best = null;
         $bestRange = INF;
         foreach (self::subsets($outsiders) as $support) {
             $total = $cabinetSeats + self::coalitionSeats($support, $seats);
@@ -138,9 +155,9 @@ final class CoalitionFormation
                 continue;
             }
 
-            $range = self::ideologicalRange(array_merge($cabinet, $support), $positions);
+            $range = self::rangeOf(array_merge($cabinet, $support), $distances);
             if ($range < $bestRange - self::RANGE_TOLERANCE
-                || (abs($range - $bestRange) <= self::RANGE_TOLERANCE && count($support) < count($best))) {
+                || (abs($range - $bestRange) <= self::RANGE_TOLERANCE && count($support) < count($best ?? []))) {
                 $best = $support;
                 $bestRange = $range;
             }
@@ -153,25 +170,111 @@ final class CoalitionFormation
      * A cabinet's log-odds on Martin & Stevenson's (2010) conditional logit.
      *
      * @param list<string>                        $cabinet   The cabinet's parties.
+     * @param list<string>                        $support   Its support parties, whose positions count toward its range.
      * @param array<string, int|float>            $seats     Seats by party.
      * @param array<string, array<string, float>> $positions Positions by party and axis.
      * @param list<string>                        $statusQuo The outgoing cabinet.
      * @param string                              $largest   The Diet's largest party.
      */
-    public static function utility(array $cabinet, array $seats, array $positions, array $statusQuo, string $largest): float
+    public static function utility(array $cabinet, array $support, array $seats, array $positions, array $statusQuo, string $largest): float
     {
         $minority = self::coalitionSeats($cabinet, $seats) < AerieDiet::MAJORITY_SEATS;
         $sorted = $cabinet;
         sort($sorted);
         $outgoing = $statusQuo;
         sort($outgoing);
+        $blocs = self::blocs($positions);
+        $government = array_merge($cabinet, $support);
+        $oneBloc = count($government) > 1 && count(array_unique(array_map(static fn(string $party): string => $blocs[$party], $government))) === 1;
+        $leaders = array_intersect(array_keys(AerieDiet::BLOC_CORES), $cabinet);
+        $median = self::councilMedian($seats, $positions);
+        $challenge = 0.0;
+        foreach ($cabinet as $party) {
+            $challenge += abs(AerieDiet::position($party, $positions)[AerieDiet::AXIS_COUNCIL] - $median);
+        }
 
         return ($minority ? MacroEngine::FORMATION_MINORITY_UTILITY : 0.0)
             + (self::isMinimalWinning($cabinet, $seats) ? MacroEngine::FORMATION_MINIMAL_WINNING_UTILITY : 0.0)
             + (MacroEngine::FORMATION_PARTY_UTILITY * count($cabinet))
             + (in_array($largest, $cabinet, true) ? MacroEngine::FORMATION_LARGEST_PARTY_UTILITY : 0.0)
-            + (MacroEngine::FORMATION_RANGE_UTILITY * self::ideologicalRange($cabinet, $positions))
-            + ($sorted === $outgoing ? MacroEngine::FORMATION_STATUS_QUO_UTILITY : 0.0);
+            + (MacroEngine::FORMATION_RANGE_UTILITY * self::ideologicalRange($government, $positions))
+            + ($sorted === $outgoing ? MacroEngine::FORMATION_STATUS_QUO_UTILITY : 0.0)
+            + ($oneBloc ? MacroEngine::FORMATION_PACT_UTILITY : 0.0)
+            + (count($leaders) > 1 ? MacroEngine::FORMATION_ANTIPACT_UTILITY : 0.0)
+            + (MacroEngine::FORMATION_ANTISYSTEM_UTILITY * $challenge);
+    }
+
+    /**
+     * The bloc each party campaigns in, by the leader it declared for: a core party belongs to its own leader's bloc, and
+     * every other party declares for the bloc whose core stands nearer on the economic questions, the first bloc on a
+     * tie.
+     *
+     * @param array<string, array<string, float>> $positions Positions by party and axis.
+     * @return array<string, string> The leader of each party's bloc, by party.
+     */
+    public static function blocs(array $positions): array
+    {
+        $centres = [];
+        foreach (AerieDiet::BLOC_CORES as $leader => $core) {
+            foreach (AerieDiet::BLOC_AXES as $axis) {
+                $centres[$leader][$axis] = array_sum(array_map(static fn(string $party): float => AerieDiet::position($party, $positions)[$axis], $core)) / count($core);
+            }
+        }
+
+        $blocs = [];
+        foreach (AerieDiet::PARTIES as $party) {
+            $nearest = null;
+            $nearestDistance = INF;
+            foreach (AerieDiet::BLOC_CORES as $leader => $core) {
+                if (in_array($party, $core, true)) {
+                    $nearest = $leader;
+                    break;
+                }
+                $point = AerieDiet::position($party, $positions);
+                $distance = sqrt(array_sum(array_map(static fn(string $axis): float => ($point[$axis] - $centres[$leader][$axis]) ** 2, AerieDiet::BLOC_AXES)));
+                if ($distance < $nearestDistance - self::RANGE_TOLERANCE) {
+                    $nearest = $leader;
+                    $nearestDistance = $distance;
+                }
+            }
+            $blocs[$party] = (string) $nearest;
+        }
+
+        return $blocs;
+    }
+
+    /**
+     * Whether two parties have ruled out governing together: the two bloc leaders.
+     */
+    public static function rulesOut(string $a, string $b): bool
+    {
+        return $a !== $b && isset(AerieDiet::BLOC_CORES[$a], AerieDiet::BLOC_CORES[$b]);
+    }
+
+    /**
+     * The Diet's median on the Council axis: the position of the party holding the middle seat when the parties are
+     * lined up from the populist end.
+     *
+     * @param array<string, int|float>            $seats     Seats by party.
+     * @param array<string, array<string, float>> $positions Positions by party and axis.
+     */
+    public static function councilMedian(array $seats, array $positions): float
+    {
+        $council = [];
+        foreach (AerieDiet::PARTIES as $party) {
+            $council[$party] = AerieDiet::position($party, $positions)[AerieDiet::AXIS_COUNCIL];
+        }
+        asort($council);
+        $half = self::coalitionSeats(AerieDiet::PARTIES, $seats) / 2.0;
+        $counted = 0.0;
+        foreach ($council as $party => $position) {
+            $counted += (float) ($seats[$party] ?? 0);
+            if ($counted >= $half) {
+                return $position;
+            }
+        }
+
+        return 0.0;
     }
 
     /**
@@ -233,16 +336,47 @@ final class CoalitionFormation
      */
     public static function ideologicalRange(array $members, array $positions): float
     {
-        $range = 0.0;
-        foreach ($members as $i => $a) {
-            $pa = AerieDiet::position($a, $positions);
-            foreach (array_slice($members, $i + 1) as $b) {
-                $pb = AerieDiet::position($b, $positions);
+        return self::rangeOf($members, self::distances($positions));
+    }
+
+    /**
+     * The distance between every two parties in the policy space.
+     *
+     * @param array<string, array<string, float>> $positions Positions by party and axis.
+     * @return array<string, array<string, float>>
+     */
+    private static function distances(array $positions): array
+    {
+        $points = [];
+        foreach (AerieDiet::PARTIES as $party) {
+            $points[$party] = AerieDiet::position($party, $positions);
+        }
+        $distances = [];
+        foreach (AerieDiet::PARTIES as $a) {
+            foreach (AerieDiet::PARTIES as $b) {
                 $squared = 0.0;
                 foreach (AerieDiet::AXES as $axis) {
-                    $squared += ($pa[$axis] - $pb[$axis]) ** 2;
+                    $squared += ($points[$a][$axis] - $points[$b][$axis]) ** 2;
                 }
-                $range = max($range, sqrt($squared));
+                $distances[$a][$b] = sqrt($squared);
+            }
+        }
+
+        return $distances;
+    }
+
+    /**
+     * The largest distance between two members, off a table of distances.
+     *
+     * @param list<string>                        $members   Parties.
+     * @param array<string, array<string, float>> $distances Distances between parties (distances()).
+     */
+    private static function rangeOf(array $members, array $distances): float
+    {
+        $range = 0.0;
+        foreach ($members as $i => $a) {
+            foreach (array_slice($members, $i + 1) as $b) {
+                $range = max($range, $distances[$a][$b]);
             }
         }
 
@@ -263,16 +397,6 @@ final class CoalitionFormation
         }
 
         return $total;
-    }
-
-    /**
-     * The index of the cabinet with the highest log-odds, the first on a tie.
-     *
-     * @param list<float> $utilities
-     */
-    public static function likeliest(array $utilities): int
-    {
-        return (int) array_search(max($utilities), $utilities, true);
     }
 
     /**

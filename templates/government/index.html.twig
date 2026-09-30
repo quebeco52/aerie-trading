@@ -91,7 +91,7 @@
 					{% if talks.leading %}
 						<div class="shrink-0 rounded border border-primary/30 bg-primary/5 px-3 py-2">
 							<p class="text-2xs font-bold uppercase tracking-wider text-primary">Attempt {{ talks.leading.attempt }}</p>
-							<p class="text-xs text-on-surface mt-0.5"><span class="inline-block w-2 h-2 rounded-full mr-1" style="background-color: {{ talks.leading.color }}" aria-hidden="true"></span><span class="font-bold">{{ talks.leading.name }}</span> seeks {{ talks.leading.seeking }}</p>
+							<p class="text-xs text-on-surface mt-0.5"><span class="inline-block w-2 h-2 rounded-full mr-1" style="background-color: {{ talks.leading.color }}" aria-hidden="true"></span><span class="font-bold">{{ talks.leading.name }}</span> is trying to form a government</p>
 						</div>
 					{% endif %}
 				</div>
@@ -105,7 +105,7 @@
 									{% if entry.formed %}
 										<span class="text-secondary font-bold">formed a government:</span> {{ entry.cabinet|join(', ') }}{% if entry.support is not empty %}, supported by {{ entry.support|join(', ') }}{% endif %}.
 									{% else %}
-										<span class="text-error font-bold">failed</span> to form {{ entry.seeking }}; its likeliest cabinet was {{ entry.cabinet|join(', ') }}{% if entry.support is not empty %} with {{ entry.support|join(', ') }} in support{% endif %}.
+										<span class="text-error font-bold">failed</span> to form a cabinet of {{ entry.cabinet|join(', ') }}{% if entry.support is not empty %} with {{ entry.support|join(', ') }} in support{% endif %}.
 									{% endif %}
 								</span>
 							</li>
@@ -120,7 +120,8 @@
 		<div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
 			<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/15" aria-labelledby="diet-heading">
 				<h2 id="diet-heading" class="text-sm font-bold text-on-surface">The Diet</h2>
-				<p class="text-3xs text-on-surface-variant mt-0.5">{{ rules.seats }} seats, from the largest state on the left to the smallest on the right. The cabinet's seats are solid, its supporters' half-filled.</p>
+				<p class="text-3xs text-on-surface-variant mt-0.5">{{ rules.seats }} seats, from the largest state on the left to the smallest on the right. The cabinet's seats are solid, its supporters' half-filled.
+					The blocs: {% for bloc in rules.blocSeats %}<span class="inline-block w-1.5 h-1.5 rounded-full mx-0.5 align-middle" style="background-color: {{ bloc.color }}" aria-hidden="true"></span>{{ bloc.name }}'s {{ bloc.seats }}{{ not loop.last ? ', ' : '.' }}{% endfor %}</p>
 
 				<svg viewBox="-108 -106 216 114" class="w-full mt-4 max-h-72" role="img" aria-label="Diet seats by party: {% for party in parties %}{{ party.name }} {{ party.seats }}{{ not loop.last ? ', ' : '' }}{% endfor %}">
 					{% for seat in hemicycle %}
@@ -146,6 +147,7 @@
 									<span class="inline-flex items-center gap-2">
 										<span class="w-2.5 h-2.5 rounded-full shrink-0" style="background-color: {{ party.color }}" aria-hidden="true"></span>
 										<span class="font-bold text-on-surface">{{ party.name }}</span>
+										<span class="text-3xs uppercase tracking-wider text-on-surface-variant" title="{{ party.leadsBloc ? 'Leads a bloc and rules out governing with the other leader' : 'Declared before the vote for the bloc leader it stands nearer' }}"><span class="inline-block w-1.5 h-1.5 rounded-full mr-0.5 align-middle" style="background-color: {{ party.blocColor }}" aria-hidden="true"></span>{{ party.leadsBloc ? 'Leads a bloc' : 'Backs ' ~ party.bloc }}</span>
 										{% if party.governing %}<span class="text-3xs font-bold uppercase tracking-wider text-secondary">{{ government.caretaker ? 'Caretaker' : 'In government' }}</span>{% elseif party.supporting %}<span class="text-3xs font-bold uppercase tracking-wider text-primary">Supports</span>{% endif %}
 									</span>
 								</th>
@@ -163,20 +165,20 @@
 			<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/15" aria-labelledby="compass-heading">
 				<h2 id="compass-heading" class="text-sm font-bold text-on-surface">The parties</h2>
 				<p class="text-3xs text-on-surface-variant mt-0.5">
-					Each party is fixed on the question it was founded on and drifts on the other two between elections. The cabinet is joined by
-					dashed lines; the diamond is its own position, its parties weighted by their seats. Faint trails are past positions. The strip
-					beneath is the third question: how far to trust the Council's technocrats.
+					Each party is fixed on the question it was founded on. On the other two it strays between elections and is pulled back toward
+					where it stood at the founding. The cabinet is joined by dashed lines; the diamond is its own position, its parties weighted by
+					their seats. Faint trails are past positions. The strip beneath is the third question: how far to trust the Council's technocrats.
 				</p>
 
 				{% set w = compass.halfWidth %}
-				<svg viewBox="{{ -w - 36 }} {{ -w - 16 }} {{ 2 * w + 72 }} {{ 2 * w + 32 }}" class="w-full mt-4 max-h-96" role="img" aria-label="Party positions: openness across, size of state up">
+				{% set f = compass.fontSize %}
+				<svg viewBox="{{ compass.viewBox|join(' ') }}" class="w-full mt-4 max-h-[28rem]" role="img" aria-label="Party positions: openness across and size of state up, and beneath them the Council axis, populist on the left and technocratic on the right">
 					<rect x="{{ -w }}" y="{{ -w }}" width="{{ 2 * w }}" height="{{ 2 * w }}" fill="none" class="stroke-outline-variant" stroke-opacity="0.4" stroke-width="0.6"></rect>
 					<line x1="{{ -w }}" y1="0" x2="{{ w }}" y2="0" class="stroke-outline-variant" stroke-opacity="0.6" stroke-width="0.6"></line>
 					<line x1="0" y1="{{ -w }}" x2="0" y2="{{ w }}" class="stroke-outline-variant" stroke-opacity="0.6" stroke-width="0.6"></line>
-					<text x="0" y="{{ -w - 5 }}" text-anchor="middle" font-size="7" class="fill-on-surface-variant">Big state</text>
-					<text x="0" y="{{ w + 11 }}" text-anchor="middle" font-size="7" class="fill-on-surface-variant">Small state</text>
-					<text x="{{ -w - 4 }}" y="2" text-anchor="end" font-size="7" class="fill-on-surface-variant">Closed</text>
-					<text x="{{ w + 4 }}" y="2" text-anchor="start" font-size="7" class="fill-on-surface-variant">Open</text>
+					{% for axis in compass.axes %}
+						<text x="{{ axis.x }}" y="{{ axis.y }}" text-anchor="{{ axis.anchor }}" font-size="{{ f }}" class="fill-on-surface-variant">{{ axis.text }}</text>
+					{% endfor %}
 
 					{% for party in compass.parties %}
 						{% if party.trail|length > 1 %}
@@ -187,27 +189,32 @@
 						<line x1="{{ link.x1 }}" y1="{{ link.y1 }}" x2="{{ link.x2 }}" y2="{{ link.y2 }}" class="stroke-on-surface" stroke-width="1" stroke-dasharray="3 2" stroke-opacity="0.7"></line>
 					{% endfor %}
 					{% for party in compass.parties %}
-						<circle cx="{{ party.x }}" cy="{{ party.y }}" r="{{ 3 + party.seats / 20 }}" fill="{{ party.color }}" fill-opacity="{{ party.governing ? 1 : 0.55 }}" class="stroke-surface" stroke-width="1"></circle>
-						<text x="{{ party.x }}" y="{{ party.y - 6 - party.seats / 20 }}" text-anchor="middle" font-size="7" font-weight="bold" class="fill-on-surface">{{ party.name }}</text>
+						<circle cx="{{ party.x }}" cy="{{ party.y }}" r="{{ party.r }}" fill="{{ party.color }}" fill-opacity="{{ party.governing ? 1 : 0.55 }}" class="stroke-surface" stroke-width="1"></circle>
+					{% endfor %}
+					{% for party in compass.parties %}
+						<text x="{{ party.labelX }}" y="{{ party.labelY }}" text-anchor="{{ party.labelAnchor }}" font-size="{{ f }}" font-weight="bold" class="fill-on-surface">{{ party.label }}</text>
 					{% endfor %}
 					<rect x="{{ compass.government.x - 3.5 }}" y="{{ compass.government.y - 3.5 }}" width="7" height="7" transform="rotate(45 {{ compass.government.x }} {{ compass.government.y }})" class="fill-on-surface"></rect>
-				</svg>
 
-				<svg viewBox="{{ -w - 36 }} -16 {{ 2 * w + 72 }} 32" class="w-full mt-2" role="img" aria-label="Party positions on the Council axis: populist on the left, technocratic on the right">
-					<line x1="{{ -w }}" y1="0" x2="{{ w }}" y2="0" class="stroke-outline-variant" stroke-opacity="0.6" stroke-width="0.6"></line>
-					<line x1="0" y1="-4" x2="0" y2="4" class="stroke-outline-variant" stroke-opacity="0.6" stroke-width="0.6"></line>
-					<text x="{{ -w - 4 }}" y="2" text-anchor="end" font-size="7" class="fill-on-surface-variant">Populist</text>
-					<text x="{{ w + 4 }}" y="2" text-anchor="start" font-size="7" class="fill-on-surface-variant">Technocratic</text>
-					{% for party in compass.parties %}
-						{% for x in party.councilTrail %}
-							<circle cx="{{ x }}" cy="0" r="1.2" fill="{{ party.color }}" fill-opacity="0.25"></circle>
+					<g transform="translate(0 {{ compass.stripY }})">
+						<line x1="{{ -w }}" y1="0" x2="{{ w }}" y2="0" class="stroke-outline-variant" stroke-opacity="0.6" stroke-width="0.6"></line>
+						<line x1="0" y1="-4" x2="0" y2="4" class="stroke-outline-variant" stroke-opacity="0.6" stroke-width="0.6"></line>
+						{% for axis in compass.stripAxes %}
+							<text x="{{ axis.x }}" y="{{ axis.y }}" text-anchor="{{ axis.anchor }}" font-size="{{ f }}" class="fill-on-surface-variant">{{ axis.text }}</text>
 						{% endfor %}
-					{% endfor %}
-					{% for party in compass.parties %}
-						<circle cx="{{ party.councilX }}" cy="0" r="{{ 2.5 + party.seats / 25 }}" fill="{{ party.color }}" fill-opacity="{{ party.governing ? 1 : 0.55 }}" class="stroke-surface" stroke-width="1"></circle>
-						<text x="{{ party.councilX }}" y="{{ loop.index is odd ? -8 : 14 }}" text-anchor="middle" font-size="6" font-weight="bold" class="fill-on-surface">{{ party.name|split(' ')|last }}</text>
-					{% endfor %}
-					<rect x="{{ compass.government.councilX - 3 }}" y="-3" width="6" height="6" transform="rotate(45 {{ compass.government.councilX }} 0)" class="fill-on-surface"></rect>
+						{% for party in compass.parties %}
+							{% for x in party.councilTrail %}
+								<circle cx="{{ x }}" cy="0" r="1.2" fill="{{ party.color }}" fill-opacity="0.25"></circle>
+							{% endfor %}
+						{% endfor %}
+						{% for party in compass.parties %}
+							<circle cx="{{ party.councilX }}" cy="0" r="{{ party.councilR }}" fill="{{ party.color }}" fill-opacity="{{ party.governing ? 1 : 0.55 }}" class="stroke-surface" stroke-width="1"></circle>
+						{% endfor %}
+						{% for party in compass.parties %}
+							<text x="{{ party.stripLabelX }}" y="{{ party.stripLabelY }}" text-anchor="middle" font-size="{{ f }}" font-weight="bold" class="fill-on-surface">{{ party.label }}</text>
+						{% endfor %}
+						<rect x="{{ compass.government.councilX - 3 }}" y="-3" width="6" height="6" transform="rotate(45 {{ compass.government.councilX }} 0)" class="fill-on-surface"></rect>
+					</g>
 				</svg>
 
 				<table class="w-full mt-3 text-xs">
@@ -224,9 +231,9 @@
 						{% for party in parties %}
 							<tr>
 								<th scope="row" class="py-1.5 text-left font-normal text-on-surface">{{ party.name }}</th>
-								<td class="py-1.5 text-right font-mono tabular-nums {{ party.primaryAxis == 'state' ? 'text-on-surface font-bold' : 'text-on-surface-variant' }}">{{ (party.state >= 0 ? '+' : '') ~ party.state|number_format(2) }}</td>
-								<td class="py-1.5 text-right font-mono tabular-nums {{ party.primaryAxis == 'openness' ? 'text-on-surface font-bold' : 'text-on-surface-variant' }}">{{ (party.openness >= 0 ? '+' : '') ~ party.openness|number_format(2) }}</td>
-								<td class="py-1.5 text-right font-mono tabular-nums {{ party.primaryAxis == 'council' ? 'text-on-surface font-bold' : 'text-on-surface-variant' }}">{{ (party.council >= 0 ? '+' : '') ~ party.council|number_format(2) }}</td>
+								<td class="py-1.5 text-right font-mono tabular-nums {{ 'state' in party.fixedAxes ? 'text-on-surface font-bold' : 'text-on-surface-variant' }}">{{ (party.state >= 0 ? '+' : '') ~ party.state|number_format(2) }}</td>
+								<td class="py-1.5 text-right font-mono tabular-nums {{ 'openness' in party.fixedAxes ? 'text-on-surface font-bold' : 'text-on-surface-variant' }}">{{ (party.openness >= 0 ? '+' : '') ~ party.openness|number_format(2) }}</td>
+								<td class="py-1.5 text-right font-mono tabular-nums {{ 'council' in party.fixedAxes ? 'text-on-surface font-bold' : 'text-on-surface-variant' }}">{{ (party.council >= 0 ? '+' : '') ~ party.council|number_format(2) }}</td>
 							</tr>
 						{% endfor %}
 						<tr>
@@ -237,7 +244,7 @@
 						</tr>
 					</tbody>
 				</table>
-				<p class="text-3xs text-on-surface-variant mt-2">Bold is the axis a party is defined by and never leaves.</p>
+				<p class="text-3xs text-on-surface-variant mt-2">Bold is an axis a party is defined by and never leaves.</p>
 			</section>
 		</div>
 
@@ -380,7 +387,7 @@
 							<tr>
 								<th scope="col" class="px-5 py-2.5 text-left font-bold">Held</th>
 								{% for party in parties %}
-									<th scope="col" class="px-3 py-2.5 text-right font-bold" title="{{ party.name }}"><span class="inline-block w-2 h-2 rounded-full mr-1" style="background-color: {{ party.color }}" aria-hidden="true"></span>{{ party.name|split(' ')|last }}</th>
+									<th scope="col" class="px-3 py-2.5 text-right font-bold" title="{{ party.name }}"><span class="inline-block w-2 h-2 rounded-full mr-1" style="background-color: {{ party.color }}" aria-hidden="true"></span>{{ party.label }}</th>
 								{% endfor %}
 								<th scope="col" class="px-3 py-2.5 text-left font-bold">Government</th>
 								<th scope="col" class="px-3 py-2.5 text-right font-bold hidden md:table-cell" title="The outgoing government's change in combined vote share">Incumbent swing</th>
@@ -482,23 +489,33 @@
 
 			{% set formation_list = [
 				{
-					name: 'The rounds',
-					text: 'A party with ' ~ rules.majority ~ ' seats of its own governs alone. Otherwise the largest party leads the talks: first it seeks a cabinet with a majority, then, if that fails, a minority cabinet that other parties will support from outside. The second-largest party then gets the same two rounds, and after that the lead passes back and forth between the two until a government forms.',
-					source: 'The formateur process; Baron & Ferejohn (1989); Diermeier & Merlo (2004)'
+					name: 'Which cabinet',
+					text: 'A party with ' ~ rules.majority ~ ' seats of its own governs alone. Otherwise every cabinet the Diet could seat is weighed as real ones have been chosen, a minority cabinet with the support parties that would carry it. Holding the Diet\'s largest party adds ' ~ rules.largestPartyUtility|number_format(2) ~ ' to its odds on the log scale, needing every member for the majority ' ~ rules.minimalWinningUtility|number_format(2) ~ ', being the outgoing cabinet ' ~ rules.statusQuoUtility|number_format(2) ~ '; each party in it costs ' ~ (-rules.partyUtility)|number_format(2) ~ ', lacking a majority ' ~ (-rules.minorityUtility)|number_format(2) ~ ', and each unit of distance between the two furthest parties of its majority, supporters included ' ~ (-rules.rangeUtility)|number_format(2) ~ '. A random draw on every cabinet stands for everything else that sways the talks.',
+					source: 'Martin & Stevenson (2010), Table 1: 256 formations in 17 West European democracies, a unit read as ' ~ rules.manifestoPointsPerUnit|number_format(0) ~ ' points of their left-right scale, fitted so a third of cabinets are minority cabinets, as in Western Europe since 1945 (ParlGov); Benoit & Laver (2007) put it at 30'
 				},
 				{
-					name: 'Which cabinet',
-					text: 'The party leading the talks weighs every cabinet it could lead as real ones have been chosen. Holding the Diet\'s largest party adds ' ~ rules.largestPartyUtility|number_format(2) ~ ' to its odds on the log scale, needing every member for the majority ' ~ rules.minimalWinningUtility|number_format(2) ~ ', being the outgoing cabinet ' ~ rules.statusQuoUtility|number_format(2) ~ '; each party in it costs ' ~ (-rules.partyUtility)|number_format(2) ~ ', lacking a majority ' ~ (-rules.minorityUtility)|number_format(2) ~ ', and each unit of distance between its two furthest members ' ~ (-rules.rangeUtility)|number_format(1) ~ '. A random draw on every cabinet stands for everything else that sways the talks.',
-					source: 'Martin & Stevenson (2010), Table 1: 256 formations in 17 West European democracies'
+					name: 'Blocs',
+					text: 'The Diet votes in two blocs. ' ~ rules.blocLeaders|join(' and ') ~ ', rivals for the premiership, rule out governing together; each has at its core the party fixed beside it on the size of the state, ' ~ rules.blocCores|join(' and ') ~ '. Every other party declares before each vote for the bloc whose core stands nearer on the economic questions, the size of the state and openness, so a party that drifts across can change sides; the Council question cuts across both. A cabinet of one bloc\'s parties is a pact, ' ~ rules.pactUtility|number_format(2) ~ ' on the log scale; one holding both leaders is ruled out, ' ~ rules.antipactUtility|number_format(2) ~ ', and neither leader will support the other\'s cabinet from outside.',
+					source: 'Martin & Stevenson (2010), Table 1: pre-electoral pacts and anti-pacts; the red and blue blocs of Denmark, Sweden and Norway'
+				},
+				{
+					name: 'The firewall',
+					text: 'The Council axis asks about the constitutional order itself. Each unit a cabinet party stands from the Diet\'s middle on it costs ' ~ (-rules.antisystemUtility)|number_format(2) ~ ' on the log scale, so the parties at its ends seldom enter a cabinet and usually support one from outside instead. A party that moves toward the middle becomes a partner again. The cost falls on both ends: a party that would make the Diet answer to the Council is as hard to govern with as one that would tear the Council down.',
+					source: 'Martin & Stevenson (2010): anti-system parties in coalition; the strength fitted so the axis\'s ends sit in cabinet as seldom as Scandinavia\'s radical parties since 1945 (ParlGov: 4 in 70). On the populist side, real parties govern less the more anti-elite they are (Chapel Hill expert survey, 2014-2024); the technocratic side is the District\'s own'
+				},
+				{
+					name: 'Who leads',
+					text: 'Each attempt tries one cabinet, drawn by those odds, and its largest party leads the talks for it. So the Diet\'s largest party leads most attempts, but not when the cabinet likeliest to form leaves it out.',
+					source: 'Diermeier & Merlo (2004): no evidence that the lead passes down the parties in order of size'
 				},
 				{
 					name: 'Talks that fail',
-					text: 'An attempt succeeds only if its best cabinet clears the bar of no deal at all, ' ~ rules.reservation|number_format(2) ~ ' on the same scale. What widens as the talks go on is what may be offered: from the second round a minority cabinet with support, which almost always clears it. An attempt lasts ' ~ rules.attemptDays|number_format(0) ~ ' days on average, drawn at random, and talks average ' ~ rules.formationMeanDays|number_format(0) ~ ' days.',
-					source: 'Fitted to Golder (2010): nearly a third of formations need more than one attempt; and Bäck, Hellström, Lindvall & Teorell (2023): 34 days on average, with a spread about as wide'
+					text: 'An attempt succeeds only if its cabinet clears the bar of no deal at all, ' ~ rules.reservation|number_format(2) ~ ' on the same scale; otherwise the talks try again, and each failure lowers the bar by ' ~ rules.reservationStep|number_format(2) ~ ' as patience runs out. An attempt lasts ' ~ rules.attemptDays|number_format(0) ~ ' days on average, drawn at random, and talks average ' ~ rules.formationMeanDays|number_format(0) ~ ' days.',
+					source: 'Fitted to Golder (2010): nearly a third of formations need more than one attempt; and Bäck, Hellström, Lindvall & Teorell (2023): 34 days on average, with a spread about as wide, which is what sets how fast the bar falls'
 				},
 				{
 					name: 'Support parties',
-					text: 'A minority cabinet\'s supporters are the parties outside it that give it a majority, each of them needed, spanning the narrowest range with it. The cabinet proposes the budget and each supporter accepts only a lever that is no further from its own policy than the one in force. A supporter can stop the cabinet moving policy away from it, but cannot pull policy its way.',
+					text: 'A minority cabinet\'s supporters are the parties outside it that give it a majority, each of them needed, spanning the narrowest range with it, and never a party that ruled out governing with one of its parties. The cabinet proposes the budget and each supporter accepts only a lever that is no further from its own policy than the one in force. A supporter can stop the cabinet moving policy away from it, but cannot pull policy its way.',
 					source: 'de Swaan (1973); Romer & Rosenthal (1978), the agenda setter and the veto player'
 				},
 				{

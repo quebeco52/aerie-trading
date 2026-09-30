@@ -34,7 +34,7 @@ class ElectionRecorderTest extends TestCase
             ['day' => 12.5, 'formateur' => Diet::CIVIC, 'round' => 1, 'formed' => false, 'cabinet' => [Diet::CIVIC, Diet::VANGUARD], 'support' => []],
             ['day' => 30.25, 'formateur' => Diet::CIVIC, 'round' => 2, 'formed' => true, 'cabinet' => [Diet::CIVIC, Diet::IRON_HARBOR], 'support' => [Diet::COMMON_LOT]],
         ];
-        $positions = Diet::SEED_POSITIONS;
+        $positions = Diet::HOME_POSITIONS;
         $positions[Diet::CIVIC][Diet::AXIS_COUNCIL] = 0.1;
         $election = $this->recorder(null)->record(new MacroStateDTO(
             totalTime: 4.0,

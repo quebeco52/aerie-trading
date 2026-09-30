@@ -10,6 +10,7 @@ use App\Entity\DietElection;
 use App\Repository\DietElectionRepository;
 use App\Service\Macro\MacroEngine;
 use App\Service\View\GovernmentPageBuilder;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
 class GovernmentPageBuilderTest extends TestCase
@@ -27,10 +28,19 @@ class GovernmentPageBuilderTest extends TestCase
     {
         $page = $this->builder()->build(new MacroStateDTO());
 
-        $this->assertSame(['The Vanguard', 'Exchange Party', 'The Chartists'], array_column($page['government']['members'], 'name'));
-        $this->assertSame(155, $page['government']['seats']);
-        $this->assertSame([], $page['government']['support']);
-        $this->assertFalse($page['government']['minority']);
+        $this->assertSame(['The Vanguard'], array_column($page['government']['members'], 'name'));
+        $this->assertSame(80, $page['government']['seats']);
+        $this->assertSame(['Exchange Party', 'The Chartists', 'The Free Port Compact'], array_column($page['government']['support'], 'name'));
+        $this->assertSame(155, $page['government']['supportedSeats']);
+        $this->assertTrue($page['government']['minority']);
+        $this->assertSame(
+            [75 + 35 + 15 + 20, 80 + 30 + 20 + 25],
+            array_column($page['rules']['blocSeats'], 'seats'),
+            'The blocs: the Civic Front with the Harbor, the Common Lot and the Guilds; the Vanguard with the Exchange, the Chartists and the Free Port.'
+        );
+        $tags = array_column($page['parties'], 'bloc', 'key');
+        $this->assertSame('Vanguard', $tags[Diet::CHARTISTS]);
+        $this->assertSame('Civic', $tags[Diet::IRON_HARBOR]);
         $this->assertNull($page['talks'], 'Before any vote there are no talks to show.');
         $this->assertFalse($page['government']['supermajority']);
         $this->assertSame('At the founding', $page['government']['formed']);
@@ -51,8 +61,8 @@ class GovernmentPageBuilderTest extends TestCase
         $leftmost = array_reduce($page['hemicycle'], static fn(?array $carry, array $seat): array => $carry === null || $seat['x'] < $carry['x'] ? $seat : $carry);
         $rightmost = array_reduce($page['hemicycle'], static fn(?array $carry, array $seat): array => $carry === null || $seat['x'] > $carry['x'] ? $seat : $carry);
 
-        $this->assertSame(GovernmentPageBuilder::PARTY_COLORS[Diet::CIVIC], $leftmost['color']);
-        $this->assertSame(GovernmentPageBuilder::PARTY_COLORS[Diet::VANGUARD], $rightmost['color']);
+        $this->assertContains($leftmost['color'], [GovernmentPageBuilder::PARTY_COLORS[Diet::CIVIC], GovernmentPageBuilder::PARTY_COLORS[Diet::BASTION_GUILDS]]);
+        $this->assertContains($rightmost['color'], [GovernmentPageBuilder::PARTY_COLORS[Diet::VANGUARD], GovernmentPageBuilder::PARTY_COLORS[Diet::FREE_PORT]]);
     }
 
     /** The history runs newest first, marks a change of government, and each vote leaves a point on every party's trail. */
@@ -80,8 +90,8 @@ class GovernmentPageBuilderTest extends TestCase
     public function testTalksUnderWayShowOnlyTheAttemptsWhoseDayHasPassed(): void
     {
         $log = [
-            ['day' => 20.0, 'formateur' => Diet::VANGUARD, 'round' => 1, 'formed' => false, 'cabinet' => [Diet::VANGUARD, Diet::EXCHANGE, Diet::CHARTISTS], 'support' => []],
-            ['day' => 50.0, 'formateur' => Diet::VANGUARD, 'round' => 2, 'formed' => true, 'cabinet' => [Diet::VANGUARD], 'support' => [Diet::EXCHANGE, Diet::CHARTISTS]],
+            ['day' => 20.0, 'formateur' => Diet::VANGUARD, 'formed' => false, 'cabinet' => [Diet::VANGUARD, Diet::EXCHANGE, Diet::CHARTISTS], 'support' => []],
+            ['day' => 50.0, 'formateur' => Diet::VANGUARD, 'formed' => true, 'cabinet' => [Diet::VANGUARD], 'support' => [Diet::EXCHANGE, Diet::CHARTISTS]],
         ];
         $vote = $this->election(4.0, [Diet::VANGUARD], [Diet::VANGUARD, Diet::EXCHANGE, Diet::CHARTISTS])->setSupport([Diet::EXCHANGE, Diet::CHARTISTS])->setFormation($log)->setFormationDays(50.0);
 
@@ -100,7 +110,7 @@ class GovernmentPageBuilderTest extends TestCase
         $this->assertSame('The Vanguard', $page['talks']['leading']['name']);
         $this->assertSame(2, $page['talks']['leading']['attempt']);
         $this->assertTrue($page['government']['caretaker']);
-        $this->assertSame(['The Vanguard', 'Exchange Party', 'The Chartists'], array_column($page['government']['members'], 'name'), 'The outgoing cabinet stays on.');
+        $this->assertSame(['The Vanguard'], array_column($page['government']['members'], 'name'), 'The outgoing cabinet stays on.');
         $this->assertSame('caretaker', array_column($page['budget']['levers'], null, 'name')['Corporate tax rate']['status']);
         $this->assertFalse($page['history'][0]['formed']);
         $this->assertSame([], $page['history'][0]['coalition'], 'The history gives the talks away.');
@@ -123,11 +133,11 @@ class GovernmentPageBuilderTest extends TestCase
         ));
 
         $this->assertTrue($page['government']['minority']);
-        $this->assertSame(95, $page['government']['seats']);
-        $this->assertSame(155, $page['government']['supportedSeats']);
+        $this->assertSame(80, $page['government']['seats']);
+        $this->assertSame(130, $page['government']['supportedSeats']);
         $this->assertSame(['Exchange Party', 'The Chartists'], array_column($page['government']['support'], 'name'));
-        $this->assertCount(60, array_filter($page['hemicycle'], static fn(array $seat): bool => $seat['supporting']));
-        $this->assertCount(95, array_filter($page['hemicycle'], static fn(array $seat): bool => $seat['governing']));
+        $this->assertCount(50, array_filter($page['hemicycle'], static fn(array $seat): bool => $seat['supporting']));
+        $this->assertCount(80, array_filter($page['hemicycle'], static fn(array $seat): bool => $seat['governing']));
         foreach ($page['compass']['parties'] as $party) {
             $this->assertEqualsWithDelta($party['council'] * 100.0, $party['councilX'], 1e-9, 'The Council strip places every party on its axis.');
         }
@@ -150,10 +160,11 @@ class GovernmentPageBuilderTest extends TestCase
         $this->assertFalse($page['budget']['braking']);
     }
 
-    /** The founding government's cut waits on the Council while debt is over the line; a lever that costs no revenue waits only on the next round. */
+    /** A majority government's cut waits on the Council while debt is over the line; a lever that costs no revenue waits only on the next round. */
     public function testTheBudgetShowsWhatTheCouncilHolds(): void
     {
-        $braked = $this->builder()->build(new MacroStateDTO(totalTime: 0.2, sovereignDebtToGdp: MacroEngine::SOVEREIGN_RISK_DEBT_THRESHOLD + 0.03));
+        $rightBloc = Diet::membership([Diet::VANGUARD, Diet::EXCHANGE, Diet::CHARTISTS, Diet::FREE_PORT]);
+        $braked = $this->builder()->build(new MacroStateDTO(totalTime: 0.2, sovereignDebtToGdp: MacroEngine::SOVEREIGN_RISK_DEBT_THRESHOLD + 0.03, governingCoalition: $rightBloc, supportParties: Diet::membership([])));
         $levers = array_column($braked['budget']['levers'], null, 'name');
 
         $this->assertTrue($braked['budget']['braking']);
@@ -164,9 +175,91 @@ class GovernmentPageBuilderTest extends TestCase
         $this->assertSame('pending', $levers['Labour force growth']['status']);
         $this->assertSame('Year 1 Q3', $braked['budget']['nextRound']);
 
-        $free = $this->builder()->build(new MacroStateDTO(totalTime: 0.2, sovereignDebtToGdp: 0.5));
+        $free = $this->builder()->build(new MacroStateDTO(totalTime: 0.2, sovereignDebtToGdp: 0.5, governingCoalition: $rightBloc, supportParties: Diet::membership([])));
         $this->assertFalse($free['budget']['braking']);
         $this->assertSame('pending', array_column($free['budget']['levers'], null, 'name')['Corporate tax rate']['status']);
+    }
+
+    /**
+     * With parties crowded together -- the Chartists, the Exchange Party and the Common Lot close on the plane, the
+     * Civic Front, the Vanguard and the Chartists close on the Council strip -- or all eight at their homes, no label
+     * lands on another or on an axis name, and none runs off the drawing.
+     *
+     * @param array<string, float> $seats
+     * @param array<string, array<string, float>> $positions
+     */
+    #[DataProvider('crowdedDiets')]
+    public function testNoLabelCrowdsAnotherWhenThePartiesBunch(array $seats, array $positions): void
+    {
+        $page = $this->builder()->build(new MacroStateDTO(dietSeats: $seats, partyPositions: $positions));
+        $compass = $page['compass'];
+        $size = $compass['fontSize'];
+        $box = static function (string $text, float $x, float $y, string $anchor) use ($size): array {
+            $width = mb_strlen($text) * $size * GovernmentPageBuilder::COMPASS_CHARACTER_WIDTH;
+            $left = match ($anchor) { 'start' => $x, 'end' => $x - $width, default => $x - ($width / 2.0) };
+
+            return [$left, $y - (0.8 * $size), $left + $width, $y + (0.2 * $size)];
+        };
+        $apart = static fn(array $a, array $b): bool => $a[2] <= $b[0] || $b[2] <= $a[0] || $a[3] <= $b[1] || $b[3] <= $a[1];
+        [$left, $top, $width, $height] = $compass['viewBox'];
+
+        $plane = array_map(static fn(array $axis): array => $box($axis['text'], $axis['x'], $axis['y'], $axis['anchor']), $compass['axes']);
+        $strip = array_map(static fn(array $axis): array => $box($axis['text'], $axis['x'], $axis['y'], $axis['anchor']), $compass['stripAxes']);
+        foreach ($compass['parties'] as $party) {
+            $this->assertSame(GovernmentPageBuilder::PARTY_LABELS[$party['key']], $party['label']);
+            $plane[] = $box($party['label'], $party['labelX'], $party['labelY'], $party['labelAnchor']);
+            $strip[] = $box($party['label'], $party['stripLabelX'], $party['stripLabelY'], 'middle');
+        }
+        foreach (['plane' => $plane, 'strip' => $strip] as $name => $boxes) {
+            foreach ($boxes as $i => $a) {
+                $this->assertGreaterThanOrEqual($left, $a[0], "A {$name} label runs off the left.");
+                $this->assertLessThanOrEqual($left + $width, $a[2], "A {$name} label runs off the right.");
+                foreach (array_slice($boxes, $i + 1, null, true) as $j => $b) {
+                    $this->assertTrue($apart($a, $b), "Two {$name} labels overlap ({$i} and {$j}).");
+                }
+            }
+        }
+        foreach ($plane as $a) {
+            $this->assertGreaterThanOrEqual($top, $a[1]);
+            $this->assertLessThanOrEqual($compass['stripY'] - 16.0, $a[3], 'A plane label runs into the strip.');
+        }
+        foreach ($strip as $a) {
+            $this->assertLessThanOrEqual($top + $height, $compass['stripY'] + $a[3], 'A strip label runs off the bottom.');
+        }
+    }
+
+    /** @return array<string, array{array<string, float>, array<string, array<string, float>>}> */
+    public static function crowdedDiets(): array
+    {
+        return [
+            'six parties bunched' => [
+                [Diet::CIVIC => 83.0, Diet::VANGUARD => 84.0, Diet::IRON_HARBOR => 48.0, Diet::EXCHANGE => 50.0, Diet::CHARTISTS => 21.0, Diet::COMMON_LOT => 14.0],
+                [
+                    Diet::CIVIC => [Diet::AXIS_STATE => 0.6, Diet::AXIS_OPENNESS => -0.04, Diet::AXIS_COUNCIL => 0.74],
+                    Diet::VANGUARD => [Diet::AXIS_STATE => -0.6, Diet::AXIS_OPENNESS => -0.93, Diet::AXIS_COUNCIL => 0.55],
+                    Diet::IRON_HARBOR => [Diet::AXIS_STATE => -0.12, Diet::AXIS_OPENNESS => -0.8, Diet::AXIS_COUNCIL => -0.33],
+                    Diet::EXCHANGE => [Diet::AXIS_STATE => -0.12, Diet::AXIS_OPENNESS => 0.8, Diet::AXIS_COUNCIL => -0.04],
+                    Diet::CHARTISTS => [Diet::AXIS_STATE => -0.17, Diet::AXIS_OPENNESS => 0.76, Diet::AXIS_COUNCIL => 0.8],
+                    Diet::COMMON_LOT => [Diet::AXIS_STATE => -0.17, Diet::AXIS_OPENNESS => 0.46, Diet::AXIS_COUNCIL => -0.8],
+                ],
+            ],
+            'the founding Diet' => [Diet::SEED_SEATS, Diet::HOME_POSITIONS],
+        ];
+    }
+
+    /** A big party at the top of the plane has its label moved off the top edge, beneath its dot, rather than off the drawing. */
+    public function testALabelAtTheEdgeStaysInsideTheDrawing(): void
+    {
+        $positions = Diet::HOME_POSITIONS;
+        $positions[Diet::EXCHANGE][Diet::AXIS_STATE] = 1.0;
+        $page = $this->builder()->build(new MacroStateDTO(
+            dietSeats: [Diet::CIVIC => 60.0, Diet::VANGUARD => 60.0, Diet::IRON_HARBOR => 20.0, Diet::EXCHANGE => 130.0, Diet::CHARTISTS => 20.0, Diet::COMMON_LOT => 10.0],
+            partyPositions: $positions,
+        ));
+        $exchange = array_values(array_filter($page['compass']['parties'], static fn(array $party): bool => $party['key'] === Diet::EXCHANGE))[0];
+
+        $this->assertGreaterThan($exchange['y'], $exchange['labelY'], 'Above the dot the label would run off the top.');
+        $this->assertGreaterThanOrEqual($page['compass']['viewBox'][1], $exchange['labelY'] - (0.8 * $page['compass']['fontSize']));
     }
 
     public function testSimulationDatesCountFromTheFounding(): void
@@ -187,7 +280,7 @@ class GovernmentPageBuilderTest extends TestCase
             ->setSeats(array_map('intval', Diet::SEED_SEATS))
             ->setVoteShares(Diet::SEED_VOTE_SHARES)
             ->setVoteSwings(array_fill_keys(Diet::PARTIES, 0.0))
-            ->setPositions(Diet::SEED_POSITIONS)
+            ->setPositions(Diet::HOME_POSITIONS)
             ->setCoalition($coalition)
             ->setOutgoingCoalition($outgoing);
     }

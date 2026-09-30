@@ -383,10 +383,11 @@ class NarrativeEngine
                 isset($context['majority_party'], $context['largest_seats'], $context['mover']) ? [
                     "Diet election: {$context['majority_party']} wins {$context['largest_seats']} of {$context['diet_seats']} seats, a majority of its own, and will govern alone. The biggest move of the night was {$context['mover']}, {$context['mover_swing_pp']} points.",
                     "Landslide in the Diet: {$context['majority_party']} takes {$context['largest_seats']} seats and needs no partner. {$context['mover']} moved {$context['mover_swing_pp']} points.",
-                ] : (isset($context['largest_party'], $context['largest_seats'], $context['mover']) ? [
-                    "Diet election: No party holds the {$context['majority_seats']} seats a government needs, so {$context['largest_party']}, the largest with {$context['largest_seats']}, opens coalition talks. The biggest move of the night was {$context['mover']}, {$context['mover_swing_pp']} points.",
-                    "Hung Diet: {$context['largest_party']} leads with {$context['largest_seats']} of {$context['diet_seats']} seats and begins talks on a government. The outgoing cabinet stays on as caretaker, and policy uncertainty holds at {$context['epu_index']} until a new one takes office.",
+                ] : (isset($context['largest_party'], $context['largest_seats'], $context['mover'], $context['talks_opening'], $context['bloc_leader']) ? [
+                    "Diet election: No party holds the {$context['majority_seats']} seats a government needs, so {$context['talks_opening']}. The biggest move of the night was {$context['mover']}, {$context['mover_swing_pp']} points.",
+                    "Hung Diet: {$context['largest_party']} leads with {$context['largest_seats']} of {$context['diet_seats']} seats, and the parties begin talks on a government. The outgoing cabinet stays on as caretaker, and policy uncertainty holds at {$context['epu_index']} until a new one takes office.",
                     "The District has voted, and the bargaining begins: {$context['largest_party']} is largest with {$context['largest_seats']} seats, short of the {$context['majority_seats']} it needs. {$context['mover']} moved {$context['mover_swing_pp']} points.",
+                    "The blocs are counted: {$context['bloc_leader']}'s side holds {$context['bloc_seats']} of {$context['diet_seats']} seats, and {$context['talks_opening']}.",
                 ] : (isset($context['epu_index']) ? [
                     "District election held: Voters returned a Diet for a fresh term, with the policy-uncertainty index at {$context['epu_index']} into the vote.",
                     "Polls closed: A new legislative term begins, with the policy-uncertainty index at {$context['epu_index']}.",

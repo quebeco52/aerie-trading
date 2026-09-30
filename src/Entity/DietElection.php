@@ -52,7 +52,7 @@ class DietElection
     #[ORM\Column(type: Types::JSON)]
     private array $support = [];
 
-    /** @var list<array{day: float, formateur: string, round: int, formed: bool, cabinet: list<string>, support: list<string>}> The talks, attempt by attempt. */
+    /** @var list<array{day: float, formateur: string, formed: bool, cabinet: list<string>, support: list<string>}> The talks, attempt by attempt. */
     #[ORM\Column(type: Types::JSON)]
     private array $formation = [];
 
@@ -179,13 +179,13 @@ class DietElection
         return $this;
     }
 
-    /** @return list<array{day: float, formateur: string, round: int, formed: bool, cabinet: list<string>, support: list<string>}> */
+    /** @return list<array{day: float, formateur: string, formed: bool, cabinet: list<string>, support: list<string>}> */
     public function getFormation(): array
     {
         return $this->formation;
     }
 
-    /** @param list<array{day: float, formateur: string, round: int, formed: bool, cabinet: list<string>, support: list<string>}> $formation */
+    /** @param list<array{day: float, formateur: string, formed: bool, cabinet: list<string>, support: list<string>}> $formation */
     public function setFormation(array $formation): static
     {
         $this->formation = $formation;

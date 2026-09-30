@@ -65,8 +65,8 @@ class SystemicEventReporterTest extends TestCase
     }
 
     /**
-     * A hung Diet's headline names the largest party, which leads the talks, and the biggest mover, and never the
-     * cabinet the talks will produce: that is settled on the day but not known until it takes office.
+     * A hung Diet's headline names the largest party, the party opening the talks and the biggest mover, and never the
+     * cabinet the talks will produce or try: that is settled on the day but not known until it takes office.
      */
     public function testTheElectionHeadlineOpensTheTalksWithoutGivingAwayTheirOutcome(): void
     {
@@ -75,6 +75,7 @@ class SystemicEventReporterTest extends TestCase
             dietSeats: [Diet::CIVIC => 97.0, Diet::VANGUARD => 83.0, Diet::IRON_HARBOR => 46.0, Diet::EXCHANGE => 34.0, Diet::CHARTISTS => 25.0, Diet::COMMON_LOT => 15.0],
             dietVoteSwings: [Diet::CIVIC => 0.048, Diet::VANGUARD => -0.05, Diet::IRON_HARBOR => 0.004, Diet::EXCHANGE => -0.002, Diet::CHARTISTS => 0.0, Diet::COMMON_LOT => 0.0],
             pendingCoalition: Diet::membership([Diet::CIVIC, Diet::IRON_HARBOR]),
+            formationLog: [['day' => 20.0, 'formateur' => Diet::CIVIC, 'formed' => true, 'cabinet' => [Diet::CIVIC, Diet::IRON_HARBOR], 'support' => []]],
         );
 
         // Every phrasing must hold; draw until each has been seen.
@@ -89,6 +90,49 @@ class SystemicEventReporterTest extends TestCase
             $seen[$headline['description']] = true;
         }
         $this->assertGreaterThan(1, count($seen));
+    }
+
+    /** A party other than the largest can open the talks, when the cabinet it tries leaves the largest out. */
+    public function testTheElectionHeadlineNamesAnOpenerOtherThanTheLargestParty(): void
+    {
+        $macro = new MacroStateDTO(
+            eventType: ShockEvent::ELECTION_HELD,
+            dietSeats: [Diet::CIVIC => 97.0, Diet::VANGUARD => 83.0, Diet::IRON_HARBOR => 46.0, Diet::EXCHANGE => 34.0, Diet::CHARTISTS => 25.0, Diet::COMMON_LOT => 15.0],
+            dietVoteSwings: [Diet::CIVIC => 0.048, Diet::VANGUARD => -0.05, Diet::IRON_HARBOR => 0.004, Diet::EXCHANGE => -0.002, Diet::CHARTISTS => 0.0, Diet::COMMON_LOT => 0.0],
+            formationLog: [['day' => 20.0, 'formateur' => Diet::VANGUARD, 'formed' => false, 'cabinet' => [Diet::VANGUARD, Diet::EXCHANGE, Diet::CHARTISTS], 'support' => []]],
+        );
+
+        $opened = 0;
+        for ($i = 0; $i < 60; ++$i) {
+            $description = $this->reporter(bufferedPrice: null)->report($macro, $this->benchmarkAt('100'))['description'] ?? '';
+            $this->assertStringNotContainsString('Exchange', $description, 'The cabinet the first attempt tries is out before the talks end.');
+            if (str_contains($description, 'opens coalition talks')) {
+                ++$opened;
+                $this->assertStringContainsString('the Vanguard opens coalition talks, though the Civic Front is the largest with 97', $description);
+            }
+        }
+        $this->assertGreaterThan(0, $opened);
+    }
+
+    /** The bloc count names the larger bloc, which need not be the largest party's: Civic leads on seats, the Vanguard's side on blocs. */
+    public function testTheElectionHeadlineCountsTheLargerBloc(): void
+    {
+        $macro = new MacroStateDTO(
+            eventType: ShockEvent::ELECTION_HELD,
+            dietSeats: [Diet::CIVIC => 78.0, Diet::VANGUARD => 77.0] + Diet::SEED_SEATS,
+            dietVoteSwings: [Diet::CIVIC => 0.01, Diet::VANGUARD => -0.01] + array_fill_keys(array_keys(Diet::SEED_SEATS), 0.0),
+            formationLog: [['day' => 20.0, 'formateur' => Diet::CIVIC, 'formed' => true, 'cabinet' => [Diet::CIVIC], 'support' => [Diet::BASTION_GUILDS, Diet::IRON_HARBOR, Diet::COMMON_LOT]]],
+        );
+
+        $counted = 0;
+        for ($i = 0; $i < 60; ++$i) {
+            $description = $this->reporter(bufferedPrice: null)->report($macro, $this->benchmarkAt('100'))['description'] ?? '';
+            if (str_contains($description, 'The blocs are counted')) {
+                ++$counted;
+                $this->assertStringContainsString("the Vanguard's side holds 152 of 300 seats", $description);
+            }
+        }
+        $this->assertGreaterThan(0, $counted);
     }
 
     public function testAPartyWithAMajorityOfItsOwnIsNamedGoverningAlone(): void

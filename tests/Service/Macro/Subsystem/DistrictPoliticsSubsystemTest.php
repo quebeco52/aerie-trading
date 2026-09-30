@@ -9,6 +9,7 @@ use App\Service\Macro\MacroEngine;
 use App\Service\Macro\MacroState;
 use App\Service\Macro\Recorder\MacroSnapshotRecorder;
 use App\Service\Macro\Subsystem\AssetMarketSubsystem;
+use App\Service\Macro\Subsystem\CoalitionFormation;
 use App\Service\Macro\Subsystem\CommodityLogisticsSubsystem;
 use App\Service\Macro\Subsystem\CreditFiscalSubsystem;
 use App\Service\Macro\Subsystem\DistrictPoliticsSubsystem as Politics;
@@ -21,6 +22,9 @@ use PHPUnit\Framework\TestCase;
 
 class DistrictPoliticsSubsystemTest extends TestCase
 {
+    /** The Vanguard's whole bloc at the founding, a majority cabinet of 155 seats with no one outside to answer to. */
+    private const RIGHT_BLOC = [Diet::VANGUARD, Diet::EXCHANGE, Diet::CHARTISTS, Diet::FREE_PORT];
+
     /** The first vote on the calendar. */
     private const ELECTION_AT = MacroEngine::ELECTION_TERM_YEARS;
 
@@ -45,28 +49,37 @@ class DistrictPoliticsSubsystemTest extends TestCase
         }
     }
 
-    /** Each party stands fixed on the axis it is defined by, at its founding place on the others. */
-    public function testEachPartyIsFixedOnTheAxisItIsDefinedBy(): void
+    /** Each party stands fixed on the axes it is defined by, at its home on the others. */
+    public function testEachPartyIsFixedOnTheAxesItIsDefinedBy(): void
     {
-        $drifted = [Diet::CHARTISTS => [Diet::AXIS_COUNCIL => -0.5, Diet::AXIS_STATE => 0.4]];
+        $drifted = [
+            Diet::CHARTISTS => [Diet::AXIS_COUNCIL => -0.5, Diet::AXIS_STATE => 0.4],
+            Diet::FREE_PORT => [Diet::AXIS_STATE => 0.9, Diet::AXIS_OPENNESS => -0.9, Diet::AXIS_COUNCIL => -0.2],
+        ];
 
-        $this->assertSame(Diet::PRIMARY_POSITION[Diet::CHARTISTS], Diet::position(Diet::CHARTISTS, $drifted)[Diet::AXIS_COUNCIL], 'A stored value cannot move a party off its own axis.');
+        $this->assertSame(Diet::FIXED_POSITIONS[Diet::CHARTISTS][Diet::AXIS_COUNCIL], Diet::position(Diet::CHARTISTS, $drifted)[Diet::AXIS_COUNCIL], 'A stored value cannot move a party off its own axis.');
         $this->assertSame(0.4, Diet::position(Diet::CHARTISTS, $drifted)[Diet::AXIS_STATE]);
-        $this->assertSame(Diet::SEED_POSITIONS[Diet::CHARTISTS][Diet::AXIS_OPENNESS], Diet::position(Diet::CHARTISTS, $drifted)[Diet::AXIS_OPENNESS], 'A missing axis is the founding place.');
-        $this->assertEqualsCanonicalizing(Diet::AXES, array_values(array_unique(Diet::PRIMARY_AXIS)), 'Every axis has parties defined by it.');
-        foreach (Diet::PARTIES as $party) {
-            $this->assertSame(Diet::PRIMARY_POSITION[$party], Diet::SEED_POSITIONS[$party][Diet::PRIMARY_AXIS[$party]]);
+        $this->assertSame(Diet::HOME_POSITIONS[Diet::CHARTISTS][Diet::AXIS_OPENNESS], Diet::position(Diet::CHARTISTS, $drifted)[Diet::AXIS_OPENNESS], 'A missing axis is the home.');
+        $this->assertSame([Diet::AXIS_STATE => -0.6, Diet::AXIS_OPENNESS => 0.6, Diet::AXIS_COUNCIL => -0.2], Diet::position(Diet::FREE_PORT, $drifted), 'The Free Port Compact is fixed on two axes.');
+        $defined = array_values(array_unique(array_merge(...array_map('array_keys', array_values(Diet::FIXED_POSITIONS)))));
+        $this->assertEqualsCanonicalizing(Diet::AXES, $defined, 'Every axis has parties defined by it.');
+        foreach (Diet::FIXED_POSITIONS as $party => $fixed) {
+            foreach ($fixed as $axis => $value) {
+                $this->assertSame($value, Diet::HOME_POSITIONS[$party][$axis]);
+                $this->assertTrue(Diet::isFixed($party, $axis));
+            }
         }
+        $this->assertFalse(Diet::isFixed(Diet::FREE_PORT, Diet::AXIS_COUNCIL));
     }
 
     public function testTheGovernmentsPositionIsItsPartiesWeightedBySeats(): void
     {
-        $position = Politics::coalitionPosition(Diet::SEED_COALITION, Diet::SEED_SEATS, Diet::SEED_POSITIONS);
+        $position = Politics::coalitionPosition(Diet::membership([Diet::VANGUARD, Diet::EXCHANGE, Diet::CHARTISTS]), Diet::SEED_SEATS, Diet::HOME_POSITIONS);
 
-        // Vanguard 95 at (-0.6, 0, +0.3), Exchange 40 at (0, +0.8, +0.4), Chartists 20 at (0, +0.2, +0.8).
-        $this->assertEqualsWithDelta(95.0 * -0.6 / 155.0, $position[Diet::AXIS_STATE], 1e-12);
-        $this->assertEqualsWithDelta((40.0 * 0.8 + 20.0 * 0.2) / 155.0, $position[Diet::AXIS_OPENNESS], 1e-12);
-        $this->assertEqualsWithDelta((95.0 * 0.3 + 40.0 * 0.4 + 20.0 * 0.8) / 155.0, $position[Diet::AXIS_COUNCIL], 1e-12);
+        // Vanguard 80 at (-0.6, 0, +0.3), Exchange 30 at (0, +0.8, +0.4), Chartists 20 at (0, +0.6, +0.8).
+        $this->assertEqualsWithDelta(80.0 * -0.6 / 130.0, $position[Diet::AXIS_STATE], 1e-12);
+        $this->assertEqualsWithDelta((30.0 * 0.8 + 20.0 * 0.6) / 130.0, $position[Diet::AXIS_OPENNESS], 1e-12);
+        $this->assertEqualsWithDelta((80.0 * 0.3 + 30.0 * 0.4 + 20.0 * 0.8) / 130.0, $position[Diet::AXIS_COUNCIL], 1e-12);
     }
 
     // --- The vote ---
@@ -85,7 +98,13 @@ class DistrictPoliticsSubsystemTest extends TestCase
      * Vote after vote at a trend economy, each cabinet taking office after its talks: governments lose about what the
      * record's governments lose, the Diet is about two thirds as volatile as Western Europe's parliaments, no party
      * drifts into a majority of its own, and the talks run as real ones have -- about a third need a second attempt
-     * (Golder 2010), and they last about a month (Bäck, Hellström, Lindvall & Teorell 2023: 33.7 days, sd 33.9).
+     * (Golder 2010), they last about a month (Bäck, Hellström, Lindvall & Teorell 2023: 33.7 days, sd 33.9), and they
+     * seat the governments Scandinavia's bloc parliaments have since 1945 (ParlGov, 68 cabinets): most of them minority
+     * cabinets, half of them one party alone, the two largest parties almost never together (1.5%), and the parties at
+     * the Council axis's ends supporting far more often than they govern. The Civic Front's populist lean costs it
+     * cabinets, so the Vanguard governs alone more than Scandinavia's parties do: minority 91% (84%), one party alone
+     * 54% (47%). The largest party sits in 71% of cabinets, above Scandinavia's 63%
+     * (var/harness/politics/formation_report.py).
      */
     public function testTheDietStaysBalancedAtItsCalibratedVolatility(): void
     {
@@ -96,6 +115,12 @@ class DistrictPoliticsSubsystemTest extends TestCase
         $singlePartyMajority = 0;
         $talkDays = [];
         $retried = 0;
+        $minority = 0;
+        $largestIn = 0;
+        $twoLargest = 0;
+        $single = 0;
+        $radicalIn = 0;
+        $radicalSupports = 0;
         for ($run = 0; $run < 60; ++$run) {
             $state = $this->electionTick();
             for ($vote = 0; $vote < 40; ++$vote) {
@@ -108,6 +133,14 @@ class DistrictPoliticsSubsystemTest extends TestCase
                     $singlePartyMajority += max($state->dietSeats) >= Diet::MAJORITY_SEATS ? 1 : 0;
                     $talkDays[] = $state->formationLog === [] ? 0.0 : $state->formationLog[array_key_last($state->formationLog)]['day'];
                     $retried += count($state->formationLog) > 1 ? 1 : 0;
+                    $cabinet = Diet::governingParties($state->governingCoalition);
+                    [$first, $second] = CoalitionFormation::bySize($state->dietSeats, $state->dietVoteShares);
+                    $minority += Diet::governingParties($state->supportParties) === [] ? 0 : 1;
+                    $largestIn += in_array($first, $cabinet, true) ? 1 : 0;
+                    $twoLargest += in_array($first, $cabinet, true) && in_array($second, $cabinet, true) ? 1 : 0;
+                    $single += count($cabinet) === 1 ? 1 : 0;
+                    $radicalIn += count(array_intersect([Diet::CHARTISTS, Diet::COMMON_LOT], $cabinet));
+                    $radicalSupports += count(array_intersect([Diet::CHARTISTS, Diet::COMMON_LOT], Diet::governingParties($state->supportParties)));
                 }
                 $state = $this->nextElectionTick($state);
             }
@@ -118,6 +151,12 @@ class DistrictPoliticsSubsystemTest extends TestCase
         $this->assertEqualsWithDelta(33.7, $meanDays, 3.0);
         $this->assertEqualsWithDelta(MacroEngine::FORMATION_MEAN_DAYS, $meanDays, 3.0, 'The uncertainty index is compensated for talks of another length.');
         $this->assertEqualsWithDelta(33.9, sqrt(array_sum(array_map(static fn(float $d): float => ($d - $meanDays) ** 2, $talkDays)) / count($talkDays)), 5.0);
+        $this->assertEqualsWithDelta(0.91, $minority / count($talkDays), 0.04);
+        $this->assertEqualsWithDelta(0.54, $single / count($talkDays), 0.04);
+        $this->assertLessThan(0.04, $twoLargest / count($talkDays));
+        $this->assertEqualsWithDelta(0.72, $largestIn / count($talkDays), 0.04);
+        $this->assertLessThan(0.08, $radicalIn / (2 * count($talkDays)), 'The Council axis\'s ends sit in cabinet too often.');
+        $this->assertGreaterThan(3 * $radicalIn, $radicalSupports, 'The Council axis\'s ends govern rather than support.');
 
         $observedLoss = -array_sum($incumbentSwings) / count($incumbentSwings);
         $this->assertEqualsWithDelta(MacroEngine::ELECTION_RECORDED_COST_OF_RULING, $observedLoss, 0.0075);
@@ -161,11 +200,11 @@ class DistrictPoliticsSubsystemTest extends TestCase
     /** The opposition takes what the government loses, each opposition party in proportion to its own share. */
     public function testTheSwingIsSharedInProportion(): void
     {
-        $shares = Politics::applyIncumbentSwing(Diet::SEED_VOTE_SHARES, Diet::SEED_COALITION, -0.04);
+        $shares = Politics::applyIncumbentSwing(Diet::SEED_VOTE_SHARES, Diet::membership([Diet::VANGUARD, Diet::EXCHANGE, Diet::CHARTISTS]), -0.04);
         $seed = Diet::SEED_VOTE_SHARES;
 
         $this->assertEqualsWithDelta(1.0, array_sum($shares), 1e-12);
-        $this->assertEqualsWithDelta(155.0 / 300.0 - 0.04, $shares[Diet::VANGUARD] + $shares[Diet::EXCHANGE] + $shares[Diet::CHARTISTS], 1e-12);
+        $this->assertEqualsWithDelta(130.0 / 300.0 - 0.04, $shares[Diet::VANGUARD] + $shares[Diet::EXCHANGE] + $shares[Diet::CHARTISTS], 1e-12);
         $this->assertEqualsWithDelta($seed[Diet::CIVIC] / $seed[Diet::IRON_HARBOR], $shares[Diet::CIVIC] / $shares[Diet::IRON_HARBOR], 1e-12);
         $this->assertEqualsWithDelta($seed[Diet::VANGUARD] / $seed[Diet::EXCHANGE], $shares[Diet::VANGUARD] / $shares[Diet::EXCHANGE], 1e-12);
     }
@@ -233,27 +272,27 @@ class DistrictPoliticsSubsystemTest extends TestCase
 
     // --- Positions ---
 
-    /** Each vote moves a party on both axes it is not defined by, by Somer-Topcu's step, and never off them. */
-    public function testPositionsDriftAtTheManifestoScaleOnBothFreeAxes(): void
+    /** Left alone, a party's distance from home shrinks by the fitted persistence each term. */
+    public function testAPartyIsPulledBackTowardItsHome(): void
+    {
+        foreach ([Diet::AXIS_STATE, Diet::AXIS_OPENNESS, Diet::AXIS_COUNCIL] as $axis) {
+            $persistence = Politics::POSITION_ANNUAL_PERSISTENCE[$axis] ** MacroEngine::ELECTION_TERM_YEARS;
+            $this->assertEqualsWithDelta(0.1 + (0.5 * $persistence), Politics::movePosition(0.6, 0.1, $axis, 0.0), 1e-12, "{$axis}: the pull home.");
+            $this->assertEqualsWithDelta(0.1, Politics::movePosition(0.1, 0.1, $axis, 0.0), 1e-12, "{$axis}: a party at home stays there.");
+        }
+    }
+
+    /**
+     * Vote after vote a party strays around its home by the Chapel Hill survey's within-party spread, rather than
+     * wandering off as a random walk would, and never leaves the axis it is defined by or the scale.
+     */
+    public function testPositionsStrayAroundTheirHomesAtTheSurveysSpread(): void
     {
         mt_srand(3);
         $subsystem = new Politics(new MathUtility());
-        $steps = [Diet::AXIS_OPENNESS => [], Diet::AXIS_COUNCIL => []];
-        for ($i = 0; $i < 3000; ++$i) {
-            $state = $this->electionTick();
-            $subsystem->update($state, 0.01);
-            foreach ($steps as $axis => $unused) {
-                $steps[$axis][] = $state->partyPositions[Diet::VANGUARD][$axis] - Diet::SEED_POSITIONS[Diet::VANGUARD][$axis];
-            }
-            $this->assertSame(Diet::PRIMARY_POSITION[Diet::VANGUARD], $state->partyPositions[Diet::VANGUARD][Diet::AXIS_STATE]);
-        }
-        foreach ($steps as $axis => $axisSteps) {
-            $sd = sqrt(array_sum(array_map(static fn(float $s): float => $s ** 2, $axisSteps)) / count($axisSteps));
-            $this->assertEqualsWithDelta(Politics::POSITION_DRIFT_PER_ELECTION, $sd, 0.01, "The {$axis} step is off the manifesto scale.");
-        }
-
+        $deviations = [Diet::AXIS_OPENNESS => [], Diet::AXIS_COUNCIL => []];
         $state = $this->electionTick();
-        for ($vote = 0; $vote < 300; ++$vote) {
+        for ($vote = 0; $vote < 2000; ++$vote) {
             $state->lastElectionAt = $state->totalTime;
             $subsystem->update($state, 0.01);
             Politics::takeOffice($state);
@@ -262,25 +301,32 @@ class DistrictPoliticsSubsystemTest extends TestCase
                     $this->assertGreaterThanOrEqual(-1.0, $state->partyPositions[$party][$axis]);
                     $this->assertLessThanOrEqual(1.0, $state->partyPositions[$party][$axis]);
                 }
-                $this->assertSame(Diet::PRIMARY_POSITION[$party], $state->partyPositions[$party][Diet::PRIMARY_AXIS[$party]]);
+                foreach (Diet::FIXED_POSITIONS[$party] as $axis => $value) {
+                    $this->assertSame($value, $state->partyPositions[$party][$axis]);
+                }
             }
-            $this->assertSame((float) Diet::SEATS, array_sum($state->dietSeats));
+            foreach ($deviations as $axis => $unused) {
+                $deviations[$axis][] = $state->partyPositions[Diet::VANGUARD][$axis] - Diet::HOME_POSITIONS[Diet::VANGUARD][$axis];
+            }
             $state->totalTime += MacroEngine::ELECTION_TERM_YEARS;
+        }
+
+        foreach ($deviations as $axis => $axisDeviations) {
+            $mean = array_sum($axisDeviations) / count($axisDeviations);
+            $sd = sqrt(array_sum(array_map(static fn(float $d): float => ($d - $mean) ** 2, $axisDeviations)) / count($axisDeviations));
+            $this->assertEqualsWithDelta(0.0, $mean, 0.05, "The Vanguard has wandered from home on {$axis}.");
+            $this->assertEqualsWithDelta(Politics::POSITION_WITHIN_SD[$axis], $sd, 0.025, "The {$axis} spread is off the survey's.");
         }
     }
 
     /** A step past the end of the axis comes back off it by the overshoot, rather than sticking at the end. */
     public function testAStepPastTheEndOfTheAxisIsReflected(): void
     {
-        $subsystem = new Politics(new class extends MathUtility {
-            public function generateStandardNormal(): float { return 1.0; }
-        });
-        $state = $this->electionTick();
-        $state->partyPositions[Diet::VANGUARD][Diet::AXIS_OPENNESS] = 0.95;
+        $persistence = Politics::POSITION_ANNUAL_PERSISTENCE[Diet::AXIS_OPENNESS] ** MacroEngine::ELECTION_TERM_YEARS;
+        $overshoot = (0.95 * $persistence) + (Politics::POSITION_WITHIN_SD[Diet::AXIS_OPENNESS] * sqrt(1.0 - ($persistence ** 2)) * 3.0);
 
-        $subsystem->update($state, 0.01);
-
-        $this->assertEqualsWithDelta(2.0 - (0.95 + Politics::POSITION_DRIFT_PER_ELECTION), $state->partyPositions[Diet::VANGUARD][Diet::AXIS_OPENNESS], 1e-12);
+        $this->assertGreaterThan(1.0, $overshoot);
+        $this->assertEqualsWithDelta(2.0 - $overshoot, Politics::movePosition(0.95, 0.0, Diet::AXIS_OPENNESS, 3.0), 1e-12);
     }
 
     // --- The calendar and the talks ---
@@ -329,28 +375,25 @@ class DistrictPoliticsSubsystemTest extends TestCase
         $this->assertSame(-1.0, $state->coalitionTakesOfficeAt);
     }
 
-    /**
-     * The talks weigh the outgoing cabinet's incumbency: with the grand coalition going into the vote, it is the Vanguard's
-     * likeliest majority, where from the founding cabinet it is not.
-     */
+    /** The talks weigh the outgoing cabinet's incumbency: a cabinet going into the vote re-forms far more often than it forms after another. */
     public function testTheTalksWeighTheOutgoingCabinet(): void
     {
-        $firstAttemptFails = static fn(): MathUtility => new class extends MathUtility {
-            private int $draw = 0;
-            public function generateStandardNormal(): float { return 0.0; }
-            // Attempt one: its length, then a draw nothing clears; attempt two: its length, a sure success, the first cabinet.
-            public function generateUniform(): float { return [0.5, 0.9999999, 0.5, 0.0, 0.0][$this->draw++] ?? 0.0; }
+        mt_srand(11);
+        $subsystem = new Politics(new MathUtility());
+        $cabinet = [Diet::VANGUARD, Diet::EXCHANGE];
+        $formedAfter = function (array $outgoing) use ($subsystem, $cabinet): int {
+            $count = 0;
+            for ($trial = 0; $trial < 300; ++$trial) {
+                $state = $this->electionTick();
+                $state->governingCoalition = Diet::membership($outgoing);
+                $subsystem->update($state, 0.01);
+                $count += Diet::governingParties($state->pendingCoalition) === $cabinet ? 1 : 0;
+            }
+
+            return $count;
         };
 
-        $grand = $this->electionTick();
-        $grand->governingCoalition = Diet::membership([Diet::CIVIC, Diet::VANGUARD]);
-        (new Politics($firstAttemptFails()))->update($grand, 0.01);
-        $founding = $this->electionTick();
-        (new Politics($firstAttemptFails()))->update($founding, 0.01);
-
-        $this->assertFalse($grand->formationLog[0]['formed']);
-        $this->assertSame([Diet::CIVIC, Diet::VANGUARD], $grand->formationLog[0]['cabinet']);
-        $this->assertSame(Diet::governingParties(Diet::SEED_COALITION), $founding->formationLog[0]['cabinet']);
+        $this->assertGreaterThan(2 * $formedAfter([Diet::VANGUARD, Diet::FREE_PORT]), $formedAfter($cabinet));
     }
 
     /** The cabinet the talks produced takes office on the first tick at or past its day, supporters with it. */
@@ -378,8 +421,8 @@ class DistrictPoliticsSubsystemTest extends TestCase
         $subsystem = new Politics($this->quietMath());
         $state = $this->pendingGovernment(takesOfficeAt: 4.6);
         // A majority cabinet, so nothing but the talks stands between it and its budget.
-        $state->pendingCoalition = Diet::SEED_COALITION;
-        $state->pendingSupport = Diet::SEED_SUPPORT;
+        $state->pendingCoalition = Diet::membership(self::RIGHT_BLOC);
+        $state->pendingSupport = Diet::membership([]);
         $state->governingCoalition = Diet::membership([Diet::CIVIC, Diet::IRON_HARBOR]);
         $state->sovereignDebtToGdp = 0.5;
 
@@ -464,13 +507,13 @@ class DistrictPoliticsSubsystemTest extends TestCase
     /** Each lever runs between the policies of the parties at the two ends of its axis. */
     public function testThePlatformRunsBetweenThePartiesAtTheEndsOfEachAxis(): void
     {
-        $civic = Politics::platform([Diet::AXIS_STATE => Diet::PRIMARY_POSITION[Diet::CIVIC], Diet::AXIS_OPENNESS => 0.0]);
-        $vanguard = Politics::platform([Diet::AXIS_STATE => Diet::PRIMARY_POSITION[Diet::VANGUARD], Diet::AXIS_OPENNESS => 0.0]);
+        $civic = Politics::platform([Diet::AXIS_STATE => Diet::FIXED_POSITIONS[Diet::CIVIC][Diet::AXIS_STATE], Diet::AXIS_OPENNESS => 0.0]);
+        $vanguard = Politics::platform([Diet::AXIS_STATE => Diet::FIXED_POSITIONS[Diet::VANGUARD][Diet::AXIS_STATE], Diet::AXIS_OPENNESS => 0.0]);
         $this->assertEqualsWithDelta(MacroEngine::POLICY_MANIFESTO_CORPORATE_TAX_GAP, $civic['corporateTax'] - $vanguard['corporateTax'], 1e-12, 'The two big parties are a manifesto gap apart.');
         $this->assertEqualsWithDelta(0.0, $civic['corporateTax'] + $vanguard['corporateTax'], 1e-12, 'The gap is centred on the neutral rate.');
 
-        $harbor = Politics::platform([Diet::AXIS_STATE => 0.0, Diet::AXIS_OPENNESS => Diet::PRIMARY_POSITION[Diet::IRON_HARBOR]]);
-        $exchange = Politics::platform([Diet::AXIS_STATE => 0.0, Diet::AXIS_OPENNESS => Diet::PRIMARY_POSITION[Diet::EXCHANGE]]);
+        $harbor = Politics::platform([Diet::AXIS_STATE => 0.0, Diet::AXIS_OPENNESS => Diet::FIXED_POSITIONS[Diet::IRON_HARBOR][Diet::AXIS_OPENNESS]]);
+        $exchange = Politics::platform([Diet::AXIS_STATE => 0.0, Diet::AXIS_OPENNESS => Diet::FIXED_POSITIONS[Diet::EXCHANGE][Diet::AXIS_OPENNESS]]);
         $this->assertEqualsWithDelta(MacroEngine::POLICY_PROTECTIONIST_TARIFF, $harbor['tariff'], 1e-12, 'The protectionist party enacts its own tariff.');
         $this->assertSame(0.0, $exchange['tariff']);
         $this->assertEqualsWithDelta(MacroEngine::MIGRATION_OPEN_REGIME - MacroEngine::MIGRATION_CLOSED_REGIME, $exchange['laborGrowth'] - $harbor['laborGrowth'], 1e-12, 'The two immigration regimes are a regime apart.');
@@ -487,11 +530,11 @@ class DistrictPoliticsSubsystemTest extends TestCase
 
     public function testNoGovernmentGoesFurtherThanThePartyAtTheEndOfTheAxis(): void
     {
-        $pole = Politics::platform([Diet::AXIS_STATE => Diet::PRIMARY_POSITION[Diet::CIVIC], Diet::AXIS_OPENNESS => Diet::PRIMARY_POSITION[Diet::IRON_HARBOR]]);
+        $pole = Politics::platform([Diet::AXIS_STATE => Diet::FIXED_POSITIONS[Diet::CIVIC][Diet::AXIS_STATE], Diet::AXIS_OPENNESS => Diet::FIXED_POSITIONS[Diet::IRON_HARBOR][Diet::AXIS_OPENNESS]]);
 
         $this->assertSame($pole, Politics::platform([Diet::AXIS_STATE => 1.0, Diet::AXIS_OPENNESS => -1.0]));
         $this->assertSame(
-            Politics::platform([Diet::AXIS_STATE => Diet::PRIMARY_POSITION[Diet::VANGUARD], Diet::AXIS_OPENNESS => Diet::PRIMARY_POSITION[Diet::EXCHANGE]]),
+            Politics::platform([Diet::AXIS_STATE => Diet::FIXED_POSITIONS[Diet::VANGUARD][Diet::AXIS_STATE], Diet::AXIS_OPENNESS => Diet::FIXED_POSITIONS[Diet::EXCHANGE][Diet::AXIS_OPENNESS]]),
             Politics::platform([Diet::AXIS_STATE => -1.0, Diet::AXIS_OPENNESS => 1.0])
         );
     }
@@ -500,8 +543,8 @@ class DistrictPoliticsSubsystemTest extends TestCase
     {
         $subsystem = new Politics($this->quietMath());
         $state = $this->pendingGovernment(takesOfficeAt: 4.1);
-        $state->pendingCoalition = Diet::SEED_COALITION;
-        $state->pendingSupport = Diet::SEED_SUPPORT;
+        $state->pendingCoalition = Diet::membership(self::RIGHT_BLOC);
+        $state->pendingSupport = Diet::membership([]);
         $state->sovereignDebtToGdp = 0.5;
 
         $state->totalTime = 4.1;
@@ -599,7 +642,7 @@ class DistrictPoliticsSubsystemTest extends TestCase
     public function testASupporterAcceptsNothingFurtherFromItsOwnPolicyThanTheLeverInForce(): void
     {
         $seats = Diet::SEED_SEATS;
-        $positions = Diet::SEED_POSITIONS;
+        $positions = Diet::HOME_POSITIONS;
         $standing = static fn(float $tax): array => ['corporateTax' => $tax, 'tariff' => 0.0, 'laborGrowth' => MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE];
         $gap = MacroEngine::POLICY_MANIFESTO_CORPORATE_TAX_GAP;
         $civicIdeal = Politics::platform(Diet::position(Diet::CIVIC, $positions))['corporateTax'];

@@ -387,7 +387,7 @@ class MacroState
     public array $pendingSupport;
     public float $coalitionTakesOfficeAt;
     public float $lastGovernmentFormedAt;
-    /** @var list<array{day: float, formateur: string, round: int, formed: bool, cabinet: list<string>, support: list<string>}> */
+    /** @var list<array{day: float, formateur: string, formed: bool, cabinet: list<string>, support: list<string>}> */
     public array $formationLog;
     // What the vote reads: the deflator where the term began and real GDP where the campaign began (-1: not yet marked).
     public float $termStartedAt;

@@ -261,7 +261,7 @@ class MacroEngine
     public const ELECTION_RESIDUAL_SD = 0.0295;
     /** Vote share the average government has lost over a term in the record (Nannestad & Paldam 2002: 282 elections in 19 democracies), the reference the Diet's own cost is read against. */
     public const ELECTION_RECORDED_COST_OF_RULING = 0.0225;
-    /** Vote share governing costs the governing parties each term, beyond the short-term swings they were elected on running off. It is also what keeps the party system balanced: at 0.2 points the Diet drifts into one-party rule, and at the recorded 2.25 the run-off takes the average loss to 5.8 (var/harness replay of 2,500 elections). At 1.2, with ELECTION_PARTY_SHOCK_SD, six parties and cabinets formed by talks, the observed loss is about 2.1 (var/harness/politics/formation_report.py, 2,500 elections). */
+    /** Vote share governing costs the governing parties each term, beyond the short-term swings they were elected on running off. It is also what keeps the party system balanced: at 0.2 points the Diet drifts into one-party rule, and at the recorded 2.25 the run-off takes the average loss to 5.8 (var/harness replay of 2,500 elections). At 1.2, with ELECTION_PARTY_SHOCK_SD, eight parties and cabinets formed by talks, the observed loss is about 2.1 (var/harness/politics/formation_report.py, 2,500 elections). */
     public const ELECTION_COST_OF_RULING = 0.012;
     /** Relative gain of the closed-economy party's vote after a financial crisis (Funke, Schularick & Trebesch 2016: far right +30%, none after ordinary recessions). */
     public const ELECTION_CRISIS_CLOSED_PARTY_LIFT = 0.30;
@@ -281,14 +281,24 @@ class MacroEngine
     public const FORMATION_PARTY_UTILITY = -0.485;
     /** Log-odds of a cabinet holding the Diet's largest party (Martin & Stevenson 2010). */
     public const FORMATION_LARGEST_PARTY_UTILITY = 1.575;
-    /** Log-odds per unit of the cabinet's ideological range: -0.027 per point of the manifesto left-right scale (Martin & Stevenson 2010), at the 100 points a unit of the Diet's axes spans (the scale the drift is read on). */
-    public const FORMATION_RANGE_UTILITY = -0.027 * 100.0;
+    /** Manifesto left-right points a unit of the Diet's axes spans, the scale Martin & Stevenson read range on; fitted so 36.5% of cabinets after a hung vote are minority cabinets (ParlGov: 315 in Western Europe since 1945; var/harness/politics/formation_fit.py). Benoit & Laver (2007) put a unit, half an expert scale, at 30 points (3.19 per point of their 1-20 scale). */
+    public const FORMATION_MANIFESTO_POINTS_PER_UNIT = 40.0;
+    /** Log-odds per unit of the cabinet's ideological range: -0.027 per manifesto left-right point (Martin & Stevenson 2010). */
+    public const FORMATION_RANGE_UTILITY = -0.027 * self::FORMATION_MANIFESTO_POINTS_PER_UNIT;
     /** Log-odds of the outgoing cabinet re-forming (Martin & Stevenson 2010: the status quo government). */
     public const FORMATION_STATUS_QUO_UTILITY = 1.984;
-    /** Log-odds a formateur's best cabinet must clear, the value of no deal at all; fitted so 32% of formations need more than one attempt (Golder 2010: 'nearly a third', 16 West European democracies 1944-1998; var/harness/politics/formation_fit.py). The same bar holds every attempt: a second round, which opens minority cabinets, forms 98% of the rest, so real talks leave no trace of a bar that falls. */
-    public const FORMATION_RESERVATION = -2.01;
+    /** Log-odds of a government whose parties, cabinet and supporters, all declared for the same bloc before the vote (Martin & Stevenson 2010: a pre-electoral pact associated with the coalition). */
+    public const FORMATION_PACT_UTILITY = 3.429;
+    /** Log-odds of a cabinet holding two parties that ruled out governing together, the two bloc leaders (Martin & Stevenson 2010: an anti-pact). */
+    public const FORMATION_ANTIPACT_UTILITY = -2.877;
+    /** Log-odds per unit a cabinet party stands from the Diet's median on the Council axis, the question of the constitutional order: Martin & Stevenson's (2010) anti-system term, its manifesto measure replaced by that distance and its strength fitted so the parties at the axis's ends sit in cabinet as seldom as Scandinavia's radical parties (var/harness/politics/formation_fit.py). */
+    public const FORMATION_ANTISYSTEM_UTILITY = -2.68;
+    /** Log-odds the cabinet the first attempt tries must clear, the value of no deal at all; fitted so 32% of formations need more than one attempt (Golder 2010: 'nearly a third', 16 West European democracies 1944-1998; var/harness/politics/formation_fit.py). */
+    public const FORMATION_RESERVATION = 2.18;
+    /** How far the bar of no deal falls with each attempt that fails, as the parties' patience runs out; fitted so formations are as spread as the record's, sd 33.9 days on a mean of 33.7 (Bäck, Hellström, Lindvall & Teorell 2023), which cuts the stalemates a fixed bar would leave running for years. */
+    public const FORMATION_RESERVATION_STEP = 0.65;
     /** Mean length of one attempt in days, each drawn exponential (a constant hazard: the formation record's spread about equals its mean); fitted so formations average Bäck, Hellström, Lindvall & Teorell's (2023) 33.7 days, Western Europe 1945-2019. */
-    public const FORMATION_ATTEMPT_DAYS = 24.7;
+    public const FORMATION_ATTEMPT_DAYS = 22.9;
     /** Mean days from a vote to the government it forms, single-party majorities included: what the talks model averages at the fitted constants. */
     public const FORMATION_MEAN_DAYS = 33.7;
 

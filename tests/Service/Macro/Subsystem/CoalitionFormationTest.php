@@ -15,47 +15,107 @@ class CoalitionFormationTest extends TestCase
 {
     // --- The calculus ---
 
-    /** A cabinet's log-odds are Martin & Stevenson's terms, each where it applies. */
+    /**
+     * A cabinet's log-odds are Martin & Stevenson's terms, each where it applies. At the founding the Council median is
+     * the establishment's +0.3, the right bloc is the Vanguard, the Exchange Party, the Chartists and the Free Port
+     * Compact, and the left bloc the rest.
+     */
     public function testTheUtilityIsMartinAndStevensonsTermByTerm(): void
     {
         $seats = Diet::SEED_SEATS;
-        $positions = Diet::SEED_POSITIONS;
-        $cabinet = [Diet::VANGUARD, Diet::EXCHANGE, Diet::CHARTISTS];
-        $range = Formation::ideologicalRange($cabinet, $positions);
-        $majority = MacroEngine::FORMATION_MINIMAL_WINNING_UTILITY + (3 * MacroEngine::FORMATION_PARTY_UTILITY)
-            + MacroEngine::FORMATION_LARGEST_PARTY_UTILITY + (MacroEngine::FORMATION_RANGE_UTILITY * $range);
+        $positions = Diet::HOME_POSITIONS;
+        $this->assertEqualsWithDelta(0.3, Formation::councilMedian($seats, $positions), 1e-12);
 
-        $this->assertTrue(Formation::isMinimalWinning($cabinet, $seats));
-        $this->assertEqualsWithDelta($majority, Formation::utility($cabinet, $seats, $positions, [], Diet::VANGUARD), 1e-12);
+        $right = [Diet::VANGUARD, Diet::EXCHANGE, Diet::CHARTISTS, Diet::FREE_PORT];
+        $this->assertTrue(Formation::isMinimalWinning($right, $seats));
+        // Distances from the Council median: the Exchange Party 0.1, the Chartists 0.5, the Vanguard and the Free Port none.
+        $majority = MacroEngine::FORMATION_MINIMAL_WINNING_UTILITY + (4 * MacroEngine::FORMATION_PARTY_UTILITY) + MacroEngine::FORMATION_LARGEST_PARTY_UTILITY
+            + (MacroEngine::FORMATION_RANGE_UTILITY * Formation::ideologicalRange($right, $positions))
+            + MacroEngine::FORMATION_PACT_UTILITY + (MacroEngine::FORMATION_ANTISYSTEM_UTILITY * 0.6);
+        $this->assertEqualsWithDelta($majority, Formation::utility($right, [], $seats, $positions, [], Diet::VANGUARD), 1e-12);
         $this->assertEqualsWithDelta(
             $majority + MacroEngine::FORMATION_STATUS_QUO_UTILITY,
-            Formation::utility($cabinet, $seats, $positions, [Diet::CHARTISTS, Diet::VANGUARD, Diet::EXCHANGE], Diet::VANGUARD),
+            Formation::utility($right, [], $seats, $positions, [Diet::FREE_PORT, Diet::CHARTISTS, Diet::VANGUARD, Diet::EXCHANGE], Diet::VANGUARD),
             1e-12,
             'The outgoing cabinet, in whatever order it is written, has the incumbency term.'
         );
+
         $this->assertEqualsWithDelta(
             MacroEngine::FORMATION_MINORITY_UTILITY + MacroEngine::FORMATION_PARTY_UTILITY + MacroEngine::FORMATION_LARGEST_PARTY_UTILITY,
-            Formation::utility([Diet::VANGUARD], $seats, $positions, [], Diet::VANGUARD),
+            Formation::utility([Diet::VANGUARD], [], $seats, $positions, [], Diet::VANGUARD),
             1e-12,
-            'One party alone spans no range and holds no majority.'
+            'One party alone spans no range, holds no majority and makes no pact.'
         );
-        $surplus = [Diet::CIVIC, Diet::VANGUARD, Diet::EXCHANGE];
-        $this->assertFalse(Formation::isMinimalWinning($surplus, $seats));
         $this->assertEqualsWithDelta(
-            (3 * MacroEngine::FORMATION_PARTY_UTILITY) + MacroEngine::FORMATION_LARGEST_PARTY_UTILITY + (MacroEngine::FORMATION_RANGE_UTILITY * Formation::ideologicalRange($surplus, $positions)),
-            Formation::utility($surplus, $seats, $positions, [], Diet::VANGUARD),
+            MacroEngine::FORMATION_MINORITY_UTILITY + MacroEngine::FORMATION_PARTY_UTILITY + MacroEngine::FORMATION_LARGEST_PARTY_UTILITY
+                + (MacroEngine::FORMATION_RANGE_UTILITY * Formation::ideologicalRange($right, $positions)) + MacroEngine::FORMATION_PACT_UTILITY,
+            Formation::utility([Diet::VANGUARD], [Diet::EXCHANGE, Diet::CHARTISTS, Diet::FREE_PORT], $seats, $positions, [], Diet::VANGUARD),
             1e-12,
-            'A surplus cabinet is neither minority nor minimal winning.'
+            'Carried by its own bloc, a one-party cabinet is a pact whose range runs over its supporters, who pay no anti-system cost.'
         );
+
+        $grand = [Diet::CIVIC, Diet::VANGUARD];
+        $this->assertTrue(Formation::isMinimalWinning($grand, $seats));
+        // The Civic Front leans populist, 0.4 below the Council median.
+        $this->assertEqualsWithDelta(
+            MacroEngine::FORMATION_MINIMAL_WINNING_UTILITY + (2 * MacroEngine::FORMATION_PARTY_UTILITY) + MacroEngine::FORMATION_LARGEST_PARTY_UTILITY
+                + (MacroEngine::FORMATION_RANGE_UTILITY * Formation::ideologicalRange($grand, $positions)) + MacroEngine::FORMATION_ANTIPACT_UTILITY
+                + (MacroEngine::FORMATION_ANTISYSTEM_UTILITY * 0.4),
+            Formation::utility($grand, [], $seats, $positions, [], Diet::VANGUARD),
+            1e-12,
+            'The two bloc leaders together are an anti-pact and no pact.'
+        );
+    }
+
+    /** Every party but the two leaders declares for the leader it stands nearer, and moves bloc when it drifts across. */
+    public function testEachPartyDeclaresForTheLeaderItStandsNearer(): void
+    {
+        $blocs = Formation::blocs(Diet::HOME_POSITIONS);
+        $this->assertSame([
+            Diet::CIVIC => Diet::CIVIC,
+            Diet::VANGUARD => Diet::VANGUARD,
+            Diet::IRON_HARBOR => Diet::CIVIC,
+            Diet::EXCHANGE => Diet::VANGUARD,
+            Diet::CHARTISTS => Diet::VANGUARD,
+            Diet::COMMON_LOT => Diet::CIVIC,
+            Diet::FREE_PORT => Diet::VANGUARD,
+            Diet::BASTION_GUILDS => Diet::CIVIC,
+        ], $blocs);
+
+        $positions = Diet::HOME_POSITIONS;
+        $positions[Diet::CHARTISTS][Diet::AXIS_STATE] = 0.4;
+        $this->assertSame(Diet::CIVIC, Formation::blocs($positions)[Diet::CHARTISTS], 'The Chartists drift toward big government and change sides.');
+    }
+
+    public function testOnlyTheTwoLeadersRuleEachOtherOut(): void
+    {
+        $this->assertTrue(Formation::rulesOut(Diet::CIVIC, Diet::VANGUARD));
+        $this->assertTrue(Formation::rulesOut(Diet::VANGUARD, Diet::CIVIC));
+        $this->assertFalse(Formation::rulesOut(Diet::CIVIC, Diet::CIVIC));
+        $this->assertFalse(Formation::rulesOut(Diet::CIVIC, Diet::EXCHANGE));
+        $this->assertFalse(Formation::rulesOut(Diet::CHARTISTS, Diet::COMMON_LOT));
+    }
+
+    /** The Council median is where the party holding the middle seat stands, counting from the populist end. */
+    public function testTheCouncilMedianIsTheMiddleSeat(): void
+    {
+        $seats = array_fill_keys(Diet::PARTIES, 0.0);
+        $seats[Diet::COMMON_LOT] = 160.0;
+        $seats[Diet::CHARTISTS] = 140.0;
+
+        $this->assertSame(-0.8, Formation::councilMedian($seats, Diet::HOME_POSITIONS));
+        $seats[Diet::COMMON_LOT] = 140.0;
+        $seats[Diet::CHARTISTS] = 160.0;
+        $this->assertSame(0.8, Formation::councilMedian($seats, Diet::HOME_POSITIONS));
     }
 
     /** The range is the distance between the two furthest members, across all three axes. */
     public function testTheRangeSpansAllThreeAxes(): void
     {
-        $positions = Diet::SEED_POSITIONS;
+        $positions = Diet::HOME_POSITIONS;
 
         $this->assertEqualsWithDelta(
-            sqrt((0.6 ** 2) + (0.2 ** 2) + (0.5 ** 2)),
+            sqrt((0.6 ** 2) + (0.6 ** 2) + (0.5 ** 2)),
             Formation::ideologicalRange([Diet::VANGUARD, Diet::CHARTISTS], $positions),
             1e-12
         );
@@ -71,85 +131,79 @@ class CoalitionFormationTest extends TestCase
         $this->assertGreaterThan(Formation::successProbability([0.0], 0.0), Formation::successProbability([0.0, -1.0], 0.0), 'Another cabinet on the table only adds to the chance.');
     }
 
-    // --- The rounds ---
+    // --- What is on offer ---
 
-    public function testTheLeadPassesAsTheRoundsRequire(): void
-    {
-        $expected = [
-            1 => ['a', Diet::ROUND_MAJORITY],
-            2 => ['a', Diet::ROUND_SUPPORT],
-            3 => ['b', Diet::ROUND_MAJORITY],
-            4 => ['b', Diet::ROUND_SUPPORT],
-            5 => ['a', Diet::ROUND_RUNOFF],
-            6 => ['b', Diet::ROUND_RUNOFF],
-            7 => ['a', Diet::ROUND_RUNOFF],
-        ];
-        foreach ($expected as $attempt => $lead) {
-            $this->assertSame($lead, Formation::lead($attempt, 'a', 'b'), "Attempt {$attempt}.");
-        }
-    }
-
-    public function testTheFirstRoundOffersOnlyMajorityCabinetsTheFormateurLeads(): void
-    {
-        $options = Formation::options(Diet::VANGUARD, Diet::ROUND_MAJORITY, Diet::SEED_SEATS, Diet::SEED_POSITIONS);
-
-        $this->assertNotSame([], $options);
-        foreach ($options as $option) {
-            $this->assertContains(Diet::VANGUARD, $option['cabinet']);
-            $this->assertGreaterThanOrEqual(Diet::MAJORITY_SEATS, Formation::coalitionSeats($option['cabinet'], Diet::SEED_SEATS));
-            $this->assertSame([], $option['support']);
-        }
-        // Every set holding the Vanguard with a majority: 32 sets hold it, and this many reach 151.
-        $expected = 0;
-        for ($mask = 0; $mask < 32; ++$mask) {
-            $others = array_values(array_diff(Diet::PARTIES, [Diet::VANGUARD]));
-            $members = [Diet::VANGUARD];
-            foreach ($others as $i => $party) {
-                if ($mask & (1 << $i)) {
-                    $members[] = $party;
-                }
-            }
-            $expected += Formation::coalitionSeats($members, Diet::SEED_SEATS) >= Diet::MAJORITY_SEATS ? 1 : 0;
-        }
-        $this->assertCount($expected, $options);
-    }
-
-    /** From the second round a minority cabinet is on offer, with the narrowest set of supporters that carries it. */
-    public function testMinorityCabinetsComeWithTheNarrowestSupportThatCarriesThem(): void
+    /**
+     * Every set of parties is on offer, as Martin & Stevenson estimated over: a majority alone, a minority with support,
+     * and never supported by a party that ruled out governing with one of its members.
+     */
+    public function testEveryCabinetIsOnOffer(): void
     {
         $seats = Diet::SEED_SEATS;
-        $positions = Diet::SEED_POSITIONS;
-        $options = Formation::options(Diet::VANGUARD, Diet::ROUND_SUPPORT, $seats, $positions);
-        $minority = array_filter($options, static fn(array $option): bool => Formation::coalitionSeats($option['cabinet'], $seats) < Diet::MAJORITY_SEATS);
+        $positions = Diet::HOME_POSITIONS;
+        $options = Formation::options($seats, $positions);
 
-        $this->assertNotSame([], $minority);
-        $this->assertCount(count(Formation::options(Diet::VANGUARD, Diet::ROUND_MAJORITY, $seats, $positions)) + count($minority), $options, 'The majority cabinets stay on offer.');
-        foreach ($minority as $option) {
+        $this->assertCount(count($options), array_unique(array_map(static fn(array $option): string => implode('+', $option['cabinet']), $options)));
+        $majorities = 0;
+        foreach ($options as $option) {
+            $cabinetSeats = Formation::coalitionSeats($option['cabinet'], $seats);
+            if ($cabinetSeats >= Diet::MAJORITY_SEATS) {
+                ++$majorities;
+                $this->assertSame([], $option['support'], 'A majority cabinet needs no support.');
+                continue;
+            }
             $total = Formation::coalitionSeats(array_merge($option['cabinet'], $option['support']), $seats);
             $this->assertGreaterThanOrEqual(Diet::MAJORITY_SEATS, $total);
             $this->assertSame([], array_intersect($option['cabinet'], $option['support']));
             foreach ($option['support'] as $party) {
                 $this->assertLessThan(Diet::MAJORITY_SEATS, $total - $seats[$party], "{$party} is not needed.");
+                foreach ($option['cabinet'] as $member) {
+                    $this->assertFalse(Formation::rulesOut($party, $member), "{$party} props up a cabinet holding its rival.");
+                }
             }
         }
-
-        // The Vanguard alone: the Exchange Party and the Chartists are the narrowest pair that carries it (155 seats).
-        $alone = array_values(array_filter($options, static fn(array $option): bool => $option['cabinet'] === [Diet::VANGUARD]))[0];
-        $this->assertSame([Diet::EXCHANGE, Diet::CHARTISTS], $alone['support']);
-        $this->assertSame($alone['support'], Formation::supportFor([Diet::VANGUARD], $seats, $positions));
+        $expected = 0;
+        for ($mask = 1; $mask < (1 << count(Diet::PARTIES)); ++$mask) {
+            $members = array_values(array_filter(Diet::PARTIES, static fn(string $party): bool => ($mask & (1 << array_search($party, Diet::PARTIES, true))) !== 0));
+            $expected += Formation::coalitionSeats($members, $seats) >= Diet::MAJORITY_SEATS ? 1 : 0;
+        }
+        $this->assertSame($expected, $majorities, 'Every majority cabinet is on offer.');
     }
 
-    /** The founding cabinet is the Vanguard's likeliest majority at the founding Diet, so the constant cannot drift from the calculus. */
-    public function testTheFoundingCabinetIsTheVanguardsLikeliestMajority(): void
+    /** A minority cabinet's supporters are the narrowest set of outsiders that carries it, its rival left out. */
+    public function testMinorityCabinetsComeWithTheNarrowestSupportThatCarriesThem(): void
+    {
+        // The Vanguard alone (80 seats): its bloc, the Exchange Party, the Chartists and the Free Port Compact, carry it at 155.
+        $this->assertSame([Diet::EXCHANGE, Diet::CHARTISTS, Diet::FREE_PORT], Formation::supportFor([Diet::VANGUARD], Diet::SEED_SEATS, Diet::HOME_POSITIONS));
+
+        // With the Civic Front the only party big enough, the Vanguard cannot be carried at all.
+        $seats = array_fill_keys(Diet::PARTIES, 1.0);
+        $seats[Diet::CIVIC] = 150.0;
+        $seats[Diet::VANGUARD] = 144.0;
+        $this->assertNull(Formation::supportFor([Diet::VANGUARD], $seats, Diet::HOME_POSITIONS));
+        $this->assertNotContains([Diet::VANGUARD], array_column(Formation::options($seats, Diet::HOME_POSITIONS), 'cabinet'));
+    }
+
+    /** The talks for a cabinet are led by its largest party, whether or not it is the Diet's largest. */
+    public function testACabinetsLargestPartyLeadsItsTalks(): void
     {
         $order = Formation::bySize(Diet::SEED_SEATS, Diet::SEED_VOTE_SHARES);
+
         $this->assertSame([Diet::VANGUARD, Diet::CIVIC], array_slice($order, 0, 2));
+        $this->assertSame(Diet::VANGUARD, Formation::leader([Diet::EXCHANGE, Diet::VANGUARD], $order));
+        $this->assertSame(Diet::CIVIC, Formation::leader([Diet::IRON_HARBOR, Diet::CIVIC, Diet::COMMON_LOT], $order));
+        $this->assertSame(Diet::CHARTISTS, Formation::leader([Diet::COMMON_LOT, Diet::CHARTISTS], $order));
+    }
 
-        $options = Formation::options(Diet::VANGUARD, Diet::ROUND_MAJORITY, Diet::SEED_SEATS, Diet::SEED_POSITIONS);
-        $utilities = array_map(static fn(array $option): float => Formation::utility($option['cabinet'], Diet::SEED_SEATS, Diet::SEED_POSITIONS, [], Diet::VANGUARD), $options);
+    /** The founding government is the likeliest the founding Diet would seat, so the constant cannot drift from the calculus. */
+    public function testTheFoundingGovernmentIsTheFoundingDietsLikeliest(): void
+    {
+        $options = Formation::options(Diet::SEED_SEATS, Diet::HOME_POSITIONS);
+        $utilities = array_map(static fn(array $option): float => Formation::utility($option['cabinet'], $option['support'], Diet::SEED_SEATS, Diet::HOME_POSITIONS, [], Diet::VANGUARD), $options);
+        $likeliest = $options[(int) array_search(max($utilities), $utilities, true)];
 
-        $this->assertSame(Diet::governingParties(Diet::SEED_COALITION), $options[Formation::likeliest($utilities)]['cabinet']);
-        $this->assertSame([], Diet::governingParties(Diet::SEED_SUPPORT));
+        $this->assertSame(Diet::governingParties(Diet::SEED_COALITION), $likeliest['cabinet']);
+        $this->assertSame(Diet::governingParties(Diet::SEED_SUPPORT), $likeliest['support']);
     }
 
     // --- The talks ---
@@ -158,7 +212,7 @@ class CoalitionFormationTest extends TestCase
     {
         $seats = [Diet::CIVIC => 40.0, Diet::VANGUARD => 170.0, Diet::IRON_HARBOR => 30.0, Diet::EXCHANGE => 30.0, Diet::CHARTISTS => 20.0, Diet::COMMON_LOT => 10.0];
 
-        $talks = Formation::talks($seats, Diet::SEED_VOTE_SHARES, Diet::SEED_POSITIONS, [], MathUtility::ownStream(1));
+        $talks = Formation::talks($seats, Diet::SEED_VOTE_SHARES, Diet::HOME_POSITIONS, [], MathUtility::ownStream(1));
 
         $this->assertSame(['cabinet' => [Diet::VANGUARD], 'support' => [], 'days' => 0.0, 'log' => []], $talks);
     }
@@ -168,55 +222,56 @@ class CoalitionFormationTest extends TestCase
     {
         $seats = [Diet::CIVIC => 60.0, Diet::VANGUARD => (float) Diet::MAJORITY_SEATS, Diet::IRON_HARBOR => 30.0, Diet::EXCHANGE => 29.0, Diet::CHARTISTS => 20.0, Diet::COMMON_LOT => 10.0];
 
-        $talks = Formation::talks($seats, Diet::SEED_VOTE_SHARES, Diet::SEED_POSITIONS, [], MathUtility::ownStream(1));
+        $talks = Formation::talks($seats, Diet::SEED_VOTE_SHARES, Diet::HOME_POSITIONS, [], MathUtility::ownStream(1));
 
         $this->assertSame([Diet::VANGUARD], $talks['cabinet']);
         $this->assertSame([], $talks['log']);
     }
 
-    /** A successful attempt draws its cabinet in proportion to its odds, not always the likeliest one. */
+    /** Each attempt tries a cabinet drawn in proportion to its odds, not always the likeliest one. */
     public function testTheCabinetIsDrawnInProportionToItsOdds(): void
     {
-        $options = Formation::options(Diet::VANGUARD, Diet::ROUND_MAJORITY, Diet::SEED_SEATS, Diet::SEED_POSITIONS);
-        $utilities = array_map(static fn(array $option): float => Formation::utility($option['cabinet'], Diet::SEED_SEATS, Diet::SEED_POSITIONS, [], Diet::VANGUARD), $options);
-        $likeliest = $options[Formation::likeliest($utilities)]['cabinet'];
+        $options = Formation::options(Diet::SEED_SEATS, Diet::HOME_POSITIONS);
+        $utilities = array_map(static fn(array $option): float => Formation::utility($option['cabinet'], $option['support'], Diet::SEED_SEATS, Diet::HOME_POSITIONS, [], Diet::VANGUARD), $options);
+        $likeliest = $options[(int) array_search(max($utilities), $utilities, true)]['cabinet'];
         $expected = exp(max($utilities)) / array_sum(array_map('exp', $utilities));
 
         $stream = MathUtility::ownStream(3);
-        $firstTime = 0;
+        $attempts = 0;
         $modal = 0;
-        for ($trial = 0; $trial < 4000; ++$trial) {
-            $talks = Formation::talks(Diet::SEED_SEATS, Diet::SEED_VOTE_SHARES, Diet::SEED_POSITIONS, [], $stream);
-            if (count($talks['log']) === 1) {
-                ++$firstTime;
-                $modal += $talks['cabinet'] === $likeliest ? 1 : 0;
+        for ($trial = 0; $trial < 1000; ++$trial) {
+            foreach (Formation::talks(Diet::SEED_SEATS, Diet::SEED_VOTE_SHARES, Diet::HOME_POSITIONS, [], $stream)['log'] as $attempt) {
+                ++$attempts;
+                $modal += $attempt['cabinet'] === $likeliest ? 1 : 0;
             }
         }
 
-        $this->assertEqualsWithDelta($expected, $modal / $firstTime, 0.03);
+        $this->assertEqualsWithDelta($expected, $modal / $attempts, 0.03);
     }
 
-    /** An attempt that fails logs what its formateur was likeliest to form; the one that succeeds logs the cabinet. */
+    /** Every attempt is logged with the cabinet it tried and the party that led it; the last formed the government. */
     public function testEveryAttemptIsLogged(): void
     {
-        // Every draw fails an attempt until the round-2 sure thing: uniform draws at 0.9999 fail anything short of p = 1.
+        // Uniform draws in turn: which cabinet an attempt tries, then whether it succeeds. 0.0 tries the first cabinet,
+        // the Civic Front alone; just under 1.0 tries the last with any odds to speak of -- every party but the Civic
+        // Front, since every party together holds both leaders -- and fails anything short of certain.
         $draws = new class extends MathUtility {
-            public int $attempt = 0;
-            public function generateExponential(float $rate = 1.0): float { ++$this->attempt; return 1.0; }
-            public function generateUniform(): float { return $this->attempt < 3 ? 0.9999999 : 0.0; }
+            /** @var list<float> */
+            public array $uniforms = [0.0, 0.9999999, 0.9999999, 0.9999999, 0.0, 0.0];
+            public function generateExponential(float $rate = 1.0): float { return 1.0; }
+            public function generateUniform(): float { return (float) array_shift($this->uniforms); }
         };
 
-        $talks = Formation::talks(Diet::SEED_SEATS, Diet::SEED_VOTE_SHARES, Diet::SEED_POSITIONS, [], $draws);
+        $talks = Formation::talks(Diet::SEED_SEATS, Diet::SEED_VOTE_SHARES, Diet::HOME_POSITIONS, [], $draws);
 
-        $this->assertCount(3, $talks['log']);
-        $this->assertSame([Diet::VANGUARD, Diet::VANGUARD, Diet::CIVIC], array_column($talks['log'], 'formateur'));
-        $this->assertSame([Diet::ROUND_MAJORITY, Diet::ROUND_SUPPORT, Diet::ROUND_MAJORITY], array_column($talks['log'], 'round'));
+        $this->assertSame([Diet::CIVIC, Diet::VANGUARD, Diet::CIVIC], array_column($talks['log'], 'formateur'), 'Each attempt is led by the largest party in its cabinet.');
         $this->assertSame([false, false, true], array_column($talks['log'], 'formed'));
-        $this->assertEqualsWithDelta(3 * MacroEngine::FORMATION_ATTEMPT_DAYS, $talks['days'], 1e-9);
+        $this->assertSame([[Diet::CIVIC], array_values(array_diff(Diet::PARTIES, [Diet::CIVIC])), [Diet::CIVIC]], array_column($talks['log'], 'cabinet'));
         $this->assertSame([MacroEngine::FORMATION_ATTEMPT_DAYS, 2 * MacroEngine::FORMATION_ATTEMPT_DAYS, 3 * MacroEngine::FORMATION_ATTEMPT_DAYS], array_column($talks['log'], 'day'));
-        $this->assertSame(Diet::governingParties(Diet::SEED_COALITION), $talks['log'][0]['cabinet'], 'The first attempt logs the Vanguard\'s likeliest majority.');
-        $this->assertContains(Diet::CIVIC, $talks['cabinet']);
-        $this->assertSame($talks['log'][2]['cabinet'], $talks['cabinet']);
+        $this->assertEqualsWithDelta(3 * MacroEngine::FORMATION_ATTEMPT_DAYS, $talks['days'], 1e-9);
+        $this->assertSame([Diet::CIVIC], $talks['cabinet'], 'A cabinet without the Diet\'s largest party can form.');
+        $this->assertSame(Formation::supportFor([Diet::CIVIC], Diet::SEED_SEATS, Diet::HOME_POSITIONS), $talks['support']);
+        $this->assertSame($talks['support'], $talks['log'][2]['support']);
     }
 
     /** However the draws fall, the talks end in a government that commands the Diet. */
@@ -230,28 +285,48 @@ class CoalitionFormationTest extends TestCase
 
             $this->assertGreaterThanOrEqual(Diet::MAJORITY_SEATS, Formation::coalitionSeats(array_merge($talks['cabinet'], $talks['support']), $seats));
             $this->assertTrue($talks['log'] === [] || $talks['log'][array_key_last($talks['log'])]['formed']);
+            foreach ($talks['log'] as $attempt) {
+                $this->assertSame(Formation::leader($attempt['cabinet'], Formation::bySize($seats, $shares)), $attempt['formateur']);
+            }
             $this->assertSame(count($talks['log']) === 0, $talks['days'] === 0.0);
         }
     }
 
-    /** The Council's loyalists and the populists are the axis's two ends: they almost never sit in one cabinet. */
-    public function testTheChartistsAndTheCommonLotRarelyGovernTogether(): void
+    /**
+     * The firewall: the Council axis's two ends seldom sit in cabinet and far more often carry one from outside. The two
+     * bloc leaders seldom serve together (Scandinavia since 1945: 1 cabinet in 68) and never prop each other up.
+     */
+    public function testTheFirewallKeepsTheCouncilAxissEndsInSupport(): void
     {
         $stream = MathUtility::ownStream(13);
+        $trials = 400;
+        $cabinet = array_fill_keys([Diet::CHARTISTS, Diet::COMMON_LOT], 0);
+        $support = $cabinet;
         $together = 0;
-        for ($trial = 0; $trial < 2000; ++$trial) {
+        for ($trial = 0; $trial < $trials; ++$trial) {
             [$seats, $shares, $positions] = $this->driftedFoundingDiet($stream);
-            $cabinet = Formation::talks($seats, $shares, $positions, [], $stream)['cabinet'];
-            $together += in_array(Diet::CHARTISTS, $cabinet, true) && in_array(Diet::COMMON_LOT, $cabinet, true) ? 1 : 0;
+            $talks = Formation::talks($seats, $shares, $positions, [], $stream);
+            foreach ($cabinet as $party => $unused) {
+                $cabinet[$party] += in_array($party, $talks['cabinet'], true) ? 1 : 0;
+                $support[$party] += in_array($party, $talks['support'], true) ? 1 : 0;
+            }
+            $together += in_array(Diet::CIVIC, $talks['cabinet'], true) && in_array(Diet::VANGUARD, $talks['cabinet'], true) ? 1 : 0;
+            foreach ([[Diet::CIVIC, Diet::VANGUARD], [Diet::VANGUARD, Diet::CIVIC]] as [$leader, $rival]) {
+                $this->assertFalse(in_array($leader, $talks['cabinet'], true) && in_array($rival, $talks['support'], true), 'A bloc leader props up its rival.');
+            }
         }
+        $this->assertLessThan(0.05, $together / $trials);
 
-        $this->assertLessThan(0.06, $together / 2000);
+        foreach ($cabinet as $party => $count) {
+            $this->assertLessThan(0.15, $count / $trials, "{$party} sits in cabinet too often.");
+            $this->assertGreaterThan(2 * $count, $support[$party], "{$party} governs rather than supports.");
+        }
     }
 
     public function testTheTalksReplayUnderTheSameSeed(): void
     {
-        $first = Formation::talks(Diet::SEED_SEATS, Diet::SEED_VOTE_SHARES, Diet::SEED_POSITIONS, [], MathUtility::ownStream(5));
-        $again = Formation::talks(Diet::SEED_SEATS, Diet::SEED_VOTE_SHARES, Diet::SEED_POSITIONS, [], MathUtility::ownStream(5));
+        $first = Formation::talks(Diet::SEED_SEATS, Diet::SEED_VOTE_SHARES, Diet::HOME_POSITIONS, [], MathUtility::ownStream(5));
+        $again = Formation::talks(Diet::SEED_SEATS, Diet::SEED_VOTE_SHARES, Diet::HOME_POSITIONS, [], MathUtility::ownStream(5));
 
         $this->assertSame($first, $again);
     }
@@ -287,7 +362,7 @@ class CoalitionFormationTest extends TestCase
     }
 
     /**
-     * The founding Diet a few votes on: shares scattered by the short-term swing, positions by a few manifesto steps.
+     * The founding Diet a few votes on: shares scattered by the short-term swing, positions around their homes.
      *
      * @return array{0: array<string, int>, 1: array<string, float>, 2: array<string, array<string, float>>}
      */
@@ -298,7 +373,7 @@ class CoalitionFormationTest extends TestCase
         foreach (Diet::PARTIES as $party) {
             $shares[$party] = Diet::SEED_VOTE_SHARES[$party] * exp(0.25 * $stream->generateStandardNormal());
             foreach (Diet::AXES as $axis) {
-                $positions[$party][$axis] = max(-1.0, min(1.0, Diet::SEED_POSITIONS[$party][$axis] + (0.3 * $stream->generateStandardNormal())));
+                $positions[$party][$axis] = max(-1.0, min(1.0, Diet::HOME_POSITIONS[$party][$axis] + (0.3 * $stream->generateStandardNormal())));
             }
             $positions[$party] = Diet::position($party, $positions);
         }

@@ -36,6 +36,21 @@ class GovernmentPageBuilder
         AerieDiet::EXCHANGE => '#0d9488',
         AerieDiet::CHARTISTS => '#7c3aed',
         AerieDiet::COMMON_LOT => '#d97706',
+        AerieDiet::FREE_PORT => '#16a34a',
+        AerieDiet::BASTION_GUILDS => '#db2777',
+    ];
+
+    // --- Party Labels ---
+    /** Short names for the drawings and narrow columns, where the full names would crowd each other. */
+    public const PARTY_LABELS = [
+        AerieDiet::CIVIC => 'Civic',
+        AerieDiet::VANGUARD => 'Vanguard',
+        AerieDiet::IRON_HARBOR => 'Iron Harbor',
+        AerieDiet::EXCHANGE => 'Exchange',
+        AerieDiet::CHARTISTS => 'Chartists',
+        AerieDiet::COMMON_LOT => 'Common Lot',
+        AerieDiet::FREE_PORT => 'Free Port',
+        AerieDiet::BASTION_GUILDS => 'Bastion Guilds',
     ];
 
     // --- Hemicycle Geometry ---
@@ -47,6 +62,18 @@ class GovernmentPageBuilder
     // --- Compass Geometry ---
     /** Half-width of the compass drawing, in SVG units, for a policy axis running -1 to +1. */
     private const COMPASS_HALF_WIDTH = 100.0;
+    /** Margin around the plane for the axis names, in SVG units: wide enough for 'Technocratic' beside the strip. */
+    private const COMPASS_MARGIN = 56.0;
+    /** Distance from the plane's lower edge to the Council strip's line, in SVG units: clear of 'Small state' for the highest row. */
+    private const COMPASS_STRIP_OFFSET = 48.0;
+    /** Font size of the axis names and party labels, in SVG units. */
+    private const COMPASS_FONT_SIZE = 7.0;
+    /** Advance of a bold label's average character as a share of its font size, to size a label's box. */
+    public const COMPASS_CHARACTER_WIDTH = 0.6;
+    /** Gap kept between a label and its dot, or another label, in SVG units. */
+    private const COMPASS_LABEL_GAP = 1.5;
+    /** Baselines a Council-strip label may take, above and below the line, nearest first, a label and its gap apart. */
+    private const COMPASS_STRIP_ROWS = [-8.0, 15.0, -17.0, 24.0, -26.0, 33.0];
 
     public function __construct(private readonly DietElectionRepository $elections) {}
 
@@ -65,19 +92,24 @@ class GovernmentPageBuilder
         $removalSeats = $sumSeats(array_values(array_diff(array_merge($coalition, $support), AerieDiet::COUNCIL_LOYALISTS)));
         $talking = $macro->coalitionTakesOfficeAt > $macro->totalTime;
 
+        $blocs = CoalitionFormation::blocs($macro->partyPositions);
         $parties = [];
         foreach (AerieDiet::PARTIES as $party) {
             $position = AerieDiet::position($party, $macro->partyPositions);
             $parties[] = [
                 'key' => $party,
                 'name' => AerieDiet::PARTY_NAMES[$party],
+                'label' => self::PARTY_LABELS[$party],
                 'color' => self::PARTY_COLORS[$party],
                 'seats' => $seats[$party],
                 'share' => $macro->dietVoteShares[$party] ?? 0.0,
                 'swing' => $history === [] ? null : ($macro->dietVoteSwings[$party] ?? 0.0),
                 'governing' => in_array($party, $coalition, true),
                 'supporting' => in_array($party, $support, true),
-                'primaryAxis' => AerieDiet::PRIMARY_AXIS[$party],
+                'fixedAxes' => array_keys(AerieDiet::FIXED_POSITIONS[$party]),
+                'leadsBloc' => $blocs[$party] === $party,
+                'bloc' => self::PARTY_LABELS[$blocs[$party]],
+                'blocColor' => self::PARTY_COLORS[$blocs[$party]],
                 'state' => $position[AerieDiet::AXIS_STATE],
                 'openness' => $position[AerieDiet::AXIS_OPENNESS],
                 'council' => $position[AerieDiet::AXIS_COUNCIL],
@@ -149,8 +181,23 @@ class GovernmentPageBuilder
                 'partyUtility' => MacroEngine::FORMATION_PARTY_UTILITY,
                 'largestPartyUtility' => MacroEngine::FORMATION_LARGEST_PARTY_UTILITY,
                 'rangeUtility' => MacroEngine::FORMATION_RANGE_UTILITY,
+                'manifestoPointsPerUnit' => MacroEngine::FORMATION_MANIFESTO_POINTS_PER_UNIT,
+                'pactUtility' => MacroEngine::FORMATION_PACT_UTILITY,
+                'antipactUtility' => MacroEngine::FORMATION_ANTIPACT_UTILITY,
+                'antisystemUtility' => MacroEngine::FORMATION_ANTISYSTEM_UTILITY,
+                'blocLeaders' => array_map(static fn(string $party): string => AerieDiet::PARTY_NAMES[$party], array_keys(AerieDiet::BLOC_CORES)),
+                'blocCores' => array_map(static fn(string $leader): string => AerieDiet::PARTY_NAMES[AerieDiet::BLOC_CORES[$leader][1]], array_keys(AerieDiet::BLOC_CORES)),
+                'blocSeats' => array_map(
+                    static fn(string $leader): array => [
+                        'name' => self::PARTY_LABELS[$leader],
+                        'color' => self::PARTY_COLORS[$leader],
+                        'seats' => $sumSeats(array_keys(array_filter($blocs, static fn(string $bloc): bool => $bloc === $leader))),
+                    ],
+                    array_keys(AerieDiet::BLOC_CORES)
+                ),
                 'statusQuoUtility' => MacroEngine::FORMATION_STATUS_QUO_UTILITY,
                 'reservation' => MacroEngine::FORMATION_RESERVATION,
+                'reservationStep' => MacroEngine::FORMATION_RESERVATION_STEP,
                 'attemptDays' => MacroEngine::FORMATION_ATTEMPT_DAYS,
                 'formationMeanDays' => MacroEngine::FORMATION_MEAN_DAYS,
                 'supportAccountability' => MacroEngine::ELECTION_SUPPORT_ACCOUNTABILITY,
@@ -176,7 +223,7 @@ class GovernmentPageBuilder
 
     /**
      * The talks after the last vote, as far as they have gone: the attempts whose day has passed, who leads the one
-     * under way, and, once a cabinet has taken office, how long it took.
+     * under way (but not the cabinet it is trying), and, once a cabinet has taken office, how long it took.
      *
      * @return array<string, mixed>|null Null before the first vote.
      */
@@ -188,16 +235,11 @@ class GovernmentPageBuilder
 
         $elapsed = ($macro->totalTime - $macro->lastElectionAt) * FinancialConstants::DAYS_PER_YEAR;
         $names = AerieDiet::PARTY_NAMES;
-        $rounds = [
-            AerieDiet::ROUND_MAJORITY => 'a majority cabinet',
-            AerieDiet::ROUND_SUPPORT => 'a majority, or a minority cabinet with support',
-            AerieDiet::ROUND_RUNOFF => 'any cabinet it can carry',
-        ];
         $entries = [];
         $leading = null;
         foreach ($macro->formationLog as $attempt => $entry) {
             if ($talking && $entry['day'] > $elapsed) {
-                $leading = ['name' => $names[$entry['formateur']], 'color' => self::PARTY_COLORS[$entry['formateur']], 'seeking' => $rounds[$entry['round']], 'attempt' => $attempt + 1];
+                $leading = ['name' => $names[$entry['formateur']], 'color' => self::PARTY_COLORS[$entry['formateur']], 'attempt' => $attempt + 1];
                 break;
             }
             $entries[] = [
@@ -205,7 +247,6 @@ class GovernmentPageBuilder
                 'attempt' => $attempt + 1,
                 'formateur' => $names[$entry['formateur']],
                 'color' => self::PARTY_COLORS[$entry['formateur']],
-                'seeking' => $rounds[$entry['round']],
                 'formed' => $entry['formed'],
                 'cabinet' => array_map(static fn(string $party): string => $names[$party], $entry['cabinet']),
                 'support' => array_map(static fn(string $party): string => $names[$party], $entry['support']),
@@ -360,7 +401,7 @@ class GovernmentPageBuilder
 
     /**
      * The policy space: openness across and size of state up, with the Council axis as a strip beneath; each party
-     * with its trail of past positions.
+     * with its trail of past positions, and its label placed where it crowds nothing.
      *
      * @param list<array<string, mixed>>  $parties    Party rows.
      * @param list<DietElection>          $history    Votes, oldest first.
@@ -371,6 +412,7 @@ class GovernmentPageBuilder
     private function compass(array $parties, array $history, array $government, array $coalition): array
     {
         $scale = self::COMPASS_HALF_WIDTH;
+        $margin = self::COMPASS_MARGIN;
         $point = static fn(float $state, float $openness): array => ['x' => round($openness * $scale, 2), 'y' => round(-$state * $scale, 2)];
 
         $dots = [];
@@ -386,10 +428,26 @@ class GovernmentPageBuilder
                 $councilTrail[] = round($past[AerieDiet::AXIS_COUNCIL] * $scale, 2);
             }
             $dots[] = $party + $point($party['state'], $party['openness']) + [
+                'r' => 3.0 + ($party['seats'] / 20.0),
                 'trail' => $trail,
                 'councilX' => round($party['council'] * $scale, 2),
+                'councilR' => 2.5 + ($party['seats'] / 25.0),
                 'councilTrail' => $councilTrail,
             ];
+        }
+
+        $size = self::COMPASS_FONT_SIZE;
+        $axes = [
+            ['text' => 'Big state', 'x' => 0.0, 'y' => -$scale - 5.0, 'anchor' => 'middle'],
+            ['text' => 'Small state', 'x' => 0.0, 'y' => $scale + 11.0, 'anchor' => 'middle'],
+            ['text' => 'Closed', 'x' => -$scale - 4.0, 'y' => 2.0, 'anchor' => 'end'],
+            ['text' => 'Open', 'x' => $scale + 4.0, 'y' => 2.0, 'anchor' => 'start'],
+        ];
+        $bounds = [-$scale - $margin, -$scale - 16.0, $scale + $margin, $scale + 16.0];
+        $plane = self::placePlaneLabels($dots, array_map(static fn(array $axis): array => self::labelBox($axis['text'], $axis['x'], $axis['y'], $axis['anchor']), $axes), $bounds);
+        $strip = self::placeStripLabels($dots);
+        foreach ($dots as $i => $dot) {
+            $dots[$i] = $dot + $plane[$i] + $strip[$i];
         }
 
         $links = [];
@@ -400,14 +458,152 @@ class GovernmentPageBuilder
             }
         }
 
+        $stripY = $scale + self::COMPASS_STRIP_OFFSET;
+        $bottom = $stripY + max(self::COMPASS_STRIP_ROWS) + (0.3 * $size);
+
         return [
             'halfWidth' => $scale,
+            'viewBox' => [-$scale - $margin, -$scale - 16.0, 2.0 * ($scale + $margin), $bottom + $scale + 16.0],
+            'fontSize' => $size,
+            'axes' => $axes,
+            'stripY' => $stripY,
+            'stripAxes' => [
+                ['text' => 'Populist', 'x' => -$scale - 4.0, 'y' => 2.0, 'anchor' => 'end'],
+                ['text' => 'Technocratic', 'x' => $scale + 4.0, 'y' => 2.0, 'anchor' => 'start'],
+            ],
             'parties' => $dots,
             'links' => $links,
             'government' => $point($government[AerieDiet::AXIS_STATE], $government[AerieDiet::AXIS_OPENNESS]) + [
                 'councilX' => round($government[AerieDiet::AXIS_COUNCIL] * $scale, 2),
             ],
         ];
+    }
+
+    /**
+     * Where each party's label goes in the plane: above its dot, below, right or left, the first spot inside the
+     * drawing that clears the axis names, the other dots and every label placed before it, the larger parties placed
+     * first; above when no spot is clear.
+     *
+     * @param list<array<string, mixed>>                          $dots   The parties, with x, y, r and label.
+     * @param list<array{0: float, 1: float, 2: float, 3: float}> $taken  Boxes already drawn on.
+     * @param array{0: float, 1: float, 2: float, 3: float}       $bounds The box a label must stay inside.
+     * @return array<int, array{labelX: float, labelY: float, labelAnchor: string}> By the dots' index.
+     */
+    private static function placePlaneLabels(array $dots, array $taken, array $bounds): array
+    {
+        $size = self::COMPASS_FONT_SIZE;
+        $gap = self::COMPASS_LABEL_GAP;
+        $circles = array_map(static fn(array $dot): array => [$dot['x'] - $dot['r'], $dot['y'] - $dot['r'], $dot['x'] + $dot['r'], $dot['y'] + $dot['r']], $dots);
+
+        $placed = [];
+        foreach (self::bySeats($dots) as $i) {
+            $dot = $dots[$i];
+            $candidates = [
+                [$dot['x'], $dot['y'] - $dot['r'] - $gap - (0.2 * $size), 'middle'],
+                [$dot['x'], $dot['y'] + $dot['r'] + $gap + (0.8 * $size), 'middle'],
+                [$dot['x'] + $dot['r'] + $gap, $dot['y'] + (0.3 * $size), 'start'],
+                [$dot['x'] - $dot['r'] - $gap, $dot['y'] + (0.3 * $size), 'end'],
+            ];
+            $others = array_merge($taken, array_values(array_diff_key($circles, [$i => true])));
+            $choice = $candidates[0];
+            foreach ($candidates as $candidate) {
+                $box = self::labelBox($dot['label'], ...$candidate);
+                $inside = $box[0] >= $bounds[0] && $box[1] >= $bounds[1] && $box[2] <= $bounds[2] && $box[3] <= $bounds[3];
+                if ($inside && !self::crowds($box, $others)) {
+                    $choice = $candidate;
+                    break;
+                }
+            }
+            $taken[] = self::labelBox($dot['label'], ...$choice);
+            $placed[$i] = ['labelX' => round($choice[0], 2), 'labelY' => round($choice[1], 2), 'labelAnchor' => $choice[2]];
+        }
+
+        return $placed;
+    }
+
+    /**
+     * Where each party's label goes on the Council strip: centred over its dot (the margin holds half the longest
+     * label past either end), in the nearest row above or below the line that no label placed before it crowds, the
+     * larger parties placed first; the nearest row when every row is crowded.
+     *
+     * @param list<array<string, mixed>> $dots The parties, with councilX and label.
+     * @return array<int, array{stripLabelX: float, stripLabelY: float}> By the dots' index.
+     */
+    private static function placeStripLabels(array $dots): array
+    {
+        $taken = [];
+        $placed = [];
+        foreach (self::bySeats($dots) as $i) {
+            $x = (float) $dots[$i]['councilX'];
+            $row = self::COMPASS_STRIP_ROWS[0];
+            foreach (self::COMPASS_STRIP_ROWS as $candidate) {
+                if (!self::crowds(self::labelBox($dots[$i]['label'], $x, $candidate, 'middle'), $taken)) {
+                    $row = $candidate;
+                    break;
+                }
+            }
+            $taken[] = self::labelBox($dots[$i]['label'], $x, $row, 'middle');
+            $placed[$i] = ['stripLabelX' => round($x, 2), 'stripLabelY' => $row];
+        }
+
+        return $placed;
+    }
+
+    /**
+     * The dots' indexes from the most seats to the fewest, ties in party order.
+     *
+     * @param list<array<string, mixed>> $dots
+     * @return list<int>
+     */
+    private static function bySeats(array $dots): array
+    {
+        $order = array_keys($dots);
+        usort($order, static fn(int $a, int $b): int => [$dots[$b]['seats'], $a] <=> [$dots[$a]['seats'], $b]);
+
+        return $order;
+    }
+
+    /**
+     * The box a label covers: its width from its length, from the cap height above its baseline to the descenders.
+     *
+     * @return array{0: float, 1: float, 2: float, 3: float} Left, top, right, bottom.
+     */
+    private static function labelBox(string $text, float $x, float $baseline, string $anchor): array
+    {
+        $width = self::labelWidth($text);
+        $left = match ($anchor) {
+            'start' => $x,
+            'end' => $x - $width,
+            default => $x - ($width / 2.0),
+        };
+
+        return [$left, $baseline - (0.8 * self::COMPASS_FONT_SIZE), $left + $width, $baseline + (0.2 * self::COMPASS_FONT_SIZE)];
+    }
+
+    /**
+     * A label's width at the compass font, from its length.
+     */
+    private static function labelWidth(string $text): float
+    {
+        return mb_strlen($text) * self::COMPASS_FONT_SIZE * self::COMPASS_CHARACTER_WIDTH;
+    }
+
+    /**
+     * Whether a box comes within the label gap of any of the others.
+     *
+     * @param array{0: float, 1: float, 2: float, 3: float}       $box
+     * @param list<array{0: float, 1: float, 2: float, 3: float}> $others
+     */
+    private static function crowds(array $box, array $others): bool
+    {
+        $gap = self::COMPASS_LABEL_GAP;
+        foreach ($others as $other) {
+            if ($box[0] < $other[2] + $gap && $other[0] < $box[2] + $gap && $box[1] < $other[3] + $gap && $other[1] < $box[3] + $gap) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**

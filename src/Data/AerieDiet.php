@@ -5,10 +5,11 @@ declare(strict_types=1);
 namespace App\Data;
 
 /**
- * The Aerie Diet: the District's legislature, its six parties and where they stand.
+ * The Aerie Diet: the District's legislature, its eight parties, where they stand, and the two blocs they form.
  *
  * Each party is defined by one question -- the size of the state, how open the District is, or how far the Council's
- * technocrats should be trusted -- and holds a fixed position on it; on the other two it drifts between elections
+ * technocrats should be trusted -- or, for the Free Port Compact and the Bastion Guilds, by the first two together, and
+ * holds a fixed position on it; on the others it strays between elections and is pulled back toward its home
  * (App\Service\Macro\Subsystem\DistrictPoliticsSubsystem). The Diet seated at the founding is the lore's. Every
  * party-keyed map in the macro state is keyed and ordered by PARTIES.
  */
@@ -27,8 +28,12 @@ final class AerieDiet
     public const CHARTISTS = 'chartists';
     /** Financial populism: the retail shareholder's party, against the cartels and the technocrats who keep them. */
     public const COMMON_LOT = 'common_lot';
+    /** Small government and a global economy: the free port's own party, low taxes and open borders to trade and capital. */
+    public const FREE_PORT = 'free_port';
+    /** Big government and a closed economy: the guilds' party, the state behind the District's own trades. */
+    public const BASTION_GUILDS = 'bastion_guilds';
     /** The parties in the Diet, in the order every party-keyed map is written. */
-    public const PARTIES = [self::CIVIC, self::VANGUARD, self::IRON_HARBOR, self::EXCHANGE, self::CHARTISTS, self::COMMON_LOT];
+    public const PARTIES = [self::CIVIC, self::VANGUARD, self::IRON_HARBOR, self::EXCHANGE, self::CHARTISTS, self::COMMON_LOT, self::FREE_PORT, self::BASTION_GUILDS];
     /** Display names. */
     public const PARTY_NAMES = [
         self::CIVIC => 'Civic Front',
@@ -37,9 +42,18 @@ final class AerieDiet
         self::EXCHANGE => 'Exchange Party',
         self::CHARTISTS => 'The Chartists',
         self::COMMON_LOT => 'The Common Lot',
+        self::FREE_PORT => 'The Free Port Compact',
+        self::BASTION_GUILDS => 'The Bastion Guilds',
     ];
     /** Parties that never vote to remove a councillor: the Chartists are the Council's own. */
     public const COUNCIL_LOYALISTS = [self::CHARTISTS];
+    /** The two blocs, by leader: each leader, a rival for the premiership, with the party fixed beside it at its end of the size-of-state question. The leaders rule out governing together; every other party declares for the bloc whose core stands nearer (App\Service\Macro\Subsystem\CoalitionFormation::blocs). */
+    public const BLOC_CORES = [
+        self::CIVIC => [self::CIVIC, self::BASTION_GUILDS],
+        self::VANGUARD => [self::VANGUARD, self::FREE_PORT],
+    ];
+    /** The questions the blocs divide on, the economic ones: the Council question cuts across both blocs, as populism does across Scandinavia's red and blue. */
+    public const BLOC_AXES = [self::AXIS_STATE, self::AXIS_OPENNESS];
 
     // --- Policy Space ---
     /** Size-of-state axis: +1 is the largest state, -1 the smallest. */
@@ -50,41 +64,28 @@ final class AerieDiet
     public const AXIS_COUNCIL = 'council';
     /** The axes of the policy space, in the order every position is written. */
     public const AXES = [self::AXIS_STATE, self::AXIS_OPENNESS, self::AXIS_COUNCIL];
-    /** The axis each party is defined by; it never moves there. */
-    public const PRIMARY_AXIS = [
-        self::CIVIC => self::AXIS_STATE,
-        self::VANGUARD => self::AXIS_STATE,
-        self::IRON_HARBOR => self::AXIS_OPENNESS,
-        self::EXCHANGE => self::AXIS_OPENNESS,
-        self::CHARTISTS => self::AXIS_COUNCIL,
-        self::COMMON_LOT => self::AXIS_COUNCIL,
+    /** Each party's fixed position on the axes it is defined by, where it never moves: the two big parties moderate, the others at the ends of theirs, the Free Port Compact and the Bastion Guilds on the diagonal between them. */
+    public const FIXED_POSITIONS = [
+        self::CIVIC => [self::AXIS_STATE => 0.6],
+        self::VANGUARD => [self::AXIS_STATE => -0.6],
+        self::IRON_HARBOR => [self::AXIS_OPENNESS => -0.8],
+        self::EXCHANGE => [self::AXIS_OPENNESS => 0.8],
+        self::CHARTISTS => [self::AXIS_COUNCIL => 0.8],
+        self::COMMON_LOT => [self::AXIS_COUNCIL => -0.8],
+        self::FREE_PORT => [self::AXIS_STATE => -0.6, self::AXIS_OPENNESS => 0.6],
+        self::BASTION_GUILDS => [self::AXIS_STATE => 0.6, self::AXIS_OPENNESS => -0.6],
     ];
-    /** Each party's fixed position on its defining axis: the two big parties moderate, the others at the ends of theirs. */
-    public const PRIMARY_POSITION = [
-        self::CIVIC => 0.6,
-        self::VANGUARD => -0.6,
-        self::IRON_HARBOR => -0.8,
-        self::EXCHANGE => 0.8,
-        self::CHARTISTS => 0.8,
-        self::COMMON_LOT => -0.8,
-    ];
-    /** Each party's place at the founding: the big two establishment, the Harbor populist and slightly big-state, the Chartists slightly open, the Common Lot slightly big-state. */
-    public const SEED_POSITIONS = [
-        self::CIVIC => [self::AXIS_STATE => 0.6, self::AXIS_OPENNESS => -0.1, self::AXIS_COUNCIL => 0.3],
+    /** Each party's home, where it stood at the founding and is pulled back toward between elections; openness and the Council axis run together as they do in Western Europe (Chapel Hill 2014-2024: corr +0.84), so the Chartists stand open and the Common Lot, the Harbor and the Guilds lean populist. */
+    public const HOME_POSITIONS = [
+        self::CIVIC => [self::AXIS_STATE => 0.6, self::AXIS_OPENNESS => -0.1, self::AXIS_COUNCIL => -0.1],
         self::VANGUARD => [self::AXIS_STATE => -0.6, self::AXIS_OPENNESS => 0.0, self::AXIS_COUNCIL => 0.3],
         self::IRON_HARBOR => [self::AXIS_STATE => 0.1, self::AXIS_OPENNESS => -0.8, self::AXIS_COUNCIL => -0.4],
         self::EXCHANGE => [self::AXIS_STATE => 0.0, self::AXIS_OPENNESS => 0.8, self::AXIS_COUNCIL => 0.4],
-        self::CHARTISTS => [self::AXIS_STATE => 0.0, self::AXIS_OPENNESS => 0.2, self::AXIS_COUNCIL => 0.8],
-        self::COMMON_LOT => [self::AXIS_STATE => 0.3, self::AXIS_OPENNESS => 0.0, self::AXIS_COUNCIL => -0.8],
+        self::CHARTISTS => [self::AXIS_STATE => 0.0, self::AXIS_OPENNESS => 0.6, self::AXIS_COUNCIL => 0.8],
+        self::COMMON_LOT => [self::AXIS_STATE => 0.3, self::AXIS_OPENNESS => -0.5, self::AXIS_COUNCIL => -0.8],
+        self::FREE_PORT => [self::AXIS_STATE => -0.6, self::AXIS_OPENNESS => 0.6, self::AXIS_COUNCIL => 0.3],
+        self::BASTION_GUILDS => [self::AXIS_STATE => 0.6, self::AXIS_OPENNESS => -0.6, self::AXIS_COUNCIL => 0.0],
     ];
-
-    // --- Forming a Government ---
-    /** A round in which the party leading the talks seeks a cabinet with a majority of its own. */
-    public const ROUND_MAJORITY = 1;
-    /** A round in which it may also offer a minority cabinet that other parties support from outside. */
-    public const ROUND_SUPPORT = 2;
-    /** The rounds after both big parties have had their two: the lead passing between them, either cabinet on offer. */
-    public const ROUND_RUNOFF = 3;
 
     // --- The Chamber ---
     /** Seats in the Diet. */
@@ -95,44 +96,52 @@ final class AerieDiet
     public const SUPERMAJORITY_SEATS = 225;
     /** Seats at the founding. */
     public const SEED_SEATS = [
-        self::CIVIC => 90.0,
-        self::VANGUARD => 95.0,
-        self::IRON_HARBOR => 40.0,
-        self::EXCHANGE => 40.0,
+        self::CIVIC => 75.0,
+        self::VANGUARD => 80.0,
+        self::IRON_HARBOR => 35.0,
+        self::EXCHANGE => 30.0,
         self::CHARTISTS => 20.0,
         self::COMMON_LOT => 15.0,
+        self::FREE_PORT => 25.0,
+        self::BASTION_GUILDS => 20.0,
     ];
     /** Vote shares at the founding: the founding seats over the Diet. */
     public const SEED_VOTE_SHARES = [
-        self::CIVIC => 90.0 / 300.0,
-        self::VANGUARD => 95.0 / 300.0,
-        self::IRON_HARBOR => 40.0 / 300.0,
-        self::EXCHANGE => 40.0 / 300.0,
+        self::CIVIC => 75.0 / 300.0,
+        self::VANGUARD => 80.0 / 300.0,
+        self::IRON_HARBOR => 35.0 / 300.0,
+        self::EXCHANGE => 30.0 / 300.0,
         self::CHARTISTS => 20.0 / 300.0,
         self::COMMON_LOT => 15.0 / 300.0,
+        self::FREE_PORT => 25.0 / 300.0,
+        self::BASTION_GUILDS => 20.0 / 300.0,
     ];
-    /** The founding cabinet, 1.0 for a member: the likeliest government of the Vanguard's first bid for a majority (CoalitionFormation). */
+    /** The founding cabinet, 1.0 for a member: the likeliest government of the founding Diet (CoalitionFormation), the Vanguard alone, its bloc carrying it from outside. */
     public const SEED_COALITION = [
         self::CIVIC => 0.0,
         self::VANGUARD => 1.0,
         self::IRON_HARBOR => 0.0,
-        self::EXCHANGE => 1.0,
-        self::CHARTISTS => 1.0,
+        self::EXCHANGE => 0.0,
+        self::CHARTISTS => 0.0,
         self::COMMON_LOT => 0.0,
+        self::FREE_PORT => 0.0,
+        self::BASTION_GUILDS => 0.0,
     ];
-    /** The founding cabinet governs with a majority of its own: no party supports it from outside. */
+    /** The founding cabinet's support parties, 1.0 for a supporter: the rest of the Vanguard's bloc. */
     public const SEED_SUPPORT = [
         self::CIVIC => 0.0,
         self::VANGUARD => 0.0,
         self::IRON_HARBOR => 0.0,
-        self::EXCHANGE => 0.0,
-        self::CHARTISTS => 0.0,
+        self::EXCHANGE => 1.0,
+        self::CHARTISTS => 1.0,
         self::COMMON_LOT => 0.0,
+        self::FREE_PORT => 1.0,
+        self::BASTION_GUILDS => 0.0,
     ];
 
     /**
-     * A party's place in the policy space: fixed on its defining axis, where the given positions put it on the others,
-     * and at its founding place on any axis they leave out.
+     * A party's place in the policy space: fixed on the axes it is defined by, where the given positions put it on the
+     * others, and at its home on any axis they leave out.
      *
      * @param array<string, array<string, float>> $positions Positions by party and axis.
      * @return array{state: float, openness: float, council: float}
@@ -141,11 +150,18 @@ final class AerieDiet
     {
         $point = [];
         foreach (self::AXES as $axis) {
-            $point[$axis] = (float) ($positions[$party][$axis] ?? self::SEED_POSITIONS[$party][$axis]);
+            $point[$axis] = (float) (self::FIXED_POSITIONS[$party][$axis] ?? $positions[$party][$axis] ?? self::HOME_POSITIONS[$party][$axis]);
         }
-        $point[self::PRIMARY_AXIS[$party]] = self::PRIMARY_POSITION[$party];
 
         return $point;
+    }
+
+    /**
+     * Whether a party is defined by an axis, and so never moves on it.
+     */
+    public static function isFixed(string $party, string $axis): bool
+    {
+        return isset(self::FIXED_POSITIONS[$party][$axis]);
     }
 
     /**
