@@ -93,7 +93,8 @@ class GovernmentPageBuilder
         $removalSeats = $sumSeats(array_values(array_diff(array_merge($coalition, $support), AerieDiet::COUNCIL_LOYALISTS)));
         $talking = $macro->coalitionTakesOfficeAt > $macro->totalTime;
 
-        $blocs = CoalitionFormation::blocs($macro->partyPositions);
+        $blocs = $macro->dietBlocs;
+        $leaders = array_values(array_unique($blocs));
         $parties = [];
         foreach (AerieDiet::PARTIES as $party) {
             $position = AerieDiet::position($party, $macro->partyPositions);
@@ -193,15 +194,14 @@ class GovernmentPageBuilder
                 'pactUtility' => MacroEngine::FORMATION_PACT_UTILITY,
                 'antipactUtility' => MacroEngine::FORMATION_ANTIPACT_UTILITY,
                 'antisystemUtility' => MacroEngine::FORMATION_ANTISYSTEM_UTILITY,
-                'blocLeaders' => array_map(static fn(string $party): string => AerieDiet::PARTY_NAMES[$party], array_keys(AerieDiet::BLOC_CORES)),
-                'blocCores' => array_map(static fn(string $leader): string => AerieDiet::PARTY_NAMES[AerieDiet::BLOC_CORES[$leader][1]], array_keys(AerieDiet::BLOC_CORES)),
+                'blocLeaders' => array_map(static fn(string $party): string => AerieDiet::PARTY_NAMES[$party], $leaders),
                 'blocSeats' => array_map(
                     static fn(string $leader): array => [
                         'name' => self::PARTY_LABELS[$leader],
                         'color' => self::PARTY_COLORS[$leader],
                         'seats' => $sumSeats(array_keys(array_filter($blocs, static fn(string $bloc): bool => $bloc === $leader))),
                     ],
-                    array_keys(AerieDiet::BLOC_CORES)
+                    $leaders
                 ),
                 'statusQuoUtility' => MacroEngine::FORMATION_STATUS_QUO_UTILITY,
                 'reservation' => MacroEngine::FORMATION_RESERVATION,

@@ -22,12 +22,14 @@ use App\Service\Math\MathUtility;
  * lasts an exponential time. The bar, its fall and the attempt length are fitted to how often a first attempt fails
  * (Golder 2010) and how long formations take and how widely that varies (Bäck, Hellström, Lindvall & Teorell 2023).
  *
- * The Diet votes in two blocs, as the Scandinavian parliaments do: the two bloc leaders, rivals for the premiership,
- * rule each other out, and every other party declares before the vote for the bloc whose core -- the leader and the
- * party fixed beside it -- stands nearer on the economic questions. A government
- * whose parties, cabinet and supporters alike, all come from one bloc is a pre-electoral pact, for what a Scandinavian
- * party promises before the vote is to put its bloc's leader in office, not to sit in the cabinet; one holding both
- * leaders is an anti-pact. A party that stands far from
+ * The Diet votes in two blocs, as the Scandinavian parliaments do. Before each vote every party declares for the bloc
+ * whose centre stands nearer on the economic questions, a centre being its members' positions weighted by their seats,
+ * where a government of the bloc would set policy; the blocs of the last vote are where the declarations start, and they
+ * are counted again until no party would change sides (Lloyd's (1982) two-means). Each bloc is led by its largest party,
+ * its candidate for the premiership, and the two leaders rule each other out. A government whose parties, cabinet and
+ * supporters alike, all come from one bloc is a pre-electoral pact, for what a Scandinavian party promises before the
+ * vote is to put its bloc's leader in office, not to sit in the cabinet; one holding both leaders is an anti-pact. A
+ * party that stands far from
  * the Diet's middle on the Council axis, the question of the constitutional order itself, is hard to take into cabinet
  * and usually sustains one from outside instead: Martin & Stevenson's anti-system term.
  *
@@ -40,6 +42,8 @@ final class CoalitionFormation
 {
     /** Attempts after which the cabinet tried takes office regardless: a safeguard, since the falling bar ends every talks in the harness within a dozen attempts. */
     private const MAX_ATTEMPTS = 1000;
+    /** Rounds of declarations after which the blocs stand as they are: a safeguard, since two-means settles within a few. */
+    private const MAX_BLOC_ROUNDS = 100;
     /** Distances equal to within this are ties. */
     private const RANGE_TOLERANCE = 1e-9;
 
@@ -51,12 +55,13 @@ final class CoalitionFormation
      * @param array<string, float>                $shares    Vote shares by party, which order parties tied on seats.
      * @param array<string, array<string, float>> $positions Positions by party and axis.
      * @param list<string>                        $statusQuo The outgoing cabinet.
+     * @param array<string, string>               $blocs     The leader of the bloc each party declared for (declareBlocs()).
      * @param list<string>                        $fallen    The cabinet that fell, in party order; none after a vote.
      * @return array{cabinet: list<string>, support: list<string>, days: float, log: list<array{day: float, formateur: string, formed: bool, cabinet: list<string>, support: list<string>}>}
      *         The cabinet and its support parties, the days the talks took, and each attempt: the day it ended, the
      *         party that led it, whether it formed a government, and the cabinet it tried.
      */
-    public static function talks(array $seats, array $shares, array $positions, array $statusQuo, MathUtility $draws, array $fallen = []): array
+    public static function talks(array $seats, array $shares, array $positions, array $statusQuo, array $blocs, MathUtility $draws, array $fallen = []): array
     {
         $order = self::bySize($seats, $shares);
         $largest = $order[0];
@@ -64,9 +69,9 @@ final class CoalitionFormation
             return ['cabinet' => [$largest], 'support' => [], 'days' => 0.0, 'log' => []];
         }
 
-        $options = array_values(array_filter(self::options($seats, $positions), static fn(array $option): bool => $option['cabinet'] !== $fallen));
+        $options = array_values(array_filter(self::options($seats, $positions, $blocs), static fn(array $option): bool => $option['cabinet'] !== $fallen));
         $utilities = array_map(
-            static fn(array $option): float => self::utility($option['cabinet'], $option['support'], $seats, $positions, $statusQuo, $largest),
+            static fn(array $option): float => self::utility($option['cabinet'], $option['support'], $seats, $positions, $statusQuo, $largest, $blocs),
             $options
         );
 
@@ -91,9 +96,10 @@ final class CoalitionFormation
      *
      * @param array<string, int|float>            $seats     Seats by party.
      * @param array<string, array<string, float>> $positions Positions by party and axis.
+     * @param array<string, string>               $blocs     The leader of the bloc each party declared for (declareBlocs()).
      * @return list<array{cabinet: list<string>, support: list<string>}>
      */
-    public static function options(array $seats, array $positions): array
+    public static function options(array $seats, array $positions, array $blocs): array
     {
         $distances = self::distances($positions);
         $options = [];
@@ -102,7 +108,7 @@ final class CoalitionFormation
                 $options[] = ['cabinet' => $cabinet, 'support' => []];
                 continue;
             }
-            $support = self::supportFor($cabinet, $seats, $positions, $distances);
+            $support = self::supportFor($cabinet, $seats, $positions, $blocs, $distances);
             if ($support !== null) {
                 $options[] = ['cabinet' => $cabinet, 'support' => $support];
             }
@@ -137,15 +143,16 @@ final class CoalitionFormation
      * @param list<string>                               $cabinet   The cabinet's parties.
      * @param array<string, int|float>                   $seats     Seats by party.
      * @param array<string, array<string, float>>        $positions Positions by party and axis.
+     * @param array<string, string>                      $blocs     The leader of the bloc each party declared for (declareBlocs()).
      * @param array<string, array<string, float>>|null   $distances Distances between parties (distances()), if already worked out.
      * @return list<string>|null The support parties, in party order; null when the outsiders who may support it fall short.
      */
-    public static function supportFor(array $cabinet, array $seats, array $positions, ?array $distances = null): ?array
+    public static function supportFor(array $cabinet, array $seats, array $positions, array $blocs, ?array $distances = null): ?array
     {
         $distances ??= self::distances($positions);
         $outsiders = array_values(array_filter(
             array_diff(AerieDiet::PARTIES, $cabinet),
-            static fn(string $party): bool => array_filter($cabinet, static fn(string $member): bool => self::rulesOut($party, $member)) === []
+            static fn(string $party): bool => array_filter($cabinet, static fn(string $member): bool => self::rulesOut($party, $member, $blocs)) === []
         ));
         $cabinetSeats = self::coalitionSeats($cabinet, $seats);
 
@@ -177,18 +184,18 @@ final class CoalitionFormation
      * @param array<string, array<string, float>> $positions Positions by party and axis.
      * @param list<string>                        $statusQuo The outgoing cabinet.
      * @param string                              $largest   The Diet's largest party.
+     * @param array<string, string>               $blocs     The leader of the bloc each party declared for (declareBlocs()).
      */
-    public static function utility(array $cabinet, array $support, array $seats, array $positions, array $statusQuo, string $largest): float
+    public static function utility(array $cabinet, array $support, array $seats, array $positions, array $statusQuo, string $largest, array $blocs): float
     {
         $minority = self::coalitionSeats($cabinet, $seats) < AerieDiet::MAJORITY_SEATS;
         $sorted = $cabinet;
         sort($sorted);
         $outgoing = $statusQuo;
         sort($outgoing);
-        $blocs = self::blocs($positions);
         $government = array_merge($cabinet, $support);
         $oneBloc = count($government) > 1 && count(array_unique(array_map(static fn(string $party): string => $blocs[$party], $government))) === 1;
-        $leaders = array_intersect(array_keys(AerieDiet::BLOC_CORES), $cabinet);
+        $leaders = array_filter($cabinet, static fn(string $party): bool => $blocs[$party] === $party);
         $median = self::councilMedian($seats, $positions);
         $challenge = 0.0;
         foreach ($cabinet as $party) {
@@ -207,50 +214,101 @@ final class CoalitionFormation
     }
 
     /**
-     * The bloc each party campaigns in, by the leader it declared for: a core party belongs to its own leader's bloc, and
-     * every other party declares for the bloc whose core stands nearer on the economic questions, the first bloc on a
-     * tie.
+     * The blocs the parties campaign in, declared before a vote: starting from the blocs of the last vote, every party
+     * declares for the bloc whose centre, its members' positions on the economic questions weighted by their seats,
+     * stands nearer, staying where it is on a tie, and the centres are struck again until no party would change sides
+     * (Lloyd 1982). A Diet with no blocs yet, or one whose blocs have merged, splits around its two largest parties. Each
+     * bloc is led by its largest party.
      *
+     * @param array<string, int|float>            $seats     Seats by party going into the vote, which weight the centres and name the leaders.
      * @param array<string, array<string, float>> $positions Positions by party and axis.
-     * @return array<string, string> The leader of each party's bloc, by party.
+     * @param array<string, string>               $previous  The leader of the bloc each party declared for at the last vote; none at the founding.
+     * @return array<string, string> The leader of each party's bloc, by party, in party order.
      */
-    public static function blocs(array $positions): array
+    public static function declareBlocs(array $seats, array $positions, array $previous): array
     {
-        $centres = [];
-        foreach (AerieDiet::BLOC_CORES as $leader => $core) {
-            foreach (AerieDiet::BLOC_AXES as $axis) {
-                $centres[$leader][$axis] = array_sum(array_map(static fn(string $party): float => AerieDiet::position($party, $positions)[$axis], $core)) / count($core);
+        $points = [];
+        foreach (AerieDiet::PARTIES as $party) {
+            $points[$party] = AerieDiet::position($party, $positions);
+        }
+        $bySize = self::bySize($seats, []);
+        $split = static fn(): array => self::nearestCentre($points, [$bySize[0] => $points[$bySize[0]], $bySize[1] => $points[$bySize[1]]], [$bySize[0] => $bySize[0], $bySize[1] => $bySize[1]]);
+
+        $sides = count(array_unique($previous)) === 2 ? $previous : $split();
+        for ($round = 0; $round < self::MAX_BLOC_ROUNDS; ++$round) {
+            $centres = [];
+            foreach (array_unique($sides) as $side) {
+                $members = array_keys($sides, $side, true);
+                $weight = self::coalitionSeats($members, $seats);
+                foreach (AerieDiet::BLOC_AXES as $axis) {
+                    $centres[$side][$axis] = $weight > 0.0
+                        ? array_sum(array_map(static fn(string $party): float => (float) ($seats[$party] ?? 0) * $points[$party][$axis], $members)) / $weight
+                        : array_sum(array_map(static fn(string $party): float => $points[$party][$axis], $members)) / count($members);
+                }
             }
+            $next = self::nearestCentre($points, $centres, $sides);
+            if (count(array_unique($next)) < 2) {
+                $next = $split();
+            }
+            if ($next === $sides) {
+                break;
+            }
+            $sides = $next;
         }
 
         $blocs = [];
-        foreach (AerieDiet::PARTIES as $party) {
-            $nearest = null;
-            $nearestDistance = INF;
-            foreach (AerieDiet::BLOC_CORES as $leader => $core) {
-                if (in_array($party, $core, true)) {
-                    $nearest = $leader;
-                    break;
-                }
-                $point = AerieDiet::position($party, $positions);
-                $distance = sqrt(array_sum(array_map(static fn(string $axis): float => ($point[$axis] - $centres[$leader][$axis]) ** 2, AerieDiet::BLOC_AXES)));
-                if ($distance < $nearestDistance - self::RANGE_TOLERANCE) {
-                    $nearest = $leader;
-                    $nearestDistance = $distance;
-                }
+        foreach (array_unique($sides) as $side) {
+            $members = array_keys($sides, $side, true);
+            $leader = self::leader($members, $bySize);
+            foreach ($members as $party) {
+                $blocs[$party] = $leader;
             }
-            $blocs[$party] = (string) $nearest;
         }
 
-        return $blocs;
+        $ordered = [];
+        foreach (AerieDiet::PARTIES as $party) {
+            $ordered[$party] = $blocs[$party];
+        }
+
+        return $ordered;
+    }
+
+    /**
+     * Each party's nearer centre on the economic questions, its present side on a tie.
+     *
+     * @param array<string, array<string, float>> $points  Each party's point.
+     * @param array<string, array<string, float>> $centres Each side's centre on the bloc axes, by side.
+     * @param array<string, string>               $sides   The side each party is on now; a party on none takes the first centre on a tie.
+     * @return array<string, string> The side each party is nearer, by party.
+     */
+    private static function nearestCentre(array $points, array $centres, array $sides): array
+    {
+        $nearest = [];
+        foreach ($points as $party => $point) {
+            $best = null;
+            $bestDistance = INF;
+            foreach ($centres as $side => $centre) {
+                $distance = sqrt(array_sum(array_map(static fn(string $axis): float => ($point[$axis] - $centre[$axis]) ** 2, AerieDiet::BLOC_AXES)));
+                if ($distance < $bestDistance - self::RANGE_TOLERANCE
+                    || (abs($distance - $bestDistance) <= self::RANGE_TOLERANCE && $side === ($sides[$party] ?? null))) {
+                    $best = $side;
+                    $bestDistance = $distance;
+                }
+            }
+            $nearest[$party] = (string) $best;
+        }
+
+        return $nearest;
     }
 
     /**
      * Whether two parties have ruled out governing together: the two bloc leaders.
+     *
+     * @param array<string, string> $blocs The leader of the bloc each party declared for (declareBlocs()).
      */
-    public static function rulesOut(string $a, string $b): bool
+    public static function rulesOut(string $a, string $b, array $blocs): bool
     {
-        return $a !== $b && isset(AerieDiet::BLOC_CORES[$a], AerieDiet::BLOC_CORES[$b]);
+        return $a !== $b && ($blocs[$a] ?? null) === $a && ($blocs[$b] ?? null) === $b;
     }
 
     /**

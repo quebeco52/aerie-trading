@@ -375,6 +375,9 @@ class MacroState
     public array $governingCoalition;
     /** @var array<string, float> */
     public array $supportParties;
+    // The blocs declared before the last vote: the leader of the bloc each party campaigned in.
+    /** @var array<string, string> */
+    public array $dietBlocs;
     // Each party's short-term swing at the last vote, in log share: candidates and campaigns that do not outlast the vote.
     /** @var array<string, float> */
     public array $partyShortTermShocks;
@@ -529,6 +532,7 @@ class MacroState
                 'pendingCoalition', 'pendingSupport', 'electionOutgoingCabinet'
                     => is_array($data[$key]) ? array_map('floatval', $data[$key]) : [],
                 'partyPositions' => is_array($data[$key]) ? self::hydratePositions($data[$key]) : [],
+                'dietBlocs' => is_array($data[$key]) ? array_map('strval', $data[$key]) : [],
                 'formationLog' => is_array($data[$key]) ? array_values($data[$key]) : [],
                 'qeActive', 'qtActive' => (bool) $data[$key],
                 'eventType' => (string) $data[$key],

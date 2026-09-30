@@ -418,10 +418,14 @@ class DistrictPoliticsSubsystemTest extends TestCase
         $state->dietSeats = Diet::SEED_SEATS;
         $state->cabinetFallsAt = 10.3;
         $state->totalTime = 10.3;
+        $openAgainstClosed = [Diet::CIVIC => Diet::CIVIC, Diet::VANGUARD => Diet::VANGUARD, Diet::IRON_HARBOR => Diet::VANGUARD, Diet::EXCHANGE => Diet::CIVIC,
+            Diet::CHARTISTS => Diet::CIVIC, Diet::COMMON_LOT => Diet::VANGUARD, Diet::FREE_PORT => Diet::CIVIC, Diet::BASTION_GUILDS => Diet::VANGUARD];
+        $state->dietBlocs = $openAgainstClosed;
 
         $subsystem->update($state, 0.01);
 
         $this->assertSame(10.3, $state->lastCabinetFellAt);
+        $this->assertSame($openAgainstClosed, $state->dietBlocs, 'A fall declares no blocs: the talks go on in those of the last vote.');
         $this->assertSame(10.3, $state->talksStartedAt);
         $this->assertSame(-1.0, $state->cabinetFallsAt);
         $this->assertSame([Diet::VANGUARD], Diet::governingParties($state->governingCoalition), 'The cabinet that fell stays on as caretaker.');
@@ -437,13 +441,31 @@ class DistrictPoliticsSubsystemTest extends TestCase
         $this->assertGreaterThan($state->totalTime, $state->cabinetFallsAt, 'The new cabinet draws its own day.');
     }
 
+    /**
+     * The parties declare their blocs at the vote, on the seats they go into it with: a Diet where Iron Harbor has
+     * outgrown the Civic Front campaigns with Iron Harbor leading the left, whatever the vote then does to the seats.
+     */
+    public function testTheVoteDeclaresTheBlocsOnTheSeatsGoingIntoIt(): void
+    {
+        $state = $this->electionTick();
+        $state->dietSeats[Diet::IRON_HARBOR] = 80.0;
+        $state->dietSeats[Diet::CIVIC] = 60.0;
+        $going = $state->dietSeats;
+
+        (new Politics($this->quietMath()))->update($state, 0.01);
+
+        $this->assertSame(CoalitionFormation::declareBlocs($going, $state->partyPositions, Diet::SEED_BLOCS), $state->dietBlocs);
+        $this->assertSame(Diet::IRON_HARBOR, $state->dietBlocs[Diet::CIVIC]);
+        $this->assertGreaterThan($state->dietSeats[Diet::IRON_HARBOR], $state->dietSeats[Diet::CIVIC], 'The vote gives the Civic Front back its lead, after the blocs were declared.');
+    }
+
     /** The talks never seat the cabinet that fell, however likely it was. */
     public function testTheTalksAfterAFallNeverSeatTheCabinetThatFell(): void
     {
         $stream = MathUtility::ownStream(8);
         $fallen = [Diet::VANGUARD];
         for ($trial = 0; $trial < 200; ++$trial) {
-            $talks = CoalitionFormation::talks(Diet::SEED_SEATS, Diet::SEED_VOTE_SHARES, Diet::HOME_POSITIONS, [], $stream, $fallen);
+            $talks = CoalitionFormation::talks(Diet::SEED_SEATS, Diet::SEED_VOTE_SHARES, Diet::HOME_POSITIONS, [], Diet::SEED_BLOCS, $stream, $fallen);
             $this->assertNotSame($fallen, $talks['cabinet']);
             foreach ($talks['log'] as $attempt) {
                 $this->assertNotSame($fallen, $attempt['cabinet']);

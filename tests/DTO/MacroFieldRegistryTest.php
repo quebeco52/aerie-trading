@@ -56,6 +56,7 @@ class MacroFieldRegistryTest extends TestCase
         'partyPositions' => 'Per-party array, recorded per election in diet_election.',
         'governingCoalition' => 'Per-party array, recorded per election in diet_election.',
         'supportParties' => 'Per-party array, recorded per election in diet_election.',
+        'dietBlocs' => 'Per-party map of bloc leaders declared at each vote; shown on the government page, not a series.',
         'pendingCoalition' => 'Per-party array, recorded per election in diet_election.',
         'pendingSupport' => 'Per-party array, recorded per election in diet_election.',
         'coalitionTakesOfficeAt' => 'Election day plus the talks diet_election records.',

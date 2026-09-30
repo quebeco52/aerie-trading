@@ -268,6 +268,7 @@ class DistrictPoliticsSubsystem
     private function holdElection(MacroState $state, float $realGdp): void
     {
         $previous = $state->dietVoteShares;
+        $outgoingSeats = $state->dietSeats;
         // The last vote's short-term forces are spent, and its crisis lift given back if the window has closed; both are
         // undone in the reverse of the order they were applied.
         $shares = self::applyShortTermShocks($previous, array_map(static fn(float $shock): float => -$shock, $state->partyShortTermShocks));
@@ -326,12 +327,14 @@ class DistrictPoliticsSubsystem
             }
         }
         $state->partyPositions = $positions;
+        // The parties declared their blocs on the platforms they ran on and the seats they went into the vote with.
+        $state->dietBlocs = CoalitionFormation::declareBlocs($outgoingSeats, $positions, $state->dietBlocs);
 
         // A cabinet that fell just before the vote goes into it as caretaker, with no incumbency to weigh.
         $statusQuo = $state->coalitionTakesOfficeAt >= 0.0 ? [] : AerieDiet::governingParties($state->governingCoalition);
         $state->electionOutgoingCabinet = $state->governingCoalition;
         $state->cabinetFallsAt = -1.0;
-        self::beginTalks($state, CoalitionFormation::talks($seats, $shares, $positions, $statusQuo, $this->mathUtility));
+        self::beginTalks($state, CoalitionFormation::talks($seats, $shares, $positions, $statusQuo, $state->dietBlocs, $this->mathUtility));
     }
 
     /**
@@ -343,7 +346,7 @@ class DistrictPoliticsSubsystem
         $fallen = AerieDiet::governingParties($state->governingCoalition);
         $state->lastCabinetFellAt = $state->totalTime;
         $state->cabinetFallsAt = -1.0;
-        self::beginTalks($state, CoalitionFormation::talks($state->dietSeats, $state->dietVoteShares, $state->partyPositions, [], $this->mathUtility, $fallen));
+        self::beginTalks($state, CoalitionFormation::talks($state->dietSeats, $state->dietVoteShares, $state->partyPositions, [], $state->dietBlocs, $this->mathUtility, $fallen));
     }
 
     /**

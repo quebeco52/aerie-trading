@@ -322,6 +322,8 @@ readonly class MacroStateDTO
         public array $governingCoalition = AerieDiet::SEED_COALITION,
         /** @var array<string, float> 1.0 for a party supporting a minority cabinet from outside. */
         public array $supportParties = AerieDiet::SEED_SUPPORT,
+        /** @var array<string, string> The leader of the bloc each party declared for before the last vote. */
+        public array $dietBlocs = AerieDiet::SEED_BLOCS,
         /** @var array<string, float> Each party's short-term log swing at the last vote, given back at the next. */
         public array $partyShortTermShocks = [],
         public float $coalitionFormedAt = 0.0,
@@ -436,6 +438,7 @@ readonly class MacroStateDTO
                 'pendingCoalition', 'pendingSupport', 'electionOutgoingCabinet'
                     => is_array($data[$key]) ? array_map('floatval', $data[$key]) : [],
                 'partyPositions' => is_array($data[$key]) ? MacroState::hydratePositions($data[$key]) : [],
+                'dietBlocs' => is_array($data[$key]) ? array_map('strval', $data[$key]) : [],
                 'formationLog' => is_array($data[$key]) ? array_values($data[$key]) : [],
                 'qeActive', 'qtActive' => (bool) $data[$key],
                 'eventType' => (string) $data[$key],

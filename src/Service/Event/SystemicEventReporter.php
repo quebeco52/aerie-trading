@@ -120,7 +120,7 @@ class SystemicEventReporter
             $context['majority_party'] = $names[$largest];
         } elseif ($macro->formationLog !== []) {
             $blocSeats = [];
-            foreach (CoalitionFormation::blocs($macro->partyPositions) as $party => $leader) {
+            foreach ($macro->dietBlocs as $party => $leader) {
                 $blocSeats[$leader] = ($blocSeats[$leader] ?? 0) + ($seats[$party] ?? 0);
             }
             arsort($blocSeats);

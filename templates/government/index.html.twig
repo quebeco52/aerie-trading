@@ -147,7 +147,7 @@
 									<span class="inline-flex items-center gap-2">
 										<span class="w-2.5 h-2.5 rounded-full shrink-0" style="background-color: {{ party.color }}" aria-hidden="true"></span>
 										<span class="font-bold text-on-surface">{{ party.name }}</span>
-										<span class="text-3xs uppercase tracking-wider text-on-surface-variant" title="{{ party.leadsBloc ? 'Leads a bloc and rules out governing with the other leader' : 'Declared before the vote for the bloc leader it stands nearer' }}"><span class="inline-block w-1.5 h-1.5 rounded-full mr-0.5 align-middle" style="background-color: {{ party.blocColor }}" aria-hidden="true"></span>{{ party.leadsBloc ? 'Leads a bloc' : 'Backs ' ~ party.bloc }}</span>
+										<span class="text-3xs uppercase tracking-wider text-on-surface-variant" title="{{ party.leadsBloc ? 'Leads a bloc as its largest party and rules out governing with the other leader' : 'Declared before the vote for the bloc whose centre it stands nearer' }}"><span class="inline-block w-1.5 h-1.5 rounded-full mr-0.5 align-middle" style="background-color: {{ party.blocColor }}" aria-hidden="true"></span>{{ party.leadsBloc ? 'Leads a bloc' : 'Backs ' ~ party.bloc }}</span>
 										{% if party.governing %}<span class="text-3xs font-bold uppercase tracking-wider text-secondary">{{ government.caretaker ? 'Caretaker' : 'In government' }}</span>{% elseif party.supporting %}<span class="text-3xs font-bold uppercase tracking-wider text-primary">Supports</span>{% endif %}
 									</span>
 								</th>
@@ -518,8 +518,8 @@
 				},
 				{
 					name: 'Blocs',
-					text: 'The Diet votes in two blocs. ' ~ rules.blocLeaders|join(' and ') ~ ', rivals for the premiership, rule out governing together; each has at its core the party fixed beside it on the size of the state, ' ~ rules.blocCores|join(' and ') ~ '. Every other party declares before each vote for the bloc whose core stands nearer on the economic questions, the size of the state and openness, so a party that drifts across can change sides; the Council question cuts across both. A cabinet of one bloc\'s parties is a pact, ' ~ rules.pactUtility|number_format(2) ~ ' on the log scale; one holding both leaders is ruled out, ' ~ rules.antipactUtility|number_format(2) ~ ', and neither leader will support the other\'s cabinet from outside.',
-					source: 'Martin & Stevenson (2010), Table 1: pre-electoral pacts and anti-pacts; the red and blue blocs of Denmark, Sweden and Norway'
+					text: 'The Diet votes in two blocs. Before each vote every party declares for the bloc whose centre stands nearer on the economic questions, the size of the state and openness: a bloc\'s centre is its parties\' positions weighted by their seats, where a government of the bloc would set policy. The declarations start from the blocs of the last vote and are counted again until no party would change sides, so a party that drifts across changes sides, and a party whose platform moves far enough can take its bloc with it; the Council question cuts across both. Each bloc is led by its largest party going into the vote, now ' ~ rules.blocLeaders|join(' and ') ~ ', rivals for the premiership who rule out governing together. A cabinet of one bloc\'s parties is a pact, ' ~ rules.pactUtility|number_format(2) ~ ' on the log scale; one holding both leaders is ruled out, ' ~ rules.antipactUtility|number_format(2) ~ ', and neither leader will support the other\'s cabinet from outside.',
+					source: 'Martin & Stevenson (2010), Table 1: pre-electoral pacts and anti-pacts; the red and blue blocs of Denmark, Sweden and Norway; Lloyd (1982): two-means'
 				},
 				{
 					name: 'The firewall',

@@ -47,11 +47,6 @@ final class AerieDiet
     ];
     /** Parties that never vote to remove a councillor: the Chartists are the Council's own. */
     public const COUNCIL_LOYALISTS = [self::CHARTISTS];
-    /** The two blocs, by leader: each leader, a rival for the premiership, with the party fixed beside it at its end of the size-of-state question. The leaders rule out governing together; every other party declares for the bloc whose core stands nearer (App\Service\Macro\Subsystem\CoalitionFormation::blocs). */
-    public const BLOC_CORES = [
-        self::CIVIC => [self::CIVIC, self::BASTION_GUILDS],
-        self::VANGUARD => [self::VANGUARD, self::FREE_PORT],
-    ];
     /** The questions the blocs divide on, the economic ones: the Council question cuts across both blocs, as populism does across Scandinavia's red and blue. */
     public const BLOC_AXES = [self::AXIS_STATE, self::AXIS_OPENNESS];
 
@@ -115,6 +110,17 @@ final class AerieDiet
         self::COMMON_LOT => 15.0 / 300.0,
         self::FREE_PORT => 25.0 / 300.0,
         self::BASTION_GUILDS => 20.0 / 300.0,
+    ];
+    /** The blocs the founding Diet votes in, by the leader of each party's bloc: the parties split around the two largest (App\Service\Macro\Subsystem\CoalitionFormation::declareBlocs). */
+    public const SEED_BLOCS = [
+        self::CIVIC => self::CIVIC,
+        self::VANGUARD => self::VANGUARD,
+        self::IRON_HARBOR => self::CIVIC,
+        self::EXCHANGE => self::VANGUARD,
+        self::CHARTISTS => self::VANGUARD,
+        self::COMMON_LOT => self::CIVIC,
+        self::FREE_PORT => self::VANGUARD,
+        self::BASTION_GUILDS => self::CIVIC,
     ];
     /** The founding cabinet, 1.0 for a member: the likeliest government of the founding Diet (CoalitionFormation), the Vanguard alone, its bloc carrying it from outside. */
     public const SEED_COALITION = [
