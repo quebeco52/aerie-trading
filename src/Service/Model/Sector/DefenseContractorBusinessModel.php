@@ -157,7 +157,7 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
     // --- Working Capital & FAR Progress Payment Withholding ---
     /** Baseline net working capital intensity under standard FAR progress payment schedules. */
     public const BASE_NWC_INTENSITY = 0.10;
-    /** Elevated net working capital intensity during FAR 32.503-6 progress payment withholding. */
+    /** Working capital intensity of the fixed-price book while FAR 32.503-6 withholds its progress payments. */
     public const WITHHOLDING_NWC_INTENSITY = 0.18;
 
         public function getWholesaleLeverageLimit(): float { return 2.0; }
@@ -195,9 +195,15 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
         $fixedPriceZ = (float) ($momentum['fixed_price_development'] ?? 0.0);
         $eventZ = (float) ($momentum['event'] ?? 0.0);
 
-        // FAR 32.503-6 Suspension/Reduction of Progress Payments due to programmatic failures
+        // FAR 32.503-6 suspends or reduces PROGRESS payments on a programme failure, and progress payments
+        // finance fixed-price work only (cost-type contracts bill costs as incurred, FAR 52.216-7): the
+        // withheld cash is the fixed-price book's, not the whole company's.
         if ($fixedPriceZ < self::FORWARD_LOSS_Z_SCORE || $eventZ < self::FLAGSHIP_FAILURE_Z_SCORE) {
-            return self::WITHHOLDING_NWC_INTENSITY;
+            $fixedPriceWeight = $this->resolveModelParameters($stock, [
+                ModelParam::FixedPriceDevWeight->value => self::FIXED_PRICE_DEV_WEIGHT,
+            ])[ModelParam::FixedPriceDevWeight->value];
+
+            return self::BASE_NWC_INTENSITY + ((self::WITHHOLDING_NWC_INTENSITY - self::BASE_NWC_INTENSITY) * $fixedPriceWeight);
         }
 
         return self::BASE_NWC_INTENSITY;
@@ -209,6 +215,36 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
             'macro_demand_shift'       => 0.0,
             'pricing_power_multiplier' => 1.0,
         ];
+    }
+
+    /**
+     * Where the prime staffs to: the programme work it has in hand. Awards reach revenue through the backlog
+     * inside calculateSectorPhysics rather than through macro_demand_shift, so the cost base reads the
+     * revenue-weighted opening workload of the three books. A procurement drawdown is a drawdown for the
+     * programme staff resourced to it, and headcount follows it at the sticky-cost pace.
+     */
+    public function resolveSectorActivityShift(Stock $stock, MacroStateDTO $macroState): float
+    {
+        $params = $this->resolveModelParameters($stock, [
+            ModelParam::CostPlusWeight->value             => self::COST_PLUS_WEIGHT,
+            ModelParam::FixedPriceDevWeight->value        => self::FIXED_PRICE_DEV_WEIGHT,
+            ModelParam::ForeignMilitarySalesWeight->value => self::FOREIGN_MILITARY_SALES_WEIGHT,
+        ]);
+        $books = [
+            'cost_plus_procurement'   => [$params[ModelParam::CostPlusWeight->value], self::COST_PLUS_BACKLOG_BURN_RATE],
+            'fixed_price_development' => [$params[ModelParam::FixedPriceDevWeight->value], self::FIXED_PRICE_BACKLOG_BURN_RATE],
+            'foreign_military_sales'  => [$params[ModelParam::ForeignMilitarySalesWeight->value], self::FMS_BACKLOG_BURN_RATE],
+        ];
+
+        $momentum = $stock->getEarningsMomentumZ() ?? [];
+        $totalWeight = 0.0;
+        $workload = 0.0;
+        foreach ($books as $key => [$weight, $burnRate]) {
+            $workload += $weight * StreamContext::openingWorkload($momentum, $key, $burnRate);
+            $totalWeight += $weight;
+        }
+
+        return $totalWeight > 0.0 ? ($workload / $totalWeight) - 1.0 : 0.0;
     }
 
     protected function calculateSectorPhysics(

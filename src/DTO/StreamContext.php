@@ -189,6 +189,23 @@ class StreamContext
     }
 
     /**
+     * The work a long-cycle stream has in hand as a quarter opens, relative to steady state (1.0 = normal):
+     * what recognizeBacklog() would book on the persisted opening backlog with orders at their steady rate.
+     * It is known before the quarter's awards arrive, which is why a contractor staffs to it.
+     *
+     * @param array<string, float> $momentum  The stream state map persisted last quarter ($stock->getEarningsMomentumZ()).
+     * @param string               $key       Stream key the backlog was recognized under.
+     * @param float                $burnRate  Fraction of available work executed per quarter, as passed to recognizeBacklog().
+     */
+    public static function openingWorkload(array $momentum, string $key, float $burnRate): float
+    {
+        $burn = max(0.05, min(1.0, $burnRate));
+        $openingQuarters = max(0.0, (float) ($momentum[self::BACKLOG_STATE_PREFIX . $key] ?? ((1.0 - $burn) / $burn)));
+
+        return $burn * ($openingQuarters + 1.0);
+    }
+
+    /**
      * Advances a persistent two-state regime for this quarter (Hamilton 1989 Markov switching).
      *
      * Tail events such as strikes, price wars, consent decrees, recall recoveries or port congestion are not

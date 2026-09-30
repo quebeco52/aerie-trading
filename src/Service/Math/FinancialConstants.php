@@ -214,6 +214,12 @@ class FinancialConstants
     /** Maximum market cap percentage (15%) a fully saturated firm can repurchase in a single quarter. */
     public const MAX_REGULATORY_SPEND_SATURATED = 0.15;
 
+    // --- Dividend Smoothing (Lintner 1956) ---
+    /** Share of the gap to the target dividend closed in a year: Fama & Babiak (1968) firm-level mean. */
+    public const LINTNER_ANNUAL_ADJUSTMENT_SPEED = 0.32;
+    /** The same speed per quarter, the cadence dividends are declared at: the quarterly share that compounds to the annual one. */
+    public const LINTNER_QUARTERLY_ADJUSTMENT_SPEED = 1.0 - ((1.0 - self::LINTNER_ANNUAL_ADJUSTMENT_SPEED) ** 0.25);
+
     // --- Regulatory Capital Conservation Buffer (Basel III / Solvency II) ---
     /** Leverage overshoot ratio (1.05x) triggering Tier 1 Capital Conservation Buffer restriction (max 60% payout). */
     public const REGULATORY_BUFFER_TIER_1_THRESHOLD = 1.05;

@@ -339,6 +339,19 @@ class StreamContextTest extends TestCase
         $this->assertArrayHasKey(StreamContext::BACKLOG_STATE_PREFIX . 'oem', $context->getStreamZ());
     }
 
+    /** The work in hand is what the backlog books on steady orders: normal when seeded, above it while a surge is worked off. */
+    public function testOpeningWorkloadIsWhatTheBacklogBooksOnSteadyOrders(): void
+    {
+        $math = new MathUtility();
+        $this->assertEqualsWithDelta(1.0, StreamContext::openingWorkload([], 'oem', 0.25), 1e-12);
+
+        $shocked = new StreamContext([], $math);
+        $shocked->recognizeBacklog('oem', 1000.0, 1.2, 0.25);
+        $next = (new StreamContext($shocked->getStreamZ(), $math))->recognizeBacklog('oem', 1000.0, 1.0, 0.25);
+
+        $this->assertEqualsWithDelta($next['revenue'] / 1000.0, StreamContext::openingWorkload($shocked->getStreamZ(), 'oem', 0.25), 1e-12);
+    }
+
     public function testTheSectorFactorsPartOfEachStreamsZIsKeptBesideIt(): void
     {
         $mathUtility = new MathUtility();

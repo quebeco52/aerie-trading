@@ -14,6 +14,7 @@ use App\Service\Corporate\CorporateLedgerService;
 use App\Service\Corporate\DebtEngine;
 use App\Service\Corporate\TreasuryEngine;
 use App\Service\Math\CorporateMetrics;
+use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
@@ -517,6 +518,40 @@ class CapitalAllocationEngineTest extends TestCase
 
         $target = 1.00 * $stock->getPolicyPayoutRatio();
         $this->assertEqualsWithDelta(1.00 + (0.10 * ($target - 1.00)), $result['dividend_paid'], 1e-9);
+    }
+
+    /**
+     * Lintner partial adjustment at the speed the seed gives a smoothing payer: declared quarterly, the dividend
+     * closes the share of its gap to target that Fama & Babiak (1968) measured in a year, not the 4-11% a year the
+     * old aristocrat marker speeds closed.
+     */
+    public function testAPayerAtTheLintnerSpeedClosesTheCitedShareOfItsDividendGapInAYear(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('PEER');
+        $stock->setIndustry('Software - Infrastructure');
+        $stock->setSharesOutstanding('1000000');
+        $stock->setPrice('100.00');
+        $stock->setTotalEquity('100000000');
+        $stock->setCorporateTreasury('50000000');
+        $stock->setTargetPayoutRatio('0.30');
+        $stock->setDividendSpeed((string) FinancialConstants::LINTNER_QUARTERLY_ADJUSTMENT_SPEED);
+        $stock->setLastDividend('0.10');
+        $stock->setRetainedEarnings('50000000.00');
+        $stock->setTotalRevenue('10000000.00');
+        $stock->setOperatingMargin('0.20');
+        $stock->setWholesaleDebt('10000000.00');
+        $stock->setCustomerDeposits('0.00');
+        $stock->setRoicTtm('0.12');
+
+        $engine = $this->buildEngineWith($this->debtEngineReturning($this->buildHealth()));
+        for ($quarter = 0; $quarter < 4; $quarter++) {
+            $engine->allocateCapital($stock, 4.00, 1.00, 100.00, 1000000.0, new MacroStateDTO(corporateTaxRate: 0.21));
+        }
+
+        $target = 1.00 * $stock->getPolicyPayoutRatio();
+        $closed = ((float) $stock->getLastDividend() - 0.10) / ($target - 0.10);
+        $this->assertEqualsWithDelta(FinancialConstants::LINTNER_ANNUAL_ADJUSTMENT_SPEED, $closed, 0.002);
     }
 
     /**

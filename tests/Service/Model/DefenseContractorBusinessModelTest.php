@@ -352,13 +352,28 @@ class DefenseContractorBusinessModelTest extends TestCase
         $stock->setEarningsMomentumZ(['fixed_price_development' => 0.0, 'event' => 0.0]);
         $this->assertEqualsWithDelta(DefenseContractorBusinessModel::BASE_NWC_INTENSITY, $model->getWorkingCapitalIntensity($stock), 0.001);
 
-        // Fixed-price development distress -> WITHHOLDING_NWC_INTENSITY (0.18)
-        $stock->setEarningsMomentumZ(['fixed_price_development' => -1.8, 'event' => 0.0]);
-        $this->assertEqualsWithDelta(DefenseContractorBusinessModel::WITHHOLDING_NWC_INTENSITY, $model->getWorkingCapitalIntensity($stock), 0.001);
+        // Progress payments finance the fixed-price book only, so withholding ties up that book's share (GRIP 20%).
+        $withheld = DefenseContractorBusinessModel::BASE_NWC_INTENSITY
+            + (DefenseContractorBusinessModel::WITHHOLDING_NWC_INTENSITY - DefenseContractorBusinessModel::BASE_NWC_INTENSITY) * 0.20;
 
-        // Flagship defect / fleet grounding -> WITHHOLDING_NWC_INTENSITY (0.18)
+        // Fixed-price development distress
+        $stock->setEarningsMomentumZ(['fixed_price_development' => -1.8, 'event' => 0.0]);
+        $this->assertEqualsWithDelta($withheld, $model->getWorkingCapitalIntensity($stock), 1e-12);
+
+        // Flagship defect / fleet grounding
         $stock->setEarningsMomentumZ(['fixed_price_development' => 0.0, 'event' => -2.6]);
-        $this->assertEqualsWithDelta(DefenseContractorBusinessModel::WITHHOLDING_NWC_INTENSITY, $model->getWorkingCapitalIntensity($stock), 0.001);
+        $this->assertEqualsWithDelta($withheld, $model->getWorkingCapitalIntensity($stock), 1e-12);
+
+        // An export house with a smaller fixed-price sleeve has less of its book on progress payments (PTAR 15%).
+        $exporter = new Stock();
+        $exporter->setTicker('PTAR');
+        $exporter->setEarningsMomentumZ(['fixed_price_development' => -1.8, 'event' => 0.0]);
+        $this->assertEqualsWithDelta(
+            DefenseContractorBusinessModel::BASE_NWC_INTENSITY
+                + (DefenseContractorBusinessModel::WITHHOLDING_NWC_INTENSITY - DefenseContractorBusinessModel::BASE_NWC_INTENSITY) * 0.15,
+            $model->getWorkingCapitalIntensity($exporter),
+            1e-12
+        );
     }
 
     public function testClassifiedToolingAndNextGenPlatformReinvestment(): void
@@ -502,6 +517,37 @@ class DefenseContractorBusinessModelTest extends TestCase
         $base = $programmes(new MacroStateDTO());
         $this->assertSame($base, $programmes(new MacroStateDTO(governmentSpendingIndexEma: 130.0)), 'A District spending surge buys no arms.');
         $this->assertGreaterThan($base, $programmes(new MacroStateDTO(alliedDefenseSpendingIndexEma: 130.0)), 'An allied build-up fills the programme book.');
+    }
+
+    /**
+     * The committed cost base staffs to the programme work in hand: with the draws and the macro terms flat, the
+     * activity the prime reports is the revenue its books recognize on the opening backlog, less one. Two
+     * formulas would drift, and the base would carry programme staff for work the books no longer hold.
+     */
+    public function testTheCostBaseStaffsToTheProgrammeWorkInHand(): void
+    {
+        $model = new DefenseContractorBusinessModel();
+        $macro = $this->createMacroState(inflation: MacroEngine::TARGET_INFLATION);
+        $mathMock = $this->createStub(MathUtility::class);
+        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+
+        $seeded = new Stock();
+        $seeded->setTicker('GRIP');
+        $this->assertEqualsWithDelta(0.0, $model->resolveSectorActivityShift($seeded, $macro), 1e-12, 'A freshly seeded book is normal activity.');
+
+        $drawnDown = new Stock();
+        $drawnDown->setTicker('GRIP');
+        $drawnDown->setBeta('0.35');
+        $drawnDown->setEarningsMomentumZ([
+            StreamContext::BACKLOG_STATE_PREFIX . 'cost_plus_procurement'   => 4.0,
+            StreamContext::BACKLOG_STATE_PREFIX . 'fixed_price_development' => 3.0,
+            StreamContext::BACKLOG_STATE_PREFIX . 'foreign_military_sales'  => 2.0,
+        ]);
+        $shift = $model->resolveSectorActivityShift($drawnDown, $macro);
+        $booked = $model->computeActualFinancials($drawnDown, 1000.0, 0.30, 300.0, 0.15, $macro, $mathMock)->actualRevenue / 1000.0 - 1.0;
+
+        $this->assertLessThan(-0.10, $shift, 'A book run down by a drawdown staffs the base down.');
+        $this->assertEqualsWithDelta($booked, $shift, 1e-9, 'The base staffs to the revenue the books recognize.');
     }
 
     public function testTailEventPersistsAsAMarkovRegimeWithRandomExit(): void

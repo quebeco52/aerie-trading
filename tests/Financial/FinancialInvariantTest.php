@@ -496,6 +496,9 @@ class FinancialInvariantTest extends TestCase
     {
         $deterministicMath = new class extends MathUtility {
             public function generateStandardNormal(): float { return 0.0; }
+
+            // The disaster gate is the only randomness left; a jump in one leg would swamp the difference.
+            public function checkProbability(float $probability): bool { return false; }
         };
         $aggregate = new MacroAggregateSubsystem($deterministicMath);
 
