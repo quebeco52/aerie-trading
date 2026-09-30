@@ -47,7 +47,9 @@ class ShockEvent
     public const NATURAL_CATASTROPHE = 'natural_catastrophe';
     /** A scheduled district election has been held; the talks for the next government begin, unless one party won a majority. */
     public const ELECTION_HELD = 'election_held';
-    /** A cabinet has taken office after the talks that followed a vote. */
+    /** The cabinet has lost the Diet between votes and stays on as caretaker while the parties talk; no election is called. */
+    public const GOVERNMENT_FELL = 'government_fell';
+    /** A cabinet has taken office after the talks that followed a vote or a fall. */
     public const GOVERNMENT_FORMED = 'government_formed';
     /** A budget round changed the government's levers; the headline says what the Council held back, if anything. */
     public const BUDGET_ENACTED = 'budget_enacted';

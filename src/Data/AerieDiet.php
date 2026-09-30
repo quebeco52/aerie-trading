@@ -105,7 +105,7 @@ final class AerieDiet
         self::FREE_PORT => 25.0,
         self::BASTION_GUILDS => 20.0,
     ];
-    /** Vote shares at the founding: the founding seats over the Diet. */
+    /** Vote shares at the founding, the founding seats over the Diet: each party's normal vote, the share its lasting support is pulled back toward (Converse 1966). */
     public const SEED_VOTE_SHARES = [
         self::CIVIC => 75.0 / 300.0,
         self::VANGUARD => 80.0 / 300.0,

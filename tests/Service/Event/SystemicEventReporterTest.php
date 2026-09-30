@@ -182,6 +182,48 @@ class SystemicEventReporterTest extends TestCase
         $this->assertGreaterThan(1, count($seen));
     }
 
+    /** The day a cabinet falls, its headline names the caretaker, the supporters it lost and the party opening the talks, never the cabinet they will seat. */
+    public function testTheFallHeadlineNamesTheCabinetThatFell(): void
+    {
+        $log = [['day' => 30.0, 'formateur' => Diet::CIVIC, 'formed' => true, 'cabinet' => [Diet::CIVIC, Diet::BASTION_GUILDS], 'support' => [Diet::IRON_HARBOR]]];
+        $minority = new MacroStateDTO(
+            eventType: ShockEvent::GOVERNMENT_FELL,
+            totalTime: 6.5,
+            dietSeats: Diet::SEED_SEATS,
+            governingCoalition: Diet::membership([Diet::VANGUARD]),
+            supportParties: Diet::membership([Diet::EXCHANGE, Diet::CHARTISTS]),
+            coalitionFormedAt: 4.5,
+            pendingCoalition: Diet::membership([Diet::CIVIC, Diet::BASTION_GUILDS]),
+            coalitionTakesOfficeAt: 6.5 + 30.0 / 365.0,
+            formationLog: $log,
+            lastCabinetFellAt: 6.5,
+        );
+        $majority = new MacroStateDTO(
+            eventType: ShockEvent::GOVERNMENT_FELL,
+            totalTime: 6.5,
+            dietSeats: Diet::SEED_SEATS,
+            governingCoalition: Diet::membership([Diet::VANGUARD, Diet::CIVIC]),
+            supportParties: Diet::membership([]),
+            coalitionFormedAt: 4.5,
+            formationLog: $log,
+            lastCabinetFellAt: 6.5,
+        );
+
+        for ($i = 0; $i < 30; ++$i) {
+            $headline = $this->reporter(bufferedPrice: null)->report($minority, $this->benchmarkAt('100'));
+            $this->assertNotNull($headline);
+            $this->assertStringContainsString('the Vanguard', $headline['description']);
+            $this->assertStringContainsString('the Exchange Party and the Chartists', $headline['description']);
+            $this->assertStringNotContainsString('Bastion', $headline['description'], 'The talks\' outcome is not news yet.');
+            $this->assertStringNotContainsString('{', $headline['description']);
+
+            $headline = $this->reporter(bufferedPrice: null)->report($majority, $this->benchmarkAt('100'));
+            $this->assertNotNull($headline);
+            $this->assertStringContainsString('the Civic Front and the Vanguard', $headline['description']);
+            $this->assertStringNotContainsString('{', $headline['description']);
+        }
+    }
+
     /** A budget the Council held back says so, and names the debt it answered; one it let through names the levers. */
     public function testTheBudgetHeadlineSaysWhatTheCouncilHeld(): void
     {

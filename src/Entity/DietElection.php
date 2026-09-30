@@ -11,7 +11,8 @@ use Doctrine\ORM\Mapping as ORM;
  * One vote for the Aerie Diet: the result, the economy it was cast on, and the talks and government that followed.
  *
  * Written by App\Service\Macro\Recorder\ElectionRecorder on the tick the vote is held, when the talks are already
- * settled; the government takes office formationDays later, and nothing shown before then may give it away. Party-keyed
+ * settled; the government takes office formationDays later, and nothing shown before then may give it away. A cabinet
+ * that falls before the next vote is added to the vote's record on the day it falls, with the talks that follow. Party-keyed
  * maps are stored whole, keyed by App\Data\AerieDiet::PARTIES.
  */
 #[ORM\Entity(repositoryClass: \App\Repository\DietElectionRepository::class)]
@@ -63,6 +64,10 @@ class DietElection
     /** @var list<string> The governing parties going into the vote. */
     #[ORM\Column(type: Types::JSON)]
     private array $outgoingCoalition = [];
+
+    /** @var list<array{fellAt: float, fallen: list<string>, cabinet: list<string>, support: list<string>, formation: list<array{day: float, formateur: string, formed: bool, cabinet: list<string>, support: list<string>}>, formationDays: float}> Cabinets that fell before the next vote, each with the talks and the government that followed. */
+    #[ORM\Column(type: Types::JSON)]
+    private array $falls = [];
 
     /** Annualised real per-capita growth over the campaign, less trend. */
     #[ORM\Column(type: Types::FLOAT)]
@@ -223,6 +228,40 @@ class DietElection
         $this->coalition = $coalition;
 
         return $this;
+    }
+
+    /** @return list<array{fellAt: float, fallen: list<string>, cabinet: list<string>, support: list<string>, formation: list<array{day: float, formateur: string, formed: bool, cabinet: list<string>, support: list<string>}>, formationDays: float}> */
+    public function getFalls(): array
+    {
+        return $this->falls;
+    }
+
+    /**
+     * Records a cabinet that fell during this Diet, with the talks and the government that followed.
+     *
+     * @param list<string>                                                                                   $fallen    The cabinet that fell.
+     * @param list<string>                                                                                   $cabinet   The cabinet the talks produced.
+     * @param list<string>                                                                                   $support   Its support parties.
+     * @param list<array{day: float, formateur: string, formed: bool, cabinet: list<string>, support: list<string>}> $formation The talks, attempt by attempt.
+     */
+    public function addFall(float $fellAt, array $fallen, array $cabinet, array $support, array $formation): static
+    {
+        $this->falls[] = [
+            'fellAt' => $fellAt,
+            'fallen' => $fallen,
+            'cabinet' => $cabinet,
+            'support' => $support,
+            'formation' => $formation,
+            'formationDays' => $formation === [] ? 0.0 : (float) $formation[array_key_last($formation)]['day'],
+        ];
+
+        return $this;
+    }
+
+    /** The cabinets in office over this Diet, in order: the one the vote's talks produced, then each that followed a fall. @return list<list<string>> */
+    public function getCabinets(): array
+    {
+        return [$this->coalition, ...array_map(static fn(array $fall): array => $fall['cabinet'], $this->falls)];
     }
 
     /** @return list<string> */

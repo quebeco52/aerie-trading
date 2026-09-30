@@ -248,7 +248,7 @@ class MacroEngine
     /** Horizon of the long-run average the budget reads the gap against, so the cycle it answers averages to zero: the 15-year window Drehmann & Juselius (2012) separate a cycle from its trend with, about 2.5 postwar NBER cycles. */
     public const FUND_STABILISATION_GAP_TREND_YEARS = 15.0;
 
-    // --- The Diet's Election (Fair presidential vote equation, 2020 update; Nannestad & Paldam 2002) ---
+    // --- The Diet's Election (Fair presidential vote equation, 2020 update; Nannestad & Paldam 2002; ParlGov) ---
     /** Length of the fixed electoral term in years; the clock is derived from simulation time, never stored. */
     public const ELECTION_TERM_YEARS = 4.0;
     /** Final stretch of the term whose growth voters weigh (Fair's G: the first three quarters of the election year). */
@@ -261,14 +261,16 @@ class MacroEngine
     public const ELECTION_RESIDUAL_SD = 0.0295;
     /** Vote share the average government has lost over a term in the record (Nannestad & Paldam 2002: 282 elections in 19 democracies), the reference the Diet's own cost is read against. */
     public const ELECTION_RECORDED_COST_OF_RULING = 0.0225;
-    /** Vote share governing costs the governing parties each term, beyond the short-term swings they were elected on running off. It is also what keeps the party system balanced: at 0.2 points the Diet drifts into one-party rule, and at the recorded 2.25 the run-off takes the average loss to 5.8 (var/harness replay of 2,500 elections). At 1.2, with ELECTION_PARTY_SHOCK_SD, eight parties and cabinets formed by talks, the observed loss is about 2.1 (var/harness/politics/formation_report.py, 2,500 elections). */
-    public const ELECTION_COST_OF_RULING = 0.012;
+    /** Vote share governing costs the governing parties each term, beyond what they were elected on drifting back: governments are formed by parties riding a short-term swing or a lasting lead, and both run off. With those, the outgoing cabinet's parties lose 2.2 points a term, the record's 2.25 (var/harness/politics/vote_sim.py, 2,500 elections; ParlGov since 1945, measured the same way: Scandinavia 1.8, Western Europe 3.9). */
+    public const ELECTION_COST_OF_RULING = 0.005;
     /** Relative gain of the closed-economy party's vote after a financial crisis (Funke, Schularick & Trebesch 2016: far right +30%, none after ordinary recessions). */
     public const ELECTION_CRISIS_CLOSED_PARTY_LIFT = 0.30;
     /** Years after a financial crisis the lift lasts (Funke, Schularick & Trebesch 2016). */
     public const ELECTION_CRISIS_WINDOW_YEARS = 5.0;
-    /** Each party's own short-term swing in log vote share, drawn at every vote and gone by the next (Converse 1966 short-term forces; additive logistic form, Katz & King 1999). Sized with ELECTION_COST_OF_RULING for a total volatility near 7, about two thirds of Western Europe's 10 (Dassonneville & Hooghe 2017, Pedersen index, 21 countries 1950-2013): the full 10 needs swings whose run-off costs governments twice the recorded loss. */
-    public const ELECTION_PARTY_SHOCK_SD = 0.12;
+    /** Each party's own short-term swing, drawn at every vote and gone by the next (Converse 1966 short-term forces), as the variance of its log vote share times its normal vote: real vote shares vary in proportion to their size (ParlGov, West European parties since 1945: log variance on log share, slope -0.99). Nordic parties since 1945 (var/harness/politics/vote_fit.py): a party of a quarter swings 7% either way, one of a twentieth 15%. */
+    public const ELECTION_SHORT_TERM_SWING_VARIANCE = 0.0012;
+    /** Share of a party's lasting lead or deficit on its normal vote still there a year later: real parties drift back toward their usual share, a half-life of seven years (ParlGov, Nordic parties since 1945, var/harness/politics/vote_fit.py; West European parties 0.911 over elections up to 20 years apart). */
+    public const ELECTION_NORMAL_VOTE_PERSISTENCE = 0.905;
     /** Share of a cabinet party's electoral cost of governing a support party bears: 1.99 points lost against 2.81 for cabinet parties (Thürk & Klüver 2024, Table 1 Model 1: support -1.991, prime minister's party -2.815, junior partner -2.799; 304 elections in 31 democracies since 1980). */
     public const ELECTION_SUPPORT_ACCOUNTABILITY = 1.991 / ((2.815 + 2.799) / 2.0);
 
@@ -292,15 +294,23 @@ class MacroEngine
     /** Log-odds of a cabinet holding two parties that ruled out governing together, the two bloc leaders (Martin & Stevenson 2010: an anti-pact). */
     public const FORMATION_ANTIPACT_UTILITY = -2.877;
     /** Log-odds per unit a cabinet party stands from the Diet's median on the Council axis, the question of the constitutional order: Martin & Stevenson's (2010) anti-system term, its manifesto measure replaced by that distance and its strength fitted so the parties at the axis's ends sit in cabinet as seldom as Scandinavia's radical parties (var/harness/politics/formation_fit.py). */
-    public const FORMATION_ANTISYSTEM_UTILITY = -2.68;
+    public const FORMATION_ANTISYSTEM_UTILITY = -2.91;
     /** Log-odds the cabinet the first attempt tries must clear, the value of no deal at all; fitted so 32% of formations need more than one attempt (Golder 2010: 'nearly a third', 16 West European democracies 1944-1998; var/harness/politics/formation_fit.py). */
-    public const FORMATION_RESERVATION = 2.18;
+    public const FORMATION_RESERVATION = 2.17;
     /** How far the bar of no deal falls with each attempt that fails, as the parties' patience runs out; fitted so formations are as spread as the record's, sd 33.9 days on a mean of 33.7 (Bäck, Hellström, Lindvall & Teorell 2023), which cuts the stalemates a fixed bar would leave running for years. */
-    public const FORMATION_RESERVATION_STEP = 0.65;
+    public const FORMATION_RESERVATION_STEP = 0.68;
     /** Mean length of one attempt in days, each drawn exponential (a constant hazard: the formation record's spread about equals its mean); fitted so formations average Bäck, Hellström, Lindvall & Teorell's (2023) 33.7 days, Western Europe 1945-2019. */
-    public const FORMATION_ATTEMPT_DAYS = 22.9;
+    public const FORMATION_ATTEMPT_DAYS = 22.8;
     /** Mean days from a vote to the government it forms, single-party majorities included: what the talks model averages at the fitted constants. */
     public const FORMATION_MEAN_DAYS = 33.7;
+
+    // --- Cabinets Falling Between Votes (ParlGov, West European cabinets since 1945, var/harness/politics/termination_fit.py) ---
+    /** Yearly hazard a single-party minority cabinet falls between votes, replaced by another cabinet without an election: 21 falls in 199 cabinet-years (a constant hazard, King, Alt, Burns & Laver 1990). */
+    public const CABINET_FALL_HAZARD_SINGLE_PARTY_MINORITY = 0.106;
+    /** Yearly hazard a minority coalition falls between votes: 27 falls in 125 cabinet-years, twice a single party's, as a partner can walk out as well as a supporter. */
+    public const CABINET_FALL_HAZARD_MINORITY_COALITION = 0.216;
+    /** Yearly hazard a majority coalition falls between votes: 91 falls in 763 cabinet-years. A party governing alone with its own majority has no partner or supporter to lose, and none fell in 242 cabinet-years. */
+    public const CABINET_FALL_HAZARD_MAJORITY_COALITION = 0.119;
 
     // --- The Diet's Levers: Corporate Tax (Osterloh & Debus 2012; Mertens & Ravn 2013) ---
     /** Gap between the corporate rates the big-state and small-state manifestos set, the parties at the ends of the size-of-state axis: 7 points (US: the 2020 Democratic platform's 28% against the 21% of the 2017 Republican act; UK 2019: Labour's 26% against the Conservatives' 19%). Enacted rates follow manifesto ideology (Osterloh & Debus 2012, European panel). */
@@ -825,7 +835,11 @@ class MacroEngine
             $state->lastElectionAt === $state->totalTime
             => ShockEvent::ELECTION_HELD,
 
-            // A cabinet taking office after the talks that followed a vote (DistrictPoliticsSubsystem).
+            // A cabinet losing the Diet between votes (DistrictPoliticsSubsystem).
+            $state->lastCabinetFellAt === $state->totalTime
+            => ShockEvent::GOVERNMENT_FELL,
+
+            // A cabinet taking office after the talks that followed a vote or a fall (DistrictPoliticsSubsystem).
             $state->lastGovernmentFormedAt === $state->totalTime
             => ShockEvent::GOVERNMENT_FORMED,
 
@@ -839,7 +853,7 @@ class MacroEngine
         if ($eventType !== null) {
             $state->eventType = $eventType;
             // District-wide systemic crisis refractory cooldown timer arming; the political calendar arms none.
-            if (!in_array($eventType, [ShockEvent::ELECTION_HELD, ShockEvent::GOVERNMENT_FORMED, ShockEvent::BUDGET_ENACTED], true)) {
+            if (!in_array($eventType, [ShockEvent::ELECTION_HELD, ShockEvent::GOVERNMENT_FELL, ShockEvent::GOVERNMENT_FORMED, ShockEvent::BUDGET_ENACTED], true)) {
                 $state->eventCooldownTimer = self::SYSTEMIC_EVENT_COOLDOWN_YEARS;
             }
         }

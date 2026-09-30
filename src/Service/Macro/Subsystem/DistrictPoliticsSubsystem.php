@@ -11,33 +11,36 @@ use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
 
 /**
- * The Aerie Diet: six parties, a vote on the fixed election calendar, seats, the talks that follow, and the government.
+ * The Aerie Diet: eight parties, a vote on the fixed election calendar, seats, the talks that follow, and the government.
  *
  * The vote is the economic vote: the government's share moves with growth over the campaign and inflation over the term
  * on Fair's presidential vote-equation slopes, with the opposition taking what it loses in proportion to its own shares.
  * Governing costs the governing parties a share of the vote each term, the cost of ruling (Nannestad & Paldam 2002)
- * that keeps a party system balanced; the loss a government is seen to take is larger, because governments are formed
- * by the parties whose short-term swings carried the last vote, and those run off by the next. A party supporting a
+ * the Diet's parties pay on top of what they were elected on running off; governments are formed by parties riding a
+ * short-term swing or a lasting lead, so the loss a government is seen to take is larger. A party supporting a
  * minority cabinet from outside bears part of that cost (Thürk & Klüver 2024). A financial crisis in the five years
  * before the vote lifts the closed-economy party, the one that names the outside world as the contagion, by the 30%
  * Funke, Schularick & Trebesch (2016) find for the far right after financial crises, and gives it back once the
- * crisis leaves that window. On top of that each party has its own short-term swing -- candidates, campaigns, scandals --
- * which lasts only the one vote (Converse 1966), sized so the Diet is as volatile as Western Europe's parliaments have
- * been on average. Seats are D'Hondt over the whole Diet.
+ * crisis leaves that window. Each party has a normal vote, its share at the founding (Converse 1966): its lasting support
+ * strays from it and drifts back at the pace real parties' do, and each party also has a short-term swing --
+ * candidates, campaigns, scandals -- which lasts only the one vote. Both are sized to the Nordic parties since 1945
+ * (ParlGov), in proportion to a party's size, as real vote shares vary. Seats are D'Hondt over the whole Diet.
  *
  * Each party is fixed on the axes it is defined by (size of state, openness, or the Council). On the others it strays
  * from its home between elections and is pulled back toward it, at the pace real parties move in the Chapel Hill expert
  * survey: an AR(1) around each party's own place, not a random walk, since parties keep their family's positions for
  * decades (Budge, Ezrow & McDonald 2010). After the vote the parties negotiate a government (CoalitionFormation); until
- * it takes office the outgoing cabinet stays on as caretaker and passes no budget.
+ * it takes office the outgoing cabinet stays on as caretaker and passes no budget. Between votes a cabinet can fall, at
+ * the rate real cabinets of its kind have (ParlGov): the parties then talk again on the same seats, with no election.
  *
  * The calendar is CreditFiscalSubsystem's: the vote is held on the tick its election falls on. A run built by hand (a
  * harness, a unit test) has none.
  *
  * The government then legislates at the budget rounds after the one it took office on. Its cabinet's position, its
- * members' weighted by seats (Gamson's law), sets three levers between the policies real parties at the ends of each
- * axis have enacted: the corporate rate on the size-of-state axis, and the tariff and the immigration regime on the
- * openness axis. Size of state moves no purchases: in the US record the purchases process is fitted to, the party in
+ * members' weighted by seats (Gamson's law), sets four levers between the policies real parties at the ends of each
+ * axis have enacted: the corporate rate on the size-of-state axis, the tariff and the immigration regime on the
+ * openness axis, and merger review on the Council axis, from the populists' 2023 guidelines to the technocrats' 2010
+ * ones. Size of state moves no purchases: in the US record the purchases process is fitted to, the party in
  * power shifts civilian purchases the wrong way (-2% under Democratic presidents, var/harness/partisan_fit.py), and the
  * panel evidence has faded since the 1990s (Potrafke 2017). A minority cabinet proposes and its support parties can
  * refuse: each accepts a lever no further from its own policy than the one in force, so a supporter can stop the
@@ -56,10 +59,12 @@ class DistrictPoliticsSubsystem
     // --- Vote Shares ---
     /** Smallest vote share a party is carried at, so a collapse leaves it a rump rather than a negative share. */
     public const MIN_VOTE_SHARE = 0.005;
+    /** Each party's own lasting swing each term, as the variance of its log vote share times its normal vote: with the government's swings, it spreads the parties around their normal votes as far as the Nordic parties since 1945, 0.019 (ParlGov, var/harness/politics/vote_fit.py against vote_sim.py). */
+    public const LASTING_SWING_VARIANCE = 0.0118;
 
     // --- The Budget ---
     /** The levers a budget sets, and whether cutting each costs revenue the Council guards. */
-    public const REVENUE_LEVERS = ['corporateTax' => true, 'tariff' => true, 'laborGrowth' => false];
+    public const REVENUE_LEVERS = ['corporateTax' => true, 'tariff' => true, 'laborGrowth' => false, 'mergerReviewLeniency' => false];
 
     public function __construct(private readonly MathUtility $mathUtility) {}
 
@@ -94,8 +99,20 @@ class DistrictPoliticsSubsystem
             $state->termStartDeflator = $state->gdpDeflator;
         }
 
+        if ($state->cabinetFallsAt >= 0.0 && $state->totalTime >= $state->cabinetFallsAt) {
+            $this->fall($state);
+        }
+
         if ($state->coalitionTakesOfficeAt >= 0.0 && $state->totalTime >= $state->coalitionTakesOfficeAt) {
             self::takeOffice($state);
+        }
+
+        // A sitting cabinet without a fall date draws one: on taking office, or on the first tick of a state that has none.
+        if ($state->cabinetFallsAt < 0.0 && $state->coalitionTakesOfficeAt < 0.0) {
+            $hazard = self::fallHazard(AerieDiet::governingParties($state->governingCoalition), $state->dietSeats);
+            if ($hazard > 0.0) {
+                $state->cabinetFallsAt = $state->totalTime + ($this->mathUtility->generateExponential() / $hazard);
+            }
         }
 
         // A government's first budget is the round after the one it took office on; a caretaker passes none.
@@ -112,8 +129,9 @@ class DistrictPoliticsSubsystem
      * policy and no more: nothing on record goes further.
      *
      * @param array<string, float> $position A position by axis (coalitionPosition(), or a party's).
-     * @return array{corporateTax: float, tariff: float, laborGrowth: float} The corporate rate's shift from the neutral
-     *         rate, the average tariff on imports, and labour force growth.
+     * @return array{corporateTax: float, tariff: float, laborGrowth: float, mergerReviewLeniency: float} The corporate
+     *         rate's shift from the neutral rate, the average tariff on imports, labour force growth, and where merger
+     *         review stands between the 2023 guidelines (0) and the 2010 guidelines (1).
      */
     public static function platform(array $position): array
     {
@@ -122,8 +140,11 @@ class DistrictPoliticsSubsystem
         $bigState = AerieDiet::FIXED_POSITIONS[AerieDiet::CIVIC][AerieDiet::AXIS_STATE];
         $closed = AerieDiet::FIXED_POSITIONS[AerieDiet::IRON_HARBOR][AerieDiet::AXIS_OPENNESS];
         $open = AerieDiet::FIXED_POSITIONS[AerieDiet::EXCHANGE][AerieDiet::AXIS_OPENNESS];
+        $populist = AerieDiet::FIXED_POSITIONS[AerieDiet::COMMON_LOT][AerieDiet::AXIS_COUNCIL];
+        $technocratic = AerieDiet::FIXED_POSITIONS[AerieDiet::CHARTISTS][AerieDiet::AXIS_COUNCIL];
         $state = max($smallState, min($bigState, $position[AerieDiet::AXIS_STATE] ?? 0.0));
         $openness = max($closed, min($open, $position[AerieDiet::AXIS_OPENNESS] ?? 0.0));
+        $council = max($populist, min($technocratic, $position[AerieDiet::AXIS_COUNCIL] ?? 0.0));
         $stateSpan = $bigState - $smallState;
         $opennessSpan = $open - $closed;
 
@@ -132,6 +153,9 @@ class DistrictPoliticsSubsystem
             'tariff' => MacroEngine::POLICY_PROTECTIONIST_TARIFF * max(0.0, $openness / $closed),
             'laborGrowth' => MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE
                 + ((MacroEngine::MIGRATION_OPEN_REGIME - MacroEngine::MIGRATION_CLOSED_REGIME) * $openness / $opennessSpan),
+            // The Common Lot's anti-cartel review is the 2023 guidelines, the Chartists' the 2010 ones
+            // (App\Service\Corporate\MergerAndAcquisitionEngine::reviewScreens).
+            'mergerReviewLeniency' => ($council - $populist) / ($technocratic - $populist),
         ];
     }
 
@@ -149,8 +173,8 @@ class DistrictPoliticsSubsystem
      * @param list<string>                        $support   Its support parties.
      * @param array<string, int|float>            $seats     Seats by party.
      * @param array<string, array<string, float>> $positions Positions by party and axis.
-     * @param array{corporateTax: float, tariff: float, laborGrowth: float} $standing The levers in force.
-     * @return array{levers: array{corporateTax: float, tariff: float, laborGrowth: float}, platform: array{corporateTax: float, tariff: float, laborGrowth: float}, supportHeld: array<string, bool>, councilHeld: array<string, bool>, councilGuards: bool}
+     * @param array{corporateTax: float, tariff: float, laborGrowth: float, mergerReviewLeniency: float} $standing The levers in force.
+     * @return array{levers: array{corporateTax: float, tariff: float, laborGrowth: float, mergerReviewLeniency: float}, platform: array{corporateTax: float, tariff: float, laborGrowth: float, mergerReviewLeniency: float}, supportHeld: array<string, bool>, councilHeld: array<string, bool>, councilGuards: bool}
      *         What the round enacts, the cabinet's own platform, which levers the supporters and the Council hold short
      *         of it, and whether the Council's brake is on.
      */
@@ -197,6 +221,7 @@ class DistrictPoliticsSubsystem
             'corporateTax' => $state->corporateTaxPolicyShift,
             'tariff' => $state->importTariffRate,
             'laborGrowth' => $state->laborForceGrowthRate,
+            'mergerReviewLeniency' => $state->mergerReviewLeniency,
         ];
         $budget = self::budget(
             AerieDiet::governingParties($state->governingCoalition),
@@ -222,6 +247,7 @@ class DistrictPoliticsSubsystem
         $state->corporateTaxPolicyShift = $levers['corporateTax'];
         $state->importTariffRate = $levers['tariff'];
         $state->laborForceGrowthRate = $levers['laborGrowth'];
+        $state->mergerReviewLeniency = $levers['mergerReviewLeniency'];
     }
 
     /**
@@ -247,6 +273,12 @@ class DistrictPoliticsSubsystem
         $shares = self::applyShortTermShocks($previous, array_map(static fn(float $shock): float => -$shock, $state->partyShortTermShocks));
         $shares = self::returnCrisisShift($shares, $state->ironHarborCrisisShift);
 
+        $lasting = [];
+        foreach (AerieDiet::PARTIES as $party) {
+            $lasting[$party] = self::swingSd(self::LASTING_SWING_VARIANCE, $party) * $this->mathUtility->generateStandardNormal();
+        }
+        $shares = self::revertToNormalVote($shares, $lasting);
+
         $growthGap = self::annualisedLogChange($state->campaignStartRealGdp, $realGdp, $state->totalTime - $state->campaignStartedAt);
         $growthGap = $growthGap === null ? 0.0 : $growthGap - $state->laborForceGrowthRate - MacroEngine::TFP_DRIFT;
         $inflationGap = self::annualisedLogChange($state->termStartDeflator, $state->gdpDeflator, $state->totalTime - $state->termStartedAt);
@@ -262,7 +294,7 @@ class DistrictPoliticsSubsystem
 
         $shocks = [];
         foreach (AerieDiet::PARTIES as $party) {
-            $shocks[$party] = MacroEngine::ELECTION_PARTY_SHOCK_SD * $this->mathUtility->generateStandardNormal();
+            $shocks[$party] = self::swingSd(MacroEngine::ELECTION_SHORT_TERM_SWING_VARIANCE, $party) * $this->mathUtility->generateStandardNormal();
         }
         $shares = self::normaliseShares(self::applyShortTermShocks($shares, $shocks));
         $state->partyShortTermShocks = $shocks;
@@ -295,11 +327,57 @@ class DistrictPoliticsSubsystem
         }
         $state->partyPositions = $positions;
 
-        $talks = CoalitionFormation::talks($seats, $shares, $positions, AerieDiet::governingParties($state->governingCoalition), $this->mathUtility);
+        // A cabinet that fell just before the vote goes into it as caretaker, with no incumbency to weigh.
+        $statusQuo = $state->coalitionTakesOfficeAt >= 0.0 ? [] : AerieDiet::governingParties($state->governingCoalition);
+        $state->electionOutgoingCabinet = $state->governingCoalition;
+        $state->cabinetFallsAt = -1.0;
+        self::beginTalks($state, CoalitionFormation::talks($seats, $shares, $positions, $statusQuo, $this->mathUtility));
+    }
+
+    /**
+     * The cabinet loses the Diet between votes: it stays on as caretaker and the parties talk, on the seats the last vote
+     * gave them, for a cabinet other than the one that fell. No election is called; the calendar is fixed.
+     */
+    private function fall(MacroState $state): void
+    {
+        $fallen = AerieDiet::governingParties($state->governingCoalition);
+        $state->lastCabinetFellAt = $state->totalTime;
+        $state->cabinetFallsAt = -1.0;
+        self::beginTalks($state, CoalitionFormation::talks($state->dietSeats, $state->dietVoteShares, $state->partyPositions, [], $this->mathUtility, $fallen));
+    }
+
+    /**
+     * Sets the talks' outcome pending until the day it takes office.
+     *
+     * @param array{cabinet: list<string>, support: list<string>, days: float, log: list<array{day: float, formateur: string, formed: bool, cabinet: list<string>, support: list<string>}>} $talks
+     */
+    private static function beginTalks(MacroState $state, array $talks): void
+    {
         $state->pendingCoalition = AerieDiet::membership($talks['cabinet']);
         $state->pendingSupport = AerieDiet::membership($talks['support']);
+        $state->talksStartedAt = $state->totalTime;
         $state->coalitionTakesOfficeAt = $state->totalTime + ($talks['days'] / FinancialConstants::DAYS_PER_YEAR);
         $state->formationLog = $talks['log'];
+    }
+
+    /**
+     * The yearly hazard a cabinet falls between votes, replaced without an election (ParlGov, West European cabinets
+     * since 1945): a coalition can lose a partner, and a minority cabinet its supporters; a party governing alone with its
+     * own majority has neither to lose.
+     *
+     * @param list<string>             $cabinet The cabinet's parties.
+     * @param array<string, int|float> $seats   Seats by party.
+     */
+    public static function fallHazard(array $cabinet, array $seats): float
+    {
+        $minority = CoalitionFormation::coalitionSeats($cabinet, $seats) < AerieDiet::MAJORITY_SEATS;
+
+        return match (true) {
+            $minority && count($cabinet) === 1 => MacroEngine::CABINET_FALL_HAZARD_SINGLE_PARTY_MINORITY,
+            $minority => MacroEngine::CABINET_FALL_HAZARD_MINORITY_COALITION,
+            count($cabinet) > 1 => MacroEngine::CABINET_FALL_HAZARD_MAJORITY_COALITION,
+            default => 0.0,
+        };
     }
 
     /**
@@ -401,6 +479,42 @@ class DistrictPoliticsSubsystem
         $total = array_sum($moved);
 
         return array_map(static fn(float $share): float => $share / $total, $moved);
+    }
+
+    /**
+     * Pulls each party's lasting share back toward its normal vote, the share it won at the founding (Converse 1966),
+     * and moves it by its own lasting swing: its log share against its normal vote decays for a term at the persistence
+     * real parties show and takes the swing, the shares renormalised to the whole electorate (additive logistic form,
+     * Katz & King 1999).
+     *
+     * @param array<string, float> $shares Lasting vote shares by party, short-term swings and crisis lift given back.
+     * @param array<string, float> $swings Lasting log swing by party; a party without one only drifts back.
+     * @return array<string, float> Vote shares by party.
+     */
+    public static function revertToNormalVote(array $shares, array $swings): array
+    {
+        $persistence = MacroEngine::ELECTION_NORMAL_VOTE_PERSISTENCE ** MacroEngine::ELECTION_TERM_YEARS;
+
+        $moved = [];
+        foreach (AerieDiet::PARTIES as $party) {
+            $normal = AerieDiet::SEED_VOTE_SHARES[$party];
+            $share = max(self::MIN_VOTE_SHARE, $shares[$party] ?? $normal);
+            $moved[$party] = $normal * exp(($persistence * log($share / $normal)) + ($swings[$party] ?? 0.0));
+        }
+        $total = array_sum($moved);
+
+        return array_map(static fn(float $share): float => $share / $total, $moved);
+    }
+
+    /**
+     * The standard deviation of a party's swing in log vote share: the variance scale over its normal vote, since real
+     * vote shares vary in proportion to their size.
+     *
+     * @param float $varianceScale Variance of the log share times the normal vote.
+     */
+    public static function swingSd(float $varianceScale, string $party): float
+    {
+        return sqrt($varianceScale / AerieDiet::SEED_VOTE_SHARES[$party]);
     }
 
     /**

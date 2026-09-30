@@ -170,11 +170,11 @@ class IndustryPositionBuilder
             return null;
         }
 
-        $reviewCap = MergerAndAcquisitionEngine::maxClearedTargetShare($market['acquirer_share'], $market['herfindahl']);
+        $reviewCap = MergerAndAcquisitionEngine::maxClearedTargetShare($market['acquirer_share'], $market['herfindahl'], $macroState->mergerReviewLeniency);
 
         return [
             'herfindahl' => $market['herfindahl'],
-            'highlyConcentrated' => $market['herfindahl'] > MergerAndAcquisitionEngine::MERGER_REVIEW_CONCENTRATED_HHI,
+            'highlyConcentrated' => $market['herfindahl'] > MergerAndAcquisitionEngine::reviewScreens($macroState->mergerReviewLeniency)['concentrated'],
             'acquirerShare' => $market['acquirer_share'],
             'fringeShare' => $market['fringe_share'],
             'clearedShare' => min($market['fringe_share'], $reviewCap),

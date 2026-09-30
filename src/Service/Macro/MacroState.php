@@ -389,6 +389,14 @@ class MacroState
     public float $lastGovernmentFormedAt;
     /** @var list<array{day: float, formateur: string, formed: bool, cabinet: list<string>, support: list<string>}> */
     public array $formationLog;
+    // When the last talks began (a vote or a fall; -1: none yet), when the sitting cabinet will fall (-1: it sees out the
+    // term or talks are pending), and when a cabinet last fell.
+    public float $talksStartedAt;
+    public float $cabinetFallsAt;
+    public float $lastCabinetFellAt;
+    // The cabinet that went into the last vote, the talks' status quo.
+    /** @var array<string, float> */
+    public array $electionOutgoingCabinet;
     // What the vote reads: the deflator where the term began and real GDP where the campaign began (-1: not yet marked).
     public float $termStartedAt;
     public float $termStartDeflator;
@@ -409,6 +417,8 @@ class MacroState
     public float $importTariffRate;
     public float $tariffTradeLag;
     public float $laborForceGrowthRate;
+    // Where merger review stands between the 2023 guidelines (0) and the 2010 guidelines (1), as the Diet last set it.
+    public float $mergerReviewLeniency;
     public float $immigrationPopulationShift;
     public float $lastBudgetEnactedAt;
     public float $lastCouncilBrakeAt;
@@ -516,7 +526,7 @@ class MacroState
             $carried[$field] = true;
             $state->$field = match ($field) {
                 'sectorZ', 'sectorDemandZ', 'dietSeats', 'dietVoteShares', 'dietVoteSwings', 'governingCoalition', 'supportParties', 'partyShortTermShocks',
-                'pendingCoalition', 'pendingSupport'
+                'pendingCoalition', 'pendingSupport', 'electionOutgoingCabinet'
                     => is_array($data[$key]) ? array_map('floatval', $data[$key]) : [],
                 'partyPositions' => is_array($data[$key]) ? self::hydratePositions($data[$key]) : [],
                 'formationLog' => is_array($data[$key]) ? array_values($data[$key]) : [],

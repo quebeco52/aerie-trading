@@ -79,10 +79,10 @@
 			<section class="bg-surface-container-low rounded-lg p-5 border {{ talks.underWay ? 'border-primary/40' : 'border-outline-variant/15' }}" aria-labelledby="talks-heading">
 				<div class="flex flex-col md:flex-row md:items-start md:justify-between gap-3">
 					<div>
-						<h2 id="talks-heading" class="text-sm font-bold text-on-surface">{{ talks.underWay ? 'Coalition talks under way' : 'The last coalition talks' }}</h2>
+						<h2 id="talks-heading" class="text-sm font-bold text-on-surface">{{ talks.underWay ? (talks.afterFall ? 'The cabinet has fallen: talks under way' : 'Coalition talks under way') : 'The last coalition talks' }}</h2>
 						<p class="text-3xs text-on-surface-variant mt-0.5">
 							{% if talks.underWay %}
-								Day {{ talks.day|number_format(0) }}. The outgoing cabinet stays on as caretaker and passes no budget until a new government takes office.
+								Day {{ talks.day|number_format(0) }}{{ talks.afterFall ? ' since the cabinet fell on ' ~ talks.startedOn : '' }}. The {{ talks.afterFall ? 'cabinet that fell' : 'outgoing cabinet' }} stays on as caretaker and passes no budget until a new government takes office{{ talks.afterFall ? '; no election is called' : '' }}.
 							{% else %}
 								A government took office after {{ talks.day|number_format(0) }} days and {{ talks.attempts }} {{ talks.attempts == 1 ? 'attempt' : 'attempts' }}.
 							{% endif %}
@@ -284,8 +284,8 @@
 									<span class="font-bold text-on-surface">{{ lever.name }}</span>
 									<span class="block text-3xs font-normal text-on-surface-variant">{{ lever.note }}</span>
 								</th>
-								<td class="py-2 text-right font-mono tabular-nums text-on-surface-variant">{{ (lever.platform * 100)|number_format(2) }}%</td>
-								<td class="py-2 text-right font-mono tabular-nums font-bold text-on-surface">{{ (lever.enacted * 100)|number_format(2) }}%</td>
+								<td class="py-2 text-right font-mono tabular-nums text-on-surface-variant">{{ _self.lever_value(lever, lever.platform) }}</td>
+								<td class="py-2 text-right font-mono tabular-nums font-bold text-on-surface">{{ _self.lever_value(lever, lever.enacted) }}</td>
 								<td class="py-2 pl-4 text-3xs">
 									{% if lever.status == 'caretaker' %}
 										<span class="font-bold text-on-surface-variant">Waits on the talks</span>
@@ -297,7 +297,7 @@
 										<span class="font-bold text-error">Blocked by its supporters</span>
 										<span class="block text-on-surface-variant">They will not vote to move it further from their own policy</span>
 									{% elseif lever.status == 'partial' %}
-										<span class="font-bold text-primary">To {{ (lever.target * 100)|number_format(2) }}% at the next budget</span>
+										<span class="font-bold text-primary">To {{ _self.lever_value(lever, lever.target) }} at the next budget</span>
 										<span class="block text-on-surface-variant">As far as its supporters will go</span>
 									{% elseif lever.status == 'pending' %}
 										<span class="font-bold text-primary">At the next budget</span>
@@ -424,6 +424,24 @@
 												{%- if row.attempts == 0 %}A majority of its own{% else %}{{ row.formationDays|number_format(0) }} days, {{ row.attempts }} {{ row.attempts == 1 ? 'attempt' : 'attempts' }}{% endif -%}
 											</span>
 											{% if row.changed %}<span class="text-3xs font-bold uppercase tracking-wider text-primary">New government</span>{% endif %}
+											{% for fall in row.falls %}
+												<span class="block mt-1 pt-1 border-t border-outline-variant/15">
+													<span class="block text-3xs font-bold uppercase tracking-wider text-error">Fell {{ fall.date }}</span>
+													{% if not fall.formed %}
+														<span class="text-3xs font-bold uppercase tracking-wider text-primary">Talks under way</span>
+													{% else %}
+														<span class="flex flex-wrap gap-x-2 gap-y-0.5">
+															{% for member in fall.coalition %}
+																<span class="inline-flex items-center gap-1 text-on-surface"><span class="w-2 h-2 rounded-full" style="background-color: {{ member.color }}" aria-hidden="true"></span>{{ member.name }}</span>
+															{% endfor %}
+														</span>
+														{% if fall.support is not empty %}
+															<span class="block text-3xs text-on-surface-variant">Supported by {% for member in fall.support %}{{ member.name }}{{ not loop.last ? ', ' : '' }}{% endfor %}</span>
+														{% endif %}
+														<span class="block text-3xs font-mono tabular-nums text-on-surface-variant">{{ fall.formationDays|number_format(0) }} days, {{ fall.attempts }} {{ fall.attempts == 1 ? 'attempt' : 'attempts' }}</span>
+													{% endif %}
+												</span>
+											{% endfor %}
 										{% endif %}
 									</td>
 									<td class="px-3 py-2 text-right font-mono tabular-nums hidden md:table-cell {{ row.incumbentSwing >= 0 ? 'text-secondary' : 'text-error' }}">{{ (row.incumbentSwing >= 0 ? '+' : '') ~ (row.incumbentSwing * 100)|number_format(1) }}pp</td>
@@ -450,7 +468,7 @@
 				},
 				{
 					name: 'The cost of ruling',
-					text: 'Governing costs the governing parties ' ~ (rules.costOfRuling * 100)|number_format(1) ~ ' points of the vote each term, whatever the economy did. They are seen to lose more: governments are formed by the parties whose short-term swings carried the last vote, and those swings run off by the next. On average real governments have lost ' ~ (rules.recordedCostOfRuling * 100)|number_format(2) ~ ' points a term; the Diet\'s lose a little more.',
+					text: 'Governing costs the governing parties ' ~ (rules.costOfRuling * 100)|number_format(1) ~ ' points of the vote each term, whatever the economy did. They are seen to lose more: governments are formed by the parties riding a good vote, a short-term swing that runs off by the next or a lasting lead that drifts back. With both, the Diet\'s governing parties lose about what real ones have, ' ~ (rules.recordedCostOfRuling * 100)|number_format(2) ~ ' points a term.',
 					source: 'Nannestad & Paldam (2002): 282 elections in 19 democracies'
 				},
 				{
@@ -460,8 +478,13 @@
 				},
 				{
 					name: 'Short-term forces',
-					text: 'Each party also has a swing of its own at every vote: its candidates, its campaign, its scandals. It moves the party\'s vote by about ' ~ (rules.partyShock * 100)|number_format(0) ~ '% either way and does not carry into the next vote. With the cost of ruling, it makes the Diet about two thirds as volatile as Western Europe\'s parliaments have been on average. Much more, and governments would lose far more than real ones do; much less cost of ruling, and the party system would drift into one-party rule.',
-					source: 'Converse (1966) on short-term forces; Dassonneville & Hooghe (2017): average volatility of 10 across 21 Western European countries, 1950-2013'
+					text: 'Each party also has a swing of its own at every vote: its candidates, its campaign, its scandals. It does not carry into the next vote. Small parties swing more, as real ones do: about ' ~ (rules.shortSwingQuarter * 100)|number_format(0) ~ '% of the vote of a party with a quarter of it, ' ~ (rules.shortSwingTwentieth * 100)|number_format(0) ~ '% of one with a twentieth.',
+					source: 'Converse (1966) on short-term forces; ParlGov, Nordic parliaments since 1945: vote shares vary in proportion to their size'
+				},
+				{
+					name: 'The normal vote',
+					text: 'Each party has a normal vote, the share it won at the founding. Its lasting support strays from it, with a new generation of voters or a realignment, and drifts back, half the gap closing in about ' ~ rules.normalVoteHalfLifeYears|number_format(0) ~ ' years. The Diet\'s parties stray as far from their normal votes as the Nordic parties have from theirs, so no party is doomed to fade and none grows without end.',
+					source: 'Converse (1966) on the normal vote; ParlGov, Denmark, Finland, Iceland, Norway and Sweden since 1945'
 				},
 				{
 					name: 'After a financial crisis',
@@ -522,6 +545,11 @@
 					name: 'The caretaker',
 					text: 'Until the talks produce a government, the outgoing cabinet stays on and passes no budget, and the policy uncertainty that built into the vote stays at its peak.',
 					source: 'Caretaker conventions; Bernhard & Leblang (2006): returns fall and volatility rises through cabinet formations markets cannot call'
+				},
+				{
+					name: 'When a cabinet falls',
+					text: 'Between votes a cabinet can lose the Diet: a partner walks out, or its supporters stop voting its budgets. Over a term, a single-party minority cabinet falls ' ~ (rules.fallSingleMinority * 100)|number_format(0) ~ '% of the time, a minority coalition ' ~ (rules.fallMinorityCoalition * 100)|number_format(0) ~ '%, and a majority coalition ' ~ (rules.fallMajorityCoalition * 100)|number_format(0) ~ '%; a party governing alone with its own majority has no one to lose. No election is called, since the Diet sits its fixed term: the fallen cabinet stays on as caretaker and the parties talk again on the seats they hold, for any cabinet but the one that fell.',
+					source: 'ParlGov, West European cabinets since 1945: cabinets replaced without an election (var/harness/politics/termination_fit.py); King, Alt, Burns & Laver (1990), a constant hazard; Norway, whose Storting cannot be dissolved'
 				}
 			] %}
 			{{ _self.rules_table(formation_list) }}
@@ -554,6 +582,11 @@
 					source: 'World Bank net migration 2000-2019: Japan (closed), Canada and Australia (open); Holston, Laubach & Williams (2017); Saiz (2007)'
 				},
 				{
+					name: 'Merger review',
+					text: 'The Common Lot\'s review blocks a merger that adds more than ' ~ (rules.strictReviewDelta * 10000)|number_format(0) ~ ' points to a market\'s HHI and leaves it above ' ~ (rules.strictReviewLine * 10000)|number_format(0) ~ ', or makes a firm of more than ' ~ (rules.strictReviewShare * 100)|number_format(0) ~ '% of its market; the Chartists\' lets through all but a deal adding ' ~ (rules.lenientReviewDelta * 10000)|number_format(0) ~ ' points in a market above ' ~ (rules.lenientReviewLine * 10000)|number_format(0) ~ ', with no test of share. A cabinet reviews between them, where its place on the Council axis puts it. The line caps how much of its market a firm can buy.',
+					source: 'US Merger Guidelines (2023), the populist turn in antitrust; US Horizontal Merger Guidelines (2010); Philadelphia National Bank (1963)'
+				},
+				{
 					name: 'The Council\'s brake',
 					text: 'Above ' ~ (rules.debtBrake * 100)|number_format(0) ~ '% of GDP in debt, the Council would veto any bill that cuts revenue: a lower tax rate or a lower tariff. The Diet knows it and tables none, so the veto is never cast and the lever stays where it stands. A government whose cabinet and supporters hold three quarters of the Diet, enough to remove councillors, is not held; the Council\'s loyalists do not count toward it.',
 					source: 'Romer & Rosenthal (1978), the agenda setter and the veto player; Reinhart & Rogoff (2010), the 90% line'
@@ -563,6 +596,8 @@
 		</section>
 	</div>
 {% endblock %}
+
+{% macro lever_value(lever, value) %}{{ (lever.unit ?? '') == 'hhi' ? (value * 10000)|number_format(0) ~ ' HHI' : (value * 100)|number_format(2) ~ '%' }}{% endmacro %}
 
 {% macro rules_table(rules_list) %}
 			<dl class="mt-4 divide-y divide-outline-variant/10">

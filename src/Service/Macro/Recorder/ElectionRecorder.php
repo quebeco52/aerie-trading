@@ -12,7 +12,8 @@ use App\Service\Macro\Subsystem\DistrictPoliticsSubsystem;
 use Doctrine\ORM\EntityManagerInterface;
 
 /**
- * Writes the Diet's vote to diet_election on the tick it is held.
+ * Writes the Diet's vote to diet_election on the tick it is held, and each cabinet that falls before the next vote to
+ * that vote's record on the tick it falls.
  *
  * Keyed on the calendar (lastElectionAt on this tick), not on the tick's headline: a crisis on the same tick
  * outranks the election as the headline, and the vote still happened. Persisted only; the tick's own flush writes it.
@@ -31,13 +32,15 @@ class ElectionRecorder
      */
     public function record(MacroStateDTO $macro): ?DietElection
     {
+        if ($macro->lastCabinetFellAt === $macro->totalTime) {
+            return $this->recordFall($macro);
+        }
         if ($macro->lastElectionAt !== $macro->totalTime) {
             return null;
         }
 
-        // The government going into the vote: the last recorded one, or the founding one before any vote.
-        $previous = $this->elections->findLatest();
-        $outgoing = $previous?->getCoalition() ?? AerieDiet::governingParties(AerieDiet::SEED_COALITION);
+        // The cabinet going into the vote, which the talks weighed as the status quo.
+        $outgoing = AerieDiet::governingParties($macro->electionOutgoingCabinet);
 
         $election = (new DietElection())
             ->setSimTime($macro->totalTime)
@@ -59,5 +62,30 @@ class ElectionRecorder
         $this->entityManager->persist($election);
 
         return $election;
+    }
+
+    /**
+     * Adds a fall to the vote that seated the Diet it happened in. The cabinet that fell is the caretaker still in
+     * office, unless a party with its own majority took over the same day; a fall before the first vote has no vote to
+     * go on.
+     */
+    private function recordFall(MacroStateDTO $macro): ?DietElection
+    {
+        $election = $this->elections->findLatest();
+        if ($election === null) {
+            return null;
+        }
+
+        $sameDay = $macro->lastGovernmentFormedAt === $macro->totalTime;
+        $cabinets = $election->getCabinets();
+        $this->entityManager->persist($election);
+
+        return $election->addFall(
+            $macro->totalTime,
+            $sameDay ? $cabinets[array_key_last($cabinets)] : AerieDiet::governingParties($macro->governingCoalition),
+            AerieDiet::governingParties($sameDay ? $macro->governingCoalition : $macro->pendingCoalition),
+            AerieDiet::governingParties($sameDay ? $macro->supportParties : $macro->pendingSupport),
+            $macro->formationLog,
+        );
     }
 }

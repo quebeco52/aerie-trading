@@ -124,6 +124,43 @@ class GovernmentPageBuilderTest extends TestCase
         $this->assertSame(['Exchange Party', 'The Chartists'], array_column($after['history'][0]['support'], 'name'));
     }
 
+    /**
+     * After a fall the talks count their days from the fall, and the vote's history row shows the fall at once but the
+     * cabinet the talks will seat only once it takes office.
+     */
+    public function testTalksAfterAFallCountFromTheFallAndKeepTheirOutcome(): void
+    {
+        $log = [['day' => 30.0, 'formateur' => Diet::CIVIC, 'formed' => true, 'cabinet' => [Diet::CIVIC], 'support' => [Diet::IRON_HARBOR, Diet::BASTION_GUILDS]]];
+        $vote = $this->election(4.0, [Diet::VANGUARD], [Diet::VANGUARD])
+            ->addFall(6.5, [Diet::VANGUARD], [Diet::CIVIC], [Diet::IRON_HARBOR, Diet::BASTION_GUILDS], $log);
+        $during = new MacroStateDTO(
+            totalTime: 6.5 + 10.0 / 365.0,
+            lastElectionAt: 4.0,
+            coalitionTakesOfficeAt: 6.5 + 30.0 / 365.0,
+            formationLog: $log,
+            talksStartedAt: 6.5,
+            lastCabinetFellAt: 6.5,
+        );
+
+        $page = $this->builder([$vote])->build($during);
+
+        $this->assertTrue($page['talks']['underWay']);
+        $this->assertTrue($page['talks']['afterFall']);
+        $this->assertEqualsWithDelta(10.0, $page['talks']['day'], 1e-9);
+        $this->assertSame('Year 7 Q3', $page['talks']['startedOn']);
+        $fall = $page['history'][0]['falls'][0];
+        $this->assertSame('Year 7 Q3', $fall['date']);
+        $this->assertSame(['The Vanguard'], array_column($fall['fallen'], 'name'));
+        $this->assertFalse($fall['formed']);
+        $this->assertSame([], $fall['coalition'], 'The history gives the talks away.');
+        $this->assertTrue($page['history'][0]['formed'], 'The vote\'s own government is long in office.');
+
+        $after = $this->builder([$vote])->build(new MacroStateDTO(totalTime: 6.5 + 31.0 / 365.0, lastElectionAt: 4.0, formationLog: $log, talksStartedAt: 6.5, lastCabinetFellAt: 6.5));
+        $this->assertFalse($after['talks']['underWay']);
+        $this->assertSame(['Civic Front'], array_column($after['history'][0]['falls'][0]['coalition'], 'name'));
+        $this->assertSame(['Iron Harbor Coalition', 'The Bastion Guilds'], array_column($after['history'][0]['falls'][0]['support'], 'name'));
+    }
+
     /** A minority cabinet's supporters are marked in the chamber and the tables, and count toward its majority. */
     public function testSupportSeatsAreMarkedAndCountTowardTheMajority(): void
     {

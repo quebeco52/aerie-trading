@@ -24,8 +24,8 @@ class ElectionRecorderTest extends TestCase
     }
 
     /**
-     * The vote is written on its tick, with the founding government as the outgoing one before any vote is on record,
-     * and with the talks already settled: the cabinet they produced, its supporters, every attempt, and how long it took.
+     * The vote is written on its tick, against the cabinet that went into it, and with the talks already settled: the
+     * cabinet they produced, its supporters, every attempt, and how long it took.
      */
     public function testTheFirstVoteIsWrittenAgainstTheFoundingGovernment(): void
     {
@@ -43,6 +43,7 @@ class ElectionRecorderTest extends TestCase
             dietVoteSwings: $swings,
             partyPositions: $positions,
             governingCoalition: Diet::SEED_COALITION,
+            electionOutgoingCabinet: Diet::SEED_COALITION,
             pendingCoalition: Diet::membership([Diet::CIVIC, Diet::IRON_HARBOR]),
             pendingSupport: Diet::membership([Diet::COMMON_LOT]),
             coalitionTakesOfficeAt: 4.0 + 30.25 / 365.0,
@@ -82,14 +83,50 @@ class ElectionRecorderTest extends TestCase
         $this->assertSame(4.0, $election->getTakesOfficeAt());
     }
 
-    /** Afterwards the outgoing government is the one the last recorded vote formed. */
-    public function testALaterVoteIsWrittenAgainstTheLastRecordedGovernment(): void
+    /** The outgoing cabinet is the one in office at the vote, which after a fall is not the one the last vote formed. */
+    public function testAVoteIsWrittenAgainstTheCabinetInOfficeAfterAFall(): void
     {
-        $last = (new DietElection())->setCoalition([Diet::CIVIC, Diet::EXCHANGE]);
-        $election = $this->recorder($last)->record(new MacroStateDTO(totalTime: 8.0, lastElectionAt: 8.0));
+        $last = (new DietElection())->setCoalition([Diet::VANGUARD]);
+        $election = $this->recorder($last)->record(new MacroStateDTO(totalTime: 8.0, lastElectionAt: 8.0, electionOutgoingCabinet: Diet::membership([Diet::CIVIC, Diet::EXCHANGE])));
 
         $this->assertNotNull($election);
         $this->assertSame([Diet::CIVIC, Diet::EXCHANGE], $election->getOutgoingCoalition());
+    }
+
+    /** A cabinet that falls is added to the vote that seated its Diet, with the caretaker it leaves and the talks that follow. */
+    public function testAFallIsAddedToTheVoteThatSeatedTheDiet(): void
+    {
+        $log = [['day' => 21.0, 'formateur' => Diet::CIVIC, 'formed' => true, 'cabinet' => [Diet::CIVIC], 'support' => [Diet::IRON_HARBOR, Diet::BASTION_GUILDS]]];
+        $last = (new DietElection())->setSimTime(4.0)->setCoalition([Diet::VANGUARD, Diet::EXCHANGE]);
+        $recorded = $this->recorder($last)->record(new MacroStateDTO(
+            totalTime: 6.5,
+            lastElectionAt: 4.0,
+            governingCoalition: Diet::membership([Diet::VANGUARD, Diet::EXCHANGE]),
+            pendingCoalition: Diet::membership([Diet::CIVIC]),
+            pendingSupport: Diet::membership([Diet::IRON_HARBOR, Diet::BASTION_GUILDS]),
+            coalitionTakesOfficeAt: 6.5 + 21.0 / 365.0,
+            formationLog: $log,
+            lastCabinetFellAt: 6.5,
+        ));
+
+        $this->assertSame($last, $recorded);
+        $this->assertSame([$last], $this->persisted);
+        $this->assertSame([[
+            'fellAt' => 6.5,
+            'fallen' => [Diet::VANGUARD, Diet::EXCHANGE],
+            'cabinet' => [Diet::CIVIC],
+            'support' => [Diet::IRON_HARBOR, Diet::BASTION_GUILDS],
+            'formation' => $log,
+            'formationDays' => 21.0,
+        ]], $last->getFalls());
+        $this->assertSame([[Diet::VANGUARD, Diet::EXCHANGE], [Diet::CIVIC]], $last->getCabinets());
+    }
+
+    /** A founding cabinet that falls before the first vote has no vote to be recorded under. */
+    public function testAFallBeforeTheFirstVoteIsNotWritten(): void
+    {
+        $this->assertNull($this->recorder(null)->record(new MacroStateDTO(totalTime: 2.0, lastCabinetFellAt: 2.0)));
+        $this->assertSame([], $this->persisted);
     }
 
     private function recorder(?DietElection $latest): ElectionRecorder

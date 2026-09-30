@@ -333,6 +333,11 @@ readonly class MacroStateDTO
         public float $lastGovernmentFormedAt = -1.0,
         /** @var list<array{day: float, formateur: string, formed: bool, cabinet: list<string>, support: list<string>}> The last talks, attempt by attempt. */
         public array $formationLog = [],
+        public float $talksStartedAt = -1.0,
+        public float $cabinetFallsAt = -1.0,
+        public float $lastCabinetFellAt = -1.0,
+        /** @var array<string, float> 1.0 for a party in the cabinet that went into the last vote. */
+        public array $electionOutgoingCabinet = [],
         public float $termStartedAt = -1.0,
         public float $termStartDeflator = 0.0,
         public float $campaignStartedAt = -1.0,
@@ -345,6 +350,7 @@ readonly class MacroStateDTO
         public float $importTariffRate = 0.0,
         public float $tariffTradeLag = 0.0,
         public float $laborForceGrowthRate = MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE,
+        public float $mergerReviewLeniency = 0.0,
         public float $immigrationPopulationShift = 0.0,
         public float $lastBudgetEnactedAt = -1.0,
         public float $lastCouncilBrakeAt = -1.0,
@@ -427,7 +433,7 @@ readonly class MacroStateDTO
 
             $args[$field] = match ($field) {
                 'sectorZ', 'sectorDemandZ', 'dietSeats', 'dietVoteShares', 'dietVoteSwings', 'governingCoalition', 'supportParties', 'partyShortTermShocks',
-                'pendingCoalition', 'pendingSupport'
+                'pendingCoalition', 'pendingSupport', 'electionOutgoingCabinet'
                     => is_array($data[$key]) ? array_map('floatval', $data[$key]) : [],
                 'partyPositions' => is_array($data[$key]) ? MacroState::hydratePositions($data[$key]) : [],
                 'formationLog' => is_array($data[$key]) ? array_values($data[$key]) : [],

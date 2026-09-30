@@ -396,6 +396,17 @@ class NarrativeEngine
                     "Polls closed: A new legislative term begins.",
                 ]))
             ),
+            ShockEvent::GOVERNMENT_FELL => $this->getRandomPhrase(
+                isset($context['fallen_cabinet'], $context['fallen_months'], $context['talks_lead']) ? (($context['fallen_support'] ?? '') !== '' ? [
+                    "Government falls: The minority cabinet of {$context['fallen_cabinet']} loses the Diet after {$context['fallen_months']} months, as the support of {$context['fallen_support']} gives way. It stays on as caretaker while {$context['talks_lead']} opens talks on a new cabinet; no election is called.",
+                    "Cabinet collapses: Without the votes of {$context['fallen_support']}, the cabinet of {$context['fallen_cabinet']} can no longer carry a budget through the Diet. The parties talk again on the seats they hold, and policy uncertainty holds at {$context['epu_index']}.",
+                ] : [
+                    "Coalition breaks up: The cabinet of {$context['fallen_cabinet']} falls after {$context['fallen_months']} months. It stays on as caretaker while {$context['talks_lead']} opens talks on a new cabinet; the next vote stays on the calendar.",
+                    "Government falls: The partners in the cabinet of {$context['fallen_cabinet']} part ways after {$context['fallen_months']} months, and the Diet's parties return to the table with no election called.",
+                ]) : [
+                    "Government falls: The cabinet has lost the Diet and stays on as caretaker while the parties talk; no election is called.",
+                ]
+            ),
             ShockEvent::GOVERNMENT_FORMED => $this->getRandomPhrase(
                 isset($context['cabinet'], $context['talk_days'], $context['minority']) ? ($context['minority'] === 'yes' ? [
                     "Government formed: After {$context['talk_days']} days of talks, {$context['lead_party']} forms a minority cabinet of {$context['cabinet']} with {$context['cabinet_seats']} seats, governing with the support of {$context['support']} ({$context['supported_seats']} of {$context['diet_seats']}).",

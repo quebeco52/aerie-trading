@@ -55,7 +55,7 @@ class SystemicEventReporter
             'swf_target_pct' => number_format($macro->sovereignFundTargetWeight * 100.0, 2),
             'swf_size_gdp_pct' => number_format($macro->sovereignFundToGdp * 100.0, 0),
             'swf_months' => number_format($macro->sovereignFundRebalanceMonthsLeft, 0),
-        ] + self::electionContext($macro) + self::formationContext($macro) + self::budgetContext($macro);
+        ] + self::electionContext($macro) + self::fallContext($macro) + self::formationContext($macro) + self::budgetContext($macro);
 
         $monthMove = $this->priceChangeFeed->changeForTicker((string) $benchmark->getTicker(), (float) $benchmark->getPrice());
 
@@ -133,6 +133,30 @@ class SystemicEventReporter
         }
 
         return $context;
+    }
+
+    /**
+     * The cabinet that fell, for the headline on the day it falls: its parties and supporters, how long it governed, and
+     * the party that leads the first attempt at the next cabinet. As after a vote, the talks' outcome is never named.
+     * Empty when a party with its own majority takes office on the same day, leaving no caretaker to name.
+     *
+     * @return array<string, string>
+     */
+    private static function fallContext(MacroStateDTO $macro): array
+    {
+        if ($macro->lastCabinetFellAt !== $macro->totalTime || $macro->lastGovernmentFormedAt === $macro->totalTime || $macro->formationLog === []) {
+            return [];
+        }
+
+        $names = self::midSentenceNames();
+        $list = static fn(array $parties): string => self::listNames(array_map(static fn(string $party): string => $names[$party], $parties));
+
+        return [
+            'fallen_cabinet' => $list(AerieDiet::governingParties($macro->governingCoalition)),
+            'fallen_support' => $list(AerieDiet::governingParties($macro->supportParties)),
+            'fallen_months' => number_format(12.0 * ($macro->totalTime - $macro->coalitionFormedAt), 0),
+            'talks_lead' => $names[$macro->formationLog[0]['formateur']],
+        ];
     }
 
     /**

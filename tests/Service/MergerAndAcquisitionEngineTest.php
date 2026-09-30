@@ -1031,6 +1031,24 @@ class MergerAndAcquisitionEngineTest extends TestCase
     }
 
     /**
+     * The Diet sets review between the 2023 guidelines and the 2010 ones: 2,500 points, a 200-point delta and no share
+     * presumption let the 30% leader that 2023 holds to its safe harbour buy until the market reaches 2,500.
+     */
+    public function testLenientReviewAppliesTheTwentyTenGuidelines(): void
+    {
+        $this->assertSame(['delta' => 0.0100, 'concentrated' => 0.1800, 'shareCeiling' => 0.30], MergerAndAcquisitionEngine::reviewScreens(0.0));
+        $this->assertEqualsWithDelta(0.0200, MergerAndAcquisitionEngine::reviewScreens(1.0)['delta'], 1e-12);
+        $this->assertEqualsWithDelta(0.2500, MergerAndAcquisitionEngine::reviewScreens(1.0)['concentrated'], 1e-12);
+        $this->assertEqualsWithDelta(1.0, MergerAndAcquisitionEngine::reviewScreens(1.0)['shareCeiling'], 1e-12);
+        $this->assertSame(MergerAndAcquisitionEngine::reviewScreens(1.0), MergerAndAcquisitionEngine::reviewScreens(1.5), 'Nothing on record is more lenient.');
+
+        // √(0.09 + 0.25 − 0.09) − 0.30: the purchase that takes the market to 2,500.
+        $this->assertEqualsWithDelta(0.20, MergerAndAcquisitionEngine::maxClearedTargetShare(0.30, 0.09, 1.0), 1e-12);
+        $this->assertEqualsWithDelta(0.0100 / 0.60, MergerAndAcquisitionEngine::maxClearedTargetShare(0.30, 0.09, 0.0), 1e-12);
+        $this->assertGreaterThan(MergerAndAcquisitionEngine::maxClearedTargetShare(0.30, 0.09, 0.4), MergerAndAcquisitionEngine::maxClearedTargetShare(0.30, 0.09, 0.6));
+    }
+
+    /**
      * A leader at 30% of its market buys no more of it than the delta safe harbour clears, 1.67% of the
      * market, however much its balance sheet could pay. Its share after the deal is its share before plus
      * exactly that, which is an HHI increase of exactly 100 points.

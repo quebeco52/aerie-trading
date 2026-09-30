@@ -278,6 +278,24 @@ class SystemicEventTest extends TestCase
         $this->assertNull($this->fire($state));
     }
 
+    /** A cabinet falling is news on its day, above a party taking office the same day, and arms no cooldown. */
+    public function testAFallIsReportedOnItsDay(): void
+    {
+        $state = new MacroState();
+        $state->totalTime = 6.3;
+        $state->lastElectionAt = 4.0;
+        $state->lastCabinetFellAt = 6.3;
+
+        $this->assertSame(ShockEvent::GOVERNMENT_FELL, $this->fire($state));
+        $this->assertSame(0.0, $state->eventCooldownTimer, 'The political calendar arms no crisis cooldown.');
+
+        $state->lastGovernmentFormedAt = 6.3;
+        $this->assertSame(ShockEvent::GOVERNMENT_FELL, $this->fire($state), 'A party that takes over on the day of the fall is part of the same news.');
+
+        $state->totalTime += 1.0 / self::TICKS_PER_YEAR;
+        $this->assertNull($this->fire($state));
+    }
+
     public function testABudgetIsReportedOnTheRoundItChangesALeverAndBelowAnElection(): void
     {
         $state = new MacroState();

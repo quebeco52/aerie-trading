@@ -89,6 +89,8 @@ class CreditFiscalSubsystem
     // --- Economic Policy Uncertainty (Baker, Bloom & Davis 2016) ---
     /** Log lift of the index at the election, ramping in over the final year of the term (Julio & Yook 2012 locate the investment cut in the election year; the BBD index rises a quarter or so into a presidential vote). */
     public const EPU_ELECTION_LIFT = 0.25;
+    /** Days per term the talks after a cabinet falls hold the election pulse above where the term's ramp would put it: falls in 41% of terms, 40 days of talks each (var/harness/politics/formation_report.py). */
+    public const EPU_FALL_TALK_DAYS_PER_TERM = 19.5;
     /** Log lift per unit of recession probability above its unconditional level: the index roughly doubled through 2008-2011 as policy responses were debated. */
     public const EPU_STRESS_LIFT = 1.0;
     /** Unconditional recession probability the stress lift measures from (the probit intercept's ~15%). */
@@ -716,15 +718,16 @@ class CreditFiscalSubsystem
         $term = MacroEngine::ELECTION_TERM_YEARS;
         $yearsToElection = $term - fmod($state->totalTime, $term);
         $electionProximity = max(0.0, 1.0 - $yearsToElection);
-        // The vote's own tick counts as talks too: the government it seats is decided later in the tick.
+        // Talks after a vote or a fall hold the peak; the vote's own tick counts as talks too, since the government it
+        // seats is decided later in the tick.
         if ($state->coalitionTakesOfficeAt > $state->totalTime || MathUtility::crossedSimulatedBoundary($state->totalTime, $dt, $term)) {
             $electionProximity = 1.0;
         }
         $recessionExcess = max(0.0, $state->recessionProbabilityEma - self::EPU_STRESS_PROBABILITY_FLOOR);
 
         // Julio & Yook (2012) election-cycle policy uncertainty with jump compensation: the ramp's half-year average
-        // over the term, plus the talks at the peak.
-        $averageElectionProximity = (0.5 + (MacroEngine::FORMATION_MEAN_DAYS / FinancialConstants::DAYS_PER_YEAR)) / $term;
+        // over the term, plus the talks at the peak, after the vote and after any fall.
+        $averageElectionProximity = (0.5 + ((MacroEngine::FORMATION_MEAN_DAYS + self::EPU_FALL_TALK_DAYS_PER_TERM) / FinancialConstants::DAYS_PER_YEAR)) / $term;
         $jumpLogCompensator = self::EPU_JUMP_PROBABILITY * self::EPU_JUMP_MEAN / self::EPU_MEAN_REVERSION;
 
         $target = MacroEngine::EPU_BASELINE * exp(
