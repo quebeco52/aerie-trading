@@ -35,6 +35,8 @@ class CapitalAllocationContext
 
     // Computed Operational Metrics
     public float $quarterlyEps = 0.0;
+    /** A quarter's share of trailing-twelve-month EPS (FFO for a trust): the earnings a dividend is set against. */
+    public float $trailingQuarterlyEps = 0.0;
     public float $quarterlyNetIncome = 0.0;
     public float $currentTreasury = 0.0;
     public float $operatingBase = 0.0;

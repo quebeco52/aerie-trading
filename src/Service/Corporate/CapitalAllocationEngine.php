@@ -91,6 +91,7 @@ class CapitalAllocationEngine
         $stock = $ctx->stock;
         
         $ctx->quarterlyEps = $ctx->actualAnnualEps / 4.0;
+        $ctx->trailingQuarterlyEps = (float) $stock->getEarningsPerShare() / 4.0;
         $ctx->quarterlyNetIncome = $ctx->actualTotalNetIncome != 0.0 ? $ctx->actualTotalNetIncome : ($ctx->quarterlyEps * $ctx->sharesOutstanding);
         
         $ctx->currentTreasury = (float) $stock->getCorporateTreasury();
@@ -150,14 +151,20 @@ class CapitalAllocationEngine
             $effectiveTargetPayout = 0.0;
         }
 
-        $sustainableBase = $ctx->strategy->getSustainableDividendBase($stock, $ctx->quarterlyEps, $ctx->investedCapital, $depRate);
+        // Lintner (1956) and Fama & Babiak (1968) set the dividend against the year's earnings: the target moves
+        // with trailing-twelve-month EPS, so one strong quarter is not a raise the floor then locks in, and one
+        // weak quarter is not a cut.
+        $sustainableBase = $ctx->strategy->getSustainableDividendBase($stock, $ctx->trailingQuarterlyEps, $ctx->investedCapital, $depRate);
         if ($sustainableBase <= 0.0 && $ctx->quarterlyFcfPerShare > 0.0) {
             $sustainableBase = min($ctx->quarterlyFcfPerShare, $lastDividend / max(0.01, $effectiveTargetPayout));
         }
         $calculatedTarget = $sustainableBase > 0 ? ($sustainableBase * $effectiveTargetPayout) : 0.0;
-        // Managers are reluctant to cut (Lintner 1956), and one known for an unbroken record of increases does
-        // not cut by choice at all: it holds the dividend while earnings fall and cuts only when it is forced to.
-        $targetDividend = $isAristocrat ? max($calculatedTarget, $lastDividend) : $calculatedTarget;
+        // Managers are reluctant to cut (Lintner 1956): a payer holds its dividend while earnings fall, and cuts by
+        // choice only after a loss year (DeAngelo, DeAngelo & Skinner 1992). One known for an unbroken record of
+        // increases does not cut by choice even then; either one still cuts when the caps below force it to.
+        $isLossYear = $ctx->trailingQuarterlyEps <= 0.0;
+        $holdsDividend = $isAristocrat || !$isLossYear;
+        $targetDividend = $holdsDividend ? max($calculatedTarget, $lastDividend) : $calculatedTarget;
 
         $isRegulatoryDividendHalt = false;
         
@@ -209,9 +216,9 @@ class CapitalAllocationEngine
         // Taxable income is struck on historic-cost depreciation, so when replacing the property costs more than
         // the book charge the trust owes a distribution its cash flow does not cover. It borrows the gap at its
         // market rate while its lenders will fund it, as REITs draw their lines to pay required distributions.
-        // An aristocrat does the same for the dividend its record holds it to: managers raise external funds
-        // before they cut (Brav, Graham, Harvey & Michaely 2005), so a quarter's cash shortfall is not a cut.
-        $heldDividend = $isAristocrat ? min($ctx->newDividend, $lastDividend) : 0.0;
+        // A payer holding its dividend does the same: managers raise external funds before they cut (Brav, Graham,
+        // Harvey & Michaely 2005), so a quarter's cash shortfall is not a cut while lenders will fund it.
+        $heldDividend = $holdsDividend ? min($ctx->newDividend, $lastDividend) : 0.0;
         $fundedDividend = max($requiredDividend, $heldDividend);
         // Measured from the operating floor itself, so a treasury below it borrows enough to pay: the cash cap
         // below reads the same floor.

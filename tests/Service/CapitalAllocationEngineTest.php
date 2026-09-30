@@ -290,12 +290,13 @@ class CapitalAllocationEngineTest extends TestCase
         $stock->setOperatingMargin('0.20');
         $stock->setWholesaleDebt('10000000.00');
         $stock->setCustomerDeposits('0.00');
+        // A trust reports FFO as its earnings (Net Income + Depreciation), so its trailing year is FFO too:
+        // $1.00 quarterly net income and $1.25 quarterly depreciation on 1M shares is $9.00 a year.
+        $stock->setTotalNetIncome('9000000.00');
 
         $macroState = new MacroStateDTO(corporateTaxRate: 0.21);
 
-        // In EarningsEngine, actual annual EPS for REITs is computed as FFO per share (Net Income + Depreciation).
-        // For 1M shares with $1.00 quarterly net income and $1.25 quarterly depreciation, FFO per share is $2.25 quarterly ($9.00 annual).
-        // With an 80% target payout ratio on FFO, target quarterly dividend is $1.80 per share.
+        // With an 80% target payout ratio on trailing FFO, the target quarterly dividend is $1.80 per share.
         $annualFfoEps = 9.00;
         $result = $this->engine->allocateCapital($stock, $annualFfoEps, 2.00, 100.00, 1000000.0, $macroState, 1_000_000.0);
 
@@ -374,10 +375,11 @@ class CapitalAllocationEngineTest extends TestCase
         $stock->setWholesaleDebt('10000000.00');
         $stock->setCustomerDeposits('0.00');
         $stock->setRoicTtm('0.05');
+        $stock->setTotalNetIncome('8000000.00');
 
         $macroState = new MacroStateDTO(corporateTaxRate: 0.21);
 
-        // Quarterly EPS = $2.00 ($8.00 annual). Under 100% saturation, effective payout is 85% ($1.70 per share)
+        // Trailing EPS = $8.00 ($2.00 a quarter). Under 100% saturation, effective payout is 85% ($1.70 per share)
         $result = $engine->allocateCapital($stock, 8.00, 2.00, 100.00, 1000000.0, $macroState);
 
         $this->assertEqualsWithDelta(1.70, $result['dividend_paid'], 0.0001, 'Saturated company should expand dividend payout to 85% under Life-Cycle physics');
@@ -428,18 +430,30 @@ class CapitalAllocationEngineTest extends TestCase
     }
 
     /**
-     * Managers are reluctant to cut (Lintner 1956), and one known for an unbroken record of increases does not cut by
-     * choice at all. With earnings falling below what the dividend pays out, a firm follows its target payout down at
-     * its own adjustment speed; the same firm named an aristocrat holds its dividend and keeps its standing.
+     * Managers are reluctant to cut (Lintner 1956). With earnings falling to what the dividend pays out but still a
+     * profit, a payer holds its dividend rather than following its target payout down.
      */
-    public function testAnAristocratHoldsTheDividendAPeerCutsOnFallingEarnings(): void
+    public function testAPayerHoldsItsDividendWhileEarningsFall(): void
     {
         [$peer, $peerStock] = $this->payDividendOnFallingEarnings(false, $this->buildHealth());
-        [$aristocrat, $aristocratStock] = $this->payDividendOnFallingEarnings(true, $this->buildHealth());
+
+        $this->assertLessThan(1.00, 1.00 * $peerStock->getPolicyPayoutRatio(), 'Control: the target payout sits below the dividend.');
+        $this->assertSame(1.00, $peer['dividend_paid'], 'A profitable year is not a cut.');
+    }
+
+    /**
+     * Cuts follow losses (DeAngelo, DeAngelo & Skinner 1992): after a loss year a payer follows its target payout
+     * down at its own adjustment speed. One known for an unbroken record of increases does not cut by choice even
+     * then: it holds its dividend and keeps its standing.
+     */
+    public function testAfterALossYearAPeerCutsWhereAnAristocratHolds(): void
+    {
+        [$peer, $peerStock] = $this->payDividendOnFallingEarnings(false, $this->buildHealth(), trailingNetIncome: '-1000000.00');
+        [$aristocrat, $aristocratStock] = $this->payDividendOnFallingEarnings(true, $this->buildHealth(), trailingNetIncome: '-1000000.00');
 
         $target = 1.00 * $peerStock->getPolicyPayoutRatio();
-        $this->assertEqualsWithDelta(1.00 + (0.10 * ($target - 1.00)), $peer['dividend_paid'], 1e-9, 'A firm follows its target payout down at its own speed.');
-        $this->assertSame(1.00, $aristocrat['dividend_paid'], 'An aristocrat holds its dividend while earnings fall.');
+        $this->assertEqualsWithDelta(1.00 + (0.10 * ($target - 1.00)), $peer['dividend_paid'], 1e-9, 'After a loss a firm follows its target payout down at its own speed.');
+        $this->assertSame(1.00, $aristocrat['dividend_paid'], 'An aristocrat holds its dividend through a loss year.');
         $this->assertTrue($aristocratStock->isDividendAristocrat());
     }
 
@@ -454,14 +468,25 @@ class CapitalAllocationEngineTest extends TestCase
     }
 
     /**
-     * Managers raise external funds before they cut (Brav, Graham, Harvey & Michaely 2005). An aristocrat whose quarter
-     * leaves its treasury below its operating floor borrows the dividend it holds while its lenders will fund it; the
-     * same firm without the record pays what its cash allows.
+     * Managers raise external funds before they cut (Brav, Graham, Harvey & Michaely 2005). A payer whose quarter
+     * leaves its treasury below its operating floor borrows the dividend it holds while its lenders will fund it.
      */
-    public function testAnAristocratBorrowsRatherThanCutWhenAQuartersCashFallsShort(): void
+    public function testAPayerBorrowsRatherThanCutWhenAQuartersCashFallsShort(): void
     {
-        [$aristocrat, $aristocratStock, $borrowed] = $this->payDividendShortOfCash(true);
-        [$peer, , $peerBorrowed] = $this->payDividendShortOfCash(false);
+        [$peer, , $borrowed] = $this->payDividendShortOfCash(false);
+
+        $this->assertEqualsWithDelta(1.00, $peer['dividend_paid'], 1e-9);
+        $this->assertCount(1, $borrowed);
+    }
+
+    /**
+     * After a loss year a payer no longer holds its dividend, so it borrows nothing to pay it and the cash cap takes
+     * it; an aristocrat holds its dividend through the loss, borrows the shortfall, and keeps its standing.
+     */
+    public function testAfterALossYearOnlyAnAristocratBorrowsToHoldItsDividend(): void
+    {
+        [$aristocrat, $aristocratStock, $borrowed] = $this->payDividendShortOfCash(true, '-1000000.00');
+        [$peer, , $peerBorrowed] = $this->payDividendShortOfCash(false, '-1000000.00');
 
         $this->assertEqualsWithDelta(1.00, $aristocrat['dividend_paid'], 1e-9);
         $this->assertTrue($aristocratStock->isDividendAristocrat(), 'A funded dividend is not a cut.');
@@ -471,11 +496,12 @@ class CapitalAllocationEngineTest extends TestCase
     }
 
     /**
-     * A firm that pays out $1.00 a quarter from a $0.5m treasury in a quarter whose free cash flow is -$1.00 a share.
+     * A firm that pays out $1.00 a quarter from a $0.5m treasury in a quarter whose free cash flow is -$1.00 a share;
+     * the trailing year earned $4.00 a share unless a loss year is given.
      *
      * @return array{0: array<string, mixed>, 1: Stock, 2: list<float>} The allocation, the firm, and each amount borrowed.
      */
-    private function payDividendShortOfCash(bool $aristocrat): array
+    private function payDividendShortOfCash(bool $aristocrat, string $trailingNetIncome = '4000000.00'): array
     {
         $stock = new Stock();
         $stock->setTicker($aristocrat ? 'ARIS' : 'PEER');
@@ -494,6 +520,7 @@ class CapitalAllocationEngineTest extends TestCase
         $stock->setWholesaleDebt('10000000.00');
         $stock->setCustomerDeposits('0.00');
         $stock->setRoicTtm('0.12');
+        $stock->setTotalNetIncome($trailingNetIncome);
 
         $borrowed = [];
         $lender = $this->createStub(DebtEngine::class);
@@ -509,15 +536,14 @@ class CapitalAllocationEngineTest extends TestCase
 
     /**
      * Cuts follow losses (DeAngelo, DeAngelo & Skinner 1992), not a return below the hurdle on earnings that still
-     * cover the payout. A firm earning 1% on capital that costs it 10% follows its target payout like any other; the
-     * rule it replaces omitted the dividend of any firm 800bps under its hurdle.
+     * cover the payout. A firm earning 1% on capital that costs it 10% keeps paying like any other profitable firm;
+     * the rule this replaced omitted the dividend of any firm 800bps under its hurdle.
      */
-    public function testAFirmEarningBelowItsHurdleFollowsItsTargetPayoutRatherThanOmitting(): void
+    public function testAFirmEarningBelowItsHurdleKeepsPayingRatherThanOmitting(): void
     {
-        [$result, $stock] = $this->payDividendOnFallingEarnings(false, $this->buildHealth(wacc: 0.10), '0.01');
+        [$result] = $this->payDividendOnFallingEarnings(false, $this->buildHealth(wacc: 0.10), '0.01');
 
-        $target = 1.00 * $stock->getPolicyPayoutRatio();
-        $this->assertEqualsWithDelta(1.00 + (0.10 * ($target - 1.00)), $result['dividend_paid'], 1e-9);
+        $this->assertSame(1.00, $result['dividend_paid']);
     }
 
     /**
@@ -546,6 +572,8 @@ class CapitalAllocationEngineTest extends TestCase
 
         $engine = $this->buildEngineWith($this->debtEngineReturning($this->buildHealth()));
         for ($quarter = 0; $quarter < 4; $quarter++) {
+            // The trailing year holds at $4.00 a share, so the target stands still while the dividend closes on it.
+            $stock->setEarningsPerShare('4.00');
             $engine->allocateCapital($stock, 4.00, 1.00, 100.00, 1000000.0, new MacroStateDTO(corporateTaxRate: 0.21));
         }
 
@@ -555,12 +583,36 @@ class CapitalAllocationEngineTest extends TestCase
     }
 
     /**
+     * Lintner (1956) and Fama & Babiak (1968) set the dividend against the year's earnings. A quarter earning three
+     * times its run-rate leaves a trailing year that has not moved, so the dividend does not move either; a year
+     * that has grown raises it.
+     */
+    public function testADividendIsSetAgainstTheYearsEarningsNotTheQuarters(): void
+    {
+        $pay = function (string $trailingNetIncome, float $annualizedQuarterEps): float {
+            $stock = $this->buildDistributor('LINT');
+            $stock->setTargetPayoutRatio('0.50');
+            $stock->setDividendSpeed('1.00');
+            $stock->setLastDividend('0.50');
+            $stock->setTotalNetIncome($trailingNetIncome);
+
+            return $this->buildEngineWith($this->debtEngineReturning($this->buildHealth()))
+                ->allocateCapital($stock, $annualizedQuarterEps, 2.00, 10.00, 1000000.0, new MacroStateDTO(corporateTaxRate: 0.21))['dividend_paid'];
+        };
+
+        $steady = $pay('4000000.00', 4.00);
+        $this->assertGreaterThan(0.0, $steady);
+        $this->assertEqualsWithDelta($steady, $pay('4000000.00', 12.00), 1e-9, 'A strong quarter in an unchanged year is not a raise.');
+        $this->assertGreaterThan($steady, $pay('6000000.00', 4.00), 'A year that has grown raises the dividend.');
+    }
+
+    /**
      * A firm paying $1.00 a quarter at 0.10 adjustment speed whose earnings fall to $1.00 a quarter, against a 30%
-     * target payout.
+     * target payout; the trailing year earned $4.00 a share unless a loss year is given.
      *
      * @return array{0: array<string, mixed>, 1: Stock}
      */
-    private function payDividendOnFallingEarnings(bool $aristocrat, DebtHealthDTO $health, string $roic = '0.12'): array
+    private function payDividendOnFallingEarnings(bool $aristocrat, DebtHealthDTO $health, string $roic = '0.12', string $trailingNetIncome = '4000000.00'): array
     {
         $stock = new Stock();
         $stock->setTicker($aristocrat ? 'ARIS' : 'PEER');
@@ -579,6 +631,7 @@ class CapitalAllocationEngineTest extends TestCase
         $stock->setWholesaleDebt('10000000.00');
         $stock->setCustomerDeposits('0.00');
         $stock->setRoicTtm($roic);
+        $stock->setTotalNetIncome($trailingNetIncome);
 
         $result = $this->buildEngineWith($this->debtEngineReturning($health))
             ->allocateCapital($stock, 4.00, 1.00, 100.00, 1000000.0, new MacroStateDTO(corporateTaxRate: 0.21));
@@ -747,6 +800,7 @@ class CapitalAllocationEngineTest extends TestCase
             $stock->setTargetPayoutRatio('0.50');
             $stock->setDividendSpeed('1.00');
             $stock->setLastDividend('0.20');
+            $stock->setTotalNetIncome('4000000.00');
 
             return $stock;
         };
