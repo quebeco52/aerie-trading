@@ -8,10 +8,11 @@ use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\Mapping as ORM;
 
 /**
- * One vote for the Aerie Diet: the result, the economy it was cast on, and the government it formed.
+ * One vote for the Aerie Diet: the result, the economy it was cast on, and the talks and government that followed.
  *
- * Written by App\Service\Macro\Recorder\ElectionRecorder on the tick the vote is held. Party-keyed maps are stored
- * whole, keyed by App\Data\AerieDiet::PARTIES.
+ * Written by App\Service\Macro\Recorder\ElectionRecorder on the tick the vote is held, when the talks are already
+ * settled; the government takes office formationDays later, and nothing shown before then may give it away. Party-keyed
+ * maps are stored whole, keyed by App\Data\AerieDiet::PARTIES.
  */
 #[ORM\Entity(repositoryClass: \App\Repository\DietElectionRepository::class)]
 #[ORM\Table(name: 'diet_election')]
@@ -39,13 +40,25 @@ class DietElection
     #[ORM\Column(type: Types::JSON)]
     private array $voteSwings = [];
 
-    /** @var array<string, float> Each party's position on the axis it is not defined by, after the vote. */
+    /** @var array<string, array<string, float>> Each party's position by axis, after the vote. */
     #[ORM\Column(type: Types::JSON)]
-    private array $secondaryPositions = [];
+    private array $positions = [];
 
-    /** @var list<string> The governing parties the vote produced. */
+    /** @var list<string> The cabinet the talks produced. */
     #[ORM\Column(type: Types::JSON)]
     private array $coalition = [];
+
+    /** @var list<string> The parties supporting that cabinet from outside; empty for a majority cabinet. */
+    #[ORM\Column(type: Types::JSON)]
+    private array $support = [];
+
+    /** @var list<array{day: float, formateur: string, round: int, formed: bool, cabinet: list<string>, support: list<string>}> The talks, attempt by attempt. */
+    #[ORM\Column(type: Types::JSON)]
+    private array $formation = [];
+
+    /** Days from the vote to the cabinet taking office; zero when one party won a majority. */
+    #[ORM\Column(type: Types::FLOAT)]
+    private float $formationDays = 0.0;
 
     /** @var list<string> The governing parties going into the vote. */
     #[ORM\Column(type: Types::JSON)]
@@ -138,18 +151,64 @@ class DietElection
         return $this;
     }
 
-    /** @return array<string, float> */
-    public function getSecondaryPositions(): array
+    /** @return array<string, array<string, float>> */
+    public function getPositions(): array
     {
-        return $this->secondaryPositions;
+        return $this->positions;
     }
 
-    /** @param array<string, float> $secondaryPositions */
-    public function setSecondaryPositions(array $secondaryPositions): static
+    /** @param array<string, array<string, float>> $positions */
+    public function setPositions(array $positions): static
     {
-        $this->secondaryPositions = $secondaryPositions;
+        $this->positions = $positions;
 
         return $this;
+    }
+
+    /** @return list<string> */
+    public function getSupport(): array
+    {
+        return $this->support;
+    }
+
+    /** @param list<string> $support */
+    public function setSupport(array $support): static
+    {
+        $this->support = $support;
+
+        return $this;
+    }
+
+    /** @return list<array{day: float, formateur: string, round: int, formed: bool, cabinet: list<string>, support: list<string>}> */
+    public function getFormation(): array
+    {
+        return $this->formation;
+    }
+
+    /** @param list<array{day: float, formateur: string, round: int, formed: bool, cabinet: list<string>, support: list<string>}> $formation */
+    public function setFormation(array $formation): static
+    {
+        $this->formation = $formation;
+
+        return $this;
+    }
+
+    public function getFormationDays(): float
+    {
+        return $this->formationDays;
+    }
+
+    public function setFormationDays(float $formationDays): static
+    {
+        $this->formationDays = $formationDays;
+
+        return $this;
+    }
+
+    /** Simulation time the cabinet the talks produced takes office. */
+    public function getTakesOfficeAt(): float
+    {
+        return $this->simTime + ($this->formationDays / \App\Service\Math\FinancialConstants::DAYS_PER_YEAR);
     }
 
     /** @return list<string> */

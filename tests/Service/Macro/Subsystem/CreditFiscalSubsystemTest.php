@@ -447,6 +447,36 @@ class CreditFiscalSubsystemTest extends TestCase
         $this->assertLessThan(MacroEngine::EPU_BASELINE * exp(CreditFiscalSubsystem::EPU_ELECTION_LIFT), $campaign->policyUncertaintyIndex, 'and no higher than the full election lift.');
     }
 
+    /**
+     * The vote settles nothing until a government takes office: through the talks the index holds at the eve-of-vote
+     * level, on the tick of the vote as much as after it, and it falls back once the cabinet is seated.
+     */
+    public function testPolicyUncertaintyHoldsThroughTheTalks(): void
+    {
+        $subsystem = $this->quietSubsystem();
+
+        $eve = new MacroState();
+        $voteDay = new MacroState();
+        $talks = new MacroState();
+        $talks->coalitionTakesOfficeAt = 4.2;
+        $seated = new MacroState();
+        $seated->coalitionTakesOfficeAt = -1.0;
+
+        for ($i = 0; $i < 400; $i++) {
+            $eve->totalTime = 3.99;
+            $voteDay->totalTime = 4.0;
+            $talks->totalTime = 4.1;
+            $seated->totalTime = 4.1;
+            foreach ([$eve, $voteDay, $talks, $seated] as $state) {
+                $subsystem->calculatePolicyUncertainty($state, 0.01);
+            }
+        }
+
+        $this->assertEqualsWithDelta($eve->policyUncertaintyIndex, $voteDay->policyUncertaintyIndex, 0.01 * $eve->policyUncertaintyIndex, 'The index dips on the tick of the vote.');
+        $this->assertEqualsWithDelta($eve->policyUncertaintyIndex, $talks->policyUncertaintyIndex, 0.01 * $eve->policyUncertaintyIndex, 'The talks settle nothing.');
+        $this->assertEqualsWithDelta(CreditFiscalSubsystem::EPU_ELECTION_LIFT, log($talks->policyUncertaintyIndex / $seated->policyUncertaintyIndex), 0.02, 'A seated government settles the regime.');
+    }
+
     public function testADownturnLiftsPolicyUncertainty(): void
     {
         $subsystem = $this->quietSubsystem();

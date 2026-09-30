@@ -261,7 +261,7 @@ class MacroEngine
     public const ELECTION_RESIDUAL_SD = 0.0295;
     /** Vote share the average government has lost over a term in the record (Nannestad & Paldam 2002: 282 elections in 19 democracies), the reference the Diet's own cost is read against. */
     public const ELECTION_RECORDED_COST_OF_RULING = 0.0225;
-    /** Vote share governing costs the governing parties each term, beyond the short-term swings they were elected on running off. It is also what keeps the party system balanced: at 0.2 points the Diet drifts into one-party rule, and at the recorded 2.25 the run-off takes the average loss to 5.8 (var/harness replay of 2,500 elections). At 1.2, with ELECTION_PARTY_SHOCK_SD, the observed loss is about 2.8. */
+    /** Vote share governing costs the governing parties each term, beyond the short-term swings they were elected on running off. It is also what keeps the party system balanced: at 0.2 points the Diet drifts into one-party rule, and at the recorded 2.25 the run-off takes the average loss to 5.8 (var/harness replay of 2,500 elections). At 1.2, with ELECTION_PARTY_SHOCK_SD, six parties and cabinets formed by talks, the observed loss is about 2.1 (var/harness/politics/formation_report.py, 2,500 elections). */
     public const ELECTION_COST_OF_RULING = 0.012;
     /** Relative gain of the closed-economy party's vote after a financial crisis (Funke, Schularick & Trebesch 2016: far right +30%, none after ordinary recessions). */
     public const ELECTION_CRISIS_CLOSED_PARTY_LIFT = 0.30;
@@ -269,6 +269,28 @@ class MacroEngine
     public const ELECTION_CRISIS_WINDOW_YEARS = 5.0;
     /** Each party's own short-term swing in log vote share, drawn at every vote and gone by the next (Converse 1966 short-term forces; additive logistic form, Katz & King 1999). Sized with ELECTION_COST_OF_RULING for a total volatility near 7, about two thirds of Western Europe's 10 (Dassonneville & Hooghe 2017, Pedersen index, 21 countries 1950-2013): the full 10 needs swings whose run-off costs governments twice the recorded loss. */
     public const ELECTION_PARTY_SHOCK_SD = 0.12;
+    /** Share of a cabinet party's electoral cost of governing a support party bears: 1.99 points lost against 2.81 for cabinet parties (Thürk & Klüver 2024, Table 1 Model 1: support -1.991, prime minister's party -2.815, junior partner -2.799; 304 elections in 31 democracies since 1980). */
+    public const ELECTION_SUPPORT_ACCOUNTABILITY = 1.991 / ((2.815 + 2.799) / 2.0);
+
+    // --- Forming a Government (Martin & Stevenson 2010, Table 1 Model 1; Golder 2010; Bäck et al. 2023) ---
+    /** Log-odds of a cabinet without a majority of its own (Martin & Stevenson 2010, Table 1 Model 1: 256 formations in 17 West European democracies). */
+    public const FORMATION_MINORITY_UTILITY = -1.188;
+    /** Log-odds of a minimal winning cabinet, every member needed for its majority (Martin & Stevenson 2010). */
+    public const FORMATION_MINIMAL_WINNING_UTILITY = 0.683;
+    /** Log-odds per party in the cabinet (Martin & Stevenson 2010). */
+    public const FORMATION_PARTY_UTILITY = -0.485;
+    /** Log-odds of a cabinet holding the Diet's largest party (Martin & Stevenson 2010). */
+    public const FORMATION_LARGEST_PARTY_UTILITY = 1.575;
+    /** Log-odds per unit of the cabinet's ideological range: -0.027 per point of the manifesto left-right scale (Martin & Stevenson 2010), at the 100 points a unit of the Diet's axes spans (the scale the drift is read on). */
+    public const FORMATION_RANGE_UTILITY = -0.027 * 100.0;
+    /** Log-odds of the outgoing cabinet re-forming (Martin & Stevenson 2010: the status quo government). */
+    public const FORMATION_STATUS_QUO_UTILITY = 1.984;
+    /** Log-odds a formateur's best cabinet must clear, the value of no deal at all; fitted so 32% of formations need more than one attempt (Golder 2010: 'nearly a third', 16 West European democracies 1944-1998; var/harness/politics/formation_fit.py). The same bar holds every attempt: a second round, which opens minority cabinets, forms 98% of the rest, so real talks leave no trace of a bar that falls. */
+    public const FORMATION_RESERVATION = -2.01;
+    /** Mean length of one attempt in days, each drawn exponential (a constant hazard: the formation record's spread about equals its mean); fitted so formations average Bäck, Hellström, Lindvall & Teorell's (2023) 33.7 days, Western Europe 1945-2019. */
+    public const FORMATION_ATTEMPT_DAYS = 24.7;
+    /** Mean days from a vote to the government it forms, single-party majorities included: what the talks model averages at the fitted constants. */
+    public const FORMATION_MEAN_DAYS = 33.7;
 
     // --- The Diet's Levers: Corporate Tax (Osterloh & Debus 2012; Mertens & Ravn 2013) ---
     /** Gap between the corporate rates the big-state and small-state manifestos set, the parties at the ends of the size-of-state axis: 7 points (US: the 2020 Democratic platform's 28% against the 21% of the 2017 Republican act; UK 2019: Labour's 26% against the Conservatives' 19%). Enacted rates follow manifesto ideology (Osterloh & Debus 2012, European panel). */
@@ -793,6 +815,10 @@ class MacroEngine
             $state->lastElectionAt === $state->totalTime
             => ShockEvent::ELECTION_HELD,
 
+            // A cabinet taking office after the talks that followed a vote (DistrictPoliticsSubsystem).
+            $state->lastGovernmentFormedAt === $state->totalTime
+            => ShockEvent::GOVERNMENT_FORMED,
+
             // A budget round that changed a lever (DistrictPoliticsSubsystem::enactBudget).
             $state->lastBudgetEnactedAt === $state->totalTime
             => ShockEvent::BUDGET_ENACTED,
@@ -803,7 +829,7 @@ class MacroEngine
         if ($eventType !== null) {
             $state->eventType = $eventType;
             // District-wide systemic crisis refractory cooldown timer arming; the political calendar arms none.
-            if ($eventType !== ShockEvent::ELECTION_HELD && $eventType !== ShockEvent::BUDGET_ENACTED) {
+            if (!in_array($eventType, [ShockEvent::ELECTION_HELD, ShockEvent::GOVERNMENT_FORMED, ShockEvent::BUDGET_ENACTED], true)) {
                 $state->eventCooldownTimer = self::SYSTEMIC_EVENT_COOLDOWN_YEARS;
             }
         }

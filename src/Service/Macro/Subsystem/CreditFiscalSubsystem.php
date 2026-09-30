@@ -5,6 +5,7 @@ namespace App\Service\Macro\Subsystem;
 use App\Service\Macro\MacroEngine;
 use App\Service\Macro\MacroState;
 use App\Service\Macro\Recorder\MacroDiagnosticsProbe;
+use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
 
 /**
@@ -700,9 +701,12 @@ class CreditFiscalSubsystem
      *
      * A log mean-reverting index whose level is set by two things the record ties it to: the calendar, since
      * uncertainty about the policy regime builds into a scheduled election and resolves after it (Julio &
-     * Yook 2012), and the cycle, since a downturn brings the policy response itself into question. Unscheduled
-     * shocks arrive as jumps. The election is derived from simulation time -- a term of MacroEngine::ELECTION_TERM_YEARS --
-     * so nothing about the calendar is stored, only the tick the last vote fell on, for the event pulse.
+     * Yook 2012), and the cycle, since a downturn brings the policy response itself into question. The vote only
+     * settles the regime once a government takes office, so through the talks that follow it the calendar's lift holds
+     * at its peak (Bernhard & Leblang 2006: returns fall and volatility rises through cabinet formations markets cannot
+     * call). Unscheduled shocks arrive as jumps. The election is derived from simulation time -- a term of
+     * MacroEngine::ELECTION_TERM_YEARS -- so nothing about the calendar is stored, only the tick the last vote fell on,
+     * for the event pulse.
      *
      * @param MacroState $state Current macroeconomic state.
      * @param float      $dt    Time increment in years.
@@ -712,10 +716,15 @@ class CreditFiscalSubsystem
         $term = MacroEngine::ELECTION_TERM_YEARS;
         $yearsToElection = $term - fmod($state->totalTime, $term);
         $electionProximity = max(0.0, 1.0 - $yearsToElection);
+        // The vote's own tick counts as talks too: the government it seats is decided later in the tick.
+        if ($state->coalitionTakesOfficeAt > $state->totalTime || MathUtility::crossedSimulatedBoundary($state->totalTime, $dt, $term)) {
+            $electionProximity = 1.0;
+        }
         $recessionExcess = max(0.0, $state->recessionProbabilityEma - self::EPU_STRESS_PROBABILITY_FLOOR);
 
-        // Julio & Yook (2012) election-cycle policy uncertainty with jump compensation.
-        $averageElectionProximity = 0.5 / $term;
+        // Julio & Yook (2012) election-cycle policy uncertainty with jump compensation: the ramp's half-year average
+        // over the term, plus the talks at the peak.
+        $averageElectionProximity = (0.5 + (MacroEngine::FORMATION_MEAN_DAYS / FinancialConstants::DAYS_PER_YEAR)) / $term;
         $jumpLogCompensator = self::EPU_JUMP_PROBABILITY * self::EPU_JUMP_MEAN / self::EPU_MEAN_REVERSION;
 
         $target = MacroEngine::EPU_BASELINE * exp(

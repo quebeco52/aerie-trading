@@ -380,19 +380,31 @@ class NarrativeEngine
                 ]
             ),
             ShockEvent::ELECTION_HELD => $this->getRandomPhrase(
-                isset($context['coalition'], $context['mover'], $context['mover_swing_pp'], $context['diet_seats']) ? [
-                    "Diet election: The vote moved {$context['mover_swing_pp']} points for {$context['mover']}, and a government of {$context['coalition']} takes office with {$context['coalition_seats']} of {$context['diet_seats']} seats.",
-                    "The District has voted: {$context['coalition']} will govern, with {$context['largest_party']} the largest party in the Diet. The biggest move of the night was {$context['mover']}, {$context['mover_swing_pp']} points.",
-                    "Polls closed: A coalition of {$context['coalition']} commands {$context['coalition_seats']} seats in the new Diet, resolving a campaign that had lifted policy uncertainty to {$context['epu_index']}.",
+                isset($context['majority_party'], $context['largest_seats'], $context['mover']) ? [
+                    "Diet election: {$context['majority_party']} wins {$context['largest_seats']} of {$context['diet_seats']} seats, a majority of its own, and will govern alone. The biggest move of the night was {$context['mover']}, {$context['mover_swing_pp']} points.",
+                    "Landslide in the Diet: {$context['majority_party']} takes {$context['largest_seats']} seats and needs no partner. {$context['mover']} moved {$context['mover_swing_pp']} points.",
+                ] : (isset($context['largest_party'], $context['largest_seats'], $context['mover']) ? [
+                    "Diet election: No party holds the {$context['majority_seats']} seats a government needs, so {$context['largest_party']}, the largest with {$context['largest_seats']}, opens coalition talks. The biggest move of the night was {$context['mover']}, {$context['mover_swing_pp']} points.",
+                    "Hung Diet: {$context['largest_party']} leads with {$context['largest_seats']} of {$context['diet_seats']} seats and begins talks on a government. The outgoing cabinet stays on as caretaker, and policy uncertainty holds at {$context['epu_index']} until a new one takes office.",
+                    "The District has voted, and the bargaining begins: {$context['largest_party']} is largest with {$context['largest_seats']} seats, short of the {$context['majority_seats']} it needs. {$context['mover']} moved {$context['mover_swing_pp']} points.",
                 ] : (isset($context['epu_index']) ? [
-                    "District election held: Voters returned a government for a fresh term, with the policy-uncertainty index at {$context['epu_index']} into the vote.",
-                    "Polls closed: A new legislative term begins, resolving a campaign that had lifted policy uncertainty to {$context['epu_index']}.",
-                    "Election result declared: Boards that had deferred decisions through a campaign at {$context['epu_index']} on the uncertainty index now know the regime they face.",
+                    "District election held: Voters returned a Diet for a fresh term, with the policy-uncertainty index at {$context['epu_index']} into the vote.",
+                    "Polls closed: A new legislative term begins, with the policy-uncertainty index at {$context['epu_index']}.",
                 ] : [
-                    "District election held: Voters returned a government for a fresh term.",
-                    "Polls closed: A new legislative term begins, resolving the campaign's policy uncertainty.",
-                    "Election result declared: Boards that had deferred decisions through the campaign now know the regime they face.",
-                ])
+                    "District election held: Voters returned a Diet for a fresh term.",
+                    "Polls closed: A new legislative term begins.",
+                ]))
+            ),
+            ShockEvent::GOVERNMENT_FORMED => $this->getRandomPhrase(
+                isset($context['cabinet'], $context['talk_days'], $context['minority']) ? ($context['minority'] === 'yes' ? [
+                    "Government formed: After {$context['talk_days']} days of talks, {$context['lead_party']} forms a minority cabinet of {$context['cabinet']} with {$context['cabinet_seats']} seats, governing with the support of {$context['support']} ({$context['supported_seats']} of {$context['diet_seats']}).",
+                    "Minority government takes office {$context['attempts_phrase']}: {$context['cabinet']} will govern on {$context['cabinet_seats']} seats, with {$context['support']} backing its budgets from outside the cabinet.",
+                ] : [
+                    "Government formed: After {$context['talk_days']} days of talks, a cabinet of {$context['cabinet']} takes office with {$context['cabinet_seats']} of {$context['diet_seats']} seats.",
+                    "Coalition agreed {$context['attempts_phrase']}: {$context['cabinet']} will govern with {$context['cabinet_seats']} seats, ending {$context['talk_days']} days of caretaker government.",
+                ]) : [
+                    "Government formed: A new cabinet has taken office after the coalition talks.",
+                ]
             ),
             ShockEvent::BUDGET_ENACTED => $this->getRandomPhrase(
                 isset($context['government'], $context['tax_rate_pct'], $context['tariff_pct']) ? (($context['council_held'] ?? 'no') === 'yes' ? [

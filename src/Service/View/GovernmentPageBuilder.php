@@ -10,11 +10,16 @@ use App\DTO\MacroStateDTO;
 use App\Entity\DietElection;
 use App\Repository\DietElectionRepository;
 use App\Service\Macro\MacroEngine;
+use App\Service\Macro\Subsystem\CoalitionFormation;
 use App\Service\Macro\Subsystem\DistrictPoliticsSubsystem;
+use App\Service\Math\FinancialConstants;
 
 /**
- * Builds the government page: the Diet as it now sits, the parties in the policy space, the coalition that governs,
- * the Council, and every vote on record.
+ * Builds the government page: the Diet as it now sits, the parties in the policy space, the cabinet that governs and
+ * the parties that support it, the talks after a vote, the Council, and every vote on record.
+ *
+ * The talks are settled on the day of the vote; the page shows only the attempts whose day has passed, and no cabinet
+ * before it takes office.
  *
  * The live Diet is read off the macro snapshot (DistrictPoliticsSubsystem publishes it every tick); the history and
  * the parties' past positions off diet_election. The hemicycle and compass geometry is computed here so the template
@@ -29,6 +34,8 @@ class GovernmentPageBuilder
         AerieDiet::VANGUARD => '#2563eb',
         AerieDiet::IRON_HARBOR => '#78716c',
         AerieDiet::EXCHANGE => '#0d9488',
+        AerieDiet::CHARTISTS => '#7c3aed',
+        AerieDiet::COMMON_LOT => '#d97706',
     ];
 
     // --- Hemicycle Geometry ---
@@ -51,13 +58,16 @@ class GovernmentPageBuilder
         $history = $this->elections->findChronological();
         $seats = array_map('intval', $macro->dietSeats + array_fill_keys(AerieDiet::PARTIES, 0.0));
         $coalition = AerieDiet::governingParties($macro->governingCoalition);
-        $coalitionSeats = array_sum(array_map(static fn(string $party): int => $seats[$party], $coalition));
-        $coalitionPosition = DistrictPoliticsSubsystem::coalitionPosition($macro->governingCoalition, $macro->dietSeats, $macro->partySecondaryPositions);
+        $support = AerieDiet::governingParties($macro->supportParties);
+        $sumSeats = static fn(array $members): int => array_sum(array_map(static fn(string $party): int => $seats[$party], $members));
+        $coalitionSeats = $sumSeats($coalition);
+        $coalitionPosition = DistrictPoliticsSubsystem::coalitionPosition($macro->governingCoalition, $macro->dietSeats, $macro->partyPositions);
+        $removalSeats = $sumSeats(array_values(array_diff(array_merge($coalition, $support), AerieDiet::COUNCIL_LOYALISTS)));
+        $talking = $macro->coalitionTakesOfficeAt > $macro->totalTime;
 
         $parties = [];
         foreach (AerieDiet::PARTIES as $party) {
-            $secondary = $macro->partySecondaryPositions[$party] ?? AerieDiet::SEED_SECONDARY_POSITIONS[$party];
-            $position = AerieDiet::position($party, $secondary);
+            $position = AerieDiet::position($party, $macro->partyPositions);
             $parties[] = [
                 'key' => $party,
                 'name' => AerieDiet::PARTY_NAMES[$party],
@@ -66,31 +76,40 @@ class GovernmentPageBuilder
                 'share' => $macro->dietVoteShares[$party] ?? 0.0,
                 'swing' => $history === [] ? null : ($macro->dietVoteSwings[$party] ?? 0.0),
                 'governing' => in_array($party, $coalition, true),
+                'supporting' => in_array($party, $support, true),
                 'primaryAxis' => AerieDiet::PRIMARY_AXIS[$party],
                 'state' => $position[AerieDiet::AXIS_STATE],
                 'openness' => $position[AerieDiet::AXIS_OPENNESS],
+                'council' => $position[AerieDiet::AXIS_COUNCIL],
             ];
         }
 
         $term = MacroEngine::ELECTION_TERM_YEARS;
         $nextElection = (floor($macro->totalTime / $term) + 1.0) * $term;
+        $member = static fn(string $party): array => [
+            'key' => $party,
+            'name' => AerieDiet::PARTY_NAMES[$party],
+            'color' => self::PARTY_COLORS[$party],
+            'seats' => $seats[$party],
+        ];
 
         return [
             'simDate' => self::simDate($macro->totalTime),
             'government' => [
-                'members' => array_map(static fn(string $party): array => [
-                    'key' => $party,
-                    'name' => AerieDiet::PARTY_NAMES[$party],
-                    'color' => self::PARTY_COLORS[$party],
-                    'seats' => $seats[$party],
-                ], $coalition),
+                'members' => array_map($member, $coalition),
+                'support' => array_map($member, $support),
                 'seats' => $coalitionSeats,
-                'formed' => $history === [] ? 'At the founding' : self::simDate($macro->coalitionFormedAt),
-                'range' => DistrictPoliticsSubsystem::ideologicalRange($coalition, $macro->partySecondaryPositions),
+                'supportedSeats' => $coalitionSeats + $sumSeats($support),
+                'minority' => $coalitionSeats < AerieDiet::MAJORITY_SEATS,
+                'formed' => $macro->lastGovernmentFormedAt < 0.0 ? 'At the founding' : self::simDate($macro->coalitionFormedAt),
+                'range' => CoalitionFormation::ideologicalRange($coalition, $macro->partyPositions),
                 'state' => $coalitionPosition[AerieDiet::AXIS_STATE],
                 'openness' => $coalitionPosition[AerieDiet::AXIS_OPENNESS],
-                'supermajority' => $coalitionSeats >= AerieDiet::SUPERMAJORITY_SEATS,
+                'council' => $coalitionPosition[AerieDiet::AXIS_COUNCIL],
+                'supermajority' => $removalSeats >= AerieDiet::SUPERMAJORITY_SEATS,
+                'caretaker' => $talking,
             ],
+            'talks' => $this->talks($macro, $talking),
             'election' => [
                 'next' => self::simDate($nextElection),
                 'yearsLeft' => $nextElection - $macro->totalTime,
@@ -125,10 +144,21 @@ class GovernmentPageBuilder
                 'housingElasticity' => MacroEngine::IMMIGRATION_HOUSING_ELASTICITY,
                 'debtBrake' => MacroEngine::SOVEREIGN_RISK_DEBT_THRESHOLD,
                 'budgetRoundMonths' => 12.0 * MacroEngine::BUDGET_ROUND_PERIOD_YEARS,
+                'minorityUtility' => MacroEngine::FORMATION_MINORITY_UTILITY,
+                'minimalWinningUtility' => MacroEngine::FORMATION_MINIMAL_WINNING_UTILITY,
+                'partyUtility' => MacroEngine::FORMATION_PARTY_UTILITY,
+                'largestPartyUtility' => MacroEngine::FORMATION_LARGEST_PARTY_UTILITY,
+                'rangeUtility' => MacroEngine::FORMATION_RANGE_UTILITY,
+                'statusQuoUtility' => MacroEngine::FORMATION_STATUS_QUO_UTILITY,
+                'reservation' => MacroEngine::FORMATION_RESERVATION,
+                'attemptDays' => MacroEngine::FORMATION_ATTEMPT_DAYS,
+                'formationMeanDays' => MacroEngine::FORMATION_MEAN_DAYS,
+                'supportAccountability' => MacroEngine::ELECTION_SUPPORT_ACCOUNTABILITY,
+                'loyalists' => array_map(static fn(string $party): string => AerieDiet::PARTY_NAMES[$party], AerieDiet::COUNCIL_LOYALISTS),
             ],
-            'budget' => $this->budget($macro, $coalitionPosition, $coalitionSeats),
+            'budget' => $this->budget($macro, $coalition, $support, $talking),
             'parties' => $parties,
-            'hemicycle' => $this->hemicycle($seats, $parties, $coalition),
+            'hemicycle' => $this->hemicycle($seats, $parties),
             'compass' => $this->compass($parties, $history, $coalitionPosition, $coalition),
             'council' => [
                 'roster' => array_map(static fn(array $seat): array => $seat + [
@@ -140,64 +170,122 @@ class GovernmentPageBuilder
                 })(AerieCouncil::nextVacancy($macro->totalTime)),
                 'departments' => AerieCouncil::DEPARTMENTS,
             ],
-            'history' => array_map(fn(DietElection $election): array => $this->historyRow($election), array_reverse($history)),
+            'history' => array_map(fn(DietElection $election): array => $this->historyRow($election, $macro->totalTime), array_reverse($history)),
         ];
     }
 
     /**
-     * The levers as the government's platform sets them and as the last budget enacted them, and whether the Council's
-     * debt brake stands between the two.
+     * The talks after the last vote, as far as they have gone: the attempts whose day has passed, who leads the one
+     * under way, and, once a cabinet has taken office, how long it took.
      *
-     * @param array{state: float, openness: float} $position The coalition's seat-weighted position.
+     * @return array<string, mixed>|null Null before the first vote.
+     */
+    private function talks(MacroStateDTO $macro, bool $talking): ?array
+    {
+        if ($macro->lastElectionAt < 0.0 || $macro->formationLog === []) {
+            return null;
+        }
+
+        $elapsed = ($macro->totalTime - $macro->lastElectionAt) * FinancialConstants::DAYS_PER_YEAR;
+        $names = AerieDiet::PARTY_NAMES;
+        $rounds = [
+            AerieDiet::ROUND_MAJORITY => 'a majority cabinet',
+            AerieDiet::ROUND_SUPPORT => 'a majority, or a minority cabinet with support',
+            AerieDiet::ROUND_RUNOFF => 'any cabinet it can carry',
+        ];
+        $entries = [];
+        $leading = null;
+        foreach ($macro->formationLog as $attempt => $entry) {
+            if ($talking && $entry['day'] > $elapsed) {
+                $leading = ['name' => $names[$entry['formateur']], 'color' => self::PARTY_COLORS[$entry['formateur']], 'seeking' => $rounds[$entry['round']], 'attempt' => $attempt + 1];
+                break;
+            }
+            $entries[] = [
+                'day' => $entry['day'],
+                'attempt' => $attempt + 1,
+                'formateur' => $names[$entry['formateur']],
+                'color' => self::PARTY_COLORS[$entry['formateur']],
+                'seeking' => $rounds[$entry['round']],
+                'formed' => $entry['formed'],
+                'cabinet' => array_map(static fn(string $party): string => $names[$party], $entry['cabinet']),
+                'support' => array_map(static fn(string $party): string => $names[$party], $entry['support']),
+            ];
+        }
+        $last = $macro->formationLog[array_key_last($macro->formationLog)];
+
+        return [
+            'underWay' => $talking,
+            'day' => $talking ? $elapsed : $last['day'],
+            'entries' => $entries,
+            'leading' => $leading,
+            'attempts' => count($macro->formationLog),
+        ];
+    }
+
+    /**
+     * The levers as the cabinet's platform sets them, as the next budget would enact them, and as the last budget
+     * left them, with what stands between: the support parties, the Council's debt brake, or talks still under way.
+     *
+     * @param list<string> $coalition The cabinet.
+     * @param list<string> $support   Its support parties.
      * @return array<string, mixed>
      */
-    private function budget(MacroStateDTO $macro, array $position, int $coalitionSeats): array
+    private function budget(MacroStateDTO $macro, array $coalition, array $support, bool $talking): array
     {
-        $platform = DistrictPoliticsSubsystem::platform($position);
-        $braking = $macro->sovereignDebtToGdp > MacroEngine::SOVEREIGN_RISK_DEBT_THRESHOLD && $coalitionSeats < AerieDiet::SUPERMAJORITY_SEATS;
+        $standing = [
+            'corporateTax' => $macro->corporateTaxPolicyShift,
+            'tariff' => $macro->importTariffRate,
+            'laborGrowth' => $macro->laborForceGrowthRate,
+        ];
+        $budget = DistrictPoliticsSubsystem::budget($coalition, $support, $macro->dietSeats, $macro->partyPositions, $standing, $macro->sovereignDebtToGdp);
         $round = MacroEngine::BUDGET_ROUND_PERIOD_YEARS;
         $nextRound = self::simDate((floor($macro->totalTime / $round) + 1.0) * $round);
 
-        // A lever that cuts revenue waits on the Council while the brake is on; anything else waits on the next round.
-        $status = static function (float $platform, float $enacted, bool $cutsRevenue) use ($braking): string {
-            if (abs($platform - $enacted) < 1e-9) {
-                return 'enacted';
-            }
-
-            return $cutsRevenue && $braking ? 'held' : 'pending';
+        $status = static function (string $lever) use ($budget, $standing, $talking): string {
+            return match (true) {
+                abs($budget['platform'][$lever] - $standing[$lever]) < 1e-9 => 'enacted',
+                $talking => 'caretaker',
+                $budget['councilHeld'][$lever] => 'held',
+                $budget['supportHeld'][$lever] && abs($budget['levers'][$lever] - $standing[$lever]) < 1e-9 => 'blocked',
+                $budget['supportHeld'][$lever] => 'partial',
+                default => 'pending',
+            };
         };
-        $taxPlatform = MacroEngine::TARGET_CORPORATE_TAX_RATE + $platform['corporateTax'];
-        $taxEnacted = MacroEngine::TARGET_CORPORATE_TAX_RATE + $macro->corporateTaxPolicyShift;
+        $neutral = MacroEngine::TARGET_CORPORATE_TAX_RATE;
 
         return [
             'levers' => [
                 [
                     'name' => 'Corporate tax rate',
                     'axis' => AerieDiet::AXIS_STATE,
-                    'platform' => $taxPlatform,
-                    'enacted' => $taxEnacted,
-                    'status' => $status($taxPlatform, $taxEnacted, $taxPlatform < $taxEnacted),
+                    'platform' => $neutral + $budget['platform']['corporateTax'],
+                    'target' => $neutral + $budget['levers']['corporateTax'],
+                    'enacted' => $neutral + $standing['corporateTax'],
+                    'status' => $status('corporateTax'),
                     'note' => sprintf('Firms pay %.1f%% today, with the cyclical adjustment', 100.0 * $macro->corporateTaxRate),
                 ],
                 [
                     'name' => 'Average tariff on imports',
                     'axis' => AerieDiet::AXIS_OPENNESS,
-                    'platform' => $platform['tariff'],
-                    'enacted' => $macro->importTariffRate,
-                    'status' => $status($platform['tariff'], $macro->importTariffRate, $platform['tariff'] < $macro->importTariffRate),
+                    'platform' => $budget['platform']['tariff'],
+                    'target' => $budget['levers']['tariff'],
+                    'enacted' => $standing['tariff'],
+                    'status' => $status('tariff'),
                     'note' => sprintf('Partners answer with %.1f%% on the District\'s exports', 100.0 * MacroEngine::TARIFF_RETALIATION_RATIO * $macro->importTariffRate),
                 ],
                 [
                     'name' => 'Labour force growth',
                     'axis' => AerieDiet::AXIS_OPENNESS,
-                    'platform' => $platform['laborGrowth'],
-                    'enacted' => $macro->laborForceGrowthRate,
-                    'status' => $status($platform['laborGrowth'], $macro->laborForceGrowthRate, false),
+                    'platform' => $budget['platform']['laborGrowth'],
+                    'target' => $budget['levers']['laborGrowth'],
+                    'enacted' => $standing['laborGrowth'],
+                    'status' => $status('laborGrowth'),
                     'note' => sprintf('Immigration has added %+.1f%% to the population over the structural path', 100.0 * $macro->immigrationPopulationShift),
                 ],
             ],
             'debt' => $macro->sovereignDebtToGdp,
-            'braking' => $braking,
+            'braking' => $budget['councilGuards'],
+            'caretaker' => $talking,
             'lastBrake' => $macro->lastCouncilBrakeAt >= 0.0 ? self::simDate($macro->lastCouncilBrakeAt) : null,
             'lastBudget' => $macro->lastBudgetEnactedAt >= 0.0 ? self::simDate($macro->lastBudgetEnactedAt) : null,
             'nextRound' => $nextRound,
@@ -221,12 +309,11 @@ class GovernmentPageBuilder
      * Rows hold seats in proportion to their radius so the spacing is even, and seats are dealt out by angle so each
      * party takes a wedge.
      *
-     * @param array<string, int>          $seats     Seats by party.
-     * @param list<array<string, mixed>>  $parties   Party rows.
-     * @param list<string>                $coalition Governing parties.
-     * @return list<array{x: float, y: float, color: string, governing: bool}>
+     * @param array<string, int>          $seats   Seats by party.
+     * @param list<array<string, mixed>>  $parties Party rows, each marked governing or supporting.
+     * @return list<array{x: float, y: float, color: string, governing: bool, supporting: bool}>
      */
-    private function hemicycle(array $seats, array $parties, array $coalition): array
+    private function hemicycle(array $seats, array $parties): array
     {
         $total = array_sum($seats);
         if ($total <= 0) {
@@ -262,7 +349,8 @@ class GovernmentPageBuilder
                     'x' => round(cos($slots[$slot]['angle']) * $slots[$slot]['radius'], 4),
                     'y' => round(sin($slots[$slot]['angle']) * $slots[$slot]['radius'], 4),
                     'color' => $party['color'],
-                    'governing' => in_array($party['key'], $coalition, true),
+                    'governing' => $party['governing'],
+                    'supporting' => $party['supporting'],
                 ];
             }
         }
@@ -271,12 +359,13 @@ class GovernmentPageBuilder
     }
 
     /**
-     * The policy space: openness across, size of state up, each party with its trail of past positions.
+     * The policy space: openness across and size of state up, with the Council axis as a strip beneath; each party
+     * with its trail of past positions.
      *
-     * @param list<array<string, mixed>>        $parties   Party rows.
-     * @param list<DietElection>                $history   Votes, oldest first.
-     * @param array{state: float, openness: float} $government The coalition's seat-weighted position.
-     * @param list<string>                      $coalition Governing parties.
+     * @param list<array<string, mixed>>  $parties    Party rows.
+     * @param list<DietElection>          $history    Votes, oldest first.
+     * @param array{state: float, openness: float, council: float} $government The cabinet's seat-weighted position.
+     * @param list<string>                $coalition  The cabinet.
      * @return array<string, mixed>
      */
     private function compass(array $parties, array $history, array $government, array $coalition): array
@@ -287,15 +376,20 @@ class GovernmentPageBuilder
         $dots = [];
         foreach ($parties as $party) {
             $trail = [];
+            $councilTrail = [];
             foreach ($history as $election) {
-                $secondary = $election->getSecondaryPositions()[$party['key']] ?? null;
-                if ($secondary === null) {
+                if (!isset($election->getPositions()[$party['key']])) {
                     continue;
                 }
-                $past = AerieDiet::position($party['key'], (float) $secondary);
+                $past = AerieDiet::position($party['key'], $election->getPositions());
                 $trail[] = $point($past[AerieDiet::AXIS_STATE], $past[AerieDiet::AXIS_OPENNESS]);
+                $councilTrail[] = round($past[AerieDiet::AXIS_COUNCIL] * $scale, 2);
             }
-            $dots[] = $party + $point($party['state'], $party['openness']) + ['trail' => $trail];
+            $dots[] = $party + $point($party['state'], $party['openness']) + [
+                'trail' => $trail,
+                'councilX' => round($party['council'] * $scale, 2),
+                'councilTrail' => $councilTrail,
+            ];
         }
 
         $links = [];
@@ -310,17 +404,28 @@ class GovernmentPageBuilder
             'halfWidth' => $scale,
             'parties' => $dots,
             'links' => $links,
-            'government' => $point($government[AerieDiet::AXIS_STATE], $government[AerieDiet::AXIS_OPENNESS]),
+            'government' => $point($government[AerieDiet::AXIS_STATE], $government[AerieDiet::AXIS_OPENNESS]) + [
+                'councilX' => round($government[AerieDiet::AXIS_COUNCIL] * $scale, 2),
+            ],
         ];
     }
 
     /**
+     * A vote on record. Its government stays hidden until it takes office: the talks are settled on the day of the
+     * vote, and the page must not give their outcome away.
+     *
      * @return array<string, mixed>
      */
-    private function historyRow(DietElection $election): array
+    private function historyRow(DietElection $election, float $now): array
     {
         $seats = $election->getSeats();
-        $coalition = $election->getCoalition();
+        $formed = $election->getTakesOfficeAt() <= $now;
+        $coalition = $formed ? $election->getCoalition() : [];
+        $support = $formed ? $election->getSupport() : [];
+        $named = static fn(string $party): array => [
+            'name' => AerieDiet::PARTY_NAMES[$party],
+            'color' => self::PARTY_COLORS[$party],
+        ];
 
         return [
             'date' => self::simDate($election->getSimTime()),
@@ -330,12 +435,13 @@ class GovernmentPageBuilder
                 'swing' => (float) ($election->getVoteSwings()[$party] ?? 0.0),
                 'color' => self::PARTY_COLORS[$party],
             ], AerieDiet::PARTIES),
-            'coalition' => array_map(static fn(string $party): array => [
-                'name' => AerieDiet::PARTY_NAMES[$party],
-                'color' => self::PARTY_COLORS[$party],
-            ], $coalition),
+            'formed' => $formed,
+            'coalition' => array_map($named, $coalition),
+            'support' => array_map($named, $support),
+            'formationDays' => $election->getFormationDays(),
+            'attempts' => count($election->getFormation()),
             // Both lists are written in party order, so a different government is a different list.
-            'changed' => $coalition !== $election->getOutgoingCoalition(),
+            'changed' => $formed && $coalition !== $election->getOutgoingCoalition(),
             'incumbentSwing' => $election->getIncumbentSwing(),
             'volatility' => $election->getVolatility(),
             'growthGap' => $election->getGrowthGap(),

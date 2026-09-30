@@ -23,27 +23,63 @@ class ElectionRecorderTest extends TestCase
         $this->assertSame([], $this->persisted);
     }
 
-    /** The vote is written on its tick, with the founding government as the outgoing one before any vote is on record. */
+    /**
+     * The vote is written on its tick, with the founding government as the outgoing one before any vote is on record,
+     * and with the talks already settled: the cabinet they produced, its supporters, every attempt, and how long it took.
+     */
     public function testTheFirstVoteIsWrittenAgainstTheFoundingGovernment(): void
     {
-        $swings = [Diet::CIVIC => 0.03, Diet::VANGUARD => -0.02, Diet::IRON_HARBOR => 0.0, Diet::EXCHANGE => -0.01];
+        $swings = [Diet::CIVIC => 0.03, Diet::VANGUARD => -0.02, Diet::IRON_HARBOR => 0.0, Diet::EXCHANGE => -0.01, Diet::CHARTISTS => 0.0, Diet::COMMON_LOT => 0.0];
+        $log = [
+            ['day' => 12.5, 'formateur' => Diet::CIVIC, 'round' => 1, 'formed' => false, 'cabinet' => [Diet::CIVIC, Diet::VANGUARD], 'support' => []],
+            ['day' => 30.25, 'formateur' => Diet::CIVIC, 'round' => 2, 'formed' => true, 'cabinet' => [Diet::CIVIC, Diet::IRON_HARBOR], 'support' => [Diet::COMMON_LOT]],
+        ];
+        $positions = Diet::SEED_POSITIONS;
+        $positions[Diet::CIVIC][Diet::AXIS_COUNCIL] = 0.1;
         $election = $this->recorder(null)->record(new MacroStateDTO(
             totalTime: 4.0,
             lastElectionAt: 4.0,
-            dietSeats: [Diet::CIVIC => 93.0, Diet::VANGUARD => 90.0, Diet::IRON_HARBOR => 35.0, Diet::EXCHANGE => 32.0],
+            dietSeats: [Diet::CIVIC => 110.0, Diet::VANGUARD => 90.0, Diet::IRON_HARBOR => 35.0, Diet::EXCHANGE => 32.0, Diet::CHARTISTS => 18.0, Diet::COMMON_LOT => 15.0],
             dietVoteSwings: $swings,
-            governingCoalition: [Diet::CIVIC => 1.0, Diet::VANGUARD => 0.0, Diet::IRON_HARBOR => 1.0, Diet::EXCHANGE => 0.0],
+            partyPositions: $positions,
+            governingCoalition: Diet::SEED_COALITION,
+            pendingCoalition: Diet::membership([Diet::CIVIC, Diet::IRON_HARBOR]),
+            pendingSupport: Diet::membership([Diet::COMMON_LOT]),
+            coalitionTakesOfficeAt: 4.0 + 30.25 / 365.0,
+            formationLog: $log,
             ironHarborCrisisShift: 0.01,
         ));
 
         $this->assertNotNull($election);
         $this->assertSame([$election], $this->persisted);
         $this->assertSame(4.0, $election->getSimTime());
-        $this->assertSame([Diet::CIVIC => 93, Diet::VANGUARD => 90, Diet::IRON_HARBOR => 35, Diet::EXCHANGE => 32], $election->getSeats());
+        $this->assertSame(110, $election->getSeats()[Diet::CIVIC]);
         $this->assertSame([Diet::CIVIC, Diet::IRON_HARBOR], $election->getCoalition());
+        $this->assertSame([Diet::COMMON_LOT], $election->getSupport());
+        $this->assertSame($log, $election->getFormation());
+        $this->assertSame(30.25, $election->getFormationDays());
+        $this->assertEqualsWithDelta(4.0 + 30.25 / 365.0, $election->getTakesOfficeAt(), 1e-12);
+        $this->assertSame(0.1, $election->getPositions()[Diet::CIVIC][Diet::AXIS_COUNCIL]);
         $this->assertSame(Diet::governingParties(Diet::SEED_COALITION), $election->getOutgoingCoalition());
         $this->assertEqualsWithDelta(0.03, $election->getVolatility(), 1e-12);
         $this->assertTrue($election->hasCrisisLift());
+    }
+
+    /** A party with a majority of its own takes office on the day, with no talks. */
+    public function testAMajorityWinnerIsWrittenWithNoTalks(): void
+    {
+        $election = $this->recorder(null)->record(new MacroStateDTO(
+            totalTime: 4.0,
+            lastElectionAt: 4.0,
+            pendingCoalition: Diet::membership([Diet::VANGUARD]),
+            formationLog: [],
+        ));
+
+        $this->assertNotNull($election);
+        $this->assertSame([Diet::VANGUARD], $election->getCoalition());
+        $this->assertSame([], $election->getSupport());
+        $this->assertSame(0.0, $election->getFormationDays());
+        $this->assertSame(4.0, $election->getTakesOfficeAt());
     }
 
     /** Afterwards the outgoing government is the one the last recorded vote formed. */

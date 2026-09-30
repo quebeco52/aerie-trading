@@ -362,21 +362,33 @@ class MacroState
     public float $lastElectionAt;
 
     // The Diet (App\Service\Macro\Subsystem\DistrictPoliticsSubsystem), each map keyed by party: seats, vote shares and
-    // their change at the last vote, the drifting position on each party's other axis, and the governing coalition.
+    // their change at the last vote, each party's position by axis, the cabinet, and the parties supporting it from outside.
     /** @var array<string, float> */
     public array $dietSeats;
     /** @var array<string, float> */
     public array $dietVoteShares;
     /** @var array<string, float> */
     public array $dietVoteSwings;
-    /** @var array<string, float> */
-    public array $partySecondaryPositions;
+    /** @var array<string, array<string, float>> */
+    public array $partyPositions;
     /** @var array<string, float> */
     public array $governingCoalition;
+    /** @var array<string, float> */
+    public array $supportParties;
     // Each party's short-term swing at the last vote, in log share: candidates and campaigns that do not outlast the vote.
     /** @var array<string, float> */
     public array $partyShortTermShocks;
     public float $coalitionFormedAt;
+    // The talks after a vote (CoalitionFormation): the cabinet and supporters they produced, the day they take office
+    // (-1: no talks pending, the government sits), when a cabinet last took office, and the talks attempt by attempt.
+    /** @var array<string, float> */
+    public array $pendingCoalition;
+    /** @var array<string, float> */
+    public array $pendingSupport;
+    public float $coalitionTakesOfficeAt;
+    public float $lastGovernmentFormedAt;
+    /** @var list<array{day: float, formateur: string, round: int, formed: bool, cabinet: list<string>, support: list<string>}> */
+    public array $formationLog;
     // What the vote reads: the deflator where the term began and real GDP where the campaign began (-1: not yet marked).
     public float $termStartedAt;
     public float $termStartDeflator;
@@ -503,8 +515,11 @@ class MacroState
 
             $carried[$field] = true;
             $state->$field = match ($field) {
-                'sectorZ', 'sectorDemandZ', 'dietSeats', 'dietVoteShares', 'dietVoteSwings', 'partySecondaryPositions', 'governingCoalition', 'partyShortTermShocks'
+                'sectorZ', 'sectorDemandZ', 'dietSeats', 'dietVoteShares', 'dietVoteSwings', 'governingCoalition', 'supportParties', 'partyShortTermShocks',
+                'pendingCoalition', 'pendingSupport'
                     => is_array($data[$key]) ? array_map('floatval', $data[$key]) : [],
+                'partyPositions' => is_array($data[$key]) ? self::hydratePositions($data[$key]) : [],
+                'formationLog' => is_array($data[$key]) ? array_values($data[$key]) : [],
                 'qeActive', 'qtActive' => (bool) $data[$key],
                 'eventType' => (string) $data[$key],
                 default => (float) $data[$key],
@@ -584,6 +599,24 @@ class MacroState
         }
 
         return $state;
+    }
+
+    /**
+     * Party positions off the wire: each party's coordinates by axis, as floats.
+     *
+     * @param array<mixed> $positions Positions by party and axis, as decoded.
+     * @return array<string, array<string, float>>
+     */
+    public static function hydratePositions(array $positions): array
+    {
+        $hydrated = [];
+        foreach ($positions as $party => $point) {
+            if (is_array($point)) {
+                $hydrated[(string) $party] = array_map('floatval', $point);
+            }
+        }
+
+        return $hydrated;
     }
 
     /**

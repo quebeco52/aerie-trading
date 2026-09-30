@@ -64,22 +64,74 @@ class SystemicEventReporterTest extends TestCase
         $this->assertNull($this->persisted[0]->getChangePercent());
     }
 
-    /** The election headline names the government the vote formed, its seats, and the party the vote moved most. */
-    public function testTheElectionHeadlineNamesTheNewGovernment(): void
+    /**
+     * A hung Diet's headline names the largest party, which leads the talks, and the biggest mover, and never the
+     * cabinet the talks will produce: that is settled on the day but not known until it takes office.
+     */
+    public function testTheElectionHeadlineOpensTheTalksWithoutGivingAwayTheirOutcome(): void
     {
         $macro = new MacroStateDTO(
             eventType: ShockEvent::ELECTION_HELD,
-            dietSeats: [Diet::CIVIC => 97.0, Diet::VANGUARD => 83.0, Diet::IRON_HARBOR => 36.0, Diet::EXCHANGE => 34.0],
-            dietVoteSwings: [Diet::CIVIC => 0.048, Diet::VANGUARD => -0.05, Diet::IRON_HARBOR => 0.004, Diet::EXCHANGE => -0.002],
-            governingCoalition: [Diet::CIVIC => 1.0, Diet::VANGUARD => 0.0, Diet::IRON_HARBOR => 1.0, Diet::EXCHANGE => 0.0],
+            dietSeats: [Diet::CIVIC => 97.0, Diet::VANGUARD => 83.0, Diet::IRON_HARBOR => 46.0, Diet::EXCHANGE => 34.0, Diet::CHARTISTS => 25.0, Diet::COMMON_LOT => 15.0],
+            dietVoteSwings: [Diet::CIVIC => 0.048, Diet::VANGUARD => -0.05, Diet::IRON_HARBOR => 0.004, Diet::EXCHANGE => -0.002, Diet::CHARTISTS => 0.0, Diet::COMMON_LOT => 0.0],
+            pendingCoalition: Diet::membership([Diet::CIVIC, Diet::IRON_HARBOR]),
         );
 
-        // Every phrasing must name the coalition; draw until each has been seen.
+        // Every phrasing must hold; draw until each has been seen.
         $seen = [];
         for ($i = 0; $i < 60; ++$i) {
             $headline = $this->reporter(bufferedPrice: null)->report($macro, $this->benchmarkAt('100'));
             $this->assertNotNull($headline);
-            $this->assertStringContainsString('the Civic Front and the Iron Harbor Coalition', $headline['description']);
+            $this->assertStringContainsString('the Civic Front', $headline['description']);
+            $this->assertStringContainsString('97', $headline['description']);
+            $this->assertStringNotContainsString('Iron Harbor', $headline['description'], 'The talks\' outcome is out before the cabinet takes office.');
+            $this->assertStringNotContainsString('{', $headline['description']);
+            $seen[$headline['description']] = true;
+        }
+        $this->assertGreaterThan(1, count($seen));
+    }
+
+    public function testAPartyWithAMajorityOfItsOwnIsNamedGoverningAlone(): void
+    {
+        $macro = new MacroStateDTO(
+            eventType: ShockEvent::ELECTION_HELD,
+            dietSeats: [Diet::CIVIC => 60.0, Diet::VANGUARD => 160.0, Diet::IRON_HARBOR => 30.0, Diet::EXCHANGE => 30.0, Diet::CHARTISTS => 10.0, Diet::COMMON_LOT => 10.0],
+            dietVoteSwings: [Diet::CIVIC => -0.1, Diet::VANGUARD => 0.2, Diet::IRON_HARBOR => 0.0, Diet::EXCHANGE => 0.0, Diet::CHARTISTS => 0.0, Diet::COMMON_LOT => 0.0],
+        );
+
+        for ($i = 0; $i < 30; ++$i) {
+            $headline = $this->reporter(bufferedPrice: null)->report($macro, $this->benchmarkAt('100'));
+            $this->assertNotNull($headline);
+            $this->assertStringContainsString('the Vanguard', $headline['description']);
+            $this->assertStringContainsString('160', $headline['description']);
+            $this->assertStringNotContainsString('talks', $headline['description']);
+        }
+    }
+
+    /** The day a cabinet takes office, its headline names it, its supporters, and the talks that made it. */
+    public function testTheFormationHeadlineNamesTheCabinetAndItsSupporters(): void
+    {
+        $log = [
+            ['day' => 19.6, 'formateur' => Diet::VANGUARD, 'round' => 1, 'formed' => false, 'cabinet' => [Diet::VANGUARD, Diet::EXCHANGE, Diet::CHARTISTS], 'support' => []],
+            ['day' => 41.2, 'formateur' => Diet::VANGUARD, 'round' => 2, 'formed' => true, 'cabinet' => [Diet::VANGUARD], 'support' => [Diet::EXCHANGE, Diet::CHARTISTS]],
+        ];
+        $macro = new MacroStateDTO(
+            eventType: ShockEvent::GOVERNMENT_FORMED,
+            totalTime: 4.12,
+            dietSeats: Diet::SEED_SEATS,
+            governingCoalition: Diet::membership([Diet::VANGUARD]),
+            supportParties: Diet::membership([Diet::EXCHANGE, Diet::CHARTISTS]),
+            lastGovernmentFormedAt: 4.12,
+            formationLog: $log,
+        );
+
+        $seen = [];
+        for ($i = 0; $i < 40; ++$i) {
+            $headline = $this->reporter(bufferedPrice: null)->report($macro, $this->benchmarkAt('100'));
+            $this->assertNotNull($headline);
+            $this->assertStringContainsString('the Vanguard', $headline['description']);
+            $this->assertStringContainsString('the Exchange Party and the Chartists', $headline['description']);
+            $this->assertMatchesRegularExpression('/41 days|after 2 attempts/', $headline['description']);
             $this->assertStringNotContainsString('{', $headline['description']);
             $seen[$headline['description']] = true;
         }

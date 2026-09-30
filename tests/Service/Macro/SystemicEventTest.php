@@ -259,6 +259,25 @@ class SystemicEventTest extends TestCase
     }
 
 
+    /** A cabinet taking office after the talks is news on its day, below the vote that opened them, and arms no cooldown. */
+    public function testAGovernmentIsReportedOnTheDayItTakesOffice(): void
+    {
+        $state = new MacroState();
+        $state->totalTime = 4.1;
+        $state->lastElectionAt = 4.0;
+        $state->lastGovernmentFormedAt = 4.1;
+
+        $this->assertSame(ShockEvent::GOVERNMENT_FORMED, $this->fire($state));
+        $this->assertSame(0.0, $state->eventCooldownTimer, 'The political calendar arms no crisis cooldown.');
+
+        $state->lastElectionAt = 4.1;
+        $this->assertSame(ShockEvent::ELECTION_HELD, $this->fire($state), 'A majority won outright takes office on the day of the vote, which is the news.');
+
+        $state->lastElectionAt = 4.0;
+        $state->totalTime += 1.0 / self::TICKS_PER_YEAR;
+        $this->assertNull($this->fire($state));
+    }
+
     public function testABudgetIsReportedOnTheRoundItChangesALeverAndBelowAnElection(): void
     {
         $state = new MacroState();

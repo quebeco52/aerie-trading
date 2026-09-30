@@ -316,13 +316,23 @@ readonly class MacroStateDTO
         public array $dietVoteShares = AerieDiet::SEED_VOTE_SHARES,
         /** @var array<string, float> Change in each party's vote share at the last election. */
         public array $dietVoteSwings = [],
-        /** @var array<string, float> Each party's position on the axis it is not defined by. */
-        public array $partySecondaryPositions = AerieDiet::SEED_SECONDARY_POSITIONS,
-        /** @var array<string, float> 1.0 for a party in the governing coalition. */
+        /** @var array<string, array<string, float>> Each party's position by axis; the axis it is defined by never moves. */
+        public array $partyPositions = AerieDiet::SEED_POSITIONS,
+        /** @var array<string, float> 1.0 for a party in the cabinet. */
         public array $governingCoalition = AerieDiet::SEED_COALITION,
+        /** @var array<string, float> 1.0 for a party supporting a minority cabinet from outside. */
+        public array $supportParties = AerieDiet::SEED_SUPPORT,
         /** @var array<string, float> Each party's short-term log swing at the last vote, given back at the next. */
         public array $partyShortTermShocks = [],
         public float $coalitionFormedAt = 0.0,
+        /** @var array<string, float> 1.0 for a party in the cabinet the talks produced, until it takes office. */
+        public array $pendingCoalition = [],
+        /** @var array<string, float> 1.0 for a party that will support that cabinet. */
+        public array $pendingSupport = [],
+        public float $coalitionTakesOfficeAt = -1.0,
+        public float $lastGovernmentFormedAt = -1.0,
+        /** @var list<array{day: float, formateur: string, round: int, formed: bool, cabinet: list<string>, support: list<string>}> The last talks, attempt by attempt. */
+        public array $formationLog = [],
         public float $termStartedAt = -1.0,
         public float $termStartDeflator = 0.0,
         public float $campaignStartedAt = -1.0,
@@ -416,8 +426,11 @@ readonly class MacroStateDTO
             }
 
             $args[$field] = match ($field) {
-                'sectorZ', 'sectorDemandZ', 'dietSeats', 'dietVoteShares', 'dietVoteSwings', 'partySecondaryPositions', 'governingCoalition', 'partyShortTermShocks'
+                'sectorZ', 'sectorDemandZ', 'dietSeats', 'dietVoteShares', 'dietVoteSwings', 'governingCoalition', 'supportParties', 'partyShortTermShocks',
+                'pendingCoalition', 'pendingSupport'
                     => is_array($data[$key]) ? array_map('floatval', $data[$key]) : [],
+                'partyPositions' => is_array($data[$key]) ? MacroState::hydratePositions($data[$key]) : [],
+                'formationLog' => is_array($data[$key]) ? array_values($data[$key]) : [],
                 'qeActive', 'qtActive' => (bool) $data[$key],
                 'eventType' => (string) $data[$key],
                 default => (float) $data[$key],

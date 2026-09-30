@@ -7,56 +7,61 @@ namespace App\Service\Macro\Subsystem;
 use App\Data\AerieDiet;
 use App\Service\Macro\MacroEngine;
 use App\Service\Macro\MacroState;
+use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
 
 /**
- * The Aerie Diet: four parties, a vote on the fixed election calendar, seats, and the coalition that governs.
+ * The Aerie Diet: six parties, a vote on the fixed election calendar, seats, the talks that follow, and the government.
  *
- * The vote is the economic vote: the governing coalition's share moves with growth over the campaign and inflation
- * over the term on Fair's presidential vote-equation slopes, with the opposition taking what it loses in proportion to
- * its own shares. Governing costs the governing parties a share of the vote each term, the cost of ruling (Nannestad
- * & Paldam 2002) that keeps a party system balanced; the loss a government is seen to take is larger, because
- * governments are formed by the parties whose short-term swings carried the last vote, and those run off by the next. A financial crisis in the five years
+ * The vote is the economic vote: the government's share moves with growth over the campaign and inflation over the term
+ * on Fair's presidential vote-equation slopes, with the opposition taking what it loses in proportion to its own shares.
+ * Governing costs the governing parties a share of the vote each term, the cost of ruling (Nannestad & Paldam 2002)
+ * that keeps a party system balanced; the loss a government is seen to take is larger, because governments are formed
+ * by the parties whose short-term swings carried the last vote, and those run off by the next. A party supporting a
+ * minority cabinet from outside bears part of that cost (Thürk & Klüver 2024). A financial crisis in the five years
  * before the vote lifts the closed-economy party, the one that names the outside world as the contagion, by the 30%
  * Funke, Schularick & Trebesch (2016) find for the far right after financial crises, and gives it back once the
  * crisis leaves that window. On top of that each party has its own short-term swing -- candidates, campaigns, scandals --
  * which lasts only the one vote (Converse 1966), sized so the Diet is as volatile as Western Europe's parliaments have
  * been on average. Seats are D'Hondt over the whole Diet.
  *
- * Each party is fixed on the axis it is defined by (size of state or openness) and drifts on the other by the
- * manifesto shift parties make between elections (Somer-Topcu 2009). The government is the minimal winning coalition
- * with the smallest ideological range (Riker 1962; de Swaan 1973; Martin & Stevenson 2001), so the drift is what lets
- * the two big parties change partners, and the grand coalition forms only when nothing tighter commands a majority.
+ * Each party is fixed on the axis it is defined by (size of state, openness, or the Council) and drifts on the other
+ * two by the manifesto shift parties make between elections (Somer-Topcu 2009). After the vote the parties negotiate a
+ * government (CoalitionFormation); until it takes office the outgoing cabinet stays on as caretaker and passes no budget.
  *
  * The calendar is CreditFiscalSubsystem's: the vote is held on the tick its election falls on. A run built by hand (a
  * harness, a unit test) has none.
  *
- * The government then legislates at the budget rounds after the one it was formed on. Its position, its members'
- * weighted by seats, sets three levers between the policies real parties at the ends of each axis have enacted: the
- * corporate rate on the size-of-state axis, and the tariff and the immigration regime on the openness axis. Size of
- * state moves no purchases: in the US record the purchases process is fitted to, the party in power shifts civilian
- * purchases the wrong way (-2% under Democratic presidents, var/harness/partisan_fit.py), and the panel evidence has
- * faded since the 1990s (Potrafke 2017). Above the 90% debt line the Council would veto a bill that cuts revenue, and
- * the Diet, knowing it, tables none (Romer & Rosenthal 1978), unless it holds the three quarters that could remove the
- * Council.
+ * The government then legislates at the budget rounds after the one it took office on. Its cabinet's position, its
+ * members' weighted by seats (Gamson's law), sets three levers between the policies real parties at the ends of each
+ * axis have enacted: the corporate rate on the size-of-state axis, and the tariff and the immigration regime on the
+ * openness axis. Size of state moves no purchases: in the US record the purchases process is fitted to, the party in
+ * power shifts civilian purchases the wrong way (-2% under Democratic presidents, var/harness/partisan_fit.py), and the
+ * panel evidence has faded since the 1990s (Potrafke 2017). A minority cabinet proposes and its support parties can
+ * refuse: each accepts a lever no further from its own policy than the one in force, so a supporter can stop the
+ * cabinet moving away from it but cannot pull policy its way (Romer & Rosenthal 1978). Above the 90% debt line the
+ * Council would veto a bill that cuts revenue, and the Diet, knowing it, tables none, unless the government and its
+ * supporters, less the Council's own loyalists, hold the three quarters that could remove the Council.
  */
 class DistrictPoliticsSubsystem
 {
     // --- Party Drift (Somer-Topcu 2009) ---
-    /** Per-election step on the secondary axis: the mean absolute manifesto shift of 10-16 of 200 RILE points is ~0.12 of this two-unit scale, sigma = 0.12 / sqrt(2/pi). */
-    public const SECONDARY_DRIFT_PER_ELECTION = 0.15;
+    /** Per-election step on each axis a party is not defined by: the mean absolute manifesto shift of 10-16 of 200 RILE points is ~0.12 of this two-unit scale, sigma = 0.12 / sqrt(2/pi). */
+    public const POSITION_DRIFT_PER_ELECTION = 0.15;
 
     // --- Vote Shares ---
     /** Smallest vote share a party is carried at, so a collapse leaves it a rump rather than a negative share. */
     public const MIN_VOTE_SHARE = 0.005;
 
-    /** Distances equal to within this are ties. */
-    private const RANGE_TOLERANCE = 1e-9;
+    // --- The Budget ---
+    /** The levers a budget sets, and whether cutting each costs revenue the Council guards. */
+    public const REVENUE_LEVERS = ['corporateTax' => true, 'tariff' => true, 'laborGrowth' => false];
 
     public function __construct(private readonly MathUtility $mathUtility) {}
 
     /**
-     * Keeps the campaign and term marks, and holds the vote on the tick the calendar puts it on.
+     * Keeps the campaign and term marks, holds the vote on the tick the calendar puts it on, seats the government the
+     * talks produce when its day comes, and passes the budget at each round a government sits through.
      *
      * Runs after real GDP and the deflator are struck, so the vote reads this tick's economy.
      *
@@ -85,8 +90,13 @@ class DistrictPoliticsSubsystem
             $state->termStartDeflator = $state->gdpDeflator;
         }
 
-        // A government's first budget is the round after the one it was formed on.
-        if ($state->coalitionFormedAt < $state->totalTime
+        if ($state->coalitionTakesOfficeAt >= 0.0 && $state->totalTime >= $state->coalitionTakesOfficeAt) {
+            self::takeOffice($state);
+        }
+
+        // A government's first budget is the round after the one it took office on; a caretaker passes none.
+        if ($state->coalitionTakesOfficeAt < 0.0
+            && $state->coalitionFormedAt < $state->totalTime
             && MathUtility::crossedSimulatedBoundary($state->totalTime, $dt, MacroEngine::BUDGET_ROUND_PERIOD_YEARS)) {
             self::enactBudget($state);
         }
@@ -97,7 +107,7 @@ class DistrictPoliticsSubsystem
      * its axis have enacted. A government leaning further than the party at the end of an axis enacts that party's
      * policy and no more: nothing on record goes further.
      *
-     * @param array{state: float, openness: float} $position The coalition's position (coalitionPosition()).
+     * @param array<string, float> $position A position by axis (coalitionPosition(), or a party's).
      * @return array{corporateTax: float, tariff: float, laborGrowth: float} The corporate rate's shift from the neutral
      *         rate, the average tariff on imports, and labour force growth.
      */
@@ -108,8 +118,8 @@ class DistrictPoliticsSubsystem
         $bigState = AerieDiet::PRIMARY_POSITION[AerieDiet::CIVIC];
         $closed = AerieDiet::PRIMARY_POSITION[AerieDiet::IRON_HARBOR];
         $open = AerieDiet::PRIMARY_POSITION[AerieDiet::EXCHANGE];
-        $state = max($smallState, min($bigState, $position[AerieDiet::AXIS_STATE]));
-        $openness = max($closed, min($open, $position[AerieDiet::AXIS_OPENNESS]));
+        $state = max($smallState, min($bigState, $position[AerieDiet::AXIS_STATE] ?? 0.0));
+        $openness = max($closed, min($open, $position[AerieDiet::AXIS_OPENNESS] ?? 0.0));
         $stateSpan = $bigState - $smallState;
         $opennessSpan = $open - $closed;
 
@@ -122,52 +132,108 @@ class DistrictPoliticsSubsystem
     }
 
     /**
-     * A budget round: the government's platform becomes law, as far as the Council lets it.
+     * What a budget round would enact: the cabinet's platform, as far as its support parties and the Council let it.
      *
-     * Above the debt line the Council's veto is a red line on revenue, and the Diet, as the agenda setter in Romer &
-     * Rosenthal (1978), tables nothing it would veto: a lever that would cut revenue stays where it stands. A government
-     * with the three quarters that could remove councillors is not held. A tariff's change moves productivity by
-     * Furceri et al.'s (2018) output loss, a level potential absorbs over the years that follow.
+     * The cabinet proposes and each support party accepts a lever no further from its own policy than the one in force
+     * (Romer & Rosenthal 1978), so the proposal is the cabinet's platform held inside every supporter's acceptable
+     * range, which always holds the lever in force. Above the debt line the Council's veto is a red line on revenue,
+     * and the Diet tables nothing it would veto: a lever that would cut revenue stays where it stands. A government
+     * whose seats and supporters', less the Council's loyalists, reach the three quarters that could remove
+     * councillors is not held.
+     *
+     * @param list<string>                        $cabinet   The cabinet's parties.
+     * @param list<string>                        $support   Its support parties.
+     * @param array<string, int|float>            $seats     Seats by party.
+     * @param array<string, array<string, float>> $positions Positions by party and axis.
+     * @param array{corporateTax: float, tariff: float, laborGrowth: float} $standing The levers in force.
+     * @return array{levers: array{corporateTax: float, tariff: float, laborGrowth: float}, platform: array{corporateTax: float, tariff: float, laborGrowth: float}, supportHeld: array<string, bool>, councilHeld: array<string, bool>, councilGuards: bool}
+     *         What the round enacts, the cabinet's own platform, which levers the supporters and the Council hold short
+     *         of it, and whether the Council's brake is on.
+     */
+    public static function budget(array $cabinet, array $support, array $seats, array $positions, array $standing, float $debtToGdp): array
+    {
+        $platform = self::platform(self::coalitionPosition(AerieDiet::membership($cabinet), $seats, $positions));
+        $supporterPlatforms = array_map(static fn(string $party): array => self::platform(AerieDiet::position($party, $positions)), $support);
+
+        $removalSeats = CoalitionFormation::coalitionSeats(array_values(array_diff(array_merge($cabinet, $support), AerieDiet::COUNCIL_LOYALISTS)), $seats);
+        $councilGuards = $debtToGdp > MacroEngine::SOVEREIGN_RISK_DEBT_THRESHOLD && $removalSeats < AerieDiet::SUPERMAJORITY_SEATS;
+
+        $levers = $platform;
+        $supportHeld = [];
+        $councilHeld = [];
+        foreach (self::REVENUE_LEVERS as $lever => $revenue) {
+            $low = -INF;
+            $high = INF;
+            foreach ($supporterPlatforms as $own) {
+                $reach = abs($standing[$lever] - $own[$lever]);
+                $low = max($low, $own[$lever] - $reach);
+                $high = min($high, $own[$lever] + $reach);
+            }
+            $levers[$lever] = max($low, min($high, $platform[$lever]));
+            $supportHeld[$lever] = $levers[$lever] !== $platform[$lever];
+
+            $councilHeld[$lever] = $revenue && $councilGuards && $levers[$lever] < $standing[$lever];
+            if ($councilHeld[$lever]) {
+                $levers[$lever] = $standing[$lever];
+            }
+        }
+
+        return ['levers' => $levers, 'platform' => $platform, 'supportHeld' => $supportHeld, 'councilHeld' => $councilHeld, 'councilGuards' => $councilGuards];
+    }
+
+    /**
+     * A budget round: budget() becomes law. A tariff's change moves productivity by Furceri et al.'s (2018) output
+     * loss, a level potential absorbs over the years that follow.
      *
      * @param MacroState $state Current macroeconomic state.
      */
     public static function enactBudget(MacroState $state): void
     {
-        $platform = self::platform(self::coalitionPosition($state->governingCoalition, $state->dietSeats, $state->partySecondaryPositions));
+        $standing = [
+            'corporateTax' => $state->corporateTaxPolicyShift,
+            'tariff' => $state->importTariffRate,
+            'laborGrowth' => $state->laborForceGrowthRate,
+        ];
+        $budget = self::budget(
+            AerieDiet::governingParties($state->governingCoalition),
+            AerieDiet::governingParties($state->supportParties),
+            $state->dietSeats,
+            $state->partyPositions,
+            $standing,
+            $state->sovereignDebtToGdp
+        );
+        $levers = $budget['levers'];
 
-        $governingSeats = 0.0;
-        foreach (AerieDiet::governingParties($state->governingCoalition) as $party) {
-            $governingSeats += $state->dietSeats[$party] ?? 0.0;
-        }
-        $braked = false;
-        if ($state->sovereignDebtToGdp > MacroEngine::SOVEREIGN_RISK_DEBT_THRESHOLD && $governingSeats < AerieDiet::SUPERMAJORITY_SEATS) {
-            foreach (['corporateTax' => $state->corporateTaxPolicyShift, 'tariff' => $state->importTariffRate] as $lever => $standing) {
-                if ($platform[$lever] < $standing) {
-                    $platform[$lever] = $standing;
-                    $braked = true;
-                }
-            }
-        }
-        if ($braked) {
+        if (in_array(true, $budget['councilHeld'], true)) {
             $state->lastCouncilBrakeAt = $state->totalTime;
         }
 
-        $productivityLoss = -MacroEngine::TARIFF_OUTPUT_LOSS * ($platform['tariff'] - $state->importTariffRate);
+        $productivityLoss = -MacroEngine::TARIFF_OUTPUT_LOSS * ($levers['tariff'] - $state->importTariffRate);
         $state->tfpShockLevel += $productivityLoss;
         $state->totalFactorProductivityIndex *= exp($productivityLoss);
 
-        if ($platform['corporateTax'] !== $state->corporateTaxPolicyShift
-            || $platform['tariff'] !== $state->importTariffRate
-            || $platform['laborGrowth'] !== $state->laborForceGrowthRate) {
+        if ($levers !== $standing) {
             $state->lastBudgetEnactedAt = $state->totalTime;
         }
-        $state->corporateTaxPolicyShift = $platform['corporateTax'];
-        $state->importTariffRate = $platform['tariff'];
-        $state->laborForceGrowthRate = $platform['laborGrowth'];
+        $state->corporateTaxPolicyShift = $levers['corporateTax'];
+        $state->importTariffRate = $levers['tariff'];
+        $state->laborForceGrowthRate = $levers['laborGrowth'];
     }
 
     /**
-     * Votes, seats, positions, government.
+     * The government the talks produced takes office; the caretaker steps down.
+     */
+    public static function takeOffice(MacroState $state): void
+    {
+        $state->governingCoalition = $state->pendingCoalition;
+        $state->supportParties = $state->pendingSupport;
+        $state->coalitionFormedAt = $state->totalTime;
+        $state->lastGovernmentFormedAt = $state->totalTime;
+        $state->coalitionTakesOfficeAt = -1.0;
+    }
+
+    /**
+     * Votes, seats, positions, and the talks for the next government.
      */
     private function holdElection(MacroState $state, float $realGdp): void
     {
@@ -183,7 +249,7 @@ class DistrictPoliticsSubsystem
         $inflationGap = $inflationGap === null ? 0.0 : $inflationGap - MacroEngine::TARGET_INFLATION;
 
         $swing = self::economicVote($growthGap, $inflationGap, $this->mathUtility->generateStandardNormal());
-        $shares = self::applyIncumbentSwing($shares, $state->governingCoalition, $swing);
+        $shares = self::applyIncumbentSwing($shares, $state->governingCoalition, $swing, $state->supportParties);
 
         $crisisShift = 0.0;
         if ($state->lastCreditCrisisAt >= 0.0 && $state->totalTime - $state->lastCreditCrisisAt <= MacroEngine::ELECTION_CRISIS_WINDOW_YEARS) {
@@ -199,7 +265,8 @@ class DistrictPoliticsSubsystem
 
         $state->electionGrowthGap = $growthGap;
         $state->electionInflationGap = $inflationGap;
-        $state->electionIncumbentSwing = self::blocShare($shares, $state->governingCoalition) - self::blocShare($previous, $state->governingCoalition);
+        $state->electionIncumbentSwing = self::blocShare($shares, $state->governingCoalition, $state->supportParties)
+            - self::blocShare($previous, $state->governingCoalition, $state->supportParties);
         $state->ironHarborCrisisShift = $crisisShift;
 
         $swings = [];
@@ -212,20 +279,23 @@ class DistrictPoliticsSubsystem
         $seats = self::dHondt($shares, AerieDiet::SEATS);
         $state->dietSeats = array_map('floatval', $seats);
 
-        $positions = $state->partySecondaryPositions;
+        $positions = [];
         foreach (AerieDiet::PARTIES as $party) {
-            $positions[$party] = self::reflect(($positions[$party] ?? AerieDiet::SEED_SECONDARY_POSITIONS[$party])
-                + (self::SECONDARY_DRIFT_PER_ELECTION * $this->mathUtility->generateStandardNormal()));
+            $positions[$party] = AerieDiet::position($party, $state->partyPositions);
+            foreach (AerieDiet::AXES as $axis) {
+                if ($axis !== AerieDiet::PRIMARY_AXIS[$party]) {
+                    $positions[$party][$axis] = self::reflect($positions[$party][$axis]
+                        + (self::POSITION_DRIFT_PER_ELECTION * $this->mathUtility->generateStandardNormal()));
+                }
+            }
         }
-        $state->partySecondaryPositions = $positions;
+        $state->partyPositions = $positions;
 
-        $coalition = self::formCoalition($seats, $positions);
-        $membership = [];
-        foreach (AerieDiet::PARTIES as $party) {
-            $membership[$party] = in_array($party, $coalition, true) ? 1.0 : 0.0;
-        }
-        $state->governingCoalition = $membership;
-        $state->coalitionFormedAt = $state->totalTime;
+        $talks = CoalitionFormation::talks($seats, $shares, $positions, AerieDiet::governingParties($state->governingCoalition), $this->mathUtility);
+        $state->pendingCoalition = AerieDiet::membership($talks['cabinet']);
+        $state->pendingSupport = AerieDiet::membership($talks['support']);
+        $state->coalitionTakesOfficeAt = $state->totalTime + ($talks['days'] / FinancialConstants::DAYS_PER_YEAR);
+        $state->formationLog = $talks['log'];
     }
 
     /**
@@ -244,16 +314,20 @@ class DistrictPoliticsSubsystem
     }
 
     /**
-     * Moves a swing between the governing coalition and the opposition, each side's parties in proportion to their shares.
+     * Moves a swing between the government and the opposition, each side's parties in proportion to their shares.
      *
-     * @param array<string, float> $shares     Vote shares by party.
-     * @param array<string, float> $coalition  1.0 for a governing party.
-     * @param float                $swing      Change in the coalition's combined share.
+     * A support party's share sits partly on each side, in the proportion of the cost of governing it bears
+     * (MacroEngine::ELECTION_SUPPORT_ACCOUNTABILITY), so it gains or loses with the government by that much less.
+     *
+     * @param array<string, float> $shares    Vote shares by party.
+     * @param array<string, float> $coalition 1.0 for a cabinet party.
+     * @param float                $swing     Change in the government's combined share.
+     * @param array<string, float> $support   1.0 for a support party.
      * @return array<string, float> Vote shares by party.
      */
-    public static function applyIncumbentSwing(array $shares, array $coalition, float $swing): array
+    public static function applyIncumbentSwing(array $shares, array $coalition, float $swing, array $support = []): array
     {
-        $governing = self::blocShare($shares, $coalition);
+        $governing = self::blocShare($shares, $coalition, $support);
         $opposition = array_sum($shares) - $governing;
         if ($governing <= 0.0 || $opposition <= 0.0) {
             return $shares;
@@ -265,14 +339,14 @@ class DistrictPoliticsSubsystem
         $result = [];
         foreach (AerieDiet::PARTIES as $party) {
             $share = $shares[$party] ?? 0.0;
-            $result[$party] = ($coalition[$party] ?? 0.0) > 0.5
-                ? $share * ($governing + $swing) / $governing
-                : $share * ($opposition - $swing) / $opposition;
+            $weight = self::governmentWeight($party, $coalition, $support);
+            $result[$party] = $share
+                + ($swing * $weight * $share / $governing)
+                - ($swing * (1.0 - $weight) * $share / $opposition);
         }
 
         return $result;
     }
-
     /**
      * Lifts the closed-economy party's share by the post-crisis gain, taken from the others in proportion to theirs.
      *
@@ -356,128 +430,33 @@ class DistrictPoliticsSubsystem
     }
 
     /**
-     * The government: of the minimal winning coalitions, the one with the smallest ideological range.
+     * A cabinet's policy: its members' positions weighted by their seats (Gamson's law).
      *
-     * A coalition wins with a majority of the Diet, and is minimal when every member is needed for it (Riker 1962).
-     * Its range is the largest distance between two members in the policy space (de Swaan 1973, as Martin & Stevenson
-     * 2001 measure it). Ties go to the coalition holding the largest party, then to the one with more seats.
-     *
-     * @param array<string, int|float>  $seats     Seats by party.
-     * @param array<string, float>      $secondary Secondary-axis positions by party.
-     * @return list<string> The governing parties, in PARTIES order.
+     * @param array<string, float>                $coalition 1.0 for a member.
+     * @param array<string, int|float>            $seats     Seats by party.
+     * @param array<string, array<string, float>> $positions Positions by party and axis.
+     * @return array{state: float, openness: float, council: float}
      */
-    public static function formCoalition(array $seats, array $secondary): array
+    public static function coalitionPosition(array $coalition, array $seats, array $positions): array
     {
-        $largest = AerieDiet::PARTIES[0];
-        foreach (AerieDiet::PARTIES as $party) {
-            if (($seats[$party] ?? 0) > ($seats[$largest] ?? 0)) {
-                $largest = $party;
-            }
-        }
-
-        $best = null;
-        $bestRange = INF;
-        $bestHoldsLargest = false;
-        $bestSeats = 0.0;
-        $count = count(AerieDiet::PARTIES);
-        for ($mask = 1; $mask < (1 << $count); ++$mask) {
-            $members = [];
-            foreach (AerieDiet::PARTIES as $index => $party) {
-                if ($mask & (1 << $index)) {
-                    $members[] = $party;
-                }
-            }
-            if (!self::isMinimalWinning($members, $seats)) {
-                continue;
-            }
-
-            $range = self::ideologicalRange($members, $secondary);
-            $holdsLargest = in_array($largest, $members, true);
-            $total = self::coalitionSeats($members, $seats);
-            $tied = abs($range - $bestRange) <= self::RANGE_TOLERANCE;
-            $better = $best === null
-                || $range < $bestRange - self::RANGE_TOLERANCE
-                || ($tied && $holdsLargest && !$bestHoldsLargest)
-                || ($tied && $holdsLargest === $bestHoldsLargest && $total > $bestSeats);
-            if ($better) {
-                $best = $members;
-                $bestRange = $range;
-                $bestHoldsLargest = $holdsLargest;
-                $bestSeats = $total;
-            }
-        }
-
-        return $best ?? [];
-    }
-
-    /**
-     * Whether a set of parties holds a majority that every member is needed for.
-     *
-     * @param list<string>             $members Parties.
-     * @param array<string, int|float> $seats   Seats by party.
-     */
-    public static function isMinimalWinning(array $members, array $seats): bool
-    {
-        $total = self::coalitionSeats($members, $seats);
-        if ($total < AerieDiet::MAJORITY_SEATS) {
-            return false;
-        }
-        foreach ($members as $party) {
-            if ($total - ($seats[$party] ?? 0) >= AerieDiet::MAJORITY_SEATS) {
-                return false;
-            }
-        }
-
-        return true;
-    }
-
-    /**
-     * The largest distance between two members in the policy space; zero for one party.
-     *
-     * @param list<string>         $members   Parties.
-     * @param array<string, float> $secondary Secondary-axis positions by party.
-     */
-    public static function ideologicalRange(array $members, array $secondary): float
-    {
-        $range = 0.0;
-        foreach ($members as $i => $a) {
-            foreach (array_slice($members, $i + 1) as $b) {
-                $pa = AerieDiet::position($a, $secondary[$a] ?? AerieDiet::SEED_SECONDARY_POSITIONS[$a]);
-                $pb = AerieDiet::position($b, $secondary[$b] ?? AerieDiet::SEED_SECONDARY_POSITIONS[$b]);
-                $range = max($range, hypot($pa[AerieDiet::AXIS_STATE] - $pb[AerieDiet::AXIS_STATE], $pa[AerieDiet::AXIS_OPENNESS] - $pb[AerieDiet::AXIS_OPENNESS]));
-            }
-        }
-
-        return $range;
-    }
-
-    /**
-     * The coalition's policy: its members' positions weighted by their seats.
-     *
-     * @param array<string, float> $coalition 1.0 for a governing party.
-     * @param array<string, float> $seats     Seats by party.
-     * @param array<string, float> $secondary Secondary-axis positions by party.
-     * @return array{state: float, openness: float}
-     */
-    public static function coalitionPosition(array $coalition, array $seats, array $secondary): array
-    {
-        $weighted = [AerieDiet::AXIS_STATE => 0.0, AerieDiet::AXIS_OPENNESS => 0.0];
+        $weighted = array_fill_keys(AerieDiet::AXES, 0.0);
         $total = 0.0;
-        foreach (AerieDiet::PARTIES as $party) {
-            if (($coalition[$party] ?? 0.0) <= 0.5) {
-                continue;
-            }
+        foreach (AerieDiet::governingParties($coalition) as $party) {
             $weight = (float) ($seats[$party] ?? 0.0);
-            $point = AerieDiet::position($party, $secondary[$party] ?? AerieDiet::SEED_SECONDARY_POSITIONS[$party]);
-            $weighted[AerieDiet::AXIS_STATE] += $weight * $point[AerieDiet::AXIS_STATE];
-            $weighted[AerieDiet::AXIS_OPENNESS] += $weight * $point[AerieDiet::AXIS_OPENNESS];
+            $point = AerieDiet::position($party, $positions);
+            foreach (AerieDiet::AXES as $axis) {
+                $weighted[$axis] += $weight * $point[$axis];
+            }
             $total += $weight;
         }
-        if ($total <= 0.0) {
-            return $weighted;
+        if ($total > 0.0) {
+            foreach (AerieDiet::AXES as $axis) {
+                $weighted[$axis] /= $total;
+            }
         }
 
-        return [AerieDiet::AXIS_STATE => $weighted[AerieDiet::AXIS_STATE] / $total, AerieDiet::AXIS_OPENNESS => $weighted[AerieDiet::AXIS_OPENNESS] / $total];
+        /** @var array{state: float, openness: float, council: float} $weighted */
+        return $weighted;
     }
 
     /**
@@ -499,33 +478,36 @@ class DistrictPoliticsSubsystem
     }
 
     /**
+     * The government's share of the vote: its cabinet's, and the part of its supporters' that sits with it.
+     *
      * @param array<string, float> $shares    Vote shares by party.
-     * @param array<string, float> $coalition 1.0 for a governing party.
+     * @param array<string, float> $coalition 1.0 for a cabinet party.
+     * @param array<string, float> $support   1.0 for a support party.
      */
-    private static function blocShare(array $shares, array $coalition): float
+    private static function blocShare(array $shares, array $coalition, array $support = []): float
     {
         $total = 0.0;
         foreach (AerieDiet::PARTIES as $party) {
-            if (($coalition[$party] ?? 0.0) > 0.5) {
-                $total += $shares[$party] ?? 0.0;
-            }
+            $total += self::governmentWeight($party, $coalition, $support) * ($shares[$party] ?? 0.0);
         }
 
         return $total;
     }
 
     /**
-     * @param list<string>             $members Parties.
-     * @param array<string, int|float> $seats   Seats by party.
+     * How much of a party's share sits with the government: all of a cabinet party's, the accountable part of a
+     * support party's, none of the opposition's.
+     *
+     * @param array<string, float> $coalition 1.0 for a cabinet party.
+     * @param array<string, float> $support   1.0 for a support party.
      */
-    private static function coalitionSeats(array $members, array $seats): float
+    private static function governmentWeight(string $party, array $coalition, array $support): float
     {
-        $total = 0.0;
-        foreach ($members as $party) {
-            $total += (float) ($seats[$party] ?? 0);
-        }
-
-        return $total;
+        return match (true) {
+            ($coalition[$party] ?? 0.0) > 0.5 => 1.0,
+            ($support[$party] ?? 0.0) > 0.5 => MacroEngine::ELECTION_SUPPORT_ACCOUNTABILITY,
+            default => 0.0,
+        };
     }
 
     /**

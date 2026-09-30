@@ -3,9 +3,9 @@
 {% block title %}The Government - Aerie Exchange{% endblock %}
 
 {% block meta %}
-	<meta name="description" content="The Aerie District's government: the Diet and the coalition that governs it, the parties, the Council, and every election on record.">
+	<meta name="description" content="The Aerie District's government: the Diet and the cabinet that governs it, the parties, the coalition talks, the Council, and every election on record.">
 	<meta property="og:title" content="The Government | Aerie Exchange">
-	<meta property="og:description" content="Four parties, a 250-seat Diet elected every four years, and a thirteen-member Council that renews itself.">
+	<meta property="og:description" content="Six parties, a 300-seat Diet elected every four years, and a thirteen-member Council that renews itself.">
 	<meta property="og:type" content="website">
 {% endblock %}
 
@@ -35,18 +35,23 @@
 
 				<dl class="grid grid-cols-2 sm:grid-cols-4 gap-3 shrink-0 xl:min-w-[46rem]">
 					<div class="bg-surface-container-lowest rounded border border-outline-variant/20 px-4 py-3 col-span-2">
-						<dt class="text-2xs font-bold uppercase tracking-wider text-on-surface-variant">Governing coalition</dt>
+						<dt class="text-2xs font-bold uppercase tracking-wider text-on-surface-variant">{{ government.caretaker ? 'Caretaker cabinet' : 'Cabinet' }}</dt>
 						<dd class="text-base font-bold text-on-surface mt-1 flex flex-wrap gap-x-3 gap-y-1">
 							{% for member in government.members %}
 								<span class="inline-flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full" style="background-color: {{ member.color }}" aria-hidden="true"></span>{{ member.name }}</span>
 							{% endfor %}
 						</dd>
-						<p class="text-3xs font-mono tabular-nums text-on-surface-variant mt-1">Formed {{ government.formed }}</p>
+						{% if government.support is not empty %}
+							<p class="text-3xs text-on-surface-variant mt-1">Supported from outside by {% for member in government.support %}<span class="font-bold text-on-surface">{{ member.name }}</span>{{ not loop.last ? ', ' : '' }}{% endfor %}</p>
+						{% endif %}
+						<p class="text-3xs font-mono tabular-nums text-on-surface-variant mt-1">{{ government.caretaker ? 'Stays in office until the talks produce a government · formed ' : 'Formed ' }}{{ government.formed }}</p>
 					</div>
 					<div class="bg-surface-container-lowest rounded border border-outline-variant/20 px-4 py-3">
-						<dt class="text-2xs font-bold uppercase tracking-wider text-on-surface-variant">Coalition seats</dt>
+						<dt class="text-2xs font-bold uppercase tracking-wider text-on-surface-variant">Cabinet seats</dt>
 						<dd class="text-lg font-bold font-mono tabular-nums text-on-surface mt-0.5">{{ government.seats }} / {{ rules.seats }}</dd>
-						<p class="text-3xs font-mono tabular-nums text-on-surface-variant mt-0.5">Majority {{ rules.majority }}{{ government.supermajority ? ' · three quarters held' : '' }}</p>
+						<p class="text-3xs font-mono tabular-nums text-on-surface-variant mt-0.5">
+							{%- if government.minority %}Minority · {{ government.supportedSeats }} with supporters{% else %}Majority {{ rules.majority }}{% endif %}{{ government.supermajority ? ' · three quarters held' : '' -}}
+						</p>
 					</div>
 					<div class="bg-surface-container-lowest rounded border border-outline-variant/20 px-4 py-3">
 						<dt class="text-2xs font-bold uppercase tracking-wider text-on-surface-variant">Next election</dt>
@@ -56,9 +61,9 @@
 						</p>
 					</div>
 					<div class="bg-surface-container-lowest rounded border border-outline-variant/20 px-4 py-3 col-span-2">
-						<dt class="text-2xs font-bold uppercase tracking-wider text-on-surface-variant" title="Baker, Bloom and Davis economic policy uncertainty: it builds into each election and falls back after it">Policy uncertainty</dt>
+						<dt class="text-2xs font-bold uppercase tracking-wider text-on-surface-variant" title="Baker, Bloom and Davis economic policy uncertainty: it builds into each election and falls back once a government takes office">Policy uncertainty</dt>
 						<dd class="text-lg font-bold font-mono tabular-nums text-on-surface mt-0.5">{{ election.policyUncertainty|number_format(0) }}</dd>
-						<p class="text-3xs text-on-surface-variant mt-0.5">Rises into a vote as firms put off investment until they know who governs</p>
+						<p class="text-3xs text-on-surface-variant mt-0.5">Rises into a vote and stays high through the talks, as firms put off investment until they know who governs</p>
 					</div>
 					<div class="bg-surface-container-lowest rounded border border-outline-variant/20 px-4 py-3 col-span-2">
 						<dt class="text-2xs font-bold uppercase tracking-wider text-on-surface-variant">Next Council vacancy</dt>
@@ -69,18 +74,59 @@
 			</div>
 		</div>
 
+		{# --- THE TALKS AFTER THE LAST VOTE --- #}
+		{% if talks %}
+			<section class="bg-surface-container-low rounded-lg p-5 border {{ talks.underWay ? 'border-primary/40' : 'border-outline-variant/15' }}" aria-labelledby="talks-heading">
+				<div class="flex flex-col md:flex-row md:items-start md:justify-between gap-3">
+					<div>
+						<h2 id="talks-heading" class="text-sm font-bold text-on-surface">{{ talks.underWay ? 'Coalition talks under way' : 'The last coalition talks' }}</h2>
+						<p class="text-3xs text-on-surface-variant mt-0.5">
+							{% if talks.underWay %}
+								Day {{ talks.day|number_format(0) }}. The outgoing cabinet stays on as caretaker and passes no budget until a new government takes office.
+							{% else %}
+								A government took office after {{ talks.day|number_format(0) }} days and {{ talks.attempts }} {{ talks.attempts == 1 ? 'attempt' : 'attempts' }}.
+							{% endif %}
+						</p>
+					</div>
+					{% if talks.leading %}
+						<div class="shrink-0 rounded border border-primary/30 bg-primary/5 px-3 py-2">
+							<p class="text-2xs font-bold uppercase tracking-wider text-primary">Attempt {{ talks.leading.attempt }}</p>
+							<p class="text-xs text-on-surface mt-0.5"><span class="inline-block w-2 h-2 rounded-full mr-1" style="background-color: {{ talks.leading.color }}" aria-hidden="true"></span><span class="font-bold">{{ talks.leading.name }}</span> seeks {{ talks.leading.seeking }}</p>
+						</div>
+					{% endif %}
+				</div>
+				{% if talks.entries is not empty %}
+					<ol class="mt-4 divide-y divide-outline-variant/10">
+						{% for entry in talks.entries %}
+							<li class="py-2 grid grid-cols-[4rem_1fr] gap-3 text-xs">
+								<span class="font-mono tabular-nums text-on-surface-variant">Day {{ entry.day|number_format(0) }}</span>
+								<span>
+									<span class="inline-block w-2 h-2 rounded-full mr-1" style="background-color: {{ entry.color }}" aria-hidden="true"></span><span class="font-bold text-on-surface">{{ entry.formateur }}</span>
+									{% if entry.formed %}
+										<span class="text-secondary font-bold">formed a government:</span> {{ entry.cabinet|join(', ') }}{% if entry.support is not empty %}, supported by {{ entry.support|join(', ') }}{% endif %}.
+									{% else %}
+										<span class="text-error font-bold">failed</span> to form {{ entry.seeking }}; its likeliest cabinet was {{ entry.cabinet|join(', ') }}{% if entry.support is not empty %} with {{ entry.support|join(', ') }} in support{% endif %}.
+									{% endif %}
+								</span>
+							</li>
+						{% endfor %}
+					</ol>
+				{% endif %}
+			</section>
+		{% endif %}
+
 		{# --- THE DIET AND THE POLICY SPACE --- #}
 		{# The chamber's seat positions are unit-radius; they are drawn at 100 units so text sizes stay whole. #}
 		<div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
 			<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/15" aria-labelledby="diet-heading">
 				<h2 id="diet-heading" class="text-sm font-bold text-on-surface">The Diet</h2>
-				<p class="text-3xs text-on-surface-variant mt-0.5">{{ rules.seats }} seats, from the largest state on the left to the smallest on the right. The governing parties' seats are solid.</p>
+				<p class="text-3xs text-on-surface-variant mt-0.5">{{ rules.seats }} seats, from the largest state on the left to the smallest on the right. The cabinet's seats are solid, its supporters' half-filled.</p>
 
 				<svg viewBox="-108 -106 216 114" class="w-full mt-4 max-h-72" role="img" aria-label="Diet seats by party: {% for party in parties %}{{ party.name }} {{ party.seats }}{{ not loop.last ? ', ' : '' }}{% endfor %}">
 					{% for seat in hemicycle %}
-						<circle cx="{{ seat.x * 100 }}" cy="{{ -seat.y * 100 }}" r="2.8" fill="{{ seat.color }}" fill-opacity="{{ seat.governing ? 1 : 0.4 }}"></circle>
+						<circle cx="{{ seat.x * 100 }}" cy="{{ -seat.y * 100 }}" r="2.5" fill="{{ seat.color }}" fill-opacity="{{ seat.governing ? 1 : (seat.supporting ? 0.6 : 0.3) }}"{% if seat.supporting %} stroke="{{ seat.color }}" stroke-width="0.6"{% endif %}></circle>
 					{% endfor %}
-					<text x="0" y="-13" text-anchor="middle" class="fill-on-surface font-bold" font-size="15">{{ government.seats }}</text>
+					<text x="0" y="-13" text-anchor="middle" class="fill-on-surface font-bold" font-size="15">{{ government.supportedSeats }}</text>
 					<text x="0" y="-4" text-anchor="middle" class="fill-on-surface-variant" font-size="5.5">of {{ rules.majority }} needed</text>
 				</svg>
 
@@ -100,7 +146,7 @@
 									<span class="inline-flex items-center gap-2">
 										<span class="w-2.5 h-2.5 rounded-full shrink-0" style="background-color: {{ party.color }}" aria-hidden="true"></span>
 										<span class="font-bold text-on-surface">{{ party.name }}</span>
-										{% if party.governing %}<span class="text-3xs font-bold uppercase tracking-wider text-secondary">In government</span>{% endif %}
+										{% if party.governing %}<span class="text-3xs font-bold uppercase tracking-wider text-secondary">{{ government.caretaker ? 'Caretaker' : 'In government' }}</span>{% elseif party.supporting %}<span class="text-3xs font-bold uppercase tracking-wider text-primary">Supports</span>{% endif %}
 									</span>
 								</th>
 								<td class="py-2 text-right font-mono tabular-nums text-on-surface">{{ party.seats }}</td>
@@ -117,8 +163,9 @@
 			<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/15" aria-labelledby="compass-heading">
 				<h2 id="compass-heading" class="text-sm font-bold text-on-surface">The parties</h2>
 				<p class="text-3xs text-on-surface-variant mt-0.5">
-					Each party is fixed on the question it was founded on and drifts on the other between elections. The coalition is joined by
-					dashed lines; the diamond is the government's own position, its parties weighted by their seats. Faint trails are past positions.
+					Each party is fixed on the question it was founded on and drifts on the other two between elections. The cabinet is joined by
+					dashed lines; the diamond is its own position, its parties weighted by their seats. Faint trails are past positions. The strip
+					beneath is the third question: how far to trust the Council's technocrats.
 				</p>
 
 				{% set w = compass.halfWidth %}
@@ -146,6 +193,23 @@
 					<rect x="{{ compass.government.x - 3.5 }}" y="{{ compass.government.y - 3.5 }}" width="7" height="7" transform="rotate(45 {{ compass.government.x }} {{ compass.government.y }})" class="fill-on-surface"></rect>
 				</svg>
 
+				<svg viewBox="{{ -w - 36 }} -16 {{ 2 * w + 72 }} 32" class="w-full mt-2" role="img" aria-label="Party positions on the Council axis: populist on the left, technocratic on the right">
+					<line x1="{{ -w }}" y1="0" x2="{{ w }}" y2="0" class="stroke-outline-variant" stroke-opacity="0.6" stroke-width="0.6"></line>
+					<line x1="0" y1="-4" x2="0" y2="4" class="stroke-outline-variant" stroke-opacity="0.6" stroke-width="0.6"></line>
+					<text x="{{ -w - 4 }}" y="2" text-anchor="end" font-size="7" class="fill-on-surface-variant">Populist</text>
+					<text x="{{ w + 4 }}" y="2" text-anchor="start" font-size="7" class="fill-on-surface-variant">Technocratic</text>
+					{% for party in compass.parties %}
+						{% for x in party.councilTrail %}
+							<circle cx="{{ x }}" cy="0" r="1.2" fill="{{ party.color }}" fill-opacity="0.25"></circle>
+						{% endfor %}
+					{% endfor %}
+					{% for party in compass.parties %}
+						<circle cx="{{ party.councilX }}" cy="0" r="{{ 2.5 + party.seats / 25 }}" fill="{{ party.color }}" fill-opacity="{{ party.governing ? 1 : 0.55 }}" class="stroke-surface" stroke-width="1"></circle>
+						<text x="{{ party.councilX }}" y="{{ loop.index is odd ? -8 : 14 }}" text-anchor="middle" font-size="6" font-weight="bold" class="fill-on-surface">{{ party.name|split(' ')|last }}</text>
+					{% endfor %}
+					<rect x="{{ compass.government.councilX - 3 }}" y="-3" width="6" height="6" transform="rotate(45 {{ compass.government.councilX }} 0)" class="fill-on-surface"></rect>
+				</svg>
+
 				<table class="w-full mt-3 text-xs">
 					<caption class="sr-only">Party positions</caption>
 					<thead>
@@ -153,6 +217,7 @@
 							<th scope="col" class="text-left font-bold pb-2">Party</th>
 							<th scope="col" class="text-right font-bold pb-2">Size of state</th>
 							<th scope="col" class="text-right font-bold pb-2">Openness</th>
+							<th scope="col" class="text-right font-bold pb-2">Council</th>
 						</tr>
 					</thead>
 					<tbody class="divide-y divide-outline-variant/10">
@@ -161,12 +226,14 @@
 								<th scope="row" class="py-1.5 text-left font-normal text-on-surface">{{ party.name }}</th>
 								<td class="py-1.5 text-right font-mono tabular-nums {{ party.primaryAxis == 'state' ? 'text-on-surface font-bold' : 'text-on-surface-variant' }}">{{ (party.state >= 0 ? '+' : '') ~ party.state|number_format(2) }}</td>
 								<td class="py-1.5 text-right font-mono tabular-nums {{ party.primaryAxis == 'openness' ? 'text-on-surface font-bold' : 'text-on-surface-variant' }}">{{ (party.openness >= 0 ? '+' : '') ~ party.openness|number_format(2) }}</td>
+								<td class="py-1.5 text-right font-mono tabular-nums {{ party.primaryAxis == 'council' ? 'text-on-surface font-bold' : 'text-on-surface-variant' }}">{{ (party.council >= 0 ? '+' : '') ~ party.council|number_format(2) }}</td>
 							</tr>
 						{% endfor %}
 						<tr>
-							<th scope="row" class="py-1.5 text-left font-bold text-on-surface">Government</th>
+							<th scope="row" class="py-1.5 text-left font-bold text-on-surface">Cabinet</th>
 							<td class="py-1.5 text-right font-mono tabular-nums text-on-surface">{{ (government.state >= 0 ? '+' : '') ~ government.state|number_format(2) }}</td>
 							<td class="py-1.5 text-right font-mono tabular-nums text-on-surface">{{ (government.openness >= 0 ? '+' : '') ~ government.openness|number_format(2) }}</td>
+							<td class="py-1.5 text-right font-mono tabular-nums text-on-surface">{{ (government.council >= 0 ? '+' : '') ~ government.council|number_format(2) }}</td>
 						</tr>
 					</tbody>
 				</table>
@@ -180,7 +247,8 @@
 				<div>
 					<h2 id="budget-heading" class="text-sm font-bold text-on-surface">The budget</h2>
 					<p class="text-3xs text-on-surface-variant mt-0.5">
-						The government legislates its platform at the budget rounds, every {{ rules.budgetRoundMonths|number_format(0) }} months, starting with the round after it takes office.
+						The cabinet legislates its platform at the budget rounds, every {{ rules.budgetRoundMonths|number_format(0) }} months, starting with the round after it takes office.
+						A minority cabinet gets only what its supporters will vote for.
 						Next round: <span class="font-mono tabular-nums">{{ budget.nextRound }}</span>{% if budget.lastBudget %} · last change <span class="font-mono tabular-nums">{{ budget.lastBudget }}</span>{% endif %}.
 					</p>
 				</div>
@@ -212,9 +280,18 @@
 								<td class="py-2 text-right font-mono tabular-nums text-on-surface-variant">{{ (lever.platform * 100)|number_format(2) }}%</td>
 								<td class="py-2 text-right font-mono tabular-nums font-bold text-on-surface">{{ (lever.enacted * 100)|number_format(2) }}%</td>
 								<td class="py-2 pl-4 text-3xs">
-									{% if lever.status == 'held' %}
+									{% if lever.status == 'caretaker' %}
+										<span class="font-bold text-on-surface-variant">Waits on the talks</span>
+										<span class="block text-on-surface-variant">A caretaker cabinet passes no budget</span>
+									{% elseif lever.status == 'held' %}
 										<span class="font-bold text-error">Held by the Council</span>
 										<span class="block text-on-surface-variant">A cut in revenue while debt is above the line</span>
+									{% elseif lever.status == 'blocked' %}
+										<span class="font-bold text-error">Blocked by its supporters</span>
+										<span class="block text-on-surface-variant">They will not vote to move it further from their own policy</span>
+									{% elseif lever.status == 'partial' %}
+										<span class="font-bold text-primary">To {{ (lever.target * 100)|number_format(2) }}% at the next budget</span>
+										<span class="block text-on-surface-variant">As far as its supporters will go</span>
 									{% elseif lever.status == 'pending' %}
 										<span class="font-bold text-primary">At the next budget</span>
 									{% else %}
@@ -280,7 +357,7 @@
 						<h3 class="text-xs font-bold text-on-surface">Powers</h3>
 						<ul class="mt-2 space-y-2 text-3xs text-on-surface-variant">
 							<li><span class="font-bold text-on-surface">Veto.</span> The Council can veto any budget or law the Diet passes. It almost never does: the threat is enough. Its red line is the debt: above {{ (rules.debtBrake * 100)|number_format(0) }}% of GDP it would veto any bill that cuts revenue, so the Diet tables none.</li>
-							<li><span class="font-bold text-on-surface">Removal.</span> The Diet can remove a councillor with {{ rules.supermajority }} of its {{ rules.seats }} seats, three quarters. It never has.</li>
+							<li><span class="font-bold text-on-surface">Removal.</span> The Diet can remove a councillor with {{ rules.supermajority }} of its {{ rules.seats }} seats, three quarters. It never has, and {{ rules.loyalists|join(', ') }} never would.</li>
 							<li><span class="font-bold text-on-surface">Independence.</span> No party sits on the Council, and no councillor sits in the Diet. What passes between them runs on gentlemen's agreements.</li>
 						</ul>
 					</div>
@@ -292,7 +369,7 @@
 		<section class="bg-surface-container-low rounded-lg border border-outline-variant/15 overflow-hidden" aria-labelledby="history-heading">
 			<div class="p-5 pb-3">
 				<h2 id="history-heading" class="text-sm font-bold text-on-surface">Elections</h2>
-				<p class="text-3xs text-on-surface-variant mt-0.5">Every vote on record, newest first, with the economy it was cast on.</p>
+				<p class="text-3xs text-on-surface-variant mt-0.5">Every vote on record, newest first, with the economy it was cast on and the government the talks produced.</p>
 			</div>
 			{% if history is empty %}
 				<p class="px-5 pb-5 text-xs text-on-surface-variant">No election has been held yet. The founding Diet sits until {{ election.next }}.</p>
@@ -325,12 +402,22 @@
 										</td>
 									{% endfor %}
 									<td class="px-3 py-2">
-										<span class="flex flex-wrap gap-x-2 gap-y-0.5">
-											{% for member in row.coalition %}
-												<span class="inline-flex items-center gap-1 text-on-surface"><span class="w-2 h-2 rounded-full" style="background-color: {{ member.color }}" aria-hidden="true"></span>{{ member.name }}</span>
-											{% endfor %}
-										</span>
-										{% if row.changed %}<span class="text-3xs font-bold uppercase tracking-wider text-primary">New government</span>{% endif %}
+										{% if not row.formed %}
+											<span class="text-3xs font-bold uppercase tracking-wider text-primary">Talks under way</span>
+										{% else %}
+											<span class="flex flex-wrap gap-x-2 gap-y-0.5">
+												{% for member in row.coalition %}
+													<span class="inline-flex items-center gap-1 text-on-surface"><span class="w-2 h-2 rounded-full" style="background-color: {{ member.color }}" aria-hidden="true"></span>{{ member.name }}</span>
+												{% endfor %}
+											</span>
+											{% if row.support is not empty %}
+												<span class="block text-3xs text-on-surface-variant">Supported by {% for member in row.support %}{{ member.name }}{{ not loop.last ? ', ' : '' }}{% endfor %}</span>
+											{% endif %}
+											<span class="block text-3xs font-mono tabular-nums text-on-surface-variant">
+												{%- if row.attempts == 0 %}A majority of its own{% else %}{{ row.formationDays|number_format(0) }} days, {{ row.attempts }} {{ row.attempts == 1 ? 'attempt' : 'attempts' }}{% endif -%}
+											</span>
+											{% if row.changed %}<span class="text-3xs font-bold uppercase tracking-wider text-primary">New government</span>{% endif %}
+										{% endif %}
 									</td>
 									<td class="px-3 py-2 text-right font-mono tabular-nums hidden md:table-cell {{ row.incumbentSwing >= 0 ? 'text-secondary' : 'text-error' }}">{{ (row.incumbentSwing >= 0 ? '+' : '') ~ (row.incumbentSwing * 100)|number_format(1) }}pp</td>
 									<td class="px-3 py-2 text-right font-mono tabular-nums text-on-surface-variant hidden md:table-cell">{{ (row.growthGap >= 0 ? '+' : '') ~ (row.growthGap * 100)|number_format(1) }} / {{ (row.inflationGap >= 0 ? '+' : '') ~ (row.inflationGap * 100)|number_format(1) }}</td>
@@ -361,8 +448,8 @@
 				},
 				{
 					name: 'Who gains',
-					text: 'What the governing parties lose, the opposition gains, each party in proportion to its own vote. Within the government, each party takes its share of the swing.',
-					source: 'Proportional swing'
+					text: 'What the governing parties lose, the opposition gains, each party in proportion to its own vote. A party that supports a minority cabinet from outside shares ' ~ (rules.supportAccountability * 100)|number_format(0) ~ '% of the government\'s fortunes: voters hold it to account, though less than the cabinet\'s own parties.',
+					source: 'Proportional swing; Thürk & Klüver (2024): support parties lose 2.0 points at the next election against 2.8 for cabinet parties, 304 elections in 31 democracies'
 				},
 				{
 					name: 'Short-term forces',
@@ -381,27 +468,57 @@
 				},
 				{
 					name: 'Party positions',
-					text: 'A party never moves on the question it was founded on. On the other it moves between elections by as much as real parties revise their manifestos.',
+					text: 'A party never moves on the question it was founded on. On the other two it moves between elections by as much as real parties revise their manifestos.',
 					source: 'Somer-Topcu (2009): 10 to 16 points on the 200-point left-right scale per election'
-				},
-				{
-					name: 'Forming a government',
-					text: 'The government is the coalition that commands a majority, needs every one of its members to, and spans the narrowest range of views. The Civic Front and the Vanguard govern together only when nothing narrower can.',
-					source: 'Riker (1962); de Swaan (1973); Martin & Stevenson (2001)'
 				}
 			] %}
 			{{ _self.rules_table(rules_list) }}
 		</section>
 
+		{# --- HOW GOVERNMENTS FORM --- #}
+		<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/15" aria-labelledby="formation-heading">
+			<h2 id="formation-heading" class="text-sm font-bold text-on-surface">How governments form</h2>
+			<p class="text-3xs text-on-surface-variant mt-0.5">No party ever has a red line written for it: who will govern with whom comes out of where the parties stand.</p>
+
+			{% set formation_list = [
+				{
+					name: 'The rounds',
+					text: 'A party with ' ~ rules.majority ~ ' seats of its own governs alone. Otherwise the largest party leads the talks: first it seeks a cabinet with a majority, then, if that fails, a minority cabinet that other parties will support from outside. The second-largest party then gets the same two rounds, and after that the lead passes back and forth between the two until a government forms.',
+					source: 'The formateur process; Baron & Ferejohn (1989); Diermeier & Merlo (2004)'
+				},
+				{
+					name: 'Which cabinet',
+					text: 'The party leading the talks weighs every cabinet it could lead as real ones have been chosen. Holding the Diet\'s largest party adds ' ~ rules.largestPartyUtility|number_format(2) ~ ' to its odds on the log scale, needing every member for the majority ' ~ rules.minimalWinningUtility|number_format(2) ~ ', being the outgoing cabinet ' ~ rules.statusQuoUtility|number_format(2) ~ '; each party in it costs ' ~ (-rules.partyUtility)|number_format(2) ~ ', lacking a majority ' ~ (-rules.minorityUtility)|number_format(2) ~ ', and each unit of distance between its two furthest members ' ~ (-rules.rangeUtility)|number_format(1) ~ '. A random draw on every cabinet stands for everything else that sways the talks.',
+					source: 'Martin & Stevenson (2010), Table 1: 256 formations in 17 West European democracies'
+				},
+				{
+					name: 'Talks that fail',
+					text: 'An attempt succeeds only if its best cabinet clears the bar of no deal at all, ' ~ rules.reservation|number_format(2) ~ ' on the same scale. What widens as the talks go on is what may be offered: from the second round a minority cabinet with support, which almost always clears it. An attempt lasts ' ~ rules.attemptDays|number_format(0) ~ ' days on average, drawn at random, and talks average ' ~ rules.formationMeanDays|number_format(0) ~ ' days.',
+					source: 'Fitted to Golder (2010): nearly a third of formations need more than one attempt; and Bäck, Hellström, Lindvall & Teorell (2023): 34 days on average, with a spread about as wide'
+				},
+				{
+					name: 'Support parties',
+					text: 'A minority cabinet\'s supporters are the parties outside it that give it a majority, each of them needed, spanning the narrowest range with it. The cabinet proposes the budget and each supporter accepts only a lever that is no further from its own policy than the one in force. A supporter can stop the cabinet moving policy away from it, but cannot pull policy its way.',
+					source: 'de Swaan (1973); Romer & Rosenthal (1978), the agenda setter and the veto player'
+				},
+				{
+					name: 'The caretaker',
+					text: 'Until the talks produce a government, the outgoing cabinet stays on and passes no budget, and the policy uncertainty that built into the vote stays at its peak.',
+					source: 'Caretaker conventions; Bernhard & Leblang (2006): returns fall and volatility rises through cabinet formations markets cannot call'
+				}
+			] %}
+			{{ _self.rules_table(formation_list) }}
+		</section>
+
 		{# --- HOW THE DIET LEGISLATES --- #}
 		<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/15" aria-labelledby="levers-heading">
 			<h2 id="levers-heading" class="text-sm font-bold text-on-surface">How the Diet legislates</h2>
-			<p class="text-3xs text-on-surface-variant mt-0.5">Each party at the end of an axis stands for a policy real parties have enacted; a government sits between them, where its members' seats put it.</p>
+			<p class="text-3xs text-on-surface-variant mt-0.5">Each party at the end of an axis stands for a policy real parties have enacted; a cabinet sits between them, where its members' seats put it.</p>
 
 			{% set levers_list = [
 				{
 					name: 'Corporate tax',
-					text: 'The Civic Front\'s manifesto rate is ' ~ (rules.manifestoTaxGap * 100)|number_format(0) ~ ' points above the Vanguard\'s, centred on ' ~ (rules.neutralTaxRate * 100)|number_format(0) ~ '%. A government legislates its place between them. The change is levied on corporate profits, ' ~ (rules.profitsToGdp * 100)|number_format(1) ~ '% of GDP, so a point on the rate is about a tenth of a point of GDP in revenue. Firms pay it on their earnings, and a cut lifts demand as corporate tax cuts have.',
+					text: 'The Civic Front\'s manifesto rate is ' ~ (rules.manifestoTaxGap * 100)|number_format(0) ~ ' points above the Vanguard\'s, centred on ' ~ (rules.neutralTaxRate * 100)|number_format(0) ~ '%. A cabinet legislates its place between them. The change is levied on corporate profits, ' ~ (rules.profitsToGdp * 100)|number_format(1) ~ '% of GDP, so a point on the rate is about a tenth of a point of GDP in revenue. Firms pay it on their earnings, and a cut lifts demand as corporate tax cuts have.',
 					source: 'US 2020 Democratic platform 28% vs the 2017 act\'s 21%; UK 2019 Labour 26% vs Conservatives 19%; Osterloh & Debus (2012); Mertens & Ravn (2013); BEA corporate profits 1985-2019'
 				},
 				{
@@ -411,7 +528,7 @@
 				},
 				{
 					name: 'Tariffs',
-					text: 'The Iron Harbor Coalition\'s platform raises the average tariff by ' ~ (rules.protectionistTariff * 100)|number_format(1) ~ ' points over the free port; an open government levies none. The duty passes into import prices in full, imports fall with their price, and trading partners answer with ' ~ (rules.retaliation * 100)|number_format(0) ~ '% of it on the District\'s civilian exports. Each point of tariff costs about ' ~ (rules.tariffOutputLoss)|number_format(2) ~ '% of output through productivity over the following years.',
+					text: 'The Iron Harbor Coalition\'s platform raises the average tariff by ' ~ (rules.protectionistTariff * 100)|number_format(1) ~ ' points over the free port; an open cabinet levies none. The duty passes into import prices in full, imports fall with their price, and trading partners answer with ' ~ (rules.retaliation * 100)|number_format(0) ~ '% of it on the District\'s civilian exports. Each point of tariff costs about ' ~ (rules.tariffOutputLoss)|number_format(2) ~ '% of output through productivity over the following years.',
 					source: 'Yale Budget Lab (2025): the US rise from 2.5% to 17.9%; Amiti, Redding & Weinstein (2019); Fajgelbaum, Goldberg, Kennedy & Khandelwal (2020); Furceri, Hannan, Ostry & Rose (2018)'
 				},
 				{
@@ -421,7 +538,7 @@
 				},
 				{
 					name: 'The Council\'s brake',
-					text: 'Above ' ~ (rules.debtBrake * 100)|number_format(0) ~ '% of GDP in debt, the Council would veto any bill that cuts revenue: a lower tax rate or a lower tariff. The Diet knows it and tables none, so the veto is never cast and the lever stays where it stands. A government holding three quarters of the Diet, enough to remove councillors, is not held.',
+					text: 'Above ' ~ (rules.debtBrake * 100)|number_format(0) ~ '% of GDP in debt, the Council would veto any bill that cuts revenue: a lower tax rate or a lower tariff. The Diet knows it and tables none, so the veto is never cast and the lever stays where it stands. A government whose cabinet and supporters hold three quarters of the Diet, enough to remove councillors, is not held; the Council\'s loyalists do not count toward it.',
 					source: 'Romer & Rosenthal (1978), the agenda setter and the veto player; Reinhart & Rogoff (2010), the 90% line'
 				}
 			] %}

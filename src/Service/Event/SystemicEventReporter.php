@@ -54,7 +54,7 @@ class SystemicEventReporter
             'swf_target_pct' => number_format($macro->sovereignFundTargetWeight * 100.0, 2),
             'swf_size_gdp_pct' => number_format($macro->sovereignFundToGdp * 100.0, 0),
             'swf_months' => number_format($macro->sovereignFundRebalanceMonthsLeft, 0),
-        ] + self::electionContext($macro) + self::budgetContext($macro);
+        ] + self::electionContext($macro) + self::formationContext($macro) + self::budgetContext($macro);
 
         $monthMove = $this->priceChangeFeed->changeForTicker((string) $benchmark->getTicker(), (float) $benchmark->getPrice());
 
@@ -85,8 +85,9 @@ class SystemicEventReporter
     }
 
     /**
-     * The vote's result for an election headline: the government it formed, the largest party, and the biggest mover.
-     * Empty before the first vote has moved anything.
+     * The vote's result for an election headline: the largest party, the biggest mover, and either the party that won a
+     * majority outright or the party that now leads the talks. The talks' outcome is never named here: it is settled
+     * on the day of the vote but not known until the cabinet takes office. Empty before the first vote has moved anything.
      *
      * @return array<string, string>
      */
@@ -96,23 +97,85 @@ class SystemicEventReporter
             return [];
         }
 
-        // Each name as it reads mid-sentence: "the Vanguard", "the Civic Front".
-        $names = array_map(static fn(string $name): string => 'the ' . (preg_replace('/^The /', '', $name) ?? $name), AerieDiet::PARTY_NAMES);
-        $members = AerieDiet::governingParties($macro->governingCoalition);
+        $names = self::midSentenceNames();
         $seats = array_map('intval', $macro->dietSeats);
         arsort($seats);
+        $largest = (string) array_key_first($seats);
         $swings = $macro->dietVoteSwings;
         uasort($swings, static fn(float $a, float $b): int => abs($b) <=> abs($a));
         $mover = (string) array_key_first($swings);
         $moverSwing = $swings[$mover] * 100.0;
 
-        return [
-            'coalition' => implode(' and ', array_map(static fn(string $party): string => $names[$party], $members)),
+        $context = [
             'diet_seats' => (string) AerieDiet::SEATS,
-            'coalition_seats' => (string) array_sum(array_map(static fn(string $party): int => $seats[$party] ?? 0, $members)),
-            'largest_party' => $names[(string) array_key_first($seats)],
+            'majority_seats' => (string) AerieDiet::MAJORITY_SEATS,
+            'largest_party' => $names[$largest],
+            'largest_seats' => (string) $seats[$largest],
             'mover' => $names[$mover],
             'mover_swing_pp' => ($moverSwing >= 0.0 ? '+' : '') . number_format($moverSwing, 1),
         ];
+        if ($seats[$largest] >= AerieDiet::MAJORITY_SEATS) {
+            $context['majority_party'] = $names[$largest];
+        }
+
+        return $context;
+    }
+
+    /**
+     * The government the talks produced, for the headline on the day it takes office: its cabinet, the parties that
+     * support it from outside, how long the talks took and over how many attempts, and who led the one that succeeded.
+     *
+     * @return array<string, string>
+     */
+    private static function formationContext(MacroStateDTO $macro): array
+    {
+        if ($macro->formationLog === [] || $macro->lastGovernmentFormedAt !== $macro->totalTime) {
+            return [];
+        }
+
+        $names = self::midSentenceNames();
+        $list = static fn(array $parties): string => self::listNames(array_map(static fn(string $party): string => $names[$party], $parties));
+        $cabinet = AerieDiet::governingParties($macro->governingCoalition);
+        $support = AerieDiet::governingParties($macro->supportParties);
+        $seatsOf = static fn(array $parties): int => (int) array_sum(array_map(static fn(string $party): float => $macro->dietSeats[$party] ?? 0.0, $parties));
+        $final = $macro->formationLog[array_key_last($macro->formationLog)];
+
+        return [
+            'cabinet' => $list($cabinet),
+            'cabinet_seats' => (string) $seatsOf($cabinet),
+            'support' => $list($support),
+            'supported_seats' => (string) ($seatsOf($cabinet) + $seatsOf($support)),
+            'minority' => $support === [] ? 'no' : 'yes',
+            'talk_days' => number_format($final['day'], 0),
+            'attempts' => (string) count($macro->formationLog),
+            'attempts_phrase' => count($macro->formationLog) === 1 ? 'at the first attempt' : 'after ' . count($macro->formationLog) . ' attempts',
+            'lead_party' => $names[$final['formateur']],
+            'diet_seats' => (string) AerieDiet::SEATS,
+        ];
+    }
+
+    /**
+     * Each party's name as it reads mid-sentence: "the Vanguard", "the Civic Front".
+     *
+     * @return array<string, string>
+     */
+    private static function midSentenceNames(): array
+    {
+        return array_map(static fn(string $name): string => 'the ' . (preg_replace('/^The /', '', $name) ?? $name), AerieDiet::PARTY_NAMES);
+    }
+
+    /**
+     * Names joined as prose: "a", "a and b", "a, b and c".
+     *
+     * @param list<string> $names
+     */
+    private static function listNames(array $names): string
+    {
+        if (count($names) < 2) {
+            return implode('', $names);
+        }
+        $last = array_pop($names);
+
+        return implode(', ', $names) . ' and ' . $last;
     }
 }

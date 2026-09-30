@@ -8,6 +8,7 @@ use App\Data\AerieDiet;
 use App\Service\Macro\Subsystem\AssetMarketSubsystem;
 use App\Service\Macro\Subsystem\CommodityLogisticsSubsystem;
 use App\Service\Macro\Subsystem\CreditFiscalSubsystem;
+use App\Service\Macro\Subsystem\CoalitionFormation;
 use App\Service\Macro\Subsystem\DistrictPoliticsSubsystem;
 use App\Service\Macro\Subsystem\SovereignFundSubsystem;
 use App\Service\Macro\Subsystem\LaborMarketSubsystem;
@@ -36,6 +37,7 @@ final class MacroConfigFingerprint
         CreditFiscalSubsystem::class,
         SovereignFundSubsystem::class,
         DistrictPoliticsSubsystem::class,
+        CoalitionFormation::class,
         AerieDiet::class,
     ];
 

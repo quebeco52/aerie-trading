@@ -45,8 +45,10 @@ class ShockEvent
     public const HOUSEHOLD_DELEVERAGING = 'household_deleveraging';
     /** A storm or other physical catastrophe large enough to make district news has struck. */
     public const NATURAL_CATASTROPHE = 'natural_catastrophe';
-    /** A scheduled district election has been held; the policy regime is settled for another term. */
+    /** A scheduled district election has been held; the talks for the next government begin, unless one party won a majority. */
     public const ELECTION_HELD = 'election_held';
+    /** A cabinet has taken office after the talks that followed a vote. */
+    public const GOVERNMENT_FORMED = 'government_formed';
     /** A budget round changed the government's levers; the headline says what the Council held back, if anything. */
     public const BUDGET_ENACTED = 'budget_enacted';
 
