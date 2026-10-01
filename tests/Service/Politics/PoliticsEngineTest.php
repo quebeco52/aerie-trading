@@ -1131,10 +1131,24 @@ class PoliticsEngineTest extends TestCase
 
         $this->assertSame($order, array_keys(Politics::REVENUE_LEVERS));
         $this->assertSame($order, array_keys(Politics::LEVER_FIELDS));
+        $this->assertSame($order, array_keys(Politics::LEVER_AXES));
         $this->assertSame($order, array_keys(Politics::standingLevers(new PoliticsStateDTO())));
         foreach (Politics::LEVER_FIELDS as $field) {
             $this->assertTrue(property_exists(PoliticsStateDTO::class, $field), "{$field} is kept on the state.");
             $this->assertTrue(property_exists(GovernmentPolicyDTO::class, $field), "{$field} is handed to the economy.");
+        }
+    }
+
+    /** Each lever moves with the question it is listed under and with no other, from either side of the centre. */
+    public function testEachLeverReadsOnlyItsOwnQuestion(): void
+    {
+        $centre = array_fill_keys(Diet::AXES, 0.0);
+        foreach (Diet::AXES as $axis) {
+            $towards = [Politics::platform([$axis => -0.4] + $centre), Politics::platform([$axis => 0.4] + $centre)];
+            foreach (Politics::LEVER_AXES as $lever => $own) {
+                $moved = $towards[0][$lever] !== $towards[1][$lever];
+                $this->assertSame($own === $axis, $moved, "{$lever} " . ($moved ? 'moves' : 'does not move') . " with {$axis}.");
+            }
         }
     }
 

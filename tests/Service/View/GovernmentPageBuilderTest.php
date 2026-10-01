@@ -79,10 +79,11 @@ class GovernmentPageBuilderTest extends TestCase
         $this->assertSame([true, false], array_column($page['history'], 'changed'));
         $this->assertSame('Year 9 Q1', $page['government']['formed']);
         $this->assertSame('Year 13 Q1', $page['election']['next']);
-        foreach ($page['compass']['parties'] as $party) {
-            $this->assertCount(2, $party['trail']);
-            foreach ($party['strips'] as $strip) {
-                $this->assertCount(2, $strip['trail']);
+        foreach ($page['compass']['layouts'] as $layout) {
+            foreach ($layout['rows'] as $row) {
+                foreach ($row['parties'] as $party) {
+                    $this->assertCount(2, $party['trail']);
+                }
             }
         }
     }
@@ -181,10 +182,14 @@ class GovernmentPageBuilderTest extends TestCase
         $this->assertSame(['Exchange Party', 'The Chartists'], array_column($page['government']['support'], 'name'));
         $this->assertCount(55, array_filter($page['hemicycle'], static fn(array $seat): bool => $seat['supporting']));
         $this->assertCount(85, array_filter($page['hemicycle'], static fn(array $seat): bool => $seat['governing']));
-        $this->assertSame([Diet::AXIS_COUNCIL, Diet::AXIS_ENVIRONMENT], array_column($page['compass']['strips'], 'axis'));
-        foreach ($page['compass']['parties'] as $party) {
-            foreach ($party['strips'] as $axis => $strip) {
-                $this->assertEqualsWithDelta($party[$axis] * 100.0, $strip['x'], 1e-9, 'Each strip places every party on its axis.');
+        $this->assertSame(['wide', 'narrow'], array_keys($page['compass']['layouts']));
+        foreach ($page['compass']['layouts'] as $layout) {
+            $this->assertSame(Diet::AXES, array_column($layout['rows'], 'axis'), 'One line per question, in the questions\' order.');
+            foreach ($layout['rows'] as $row) {
+                $this->assertSame(Diet::PARTIES, array_column($row['parties'], 'key'));
+                foreach ($row['parties'] as $party) {
+                    $this->assertEqualsWithDelta($party[$row['axis']] * $layout['halfWidth'], $party['x'], 0.005, 'Each line places every party on its question.');
+                }
             }
         }
     }
@@ -229,9 +234,9 @@ class GovernmentPageBuilderTest extends TestCase
     }
 
     /**
-     * With parties crowded together -- the Chartists, the Exchange Party and the Common Lot close on the plane, the
-     * Civic Front, the Vanguard and the Chartists close on the Council strip -- or all eight at their homes, no label
-     * lands on another or on an axis name, and none runs off the drawing.
+     * With parties crowded together -- six of them within half a unit on the environment, three on top of each other on
+     * the Council -- or all eight at their homes, no label lands on another, on an end word or another
+     * party's leader line, no leader crosses a label, and nothing runs off its line's drawing.
      *
      * @param array<string, float> $seats
      * @param array<string, array<string, float>> $positions
@@ -239,8 +244,28 @@ class GovernmentPageBuilderTest extends TestCase
     #[DataProvider('crowdedDiets')]
     public function testNoLabelCrowdsAnotherWhenThePartiesBunch(array $seats, array $positions): void
     {
-        $page = $this->builder()->build(new MacroStateDTO(), new PoliticsStateDTO(dietSeats: $seats, partyPositions: $positions));
-        $compass = $page['compass'];
+        $page = $this->builder()->build(new MacroStateDTO(), new PoliticsStateDTO(
+            dietSeats: $seats,
+            partyPositions: $positions,
+            governingCoalition: Diet::membership([Diet::CIVIC, Diet::TIDELINE]),
+            supportParties: Diet::membership([Diet::COMMON_LOT, Diet::CHARTISTS]),
+        ));
+        $leaders = $this->assertCompassIsClean($page['compass']);
+        if (isset($positions[Diet::TIDELINE])) {
+            $this->assertGreaterThan(0, $leaders, 'The bunched case needs labels moved aside, or it tests nothing about leaders.');
+        }
+    }
+
+    /**
+     * No label lands on another, on an end word or another party's leader line, none covers its own dot,
+     * every leader joins its dot to its label without lying flat, and nothing runs off
+     * its line's drawing, at every width.
+     *
+     * @param array<string, mixed> $compass
+     * @return int Leaders drawn.
+     */
+    private function assertCompassIsClean(array $compass): int
+    {
         $size = $compass['fontSize'];
         $box = static function (string $text, float $x, float $y, string $anchor) use ($size): array {
             $width = mb_strlen($text) * $size * GovernmentPageBuilder::COMPASS_CHARACTER_WIDTH;
@@ -249,40 +274,78 @@ class GovernmentPageBuilderTest extends TestCase
             return [$left, $y - (0.8 * $size), $left + $width, $y + (0.2 * $size)];
         };
         $apart = static fn(array $a, array $b): bool => $a[2] <= $b[0] || $b[2] <= $a[0] || $a[3] <= $b[1] || $b[3] <= $a[1];
-        [$left, $top, $width, $height] = $compass['viewBox'];
 
-        $plane = array_map(static fn(array $axis): array => $box($axis['text'], $axis['x'], $axis['y'], $axis['anchor']), $compass['axes']);
-        $sets = ['plane' => $plane];
-        foreach ($compass['strips'] as $strip) {
-            $sets[$strip['axis']] = array_map(static fn(array $end): array => $box($end['text'], $end['x'], $strip['y'] + $end['y'], $end['anchor']), $strip['ends']);
-        }
-        foreach ($compass['parties'] as $party) {
-            $this->assertSame(GovernmentPageBuilder::PARTY_LABELS[$party['key']], $party['label']);
-            $sets['plane'][] = $box($party['label'], $party['labelX'], $party['labelY'], $party['labelAnchor']);
-            foreach ($compass['strips'] as $strip) {
-                $place = $party['strips'][$strip['axis']];
-                $sets[$strip['axis']][] = $box($party['label'], $place['labelX'], $strip['y'] + $place['labelY'], 'middle');
-            }
-        }
-        foreach ($sets as $name => $boxes) {
-            foreach ($boxes as $i => $a) {
-                $this->assertGreaterThanOrEqual($left, $a[0], "A {$name} label runs off the left.");
-                $this->assertLessThanOrEqual($left + $width, $a[2], "A {$name} label runs off the right.");
-                foreach (array_slice($boxes, $i + 1, null, true) as $j => $b) {
-                    $this->assertTrue($apart($a, $b), "Two {$name} labels overlap ({$i} and {$j}).");
+        $leaders = 0;
+        foreach ($compass['layouts'] as $name => $layout) {
+            foreach ($layout['rows'] as $row) {
+                $where = "{$row['axis']} ({$name})";
+                [$left, $top, $width, $height] = $row['viewBox'];
+                $boxes = $layout['endsBeside'] ? array_map(static fn(array $end): array => $box($end['text'], $end['x'], $end['y'], $end['anchor']), $row['ends']) : [];
+                $lines = [];
+                foreach ($row['parties'] as $party) {
+                    $this->assertSame(GovernmentPageBuilder::PARTY_LABELS[$party['key']], $party['label']);
+                    $label = $box($party['label'], $party['labelX'], $party['labelY'], 'middle');
+                    $ring = $party['r'] + ($party['governing'] || $party['supporting'] ? $compass['ringGap'] : 0.0);
+                    $this->assertTrue($apart($label, [$party['x'] - $ring, -$ring, $party['x'] + $ring, $ring]), "{$party['label']}'s label covers its dot or ring on {$where}.");
+                    $boxes[$party['key']] = $label;
+                    if ($party['leader'] !== null) {
+                        ++$leaders;
+                        [$x1, $y1, $x2, $y2] = $party['leader'];
+                        $lines[$party['key']] = [min($x1, $x2), min($y1, $y2), max($x1, $x2), max($y1, $y2)];
+                        $this->assertSame($party['labelX'], $x2, 'A leader ends under its label.');
+                        $this->assertEqualsWithDelta($party['labelY'] < 0.0 ? $label[3] : $label[1], $y2, 1.0, 'A leader reaches its label.');
+                        $this->assertGreaterThan($party['r'], hypot($x1 - $party['x'], $y1), 'A leader starts outside its dot.');
+                        $this->assertGreaterThanOrEqual(0.4 - 1e-6, abs($y2 - $y1) / max(1e-9, abs($x2 - $x1)), 'A leader lies too flat.');
+                    }
+                }
+                $keys = array_keys($boxes);
+                foreach ($keys as $n => $i) {
+                    $a = $boxes[$i];
+                    $this->assertGreaterThanOrEqual($left, $a[0], "A label runs off the left of {$where}.");
+                    $this->assertLessThanOrEqual($left + $width, $a[2], "A label runs off the right of {$where}.");
+                    $this->assertGreaterThanOrEqual($top, $a[1], "A label runs off the top of {$where}.");
+                    $this->assertLessThanOrEqual($top + $height, $a[3], "A label runs off the bottom of {$where}.");
+                    foreach (array_slice($keys, $n + 1) as $j) {
+                        $this->assertTrue($apart($a, $boxes[$j]), "Two labels on {$where} overlap ({$i} and {$j}).");
+                    }
+                    foreach ($lines as $owner => $line) {
+                        if ($owner !== $i) {
+                            $this->assertTrue($apart($a, $line), "{$owner}'s leader on {$where} crosses the label {$i}.");
+                        }
+                    }
                 }
             }
         }
-        foreach ($sets['plane'] as $a) {
-            $this->assertGreaterThanOrEqual($top, $a[1]);
-            $this->assertLessThanOrEqual($compass['strips'][0]['y'] - 16.0, $a[3], 'A plane label runs into the strip.');
-        }
-        $stripBoxes = array_merge(...array_values(array_diff_key($sets, ['plane' => true])));
-        foreach ($stripBoxes as $i => $a) {
-            $this->assertLessThanOrEqual($top + $height, $a[3], 'A strip label runs off the bottom.');
-            foreach (array_slice($stripBoxes, $i + 1, null, true) as $b) {
-                $this->assertTrue($apart($a, $b), 'Labels on two strips overlap.');
+
+        return $leaders;
+    }
+
+    /** Diets drawn at random -- seats, positions, cabinet and supporters -- lay out as cleanly as the hand-picked ones. */
+    public function testRandomDietsLayOutCleanly(): void
+    {
+        mt_srand(20261001);
+        $uniform = static fn(): float => (mt_rand() / mt_getrandmax() * 2.0) - 1.0;
+        for ($draw = 0; $draw < 500; ++$draw) {
+            $weights = array_map(static fn(): float => -log(max(1e-9, mt_rand() / mt_getrandmax())), Diet::PARTIES);
+            $seats = array_combine(Diet::PARTIES, array_map(static fn(float $w): float => round(Diet::SEATS * $w / array_sum($weights)), $weights));
+            $positions = array_fill_keys(Diet::PARTIES, []);
+            foreach (Diet::PARTIES as $party) {
+                foreach (Diet::AXES as $axis) {
+                    $positions[$party][$axis] = mt_rand(0, 3) === 0 ? $uniform() * 0.15 : $uniform();
+                }
             }
+            $shuffled = Diet::PARTIES;
+            shuffle($shuffled);
+            $cabinet = array_slice($shuffled, 0, mt_rand(1, 4));
+            $support = array_slice($shuffled, count($cabinet), mt_rand(0, 3));
+
+            $page = $this->builder()->build(new MacroStateDTO(), new PoliticsStateDTO(
+                dietSeats: $seats,
+                partyPositions: $positions,
+                governingCoalition: Diet::membership($cabinet),
+                supportParties: Diet::membership($support),
+            ));
+            $this->assertCompassIsClean($page['compass']);
         }
     }
 
@@ -291,33 +354,39 @@ class GovernmentPageBuilderTest extends TestCase
     {
         return [
             'six parties bunched' => [
-                [Diet::CIVIC => 83.0, Diet::VANGUARD => 84.0, Diet::IRON_HARBOR => 48.0, Diet::EXCHANGE => 50.0, Diet::CHARTISTS => 21.0, Diet::COMMON_LOT => 14.0],
+                [Diet::CIVIC => 75.0, Diet::VANGUARD => 70.0, Diet::IRON_HARBOR => 38.0, Diet::EXCHANGE => 40.0, Diet::CHARTISTS => 21.0, Diet::COMMON_LOT => 14.0, Diet::TIDELINE => 24.0, Diet::NEW_HORIZON => 18.0],
                 [
-                    Diet::CIVIC => [Diet::AXIS_STATE => 0.6, Diet::AXIS_OPENNESS => -0.04, Diet::AXIS_COUNCIL => 0.74],
-                    Diet::VANGUARD => [Diet::AXIS_STATE => -0.6, Diet::AXIS_OPENNESS => -0.93, Diet::AXIS_COUNCIL => 0.55],
-                    Diet::IRON_HARBOR => [Diet::AXIS_STATE => -0.12, Diet::AXIS_OPENNESS => -0.8, Diet::AXIS_COUNCIL => -0.33],
-                    Diet::EXCHANGE => [Diet::AXIS_STATE => -0.12, Diet::AXIS_OPENNESS => 0.8, Diet::AXIS_COUNCIL => -0.04],
-                    Diet::CHARTISTS => [Diet::AXIS_STATE => -0.17, Diet::AXIS_OPENNESS => 0.76, Diet::AXIS_COUNCIL => 0.8],
-                    Diet::COMMON_LOT => [Diet::AXIS_STATE => -0.17, Diet::AXIS_OPENNESS => 0.46, Diet::AXIS_COUNCIL => -0.8],
+                    Diet::CIVIC => [Diet::AXIS_STATE => 0.6, Diet::AXIS_OPENNESS => -0.04, Diet::AXIS_COUNCIL => 0.74, Diet::AXIS_ENVIRONMENT => 0.30],
+                    Diet::VANGUARD => [Diet::AXIS_STATE => -0.6, Diet::AXIS_OPENNESS => -0.93, Diet::AXIS_COUNCIL => 0.74, Diet::AXIS_ENVIRONMENT => 0.05],
+                    Diet::IRON_HARBOR => [Diet::AXIS_STATE => -0.12, Diet::AXIS_OPENNESS => -0.8, Diet::AXIS_COUNCIL => -0.33, Diet::AXIS_ENVIRONMENT => 0.12],
+                    Diet::EXCHANGE => [Diet::AXIS_STATE => -0.12, Diet::AXIS_OPENNESS => 0.8, Diet::AXIS_COUNCIL => 0.74, Diet::AXIS_ENVIRONMENT => 0.20],
+                    Diet::CHARTISTS => [Diet::AXIS_STATE => -0.17, Diet::AXIS_OPENNESS => 0.76, Diet::AXIS_COUNCIL => 0.8, Diet::AXIS_ENVIRONMENT => 0.0],
+                    Diet::COMMON_LOT => [Diet::AXIS_STATE => -0.17, Diet::AXIS_OPENNESS => 0.46, Diet::AXIS_COUNCIL => -0.8, Diet::AXIS_ENVIRONMENT => 0.25],
+                    Diet::TIDELINE => [Diet::AXIS_STATE => -0.1, Diet::AXIS_OPENNESS => 0.0, Diet::AXIS_COUNCIL => 0.0, Diet::AXIS_ENVIRONMENT => 0.8],
+                    Diet::NEW_HORIZON => [Diet::AXIS_STATE => -0.12, Diet::AXIS_OPENNESS => 0.7, Diet::AXIS_COUNCIL => 0.0, Diet::AXIS_ENVIRONMENT => 0.15],
                 ],
             ],
             'the founding Diet' => [Diet::SEED_SEATS, Diet::HOME_POSITIONS],
+            'everyone at the centre' => [Diet::SEED_SEATS, array_fill_keys(Diet::PARTIES, array_fill_keys(Diet::AXES, 0.0))],
         ];
     }
 
-    /** A big party at the top of the plane has its label moved off the top edge, beneath its dot, rather than off the drawing. */
+    /** A party at the end of a line has its label kept inside the drawing, in the margin past the line's end. */
     public function testALabelAtTheEdgeStaysInsideTheDrawing(): void
     {
         $positions = Diet::HOME_POSITIONS;
-        $positions[Diet::EXCHANGE][Diet::AXIS_STATE] = 1.0;
-        $page = $this->builder()->build(new MacroStateDTO(), new PoliticsStateDTO(
-            dietSeats: [Diet::CIVIC => 60.0, Diet::VANGUARD => 60.0, Diet::IRON_HARBOR => 20.0, Diet::EXCHANGE => 130.0, Diet::CHARTISTS => 20.0, Diet::COMMON_LOT => 10.0],
-            partyPositions: $positions,
-        ));
-        $exchange = array_values(array_filter($page['compass']['parties'], static fn(array $party): bool => $party['key'] === Diet::EXCHANGE))[0];
+        $positions[Diet::EXCHANGE][Diet::AXIS_STATE] = -1.0;
+        $page = $this->builder()->build(new MacroStateDTO(), new PoliticsStateDTO(partyPositions: $positions));
+        foreach ($page['compass']['layouts'] as $name => $layout) {
+            $row = array_column($layout['rows'], null, 'axis')[Diet::AXIS_STATE];
+            $exchange = array_column($row['parties'], null, 'key')[Diet::EXCHANGE];
+            $halfLabel = mb_strlen($exchange['label']) * $page['compass']['fontSize'] * GovernmentPageBuilder::COMPASS_CHARACTER_WIDTH / 2.0;
 
-        $this->assertGreaterThan($exchange['y'], $exchange['labelY'], 'Above the dot the label would run off the top.');
-        $this->assertGreaterThanOrEqual($page['compass']['viewBox'][1], $exchange['labelY'] - (0.8 * $page['compass']['fontSize']));
+            $this->assertGreaterThanOrEqual($row['viewBox'][0], $exchange['labelX'] - $halfLabel);
+            if ($name === 'wide') {
+                $this->assertSame(-$layout['halfWidth'], $exchange['labelX'], 'With room to spare the label stays centred over its dot.');
+            }
+        }
     }
 
     public function testSimulationDatesCountFromTheFounding(): void
@@ -328,53 +397,64 @@ class GovernmentPageBuilderTest extends TestCase
     }
 
     /**
-     * @param list<string> $coalition
-     * @param list<string> $outgoing
+     * On every line a coalition's parties and its supporters are marked each on its own, so no party between them looks
+     * part of it, with a mark where the coalition governs from (its parties weighted by seats) reaching past every
+     * member's ring; a screen reader hears who is in it and where it stands.
      */
-    /**
-     * The cabinet is a shaded area over its parties, a ring where it governs from (its parties weighted by seats), solid
-     * lines from there to its parties and dotted ones to its supporters; a party inside the others adds no corner.
-     */
-    public function testTheCabinetIsShadedOverItsPartiesAndLinkedToItsSupporters(): void
+    public function testACoalitionIsMarkedPartyByPartyWithWhereItGovernsFrom(): void
     {
-        $positions = Diet::HOME_POSITIONS;
-        $positions[Diet::CHARTISTS] = [Diet::AXIS_STATE => 0.0, Diet::AXIS_OPENNESS => 0.0, Diet::AXIS_COUNCIL => 0.8];
-        $cabinet = [Diet::CIVIC, Diet::VANGUARD, Diet::IRON_HARBOR, Diet::EXCHANGE, Diet::CHARTISTS];
+        $cabinet = [Diet::CIVIC, Diet::IRON_HARBOR, Diet::TIDELINE];
         $page = $this->builder()->build(new MacroStateDTO(), new PoliticsStateDTO(
-            partyPositions: $positions,
             governingCoalition: Diet::membership($cabinet),
-            supportParties: Diet::membership([Diet::NEW_HORIZON]),
+            supportParties: Diet::membership([Diet::COMMON_LOT]),
         ));
-        $cabinetShape = $page['compass']['cabinet'];
-        $dots = array_column($page['compass']['parties'], null, 'key');
-        $at = static fn(string $party): array => [$dots[$party]['x'], $dots[$party]['y']];
+        $compass = $page['compass'];
 
-        $this->assertEqualsCanonicalizing([$at(Diet::CIVIC), $at(Diet::VANGUARD), $at(Diet::IRON_HARBOR), $at(Diet::EXCHANGE)], $cabinetShape['halo'], 'The Chartists sit inside the others and add no corner.');
-        $this->assertTrue($cabinetShape['ring']);
-        $this->assertEqualsWithDelta($page['government']['openness'] * 100.0, $cabinetShape['hub']['x'], 0.01);
-        $this->assertEqualsWithDelta(-$page['government']['state'] * 100.0, $cabinetShape['hub']['y'], 0.01);
-        $this->assertCount(count($cabinet), array_filter($cabinetShape['spokes'], static fn(array $spoke): bool => !$spoke['supporter']));
-        $dotted = array_values(array_filter($cabinetShape['spokes'], static fn(array $spoke): bool => $spoke['supporter']));
-        $this->assertCount(1, $dotted);
-        $this->assertSame($at(Diet::NEW_HORIZON), [$dotted[0]['x2'], $dotted[0]['y2']]);
-        $this->assertArrayNotHasKey('councilX', $cabinetShape, 'The cabinet is not drawn on the Council strip.');
+        $this->assertTrue($compass['coalitionMark']);
+        foreach ($compass['layouts'] as $layout) {
+            foreach ($layout['rows'] as $row) {
+                $dots = array_column($row['parties'], null, 'key');
+                $this->assertEqualsCanonicalizing($cabinet, array_keys(array_filter($dots, static fn(array $dot): bool => $dot['governing'])));
+                $this->assertSame([Diet::COMMON_LOT], array_keys(array_filter($dots, static fn(array $dot): bool => $dot['supporting'])));
+                $this->assertArrayNotHasKey('cabinet', $row, 'No shape spans the cabinet, which would take in the parties between its members.');
+                $this->assertEqualsWithDelta($page['government'][$row['axis']] * $layout['halfWidth'], $row['hub'], 0.01);
+                $largest = max(array_map(static fn(string $party): float => $dots[$party]['r'], $cabinet));
+                $this->assertGreaterThan($largest + $compass['ringGap'], $compass['hubReach'], 'The mark shows past the ring of any member sitting on it.');
+                $this->assertGreaterThanOrEqual($compass['hubReach'], -$row['viewBox'][1], 'The mark fits the drawing.');
+                $this->assertStringEndsWith('; the cabinet at ' . sprintf('%+.2f', $page['government'][$row['axis']]), $row['summary'], 'A screen reader hears where the cabinet stands.');
+                $this->assertStringContainsString('Civic Front (in the cabinet) at', $row['summary']);
+                $this->assertStringContainsString('The Common Lot (supporting it) at', $row['summary']);
+            }
+        }
     }
 
-    /** A party governing alone is its own cabinet: the shade is round it, no ring, and only its supporters are linked to it. */
+    /** A party governing alone is its own cabinet: it is ringed, and there is no mark of where a coalition governs from. */
     public function testAPartyGoverningAloneIsItsOwnCabinet(): void
     {
         $page = $this->builder()->build(new MacroStateDTO(), new PoliticsStateDTO());
-        $cabinetShape = $page['compass']['cabinet'];
-        $vanguard = array_column($page['compass']['parties'], null, 'key')[Diet::VANGUARD];
+        $compass = $page['compass'];
 
-        $this->assertSame([[$vanguard['x'], $vanguard['y']]], $cabinetShape['halo']);
-        $this->assertGreaterThan($vanguard['r'], $cabinetShape['pad']);
-        $this->assertFalse($cabinetShape['ring']);
-        $this->assertCount(3, $cabinetShape['spokes'], 'The founding Vanguard cabinet has three supporters.');
-        foreach ($cabinetShape['spokes'] as $spoke) {
-            $this->assertTrue($spoke['supporter']);
-            $this->assertSame([$vanguard['x'], $vanguard['y']], [$spoke['x1'], $spoke['y1']]);
+        $this->assertFalse($compass['coalitionMark']);
+        foreach ($compass['layouts'] as $layout) {
+            foreach ($layout['rows'] as $row) {
+                $this->assertSame([Diet::VANGUARD], array_keys(array_filter(array_column($row['parties'], null, 'key'), static fn(array $dot): bool => $dot['governing'])));
+                $this->assertNull($row['hub']);
+                $this->assertStringNotContainsString('the cabinet at', $row['summary']);
+                $this->assertCount(3, array_filter($row['parties'], static fn(array $dot): bool => $dot['supporting']), 'The founding Vanguard cabinet has three supporters.');
+            }
         }
+    }
+
+    /** Each line names the laws its question sets, and every law is named on exactly one line. */
+    public function testEachQuestionNamesTheLawsItSets(): void
+    {
+        $rows = array_column($this->builder()->build(new MacroStateDTO(), new PoliticsStateDTO())['compass']['layouts']['wide']['rows'], 'laws', 'axis');
+
+        $this->assertSame(['corporate tax', 'stamp duty', 'bank levy'], $rows[Diet::AXIS_STATE]);
+        $this->assertSame(['tariffs', 'immigration'], $rows[Diet::AXIS_OPENNESS]);
+        $this->assertSame(['merger review'], $rows[Diet::AXIS_COUNCIL]);
+        $this->assertSame(['green belts', 'carbon price', 'extraction rules'], $rows[Diet::AXIS_ENVIRONMENT]);
+        $this->assertCount(count(PoliticsEngine::LEVER_FIELDS), array_merge(...array_values($rows)));
     }
 
     /**

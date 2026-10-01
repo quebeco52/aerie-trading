@@ -137,6 +137,18 @@ class PoliticsEngine
         'stampDutyRate' => 'stampDutyRate',
         'bankLevyRate' => 'bankLevyRate',
     ];
+    /** The question each lever's platform reads, in the same order. */
+    public const LEVER_AXES = [
+        'corporateTax' => AerieDiet::AXIS_STATE,
+        'tariff' => AerieDiet::AXIS_OPENNESS,
+        'laborGrowth' => AerieDiet::AXIS_OPENNESS,
+        'mergerReviewLeniency' => AerieDiet::AXIS_COUNCIL,
+        'greenBeltStringency' => AerieDiet::AXIS_ENVIRONMENT,
+        'carbonPrice' => AerieDiet::AXIS_ENVIRONMENT,
+        'extractionStringency' => AerieDiet::AXIS_ENVIRONMENT,
+        'stampDutyRate' => AerieDiet::AXIS_STATE,
+        'bankLevyRate' => AerieDiet::AXIS_STATE,
+    ];
 
     // --- Platforms: Corporate Tax (Osterloh & Debus 2012) ---
     /** Gap between the corporate rates the big-state and small-state manifestos set, the parties at the ends of the size-of-state axis: 7 points (US: the 2020 Democratic platform's 28% against the 21% of the 2017 Republican act; UK 2019: Labour's 26% against the Conservatives' 19%). Enacted rates follow manifesto ideology (Osterloh & Debus 2012, European panel). */

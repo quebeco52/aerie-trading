@@ -79,7 +79,7 @@ final class AerieDiet
         self::VANGUARD => [self::AXIS_STATE => -0.6, self::AXIS_OPENNESS => 0.0, self::AXIS_COUNCIL => 0.3, self::AXIS_ENVIRONMENT => -0.48],
         self::IRON_HARBOR => [self::AXIS_STATE => 0.1, self::AXIS_OPENNESS => -0.8, self::AXIS_COUNCIL => -0.4, self::AXIS_ENVIRONMENT => -0.23],
         self::EXCHANGE => [self::AXIS_STATE => 0.0, self::AXIS_OPENNESS => 0.8, self::AXIS_COUNCIL => 0.4, self::AXIS_ENVIRONMENT => 0.21],
-        self::CHARTISTS => [self::AXIS_STATE => 0.0, self::AXIS_OPENNESS => 0.6, self::AXIS_COUNCIL => 0.8, self::AXIS_ENVIRONMENT => 0.11],
+        self::CHARTISTS => [self::AXIS_STATE => -0.3, self::AXIS_OPENNESS => 0.6, self::AXIS_COUNCIL => 0.8, self::AXIS_ENVIRONMENT => 0.11],
         self::COMMON_LOT => [self::AXIS_STATE => 0.3, self::AXIS_OPENNESS => -0.5, self::AXIS_COUNCIL => -0.8, self::AXIS_ENVIRONMENT => 0.04],
         self::TIDELINE => [self::AXIS_STATE => 0.4, self::AXIS_OPENNESS => -0.2, self::AXIS_COUNCIL => -0.3, self::AXIS_ENVIRONMENT => 0.8],
         self::NEW_HORIZON => [self::AXIS_STATE => -0.5, self::AXIS_OPENNESS => 0.7, self::AXIS_COUNCIL => 0.3, self::AXIS_ENVIRONMENT => -0.17],

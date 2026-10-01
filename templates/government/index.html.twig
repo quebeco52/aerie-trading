@@ -159,97 +159,33 @@
 			<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20" aria-labelledby="compass-heading">
 				<h2 id="compass-heading" class="text-sm font-semibold text-on-surface">Where the parties stand</h2>
 				<p class="text-2xs text-on-surface-variant mt-0.5">
-					Each party is anchored on the question it was founded on and drifts on the others between elections. Select a party for its profile.
+					Each party is anchored on the question it was founded on and drifts on the others between elections. Each question sets the laws named beside it. Select a party for its profile.
 				</p>
 
-				{% set w = compass.halfWidth %}
-				{% set f = compass.fontSize %}
-				{% set cab = compass.cabinet %}
-				<svg viewBox="{{ compass.viewBox|join(' ') }}" class="w-full mt-4 max-h-[30rem]" role="img" aria-label="Party positions: openness across and size of state up, and beneath them the Council question, populist on the left and technocratic on the right, and the environment question, growth first on the left and the environment first on the right">
-					<rect x="{{ -w }}" y="{{ -w }}" width="{{ 2 * w }}" height="{{ 2 * w }}" rx="2" class="fill-surface-container-lowest stroke-outline-variant" fill-opacity="0.5" stroke-opacity="0.5" stroke-width="0.6"></rect>
-					{% for g in [-0.5, 0.5] %}
-						<line x1="{{ -w }}" y1="{{ g * w }}" x2="{{ w }}" y2="{{ g * w }}" class="stroke-outline-variant" stroke-opacity="0.35" stroke-width="0.4" stroke-dasharray="1 2"></line>
-						<line x1="{{ g * w }}" y1="{{ -w }}" x2="{{ g * w }}" y2="{{ w }}" class="stroke-outline-variant" stroke-opacity="0.35" stroke-width="0.4" stroke-dasharray="1 2"></line>
+				{# Pointing at a party anywhere fades the others on every question, so its whole profile reads at once. #}
+				<style>
+					#compass-rows [data-party] { transition: opacity 120ms; }
+					{% for party in parties %}
+						#compass-rows:has([data-party="{{ party.key }}"]:is(:hover, :focus-visible)) [data-party]:not([data-party="{{ party.key }}"]) { opacity: 0.2; }
 					{% endfor %}
-					<line x1="{{ -w }}" y1="0" x2="{{ w }}" y2="0" class="stroke-outline-variant" stroke-opacity="0.8" stroke-width="0.6"></line>
-					<line x1="0" y1="{{ -w }}" x2="0" y2="{{ w }}" class="stroke-outline-variant" stroke-opacity="0.8" stroke-width="0.6"></line>
-					{% for axis in compass.axes %}
-						<text x="{{ axis.x }}" y="{{ axis.y }}" text-anchor="{{ axis.anchor }}" font-size="{{ f }}" class="fill-on-surface-variant">{{ axis.text }}</text>
+				</style>
+				<div id="compass-rows" class="mt-4 space-y-4">
+					{% for k, row in compass.layouts.wide.rows %}
+						<div>
+							<h3 class="text-xs text-on-surface"><span class="font-semibold">{{ row.name }}</span><span class="text-on-surface-variant"> · {{ row.laws|join(', ') }}</span></h3>
+							<div class="hidden sm:block">{{ _self.compass_row(row, compass, compass.layouts.wide) }}</div>
+							<div class="sm:hidden">{{ _self.compass_row(compass.layouts.narrow.rows[k], compass, compass.layouts.narrow) }}</div>
+						</div>
 					{% endfor %}
-
-					{# The cabinet: a shaded area over its parties. #}
-					{% if cab.halo is not empty %}
-						<g opacity="0.14" class="fill-primary stroke-primary">
-							{% if cab.halo|length == 1 %}
-								<circle cx="{{ cab.halo[0][0] }}" cy="{{ cab.halo[0][1] }}" r="{{ cab.pad }}" stroke="none"></circle>
-							{% else %}
-								<polygon points="{% for p in cab.halo %}{{ p[0] }},{{ p[1] }} {% endfor %}" stroke-width="{{ 2 * cab.pad }}" stroke-linejoin="round" stroke-linecap="round"></polygon>
-							{% endif %}
-						</g>
-					{% endif %}
-
-					{% for party in compass.parties %}
-						{% for p in party.trail %}
-							<circle cx="{{ p.x }}" cy="{{ p.y }}" r="1.3" fill="{{ party.color }}" fill-opacity="{{ p.opacity }}"></circle>
-						{% endfor %}
-					{% endfor %}
-
-					{% for spoke in cab.spokes %}
-						<line x1="{{ spoke.x1 }}" y1="{{ spoke.y1 }}" x2="{{ spoke.x2 }}" y2="{{ spoke.y2 }}" class="stroke-primary" stroke-linecap="round"
-							{%- if spoke.supporter %} stroke-width="1" stroke-dasharray="0.1 2.6" stroke-opacity="0.75"{% else %} stroke-width="0.8" stroke-opacity="0.45"{% endif %}></line>
-					{% endfor %}
-
-					{% for party in compass.parties %}
-						<a href="{{ path('app_government_party', {slug: party.slug}) }}" class="hover:opacity-80">
-							<title>{{ party.name }}: {{ party.seats }} seats</title>
-							<circle cx="{{ party.x }}" cy="{{ party.y }}" r="{{ party.r }}" fill="{{ party.color }}" fill-opacity="{{ party.governing ? 1 : (party.supporting ? 0.85 : 0.65) }}" class="stroke-surface-container-low" stroke-width="1"></circle>
-						</a>
-					{% endfor %}
-					{% if cab.ring %}
-						<circle cx="{{ cab.hub.x }}" cy="{{ cab.hub.y }}" r="{{ cab.hubRadius }}" class="fill-surface-container-low stroke-primary" stroke-width="1.2"></circle>
-						<circle cx="{{ cab.hub.x }}" cy="{{ cab.hub.y }}" r="1.2" class="fill-primary"></circle>
-					{% endif %}
-					{% for party in compass.parties %}
-						<a href="{{ path('app_government_party', {slug: party.slug}) }}" class="hover:underline">
-							<text x="{{ party.labelX }}" y="{{ party.labelY }}" text-anchor="{{ party.labelAnchor }}" font-size="{{ f }}" font-weight="{{ party.governing ? 'bold' : '600' }}" class="{{ party.governing or party.supporting ? 'fill-on-surface' : 'fill-on-surface-variant' }}">{{ party.label }}</text>
-						</a>
-					{% endfor %}
-
-					{% for strip in compass.strips %}
-						<g transform="translate(0 {{ strip.y }})">
-							<line x1="{{ -w }}" y1="0" x2="{{ w }}" y2="0" class="stroke-outline-variant" stroke-opacity="0.8" stroke-width="0.6"></line>
-							<line x1="0" y1="-4" x2="0" y2="4" class="stroke-outline-variant" stroke-opacity="0.8" stroke-width="0.6"></line>
-							{% for axis in strip.ends %}
-								<text x="{{ axis.x }}" y="{{ axis.y }}" text-anchor="{{ axis.anchor }}" font-size="{{ f }}" class="fill-on-surface-variant">{{ axis.text }}</text>
-							{% endfor %}
-							{% for party in compass.parties %}
-								{% for p in party.strips[strip.axis].trail %}
-									<circle cx="{{ p.x }}" cy="0" r="1.2" fill="{{ party.color }}" fill-opacity="{{ p.opacity }}"></circle>
-								{% endfor %}
-							{% endfor %}
-							{% for party in compass.parties %}
-								{% set place = party.strips[strip.axis] %}
-								<a href="{{ path('app_government_party', {slug: party.slug}) }}" class="hover:opacity-80">
-									<title>{{ party.name }}</title>
-									<circle cx="{{ place.x }}" cy="0" r="{{ place.r }}" fill="{{ party.color }}" fill-opacity="{{ party.governing ? 1 : (party.supporting ? 0.85 : 0.65) }}" class="stroke-surface-container-low" stroke-width="1"></circle>
-								</a>
-							{% endfor %}
-							{% for party in compass.parties %}
-								{% set place = party.strips[strip.axis] %}
-								<text x="{{ place.labelX }}" y="{{ place.labelY }}" text-anchor="middle" font-size="{{ f }}" font-weight="600" class="{{ party.governing or party.supporting ? 'fill-on-surface' : 'fill-on-surface-variant' }}">{{ party.label }}</text>
-							{% endfor %}
-						</g>
-					{% endfor %}
-				</svg>
+				</div>
 
 				<ul class="mt-3 flex flex-wrap gap-x-5 gap-y-1.5 text-2xs text-on-surface-variant" aria-label="Key">
-					<li class="inline-flex items-center gap-1.5"><span class="inline-block w-4 h-2.5 rounded-full bg-primary/20" aria-hidden="true"></span>The cabinet</li>
-					{% if cab.ring %}
-						<li class="inline-flex items-center gap-1.5"><span class="inline-flex w-2.5 h-2.5 rounded-full border border-primary items-center justify-center" aria-hidden="true"><span class="w-1 h-1 rounded-full bg-primary"></span></span>Where it governs from, its parties weighted by seats</li>
+					<li class="inline-flex items-center gap-1.5"><span class="inline-block w-2.5 h-2.5 rounded-full border border-primary" aria-hidden="true"></span>In the cabinet</li>
+					{% if compass.coalitionMark %}
+						<li class="inline-flex items-center gap-1.5"><span class="inline-block w-0.5 h-3 rounded-full bg-primary" aria-hidden="true"></span>Where the coalition governs from, its parties weighted by seats</li>
 					{% endif %}
-					<li class="inline-flex items-center gap-1.5"><span class="inline-block w-4 border-t-2 border-dotted border-primary" aria-hidden="true"></span>Supports it from outside</li>
+					<li class="inline-flex items-center gap-1.5"><span class="inline-block w-2.5 h-2.5 rounded-full border border-dotted border-primary" aria-hidden="true"></span>Supports the cabinet from outside</li>
 					<li class="inline-flex items-center gap-1.5"><span class="inline-flex gap-0.5" aria-hidden="true"><span class="w-1 h-1 rounded-full bg-on-surface-variant/20"></span><span class="w-1 h-1 rounded-full bg-on-surface-variant/50"></span></span>Past positions</li>
-					<li>The strips beneath: how far to trust the Council's technocrats, and whether the environment comes before growth</li>
 				</ul>
 
 				<details class="mt-4 group">
@@ -549,3 +485,52 @@
 
 {% macro lever_value(lever, value) %}{% set unit = lever.unit ?? '' %}{{ unit == 'hhi' ? (value * 10000)|number_format(0) ~ ' HHI' : (unit == 'usd_t' ? '$' ~ value|number_format(2) ~ '/t' : (value * 100)|number_format(2) ~ '%') }}{% endmacro %}
 
+{# One question's line at one width. #}
+{% macro compass_row(row, compass, layout) %}
+	{% set f = compass.fontSize %}
+	{% set w = layout.halfWidth %}
+	<svg viewBox="{{ row.viewBox|join(' ') }}" class="w-full mt-1" role="img" aria-label="{{ row.summary }}">
+		{% if row.hub is not null %}
+			{# Behind the dots, so it shows above and below whichever party sits on it. #}
+			<line x1="{{ row.hub }}" y1="{{ -compass.hubReach }}" x2="{{ row.hub }}" y2="{{ compass.hubReach }}" class="stroke-primary" stroke-width="1.4" stroke-linecap="round"></line>
+		{% endif %}
+		<line x1="{{ -w }}" y1="0" x2="{{ w }}" y2="0" class="stroke-outline-variant" stroke-opacity="0.8" stroke-width="0.6"></line>
+		<line x1="0" y1="-4" x2="0" y2="4" class="stroke-outline-variant" stroke-opacity="0.8" stroke-width="0.6"></line>
+		{% if layout.endsBeside %}
+			{% for end in row.ends %}
+				<text x="{{ end.x }}" y="{{ end.y }}" text-anchor="{{ end.anchor }}" font-size="{{ f }}" class="fill-on-surface-variant">{{ end.text }}</text>
+			{% endfor %}
+		{% endif %}
+
+		{% for party in row.parties %}
+			{% for p in party.trail %}
+				<circle data-party="{{ party.key }}" cx="{{ p.x }}" cy="0" r="1.2" fill="{{ party.color }}" fill-opacity="{{ p.opacity }}"></circle>
+			{% endfor %}
+		{% endfor %}
+		{% for party in row.parties|filter(party => party.leader) %}
+			<line data-party="{{ party.key }}" x1="{{ party.leader[0] }}" y1="{{ party.leader[1] }}" x2="{{ party.leader[2] }}" y2="{{ party.leader[3] }}" stroke="{{ party.color }}" stroke-opacity="0.7" stroke-width="0.6" stroke-linecap="round"></line>
+		{% endfor %}
+		{# The largest dots first, so a small party sitting on a large one stays in sight. #}
+		{% for party in row.parties|sort((a, b) => b.r <=> a.r) %}
+			<a data-party="{{ party.key }}" href="{{ path('app_government_party', {slug: party.slug}) }}">
+				<title>{{ party.name }}: {{ party.seats }} seats{{ party.governing ? ', in the cabinet' : (party.supporting ? ', supporting it' : '') }}</title>
+				<circle cx="{{ party.x }}" cy="0" r="{{ party.r }}" fill="{{ party.color }}" fill-opacity="{{ party.governing ? 1 : (party.supporting ? 0.85 : 0.65) }}" class="stroke-surface-container-low" stroke-width="1"></circle>
+				{% if party.governing %}
+					<circle cx="{{ party.x }}" cy="0" r="{{ party.r + compass.ringGap }}" fill="none" class="stroke-primary" stroke-width="1"></circle>
+				{% elseif party.supporting %}
+					<circle cx="{{ party.x }}" cy="0" r="{{ party.r + compass.ringGap }}" fill="none" class="stroke-primary" stroke-width="0.8" stroke-dasharray="0.1 2" stroke-linecap="round"></circle>
+				{% endif %}
+			</a>
+		{% endfor %}
+		{% for party in row.parties %}
+			<a data-party="{{ party.key }}" href="{{ path('app_government_party', {slug: party.slug}) }}" class="hover:underline">
+				<text x="{{ party.labelX }}" y="{{ party.labelY }}" text-anchor="middle" font-size="{{ f }}" font-weight="{{ party.governing ? 'bold' : '600' }}" class="{{ party.governing or party.supporting ? 'fill-on-surface' : 'fill-on-surface-variant' }}">{{ party.label }}</text>
+			</a>
+		{% endfor %}
+	</svg>
+	{% if not layout.endsBeside %}
+		<div class="flex justify-between text-2xs text-on-surface-variant" style="padding: 0 {{ layout.endInset }}%" aria-hidden="true">
+			{% for end in row.ends %}<span>{{ end.text }}</span>{% endfor %}
+		</div>
+	{% endif %}
+{% endmacro %}

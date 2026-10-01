@@ -35,16 +35,16 @@ use App\Twig\Extension\NumberFormatExtension;
 class GovernmentPageBuilder
 {
     // --- Party Colours ---
-    /** One colour per party, shared by the hemicycle, the compass and the tables. */
+    /** One colour per party, shared by the hemicycle, the compass and the tables, no two hues close enough to confuse. */
     public const PARTY_COLORS = [
         AerieDiet::CIVIC => '#dc2626',
         AerieDiet::VANGUARD => '#2563eb',
         AerieDiet::IRON_HARBOR => '#78716c',
-        AerieDiet::EXCHANGE => '#0d9488',
+        AerieDiet::EXCHANGE => '#0891b2',
         AerieDiet::CHARTISTS => '#7c3aed',
         AerieDiet::COMMON_LOT => '#d97706',
-        AerieDiet::TIDELINE => '#059669',
-        AerieDiet::NEW_HORIZON => '#d946ef',
+        AerieDiet::TIDELINE => '#16a34a',
+        AerieDiet::NEW_HORIZON => '#ec4899',
     ];
 
     // --- Party Labels ---
@@ -67,38 +67,59 @@ class GovernmentPageBuilder
     private const HEMICYCLE_INNER_RADIUS = 0.40;
 
     // --- Compass Geometry ---
-    /** Half-width of the compass drawing, in SVG units, for a policy axis running -1 to +1. */
-    private const COMPASS_HALF_WIDTH = 100.0;
-    /** Margin around the plane for the axis names, in SVG units: wide enough for 'Technocratic' beside the strip. */
-    private const COMPASS_MARGIN = 56.0;
-    /** Distance from the plane's lower edge to the first strip's line, in SVG units: clear of 'Small state' for the highest row. */
-    private const COMPASS_STRIP_OFFSET = 48.0;
-    /** The questions drawn as strips beneath the plane, in order from the top. */
-    private const COMPASS_STRIP_AXES = [AerieDiet::AXIS_COUNCIL, AerieDiet::AXIS_ENVIRONMENT];
-    /** The words at either end of each strip, short enough for the margin. */
-    private const COMPASS_STRIP_ENDS = [
+    /** The drawing at each screen width: the half-length of a line running -1 to +1 and the margin either side, in SVG units, and whether the end words sit beside the line (the margin then fits 'Technocratic') or beneath it (half the longest label). A phone gets the shorter line, so its labels stay legible. */
+    private const COMPASS_LAYOUTS = [
+        'wide' => [150.0, 56.0, true],
+        'narrow' => [80.0, 24.0, false],
+    ];
+    /** The words at either end of each question's line, short enough for the margin. */
+    private const COMPASS_ROW_ENDS = [
+        AerieDiet::AXIS_STATE => ['Small state', 'Big state'],
+        AerieDiet::AXIS_OPENNESS => ['Closed', 'Open'],
         AerieDiet::AXIS_COUNCIL => ['Populist', 'Technocratic'],
         AerieDiet::AXIS_ENVIRONMENT => ['Growth', 'Environment'],
     ];
-    /** Font size of the axis names and party labels, in SVG units. */
+    /** The levers as a question's heading lists them. */
+    private const LEVER_SHORT_NAMES = [
+        'corporateTax' => 'corporate tax',
+        'tariff' => 'tariffs',
+        'laborGrowth' => 'immigration',
+        'mergerReviewLeniency' => 'merger review',
+        'greenBeltStringency' => 'green belts',
+        'carbonPrice' => 'carbon price',
+        'extractionStringency' => 'extraction rules',
+        'stampDutyRate' => 'stamp duty',
+        'bankLevyRate' => 'bank levy',
+    ];
+    /** Font size of the end words and party labels, in SVG units. */
     private const COMPASS_FONT_SIZE = 7.0;
     /** Advance of a bold label's average character as a share of its font size, to size a label's box. */
     public const COMPASS_CHARACTER_WIDTH = 0.6;
     /** Gap kept between a label and its dot, or another label, in SVG units. */
     private const COMPASS_LABEL_GAP = 1.5;
-    /** Baselines a strip label may take, above and below the line, nearest first, a label and its gap apart. */
-    private const COMPASS_STRIP_ROWS = [-8.0, 15.0, -17.0, 24.0, -26.0, 33.0];
+    /** Least clearance between the outermost dot or ring and a row of labels beyond the label gap, in SVG units. */
+    private const COMPASS_LABEL_LIFT = 2.0;
+    /** Least rise of a leader line per unit it runs sideways, so a leader never lies along the line. */
+    private const COMPASS_LEADER_SLOPE = 0.4;
+    /** Gap left between a leader line's ends and the dot or label it joins, in SVG units. */
+    private const COMPASS_LEADER_GAP = 0.6;
+    /** Radius of the smallest party's dot, in SVG units. */
+    private const COMPASS_DOT_RADIUS = 2.5;
+    /** Seats that add one SVG unit to a party's dot radius. */
+    private const COMPASS_SEATS_PER_RADIUS = 25.0;
     /** Past votes whose positions are drawn behind each party, the oldest faintest. */
     private const COMPASS_TRAIL_VOTES = 6;
     /** Faintest and strongest opacity of a past position, the oldest drawn and the last vote's. */
     private const COMPASS_TRAIL_OPACITY = [0.10, 0.40];
-    /** How far the cabinet's shaded area reaches past the edge of its parties' dots, in SVG units. */
-    private const COMPASS_HALO_PAD = 5.0;
-    /** Radius of the ring marking where the cabinet governs from, in SVG units. */
-    private const COMPASS_HUB_RADIUS = 3.5;
+    /** How far the mark where a coalition governs from reaches past the ring of its largest party, in SVG units. */
+    private const COMPASS_HUB_PAD = 2.5;
+    /** Gap between a party's dot and the ring round it, solid in the cabinet and dotted in support, in SVG units. */
+    private const COMPASS_RING_GAP = 1.8;
+    /** Margin kept above and below each question's drawing, in SVG units. */
+    private const COMPASS_ROW_PAD = 2.0;
 
-    // --- Party Pages ---
-    /** The policy questions as a party page names them: the axis, and its two ends. */
+    // --- Policy Questions ---
+    /** The policy questions as the pages name them: the axis, and its two ends. */
     private const AXIS_NAMES = [
         AerieDiet::AXIS_STATE => ['name' => 'Size of the state', 'low' => 'Small state', 'high' => 'Big state'],
         AerieDiet::AXIS_OPENNESS => ['name' => 'Openness', 'low' => 'Closed', 'high' => 'Open'],
@@ -187,7 +208,7 @@ class GovernmentPageBuilder
             'budget' => $this->budget($macro, $politics, $coalition, $support, $talking),
             'parties' => $parties,
             'hemicycle' => $this->hemicycle($seats, $parties),
-            'compass' => $this->compass($parties, $history, $coalitionPosition, $coalition, $support),
+            'compass' => $this->compass($parties, $history, $coalitionPosition, $coalition),
             'council' => [
                 'roster' => array_map(static fn(array $seat): array => $seat + [
                     'sinceLabel' => $seat['founding'] ? 'Founding' : self::simDate($seat['since']),
@@ -587,220 +608,260 @@ class GovernmentPageBuilder
     }
 
     /**
-     * The policy space: openness across and size of state up, with the Council and the environment as strips beneath. Each party is a
-     * dot sized by its seats, with its last few positions fading behind it and its label placed where it crowds nothing.
-     * The cabinet is a shaded area over its parties, a ring where it governs from (its parties weighted by seats; a party
-     * governing alone is its own), and dotted lines from there to the parties supporting it from outside.
+     * Where the parties stand: one line per question, from its small-state, closed, populist or growth end on the left,
+     * drawn at each width the page offers. Each party is a dot sized by its seats with its last few positions fading
+     * behind it, and its label set above or below where it crowds nothing, a leader line joining any label moved
+     * sideways off its dot. The cabinet's parties are ringed solid and its supporters dotted; a coalition also has a
+     * mark across the line where it governs from (its parties weighted by seats), drawn behind the dots so it hides none
+     * of them.
      *
      * @param list<array<string, mixed>>  $parties    Party rows.
      * @param list<DietElection>          $history    Votes, oldest first.
      * @param array{state: float, openness: float, council: float, environment: float} $government The cabinet's seat-weighted position.
      * @param list<string>                $coalition  The cabinet.
-     * @param list<string>                $support    Its support parties.
      * @return array<string, mixed>
      */
-    private function compass(array $parties, array $history, array $government, array $coalition, array $support): array
+    private function compass(array $parties, array $history, array $government, array $coalition): array
     {
-        $scale = self::COMPASS_HALF_WIDTH;
-        $margin = self::COMPASS_MARGIN;
-        $point = static fn(float $state, float $openness): array => ['x' => round($openness * $scale, 2), 'y' => round(-$state * $scale, 2)];
         [$faintest, $strongest] = self::COMPASS_TRAIL_OPACITY;
         $recent = array_values(array_slice($history, -self::COMPASS_TRAIL_VOTES));
 
         $dots = [];
         foreach ($parties as $party) {
-            $trail = [];
-            $stripTrails = array_fill_keys(self::COMPASS_STRIP_AXES, []);
+            $past = [];
             foreach ($recent as $k => $election) {
-                if (!isset($election->getPositions()[$party['key']])) {
-                    continue;
-                }
-                $past = AerieDiet::position($party['key'], $election->getPositions());
-                $opacity = round($faintest + (($strongest - $faintest) * ($k + 1) / count($recent)), 3);
-                $trail[] = $point($past[AerieDiet::AXIS_STATE], $past[AerieDiet::AXIS_OPENNESS]) + ['opacity' => $opacity];
-                foreach (self::COMPASS_STRIP_AXES as $axis) {
-                    $stripTrails[$axis][] = ['x' => round($past[$axis] * $scale, 2), 'opacity' => $opacity];
+                if (isset($election->getPositions()[$party['key']])) {
+                    $past[] = [
+                        'position' => AerieDiet::position($party['key'], $election->getPositions()),
+                        'opacity' => round($faintest + (($strongest - $faintest) * ($k + 1) / count($recent)), 3),
+                    ];
                 }
             }
-            $strips = [];
-            foreach (self::COMPASS_STRIP_AXES as $axis) {
-                $strips[$axis] = ['x' => round($party[$axis] * $scale, 2), 'r' => 2.5 + ($party['seats'] / 25.0), 'trail' => $stripTrails[$axis]];
-            }
-            $dots[] = $party + $point($party['state'], $party['openness']) + [
-                'r' => 3.0 + ($party['seats'] / 20.0),
-                'trail' => $trail,
-                'strips' => $strips,
-            ];
+            $dots[] = $party + ['r' => self::COMPASS_DOT_RADIUS + ($party['seats'] / self::COMPASS_SEATS_PER_RADIUS), 'past' => $past];
         }
 
         $members = array_values(array_filter($dots, static fn(array $dot): bool => in_array($dot['key'], $coalition, true)));
-        $alone = count($members) === 1;
-        $hub = $alone ? ['x' => $members[0]['x'], 'y' => $members[0]['y']] : $point($government[AerieDiet::AXIS_STATE], $government[AerieDiet::AXIS_OPENNESS]);
-        $spokes = [];
-        foreach ($dots as $dot) {
-            $supporter = in_array($dot['key'], $support, true);
-            if ($supporter || (!$alone && in_array($dot['key'], $coalition, true))) {
-                $spokes[] = ['x1' => $hub['x'], 'y1' => $hub['y'], 'x2' => $dot['x'], 'y2' => $dot['y'], 'supporter' => $supporter];
-            }
-        }
+        $coalitionMark = count($members) > 1;
+        $hubReach = ($members === [] ? 0.0 : max(array_column($members, 'r'))) + self::COMPASS_RING_GAP + self::COMPASS_HUB_PAD;
+        $outermost = max(array_map(static fn(array $dot): float => $dot['r'] + ($dot['governing'] || $dot['supporting'] ? self::COMPASS_RING_GAP : 0.0), $dots));
 
-        $size = self::COMPASS_FONT_SIZE;
-        $axes = [
-            ['text' => 'Big state', 'x' => 0.0, 'y' => -$scale - 5.0, 'anchor' => 'middle'],
-            ['text' => 'Small state', 'x' => 0.0, 'y' => $scale + 11.0, 'anchor' => 'middle'],
-            ['text' => 'Closed', 'x' => -$scale - 4.0, 'y' => 2.0, 'anchor' => 'end'],
-            ['text' => 'Open', 'x' => $scale + 4.0, 'y' => 2.0, 'anchor' => 'start'],
-        ];
-        $taken = array_map(static fn(array $axis): array => self::labelBox($axis['text'], $axis['x'], $axis['y'], $axis['anchor']), $axes);
-        if (!$alone && $members !== []) {
-            $ring = self::COMPASS_HUB_RADIUS;
-            $taken[] = [$hub['x'] - $ring, $hub['y'] - $ring, $hub['x'] + $ring, $hub['y'] + $ring];
-        }
-        $bounds = [-$scale - $margin, -$scale - 16.0, $scale + $margin, $scale + 16.0];
-        $plane = self::placePlaneLabels($dots, $taken, $bounds);
-        foreach ($dots as $i => $dot) {
-            $dots[$i] = $dot + $plane[$i];
-        }
-        foreach (self::COMPASS_STRIP_AXES as $axis) {
-            foreach (self::placeStripLabels($dots, $axis) as $i => $label) {
-                $dots[$i]['strips'][$axis] += $label;
+        $layouts = [];
+        foreach (self::COMPASS_LAYOUTS as $name => [$scale, $margin, $endsBeside]) {
+            $rows = [];
+            foreach (AerieDiet::AXES as $axis) {
+                $rows[] = self::compassRow($axis, $dots, $coalitionMark ? $government[$axis] : null, $scale, $margin, $endsBeside, $hubReach, $outermost);
             }
-        }
-
-        // Each strip sits a full set of label rows below the last, so no strip's labels reach the next one's.
-        $spacing = max(self::COMPASS_STRIP_ROWS) - min(self::COMPASS_STRIP_ROWS) + (1.5 * $size) + (2.0 * self::COMPASS_LABEL_GAP);
-        $strips = [];
-        foreach (self::COMPASS_STRIP_AXES as $k => $axis) {
-            [$low, $high] = self::COMPASS_STRIP_ENDS[$axis];
-            $strips[] = [
-                'axis' => $axis,
-                'y' => $scale + self::COMPASS_STRIP_OFFSET + ($k * $spacing),
-                'ends' => [
-                    ['text' => $low, 'x' => -$scale - 4.0, 'y' => 2.0, 'anchor' => 'end'],
-                    ['text' => $high, 'x' => $scale + 4.0, 'y' => 2.0, 'anchor' => 'start'],
-                ],
+            $layouts[$name] = [
+                'halfWidth' => $scale,
+                'endsBeside' => $endsBeside,
+                // How far in from the drawing's edge the line ends, so end words set beneath it line up with its ends.
+                'endInset' => round(100.0 * $margin / (2.0 * ($scale + $margin)), 2),
+                'rows' => $rows,
             ];
         }
-        $bottom = $strips[array_key_last($strips)]['y'] + max(self::COMPASS_STRIP_ROWS) + (0.3 * $size);
 
         return [
-            'halfWidth' => $scale,
-            'viewBox' => [-$scale - $margin, -$scale - 16.0, 2.0 * ($scale + $margin), $bottom + $scale + 16.0],
-            'fontSize' => $size,
-            'axes' => $axes,
-            'strips' => $strips,
-            'parties' => $dots,
-            'cabinet' => [
-                'halo' => self::convexHull(array_map(static fn(array $dot): array => [$dot['x'], $dot['y']], $members)),
-                'pad' => ($members === [] ? 0.0 : max(array_column($members, 'r'))) + self::COMPASS_HALO_PAD,
-                'hub' => $hub,
-                'ring' => !$alone && $members !== [],
-                'hubRadius' => self::COMPASS_HUB_RADIUS,
-                'spokes' => $spokes,
-            ],
+            'fontSize' => self::COMPASS_FONT_SIZE,
+            'hubReach' => $hubReach,
+            'ringGap' => self::COMPASS_RING_GAP,
+            'coalitionMark' => $coalitionMark,
+            'layouts' => $layouts,
         ];
     }
 
     /**
-     * The convex hull of a few points, in drawing order (Andrew's monotone chain); two points or fewer come back as given.
+     * One question's line at one width: every party placed and labelled, the mark where a coalition governs from, and
+     * the drawing's extent.
      *
-     * @param list<array{0: float, 1: float}> $points
-     * @return list<array{0: float, 1: float}>
+     * @param list<array<string, mixed>> $dots     The parties, with their radius and past positions.
+     * @param float|null                 $hub      Where the cabinet governs from on this question; null when one party governs alone.
+     * @param float                      $hubReach How far the mark reaches either side of the line, in SVG units.
+     * @return array<string, mixed>
      */
-    private static function convexHull(array $points): array
-    {
-        $points = array_values(array_unique($points, SORT_REGULAR));
-        if (count($points) < 3) {
-            return $points;
-        }
-        usort($points, static fn(array $a, array $b): int => $a <=> $b);
-        $turn = static fn(array $o, array $a, array $b): float => (($a[0] - $o[0]) * ($b[1] - $o[1])) - (($a[1] - $o[1]) * ($b[0] - $o[0]));
-
-        $chain = static function (array $ordered) use ($turn): array {
-            $hull = [];
-            foreach ($ordered as $p) {
-                while (count($hull) >= 2 && $turn($hull[count($hull) - 2], $hull[count($hull) - 1], $p) <= 0.0) {
-                    array_pop($hull);
-                }
-                $hull[] = $p;
-            }
-            array_pop($hull);
-
-            return $hull;
-        };
-
-        return array_merge($chain($points), $chain(array_reverse($points)));
-    }
-
-    /**
-     * Where each party's label goes in the plane: above its dot, below, right or left, the first spot inside the
-     * drawing that clears the axis names, the other dots and every label placed before it, the larger parties placed
-     * first; above when no spot is clear.
-     *
-     * @param list<array<string, mixed>>                          $dots   The parties, with x, y, r and label.
-     * @param list<array{0: float, 1: float, 2: float, 3: float}> $taken  Boxes already drawn on.
-     * @param array{0: float, 1: float, 2: float, 3: float}       $bounds The box a label must stay inside.
-     * @return array<int, array{labelX: float, labelY: float, labelAnchor: string}> By the dots' index.
-     */
-    private static function placePlaneLabels(array $dots, array $taken, array $bounds): array
+    private static function compassRow(string $axis, array $dots, ?float $hub, float $scale, float $margin, bool $endsBeside, float $hubReach, float $outermost): array
     {
         $size = self::COMPASS_FONT_SIZE;
-        $gap = self::COMPASS_LABEL_GAP;
-        $circles = array_map(static fn(array $dot): array => [$dot['x'] - $dot['r'], $dot['y'] - $dot['r'], $dot['x'] + $dot['r'], $dot['y'] + $dot['r']], $dots);
+        [$low, $high] = self::COMPASS_ROW_ENDS[$axis];
+        $signed = static fn(float $value): string => sprintf('%+.2f', $value);
 
         $placed = [];
-        foreach (self::bySeats($dots) as $i) {
-            $dot = $dots[$i];
-            $candidates = [
-                [$dot['x'], $dot['y'] - $dot['r'] - $gap - (0.2 * $size), 'middle'],
-                [$dot['x'], $dot['y'] + $dot['r'] + $gap + (0.8 * $size), 'middle'],
-                [$dot['x'] + $dot['r'] + $gap, $dot['y'] + (0.3 * $size), 'start'],
-                [$dot['x'] - $dot['r'] - $gap, $dot['y'] + (0.3 * $size), 'end'],
+        foreach ($dots as $i => $dot) {
+            $placed[$i] = $dot + [
+                'x' => round($dot[$axis] * $scale, 2),
+                'trail' => array_map(static fn(array $past): array => ['x' => round($past['position'][$axis] * $scale, 2), 'opacity' => $past['opacity']], $dot['past']),
             ];
-            $others = array_merge($taken, array_values(array_diff_key($circles, [$i => true])));
-            $choice = $candidates[0];
-            foreach ($candidates as $candidate) {
-                $box = self::labelBox($dot['label'], ...$candidate);
-                $inside = $box[0] >= $bounds[0] && $box[1] >= $bounds[1] && $box[2] <= $bounds[2] && $box[3] <= $bounds[3];
-                if ($inside && !self::crowds($box, $others)) {
-                    $choice = $candidate;
-                    break;
-                }
-            }
-            $taken[] = self::labelBox($dot['label'], ...$choice);
-            $placed[$i] = ['labelX' => round($choice[0], 2), 'labelY' => round($choice[1], 2), 'labelAnchor' => $choice[2]];
+            unset($placed[$i]['past']);
         }
 
-        return $placed;
+        $boxes = [];
+        foreach (self::placeRowLabels($placed, $outermost, $scale, $margin, $endsBeside) as $i => $label) {
+            $placed[$i] += $label;
+            $boxes[] = self::labelBox($placed[$i]['label'], $label['labelX'], $label['labelY'], 'middle');
+        }
+
+        $reach = max($outermost, $hub === null ? 0.0 : $hubReach);
+        $top = min(-$reach, ...array_column($boxes, 1)) - self::COMPASS_ROW_PAD;
+        $bottom = max($reach, ...array_column($boxes, 3)) + self::COMPASS_ROW_PAD;
+
+        return [
+            'axis' => $axis,
+            'name' => self::AXIS_NAMES[$axis]['name'],
+            'laws' => array_map(static fn(string $lever): string => self::LEVER_SHORT_NAMES[$lever], array_keys(PoliticsEngine::LEVER_AXES, $axis, true)),
+            'summary' => sprintf('%s, from %s on the left to %s on the right: %s%s', self::AXIS_NAMES[$axis]['name'], strtolower($low), strtolower($high),
+                implode(', ', array_map(static fn(array $dot): string => $dot['name'] . ($dot['governing'] ? ' (in the cabinet)' : ($dot['supporting'] ? ' (supporting it)' : '')) . ' at ' . $signed($dot[$axis]), $dots)),
+                $hub === null ? '' : '; the cabinet at ' . $signed($hub)),
+            'ends' => [
+                ['text' => $low, 'x' => -$scale - 4.0, 'y' => 0.35 * $size, 'anchor' => 'end'],
+                ['text' => $high, 'x' => $scale + 4.0, 'y' => 0.35 * $size, 'anchor' => 'start'],
+            ],
+            'hub' => $hub === null ? null : round($hub * $scale, 2),
+            'parties' => array_values($placed),
+            'viewBox' => [-$scale - $margin, round($top, 2), 2.0 * ($scale + $margin), round($bottom - $top, 2)],
+        ];
     }
 
     /**
-     * Where each party's label goes on a strip: centred over its dot (the margin holds half the longest label past
-     * either end), in the nearest row above or below the line that no label placed before it crowds, the larger
-     * parties placed first; the nearest row when every row is crowded.
+     * Where each party's label goes on a question's line: in one row above the line or one below, the larger parties
+     * choosing first and taking the row above unless a label already there is in the way, the side with less in the
+     * way when both are crowded; a row too long for its labels sends its smallest parties across where they fit. Each
+     * row is spread so no label crowds the next, and set back from the line far enough that the leader joining a dot
+     * to a label moved sideways off it rises at least COMPASS_LEADER_SLOPE. No label is centred past the end of its
+     * line when the end words sit beside it, so no leader crosses them.
      *
-     * @param list<array<string, mixed>> $dots The parties, with their strip places and label.
-     * @param string                     $axis The strip's question.
-     * @return array<int, array{labelX: float, labelY: float}> By the dots' index.
+     * @param array<int, array<string, mixed>> $dots       The parties, with their place on the line, radius, label and part in the government.
+     * @param float                            $outermost  Furthest any dot or ring reaches from the line, in SVG units.
+     * @param float                            $scale      Half the line's length, in SVG units.
+     * @param float                            $margin     The drawing's margin either side of the line, in SVG units.
+     * @param bool                             $endsBeside Whether the end words sit beside the line's ends.
+     * @return array<int, array{labelX: float, labelY: float, leader: list<float>|null}> By the dots' index.
      */
-    private static function placeStripLabels(array $dots, string $axis): array
+    private static function placeRowLabels(array $dots, float $outermost, float $scale, float $margin, bool $endsBeside): array
     {
-        $taken = [];
-        $placed = [];
-        foreach (self::bySeats($dots) as $i) {
-            $x = (float) $dots[$i]['strips'][$axis]['x'];
-            $row = self::COMPASS_STRIP_ROWS[0];
-            foreach (self::COMPASS_STRIP_ROWS as $candidate) {
-                if (!self::crowds(self::labelBox($dots[$i]['label'], $x, $candidate, 'middle'), $taken)) {
-                    $row = $candidate;
+        $gap = self::COMPASS_LABEL_GAP;
+        $size = self::COMPASS_FONT_SIZE;
+        $order = self::bySeats($dots);
+
+        // Each label wants to sit centred over its dot; its own centre stays where its edge is inside the drawing, and
+        // short of the line's end when the end words sit beside it.
+        $items = [];
+        foreach ($order as $i) {
+            $width = self::labelWidth($dots[$i]['label']);
+            $limit = $endsBeside ? $scale : $scale + $margin - ($width / 2.0);
+            $items[$i] = ['centre' => (float) $dots[$i]['x'], 'width' => $width, 'lo' => -$limit, 'hi' => $limit];
+        }
+        $inTheWay = static function (array $item, array $row) use ($gap): float {
+            $crowding = 0.0;
+            foreach ($row as $other) {
+                $crowding += max(0.0, ($item['width'] + $other['width']) / 2.0 + $gap - abs($item['centre'] - $other['centre']));
+            }
+
+            return $crowding;
+        };
+        // Whether a row's labels fit, in order, between the limits of its first and its last.
+        $fits = static function (array $row) use ($gap): bool {
+            if ($row === []) {
+                return true;
+            }
+            uasort($row, static fn(array $a, array $b): int => $a['centre'] <=> $b['centre']);
+            $first = $row[array_key_first($row)];
+            $last = $row[array_key_last($row)];
+
+            return array_sum(array_column($row, 'width')) + ($gap * (count($row) - 1))
+                <= ($last['hi'] + ($last['width'] / 2.0)) - ($first['lo'] - ($first['width'] / 2.0));
+        };
+
+        // -1 is the row above the line, +1 the row below.
+        $rows = [-1 => [], 1 => []];
+        foreach ($order as $i) {
+            $above = $inTheWay($items[$i], $rows[-1]);
+            $rows[$above <= 0.0 || $above <= $inTheWay($items[$i], $rows[1]) ? -1 : 1][$i] = $items[$i];
+        }
+        foreach ([-1, 1] as $side) {
+            foreach (array_reverse($order) as $i) {
+                if ($fits($rows[$side])) {
                     break;
                 }
+                if (isset($rows[$side][$i]) && $fits($rows[-$side] + [$i => $rows[$side][$i]])) {
+                    $rows[-$side][$i] = $rows[$side][$i];
+                    unset($rows[$side][$i]);
+                }
             }
-            $taken[] = self::labelBox($dots[$i]['label'], $x, $row, 'middle');
-            $placed[$i] = ['labelX' => round($x, 2), 'labelY' => $row];
         }
 
-        return $placed;
+        $labels = [];
+        foreach ($rows as $side => $row) {
+            uasort($row, static fn(array $a, array $b): int => $a['centre'] <=> $b['centre']);
+            $centres = self::packRow($row);
+            $lift = self::COMPASS_LABEL_LIFT;
+            $moved = [];
+            foreach ($centres as $i => $centre) {
+                $shift = abs($centre - $row[$i]['centre']);
+                if ($shift > $row[$i]['width'] / 4.0) {
+                    $moved[$i] = true;
+                    $lift = max($lift, self::COMPASS_LEADER_SLOPE * $shift);
+                }
+            }
+            // The labels' edge nearest the line, and their baseline.
+            $edge = $side * ($outermost + $gap + $lift);
+            $baseline = $side < 0 ? $edge - (0.2 * $size) : $edge + (0.8 * $size);
+            foreach ($centres as $i => $centre) {
+                $leader = null;
+                if (isset($moved[$i])) {
+                    $x = $row[$i]['centre'];
+                    $endY = $edge - ($side * self::COMPASS_LEADER_GAP);
+                    $length = hypot($centre - $x, $endY);
+                    $reach = $dots[$i]['r'] + ($dots[$i]['governing'] || $dots[$i]['supporting'] ? self::COMPASS_RING_GAP : 0.0) + self::COMPASS_LEADER_GAP;
+                    $leader = [round($x + (($centre - $x) * $reach / $length), 2), round($endY * $reach / $length, 2), round($centre, 2), round($endY, 2)];
+                }
+                $labels[$i] = ['labelX' => round($centre, 2), 'labelY' => round($baseline, 2), 'leader' => $leader];
+            }
+        }
+
+        return $labels;
+    }
+
+    /**
+     * Spreads a row of labels so none comes within the label gap of the next, each as near its wanted centre as the
+     * others allow: labels that would crowd each other are merged into a run set where its labels' wanted centres put
+     * it on average (least squares), held within every label's limits, and runs that then crowd merge in turn.
+     *
+     * @param array<int, array{centre: float, width: float, lo: float, hi: float}> $items Labels in order of their wanted centres, each with the range its centre may take.
+     * @return array<int, float> Each label's centre.
+     */
+    private static function packRow(array $items): array
+    {
+        $gap = self::COMPASS_LABEL_GAP;
+        $left = static fn(array $run): float => max($run['lo'], min($run['hi'], $run['sum'] / count($run['keys'])));
+        // A run's 'sum' adds each label's wanted left edge less its offset in the run, so its best left edge is their
+        // mean; 'lo' and 'hi' bound that edge so every label keeps within its own limits.
+        $runs = [];
+        foreach ($items as $key => $item) {
+            $half = $item['width'] / 2.0;
+            $run = ['keys' => [$key], 'width' => $item['width'], 'sum' => $item['centre'] - $half, 'lo' => $item['lo'] - $half, 'hi' => $item['hi'] - $half];
+            while ($runs !== [] && $left($runs[array_key_last($runs)]) + $runs[array_key_last($runs)]['width'] + $gap > $left($run)) {
+                $last = array_pop($runs);
+                $offset = $last['width'] + $gap;
+                $run = [
+                    'keys' => [...$last['keys'], ...$run['keys']],
+                    'width' => $offset + $run['width'],
+                    'sum' => $last['sum'] + $run['sum'] - ($offset * count($run['keys'])),
+                    'lo' => max($last['lo'], $run['lo'] - $offset),
+                    'hi' => min($last['hi'], $run['hi'] - $offset),
+                ];
+            }
+            $runs[] = $run;
+        }
+
+        $centres = [];
+        foreach ($runs as $run) {
+            $at = $left($run);
+            foreach ($run['keys'] as $key) {
+                $centres[$key] = $at + ($items[$key]['width'] / 2.0);
+                $at += $items[$key]['width'] + $gap;
+            }
+        }
+
+        return $centres;
     }
 
     /**
@@ -840,24 +901,6 @@ class GovernmentPageBuilder
     private static function labelWidth(string $text): float
     {
         return mb_strlen($text) * self::COMPASS_FONT_SIZE * self::COMPASS_CHARACTER_WIDTH;
-    }
-
-    /**
-     * Whether a box comes within the label gap of any of the others.
-     *
-     * @param array{0: float, 1: float, 2: float, 3: float}       $box
-     * @param list<array{0: float, 1: float, 2: float, 3: float}> $others
-     */
-    private static function crowds(array $box, array $others): bool
-    {
-        $gap = self::COMPASS_LABEL_GAP;
-        foreach ($others as $other) {
-            if ($box[0] < $other[2] + $gap && $other[0] < $box[2] + $gap && $box[1] < $other[3] + $gap && $other[1] < $box[3] + $gap) {
-                return true;
-            }
-        }
-
-        return false;
     }
 
     /**
