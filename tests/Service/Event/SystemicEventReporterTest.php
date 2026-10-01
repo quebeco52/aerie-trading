@@ -120,7 +120,7 @@ class SystemicEventReporterTest extends TestCase
     {
         $politics = new PoliticsStateDTO(
             eventType: ShockEvent::ELECTION_HELD,
-            dietSeats: [Diet::CIVIC => 78.0, Diet::VANGUARD => 77.0] + Diet::SEED_SEATS,
+            dietSeats: [Diet::CIVIC => 78.0, Diet::VANGUARD => 77.0, Diet::IRON_HARBOR => 30.0, Diet::EXCHANGE => 30.0, Diet::CHARTISTS => 20.0, Diet::COMMON_LOT => 15.0, Diet::TIDELINE => 15.0, Diet::NEW_HORIZON => 35.0],
             dietVoteSwings: [Diet::CIVIC => 0.01, Diet::VANGUARD => -0.01] + array_fill_keys(array_keys(Diet::SEED_SEATS), 0.0),
             formationLog: [['day' => 20.0, 'formateur' => Diet::CIVIC, 'formed' => true, 'cabinet' => [Diet::CIVIC], 'support' => [Diet::TIDELINE, Diet::IRON_HARBOR, Diet::COMMON_LOT]]],
         );
@@ -130,7 +130,7 @@ class SystemicEventReporterTest extends TestCase
             $description = $this->reporter(bufferedPrice: null)->report(new MacroStateDTO(), $politics, $this->benchmarkAt('100'))['description'] ?? '';
             if (str_contains($description, 'The blocs are counted')) {
                 ++$counted;
-                $this->assertStringContainsString("the Vanguard's side holds 152 of 300 seats", $description);
+                $this->assertStringContainsString("the Vanguard's side holds 162 of 300 seats", $description);
             }
         }
         $this->assertGreaterThan(0, $counted);

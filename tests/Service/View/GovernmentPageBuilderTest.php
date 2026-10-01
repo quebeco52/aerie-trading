@@ -31,12 +31,12 @@ class GovernmentPageBuilderTest extends TestCase
         $page = $this->builder()->build(new MacroStateDTO(), new PoliticsStateDTO());
 
         $this->assertSame(['The Vanguard'], array_column($page['government']['members'], 'name'));
-        $this->assertSame(85, $page['government']['seats']);
+        $this->assertSame(95, $page['government']['seats']);
         $this->assertSame(['Exchange Party', 'The Chartists', 'New Horizon'], array_column($page['government']['support'], 'name'));
-        $this->assertSame(160, $page['government']['supportedSeats']);
+        $this->assertSame(165, $page['government']['supportedSeats']);
         $this->assertTrue($page['government']['minority']);
         $this->assertSame(
-            [75 + 35 + 15 + 15, 85 + 35 + 20 + 20],
+            [94 + 25 + 8 + 8, 95 + 25 + 20 + 25],
             array_column($page['rules']['blocSeats'], 'seats'),
             'The blocs: the Civic Front with the Harbor, the Common Lot and the Accord; the Vanguard with the Exchange, the Chartists and New Horizon.'
         );
@@ -177,11 +177,11 @@ class GovernmentPageBuilderTest extends TestCase
         ));
 
         $this->assertTrue($page['government']['minority']);
-        $this->assertSame(85, $page['government']['seats']);
+        $this->assertSame(95, $page['government']['seats']);
         $this->assertSame(140, $page['government']['supportedSeats']);
         $this->assertSame(['Exchange Party', 'The Chartists'], array_column($page['government']['support'], 'name'));
-        $this->assertCount(55, array_filter($page['hemicycle'], static fn(array $seat): bool => $seat['supporting']));
-        $this->assertCount(85, array_filter($page['hemicycle'], static fn(array $seat): bool => $seat['governing']));
+        $this->assertCount(45, array_filter($page['hemicycle'], static fn(array $seat): bool => $seat['supporting']));
+        $this->assertCount(95, array_filter($page['hemicycle'], static fn(array $seat): bool => $seat['governing']));
         $this->assertSame(['wide', 'narrow'], array_keys($page['compass']['layouts']));
         foreach ($page['compass']['layouts'] as $layout) {
             $this->assertSame(Diet::AXES, array_column($layout['rows'], 'axis'), 'One line per question, in the questions\' order.');
@@ -489,7 +489,7 @@ class GovernmentPageBuilderTest extends TestCase
         $this->assertCount(count(Diet::PARTIES) - 1, $axes[Diet::AXIS_STATE]['others']);
 
         $this->assertSame(['Founding', 'Year 5 Q1', 'Year 9 Q1'], array_column($page['record'], 'date'));
-        $this->assertSame(35, $page['record'][0]['seats']);
+        $this->assertSame(25, $page['record'][0]['seats']);
         $this->assertTrue($page['record'][1]['cabinet']);
         $this->assertFalse($page['record'][2]['cabinet'], 'The talks\' outcome is hidden until the cabinet takes office.');
         $this->assertSame(['votes' => 2, 'cabinet' => 1], array_intersect_key($page['recordSummary'], ['votes' => 0, 'cabinet' => 0]));

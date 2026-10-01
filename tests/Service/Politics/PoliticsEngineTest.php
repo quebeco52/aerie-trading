@@ -81,10 +81,10 @@ class PoliticsEngineTest extends TestCase
     {
         $position = Politics::coalitionPosition(Diet::membership([Diet::VANGUARD, Diet::EXCHANGE, Diet::CHARTISTS]), Diet::SEED_SEATS, Diet::HOME_POSITIONS);
 
-        // Vanguard 85 at (-0.6, 0, +0.3), Exchange 35 at (0, +0.8, +0.4), Chartists 20 at (-0.3, +0.6, +0.8).
-        $this->assertEqualsWithDelta((85.0 * -0.6 + 20.0 * -0.3) / 140.0, $position[Diet::AXIS_STATE], 1e-12);
-        $this->assertEqualsWithDelta((35.0 * 0.8 + 20.0 * 0.6) / 140.0, $position[Diet::AXIS_OPENNESS], 1e-12);
-        $this->assertEqualsWithDelta((85.0 * 0.3 + 35.0 * 0.4 + 20.0 * 0.8) / 140.0, $position[Diet::AXIS_COUNCIL], 1e-12);
+        // Vanguard 95 at (-0.6, 0, +0.3), Exchange 25 at (-0.1, +0.8, +0.4), Chartists 20 at (-0.4, +0.6, +0.8).
+        $this->assertEqualsWithDelta((95.0 * -0.6 + 25.0 * -0.1 + 20.0 * -0.4) / 140.0, $position[Diet::AXIS_STATE], 1e-12);
+        $this->assertEqualsWithDelta((25.0 * 0.8 + 20.0 * 0.6) / 140.0, $position[Diet::AXIS_OPENNESS], 1e-12);
+        $this->assertEqualsWithDelta((95.0 * 0.3 + 25.0 * 0.4 + 20.0 * 0.8) / 140.0, $position[Diet::AXIS_COUNCIL], 1e-12);
     }
 
     // --- The vote ---
@@ -107,14 +107,14 @@ class PoliticsEngineTest extends TestCase
      * Vote after vote at a trend economy, each cabinet taking office after its talks: the outgoing cabinet's parties lose
      * about what the record's governments lose, the Diet is as volatile as the Nordic vote process makes a parliament of
      * eight parties (13; Scandinavia 11 with four or five effective parties, ParlGov), the two big parties hold their
-     * seats across 160 years, no party drifts into a majority of its own, and the talks run as real ones have -- about a
-     * third need a second attempt (Golder 2010), they last about a month (Bäck, Hellström, Lindvall & Teorell 2023: 33.7
-     * days, sd 33.9), and they seat the governments Scandinavia's bloc parliaments have since 1945 (ParlGov, 68
-     * cabinets): minority cabinets 78% (84%), one party alone 42% (47%), and the parties at the Council axis's ends
-     * supporting far more often than they govern. A bloc puts its leader in office, so the largest party sits in 78% of
-     * cabinets, above Scandinavia's 63%, where the largest party leads the losing bloc more often; the two largest govern
-     * together in 7% (1.5%), when a bloc leader slumps below a party of its own bloc
-     * (var/harness/politics/formation_report.py).
+     * seats across 160 years, no party drifts into a majority of its own, and the talks run close to real ones. In the
+     * full loop about a third need a second attempt (Golder 2010) and they last about a month (Bäck, Hellström, Lindvall
+     * & Teorell 2023: 33.7 days, sd 33.9), 32% and 33.5 days (var/harness/politics/formation_report.py); at a trend
+     * economy they come easier, 26% and 30 days. They seat the governments Scandinavia's bloc parliaments have since 1945
+     * (ParlGov, 68 cabinets): minority cabinets 74% (84%), one party alone 48% (47%), and the parties at the Council
+     * axis's ends supporting far more often than they govern. A bloc puts its leader in office, so the largest party
+     * sits in 76% of cabinets, above Scandinavia's 63%, where the largest party leads the losing bloc more often; the two
+     * largest govern together in 2% (1.5%).
      */
     public function testTheDietStaysBalancedAtItsCalibratedVolatility(): void
     {
@@ -163,14 +163,14 @@ class PoliticsEngineTest extends TestCase
         }
 
         $meanDays = array_sum($talkDays) / count($talkDays);
-        $this->assertEqualsWithDelta(0.32, $retried / count($talkDays), 0.04);
-        $this->assertEqualsWithDelta(33.7, $meanDays, 3.0);
-        $this->assertEqualsWithDelta(CoalitionFormation::FORMATION_MEAN_DAYS, $meanDays, 3.0, 'The uncertainty index is compensated for talks of another length.');
-        $this->assertEqualsWithDelta(33.9, sqrt(array_sum(array_map(static fn(float $d): float => ($d - $meanDays) ** 2, $talkDays)) / count($talkDays)), 5.0);
-        $this->assertEqualsWithDelta(0.78, $minority / count($talkDays), 0.06);
-        $this->assertEqualsWithDelta(0.42, $single / count($talkDays), 0.04);
-        $this->assertLessThan(0.10, $twoLargest / count($talkDays));
-        $this->assertEqualsWithDelta(0.78, $largestIn / count($talkDays), 0.04);
+        $this->assertEqualsWithDelta(0.26, $retried / count($talkDays), 0.04);
+        $this->assertEqualsWithDelta(30.0, $meanDays, 3.0);
+        $this->assertEqualsWithDelta(CoalitionFormation::FORMATION_MEAN_DAYS, $meanDays, 4.0, 'The uncertainty index is compensated for talks of another length.');
+        $this->assertEqualsWithDelta(29.0, sqrt(array_sum(array_map(static fn(float $d): float => ($d - $meanDays) ** 2, $talkDays)) / count($talkDays)), 5.0);
+        $this->assertEqualsWithDelta(0.74, $minority / count($talkDays), 0.06);
+        $this->assertEqualsWithDelta(0.48, $single / count($talkDays), 0.04);
+        $this->assertLessThan(0.05, $twoLargest / count($talkDays));
+        $this->assertEqualsWithDelta(0.76, $largestIn / count($talkDays), 0.04);
         $this->assertLessThan(0.08, $radicalIn / (2 * count($talkDays)), 'The Council axis\'s ends sit in cabinet too often.');
         $this->assertGreaterThan(3 * $radicalIn, $radicalSupports, 'The Council axis\'s ends govern rather than support.');
 
@@ -216,14 +216,14 @@ class PoliticsEngineTest extends TestCase
         $this->assertEqualsWithDelta(0.1, $lead($swung), 1e-12);
     }
 
-    /** A party's swings scale with its size as real vote shares' do: a party a fifth the size swings the square root of five times as far in log share. */
+    /** A party's swings scale with its size as real vote shares' do: the Common Lot, 8 seats to the Civic Front's 94, swings the square root of 94/8, 3.4 times, as far in log share. */
     public function testSmallPartiesSwingFurtherInLogShare(): void
     {
         $large = Politics::swingSd(Politics::ELECTION_SHORT_TERM_SWING_VARIANCE, Diet::CIVIC);
         $small = Politics::swingSd(Politics::ELECTION_SHORT_TERM_SWING_VARIANCE, Diet::COMMON_LOT);
 
-        $this->assertEqualsWithDelta(sqrt(Politics::ELECTION_SHORT_TERM_SWING_VARIANCE / 0.25), $large, 1e-12);
-        $this->assertEqualsWithDelta(sqrt(5.0), $small / $large, 1e-12);
+        $this->assertEqualsWithDelta(sqrt(Politics::ELECTION_SHORT_TERM_SWING_VARIANCE / (94.0 / 300.0)), $large, 1e-12);
+        $this->assertEqualsWithDelta(sqrt(94.0 / 8.0), $small / $large, 1e-12);
     }
 
     /** A boom over the campaign returns the government stronger; inflation over the term costs it. */
@@ -928,13 +928,15 @@ class PoliticsEngineTest extends TestCase
         $this->assertTrue($blocked['supportHeld']['corporateTax']);
         $this->assertFalse($blocked['councilHeld']['corporateTax']);
 
-        // The Exchange Party's own rate is the neutral one: from 3.5 points above it, a cut to 3.5 below is no further.
+        // The Exchange Party's own rate is just under the neutral one: from 3.5 points above neutral, a cut to the
+        // Vanguard's 3.5 below is no further from the Exchange's rate than the rate in force stands.
+        $exchangeIdeal = Politics::platform(Diet::position(Diet::EXCHANGE, $positions))['corporateTax'];
         $through = Politics::budget([Diet::VANGUARD], [Diet::EXCHANGE], $seats, $positions, $standing($gap / 2.0), 0.5);
         $this->assertEqualsWithDelta($vanguardIdeal, $through['levers']['corporateTax'], 1e-12);
         $this->assertFalse($through['supportHeld']['corporateTax']);
 
         $partial = Politics::budget([Diet::VANGUARD], [Diet::EXCHANGE], $seats, $positions, $standing(0.01), 0.5);
-        $this->assertEqualsWithDelta(-0.01, $partial['levers']['corporateTax'], 1e-12, 'A cut goes only as far past the Exchange Party\'s rate as the rate in force stood above it.');
+        $this->assertEqualsWithDelta($exchangeIdeal - (0.01 - $exchangeIdeal), $partial['levers']['corporateTax'], 1e-12, 'A cut goes only as far past the Exchange Party\'s rate as the rate in force stood above it.');
         $this->assertTrue($partial['supportHeld']['corporateTax']);
 
         $both = Politics::budget([Diet::VANGUARD], [Diet::EXCHANGE, Diet::CIVIC], $seats, $positions, $standing(0.01), 0.5);

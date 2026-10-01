@@ -147,11 +147,13 @@ class CoalitionFormationTest extends TestCase
     }
 
     /**
-     * The last vote's blocs carry over: at the founding positions a split on the size of the state and one on openness
-     * both hold, and whichever the parties declared last stands.
+     * The last vote's blocs carry over: in a Diet where a split on the size of the state and one on openness both hold
+     * (the Harbor and the Exchange at 35 seats each), whichever the parties declared last stands. At today's founding
+     * seats only the split on the size of the state holds, and a split on openness gives way to it.
      */
     public function testTheLastVotesBlocsCarryOver(): void
     {
+        $seats = [Diet::CIVIC => 75.0, Diet::VANGUARD => 85.0, Diet::IRON_HARBOR => 35.0, Diet::EXCHANGE => 35.0, Diet::CHARTISTS => 20.0, Diet::COMMON_LOT => 15.0, Diet::TIDELINE => 15.0, Diet::NEW_HORIZON => 20.0];
         $openAgainstClosed = [
             Diet::CIVIC => Diet::CIVIC,
             Diet::VANGUARD => Diet::VANGUARD,
@@ -163,8 +165,10 @@ class CoalitionFormationTest extends TestCase
             Diet::NEW_HORIZON => Diet::CIVIC,
         ];
 
-        $this->assertSame($openAgainstClosed, Formation::declareBlocs(Diet::SEED_SEATS, Diet::HOME_POSITIONS, $openAgainstClosed));
+        $this->assertSame($openAgainstClosed, Formation::declareBlocs($seats, Diet::HOME_POSITIONS, $openAgainstClosed));
+        $this->assertSame(Diet::SEED_BLOCS, Formation::declareBlocs($seats, Diet::HOME_POSITIONS, Diet::SEED_BLOCS));
         $this->assertNotSame($openAgainstClosed, Diet::SEED_BLOCS);
+        $this->assertSame(Diet::SEED_BLOCS, Formation::declareBlocs(Diet::SEED_SEATS, Diet::HOME_POSITIONS, $openAgainstClosed));
     }
 
     /** However the Diet stands, the declarations settle in two blocs, each party nearer its own bloc's centre and each bloc led by its largest party. */
@@ -229,7 +233,7 @@ class CoalitionFormationTest extends TestCase
         $positions = Diet::HOME_POSITIONS;
 
         $this->assertEqualsWithDelta(
-            sqrt((0.3 ** 2) + (0.6 ** 2) + (0.5 ** 2) + (0.59 ** 2)),
+            sqrt((0.2 ** 2) + (0.6 ** 2) + (0.5 ** 2) + (0.28 ** 2)),
             Formation::ideologicalRange([Diet::VANGUARD, Diet::CHARTISTS], $positions),
             1e-12
         );
