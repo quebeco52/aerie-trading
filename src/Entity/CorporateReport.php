@@ -143,6 +143,10 @@ class CorporateReport
     #[ORM\Column(type: Types::DECIMAL, precision: 30, scale: 4, nullable: true)]
     private ?string $creditLossProvision = null;
 
+    /** Bank levy charged this quarter on the balance sheet, after tax (null for a firm that is not a bank). */
+    #[ORM\Column(type: Types::DECIMAL, precision: 30, scale: 4, nullable: true)]
+    private ?string $bankLevy = null;
+
     /** Loans written off against the allowance this quarter. */
     #[ORM\Column(type: Types::DECIMAL, precision: 30, scale: 4, nullable: true)]
     private ?string $netChargeOffs = null;
@@ -943,6 +947,17 @@ class CorporateReport
     public function getCreditLossProvision(): ?string
     {
         return $this->creditLossProvision;
+    }
+
+    public function getBankLevy(): ?string
+    {
+        return $this->bankLevy;
+    }
+
+    public function setBankLevy(?string $bankLevy): static
+    {
+        $this->bankLevy = $bankLevy;
+        return $this;
     }
 
     public function setCreditLossProvision(?string $creditLossProvision): static

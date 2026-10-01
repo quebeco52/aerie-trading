@@ -60,6 +60,7 @@ class StockPageBuilder
     {
         $isEtf = $asset instanceof Etf;
         $macroState = $this->macroStateProvider->liveState();
+        $this->liquidityEngine->setStampDutyRate($macroState->stampDutyRate);
 
         // A fund carries no bankruptcy flag, so only a company can be delisted.
         $isDelisted = !$isEtf && $asset->isBankrupt();

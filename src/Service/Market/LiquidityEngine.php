@@ -34,9 +34,18 @@ use App\Service\Math\MathUtility;
  */
 final class LiquidityEngine
 {
+    /** The stamp duty in force on each side of a share trade, which thins turnover; the ticker and the trade desk set it from the economy. */
+    private float $stampDutyRate = FinancialConstants::STAMP_DUTY_RATE;
+
     public function __construct(
         private readonly MathUtility $mathUtility,
     ) {}
+
+    /** Sets the stamp duty in force on each side of a share trade, which every volume figure after it reads. */
+    public function setStampDutyRate(float $stampDutyRate): void
+    {
+        $this->stampDutyRate = $stampDutyRate;
+    }
 
     /**
      * The structural annual turnover a name should be seeded with, from its own volatility.
@@ -92,13 +101,18 @@ final class LiquidityEngine
         return max(FinancialConstants::MIN_ADV_SHARES, $this->rawStructuralDailyVolume($stock));
     }
 
+    /**
+     * Float times turnover, thinned by a stamp duty above the founding rate (MathUtility::calculateStampDutyVolumeFactor):
+     * spreads, impact and every order cap read volume, so a dearer round trip leaves a less liquid market, as France's
+     * 2012 tax did (Colliard & Hoffmann 2017).
+     */
     private function rawStructuralDailyVolume(Stock $stock): float
     {
         $shares = (float) $stock->getSharesOutstanding();
         $float = max(0.0, min(1.0, (float) $stock->getPublicFloatPercentage()));
         $turnover = $stock->getTurnoverRatio() ?? FinancialConstants::BASELINE_ANNUAL_TURNOVER;
 
-        return ($shares * $float * max(0.0, $turnover)) / FinancialConstants::TRADING_DAYS_PER_YEAR;
+        return ($shares * $float * max(0.0, $turnover)) * MathUtility::calculateStampDutyVolumeFactor($this->stampDutyRate) / FinancialConstants::TRADING_DAYS_PER_YEAR;
     }
 
     /**

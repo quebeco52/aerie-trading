@@ -219,4 +219,4 @@
 	</div>
 {% endblock %}
 
-{% macro value(lever, value) %}{{ lever.unit == 'hhi' ? (value * 10000)|number_format(0) ~ ' HHI' : (value * 100)|number_format(2) ~ '%' }}{% endmacro %}
+{% macro value(lever, value) %}{{ lever.unit == 'hhi' ? (value * 10000)|number_format(0) ~ ' HHI' : (lever.unit == 'usd_t' ? '$' ~ value|number_format(2) ~ '/t' : (value * 100)|number_format(2) ~ '%') }}{% endmacro %}

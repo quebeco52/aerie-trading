@@ -517,9 +517,11 @@ class FinancialConstants
     public const MIN_ANNUAL_TURNOVER = 0.35;
     public const MAX_ANNUAL_TURNOVER = 4.00;
 
-    // --- Stamp Duty ---
-    /** Stamp duty on a transfer of listed shares, charged to buyer and seller each and paid into the sovereign reserve fund (District rate; Hong Kong charges 0.1% a side, the UK 0.5% on purchases). */
+    // --- Stamp Duty (Colliard & Hoffmann 2017) ---
+    /** Stamp duty on a transfer of listed shares at the founding, charged to buyer and seller each and paid into the sovereign reserve fund (District rate; Hong Kong charges 0.1% a side, the UK 0.5% on purchases). The Diet sets the rate in force (MacroStateDTO::stampDutyRate). */
     public const STAMP_DUTY_RATE = 0.0005;
+    /** Log fall in share turnover per unit of round-trip duty above the founding rate: France's 0.2% tax on purchases in August 2012 cut trading volume by about 10% (Colliard & Hoffmann 2017, JF), ln(1 / 0.9) / 0.002. */
+    public const STAMP_DUTY_VOLUME_SEMI_ELASTICITY = 52.68;
 
     // --- Market Microstructure: Spread (Wyart, Bouchaud, Kockelkoren, Potters & Vettorazzo 2008) ---
     /** Coefficient c in S = c * sigma_daily / sqrt(N), the observed relation between spread, volatility and trade count. Near unity in real order-driven markets. */
@@ -795,6 +797,16 @@ class FinancialConstants
     public const ANALYST_RATING_OUTPERFORM = 1.15;
     /** Target-over-price below which it reads Underperform. Asymmetric against the threshold above on purpose: the sell side downgrades late and reluctantly. */
     public const ANALYST_RATING_UNDERPERFORM = 0.98;
+
+    // --- Bank Levy (UK Finance Act 2011, Schedule 19; FDIC) ---
+    /** The levy on long-term funding and on deposits from customers outside finance, as a share of the rate on short-term funding: half (the UK's long-term rate, 0.105% against 0.21% in 2015). */
+    public const BANK_LEVY_LONG_TERM_RATE_SHARE = 0.5;
+    /** Share of deposits a deposit-insurance scheme covers, which the levy leaves out: 60.4% of US domestic deposits in 2024 (FDIC, estimated insured deposits). */
+    public const INSURED_DEPOSIT_SHARE = 0.604;
+
+    // --- Environmental Regulation (Greenstone, List & Syverson 2012) ---
+    /** Productivity polluting plants lose under the strictest air-quality rules: 4.8% of TFP for plants in counties out of attainment, corrected for price rises and for the plants that close (NBER w18392, 1.2 million US plant-years 1972-1993). Manufacturing evidence, the nearest on record for the rules on extraction. */
+    public const ENVIRONMENTAL_REGULATION_TFP_LOSS = 0.048;
 
     // --- ETF Creation, Redemption and the Arbitrage Band (Petajisto 2017; Madhavan 2016) ---
     /** Fee an authorized participant is charged for one creation or redemption, as a fraction of the basket. Part of the round trip it has to earn back before arbitraging a deviation is worth doing. */

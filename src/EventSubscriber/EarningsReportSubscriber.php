@@ -106,6 +106,7 @@ class EarningsReportSubscriber implements EventSubscriberInterface
         $report->setEarningAssets($stock->getEarningAssets());
         $report->setCreditLossAllowance($hasEarningAssets ? $stock->getCreditLossAllowance() : null);
         $report->setCreditLossProvision($hasEarningAssets ? \App\Service\Math\MathUtility::formatDecimal($ctx->creditLossProvision, 4) : null);
+        $report->setBankLevy($ctx->bankLevy > 0.0 ? \App\Service\Math\MathUtility::formatDecimal($ctx->bankLevy, 4) : null);
         $report->setNetChargeOffs($hasEarningAssets ? \App\Service\Math\MathUtility::formatDecimal($ctx->netChargeOffs, 4) : null);
         $report->setNetLoanOriginations($hasEarningAssets ? \App\Service\Math\MathUtility::formatDecimal($ctx->netLoanOriginations, 4) : null);
         $report->setAssetSaleLoss($hasEarningAssets ? \App\Service\Math\MathUtility::formatDecimal($ctx->assetSaleLoss, 4) : null);

@@ -9,6 +9,7 @@ use App\Service\Macro\MacroEngine;
 use App\Service\Macro\MacroState;
 use App\Service\Macro\Subsystem\AssetMarketSubsystem;
 use App\Service\Macro\Subsystem\MacroAggregateSubsystem;
+use App\Service\Math\FinancialConstants;
 
 /**
  * Immutable Data Transfer Object representing a snapshot of the macroeconomic state.
@@ -316,6 +317,12 @@ readonly class MacroStateDTO
         public float $laborForceGrowthRate = MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE,
         public float $mergerReviewLeniency = 0.0,
         public float $immigrationPopulationShift = 0.0,
+        public float $greenBeltStringency = 0.0,
+        public float $carbonPrice = 0.0,
+        public float $extractionStringency = 0.0,
+        public float $stampDutyRate = FinancialConstants::STAMP_DUTY_RATE,
+        public float $bankLevyRate = 0.0,
+        public float $electricityCarbonPriceLevel = 0.0,
         public float $moneySupplyGrowth = MacroEngine::M2_BASE_GROWTH,
         public float $moneySupplyGrowthEma = MacroEngine::M2_BASE_GROWTH,
         public float $sovereignFundDomesticEquity = 0.0,
@@ -356,6 +363,7 @@ readonly class MacroStateDTO
         public float $boardDividendCash = 0.0,
         public float $boardNetIssuance = 0.0,
         public float $boardStampDuty = 0.0,
+        public float $boardBankLevy = 0.0,
         public float $strategicStakeCash = 0.0,
         public float $sovereignFundBudgetInflow = 0.0,
     ) {

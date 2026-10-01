@@ -275,6 +275,7 @@ class StockController extends AbstractController
             ['name' => 'Pre-tax income', 'role' => 'profit'],
             ['name' => 'Taxes', 'role' => 'cost'],
             ['name' => 'Goodwill impairment', 'role' => 'noncash'],
+            ['name' => 'Bank levy', 'role' => 'cost'],
             ['name' => 'Net income', 'role' => 'profit'],
             ['name' => 'Cash generated', 'role' => 'profit'],
             ['name' => 'External funding', 'role' => 'income'],
@@ -334,6 +335,7 @@ class StockController extends AbstractController
 
         $addLink('Pre-tax income', 'Taxes', $flow->taxes);
         $addLink('Pre-tax income', 'Goodwill impairment', $flow->goodwillImpairment);
+        $addLink('Pre-tax income', 'Bank levy', $flow->bankLevy);
         $addLink('Pre-tax income', 'Net income', $flow->netIncome);
 
         // Cash sources and uses: add back non-cash depreciation and goodwill impairment.

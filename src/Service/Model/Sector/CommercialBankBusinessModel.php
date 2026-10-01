@@ -28,6 +28,10 @@ use App\Service\Math\FinancialConstants;
  */
 class CommercialBankBusinessModel extends BaseFinancialBusinessModel
 {
+    // --- Bank Levy ---
+    /** A deposit-taking bank pays the bank levy. */
+    public const PAYS_BANK_LEVY = true;
+
     // --- Operating Cyclicality & Demand Structure ---
     /** Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Loan demand and deposit growth track nominal activity. */
     public const OPERATING_CYCLICALITY = 1.00;

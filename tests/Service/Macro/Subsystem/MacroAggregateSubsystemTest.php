@@ -5,6 +5,7 @@ namespace App\Tests\Service\Macro\Subsystem;
 use App\Service\Macro\MacroEngine;
 use App\Service\Macro\MacroState;
 use App\Service\Macro\Subsystem\AssetMarketSubsystem;
+use App\Service\Macro\Subsystem\CommodityLogisticsSubsystem;
 use App\Service\Macro\Recorder\OutputGapProbe;
 use App\Service\Macro\Subsystem\MacroAggregateSubsystem;
 use App\Service\Macro\Subsystem\SovereignFundSubsystem;
@@ -1953,5 +1954,36 @@ class MacroAggregateSubsystemTest extends TestCase
             $followed,
             'The trend must follow a genuinely new level eventually, or it is just another constant.'
         );
+    }
+
+    /**
+     * A carbon price steps the price level up by electricity's CPI weight times the rise in the household bill, spread
+     * over the energy lag: a step, not a lasting rate.
+     */
+    public function testACarbonPriceStepsThePriceLevelByElectricitysWeight(): void
+    {
+        $quiet = new class extends MathUtility {
+            public function generateStandardNormal(): float { return 0.0; }
+        };
+        $subsystem = new MacroAggregateSubsystem($quiet);
+        $free = new MacroState();
+        $free->inflationEma = MacroEngine::TARGET_INFLATION;
+        $free->wageGrowth = MacroEngine::TFP_DRIFT + MacroEngine::TARGET_INFLATION;
+        $priced = clone $free;
+        $priced->carbonPrice = 70.37;
+
+        $dt = 0.01;
+        $added = 0.0;
+        $last = 0.0;
+        for ($step = 0; $step < 1000; ++$step) {
+            $last = $subsystem->calculateInflation($priced, MacroEngine::TARGET_INFLATION, 1.0, $dt) - $subsystem->calculateInflation($free, MacroEngine::TARGET_INFLATION, 1.0, $dt);
+            $added += $last * $dt;
+        }
+
+        $step = MacroAggregateSubsystem::CPI_ELECTRICITY_WEIGHT * log(1.0 + (CommodityLogisticsSubsystem::carbonPowerPriceAdder(70.37) / MacroAggregateSubsystem::RESIDENTIAL_ELECTRICITY_PRICE));
+        $this->assertEqualsWithDelta($step, $added, 1e-6, 'Ten years on, the price level is up by the step and no more.');
+        $this->assertEqualsWithDelta(0.0, $last, 1e-9, 'Once passed through, inflation is back where it was.');
+        $this->assertGreaterThan(0.002, $step);
+        $this->assertLessThan(0.006, $step);
     }
 }

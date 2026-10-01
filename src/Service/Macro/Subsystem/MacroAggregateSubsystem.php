@@ -235,6 +235,12 @@ class MacroAggregateSubsystem
     /** Characteristic half-life in years for food cost-push pass-through into core inflation. */
     public const AGRI_COST_PUSH_LAG_YEARS = 0.75;
 
+    // --- Carbon in the Electricity Bill (BLS CPI relative importance; EIA Electric Power Monthly) ---
+    /** Household electricity's weight in the consumer price index: 2.201% (CPI-U relative importance, December 2024). */
+    public const CPI_ELECTRICITY_WEIGHT = 0.02201;
+    /** What households pay for electricity, in $/MWh: 16.48 cents a kWh, the US residential average in 2024 (EIA). */
+    public const RESIDENTIAL_ELECTRICITY_PRICE = 164.8;
+
     // --- New Keynesian Phillips Curve Dynamics ---
     /** Output gap at which supply bottlenecks bind (Benigno & Eggertsson 2023, the v/u = 1 kink); at 11% the convexity sat outside the ±4% the gap lives in and inflation was flat across the cycle. */
     public const PHILLIPS_MAX_CAPACITY = 0.035;
@@ -968,9 +974,20 @@ class MacroAggregateSubsystem
             lagTimeConstant: self::AGRI_COST_PUSH_LAG_YEARS
         );
 
+        // A carbon price reaches the electricity bill as the wholesale price it adds, at the energy lag: a step in the
+        // price level, its electricity weight's worth, not a lasting rate.
+        $priorCarbonLevel = $state->electricityCarbonPriceLevel;
+        $state->electricityCarbonPriceLevel = $this->mathUtility->calculateDistributedLag(
+            currentLaggedValue: $priorCarbonLevel,
+            targetValue: log(1.0 + (CommodityLogisticsSubsystem::carbonPowerPriceAdder($state->carbonPrice) / self::RESIDENTIAL_ELECTRICITY_PRICE)),
+            dt: $dt,
+            lagTimeConstant: self::ENERGY_COST_PUSH_LAG_YEARS
+        );
+        $carbonCostPush = self::CPI_ELECTRICITY_WEIGHT * ($state->electricityCarbonPriceLevel - $priorCarbonLevel) / $dt;
+
         // Shapiro (2022) commodity basket aggregation normalized by expenditure weight.
         $commodityBasketInflation = $targetInflation + $anchorSlip
-            + (($state->energyCostPushLag + $state->agriCostPushLag) / self::INFLATION_WEIGHT_COMMODITY)
+            + (($state->energyCostPushLag + $state->agriCostPushLag + $carbonCostPush) / self::INFLATION_WEIGHT_COMMODITY)
             + $importPriceInflation;
 
         // Shapiro (2022) expenditure-weighted headline consumer price aggregation.
@@ -994,6 +1011,7 @@ class MacroAggregateSubsystem
                 'goodsSupply' => $goodsSupplyFriction * self::INFLATION_WEIGHT_GOODS,
                 'energyPassThrough' => $state->energyCostPushLag,
                 'foodPassThrough' => $state->agriCostPushLag,
+                'carbonPassThrough' => $carbonCostPush,
                 'importPrices' => $importPriceInflation * (self::INFLATION_WEIGHT_GOODS + self::INFLATION_WEIGHT_COMMODITY),
                 'stickyPriceLag' => (self::INFLATION_WEIGHT_SUPERCORE * ($state->supercoreInflation - $targetSupercore))
                     + (self::INFLATION_WEIGHT_GOODS * ($state->coreGoodsInflation - $targetCoreGoods)),

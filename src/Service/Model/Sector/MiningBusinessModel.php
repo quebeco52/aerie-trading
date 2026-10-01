@@ -263,8 +263,10 @@ class MiningBusinessModel extends StandardCorporateBusinessModel
         $priceRelative = $volumeRevenue > 0.0 ? $actualRevenue / $volumeRevenue : 1.0;
 
         // --- Per-Tonne Cost Base ---
+        // Stricter rules on extraction cost productivity, and every tonne costs that much more to mine.
         $inputCostDrag = $this->resolveInputCostDrag($stock, $macroState, $streams, $this->resolvePricingPower($stock), $realizedVariableMargin);
-        $perTonneCostRatio = $realizedVariableMargin + $inputCostDrag + $disasterPenalty;
+        $extractionRules = MathUtility::getInstance()->calculateProductivityLossCostFactor(FinancialConstants::ENVIRONMENTAL_REGULATION_TFP_LOSS * $macroState->extractionStringency);
+        $perTonneCostRatio = (($realizedVariableMargin + $inputCostDrag) * $extractionRules) + $disasterPenalty;
         $clampedMargin = $this->clampMargin(MathUtility::getInstance()->calculatePerUnitCostRatio($perTonneCostRatio, $priceRelative));
 
         // The benchmark is public; the mine's own output is not. Dividing the price leg by the base visibility
@@ -305,6 +307,7 @@ class MiningBusinessModel extends StandardCorporateBusinessModel
             'agricultural_commodity_index_ema',
             'energy_cost_push_lag',
             'exchange_rate_index_ema',
+            'extraction_stringency',
             'gold_price_index_ema',
             'industrial_metals_index_ema',
             'natural_gas_price_index_ema',

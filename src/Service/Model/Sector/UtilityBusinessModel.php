@@ -97,7 +97,7 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
     /** Share of merchant generation whose fuel is gas bought at spot: 43.1% of U.S. utility-scale generation in 2023 (EIA). Nuclear, renewables, hydro and contracted coal make up the rest, whose fuel does not move with gas. */
     public const MERCHANT_GAS_FLEET_SHARE = 0.431;
     /** Heat rate of the merchant gas fleet (MMBtu/MWh): the U.S. gas-fired operating average, 2017-2024 (EIA Electric Power Annual, Table 8.1). */
-    public const MERCHANT_GAS_HEAT_RATE = 7.74;
+    public const MERCHANT_GAS_HEAT_RATE = CommodityLogisticsSubsystem::GAS_FLEET_HEAT_RATE;
 
     // --- Regulatory Lag & Macro Physics ---
     /** Macroeconomic demand shift sensitivity to output gap (industrial power usage). */
@@ -304,14 +304,17 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
 
     /**
      * Change in merchant fuel cost per unit of merchant revenue at baseline prices: the gas-fired share burns the
-     * fleet heat rate of gas per MWh, which at baseline prices is this share of what the MWh sells for.
+     * fleet heat rate of gas per MWh, which at baseline prices is this share of what the MWh sells for, and pays the
+     * carbon price on what it burns.
      */
     private function resolveMerchantFuelCostChange(float $powerShare, float $gasFleetShare, MacroStateDTO $macroState): float
     {
         $baselineFuelShare = self::MERCHANT_GAS_HEAT_RATE * CommodityLogisticsSubsystem::REFERENCE_GAS_PRICE / CommodityLogisticsSubsystem::REFERENCE_POWER_PRICE;
         $gasRelative = max(0.0, $macroState->naturalGasPriceIndexEma) / MacroEngine::NATURAL_GAS_BASELINE;
+        $carbonShare = self::MERCHANT_GAS_HEAT_RATE * CommodityLogisticsSubsystem::NATURAL_GAS_CO2_TONNES_PER_MMBTU * $macroState->carbonPrice
+            / CommodityLogisticsSubsystem::REFERENCE_POWER_PRICE;
 
-        return $powerShare * $gasFleetShare * $baselineFuelShare * ($gasRelative - 1.0);
+        return $powerShare * $gasFleetShare * (($baselineFuelShare * ($gasRelative - 1.0)) + $carbonShare);
     }
 
     /**
@@ -401,6 +404,7 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
     public function getOperatingMacroFields(): array
     {
         return [
+            'carbon_price',
             'catastrophe_loss_index_ema',
             'energy_cost_push_lag',
             'exchange_rate_index_ema',

@@ -52,6 +52,7 @@ class MacroFieldRegistryTest extends TestCase
         'electionPulse' => 'Input the government hands the economy each tick; policy_uncertainty_index records its effect.',
         'tariffTradeLag' => 'Net-export response building toward the tariff, which import_tariff_rate records.',
         'immigrationPopulationShift' => 'Integral of labor_force_growth_rate over the structural rate, which is recorded.',
+        'electricityCarbonPriceLevel' => 'Lagged pass-through of carbon_price into the electricity bill, which is recorded.',
         'lastQeLaunchAt' => 'Edge marker for the launch headline; qe_active and qe_intensity record the programme.',
 
         'sovereignFundDomesticEquity' => 'Currency amount that compounds forever; sovereign_fund_to_gdp and the domestic weight record it.',
@@ -69,6 +70,7 @@ class MacroFieldRegistryTest extends TestCase
         'foreignEquityValuationChange' => 'One tick of re-rating; foreign_equity_index records its effect.',
         'sovereignFundStampDutyYearToDate' => 'Currency accumulator for the budget year; sovereign_fund_stamp_duty_to_gdp records the year.',
         'boardStampDuty' => 'One tick of stamp duty; sovereign_fund_stamp_duty_to_gdp records the year.',
+        'boardBankLevy' => 'The banks\' levy bill at the rate in force; bank_levy_rate records the rate and corporate_report.bank_levy what each bank paid.',
         'strategicStakeCash' => 'One tick of cash from the District\'s strategic stakes, credited to the fund at once.',
         'sovereignFundStabilisationYearStart' => 'The budget year\'s opening level of sovereign_fund_stabilisation_to_gdp, which is recorded.',
         'sovereignFundStabilisationLastChange' => 'Last budget year\'s change in sovereign_fund_stabilisation_to_gdp, which is recorded.',

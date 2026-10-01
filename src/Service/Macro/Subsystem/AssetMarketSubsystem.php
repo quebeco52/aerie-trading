@@ -26,6 +26,18 @@ class AssetMarketSubsystem
     /** Rise in rents and house values per unit of population added by immigration (Saiz 2007: an inflow of 1% of a city's population raises rents and values about 1%); the District's land ends at the sounds. */
     public const IMMIGRATION_HOUSING_ELASTICITY = 1.0;
 
+    // --- Green Belts (Hilber & Vermeulen 2016, EJ: 353 English planning authorities, 1974-2008) ---
+    /** Mean refusal rate of major residential schemes (ten or more homes) across English planning authorities, 1979-2008 (Table 1). */
+    public const PLANNING_REFUSAL_RATE_MEAN = 0.254;
+    /** Standard deviation of that refusal rate across authorities (Table 1). */
+    public const PLANNING_REFUSAL_RATE_SD = 0.087;
+    /** Standard deviations from the mean authority to the 10th or 90th percentile, a normal's (the refusal rate's skewness is 0.33): the founding planning regime stands at the 10th, the strictest green belt at the 90th. */
+    public const PLANNING_PERCENTILE_Z = 1.2816;
+    /** Rise in the house price-earnings elasticity per standard deviation of refusal rate while house prices rise (Table 3, booms: 0.267, se 0.055). */
+    public const GREEN_BELT_BOOM_ELASTICITY_PER_SD = 0.267;
+    /** The same rise while house prices fall (Table 3, busts: 0.152, se 0.061): a durable stock cannot shrink, so supply binds less on the way down (Glaeser & Gyourko 2005). */
+    public const GREEN_BELT_BUST_ELASTICITY_PER_SD = 0.152;
+
     // --- Sector Demand Factor ---
     /** Campbell-Cochrane (1999) habit formation risk aversion sensitivity to output gap deviations. */
     public const HABIT_RISK_AVERSION_COEFF = 9.0;
@@ -336,7 +348,10 @@ class AssetMarketSubsystem
      * and household real disposable income affordability, with sticky physical mean reversion. Credit conditions
      * enter the fundamental as in Duca, Muellbauer & Murphy (2011): the price a buyer can pay is the price a lender
      * will finance, so net tightening in bank standards lowers it and loosening lifts it. The population an immigration
-     * regime adds over the structural path bids for the same land, one for one (Saiz 2007).
+     * regime adds over the structural path bids for the same land, one for one (Saiz 2007). A green belt makes prices
+     * answer income and population more strongly, as stricter planning does across English authorities (Hilber &
+     * Vermeulen 2016); the index has no trend in real income, so a green belt deepens its booms and slumps and the
+     * price of immigration rather than adding a drift of its own.
      *
      * @param MacroState $state             Current macroeconomic state.
      * @param float      $expectedInflation Expected inflation (MonetaryPolicySubsystem::calculateExpectedInflation), the same measure the Taylor rule and IS curve use.
@@ -348,7 +363,8 @@ class AssetMarketSubsystem
 
         $excessUnemployment = $state->unemploymentRateEma - $state->nairu;
         $laborFactor = 1.0 - ($excessUnemployment * self::RESIDENTIAL_UNEMPLOYMENT_SENSITIVITY);
-        $incomeFactor = 1.0 + ($state->outputGapEma * self::RESIDENTIAL_INCOME_ELASTICITY);
+        $incomeLift = self::greenBeltElasticityLift($state->greenBeltStringency, $state->outputGapEma);
+        $incomeFactor = 1.0 + ($state->outputGapEma * (self::RESIDENTIAL_INCOME_ELASTICITY + $incomeLift));
         $demandMultiplier = max(self::RESIDENTIAL_MIN_LABOR_FACTOR, min(self::RESIDENTIAL_MAX_LABOR_FACTOR, $laborFactor * $incomeFactor));
 
         $affordabilityFactor = ((self::RESIDENTIAL_NEUTRAL_USER_COST / $userCost) ** self::RESIDENTIAL_USER_COST_ELASTICITY) * $demandMultiplier;
@@ -360,7 +376,8 @@ class AssetMarketSubsystem
         $creditSupplyFactor = $state->creditToGdpTrend > 0.0
             ? 1.0 + (self::RESIDENTIAL_CREDIT_SUPPLY_ELASTICITY * ($state->creditToGdpGapEma / $state->creditToGdpTrend))
             : 1.0;
-        $immigrationFactor = exp(self::IMMIGRATION_HOUSING_ELASTICITY * $state->immigrationPopulationShift);
+        $immigrationLift = self::greenBeltElasticityLift($state->greenBeltStringency, $state->immigrationPopulationShift);
+        $immigrationFactor = exp((self::IMMIGRATION_HOUSING_ELASTICITY + $immigrationLift) * $state->immigrationPopulationShift);
         $fundamentalPrice = self::RESIDENTIAL_BASELINE * max(0.30, min(2.50, $affordabilityFactor * max(0.5, $damageFactor) * max(0.5, $creditConditionsFactor) * max(0.5, $creditSupplyFactor) * $immigrationFactor));
 
         $dW = $this->mathUtility->generateStandardNormal();
@@ -392,11 +409,13 @@ class AssetMarketSubsystem
             $terms = [
                 'userCost' => self::RESIDENTIAL_USER_COST_ELASTICITY * log(self::RESIDENTIAL_NEUTRAL_USER_COST / $userCost),
                 'unemployment' => log(max(1e-9, $laborFactor)),
-                'income' => log(max(1e-9, $incomeFactor)),
+                'income' => log(max(1e-9, 1.0 + ($state->outputGapEma * self::RESIDENTIAL_INCOME_ELASTICITY))),
                 'catastropheDamage' => log(max(0.5, $damageFactor)),
                 'lendingStandards' => log(max(0.5, $creditConditionsFactor)),
                 'creditSupply' => log(max(0.5, $creditSupplyFactor)),
-                'immigration' => log($immigrationFactor),
+                'immigration' => self::IMMIGRATION_HOUSING_ELASTICITY * $state->immigrationPopulationShift,
+                'greenBelt' => log(max(1e-9, $incomeFactor) / max(1e-9, 1.0 + ($state->outputGapEma * self::RESIDENTIAL_INCOME_ELASTICITY)))
+                    + ($immigrationLift * $state->immigrationPopulationShift),
             ];
             $terms['clamp'] = $logFundamental - array_sum($terms);
             $this->diagnostics->recordLevel('households', 'houseFundamental', $terms, $logFundamental, $dt);
@@ -898,10 +917,49 @@ class AssetMarketSubsystem
     }
 
     /**
+     * The refusal rate of major residential schemes a green belt's stringency stands for: the 10th percentile of English
+     * planning authorities at the founding regime (0), the 90th at the strictest (1).
+     *
+     * @param float $stringency The green belt, 0 to 1.
+     */
+    public static function planningRefusalRate(float $stringency): float
+    {
+        return self::PLANNING_REFUSAL_RATE_MEAN + (self::PLANNING_REFUSAL_RATE_SD * self::PLANNING_PERCENTILE_Z * ((2.0 * $stringency) - 1.0));
+    }
+
+    /**
+     * How much a green belt adds to the elasticity of house prices to a demand shifter over the founding regime: the
+     * refusal rate's rise in standard deviations times Hilber & Vermeulen's rise per standard deviation, the boom
+     * estimate while the shifter pushes prices up and the bust estimate while it pulls them down.
+     *
+     * @param float $stringency The green belt, 0 to 1.
+     * @param float $shifter    The demand shifter the elasticity applies to (the output gap, or the immigrant population).
+     */
+    public static function greenBeltElasticityLift(float $stringency, float $shifter): float
+    {
+        $perSd = $shifter >= 0.0 ? self::GREEN_BELT_BOOM_ELASTICITY_PER_SD : self::GREEN_BELT_BUST_ELASTICITY_PER_SD;
+
+        return 2.0 * self::PLANNING_PERCENTILE_Z * $stringency * $perSd;
+    }
+
+    /**
+     * How strongly building answers house prices under a green belt, as a share of how it answers under the founding
+     * regime: the price response to demand is the inverse of the supply elasticity (Saiz 2010), so supply's response to
+     * the price falls in the proportion the price's response to rising demand grows.
+     *
+     * @param float $stringency The green belt, 0 to 1.
+     */
+    public static function greenBeltSupplyResponse(float $stringency): float
+    {
+        return self::RESIDENTIAL_INCOME_ELASTICITY / (self::RESIDENTIAL_INCOME_ELASTICITY + self::greenBeltElasticityLift($stringency, 1.0));
+    }
+
+    /**
      * Poterba (1984) / Topel-Rosen (1988) Tobin's Q Housing Investment Dynamics.
      *
      * Computes residential construction volume (Housing Starts) driven by the ratio of asset market home prices
-     * to physical replacement costs, discounted by mortgage user costs and bank lending standards.
+     * to physical replacement costs, discounted by mortgage user costs and bank lending standards. A green belt makes
+     * building answer the price less (greenBeltSupplyResponse()).
      *
      * @param MacroState $state             Current macroeconomic state.
      * @param float      $expectedInflation Expected inflation, as for calculateResidentialPropertyIndex().
@@ -923,7 +981,7 @@ class AssetMarketSubsystem
 
         $params = [
             'baseline' => MacroEngine::HOUSING_STARTS_BASELINE,
-            'qSens' => self::HOUSING_STARTS_Q_SENSITIVITY,
+            'qSens' => self::HOUSING_STARTS_Q_SENSITIVITY * self::greenBeltSupplyResponse($state->greenBeltStringency),
             'costSens' => self::HOUSING_STARTS_USER_COST_SENSITIVITY,
             'sloosSens' => self::HOUSING_STARTS_SLOOS_SENSITIVITY,
             'creditGapSens' => self::HOUSING_STARTS_CREDIT_GAP_SENSITIVITY,

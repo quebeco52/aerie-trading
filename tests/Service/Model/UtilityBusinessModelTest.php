@@ -11,6 +11,7 @@ use App\DTO\StreamContext;
 use App\Service\Event\ShockEvent;
 use App\DTO\ActualFinancialsDTO;
 use App\DTO\MacroStateDTO;
+use App\Service\Macro\MacroEngine;
 use App\Service\Macro\Subsystem\CommodityLogisticsSubsystem;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\TestCase;
@@ -237,5 +238,24 @@ class UtilityBusinessModelTest extends TestCase
 
         $this->assertArrayNotHasKey($regimeKey, array_filter($run(1.0)));
         $this->assertGreaterThan(0.0, $run(UtilityBusinessModel::CATASTROPHE_GRID_DAMAGE_THRESHOLD)[$regimeKey] ?? 0.0, 'District storm damage opens the hardening regime with the utility\'s own event draw flat.');
+    }
+
+    /**
+     * Gas-fired fleets pay the carbon they burn and get back the share the power price passes through; zero-fuel
+     * renewables pay none and keep it all.
+     */
+    public function testCarbonCostsTheGasFleetWhatThePriceDoesNotPassThroughAndPaysRenewables(): void
+    {
+        $adderShare = CommodityLogisticsSubsystem::carbonPowerPriceAdder(70.37) / CommodityLogisticsSubsystem::REFERENCE_POWER_PRICE;
+        $macro = new MacroStateDTO(carbonPrice: 70.37, wholesalePowerPriceIndexEma: MacroEngine::WHOLESALE_POWER_BASELINE * (1.0 + $adderShare));
+        $carbonShare = UtilityBusinessModel::MERCHANT_GAS_HEAT_RATE * CommodityLogisticsSubsystem::NATURAL_GAS_CO2_TONNES_PER_MMBTU * 70.37 / CommodityLogisticsSubsystem::REFERENCE_POWER_PRICE;
+
+        $renewables = new Stock();
+        $renewables->setTicker('BIRD');
+        $this->assertEqualsWithDelta($adderShare, (new UtilityBusinessModel())->describeMerchantPowerImpact($renewables, $macro), 1e-12);
+
+        $mixed = new Stock();
+        $mixed->setTicker('UTIL');
+        $this->assertEqualsWithDelta($adderShare - (UtilityBusinessModel::MERCHANT_GAS_FLEET_SHARE * $carbonShare), (new UtilityBusinessModel())->describeMerchantPowerImpact($mixed, $macro), 1e-12);
     }
 }

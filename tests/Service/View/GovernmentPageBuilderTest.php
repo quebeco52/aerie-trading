@@ -81,7 +81,9 @@ class GovernmentPageBuilderTest extends TestCase
         $this->assertSame('Year 13 Q1', $page['election']['next']);
         foreach ($page['compass']['parties'] as $party) {
             $this->assertCount(2, $party['trail']);
-            $this->assertCount(2, $party['councilTrail']);
+            foreach ($party['strips'] as $strip) {
+                $this->assertCount(2, $strip['trail']);
+            }
         }
     }
 
@@ -179,8 +181,11 @@ class GovernmentPageBuilderTest extends TestCase
         $this->assertSame(['Exchange Party', 'The Chartists'], array_column($page['government']['support'], 'name'));
         $this->assertCount(55, array_filter($page['hemicycle'], static fn(array $seat): bool => $seat['supporting']));
         $this->assertCount(85, array_filter($page['hemicycle'], static fn(array $seat): bool => $seat['governing']));
+        $this->assertSame([Diet::AXIS_COUNCIL, Diet::AXIS_ENVIRONMENT], array_column($page['compass']['strips'], 'axis'));
         foreach ($page['compass']['parties'] as $party) {
-            $this->assertEqualsWithDelta($party['council'] * 100.0, $party['councilX'], 1e-9, 'The Council strip places every party on its axis.');
+            foreach ($party['strips'] as $axis => $strip) {
+                $this->assertEqualsWithDelta($party[$axis] * 100.0, $strip['x'], 1e-9, 'Each strip places every party on its axis.');
+            }
         }
     }
 
@@ -247,13 +252,19 @@ class GovernmentPageBuilderTest extends TestCase
         [$left, $top, $width, $height] = $compass['viewBox'];
 
         $plane = array_map(static fn(array $axis): array => $box($axis['text'], $axis['x'], $axis['y'], $axis['anchor']), $compass['axes']);
-        $strip = array_map(static fn(array $axis): array => $box($axis['text'], $axis['x'], $axis['y'], $axis['anchor']), $compass['stripAxes']);
+        $sets = ['plane' => $plane];
+        foreach ($compass['strips'] as $strip) {
+            $sets[$strip['axis']] = array_map(static fn(array $end): array => $box($end['text'], $end['x'], $strip['y'] + $end['y'], $end['anchor']), $strip['ends']);
+        }
         foreach ($compass['parties'] as $party) {
             $this->assertSame(GovernmentPageBuilder::PARTY_LABELS[$party['key']], $party['label']);
-            $plane[] = $box($party['label'], $party['labelX'], $party['labelY'], $party['labelAnchor']);
-            $strip[] = $box($party['label'], $party['stripLabelX'], $party['stripLabelY'], 'middle');
+            $sets['plane'][] = $box($party['label'], $party['labelX'], $party['labelY'], $party['labelAnchor']);
+            foreach ($compass['strips'] as $strip) {
+                $place = $party['strips'][$strip['axis']];
+                $sets[$strip['axis']][] = $box($party['label'], $place['labelX'], $strip['y'] + $place['labelY'], 'middle');
+            }
         }
-        foreach (['plane' => $plane, 'strip' => $strip] as $name => $boxes) {
+        foreach ($sets as $name => $boxes) {
             foreach ($boxes as $i => $a) {
                 $this->assertGreaterThanOrEqual($left, $a[0], "A {$name} label runs off the left.");
                 $this->assertLessThanOrEqual($left + $width, $a[2], "A {$name} label runs off the right.");
@@ -262,12 +273,16 @@ class GovernmentPageBuilderTest extends TestCase
                 }
             }
         }
-        foreach ($plane as $a) {
+        foreach ($sets['plane'] as $a) {
             $this->assertGreaterThanOrEqual($top, $a[1]);
-            $this->assertLessThanOrEqual($compass['stripY'] - 16.0, $a[3], 'A plane label runs into the strip.');
+            $this->assertLessThanOrEqual($compass['strips'][0]['y'] - 16.0, $a[3], 'A plane label runs into the strip.');
         }
-        foreach ($strip as $a) {
-            $this->assertLessThanOrEqual($top + $height, $compass['stripY'] + $a[3], 'A strip label runs off the bottom.');
+        $stripBoxes = array_merge(...array_values(array_diff_key($sets, ['plane' => true])));
+        foreach ($stripBoxes as $i => $a) {
+            $this->assertLessThanOrEqual($top + $height, $a[3], 'A strip label runs off the bottom.');
+            foreach (array_slice($stripBoxes, $i + 1, null, true) as $b) {
+                $this->assertTrue($apart($a, $b), 'Labels on two strips overlap.');
+            }
         }
     }
 
@@ -399,6 +414,42 @@ class GovernmentPageBuilderTest extends TestCase
         $this->assertFalse($page['record'][2]['cabinet'], 'The talks\' outcome is hidden until the cabinet takes office.');
         $this->assertSame(['votes' => 2, 'cabinet' => 1], array_intersect_key($page['recordSummary'], ['votes' => 0, 'cabinet' => 0]));
         $this->assertCount(count(Diet::PARTIES), $page['parties']);
+    }
+
+    /**
+     * The Tideline Accord's page: founded on the environment alone, and governing alone it would enact the strictest
+     * green belt (the 90th percentile of refusals), the EU ETS carbon price and the strictest extraction rules.
+     */
+    public function testTheTidelinePageShowsTheEnvironmentLevers(): void
+    {
+        $page = $this->builder()->buildParty(new MacroStateDTO(), new PoliticsStateDTO(), Diet::TIDELINE);
+        $levers = array_column($page['levers'], null, 'name');
+
+        $this->assertSame(['The environment'], $page['party']['definedBy']);
+        $this->assertEqualsWithDelta(0.254 + (1.2816 * 0.087), $levers['Housing schemes refused']['platform'], 1e-12);
+        $this->assertEqualsWithDelta(0.254 - (1.2816 * 0.087), $levers['Housing schemes refused']['enacted'], 1e-12, 'The founding plan is in force.');
+        $this->assertSame('usd_t', $levers['Carbon price']['unit']);
+        $this->assertSame(PoliticsEngine::POLICY_GREEN_CARBON_PRICE, $levers['Carbon price']['platform']);
+        $this->assertSame(0.0, $levers['Carbon price']['enacted']);
+        $this->assertEqualsWithDelta((1.0 / 0.952) - 1.0, $levers['Extraction compliance cost']['platform'], 1e-12);
+    }
+
+    /** A Civic cabinet's budget puts a carbon price in front of the Diet, and the budget page names what it adds to power. */
+    public function testTheBudgetCarriesTheEnvironmentLevers(): void
+    {
+        $page = $this->builder()->build(new MacroStateDTO(totalTime: 0.2, sovereignDebtToGdp: 0.5), new PoliticsStateDTO(
+            totalTime: 0.2,
+            governingCoalition: Diet::membership([Diet::CIVIC]),
+            supportParties: Diet::membership([Diet::IRON_HARBOR, Diet::COMMON_LOT, Diet::TIDELINE]),
+            carbonPrice: 10.0,
+        ));
+        $carbon = array_column($page['budget']['levers'], null, 'name')['Carbon price'];
+
+        $this->assertSame(Diet::AXIS_ENVIRONMENT, $carbon['axis']);
+        $this->assertGreaterThan(10.0, $carbon['platform']);
+        $this->assertSame(10.0, $carbon['enacted']);
+        $this->assertStringContainsString('MWh', $carbon['note']);
+        $this->assertContains(Diet::AXIS_ENVIRONMENT, array_column($page['axes'], 'key'));
     }
 
     private function election(float $at, array $coalition, array $outgoing): DietElection

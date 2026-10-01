@@ -165,7 +165,7 @@
 				{% set w = compass.halfWidth %}
 				{% set f = compass.fontSize %}
 				{% set cab = compass.cabinet %}
-				<svg viewBox="{{ compass.viewBox|join(' ') }}" class="w-full mt-4 max-h-[30rem]" role="img" aria-label="Party positions: openness across and size of state up, and beneath them the Council question, populist on the left and technocratic on the right">
+				<svg viewBox="{{ compass.viewBox|join(' ') }}" class="w-full mt-4 max-h-[30rem]" role="img" aria-label="Party positions: openness across and size of state up, and beneath them the Council question, populist on the left and technocratic on the right, and the environment question, growth first on the left and the environment first on the right">
 					<rect x="{{ -w }}" y="{{ -w }}" width="{{ 2 * w }}" height="{{ 2 * w }}" rx="2" class="fill-surface-container-lowest stroke-outline-variant" fill-opacity="0.5" stroke-opacity="0.5" stroke-width="0.6"></rect>
 					{% for g in [-0.5, 0.5] %}
 						<line x1="{{ -w }}" y1="{{ g * w }}" x2="{{ w }}" y2="{{ g * w }}" class="stroke-outline-variant" stroke-opacity="0.35" stroke-width="0.4" stroke-dasharray="1 2"></line>
@@ -215,27 +215,31 @@
 						</a>
 					{% endfor %}
 
-					<g transform="translate(0 {{ compass.stripY }})">
-						<line x1="{{ -w }}" y1="0" x2="{{ w }}" y2="0" class="stroke-outline-variant" stroke-opacity="0.8" stroke-width="0.6"></line>
-						<line x1="0" y1="-4" x2="0" y2="4" class="stroke-outline-variant" stroke-opacity="0.8" stroke-width="0.6"></line>
-						{% for axis in compass.stripAxes %}
-							<text x="{{ axis.x }}" y="{{ axis.y }}" text-anchor="{{ axis.anchor }}" font-size="{{ f }}" class="fill-on-surface-variant">{{ axis.text }}</text>
-						{% endfor %}
-						{% for party in compass.parties %}
-							{% for p in party.councilTrail %}
-								<circle cx="{{ p.x }}" cy="0" r="1.2" fill="{{ party.color }}" fill-opacity="{{ p.opacity }}"></circle>
+					{% for strip in compass.strips %}
+						<g transform="translate(0 {{ strip.y }})">
+							<line x1="{{ -w }}" y1="0" x2="{{ w }}" y2="0" class="stroke-outline-variant" stroke-opacity="0.8" stroke-width="0.6"></line>
+							<line x1="0" y1="-4" x2="0" y2="4" class="stroke-outline-variant" stroke-opacity="0.8" stroke-width="0.6"></line>
+							{% for axis in strip.ends %}
+								<text x="{{ axis.x }}" y="{{ axis.y }}" text-anchor="{{ axis.anchor }}" font-size="{{ f }}" class="fill-on-surface-variant">{{ axis.text }}</text>
 							{% endfor %}
-						{% endfor %}
-						{% for party in compass.parties %}
-							<a href="{{ path('app_government_party', {slug: party.slug}) }}" class="hover:opacity-80">
-								<title>{{ party.name }}</title>
-								<circle cx="{{ party.councilX }}" cy="0" r="{{ party.councilR }}" fill="{{ party.color }}" fill-opacity="{{ party.governing ? 1 : (party.supporting ? 0.85 : 0.65) }}" class="stroke-surface-container-low" stroke-width="1"></circle>
-							</a>
-						{% endfor %}
-						{% for party in compass.parties %}
-							<text x="{{ party.stripLabelX }}" y="{{ party.stripLabelY }}" text-anchor="middle" font-size="{{ f }}" font-weight="600" class="{{ party.governing or party.supporting ? 'fill-on-surface' : 'fill-on-surface-variant' }}">{{ party.label }}</text>
-						{% endfor %}
-					</g>
+							{% for party in compass.parties %}
+								{% for p in party.strips[strip.axis].trail %}
+									<circle cx="{{ p.x }}" cy="0" r="1.2" fill="{{ party.color }}" fill-opacity="{{ p.opacity }}"></circle>
+								{% endfor %}
+							{% endfor %}
+							{% for party in compass.parties %}
+								{% set place = party.strips[strip.axis] %}
+								<a href="{{ path('app_government_party', {slug: party.slug}) }}" class="hover:opacity-80">
+									<title>{{ party.name }}</title>
+									<circle cx="{{ place.x }}" cy="0" r="{{ place.r }}" fill="{{ party.color }}" fill-opacity="{{ party.governing ? 1 : (party.supporting ? 0.85 : 0.65) }}" class="stroke-surface-container-low" stroke-width="1"></circle>
+								</a>
+							{% endfor %}
+							{% for party in compass.parties %}
+								{% set place = party.strips[strip.axis] %}
+								<text x="{{ place.labelX }}" y="{{ place.labelY }}" text-anchor="middle" font-size="{{ f }}" font-weight="600" class="{{ party.governing or party.supporting ? 'fill-on-surface' : 'fill-on-surface-variant' }}">{{ party.label }}</text>
+							{% endfor %}
+						</g>
+					{% endfor %}
 				</svg>
 
 				<ul class="mt-3 flex flex-wrap gap-x-5 gap-y-1.5 text-2xs text-on-surface-variant" aria-label="Key">
@@ -245,7 +249,7 @@
 					{% endif %}
 					<li class="inline-flex items-center gap-1.5"><span class="inline-block w-4 border-t-2 border-dotted border-primary" aria-hidden="true"></span>Supports it from outside</li>
 					<li class="inline-flex items-center gap-1.5"><span class="inline-flex gap-0.5" aria-hidden="true"><span class="w-1 h-1 rounded-full bg-on-surface-variant/20"></span><span class="w-1 h-1 rounded-full bg-on-surface-variant/50"></span></span>Past positions</li>
-					<li>The strip beneath: how far to trust the Council's technocrats</li>
+					<li>The strips beneath: how far to trust the Council's technocrats, and whether the environment comes before growth</li>
 				</ul>
 
 				<details class="mt-4 group">
@@ -258,24 +262,24 @@
 						<thead>
 							<tr class="text-2xs uppercase tracking-wide font-semibold text-on-surface-variant border-b border-outline-variant/15">
 								<th scope="col" class="text-left font-semibold pb-2">Party</th>
-								<th scope="col" class="text-right font-semibold pb-2">Size of state</th>
-								<th scope="col" class="text-right font-semibold pb-2">Openness</th>
-								<th scope="col" class="text-right font-semibold pb-2">Council</th>
+								{% for axis in axes %}
+									<th scope="col" class="text-right font-semibold pb-2">{{ axis.name }}</th>
+								{% endfor %}
 							</tr>
 						</thead>
 						<tbody class="divide-y divide-outline-variant/10">
 							{% for party in parties %}
 								<tr>
 									<th scope="row" class="py-1.5 text-left font-normal"><a href="{{ path('app_government_party', {slug: party.slug}) }}" class="text-on-surface hover:text-primary hover:underline">{{ party.name }}</a></th>
-									{% for axis in ['state', 'openness', 'council'] %}
-										<td class="py-1.5 text-right font-mono tabular-nums {{ axis in party.fixedAxes ? 'text-on-surface font-semibold' : 'text-on-surface-variant' }}">{{ (attribute(party, axis) >= 0 ? '+' : '') ~ attribute(party, axis)|number_format(2) }}</td>
+									{% for axis in axes %}
+										<td class="py-1.5 text-right font-mono tabular-nums {{ axis.key in party.fixedAxes ? 'text-on-surface font-semibold' : 'text-on-surface-variant' }}">{{ (attribute(party, axis.key) >= 0 ? '+' : '') ~ attribute(party, axis.key)|number_format(2) }}</td>
 									{% endfor %}
 								</tr>
 							{% endfor %}
 							<tr>
 								<th scope="row" class="py-1.5 text-left font-semibold text-on-surface">The cabinet</th>
-								{% for axis in ['state', 'openness', 'council'] %}
-									<td class="py-1.5 text-right font-mono tabular-nums text-on-surface">{{ (attribute(government, axis) >= 0 ? '+' : '') ~ attribute(government, axis)|number_format(2) }}</td>
+								{% for axis in axes %}
+									<td class="py-1.5 text-right font-mono tabular-nums text-on-surface">{{ (attribute(government, axis.key) >= 0 ? '+' : '') ~ attribute(government, axis.key)|number_format(2) }}</td>
 								{% endfor %}
 							</tr>
 						</tbody>
@@ -517,7 +521,7 @@
 					heading: 'The budget',
 					items: [
 						{name: 'Budget rounds', text: 'The Diet passes a budget every ' ~ rules.budgetRoundMonths|number_format(0) ~ ' months. A new government\'s first budget is the round after it takes office.'},
-						{name: 'What it decides', text: 'The corporate tax rate, the tariff on imports, the immigration regime and how strictly mergers are reviewed. Public spending follows the Treasury\'s long-term plan, which no government has rewritten.'},
+						{name: 'What it decides', text: 'The corporate tax rate, the tariff on imports, the immigration regime, how strictly mergers are reviewed, how much housing the planning system lets through, the carbon price on power, the rules on offshore drilling and mining, the stamp duty on share trades, which is paid into the Sovereign Reserve, and the levy on banks\' balance sheets. Public spending follows the Treasury\'s long-term plan, which no government has rewritten.'},
 						{name: 'Supporters\' veto', text: 'A minority cabinet needs its supporters\' votes. They will not back a change that moves a policy further from their own, so they can stop a government but not steer it.'},
 						{name: 'The debt brake', text: 'Above ' ~ (rules.debtBrake * 100)|number_format(0) ~ '% of GDP in debt, the Council would veto any budget that cuts revenue, so the Diet does not table one.'},
 						{name: 'Removing councillors', text: 'The Diet can remove a councillor with ' ~ rules.supermajority ~ ' of its ' ~ rules.seats ~ ' seats. It never has, and ' ~ rules.loyalists|join(', ') ~ ' never would.'}
@@ -543,5 +547,5 @@
 	</div>
 {% endblock %}
 
-{% macro lever_value(lever, value) %}{{ (lever.unit ?? '') == 'hhi' ? (value * 10000)|number_format(0) ~ ' HHI' : (value * 100)|number_format(2) ~ '%' }}{% endmacro %}
+{% macro lever_value(lever, value) %}{% set unit = lever.unit ?? '' %}{{ unit == 'hhi' ? (value * 10000)|number_format(0) ~ ' HHI' : (unit == 'usd_t' ? '$' ~ value|number_format(2) ~ '/t' : (value * 100)|number_format(2) ~ '%') }}{% endmacro %}
 

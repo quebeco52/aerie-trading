@@ -363,14 +363,23 @@ class MacroState
 
     // The levers the government has in force (App\DTO\GovernmentPolicyDTO): the corporate rate's shift from the neutral
     // 21%, the average tariff on imports and the net export response building toward it, labour force growth with the
-    // immigration regime in it and the population that regime has added against the structural path (log), and where
-    // merger review stands between the 2023 guidelines (0) and the 2010 guidelines (1).
+    // immigration regime in it and the population that regime has added against the structural path (log), where
+    // merger review stands between the 2023 guidelines (0) and the 2010 guidelines (1), how far the green belt and the
+    // rules on extraction stand between the founding regime (0) and the strictest (1), the carbon price ($/t CO2), and the
+    // stamp duty on each side of a share trade, and the bank levy on short-term funding.
     public float $corporateTaxPolicyShift;
     public float $importTariffRate;
     public float $tariffTradeLag;
     public float $laborForceGrowthRate;
     public float $mergerReviewLeniency;
     public float $immigrationPopulationShift;
+    public float $greenBeltStringency;
+    public float $carbonPrice;
+    public float $extractionStringency;
+    public float $stampDutyRate;
+    public float $bankLevyRate;
+    // How far the carbon price has lifted the household electricity bill so far (log), at the energy pass-through lag.
+    public float $electricityCarbonPriceLevel;
 
     // Sovereign reserve fund (App\Service\Macro\Subsystem\SovereignFundSubsystem). The three sleeves: a slice of the
     // board in currency, and foreign equities and foreign paper in FOREIGN units (home value is units / exchangeRateIndex).
@@ -433,6 +442,8 @@ class MacroState
     public float $boardDividendCash;
     public float $boardNetIssuance;
     public float $boardStampDuty;
+    // The bank levy the board's banks owe a year at the rate in force, in currency; kept until the board is priced again.
+    public float $boardBankLevy;
     // Cash the District's strategic stakes (App\Data\StrategicHoldings) paid it on the previous tick, a flow like the
     // board's: dividends, plus its share of buybacks less its share of issues. Held outside the fund, paid into it.
     public float $strategicStakeCash;

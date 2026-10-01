@@ -147,7 +147,9 @@ class BrokerageBusinessModel extends BaseFinancialBusinessModel
         $dealActivityShift = ($macroState->dealActivityIndexEma - MacroEngine::DEAL_ACTIVITY_BASELINE) / MacroEngine::DEAL_ACTIVITY_BASELINE;
         $advisoryDealBonus = $dealActivityShift * self::DEAL_ACTIVITY_ADVISORY_SCALAR;
 
-        $tradingRevenue  = max(0.0, $expectedRevenue * $tradingWeight * (1.0 + ($tradingZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + $volatilityBonus + $m2Shift));
+        // Commissions are paid per trade, so a stamp duty that thins the District's turnover thins them with it.
+        $dutyVolumeFactor = MathUtility::calculateStampDutyVolumeFactor($macroState->stampDutyRate);
+        $tradingRevenue  = max(0.0, $expectedRevenue * $tradingWeight * $dutyVolumeFactor * (1.0 + ($tradingZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + $volatilityBonus + $m2Shift));
         $advisoryRevenue = max(0.0, $expectedRevenue * $advisoryWeight * (1.0 + ($advisoryZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + $advisoryDealBonus));
         
         $streamRevenues = [
@@ -368,6 +370,7 @@ class BrokerageBusinessModel extends BaseFinancialBusinessModel
             'money_supply_growth_ema',
             'output_gap_ema',
             'policy_rate_ema',
+            'stamp_duty_rate',
             'system_deposit_beta_ema',
             'yield_5y_ema',
         ];

@@ -425,6 +425,9 @@ class NarrativeEngine
                 ] : [
                     "Budget passed: The {$context['government']} government sets the corporate rate at {$context['tax_rate_pct']}% and the average tariff at {$context['tariff_pct']}%, with its immigration rules growing the labour force {$context['labor_growth_pct']}% a year.",
                     "The Diet votes the budget: Firms will pay {$context['tax_rate_pct']}% on their profits and importers a {$context['tariff_pct']}% average duty under the {$context['government']} government.",
+                    ...(($context['carbon_price'] ?? '0.00') !== '0.00' ? [
+                        "Budget passed: The {$context['government']} government prices carbon at \${$context['carbon_price']} a tonne, with the corporate rate at {$context['tax_rate_pct']}%.",
+                    ] : []),
                 ]) : [
                     "Budget passed: The Diet has voted the government's budget.",
                 ]

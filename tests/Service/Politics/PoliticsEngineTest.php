@@ -64,7 +64,8 @@ class PoliticsEngineTest extends TestCase
         $this->assertSame(Diet::FIXED_POSITIONS[Diet::CHARTISTS][Diet::AXIS_COUNCIL], Diet::position(Diet::CHARTISTS, $drifted)[Diet::AXIS_COUNCIL], 'A stored value cannot move a party off its own axis.');
         $this->assertSame(0.4, Diet::position(Diet::CHARTISTS, $drifted)[Diet::AXIS_STATE]);
         $this->assertSame(Diet::HOME_POSITIONS[Diet::CHARTISTS][Diet::AXIS_OPENNESS], Diet::position(Diet::CHARTISTS, $drifted)[Diet::AXIS_OPENNESS], 'A missing axis is the home.');
-        $this->assertSame([Diet::AXIS_STATE => -0.5, Diet::AXIS_OPENNESS => 0.7, Diet::AXIS_COUNCIL => -0.2], Diet::position(Diet::NEW_HORIZON, $drifted), 'New Horizon is fixed on two axes.');
+        $this->assertSame([Diet::AXIS_STATE => -0.5, Diet::AXIS_OPENNESS => 0.7, Diet::AXIS_COUNCIL => -0.2, Diet::AXIS_ENVIRONMENT => Diet::HOME_POSITIONS[Diet::NEW_HORIZON][Diet::AXIS_ENVIRONMENT]], Diet::position(Diet::NEW_HORIZON, $drifted), 'New Horizon is fixed on two axes.');
+        $this->assertSame([Diet::AXIS_ENVIRONMENT], array_keys(Diet::FIXED_POSITIONS[Diet::TIDELINE]), 'The Tideline Accord is defined by the environment alone.');
         $defined = array_values(array_unique(array_merge(...array_map('array_keys', array_values(Diet::FIXED_POSITIONS)))));
         $this->assertEqualsCanonicalizing(Diet::AXES, $defined, 'Every axis has parties defined by it.');
         foreach (Diet::FIXED_POSITIONS as $party => $fixed) {
@@ -914,7 +915,7 @@ class PoliticsEngineTest extends TestCase
     {
         $seats = Diet::SEED_SEATS;
         $positions = Diet::HOME_POSITIONS;
-        $standing = static fn(float $tax): array => ['corporateTax' => $tax, 'tariff' => 0.0, 'laborGrowth' => MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE, 'mergerReviewLeniency' => 0.0];
+        $standing = static fn(float $tax): array => ['corporateTax' => $tax] + Politics::standingLevers(new PoliticsStateDTO());
         $gap = Politics::POLICY_MANIFESTO_CORPORATE_TAX_GAP;
         $civicIdeal = Politics::platform(Diet::position(Diet::CIVIC, $positions))['corporateTax'];
         $vanguardIdeal = Politics::platform(Politics::coalitionPosition(Diet::membership([Diet::VANGUARD]), $seats, $positions))['corporateTax'];
@@ -939,7 +940,7 @@ class PoliticsEngineTest extends TestCase
         $this->assertEqualsWithDelta(0.01, $both['levers']['corporateTax'], 1e-12, 'With the Civic Front also needed, the rate cannot fall at all.');
 
         $majority = Politics::budget([Diet::VANGUARD, Diet::EXCHANGE, Diet::CHARTISTS], [], $seats, $positions, $standing(0.0), 0.5);
-        $this->assertSame([false, false, false, false], array_values($majority['supportHeld']), 'A majority cabinet answers to no supporter.');
+        $this->assertSame(array_fill_keys(array_keys(Politics::REVENUE_LEVERS), false), $majority['supportHeld'], 'A majority cabinet answers to no supporter.');
     }
 
     /**
@@ -958,7 +959,7 @@ class PoliticsEngineTest extends TestCase
         $this->assertSame(1.0, $leniency(1.0), 'Nothing on record is more lenient than the 2010 guidelines.');
         $this->assertEqualsWithDelta((0.3 + 0.8) / 1.6, Politics::platform(Diet::position(Diet::VANGUARD, $positions))['mergerReviewLeniency'], 1e-12);
 
-        $standing = ['corporateTax' => 0.0, 'tariff' => 0.0, 'laborGrowth' => MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE, 'mergerReviewLeniency' => 0.0];
+        $standing = Politics::standingLevers(new PoliticsStateDTO());
         $held = Politics::budget([Diet::VANGUARD], [Diet::COMMON_LOT], Diet::SEED_SEATS, $positions, $standing, MacroEngine::SOVEREIGN_RISK_DEBT_THRESHOLD + 0.1);
         $this->assertSame(0.0, $held['levers']['mergerReviewLeniency'], 'The Common Lot will not vote review looser than its own.');
         $this->assertTrue($held['supportHeld']['mergerReviewLeniency']);
@@ -1094,5 +1095,93 @@ class PoliticsEngineTest extends TestCase
                 return true;
             }
         };
+    }
+
+    /**
+     * The environment levers are none at all for a cabinet at or past the axis's middle toward growth and rise to the
+     * strictest on record at the Tideline Accord's place: the green belt and the extraction rules from 0 to 1, the
+     * carbon price from none to the EU ETS's. The founding cabinet, the Vanguard alone, enacts none of them.
+     */
+    public function testTheEnvironmentLeversRiseFromNoneToTheTidelineAccords(): void
+    {
+        $at = static fn(float $environment): array => Politics::platform([Diet::AXIS_ENVIRONMENT => $environment]);
+
+        foreach ([-1.0, -0.5, 0.0] as $growth) {
+            $this->assertSame(0.0, $at($growth)['greenBeltStringency']);
+            $this->assertSame(0.0, $at($growth)['carbonPrice']);
+            $this->assertSame(0.0, $at($growth)['extractionStringency']);
+        }
+        $this->assertEqualsWithDelta(0.5, $at(0.4)['greenBeltStringency'], 1e-12);
+        $this->assertEqualsWithDelta(Politics::POLICY_GREEN_CARBON_PRICE / 2.0, $at(0.4)['carbonPrice'], 1e-12);
+        $tideline = Politics::platform(Diet::position(Diet::TIDELINE, Diet::HOME_POSITIONS));
+        $this->assertSame(1.0, $tideline['greenBeltStringency']);
+        $this->assertSame(Politics::POLICY_GREEN_CARBON_PRICE, $tideline['carbonPrice']);
+        $this->assertSame(1.0, $at(1.0)['extractionStringency'], 'Nothing on record is stricter.');
+
+        $founding = Politics::platform(Politics::coalitionPosition(Diet::SEED_COALITION, Diet::SEED_SEATS, Diet::HOME_POSITIONS));
+        $this->assertSame(0.0, $founding['greenBeltStringency'], 'The founding economy is the calibrated one.');
+        $this->assertSame(0.0, $founding['carbonPrice']);
+        $this->assertSame(0.0, $founding['extractionStringency']);
+    }
+
+    /** The standing levers, the platform, the revenue flags and the state fields all list the levers in one order, so a budget that changes nothing compares equal. */
+    public function testEveryLeverListIsInPlatformOrder(): void
+    {
+        $order = array_keys(Politics::platform(Diet::HOME_POSITIONS[Diet::CIVIC]));
+
+        $this->assertSame($order, array_keys(Politics::REVENUE_LEVERS));
+        $this->assertSame($order, array_keys(Politics::LEVER_FIELDS));
+        $this->assertSame($order, array_keys(Politics::standingLevers(new PoliticsStateDTO())));
+        foreach (Politics::LEVER_FIELDS as $field) {
+            $this->assertTrue(property_exists(PoliticsStateDTO::class, $field), "{$field} is kept on the state.");
+            $this->assertTrue(property_exists(GovernmentPolicyDTO::class, $field), "{$field} is handed to the economy.");
+        }
+    }
+
+    /**
+     * The Tideline Accord, propping up a Civic cabinet, will not vote the carbon price down toward the Front's own; and
+     * above the debt line the Council holds a carbon cut, which costs revenue, but never a green belt, which does not.
+     */
+    public function testTheAccordAndTheCouncilEachHoldTheCarbonPrice(): void
+    {
+        $seats = Diet::SEED_SEATS;
+        $positions = Diet::HOME_POSITIONS;
+        $standing = ['carbonPrice' => 50.0, 'greenBeltStringency' => 0.9] + Politics::standingLevers(new PoliticsStateDTO());
+        $civicCarbon = Politics::platform(Diet::position(Diet::CIVIC, $positions))['carbonPrice'];
+        $this->assertLessThan(50.0, $civicCarbon);
+
+        $propped = Politics::budget([Diet::CIVIC], [Diet::TIDELINE], $seats, $positions, $standing, 0.5);
+        $this->assertSame(50.0, $propped['levers']['carbonPrice'], 'The Accord accepts nothing further from its own price.');
+        $this->assertTrue($propped['supportHeld']['carbonPrice']);
+
+        $braked = Politics::budget([Diet::VANGUARD, Diet::EXCHANGE, Diet::CHARTISTS, Diet::NEW_HORIZON], [], $seats, $positions, $standing, MacroEngine::SOVEREIGN_RISK_DEBT_THRESHOLD + 0.05);
+        $this->assertTrue($braked['councilHeld']['carbonPrice']);
+        $this->assertSame(50.0, $braked['levers']['carbonPrice']);
+        $this->assertFalse($braked['councilHeld']['greenBeltStringency']);
+        $this->assertSame(0.0, $braked['levers']['greenBeltStringency'], 'A growth-first majority lifts the green belt whatever the debt.');
+    }
+
+    /**
+     * The stamp duty runs along the size-of-state axis from the founding 0.05% a side at the Vanguard's end to France's
+     * 0.4% on purchases, 0.2% a side, at the Civic Front's; it goes to the reserve fund, so the Council does not guard it.
+     */
+    public function testTheStampDutyRunsFromTheFoundingRateToFrancesTax(): void
+    {
+        $positions = Diet::HOME_POSITIONS;
+
+        $this->assertEqualsWithDelta(FinancialConstants::STAMP_DUTY_RATE, Politics::platform(Diet::position(Diet::VANGUARD, $positions))['stampDutyRate'], 1e-15, 'The founding cabinet keeps the founding duty.');
+        $this->assertEqualsWithDelta(Politics::POLICY_BIG_STATE_STAMP_DUTY, Politics::platform(Diet::position(Diet::CIVIC, $positions))['stampDutyRate'], 1e-15);
+        $this->assertEqualsWithDelta(0.00125, Politics::platform([Diet::AXIS_STATE => 0.0])['stampDutyRate'], 1e-15);
+        $this->assertFalse(Politics::REVENUE_LEVERS['stampDutyRate']);
+    }
+
+    /** The bank levy runs from none at the Vanguard's end to the UK's 2015 peak at the Civic Front's, and the Council guards it as revenue. */
+    public function testTheBankLevyRunsFromNoneToTheUksPeak(): void
+    {
+        $positions = Diet::HOME_POSITIONS;
+
+        $this->assertEqualsWithDelta(0.0, Politics::platform(Diet::position(Diet::VANGUARD, $positions))['bankLevyRate'], 1e-15, 'The founding cabinet levies none.');
+        $this->assertEqualsWithDelta(0.0021, Politics::platform(Diet::position(Diet::CIVIC, $positions))['bankLevyRate'], 1e-15);
+        $this->assertTrue(Politics::REVENUE_LEVERS['bankLevyRate']);
     }
 }

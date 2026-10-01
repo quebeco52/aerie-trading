@@ -506,6 +506,7 @@ class MacroEngine
      * @param float|null $boardStampDuty    Stamp duty the board's trading paid on the previous tick, or null.
      * @param float|null $strategicStakeCash Cash the District's strategic stakes paid it on the previous tick (dividends, buybacks less issues), or null.
      * @param GovernmentPolicyDTO|null $policy The government's levers and election pulse as of the previous tick, or null.
+     * @param float|null $boardBankLevy     Bank levy the board's banks owe a year at the rate in force, as of the previous tick, or null to keep the last.
      */
     public function updateMacroState(
         float $dt,
@@ -517,6 +518,7 @@ class MacroEngine
         ?float $boardStampDuty = null,
         ?float $strategicStakeCash = null,
         ?GovernmentPolicyDTO $policy = null,
+        ?float $boardBankLevy = null,
     ): \App\DTO\MacroStateDTO {
         $state = $this->loadState();
 
@@ -535,6 +537,9 @@ class MacroEngine
         $state->boardNetIssuance = $boardNetIssuance ?? 0.0;
         $state->boardStampDuty = $boardStampDuty ?? 0.0;
         $state->strategicStakeCash = $strategicStakeCash ?? 0.0;
+        if ($boardBankLevy !== null) {
+            $state->boardBankLevy = $boardBankLevy;
+        }
 
         // Advance physical simulation time in years
         $state->totalTime += $dt;
@@ -780,6 +785,11 @@ class MacroEngine
         $state->importTariffRate = $policy->importTariffRate;
         $state->laborForceGrowthRate = $policy->laborForceGrowthRate;
         $state->mergerReviewLeniency = $policy->mergerReviewLeniency;
+        $state->greenBeltStringency = $policy->greenBeltStringency;
+        $state->carbonPrice = $policy->carbonPrice;
+        $state->extractionStringency = $policy->extractionStringency;
+        $state->stampDutyRate = $policy->stampDutyRate;
+        $state->bankLevyRate = $policy->bankLevyRate;
         $state->electionPulse = $policy->electionPulse;
     }
 

@@ -25,6 +25,10 @@ use App\Service\Event\ShockEvent;
  */
 class InvestmentBankBusinessModel extends BrokerageBusinessModel
 {
+    // --- Bank Levy ---
+    /** An investment bank pays the bank levy on its wholesale funding. */
+    public const PAYS_BANK_LEVY = true;
+
     // --- Operating Cyclicality & Demand Structure ---
     /** Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Deal flow is among the most cyclical fee pools. */
     public const OPERATING_CYCLICALITY = 1.40;

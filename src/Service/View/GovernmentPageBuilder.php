@@ -13,9 +13,13 @@ use App\Entity\DietElection;
 use App\Repository\DietElectionRepository;
 use App\Service\Corporate\MergerAndAcquisitionEngine;
 use App\Service\Macro\MacroEngine;
+use App\Service\Macro\Subsystem\AssetMarketSubsystem;
+use App\Service\Macro\Subsystem\CommodityLogisticsSubsystem;
 use App\Service\Math\FinancialConstants;
+use App\Service\Math\MathUtility;
 use App\Service\Politics\CoalitionFormation;
 use App\Service\Politics\PoliticsEngine;
+use App\Twig\Extension\NumberFormatExtension;
 
 /**
  * Builds the government page: the Diet as it now sits, the parties in the policy space, the cabinet that governs and
@@ -67,15 +71,22 @@ class GovernmentPageBuilder
     private const COMPASS_HALF_WIDTH = 100.0;
     /** Margin around the plane for the axis names, in SVG units: wide enough for 'Technocratic' beside the strip. */
     private const COMPASS_MARGIN = 56.0;
-    /** Distance from the plane's lower edge to the Council strip's line, in SVG units: clear of 'Small state' for the highest row. */
+    /** Distance from the plane's lower edge to the first strip's line, in SVG units: clear of 'Small state' for the highest row. */
     private const COMPASS_STRIP_OFFSET = 48.0;
+    /** The questions drawn as strips beneath the plane, in order from the top. */
+    private const COMPASS_STRIP_AXES = [AerieDiet::AXIS_COUNCIL, AerieDiet::AXIS_ENVIRONMENT];
+    /** The words at either end of each strip, short enough for the margin. */
+    private const COMPASS_STRIP_ENDS = [
+        AerieDiet::AXIS_COUNCIL => ['Populist', 'Technocratic'],
+        AerieDiet::AXIS_ENVIRONMENT => ['Growth', 'Environment'],
+    ];
     /** Font size of the axis names and party labels, in SVG units. */
     private const COMPASS_FONT_SIZE = 7.0;
     /** Advance of a bold label's average character as a share of its font size, to size a label's box. */
     public const COMPASS_CHARACTER_WIDTH = 0.6;
     /** Gap kept between a label and its dot, or another label, in SVG units. */
     private const COMPASS_LABEL_GAP = 1.5;
-    /** Baselines a Council-strip label may take, above and below the line, nearest first, a label and its gap apart. */
+    /** Baselines a strip label may take, above and below the line, nearest first, a label and its gap apart. */
     private const COMPASS_STRIP_ROWS = [-8.0, 15.0, -17.0, 24.0, -26.0, 33.0];
     /** Past votes whose positions are drawn behind each party, the oldest faintest. */
     private const COMPASS_TRAIL_VOTES = 6;
@@ -92,6 +103,14 @@ class GovernmentPageBuilder
         AerieDiet::AXIS_STATE => ['name' => 'Size of the state', 'low' => 'Small state', 'high' => 'Big state'],
         AerieDiet::AXIS_OPENNESS => ['name' => 'Openness', 'low' => 'Closed', 'high' => 'Open'],
         AerieDiet::AXIS_COUNCIL => ['name' => 'The Council', 'low' => 'Populist', 'high' => 'Technocratic'],
+        AerieDiet::AXIS_ENVIRONMENT => ['name' => 'The environment', 'low' => 'Growth first', 'high' => 'Environment first'],
+    ];
+    /** The questions as the table of positions heads its columns. */
+    private const AXIS_COLUMNS = [
+        AerieDiet::AXIS_STATE => 'Size of state',
+        AerieDiet::AXIS_OPENNESS => 'Openness',
+        AerieDiet::AXIS_COUNCIL => 'Council',
+        AerieDiet::AXIS_ENVIRONMENT => 'Environment',
     ];
 
     public function __construct(private readonly DietElectionRepository $elections) {}
@@ -126,6 +145,7 @@ class GovernmentPageBuilder
 
         return [
             'simDate' => self::simDate($macro->totalTime),
+            'axes' => array_map(static fn(string $axis): array => ['key' => $axis, 'name' => self::AXIS_COLUMNS[$axis]], AerieDiet::AXES),
             'government' => [
                 'members' => array_map($member, $coalition),
                 'support' => array_map($member, $support),
@@ -134,12 +154,9 @@ class GovernmentPageBuilder
                 'minority' => $coalitionSeats < AerieDiet::MAJORITY_SEATS,
                 'formed' => $politics->lastGovernmentFormedAt < 0.0 ? 'At the founding' : self::simDate($politics->coalitionFormedAt),
                 'range' => CoalitionFormation::ideologicalRange($coalition, $politics->partyPositions),
-                'state' => $coalitionPosition[AerieDiet::AXIS_STATE],
-                'openness' => $coalitionPosition[AerieDiet::AXIS_OPENNESS],
-                'council' => $coalitionPosition[AerieDiet::AXIS_COUNCIL],
                 'supermajority' => $removalSeats >= AerieDiet::SUPERMAJORITY_SEATS,
                 'caretaker' => $talking,
-            ],
+            ] + $coalitionPosition,
             'talks' => $this->talks($politics, $talking),
             'election' => [
                 'next' => self::simDate($nextElection),
@@ -244,6 +261,11 @@ class GovernmentPageBuilder
                 ['name' => 'Average tariff on imports', 'unit' => 'pct', 'platform' => $platform['tariff'], 'enacted' => $politics->importTariffRate],
                 ['name' => 'Labour force growth', 'unit' => 'pct', 'platform' => $platform['laborGrowth'], 'enacted' => $politics->laborForceGrowthRate],
                 ['name' => 'Merger review line', 'unit' => 'hhi', 'platform' => $concentrated($platform['mergerReviewLeniency']), 'enacted' => $concentrated($politics->mergerReviewLeniency)],
+                ['name' => 'Housing schemes refused', 'unit' => 'pct', 'platform' => AssetMarketSubsystem::planningRefusalRate($platform['greenBeltStringency']), 'enacted' => AssetMarketSubsystem::planningRefusalRate($politics->greenBeltStringency)],
+                ['name' => 'Carbon price', 'unit' => 'usd_t', 'platform' => $platform['carbonPrice'], 'enacted' => $politics->carbonPrice],
+                ['name' => 'Extraction compliance cost', 'unit' => 'pct', 'platform' => self::extractionCostUplift($platform['extractionStringency']), 'enacted' => self::extractionCostUplift($politics->extractionStringency)],
+                ['name' => 'Stamp duty on share trades', 'unit' => 'pct', 'platform' => $platform['stampDutyRate'], 'enacted' => $politics->stampDutyRate],
+                ['name' => 'Bank levy', 'unit' => 'pct', 'platform' => $platform['bankLevyRate'], 'enacted' => $politics->bankLevyRate],
             ],
             'record' => $record,
             'recordSummary' => [
@@ -294,10 +316,7 @@ class GovernmentPageBuilder
                 'leadsBloc' => $blocs[$party] === $party,
                 'bloc' => self::PARTY_LABELS[$blocs[$party]],
                 'blocColor' => self::PARTY_COLORS[$blocs[$party]],
-                'state' => $position[AerieDiet::AXIS_STATE],
-                'openness' => $position[AerieDiet::AXIS_OPENNESS],
-                'council' => $position[AerieDiet::AXIS_COUNCIL],
-            ];
+            ] + $position;
         }
 
         return $parties;
@@ -360,12 +379,7 @@ class GovernmentPageBuilder
      */
     private function budget(MacroStateDTO $macro, PoliticsStateDTO $politics, array $coalition, array $support, bool $talking): array
     {
-        $standing = [
-            'corporateTax' => $politics->corporateTaxPolicyShift,
-            'tariff' => $politics->importTariffRate,
-            'laborGrowth' => $politics->laborForceGrowthRate,
-            'mergerReviewLeniency' => $politics->mergerReviewLeniency,
-        ];
+        $standing = PoliticsEngine::standingLevers($politics);
         $budget = PoliticsEngine::budget($coalition, $support, $politics->dietSeats, $politics->partyPositions, $standing, $macro->sovereignDebtToGdp);
         $round = MacroEngine::BUDGET_ROUND_PERIOD_YEARS;
         $nextRound = self::simDate((floor($macro->totalTime / $round) + 1.0) * $round);
@@ -422,6 +436,62 @@ class GovernmentPageBuilder
                     'status' => $status('mergerReviewLeniency'),
                     'note' => sprintf('A deal adding %.0f points of HHI past the line is blocked%s', 10000.0 * $screens['delta'], $screens['shareCeiling'] < 1.0 ? sprintf(', as is one making a firm of %.0f%% of its market', 100.0 * $screens['shareCeiling']) : ''),
                 ],
+                [
+                    'name' => 'Housing schemes refused',
+                    'axis' => AerieDiet::AXIS_ENVIRONMENT,
+                    'platform' => AssetMarketSubsystem::planningRefusalRate($budget['platform']['greenBeltStringency']),
+                    'target' => AssetMarketSubsystem::planningRefusalRate($budget['levers']['greenBeltStringency']),
+                    'enacted' => AssetMarketSubsystem::planningRefusalRate($standing['greenBeltStringency']),
+                    'status' => $status('greenBeltStringency'),
+                    'note' => $standing['greenBeltStringency'] > 0.0
+                        ? sprintf('Builders answer a rise in prices only %.0f%% as strongly as under the founding plan', 100.0 * AssetMarketSubsystem::greenBeltSupplyResponse($standing['greenBeltStringency']))
+                        : 'The founding plan is in force',
+                ],
+                [
+                    'name' => 'Carbon price',
+                    'axis' => AerieDiet::AXIS_ENVIRONMENT,
+                    'unit' => 'usd_t',
+                    'platform' => $budget['platform']['carbonPrice'],
+                    'target' => $budget['levers']['carbonPrice'],
+                    'enacted' => $standing['carbonPrice'],
+                    'status' => $status('carbonPrice'),
+                    'note' => $standing['carbonPrice'] > 0.0
+                        ? sprintf('Adds $%.2f to each MWh of wholesale power', CommodityLogisticsSubsystem::carbonPowerPriceAdder($standing['carbonPrice']))
+                        : 'No carbon price is in force; one would add to each MWh of wholesale power',
+                ],
+                [
+                    'name' => 'Extraction compliance cost',
+                    'axis' => AerieDiet::AXIS_ENVIRONMENT,
+                    'platform' => self::extractionCostUplift($budget['platform']['extractionStringency']),
+                    'target' => self::extractionCostUplift($budget['levers']['extractionStringency']),
+                    'enacted' => self::extractionCostUplift($standing['extractionStringency']),
+                    'status' => $status('extractionStringency'),
+                    'note' => $standing['extractionStringency'] > 0.0
+                        ? 'Added to the cost of every barrel lifted offshore and every tonne mined'
+                        : 'The founding rules on offshore drilling and mining are in force',
+                ],
+                [
+                    'name' => 'Stamp duty on share trades',
+                    'axis' => AerieDiet::AXIS_STATE,
+                    'platform' => $budget['platform']['stampDutyRate'],
+                    'target' => $budget['levers']['stampDutyRate'],
+                    'enacted' => $standing['stampDutyRate'],
+                    'status' => $status('stampDutyRate'),
+                    'note' => sprintf('Paid by buyer and seller each, into the Sovereign Reserve; turnover runs %.0f%% %s its level at the founding rate',
+                        abs(100.0 * (MathUtility::calculateStampDutyVolumeFactor($standing['stampDutyRate']) - 1.0)),
+                        MathUtility::calculateStampDutyVolumeFactor($standing['stampDutyRate']) < 1.0 ? 'below' : 'above'),
+                ],
+                [
+                    'name' => 'Bank levy',
+                    'axis' => AerieDiet::AXIS_STATE,
+                    'platform' => $budget['platform']['bankLevyRate'],
+                    'target' => $budget['levers']['bankLevyRate'],
+                    'enacted' => $standing['bankLevyRate'],
+                    'status' => $status('bankLevyRate'),
+                    'note' => $macro->boardBankLevy > 0.0
+                        ? sprintf('On banks\' short-term funding, half that on long-term funding and uninsured deposits; the banks owe %s a year', (new NumberFormatExtension())->formatLargeNumber($macro->boardBankLevy, '$'))
+                        : 'On banks\' short-term funding, half that on long-term funding and uninsured deposits',
+                ],
             ],
             'debt' => $macro->sovereignDebtToGdp,
             'braking' => $budget['councilGuards'],
@@ -430,6 +500,16 @@ class GovernmentPageBuilder
             'lastBudget' => $politics->lastBudgetEnactedAt >= 0.0 ? self::simDate($politics->lastBudgetEnactedAt) : null,
             'nextRound' => $nextRound,
         ];
+    }
+
+    /**
+     * What the rules on extraction add to the cost of each barrel or tonne, as a fraction.
+     *
+     * @param float $stringency The rules, 0 to 1.
+     */
+    private static function extractionCostUplift(float $stringency): float
+    {
+        return MathUtility::getInstance()->calculateProductivityLossCostFactor(FinancialConstants::ENVIRONMENTAL_REGULATION_TFP_LOSS * $stringency) - 1.0;
     }
 
     /**
@@ -507,14 +587,14 @@ class GovernmentPageBuilder
     }
 
     /**
-     * The policy space: openness across and size of state up, with the Council axis as a strip beneath. Each party is a
+     * The policy space: openness across and size of state up, with the Council and the environment as strips beneath. Each party is a
      * dot sized by its seats, with its last few positions fading behind it and its label placed where it crowds nothing.
      * The cabinet is a shaded area over its parties, a ring where it governs from (its parties weighted by seats; a party
      * governing alone is its own), and dotted lines from there to the parties supporting it from outside.
      *
      * @param list<array<string, mixed>>  $parties    Party rows.
      * @param list<DietElection>          $history    Votes, oldest first.
-     * @param array{state: float, openness: float, council: float} $government The cabinet's seat-weighted position.
+     * @param array{state: float, openness: float, council: float, environment: float} $government The cabinet's seat-weighted position.
      * @param list<string>                $coalition  The cabinet.
      * @param list<string>                $support    Its support parties.
      * @return array<string, mixed>
@@ -530,7 +610,7 @@ class GovernmentPageBuilder
         $dots = [];
         foreach ($parties as $party) {
             $trail = [];
-            $councilTrail = [];
+            $stripTrails = array_fill_keys(self::COMPASS_STRIP_AXES, []);
             foreach ($recent as $k => $election) {
                 if (!isset($election->getPositions()[$party['key']])) {
                     continue;
@@ -538,14 +618,18 @@ class GovernmentPageBuilder
                 $past = AerieDiet::position($party['key'], $election->getPositions());
                 $opacity = round($faintest + (($strongest - $faintest) * ($k + 1) / count($recent)), 3);
                 $trail[] = $point($past[AerieDiet::AXIS_STATE], $past[AerieDiet::AXIS_OPENNESS]) + ['opacity' => $opacity];
-                $councilTrail[] = ['x' => round($past[AerieDiet::AXIS_COUNCIL] * $scale, 2), 'opacity' => $opacity];
+                foreach (self::COMPASS_STRIP_AXES as $axis) {
+                    $stripTrails[$axis][] = ['x' => round($past[$axis] * $scale, 2), 'opacity' => $opacity];
+                }
+            }
+            $strips = [];
+            foreach (self::COMPASS_STRIP_AXES as $axis) {
+                $strips[$axis] = ['x' => round($party[$axis] * $scale, 2), 'r' => 2.5 + ($party['seats'] / 25.0), 'trail' => $stripTrails[$axis]];
             }
             $dots[] = $party + $point($party['state'], $party['openness']) + [
                 'r' => 3.0 + ($party['seats'] / 20.0),
                 'trail' => $trail,
-                'councilX' => round($party['council'] * $scale, 2),
-                'councilR' => 2.5 + ($party['seats'] / 25.0),
-                'councilTrail' => $councilTrail,
+                'strips' => $strips,
             ];
         }
 
@@ -574,24 +658,37 @@ class GovernmentPageBuilder
         }
         $bounds = [-$scale - $margin, -$scale - 16.0, $scale + $margin, $scale + 16.0];
         $plane = self::placePlaneLabels($dots, $taken, $bounds);
-        $strip = self::placeStripLabels($dots);
         foreach ($dots as $i => $dot) {
-            $dots[$i] = $dot + $plane[$i] + $strip[$i];
+            $dots[$i] = $dot + $plane[$i];
+        }
+        foreach (self::COMPASS_STRIP_AXES as $axis) {
+            foreach (self::placeStripLabels($dots, $axis) as $i => $label) {
+                $dots[$i]['strips'][$axis] += $label;
+            }
         }
 
-        $stripY = $scale + self::COMPASS_STRIP_OFFSET;
-        $bottom = $stripY + max(self::COMPASS_STRIP_ROWS) + (0.3 * $size);
+        // Each strip sits a full set of label rows below the last, so no strip's labels reach the next one's.
+        $spacing = max(self::COMPASS_STRIP_ROWS) - min(self::COMPASS_STRIP_ROWS) + (1.5 * $size) + (2.0 * self::COMPASS_LABEL_GAP);
+        $strips = [];
+        foreach (self::COMPASS_STRIP_AXES as $k => $axis) {
+            [$low, $high] = self::COMPASS_STRIP_ENDS[$axis];
+            $strips[] = [
+                'axis' => $axis,
+                'y' => $scale + self::COMPASS_STRIP_OFFSET + ($k * $spacing),
+                'ends' => [
+                    ['text' => $low, 'x' => -$scale - 4.0, 'y' => 2.0, 'anchor' => 'end'],
+                    ['text' => $high, 'x' => $scale + 4.0, 'y' => 2.0, 'anchor' => 'start'],
+                ],
+            ];
+        }
+        $bottom = $strips[array_key_last($strips)]['y'] + max(self::COMPASS_STRIP_ROWS) + (0.3 * $size);
 
         return [
             'halfWidth' => $scale,
             'viewBox' => [-$scale - $margin, -$scale - 16.0, 2.0 * ($scale + $margin), $bottom + $scale + 16.0],
             'fontSize' => $size,
             'axes' => $axes,
-            'stripY' => $stripY,
-            'stripAxes' => [
-                ['text' => 'Populist', 'x' => -$scale - 4.0, 'y' => 2.0, 'anchor' => 'end'],
-                ['text' => 'Technocratic', 'x' => $scale + 4.0, 'y' => 2.0, 'anchor' => 'start'],
-            ],
+            'strips' => $strips,
             'parties' => $dots,
             'cabinet' => [
                 'halo' => self::convexHull(array_map(static fn(array $dot): array => [$dot['x'], $dot['y']], $members)),
@@ -678,19 +775,20 @@ class GovernmentPageBuilder
     }
 
     /**
-     * Where each party's label goes on the Council strip: centred over its dot (the margin holds half the longest
-     * label past either end), in the nearest row above or below the line that no label placed before it crowds, the
-     * larger parties placed first; the nearest row when every row is crowded.
+     * Where each party's label goes on a strip: centred over its dot (the margin holds half the longest label past
+     * either end), in the nearest row above or below the line that no label placed before it crowds, the larger
+     * parties placed first; the nearest row when every row is crowded.
      *
-     * @param list<array<string, mixed>> $dots The parties, with councilX and label.
-     * @return array<int, array{stripLabelX: float, stripLabelY: float}> By the dots' index.
+     * @param list<array<string, mixed>> $dots The parties, with their strip places and label.
+     * @param string                     $axis The strip's question.
+     * @return array<int, array{labelX: float, labelY: float}> By the dots' index.
      */
-    private static function placeStripLabels(array $dots): array
+    private static function placeStripLabels(array $dots, string $axis): array
     {
         $taken = [];
         $placed = [];
         foreach (self::bySeats($dots) as $i) {
-            $x = (float) $dots[$i]['councilX'];
+            $x = (float) $dots[$i]['strips'][$axis]['x'];
             $row = self::COMPASS_STRIP_ROWS[0];
             foreach (self::COMPASS_STRIP_ROWS as $candidate) {
                 if (!self::crowds(self::labelBox($dots[$i]['label'], $x, $candidate, 'middle'), $taken)) {
@@ -699,7 +797,7 @@ class GovernmentPageBuilder
                 }
             }
             $taken[] = self::labelBox($dots[$i]['label'], $x, $row, 'middle');
-            $placed[$i] = ['stripLabelX' => round($x, 2), 'stripLabelY' => $row];
+            $placed[$i] = ['labelX' => round($x, 2), 'labelY' => $row];
         }
 
         return $placed;

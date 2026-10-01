@@ -84,6 +84,7 @@ class SystemicEventReporter
             'tax_rate_pct' => number_format((MacroEngine::TARGET_CORPORATE_TAX_RATE + $politics->corporateTaxPolicyShift) * 100.0, 1),
             'tariff_pct' => number_format($politics->importTariffRate * 100.0, 1),
             'labor_growth_pct' => number_format($politics->laborForceGrowthRate * 100.0, 2),
+            'carbon_price' => number_format($politics->carbonPrice, 2),
             'council_held' => $politics->lastCouncilBrakeAt === $politics->totalTime ? 'yes' : 'no',
         ];
     }

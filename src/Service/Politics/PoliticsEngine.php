@@ -32,7 +32,7 @@ use Psr\Log\LoggerInterface;
  * which lasts only the one vote. Both are sized to the Nordic parties since 1945 (ParlGov), in proportion to a party's
  * size, as real vote shares vary. Seats are D'Hondt over the whole Diet.
  *
- * Each party is fixed on the axes it is defined by (size of state, openness, or the Council). On the others it strays
+ * Each party is fixed on the axes it is defined by (size of state, openness, the Council, or the environment). On the others it strays
  * from its home between elections and is pulled back toward it, at the pace real parties move in the Chapel Hill expert
  * survey: an AR(1) around each party's own place, not a random walk, since parties keep their family's positions for
  * decades (Budge, Ezrow & McDonald 2010). After the vote the parties negotiate a government (CoalitionFormation); until
@@ -40,10 +40,12 @@ use Psr\Log\LoggerInterface;
  * the rate real cabinets of its kind have (ParlGov): the parties then talk again on the same seats, with no election.
  *
  * The government then legislates at the budget rounds after the one it took office on. Its cabinet's position, its
- * members' weighted by seats (Gamson's law), sets four levers between the policies real parties at the ends of each
- * axis have enacted: the corporate rate on the size-of-state axis, the tariff and the immigration regime on the
- * openness axis, and merger review on the Council axis, from the populists' 2023 guidelines to the technocrats' 2010
- * ones. Size of state moves no purchases: in the US record the purchases process is fitted to, the party in
+ * members' weighted by seats (Gamson's law), sets its levers between the policies real parties at the ends of each
+ * axis have enacted: the corporate rate, the stamp duty on share trades and the bank levy on the size-of-state axis, the tariff and the immigration regime on the
+ * openness axis, merger review on the Council axis, from the populists' 2023 guidelines to the technocrats' 2010
+ * ones, and on the environment axis the green belt, the carbon price and the rules on extraction, none of them for a
+ * cabinet that puts growth first and the strictest on record at the Tideline Accord's place. Size of state moves no
+ * purchases: in the US record the purchases process is fitted to, the party in
  * power shifts civilian purchases the wrong way (-2% under Democratic presidents, var/harness/partisan_fit.py), and in
  * 21 European PR democracies since 1990 a cabinet's place on the state-market scale has moved government consumption
  * by nothing (+0.3% per unit of the axis, se 4.6%), nor total spending, though it did before (+11%, se 7%;
@@ -99,10 +101,10 @@ class PoliticsEngine
     public const MEAN_ELECTION_PROXIMITY = (0.5 + ((CoalitionFormation::FORMATION_MEAN_DAYS + self::FALL_TALK_DAYS_PER_TERM) / FinancialConstants::DAYS_PER_YEAR)) / self::ELECTION_TERM_YEARS;
 
     // --- Party Positions (Chapel Hill expert survey 1999-2024, var/harness/politics/ches_fit.py) ---
-    /** Share of a party's distance from its home still there a year later, by axis: economic left-right for size of state, European integration for openness, anti-elite rhetoric for the Council; Western parties against their country's mean. */
-    public const POSITION_ANNUAL_PERSISTENCE = [AerieDiet::AXIS_STATE => 0.872, AerieDiet::AXIS_OPENNESS => 0.958, AerieDiet::AXIS_COUNCIL => 0.846];
+    /** Share of a party's distance from its home still there a year later, by axis: economic left-right for size of state, European integration for openness, anti-elite rhetoric for the Council, environment against growth for the environment (2010-2024); Western parties against their country's mean. */
+    public const POSITION_ANNUAL_PERSISTENCE = [AerieDiet::AXIS_STATE => 0.872, AerieDiet::AXIS_OPENNESS => 0.958, AerieDiet::AXIS_COUNCIL => 0.846, AerieDiet::AXIS_ENVIRONMENT => 0.933];
     /** How far a party strays from its home on each axis, the standard deviation around it, from the same fit (a full expert scale is two units). */
-    public const POSITION_WITHIN_SD = [AerieDiet::AXIS_STATE => 0.125, AerieDiet::AXIS_OPENNESS => 0.265, AerieDiet::AXIS_COUNCIL => 0.188];
+    public const POSITION_WITHIN_SD = [AerieDiet::AXIS_STATE => 0.125, AerieDiet::AXIS_OPENNESS => 0.265, AerieDiet::AXIS_COUNCIL => 0.188, AerieDiet::AXIS_ENVIRONMENT => 0.170];
 
     // --- Vote Shares ---
     /** Smallest vote share a party is carried at, so a collapse leaves it a rump rather than a negative share. */
@@ -111,8 +113,30 @@ class PoliticsEngine
     public const LASTING_SWING_VARIANCE = 0.0118;
 
     // --- The Budget ---
-    /** The levers a budget sets, and whether cutting each costs revenue the Council guards. */
-    public const REVENUE_LEVERS = ['corporateTax' => true, 'tariff' => true, 'laborGrowth' => false, 'mergerReviewLeniency' => false];
+    /** The levers a budget sets, in platform() order, and whether cutting each costs revenue the Council guards. */
+    public const REVENUE_LEVERS = [
+        'corporateTax' => true,
+        'tariff' => true,
+        'laborGrowth' => false,
+        'mergerReviewLeniency' => false,
+        'greenBeltStringency' => false,
+        'carbonPrice' => true,
+        'extractionStringency' => false,
+        'stampDutyRate' => false,
+        'bankLevyRate' => true,
+    ];
+    /** The state field each lever is kept in, in the same order. */
+    public const LEVER_FIELDS = [
+        'corporateTax' => 'corporateTaxPolicyShift',
+        'tariff' => 'importTariffRate',
+        'laborGrowth' => 'laborForceGrowthRate',
+        'mergerReviewLeniency' => 'mergerReviewLeniency',
+        'greenBeltStringency' => 'greenBeltStringency',
+        'carbonPrice' => 'carbonPrice',
+        'extractionStringency' => 'extractionStringency',
+        'stampDutyRate' => 'stampDutyRate',
+        'bankLevyRate' => 'bankLevyRate',
+    ];
 
     // --- Platforms: Corporate Tax (Osterloh & Debus 2012) ---
     /** Gap between the corporate rates the big-state and small-state manifestos set, the parties at the ends of the size-of-state axis: 7 points (US: the 2020 Democratic platform's 28% against the 21% of the 2017 Republican act; UK 2019: Labour's 26% against the Conservatives' 19%). Enacted rates follow manifesto ideology (Osterloh & Debus 2012, European panel). */
@@ -127,6 +151,18 @@ class PoliticsEngine
     public const MIGRATION_CLOSED_REGIME = 0.0011;
     /** Net migration an open immigration regime admits: Canada's 0.73% and Australia's 0.86%, averaged (the same series). Midway between the two regimes sits the US's 0.50%, the structural labour growth the District opens with. */
     public const MIGRATION_OPEN_REGIME = (0.00728 + 0.00859) / 2.0;
+
+    // --- Platforms: Stamp Duty (Colliard & Hoffmann 2017) ---
+    /** Duty on each side of a share trade the big-state end of the axis enacts: France's 0.4% tax on share purchases (since 1 April 2025), as 0.2% a side, the same cost to a round trip. The small-state end keeps the founding 0.05% a side (FinancialConstants::STAMP_DUTY_RATE); either way it is paid into the reserve fund, not the budget. */
+    public const POLICY_BIG_STATE_STAMP_DUTY = 0.002;
+
+    // --- Platforms: Bank Levy (UK Finance Act 2011, Schedule 19) ---
+    /** Bank levy on short-term funding the big-state end of the axis enacts, a year: the UK's at its peak, 0.21% from April to December 2015 (half that, 0.105%, on long-term funding). The small-state end levies none, as the District did at its founding. */
+    public const POLICY_BIG_STATE_BANK_LEVY = 0.0021;
+
+    // --- Platforms: The Environment (World Bank Carbon Pricing Dashboard) ---
+    /** Carbon price on power and industry the environment-first end of the axis enacts, in dollars a tonne of CO2: the EU Emissions Trading System's, $70.37 on 1 April 2025 (World Bank Carbon Pricing Dashboard). Sweden's $125.56 tax covers heating and transport fuels, which the District's economy does not price, so it is not the reference. A cabinet that puts growth first prices none, as the US federal government does not. */
+    public const POLICY_GREEN_CARBON_PRICE = 70.37;
 
     public function __construct(
         private readonly MathUtility $mathUtility,
@@ -283,10 +319,17 @@ class PoliticsEngine
      * its axis have enacted. A government leaning further than the party at the end of an axis enacts that party's
      * policy and no more: nothing on record goes further.
      *
+     * The environment levers are none at all for a cabinet at or past the axis's middle toward growth, and rise to the
+     * strictest on record at the Tideline Accord's place, as the tariff rises from an open cabinet's none to the
+     * protectionists'.
+     *
      * @param array<string, float> $position A position by axis (coalitionPosition(), or a party's).
-     * @return array{corporateTax: float, tariff: float, laborGrowth: float, mergerReviewLeniency: float} The corporate
-     *         rate's shift from the neutral rate, the average tariff on imports, labour force growth, and where merger
-     *         review stands between the 2023 guidelines (0) and the 2010 guidelines (1).
+     * @return array{corporateTax: float, tariff: float, laborGrowth: float, mergerReviewLeniency: float, greenBeltStringency: float, carbonPrice: float, extractionStringency: float, stampDutyRate: float, bankLevyRate: float}
+     *         The corporate rate's shift from the neutral rate, the average tariff on imports, labour force growth,
+     *         where merger review stands between the 2023 guidelines (0) and the 2010 guidelines (1), how far the green
+     *         belt stands between the founding planning regime (0) and the strictest (1), the carbon price in dollars a
+     *         tonne, how far the rules on extraction stand between the founding ones (0) and the strictest (1), the
+     *         stamp duty on each side of a share trade, and the bank levy on short-term funding.
      */
     public static function platform(array $position): array
     {
@@ -297,6 +340,8 @@ class PoliticsEngine
         $open = AerieDiet::FIXED_POSITIONS[AerieDiet::EXCHANGE][AerieDiet::AXIS_OPENNESS];
         $populist = AerieDiet::FIXED_POSITIONS[AerieDiet::COMMON_LOT][AerieDiet::AXIS_COUNCIL];
         $technocratic = AerieDiet::FIXED_POSITIONS[AerieDiet::CHARTISTS][AerieDiet::AXIS_COUNCIL];
+        $green = AerieDiet::FIXED_POSITIONS[AerieDiet::TIDELINE][AerieDiet::AXIS_ENVIRONMENT];
+        $stringency = max(0.0, min($green, $position[AerieDiet::AXIS_ENVIRONMENT] ?? 0.0)) / $green;
         $state = max($smallState, min($bigState, $position[AerieDiet::AXIS_STATE] ?? 0.0));
         $openness = max($closed, min($open, $position[AerieDiet::AXIS_OPENNESS] ?? 0.0));
         $council = max($populist, min($technocratic, $position[AerieDiet::AXIS_COUNCIL] ?? 0.0));
@@ -311,7 +356,29 @@ class PoliticsEngine
             // The Common Lot's anti-cartel review is the 2023 guidelines, the Chartists' the 2010 ones
             // (App\Service\Corporate\MergerAndAcquisitionEngine::reviewScreens).
             'mergerReviewLeniency' => ($council - $populist) / ($technocratic - $populist),
+            'greenBeltStringency' => $stringency,
+            'carbonPrice' => self::POLICY_GREEN_CARBON_PRICE * $stringency,
+            'extractionStringency' => $stringency,
+            'stampDutyRate' => FinancialConstants::STAMP_DUTY_RATE
+                + ((self::POLICY_BIG_STATE_STAMP_DUTY - FinancialConstants::STAMP_DUTY_RATE) * ($state - $smallState) / $stateSpan),
+            'bankLevyRate' => self::POLICY_BIG_STATE_BANK_LEVY * ($state - $smallState) / $stateSpan,
         ];
+    }
+
+    /**
+     * The levers in force, keyed and ordered as platform() writes them, so a budget that changes nothing compares equal.
+     *
+     * @return array{corporateTax: float, tariff: float, laborGrowth: float, mergerReviewLeniency: float, greenBeltStringency: float, carbonPrice: float, extractionStringency: float, stampDutyRate: float, bankLevyRate: float}
+     */
+    public static function standingLevers(PoliticsState|PoliticsStateDTO $state): array
+    {
+        $standing = [];
+        foreach (self::LEVER_FIELDS as $lever => $field) {
+            $standing[$lever] = $state->$field;
+        }
+
+        /** @var array{corporateTax: float, tariff: float, laborGrowth: float, mergerReviewLeniency: float, greenBeltStringency: float, carbonPrice: float, extractionStringency: float, stampDutyRate: float, bankLevyRate: float} $standing */
+        return $standing;
     }
 
     /**
@@ -328,8 +395,8 @@ class PoliticsEngine
      * @param list<string>                        $support   Its support parties.
      * @param array<string, int|float>            $seats     Seats by party.
      * @param array<string, array<string, float>> $positions Positions by party and axis.
-     * @param array{corporateTax: float, tariff: float, laborGrowth: float, mergerReviewLeniency: float} $standing The levers in force.
-     * @return array{levers: array{corporateTax: float, tariff: float, laborGrowth: float, mergerReviewLeniency: float}, platform: array{corporateTax: float, tariff: float, laborGrowth: float, mergerReviewLeniency: float}, supportHeld: array<string, bool>, councilHeld: array<string, bool>, councilGuards: bool}
+     * @param array<string, float>                $standing  The levers in force (standingLevers()).
+     * @return array{levers: array<string, float>, platform: array<string, float>, supportHeld: array<string, bool>, councilHeld: array<string, bool>, councilGuards: bool}
      *         What the round enacts, the cabinet's own platform, which levers the supporters and the Council hold short
      *         of it, and whether the Council's brake is on.
      */
@@ -372,12 +439,7 @@ class PoliticsEngine
      */
     public static function enactBudget(PoliticsState $state, float $debtToGdp): void
     {
-        $standing = [
-            'corporateTax' => $state->corporateTaxPolicyShift,
-            'tariff' => $state->importTariffRate,
-            'laborGrowth' => $state->laborForceGrowthRate,
-            'mergerReviewLeniency' => $state->mergerReviewLeniency,
-        ];
+        $standing = self::standingLevers($state);
         $budget = self::budget(
             AerieDiet::governingParties($state->governingCoalition),
             AerieDiet::governingParties($state->supportParties),
@@ -395,10 +457,9 @@ class PoliticsEngine
         if ($levers !== $standing) {
             $state->lastBudgetEnactedAt = $state->totalTime;
         }
-        $state->corporateTaxPolicyShift = $levers['corporateTax'];
-        $state->importTariffRate = $levers['tariff'];
-        $state->laborForceGrowthRate = $levers['laborGrowth'];
-        $state->mergerReviewLeniency = $levers['mergerReviewLeniency'];
+        foreach (self::LEVER_FIELDS as $lever => $field) {
+            $state->$field = $levers[$lever];
+        }
     }
 
     /**
@@ -678,7 +739,7 @@ class PoliticsEngine
      * @param array<string, float>                $coalition 1.0 for a member.
      * @param array<string, int|float>            $seats     Seats by party.
      * @param array<string, array<string, float>> $positions Positions by party and axis.
-     * @return array{state: float, openness: float, council: float}
+     * @return array{state: float, openness: float, council: float, environment: float}
      */
     public static function coalitionPosition(array $coalition, array $seats, array $positions): array
     {
@@ -698,7 +759,7 @@ class PoliticsEngine
             }
         }
 
-        /** @var array{state: float, openness: float, council: float} $weighted */
+        /** @var array{state: float, openness: float, council: float, environment: float} $weighted */
         return $weighted;
     }
 

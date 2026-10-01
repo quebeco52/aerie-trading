@@ -88,6 +88,14 @@ class CommodityLogisticsSubsystem
     public const REFERENCE_GAS_PRICE = 3.26;
     /** Heat rate (MMBtu/MWh) EIA quotes the spark spread at: a new, efficient combined-cycle plant. */
     public const SPARK_SPREAD_BENCHMARK_HEAT_RATE = 7.0;
+    /** Heat rate (MMBtu/MWh) the US gas-fired fleet actually burns: its operating average, 2017-24 (EIA Electric Power Annual, Table 8.1). */
+    public const GAS_FLEET_HEAT_RATE = 7.74;
+
+    // --- Carbon in Wholesale Power (EPA emission factors; Fabra & Reguant 2014) ---
+    /** CO2 burning natural gas emits, in tonnes per MMBtu: 53.06 kg (EPA GHG Emission Factors Hub). */
+    public const NATURAL_GAS_CO2_TONNES_PER_MMBTU = 0.05306;
+    /** Share of the marginal plant's carbon cost the wholesale price carries: over 80% (Fabra & Reguant 2014, Spain's power market under the EU ETS). */
+    public const CARBON_POWER_PASS_THROUGH = 0.80;
 
     // --- Gold (Barsky, Epstein, Lafont-Mueller & Yoo 2021, Chicago Fed Letter 464) ---
     /** Log change in the real gold price per unit of real ten-year yield: -0.131 per percentage point (annual levels regression, 1971-2019). */
@@ -354,7 +362,8 @@ class CommodityLogisticsSubsystem
      * Gas sets the clearing price in most hours, so power moves with it at the log elasticity the hubs show. The
      * implied heat rate on top (which plant is marginal, weather, outages) is a fast log-OU around its mean times a
      * deterministic twin-peak load season. Its target is compensated by exp(sigma^2 / 4 kappa), so the index
-     * averages its baseline rather than settling at its median.
+     * averages its baseline rather than settling at its median. A carbon price adds the marginal gas plant's carbon
+     * cost per MWh, as far as the market passes it through.
      *
      * @param MacroState $state Current macroeconomic state.
      * @param float      $dt    Time increment in years.
@@ -374,7 +383,19 @@ class CommodityLogisticsSubsystem
         $gasRelative = max(0.01, $state->naturalGasPriceIndex / MacroEngine::NATURAL_GAS_BASELINE);
         $spot = MacroEngine::WHOLESALE_POWER_BASELINE * ($gasRelative ** self::POWER_GAS_ELASTICITY)
             * exp($state->powerHeatRateLog) * self::resolvePowerSeasonalFactor($state->totalTime);
-        $state->wholesalePowerPriceIndex = max(5.0, min(800.0, $spot));
+        $carbon = MacroEngine::WHOLESALE_POWER_BASELINE * self::carbonPowerPriceAdder($state->carbonPrice) / self::REFERENCE_POWER_PRICE;
+        $state->wholesalePowerPriceIndex = max(5.0, min(800.0, $spot + $carbon));
+    }
+
+    /**
+     * What a carbon price adds to wholesale power, in $/MWh: the carbon the gas fleet emits per MWh at its heat rate,
+     * priced and passed through.
+     *
+     * @param float $carbonPrice Dollars a tonne of CO2.
+     */
+    public static function carbonPowerPriceAdder(float $carbonPrice): float
+    {
+        return self::CARBON_POWER_PASS_THROUGH * self::NATURAL_GAS_CO2_TONNES_PER_MMBTU * self::GAS_FLEET_HEAT_RATE * $carbonPrice;
     }
 
     /** The load-season multiplier on wholesale power at a point in simulated time (years); it averages one over the year. */

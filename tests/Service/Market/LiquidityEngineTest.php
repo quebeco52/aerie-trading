@@ -379,4 +379,19 @@ class LiquidityEngineTest extends TestCase
             $this->assertGreaterThanOrEqual(0.0, $this->engine->simulateTickVolume($stock, 1.0 / 14400.0));
         }
     }
+
+    /**
+     * A stamp duty thins turnover at the semi-elasticity France's 2012 tax showed (Colliard & Hoffmann 2017): another
+     * 0.1% a side, 0.2% on the round trip, takes a tenth off the volume, and so the depth every quote meets.
+     */
+    public function testAStampDutyThinsTurnover(): void
+    {
+        $engine = new LiquidityEngine(new MathUtility());
+        $stock = $this->stock();
+        $founding = $engine->structuralDailyVolume($stock);
+
+        $engine->setStampDutyRate(FinancialConstants::STAMP_DUTY_RATE + 0.001);
+        $this->assertEqualsWithDelta(0.9, $engine->structuralDailyVolume($stock) / $founding, 1e-3);
+        $this->assertEqualsWithDelta(1.0, MathUtility::calculateStampDutyVolumeFactor(FinancialConstants::STAMP_DUTY_RATE), 1e-15);
+    }
 }

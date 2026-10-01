@@ -291,7 +291,7 @@
 											  data-controller="trade-form"
 											  data-trade-form-ticker-value="{{ asset.ticker }}"
 											  data-trade-form-price-value="{{ asset.price }}"
-											  data-trade-form-duty-rate-value="{{ isEtf ? 0 : constant('App\\Service\\Math\\FinancialConstants::STAMP_DUTY_RATE') }}"
+											  data-trade-form-duty-rate-value="{{ isEtf ? 0 : macro.stampDutyRate }}"
 											  data-action="submit->trade-form#onSubmit">
 									<input type="hidden" name="ticker" value="{{ asset.ticker }}">
 									<input type="hidden" name="_token" value="{{ csrf_token('execute_trade') }}">
@@ -399,7 +399,7 @@
 										{% if not isEtf %}
 											{# Listed shares carry the District's stamp duty on both sides; funds are exempt. #}
 											<div class="flex justify-between items-center text-on-surface-variant">
-												<span>Stamp duty ({{ (constant('App\\Service\\Math\\FinancialConstants::STAMP_DUTY_RATE') * 100)|number_format(2) }}%, to the Sovereign Reserve)</span>
+												<span>Stamp duty ({{ (macro.stampDutyRate * 100)|number_format(2) }}%, to the Sovereign Reserve)</span>
 												<span class="font-mono tabular-nums" data-trade-form-target="duty">-</span>
 											</div>
 										{% endif %}

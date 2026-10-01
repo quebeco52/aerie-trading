@@ -222,4 +222,14 @@ final class OilGasProducerBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta(0.5 / OilGasProducerBusinessModel::BASE_COVERAGE_VISIBILITY, $spike->observableShockZ, 1e-9);
         $this->assertEqualsWithDelta(1.5, $spike->kpis['realized_price_index'], 1e-9);
     }
+
+    /** The strictest rules on extraction cost Greenstone, List & Syverson's 4.8% of productivity: every barrel costs 1 / 0.952 as much to lift. */
+    public function testStrictExtractionRulesRaiseTheCostOfEveryBarrel(): void
+    {
+        $founding = $this->report($this->producer(), $this->macro(crude: 100.0));
+        $strict = $this->report($this->producer(), $this->macro(crude: 100.0, macro: ['extractionStringency' => 1.0]));
+
+        $this->assertEqualsWithDelta($founding->actualRevenue, $strict->actualRevenue, 1e-9);
+        $this->assertEqualsWithDelta($founding->actualVariableCosts / (1.0 - 0.048), $strict->actualVariableCosts, 1e-9);
+    }
 }

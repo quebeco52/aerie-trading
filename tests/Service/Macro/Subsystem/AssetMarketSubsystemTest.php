@@ -330,6 +330,77 @@ class AssetMarketSubsystemTest extends TestCase
         $this->assertEqualsWithDelta($expected, log($grown->residentialPropertyIndex / $base->residentialPropertyIndex), 1e-12);
     }
 
+    /**
+     * The green belt runs from the 10th percentile of English planning authorities' refusal rates (the founding plan)
+     * to the 90th, and raises the price elasticity by Hilber & Vermeulen's boom or bust coefficient per standard
+     * deviation of refusal rate between them.
+     */
+    public function testTheGreenBeltSpansTheTenthToTheNinetiethPercentileOfEnglishPlanning(): void
+    {
+        $this->assertEqualsWithDelta(0.254 - (1.2816 * 0.087), AssetMarketSubsystem::planningRefusalRate(0.0), 1e-12);
+        $this->assertEqualsWithDelta(0.254 + (1.2816 * 0.087), AssetMarketSubsystem::planningRefusalRate(1.0), 1e-12);
+        $this->assertEqualsWithDelta(0.254, AssetMarketSubsystem::planningRefusalRate(0.5), 1e-12);
+
+        $this->assertSame(0.0, AssetMarketSubsystem::greenBeltElasticityLift(0.0, 0.05), 'The founding plan is the calibrated economy.');
+        $this->assertEqualsWithDelta(2.0 * 1.2816 * 0.267, AssetMarketSubsystem::greenBeltElasticityLift(1.0, 0.05), 1e-12);
+        $this->assertEqualsWithDelta(2.0 * 1.2816 * 0.152, AssetMarketSubsystem::greenBeltElasticityLift(1.0, -0.05), 1e-12, 'Supply binds less in a slump.');
+        $this->assertEqualsWithDelta(1.0 / (1.0 + (2.0 * 1.2816 * 0.267)), AssetMarketSubsystem::greenBeltSupplyResponse(1.0), 1e-12);
+    }
+
+    /** Under a green belt the same boom lifts the fundamental further, and the same slump takes it lower, but by less than the boom adds. */
+    public function testAGreenBeltDeepensBoomsMoreThanSlumps(): void
+    {
+        $move = function (float $gap, float $stringency): float {
+            $state = $this->neutralHousingState();
+            $state->outputGapEma = $gap;
+            $state->greenBeltStringency = $stringency;
+            $this->subsystem->calculateResidentialPropertyIndex($state, MacroEngine::TARGET_INFLATION, 0.25);
+
+            return log($state->residentialPropertyIndex / 100.0);
+        };
+
+        $boomLift = $move(0.03, 1.0) - $move(0.03, 0.0);
+        $slumpDrop = $move(-0.03, 0.0) - $move(-0.03, 1.0);
+        $this->assertGreaterThan(0.0, $boomLift);
+        $this->assertGreaterThan(0.0, $slumpDrop);
+        $this->assertGreaterThan($slumpDrop, $boomLift);
+        $this->assertSame($move(0.0, 0.0), $move(0.0, 1.0), 'At trend a green belt moves nothing: the index has no trend income to amplify.');
+    }
+
+    /** Immigration bids up a green-belted District harder: Saiz's one-for-one plus the green belt's lift. */
+    public function testAGreenBeltRaisesThePriceOfImmigration(): void
+    {
+        $open = $this->neutralHousingState();
+        $open->immigrationPopulationShift = 0.05;
+        $belted = $this->neutralHousingState();
+        $belted->immigrationPopulationShift = 0.05;
+        $belted->greenBeltStringency = 1.0;
+
+        $this->subsystem->calculateResidentialPropertyIndex($open, MacroEngine::TARGET_INFLATION, 0.25);
+        $this->subsystem->calculateResidentialPropertyIndex($belted, MacroEngine::TARGET_INFLATION, 0.25);
+
+        $expected = (1.0 - exp(-AssetMarketSubsystem::RESIDENTIAL_MEAN_REVERSION * 0.25)) * AssetMarketSubsystem::greenBeltElasticityLift(1.0, 0.05) * 0.05;
+        $this->assertEqualsWithDelta($expected, log($belted->residentialPropertyIndex / $open->residentialPropertyIndex), 1e-12);
+    }
+
+    /** Builders answer a price boom less under a green belt, in proportion to the price's stronger answer to demand. */
+    public function testAGreenBeltSlowsBuildingInABoom(): void
+    {
+        $starts = function (float $price, float $stringency): float {
+            $state = $this->neutralBuildingState();
+            $state->residentialPropertyIndex = $price;
+            $state->greenBeltStringency = $stringency;
+            $this->subsystem->calculateHousingStarts($state, MacroEngine::TARGET_INFLATION, 0.25);
+
+            return $state->housingStartsIndex;
+        };
+
+        $openResponse = $starts(130.0, 0.0) - $starts(100.0, 0.0);
+        $beltedResponse = $starts(130.0, 1.0) - $starts(100.0, 1.0);
+        $this->assertGreaterThan(0.0, $beltedResponse);
+        $this->assertEqualsWithDelta(AssetMarketSubsystem::greenBeltSupplyResponse(1.0), $beltedResponse / $openResponse, 1e-9);
+    }
+
     private function neutralHousingState(): MacroState
     {
         $state = new MacroState();

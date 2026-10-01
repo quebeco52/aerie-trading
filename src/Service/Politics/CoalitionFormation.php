@@ -59,13 +59,13 @@ final class CoalitionFormation
     /** Log-odds of a cabinet holding two parties that ruled out governing together, the two bloc leaders (Martin & Stevenson 2010: an anti-pact). */
     public const FORMATION_ANTIPACT_UTILITY = -2.877;
     /** Log-odds per unit a cabinet party stands from the Diet's median on the Council axis, the question of the constitutional order: Martin & Stevenson's (2010) anti-system term, its manifesto measure replaced by that distance and its strength fitted so the parties at the axis's ends sit in cabinet as seldom as Scandinavia's radical parties (var/harness/politics/formation_fit.py). */
-    public const FORMATION_ANTISYSTEM_UTILITY = -2.91;
+    public const FORMATION_ANTISYSTEM_UTILITY = -3.21;
     /** Log-odds the cabinet the first attempt tries must clear, the value of no deal at all; fitted so 32% of formations need more than one attempt (Golder 2010: 'nearly a third', 16 West European democracies 1944-1998; var/harness/politics/formation_fit.py). */
-    public const FORMATION_RESERVATION = 2.17;
+    public const FORMATION_RESERVATION = 1.86;
     /** How far the bar of no deal falls with each attempt that fails, as the parties' patience runs out; fitted so formations are as spread as the record's, sd 33.9 days on a mean of 33.7 (Bäck, Hellström, Lindvall & Teorell 2023), which cuts the stalemates a fixed bar would leave running for years. */
-    public const FORMATION_RESERVATION_STEP = 0.68;
+    public const FORMATION_RESERVATION_STEP = 0.73;
     /** Mean length of one attempt in days, each drawn exponential (a constant hazard: the formation record's spread about equals its mean); fitted so formations average Bäck, Hellström, Lindvall & Teorell's (2023) 33.7 days, Western Europe 1945-2019. */
-    public const FORMATION_ATTEMPT_DAYS = 22.8;
+    public const FORMATION_ATTEMPT_DAYS = 22.7;
     /** Mean days from a vote to the government it forms, single-party majorities included: what the talks model averages at the fitted constants. */
     public const FORMATION_MEAN_DAYS = 33.7;
 

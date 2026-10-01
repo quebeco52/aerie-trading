@@ -70,7 +70,7 @@ class StockTracker
      * @param bool    $recordHistory Whether to persist the new prices to the stock history table.
      * @param MacroStateDTO|null $macroState    The current state of the macroeconomic cycle.
      * 
-     * @return array{updates: array<mixed>, total_cap: float, float_caps: array<string, float>, half_spreads: array<string, float>, fund_flow: array<string, float>, dividend_points: array<string, float>, board_float_cap: float, board_price_return: float, board_dividend_cash: float, board_net_issuance: float, board_stamp_duty: float, strategic_stake_cash: float, events: array<mixed>, market_vol: float, history: array<mixed>}
+     * @return array{updates: array<mixed>, total_cap: float, float_caps: array<string, float>, half_spreads: array<string, float>, fund_flow: array<string, float>, dividend_points: array<string, float>, board_float_cap: float, board_price_return: float, board_dividend_cash: float, board_net_issuance: float, board_stamp_duty: float, board_bank_levy: float, strategic_stake_cash: float, events: array<mixed>, market_vol: float, history: array<mixed>}
      */
     public function updateStocks(array $stocks, float $dt, bool $recordHistory, ?\App\DTO\MacroStateDTO $macroState = null, int $tickCount = 0, int $ticksPerYear = 252): array
     {
@@ -85,6 +85,8 @@ class StockTracker
         // Pull systemic variables from the Macro Engine
         $macroDTO = $macroState ?? new \App\DTO\MacroStateDTO();
         $marketVol = $macroDTO->marketVolatility;
+        // The stamp duty the Diet has in force thins every name's turnover, and so its depth, this tick.
+        $this->liquidityEngine->setStampDutyRate($macroDTO->stampDutyRate);
 
         // The sovereign fund's rebalance slice for this tick, in currency, spread over the float the way any
         // cap-weighted holder's is: each name gets its share of the float the fund measured the board at.
@@ -98,6 +100,8 @@ class StockTracker
         $boardNetIssuance = 0.0;
         // What the board traded this tick, which the District's stamp duty is charged on, buyer and seller each.
         $boardTradedValue = 0.0;
+        // What the board's banks owe a year in bank levy at the rate in force, which the budget books as revenue.
+        $boardBankLevy = 0.0;
         // Cash the District's strategic stakes pay it: dividends, and its share of buybacks less its share of issues,
         // since it keeps its percentage by tendering and subscribing pro rata. Off the float; paid into the fund.
         $strategicStakeCash = 0.0;
@@ -287,6 +291,9 @@ class StockTracker
             if (!empty($warning)) {
                 $events = array_merge($events, $warning);
             }
+
+            $boardBankLevy += \App\Data\Sectors::getBusinessModelStrategy(\App\Data\Sectors::businessModelFor($stock->getIndustry()))
+                ->calculateAnnualBankLevy($stock, $macroDTO);
 
             // Earnings Engine
             $generatedEvents = $this->earningsEngine->calculate($stock, $macroDTO, $tickCount, $ticksPerYear);
@@ -531,7 +538,8 @@ class StockTracker
             'board_price_return' => $boardFloatCapAtStart > 0.0 ? $boardPriceGain / $boardFloatCapAtStart : 0.0,
             'board_dividend_cash' => (float) array_sum($dividendPoints),
             'board_net_issuance' => $boardNetIssuance,
-            'board_stamp_duty' => 2.0 * FinancialConstants::STAMP_DUTY_RATE * $boardTradedValue,
+            'board_stamp_duty' => 2.0 * $macroDTO->stampDutyRate * $boardTradedValue,
+            'board_bank_levy' => $boardBankLevy,
             'strategic_stake_cash' => $strategicStakeCash,
             'events' => $events,
             'market_vol' => $marketVol

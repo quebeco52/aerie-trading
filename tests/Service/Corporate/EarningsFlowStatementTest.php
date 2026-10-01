@@ -135,4 +135,16 @@ final class EarningsFlowStatementTest extends TestCase
         $this->assertSame(100.0, $flow->netIncome);
         $this->assertSame(100.0, $flow->retainedCash);
     }
+
+    /** A bank levy is drawn below the tax line, and net income is what is left after it. */
+    public function testABankLevyIsDrawnBelowTheTaxLine(): void
+    {
+        $plain = $this->report();
+        $levied = $this->report(['bank_levy' => 15.0]);
+
+        $this->assertSame(0.0, $plain->bankLevy);
+        $this->assertSame(15.0, $levied->bankLevy);
+        $this->assertEqualsWithDelta($plain->netIncome - 15.0, $levied->netIncome, 1e-9);
+        $this->assertEqualsWithDelta($levied->preTaxIncome, $levied->taxes + $levied->goodwillImpairment + $levied->bankLevy + $levied->netIncome, 1e-9, 'The waterfall conserves.');
+    }
 }

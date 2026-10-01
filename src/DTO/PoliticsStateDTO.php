@@ -6,6 +6,7 @@ namespace App\DTO;
 
 use App\Data\AerieDiet;
 use App\Service\Macro\MacroEngine;
+use App\Service\Math\FinancialConstants;
 use App\Service\Politics\PoliticsEngine;
 use App\Service\Politics\PoliticsState;
 
@@ -66,6 +67,16 @@ readonly class PoliticsStateDTO
         public float $laborForceGrowthRate = MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE,
         /** Where merger review stands between the 2023 guidelines (0) and the 2010 guidelines (1). */
         public float $mergerReviewLeniency = 0.0,
+        /** How far the green belt stands between the founding planning regime (0) and the strictest on record (1). */
+        public float $greenBeltStringency = 0.0,
+        /** The carbon price on power and industry, in dollars a tonne of CO2. */
+        public float $carbonPrice = 0.0,
+        /** How far the rules on extraction stand between the founding ones (0) and the strictest on record (1). */
+        public float $extractionStringency = 0.0,
+        /** Stamp duty on each side of a share trade, paid into the reserve fund. */
+        public float $stampDutyRate = FinancialConstants::STAMP_DUTY_RATE,
+        /** Bank levy on short-term funding, a year (half that on long-term funding). */
+        public float $bankLevyRate = 0.0,
         public float $lastBudgetEnactedAt = -1.0,
         public float $lastCouncilBrakeAt = -1.0,
     ) {}
@@ -101,6 +112,11 @@ readonly class PoliticsStateDTO
             importTariffRate: $this->importTariffRate,
             laborForceGrowthRate: $this->laborForceGrowthRate,
             mergerReviewLeniency: $this->mergerReviewLeniency,
+            greenBeltStringency: $this->greenBeltStringency,
+            carbonPrice: $this->carbonPrice,
+            extractionStringency: $this->extractionStringency,
+            stampDutyRate: $this->stampDutyRate,
+            bankLevyRate: $this->bankLevyRate,
             electionPulse: PoliticsEngine::electionPulse($this->totalTime, $this->lastElectionAt, $this->coalitionTakesOfficeAt),
         );
     }

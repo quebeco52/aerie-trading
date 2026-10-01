@@ -130,7 +130,7 @@ class SovereignReservePageBuilder
                 'gpifEquityLimit' => SovereignFundSubsystem::GPIF_GLOBAL_EQUITY_DEVIATION_LIMIT,
                 'checkMonths' => 12.0 * SovereignFundSubsystem::REBALANCE_CHECK_PERIOD_YEARS,
                 'executionMonths' => SovereignFundSubsystem::REBALANCE_EXECUTION_MONTHS,
-                'stampDutyRate' => FinancialConstants::STAMP_DUTY_RATE,
+                'stampDutyRate' => $macro->stampDutyRate,
                 'debtFloor' => MacroEngine::SOVEREIGN_DEBT_FLOOR,
                 'budgetRoundMonths' => 12.0 * MacroEngine::BUDGET_ROUND_PERIOD_YEARS,
                 'stabilisationGapResponse' => MacroEngine::FUND_STABILISATION_GAP_RESPONSE,

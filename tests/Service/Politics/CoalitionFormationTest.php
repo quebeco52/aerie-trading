@@ -16,8 +16,8 @@ class CoalitionFormationTest extends TestCase
 
     /**
      * A cabinet's log-odds are Martin & Stevenson's terms, each where it applies. At the founding the Council median is
-     * the establishment's +0.3, the right bloc is the Vanguard, the Exchange Party, the Chartists and the Free Port
-     * Compact, and the left bloc the rest.
+     * the establishment's +0.3, the right bloc is the Vanguard, the Exchange Party, the Chartists and New Horizon, and
+     * the left bloc the rest.
      */
     public function testTheUtilityIsMartinAndStevensonsTermByTerm(): void
     {
@@ -179,12 +179,12 @@ class CoalitionFormationTest extends TestCase
     }
 
     /** The range is the distance between the two furthest members, across all three axes. */
-    public function testTheRangeSpansAllThreeAxes(): void
+    public function testTheRangeSpansEveryAxis(): void
     {
         $positions = Diet::HOME_POSITIONS;
 
         $this->assertEqualsWithDelta(
-            sqrt((0.6 ** 2) + (0.6 ** 2) + (0.5 ** 2)),
+            sqrt((0.6 ** 2) + (0.6 ** 2) + (0.5 ** 2) + (0.59 ** 2)),
             Formation::ideologicalRange([Diet::VANGUARD, Diet::CHARTISTS], $positions),
             1e-12
         );

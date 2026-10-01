@@ -1784,6 +1784,43 @@ class MathUtility
     }
 
     /**
+     * A bank levy for a year: the full rate on short-term funding, half of it on long-term funding and on uninsured
+     * deposits from customers outside finance; insured deposits and Tier 1 equity are left out (UK Finance Act 2011,
+     * Schedule 19).
+     *
+     * @param float $shortTermFunding Funding repayable within a year, in currency.
+     * @param float $longTermFunding  Longer funding and uninsured deposits, in currency.
+     * @param float $shortTermRate    The levy on short-term funding, a year.
+     */
+    public static function calculateAnnualBankLevy(float $shortTermFunding, float $longTermFunding, float $shortTermRate): float
+    {
+        return $shortTermRate * (max(0.0, $shortTermFunding) + (FinancialConstants::BANK_LEVY_LONG_TERM_RATE_SHARE * max(0.0, $longTermFunding)));
+    }
+
+    /**
+     * Share turnover under a stamp duty, as a share of turnover at the founding rate: a duty paid on each side of a
+     * trade costs a round trip twice the rate, and turnover falls with the round trip's cost above the founding one at
+     * the semi-elasticity France's 2012 tax showed.
+     *
+     * @param float $stampDutyRate Duty on each side of a share trade.
+     */
+    public static function calculateStampDutyVolumeFactor(float $stampDutyRate): float
+    {
+        return exp(-FinancialConstants::STAMP_DUTY_VOLUME_SEMI_ELASTICITY * 2.0 * ($stampDutyRate - FinancialConstants::STAMP_DUTY_RATE));
+    }
+
+    /**
+     * How much a loss of productivity raises the cost of each unit produced: output is TFP times the inputs, so the
+     * inputs, and what they cost, per unit of output scale with 1 / TFP.
+     *
+     * @param float $tfpLoss Share of total factor productivity lost (0.048 is 4.8%).
+     */
+    public function calculateProductivityLossCostFactor(float $tfpLoss): float
+    {
+        return 1.0 / max(0.01, 1.0 - $tfpLoss);
+    }
+
+    /**
      * Schwartz (1997) one-factor futures price with a zero market price of risk: the expected spot at the
      * delivery horizon under the same exact log-OU transition calculateSchwartz1Factor() steps, so a swap
      * struck on this curve is fair against the process the spot actually follows.

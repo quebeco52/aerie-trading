@@ -258,4 +258,19 @@ class BrokerageBusinessModelTest extends TestCase
             'A system beta above the sweep floor costs the brokerage sweep spread.'
         );
     }
+
+    /** Commissions are paid per trade: a stamp duty that thins turnover by a tenth thins the trading stream by a tenth, and leaves advisory alone. */
+    public function testAStampDutyThinsTradingCommissions(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('ROOK');
+        $mathMock = $this->createStub(MathUtility::class);
+        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+
+        $founding = $this->model->computeActualFinancials($stock, 1000.0, 0.35, 100.0, 0.0, new MacroStateDTO(marketVolatilityEma: 0.20), $mathMock);
+        $taxed = $this->model->computeActualFinancials($stock, 1000.0, 0.35, 100.0, 0.0, new MacroStateDTO(marketVolatilityEma: 0.20, stampDutyRate: \App\Service\Math\FinancialConstants::STAMP_DUTY_RATE + 0.001), $mathMock);
+
+        $this->assertEqualsWithDelta(0.9, $taxed->streamRevenue['trading'] / $founding->streamRevenue['trading'], 1e-3);
+        $this->assertEqualsWithDelta($founding->streamRevenue['advisory'], $taxed->streamRevenue['advisory'], 1e-9);
+    }
 }

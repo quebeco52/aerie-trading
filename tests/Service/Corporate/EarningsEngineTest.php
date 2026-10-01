@@ -2111,4 +2111,40 @@ class EarningsEngineTest extends TestCase
             'overtime is the overshoot of the deseasonalized run rate, not of the seasonal peak'
         );
     }
+
+    /**
+     * A bank levy is charged on the balance sheet below the tax line: net income falls by the quarter's levy, the tax
+     * charge does not, the estimate carries it (the rate is public), and the cash statement still reconciles.
+     */
+    public function testABankLevyComesOffAfterTaxAndTheEstimateCarriesIt(): void
+    {
+        $run = function (float $levyRate): array {
+            $captured = null;
+            $dispatcher = new EventDispatcher();
+            $dispatcher->addListener(EarningsReportedEvent::class, function (EarningsReportedEvent $event) use (&$captured): void {
+                $captured = $event->getContext();
+            });
+            $engine = $this->buildEngine($dispatcher);
+
+            mt_srand(1111);
+            $stock = $this->buildMatureIndustrial('FBNK');
+            $stock->setIndustry('Banks - Diversified');
+            $stock->setCustomerDeposits('300000000000');
+            $cashBefore = (float) $stock->getCorporateTreasury();
+            $engine->calculate($stock, new MacroStateDTO(corporateTaxRate: 0.21, policyRateEma: 0.04, yield5yEma: 0.04, bankLevyRate: $levyRate), EarningsEngine::resolveReportingTick('FBNK', 252), 252);
+
+            return [$captured, (float) $stock->getCorporateTreasury() - $cashBefore];
+        };
+
+        [$free] = $run(0.0);
+        [$levied, $cashChange] = $run(0.0021);
+
+        $this->assertSame(0.0, $free->bankLevy);
+        // At least the uninsured deposits' share at the long-term rate, a quarter's worth.
+        $this->assertGreaterThan(300.0e9 * (1.0 - 0.604) * 0.00105 / 4.0, $levied->bankLevy);
+        $this->assertEqualsWithDelta($free->actualQuarterlyNetIncome - $levied->bankLevy, $levied->actualQuarterlyNetIncome, 1.0);
+        $this->assertEqualsWithDelta($free->expectedQuarterlyNetIncome - $levied->bankLevy, $levied->expectedQuarterlyNetIncome, 1.0);
+        $this->assertEqualsWithDelta($free->taxPaid, $levied->taxPaid, 1.0, 'The levy is not deductible.');
+        $this->assertEqualsWithDelta($cashChange, $levied->operatingCashFlow + $levied->investingCashFlow + $levied->financingCashFlow, 1.0);
+    }
 }

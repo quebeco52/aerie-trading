@@ -31,6 +31,7 @@ final readonly class EarningsFlowStatement
         public float $preTaxIncome,
         public float $taxes,
         public float $goodwillImpairment,
+        public float $bankLevy,
         public float $netIncome,
         public float $internalCash,
         public float $externalFunding,
@@ -50,6 +51,7 @@ final readonly class EarningsFlowStatement
         $capex              = max(0.0, (float) ($report['capital_expenditures'] ?? 0));
         $taxPaidRaw         = max(0.0, (float) ($report['tax_paid'] ?? 0));
         $goodwillRaw        = max(0.0, (float) ($report['goodwill_impairment'] ?? 0));
+        $bankLevyRaw        = max(0.0, (float) ($report['bank_levy'] ?? 0));
         $dividends          = max(0.0, (float) ($report['dividend_paid'] ?? 0));
         $buybacks           = max(0.0, (float) ($report['stock_buybacks'] ?? 0));
 
@@ -76,7 +78,9 @@ final readonly class EarningsFlowStatement
         // Goodwill written off under the annual impairment test is a real charge below the tax line, and the
         // one a reader most wants to see named rather than folded silently into the bottom line.
         $goodwillImpairment = min($afterTax, $goodwillRaw);
-        $netIncome = $afterTax - $goodwillImpairment;
+        // A bank levy is charged on the balance sheet below the tax line too, and is cash.
+        $bankLevy = min($afterTax - $goodwillImpairment, $bankLevyRaw);
+        $netIncome = $afterTax - $goodwillImpairment - $bankLevy;
 
         // Then the cash side widens: earnings plus the non-cash charges added straight back — depreciation,
         // and the goodwill just written off, which never cost the firm a dollar — topped up from outside
@@ -96,6 +100,7 @@ final readonly class EarningsFlowStatement
             preTaxIncome: $preTaxIncome,
             taxes: $taxes,
             goodwillImpairment: $goodwillImpairment,
+            bankLevy: $bankLevy,
             netIncome: $netIncome,
             internalCash: $internalCash,
             externalFunding: $externalFunding,

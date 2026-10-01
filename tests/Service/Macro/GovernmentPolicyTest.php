@@ -66,6 +66,11 @@ class GovernmentPolicyTest extends TestCase
             importTariffRate: $tariff,
             laborForceGrowthRate: $laborGrowth,
             mergerReviewLeniency: $leniency,
+            greenBeltStringency: 0.0,
+            carbonPrice: 0.0,
+            extractionStringency: 0.0,
+            stampDutyRate: \App\Service\Math\FinancialConstants::STAMP_DUTY_RATE,
+            bankLevyRate: 0.0,
             electionPulse: $pulse,
         )]);
     }

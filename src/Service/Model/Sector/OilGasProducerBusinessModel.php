@@ -249,9 +249,11 @@ class OilGasProducerBusinessModel extends StandardCorporateBusinessModel
         // --- Per-Barrel Cost Base ---
         // Lifting and processing costs (diesel and power, consumables, field payroll) inflate with their input
         // markets and are paid per barrel: re-expressed against the realized price, they rise as a share of a
-        // slumping revenue line and fall as a share of a booming one.
+        // slumping revenue line and fall as a share of a booming one. Stricter rules on extraction cost productivity,
+        // and every barrel costs that much more to lift.
         $inputCostDrag = $this->resolveInputCostDrag($stock, $macroState, $streams, $this->resolvePricingPower($stock), $realizedVariableMargin);
-        $perBarrelCostRatio = $realizedVariableMargin + $inputCostDrag + $disasterPenalty;
+        $extractionRules = MathUtility::getInstance()->calculateProductivityLossCostFactor(FinancialConstants::ENVIRONMENTAL_REGULATION_TFP_LOSS * $macroState->extractionStringency);
+        $perBarrelCostRatio = (($realizedVariableMargin + $inputCostDrag) * $extractionRules) + $disasterPenalty;
         $clampedMargin = $this->clampMargin(MathUtility::getInstance()->calculatePerUnitCostRatio($perBarrelCostRatio, $priceRelative));
 
         $hedgeGain = $expectedRevenue * $liquidsShare * $oilVolume * $hedgeRatio * ($hedgedStrike - $oilSpot) * (1.0 + $basisShift);
@@ -339,6 +341,7 @@ class OilGasProducerBusinessModel extends StandardCorporateBusinessModel
             'energy_price_index_ema',
             'energy_supply_ema',
             'exchange_rate_index_ema',
+            'extraction_stringency',
             'global_demand_gap_ema',
             'industrial_metals_index_ema',
             'natural_gas_price_index_ema',

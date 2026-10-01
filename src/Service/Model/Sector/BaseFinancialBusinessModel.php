@@ -5,8 +5,10 @@ declare(strict_types=1);
 namespace App\Service\Model\Sector;
 
 use App\Data\ModelParam;
+use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Math\FinancialConstants;
+use App\Service\Math\MathUtility;
 use App\Service\Model\BusinessModelInterface;
 use App\Service\Model\Trait\FinancialPhysicsTrait;
 use App\Service\Model\Trait\StandardBaseModelTrait;
@@ -51,6 +53,10 @@ abstract class BaseFinancialBusinessModel implements BusinessModelInterface
     /** Divisor on the trailing ROE's reversion speed: it reverts toward cost of equity plus moat at kappa / this. */
     public const TTM_ROE_WEIGHT = 0.50;
 
+    // --- Bank Levy ---
+    /** Whether the institution is a bank the levy is charged on: deposit-takers and investment banks are; brokers, clearinghouses, insurers, asset managers and non-bank lenders are not. */
+    public const PAYS_BANK_LEVY = false;
+
     // --- Industry Share Dynamics ---
     /** Share of an idiosyncratic gain taken from same-industry peers; funds, mandates and deposits move between houses only in part. */
     public const INDUSTRY_SUBSTITUTABILITY = FinancialConstants::DEFAULT_FINANCIAL_INDUSTRY_SUBSTITUTABILITY;
@@ -64,6 +70,28 @@ abstract class BaseFinancialBusinessModel implements BusinessModelInterface
     public function getFirmFactorLoading(): float
     {
         return static::FIRM_FACTOR_LOADING;
+    }
+
+    /**
+     * The bank levy on the balance sheet at the rate in force: wholesale funding split by how much of it reprices
+     * within a year (the floating share), the revolver as short-term funding, and the deposits deposit insurance does
+     * not cover at the long-term rate; equity, which is Tier 1, and insured deposits are left out.
+     */
+    public function calculateAnnualBankLevy(Stock $stock, MacroStateDTO $macroState): float
+    {
+        if (!static::PAYS_BANK_LEVY || $macroState->bankLevyRate <= 0.0) {
+            return 0.0;
+        }
+
+        $wholesale = (float) $stock->getWholesaleDebt();
+        $floating = max(0.0, min(1.0, (float) ($stock->getFloatingDebtRatio() ?? 0.0)));
+        $uninsuredDeposits = (float) ($stock->getCustomerDeposits() ?? 0.0) * (1.0 - FinancialConstants::INSURED_DEPOSIT_SHARE);
+
+        return MathUtility::calculateAnnualBankLevy(
+            shortTermFunding: ($wholesale * $floating) + (float) $stock->getRevolverDrawn(),
+            longTermFunding: ($wholesale * (1.0 - $floating)) + $uninsuredDeposits,
+            shortTermRate: $macroState->bankLevyRate,
+        );
     }
 
     public function getSectorFactorLoading(): float

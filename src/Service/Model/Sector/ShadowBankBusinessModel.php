@@ -26,6 +26,10 @@ use App\Service\Math\FinancialConstants;
  */
 class ShadowBankBusinessModel extends CommercialBankBusinessModel
 {
+    // --- Bank Levy ---
+    /** A non-bank lender funded in the markets is outside the bank levy. */
+    public const PAYS_BANK_LEVY = false;
+
     // --- Operating Cyclicality & Demand Structure ---
     /** Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Wholesale-funded lending expands and contracts with credit conditions. */
     public const OPERATING_CYCLICALITY = 1.30;

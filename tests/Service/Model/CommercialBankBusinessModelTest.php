@@ -950,4 +950,29 @@ class CommercialBankBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta(20.0, $state['customerDeposits'] - 1000.0, 1e-9);
         $this->assertSame([], $state['events']);
     }
+
+    /**
+     * The bank levy: the full rate on wholesale funding that reprices within a year and on the revolver, half on the
+     * rest and on the deposits deposit insurance leaves uncovered; equity and insured deposits are left out. A non-bank
+     * lender owes none.
+     */
+    public function testTheBankLevyIsChargedOnFundingAndUninsuredDeposits(): void
+    {
+        $bank = new Stock();
+        $bank->setTicker('LEVY');
+        $bank->setWholesaleDebt('100000000000');
+        $bank->setFloatingDebtRatio('0.4');
+        $bank->setRevolverDrawn('10000000000');
+        $bank->setCustomerDeposits('1000000000000');
+        $macro = new MacroStateDTO(bankLevyRate: 0.0021);
+
+        $short = (100.0e9 * 0.4) + 10.0e9;
+        $long = (100.0e9 * 0.6) + (1000.0e9 * (1.0 - 0.604));
+        $this->assertEqualsWithDelta((0.0021 * $short) + (0.00105 * $long), (new CommercialBankBusinessModel())->calculateAnnualBankLevy($bank, $macro), 1.0);
+        $this->assertSame(0.0, (new CommercialBankBusinessModel())->calculateAnnualBankLevy($bank, new MacroStateDTO()), 'No levy at the founding.');
+        $this->assertSame(0.0, (new \App\Service\Model\Sector\ShadowBankBusinessModel())->calculateAnnualBankLevy($bank, $macro));
+        $this->assertSame(0.0, (new \App\Service\Model\Sector\BrokerageBusinessModel())->calculateAnnualBankLevy($bank, $macro));
+        $this->assertSame(0.0, (new \App\Service\Model\Sector\ClearingHouseBusinessModel())->calculateAnnualBankLevy($bank, $macro));
+        $this->assertGreaterThan(0.0, (new \App\Service\Model\Sector\InvestmentBankBusinessModel())->calculateAnnualBankLevy($bank, $macro));
+    }
 }

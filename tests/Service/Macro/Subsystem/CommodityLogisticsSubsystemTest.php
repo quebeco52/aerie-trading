@@ -617,4 +617,23 @@ class CommodityLogisticsSubsystemTest extends TestCase
         $this->assertEqualsWithDelta($coarse, $fine, 0.01 * $coarse);
         $this->assertEqualsWithDelta(log(1.5) * (1.0 - exp(-2.0 * CommodityLogisticsSubsystem::ENERGY_MEAN_REVERSION)) / CommodityLogisticsSubsystem::ENERGY_MEAN_REVERSION, $fine, 0.01 * $fine);
     }
+
+    /** A carbon price adds the gas fleet's carbon per MWh to wholesale power, as far as the market passes it through (Fabra & Reguant 2014). */
+    public function testACarbonPriceAddsTheGasFleetsCarbonToPower(): void
+    {
+        $subsystem = $this->quietCommoditySubsystem();
+        $free = new MacroState();
+        $free->totalTime = 0.25;
+        $priced = clone $free;
+        $priced->carbonPrice = 70.37;
+
+        $subsystem->calculateWholesalePowerIndex($free, 0.01);
+        $subsystem->calculateWholesalePowerIndex($priced, 0.01);
+
+        // 53.06 kg of CO2 per MMBtu, 7.74 MMBtu per MWh: 0.41 t a MWh, 80% of which reaches the price.
+        $adder = 0.80 * 0.05306 * 7.74 * 70.37;
+        $this->assertEqualsWithDelta($adder, CommodityLogisticsSubsystem::carbonPowerPriceAdder(70.37), 1e-12);
+        $this->assertEqualsWithDelta(MacroEngine::WHOLESALE_POWER_BASELINE * $adder / CommodityLogisticsSubsystem::REFERENCE_POWER_PRICE, $priced->wholesalePowerPriceIndex - $free->wholesalePowerPriceIndex, 1e-9);
+        $this->assertSame(0.0, CommodityLogisticsSubsystem::carbonPowerPriceAdder(0.0));
+    }
 }

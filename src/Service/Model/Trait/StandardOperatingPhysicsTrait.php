@@ -109,6 +109,12 @@ trait StandardOperatingPhysicsTrait
         return 0.0;
     }
 
+    /** A firm that is not a bank owes no bank levy. */
+    public function calculateAnnualBankLevy(Stock $stock, MacroStateDTO $macroState): float
+    {
+        return 0.0;
+    }
+
     // --- Input Cost Basket ---
     /** Share of an input price shock a firm with full pricing power recovers in its own prices; the rest lands on margin (incomplete pass-through, Gopinath & Itskhoki 2010). */
     public const MAX_INPUT_COST_PASS_THROUGH = 0.80;

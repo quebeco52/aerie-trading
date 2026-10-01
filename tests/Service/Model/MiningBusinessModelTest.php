@@ -220,4 +220,14 @@ final class MiningBusinessModelTest extends TestCase
         $this->assertSame(0.60, $this->model->getCapexCyclicality());
         $this->assertEqualsWithDelta(0.786, $modifier, 0.001);
     }
+
+    /** The strictest rules on extraction cost Greenstone, List & Syverson's 4.8% of productivity: every tonne costs 1 / 0.952 as much to mine. */
+    public function testStrictExtractionRulesRaiseTheCostOfEveryTonne(): void
+    {
+        $founding = $this->report($this->macro(100.0));
+        $strict = $this->report($this->macro(100.0, ['extractionStringency' => 1.0]));
+
+        $this->assertEqualsWithDelta($founding->actualRevenue, $strict->actualRevenue, 1e-9);
+        $this->assertEqualsWithDelta($founding->actualVariableCosts / (1.0 - 0.048), $strict->actualVariableCosts, 1e-9);
+    }
 }

@@ -72,6 +72,11 @@ class PoliticsState
     public float $importTariffRate;
     public float $laborForceGrowthRate;
     public float $mergerReviewLeniency;
+    public float $greenBeltStringency;
+    public float $carbonPrice;
+    public float $extractionStringency;
+    public float $stampDutyRate;
+    public float $bankLevyRate;
     public float $lastBudgetEnactedAt;
     public float $lastCouncilBrakeAt;
 

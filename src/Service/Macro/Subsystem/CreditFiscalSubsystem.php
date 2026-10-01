@@ -27,6 +27,10 @@ class CreditFiscalSubsystem
     /** Corporate profits before tax over GDP, 1985-2019 mean (BEA NIPA via FRED, A053RC1Q027SBEA over GDP: 9.67%): the base a change in the corporate rate is levied on, so a point of rate is a tenth of a point of GDP in revenue. */
     public const CORPORATE_PROFITS_TO_GDP = 0.0967;
 
+    // --- Carbon Revenue (EIA; BEA) ---
+    /** Power-sector CO2 per dollar of GDP, in tonnes: 1,425 million tonnes in 2023 (EIA) over $27.36 trillion of GDP (BEA): the base a carbon price on power is levied on, held at today's emissions. */
+    public const POWER_SECTOR_CO2_PER_GDP_DOLLAR = 1425.0e6 / 27.36e12;
+
     // --- Sovereign Debt Dynamics (Greenwood-Vayanos 2014) ---
     /** Structural primary fiscal deficit as a fraction of GDP with no sovereign fund; with one, the structural deficit is the fund's draw, spent. */
     public const SOVEREIGN_STRUCTURAL_DEFICIT = 0.020;
@@ -434,7 +438,9 @@ class CreditFiscalSubsystem
      *
      * The tax rate's cyclical part is the whole budget's automatic response, so T books it on GDP as it was fitted. The
      * shift the Diet legislates is a change in the corporate rate alone and is levied on corporate profits; the tariff is
-     * levied on imported goods, which shrink by their price elasticity as the duty raises their price.
+     * levied on imported goods, which shrink by their price elasticity as the duty raises their price; the carbon price
+     * is levied on the power sector's emissions; the bank levy is what the board's banks owe on their balance sheets,
+     * in currency, read through the reserve fund's dollars per unit of GDP (none is booked before the fund opens).
      *
      * With a fund the budget spends the draw: S is the draw itself, as Norway's fiscal rule sets the structural non-oil
      * deficit at the fund's expected real return. The draw is sized to the fund and the fund compounds with its markets,
@@ -453,7 +459,9 @@ class CreditFiscalSubsystem
         $taxRevenue = (($state->corporateTaxRate - $state->corporateTaxPolicyShift) * $output)
             + ($state->corporateTaxPolicyShift * self::CORPORATE_PROFITS_TO_GDP * $output)
             + ($state->importTariffRate * MacroAggregateSubsystem::DISTRICT_IMPORT_SHARE * MacroAggregateSubsystem::GOODS_SHARE_OF_IMPORTS
-                * ((1.0 + $state->importTariffRate) ** -MacroAggregateSubsystem::IMPORT_PRICE_ELASTICITY) * $output);
+                * ((1.0 + $state->importTariffRate) ** -MacroAggregateSubsystem::IMPORT_PRICE_ELASTICITY) * $output)
+            + ($state->carbonPrice * self::POWER_SECTOR_CO2_PER_GDP_DOLLAR * $output)
+            + ($state->sovereignFundDollarsPerGdp > 0.0 ? $state->boardBankLevy / $state->sovereignFundDollarsPerGdp : 0.0);
         $govtSpendingFlow = ($state->governmentSpendingIndex / MacroEngine::GOVT_SPENDING_BASELINE)
             * MacroEngine::TARGET_CORPORATE_TAX_RATE * $state->nominalGdpIndex;
 

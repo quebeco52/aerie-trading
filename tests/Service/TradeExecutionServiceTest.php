@@ -622,6 +622,33 @@ class TradeExecutionServiceTest extends TestCase
         $this->assertEqualsWithDelta($consideration * (1.0 + FinancialConstants::STAMP_DUTY_RATE), $before - (float) $user->getCashBalance(), 0.0001, 'A buyer pays the consideration and the duty on it.');
     }
 
+    /** The duty charged is the one the Diet has in force, read off the economy the ticker last published. */
+    public function testAStockBuyPaysTheStampDutyTheDietHasInForce(): void
+    {
+        $macro = $this->createStub(MacroStateProvider::class);
+        $macro->method('liveState')->willReturn(new \App\DTO\MacroStateDTO(stampDutyRate: 0.002));
+        (new \ReflectionProperty(TradeExecutionService::class, 'macroStates'))->setValue($this->service, $macro);
+
+        $user = new User();
+        $user->setCashBalance('10000.00');
+        $stock = new Stock();
+        $stock->setTicker('APEX');
+        $stock->setPrice('50.00');
+        $this->stockRepoStub->method('findOneByTicker')->willReturn($stock);
+        $this->userStockRepoStub->method('findOneBy')->willReturn(null);
+        $captured = [];
+        $this->emMock->method('persist')->willReturnCallback(static function (object $entity) use (&$captured): void {
+            if ($entity instanceof TradeOrder) {
+                $captured[] = $entity;
+            }
+        });
+
+        $this->service->executeOrder($user, 'APEX', 'BUY', 'MARKET', 100);
+        $order = end($captured);
+
+        $this->assertEqualsWithDelta((float) $order->getExecutionPrice() * 100.0 * 0.002, (float) $order->getStampDuty(), 0.0001);
+    }
+
     public function testAStockSellPaysStampDutyOutOfTheProceeds(): void
     {
         $user = new User();

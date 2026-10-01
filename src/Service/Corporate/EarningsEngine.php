@@ -1045,6 +1045,12 @@ class EarningsEngine
         // Reported tax expense is current plus deferred; the cash figure is on the context separately.
         $ctx->taxPaid = $actualEbt - $ctx->actualQuarterlyNetIncome;
 
+        // A bank levy is charged on the balance sheet, not on profit, and is not deductible (UK Finance Act 2011,
+        // Schedule 19), so it comes off below the tax line; the rate is public, so the estimate carries it too.
+        $ctx->bankLevy = $ctx->strategy->calculateAnnualBankLevy($stock, $ctx->macroState) / 4.0;
+        $ctx->actualQuarterlyNetIncome -= $ctx->bankLevy;
+        $ctx->expectedQuarterlyNetIncome -= $ctx->bankLevy;
+
         // A warning already moved the market and the estimate: analysts have taken the guided shortfall
         // out of their number, so the report confirms it rather than delivering it. Cleared here because
         // the quarter it referred to is the one now being reported.

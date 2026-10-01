@@ -362,6 +362,8 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
         $lastBoardNetIssuance = null;
         $lastBoardStampDuty = null;
         $lastStrategicStakeCash = null;
+        // The banks' levy bill is a standing amount, not a flow, so it is kept until the board is priced again.
+        $lastBoardBankLevy = null;
         // What the government hands the economy, on the same lag: the levers in force and the election pulse.
         $policy = $this->politicsEngine->liveState()->policy();
 
@@ -393,7 +395,8 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                 $lastBoardNetIssuance,
                 $lastBoardStampDuty,
                 $lastStrategicStakeCash,
-                $policy
+                $policy,
+                boardBankLevy: $lastBoardBankLevy,
             );
             // The Diet votes on the calendar's election tick, on this tick's economy; the economy reads what it decides next tick.
             $politics = $this->politicsEngine->updatePolitics($macroState, $dt);
@@ -465,6 +468,7 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                 $lastBoardDividendCash = $result['board_dividend_cash'];
                 $lastBoardNetIssuance = $result['board_net_issuance'];
                 $lastBoardStampDuty = $result['board_stamp_duty'];
+                $lastBoardBankLevy = $result['board_bank_levy'];
                 $lastStrategicStakeCash = $result['strategic_stake_cash'];
                 $marketVol = $result['market_vol'];
                 $events = $result['events'];

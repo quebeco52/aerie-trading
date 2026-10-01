@@ -7,9 +7,10 @@ namespace App\Data;
 /**
  * The Aerie Diet: the District's legislature, its eight parties, where they stand, and the two blocs they form.
  *
- * Each party is defined by one question -- the size of the state, how open the District is, or how far the Council's
- * technocrats should be trusted -- or, for the Free Port Compact and the Bastion Guilds, by the first two together, and
- * holds a fixed position on it; on the others it strays between elections and is pulled back toward its home
+ * Each party is defined by one question -- the size of the state, how open the District is, how far the Council's
+ * technocrats should be trusted, or whether the environment comes before growth -- or, for New Horizon, by the first
+ * two together, and holds a fixed position on it; on the others it strays between elections and is pulled back toward
+ * its home
  * (App\Service\Politics\PoliticsEngine). The Diet seated at the founding is the lore's. Every
  * party-keyed map in the macro state is keyed and ordered by PARTIES.
  */
@@ -57,9 +58,11 @@ final class AerieDiet
     public const AXIS_OPENNESS = 'openness';
     /** Council axis, the people-vs-elite scale of the Chapel Hill expert survey: +1 defers to the technocrats, -1 is populist. */
     public const AXIS_COUNCIL = 'council';
+    /** Environment axis, the Chapel Hill expert survey's environment-versus-growth scale: +1 puts the environment first, -1 growth. */
+    public const AXIS_ENVIRONMENT = 'environment';
     /** The axes of the policy space, in the order every position is written. */
-    public const AXES = [self::AXIS_STATE, self::AXIS_OPENNESS, self::AXIS_COUNCIL];
-    /** Each party's fixed position on the axes it is defined by, where it never moves: the two big parties moderate, the others at the ends of theirs, the Tideline Accord and New Horizon on the diagonal between them. */
+    public const AXES = [self::AXIS_STATE, self::AXIS_OPENNESS, self::AXIS_COUNCIL, self::AXIS_ENVIRONMENT];
+    /** Each party's fixed position on the axes it is defined by, where it never moves: the two big parties moderate, the others at the ends of theirs, New Horizon on the diagonal between them. */
     public const FIXED_POSITIONS = [
         self::CIVIC => [self::AXIS_STATE => 0.6],
         self::VANGUARD => [self::AXIS_STATE => -0.6],
@@ -67,19 +70,19 @@ final class AerieDiet
         self::EXCHANGE => [self::AXIS_OPENNESS => 0.8],
         self::CHARTISTS => [self::AXIS_COUNCIL => 0.8],
         self::COMMON_LOT => [self::AXIS_COUNCIL => -0.8],
-        self::TIDELINE => [self::AXIS_STATE => 0.4, self::AXIS_OPENNESS => -0.2],
+        self::TIDELINE => [self::AXIS_ENVIRONMENT => 0.8],
         self::NEW_HORIZON => [self::AXIS_STATE => -0.5, self::AXIS_OPENNESS => 0.7],
     ];
-    /** Each party's home, where it stood at the founding and is pulled back toward between elections; openness and the Council axis run together as they do in Western Europe (Chapel Hill 2014-2024: corr +0.84), so the Chartists stand open and the Common Lot, the Harbor and the Accord lean populist. */
+    /** Each party's home, where it stood at the founding and is pulled back toward between elections; openness and the Council axis run together as they do in Western Europe (Chapel Hill 2014-2024: corr +0.84), so the Chartists stand open and the Common Lot, the Harbor and the Accord lean populist. On the environment each party stands where its other three places put it in Western Europe (Chapel Hill 2014-2024, 378 parties against their country's mean: environment = 0.694 state + 0.355 openness - 0.075 Council, R-squared 0.67). */
     public const HOME_POSITIONS = [
-        self::CIVIC => [self::AXIS_STATE => 0.6, self::AXIS_OPENNESS => -0.1, self::AXIS_COUNCIL => -0.1],
-        self::VANGUARD => [self::AXIS_STATE => -0.6, self::AXIS_OPENNESS => 0.0, self::AXIS_COUNCIL => 0.3],
-        self::IRON_HARBOR => [self::AXIS_STATE => 0.1, self::AXIS_OPENNESS => -0.8, self::AXIS_COUNCIL => -0.4],
-        self::EXCHANGE => [self::AXIS_STATE => 0.0, self::AXIS_OPENNESS => 0.8, self::AXIS_COUNCIL => 0.4],
-        self::CHARTISTS => [self::AXIS_STATE => 0.0, self::AXIS_OPENNESS => 0.6, self::AXIS_COUNCIL => 0.8],
-        self::COMMON_LOT => [self::AXIS_STATE => 0.3, self::AXIS_OPENNESS => -0.5, self::AXIS_COUNCIL => -0.8],
-        self::TIDELINE => [self::AXIS_STATE => 0.4, self::AXIS_OPENNESS => -0.2, self::AXIS_COUNCIL => -0.3],
-        self::NEW_HORIZON => [self::AXIS_STATE => -0.5, self::AXIS_OPENNESS => 0.7, self::AXIS_COUNCIL => 0.3],
+        self::CIVIC => [self::AXIS_STATE => 0.6, self::AXIS_OPENNESS => -0.1, self::AXIS_COUNCIL => -0.1, self::AXIS_ENVIRONMENT => 0.34],
+        self::VANGUARD => [self::AXIS_STATE => -0.6, self::AXIS_OPENNESS => 0.0, self::AXIS_COUNCIL => 0.3, self::AXIS_ENVIRONMENT => -0.48],
+        self::IRON_HARBOR => [self::AXIS_STATE => 0.1, self::AXIS_OPENNESS => -0.8, self::AXIS_COUNCIL => -0.4, self::AXIS_ENVIRONMENT => -0.23],
+        self::EXCHANGE => [self::AXIS_STATE => 0.0, self::AXIS_OPENNESS => 0.8, self::AXIS_COUNCIL => 0.4, self::AXIS_ENVIRONMENT => 0.21],
+        self::CHARTISTS => [self::AXIS_STATE => 0.0, self::AXIS_OPENNESS => 0.6, self::AXIS_COUNCIL => 0.8, self::AXIS_ENVIRONMENT => 0.11],
+        self::COMMON_LOT => [self::AXIS_STATE => 0.3, self::AXIS_OPENNESS => -0.5, self::AXIS_COUNCIL => -0.8, self::AXIS_ENVIRONMENT => 0.04],
+        self::TIDELINE => [self::AXIS_STATE => 0.4, self::AXIS_OPENNESS => -0.2, self::AXIS_COUNCIL => -0.3, self::AXIS_ENVIRONMENT => 0.8],
+        self::NEW_HORIZON => [self::AXIS_STATE => -0.5, self::AXIS_OPENNESS => 0.7, self::AXIS_COUNCIL => 0.3, self::AXIS_ENVIRONMENT => -0.17],
     ];
 
     // --- The Chamber ---
@@ -150,7 +153,7 @@ final class AerieDiet
      * others, and at its home on any axis they leave out.
      *
      * @param array<string, array<string, float>> $positions Positions by party and axis.
-     * @return array{state: float, openness: float, council: float}
+     * @return array{state: float, openness: float, council: float, environment: float}
      */
     public static function position(string $party, array $positions): array
     {

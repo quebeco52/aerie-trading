@@ -1655,4 +1655,47 @@ class CreditFiscalSubsystemTest extends TestCase
         $this->assertLessThan($defaultRisk + 0.005, $state->macroCreditSpread, 'Two years on, what is left is the default risk of a -7% slump.');
         $this->assertLessThan(0.40, $state->sloosTighteningIndex, 'Two years on standards have given back most of their tightening.');
     }
+
+    /** A carbon price is levied on the power sector's emissions: today's tonnes per dollar of GDP, times the price. */
+    public function testACarbonPriceIsRevenueOnThePowerSectorsEmissions(): void
+    {
+        $free = new MacroState();
+        $free->sovereignDebtToGdp = self::SOUND_DEBT_TO_GDP;
+        $free->nominalGdpIndex = 1.0;
+        $free->outputGap = 0.0;
+        $free->corporateTaxRate = 0.21;
+        $free->governmentSpendingIndex = 100.0;
+        $priced = clone $free;
+        $priced->carbonPrice = 70.37;
+
+        $this->subsystem->calculateSovereignDebt($free, 0.25);
+        $this->subsystem->calculateSovereignDebt($priced, 0.25);
+
+        // 1,425 Mt over $27.36T: about 0.37% of GDP at the EU ETS price.
+        $this->assertEqualsWithDelta(70.37 * 1425.0e6 / 27.36e12, $free->primaryDeficitToGdp - $priced->primaryDeficitToGdp, 1e-12);
+    }
+
+    /** The banks' levy bill is budget revenue, read into GDP units through the reserve fund's dollars per unit of GDP. */
+    public function testTheBankLevyIsRevenueOnceTheFundSetsTheScale(): void
+    {
+        $free = new MacroState();
+        $free->sovereignDebtToGdp = self::SOUND_DEBT_TO_GDP;
+        $free->nominalGdpIndex = 1.0;
+        $free->outputGap = 0.0;
+        $free->corporateTaxRate = 0.21;
+        $free->governmentSpendingIndex = 100.0;
+        $free->sovereignFundDollarsPerGdp = 12.0e12;
+        $levied = clone $free;
+        $levied->boardBankLevy = 12.0e9;
+
+        $this->subsystem->calculateSovereignDebt($free, 0.25);
+        $this->subsystem->calculateSovereignDebt($levied, 0.25);
+
+        $this->assertEqualsWithDelta(0.001, $free->primaryDeficitToGdp - $levied->primaryDeficitToGdp, 1e-12, '$12B on a $12T economy is a tenth of a point.');
+
+        $unfunded = new MacroState();
+        $unfunded->boardBankLevy = 12.0e9;
+        $this->subsystem->calculateSovereignDebt($unfunded, 0.25);
+        $this->assertTrue(is_finite($unfunded->primaryDeficitToGdp), 'With no fund there is no scale, and nothing is booked.');
+    }
 }

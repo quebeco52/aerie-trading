@@ -34,6 +34,11 @@ interface OperatingStrategyInterface
      */
     public function resolveSectorActivityShift(Stock $stock, MacroStateDTO $macroState): float;
     /**
+     * The bank levy the firm owes a year on its balance sheet at the rate the Diet has in force, in currency: zero for
+     * a firm that is not a bank. Not deductible, so it comes off earnings after tax.
+     */
+    public function calculateAnnualBankLevy(Stock $stock, MacroStateDTO $macroState): float;
+    /**
      * MacroStateDTO field names (snake_case, matching MacroStateDTO::toArray()) this model's own
      * operating code reads: calculateSectorPhysics(), getMacroPhysics(), calculateInterestIncome(),
      * processPassiveLiabilityGrowth(), getForwardCreditLossMultiplier() and the helpers they call,

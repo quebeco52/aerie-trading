@@ -525,6 +525,22 @@ class MacroReport
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 6, nullable: true)]
     private ?string $mergerReviewLeniency = null;
 
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 6, nullable: true)]
+    private ?string $greenBeltStringency = null;
+
+    // Dollars a tonne of CO2.
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $carbonPrice = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 6, nullable: true)]
+    private ?string $extractionStringency = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 6, nullable: true)]
+    private ?string $stampDutyRate = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 6, nullable: true)]
+    private ?string $bankLevyRate = null;
+
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
     private ?string $householdDebtToIncome = null;
 
