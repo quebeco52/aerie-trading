@@ -88,14 +88,18 @@ class PoliticsEngineTest extends TestCase
 
     // --- The vote ---
 
-    public function testTheEconomicVoteCarriesFairsSlopesLessTheCostOfRuling(): void
+    /** Inflation costs every cabinet; growth is credited to a party governing alone and to no coalition. */
+    public function testTheEconomicVoteCreditsGrowthOnlyToAPartyGoverningAlone(): void
     {
-        $atTrend = Politics::economicVote(0.0, 0.0, 0.0);
+        foreach ([true, false] as $alone) {
+            $atTrend = Politics::economicVote(0.0, 0.0, 0.0, $alone);
 
-        $this->assertEqualsWithDelta(-Politics::ELECTION_COST_OF_RULING, $atTrend, 1e-12);
-        $this->assertEqualsWithDelta(Politics::ELECTION_GROWTH_SLOPE * 0.01, Politics::economicVote(0.01, 0.0, 0.0) - $atTrend, 1e-12);
-        $this->assertEqualsWithDelta(-Politics::ELECTION_INFLATION_SLOPE * 0.01, Politics::economicVote(0.0, 0.01, 0.0) - $atTrend, 1e-12);
-        $this->assertEqualsWithDelta(Politics::ELECTION_RESIDUAL_SD, Politics::economicVote(0.0, 0.0, 1.0) - $atTrend, 1e-12);
+            $this->assertEqualsWithDelta(-Politics::ELECTION_COST_OF_RULING, $atTrend, 1e-12);
+            $this->assertEqualsWithDelta(-Politics::ELECTION_INFLATION_SLOPE * 0.01, Politics::economicVote(0.0, 0.01, 0.0, $alone) - $atTrend, 1e-12);
+            $this->assertEqualsWithDelta(Politics::ELECTION_RESIDUAL_SD, Politics::economicVote(0.0, 0.0, 1.0, $alone) - $atTrend, 1e-12);
+        }
+        $this->assertEqualsWithDelta(Politics::ELECTION_SINGLE_PARTY_GROWTH_SLOPE * 0.01, Politics::economicVote(0.01, 0.0, 0.0, true) - Politics::economicVote(0.0, 0.0, 0.0, true), 1e-12);
+        $this->assertSame(Politics::economicVote(0.0, 0.0, 0.0, false), Politics::economicVote(0.01, 0.0, 0.0, false), 'A coalition gets no credit for growth.');
     }
 
     /**
@@ -224,18 +228,26 @@ class PoliticsEngineTest extends TestCase
     public function testGrowthAndInflationMoveTheGovernmentsVote(): void
     {
         $engine = $this->engine($this->quietMath());
+        $voted = function (array $cabinet, float $growthGap = 0.0, float $inflationGap = 0.0) use ($engine): PoliticsState {
+            $state = $this->electionTick($growthGap, $inflationGap);
+            $state->governingCoalition = Diet::membership($cabinet);
+            $state->supportParties = Diet::membership([]);
+            $this->vote($engine, $state);
 
-        $trend = $this->electionTick();
-        $this->vote($engine, $trend);
-        $boom = $this->electionTick(growthGap: 0.03);
-        $this->vote($engine, $boom);
-        $inflation = $this->electionTick(inflationGap: 0.03);
-        $this->vote($engine, $inflation);
+            return $state;
+        };
 
-        $this->assertEqualsWithDelta(0.03, $boom->electionGrowthGap, 1e-9);
+        $alone = $voted([Diet::VANGUARD]);
+        $boomAlone = $voted([Diet::VANGUARD], growthGap: 0.03);
+        $coalition = $voted(self::RIGHT_BLOC);
+        $boomCoalition = $voted(self::RIGHT_BLOC, growthGap: 0.03);
+        $inflation = $voted(self::RIGHT_BLOC, inflationGap: 0.03);
+
+        $this->assertEqualsWithDelta(0.03, $boomAlone->electionGrowthGap, 1e-9);
         $this->assertEqualsWithDelta(0.03, $inflation->electionInflationGap, 1e-9);
-        $this->assertGreaterThan($trend->electionIncumbentSwing, $boom->electionIncumbentSwing);
-        $this->assertLessThan($trend->electionIncumbentSwing, $inflation->electionIncumbentSwing);
+        $this->assertEqualsWithDelta(Politics::ELECTION_SINGLE_PARTY_GROWTH_SLOPE * 0.03, $boomAlone->electionIncumbentSwing - $alone->electionIncumbentSwing, 1e-9, 'A boom returns a party governing alone stronger,');
+        $this->assertEqualsWithDelta($coalition->electionIncumbentSwing, $boomCoalition->electionIncumbentSwing, 1e-12, 'and a coalition no stronger.');
+        $this->assertEqualsWithDelta(-Politics::ELECTION_INFLATION_SLOPE * 0.03, $inflation->electionIncumbentSwing - $coalition->electionIncumbentSwing, 1e-9, 'Inflation costs a coalition too.');
     }
 
     /** The opposition takes what the government loses, each opposition party in proportion to its own share. */

@@ -158,7 +158,7 @@ class GovernmentPageBuilder
                 'termYears' => $term,
                 'councilSeats' => AerieCouncil::SEATS,
                 'councilTermYears' => AerieCouncil::TERM_YEARS,
-                'growthSlope' => PoliticsEngine::ELECTION_GROWTH_SLOPE,
+                'growthSlope' => PoliticsEngine::ELECTION_SINGLE_PARTY_GROWTH_SLOPE,
                 'inflationSlope' => PoliticsEngine::ELECTION_INFLATION_SLOPE,
                 'residual' => PoliticsEngine::ELECTION_RESIDUAL_SD,
                 'campaignMonths' => PoliticsEngine::ELECTION_CAMPAIGN_WINDOW_YEARS * 12.0,

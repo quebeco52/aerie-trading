@@ -16,8 +16,11 @@ use Psr\Log\LoggerInterface;
 /**
  * The Aerie Diet: eight parties, a vote on the fixed election calendar, seats, the talks that follow, and the government.
  *
- * The vote is the economic vote: the government's share moves with growth over the campaign and inflation over the term
- * on Fair's presidential vote-equation slopes, with the opposition taking what it loses in proportion to its own shares.
+ * The vote is the economic vote as proportional-representation electorates cast it: every cabinet's share falls with
+ * inflation over the term, and a party governing alone also gains with growth over the campaign, while a coalition's
+ * parties are held to no account for growth (Powell & Whitten 1993's clarity of responsibility; ParlGov votes since
+ * 1971, var/harness/politics/vote_europe_fit.py). The opposition takes what the government loses in proportion to its
+ * own shares.
  * Governing costs the governing parties a share of the vote each term, the cost of ruling (Nannestad & Paldam 2002)
  * the Diet's parties pay on top of what they were elected on running off; governments are formed by parties riding a
  * short-term swing or a lasting lead, so the loss a government is seen to take is larger. A party supporting a
@@ -41,8 +44,10 @@ use Psr\Log\LoggerInterface;
  * axis have enacted: the corporate rate on the size-of-state axis, the tariff and the immigration regime on the
  * openness axis, and merger review on the Council axis, from the populists' 2023 guidelines to the technocrats' 2010
  * ones. Size of state moves no purchases: in the US record the purchases process is fitted to, the party in
- * power shifts civilian purchases the wrong way (-2% under Democratic presidents, var/harness/partisan_fit.py), and the
- * panel evidence has faded since the 1990s (Potrafke 2017). A minority cabinet proposes and its support parties can
+ * power shifts civilian purchases the wrong way (-2% under Democratic presidents, var/harness/partisan_fit.py), and in
+ * 21 European PR democracies since 1990 a cabinet's place on the state-market scale has moved government consumption
+ * by nothing (+0.3% per unit of the axis, se 4.6%), nor total spending, though it did before (+11%, se 7%;
+ * var/harness/politics/spend_europe_fit.py; Potrafke 2017). A minority cabinet proposes and its support parties can
  * refuse: each accepts a lever no further from its own policy than the one in force, so a supporter can stop the
  * cabinet moving away from it but cannot pull policy its way (Romer & Rosenthal 1978). Above the 90% debt line the
  * Council would veto a bill that cuts revenue, and the Diet, knowing it, tables none, unless the government and its
@@ -57,16 +62,16 @@ class PoliticsEngine
     /** Redis key the politics state is kept under, beside the macro state. */
     public const REDIS_POLITICS_STATE = 'politics_state';
 
-    // --- The Diet's Election (Fair presidential vote equation, 2020 update; Nannestad & Paldam 2002; ParlGov) ---
+    // --- The Diet's Election (ParlGov x World Bank, var/harness/politics/vote_europe_fit.py; Powell & Whitten 1993; Nannestad & Paldam 2002) ---
     /** Length of the fixed electoral term in years: the vote falls on the tick each term ends. */
     public const ELECTION_TERM_YEARS = 4.0;
     /** Final stretch of the term whose growth voters weigh (Fair's G: the first three quarters of the election year). */
     public const ELECTION_CAMPAIGN_WINDOW_YEARS = 0.75;
-    /** Governing coalition's vote share per unit of annualised real per-capita growth over the campaign (Fair: 0.673 pp per pp). */
-    public const ELECTION_GROWTH_SLOPE = 0.673;
-    /** Governing coalition's vote share lost per unit of annualised inflation over the term (Fair: 0.721 pp per pp). */
-    public const ELECTION_INFLATION_SLOPE = 0.721;
-    /** Residual of the governing coalition's share, everything the economy does not explain (Fair: standard error 2.95 pp). */
+    /** Vote share a party governing alone gains per unit of real growth per head over the year to the vote above its trend: 0.51 (se 0.30) in 199 votes in 21 established PR democracies 1971-2020; a coalition's share does not move with growth (Powell & Whitten 1993's clarity of responsibility; -0.09, se 0.40, before the euro-area consolidations of 2008-2020). */
+    public const ELECTION_SINGLE_PARTY_GROWTH_SLOPE = 0.506;
+    /** Vote share any cabinet loses per unit of annualised GDP-deflator inflation over the term above target: 0.10 (se 0.08), same fit (Fair's US presidential slope is 0.72). */
+    public const ELECTION_INFLATION_SLOPE = 0.100;
+    /** Government-wide swing in its share that the economy does not explain, common to its parties (Fair: standard error 2.95 pp); each party's own swings are drawn on top of it, sized with it to the Nordic record. */
     public const ELECTION_RESIDUAL_SD = 0.0295;
     /** Vote share the average government has lost over a term in the record (Nannestad & Paldam 2002: 282 elections in 19 democracies), the reference the Diet's own cost is read against. */
     public const ELECTION_RECORDED_COST_OF_RULING = 0.0225;
@@ -425,7 +430,8 @@ class PoliticsEngine
         $inflationGap = self::annualisedLogChange($state->termStartDeflator, $macro->gdpDeflator, $state->totalTime - $state->termStartedAt);
         $inflationGap = $inflationGap === null ? 0.0 : $inflationGap - MacroEngine::TARGET_INFLATION;
 
-        $swing = self::economicVote($growthGap, $inflationGap, $this->mathUtility->generateStandardNormal());
+        $alone = count(AerieDiet::governingParties($state->governingCoalition)) === 1;
+        $swing = self::economicVote($growthGap, $inflationGap, $this->mathUtility->generateStandardNormal(), $alone);
         $shares = self::applyIncumbentSwing($shares, $state->governingCoalition, $swing, $state->supportParties);
 
         $shocks = [];
@@ -518,15 +524,18 @@ class PoliticsEngine
     }
 
     /**
-     * The governing coalition's change in vote share: Fair's economic slopes less the cost of ruling, plus the residual.
+     * The government's change in vote share: the economy as real PR electorates weigh it, less the cost of ruling, plus
+     * the residual. Inflation costs every cabinet; growth is credited only to a party governing alone, since voters hold
+     * a coalition's parties to no account for it (Powell & Whitten 1993).
      *
      * @param float $growthGap    Annualised real per-capita growth over the campaign, less its trend.
      * @param float $inflationGap Annualised inflation over the term, less the target.
      * @param float $residualDraw Standard normal draw for everything the economy does not explain.
+     * @param bool  $alone        Whether one party forms the cabinet.
      */
-    public static function economicVote(float $growthGap, float $inflationGap, float $residualDraw): float
+    public static function economicVote(float $growthGap, float $inflationGap, float $residualDraw, bool $alone): float
     {
-        return (self::ELECTION_GROWTH_SLOPE * $growthGap)
+        return ($alone ? self::ELECTION_SINGLE_PARTY_GROWTH_SLOPE * $growthGap : 0.0)
             - (self::ELECTION_INFLATION_SLOPE * $inflationGap)
             - self::ELECTION_COST_OF_RULING
             + (self::ELECTION_RESIDUAL_SD * $residualDraw);

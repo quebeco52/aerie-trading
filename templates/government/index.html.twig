@@ -462,8 +462,8 @@
 			{% set rules_list = [
 				{
 					name: 'The economic vote',
-					text: 'The governing parties gain ' ~ rules.growthSlope|number_format(2) ~ ' points of the vote for each point of growth above trend over the final ' ~ rules.campaignMonths|number_format(0) ~ ' months of the term, and lose ' ~ rules.inflationSlope|number_format(2) ~ ' points for each point of inflation above target over the term. Everything else voters weigh moves the result by about ' ~ (rules.residual * 100)|number_format(1) ~ ' points either way.',
-					source: 'Fair, presidential vote equation (2020 update)'
+					text: 'The governing parties lose ' ~ rules.inflationSlope|number_format(2) ~ ' points of the vote for each point of inflation above target over the term. A party governing alone also gains ' ~ rules.growthSlope|number_format(2) ~ ' points for each point of growth above trend over the final ' ~ rules.campaignMonths|number_format(0) ~ ' months; a coalition gets no credit for growth, as voters cannot tell which partner earned it. Everything else voters weigh moves the result by about ' ~ (rules.residual * 100)|number_format(1) ~ ' points either way.',
+					source: 'Votes in 21 proportional-representation democracies since 1971 (ParlGov, World Bank); Powell & Whitten (1993) on clarity of responsibility; Fair (2020) for the residual'
 				},
 				{
 					name: 'The cost of ruling',
@@ -562,8 +562,8 @@
 				},
 				{
 					name: 'Spending',
-					text: 'Neither side moves government purchases. In the US record the District\'s purchases are fitted to, the party in power shifted civilian purchases the wrong way, and across the rich democracies the gap between left and right governments on spending has faded since the 1990s.',
-					source: 'Engine fit on US civilian purchases 1985-2019 (var/harness/partisan_fit.py); Potrafke (2017), about 100 OECD panel studies'
+					text: 'Neither side moves government purchases. In the US record the District\'s purchases are fitted to, the party in power shifted civilian purchases the wrong way. In Europe\'s parliaments, left cabinets held government consumption higher before 1990, but since then a cabinet\'s economic stance has moved neither its consumption nor its total spending.',
+					source: 'Engine fit on US civilian purchases 1985-2019 (var/harness/partisan_fit.py); 21 European PR democracies 1971-2020, ParlGov cabinets and World Bank government consumption (var/harness/politics/spend_europe_fit.py); Potrafke (2017), about 100 OECD panel studies'
 				},
 				{
 					name: 'Tariffs',
