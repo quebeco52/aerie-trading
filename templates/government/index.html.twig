@@ -142,12 +142,12 @@
 										<span class="w-2.5 h-2.5 rounded-full shrink-0" style="background-color: {{ party.color }}" aria-hidden="true"></span>
 										<a href="{{ path('app_government_party', {slug: party.slug}) }}" class="font-semibold text-on-surface hover:text-primary hover:underline">{{ party.name }}</a>
 										<span class="text-xs text-on-surface-variant" title="{{ party.leadsBloc ? 'Leads its bloc as its largest party' : 'Campaigned in this bloc at the last election' }}"><span class="inline-block w-1.5 h-1.5 rounded-full mr-0.5 align-middle" style="background-color: {{ party.blocColor }}" aria-hidden="true"></span>{{ party.leadsBloc ? 'Leads a bloc' : 'Backs ' ~ party.bloc }}</span>
-										{% if party.governing %}<span class="text-xs font-medium text-secondary">{{ government.caretaker ? 'Caretaker' : 'In government' }}</span>{% elseif party.supporting %}<span class="text-xs font-medium text-primary">Supports</span>{% endif %}
+										{% if party.governing %}<span class="text-xs font-medium text-primary">{{ government.caretaker ? 'Caretaker' : 'In government' }}</span>{% elseif party.supporting %}<span class="text-xs font-medium text-on-surface-variant">Supports</span>{% endif %}
 									</span>
 								</th>
 								<td class="py-2 text-right font-mono tabular-nums text-on-surface">{{ party.seats }}</td>
 								<td class="py-2 text-right font-mono tabular-nums text-on-surface">{{ (party.share * 100)|number_format(1) }}%</td>
-								<td class="py-2 text-right font-mono tabular-nums {{ party.swing is null ? 'text-on-surface-variant' : (party.swing >= 0 ? 'text-secondary' : 'text-warning') }}">
+								<td class="py-2 text-right font-mono tabular-nums {{ party.swing is null ? 'text-on-surface-variant' : (party.swing >= 0 ? 'text-secondary' : 'text-tertiary') }}">
 									{{- party.swing is null ? '-' : (party.swing >= 0 ? '+' : '') ~ (party.swing * 100)|number_format(1) ~ 'pp' -}}
 								</td>
 							</tr>
@@ -438,7 +438,7 @@
 									{% for cell in row.seats %}
 										<td class="px-3 py-2 text-right font-mono tabular-nums text-on-surface">
 											{{ cell.seats }}
-											<span class="block text-2xs {{ cell.swing >= 0 ? 'text-secondary' : 'text-warning' }}">{{ (cell.swing >= 0 ? '+' : '') ~ (cell.swing * 100)|number_format(1) }}</span>
+											<span class="block text-2xs {{ cell.swing >= 0 ? 'text-secondary' : 'text-tertiary' }}">{{ (cell.swing >= 0 ? '+' : '') ~ (cell.swing * 100)|number_format(1) }}</span>
 										</td>
 									{% endfor %}
 									<td class="px-3 py-2">
@@ -477,7 +477,7 @@
 											{% endfor %}
 										{% endif %}
 									</td>
-									<td class="px-3 py-2 text-right font-mono tabular-nums hidden md:table-cell {{ row.incumbentSwing >= 0 ? 'text-secondary' : 'text-warning' }}">{{ (row.incumbentSwing >= 0 ? '+' : '') ~ (row.incumbentSwing * 100)|number_format(1) }}pp</td>
+									<td class="px-3 py-2 text-right font-mono tabular-nums hidden md:table-cell {{ row.incumbentSwing >= 0 ? 'text-secondary' : 'text-tertiary' }}">{{ (row.incumbentSwing >= 0 ? '+' : '') ~ (row.incumbentSwing * 100)|number_format(1) }}pp</td>
 									<td class="px-3 py-2 text-right font-mono tabular-nums text-on-surface-variant hidden md:table-cell">{{ (row.growthGap >= 0 ? '+' : '') ~ (row.growthGap * 100)|number_format(1) }} / {{ (row.inflationGap >= 0 ? '+' : '') ~ (row.inflationGap * 100)|number_format(1) }}</td>
 									<td class="px-5 py-2 text-right font-mono tabular-nums text-on-surface-variant hidden sm:table-cell">{{ (row.volatility * 100)|number_format(1) }}</td>
 								</tr>

@@ -1,20 +1,39 @@
-import { BRAND_COLORS, FALLBACK_PALETTE, THEME_COLORS, withAlpha } from '../utils/colors.js';
+import { SERIES, THEME_COLORS, withAlpha } from '../utils/colors.js';
 import { destroyChartInstance } from '../utils/chart-config.js';
 import { CHART_FONT_MONO } from '../utils/fonts.js';
 
+/** Up to eight holdings each take a series slot; past that, seven do and the rest share one grey "Other". */
+const PALETTE = Object.values(SERIES);
+const OTHER_COLOR = withAlpha(THEME_COLORS.textMuted, 0.35);
+const OTHER_LABEL = 'Other';
+
 let etfPieChart = null;
 let etfComponents = [];
+/** Tickers folded into "Other", fixed when the chart is built. */
+let otherTickers = new Set();
 
+const sumOf = (values) => [...values].reduce((sum, v) => sum + v, 0);
+
+/**
+ * Ranks the holdings once, by value at load. Each named holding keeps its colour and place for the life of
+ * the chart, so a live price move reweights the slices without repainting or reordering them.
+ */
 export function prepareEtfData(pieLabels, pieData) {
     if (!Array.isArray(pieLabels)) return [];
-    let components = [];
-    let fIndex = 0;
-    pieLabels.forEach((ticker, i) => {
-        let color = BRAND_COLORS[ticker] || FALLBACK_PALETTE[fIndex++ % FALLBACK_PALETTE.length];
-        let val = (pieData && pieData[i]) || 0;
-        components.push({ ticker, value: val, color });
-    });
-    return components.sort((a, b) => b.value - a.value);
+    const ranked = pieLabels
+        .map((ticker, i) => ({ ticker, value: (pieData && pieData[i]) || 0 }))
+        .sort((a, b) => b.value - a.value);
+
+    const named = ranked.length <= PALETTE.length ? ranked : ranked.slice(0, PALETTE.length - 1);
+    const rest = ranked.slice(named.length);
+    otherTickers = new Set(rest.map(c => c.ticker));
+
+    const slices = named.map((c, i) => ({ ...c, color: PALETTE[i] }));
+    if (rest.length > 0) {
+        const members = new Map(rest.map(c => [c.ticker, c.value]));
+        slices.push({ ticker: OTHER_LABEL, value: sumOf(members.values()), color: OTHER_COLOR, members });
+    }
+    return slices;
 }
 
 export function initEtfChart(canvasId = 'etfPieChart', pieLabels = [], pieData = []) {
@@ -32,7 +51,9 @@ export function initEtfChart(canvasId = 'etfPieChart', pieLabels = [], pieData =
             datasets: [{
                 data: etfComponents.map(c => c.value),
                 backgroundColor: etfComponents.map(c => c.color),
-                borderWidth: 0,
+                // A surface-coloured gap between slices, so neighbours read as separate marks.
+                borderColor: THEME_COLORS.surface,
+                borderWidth: 2,
                 hoverOffset: 4
             }]
         },
@@ -42,12 +63,14 @@ export function initEtfChart(canvasId = 'etfPieChart', pieLabels = [], pieData =
             cutout: '75%',
             onHover: (e, el) => {
                 if (e.native?.target) {
-                    e.native.target.style.cursor = el.length ? 'pointer' : 'default';
+                    const named = el.length > 0 && etfPieChart?.data.labels[el[0].index] !== OTHER_LABEL;
+                e.native.target.style.cursor = named ? 'pointer' : 'default';
                 }
             },
             onClick: (e, el) => {
-                if (el.length > 0 && etfPieChart) {
-                    window.location.href = '/stock/' + etfPieChart.data.labels[el[0].index];
+                const ticker = el.length > 0 && etfPieChart ? etfPieChart.data.labels[el[0].index] : null;
+                if (ticker && ticker !== OTHER_LABEL) {
+                    window.location.href = '/stock/' + ticker;
                 }
             },
             plugins: {
@@ -72,7 +95,9 @@ export function initEtfChart(canvasId = 'etfPieChart', pieLabels = [], pieData =
                             const total = context.dataset.data.reduce((acc, val) => acc + val, 0);
                             const value = context.raw;
                             const percentage = total > 0 ? ((value / total) * 100).toFixed(2) : 0;
-                            return ` ${context.label}: ${percentage}%`;
+                            const other = etfComponents[context.dataIndex]?.members;
+                            const label = other ? `Other (${other.size} holdings)` : context.label;
+                            return ` ${label}: ${percentage}%`;
                         }
                     }
                 }
@@ -85,22 +110,27 @@ export function initEtfChart(canvasId = 'etfPieChart', pieLabels = [], pieData =
 
 export function updateEtfPie(payload, sharesMap = {}) {
     if (!etfPieChart || !Array.isArray(payload?.stocks)) return;
+    const other = etfComponents.find(c => c.members);
     let updated = false;
 
     payload.stocks.forEach(stock => {
-        let comp = etfComponents.find(c => c.ticker === stock.ticker);
+        const shares = sharesMap[stock.ticker] || 0;
+        const value = parseFloat(stock.price) * shares;
+        if (otherTickers.has(stock.ticker) && other) {
+            other.members.set(stock.ticker, value);
+            updated = true;
+            return;
+        }
+        const comp = etfComponents.find(c => c.ticker === stock.ticker);
         if (comp) {
-            const shares = sharesMap[stock.ticker] || 0;
-            comp.value = parseFloat(stock.price) * shares;
+            comp.value = value;
             updated = true;
         }
     });
 
     if (updated) {
-        etfComponents.sort((a, b) => b.value - a.value);
-        etfPieChart.data.labels = etfComponents.map(c => c.ticker);
+        if (other) other.value = sumOf(other.members.values());
         etfPieChart.data.datasets[0].data = etfComponents.map(c => c.value);
-        etfPieChart.data.datasets[0].backgroundColor = etfComponents.map(c => c.color);
         etfPieChart.update('none');
     }
 }
@@ -114,4 +144,5 @@ export function resizeEtfChart() {
 export function destroyEtfChart() {
     etfPieChart = destroyChartInstance(etfPieChart);
     etfComponents = [];
+    otherTickers = new Set();
 }

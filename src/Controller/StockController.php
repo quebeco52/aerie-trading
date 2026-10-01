@@ -262,23 +262,25 @@ class StockController extends AbstractController
 
         $totalRevenue = $flow->totalRevenue;
 
+        // Each node carries its role, and sankey_controller.js colours it from the theme: money in, profit and
+        // cash kept, costs, non-cash charges, and cash paid out to shareholders.
         $nodes = [
-            ['name' => 'Total Revenue', 'itemStyle' => ['color' => '#3b82f6']], // blue
-            ['name' => 'Operating Costs', 'itemStyle' => ['color' => '#ef4444']], // red
-            ['name' => 'EBITDA', 'itemStyle' => ['color' => '#a78bfa']], // violet
-            ['name' => 'Depreciation', 'itemStyle' => ['color' => '#94a3b8']], // slate (non-cash)
-            ['name' => 'Operating Profit', 'itemStyle' => ['color' => '#8b5cf6']], // purple
-            ['name' => 'Capital Expenditures', 'itemStyle' => ['color' => '#eab308']], // yellow
-            ['name' => 'Interest Expense', 'itemStyle' => ['color' => '#f97316']], // orange
-            ['name' => 'Pre-Tax Income', 'itemStyle' => ['color' => '#14b8a6']], // teal
-            ['name' => 'Taxes', 'itemStyle' => ['color' => '#f43f5e']], // rose
-            ['name' => 'Goodwill Impairment', 'itemStyle' => ['color' => '#94a3b8']], // slate (non-cash)
-            ['name' => 'Net Income', 'itemStyle' => ['color' => '#22c55e']], // green
-            ['name' => 'Cash Generated', 'itemStyle' => ['color' => '#34d399']], // mint
-            ['name' => 'External Funding', 'itemStyle' => ['color' => '#fb923c']], // amber (debt raised or shares issued)
-            ['name' => 'Dividends', 'itemStyle' => ['color' => '#0ea5e9']], // light blue
-            ['name' => 'Stock Buybacks', 'itemStyle' => ['color' => '#d946ef']], // fuchsia
-            ['name' => 'Retained Cash', 'itemStyle' => ['color' => '#10b981']], // emerald
+            ['name' => 'Total revenue', 'role' => 'income'],
+            ['name' => 'Operating costs', 'role' => 'cost'],
+            ['name' => 'EBITDA', 'role' => 'profit'],
+            ['name' => 'Depreciation', 'role' => 'noncash'],
+            ['name' => 'Operating profit', 'role' => 'profit'],
+            ['name' => 'Capital expenditure', 'role' => 'cost'],
+            ['name' => 'Interest expense', 'role' => 'cost'],
+            ['name' => 'Pre-tax income', 'role' => 'profit'],
+            ['name' => 'Taxes', 'role' => 'cost'],
+            ['name' => 'Goodwill impairment', 'role' => 'noncash'],
+            ['name' => 'Net income', 'role' => 'profit'],
+            ['name' => 'Cash generated', 'role' => 'profit'],
+            ['name' => 'External funding', 'role' => 'income'],
+            ['name' => 'Dividends', 'role' => 'payout'],
+            ['name' => 'Buybacks', 'role' => 'payout'],
+            ['name' => 'Retained cash', 'role' => 'profit'],
         ];
 
         $links = [];
@@ -295,8 +297,8 @@ class StockController extends AbstractController
             foreach ($revenueStreams as $streamName => $streamValue) {
                 $value = (float) $streamValue;
                 if ($value > 0) {
-                    $formattedName = ucwords(str_replace('_', ' ', $streamName)) . ' Revenue';
-                    $nodeData = ['name' => $formattedName, 'itemStyle' => ['color' => '#0284c7']]; // sky blue
+                    $formattedName = ucfirst(str_replace('_', ' ', $streamName)) . ' revenue';
+                    $nodeData = ['name' => $formattedName, 'role' => 'income'];
                     if (is_array($streamDetails) && isset($streamDetails[$streamName])) {
                         $nodeData['streamKey'] = $streamName;
                         // Null is "not meaningful" — a stream with no prior quarter has no growth rate to quote.
@@ -307,7 +309,7 @@ class StockController extends AbstractController
                         }
                     }
                     $nodes[] = $nodeData;
-                    $addLink($formattedName, 'Total Revenue', $value);
+                    $addLink($formattedName, 'Total revenue', $value);
                 }
             }
             
@@ -316,34 +318,38 @@ class StockController extends AbstractController
             $streamSum = array_sum($revenueStreams);
             $difference = $totalRevenue - $streamSum;
             if ($difference > 0.01) {
-                $nodes[] = ['name' => 'Other / Interest Income', 'itemStyle' => ['color' => '#64748b']]; // slate
-                $addLink('Other / Interest Income', 'Total Revenue', $difference);
+                $nodes[] = ['name' => 'Other and interest income', 'role' => 'income'];
+                $addLink('Other and interest income', 'Total revenue', $difference);
             }
         }
 
 
-        $addLink('Total Revenue', 'Operating Costs', $flow->operatingCosts);
-        $addLink('Total Revenue', 'EBITDA', $flow->ebitda);
+        $addLink('Total revenue', 'Operating costs', $flow->operatingCosts);
+        $addLink('Total revenue', 'EBITDA', $flow->ebitda);
         $addLink('EBITDA', 'Depreciation', $flow->depreciation);
-        $addLink('EBITDA', 'Operating Profit', $flow->operatingProfit);
+        $addLink('EBITDA', 'Operating profit', $flow->operatingProfit);
 
-        $addLink('Operating Profit', 'Interest Expense', $flow->interestExpense);
-        $addLink('Operating Profit', 'Pre-Tax Income', $flow->preTaxIncome);
+        $addLink('Operating profit', 'Interest expense', $flow->interestExpense);
+        $addLink('Operating profit', 'Pre-tax income', $flow->preTaxIncome);
 
-        $addLink('Pre-Tax Income', 'Taxes', $flow->taxes);
-        $addLink('Pre-Tax Income', 'Goodwill Impairment', $flow->goodwillImpairment);
-        $addLink('Pre-Tax Income', 'Net Income', $flow->netIncome);
+        $addLink('Pre-tax income', 'Taxes', $flow->taxes);
+        $addLink('Pre-tax income', 'Goodwill impairment', $flow->goodwillImpairment);
+        $addLink('Pre-tax income', 'Net income', $flow->netIncome);
 
         // Cash sources and uses: add back non-cash depreciation and goodwill impairment.
-        $addLink('Net Income', 'Cash Generated', max(0.0, $flow->netIncome));
-        $addLink('Depreciation', 'Cash Generated', $flow->depreciation);
-        $addLink('Goodwill Impairment', 'Cash Generated', $flow->goodwillImpairment);
-        $addLink('External Funding', 'Cash Generated', $flow->externalFunding);
+        $addLink('Net income', 'Cash generated', max(0.0, $flow->netIncome));
+        $addLink('Depreciation', 'Cash generated', $flow->depreciation);
+        $addLink('Goodwill impairment', 'Cash generated', $flow->goodwillImpairment);
+        $addLink('External funding', 'Cash generated', $flow->externalFunding);
 
-        $addLink('Cash Generated', 'Capital Expenditures', $flow->capitalExpenditures);
-        $addLink('Cash Generated', 'Dividends', $flow->dividends);
-        $addLink('Cash Generated', 'Stock Buybacks', $flow->buybacks);
-        $addLink('Cash Generated', 'Retained Cash', $flow->retainedCash);
+        $addLink('Cash generated', 'Capital expenditure', $flow->capitalExpenditures);
+        $addLink('Cash generated', 'Dividends', $flow->dividends);
+        $addLink('Cash generated', 'Buybacks', $flow->buybacks);
+        $addLink('Cash generated', 'Retained cash', $flow->retainedCash);
+
+        // A node nothing flows through this quarter (no impairment, no outside funding) would sit as a bare label.
+        $linked = array_flip(array_merge(array_column($links, 'source'), array_column($links, 'target')));
+        $nodes = array_values(array_filter($nodes, static fn (array $node): bool => isset($linked[$node['name']])));
 
         return $this->json(['nodes' => $nodes, 'links' => $links]);
     }

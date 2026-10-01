@@ -12,6 +12,15 @@ export function setupChartDefaults() {
     Chart.defaults.color = THEME_COLORS.textMuted;
     Chart.defaults.scale.grid.color = withAlpha(THEME_COLORS.grid, 0.5);
     Chart.defaults.font.family = CHART_FONT_MONO;
+    // A line's legend marker is a solid dot in its colour, whether or not the line also fills an area.
+    const baseLegendLabels = Chart.defaults.plugins.legend.labels.generateLabels;
+    Chart.defaults.plugins.legend.labels.generateLabels = (chart) => baseLegendLabels(chart).map(item => {
+        const dataset = chart.data.datasets[item.datasetIndex];
+        if ((dataset?.type ?? chart.config.type) === 'line' && typeof item.strokeStyle === 'string') {
+            item.fillStyle = item.strokeStyle;
+        }
+        return item;
+    });
     Chart.defaults.animation = false;
     Chart.defaults.animations = false;
     if (Chart.defaults.transitions && Chart.defaults.transitions.active) {

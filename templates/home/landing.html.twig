@@ -130,7 +130,7 @@
 							</div>
 							<div class="text-right">
 								<p class="text-xs text-on-surface-variant">Past month</p>
-								<p class="text-sm font-semibold font-mono tabular-nums mt-0.5 {{ stock.changePercent is null ? 'text-on-surface-variant/50' : (stock.changePercent >= 0 ? 'text-secondary' : 'text-tertiary') }}">
+								<p class="text-sm font-semibold font-mono tabular-nums mt-0.5 {{ stock.changePercent is null ? 'text-on-surface-faint' : (stock.changePercent >= 0 ? 'text-secondary' : 'text-tertiary') }}">
 									{%- if stock.changePercent is null -%}
 										&mdash;
 									{%- else -%}
@@ -146,7 +146,7 @@
 
 		{# --- Disclaimer --- #}
 		<section class="pb-12">
-			<p class="text-xs text-on-surface-variant/70 leading-relaxed max-w-3xl">
+			<p class="text-xs text-on-surface-faint leading-relaxed max-w-3xl">
 				Aerie Exchange is a fictional market. Its companies, prices and economy are invented, no real
 				money is involved, and nothing here is investment advice.
 			</p>

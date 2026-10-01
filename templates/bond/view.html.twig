@@ -48,7 +48,7 @@
 						{% if changePercent is not null %}
 							<span id="big-change" class="text-sm font-semibold font-mono tabular-nums {{ changePercent >= 0 ? 'text-secondary' : 'text-tertiary' }}">{{ changePercent >= 0 ? '+' : '' }}{{ (changePercent * 100)|number_format(2) }}%</span>
 						{% else %}
-							<span id="big-change" class="text-sm font-semibold font-mono tabular-nums text-on-surface-variant/50">&mdash;</span>
+							<span id="big-change" class="text-sm font-semibold font-mono tabular-nums text-on-surface-faint">&mdash;</span>
 						{% endif %}
 						<span class="text-xs text-on-surface-variant">past month, clean</span>
 					</div>
@@ -227,7 +227,7 @@
 								{% for order in openOrders %}
 									<div class="flex items-center justify-between gap-2 text-xs">
 										<span class="font-mono tabular-nums text-on-surface">
-											<span class="{{ order.action == 'BUY' ? 'text-secondary' : 'text-tertiary' }} font-bold">{{ order.action }}</span>
+											<span class="{{ order.action in ['BUY', 'COVER'] ? 'text-secondary' : 'text-tertiary' }} font-bold">{{ order.action|lower|capitalize }}</span>
 											{{ order.quantity|number_format }} @ ${{ order.limitPrice|number_format(2) }}
 										</span>
 										<form action="{{ path('app_trade_cancel', { id: order.id }) }}" method="POST">

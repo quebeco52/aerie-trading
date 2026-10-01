@@ -19,7 +19,7 @@
 		<div class="p-4 rounded-lg bg-surface-container-lowest border border-outline-variant/20">
 			<div class="text-xs text-on-surface-variant mb-1">Open interest</div>
 			<div class="font-mono tabular-nums text-xl font-semibold text-on-surface">{{ optionOpenInterest|number_format(0) }}</div>
-			<p class="text-3xs text-on-surface-variant/70 mt-1">contracts &middot; {{ optionMultiplier }} shares each</p>
+			<p class="text-3xs text-on-surface-faint mt-1">contracts &middot; {{ optionMultiplier }} shares each</p>
 		</div>
 
 		<div class="p-4 rounded-lg bg-surface-container-lowest border border-outline-variant/20 sm:col-span-2">
@@ -30,7 +30,7 @@
 				</span>
 				<span class="text-2xs text-on-surface-variant">shares per 1% move</span>
 			</div>
-			<p class="text-3xs text-on-surface-variant/70 mt-1 leading-relaxed">
+			<p class="text-3xs text-on-surface-faint mt-1 leading-relaxed">
 				{% if optionDealerGammaPerPercent > 0 %}
 					The desk is <span class="text-tertiary font-semibold">short gamma</span>: it has to buy as the price rises and sell as it falls, so its hedging amplifies whatever the tape is already doing.
 				{% elseif optionDealerGammaPerPercent < 0 %}
@@ -61,12 +61,12 @@
 			<div class="overflow-x-auto custom-scrollbar">
 				<table class="w-full text-xs min-w-[46rem]">
 					<thead>
-						<tr class="text-on-surface-variant/70 border-b border-outline-variant/20">
+						<tr class="text-on-surface-faint border-b border-outline-variant/20">
 							<th scope="colgroup" colspan="5" class="px-3 py-1.5 text-3xs uppercase tracking-wider font-bold text-secondary">Calls</th>
 							<th scope="col" class="px-3 py-1.5 text-3xs uppercase tracking-wider font-bold text-center">Strike</th>
 							<th scope="colgroup" colspan="5" class="px-3 py-1.5 text-3xs uppercase tracking-wider font-bold text-tertiary">Puts</th>
 						</tr>
-						<tr class="text-3xs uppercase tracking-wide text-on-surface-variant/60 border-b border-outline-variant/20">
+						<tr class="text-3xs uppercase tracking-wide text-on-surface-faint border-b border-outline-variant/20">
 							<th scope="col" class="px-3 py-1 font-semibold text-left">Pos</th>
 							<th scope="col" class="px-3 py-1 font-semibold text-right">OI</th>
 							<th scope="col" class="px-3 py-1 font-semibold text-right">Delta</th>
@@ -85,7 +85,7 @@
 							<tr class="border-b border-outline-variant/10 last:border-0 {{ row.isNearestStrike ? 'bg-primary/5' : '' }} hover:bg-surface-container-high/40 transition-colors">
 								{# ---- Call side ---- #}
 								{% if row.call %}
-									<td class="px-3 py-1.5 font-mono tabular-nums {{ row.call.position != 0 ? (row.call.position > 0 ? 'text-secondary font-bold' : 'text-tertiary font-bold') : 'text-on-surface-variant/30' }}">
+									<td class="px-3 py-1.5 font-mono tabular-nums {{ row.call.position != 0 ? (row.call.position > 0 ? 'text-secondary font-bold' : 'text-tertiary font-bold') : 'text-on-surface-faint' }}">
 										{{ row.call.position != 0 ? (row.call.position > 0 ? '+' ~ row.call.position : row.call.position) : '—' }}
 									</td>
 									<td class="px-3 py-1.5 font-mono tabular-nums text-right text-on-surface-variant">{{ row.call.openInterest|number_format(0) }}</td>
@@ -105,7 +105,7 @@
 										{% endif %}
 									</td>
 								{% else %}
-									<td colspan="5" class="px-3 py-1.5 text-center text-on-surface-variant/20">—</td>
+									<td colspan="5" class="px-3 py-1.5 text-center text-on-surface-faint">—</td>
 								{% endif %}
 
 								{# ---- Strike ---- #}
@@ -131,11 +131,11 @@
 									<td class="px-3 py-1.5 font-mono tabular-nums text-left text-on-surface-variant">{{ (row.put.impliedVolatility * 100)|number_format(1) }}%</td>
 									<td class="px-3 py-1.5 font-mono tabular-nums text-left text-on-surface-variant">{{ row.put.delta|number_format(2) }}</td>
 									<td class="px-3 py-1.5 font-mono tabular-nums text-left text-on-surface-variant">{{ row.put.openInterest|number_format(0) }}</td>
-									<td class="px-3 py-1.5 font-mono tabular-nums text-right {{ row.put.position != 0 ? (row.put.position > 0 ? 'text-secondary font-bold' : 'text-tertiary font-bold') : 'text-on-surface-variant/30' }}">
+									<td class="px-3 py-1.5 font-mono tabular-nums text-right {{ row.put.position != 0 ? (row.put.position > 0 ? 'text-secondary font-bold' : 'text-tertiary font-bold') : 'text-on-surface-faint' }}">
 										{{ row.put.position != 0 ? (row.put.position > 0 ? '+' ~ row.put.position : row.put.position) : '—' }}
 									</td>
 								{% else %}
-									<td colspan="5" class="px-3 py-1.5 text-center text-on-surface-variant/20">—</td>
+									<td colspan="5" class="px-3 py-1.5 text-center text-on-surface-faint">—</td>
 								{% endif %}
 							</tr>
 						{% endfor %}
@@ -145,7 +145,7 @@
 		</div>
 	{% endfor %}
 
-	<p class="text-3xs text-on-surface-variant/60 leading-relaxed">
+	<p class="text-3xs text-on-surface-faint leading-relaxed">
 		Marks are the desk's last sweep. An order is repriced against the live underlying when it is sent, so
 		the fill is struck on the price at that moment rather than on the figure in this table. One contract
 		is {{ optionMultiplier }} shares; premiums are quoted per share. Contracts are European and are

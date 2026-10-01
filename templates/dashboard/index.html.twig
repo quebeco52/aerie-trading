@@ -90,33 +90,33 @@
             <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div class="bg-surface-container-low border border-outline-variant/20 rounded-lg p-3.5 flex items-center justify-between">
                     <div class="flex items-center gap-3">
-                        <div class="w-2.5 h-2.5 rounded-full bg-primary"></div>
+                        <div class="w-2.5 h-2.5 rounded-full bg-series-blue" aria-hidden="true"></div>
                         <div>
                             <p class="text-xs text-on-surface-variant">Stocks</p>
                             <p class="text-sm font-bold text-on-surface font-mono tabular-nums">${{ allocation.stocks|number_format(2) }}</p>
                         </div>
                     </div>
-                    <span class="text-xs font-bold text-primary font-mono tabular-nums">{{ allocation.stocksPercent|number_format(1) }}%</span>
+                    <span class="text-xs font-bold text-on-surface font-mono tabular-nums">{{ allocation.stocksPercent|number_format(1) }}%</span>
                 </div>
                 <div class="bg-surface-container-low border border-outline-variant/20 rounded-lg p-3.5 flex items-center justify-between">
                     <div class="flex items-center gap-3">
-                        <div class="w-2.5 h-2.5 rounded-full bg-secondary"></div>
+                        <div class="w-2.5 h-2.5 rounded-full bg-series-orange" aria-hidden="true"></div>
                         <div>
                             <p class="text-xs text-on-surface-variant">Index funds</p>
                             <p class="text-sm font-bold text-on-surface font-mono tabular-nums">${{ allocation.etfs|number_format(2) }}</p>
                         </div>
                     </div>
-                    <span class="text-xs font-bold text-secondary font-mono tabular-nums">{{ allocation.etfsPercent|number_format(1) }}%</span>
+                    <span class="text-xs font-bold text-on-surface font-mono tabular-nums">{{ allocation.etfsPercent|number_format(1) }}%</span>
                 </div>
                 <div class="bg-surface-container-low border border-outline-variant/20 rounded-lg p-3.5 flex items-center justify-between">
                     <div class="flex items-center gap-3">
-                        <div class="w-2.5 h-2.5 rounded-full bg-on-surface-variant"></div>
+                        <div class="w-2.5 h-2.5 rounded-full bg-on-surface-faint" aria-hidden="true"></div>
                         <div>
                             <p class="text-xs text-on-surface-variant">Cash</p>
                             <p class="text-sm font-bold text-on-surface font-mono tabular-nums">${{ allocation.cash|number_format(2) }}</p>
                         </div>
                     </div>
-                    <span class="text-xs font-bold text-on-surface-variant font-mono tabular-nums">{{ allocation.cashPercent|number_format(1) }}%</span>
+                    <span class="text-xs font-bold text-on-surface font-mono tabular-nums">{{ allocation.cashPercent|number_format(1) }}%</span>
                 </div>
             </div>
 
@@ -245,7 +245,7 @@
                                     <tr class="hover:bg-surface-container-high/30 transition-colors">
                                         <td class="py-2.5 text-xs font-mono text-on-surface-variant">#{{ order.id }}</td>
                                         <td class="py-2.5 text-xs text-on-surface-variant uppercase">{{ order.orderType }}</td>
-                                        <td class="py-2.5 font-bold {{ order.action == 'BUY' ? 'text-secondary' : 'text-primary' }}">{{ order.action }}</td>
+                                        <td class="py-2.5 font-bold {{ order.action in ['BUY', 'COVER'] ? 'text-secondary' : 'text-tertiary' }}">{{ order.action|lower|capitalize }}</td>
                                         <td class="py-2.5">
                                             <a href="/stock/{{ order.ticker }}" class="font-bold text-on-surface hover:text-primary transition-colors">{{ order.ticker }}</a>
                                         </td>
@@ -298,7 +298,7 @@
                                     <tr>
                                         <td class="py-2.5 text-xs text-on-surface-variant font-mono">{{ (trade.filledAt ?? trade.createdAt)|date('Y-m-d H:i') }}</td>
                                         <td class="py-2.5 text-xs text-on-surface-variant uppercase">{{ trade.orderType }}</td>
-                                        <td class="py-2.5 font-bold {{ trade.action == 'BUY' ? 'text-secondary' : 'text-primary' }}">{{ trade.action }}</td>
+                                        <td class="py-2.5 font-bold {{ trade.action in ['BUY', 'COVER'] ? 'text-secondary' : 'text-tertiary' }}">{{ trade.action|lower|capitalize }}</td>
                                         <td class="py-2.5">
                                             <a href="/stock/{{ trade.ticker }}" class="font-bold text-on-surface hover:text-primary transition-colors">{{ trade.ticker }}</a>
                                         </td>

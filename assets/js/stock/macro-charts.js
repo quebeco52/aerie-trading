@@ -1,6 +1,10 @@
-import { THEME_COLORS, withAlpha } from '../utils/colors.js';
+import { THEME_COLORS, SERIES, withAlpha } from '../utils/colors.js';
 import { destroyChartInstance } from '../utils/chart-config.js';
 import { renderWhenVisible, resetLazyCharts } from '../utils/lazy-chart.js';
+
+// Series take the categorical slots in legend order (SERIES, app.css --color-series-*), the chart's
+// headline first. Reference lines stay neutral; bars that encode a sign use the up and down colours.
+const GRID_COLOR = withAlpha(THEME_COLORS.grid, 0.5);
 
 let macroEconomyChartInstance = null;
 let macroRatesChartInstance = null;
@@ -545,8 +549,8 @@ function renderMacroEconomyChart(labels, inflationData, outputGapData, capitalOv
             type: 'line',
             label: 'Inflation',
             data: inflationData,
-            borderColor: '#facc15',
-            backgroundColor: '#facc15',
+            borderColor: SERIES.blue,
+            backgroundColor: SERIES.blue,
             borderWidth: 2.2,
             tension: 0.3,
             pointRadius: labels.length > 50 ? 0 : 1,
@@ -556,8 +560,8 @@ function renderMacroEconomyChart(labels, inflationData, outputGapData, capitalOv
             type: 'line',
             label: '10Y breakeven inflation',
             data: tipsBreakevenData,
-            borderColor: '#38bdf8',
-            backgroundColor: '#38bdf8',
+            borderColor: SERIES.orange,
+            backgroundColor: SERIES.orange,
             borderWidth: 1.8,
             borderDash: [5, 4],
             tension: 0.3,
@@ -568,8 +572,8 @@ function renderMacroEconomyChart(labels, inflationData, outputGapData, capitalOv
             type: 'line',
             label: 'Excess capital stock',
             data: capitalOverhangData,
-            borderColor: '#c084fc',
-            backgroundColor: '#c084fc',
+            borderColor: SERIES.aqua,
+            backgroundColor: SERIES.aqua,
             borderWidth: 1.5,
             borderDash: [4, 4],
             tension: 0.3,
@@ -609,12 +613,12 @@ function renderMacroEconomyChart(labels, inflationData, outputGapData, capitalOv
                 y: {
                     suggestedMin: -2.5,
                     suggestedMax: 4.0,
-                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    grid: { color: GRID_COLOR },
                     ticks: { callback: (val) => val + '%' },
                     title: { display: true, text: 'Percent' }
                 },
                 x: {
-                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    grid: { color: GRID_COLOR },
                     ticks: { maxTicksLimit: 8 }
                 }
             }
@@ -633,8 +637,8 @@ function renderMacroRatesChart(labels, policyRateData, yield2yData, yield5yData,
             type: 'line',
             label: 'Policy rate',
             data: policyRateData,
-            borderColor: '#38bdf8',
-            backgroundColor: '#38bdf8',
+            borderColor: SERIES.blue,
+            backgroundColor: SERIES.blue,
             borderWidth: 2.5,
             tension: 0.1,
             pointRadius: labels.length > 50 ? 0 : 1,
@@ -644,8 +648,8 @@ function renderMacroRatesChart(labels, policyRateData, yield2yData, yield5yData,
             type: 'line',
             label: '10Y yield',
             data: yield10yData,
-            borderColor: '#c084fc',
-            backgroundColor: '#c084fc',
+            borderColor: SERIES.aqua,
+            backgroundColor: SERIES.aqua,
             borderWidth: 2.5,
             tension: 0.25,
             pointRadius: labels.length > 50 ? 0 : 1,
@@ -655,8 +659,8 @@ function renderMacroRatesChart(labels, policyRateData, yield2yData, yield5yData,
             type: 'line',
             label: '2Y yield',
             data: yield2yData,
-            borderColor: '#4ade80',
-            backgroundColor: '#4ade80',
+            borderColor: SERIES.yellow,
+            backgroundColor: SERIES.yellow,
             borderWidth: 1.8,
             tension: 0.25,
             pointRadius: labels.length > 50 ? 0 : 1,
@@ -666,8 +670,8 @@ function renderMacroRatesChart(labels, policyRateData, yield2yData, yield5yData,
             type: 'line',
             label: '5Y yield',
             data: yield5yData,
-            borderColor: '#facc15',
-            backgroundColor: '#facc15',
+            borderColor: SERIES.magenta,
+            backgroundColor: SERIES.magenta,
             borderWidth: 1.8,
             tension: 0.25,
             pointRadius: labels.length > 50 ? 0 : 1,
@@ -677,8 +681,8 @@ function renderMacroRatesChart(labels, policyRateData, yield2yData, yield5yData,
             type: 'line',
             label: '2s10s spread',
             data: spread2s10sData,
-            borderColor: '#a78bfa',
-            backgroundColor: '#a78bfa',
+            borderColor: SERIES.green,
+            backgroundColor: SERIES.green,
             borderWidth: 1.5,
             borderDash: [3, 2],
             tension: 0.25,
@@ -689,12 +693,12 @@ function renderMacroRatesChart(labels, policyRateData, yield2yData, yield5yData,
 
     const hasTargetRate = targetRateData && targetRateData.some(v => v !== null && !isNaN(v));
     if (hasTargetRate) {
-        datasets.unshift({
+        datasets.splice(1, 0, {
             type: 'line',
             label: 'Rule target',
             data: targetRateData,
-            borderColor: '#fb923c',
-            backgroundColor: '#fb923c',
+            borderColor: SERIES.orange,
+            backgroundColor: SERIES.orange,
             borderWidth: 1.8,
             borderDash: [4, 4],
             tension: 0.2,
@@ -719,12 +723,12 @@ function renderMacroRatesChart(labels, policyRateData, yield2yData, yield5yData,
             },
             scales: {
                 y: {
-                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    grid: { color: GRID_COLOR },
                     ticks: { callback: (val) => val + '%' },
                     title: { display: true, text: 'Percent' }
                 },
                 x: {
-                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    grid: { color: GRID_COLOR },
                     ticks: { maxTicksLimit: 8 }
                 }
             }
@@ -746,8 +750,8 @@ function renderMacroMortgageChart(labels, policyRateData, yield30yData, spread30
                     type: 'line',
                     label: 'Policy rate',
                     data: policyRateData,
-                    borderColor: '#38bdf8',
-                    backgroundColor: '#38bdf8',
+                    borderColor: SERIES.blue,
+                    backgroundColor: SERIES.blue,
                     borderWidth: 2,
                     tension: 0.1,
                     pointRadius: labels.length > 50 ? 0 : 1
@@ -756,8 +760,8 @@ function renderMacroMortgageChart(labels, policyRateData, yield30yData, spread30
                     type: 'line',
                     label: '30Y mortgage rate',
                     data: yield30yData,
-                    borderColor: '#fb7185',
-                    backgroundColor: '#fb7185',
+                    borderColor: SERIES.orange,
+                    backgroundColor: SERIES.orange,
                     borderWidth: 2.2,
                     tension: 0.3,
                     pointRadius: labels.length > 50 ? 0 : 1
@@ -766,7 +770,7 @@ function renderMacroMortgageChart(labels, policyRateData, yield30yData, spread30
                     type: 'bar',
                     label: 'Spread over policy rate',
                     data: spread30yData,
-                    backgroundColor: spread30yData.map(val => val !== null && val < 0 ? withAlpha(THEME_COLORS.negative, 0.45) : withAlpha(THEME_COLORS.primary, 0.35)),
+                    backgroundColor: spread30yData.map(val => val !== null && val < 0 ? withAlpha(THEME_COLORS.negative, 0.45) : withAlpha(THEME_COLORS.textMuted, 0.3)),
                     borderRadius: 3,
                     barPercentage: 0.6,
                     categoryPercentage: 0.85
@@ -779,12 +783,12 @@ function renderMacroMortgageChart(labels, policyRateData, yield30yData, spread30
             plugins: { legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } }, tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${ctx.raw.toFixed(2)}%` } } },
             scales: {
                 y: {
-                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    grid: { color: GRID_COLOR },
                     ticks: { callback: (val) => val + '%' },
                     title: { display: true, text: 'Percent' }
                 },
                 x: {
-                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    grid: { color: GRID_COLOR },
                     ticks: { maxTicksLimit: 8 }
                 }
             }
@@ -805,8 +809,8 @@ function renderMacroRiskChart(labels, erpData, volData, creditSpreadBpsData, cor
                 {
                     label: 'Corporate borrowing rate',
                     data: corpBorrowingData,
-                    borderColor: '#f43f5e',
-                    backgroundColor: '#f43f5e',
+                    borderColor: SERIES.blue,
+                    backgroundColor: SERIES.blue,
                     borderWidth: 2,
                     tension: 0.3,
                     pointRadius: labels.length > 50 ? 0 : 1,
@@ -815,8 +819,8 @@ function renderMacroRiskChart(labels, erpData, volData, creditSpreadBpsData, cor
                 {
                     label: 'Equity risk premium',
                     data: erpData,
-                    borderColor: '#fde047',
-                    backgroundColor: '#fde047',
+                    borderColor: SERIES.orange,
+                    backgroundColor: SERIES.orange,
                     borderWidth: 2.2,
                     tension: 0.3,
                     pointRadius: labels.length > 50 ? 0 : 1,
@@ -825,8 +829,8 @@ function renderMacroRiskChart(labels, erpData, volData, creditSpreadBpsData, cor
                 {
                     label: 'Corporate credit spread',
                     data: creditSpreadBpsData.map(val => val !== null ? val / 100 : null),
-                    borderColor: THEME_COLORS.primary,
-                    backgroundColor: THEME_COLORS.primary,
+                    borderColor: SERIES.aqua,
+                    backgroundColor: SERIES.aqua,
                     borderWidth: 1.8,
                     borderDash: [4, 3],
                     tension: 0.2,
@@ -836,8 +840,8 @@ function renderMacroRiskChart(labels, erpData, volData, creditSpreadBpsData, cor
                 {
                     label: 'Implied volatility',
                     data: volData,
-                    borderColor: '#fb923c',
-                    backgroundColor: 'rgba(251, 146, 60, 0.12)',
+                    borderColor: SERIES.yellow,
+                    backgroundColor: withAlpha(SERIES.yellow, 0.12),
                     borderWidth: 2,
                     tension: 0.3,
                     fill: true,
@@ -860,7 +864,7 @@ function renderMacroRiskChart(labels, erpData, volData, creditSpreadBpsData, cor
                     position: 'left',
                     min: 0,
                     suggestedMax: 12,
-                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    grid: { color: GRID_COLOR },
                     ticks: { callback: (val) => val.toFixed(1) + '%' },
                     title: { display: true, text: 'Percent' }
                 },
@@ -875,7 +879,7 @@ function renderMacroRiskChart(labels, erpData, volData, creditSpreadBpsData, cor
                     title: { display: true, text: 'Volatility (%)' }
                 },
                 x: {
-                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    grid: { color: GRID_COLOR },
                     ticks: { maxTicksLimit: 8 }
                 }
             }
@@ -897,8 +901,8 @@ function renderMacroLaborCreditChart(labels, unemploymentData, jobVacanciesData,
                 {
                     label: 'Unemployment',
                     data: unemploymentData,
-                    borderColor: '#f43f5e',
-                    backgroundColor: 'rgba(244, 63, 94, 0.10)',
+                    borderColor: SERIES.blue,
+                    backgroundColor: withAlpha(SERIES.blue, 0.10),
                     borderWidth: 2.2,
                     tension: 0.3,
                     fill: true,
@@ -907,8 +911,8 @@ function renderMacroLaborCreditChart(labels, unemploymentData, jobVacanciesData,
                 {
                     label: 'Structural unemployment',
                     data: nairuData,
-                    borderColor: '#fbbf24',
-                    backgroundColor: '#fbbf24',
+                    borderColor: SERIES.orange,
+                    backgroundColor: SERIES.orange,
                     borderWidth: 1.8,
                     borderDash: [4, 4],
                     tension: 0.3,
@@ -918,8 +922,8 @@ function renderMacroLaborCreditChart(labels, unemploymentData, jobVacanciesData,
                 {
                     label: 'Vacancy rate',
                     data: jobVacanciesData,
-                    borderColor: '#38bdf8',
-                    backgroundColor: 'rgba(56, 189, 248, 0.08)',
+                    borderColor: SERIES.aqua,
+                    backgroundColor: withAlpha(SERIES.aqua, 0.08),
                     borderWidth: 2,
                     tension: 0.3,
                     fill: false,
@@ -928,7 +932,7 @@ function renderMacroLaborCreditChart(labels, unemploymentData, jobVacanciesData,
                 {
                     label: 'Wage growth',
                     data: wageGrowthData,
-                    borderColor: '#a855f7',
+                    borderColor: SERIES.yellow,
                     borderWidth: 2.2,
                     tension: 0.3,
                     fill: false,
@@ -940,8 +944,8 @@ function renderMacroLaborCreditChart(labels, unemploymentData, jobVacanciesData,
                     // the labour market is worth, and a gap that opens is the spiral turning.
                     label: 'Expected inflation',
                     data: tipsBreakevenData,
-                    borderColor: '#c4b5fd',
-                    backgroundColor: '#c4b5fd',
+                    borderColor: SERIES.magenta,
+                    backgroundColor: SERIES.magenta,
                     borderWidth: 1.8,
                     borderDash: [5, 4],
                     tension: 0.3,
@@ -954,8 +958,8 @@ function renderMacroLaborCreditChart(labels, unemploymentData, jobVacanciesData,
                     label: 'Real wage vs productivity',
                     data: realWageGapData,
                     yAxisID: 'yRealWage',
-                    borderColor: '#10b981',
-                    backgroundColor: 'rgba(16, 185, 129, 0.10)',
+                    borderColor: SERIES.green,
+                    backgroundColor: withAlpha(SERIES.green, 0.10),
                     borderWidth: 2,
                     tension: 0.3,
                     fill: 'origin',
@@ -977,7 +981,7 @@ function renderMacroLaborCreditChart(labels, unemploymentData, jobVacanciesData,
                     type: 'linear',
                     display: true,
                     position: 'left', stack: 'labor', stackWeight: 2, weight: 1,
-                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    grid: { color: GRID_COLOR },
                     ticks: { callback: (val) => val.toFixed(1) + '%' },
                     title: { display: true, text: 'Percent' }
                 },
@@ -986,12 +990,12 @@ function renderMacroLaborCreditChart(labels, unemploymentData, jobVacanciesData,
                     position: 'left', stack: 'labor', stackWeight: 1, weight: 0, offset: true,
                     // Zero is the productivity path itself, so it always stays on the axis.
                     suggestedMin: 0, suggestedMax: 0,
-                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    grid: { color: GRID_COLOR },
                     ticks: { callback: (val) => val.toFixed(1) + '%', maxTicksLimit: 4 },
                     title: { display: true, text: 'Real wage gap (%)' }
                 },
                 x: {
-                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    grid: { color: GRID_COLOR },
                     ticks: { maxTicksLimit: 8 }
                 }
             }
@@ -1013,8 +1017,8 @@ function renderMacroTermPremiumChart(labels, yield10yData, riskNeutralData, term
                 {
                     label: '10Y yield',
                     data: yield10yData,
-                    borderColor: '#c084fc',
-                    backgroundColor: '#c084fc',
+                    borderColor: SERIES.blue,
+                    backgroundColor: SERIES.blue,
                     borderWidth: 2.5,
                     tension: 0.25,
                     pointRadius: labels.length > 50 ? 0 : 2
@@ -1022,8 +1026,8 @@ function renderMacroTermPremiumChart(labels, yield10yData, riskNeutralData, term
                 {
                     label: 'Expected policy path',
                     data: riskNeutralData,
-                    borderColor: '#38bdf8',
-                    backgroundColor: '#38bdf8',
+                    borderColor: SERIES.orange,
+                    backgroundColor: SERIES.orange,
                     borderWidth: 2,
                     borderDash: [5, 4],
                     tension: 0.25,
@@ -1032,8 +1036,8 @@ function renderMacroTermPremiumChart(labels, yield10yData, riskNeutralData, term
                 {
                     label: 'Term premium',
                     data: termPremiumData,
-                    borderColor: '#fb7185',
-                    backgroundColor: 'rgba(251, 113, 133, 0.12)',
+                    borderColor: SERIES.aqua,
+                    backgroundColor: withAlpha(SERIES.aqua, 0.12),
                     borderWidth: 2,
                     fill: true,
                     tension: 0.25,
@@ -1042,7 +1046,8 @@ function renderMacroTermPremiumChart(labels, yield10yData, riskNeutralData, term
                 {
                     label: 'Neutral real rate',
                     data: naturalRateData,
-                    borderColor: '#34d399',
+                    borderColor: SERIES.yellow,
+                    backgroundColor: SERIES.yellow,
                     borderWidth: 1.5,
                     tension: 0.1,
                     pointRadius: labels.length > 50 ? 0 : 1
@@ -1060,12 +1065,12 @@ function renderMacroTermPremiumChart(labels, yield10yData, riskNeutralData, term
                 y: {
                     type: 'linear',
                     display: true,
-                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    grid: { color: GRID_COLOR },
                     ticks: { callback: (val) => val.toFixed(1) + '%' },
                     title: { display: true, text: 'Yield (%)' }
                 },
                 x: {
-                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    grid: { color: GRID_COLOR },
                     ticks: { maxTicksLimit: 8 }
                 }
             }
@@ -1083,8 +1088,8 @@ function renderMacroGdpGrowthChart(labels, nominalGdpGrowthData, realGdpGrowthDa
         {
             label: 'Nominal GDP growth',
             data: nominalGdpGrowthData,
-            borderColor: '#38bdf8',
-            backgroundColor: '#38bdf8',
+            borderColor: SERIES.blue,
+            backgroundColor: SERIES.blue,
             borderWidth: 2.2,
             tension: 0.25,
             yAxisID: 'y',
@@ -1093,8 +1098,8 @@ function renderMacroGdpGrowthChart(labels, nominalGdpGrowthData, realGdpGrowthDa
         {
             label: 'Real GDP growth',
             data: realGdpGrowthData,
-            borderColor: '#4ade80',
-            backgroundColor: 'rgba(74, 222, 128, 0.12)',
+            borderColor: SERIES.orange,
+            backgroundColor: withAlpha(SERIES.orange, 0.12),
             borderWidth: 2.5,
             fill: true,
             tension: 0.25,
@@ -1104,8 +1109,8 @@ function renderMacroGdpGrowthChart(labels, nominalGdpGrowthData, realGdpGrowthDa
         {
             label: 'Potential growth',
             data: potentialGdpGrowthData,
-            borderColor: '#fbbf24',
-            backgroundColor: '#fbbf24',
+            borderColor: SERIES.aqua,
+            backgroundColor: SERIES.aqua,
             borderWidth: 1.8,
             borderDash: [5, 4],
             tension: 0.25,
@@ -1115,8 +1120,8 @@ function renderMacroGdpGrowthChart(labels, nominalGdpGrowthData, realGdpGrowthDa
         {
             label: 'Productivity growth',
             data: tfpGrowthData,
-            borderColor: '#c084fc',
-            backgroundColor: '#c084fc',
+            borderColor: SERIES.yellow,
+            backgroundColor: SERIES.yellow,
             borderWidth: 1.5,
             tension: 0.2,
             yAxisID: 'y',
@@ -1129,8 +1134,8 @@ function renderMacroGdpGrowthChart(labels, nominalGdpGrowthData, realGdpGrowthDa
             type: 'line',
             label: 'Recession probability (12M)',
             data: recessionProbData,
-            borderColor: '#f87171',
-            backgroundColor: 'rgba(248, 113, 113, 0.10)',
+            borderColor: SERIES.magenta,
+            backgroundColor: withAlpha(SERIES.magenta, 0.10),
             borderWidth: 2,
             borderDash: [4, 3],
             fill: true,
@@ -1170,7 +1175,7 @@ function renderMacroGdpGrowthChart(labels, nominalGdpGrowthData, realGdpGrowthDa
                     type: 'linear',
                     display: true,
                     position: 'left',
-                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    grid: { color: GRID_COLOR },
                     ticks: { callback: (val) => (val >= 0 ? '+' : '') + val.toFixed(1) + '%' },
                     title: { display: true, text: 'Growth (%)' }
                 },
@@ -1185,7 +1190,7 @@ function renderMacroGdpGrowthChart(labels, nominalGdpGrowthData, realGdpGrowthDa
                     title: { display: true, text: 'Probability (%)' }
                 },
                 x: {
-                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    grid: { color: GRID_COLOR },
                     ticks: { maxTicksLimit: 8 }
                 }
             }
@@ -1207,8 +1212,8 @@ function renderMacroBalanceSheetChart(labels, balanceSheetAssetsData, balanceShe
                     type: 'line',
                     label: 'Asset holdings',
                     data: balanceSheetAssetsData,
-                    borderColor: '#38bdf8',
-                    backgroundColor: 'rgba(56, 189, 248, 0.12)',
+                    borderColor: SERIES.blue,
+                    backgroundColor: withAlpha(SERIES.blue, 0.12),
                     borderWidth: 2.5,
                     fill: true,
                     tension: 0.3,
@@ -1223,22 +1228,22 @@ function renderMacroBalanceSheetChart(labels, balanceSheetAssetsData, balanceShe
                         const prevVal = idx > 0 ? balanceSheetIntensityData[idx - 1] : val;
                         const delta = val - prevVal;
                         if (val > 5) {
-                            if (delta > 2) return 'rgba(74, 222, 128, 0.50)'; // QE Expansion (Green)
-                            if (delta < -2) return 'rgba(244, 63, 94, 0.50)'; // QT Runoff (Rose)
-                            return 'rgba(251, 191, 36, 0.55)'; // Reinvestment Hold (Amber)
+                            if (delta > 2) return withAlpha(THEME_COLORS.positive, 0.5); // QE Expansion (Green)
+                            if (delta < -2) return withAlpha(THEME_COLORS.negative, 0.5); // QT Runoff (Rose)
+                            return withAlpha(THEME_COLORS.warning, 0.55); // Reinvestment Hold (Amber)
                         }
-                        if (val < -5) return 'rgba(244, 63, 94, 0.50)'; // QT Runoff (Rose)
-                        return 'rgba(255, 255, 255, 0.10)'; // Neutral
+                        if (val < -5) return withAlpha(THEME_COLORS.negative, 0.5); // QT Runoff (Rose)
+                        return withAlpha(THEME_COLORS.textMuted, 0.15); // Neutral
                     }),
                     borderColor: balanceSheetIntensityData.map((val, idx) => {
                         const prevVal = idx > 0 ? balanceSheetIntensityData[idx - 1] : val;
                         const delta = val - prevVal;
                         if (val > 5) {
-                            if (delta > 2) return '#4ade80';
-                            if (delta < -2) return '#f43f5e';
-                            return '#fbbf24';
+                            if (delta > 2) return THEME_COLORS.positive;
+                            if (delta < -2) return THEME_COLORS.negative;
+                            return THEME_COLORS.warning;
                         }
-                        if (val < -5) return '#f43f5e';
+                        if (val < -5) return THEME_COLORS.negative;
                         return 'transparent';
                     }),
                     borderWidth: 1,
@@ -1285,7 +1290,7 @@ function renderMacroBalanceSheetChart(labels, balanceSheetAssetsData, balanceShe
                     type: 'linear',
                     display: true,
                     position: 'left',
-                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    grid: { color: GRID_COLOR },
                     ticks: { callback: (val) => Math.round(val) },
                     title: { display: true, text: 'Index' }
                 },
@@ -1301,7 +1306,7 @@ function renderMacroBalanceSheetChart(labels, balanceSheetAssetsData, balanceShe
                     title: { display: true, text: 'Basis points' }
                 },
                 x: {
-                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    grid: { color: GRID_COLOR },
                     ticks: { maxTicksLimit: 8 }
                 }
             }
@@ -1309,14 +1314,13 @@ function renderMacroBalanceSheetChart(labels, balanceSheetAssetsData, balanceShe
     });
 }
 
-// Commodity indices share one base-100 axis. Colours are the reference categorical palette's first five
-// dark-mode slots in its fixed order (validated adjacent-pair on this surface): gold takes the yellow slot.
+// Commodity indices share one base-100 axis, in the first five slots: gold takes the yellow one.
 const COMMODITY_SERIES_COLORS = {
-    energy: '#3987e5',
-    metals: '#d95926',
-    agri: '#199e70',
-    gold: '#c98500',
-    gas: '#d55181',
+    energy: SERIES.blue,
+    metals: SERIES.orange,
+    agri: SERIES.aqua,
+    gold: SERIES.yellow,
+    gas: SERIES.magenta,
 };
 
 function commodityLine(label, data, color, pointsHidden) {
@@ -1340,16 +1344,16 @@ function renderMacroCommoditiesChart(labels, energyPriceData, metalsEmaData, agr
     const dense = labels.length > 50;
 
     const datasets = [
-        commodityLine('Energy Price Index', energyPriceData, COMMODITY_SERIES_COLORS.energy, dense),
-        commodityLine('Industrial Metals Index', metalsEmaData, COMMODITY_SERIES_COLORS.metals, dense),
-        commodityLine('Agricultural Commodities', agriEmaData, COMMODITY_SERIES_COLORS.agri, dense),
+        commodityLine('Energy', energyPriceData, COMMODITY_SERIES_COLORS.energy, dense),
+        commodityLine('Industrial metals', metalsEmaData, COMMODITY_SERIES_COLORS.metals, dense),
+        commodityLine('Agriculture', agriEmaData, COMMODITY_SERIES_COLORS.agri, dense),
     ];
     // Gold is recorded only since it joined the macro; an older window has no gold line rather than a flat 100.
     if (goldPriceData && goldPriceData.some(v => v !== null)) {
-        datasets.push(commodityLine('Gold Index', goldPriceData, COMMODITY_SERIES_COLORS.gold, dense));
+        datasets.push(commodityLine('Gold', goldPriceData, COMMODITY_SERIES_COLORS.gold, dense));
     }
     if (naturalGasPriceData && naturalGasPriceData.length > 0) {
-        datasets.push(commodityLine('Natural Gas Index', naturalGasPriceData, COMMODITY_SERIES_COLORS.gas, dense));
+        datasets.push(commodityLine('Natural gas', naturalGasPriceData, COMMODITY_SERIES_COLORS.gas, dense));
     }
 
     macroCommoditiesChartInstance = new Chart(ctx, {
@@ -1364,11 +1368,11 @@ function renderMacroCommoditiesChart(labels, energyPriceData, metalsEmaData, agr
             },
             scales: {
                 y: {
-                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    grid: { color: GRID_COLOR },
                     title: { display: true, text: 'Index' }
                 },
                 x: {
-                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    grid: { color: GRID_COLOR },
                     ticks: { maxTicksLimit: 8 }
                 }
             }
@@ -1379,9 +1383,9 @@ function renderMacroCommoditiesChart(labels, energyPriceData, metalsEmaData, agr
 /** The 3:2:1 refining crack spread in dollars a barrel, on its own axis rather than a second scale beside the indices. */
 // The crack is $/bbl and power $/MWh, so each gets its own panel on a shared time axis (small multiples, one axis per unit).
 const ENERGY_SPREAD_SERIES_COLORS = {
-    crack: '#3987e5',
-    power: '#d95926',
-    spark: '#199e70',
+    crack: SERIES.blue,
+    power: SERIES.orange,
+    spark: SERIES.aqua,
 };
 
 // Power and the spark spread in dollars. The references are the PHP constants, rendered onto the canvas as data attributes.
@@ -1414,16 +1418,16 @@ function renderMacroEnergySpreadsChart(labels, crackSpreadData, powerPriceIndexD
     const ctx = canvas.getContext('2d');
     const dense = labels.length > 50;
     const spreads = energySpreadDollars(powerPriceIndexData, naturalGasPriceData);
-    const grid = { color: 'rgba(255, 255, 255, 0.05)' };
+    const grid = { color: GRID_COLOR };
 
     macroEnergySpreadsChartInstance = new Chart(ctx, {
         type: 'line',
         data: {
             labels,
             datasets: [
-                { ...commodityLine('3:2:1 Crack Spread', crackSpreadData, ENERGY_SPREAD_SERIES_COLORS.crack, dense), yAxisID: 'yCrack' },
-                { ...commodityLine('Wholesale Power', spreads.power, ENERGY_SPREAD_SERIES_COLORS.power, dense), yAxisID: 'yPower' },
-                { ...commodityLine('Spark Spread (7,000 Btu/kWh)', spreads.spark, ENERGY_SPREAD_SERIES_COLORS.spark, dense), yAxisID: 'yPower' },
+                { ...commodityLine('3:2:1 crack spread', crackSpreadData, ENERGY_SPREAD_SERIES_COLORS.crack, dense), yAxisID: 'yCrack' },
+                { ...commodityLine('Wholesale power', spreads.power, ENERGY_SPREAD_SERIES_COLORS.power, dense), yAxisID: 'yPower' },
+                { ...commodityLine('Spark spread (7,000 Btu/kWh)', spreads.spark, ENERGY_SPREAD_SERIES_COLORS.spark, dense), yAxisID: 'yPower' },
             ]
         },
         options: {
@@ -1469,8 +1473,8 @@ function renderMacroPropertyChart(labels, creEmaData, residentialEmaData, housin
         {
             label: 'Commercial property',
             data: creEmaData,
-            borderColor: '#f472b6',
-            backgroundColor: 'rgba(244, 114, 182, 0.15)',
+            borderColor: SERIES.blue,
+            backgroundColor: withAlpha(SERIES.blue, 0.15),
             borderWidth: 2,
             tension: 0.2,
             pointRadius: labels.length > 50 ? 0 : 2
@@ -1478,8 +1482,8 @@ function renderMacroPropertyChart(labels, creEmaData, residentialEmaData, housin
         {
             label: 'Residential property',
             data: residentialEmaData,
-            borderColor: '#c084fc',
-            backgroundColor: 'rgba(192, 132, 252, 0.15)',
+            borderColor: SERIES.orange,
+            backgroundColor: withAlpha(SERIES.orange, 0.15),
             borderWidth: 2,
             tension: 0.2,
             pointRadius: labels.length > 50 ? 0 : 2
@@ -1490,8 +1494,8 @@ function renderMacroPropertyChart(labels, creEmaData, residentialEmaData, housin
         datasets.push({
             label: 'Housing starts',
             data: housingStartsData,
-            borderColor: '#34d399',
-            backgroundColor: 'rgba(52, 211, 153, 0.15)',
+            borderColor: SERIES.aqua,
+            backgroundColor: withAlpha(SERIES.aqua, 0.15),
             borderWidth: 2,
             borderDash: [3, 2],
             tension: 0.2,
@@ -1514,12 +1518,12 @@ function renderMacroPropertyChart(labels, creEmaData, residentialEmaData, housin
             },
             scales: {
                 y: {
-                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    grid: { color: GRID_COLOR },
                     ticks: { callback: (val) => val },
                     title: { display: true, text: 'Index' }
                 },
                 x: {
-                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    grid: { color: GRID_COLOR },
                     ticks: { maxTicksLimit: 8 }
                 }
             }
@@ -1537,8 +1541,8 @@ function renderMacroTradeLogisticsChart(labels, fxEmaData, freightEmaData, gscpi
         {
             label: 'Exchange rate (trade-weighted)',
             data: fxEmaData,
-            borderColor: '#38bdf8',
-            backgroundColor: 'rgba(56, 189, 248, 0.15)',
+            borderColor: SERIES.blue,
+            backgroundColor: withAlpha(SERIES.blue, 0.15),
             borderWidth: 2,
             tension: 0.2,
             pointRadius: labels.length > 50 ? 0 : 2,
@@ -1547,8 +1551,8 @@ function renderMacroTradeLogisticsChart(labels, fxEmaData, freightEmaData, gscpi
         {
             label: 'Freight rates',
             data: freightEmaData,
-            borderColor: '#f97316',
-            backgroundColor: 'rgba(249, 115, 22, 0.15)',
+            borderColor: SERIES.orange,
+            backgroundColor: withAlpha(SERIES.orange, 0.15),
             borderWidth: 2,
             tension: 0.2,
             pointRadius: labels.length > 50 ? 0 : 2,
@@ -1560,8 +1564,8 @@ function renderMacroTradeLogisticsChart(labels, fxEmaData, freightEmaData, gscpi
         datasets.push({
             label: 'Supply-chain pressure',
             data: gscpiData,
-            borderColor: '#e879f9',
-            backgroundColor: 'rgba(232, 121, 249, 0.15)',
+            borderColor: SERIES.aqua,
+            backgroundColor: withAlpha(SERIES.aqua, 0.15),
             borderWidth: 2,
             borderDash: [3, 3],
             tension: 0.2,
@@ -1589,7 +1593,7 @@ function renderMacroTradeLogisticsChart(labels, fxEmaData, freightEmaData, gscpi
             },
             scales: {
                 y: {
-                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    grid: { color: GRID_COLOR },
                     ticks: { callback: (val) => val },
                     title: { display: true, text: 'Index' }
                 },
@@ -1602,7 +1606,7 @@ function renderMacroTradeLogisticsChart(labels, fxEmaData, freightEmaData, gscpi
                     title: { display: true, text: 'Standard deviations' }
                 },
                 x: {
-                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    grid: { color: GRID_COLOR },
                     ticks: { maxTicksLimit: 8 }
                 }
             }
@@ -1624,8 +1628,8 @@ function renderMacroSentimentChart(labels, sentimentData, retailDefaultData, dea
                     type: 'line',
                     label: 'Consumer sentiment',
                     data: sentimentData,
-                    borderColor: '#a855f7',
-                    backgroundColor: 'rgba(168, 85, 247, 0.15)',
+                    borderColor: SERIES.blue,
+                    backgroundColor: withAlpha(SERIES.blue, 0.15),
                     borderWidth: 2.2,
                     tension: 0.25,
                     fill: true,
@@ -1636,8 +1640,8 @@ function renderMacroSentimentChart(labels, sentimentData, retailDefaultData, dea
                     type: 'line',
                     label: 'Deal activity',
                     data: dealActivityData || [],
-                    borderColor: '#06b6d4',
-                    backgroundColor: 'rgba(6, 182, 212, 0.15)',
+                    borderColor: SERIES.orange,
+                    backgroundColor: withAlpha(SERIES.orange, 0.15),
                     borderWidth: 2,
                     tension: 0.25,
                     fill: false,
@@ -1648,8 +1652,8 @@ function renderMacroSentimentChart(labels, sentimentData, retailDefaultData, dea
                     type: 'line',
                     label: 'Household default rate',
                     data: retailDefaultData || [],
-                    borderColor: '#f59e0b',
-                    backgroundColor: 'rgba(245, 158, 11, 0.08)',
+                    borderColor: SERIES.aqua,
+                    backgroundColor: withAlpha(SERIES.aqua, 0.08),
                     borderWidth: 2,
                     borderDash: [4, 4],
                     tension: 0.25,
@@ -1661,8 +1665,8 @@ function renderMacroSentimentChart(labels, sentimentData, retailDefaultData, dea
                     type: 'line',
                     label: 'Corporate default rate',
                     data: corporateDefaultPctData || [],
-                    borderColor: '#f43f5e',
-                    backgroundColor: 'rgba(244, 63, 94, 0.08)',
+                    borderColor: SERIES.yellow,
+                    backgroundColor: withAlpha(SERIES.yellow, 0.08),
                     borderWidth: 2,
                     borderDash: [5, 3],
                     tension: 0.25,
@@ -1692,7 +1696,7 @@ function renderMacroSentimentChart(labels, sentimentData, retailDefaultData, dea
                     position: 'left',
                     min: 0,
                     suggestedMax: 220,
-                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    grid: { color: GRID_COLOR },
                     ticks: { callback: (val) => val },
                     title: { display: true, text: 'Index' }
                 },
@@ -1707,7 +1711,7 @@ function renderMacroSentimentChart(labels, sentimentData, retailDefaultData, dea
                     title: { display: true, text: 'Default Rate (%)' }
                 },
                 x: {
-                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    grid: { color: GRID_COLOR },
                     ticks: { maxTicksLimit: 8 }
                 }
             }
@@ -1735,8 +1739,8 @@ function renderMacroSovereignFundChart(labels, weightData, targetData, ownership
                     type: 'line',
                     label: 'District equity weight',
                     data: weightData,
-                    borderColor: '#0284c7',
-                    backgroundColor: 'rgba(2, 132, 199, 0.12)',
+                    borderColor: SERIES.blue,
+                    backgroundColor: withAlpha(SERIES.blue, 0.12),
                     borderWidth: 2,
                     tension: 0.2,
                     fill: false,
@@ -1747,7 +1751,7 @@ function renderMacroSovereignFundChart(labels, weightData, targetData, ownership
                     type: 'line',
                     label: 'Policy weight',
                     data: targetData,
-                    borderColor: '#d97706',
+                    borderColor: SERIES.orange,
                     borderWidth: 2,
                     borderDash: [5, 4],
                     tension: 0,
@@ -1759,8 +1763,8 @@ function renderMacroSovereignFundChart(labels, weightData, targetData, ownership
                     type: 'line',
                     label: 'Share of float owned',
                     data: ownershipData,
-                    borderColor: '#059669',
-                    backgroundColor: 'rgba(5, 150, 105, 0.12)',
+                    borderColor: SERIES.aqua,
+                    backgroundColor: withAlpha(SERIES.aqua, 0.12),
                     borderWidth: 2,
                     tension: 0.2,
                     fill: false,
@@ -1787,12 +1791,12 @@ function renderMacroSovereignFundChart(labels, weightData, targetData, ownership
                     display: true,
                     position: 'left',
                     suggestedMin: 0,
-                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    grid: { color: GRID_COLOR },
                     ticks: { callback: (val) => val.toFixed(1) + '%' },
                     title: { display: true, text: 'Percent' }
                 },
                 x: {
-                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    grid: { color: GRID_COLOR },
                     ticks: { maxTicksLimit: 8 }
                 }
             }
@@ -1811,8 +1815,8 @@ function renderMacroGovtSpendingChart(labels, govtSpendingEmaData, sovereignDebt
             type: 'line',
             label: 'Government spending',
             data: govtSpendingEmaData,
-            borderColor: '#34d399',
-            backgroundColor: 'rgba(52, 211, 153, 0.15)',
+            borderColor: SERIES.blue,
+            backgroundColor: withAlpha(SERIES.blue, 0.15),
             borderWidth: 2,
             tension: 0.2,
             fill: true,
@@ -1823,8 +1827,8 @@ function renderMacroGovtSpendingChart(labels, govtSpendingEmaData, sovereignDebt
             type: 'line',
             label: 'Public debt (% of GDP)',
             data: sovereignDebtData,
-            borderColor: '#f43f5e',
-            backgroundColor: 'rgba(244, 63, 94, 0.08)',
+            borderColor: SERIES.orange,
+            backgroundColor: withAlpha(SERIES.orange, 0.08),
             borderWidth: 2.2,
             borderDash: [5, 4],
             tension: 0.2,
@@ -1839,8 +1843,8 @@ function renderMacroGovtSpendingChart(labels, govtSpendingEmaData, sovereignDebt
             type: 'line',
             label: 'Corporate tax rate',
             data: taxData,
-            borderColor: '#38bdf8',
-            backgroundColor: 'rgba(56, 189, 248, 0.12)',
+            borderColor: SERIES.aqua,
+            backgroundColor: withAlpha(SERIES.aqua, 0.12),
             borderWidth: 2,
             tension: 0.2,
             fill: false,
@@ -1854,8 +1858,8 @@ function renderMacroGovtSpendingChart(labels, govtSpendingEmaData, sovereignDebt
             type: 'line',
             label: 'Sovereign risk spread',
             data: sovereignRiskSpreadData,
-            borderColor: '#a855f7',
-            backgroundColor: 'rgba(168, 85, 247, 0.15)',
+            borderColor: SERIES.yellow,
+            backgroundColor: withAlpha(SERIES.yellow, 0.15),
             borderWidth: 2,
             tension: 0.2,
             fill: false,
@@ -1869,8 +1873,8 @@ function renderMacroGovtSpendingChart(labels, govtSpendingEmaData, sovereignDebt
             type: 'line',
             label: 'Primary deficit (% of GDP)',
             data: primaryDeficitData,
-            borderColor: '#f59e0b',
-            backgroundColor: 'rgba(245, 158, 11, 0.15)',
+            borderColor: SERIES.magenta,
+            backgroundColor: withAlpha(SERIES.magenta, 0.15),
             borderWidth: 1.8,
             borderDash: [3, 3],
             tension: 0.2,
@@ -1913,7 +1917,7 @@ function renderMacroGovtSpendingChart(labels, govtSpendingEmaData, sovereignDebt
                     type: 'linear',
                     display: true,
                     position: 'left',
-                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    grid: { color: GRID_COLOR },
                     ticks: { callback: (val) => val.toFixed(0) },
                     title: { display: true, text: 'Percent / index' }
                 },
@@ -1941,7 +1945,7 @@ function renderMacroGovtSpendingChart(labels, govtSpendingEmaData, sovereignDebt
                     grid: { drawOnChartArea: false }
                 },
                 x: {
-                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    grid: { color: GRID_COLOR },
                     ticks: { maxTicksLimit: 8 }
                 }
             }
@@ -1963,8 +1967,8 @@ function renderMacroInterbankLiquidityChart(labels, interbankSpreadBpsData, cred
                 {
                     label: 'Interbank spread',
                     data: interbankSpreadBpsData,
-                    borderColor: '#38bdf8',
-                    backgroundColor: 'rgba(56, 189, 248, 0.20)',
+                    borderColor: SERIES.blue,
+                    backgroundColor: withAlpha(SERIES.blue, 0.20),
                     borderWidth: 2,
                     tension: 0.2,
                     fill: true,
@@ -1973,8 +1977,8 @@ function renderMacroInterbankLiquidityChart(labels, interbankSpreadBpsData, cred
                 {
                     label: 'Corporate credit spread',
                     data: creditSpreadBpsData,
-                    borderColor: '#f43f5e',
-                    backgroundColor: 'rgba(244, 63, 94, 0.10)',
+                    borderColor: SERIES.orange,
+                    backgroundColor: withAlpha(SERIES.orange, 0.10),
                     borderWidth: 2,
                     borderDash: [4, 4],
                     tension: 0.2,
@@ -1995,12 +1999,12 @@ function renderMacroInterbankLiquidityChart(labels, interbankSpreadBpsData, cred
             },
             scales: {
                 y: {
-                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    grid: { color: GRID_COLOR },
                     ticks: { callback: (val) => val + ' bps' },
                     title: { display: true, text: 'Basis points' }
                 },
                 x: {
-                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    grid: { color: GRID_COLOR },
                     ticks: { maxTicksLimit: 8 }
                 }
             }
@@ -2019,8 +2023,8 @@ function renderMacroFciChart(labels, fciData, fciEmaData, sloosData = []) {
             type: 'line',
             label: 'Trend',
             data: fciEmaData,
-            borderColor: '#c084fc',
-            backgroundColor: '#c084fc',
+            borderColor: THEME_COLORS.textMuted,
+            backgroundColor: THEME_COLORS.textMuted,
             borderWidth: 2,
             borderDash: [4, 4],
             tension: 0.3,
@@ -2031,8 +2035,8 @@ function renderMacroFciChart(labels, fciData, fciEmaData, sloosData = []) {
             type: 'bar',
             label: 'Financial conditions',
             data: fciData,
-            backgroundColor: fciData.map(val => val > 0 ? 'rgba(244, 63, 94, 0.45)' : 'rgba(74, 222, 128, 0.45)'),
-            borderColor: fciData.map(val => val > 0 ? '#f43f5e' : '#4ade80'),
+            backgroundColor: fciData.map(val => val > 0 ? withAlpha(THEME_COLORS.negative, 0.45) : withAlpha(THEME_COLORS.positive, 0.45)),
+            borderColor: fciData.map(val => val > 0 ? THEME_COLORS.negative : THEME_COLORS.positive),
             borderWidth: 1,
             borderRadius: 3,
             yAxisID: 'y'
@@ -2044,8 +2048,8 @@ function renderMacroFciChart(labels, fciData, fciEmaData, sloosData = []) {
             type: 'line',
             label: 'Banks tightening standards (net)',
             data: sloosData,
-            borderColor: '#f59e0b',
-            backgroundColor: '#f59e0b',
+            borderColor: SERIES.blue,
+            backgroundColor: SERIES.blue,
             borderWidth: 2,
             tension: 0.25,
             pointRadius: labels.length > 50 ? 0 : 2,
@@ -2085,7 +2089,7 @@ function renderMacroFciChart(labels, fciData, fciEmaData, sloosData = []) {
                 y: {
                     type: 'linear',
                     display: true,
-                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    grid: { color: GRID_COLOR },
                     ticks: {
                         callback: (val) => (val > 0.001 ? '+' : '') + val.toFixed(2) + ' σ'
                     },
@@ -2101,7 +2105,7 @@ function renderMacroFciChart(labels, fciData, fciEmaData, sloosData = []) {
                     title: { display: true, text: 'Net tightening (%)' }
                 },
                 x: {
-                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    grid: { color: GRID_COLOR },
                     ticks: { maxTicksLimit: 8 }
                 }
             }
@@ -2123,8 +2127,8 @@ function renderMacroCostPushChart(labels, agriLagData, energySupplyDragData, fre
                 {
                     label: 'Food',
                     data: agriLagData,
-                    borderColor: '#a3e635',
-                    backgroundColor: 'rgba(163, 230, 53, 0.15)',
+                    borderColor: SERIES.blue,
+                    backgroundColor: withAlpha(SERIES.blue, 0.15),
                     borderWidth: 2,
                     tension: 0.25,
                     fill: true,
@@ -2133,8 +2137,8 @@ function renderMacroCostPushChart(labels, agriLagData, energySupplyDragData, fre
                 {
                     label: 'Energy',
                     data: energySupplyDragData,
-                    borderColor: '#eab308',
-                    backgroundColor: 'rgba(234, 179, 8, 0.10)',
+                    borderColor: SERIES.orange,
+                    backgroundColor: withAlpha(SERIES.orange, 0.10),
                     borderWidth: 2,
                     tension: 0.25,
                     fill: false,
@@ -2143,8 +2147,8 @@ function renderMacroCostPushChart(labels, agriLagData, energySupplyDragData, fre
                 {
                     label: 'Freight',
                     data: freightSupplyDragData,
-                    borderColor: '#f97316',
-                    backgroundColor: 'rgba(249, 115, 22, 0.10)',
+                    borderColor: SERIES.aqua,
+                    backgroundColor: withAlpha(SERIES.aqua, 0.10),
                     borderWidth: 2,
                     tension: 0.25,
                     fill: false,
@@ -2168,12 +2172,12 @@ function renderMacroCostPushChart(labels, agriLagData, energySupplyDragData, fre
                 y: {
                     type: 'linear',
                     display: true,
-                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    grid: { color: GRID_COLOR },
                     ticks: { callback: (val) => (val >= 0 ? '+' : '') + val.toFixed(0) + ' bps' },
                     title: { display: true, text: 'Basis points' }
                 },
                 x: {
-                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    grid: { color: GRID_COLOR },
                     ticks: { maxTicksLimit: 8 }
                 }
             }
@@ -2191,8 +2195,8 @@ function renderMacroSectoralInflationChart(labels, headlineData, supercoreData, 
         {
             label: 'Headline CPI',
             data: headlineData,
-            borderColor: '#facc15',
-            backgroundColor: 'rgba(250, 204, 21, 0.10)',
+            borderColor: SERIES.blue,
+            backgroundColor: withAlpha(SERIES.blue, 0.10),
             borderWidth: 2.5,
             tension: 0.3,
             pointRadius: labels.length > 50 ? 0 : 1.5
@@ -2200,8 +2204,8 @@ function renderMacroSectoralInflationChart(labels, headlineData, supercoreData, 
         {
             label: 'Core services',
             data: supercoreData,
-            borderColor: '#38bdf8',
-            backgroundColor: 'rgba(56, 189, 248, 0.08)',
+            borderColor: SERIES.orange,
+            backgroundColor: withAlpha(SERIES.orange, 0.08),
             borderWidth: 2,
             tension: 0.3,
             pointRadius: labels.length > 50 ? 0 : 1.5
@@ -2209,8 +2213,8 @@ function renderMacroSectoralInflationChart(labels, headlineData, supercoreData, 
         {
             label: 'Core goods',
             data: coreGoodsData,
-            borderColor: '#c084fc',
-            backgroundColor: 'rgba(192, 132, 252, 0.08)',
+            borderColor: SERIES.aqua,
+            backgroundColor: withAlpha(SERIES.aqua, 0.08),
             borderWidth: 2,
             tension: 0.3,
             pointRadius: labels.length > 50 ? 0 : 1.5
@@ -2218,7 +2222,8 @@ function renderMacroSectoralInflationChart(labels, headlineData, supercoreData, 
         {
             label: 'Food',
             data: foodLagData,
-            borderColor: '#4ade80',
+            borderColor: SERIES.yellow,
+            backgroundColor: SERIES.yellow,
             borderWidth: 1.5,
             borderDash: [4, 4],
             tension: 0.3,
@@ -2230,8 +2235,8 @@ function renderMacroSectoralInflationChart(labels, headlineData, supercoreData, 
         datasets.push({
             label: 'Producer prices',
             data: ppiData,
-            borderColor: '#f97316',
-            backgroundColor: 'rgba(249, 115, 22, 0.08)',
+            borderColor: SERIES.magenta,
+            backgroundColor: withAlpha(SERIES.magenta, 0.08),
             borderWidth: 2,
             tension: 0.3,
             pointRadius: labels.length > 50 ? 0 : 1.5
@@ -2256,12 +2261,12 @@ function renderMacroSectoralInflationChart(labels, headlineData, supercoreData, 
                 y: {
                     type: 'linear',
                     display: true,
-                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    grid: { color: GRID_COLOR },
                     ticks: { callback: (val) => val.toFixed(1) + '%' },
                     title: { display: true, text: 'Year on year (%)' }
                 },
                 x: {
-                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    grid: { color: GRID_COLOR },
                     ticks: { maxTicksLimit: 8 }
                 }
             }
@@ -2279,8 +2284,8 @@ function renderMacroCreditCliffChart(labels, igBpsData, hyBpsData, cliffRatioDat
         {
             label: 'High-yield spread',
             data: hyBpsData,
-            borderColor: '#f43f5e',
-            backgroundColor: 'rgba(244, 63, 94, 0.12)',
+            borderColor: SERIES.blue,
+            backgroundColor: withAlpha(SERIES.blue, 0.12),
             borderWidth: 2.5,
             tension: 0.25,
             fill: true,
@@ -2290,8 +2295,8 @@ function renderMacroCreditCliffChart(labels, igBpsData, hyBpsData, cliffRatioDat
         {
             label: 'Investment-grade spread',
             data: igBpsData,
-            borderColor: '#38bdf8',
-            backgroundColor: 'rgba(56, 189, 248, 0.15)',
+            borderColor: SERIES.orange,
+            backgroundColor: withAlpha(SERIES.orange, 0.15),
             borderWidth: 2,
             tension: 0.25,
             fill: true,
@@ -2304,8 +2309,8 @@ function renderMacroCreditCliffChart(labels, igBpsData, hyBpsData, cliffRatioDat
         datasets.push({
             label: 'Corporate default rate',
             data: corporateDefaultBpsData,
-            borderColor: '#fb7185',
-            backgroundColor: 'rgba(251, 113, 133, 0.1)',
+            borderColor: SERIES.aqua,
+            backgroundColor: withAlpha(SERIES.aqua, 0.1),
             borderWidth: 2,
             borderDash: [4, 4],
             tension: 0.25,
@@ -2318,7 +2323,8 @@ function renderMacroCreditCliffChart(labels, igBpsData, hyBpsData, cliffRatioDat
     datasets.push({
         label: 'High-yield / investment-grade',
         data: cliffRatioData,
-        borderColor: '#fbbf24',
+        borderColor: SERIES.yellow,
+        backgroundColor: SERIES.yellow,
         borderWidth: 2,
         tension: 0.25,
         yAxisID: 'y1',
@@ -2349,7 +2355,7 @@ function renderMacroCreditCliffChart(labels, igBpsData, hyBpsData, cliffRatioDat
                 y: {
                     type: 'linear',
                     position: 'left',
-                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    grid: { color: GRID_COLOR },
                     ticks: { callback: (val) => val.toFixed(0) + ' bps' },
                     title: { display: true, text: 'Basis points' }
                 },
@@ -2363,7 +2369,7 @@ function renderMacroCreditCliffChart(labels, igBpsData, hyBpsData, cliffRatioDat
                     title: { display: true, text: 'Ratio' }
                 },
                 x: {
-                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    grid: { color: GRID_COLOR },
                     ticks: { maxTicksLimit: 8 }
                 }
             }
@@ -2381,8 +2387,8 @@ function renderMacroInventoryCycleChart(labels, invGapData, outputGapData, energ
         {
             label: 'Inventory overhang',
             data: invGapData,
-            borderColor: '#2dd4bf',
-            backgroundColor: 'rgba(45, 212, 191, 0.15)',
+            borderColor: SERIES.blue,
+            backgroundColor: withAlpha(SERIES.blue, 0.15),
             borderWidth: 2,
             tension: 0.3,
             fill: true,
@@ -2392,7 +2398,8 @@ function renderMacroInventoryCycleChart(labels, invGapData, outputGapData, energ
         {
             label: 'Output gap',
             data: outputGapData,
-            borderColor: '#818cf8',
+            borderColor: SERIES.orange,
+            backgroundColor: SERIES.orange,
             borderWidth: 2,
             borderDash: [4, 4],
             tension: 0.3,
@@ -2405,7 +2412,7 @@ function renderMacroInventoryCycleChart(labels, invGapData, outputGapData, energ
         datasets.push({
             label: 'Capacity utilisation',
             data: capacityUtilizationData,
-            borderColor: '#4ade80',
+            borderColor: SERIES.aqua,
             borderWidth: 2,
             tension: 0.25,
             fill: false,
@@ -2417,7 +2424,7 @@ function renderMacroInventoryCycleChart(labels, invGapData, outputGapData, energ
     datasets.push({
         label: 'Strategic energy stocks',
         data: energyBufData,
-        borderColor: '#f59e0b',
+        borderColor: SERIES.yellow,
         borderWidth: 2,
         borderDash: [5, 3],
         tension: 0.25,
@@ -2453,7 +2460,7 @@ function renderMacroInventoryCycleChart(labels, invGapData, outputGapData, energ
                 y: {
                     type: 'linear',
                     position: 'left',
-                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    grid: { color: GRID_COLOR },
                     ticks: { callback: (val) => val.toFixed(1) + '%' },
                     title: { display: true, text: 'Gap (%)' }
                 },
@@ -2467,7 +2474,7 @@ function renderMacroInventoryCycleChart(labels, invGapData, outputGapData, energ
                     title: { display: true, text: 'Utilisation (%) / stocks (index)' }
                 },
                 x: {
-                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    grid: { color: GRID_COLOR },
                     ticks: { maxTicksLimit: 8 }
                 }
             }
@@ -2487,9 +2494,20 @@ function renderMacroPolicyRuleChart(labels, ruleGapBpsData, policyRateData, targ
             labels: labels,
             datasets: [
                 {
+                    label: 'Policy rate',
+                    data: policyRateData,
+                    borderColor: SERIES.blue,
+                    backgroundColor: SERIES.blue,
+                    borderWidth: 2,
+                    tension: 0.15,
+                    yAxisID: 'y',
+                    pointRadius: labels.length > 50 ? 0 : 1
+                },
+                {
                     label: 'Rule target',
                     data: targetRateData,
-                    borderColor: '#38bdf8',
+                    borderColor: SERIES.orange,
+                    backgroundColor: SERIES.orange,
                     borderWidth: 2,
                     borderDash: [4, 4],
                     tension: 0.15,
@@ -2497,18 +2515,10 @@ function renderMacroPolicyRuleChart(labels, ruleGapBpsData, policyRateData, targ
                     pointRadius: labels.length > 50 ? 0 : 1
                 },
                 {
-                    label: 'Policy rate',
-                    data: policyRateData,
-                    borderColor: '#34d399',
-                    borderWidth: 2,
-                    tension: 0.15,
-                    yAxisID: 'y',
-                    pointRadius: labels.length > 50 ? 0 : 1
-                },
-                {
                     label: 'Rate minus rule target',
                     data: ruleGapBpsData,
-                    borderColor: '#fbbf24',
+                    borderColor: SERIES.aqua,
+                    backgroundColor: SERIES.aqua,
                     borderWidth: 2,
                     tension: 0.25,
                     yAxisID: 'y1',
@@ -2534,7 +2544,7 @@ function renderMacroPolicyRuleChart(labels, ruleGapBpsData, policyRateData, targ
                 y: {
                     type: 'linear',
                     position: 'left',
-                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    grid: { color: GRID_COLOR },
                     ticks: { callback: (val) => val.toFixed(1) + '%' },
                     title: { display: true, text: 'Rates (%)' }
                 },
@@ -2546,7 +2556,7 @@ function renderMacroPolicyRuleChart(labels, ruleGapBpsData, policyRateData, targ
                     title: { display: true, text: 'Gap (bps)' }
                 },
                 x: {
-                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    grid: { color: GRID_COLOR },
                     ticks: { maxTicksLimit: 8 }
                 }
             }
@@ -2570,8 +2580,8 @@ function renderMacroWealthEffectChart(labels, ratioData, trendData, equityGapDat
                     // that reaches aggregate demand.
                     label: 'Equity wealth vs trend',
                     data: equityGapData,
-                    borderColor: '#f472b6',
-                    backgroundColor: 'rgba(244, 114, 182, 0.15)',
+                    borderColor: SERIES.blue,
+                    backgroundColor: withAlpha(SERIES.blue, 0.15),
                     borderWidth: 2.2,
                     tension: 0.25,
                     fill: true,
@@ -2582,7 +2592,7 @@ function renderMacroWealthEffectChart(labels, ratioData, trendData, equityGapDat
                 {
                     label: 'Housing wealth vs trend',
                     data: housingGapData,
-                    borderColor: '#fb923c',
+                    borderColor: SERIES.orange,
                     borderWidth: 2,
                     tension: 0.25,
                     fill: false,
@@ -2592,7 +2602,7 @@ function renderMacroWealthEffectChart(labels, ratioData, trendData, equityGapDat
                 {
                     label: 'Output gap',
                     data: outputGapData,
-                    borderColor: '#38bdf8',
+                    borderColor: SERIES.aqua,
                     borderWidth: 2,
                     tension: 0.25,
                     fill: false,
@@ -2602,7 +2612,7 @@ function renderMacroWealthEffectChart(labels, ratioData, trendData, equityGapDat
                 {
                     label: 'Equity wealth',
                     data: ratioData,
-                    borderColor: '#34d399',
+                    borderColor: SERIES.yellow,
                     borderWidth: 2,
                     tension: 0.25,
                     fill: false,
@@ -2644,7 +2654,7 @@ function renderMacroWealthEffectChart(labels, ratioData, trendData, equityGapDat
                 y: {
                     type: 'linear',
                     position: 'left',
-                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    grid: { color: GRID_COLOR },
                     ticks: { callback: (val) => val.toFixed(0) + '%' },
                     title: { display: true, text: 'Deviation from trend (%)' }
                 },
@@ -2656,7 +2666,7 @@ function renderMacroWealthEffectChart(labels, ratioData, trendData, equityGapDat
                     title: { display: true, text: 'Index (start = 100)' }
                 },
                 x: {
-                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    grid: { color: GRID_COLOR },
                     ticks: { maxTicksLimit: 8 }
                 }
             }
@@ -2678,8 +2688,8 @@ function renderMacroLeadingIndicatorsChart(labels, pmiData, housingStartsData, m
                 {
                     label: 'Manufacturing PMI',
                     data: pmiData,
-                    borderColor: '#38bdf8',
-                    backgroundColor: 'rgba(56, 189, 248, 0.10)',
+                    borderColor: SERIES.blue,
+                    backgroundColor: withAlpha(SERIES.blue, 0.10),
                     borderWidth: 2.5,
                     tension: 0.25,
                     yAxisID: 'y',
@@ -2688,8 +2698,8 @@ function renderMacroLeadingIndicatorsChart(labels, pmiData, housingStartsData, m
                 {
                     label: 'Housing starts',
                     data: housingStartsData,
-                    borderColor: '#34d399',
-                    backgroundColor: 'rgba(52, 211, 153, 0.08)',
+                    borderColor: SERIES.orange,
+                    backgroundColor: withAlpha(SERIES.orange, 0.08),
                     borderWidth: 2,
                     tension: 0.25,
                     yAxisID: 'y',
@@ -2698,8 +2708,8 @@ function renderMacroLeadingIndicatorsChart(labels, pmiData, housingStartsData, m
                 {
                     label: 'Money supply growth',
                     data: moneySupplyGrowthData,
-                    borderColor: '#c084fc',
-                    backgroundColor: 'rgba(192, 132, 252, 0.08)',
+                    borderColor: SERIES.aqua,
+                    backgroundColor: withAlpha(SERIES.aqua, 0.08),
                     borderWidth: 2,
                     tension: 0.3,
                     yAxisID: 'y1',
@@ -2708,7 +2718,8 @@ function renderMacroLeadingIndicatorsChart(labels, pmiData, housingStartsData, m
                 {
                     label: 'Trade balance (% of GDP)',
                     data: tradeBalanceData,
-                    borderColor: '#f59e0b',
+                    borderColor: SERIES.yellow,
+                    backgroundColor: SERIES.yellow,
                     borderWidth: 2,
                     borderDash: [3, 2],
                     tension: 0.25,
@@ -2718,7 +2729,8 @@ function renderMacroLeadingIndicatorsChart(labels, pmiData, housingStartsData, m
                 {
                     label: 'Producer prices',
                     data: ppiData,
-                    borderColor: '#f97316',
+                    borderColor: SERIES.magenta,
+                    backgroundColor: SERIES.magenta,
                     borderWidth: 1.5,
                     borderDash: [4, 4],
                     tension: 0.3,
@@ -2753,7 +2765,7 @@ function renderMacroLeadingIndicatorsChart(labels, pmiData, housingStartsData, m
                     position: 'left',
                     suggestedMin: 40,
                     suggestedMax: 120,
-                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    grid: { color: GRID_COLOR },
                     ticks: { callback: (val) => val.toFixed(0) },
                     title: { display: true, text: 'Index' }
                 },
@@ -2765,7 +2777,7 @@ function renderMacroLeadingIndicatorsChart(labels, pmiData, housingStartsData, m
                     title: { display: true, text: 'Percent' }
                 },
                 x: {
-                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    grid: { color: GRID_COLOR },
                     ticks: { maxTicksLimit: 8 }
                 }
             }
@@ -2788,8 +2800,8 @@ function renderMacroHouseholdCreditChart(labels, householdDsrData, householdDtiD
                     type: 'bar',
                     label: 'Credit-to-GDP gap',
                     data: creditToGdpGapData,
-                    backgroundColor: creditToGdpGapData.map(v => v >= 0 ? 'rgba(245, 158, 11, 0.35)' : 'rgba(14, 165, 233, 0.35)'),
-                    borderColor: creditToGdpGapData.map(v => v >= 0 ? '#f59e0b' : '#0ea5e9'),
+                    backgroundColor: creditToGdpGapData.map(v => v >= 0 ? withAlpha(THEME_COLORS.warning, 0.35) : withAlpha(THEME_COLORS.textMuted, 0.25)),
+                    borderColor: creditToGdpGapData.map(v => v >= 0 ? THEME_COLORS.warning : withAlpha(THEME_COLORS.textMuted, 0.6)),
                     borderWidth: 1,
                     borderRadius: 2,
                     barPercentage: 0.65,
@@ -2800,8 +2812,8 @@ function renderMacroHouseholdCreditChart(labels, householdDsrData, householdDtiD
                     type: 'line',
                     label: 'Debt service ratio',
                     data: householdDsrData,
-                    borderColor: '#38bdf8',
-                    backgroundColor: 'rgba(56, 189, 248, 0.15)',
+                    borderColor: SERIES.blue,
+                    backgroundColor: withAlpha(SERIES.blue, 0.15),
                     borderWidth: 2.2,
                     tension: 0.25,
                     pointRadius: labels.length > 50 ? 0 : 2,
@@ -2811,8 +2823,8 @@ function renderMacroHouseholdCreditChart(labels, householdDsrData, householdDtiD
                     type: 'line',
                     label: 'Countercyclical buffer',
                     data: ccybRateData,
-                    borderColor: '#c084fc',
-                    backgroundColor: 'rgba(192, 132, 252, 0.15)',
+                    borderColor: SERIES.orange,
+                    backgroundColor: withAlpha(SERIES.orange, 0.15),
                     borderWidth: 2,
                     borderDash: [4, 4],
                     stepped: 'before',
@@ -2823,8 +2835,8 @@ function renderMacroHouseholdCreditChart(labels, householdDsrData, householdDtiD
                     type: 'line',
                     label: 'Household debt to income',
                     data: householdDtiData,
-                    borderColor: '#f43f5e',
-                    backgroundColor: 'rgba(244, 63, 94, 0.08)',
+                    borderColor: SERIES.aqua,
+                    backgroundColor: withAlpha(SERIES.aqua, 0.08),
                     borderWidth: 2,
                     tension: 0.25,
                     pointRadius: labels.length > 50 ? 0 : 1.5,
@@ -2840,7 +2852,7 @@ function renderMacroHouseholdCreditChart(labels, householdDsrData, householdDtiD
                 legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } },
                 tooltip: {
                     callbacks: {
-                        label: (ctx) => `${ctx.dataset.label}: ${ctx.raw !== null ? (ctx.raw >= 0 && ctx.dataset.label.includes('Gap') ? '+' : '') + ctx.raw.toFixed(2) + '%' : 'N/A'}`
+                        label: (ctx) => `${ctx.dataset.label}: ${ctx.raw !== null ? (ctx.raw >= 0 && ctx.dataset.label.toLowerCase().includes('gap') ? '+' : '') + ctx.raw.toFixed(2) + '%' : 'N/A'}`
                     }
                 }
             },
@@ -2848,7 +2860,7 @@ function renderMacroHouseholdCreditChart(labels, householdDsrData, householdDtiD
                 y: {
                     type: 'linear',
                     position: 'left',
-                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    grid: { color: GRID_COLOR },
                     ticks: { callback: (val) => val.toFixed(1) + '%' },
                     title: { display: true, text: 'Percent' }
                 },
@@ -2860,7 +2872,7 @@ function renderMacroHouseholdCreditChart(labels, householdDsrData, householdDtiD
                     title: { display: true, text: 'Debt-to-Income (%)' }
                 },
                 x: {
-                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    grid: { color: GRID_COLOR },
                     ticks: { maxTicksLimit: 8 }
                 }
             }
@@ -2883,8 +2895,8 @@ function renderMacroGlobalCycleChart(labels, outputGapData, foreignOutputGapData
                     type: 'bar',
                     label: 'Global demand gap',
                     data: globalDemandGapData,
-                    backgroundColor: globalDemandGapData.map(v => v >= 0 ? 'rgba(45, 212, 191, 0.35)' : 'rgba(244, 63, 94, 0.35)'),
-                    borderColor: globalDemandGapData.map(v => v >= 0 ? '#2dd4bf' : '#f43f5e'),
+                    backgroundColor: withAlpha(THEME_COLORS.textMuted, 0.25),
+                    borderColor: withAlpha(THEME_COLORS.textMuted, 0.6),
                     borderWidth: 1,
                     borderRadius: 2,
                     barPercentage: 0.65,
@@ -2895,8 +2907,8 @@ function renderMacroGlobalCycleChart(labels, outputGapData, foreignOutputGapData
                     type: 'line',
                     label: 'District output gap',
                     data: outputGapData,
-                    borderColor: '#34d399',
-                    backgroundColor: 'rgba(52, 211, 153, 0.15)',
+                    borderColor: SERIES.blue,
+                    backgroundColor: withAlpha(SERIES.blue, 0.15),
                     borderWidth: 2.2,
                     tension: 0.25,
                     pointRadius: labels.length > 50 ? 0 : 2,
@@ -2906,8 +2918,8 @@ function renderMacroGlobalCycleChart(labels, outputGapData, foreignOutputGapData
                     type: 'line',
                     label: 'Mainland output gap',
                     data: foreignOutputGapData,
-                    borderColor: '#38bdf8',
-                    backgroundColor: 'rgba(56, 189, 248, 0.15)',
+                    borderColor: SERIES.orange,
+                    backgroundColor: withAlpha(SERIES.orange, 0.15),
                     borderWidth: 2,
                     borderDash: [4, 4],
                     tension: 0.25,
@@ -2918,8 +2930,8 @@ function renderMacroGlobalCycleChart(labels, outputGapData, foreignOutputGapData
                     type: 'line',
                     label: 'Mainland policy rate',
                     data: foreignPolicyRateData,
-                    borderColor: '#fb923c',
-                    backgroundColor: 'rgba(251, 146, 60, 0.15)',
+                    borderColor: SERIES.aqua,
+                    backgroundColor: withAlpha(SERIES.aqua, 0.15),
                     borderWidth: 1.8,
                     tension: 0.25,
                     pointRadius: labels.length > 50 ? 0 : 1.5,
@@ -2943,7 +2955,7 @@ function renderMacroGlobalCycleChart(labels, outputGapData, foreignOutputGapData
                 y: {
                     type: 'linear',
                     position: 'left',
-                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    grid: { color: GRID_COLOR },
                     ticks: { callback: (val) => (val >= 0 ? '+' : '') + val.toFixed(1) + '%' },
                     title: { display: true, text: 'Gap (%)' }
                 },
@@ -2956,7 +2968,7 @@ function renderMacroGlobalCycleChart(labels, outputGapData, foreignOutputGapData
                     title: { display: true, text: 'Rate (%)' }
                 },
                 x: {
-                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    grid: { color: GRID_COLOR },
                     ticks: { maxTicksLimit: 8 }
                 }
             }
@@ -2979,8 +2991,8 @@ function renderMacroBankingLiquidityChart(labels, depositBetaData, mmfShareData,
                     type: 'line',
                     label: 'Deposit beta',
                     data: depositBetaData,
-                    borderColor: '#06b6d4',
-                    backgroundColor: 'rgba(6, 182, 212, 0.15)',
+                    borderColor: SERIES.blue,
+                    backgroundColor: withAlpha(SERIES.blue, 0.15),
                     borderWidth: 2.2,
                     tension: 0.25,
                     pointRadius: labels.length > 50 ? 0 : 2,
@@ -2990,8 +3002,8 @@ function renderMacroBankingLiquidityChart(labels, depositBetaData, mmfShareData,
                     type: 'line',
                     label: 'Money-market funds (% of deposits)',
                     data: mmfShareData,
-                    borderColor: '#a855f7',
-                    backgroundColor: 'rgba(168, 85, 247, 0.15)',
+                    borderColor: SERIES.orange,
+                    backgroundColor: withAlpha(SERIES.orange, 0.15),
                     borderWidth: 2,
                     tension: 0.25,
                     pointRadius: labels.length > 50 ? 0 : 1.5,
@@ -3001,8 +3013,8 @@ function renderMacroBankingLiquidityChart(labels, depositBetaData, mmfShareData,
                     type: 'line',
                     label: 'Interbank spread',
                     data: interbankSpreadBpsData,
-                    borderColor: '#f43f5e',
-                    backgroundColor: 'rgba(244, 63, 94, 0.10)',
+                    borderColor: SERIES.aqua,
+                    backgroundColor: withAlpha(SERIES.aqua, 0.10),
                     borderWidth: 1.8,
                     borderDash: [4, 4],
                     tension: 0.2,
@@ -3034,7 +3046,7 @@ function renderMacroBankingLiquidityChart(labels, depositBetaData, mmfShareData,
                     position: 'left',
                     suggestedMin: 0,
                     suggestedMax: 100,
-                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    grid: { color: GRID_COLOR },
                     ticks: { callback: (val) => val.toFixed(0) + '%' },
                     title: { display: true, text: 'Percent' }
                 },
@@ -3047,7 +3059,7 @@ function renderMacroBankingLiquidityChart(labels, depositBetaData, mmfShareData,
                     title: { display: true, text: 'Basis points' }
                 },
                 x: {
-                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    grid: { color: GRID_COLOR },
                     ticks: { maxTicksLimit: 8 }
                 }
             }

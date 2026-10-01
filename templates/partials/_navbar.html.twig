@@ -51,7 +51,7 @@
                 <div class="relative hidden sm:block" data-controller="navbar-search">
                     <form action="/search" method="GET" id="search-form" role="search">
                         <label for="market-search-input" class="sr-only">Search ticker or company</label>
-                        <input id="market-search-input" name="q" type="search" placeholder="Search ticker or company" class="bg-surface-container-lowest border border-outline-variant/25 rounded px-3 py-1 text-xs focus:ring-1 focus:ring-primary focus:border-primary w-52 xl:w-64 text-on-surface outline-none placeholder:text-on-surface-variant/50" autocomplete="off" role="combobox" aria-expanded="false" aria-controls="search-results-dropdown" aria-autocomplete="list" data-navbar-search-target="input" data-action="input->navbar-search#onInput keydown->navbar-search#onKeyDown">
+                        <input id="market-search-input" name="q" type="search" placeholder="Search ticker or company" class="bg-surface-container-lowest border border-outline-variant/25 rounded px-3 py-1 text-xs focus:ring-1 focus:ring-primary focus:border-primary w-52 xl:w-64 text-on-surface outline-none placeholder:text-on-surface-faint" autocomplete="off" role="combobox" aria-expanded="false" aria-controls="search-results-dropdown" aria-autocomplete="list" data-navbar-search-target="input" data-action="input->navbar-search#onInput keydown->navbar-search#onKeyDown">
                         <div id="search-results-dropdown" role="listbox" aria-label="Search results" data-navbar-search-target="dropdown" class="absolute left-0 mt-1 w-full bg-surface-container-high border border-outline-variant/30 rounded shadow-md hidden z-50 overflow-hidden text-xs">
                         </div>
                     </form>
@@ -84,14 +84,14 @@
                     <div class="absolute right-0 mt-3 w-64 rounded-lg border border-outline-variant/25 bg-surface-container-high shadow-lg shadow-black/40 p-2 z-50">
                         <form action="/search" method="GET" role="search" class="sm:hidden p-1 pb-2">
                             <label for="market-search-input-mobile" class="sr-only">Search ticker or company</label>
-                            <input id="market-search-input-mobile" name="q" type="search" placeholder="Search ticker or company" class="w-full bg-surface-container-lowest border border-outline-variant/25 rounded px-3 py-1.5 text-xs text-on-surface outline-none focus:ring-1 focus:ring-primary placeholder:text-on-surface-variant/50">
+                            <input id="market-search-input-mobile" name="q" type="search" placeholder="Search ticker or company" class="w-full bg-surface-container-lowest border border-outline-variant/25 rounded px-3 py-1.5 text-xs text-on-surface outline-none focus:ring-1 focus:ring-primary placeholder:text-on-surface-faint">
                         </form>
                         {% for group in [
                             { heading: null, links: market_links|merge(app.user ? [{ href: '/dashboard', label: 'Portfolio', active: portfolio_active }] : []) },
                             { heading: 'The District', links: district_links }
                         ] %}
                             {% if group.heading %}
-                                <p class="mt-1 px-3 pt-3 pb-1 border-t border-outline-variant/20 text-xs text-on-surface-variant/70">{{ group.heading }}</p>
+                                <p class="mt-1 px-3 pt-3 pb-1 border-t border-outline-variant/20 text-xs text-on-surface-faint">{{ group.heading }}</p>
                             {% endif %}
                             {% for link in group.links %}
                                 <a href="{{ link.href }}"

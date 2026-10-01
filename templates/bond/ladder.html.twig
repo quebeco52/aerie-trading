@@ -120,7 +120,7 @@
 									<td class="px-4 py-3 font-mono tabular-nums text-right font-medium text-on-surface" id="clean-{{ bond.ticker }}" title="Clean price, per {{ bond.faceValue|number_format(0) }} of face">
 										{{ bond.cleanPrice|number_format(2) }}
 									</td>
-									<td class="px-4 py-3 font-mono tabular-nums text-right font-semibold {{ row.change is null ? 'text-on-surface-variant/50' : (row.change >= 0 ? 'text-secondary' : 'text-tertiary') }}">
+									<td class="px-4 py-3 font-mono tabular-nums text-right font-semibold {{ row.change is null ? 'text-on-surface-faint' : (row.change >= 0 ? 'text-secondary' : 'text-tertiary') }}">
 										{% if row.change is null %}
 											&mdash;
 										{% else %}
@@ -133,7 +133,7 @@
 										{% if holdings[bond.ticker] is defined %}
 											<span class="font-medium text-on-surface">{{ holdings[bond.ticker]|number_format }}</span>
 										{% else %}
-											<span class="text-on-surface-variant/40">&mdash;</span>
+											<span class="text-on-surface-faint">&mdash;</span>
 										{% endif %}
 									</td>
 								</tr>
@@ -206,7 +206,7 @@
 										<td class="px-4 py-3 font-mono tabular-nums text-right font-medium text-on-surface" id="clean-{{ bond.ticker }}" title="Clean price, per {{ bond.faceValue|number_format(0) }} of face">
 											{{ bond.cleanPrice|number_format(2) }}
 										</td>
-										<td class="px-4 py-3 font-mono tabular-nums text-right font-semibold {{ row.change is null ? 'text-on-surface-variant/50' : (row.change >= 0 ? 'text-secondary' : 'text-tertiary') }}">
+										<td class="px-4 py-3 font-mono tabular-nums text-right font-semibold {{ row.change is null ? 'text-on-surface-faint' : (row.change >= 0 ? 'text-secondary' : 'text-tertiary') }}">
 											{% if row.change is null %}
 												&mdash;
 											{% else %}
@@ -219,7 +219,7 @@
 											{% if holdings[bond.ticker] is defined %}
 												<span class="font-medium text-on-surface">{{ holdings[bond.ticker]|number_format }}</span>
 											{% else %}
-												<span class="text-on-surface-variant/40">&mdash;</span>
+												<span class="text-on-surface-faint">&mdash;</span>
 											{% endif %}
 										</td>
 									</tr>

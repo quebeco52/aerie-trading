@@ -171,7 +171,7 @@
 							<p class="text-3xs text-on-surface-variant mt-2" data-gauge-status>
 								{{ (gap|abs * 100)|number_format(2) }}pp {{ gap < 0 ? 'under' : 'over' }} policy, {{ gap|abs <= gauge.band ? 'inside' : 'outside' }} the ±{{ (gauge.band * 100)|number_format(2) }}pp band.
 							</p>
-							<p class="text-3xs text-on-surface-variant/80 mt-0.5">
+							<p class="text-3xs text-on-surface-faint mt-0.5">
 								{% if gauge.key == 'district' %}
 									A fall of about {{ (gauge.breachingMove * 100)|number_format(0) }}% in the board against the rest of the fund takes it through the bottom of the band.
 								{% else %}

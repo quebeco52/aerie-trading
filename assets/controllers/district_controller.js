@@ -524,7 +524,7 @@ export default class extends Controller {
                 const type = holding.isShort ? 'SHORT' : 'LONG';
                 const shares = Number(holding.quantity).toLocaleString();
                 this.tooltipPositionTarget.textContent = `YOU HOLD: ${type} ${shares} SHS`;
-                this.tooltipPositionTarget.setAttribute('fill', holding.isShort ? THEME_COLORS.warning : THEME_COLORS.positive);
+                this.tooltipPositionTarget.setAttribute('fill', holding.isShort ? THEME_COLORS.negative : THEME_COLORS.positive);
             } else {
                 this.tooltipPositionTarget.textContent = '';
             }
@@ -684,7 +684,7 @@ export default class extends Controller {
             const wrap = document.createElement('div');
 
             const label = document.createElement('dt');
-            label.className = 'text-on-surface-variant/60 uppercase tracking-wider text-3xs';
+            label.className = 'text-on-surface-faint uppercase tracking-wider text-3xs';
             label.textContent = readout.label;
 
             const value = document.createElement('dd');
@@ -748,7 +748,7 @@ export default class extends Controller {
 
         if (!holding) {
             this.detailPositionTarget.textContent = 'None';
-            this.detailPositionTarget.className = 'text-on-surface-variant/50 tabular-nums font-normal';
+            this.detailPositionTarget.className = 'text-on-surface-faint tabular-nums font-normal';
             return;
         }
 
@@ -790,10 +790,10 @@ export default class extends Controller {
             if (holding) {
                 const isShort = Boolean(holding.isShort);
                 this.quickTradeHoldingTarget.textContent = `${isShort ? 'Short' : 'Long'} ${holding.quantity.toLocaleString()} shs`;
-                this.quickTradeHoldingTarget.className = `text-3xs font-mono font-semibold ${isShort ? 'text-warning' : 'text-secondary'}`;
+                this.quickTradeHoldingTarget.className = `text-3xs font-mono font-semibold ${isShort ? 'text-tertiary' : 'text-secondary'}`;
             } else {
                 this.quickTradeHoldingTarget.textContent = '0 shs';
-                this.quickTradeHoldingTarget.className = 'text-3xs font-mono font-semibold text-on-surface-variant/50';
+                this.quickTradeHoldingTarget.className = 'text-3xs font-mono font-semibold text-on-surface-faint';
             }
         }
 
@@ -1061,7 +1061,7 @@ export default class extends Controller {
             this.detailChangeTarget.className = 'tabular-nums ' + (change >= 0 ? 'text-secondary' : 'text-tertiary');
         } else {
             this.detailChangeTarget.innerText = '—';
-            this.detailChangeTarget.className = 'tabular-nums text-on-surface-variant/50';
+            this.detailChangeTarget.className = 'tabular-nums text-on-surface-faint';
         }
     }
 
@@ -1119,7 +1119,7 @@ export default class extends Controller {
         header.appendChild(badge);
 
         const time = document.createElement('span');
-        time.className = 'text-4xs font-mono text-on-surface-variant/50 shrink-0';
+        time.className = 'text-4xs font-mono text-on-surface-faint shrink-0';
         time.textContent = evt.recordedAt || '';
         header.appendChild(time);
         body.appendChild(header);
@@ -1189,7 +1189,7 @@ export default class extends Controller {
         const isMeaningful = value !== null && value !== undefined;
         node.textContent = `${label} ${formatGrowth(value)}`;
         node.className = 'text-2xs font-mono tabular-nums ' + (
-            !isMeaningful ? 'text-on-surface-variant/40' : (value >= 0 ? 'text-secondary' : 'text-tertiary')
+            !isMeaningful ? 'text-on-surface-faint' : (value >= 0 ? 'text-secondary' : 'text-tertiary')
         );
     }
 
@@ -1335,7 +1335,7 @@ export default class extends Controller {
         const node = document.createElement('span');
         const isMeaningful = value !== null && value !== undefined;
         node.className = 'tabular-nums ' + (
-            !isMeaningful ? 'text-on-surface-variant/40' : (value >= 0 ? 'text-secondary' : 'text-tertiary')
+            !isMeaningful ? 'text-on-surface-faint' : (value >= 0 ? 'text-secondary' : 'text-tertiary')
         );
         node.textContent = label ? `${label} ${text}` : text;
         return node;
@@ -1410,10 +1410,10 @@ export default class extends Controller {
             const driverLabel = document.createElement('span');
             driverLabel.className = 'min-w-0 flex items-baseline gap-1.5';
             const typeTag = document.createElement('span');
-            typeTag.className = 'text-4xs uppercase tracking-wider text-on-surface-variant/35 shrink-0';
+            typeTag.className = 'text-4xs uppercase tracking-wider text-on-surface-faint shrink-0';
             typeTag.textContent = DRIVER_TYPE_TAGS[driver.type] || DRIVER_TYPE_TAGS.company;
             const driverName = document.createElement('span');
-            driverName.className = 'text-on-surface-variant/70';
+            driverName.className = 'text-on-surface-faint';
             driverName.textContent = driver.label || '';
             driverLabel.append(typeTag, driverName);
             head.appendChild(driverLabel);
@@ -1424,13 +1424,13 @@ export default class extends Controller {
             const readings = Array.isArray(driver.readings) ? driver.readings : [];
             if (readings.length > 0) {
                 const readingLine = document.createElement('div');
-                readingLine.className = 'text-3xs font-mono tabular-nums text-on-surface-variant/45';
+                readingLine.className = 'text-3xs font-mono tabular-nums text-on-surface-faint';
                 readingLine.textContent = readings.map(r => `${r.label} ${formatReading(r)}`).join('  ·  ');
                 entry.appendChild(readingLine);
             } else if (driver.type === 'momentum' && driver.z !== undefined) {
                 // Sigma is how a standardised deviation is quoted; a bare "Z=" is model notation.
                 const momentumLine = document.createElement('div');
-                momentumLine.className = 'text-3xs font-mono tabular-nums text-on-surface-variant/45';
+                momentumLine.className = 'text-3xs font-mono tabular-nums text-on-surface-faint';
                 const z = Number(driver.z);
                 momentumLine.textContent = `Operating momentum ${z >= 0 ? '+' : '−'}${Math.abs(z).toFixed(1)}σ `
                     + (z >= 0 ? 'above trend' : 'below trend');

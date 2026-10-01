@@ -25,12 +25,33 @@
 
   --color-on-surface: #e8eaed;
   --color-on-surface-variant: #a1a9b4;
+  /* Third text tone, for sources, timestamps, placeholders and "—" where a value is unknown. Solid rather
+     than a faded on-surface-variant: below about 80% opacity that drops under 4.5:1 on the cards. */
+  --color-on-surface-faint: #8a919c;
   --color-outline-variant: #3b424b;
 
   /* Text on a filled primary/secondary/tertiary surface. */
   --color-on-primary: #06152e;
   --color-on-secondary: #04150c;
   --color-on-tertiary: #2a0507;
+}
+
+/* Chart series, in their fixed order: a chart gives its series the slots in legend order, its headline
+   first. The order was checked so neighbouring colours stay apart under protanopia and deuteranopia on
+   the card surface; reordering or adding a slot needs that check again. `static` emits them although no
+   utility uses them, since the chart scripts read them (assets/js/utils/colors.js SERIES). */
+@theme static {
+  --color-series-blue: #3987e5;
+  --color-series-orange: #d95926;
+  --color-series-aqua: #199e70;
+  --color-series-yellow: #c98500;
+  --color-series-magenta: #d55181;
+  --color-series-green: #008300;
+  --color-series-violet: #9085e9;
+  --color-series-red: #e66767;
+}
+
+@theme {
 
   /* --- Typography ---
      Sans for chrome and prose, mono for figures — prices, tickers, table cells — where digit

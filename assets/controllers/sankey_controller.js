@@ -2,7 +2,20 @@ import { Controller } from '@hotwired/stimulus';
 import { formatLarge } from '../js/utils/formatters.js';
 import { CHART_FONT_MONO } from '../js/utils/fonts.js';
 import { readPageData } from '../js/utils/page-data.js';
-import { THEME_COLORS, withAlpha } from '../js/utils/colors.js';
+import { THEME_COLORS, SERIES, withAlpha } from '../js/utils/colors.js';
+
+/**
+ * Node colour by role, which the API sends with each node: revenue and outside funding in blue, profit and the
+ * cash it leaves in the up colour, costs in the down colour, non-cash charges grey, and what is paid out to
+ * shareholders in violet. Every node is labelled, so the green and red pair never carries a meaning alone.
+ */
+const ROLE_COLORS = {
+    income: SERIES.blue,
+    profit: THEME_COLORS.positive,
+    cost: THEME_COLORS.negative,
+    noncash: THEME_COLORS.textMuted,
+    payout: SERIES.violet,
+};
 
 const formatSankeyValue = (num) => formatLarge(num, '$');
 
@@ -201,7 +214,10 @@ export default class extends Controller {
                     series: [
                         {
                             type: 'sankey',
-                            data: data.nodes,
+                            data: data.nodes.map(node => ({
+                                ...node,
+                                itemStyle: { color: ROLE_COLORS[node.role] ?? THEME_COLORS.textMuted },
+                            })),
                             links: data.links,
                             emphasis: {
                                 focus: 'adjacency'

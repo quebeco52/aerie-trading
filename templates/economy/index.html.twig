@@ -75,18 +75,18 @@
 
 			<div class="flex flex-col xl:flex-row justify-between items-stretch xl:items-center gap-3">
 				<div class="flex items-center flex-wrap gap-1" id="macroCategoryPills" role="group" aria-label="Filter by topic">
-					<button type="button" class="macro-cat-btn seg-btn" aria-pressed="true" data-category="all">All <span class="ml-0.5 text-on-surface-variant/70 tabular-nums">(27)</span></button>
-					<button type="button" class="macro-cat-btn seg-btn" aria-pressed="false" data-category="monetary">Rates and yields <span class="ml-0.5 text-on-surface-variant/70 tabular-nums">(5)</span></button>
-					<button type="button" class="macro-cat-btn seg-btn" aria-pressed="false" data-category="inflation">Inflation and output <span class="ml-0.5 text-on-surface-variant/70 tabular-nums">(4)</span></button>
-					<button type="button" class="macro-cat-btn seg-btn" aria-pressed="false" data-category="growth">Growth and labour <span class="ml-0.5 text-on-surface-variant/70 tabular-nums">(5)</span></button>
-					<button type="button" class="macro-cat-btn seg-btn" aria-pressed="false" data-category="credit">Credit and liquidity <span class="ml-0.5 text-on-surface-variant/70 tabular-nums">(6)</span></button>
-					<button type="button" class="macro-cat-btn seg-btn" aria-pressed="false" data-category="assets">Property and commodities <span class="ml-0.5 text-on-surface-variant/70 tabular-nums">(3)</span></button>
-					<button type="button" class="macro-cat-btn seg-btn" aria-pressed="false" data-category="public">Trade and public finance <span class="ml-0.5 text-on-surface-variant/70 tabular-nums">(4)</span></button>
+					<button type="button" class="macro-cat-btn seg-btn" aria-pressed="true" data-category="all">All <span class="ml-0.5 text-on-surface-faint tabular-nums">(27)</span></button>
+					<button type="button" class="macro-cat-btn seg-btn" aria-pressed="false" data-category="monetary">Rates and yields <span class="ml-0.5 text-on-surface-faint tabular-nums">(5)</span></button>
+					<button type="button" class="macro-cat-btn seg-btn" aria-pressed="false" data-category="inflation">Inflation and output <span class="ml-0.5 text-on-surface-faint tabular-nums">(4)</span></button>
+					<button type="button" class="macro-cat-btn seg-btn" aria-pressed="false" data-category="growth">Growth and labour <span class="ml-0.5 text-on-surface-faint tabular-nums">(5)</span></button>
+					<button type="button" class="macro-cat-btn seg-btn" aria-pressed="false" data-category="credit">Credit and liquidity <span class="ml-0.5 text-on-surface-faint tabular-nums">(6)</span></button>
+					<button type="button" class="macro-cat-btn seg-btn" aria-pressed="false" data-category="assets">Property and commodities <span class="ml-0.5 text-on-surface-faint tabular-nums">(3)</span></button>
+					<button type="button" class="macro-cat-btn seg-btn" aria-pressed="false" data-category="public">Trade and public finance <span class="ml-0.5 text-on-surface-faint tabular-nums">(4)</span></button>
 				</div>
 
 				<div class="relative w-full xl:w-64">
 					<label for="macroIndicatorSearch" class="sr-only">Filter charts</label>
-					<input type="search" id="macroIndicatorSearch" placeholder="Filter charts" class="w-full px-3 py-1.5 text-xs bg-surface-container-lowest border border-outline-variant/25 rounded text-on-surface placeholder:text-on-surface-variant/60 focus:outline-none focus:border-primary/60 transition-colors">
+					<input type="search" id="macroIndicatorSearch" placeholder="Filter charts" class="w-full px-3 py-1.5 text-xs bg-surface-container-lowest border border-outline-variant/25 rounded text-on-surface placeholder:text-on-surface-faint focus:outline-none focus:border-primary/60 transition-colors">
 				</div>
 			</div>
 
@@ -117,7 +117,7 @@
 							<div class="chart-canvas-container h-80 md:h-85 w-full relative">
 								<canvas id="macroRatesChart"></canvas>
 							</div>
-							<p class="mt-3 text-2xs text-on-surface-variant/70">Source: Monetary Authority; Treasury</p>
+							<p class="mt-3 text-2xs text-on-surface-faint">Source: Monetary Authority; Treasury</p>
 						</div>
 
 						<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-macro-category="monetary">
@@ -136,7 +136,7 @@
 							<div class="chart-canvas-container h-80 md:h-85 w-full relative">
 								<canvas id="macroPolicyRuleChart"></canvas>
 							</div>
-							<p class="mt-3 text-2xs text-on-surface-variant/70">Source: Monetary Authority</p>
+							<p class="mt-3 text-2xs text-on-surface-faint">Source: Monetary Authority</p>
 						</div>
 
 						<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-macro-category="monetary">
@@ -155,7 +155,7 @@
 							<div class="chart-canvas-container h-80 md:h-85 w-full relative">
 								<canvas id="macroTermPremiumChart"></canvas>
 							</div>
-							<p class="mt-3 text-2xs text-on-surface-variant/70">Source: Monetary Authority</p>
+							<p class="mt-3 text-2xs text-on-surface-faint">Source: Monetary Authority</p>
 						</div>
 
 						<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-macro-category="monetary">
@@ -174,7 +174,7 @@
 							<div class="chart-canvas-container h-80 md:h-85 w-full relative">
 								<canvas id="macroMortgageChart"></canvas>
 							</div>
-							<p class="mt-3 text-2xs text-on-surface-variant/70">Source: Credit Registry</p>
+							<p class="mt-3 text-2xs text-on-surface-faint">Source: Credit Registry</p>
 						</div>
 
 						<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-macro-category="monetary">
@@ -193,7 +193,7 @@
 							<div class="chart-canvas-container h-80 md:h-85 w-full relative">
 								<canvas id="macroBalanceSheetChart"></canvas>
 							</div>
-							<p class="mt-3 text-2xs text-on-surface-variant/70">Source: Monetary Authority</p>
+							<p class="mt-3 text-2xs text-on-surface-faint">Source: Monetary Authority</p>
 						</div>
 					</div>
 				</section>
@@ -217,7 +217,7 @@
 							<div class="chart-canvas-container h-80 md:h-85 w-full relative">
 								<canvas id="macroEconomyChart"></canvas>
 							</div>
-							<p class="mt-3 text-2xs text-on-surface-variant/70">Source: Statistical Office</p>
+							<p class="mt-3 text-2xs text-on-surface-faint">Source: Statistical Office</p>
 						</div>
 
 						<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-macro-category="inflation">
@@ -236,7 +236,7 @@
 							<div class="chart-canvas-container h-80 md:h-85 w-full relative">
 								<canvas id="macroSectoralInflationChart"></canvas>
 							</div>
-							<p class="mt-3 text-2xs text-on-surface-variant/70">Source: Statistical Office</p>
+							<p class="mt-3 text-2xs text-on-surface-faint">Source: Statistical Office</p>
 						</div>
 
 						<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-macro-category="inflation">
@@ -255,7 +255,7 @@
 							<div class="chart-canvas-container h-80 md:h-85 w-full relative">
 								<canvas id="macroCostPushChart"></canvas>
 							</div>
-							<p class="mt-3 text-2xs text-on-surface-variant/70">Source: Statistical Office</p>
+							<p class="mt-3 text-2xs text-on-surface-faint">Source: Statistical Office</p>
 						</div>
 
 						<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-macro-category="inflation">
@@ -274,7 +274,7 @@
 							<div class="chart-canvas-container h-80 md:h-85 w-full relative">
 								<canvas id="macroInventoryCycleChart"></canvas>
 							</div>
-							<p class="mt-3 text-2xs text-on-surface-variant/70">Source: Manufactory Board</p>
+							<p class="mt-3 text-2xs text-on-surface-faint">Source: Manufactory Board</p>
 						</div>
 					</div>
 				</section>
@@ -298,7 +298,7 @@
 							<div class="chart-canvas-container h-80 md:h-85 w-full relative">
 								<canvas id="macroGdpGrowthChart" data-structural-labor-growth="{{ constant('App\\Service\\Macro\\MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE') }}"></canvas>
 							</div>
-							<p class="mt-3 text-2xs text-on-surface-variant/70">Source: Statistical Office</p>
+							<p class="mt-3 text-2xs text-on-surface-faint">Source: Statistical Office</p>
 						</div>
 
 						<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-macro-category="growth">
@@ -317,7 +317,7 @@
 							<div class="chart-canvas-container h-80 md:h-85 w-full relative">
 								<canvas id="macroLeadingIndicatorsChart"></canvas>
 							</div>
-							<p class="mt-3 text-2xs text-on-surface-variant/70">Source: Manufactory Board; Statistical Office</p>
+							<p class="mt-3 text-2xs text-on-surface-faint">Source: Manufactory Board; Statistical Office</p>
 						</div>
 
 						<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-macro-category="growth">
@@ -336,7 +336,7 @@
 							<div class="chart-canvas-container h-80 md:h-85 w-full relative">
 								<canvas id="macroLaborCreditChart"></canvas>
 							</div>
-							<p class="mt-3 text-2xs text-on-surface-variant/70">Source: Statistical Office</p>
+							<p class="mt-3 text-2xs text-on-surface-faint">Source: Statistical Office</p>
 						</div>
 
 						<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-macro-category="growth">
@@ -355,7 +355,7 @@
 							<div class="chart-canvas-container h-80 md:h-85 w-full relative">
 								<canvas id="macroWealthEffectChart"></canvas>
 							</div>
-							<p class="mt-3 text-2xs text-on-surface-variant/70">Source: Statistical Office; Land Registry</p>
+							<p class="mt-3 text-2xs text-on-surface-faint">Source: Statistical Office; Land Registry</p>
 						</div>
 
 						<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-macro-category="growth">
@@ -374,7 +374,7 @@
 							<div class="chart-canvas-container h-80 md:h-85 w-full relative">
 								<canvas id="macroSentimentChart"></canvas>
 							</div>
-							<p class="mt-3 text-2xs text-on-surface-variant/70">Source: Statistical Office; Credit Registry</p>
+							<p class="mt-3 text-2xs text-on-surface-faint">Source: Statistical Office; Credit Registry</p>
 						</div>
 					</div>
 				</section>
@@ -398,7 +398,7 @@
 							<div class="chart-canvas-container h-80 md:h-85 w-full relative">
 								<canvas id="macroFciChart"></canvas>
 							</div>
-							<p class="mt-3 text-2xs text-on-surface-variant/70">Source: Monetary Authority; Financial Regulator</p>
+							<p class="mt-3 text-2xs text-on-surface-faint">Source: Monetary Authority; Financial Regulator</p>
 						</div>
 
 						<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-macro-category="credit">
@@ -417,7 +417,7 @@
 							<div class="chart-canvas-container h-80 md:h-85 w-full relative">
 								<canvas id="macroCreditCliffChart"></canvas>
 							</div>
-							<p class="mt-3 text-2xs text-on-surface-variant/70">Source: Credit Registry</p>
+							<p class="mt-3 text-2xs text-on-surface-faint">Source: Credit Registry</p>
 						</div>
 
 						<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-macro-category="credit">
@@ -436,7 +436,7 @@
 							<div class="chart-canvas-container h-80 md:h-85 w-full relative">
 								<canvas id="macroRiskChart"></canvas>
 							</div>
-							<p class="mt-3 text-2xs text-on-surface-variant/70">Source: Aerie Exchange; Credit Registry</p>
+							<p class="mt-3 text-2xs text-on-surface-faint">Source: Aerie Exchange; Credit Registry</p>
 						</div>
 
 						<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-macro-category="credit">
@@ -455,7 +455,7 @@
 							<div class="chart-canvas-container h-80 md:h-85 w-full relative">
 								<canvas id="macroHouseholdCreditChart"></canvas>
 							</div>
-							<p class="mt-3 text-2xs text-on-surface-variant/70">Source: Financial Regulator</p>
+							<p class="mt-3 text-2xs text-on-surface-faint">Source: Financial Regulator</p>
 						</div>
 
 						<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-macro-category="credit">
@@ -474,7 +474,7 @@
 							<div class="chart-canvas-container h-80 md:h-85 w-full relative">
 								<canvas id="macroInterbankLiquidityChart"></canvas>
 							</div>
-							<p class="mt-3 text-2xs text-on-surface-variant/70">Source: Monetary Authority; Credit Registry</p>
+							<p class="mt-3 text-2xs text-on-surface-faint">Source: Monetary Authority; Credit Registry</p>
 						</div>
 
 						<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-macro-category="credit">
@@ -493,7 +493,7 @@
 							<div class="chart-canvas-container h-80 md:h-85 w-full relative">
 								<canvas id="macroBankingLiquidityChart"></canvas>
 							</div>
-							<p class="mt-3 text-2xs text-on-surface-variant/70">Source: Financial Regulator; Monetary Authority</p>
+							<p class="mt-3 text-2xs text-on-surface-faint">Source: Financial Regulator; Monetary Authority</p>
 						</div>
 					</div>
 				</section>
@@ -517,7 +517,7 @@
 							<div class="chart-canvas-container h-80 md:h-85 w-full relative">
 								<canvas id="macroPropertyChart"></canvas>
 							</div>
-							<p class="mt-3 text-2xs text-on-surface-variant/70">Source: Land Registry</p>
+							<p class="mt-3 text-2xs text-on-surface-faint">Source: Land Registry</p>
 						</div>
 
 						<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-macro-category="assets">
@@ -536,7 +536,7 @@
 							<div class="chart-canvas-container h-80 md:h-85 w-full relative">
 								<canvas id="macroCommoditiesChart"></canvas>
 							</div>
-							<p class="mt-3 text-2xs text-on-surface-variant/70">Source: Commodity Exchange</p>
+							<p class="mt-3 text-2xs text-on-surface-faint">Source: Commodity Exchange</p>
 						</div>
 
 						<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-macro-category="assets">
@@ -558,7 +558,7 @@
 									data-gas-reference="{{ constant('App\\Service\\Macro\\Subsystem\\CommodityLogisticsSubsystem::REFERENCE_GAS_PRICE') }}"
 									data-spark-heat-rate="{{ constant('App\\Service\\Macro\\Subsystem\\CommodityLogisticsSubsystem::SPARK_SPREAD_BENCHMARK_HEAT_RATE') }}"></canvas>
 							</div>
-							<p class="mt-3 text-2xs text-on-surface-variant/70">Source: Commodity Exchange</p>
+							<p class="mt-3 text-2xs text-on-surface-faint">Source: Commodity Exchange</p>
 						</div>
 					</div>
 				</section>
@@ -582,7 +582,7 @@
 							<div class="chart-canvas-container h-80 md:h-85 w-full relative">
 								<canvas id="macroTradeLogisticsChart"></canvas>
 							</div>
-							<p class="mt-3 text-2xs text-on-surface-variant/70">Source: Freight Authority; Monetary Authority</p>
+							<p class="mt-3 text-2xs text-on-surface-faint">Source: Freight Authority; Monetary Authority</p>
 						</div>
 
 						<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-macro-category="public">
@@ -601,7 +601,7 @@
 							<div class="chart-canvas-container h-80 md:h-85 w-full relative">
 								<canvas id="macroGlobalCycleChart"></canvas>
 							</div>
-							<p class="mt-3 text-2xs text-on-surface-variant/70">Source: Statistical Office</p>
+							<p class="mt-3 text-2xs text-on-surface-faint">Source: Statistical Office</p>
 						</div>
 
 						<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-macro-category="public">
@@ -620,7 +620,7 @@
 							<div class="chart-canvas-container h-80 md:h-85 w-full relative">
 								<canvas id="macroGovtSpendingChart"></canvas>
 							</div>
-							<p class="mt-3 text-2xs text-on-surface-variant/70">Source: Treasury</p>
+							<p class="mt-3 text-2xs text-on-surface-faint">Source: Treasury</p>
 						</div>
 
 						<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-macro-category="public">
@@ -642,7 +642,7 @@
 							{# The fund's size, draw, equity share and stamp duty: scales the chart's single axis cannot carry. #}
 							<p class="mt-3 text-2xs font-mono tabular-nums text-on-surface-variant" id="stats-macroSovereignFundChart"></p>
 							<div class="mt-1 flex items-baseline justify-between gap-3">
-								<p class="text-2xs text-on-surface-variant/70">Source: Sovereign Reserve Fund</p>
+								<p class="text-2xs text-on-surface-faint">Source: Sovereign Reserve Fund</p>
 								<a href="/reserve" class="shrink-0 text-2xs font-medium text-primary hover:underline">Fund page →</a>
 							</div>
 						</div>
