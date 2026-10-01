@@ -427,54 +427,28 @@ class CreditFiscalSubsystemTest extends TestCase
         return new CreditFiscalSubsystem($math);
     }
 
-    public function testPolicyUncertaintyBuildsIntoAScheduledElection(): void
-    {
-        $subsystem = $this->quietSubsystem();
-
-        $midTerm = new MacroState();
-        $midTerm->totalTime = 1.5; // two and a half years to the vote
-        $campaign = new MacroState();
-        $campaign->totalTime = 3.95; // three weeks out
-
-        for ($i = 0; $i < 40; $i++) {
-            $subsystem->calculatePolicyUncertainty($midTerm, 0.01);
-            $subsystem->calculatePolicyUncertainty($campaign, 0.01);
-            $midTerm->totalTime = 1.5;
-            $campaign->totalTime = 3.95;
-        }
-
-        $this->assertGreaterThan($midTerm->policyUncertaintyIndex, $campaign->policyUncertaintyIndex, 'The index rises through the election year.');
-        $this->assertLessThan(MacroEngine::EPU_BASELINE * exp(CreditFiscalSubsystem::EPU_ELECTION_LIFT), $campaign->policyUncertaintyIndex, 'and no higher than the full election lift.');
-    }
-
     /**
-     * The vote settles nothing until a government takes office: through the talks the index holds at the eve-of-vote
-     * level, on the tick of the vote as much as after it, and it falls back once the cabinet is seated.
+     * The election pulse the government hands over lifts the index by the election lift a unit: the eve of a vote, or
+     * talks under way, against a mid-term pulse at its mean.
      */
-    public function testPolicyUncertaintyHoldsThroughTheTalks(): void
+    public function testPolicyUncertaintyMovesWithTheElectionPulse(): void
     {
         $subsystem = $this->quietSubsystem();
 
-        $eve = new MacroState();
-        $voteDay = new MacroState();
-        $talks = new MacroState();
-        $talks->coalitionTakesOfficeAt = 4.2;
-        $seated = new MacroState();
-        $seated->coalitionTakesOfficeAt = -1.0;
+        $atMean = new MacroState();
+        $atMean->totalTime = 1.5;
+        $peak = new MacroState();
+        $peak->totalTime = 1.5;
+        $peak->electionPulse = 1.0;
 
+        // Four years of steps: the log-OU has closed all but a fraction of a percent of its gap to the target.
         for ($i = 0; $i < 400; $i++) {
-            $eve->totalTime = 3.99;
-            $voteDay->totalTime = 4.0;
-            $talks->totalTime = 4.1;
-            $seated->totalTime = 4.1;
-            foreach ([$eve, $voteDay, $talks, $seated] as $state) {
-                $subsystem->calculatePolicyUncertainty($state, 0.01);
-            }
+            $subsystem->calculatePolicyUncertainty($atMean, 0.01);
+            $subsystem->calculatePolicyUncertainty($peak, 0.01);
         }
 
-        $this->assertEqualsWithDelta($eve->policyUncertaintyIndex, $voteDay->policyUncertaintyIndex, 0.01 * $eve->policyUncertaintyIndex, 'The index dips on the tick of the vote.');
-        $this->assertEqualsWithDelta($eve->policyUncertaintyIndex, $talks->policyUncertaintyIndex, 0.01 * $eve->policyUncertaintyIndex, 'The talks settle nothing.');
-        $this->assertEqualsWithDelta(CreditFiscalSubsystem::EPU_ELECTION_LIFT, log($talks->policyUncertaintyIndex / $seated->policyUncertaintyIndex), 0.02, 'A seated government settles the regime.');
+        $this->assertEqualsWithDelta(CreditFiscalSubsystem::EPU_ELECTION_LIFT, log($peak->policyUncertaintyIndex / $atMean->policyUncertaintyIndex), 0.02);
+        $this->assertLessThan(MacroEngine::EPU_BASELINE * exp(CreditFiscalSubsystem::EPU_ELECTION_LIFT), $peak->policyUncertaintyIndex, 'and no higher than the full election lift.');
     }
 
     public function testADownturnLiftsPolicyUncertainty(): void
@@ -498,41 +472,6 @@ class CreditFiscalSubsystemTest extends TestCase
 
         $expectedRatio = exp(CreditFiscalSubsystem::EPU_STRESS_LIFT * 0.50);
         $this->assertEqualsWithDelta($expectedRatio, $stressed->policyUncertaintyIndex / $calm->policyUncertaintyIndex, 0.02, 'A fifty-point rise in recession odds puts the policy response itself in question.');
-    }
-
-    public function testTheElectionPulseFallsOnTheTickTheTermEnds(): void
-    {
-        $subsystem = $this->quietSubsystem();
-        $state = new MacroState();
-
-        // Times sit on the tick grid, as the engine's accumulated clock does to within a rounding error.
-        $state->totalTime = 3.99;
-        $subsystem->calculatePolicyUncertainty($state, 0.01);
-        $this->assertSame(-1.0, $state->lastElectionAt, 'No election before the term is up.');
-
-        $state->totalTime = 4.00;
-        $subsystem->calculatePolicyUncertainty($state, 0.01);
-        $this->assertSame(4.00, $state->lastElectionAt, 'The vote falls on the tick that reaches the term boundary.');
-
-        $state->totalTime = 4.01;
-        $subsystem->calculatePolicyUncertainty($state, 0.01);
-        $this->assertSame(4.00, $state->lastElectionAt, 'and is not re-held on the next tick.');
-    }
-
-    public function testTheElectionFallsOnTheBoundaryTickWhenTheClockRunsAHairShort(): void
-    {
-        $subsystem = $this->quietSubsystem();
-        $state = new MacroState();
-
-        // 720 additions of 1/180 land just short of 4.0; the vote must still fall on that tick, with the budget round.
-        $dt = 1.0 / 180.0;
-        for ($tick = 1; $tick <= 720; ++$tick) {
-            $state->totalTime += $dt;
-            $subsystem->calculatePolicyUncertainty($state, $dt);
-        }
-
-        $this->assertSame($state->totalTime, $state->lastElectionAt);
-        $this->assertTrue(MathUtility::crossedSimulatedBoundary($state->totalTime, $dt, MacroEngine::BUDGET_ROUND_PERIOD_YEARS), 'The budget round falls on the same tick.');
     }
 
     public function testPolicyUncertaintyStaysInsideItsRecordedRange(): void

@@ -57,15 +57,15 @@ services:
     # pages that list constituents, so it lives in Redis alongside the district roster it mirrors.
     App\Service\Market\Index\IndexMembershipStoreInterface:
         alias: App\Service\Market\Index\RedisIndexMembershipStore
-    # The Diet draws its votes from a generator of its own, so politics can be switched on or off in a seeded run
-    # without moving a single draw the economy makes (paired harness arms stay paired). POLITICS_SEED pins it for a
-    # reproducible run; unset, it is seeded from the system's entropy.
+    # Politics draws from a generator of its own, so it can be switched on or off in a seeded run without moving a
+    # single draw the economy makes (paired harness arms stay paired). POLITICS_SEED pins it for a reproducible run;
+    # unset, it is seeded from the system's entropy.
     app.politics_draws:
         class: App\Service\Math\MathUtility
         factory: ['App\Service\Math\MathUtility', 'ownStream']
         arguments: ['%env(default::int:POLITICS_SEED)%']
 
-    App\Service\Macro\Subsystem\DistrictPoliticsSubsystem:
+    App\Service\Politics\PoliticsEngine:
         arguments:
             $mathUtility: '@app.politics_draws'
 

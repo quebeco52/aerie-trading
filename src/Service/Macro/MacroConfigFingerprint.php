@@ -8,12 +8,12 @@ use App\Data\AerieDiet;
 use App\Service\Macro\Subsystem\AssetMarketSubsystem;
 use App\Service\Macro\Subsystem\CommodityLogisticsSubsystem;
 use App\Service\Macro\Subsystem\CreditFiscalSubsystem;
-use App\Service\Macro\Subsystem\CoalitionFormation;
-use App\Service\Macro\Subsystem\DistrictPoliticsSubsystem;
 use App\Service\Macro\Subsystem\SovereignFundSubsystem;
 use App\Service\Macro\Subsystem\LaborMarketSubsystem;
 use App\Service\Macro\Subsystem\MacroAggregateSubsystem;
 use App\Service\Macro\Subsystem\MonetaryPolicySubsystem;
+use App\Service\Politics\CoalitionFormation;
+use App\Service\Politics\PoliticsEngine;
 
 /**
  * A short hash of every constant that parameterises the macro economy, stamped on each recorded quarter.
@@ -26,7 +26,7 @@ final class MacroConfigFingerprint
 {
     // --- Parameter Classes ---
 
-    /** The classes whose constants are the macro economy's parameters. */
+    /** The classes whose constants are the macro economy's parameters, the government's among them, since the levers it sets move the economy. */
     private const PARAMETER_CLASSES = [
         MacroEngine::class,
         MonetaryPolicySubsystem::class,
@@ -36,7 +36,7 @@ final class MacroConfigFingerprint
         AssetMarketSubsystem::class,
         CreditFiscalSubsystem::class,
         SovereignFundSubsystem::class,
-        DistrictPoliticsSubsystem::class,
+        PoliticsEngine::class,
         CoalitionFormation::class,
         AerieDiet::class,
     ];

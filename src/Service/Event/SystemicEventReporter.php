@@ -4,13 +4,15 @@ namespace App\Service\Event;
 
 use App\Data\AerieDiet;
 use App\DTO\MacroStateDTO;
+use App\DTO\PoliticsStateDTO;
 use App\Entity\Etf;
 use App\Service\Macro\MacroEngine;
-use App\Service\Macro\Subsystem\CoalitionFormation;
 use App\Service\Market\PriceChangeFeed;
+use App\Service\Politics\CoalitionFormation;
 
 /**
- * Publishes the tick's district-wide macro event as a headline on the benchmark fund.
+ * Publishes the tick's district-wide event as a headline on the benchmark fund: the economy's, or when the economy has
+ * none, the government's (a vote, a fall, a cabinet taking office, a budget).
  *
  * The number on the card is what the benchmark actually did over the last month, not a size the event is
  * assumed to have: a systemic event moves prices only through the economy the engine runs, so a fixed
@@ -29,9 +31,10 @@ class SystemicEventReporter
     /**
      * @return array<string, mixed>|null The wire copy of the published headline, or null when the tick carries no event.
      */
-    public function report(MacroStateDTO $macro, Etf $benchmark): ?array
+    public function report(MacroStateDTO $macro, PoliticsStateDTO $politics, Etf $benchmark): ?array
     {
-        if ($macro->eventType === null) {
+        $eventType = $macro->eventType ?? $politics->eventType;
+        if ($eventType === null) {
             return null;
         }
 
@@ -55,14 +58,14 @@ class SystemicEventReporter
             'swf_target_pct' => number_format($macro->sovereignFundTargetWeight * 100.0, 2),
             'swf_size_gdp_pct' => number_format($macro->sovereignFundToGdp * 100.0, 0),
             'swf_months' => number_format($macro->sovereignFundRebalanceMonthsLeft, 0),
-        ] + self::electionContext($macro) + self::fallContext($macro) + self::formationContext($macro) + self::budgetContext($macro);
+        ] + self::electionContext($politics) + self::fallContext($politics) + self::formationContext($politics) + self::budgetContext($politics);
 
         $monthMove = $this->priceChangeFeed->changeForTicker((string) $benchmark->getTicker(), (float) $benchmark->getPrice());
 
         return $this->marketEvent->publish(
             $benchmark,
             'SHOCK',
-            $this->narrativeEngine->generateLore($macro->eventType, $context),
+            $this->narrativeEngine->generateLore($eventType, $context),
             $monthMove === null ? null : 100.0 * $monthMove
         );
     }
@@ -72,16 +75,16 @@ class SystemicEventReporter
      *
      * @return array<string, string>
      */
-    private static function budgetContext(MacroStateDTO $macro): array
+    private static function budgetContext(PoliticsStateDTO $politics): array
     {
         $names = array_map(static fn(string $name): string => preg_replace('/^The /', '', $name) ?? $name, AerieDiet::PARTY_NAMES);
 
         return [
-            'government' => implode('-', array_map(static fn(string $party): string => $names[$party], AerieDiet::governingParties($macro->governingCoalition))),
-            'tax_rate_pct' => number_format((MacroEngine::TARGET_CORPORATE_TAX_RATE + $macro->corporateTaxPolicyShift) * 100.0, 1),
-            'tariff_pct' => number_format($macro->importTariffRate * 100.0, 1),
-            'labor_growth_pct' => number_format($macro->laborForceGrowthRate * 100.0, 2),
-            'council_held' => $macro->lastCouncilBrakeAt === $macro->totalTime ? 'yes' : 'no',
+            'government' => implode('-', array_map(static fn(string $party): string => $names[$party], AerieDiet::governingParties($politics->governingCoalition))),
+            'tax_rate_pct' => number_format((MacroEngine::TARGET_CORPORATE_TAX_RATE + $politics->corporateTaxPolicyShift) * 100.0, 1),
+            'tariff_pct' => number_format($politics->importTariffRate * 100.0, 1),
+            'labor_growth_pct' => number_format($politics->laborForceGrowthRate * 100.0, 2),
+            'council_held' => $politics->lastCouncilBrakeAt === $politics->totalTime ? 'yes' : 'no',
         ];
     }
 
@@ -94,16 +97,16 @@ class SystemicEventReporter
      *
      * @return array<string, string>
      */
-    private static function electionContext(MacroStateDTO $macro): array
+    private static function electionContext(PoliticsStateDTO $politics): array
     {
-        if ($macro->dietVoteSwings === []) {
+        if ($politics->dietVoteSwings === []) {
             return [];
         }
 
         $names = self::midSentenceNames();
-        $seats = array_map('intval', $macro->dietSeats);
-        $largest = CoalitionFormation::bySize($macro->dietSeats, $macro->dietVoteShares)[0];
-        $swings = $macro->dietVoteSwings;
+        $seats = array_map('intval', $politics->dietSeats);
+        $largest = CoalitionFormation::bySize($politics->dietSeats, $politics->dietVoteShares)[0];
+        $swings = $politics->dietVoteSwings;
         uasort($swings, static fn(float $a, float $b): int => abs($b) <=> abs($a));
         $mover = (string) array_key_first($swings);
         $moverSwing = $swings[$mover] * 100.0;
@@ -118,15 +121,15 @@ class SystemicEventReporter
         ];
         if ($seats[$largest] >= AerieDiet::MAJORITY_SEATS) {
             $context['majority_party'] = $names[$largest];
-        } elseif ($macro->formationLog !== []) {
+        } elseif ($politics->formationLog !== []) {
             $blocSeats = [];
-            foreach ($macro->dietBlocs as $party => $leader) {
+            foreach ($politics->dietBlocs as $party => $leader) {
                 $blocSeats[$leader] = ($blocSeats[$leader] ?? 0) + ($seats[$party] ?? 0);
             }
             arsort($blocSeats);
             $context['bloc_leader'] = $names[(string) array_key_first($blocSeats)];
             $context['bloc_seats'] = (string) reset($blocSeats);
-            $lead = $macro->formationLog[0]['formateur'];
+            $lead = $politics->formationLog[0]['formateur'];
             $context['talks_opening'] = $lead === $largest
                 ? "{$names[$largest]}, the largest with {$seats[$largest]}, opens coalition talks"
                 : "{$names[$lead]} opens coalition talks, though {$names[$largest]} is the largest with {$seats[$largest]}";
@@ -142,9 +145,9 @@ class SystemicEventReporter
      *
      * @return array<string, string>
      */
-    private static function fallContext(MacroStateDTO $macro): array
+    private static function fallContext(PoliticsStateDTO $politics): array
     {
-        if ($macro->lastCabinetFellAt !== $macro->totalTime || $macro->lastGovernmentFormedAt === $macro->totalTime || $macro->formationLog === []) {
+        if ($politics->lastCabinetFellAt !== $politics->totalTime || $politics->lastGovernmentFormedAt === $politics->totalTime || $politics->formationLog === []) {
             return [];
         }
 
@@ -152,10 +155,10 @@ class SystemicEventReporter
         $list = static fn(array $parties): string => self::listNames(array_map(static fn(string $party): string => $names[$party], $parties));
 
         return [
-            'fallen_cabinet' => $list(AerieDiet::governingParties($macro->governingCoalition)),
-            'fallen_support' => $list(AerieDiet::governingParties($macro->supportParties)),
-            'fallen_months' => number_format(12.0 * ($macro->totalTime - $macro->coalitionFormedAt), 0),
-            'talks_lead' => $names[$macro->formationLog[0]['formateur']],
+            'fallen_cabinet' => $list(AerieDiet::governingParties($politics->governingCoalition)),
+            'fallen_support' => $list(AerieDiet::governingParties($politics->supportParties)),
+            'fallen_months' => number_format(12.0 * ($politics->totalTime - $politics->coalitionFormedAt), 0),
+            'talks_lead' => $names[$politics->formationLog[0]['formateur']],
         ];
     }
 
@@ -165,18 +168,18 @@ class SystemicEventReporter
      *
      * @return array<string, string>
      */
-    private static function formationContext(MacroStateDTO $macro): array
+    private static function formationContext(PoliticsStateDTO $politics): array
     {
-        if ($macro->formationLog === [] || $macro->lastGovernmentFormedAt !== $macro->totalTime) {
+        if ($politics->formationLog === [] || $politics->lastGovernmentFormedAt !== $politics->totalTime) {
             return [];
         }
 
         $names = self::midSentenceNames();
         $list = static fn(array $parties): string => self::listNames(array_map(static fn(string $party): string => $names[$party], $parties));
-        $cabinet = AerieDiet::governingParties($macro->governingCoalition);
-        $support = AerieDiet::governingParties($macro->supportParties);
-        $seatsOf = static fn(array $parties): int => (int) array_sum(array_map(static fn(string $party): float => $macro->dietSeats[$party] ?? 0.0, $parties));
-        $final = $macro->formationLog[array_key_last($macro->formationLog)];
+        $cabinet = AerieDiet::governingParties($politics->governingCoalition);
+        $support = AerieDiet::governingParties($politics->supportParties);
+        $seatsOf = static fn(array $parties): int => (int) array_sum(array_map(static fn(string $party): float => $politics->dietSeats[$party] ?? 0.0, $parties));
+        $final = $politics->formationLog[array_key_last($politics->formationLog)];
 
         return [
             'cabinet' => $list($cabinet),
@@ -185,8 +188,8 @@ class SystemicEventReporter
             'supported_seats' => (string) ($seatsOf($cabinet) + $seatsOf($support)),
             'minority' => $support === [] ? 'no' : 'yes',
             'talk_days' => number_format($final['day'], 0),
-            'attempts' => (string) count($macro->formationLog),
-            'attempts_phrase' => count($macro->formationLog) === 1 ? 'at the first attempt' : 'after ' . count($macro->formationLog) . ' attempts',
+            'attempts' => (string) count($politics->formationLog),
+            'attempts_phrase' => count($politics->formationLog) === 1 ? 'at the first attempt' : 'after ' . count($politics->formationLog) . ' attempts',
             'lead_party' => $names[$final['formateur']],
             'diet_seats' => (string) AerieDiet::SEATS,
         ];

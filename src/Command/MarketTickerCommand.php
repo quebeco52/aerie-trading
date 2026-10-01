@@ -104,8 +104,10 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
         private \App\Service\Market\Flow\OrderFlowStoreInterface $orderFlow,
         /** One limit-order check per instrument per retry window, not one per tick while the worker answers. */
         private \App\Service\Market\LimitOrderDispatchGate $limitOrderGate,
+        /** The Diet and the government, advanced after the economy each tick. */
+        private \App\Service\Politics\PoliticsEngine $politicsEngine,
         /** Writes the Diet's vote on the tick it is held. */
-        private \App\Service\Macro\Recorder\ElectionRecorder $electionRecorder,
+        private \App\Service\Politics\ElectionRecorder $electionRecorder,
 
         private int $tickIntervalUs,
         private int $ticksPerYear,
@@ -360,6 +362,8 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
         $lastBoardNetIssuance = null;
         $lastBoardStampDuty = null;
         $lastStrategicStakeCash = null;
+        // What the government hands the economy, on the same lag: the levers in force and the election pulse.
+        $policy = $this->politicsEngine->liveState()->policy();
 
         $wireFrame = new WireFrame();
 
@@ -388,8 +392,12 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                 $lastBoardDividendCash,
                 $lastBoardNetIssuance,
                 $lastBoardStampDuty,
-                $lastStrategicStakeCash
+                $lastStrategicStakeCash,
+                $policy
             );
+            // The Diet votes on the calendar's election tick, on this tick's economy; the economy reads what it decides next tick.
+            $politics = $this->politicsEngine->updatePolitics($macroState, $dt);
+            $policy = $politics->policy();
             // Flows are consumed once; a tick that prices no board must not replay the last one's return.
             $lastBoardPriceReturn = null;
             $lastBoardDividendCash = null;
@@ -462,10 +470,10 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                 $events = $result['events'];
 
                 $benchmarkFund = $indexFunds[MarketIndex::benchmark()->value] ?? null;
-                if ($benchmarkFund !== null && ($headline = $this->systemicEvents->report($macroState, $benchmarkFund)) !== null) {
+                if ($benchmarkFund !== null && ($headline = $this->systemicEvents->report($macroState, $politics, $benchmarkFund)) !== null) {
                     $events[] = $headline;
                 }
-                $this->electionRecorder->record($macroState);
+                $this->electionRecorder->record($politics);
 
                 if (!empty($operatorEvents)) {
                     $events = array_merge($events, $operatorEvents);

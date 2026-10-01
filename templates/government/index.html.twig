@@ -400,7 +400,6 @@
 								<tr>
 									<th scope="row" class="px-5 py-2 text-left font-mono tabular-nums font-normal text-on-surface">
 										{{ row.date }}
-										{% if row.crisisLift %}<span class="block text-3xs font-sans text-error" title="Held within {{ rules.crisisWindowYears|number_format(0) }} years of a financial crisis">After a crisis</span>{% endif %}
 									</th>
 									{% for cell in row.seats %}
 										<td class="px-3 py-2 text-right font-mono tabular-nums text-on-surface">
@@ -485,11 +484,6 @@
 					name: 'The normal vote',
 					text: 'Each party has a normal vote, the share it won at the founding. Its lasting support strays from it, with a new generation of voters or a realignment, and drifts back, half the gap closing in about ' ~ rules.normalVoteHalfLifeYears|number_format(0) ~ ' years. The Diet\'s parties stray as far from their normal votes as the Nordic parties have from theirs, so no party is doomed to fade and none grows without end.',
 					source: 'Converse (1966) on the normal vote; ParlGov, Denmark, Finland, Iceland, Norway and Sweden since 1945'
-				},
-				{
-					name: 'After a financial crisis',
-					text: 'In the ' ~ rules.crisisWindowYears|number_format(0) ~ ' years after a financial crisis, the Iron Harbor Coalition\'s vote is lifted by ' ~ (rules.crisisLift * 100)|number_format(0) ~ '%. Its case that the outside world is a source of contagion lands. The lift is given back once the crisis is ' ~ rules.crisisWindowYears|number_format(0) ~ ' years past. Ordinary recessions bring no such lift.',
-					source: 'Funke, Schularick & Trebesch (2016): far-right vote after financial crises, 1870-2014'
 				},
 				{
 					name: 'Seats',

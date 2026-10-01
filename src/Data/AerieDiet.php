@@ -10,7 +10,7 @@ namespace App\Data;
  * Each party is defined by one question -- the size of the state, how open the District is, or how far the Council's
  * technocrats should be trusted -- or, for the Free Port Compact and the Bastion Guilds, by the first two together, and
  * holds a fixed position on it; on the others it strays between elections and is pulled back toward its home
- * (App\Service\Macro\Subsystem\DistrictPoliticsSubsystem). The Diet seated at the founding is the lore's. Every
+ * (App\Service\Politics\PoliticsEngine). The Diet seated at the founding is the lore's. Every
  * party-keyed map in the macro state is keyed and ordered by PARTIES.
  */
 final class AerieDiet
@@ -111,7 +111,7 @@ final class AerieDiet
         self::FREE_PORT => 25.0 / 300.0,
         self::BASTION_GUILDS => 20.0 / 300.0,
     ];
-    /** The blocs the founding Diet votes in, by the leader of each party's bloc: the parties split around the two largest (App\Service\Macro\Subsystem\CoalitionFormation::declareBlocs). */
+    /** The blocs the founding Diet votes in, by the leader of each party's bloc: the parties split around the two largest (App\Service\Politics\CoalitionFormation::declareBlocs). */
     public const SEED_BLOCS = [
         self::CIVIC => self::CIVIC,
         self::VANGUARD => self::VANGUARD,

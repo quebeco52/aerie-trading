@@ -10,7 +10,7 @@ use Doctrine\ORM\Mapping as ORM;
 /**
  * One vote for the Aerie Diet: the result, the economy it was cast on, and the talks and government that followed.
  *
- * Written by App\Service\Macro\Recorder\ElectionRecorder on the tick the vote is held, when the talks are already
+ * Written by App\Service\Politics\ElectionRecorder on the tick the vote is held, when the talks are already
  * settled; the government takes office formationDays later, and nothing shown before then may give it away. A cabinet
  * that falls before the next vote is added to the vote's record on the day it falls, with the talks that follow. Party-keyed
  * maps are stored whole, keyed by App\Data\AerieDiet::PARTIES.
@@ -84,10 +84,6 @@ class DietElection
     /** Total electoral volatility (Pedersen index), as a fraction of the vote. */
     #[ORM\Column(type: Types::FLOAT)]
     private float $volatility = 0.0;
-
-    /** Whether the vote fell inside a financial crisis's window and carried its lift. */
-    #[ORM\Column]
-    private bool $crisisLift = false;
 
     #[ORM\Column(type: Types::DATETIME_MUTABLE)]
     private \DateTimeInterface $recordedAt;
@@ -322,18 +318,6 @@ class DietElection
     public function setVolatility(float $volatility): static
     {
         $this->volatility = $volatility;
-
-        return $this;
-    }
-
-    public function hasCrisisLift(): bool
-    {
-        return $this->crisisLift;
-    }
-
-    public function setCrisisLift(bool $crisisLift): static
-    {
-        $this->crisisLift = $crisisLift;
 
         return $this;
     }

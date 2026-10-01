@@ -13,6 +13,7 @@ use App\Service\Market\Index\MarketIndex;
 use App\Service\Macro\MacroEngine;
 use App\Service\Market\MarketOperator;
 use App\Service\Event\SystemicEventReporter;
+use App\Service\Politics\PoliticsEngine;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
@@ -48,6 +49,7 @@ class MarketSimulateCommand extends Command
         private MacroEngine $macroEngine,
         private MarketOperator $marketOperator,
         private SystemicEventReporter $systemicEvents,
+        private PoliticsEngine $politicsEngine,
         private \Redis $redis,
     ) {
         parent::__construct();
@@ -111,9 +113,12 @@ class MarketSimulateCommand extends Command
         $indexFunds = $this->loadIndexFunds();
         $conn = $this->entityManager->getConnection();
 
+        $policy = $this->politicsEngine->liveState()->policy();
         for ($tick = 1; $tick <= $totalTicks; $tick++) {
 
-            $macroState = $this->macroEngine->updateMacroState($dt);
+            $macroState = $this->macroEngine->updateMacroState($dt, policy: $policy);
+            $politics = $this->politicsEngine->updatePolitics($macroState, $dt);
+            $policy = $politics->policy();
 
             $isHistoryTick = ($tick % 30 === 0);
 
@@ -183,7 +188,7 @@ class MarketSimulateCommand extends Command
 
             $lbi = $indexFunds[MarketIndex::benchmark()->value] ?? null;
             if ($lbi !== null) {
-                $this->systemicEvents->report($macroState, $lbi);
+                $this->systemicEvents->report($macroState, $politics, $lbi);
             }
 
             // Save Macro Report Snapshot once a "Simulation Quarter"

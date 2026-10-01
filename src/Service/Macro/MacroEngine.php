@@ -2,12 +2,12 @@
 
 namespace App\Service\Macro;
 
+use App\DTO\GovernmentPolicyDTO;
 use App\Service\Macro\Recorder\MacroDiagnosticsProbe;
 use App\Service\Macro\Recorder\MacroSnapshotRecorder;
 use App\Service\Macro\Subsystem\AssetMarketSubsystem;
 use App\Service\Macro\Subsystem\CommodityLogisticsSubsystem;
 use App\Service\Macro\Subsystem\CreditFiscalSubsystem;
-use App\Service\Macro\Subsystem\DistrictPoliticsSubsystem;
 use App\Service\Macro\Subsystem\LaborMarketSubsystem;
 use App\Service\Macro\Subsystem\MacroAggregateSubsystem;
 use App\Service\Macro\Subsystem\MonetaryPolicySubsystem;
@@ -248,89 +248,17 @@ class MacroEngine
     /** Horizon of the long-run average the budget reads the gap against, so the cycle it answers averages to zero: the 15-year window Drehmann & Juselius (2012) separate a cycle from its trend with, about 2.5 postwar NBER cycles. */
     public const FUND_STABILISATION_GAP_TREND_YEARS = 15.0;
 
-    // --- The Diet's Election (Fair presidential vote equation, 2020 update; Nannestad & Paldam 2002; ParlGov) ---
-    /** Length of the fixed electoral term in years; the clock is derived from simulation time, never stored. */
-    public const ELECTION_TERM_YEARS = 4.0;
-    /** Final stretch of the term whose growth voters weigh (Fair's G: the first three quarters of the election year). */
-    public const ELECTION_CAMPAIGN_WINDOW_YEARS = 0.75;
-    /** Governing coalition's vote share per unit of annualised real per-capita growth over the campaign (Fair: 0.673 pp per pp). */
-    public const ELECTION_GROWTH_SLOPE = 0.673;
-    /** Governing coalition's vote share lost per unit of annualised inflation over the term (Fair: 0.721 pp per pp). */
-    public const ELECTION_INFLATION_SLOPE = 0.721;
-    /** Residual of the governing coalition's share, everything the economy does not explain (Fair: standard error 2.95 pp). */
-    public const ELECTION_RESIDUAL_SD = 0.0295;
-    /** Vote share the average government has lost over a term in the record (Nannestad & Paldam 2002: 282 elections in 19 democracies), the reference the Diet's own cost is read against. */
-    public const ELECTION_RECORDED_COST_OF_RULING = 0.0225;
-    /** Vote share governing costs the governing parties each term, beyond what they were elected on drifting back: governments are formed by parties riding a short-term swing or a lasting lead, and both run off. With those, the outgoing cabinet's parties lose 2.2 points a term, the record's 2.25 (var/harness/politics/vote_sim.py, 2,500 elections; ParlGov since 1945, measured the same way: Scandinavia 1.8, Western Europe 3.9). */
-    public const ELECTION_COST_OF_RULING = 0.005;
-    /** Relative gain of the closed-economy party's vote after a financial crisis (Funke, Schularick & Trebesch 2016: far right +30%, none after ordinary recessions). */
-    public const ELECTION_CRISIS_CLOSED_PARTY_LIFT = 0.30;
-    /** Years after a financial crisis the lift lasts (Funke, Schularick & Trebesch 2016). */
-    public const ELECTION_CRISIS_WINDOW_YEARS = 5.0;
-    /** Each party's own short-term swing, drawn at every vote and gone by the next (Converse 1966 short-term forces), as the variance of its log vote share times its normal vote: real vote shares vary in proportion to their size (ParlGov, West European parties since 1945: log variance on log share, slope -0.99). Nordic parties since 1945 (var/harness/politics/vote_fit.py): a party of a quarter swings 7% either way, one of a twentieth 15%. */
-    public const ELECTION_SHORT_TERM_SWING_VARIANCE = 0.0012;
-    /** Share of a party's lasting lead or deficit on its normal vote still there a year later: real parties drift back toward their usual share, a half-life of seven years (ParlGov, Nordic parties since 1945, var/harness/politics/vote_fit.py; West European parties 0.911 over elections up to 20 years apart). */
-    public const ELECTION_NORMAL_VOTE_PERSISTENCE = 0.905;
-    /** Share of a cabinet party's electoral cost of governing a support party bears: 1.99 points lost against 2.81 for cabinet parties (Thürk & Klüver 2024, Table 1 Model 1: support -1.991, prime minister's party -2.815, junior partner -2.799; 304 elections in 31 democracies since 1980). */
-    public const ELECTION_SUPPORT_ACCOUNTABILITY = 1.991 / ((2.815 + 2.799) / 2.0);
-
-    // --- Forming a Government (Martin & Stevenson 2010, Table 1 Model 1; Golder 2010; Bäck et al. 2023) ---
-    /** Log-odds of a cabinet without a majority of its own (Martin & Stevenson 2010, Table 1 Model 1: 256 formations in 17 West European democracies). */
-    public const FORMATION_MINORITY_UTILITY = -1.188;
-    /** Log-odds of a minimal winning cabinet, every member needed for its majority (Martin & Stevenson 2010). */
-    public const FORMATION_MINIMAL_WINNING_UTILITY = 0.683;
-    /** Log-odds per party in the cabinet (Martin & Stevenson 2010). */
-    public const FORMATION_PARTY_UTILITY = -0.485;
-    /** Log-odds of a cabinet holding the Diet's largest party (Martin & Stevenson 2010). */
-    public const FORMATION_LARGEST_PARTY_UTILITY = 1.575;
-    /** Manifesto left-right points a unit of the Diet's axes spans, the scale Martin & Stevenson read range on; fitted so 36.5% of cabinets after a hung vote are minority cabinets (ParlGov: 315 in Western Europe since 1945; var/harness/politics/formation_fit.py). Benoit & Laver (2007) put a unit, half an expert scale, at 30 points (3.19 per point of their 1-20 scale). */
-    public const FORMATION_MANIFESTO_POINTS_PER_UNIT = 40.0;
-    /** Log-odds per unit of the cabinet's ideological range: -0.027 per manifesto left-right point (Martin & Stevenson 2010). */
-    public const FORMATION_RANGE_UTILITY = -0.027 * self::FORMATION_MANIFESTO_POINTS_PER_UNIT;
-    /** Log-odds of the outgoing cabinet re-forming (Martin & Stevenson 2010: the status quo government). */
-    public const FORMATION_STATUS_QUO_UTILITY = 1.984;
-    /** Log-odds of a government whose parties, cabinet and supporters, all declared for the same bloc before the vote (Martin & Stevenson 2010: a pre-electoral pact associated with the coalition). */
-    public const FORMATION_PACT_UTILITY = 3.429;
-    /** Log-odds of a cabinet holding two parties that ruled out governing together, the two bloc leaders (Martin & Stevenson 2010: an anti-pact). */
-    public const FORMATION_ANTIPACT_UTILITY = -2.877;
-    /** Log-odds per unit a cabinet party stands from the Diet's median on the Council axis, the question of the constitutional order: Martin & Stevenson's (2010) anti-system term, its manifesto measure replaced by that distance and its strength fitted so the parties at the axis's ends sit in cabinet as seldom as Scandinavia's radical parties (var/harness/politics/formation_fit.py). */
-    public const FORMATION_ANTISYSTEM_UTILITY = -2.91;
-    /** Log-odds the cabinet the first attempt tries must clear, the value of no deal at all; fitted so 32% of formations need more than one attempt (Golder 2010: 'nearly a third', 16 West European democracies 1944-1998; var/harness/politics/formation_fit.py). */
-    public const FORMATION_RESERVATION = 2.17;
-    /** How far the bar of no deal falls with each attempt that fails, as the parties' patience runs out; fitted so formations are as spread as the record's, sd 33.9 days on a mean of 33.7 (Bäck, Hellström, Lindvall & Teorell 2023), which cuts the stalemates a fixed bar would leave running for years. */
-    public const FORMATION_RESERVATION_STEP = 0.68;
-    /** Mean length of one attempt in days, each drawn exponential (a constant hazard: the formation record's spread about equals its mean); fitted so formations average Bäck, Hellström, Lindvall & Teorell's (2023) 33.7 days, Western Europe 1945-2019. */
-    public const FORMATION_ATTEMPT_DAYS = 22.8;
-    /** Mean days from a vote to the government it forms, single-party majorities included: what the talks model averages at the fitted constants. */
-    public const FORMATION_MEAN_DAYS = 33.7;
-
-    // --- Cabinets Falling Between Votes (ParlGov, West European cabinets since 1945, var/harness/politics/termination_fit.py) ---
-    /** Yearly hazard a single-party minority cabinet falls between votes, replaced by another cabinet without an election: 21 falls in 199 cabinet-years (a constant hazard, King, Alt, Burns & Laver 1990). */
-    public const CABINET_FALL_HAZARD_SINGLE_PARTY_MINORITY = 0.106;
-    /** Yearly hazard a minority coalition falls between votes: 27 falls in 125 cabinet-years, twice a single party's, as a partner can walk out as well as a supporter. */
-    public const CABINET_FALL_HAZARD_MINORITY_COALITION = 0.216;
-    /** Yearly hazard a majority coalition falls between votes: 91 falls in 763 cabinet-years. A party governing alone with its own majority has no partner or supporter to lose, and none fell in 242 cabinet-years. */
-    public const CABINET_FALL_HAZARD_MAJORITY_COALITION = 0.119;
-
-    // --- The Diet's Levers: Corporate Tax (Osterloh & Debus 2012; Mertens & Ravn 2013) ---
-    /** Gap between the corporate rates the big-state and small-state manifestos set, the parties at the ends of the size-of-state axis: 7 points (US: the 2020 Democratic platform's 28% against the 21% of the 2017 Republican act; UK 2019: Labour's 26% against the Conservatives' 19%). Enacted rates follow manifesto ideology (Osterloh & Debus 2012, European panel). */
-    public const POLICY_MANIFESTO_CORPORATE_TAX_GAP = 0.07;
+    // --- Policy Levers: Corporate Tax (Mertens & Ravn 2013) ---
     /** Corporate profits before tax over GDP, 1985-2019 mean (BEA NIPA via FRED, A053RC1Q027SBEA over GDP: 9.67%): the base a change in the corporate rate is levied on, so a point of rate is a tenth of a point of GDP in revenue. */
     public const CORPORATE_PROFITS_TO_GDP = 0.0967;
 
-    // --- The Diet's Levers: Tariffs (Amiti, Redding & Weinstein 2019; Fajgelbaum et al. 2020; Furceri et al. 2018) ---
-    /** Average effective tariff the protectionist end of the openness axis enacts over the District's free port: the US's 2025 rise, 2.5% to 17.9% (Yale Budget Lab, State of U.S. Tariffs, 26 September 2025). Duties pass fully into import prices at the border (Amiti, Redding & Weinstein 2019; Fajgelbaum et al. 2020). */
-    public const POLICY_PROTECTIONIST_TARIFF = 0.154;
+    // --- Policy Levers: Tariffs (Fajgelbaum et al. 2020; Furceri et al. 2018) ---
     /** Average tariff partners put on the District's exports per point of its average tariff on imports: 0.60 in 2018, when US tariffs rose 14.0 points on 12.7% of imports and retaliation 13.1 points on 8.2% of exports (Fajgelbaum, Goldberg, Kennedy & Khandelwal 2020). */
     public const TARIFF_RETALIATION_RATIO = (0.131 * 0.082) / (0.140 * 0.127);
     /** Output lost per unit of average tariff, through productivity: a 3.6-point rise costs 0.4% of output five years on (Furceri, Hannan, Ostry & Rose 2018: 151 countries, 1963-2014; labour productivity -0.9%). Their symmetric baseline; they find cuts help less than rises hurt. */
     public const TARIFF_OUTPUT_LOSS = 0.004 / 0.036;
 
-    // --- The Diet's Levers: Immigration (UN WPP via World Bank, 2000-2019; Saiz 2007) ---
-    /** Net migration a closed immigration regime admits, a year as a share of population: Japan's 0.11% (World Bank SM.POP.NETM over SP.POP.TOTL, 2000-2019 mean). */
-    public const MIGRATION_CLOSED_REGIME = 0.0011;
-    /** Net migration an open immigration regime admits: Canada's 0.73% and Australia's 0.86%, averaged (the same series). Midway between the two regimes sits the US's 0.50%, the structural labour growth the District opens with. */
-    public const MIGRATION_OPEN_REGIME = (0.00728 + 0.00859) / 2.0;
+    // --- Policy Levers: Immigration (Saiz 2007) ---
     /** Rise in rents and house values per unit of population added by immigration (Saiz 2007: an inflow of 1% of a city's population raises rents and values about 1%); the District's land ends at the sounds. */
     public const IMMIGRATION_HOUSING_ELASTICITY = 1.0;
 
@@ -486,8 +414,6 @@ class MacroEngine
         private readonly ?MacroDiagnosticsProbe $diagnostics = null,
         /** The sovereign reserve fund. Null means the district has none, which is what a caller that builds the engine by hand gets. */
         private readonly ?SovereignFundSubsystem $sovereignFundSubsystem = null,
-        /** The Diet's elections and coalitions. Null means no politics, which is what a caller that builds the engine by hand gets. */
-        private readonly ?DistrictPoliticsSubsystem $politicsSubsystem = null,
     ) {}
 
     private function loadState(): MacroState
@@ -575,6 +501,10 @@ class MacroEngine
      * level, which stands when not reported) and the float-weighted price return, dividend cash and net issuance of
      * that tick (flows, which are zero when not reported, so a missing observation never replays the last one).
      *
+     * The government is outside the economy too (App\Service\Politics\PoliticsEngine): what it hands over, the levers
+     * in force and the election calendar's pull on policy uncertainty, comes in through $policy as of the previous tick,
+     * and null leaves both where they stand, so a caller with no politics runs on the opening levers and no calendar.
+     *
      * @param float      $dt                Time increment in years.
      * @param float|null $equityMarketCap   Whole-board capitalisation as of the previous tick, or null.
      * @param float|null $boardFloatCap     Whole-board float-adjusted capitalisation as of the previous tick, or null.
@@ -583,6 +513,7 @@ class MacroEngine
      * @param float|null $boardNetIssuance  Float the companies' own issuance added on the previous tick (buybacks negative), or null.
      * @param float|null $boardStampDuty    Stamp duty the board's trading paid on the previous tick, or null.
      * @param float|null $strategicStakeCash Cash the District's strategic stakes paid it on the previous tick (dividends, buybacks less issues), or null.
+     * @param GovernmentPolicyDTO|null $policy The government's levers and election pulse as of the previous tick, or null.
      */
     public function updateMacroState(
         float $dt,
@@ -593,8 +524,13 @@ class MacroEngine
         ?float $boardNetIssuance = null,
         ?float $boardStampDuty = null,
         ?float $strategicStakeCash = null,
+        ?GovernmentPolicyDTO $policy = null,
     ): \App\DTO\MacroStateDTO {
         $state = $this->loadState();
+
+        if ($policy !== null) {
+            $this->enactPolicy($state, $policy);
+        }
 
         if ($equityMarketCap !== null && $equityMarketCap > 0.0) {
             $state->equityMarketCap = $equityMarketCap;
@@ -719,9 +655,6 @@ class MacroEngine
         $this->assetSubsystem->calculateConsumerSentiment($state, $dt);
         $this->monetarySubsystem->calculateRecessionProbability($state);
         $this->assetSubsystem->calculateCapitalMarketsDealIndex($state, $dt);
-        // The Diet votes on the calendar's election tick, on this tick's real GDP and deflator.
-        $this->politicsSubsystem?->update($state, $dt);
-
         $this->updateSectorFactors($state, $dt);
         $this->evaluateSystemicEvent($state, $dt);
         if ($state->eventType !== null) {
@@ -831,32 +764,31 @@ class MacroEngine
             $state->inversionDuration >= self::SYSTEMIC_INVERSION_ALARM_YEARS
             => ShockEvent::YIELD_CURVE_INVERSION_ALARM,
 
-            // Scheduled democratic political election shock event (Nordhaus 1975).
-            $state->lastElectionAt === $state->totalTime
-            => ShockEvent::ELECTION_HELD,
-
-            // A cabinet losing the Diet between votes (DistrictPoliticsSubsystem).
-            $state->lastCabinetFellAt === $state->totalTime
-            => ShockEvent::GOVERNMENT_FELL,
-
-            // A cabinet taking office after the talks that followed a vote or a fall (DistrictPoliticsSubsystem).
-            $state->lastGovernmentFormedAt === $state->totalTime
-            => ShockEvent::GOVERNMENT_FORMED,
-
-            // A budget round that changed a lever (DistrictPoliticsSubsystem::enactBudget).
-            $state->lastBudgetEnactedAt === $state->totalTime
-            => ShockEvent::BUDGET_ENACTED,
-
             default => null,
         };
 
         if ($eventType !== null) {
             $state->eventType = $eventType;
-            // District-wide systemic crisis refractory cooldown timer arming; the political calendar arms none.
-            if (!in_array($eventType, [ShockEvent::ELECTION_HELD, ShockEvent::GOVERNMENT_FELL, ShockEvent::GOVERNMENT_FORMED, ShockEvent::BUDGET_ENACTED], true)) {
-                $state->eventCooldownTimer = self::SYSTEMIC_EVENT_COOLDOWN_YEARS;
-            }
+            // District-wide systemic crisis refractory cooldown timer arming.
+            $state->eventCooldownTimer = self::SYSTEMIC_EVENT_COOLDOWN_YEARS;
         }
+    }
+
+    /**
+     * Puts the government's levers in force and takes its election pulse. A tariff's change moves productivity by
+     * Furceri et al.'s (2018) output loss, a level potential absorbs over the years that follow.
+     */
+    private function enactPolicy(MacroState $state, GovernmentPolicyDTO $policy): void
+    {
+        $productivityLoss = -self::TARIFF_OUTPUT_LOSS * ($policy->importTariffRate - $state->importTariffRate);
+        $state->tfpShockLevel += $productivityLoss;
+        $state->totalFactorProductivityIndex *= exp($productivityLoss);
+
+        $state->corporateTaxPolicyShift = $policy->corporateTaxPolicyShift;
+        $state->importTariffRate = $policy->importTariffRate;
+        $state->laborForceGrowthRate = $policy->laborForceGrowthRate;
+        $state->mergerReviewLeniency = $policy->mergerReviewLeniency;
+        $state->electionPulse = $policy->electionPulse;
     }
 
     /**

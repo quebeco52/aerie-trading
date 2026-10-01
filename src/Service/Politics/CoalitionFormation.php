@@ -2,10 +2,9 @@
 
 declare(strict_types=1);
 
-namespace App\Service\Macro\Subsystem;
+namespace App\Service\Politics;
 
 use App\Data\AerieDiet;
-use App\Service\Macro\MacroEngine;
 use App\Service\Math\MathUtility;
 
 /**
@@ -40,6 +39,37 @@ use App\Service\Math\MathUtility;
  */
 final class CoalitionFormation
 {
+    // --- Forming a Government (Martin & Stevenson 2010, Table 1 Model 1; Golder 2010; Bäck et al. 2023) ---
+    /** Log-odds of a cabinet without a majority of its own (Martin & Stevenson 2010, Table 1 Model 1: 256 formations in 17 West European democracies). */
+    public const FORMATION_MINORITY_UTILITY = -1.188;
+    /** Log-odds of a minimal winning cabinet, every member needed for its majority (Martin & Stevenson 2010). */
+    public const FORMATION_MINIMAL_WINNING_UTILITY = 0.683;
+    /** Log-odds per party in the cabinet (Martin & Stevenson 2010). */
+    public const FORMATION_PARTY_UTILITY = -0.485;
+    /** Log-odds of a cabinet holding the Diet's largest party (Martin & Stevenson 2010). */
+    public const FORMATION_LARGEST_PARTY_UTILITY = 1.575;
+    /** Manifesto left-right points a unit of the Diet's axes spans, the scale Martin & Stevenson read range on; fitted so 36.5% of cabinets after a hung vote are minority cabinets (ParlGov: 315 in Western Europe since 1945; var/harness/politics/formation_fit.py). Benoit & Laver (2007) put a unit, half an expert scale, at 30 points (3.19 per point of their 1-20 scale). */
+    public const FORMATION_MANIFESTO_POINTS_PER_UNIT = 40.0;
+    /** Log-odds per unit of the cabinet's ideological range: -0.027 per manifesto left-right point (Martin & Stevenson 2010). */
+    public const FORMATION_RANGE_UTILITY = -0.027 * self::FORMATION_MANIFESTO_POINTS_PER_UNIT;
+    /** Log-odds of the outgoing cabinet re-forming (Martin & Stevenson 2010: the status quo government). */
+    public const FORMATION_STATUS_QUO_UTILITY = 1.984;
+    /** Log-odds of a government whose parties, cabinet and supporters, all declared for the same bloc before the vote (Martin & Stevenson 2010: a pre-electoral pact associated with the coalition). */
+    public const FORMATION_PACT_UTILITY = 3.429;
+    /** Log-odds of a cabinet holding two parties that ruled out governing together, the two bloc leaders (Martin & Stevenson 2010: an anti-pact). */
+    public const FORMATION_ANTIPACT_UTILITY = -2.877;
+    /** Log-odds per unit a cabinet party stands from the Diet's median on the Council axis, the question of the constitutional order: Martin & Stevenson's (2010) anti-system term, its manifesto measure replaced by that distance and its strength fitted so the parties at the axis's ends sit in cabinet as seldom as Scandinavia's radical parties (var/harness/politics/formation_fit.py). */
+    public const FORMATION_ANTISYSTEM_UTILITY = -2.91;
+    /** Log-odds the cabinet the first attempt tries must clear, the value of no deal at all; fitted so 32% of formations need more than one attempt (Golder 2010: 'nearly a third', 16 West European democracies 1944-1998; var/harness/politics/formation_fit.py). */
+    public const FORMATION_RESERVATION = 2.17;
+    /** How far the bar of no deal falls with each attempt that fails, as the parties' patience runs out; fitted so formations are as spread as the record's, sd 33.9 days on a mean of 33.7 (Bäck, Hellström, Lindvall & Teorell 2023), which cuts the stalemates a fixed bar would leave running for years. */
+    public const FORMATION_RESERVATION_STEP = 0.68;
+    /** Mean length of one attempt in days, each drawn exponential (a constant hazard: the formation record's spread about equals its mean); fitted so formations average Bäck, Hellström, Lindvall & Teorell's (2023) 33.7 days, Western Europe 1945-2019. */
+    public const FORMATION_ATTEMPT_DAYS = 22.8;
+    /** Mean days from a vote to the government it forms, single-party majorities included: what the talks model averages at the fitted constants. */
+    public const FORMATION_MEAN_DAYS = 33.7;
+
+    // --- Safeguards ---
     /** Attempts after which the cabinet tried takes office regardless: a safeguard, since the falling bar ends every talks in the harness within a dozen attempts. */
     private const MAX_ATTEMPTS = 1000;
     /** Rounds of declarations after which the blocs stand as they are: a safeguard, since two-means settles within a few. */
@@ -78,9 +108,9 @@ final class CoalitionFormation
         $log = [];
         $day = 0.0;
         for ($attempt = 1; ; ++$attempt) {
-            $day += MacroEngine::FORMATION_ATTEMPT_DAYS * $draws->generateExponential();
+            $day += self::FORMATION_ATTEMPT_DAYS * $draws->generateExponential();
             $tried = $options[self::drawOption($utilities, $draws)];
-            $bar = MacroEngine::FORMATION_RESERVATION - (MacroEngine::FORMATION_RESERVATION_STEP * ($attempt - 1));
+            $bar = self::FORMATION_RESERVATION - (self::FORMATION_RESERVATION_STEP * ($attempt - 1));
             $formed = $draws->generateUniform() < self::successProbability($utilities, $bar) || $attempt >= self::MAX_ATTEMPTS;
 
             $log[] = ['day' => $day, 'formateur' => self::leader($tried['cabinet'], $order), 'formed' => $formed] + $tried;
@@ -202,15 +232,15 @@ final class CoalitionFormation
             $challenge += abs(AerieDiet::position($party, $positions)[AerieDiet::AXIS_COUNCIL] - $median);
         }
 
-        return ($minority ? MacroEngine::FORMATION_MINORITY_UTILITY : 0.0)
-            + (self::isMinimalWinning($cabinet, $seats) ? MacroEngine::FORMATION_MINIMAL_WINNING_UTILITY : 0.0)
-            + (MacroEngine::FORMATION_PARTY_UTILITY * count($cabinet))
-            + (in_array($largest, $cabinet, true) ? MacroEngine::FORMATION_LARGEST_PARTY_UTILITY : 0.0)
-            + (MacroEngine::FORMATION_RANGE_UTILITY * self::ideologicalRange($government, $positions))
-            + ($sorted === $outgoing ? MacroEngine::FORMATION_STATUS_QUO_UTILITY : 0.0)
-            + ($oneBloc ? MacroEngine::FORMATION_PACT_UTILITY : 0.0)
-            + (count($leaders) > 1 ? MacroEngine::FORMATION_ANTIPACT_UTILITY : 0.0)
-            + (MacroEngine::FORMATION_ANTISYSTEM_UTILITY * $challenge);
+        return ($minority ? self::FORMATION_MINORITY_UTILITY : 0.0)
+            + (self::isMinimalWinning($cabinet, $seats) ? self::FORMATION_MINIMAL_WINNING_UTILITY : 0.0)
+            + (self::FORMATION_PARTY_UTILITY * count($cabinet))
+            + (in_array($largest, $cabinet, true) ? self::FORMATION_LARGEST_PARTY_UTILITY : 0.0)
+            + (self::FORMATION_RANGE_UTILITY * self::ideologicalRange($government, $positions))
+            + ($sorted === $outgoing ? self::FORMATION_STATUS_QUO_UTILITY : 0.0)
+            + ($oneBloc ? self::FORMATION_PACT_UTILITY : 0.0)
+            + (count($leaders) > 1 ? self::FORMATION_ANTIPACT_UTILITY : 0.0)
+            + (self::FORMATION_ANTISYSTEM_UTILITY * $challenge);
     }
 
     /**

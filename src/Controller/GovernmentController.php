@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Controller;
 
 use App\Service\Macro\MacroStateProvider;
+use App\Service\Politics\PoliticsStateProvider;
 use App\Service\View\GovernmentPageBuilder;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Response;
@@ -17,8 +18,8 @@ use Symfony\Component\Routing\Attribute\Route;
 class GovernmentController extends AbstractController
 {
     #[Route('/government', name: 'app_government', methods: ['GET'])]
-    public function index(MacroStateProvider $macroStateProvider, GovernmentPageBuilder $pageBuilder): Response
+    public function index(MacroStateProvider $macroStateProvider, PoliticsStateProvider $politicsStateProvider, GovernmentPageBuilder $pageBuilder): Response
     {
-        return $this->render('government/index.html.twig', $pageBuilder->build($macroStateProvider->liveState()));
+        return $this->render('government/index.html.twig', $pageBuilder->build($macroStateProvider->liveState(), $politicsStateProvider->liveState()));
     }
 }

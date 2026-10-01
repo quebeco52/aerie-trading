@@ -356,75 +356,21 @@ class MacroState
     public float $sovereignRiskSpreadEma;
     public float $primaryDeficitToGdp;
 
-    // Policy uncertainty (BBD-style index) and the fixed-term election calendar it peaks on.
+    // Policy uncertainty (BBD-style index), and the election calendar's pull on it as the government last handed it.
     public float $policyUncertaintyIndex;
     public float $policyUncertaintyIndexEma;
-    public float $lastElectionAt;
+    public float $electionPulse;
 
-    // The Diet (App\Service\Macro\Subsystem\DistrictPoliticsSubsystem), each map keyed by party: seats, vote shares and
-    // their change at the last vote, each party's position by axis, the cabinet, and the parties supporting it from outside.
-    /** @var array<string, float> */
-    public array $dietSeats;
-    /** @var array<string, float> */
-    public array $dietVoteShares;
-    /** @var array<string, float> */
-    public array $dietVoteSwings;
-    /** @var array<string, array<string, float>> */
-    public array $partyPositions;
-    /** @var array<string, float> */
-    public array $governingCoalition;
-    /** @var array<string, float> */
-    public array $supportParties;
-    // The blocs declared before the last vote: the leader of the bloc each party campaigned in.
-    /** @var array<string, string> */
-    public array $dietBlocs;
-    // Each party's short-term swing at the last vote, in log share: candidates and campaigns that do not outlast the vote.
-    /** @var array<string, float> */
-    public array $partyShortTermShocks;
-    public float $coalitionFormedAt;
-    // The talks after a vote (CoalitionFormation): the cabinet and supporters they produced, the day they take office
-    // (-1: no talks pending, the government sits), when a cabinet last took office, and the talks attempt by attempt.
-    /** @var array<string, float> */
-    public array $pendingCoalition;
-    /** @var array<string, float> */
-    public array $pendingSupport;
-    public float $coalitionTakesOfficeAt;
-    public float $lastGovernmentFormedAt;
-    /** @var list<array{day: float, formateur: string, formed: bool, cabinet: list<string>, support: list<string>}> */
-    public array $formationLog;
-    // When the last talks began (a vote or a fall; -1: none yet), when the sitting cabinet will fall (-1: it sees out the
-    // term or talks are pending), and when a cabinet last fell.
-    public float $talksStartedAt;
-    public float $cabinetFallsAt;
-    public float $lastCabinetFellAt;
-    // The cabinet that went into the last vote, the talks' status quo.
-    /** @var array<string, float> */
-    public array $electionOutgoingCabinet;
-    // What the vote reads: the deflator where the term began and real GDP where the campaign began (-1: not yet marked).
-    public float $termStartedAt;
-    public float $termStartDeflator;
-    public float $campaignStartedAt;
-    public float $campaignStartRealGdp;
-    // The post-crisis lift the last vote gave the closed-economy party, returned at the next.
-    public float $ironHarborCrisisShift;
-    // The last vote's economy against trend and target, and the governing coalition's change in share.
-    public float $electionGrowthGap;
-    public float $electionInflationGap;
-    public float $electionIncumbentSwing;
-
-    // The levers the Diet enacts at its budget rounds: the corporate rate's shift from the neutral 21%, the average
-    // tariff on imports and the net export response building toward it, labour force growth with the immigration regime
-    // in it and the population that regime has added against the structural path (log), and when a budget last changed a
-    // lever and when the Council's debt brake last held one back (-1: never).
+    // The levers the government has in force (App\DTO\GovernmentPolicyDTO): the corporate rate's shift from the neutral
+    // 21%, the average tariff on imports and the net export response building toward it, labour force growth with the
+    // immigration regime in it and the population that regime has added against the structural path (log), and where
+    // merger review stands between the 2023 guidelines (0) and the 2010 guidelines (1).
     public float $corporateTaxPolicyShift;
     public float $importTariffRate;
     public float $tariffTradeLag;
     public float $laborForceGrowthRate;
-    // Where merger review stands between the 2023 guidelines (0) and the 2010 guidelines (1), as the Diet last set it.
     public float $mergerReviewLeniency;
     public float $immigrationPopulationShift;
-    public float $lastBudgetEnactedAt;
-    public float $lastCouncilBrakeAt;
 
     // Sovereign reserve fund (App\Service\Macro\Subsystem\SovereignFundSubsystem). The three sleeves: a slice of the
     // board in currency, and foreign equities and foreign paper in FOREIGN units (home value is units / exchangeRateIndex).
@@ -528,12 +474,7 @@ class MacroState
 
             $carried[$field] = true;
             $state->$field = match ($field) {
-                'sectorZ', 'sectorDemandZ', 'dietSeats', 'dietVoteShares', 'dietVoteSwings', 'governingCoalition', 'supportParties', 'partyShortTermShocks',
-                'pendingCoalition', 'pendingSupport', 'electionOutgoingCabinet'
-                    => is_array($data[$key]) ? array_map('floatval', $data[$key]) : [],
-                'partyPositions' => is_array($data[$key]) ? self::hydratePositions($data[$key]) : [],
-                'dietBlocs' => is_array($data[$key]) ? array_map('strval', $data[$key]) : [],
-                'formationLog' => is_array($data[$key]) ? array_values($data[$key]) : [],
+                'sectorZ', 'sectorDemandZ' => is_array($data[$key]) ? array_map('floatval', $data[$key]) : [],
                 'qeActive', 'qtActive' => (bool) $data[$key],
                 'eventType' => (string) $data[$key],
                 default => (float) $data[$key],
@@ -613,24 +554,6 @@ class MacroState
         }
 
         return $state;
-    }
-
-    /**
-     * Party positions off the wire: each party's coordinates by axis, as floats.
-     *
-     * @param array<mixed> $positions Positions by party and axis, as decoded.
-     * @return array<string, array<string, float>>
-     */
-    public static function hydratePositions(array $positions): array
-    {
-        $hydrated = [];
-        foreach ($positions as $party => $point) {
-            if (is_array($point)) {
-                $hydrated[(string) $party] = array_map('floatval', $point);
-            }
-        }
-
-        return $hydrated;
     }
 
     /**

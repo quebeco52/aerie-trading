@@ -2,13 +2,12 @@
 
 declare(strict_types=1);
 
-namespace App\Tests\Service\Macro\Subsystem;
+namespace App\Tests\Service\Politics;
 
 use App\Data\AerieDiet as Diet;
-use App\Service\Macro\MacroEngine;
-use App\Service\Macro\Subsystem\CoalitionFormation as Formation;
-use App\Service\Macro\Subsystem\DistrictPoliticsSubsystem as Politics;
 use App\Service\Math\MathUtility;
+use App\Service\Politics\CoalitionFormation as Formation;
+use App\Service\Politics\PoliticsEngine as Politics;
 use PHPUnit\Framework\TestCase;
 
 class CoalitionFormationTest extends TestCase
@@ -29,26 +28,26 @@ class CoalitionFormationTest extends TestCase
         $right = [Diet::VANGUARD, Diet::EXCHANGE, Diet::CHARTISTS, Diet::FREE_PORT];
         $this->assertTrue(Formation::isMinimalWinning($right, $seats));
         // Distances from the Council median: the Exchange Party 0.1, the Chartists 0.5, the Vanguard and the Free Port none.
-        $majority = MacroEngine::FORMATION_MINIMAL_WINNING_UTILITY + (4 * MacroEngine::FORMATION_PARTY_UTILITY) + MacroEngine::FORMATION_LARGEST_PARTY_UTILITY
-            + (MacroEngine::FORMATION_RANGE_UTILITY * Formation::ideologicalRange($right, $positions))
-            + MacroEngine::FORMATION_PACT_UTILITY + (MacroEngine::FORMATION_ANTISYSTEM_UTILITY * 0.6);
+        $majority = Formation::FORMATION_MINIMAL_WINNING_UTILITY + (4 * Formation::FORMATION_PARTY_UTILITY) + Formation::FORMATION_LARGEST_PARTY_UTILITY
+            + (Formation::FORMATION_RANGE_UTILITY * Formation::ideologicalRange($right, $positions))
+            + Formation::FORMATION_PACT_UTILITY + (Formation::FORMATION_ANTISYSTEM_UTILITY * 0.6);
         $this->assertEqualsWithDelta($majority, Formation::utility($right, [], $seats, $positions, [], Diet::VANGUARD, Diet::SEED_BLOCS), 1e-12);
         $this->assertEqualsWithDelta(
-            $majority + MacroEngine::FORMATION_STATUS_QUO_UTILITY,
+            $majority + Formation::FORMATION_STATUS_QUO_UTILITY,
             Formation::utility($right, [], $seats, $positions, [Diet::FREE_PORT, Diet::CHARTISTS, Diet::VANGUARD, Diet::EXCHANGE], Diet::VANGUARD, Diet::SEED_BLOCS),
             1e-12,
             'The outgoing cabinet, in whatever order it is written, has the incumbency term.'
         );
 
         $this->assertEqualsWithDelta(
-            MacroEngine::FORMATION_MINORITY_UTILITY + MacroEngine::FORMATION_PARTY_UTILITY + MacroEngine::FORMATION_LARGEST_PARTY_UTILITY,
+            Formation::FORMATION_MINORITY_UTILITY + Formation::FORMATION_PARTY_UTILITY + Formation::FORMATION_LARGEST_PARTY_UTILITY,
             Formation::utility([Diet::VANGUARD], [], $seats, $positions, [], Diet::VANGUARD, Diet::SEED_BLOCS),
             1e-12,
             'One party alone spans no range, holds no majority and makes no pact.'
         );
         $this->assertEqualsWithDelta(
-            MacroEngine::FORMATION_MINORITY_UTILITY + MacroEngine::FORMATION_PARTY_UTILITY + MacroEngine::FORMATION_LARGEST_PARTY_UTILITY
-                + (MacroEngine::FORMATION_RANGE_UTILITY * Formation::ideologicalRange($right, $positions)) + MacroEngine::FORMATION_PACT_UTILITY,
+            Formation::FORMATION_MINORITY_UTILITY + Formation::FORMATION_PARTY_UTILITY + Formation::FORMATION_LARGEST_PARTY_UTILITY
+                + (Formation::FORMATION_RANGE_UTILITY * Formation::ideologicalRange($right, $positions)) + Formation::FORMATION_PACT_UTILITY,
             Formation::utility([Diet::VANGUARD], [Diet::EXCHANGE, Diet::CHARTISTS, Diet::FREE_PORT], $seats, $positions, [], Diet::VANGUARD, Diet::SEED_BLOCS),
             1e-12,
             'Carried by its own bloc, a one-party cabinet is a pact whose range runs over its supporters, who pay no anti-system cost.'
@@ -58,9 +57,9 @@ class CoalitionFormationTest extends TestCase
         $this->assertTrue(Formation::isMinimalWinning($grand, $seats));
         // The Civic Front leans populist, 0.4 below the Council median.
         $this->assertEqualsWithDelta(
-            MacroEngine::FORMATION_MINIMAL_WINNING_UTILITY + (2 * MacroEngine::FORMATION_PARTY_UTILITY) + MacroEngine::FORMATION_LARGEST_PARTY_UTILITY
-                + (MacroEngine::FORMATION_RANGE_UTILITY * Formation::ideologicalRange($grand, $positions)) + MacroEngine::FORMATION_ANTIPACT_UTILITY
-                + (MacroEngine::FORMATION_ANTISYSTEM_UTILITY * 0.4),
+            Formation::FORMATION_MINIMAL_WINNING_UTILITY + (2 * Formation::FORMATION_PARTY_UTILITY) + Formation::FORMATION_LARGEST_PARTY_UTILITY
+                + (Formation::FORMATION_RANGE_UTILITY * Formation::ideologicalRange($grand, $positions)) + Formation::FORMATION_ANTIPACT_UTILITY
+                + (Formation::FORMATION_ANTISYSTEM_UTILITY * 0.4),
             Formation::utility($grand, [], $seats, $positions, [], Diet::VANGUARD, Diet::SEED_BLOCS),
             1e-12,
             'The two bloc leaders together are an anti-pact and no pact.'
@@ -337,8 +336,8 @@ class CoalitionFormationTest extends TestCase
         $this->assertSame([Diet::CIVIC, Diet::VANGUARD, Diet::CIVIC], array_column($talks['log'], 'formateur'), 'Each attempt is led by the largest party in its cabinet.');
         $this->assertSame([false, false, true], array_column($talks['log'], 'formed'));
         $this->assertSame([[Diet::CIVIC], array_values(array_diff(Diet::PARTIES, [Diet::CIVIC])), [Diet::CIVIC]], array_column($talks['log'], 'cabinet'));
-        $this->assertSame([MacroEngine::FORMATION_ATTEMPT_DAYS, 2 * MacroEngine::FORMATION_ATTEMPT_DAYS, 3 * MacroEngine::FORMATION_ATTEMPT_DAYS], array_column($talks['log'], 'day'));
-        $this->assertEqualsWithDelta(3 * MacroEngine::FORMATION_ATTEMPT_DAYS, $talks['days'], 1e-9);
+        $this->assertSame([Formation::FORMATION_ATTEMPT_DAYS, 2 * Formation::FORMATION_ATTEMPT_DAYS, 3 * Formation::FORMATION_ATTEMPT_DAYS], array_column($talks['log'], 'day'));
+        $this->assertEqualsWithDelta(3 * Formation::FORMATION_ATTEMPT_DAYS, $talks['days'], 1e-9);
         $this->assertSame([Diet::CIVIC], $talks['cabinet'], 'A cabinet without the Diet\'s largest party can form.');
         $this->assertSame(Formation::supportFor([Diet::CIVIC], Diet::SEED_SEATS, Diet::HOME_POSITIONS, Diet::SEED_BLOCS), $talks['support']);
         $this->assertSame($talks['support'], $talks['log'][2]['support']);

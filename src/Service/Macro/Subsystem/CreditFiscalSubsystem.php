@@ -5,7 +5,6 @@ namespace App\Service\Macro\Subsystem;
 use App\Service\Macro\MacroEngine;
 use App\Service\Macro\MacroState;
 use App\Service\Macro\Recorder\MacroDiagnosticsProbe;
-use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
 
 /**
@@ -87,10 +86,8 @@ class CreditFiscalSubsystem
     public const CORPORATE_DEFAULT_SLOOS_SENSITIVITY = 1.0;
 
     // --- Economic Policy Uncertainty (Baker, Bloom & Davis 2016) ---
-    /** Log lift of the index at the election, ramping in over the final year of the term (Julio & Yook 2012 locate the investment cut in the election year; the BBD index rises a quarter or so into a presidential vote). */
+    /** Log lift of the index per unit of the election pulse, the full lift on the eve of a vote (Julio & Yook 2012 locate the investment cut in the election year; the BBD index rises a quarter or so into a presidential vote). */
     public const EPU_ELECTION_LIFT = 0.25;
-    /** Days per term the talks after a cabinet falls hold the election pulse above where the term's ramp would put it: falls in 41% of terms, 40 days of talks each (var/harness/politics/formation_report.py). */
-    public const EPU_FALL_TALK_DAYS_PER_TERM = 19.5;
     /** Log lift per unit of recession probability above its unconditional level: the index roughly doubled through 2008-2011 as policy responses were debated. */
     public const EPU_STRESS_LIFT = 1.0;
     /** Unconditional recession probability the stress lift measures from (the probit intercept's ~15%). */
@@ -699,39 +696,25 @@ class CreditFiscalSubsystem
     }
 
     /**
-     * Economic policy uncertainty (Baker, Bloom & Davis 2016) on a fixed-term election calendar.
+     * Economic policy uncertainty (Baker, Bloom & Davis 2016).
      *
-     * A log mean-reverting index whose level is set by two things the record ties it to: the calendar, since
-     * uncertainty about the policy regime builds into a scheduled election and resolves after it (Julio &
-     * Yook 2012), and the cycle, since a downturn brings the policy response itself into question. The vote only
-     * settles the regime once a government takes office, so through the talks that follow it the calendar's lift holds
-     * at its peak (Bernhard & Leblang 2006: returns fall and volatility rises through cabinet formations markets cannot
-     * call). Unscheduled shocks arrive as jumps. The election is derived from simulation time -- a term of
-     * MacroEngine::ELECTION_TERM_YEARS -- so nothing about the calendar is stored, only the tick the last vote fell on,
-     * for the event pulse.
+     * A log mean-reverting index whose level is set by two things the record ties it to: the election calendar, since
+     * uncertainty about the policy regime builds into a scheduled vote and resolves once a government takes office (Julio
+     * & Yook 2012; Bernhard & Leblang 2006), and the cycle, since a downturn brings the policy response itself into
+     * question. The calendar arrives as the election pulse the government hands the economy, centred on its long-run
+     * mean, so it moves the index through the term and leaves its average where it was. Unscheduled shocks arrive as
+     * jumps.
      *
      * @param MacroState $state Current macroeconomic state.
      * @param float      $dt    Time increment in years.
      */
     public function calculatePolicyUncertainty(MacroState $state, float $dt): void
     {
-        $term = MacroEngine::ELECTION_TERM_YEARS;
-        $yearsToElection = $term - fmod($state->totalTime, $term);
-        $electionProximity = max(0.0, 1.0 - $yearsToElection);
-        // Talks after a vote or a fall hold the peak; the vote's own tick counts as talks too, since the government it
-        // seats is decided later in the tick.
-        if ($state->coalitionTakesOfficeAt > $state->totalTime || MathUtility::crossedSimulatedBoundary($state->totalTime, $dt, $term)) {
-            $electionProximity = 1.0;
-        }
         $recessionExcess = max(0.0, $state->recessionProbabilityEma - self::EPU_STRESS_PROBABILITY_FLOOR);
-
-        // Julio & Yook (2012) election-cycle policy uncertainty with jump compensation: the ramp's half-year average
-        // over the term, plus the talks at the peak, after the vote and after any fall.
-        $averageElectionProximity = (0.5 + ((MacroEngine::FORMATION_MEAN_DAYS + self::EPU_FALL_TALK_DAYS_PER_TERM) / FinancialConstants::DAYS_PER_YEAR)) / $term;
         $jumpLogCompensator = self::EPU_JUMP_PROBABILITY * self::EPU_JUMP_MEAN / self::EPU_MEAN_REVERSION;
 
         $target = MacroEngine::EPU_BASELINE * exp(
-            (self::EPU_ELECTION_LIFT * ($electionProximity - $averageElectionProximity))
+            (self::EPU_ELECTION_LIFT * $state->electionPulse)
                 + (self::EPU_STRESS_LIFT * $recessionExcess)
                 - $jumpLogCompensator
         );
@@ -755,12 +738,6 @@ class CreditFiscalSubsystem
         $state->policyUncertaintyIndex = max(self::MIN_EPU, min(self::MAX_EPU, $baseProcess * $jumpData['multiplier']));
         if ($jumpData['exponent'] !== null) {
             $this->diagnostics?->recordEvent('policyUncertainty', $jumpData['exponent']);
-        }
-
-        // Snapped to the tick grid, so the vote falls on the same tick as every other boundary of the calendar (a
-        // budget round) rather than one tick late when accumulated time lands a hair short of the term.
-        if (MathUtility::crossedSimulatedBoundary($state->totalTime, $dt, $term)) {
-            $state->lastElectionAt = $state->totalTime;
         }
     }
 

@@ -15,6 +15,7 @@ use App\Service\Market\IndexCommittee;
 use App\Service\Market\IndexFundAccountant;
 use App\Service\Market\MarketOperator;
 use App\Service\Market\StockTracker;
+use App\Service\Politics\PoliticsEngine;
 use Doctrine\DBAL\Connection;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\EntityRepository;
@@ -81,6 +82,7 @@ class MarketSimulateCommandTest extends TestCase
             $macroEngineMock,
             $marketOperatorMock,
             $systemicEventsStub,
+            new PoliticsEngine(MathUtility::ownStream(1), $redisMock),
             $redisMock
         );
 

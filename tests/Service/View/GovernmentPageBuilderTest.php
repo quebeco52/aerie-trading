@@ -6,6 +6,7 @@ namespace App\Tests\Service\View;
 
 use App\Data\AerieDiet as Diet;
 use App\DTO\MacroStateDTO;
+use App\DTO\PoliticsStateDTO;
 use App\Entity\DietElection;
 use App\Repository\DietElectionRepository;
 use App\Service\Macro\MacroEngine;
@@ -26,7 +27,7 @@ class GovernmentPageBuilderTest extends TestCase
 
     public function testTheFoundingDietIsDrawnSeatForSeat(): void
     {
-        $page = $this->builder()->build(new MacroStateDTO());
+        $page = $this->builder()->build(new MacroStateDTO(), new PoliticsStateDTO());
 
         $this->assertSame(['The Vanguard'], array_column($page['government']['members'], 'name'));
         $this->assertSame(80, $page['government']['seats']);
@@ -57,7 +58,7 @@ class GovernmentPageBuilderTest extends TestCase
     /** The chamber runs from the largest state on the left to the smallest on the right. */
     public function testTheChamberRunsFromBigStateToSmall(): void
     {
-        $page = $this->builder()->build(new MacroStateDTO());
+        $page = $this->builder()->build(new MacroStateDTO(), new PoliticsStateDTO());
         $leftmost = array_reduce($page['hemicycle'], static fn(?array $carry, array $seat): array => $carry === null || $seat['x'] < $carry['x'] ? $seat : $carry);
         $rightmost = array_reduce($page['hemicycle'], static fn(?array $carry, array $seat): array => $carry === null || $seat['x'] > $carry['x'] ? $seat : $carry);
 
@@ -71,7 +72,7 @@ class GovernmentPageBuilderTest extends TestCase
         $first = $this->election(4.0, [Diet::VANGUARD, Diet::EXCHANGE], [Diet::VANGUARD, Diet::EXCHANGE]);
         $second = $this->election(8.0, [Diet::CIVIC, Diet::IRON_HARBOR, Diet::EXCHANGE], [Diet::VANGUARD, Diet::EXCHANGE]);
 
-        $page = $this->builder([$first, $second])->build(new MacroStateDTO(totalTime: 9.3, coalitionFormedAt: 8.0, lastGovernmentFormedAt: 8.0));
+        $page = $this->builder([$first, $second])->build(new MacroStateDTO(totalTime: 9.3), new PoliticsStateDTO(totalTime: 9.3, coalitionFormedAt: 8.0, lastGovernmentFormedAt: 8.0));
 
         $this->assertSame(['Year 9 Q1', 'Year 5 Q1'], array_column($page['history'], 'date'));
         $this->assertSame([true, false], array_column($page['history'], 'changed'));
@@ -97,10 +98,12 @@ class GovernmentPageBuilderTest extends TestCase
 
         $page = $this->builder([$vote])->build(new MacroStateDTO(
             totalTime: 4.0 + 25.0 / 365.0,
+            sovereignDebtToGdp: 0.5,
+        ), new PoliticsStateDTO(
+            totalTime: 4.0 + 25.0 / 365.0,
             lastElectionAt: 4.0,
             coalitionTakesOfficeAt: 4.0 + 50.0 / 365.0,
             formationLog: $log,
-            sovereignDebtToGdp: 0.5,
         ));
 
         $this->assertTrue($page['talks']['underWay']);
@@ -116,7 +119,7 @@ class GovernmentPageBuilderTest extends TestCase
         $this->assertSame([], $page['history'][0]['coalition'], 'The history gives the talks away.');
         $this->assertSame([], $page['history'][0]['support']);
 
-        $after = $this->builder([$vote])->build(new MacroStateDTO(totalTime: 4.0 + 60.0 / 365.0, lastElectionAt: 4.0, formationLog: $log));
+        $after = $this->builder([$vote])->build(new MacroStateDTO(totalTime: 4.0 + 60.0 / 365.0), new PoliticsStateDTO(totalTime: 4.0 + 60.0 / 365.0, lastElectionAt: 4.0, formationLog: $log));
         $this->assertFalse($after['talks']['underWay']);
         $this->assertCount(2, $after['talks']['entries']);
         $this->assertTrue($after['history'][0]['formed']);
@@ -133,7 +136,7 @@ class GovernmentPageBuilderTest extends TestCase
         $log = [['day' => 30.0, 'formateur' => Diet::CIVIC, 'formed' => true, 'cabinet' => [Diet::CIVIC], 'support' => [Diet::IRON_HARBOR, Diet::BASTION_GUILDS]]];
         $vote = $this->election(4.0, [Diet::VANGUARD], [Diet::VANGUARD])
             ->addFall(6.5, [Diet::VANGUARD], [Diet::CIVIC], [Diet::IRON_HARBOR, Diet::BASTION_GUILDS], $log);
-        $during = new MacroStateDTO(
+        $during = new PoliticsStateDTO(
             totalTime: 6.5 + 10.0 / 365.0,
             lastElectionAt: 4.0,
             coalitionTakesOfficeAt: 6.5 + 30.0 / 365.0,
@@ -142,7 +145,7 @@ class GovernmentPageBuilderTest extends TestCase
             lastCabinetFellAt: 6.5,
         );
 
-        $page = $this->builder([$vote])->build($during);
+        $page = $this->builder([$vote])->build(new MacroStateDTO(totalTime: 6.5 + 10.0 / 365.0), $during);
 
         $this->assertTrue($page['talks']['underWay']);
         $this->assertTrue($page['talks']['afterFall']);
@@ -155,7 +158,7 @@ class GovernmentPageBuilderTest extends TestCase
         $this->assertSame([], $fall['coalition'], 'The history gives the talks away.');
         $this->assertTrue($page['history'][0]['formed'], 'The vote\'s own government is long in office.');
 
-        $after = $this->builder([$vote])->build(new MacroStateDTO(totalTime: 6.5 + 31.0 / 365.0, lastElectionAt: 4.0, formationLog: $log, talksStartedAt: 6.5, lastCabinetFellAt: 6.5));
+        $after = $this->builder([$vote])->build(new MacroStateDTO(totalTime: 6.5 + 31.0 / 365.0), new PoliticsStateDTO(totalTime: 6.5 + 31.0 / 365.0, lastElectionAt: 4.0, formationLog: $log, talksStartedAt: 6.5, lastCabinetFellAt: 6.5));
         $this->assertFalse($after['talks']['underWay']);
         $this->assertSame(['Civic Front'], array_column($after['history'][0]['falls'][0]['coalition'], 'name'));
         $this->assertSame(['Iron Harbor Coalition', 'The Bastion Guilds'], array_column($after['history'][0]['falls'][0]['support'], 'name'));
@@ -164,7 +167,7 @@ class GovernmentPageBuilderTest extends TestCase
     /** A minority cabinet's supporters are marked in the chamber and the tables, and count toward its majority. */
     public function testSupportSeatsAreMarkedAndCountTowardTheMajority(): void
     {
-        $page = $this->builder()->build(new MacroStateDTO(
+        $page = $this->builder()->build(new MacroStateDTO(), new PoliticsStateDTO(
             governingCoalition: Diet::membership([Diet::VANGUARD]),
             supportParties: Diet::membership([Diet::EXCHANGE, Diet::CHARTISTS]),
         ));
@@ -185,9 +188,11 @@ class GovernmentPageBuilderTest extends TestCase
     {
         $page = $this->builder()->build(new MacroStateDTO(
             totalTime: 0.2,
+            sovereignDebtToGdp: 0.5,
+        ), new PoliticsStateDTO(
+            totalTime: 0.2,
             governingCoalition: Diet::membership([Diet::VANGUARD]),
             supportParties: Diet::membership([Diet::CIVIC]),
-            sovereignDebtToGdp: 0.5,
         ));
         $tax = array_column($page['budget']['levers'], null, 'name')['Corporate tax rate'];
 
@@ -201,7 +206,7 @@ class GovernmentPageBuilderTest extends TestCase
     public function testTheBudgetShowsWhatTheCouncilHolds(): void
     {
         $rightBloc = Diet::membership([Diet::VANGUARD, Diet::EXCHANGE, Diet::CHARTISTS, Diet::FREE_PORT]);
-        $braked = $this->builder()->build(new MacroStateDTO(totalTime: 0.2, sovereignDebtToGdp: MacroEngine::SOVEREIGN_RISK_DEBT_THRESHOLD + 0.03, governingCoalition: $rightBloc, supportParties: Diet::membership([])));
+        $braked = $this->builder()->build(new MacroStateDTO(totalTime: 0.2, sovereignDebtToGdp: MacroEngine::SOVEREIGN_RISK_DEBT_THRESHOLD + 0.03), new PoliticsStateDTO(totalTime: 0.2, governingCoalition: $rightBloc, supportParties: Diet::membership([])));
         $levers = array_column($braked['budget']['levers'], null, 'name');
 
         $this->assertTrue($braked['budget']['braking']);
@@ -212,7 +217,7 @@ class GovernmentPageBuilderTest extends TestCase
         $this->assertSame('pending', $levers['Labour force growth']['status']);
         $this->assertSame('Year 1 Q3', $braked['budget']['nextRound']);
 
-        $free = $this->builder()->build(new MacroStateDTO(totalTime: 0.2, sovereignDebtToGdp: 0.5, governingCoalition: $rightBloc, supportParties: Diet::membership([])));
+        $free = $this->builder()->build(new MacroStateDTO(totalTime: 0.2, sovereignDebtToGdp: 0.5), new PoliticsStateDTO(totalTime: 0.2, governingCoalition: $rightBloc, supportParties: Diet::membership([])));
         $this->assertFalse($free['budget']['braking']);
         $this->assertSame('pending', array_column($free['budget']['levers'], null, 'name')['Corporate tax rate']['status']);
     }
@@ -228,7 +233,7 @@ class GovernmentPageBuilderTest extends TestCase
     #[DataProvider('crowdedDiets')]
     public function testNoLabelCrowdsAnotherWhenThePartiesBunch(array $seats, array $positions): void
     {
-        $page = $this->builder()->build(new MacroStateDTO(dietSeats: $seats, partyPositions: $positions));
+        $page = $this->builder()->build(new MacroStateDTO(), new PoliticsStateDTO(dietSeats: $seats, partyPositions: $positions));
         $compass = $page['compass'];
         $size = $compass['fontSize'];
         $box = static function (string $text, float $x, float $y, string $anchor) use ($size): array {
@@ -289,7 +294,7 @@ class GovernmentPageBuilderTest extends TestCase
     {
         $positions = Diet::HOME_POSITIONS;
         $positions[Diet::EXCHANGE][Diet::AXIS_STATE] = 1.0;
-        $page = $this->builder()->build(new MacroStateDTO(
+        $page = $this->builder()->build(new MacroStateDTO(), new PoliticsStateDTO(
             dietSeats: [Diet::CIVIC => 60.0, Diet::VANGUARD => 60.0, Diet::IRON_HARBOR => 20.0, Diet::EXCHANGE => 130.0, Diet::CHARTISTS => 20.0, Diet::COMMON_LOT => 10.0],
             partyPositions: $positions,
         ));

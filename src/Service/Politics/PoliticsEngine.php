@@ -2,13 +2,16 @@
 
 declare(strict_types=1);
 
-namespace App\Service\Macro\Subsystem;
+namespace App\Service\Politics;
 
 use App\Data\AerieDiet;
+use App\DTO\MacroStateDTO;
+use App\DTO\PoliticsStateDTO;
+use App\Service\Event\ShockEvent;
 use App\Service\Macro\MacroEngine;
-use App\Service\Macro\MacroState;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
+use Psr\Log\LoggerInterface;
 
 /**
  * The Aerie Diet: eight parties, a vote on the fixed election calendar, seats, the talks that follow, and the government.
@@ -18,13 +21,13 @@ use App\Service\Math\MathUtility;
  * Governing costs the governing parties a share of the vote each term, the cost of ruling (Nannestad & Paldam 2002)
  * the Diet's parties pay on top of what they were elected on running off; governments are formed by parties riding a
  * short-term swing or a lasting lead, so the loss a government is seen to take is larger. A party supporting a
- * minority cabinet from outside bears part of that cost (Thürk & Klüver 2024). A financial crisis in the five years
- * before the vote lifts the closed-economy party, the one that names the outside world as the contagion, by the 30%
- * Funke, Schularick & Trebesch (2016) find for the far right after financial crises, and gives it back once the
- * crisis leaves that window. Each party has a normal vote, its share at the founding (Converse 1966): its lasting support
- * strays from it and drifts back at the pace real parties' do, and each party also has a short-term swing --
- * candidates, campaigns, scandals -- which lasts only the one vote. Both are sized to the Nordic parties since 1945
- * (ParlGov), in proportion to a party's size, as real vote shares vary. Seats are D'Hondt over the whole Diet.
+ * minority cabinet from outside bears part of that cost (Thürk & Klüver 2024). No party family gains or loses on the
+ * economy beyond that: in ParlGov's votes since 1946 the families' shares move with growth, inflation, unemployment and
+ * financial crises alike once the governing parties' loss is taken out (var/harness/politics/profile_fit.py). Each
+ * party has a normal vote, its share at the founding (Converse 1966): its lasting support strays from it and drifts
+ * back at the pace real parties' do, and each party also has a short-term swing -- candidates, campaigns, scandals --
+ * which lasts only the one vote. Both are sized to the Nordic parties since 1945 (ParlGov), in proportion to a party's
+ * size, as real vote shares vary. Seats are D'Hondt over the whole Diet.
  *
  * Each party is fixed on the axes it is defined by (size of state, openness, or the Council). On the others it strays
  * from its home between elections and is pulled back toward it, at the pace real parties move in the Chapel Hill expert
@@ -32,9 +35,6 @@ use App\Service\Math\MathUtility;
  * decades (Budge, Ezrow & McDonald 2010). After the vote the parties negotiate a government (CoalitionFormation); until
  * it takes office the outgoing cabinet stays on as caretaker and passes no budget. Between votes a cabinet can fall, at
  * the rate real cabinets of its kind have (ParlGov): the parties then talk again on the same seats, with no election.
- *
- * The calendar is CreditFiscalSubsystem's: the vote is held on the tick its election falls on. A run built by hand (a
- * harness, a unit test) has none.
  *
  * The government then legislates at the budget rounds after the one it took office on. Its cabinet's position, its
  * members' weighted by seats (Gamson's law), sets four levers between the policies real parties at the ends of each
@@ -47,9 +47,52 @@ use App\Service\Math\MathUtility;
  * cabinet moving away from it but cannot pull policy its way (Romer & Rosenthal 1978). Above the 90% debt line the
  * Council would veto a bill that cuts revenue, and the Diet, knowing it, tables none, unless the government and its
  * supporters, less the Council's own loyalists, hold the three quarters that could remove the Council.
+ *
+ * Politics runs beside the economy, not inside it: the ticker advances it after each macro tick on that tick's snapshot,
+ * and the economy reads back only what the government hands it (PoliticsStateDTO::policy()), on the next tick.
  */
-class DistrictPoliticsSubsystem
+class PoliticsEngine
 {
+    // --- Persistence ---
+    /** Redis key the politics state is kept under, beside the macro state. */
+    public const REDIS_POLITICS_STATE = 'politics_state';
+
+    // --- The Diet's Election (Fair presidential vote equation, 2020 update; Nannestad & Paldam 2002; ParlGov) ---
+    /** Length of the fixed electoral term in years: the vote falls on the tick each term ends. */
+    public const ELECTION_TERM_YEARS = 4.0;
+    /** Final stretch of the term whose growth voters weigh (Fair's G: the first three quarters of the election year). */
+    public const ELECTION_CAMPAIGN_WINDOW_YEARS = 0.75;
+    /** Governing coalition's vote share per unit of annualised real per-capita growth over the campaign (Fair: 0.673 pp per pp). */
+    public const ELECTION_GROWTH_SLOPE = 0.673;
+    /** Governing coalition's vote share lost per unit of annualised inflation over the term (Fair: 0.721 pp per pp). */
+    public const ELECTION_INFLATION_SLOPE = 0.721;
+    /** Residual of the governing coalition's share, everything the economy does not explain (Fair: standard error 2.95 pp). */
+    public const ELECTION_RESIDUAL_SD = 0.0295;
+    /** Vote share the average government has lost over a term in the record (Nannestad & Paldam 2002: 282 elections in 19 democracies), the reference the Diet's own cost is read against. */
+    public const ELECTION_RECORDED_COST_OF_RULING = 0.0225;
+    /** Vote share governing costs the governing parties each term, beyond what they were elected on drifting back: governments are formed by parties riding a short-term swing or a lasting lead, and both run off. With those, the outgoing cabinet's parties lose 2.2 points a term, the record's 2.25 (var/harness/politics/vote_sim.py, 2,500 elections; ParlGov since 1945, measured the same way: Scandinavia 1.8, Western Europe 3.9). */
+    public const ELECTION_COST_OF_RULING = 0.005;
+    /** Each party's own short-term swing, drawn at every vote and gone by the next (Converse 1966 short-term forces), as the variance of its log vote share times its normal vote: real vote shares vary in proportion to their size (ParlGov, West European parties since 1945: log variance on log share, slope -0.99). Nordic parties since 1945 (var/harness/politics/vote_fit.py): a party of a quarter swings 7% either way, one of a twentieth 15%. */
+    public const ELECTION_SHORT_TERM_SWING_VARIANCE = 0.0012;
+    /** Share of a party's lasting lead or deficit on its normal vote still there a year later: real parties drift back toward their usual share, a half-life of seven years (ParlGov, Nordic parties since 1945, var/harness/politics/vote_fit.py; West European parties 0.911 over elections up to 20 years apart). */
+    public const ELECTION_NORMAL_VOTE_PERSISTENCE = 0.905;
+    /** Share of a cabinet party's electoral cost of governing a support party bears: 1.99 points lost against 2.81 for cabinet parties (Thürk & Klüver 2024, Table 1 Model 1: support -1.991, prime minister's party -2.815, junior partner -2.799; 304 elections in 31 democracies since 1980). */
+    public const ELECTION_SUPPORT_ACCOUNTABILITY = 1.991 / ((2.815 + 2.799) / 2.0);
+
+    // --- Cabinets Falling Between Votes (ParlGov, West European cabinets since 1945, var/harness/politics/termination_fit.py) ---
+    /** Yearly hazard a single-party minority cabinet falls between votes, replaced by another cabinet without an election: 21 falls in 199 cabinet-years (a constant hazard, King, Alt, Burns & Laver 1990). */
+    public const CABINET_FALL_HAZARD_SINGLE_PARTY_MINORITY = 0.106;
+    /** Yearly hazard a minority coalition falls between votes: 27 falls in 125 cabinet-years, twice a single party's, as a partner can walk out as well as a supporter. */
+    public const CABINET_FALL_HAZARD_MINORITY_COALITION = 0.216;
+    /** Yearly hazard a majority coalition falls between votes: 91 falls in 763 cabinet-years. A party governing alone with its own majority has no partner or supporter to lose, and none fell in 242 cabinet-years. */
+    public const CABINET_FALL_HAZARD_MAJORITY_COALITION = 0.119;
+
+    // --- Election Uncertainty (Julio & Yook 2012; Bernhard & Leblang 2006) ---
+    /** Days per term the talks after a cabinet falls hold the election pulse above where the term's ramp would put it: falls in 41% of terms, 40 days of talks each (var/harness/politics/formation_report.py). */
+    public const FALL_TALK_DAYS_PER_TERM = 19.5;
+    /** Long-run mean of nearness to the vote: the final-year ramp's half year a term, plus the talks at the peak after the vote and after any fall. */
+    public const MEAN_ELECTION_PROXIMITY = (0.5 + ((CoalitionFormation::FORMATION_MEAN_DAYS + self::FALL_TALK_DAYS_PER_TERM) / FinancialConstants::DAYS_PER_YEAR)) / self::ELECTION_TERM_YEARS;
+
     // --- Party Positions (Chapel Hill expert survey 1999-2024, var/harness/politics/ches_fit.py) ---
     /** Share of a party's distance from its home still there a year later, by axis: economic left-right for size of state, European integration for openness, anti-elite rhetoric for the Council; Western parties against their country's mean. */
     public const POSITION_ANNUAL_PERSISTENCE = [AerieDiet::AXIS_STATE => 0.872, AerieDiet::AXIS_OPENNESS => 0.958, AerieDiet::AXIS_COUNCIL => 0.846];
@@ -66,37 +109,106 @@ class DistrictPoliticsSubsystem
     /** The levers a budget sets, and whether cutting each costs revenue the Council guards. */
     public const REVENUE_LEVERS = ['corporateTax' => true, 'tariff' => true, 'laborGrowth' => false, 'mergerReviewLeniency' => false];
 
-    public function __construct(private readonly MathUtility $mathUtility) {}
+    // --- Platforms: Corporate Tax (Osterloh & Debus 2012) ---
+    /** Gap between the corporate rates the big-state and small-state manifestos set, the parties at the ends of the size-of-state axis: 7 points (US: the 2020 Democratic platform's 28% against the 21% of the 2017 Republican act; UK 2019: Labour's 26% against the Conservatives' 19%). Enacted rates follow manifesto ideology (Osterloh & Debus 2012, European panel). */
+    public const POLICY_MANIFESTO_CORPORATE_TAX_GAP = 0.07;
+
+    // --- Platforms: Tariffs (Amiti, Redding & Weinstein 2019; Fajgelbaum et al. 2020) ---
+    /** Average effective tariff the protectionist end of the openness axis enacts over the District's free port: the US's 2025 rise, 2.5% to 17.9% (Yale Budget Lab, State of U.S. Tariffs, 26 September 2025). Duties pass fully into import prices at the border (Amiti, Redding & Weinstein 2019; Fajgelbaum et al. 2020). */
+    public const POLICY_PROTECTIONIST_TARIFF = 0.154;
+
+    // --- Platforms: Immigration (UN WPP via World Bank, 2000-2019) ---
+    /** Net migration a closed immigration regime admits, a year as a share of population: Japan's 0.11% (World Bank SM.POP.NETM over SP.POP.TOTL, 2000-2019 mean). */
+    public const MIGRATION_CLOSED_REGIME = 0.0011;
+    /** Net migration an open immigration regime admits: Canada's 0.73% and Australia's 0.86%, averaged (the same series). Midway between the two regimes sits the US's 0.50%, the structural labour growth the District opens with. */
+    public const MIGRATION_OPEN_REGIME = (0.00728 + 0.00859) / 2.0;
+
+    public function __construct(
+        private readonly MathUtility $mathUtility,
+        private readonly \Redis $redis,
+        private readonly ?LoggerInterface $logger = null,
+    ) {}
 
     /**
-     * Keeps the campaign and term marks, holds the vote on the tick the calendar puts it on, seats the government the
-     * talks produce when its day comes, and passes the budget at each round a government sits through.
+     * Advances the politics by one tick on the economy's snapshot of the same tick, and keeps the result.
      *
-     * Runs after real GDP and the deflator are struck, so the vote reads this tick's economy.
-     *
-     * @param MacroState $state Current macroeconomic state.
-     * @param float      $dt    Time increment in years.
+     * @param MacroStateDTO $macro The economy as this tick left it.
+     * @param float         $dt    Time increment in years.
      */
-    public function update(MacroState $state, float $dt): void
+    public function updatePolitics(MacroStateDTO $macro, float $dt): PoliticsStateDTO
     {
-        $realGdp = self::realGdp($state);
+        $state = $this->loadState();
+        $this->advance($state, $macro, $dt);
+        $this->saveState($state);
+
+        return PoliticsStateDTO::fromState($state);
+    }
+
+    /** The politics as last kept, or the founding Diet when nothing has been. */
+    public function liveState(): PoliticsStateDTO
+    {
+        return PoliticsStateDTO::fromState($this->loadState());
+    }
+
+    private function loadState(): PoliticsState
+    {
+        $raw = $this->redis->get(self::REDIS_POLITICS_STATE);
+        if (!is_string($raw) || trim($raw) === '') {
+            return new PoliticsState();
+        }
+
+        try {
+            $decoded = json_decode($raw, true, 512, JSON_THROW_ON_ERROR);
+        } catch (\JsonException $e) {
+            $this->logger?->error('Failed to decode the politics state from Redis: ' . $e->getMessage());
+
+            return new PoliticsState();
+        }
+
+        return is_array($decoded) ? PoliticsState::fromArray($decoded) : new PoliticsState();
+    }
+
+    private function saveState(PoliticsState $state): void
+    {
+        try {
+            $this->redis->set(self::REDIS_POLITICS_STATE, json_encode($state->toArray(), JSON_THROW_ON_ERROR | JSON_PRESERVE_ZERO_FRACTION));
+        } catch (\Throwable $e) {
+            $this->logger?->critical('Failed to persist the politics state to Redis: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Keeps the campaign and term marks, holds the vote on the tick a term ends, seats the government the talks produce
+     * when its day comes, passes the budget at each round a government sits through, and names the tick's headline.
+     *
+     * @param PoliticsState $state The politics, advanced in place.
+     * @param MacroStateDTO $macro The economy as this tick left it: the vote reads its real GDP and deflator.
+     * @param float         $dt    Time increment in years.
+     */
+    public function advance(PoliticsState $state, MacroStateDTO $macro, float $dt): void
+    {
+        $state->totalTime = $macro->totalTime;
+        $realGdp = self::realGdp($macro);
 
         // A state that predates the marks opens them where it stands and measures from there.
         if ($state->termStartedAt < 0.0) {
             $state->termStartedAt = $state->totalTime;
-            $state->termStartDeflator = $state->gdpDeflator;
+            $state->termStartDeflator = $macro->gdpDeflator;
         }
         if ($state->campaignStartedAt < 0.0
-            || MathUtility::crossedSimulatedBoundary($state->totalTime + MacroEngine::ELECTION_CAMPAIGN_WINDOW_YEARS, $dt, MacroEngine::ELECTION_TERM_YEARS)) {
+            || MathUtility::crossedSimulatedBoundary($state->totalTime + self::ELECTION_CAMPAIGN_WINDOW_YEARS, $dt, self::ELECTION_TERM_YEARS)) {
             $state->campaignStartedAt = $state->totalTime;
             $state->campaignStartRealGdp = $realGdp;
         }
 
-        if ($state->lastElectionAt === $state->totalTime) {
-            $this->holdElection($state, $realGdp);
+        // Snapped to the tick grid, so the vote falls on the same tick as every other boundary of the calendar (a budget
+        // round) rather than one tick late when accumulated time lands a hair short of the term.
+        if (MathUtility::crossedSimulatedBoundary($state->totalTime, $dt, self::ELECTION_TERM_YEARS)) {
+            $state->lastElectionAt = $state->totalTime;
+            $this->holdElection($state, $macro, $realGdp);
 
             $state->termStartedAt = $state->totalTime;
-            $state->termStartDeflator = $state->gdpDeflator;
+            $state->termStartDeflator = $macro->gdpDeflator;
         }
 
         if ($state->cabinetFallsAt >= 0.0 && $state->totalTime >= $state->cabinetFallsAt) {
@@ -119,8 +231,42 @@ class DistrictPoliticsSubsystem
         if ($state->coalitionTakesOfficeAt < 0.0
             && $state->coalitionFormedAt < $state->totalTime
             && MathUtility::crossedSimulatedBoundary($state->totalTime, $dt, MacroEngine::BUDGET_ROUND_PERIOD_YEARS)) {
-            self::enactBudget($state);
+            self::enactBudget($state, $macro->sovereignDebtToGdp);
         }
+
+        $state->eventType = self::headline($state);
+    }
+
+    /**
+     * The tick's political headline, the vote above all: a cabinet falling, then one taking office, then a budget round
+     * that changed a lever. A single-tick pulse, gone on the next tick.
+     */
+    public static function headline(PoliticsState $state): ?string
+    {
+        return match (true) {
+            $state->lastElectionAt === $state->totalTime => ShockEvent::ELECTION_HELD,
+            $state->lastCabinetFellAt === $state->totalTime => ShockEvent::GOVERNMENT_FELL,
+            $state->lastGovernmentFormedAt === $state->totalTime => ShockEvent::GOVERNMENT_FORMED,
+            $state->lastBudgetEnactedAt === $state->totalTime => ShockEvent::BUDGET_ENACTED,
+            default => null,
+        };
+    }
+
+    /**
+     * The election calendar's pull on policy uncertainty, centred on its long-run mean: nearness to the vote, rising over
+     * the final year of the term (Julio & Yook 2012), held at its peak on the day of the vote and through the talks after
+     * it or after a fall, since only a seated government settles the regime (Bernhard & Leblang 2006).
+     *
+     * @param float $totalTime              Simulation time.
+     * @param float $lastElectionAt         When the last vote was held.
+     * @param float $coalitionTakesOfficeAt When the cabinet the talks produced takes office (-1: no talks pending).
+     */
+    public static function electionPulse(float $totalTime, float $lastElectionAt, float $coalitionTakesOfficeAt): float
+    {
+        $yearsToElection = self::ELECTION_TERM_YEARS - fmod($totalTime, self::ELECTION_TERM_YEARS);
+        $proximity = ($lastElectionAt === $totalTime || $coalitionTakesOfficeAt > $totalTime) ? 1.0 : max(0.0, 1.0 - $yearsToElection);
+
+        return $proximity - self::MEAN_ELECTION_PROXIMITY;
     }
 
     /**
@@ -149,10 +295,10 @@ class DistrictPoliticsSubsystem
         $opennessSpan = $open - $closed;
 
         return [
-            'corporateTax' => MacroEngine::POLICY_MANIFESTO_CORPORATE_TAX_GAP * $state / $stateSpan,
-            'tariff' => MacroEngine::POLICY_PROTECTIONIST_TARIFF * max(0.0, $openness / $closed),
+            'corporateTax' => self::POLICY_MANIFESTO_CORPORATE_TAX_GAP * $state / $stateSpan,
+            'tariff' => self::POLICY_PROTECTIONIST_TARIFF * max(0.0, $openness / $closed),
             'laborGrowth' => MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE
-                + ((MacroEngine::MIGRATION_OPEN_REGIME - MacroEngine::MIGRATION_CLOSED_REGIME) * $openness / $opennessSpan),
+                + ((self::MIGRATION_OPEN_REGIME - self::MIGRATION_CLOSED_REGIME) * $openness / $opennessSpan),
             // The Common Lot's anti-cartel review is the 2023 guidelines, the Chartists' the 2010 ones
             // (App\Service\Corporate\MergerAndAcquisitionEngine::reviewScreens).
             'mergerReviewLeniency' => ($council - $populist) / ($technocratic - $populist),
@@ -210,12 +356,12 @@ class DistrictPoliticsSubsystem
     }
 
     /**
-     * A budget round: budget() becomes law. A tariff's change moves productivity by Furceri et al.'s (2018) output
-     * loss, a level potential absorbs over the years that follow.
+     * A budget round: budget() becomes law, and the economy reads the levers from the next tick.
      *
-     * @param MacroState $state Current macroeconomic state.
+     * @param PoliticsState $state     The politics, advanced in place.
+     * @param float         $debtToGdp Sovereign debt over GDP, which the Council's brake reads.
      */
-    public static function enactBudget(MacroState $state): void
+    public static function enactBudget(PoliticsState $state, float $debtToGdp): void
     {
         $standing = [
             'corporateTax' => $state->corporateTaxPolicyShift,
@@ -229,17 +375,13 @@ class DistrictPoliticsSubsystem
             $state->dietSeats,
             $state->partyPositions,
             $standing,
-            $state->sovereignDebtToGdp
+            $debtToGdp
         );
         $levers = $budget['levers'];
 
         if (in_array(true, $budget['councilHeld'], true)) {
             $state->lastCouncilBrakeAt = $state->totalTime;
         }
-
-        $productivityLoss = -MacroEngine::TARIFF_OUTPUT_LOSS * ($levers['tariff'] - $state->importTariffRate);
-        $state->tfpShockLevel += $productivityLoss;
-        $state->totalFactorProductivityIndex *= exp($productivityLoss);
 
         if ($levers !== $standing) {
             $state->lastBudgetEnactedAt = $state->totalTime;
@@ -253,7 +395,7 @@ class DistrictPoliticsSubsystem
     /**
      * The government the talks produced takes office; the caretaker steps down.
      */
-    public static function takeOffice(MacroState $state): void
+    public static function takeOffice(PoliticsState $state): void
     {
         $state->governingCoalition = $state->pendingCoalition;
         $state->supportParties = $state->pendingSupport;
@@ -265,14 +407,12 @@ class DistrictPoliticsSubsystem
     /**
      * Votes, seats, positions, and the talks for the next government.
      */
-    private function holdElection(MacroState $state, float $realGdp): void
+    private function holdElection(PoliticsState $state, MacroStateDTO $macro, float $realGdp): void
     {
         $previous = $state->dietVoteShares;
         $outgoingSeats = $state->dietSeats;
-        // The last vote's short-term forces are spent, and its crisis lift given back if the window has closed; both are
-        // undone in the reverse of the order they were applied.
+        // The last vote's short-term forces are spent.
         $shares = self::applyShortTermShocks($previous, array_map(static fn(float $shock): float => -$shock, $state->partyShortTermShocks));
-        $shares = self::returnCrisisShift($shares, $state->ironHarborCrisisShift);
 
         $lasting = [];
         foreach (AerieDiet::PARTIES as $party) {
@@ -281,21 +421,16 @@ class DistrictPoliticsSubsystem
         $shares = self::revertToNormalVote($shares, $lasting);
 
         $growthGap = self::annualisedLogChange($state->campaignStartRealGdp, $realGdp, $state->totalTime - $state->campaignStartedAt);
-        $growthGap = $growthGap === null ? 0.0 : $growthGap - $state->laborForceGrowthRate - MacroEngine::TFP_DRIFT;
-        $inflationGap = self::annualisedLogChange($state->termStartDeflator, $state->gdpDeflator, $state->totalTime - $state->termStartedAt);
+        $growthGap = $growthGap === null ? 0.0 : $growthGap - $macro->laborForceGrowthRate - MacroEngine::TFP_DRIFT;
+        $inflationGap = self::annualisedLogChange($state->termStartDeflator, $macro->gdpDeflator, $state->totalTime - $state->termStartedAt);
         $inflationGap = $inflationGap === null ? 0.0 : $inflationGap - MacroEngine::TARGET_INFLATION;
 
         $swing = self::economicVote($growthGap, $inflationGap, $this->mathUtility->generateStandardNormal());
         $shares = self::applyIncumbentSwing($shares, $state->governingCoalition, $swing, $state->supportParties);
 
-        $crisisShift = 0.0;
-        if ($state->lastCreditCrisisAt >= 0.0 && $state->totalTime - $state->lastCreditCrisisAt <= MacroEngine::ELECTION_CRISIS_WINDOW_YEARS) {
-            [$shares, $crisisShift] = self::applyCrisisShift($shares);
-        }
-
         $shocks = [];
         foreach (AerieDiet::PARTIES as $party) {
-            $shocks[$party] = self::swingSd(MacroEngine::ELECTION_SHORT_TERM_SWING_VARIANCE, $party) * $this->mathUtility->generateStandardNormal();
+            $shocks[$party] = self::swingSd(self::ELECTION_SHORT_TERM_SWING_VARIANCE, $party) * $this->mathUtility->generateStandardNormal();
         }
         $shares = self::normaliseShares(self::applyShortTermShocks($shares, $shocks));
         $state->partyShortTermShocks = $shocks;
@@ -304,7 +439,6 @@ class DistrictPoliticsSubsystem
         $state->electionInflationGap = $inflationGap;
         $state->electionIncumbentSwing = self::blocShare($shares, $state->governingCoalition, $state->supportParties)
             - self::blocShare($previous, $state->governingCoalition, $state->supportParties);
-        $state->ironHarborCrisisShift = $crisisShift;
 
         $swings = [];
         foreach (AerieDiet::PARTIES as $party) {
@@ -341,7 +475,7 @@ class DistrictPoliticsSubsystem
      * The cabinet loses the Diet between votes: it stays on as caretaker and the parties talk, on the seats the last vote
      * gave them, for a cabinet other than the one that fell. No election is called; the calendar is fixed.
      */
-    private function fall(MacroState $state): void
+    private function fall(PoliticsState $state): void
     {
         $fallen = AerieDiet::governingParties($state->governingCoalition);
         $state->lastCabinetFellAt = $state->totalTime;
@@ -354,7 +488,7 @@ class DistrictPoliticsSubsystem
      *
      * @param array{cabinet: list<string>, support: list<string>, days: float, log: list<array{day: float, formateur: string, formed: bool, cabinet: list<string>, support: list<string>}>} $talks
      */
-    private static function beginTalks(MacroState $state, array $talks): void
+    private static function beginTalks(PoliticsState $state, array $talks): void
     {
         $state->pendingCoalition = AerieDiet::membership($talks['cabinet']);
         $state->pendingSupport = AerieDiet::membership($talks['support']);
@@ -376,9 +510,9 @@ class DistrictPoliticsSubsystem
         $minority = CoalitionFormation::coalitionSeats($cabinet, $seats) < AerieDiet::MAJORITY_SEATS;
 
         return match (true) {
-            $minority && count($cabinet) === 1 => MacroEngine::CABINET_FALL_HAZARD_SINGLE_PARTY_MINORITY,
-            $minority => MacroEngine::CABINET_FALL_HAZARD_MINORITY_COALITION,
-            count($cabinet) > 1 => MacroEngine::CABINET_FALL_HAZARD_MAJORITY_COALITION,
+            $minority && count($cabinet) === 1 => self::CABINET_FALL_HAZARD_SINGLE_PARTY_MINORITY,
+            $minority => self::CABINET_FALL_HAZARD_MINORITY_COALITION,
+            count($cabinet) > 1 => self::CABINET_FALL_HAZARD_MAJORITY_COALITION,
             default => 0.0,
         };
     }
@@ -392,17 +526,17 @@ class DistrictPoliticsSubsystem
      */
     public static function economicVote(float $growthGap, float $inflationGap, float $residualDraw): float
     {
-        return (MacroEngine::ELECTION_GROWTH_SLOPE * $growthGap)
-            - (MacroEngine::ELECTION_INFLATION_SLOPE * $inflationGap)
-            - MacroEngine::ELECTION_COST_OF_RULING
-            + (MacroEngine::ELECTION_RESIDUAL_SD * $residualDraw);
+        return (self::ELECTION_GROWTH_SLOPE * $growthGap)
+            - (self::ELECTION_INFLATION_SLOPE * $inflationGap)
+            - self::ELECTION_COST_OF_RULING
+            + (self::ELECTION_RESIDUAL_SD * $residualDraw);
     }
 
     /**
      * Moves a swing between the government and the opposition, each side's parties in proportion to their shares.
      *
      * A support party's share sits partly on each side, in the proportion of the cost of governing it bears
-     * (MacroEngine::ELECTION_SUPPORT_ACCOUNTABILITY), so it gains or loses with the government by that much less.
+     * (self::ELECTION_SUPPORT_ACCOUNTABILITY), so it gains or loses with the government by that much less.
      *
      * @param array<string, float> $shares    Vote shares by party.
      * @param array<string, float> $coalition 1.0 for a cabinet party.
@@ -433,35 +567,6 @@ class DistrictPoliticsSubsystem
         return $result;
     }
     /**
-     * Lifts the closed-economy party's share by the post-crisis gain, taken from the others in proportion to theirs.
-     *
-     * @param array<string, float> $shares Vote shares by party.
-     * @return array{0: array<string, float>, 1: float} The shares, and the share moved.
-     */
-    public static function applyCrisisShift(array $shares): array
-    {
-        $shift = MacroEngine::ELECTION_CRISIS_CLOSED_PARTY_LIFT * ($shares[AerieDiet::IRON_HARBOR] ?? 0.0);
-
-        return [self::moveShare($shares, AerieDiet::IRON_HARBOR, $shift), $shift];
-    }
-
-    /**
-     * Gives back a crisis lift from an earlier vote, so the lift lasts only as long as its window.
-     *
-     * @param array<string, float> $shares Vote shares by party.
-     * @param float                $shift  The share the earlier vote moved.
-     * @return array<string, float> Vote shares by party.
-     */
-    public static function returnCrisisShift(array $shares, float $shift): array
-    {
-        if ($shift <= 0.0) {
-            return $shares;
-        }
-
-        return self::moveShare($shares, AerieDiet::IRON_HARBOR, -min($shift, ($shares[AerieDiet::IRON_HARBOR] ?? 0.0) - self::MIN_VOTE_SHARE));
-    }
-
-    /**
      * Moves each party's share by its own log swing, the shares renormalised to the whole electorate (additive logistic
      * form, Katz & King 1999). Applying the negated swings undoes it exactly.
      *
@@ -490,13 +595,13 @@ class DistrictPoliticsSubsystem
      * real parties show and takes the swing, the shares renormalised to the whole electorate (additive logistic form,
      * Katz & King 1999).
      *
-     * @param array<string, float> $shares Lasting vote shares by party, short-term swings and crisis lift given back.
+     * @param array<string, float> $shares Lasting vote shares by party, short-term swings given back.
      * @param array<string, float> $swings Lasting log swing by party; a party without one only drifts back.
      * @return array<string, float> Vote shares by party.
      */
     public static function revertToNormalVote(array $shares, array $swings): array
     {
-        $persistence = MacroEngine::ELECTION_NORMAL_VOTE_PERSISTENCE ** MacroEngine::ELECTION_TERM_YEARS;
+        $persistence = self::ELECTION_NORMAL_VOTE_PERSISTENCE ** self::ELECTION_TERM_YEARS;
 
         $moved = [];
         foreach (AerieDiet::PARTIES as $party) {
@@ -593,9 +698,9 @@ class DistrictPoliticsSubsystem
     /**
      * Real GDP as an index: potential times the gap.
      */
-    public static function realGdp(MacroState $state): float
+    public static function realGdp(MacroStateDTO $macro): float
     {
-        return $state->potentialGdpIndex * (1.0 + $state->outputGap);
+        return $macro->potentialGdpIndex * (1.0 + $macro->outputGap);
     }
 
     /**
@@ -626,32 +731,9 @@ class DistrictPoliticsSubsystem
     {
         return match (true) {
             ($coalition[$party] ?? 0.0) > 0.5 => 1.0,
-            ($support[$party] ?? 0.0) > 0.5 => MacroEngine::ELECTION_SUPPORT_ACCOUNTABILITY,
+            ($support[$party] ?? 0.0) > 0.5 => self::ELECTION_SUPPORT_ACCOUNTABILITY,
             default => 0.0,
         };
-    }
-
-    /**
-     * Moves a share to one party from all the others, in proportion to theirs.
-     *
-     * @param array<string, float> $shares Vote shares by party.
-     * @return array<string, float>
-     */
-    private static function moveShare(array $shares, string $to, float $amount): array
-    {
-        $others = array_sum($shares) - ($shares[$to] ?? 0.0);
-        if ($others <= 0.0) {
-            return $shares;
-        }
-        $amount = min($amount, $others - (self::MIN_VOTE_SHARE * (count(AerieDiet::PARTIES) - 1)));
-
-        $result = [];
-        foreach (AerieDiet::PARTIES as $party) {
-            $share = $shares[$party] ?? 0.0;
-            $result[$party] = $party === $to ? $share + $amount : $share * ($others - $amount) / $others;
-        }
-
-        return $result;
     }
 
     /**
@@ -694,7 +776,7 @@ class DistrictPoliticsSubsystem
      */
     public static function movePosition(float $position, float $home, string $axis, float $draw): float
     {
-        $persistence = self::POSITION_ANNUAL_PERSISTENCE[$axis] ** MacroEngine::ELECTION_TERM_YEARS;
+        $persistence = self::POSITION_ANNUAL_PERSISTENCE[$axis] ** self::ELECTION_TERM_YEARS;
 
         return self::reflect($home + ($persistence * ($position - $home))
             + (self::POSITION_WITHIN_SD[$axis] * sqrt(1.0 - ($persistence ** 2)) * $draw));

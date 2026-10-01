@@ -2,13 +2,13 @@
 
 declare(strict_types=1);
 
-namespace App\Tests\Service\Macro\Recorder;
+namespace App\Tests\Service\Politics;
 
 use App\Data\AerieDiet as Diet;
-use App\DTO\MacroStateDTO;
+use App\DTO\PoliticsStateDTO;
 use App\Entity\DietElection;
 use App\Repository\DietElectionRepository;
-use App\Service\Macro\Recorder\ElectionRecorder;
+use App\Service\Politics\ElectionRecorder;
 use Doctrine\ORM\EntityManagerInterface;
 use PHPUnit\Framework\TestCase;
 
@@ -19,7 +19,7 @@ class ElectionRecorderTest extends TestCase
 
     public function testNothingIsWrittenBetweenVotes(): void
     {
-        $this->assertNull($this->recorder(null)->record(new MacroStateDTO(totalTime: 5.0, lastElectionAt: 4.0)));
+        $this->assertNull($this->recorder(null)->record(new PoliticsStateDTO(totalTime: 5.0, lastElectionAt: 4.0)));
         $this->assertSame([], $this->persisted);
     }
 
@@ -36,7 +36,7 @@ class ElectionRecorderTest extends TestCase
         ];
         $positions = Diet::HOME_POSITIONS;
         $positions[Diet::CIVIC][Diet::AXIS_COUNCIL] = 0.1;
-        $election = $this->recorder(null)->record(new MacroStateDTO(
+        $election = $this->recorder(null)->record(new PoliticsStateDTO(
             totalTime: 4.0,
             lastElectionAt: 4.0,
             dietSeats: [Diet::CIVIC => 110.0, Diet::VANGUARD => 90.0, Diet::IRON_HARBOR => 35.0, Diet::EXCHANGE => 32.0, Diet::CHARTISTS => 18.0, Diet::COMMON_LOT => 15.0],
@@ -48,7 +48,6 @@ class ElectionRecorderTest extends TestCase
             pendingSupport: Diet::membership([Diet::COMMON_LOT]),
             coalitionTakesOfficeAt: 4.0 + 30.25 / 365.0,
             formationLog: $log,
-            ironHarborCrisisShift: 0.01,
         ));
 
         $this->assertNotNull($election);
@@ -63,13 +62,12 @@ class ElectionRecorderTest extends TestCase
         $this->assertSame(0.1, $election->getPositions()[Diet::CIVIC][Diet::AXIS_COUNCIL]);
         $this->assertSame(Diet::governingParties(Diet::SEED_COALITION), $election->getOutgoingCoalition());
         $this->assertEqualsWithDelta(0.03, $election->getVolatility(), 1e-12);
-        $this->assertTrue($election->hasCrisisLift());
     }
 
     /** A party with a majority of its own takes office on the day, with no talks. */
     public function testAMajorityWinnerIsWrittenWithNoTalks(): void
     {
-        $election = $this->recorder(null)->record(new MacroStateDTO(
+        $election = $this->recorder(null)->record(new PoliticsStateDTO(
             totalTime: 4.0,
             lastElectionAt: 4.0,
             pendingCoalition: Diet::membership([Diet::VANGUARD]),
@@ -87,7 +85,7 @@ class ElectionRecorderTest extends TestCase
     public function testAVoteIsWrittenAgainstTheCabinetInOfficeAfterAFall(): void
     {
         $last = (new DietElection())->setCoalition([Diet::VANGUARD]);
-        $election = $this->recorder($last)->record(new MacroStateDTO(totalTime: 8.0, lastElectionAt: 8.0, electionOutgoingCabinet: Diet::membership([Diet::CIVIC, Diet::EXCHANGE])));
+        $election = $this->recorder($last)->record(new PoliticsStateDTO(totalTime: 8.0, lastElectionAt: 8.0, electionOutgoingCabinet: Diet::membership([Diet::CIVIC, Diet::EXCHANGE])));
 
         $this->assertNotNull($election);
         $this->assertSame([Diet::CIVIC, Diet::EXCHANGE], $election->getOutgoingCoalition());
@@ -98,7 +96,7 @@ class ElectionRecorderTest extends TestCase
     {
         $log = [['day' => 21.0, 'formateur' => Diet::CIVIC, 'formed' => true, 'cabinet' => [Diet::CIVIC], 'support' => [Diet::IRON_HARBOR, Diet::BASTION_GUILDS]]];
         $last = (new DietElection())->setSimTime(4.0)->setCoalition([Diet::VANGUARD, Diet::EXCHANGE]);
-        $recorded = $this->recorder($last)->record(new MacroStateDTO(
+        $recorded = $this->recorder($last)->record(new PoliticsStateDTO(
             totalTime: 6.5,
             lastElectionAt: 4.0,
             governingCoalition: Diet::membership([Diet::VANGUARD, Diet::EXCHANGE]),
@@ -125,7 +123,7 @@ class ElectionRecorderTest extends TestCase
     /** A founding cabinet that falls before the first vote has no vote to be recorded under. */
     public function testAFallBeforeTheFirstVoteIsNotWritten(): void
     {
-        $this->assertNull($this->recorder(null)->record(new MacroStateDTO(totalTime: 2.0, lastCabinetFellAt: 2.0)));
+        $this->assertNull($this->recorder(null)->record(new PoliticsStateDTO(totalTime: 2.0, lastCabinetFellAt: 2.0)));
         $this->assertSame([], $this->persisted);
     }
 

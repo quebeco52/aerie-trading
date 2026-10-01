@@ -6,6 +6,7 @@ namespace App\Tests\Service\Event;
 
 use App\Data\AerieDiet as Diet;
 use App\DTO\MacroStateDTO;
+use App\DTO\PoliticsStateDTO;
 use App\Entity\Etf;
 use App\Entity\EtfEvent;
 use App\Service\Event\MarketEventPublisher;
@@ -38,7 +39,7 @@ class SystemicEventReporterTest extends TestCase
     /** The card carries what the benchmark did over the month its chart buffer holds, not a size assumed for the event. */
     public function testTheHeadlineCarriesTheBenchmarksRealMonthMove(): void
     {
-        $headline = $this->reporter(bufferedPrice: 100.0)->report($this->macroWith(ShockEvent::BANKING_CRISIS), $this->benchmarkAt('94'));
+        $headline = $this->reporter(bufferedPrice: 100.0)->report($this->macroWith(ShockEvent::BANKING_CRISIS), new PoliticsStateDTO(), $this->benchmarkAt('94'));
 
         $this->assertNotNull($headline);
         $this->assertSame('SHOCK', $headline['type']);
@@ -49,7 +50,7 @@ class SystemicEventReporterTest extends TestCase
     /** A rescue is reported with the move the market made, so a programme launched into a falling market reads as one. */
     public function testALaunchIntoAFallingMarketIsNotLabelledARally(): void
     {
-        $headline = $this->reporter(bufferedPrice: 100.0)->report($this->macroWith(ShockEvent::TITAN_INTERVENTION), $this->benchmarkAt('91.5'));
+        $headline = $this->reporter(bufferedPrice: 100.0)->report($this->macroWith(ShockEvent::TITAN_INTERVENTION), new PoliticsStateDTO(), $this->benchmarkAt('91.5'));
 
         $this->assertNotNull($headline);
         $this->assertLessThan(0.0, $headline['change_percent']);
@@ -57,7 +58,7 @@ class SystemicEventReporterTest extends TestCase
 
     public function testWithoutBufferedHistoryTheHeadlineCarriesNoNumber(): void
     {
-        $headline = $this->reporter(bufferedPrice: null)->report($this->macroWith(ShockEvent::ELECTION_HELD), $this->benchmarkAt('100'));
+        $headline = $this->reporter(bufferedPrice: null)->report($this->macroWith(ShockEvent::RECESSION_DECLARED), new PoliticsStateDTO(), $this->benchmarkAt('100'));
 
         $this->assertNotNull($headline);
         $this->assertNull($headline['change_percent']);
@@ -70,7 +71,7 @@ class SystemicEventReporterTest extends TestCase
      */
     public function testTheElectionHeadlineOpensTheTalksWithoutGivingAwayTheirOutcome(): void
     {
-        $macro = new MacroStateDTO(
+        $politics = new PoliticsStateDTO(
             eventType: ShockEvent::ELECTION_HELD,
             dietSeats: [Diet::CIVIC => 97.0, Diet::VANGUARD => 83.0, Diet::IRON_HARBOR => 46.0, Diet::EXCHANGE => 34.0, Diet::CHARTISTS => 25.0, Diet::COMMON_LOT => 15.0],
             dietVoteSwings: [Diet::CIVIC => 0.048, Diet::VANGUARD => -0.05, Diet::IRON_HARBOR => 0.004, Diet::EXCHANGE => -0.002, Diet::CHARTISTS => 0.0, Diet::COMMON_LOT => 0.0],
@@ -81,7 +82,7 @@ class SystemicEventReporterTest extends TestCase
         // Every phrasing must hold; draw until each has been seen.
         $seen = [];
         for ($i = 0; $i < 60; ++$i) {
-            $headline = $this->reporter(bufferedPrice: null)->report($macro, $this->benchmarkAt('100'));
+            $headline = $this->reporter(bufferedPrice: null)->report(new MacroStateDTO(), $politics, $this->benchmarkAt('100'));
             $this->assertNotNull($headline);
             $this->assertStringContainsString('the Civic Front', $headline['description']);
             $this->assertStringContainsString('97', $headline['description']);
@@ -95,7 +96,7 @@ class SystemicEventReporterTest extends TestCase
     /** A party other than the largest can open the talks, when the cabinet it tries leaves the largest out. */
     public function testTheElectionHeadlineNamesAnOpenerOtherThanTheLargestParty(): void
     {
-        $macro = new MacroStateDTO(
+        $politics = new PoliticsStateDTO(
             eventType: ShockEvent::ELECTION_HELD,
             dietSeats: [Diet::CIVIC => 97.0, Diet::VANGUARD => 83.0, Diet::IRON_HARBOR => 46.0, Diet::EXCHANGE => 34.0, Diet::CHARTISTS => 25.0, Diet::COMMON_LOT => 15.0],
             dietVoteSwings: [Diet::CIVIC => 0.048, Diet::VANGUARD => -0.05, Diet::IRON_HARBOR => 0.004, Diet::EXCHANGE => -0.002, Diet::CHARTISTS => 0.0, Diet::COMMON_LOT => 0.0],
@@ -104,7 +105,7 @@ class SystemicEventReporterTest extends TestCase
 
         $opened = 0;
         for ($i = 0; $i < 60; ++$i) {
-            $description = $this->reporter(bufferedPrice: null)->report($macro, $this->benchmarkAt('100'))['description'] ?? '';
+            $description = $this->reporter(bufferedPrice: null)->report(new MacroStateDTO(), $politics, $this->benchmarkAt('100'))['description'] ?? '';
             $this->assertStringNotContainsString('Exchange', $description, 'The cabinet the first attempt tries is out before the talks end.');
             if (str_contains($description, 'opens coalition talks')) {
                 ++$opened;
@@ -117,7 +118,7 @@ class SystemicEventReporterTest extends TestCase
     /** The bloc count names the larger bloc, which need not be the largest party's: Civic leads on seats, the Vanguard's side on blocs. */
     public function testTheElectionHeadlineCountsTheLargerBloc(): void
     {
-        $macro = new MacroStateDTO(
+        $politics = new PoliticsStateDTO(
             eventType: ShockEvent::ELECTION_HELD,
             dietSeats: [Diet::CIVIC => 78.0, Diet::VANGUARD => 77.0] + Diet::SEED_SEATS,
             dietVoteSwings: [Diet::CIVIC => 0.01, Diet::VANGUARD => -0.01] + array_fill_keys(array_keys(Diet::SEED_SEATS), 0.0),
@@ -126,7 +127,7 @@ class SystemicEventReporterTest extends TestCase
 
         $counted = 0;
         for ($i = 0; $i < 60; ++$i) {
-            $description = $this->reporter(bufferedPrice: null)->report($macro, $this->benchmarkAt('100'))['description'] ?? '';
+            $description = $this->reporter(bufferedPrice: null)->report(new MacroStateDTO(), $politics, $this->benchmarkAt('100'))['description'] ?? '';
             if (str_contains($description, 'The blocs are counted')) {
                 ++$counted;
                 $this->assertStringContainsString("the Vanguard's side holds 152 of 300 seats", $description);
@@ -137,14 +138,14 @@ class SystemicEventReporterTest extends TestCase
 
     public function testAPartyWithAMajorityOfItsOwnIsNamedGoverningAlone(): void
     {
-        $macro = new MacroStateDTO(
+        $politics = new PoliticsStateDTO(
             eventType: ShockEvent::ELECTION_HELD,
             dietSeats: [Diet::CIVIC => 60.0, Diet::VANGUARD => 160.0, Diet::IRON_HARBOR => 30.0, Diet::EXCHANGE => 30.0, Diet::CHARTISTS => 10.0, Diet::COMMON_LOT => 10.0],
             dietVoteSwings: [Diet::CIVIC => -0.1, Diet::VANGUARD => 0.2, Diet::IRON_HARBOR => 0.0, Diet::EXCHANGE => 0.0, Diet::CHARTISTS => 0.0, Diet::COMMON_LOT => 0.0],
         );
 
         for ($i = 0; $i < 30; ++$i) {
-            $headline = $this->reporter(bufferedPrice: null)->report($macro, $this->benchmarkAt('100'));
+            $headline = $this->reporter(bufferedPrice: null)->report(new MacroStateDTO(), $politics, $this->benchmarkAt('100'));
             $this->assertNotNull($headline);
             $this->assertStringContainsString('the Vanguard', $headline['description']);
             $this->assertStringContainsString('160', $headline['description']);
@@ -159,7 +160,7 @@ class SystemicEventReporterTest extends TestCase
             ['day' => 19.6, 'formateur' => Diet::VANGUARD, 'round' => 1, 'formed' => false, 'cabinet' => [Diet::VANGUARD, Diet::EXCHANGE, Diet::CHARTISTS], 'support' => []],
             ['day' => 41.2, 'formateur' => Diet::VANGUARD, 'round' => 2, 'formed' => true, 'cabinet' => [Diet::VANGUARD], 'support' => [Diet::EXCHANGE, Diet::CHARTISTS]],
         ];
-        $macro = new MacroStateDTO(
+        $politics = new PoliticsStateDTO(
             eventType: ShockEvent::GOVERNMENT_FORMED,
             totalTime: 4.12,
             dietSeats: Diet::SEED_SEATS,
@@ -171,7 +172,7 @@ class SystemicEventReporterTest extends TestCase
 
         $seen = [];
         for ($i = 0; $i < 40; ++$i) {
-            $headline = $this->reporter(bufferedPrice: null)->report($macro, $this->benchmarkAt('100'));
+            $headline = $this->reporter(bufferedPrice: null)->report(new MacroStateDTO(), $politics, $this->benchmarkAt('100'));
             $this->assertNotNull($headline);
             $this->assertStringContainsString('the Vanguard', $headline['description']);
             $this->assertStringContainsString('the Exchange Party and the Chartists', $headline['description']);
@@ -186,7 +187,7 @@ class SystemicEventReporterTest extends TestCase
     public function testTheFallHeadlineNamesTheCabinetThatFell(): void
     {
         $log = [['day' => 30.0, 'formateur' => Diet::CIVIC, 'formed' => true, 'cabinet' => [Diet::CIVIC, Diet::BASTION_GUILDS], 'support' => [Diet::IRON_HARBOR]]];
-        $minority = new MacroStateDTO(
+        $minority = new PoliticsStateDTO(
             eventType: ShockEvent::GOVERNMENT_FELL,
             totalTime: 6.5,
             dietSeats: Diet::SEED_SEATS,
@@ -198,7 +199,7 @@ class SystemicEventReporterTest extends TestCase
             formationLog: $log,
             lastCabinetFellAt: 6.5,
         );
-        $majority = new MacroStateDTO(
+        $majority = new PoliticsStateDTO(
             eventType: ShockEvent::GOVERNMENT_FELL,
             totalTime: 6.5,
             dietSeats: Diet::SEED_SEATS,
@@ -210,14 +211,14 @@ class SystemicEventReporterTest extends TestCase
         );
 
         for ($i = 0; $i < 30; ++$i) {
-            $headline = $this->reporter(bufferedPrice: null)->report($minority, $this->benchmarkAt('100'));
+            $headline = $this->reporter(bufferedPrice: null)->report(new MacroStateDTO(), $minority, $this->benchmarkAt('100'));
             $this->assertNotNull($headline);
             $this->assertStringContainsString('the Vanguard', $headline['description']);
             $this->assertStringContainsString('the Exchange Party and the Chartists', $headline['description']);
             $this->assertStringNotContainsString('Bastion', $headline['description'], 'The talks\' outcome is not news yet.');
             $this->assertStringNotContainsString('{', $headline['description']);
 
-            $headline = $this->reporter(bufferedPrice: null)->report($majority, $this->benchmarkAt('100'));
+            $headline = $this->reporter(bufferedPrice: null)->report(new MacroStateDTO(), $majority, $this->benchmarkAt('100'));
             $this->assertNotNull($headline);
             $this->assertStringContainsString('the Civic Front and the Vanguard', $headline['description']);
             $this->assertStringNotContainsString('{', $headline['description']);
@@ -228,17 +229,18 @@ class SystemicEventReporterTest extends TestCase
     public function testTheBudgetHeadlineSaysWhatTheCouncilHeld(): void
     {
         $governing = [Diet::CIVIC => 0.0, Diet::VANGUARD => 1.0, Diet::IRON_HARBOR => 0.0, Diet::EXCHANGE => 1.0];
-        $held = new MacroStateDTO(eventType: ShockEvent::BUDGET_ENACTED, totalTime: 4.5, governingCoalition: $governing, sovereignDebtToGdp: 0.93, lastBudgetEnactedAt: 4.5, lastCouncilBrakeAt: 4.5);
-        $passed = new MacroStateDTO(eventType: ShockEvent::BUDGET_ENACTED, totalTime: 4.5, governingCoalition: $governing, corporateTaxPolicyShift: -0.026, lastBudgetEnactedAt: 4.5);
+        $indebted = new MacroStateDTO(totalTime: 4.5, sovereignDebtToGdp: 0.93);
+        $held = new PoliticsStateDTO(eventType: ShockEvent::BUDGET_ENACTED, totalTime: 4.5, governingCoalition: $governing, lastBudgetEnactedAt: 4.5, lastCouncilBrakeAt: 4.5);
+        $passed = new PoliticsStateDTO(eventType: ShockEvent::BUDGET_ENACTED, totalTime: 4.5, governingCoalition: $governing, corporateTaxPolicyShift: -0.026, lastBudgetEnactedAt: 4.5);
 
         for ($i = 0; $i < 30; ++$i) {
-            $headline = $this->reporter(bufferedPrice: null)->report($held, $this->benchmarkAt('100'));
+            $headline = $this->reporter(bufferedPrice: null)->report($indebted, $held, $this->benchmarkAt('100'));
             $this->assertNotNull($headline);
             $this->assertStringContainsString('Vanguard-Exchange Party government', $headline['description']);
             $this->assertStringContainsString('93% of GDP', $headline['description']);
             $this->assertStringNotContainsString('{', $headline['description']);
 
-            $headline = $this->reporter(bufferedPrice: null)->report($passed, $this->benchmarkAt('100'));
+            $headline = $this->reporter(bufferedPrice: null)->report(new MacroStateDTO(totalTime: 4.5), $passed, $this->benchmarkAt('100'));
             $this->assertNotNull($headline);
             $this->assertStringContainsString('18.4%', $headline['description']);
             $this->assertStringNotContainsString('{', $headline['description']);
@@ -247,8 +249,29 @@ class SystemicEventReporterTest extends TestCase
 
     public function testATickWithoutAnEventPublishesNothing(): void
     {
-        $this->assertNull($this->reporter(bufferedPrice: 100.0)->report(new MacroStateDTO(), $this->benchmarkAt('100')));
+        $this->assertNull($this->reporter(bufferedPrice: 100.0)->report(new MacroStateDTO(), new PoliticsStateDTO(), $this->benchmarkAt('100')));
         $this->assertSame([], $this->persisted);
+    }
+
+    /** One headline a tick: the economy's outranks the government's, which is reported when the economy has none. */
+    public function testTheEconomysEventOutranksTheGovernments(): void
+    {
+        $vote = new PoliticsStateDTO(
+            eventType: ShockEvent::ELECTION_HELD,
+            dietSeats: [Diet::CIVIC => 97.0, Diet::VANGUARD => 83.0, Diet::IRON_HARBOR => 46.0, Diet::EXCHANGE => 34.0, Diet::CHARTISTS => 25.0, Diet::COMMON_LOT => 15.0],
+            dietVoteSwings: [Diet::CIVIC => 0.048, Diet::VANGUARD => -0.05, Diet::IRON_HARBOR => 0.004, Diet::EXCHANGE => -0.002, Diet::CHARTISTS => 0.0, Diet::COMMON_LOT => 0.0],
+            formationLog: [['day' => 20.0, 'formateur' => Diet::CIVIC, 'formed' => true, 'cabinet' => [Diet::CIVIC], 'support' => []]],
+        );
+
+        for ($i = 0; $i < 20; ++$i) {
+            $crisis = $this->reporter(bufferedPrice: null)->report($this->macroWith(ShockEvent::BANKING_CRISIS), $vote, $this->benchmarkAt('100'));
+            $quiet = $this->reporter(bufferedPrice: null)->report(new MacroStateDTO(), $vote, $this->benchmarkAt('100'));
+
+            $this->assertNotNull($crisis);
+            $this->assertStringNotContainsString('Civic Front', $crisis['description'], 'A crisis on the day of the vote is the headline.');
+            $this->assertNotNull($quiet);
+            $this->assertStringContainsString('the Civic Front', $quiet['description']);
+        }
     }
 
     private function reporter(?float $bufferedPrice): SystemicEventReporter
