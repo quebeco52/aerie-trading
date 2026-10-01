@@ -6,6 +6,7 @@ namespace App\Service\View;
 
 use App\Data\AerieCouncil;
 use App\Data\AerieDiet;
+use App\Data\AeriePartyProfiles;
 use App\DTO\MacroStateDTO;
 use App\DTO\PoliticsStateDTO;
 use App\Entity\DietElection;
@@ -76,6 +77,22 @@ class GovernmentPageBuilder
     private const COMPASS_LABEL_GAP = 1.5;
     /** Baselines a Council-strip label may take, above and below the line, nearest first, a label and its gap apart. */
     private const COMPASS_STRIP_ROWS = [-8.0, 15.0, -17.0, 24.0, -26.0, 33.0];
+    /** Past votes whose positions are drawn behind each party, the oldest faintest. */
+    private const COMPASS_TRAIL_VOTES = 6;
+    /** Faintest and strongest opacity of a past position, the oldest drawn and the last vote's. */
+    private const COMPASS_TRAIL_OPACITY = [0.10, 0.40];
+    /** How far the cabinet's shaded area reaches past the edge of its parties' dots, in SVG units. */
+    private const COMPASS_HALO_PAD = 5.0;
+    /** Radius of the ring marking where the cabinet governs from, in SVG units. */
+    private const COMPASS_HUB_RADIUS = 3.5;
+
+    // --- Party Pages ---
+    /** The policy questions as a party page names them: the axis, and its two ends. */
+    private const AXIS_NAMES = [
+        AerieDiet::AXIS_STATE => ['name' => 'Size of the state', 'low' => 'Small state', 'high' => 'Big state'],
+        AerieDiet::AXIS_OPENNESS => ['name' => 'Openness', 'low' => 'Closed', 'high' => 'Open'],
+        AerieDiet::AXIS_COUNCIL => ['name' => 'The Council', 'low' => 'Populist', 'high' => 'Technocratic'],
+    ];
 
     public function __construct(private readonly DietElectionRepository $elections) {}
 
@@ -96,28 +113,7 @@ class GovernmentPageBuilder
 
         $blocs = $politics->dietBlocs;
         $leaders = array_values(array_unique($blocs));
-        $parties = [];
-        foreach (AerieDiet::PARTIES as $party) {
-            $position = AerieDiet::position($party, $politics->partyPositions);
-            $parties[] = [
-                'key' => $party,
-                'name' => AerieDiet::PARTY_NAMES[$party],
-                'label' => self::PARTY_LABELS[$party],
-                'color' => self::PARTY_COLORS[$party],
-                'seats' => $seats[$party],
-                'share' => $politics->dietVoteShares[$party] ?? 0.0,
-                'swing' => $history === [] ? null : ($politics->dietVoteSwings[$party] ?? 0.0),
-                'governing' => in_array($party, $coalition, true),
-                'supporting' => in_array($party, $support, true),
-                'fixedAxes' => array_keys(AerieDiet::FIXED_POSITIONS[$party]),
-                'leadsBloc' => $blocs[$party] === $party,
-                'bloc' => self::PARTY_LABELS[$blocs[$party]],
-                'blocColor' => self::PARTY_COLORS[$blocs[$party]],
-                'state' => $position[AerieDiet::AXIS_STATE],
-                'openness' => $position[AerieDiet::AXIS_OPENNESS],
-                'council' => $position[AerieDiet::AXIS_COUNCIL],
-            ];
-        }
+        $parties = $this->partyRows($politics, $history);
 
         $term = PoliticsEngine::ELECTION_TERM_YEARS;
         $nextElection = (floor($macro->totalTime / $term) + 1.0) * $term;
@@ -158,42 +154,9 @@ class GovernmentPageBuilder
                 'termYears' => $term,
                 'councilSeats' => AerieCouncil::SEATS,
                 'councilTermYears' => AerieCouncil::TERM_YEARS,
-                'growthSlope' => PoliticsEngine::ELECTION_SINGLE_PARTY_GROWTH_SLOPE,
-                'inflationSlope' => PoliticsEngine::ELECTION_INFLATION_SLOPE,
-                'residual' => PoliticsEngine::ELECTION_RESIDUAL_SD,
-                'campaignMonths' => PoliticsEngine::ELECTION_CAMPAIGN_WINDOW_YEARS * 12.0,
-                'costOfRuling' => PoliticsEngine::ELECTION_COST_OF_RULING,
-                'recordedCostOfRuling' => PoliticsEngine::ELECTION_RECORDED_COST_OF_RULING,
-                'shortSwingQuarter' => sqrt(PoliticsEngine::ELECTION_SHORT_TERM_SWING_VARIANCE / 0.25),
-                'shortSwingTwentieth' => sqrt(PoliticsEngine::ELECTION_SHORT_TERM_SWING_VARIANCE / 0.05),
-                'normalVoteHalfLifeYears' => log(0.5) / log(PoliticsEngine::ELECTION_NORMAL_VOTE_PERSISTENCE),
-                'neutralTaxRate' => MacroEngine::TARGET_CORPORATE_TAX_RATE,
-                'manifestoTaxGap' => PoliticsEngine::POLICY_MANIFESTO_CORPORATE_TAX_GAP,
-                'profitsToGdp' => MacroEngine::CORPORATE_PROFITS_TO_GDP,
-                'protectionistTariff' => PoliticsEngine::POLICY_PROTECTIONIST_TARIFF,
-                'retaliation' => MacroEngine::TARIFF_RETALIATION_RATIO,
-                'tariffOutputLoss' => MacroEngine::TARIFF_OUTPUT_LOSS,
-                'migrationClosed' => PoliticsEngine::MIGRATION_CLOSED_REGIME,
-                'migrationOpen' => PoliticsEngine::MIGRATION_OPEN_REGIME,
-                'structuralLaborGrowth' => MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE,
-                'housingElasticity' => MacroEngine::IMMIGRATION_HOUSING_ELASTICITY,
                 'debtBrake' => MacroEngine::SOVEREIGN_RISK_DEBT_THRESHOLD,
-                'strictReviewDelta' => MergerAndAcquisitionEngine::MERGER_REVIEW_HHI_DELTA,
-                'strictReviewLine' => MergerAndAcquisitionEngine::MERGER_REVIEW_CONCENTRATED_HHI,
-                'strictReviewShare' => MergerAndAcquisitionEngine::MERGER_REVIEW_SHARE_CEILING,
-                'lenientReviewDelta' => MergerAndAcquisitionEngine::MERGER_REVIEW_LENIENT_HHI_DELTA,
-                'lenientReviewLine' => MergerAndAcquisitionEngine::MERGER_REVIEW_LENIENT_CONCENTRATED_HHI,
                 'budgetRoundMonths' => 12.0 * MacroEngine::BUDGET_ROUND_PERIOD_YEARS,
-                'minorityUtility' => CoalitionFormation::FORMATION_MINORITY_UTILITY,
-                'minimalWinningUtility' => CoalitionFormation::FORMATION_MINIMAL_WINNING_UTILITY,
-                'partyUtility' => CoalitionFormation::FORMATION_PARTY_UTILITY,
-                'largestPartyUtility' => CoalitionFormation::FORMATION_LARGEST_PARTY_UTILITY,
-                'rangeUtility' => CoalitionFormation::FORMATION_RANGE_UTILITY,
-                'manifestoPointsPerUnit' => CoalitionFormation::FORMATION_MANIFESTO_POINTS_PER_UNIT,
-                'pactUtility' => CoalitionFormation::FORMATION_PACT_UTILITY,
-                'antipactUtility' => CoalitionFormation::FORMATION_ANTIPACT_UTILITY,
-                'antisystemUtility' => CoalitionFormation::FORMATION_ANTISYSTEM_UTILITY,
-                'blocLeaders' => array_map(static fn(string $party): string => AerieDiet::PARTY_NAMES[$party], $leaders),
+                'blocLeaders' => array_map(self::midSentenceName(...), $leaders),
                 'blocSeats' => array_map(
                     static fn(string $leader): array => [
                         'name' => self::PARTY_LABELS[$leader],
@@ -202,21 +165,12 @@ class GovernmentPageBuilder
                     ],
                     $leaders
                 ),
-                'statusQuoUtility' => CoalitionFormation::FORMATION_STATUS_QUO_UTILITY,
-                'reservation' => CoalitionFormation::FORMATION_RESERVATION,
-                'reservationStep' => CoalitionFormation::FORMATION_RESERVATION_STEP,
-                'attemptDays' => CoalitionFormation::FORMATION_ATTEMPT_DAYS,
-                'formationMeanDays' => CoalitionFormation::FORMATION_MEAN_DAYS,
-                'fallSingleMinority' => 1.0 - exp(-PoliticsEngine::CABINET_FALL_HAZARD_SINGLE_PARTY_MINORITY * $term),
-                'fallMinorityCoalition' => 1.0 - exp(-PoliticsEngine::CABINET_FALL_HAZARD_MINORITY_COALITION * $term),
-                'fallMajorityCoalition' => 1.0 - exp(-PoliticsEngine::CABINET_FALL_HAZARD_MAJORITY_COALITION * $term),
-                'supportAccountability' => PoliticsEngine::ELECTION_SUPPORT_ACCOUNTABILITY,
-                'loyalists' => array_map(static fn(string $party): string => AerieDiet::PARTY_NAMES[$party], AerieDiet::COUNCIL_LOYALISTS),
+                'loyalists' => array_map(self::midSentenceName(...), AerieDiet::COUNCIL_LOYALISTS),
             ],
             'budget' => $this->budget($macro, $politics, $coalition, $support, $talking),
             'parties' => $parties,
             'hemicycle' => $this->hemicycle($seats, $parties),
-            'compass' => $this->compass($parties, $history, $coalitionPosition, $coalition),
+            'compass' => $this->compass($parties, $history, $coalitionPosition, $coalition, $support),
             'council' => [
                 'roster' => array_map(static fn(array $seat): array => $seat + [
                     'sinceLabel' => $seat['founding'] ? 'Founding' : self::simDate($seat['since']),
@@ -229,6 +183,124 @@ class GovernmentPageBuilder
             ],
             'history' => array_map(fn(DietElection $election): array => $this->historyRow($election, $macro->totalTime), array_reverse($history)),
         ];
+    }
+
+    /**
+     * A party's page: who it is, where it stands, what it would enact governing alone from there today against what is
+     * in force, and its record at the polls since the founding.
+     *
+     * @return array<string, mixed>
+     */
+    public function buildParty(MacroStateDTO $macro, PoliticsStateDTO $politics, string $party): array
+    {
+        $history = $this->elections->findChronological();
+        $rows = array_column($this->partyRows($politics, $history), null, 'key');
+        $row = $rows[$party];
+        $position = AerieDiet::position($party, $politics->partyPositions);
+        $platform = PoliticsEngine::platform($position);
+        $neutral = MacroEngine::TARGET_CORPORATE_TAX_RATE;
+        $concentrated = static fn(float $leniency): float => MergerAndAcquisitionEngine::reviewScreens($leniency)['concentrated'];
+        $talking = $politics->coalitionTakesOfficeAt > $macro->totalTime;
+
+        $axes = [];
+        foreach (AerieDiet::AXES as $axis) {
+            $axes[] = self::AXIS_NAMES[$axis] + [
+                'key' => $axis,
+                'value' => $position[$axis],
+                'home' => AerieDiet::HOME_POSITIONS[$party][$axis],
+                'fixed' => AerieDiet::isFixed($party, $axis),
+                'others' => array_values(array_map(static fn(array $other): array => [
+                    'label' => $other['label'],
+                    'color' => $other['color'],
+                    'value' => $other[$axis],
+                ], array_filter($rows, static fn(array $other): bool => $other['key'] !== $party))),
+            ];
+        }
+
+        $record = [['date' => 'Founding', 'seats' => (int) AerieDiet::SEED_SEATS[$party], 'share' => AerieDiet::SEED_VOTE_SHARES[$party],
+            'cabinet' => (AerieDiet::SEED_COALITION[$party] ?? 0.0) > 0.5, 'support' => (AerieDiet::SEED_SUPPORT[$party] ?? 0.0) > 0.5]];
+        foreach ($history as $election) {
+            $formed = $election->getTakesOfficeAt() <= $macro->totalTime;
+            $record[] = [
+                'date' => self::simDate($election->getSimTime()),
+                'seats' => (int) ($election->getSeats()[$party] ?? 0),
+                'share' => (float) ($election->getVoteShares()[$party] ?? 0.0),
+                'cabinet' => $formed && in_array($party, $election->getCoalition(), true),
+                'support' => $formed && in_array($party, $election->getSupport(), true),
+            ];
+        }
+        $votes = array_slice($record, 1);
+
+        return [
+            'simDate' => self::simDate($macro->totalTime),
+            'party' => $row + AeriePartyProfiles::PROFILES[$party] + [
+                'caretaker' => $talking,
+                'blocLeader' => self::midSentenceName($politics->dietBlocs[$party]),
+                'definedBy' => array_map(static fn(string $axis): string => self::AXIS_NAMES[$axis]['name'], array_keys(AerieDiet::FIXED_POSITIONS[$party])),
+            ],
+            'axes' => $axes,
+            'levers' => [
+                ['name' => 'Corporate tax rate', 'unit' => 'pct', 'platform' => $neutral + $platform['corporateTax'], 'enacted' => $neutral + $politics->corporateTaxPolicyShift],
+                ['name' => 'Average tariff on imports', 'unit' => 'pct', 'platform' => $platform['tariff'], 'enacted' => $politics->importTariffRate],
+                ['name' => 'Labour force growth', 'unit' => 'pct', 'platform' => $platform['laborGrowth'], 'enacted' => $politics->laborForceGrowthRate],
+                ['name' => 'Merger review line', 'unit' => 'hhi', 'platform' => $concentrated($platform['mergerReviewLeniency']), 'enacted' => $concentrated($politics->mergerReviewLeniency)],
+            ],
+            'record' => $record,
+            'recordSummary' => [
+                'votes' => count($votes),
+                'cabinet' => count(array_filter($votes, static fn(array $vote): bool => $vote['cabinet'])),
+                'support' => count(array_filter($votes, static fn(array $vote): bool => $vote['support'])),
+                'best' => max(array_column($record, 'seats')),
+                'scale' => max(AerieDiet::MAJORITY_SEATS / 2, (int) ceil(max(array_column($record, 'seats')) * 1.15)),
+            ],
+            'parties' => array_values(array_map(static fn(array $other): array => [
+                'key' => $other['key'],
+                'name' => $other['name'],
+                'slug' => $other['slug'],
+                'color' => $other['color'],
+            ], $rows)),
+            'rules' => ['seats' => AerieDiet::SEATS, 'majority' => AerieDiet::MAJORITY_SEATS, 'termYears' => PoliticsEngine::ELECTION_TERM_YEARS],
+        ];
+    }
+
+    /**
+     * Every party as both pages list it: its seats and vote, its part in the government, its bloc, and where it stands.
+     *
+     * @param list<DietElection> $history Votes, oldest first.
+     * @return list<array<string, mixed>>
+     */
+    private function partyRows(PoliticsStateDTO $politics, array $history): array
+    {
+        $seats = array_map('intval', $politics->dietSeats + array_fill_keys(AerieDiet::PARTIES, 0.0));
+        $coalition = AerieDiet::governingParties($politics->governingCoalition);
+        $support = AerieDiet::governingParties($politics->supportParties);
+        $blocs = $politics->dietBlocs;
+
+        $parties = [];
+        foreach (AerieDiet::PARTIES as $party) {
+            $position = AerieDiet::position($party, $politics->partyPositions);
+            $parties[] = [
+                'key' => $party,
+                'slug' => AeriePartyProfiles::PROFILES[$party]['slug'],
+                'name' => AerieDiet::PARTY_NAMES[$party],
+                'label' => self::PARTY_LABELS[$party],
+                'color' => self::PARTY_COLORS[$party],
+                'seats' => $seats[$party],
+                'share' => $politics->dietVoteShares[$party] ?? 0.0,
+                'swing' => $history === [] ? null : ($politics->dietVoteSwings[$party] ?? 0.0),
+                'governing' => in_array($party, $coalition, true),
+                'supporting' => in_array($party, $support, true),
+                'fixedAxes' => array_keys(AerieDiet::FIXED_POSITIONS[$party]),
+                'leadsBloc' => $blocs[$party] === $party,
+                'bloc' => self::PARTY_LABELS[$blocs[$party]],
+                'blocColor' => self::PARTY_COLORS[$blocs[$party]],
+                'state' => $position[AerieDiet::AXIS_STATE],
+                'openness' => $position[AerieDiet::AXIS_OPENNESS],
+                'council' => $position[AerieDiet::AXIS_COUNCIL],
+            ];
+        }
+
+        return $parties;
     }
 
     /**
@@ -361,6 +433,14 @@ class GovernmentPageBuilder
     }
 
     /**
+     * A party's name as it reads mid-sentence: "the Vanguard", "the Civic Front".
+     */
+    private static function midSentenceName(string $party): string
+    {
+        return 'the ' . (preg_replace('/^The /', '', AerieDiet::PARTY_NAMES[$party]) ?? AerieDiet::PARTY_NAMES[$party]);
+    }
+
+    /**
      * A simulation time as the page names it: the District's year, counted from its founding, and the quarter.
      */
     public static function simDate(float $simTime): string
@@ -427,32 +507,38 @@ class GovernmentPageBuilder
     }
 
     /**
-     * The policy space: openness across and size of state up, with the Council axis as a strip beneath; each party
-     * with its trail of past positions, and its label placed where it crowds nothing.
+     * The policy space: openness across and size of state up, with the Council axis as a strip beneath. Each party is a
+     * dot sized by its seats, with its last few positions fading behind it and its label placed where it crowds nothing.
+     * The cabinet is a shaded area over its parties, a ring where it governs from (its parties weighted by seats; a party
+     * governing alone is its own), and dotted lines from there to the parties supporting it from outside.
      *
      * @param list<array<string, mixed>>  $parties    Party rows.
      * @param list<DietElection>          $history    Votes, oldest first.
      * @param array{state: float, openness: float, council: float} $government The cabinet's seat-weighted position.
      * @param list<string>                $coalition  The cabinet.
+     * @param list<string>                $support    Its support parties.
      * @return array<string, mixed>
      */
-    private function compass(array $parties, array $history, array $government, array $coalition): array
+    private function compass(array $parties, array $history, array $government, array $coalition, array $support): array
     {
         $scale = self::COMPASS_HALF_WIDTH;
         $margin = self::COMPASS_MARGIN;
         $point = static fn(float $state, float $openness): array => ['x' => round($openness * $scale, 2), 'y' => round(-$state * $scale, 2)];
+        [$faintest, $strongest] = self::COMPASS_TRAIL_OPACITY;
+        $recent = array_values(array_slice($history, -self::COMPASS_TRAIL_VOTES));
 
         $dots = [];
         foreach ($parties as $party) {
             $trail = [];
             $councilTrail = [];
-            foreach ($history as $election) {
+            foreach ($recent as $k => $election) {
                 if (!isset($election->getPositions()[$party['key']])) {
                     continue;
                 }
                 $past = AerieDiet::position($party['key'], $election->getPositions());
-                $trail[] = $point($past[AerieDiet::AXIS_STATE], $past[AerieDiet::AXIS_OPENNESS]);
-                $councilTrail[] = round($past[AerieDiet::AXIS_COUNCIL] * $scale, 2);
+                $opacity = round($faintest + (($strongest - $faintest) * ($k + 1) / count($recent)), 3);
+                $trail[] = $point($past[AerieDiet::AXIS_STATE], $past[AerieDiet::AXIS_OPENNESS]) + ['opacity' => $opacity];
+                $councilTrail[] = ['x' => round($past[AerieDiet::AXIS_COUNCIL] * $scale, 2), 'opacity' => $opacity];
             }
             $dots[] = $party + $point($party['state'], $party['openness']) + [
                 'r' => 3.0 + ($party['seats'] / 20.0),
@@ -463,6 +549,17 @@ class GovernmentPageBuilder
             ];
         }
 
+        $members = array_values(array_filter($dots, static fn(array $dot): bool => in_array($dot['key'], $coalition, true)));
+        $alone = count($members) === 1;
+        $hub = $alone ? ['x' => $members[0]['x'], 'y' => $members[0]['y']] : $point($government[AerieDiet::AXIS_STATE], $government[AerieDiet::AXIS_OPENNESS]);
+        $spokes = [];
+        foreach ($dots as $dot) {
+            $supporter = in_array($dot['key'], $support, true);
+            if ($supporter || (!$alone && in_array($dot['key'], $coalition, true))) {
+                $spokes[] = ['x1' => $hub['x'], 'y1' => $hub['y'], 'x2' => $dot['x'], 'y2' => $dot['y'], 'supporter' => $supporter];
+            }
+        }
+
         $size = self::COMPASS_FONT_SIZE;
         $axes = [
             ['text' => 'Big state', 'x' => 0.0, 'y' => -$scale - 5.0, 'anchor' => 'middle'],
@@ -470,19 +567,16 @@ class GovernmentPageBuilder
             ['text' => 'Closed', 'x' => -$scale - 4.0, 'y' => 2.0, 'anchor' => 'end'],
             ['text' => 'Open', 'x' => $scale + 4.0, 'y' => 2.0, 'anchor' => 'start'],
         ];
+        $taken = array_map(static fn(array $axis): array => self::labelBox($axis['text'], $axis['x'], $axis['y'], $axis['anchor']), $axes);
+        if (!$alone && $members !== []) {
+            $ring = self::COMPASS_HUB_RADIUS;
+            $taken[] = [$hub['x'] - $ring, $hub['y'] - $ring, $hub['x'] + $ring, $hub['y'] + $ring];
+        }
         $bounds = [-$scale - $margin, -$scale - 16.0, $scale + $margin, $scale + 16.0];
-        $plane = self::placePlaneLabels($dots, array_map(static fn(array $axis): array => self::labelBox($axis['text'], $axis['x'], $axis['y'], $axis['anchor']), $axes), $bounds);
+        $plane = self::placePlaneLabels($dots, $taken, $bounds);
         $strip = self::placeStripLabels($dots);
         foreach ($dots as $i => $dot) {
             $dots[$i] = $dot + $plane[$i] + $strip[$i];
-        }
-
-        $links = [];
-        $members = array_values(array_filter($dots, static fn(array $dot): bool => in_array($dot['key'], $coalition, true)));
-        foreach ($members as $i => $a) {
-            foreach (array_slice($members, $i + 1) as $b) {
-                $links[] = ['x1' => $a['x'], 'y1' => $a['y'], 'x2' => $b['x'], 'y2' => $b['y']];
-            }
         }
 
         $stripY = $scale + self::COMPASS_STRIP_OFFSET;
@@ -499,11 +593,46 @@ class GovernmentPageBuilder
                 ['text' => 'Technocratic', 'x' => $scale + 4.0, 'y' => 2.0, 'anchor' => 'start'],
             ],
             'parties' => $dots,
-            'links' => $links,
-            'government' => $point($government[AerieDiet::AXIS_STATE], $government[AerieDiet::AXIS_OPENNESS]) + [
-                'councilX' => round($government[AerieDiet::AXIS_COUNCIL] * $scale, 2),
+            'cabinet' => [
+                'halo' => self::convexHull(array_map(static fn(array $dot): array => [$dot['x'], $dot['y']], $members)),
+                'pad' => ($members === [] ? 0.0 : max(array_column($members, 'r'))) + self::COMPASS_HALO_PAD,
+                'hub' => $hub,
+                'ring' => !$alone && $members !== [],
+                'hubRadius' => self::COMPASS_HUB_RADIUS,
+                'spokes' => $spokes,
             ],
         ];
+    }
+
+    /**
+     * The convex hull of a few points, in drawing order (Andrew's monotone chain); two points or fewer come back as given.
+     *
+     * @param list<array{0: float, 1: float}> $points
+     * @return list<array{0: float, 1: float}>
+     */
+    private static function convexHull(array $points): array
+    {
+        $points = array_values(array_unique($points, SORT_REGULAR));
+        if (count($points) < 3) {
+            return $points;
+        }
+        usort($points, static fn(array $a, array $b): int => $a <=> $b);
+        $turn = static fn(array $o, array $a, array $b): float => (($a[0] - $o[0]) * ($b[1] - $o[1])) - (($a[1] - $o[1]) * ($b[0] - $o[0]));
+
+        $chain = static function (array $ordered) use ($turn): array {
+            $hull = [];
+            foreach ($ordered as $p) {
+                while (count($hull) >= 2 && $turn($hull[count($hull) - 2], $hull[count($hull) - 1], $p) <= 0.0) {
+                    array_pop($hull);
+                }
+                $hull[] = $p;
+            }
+            array_pop($hull);
+
+            return $hull;
+        };
+
+        return array_merge($chain($points), $chain(array_reverse($points)));
     }
 
     /**

@@ -326,7 +326,7 @@ class AssetMarketSubsystemTest extends TestCase
         $this->subsystem->calculateResidentialPropertyIndex($grown, MacroEngine::TARGET_INFLATION, 0.25);
 
         // The index closes its reversion's share of the step in the fundamental, which is the population's log times Saiz's elasticity.
-        $expected = (1.0 - exp(-AssetMarketSubsystem::RESIDENTIAL_MEAN_REVERSION * 0.25)) * MacroEngine::IMMIGRATION_HOUSING_ELASTICITY * 0.05;
+        $expected = (1.0 - exp(-AssetMarketSubsystem::RESIDENTIAL_MEAN_REVERSION * 0.25)) * AssetMarketSubsystem::IMMIGRATION_HOUSING_ELASTICITY * 0.05;
         $this->assertEqualsWithDelta($expected, log($grown->residentialPropertyIndex / $base->residentialPropertyIndex), 1e-12);
     }
 

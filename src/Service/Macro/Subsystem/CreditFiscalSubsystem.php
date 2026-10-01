@@ -23,6 +23,10 @@ class CreditFiscalSubsystem
     /** Sigma of the jump log-size; at 0.50 the two-sigma low is exactly 1.0x, so a panic jump never shrinks the spread. */
     public const INTERBANK_JUMP_VOL = 0.50;
 
+    // --- Corporate Tax Revenue (BEA NIPA) ---
+    /** Corporate profits before tax over GDP, 1985-2019 mean (BEA NIPA via FRED, A053RC1Q027SBEA over GDP: 9.67%): the base a change in the corporate rate is levied on, so a point of rate is a tenth of a point of GDP in revenue. */
+    public const CORPORATE_PROFITS_TO_GDP = 0.0967;
+
     // --- Sovereign Debt Dynamics (Greenwood-Vayanos 2014) ---
     /** Structural primary fiscal deficit as a fraction of GDP with no sovereign fund; with one, the structural deficit is the fund's draw, spent. */
     public const SOVEREIGN_STRUCTURAL_DEFICIT = 0.020;
@@ -447,7 +451,7 @@ class CreditFiscalSubsystem
     {
         $output = $state->nominalGdpIndex * (1.0 + $state->outputGap);
         $taxRevenue = (($state->corporateTaxRate - $state->corporateTaxPolicyShift) * $output)
-            + ($state->corporateTaxPolicyShift * MacroEngine::CORPORATE_PROFITS_TO_GDP * $output)
+            + ($state->corporateTaxPolicyShift * self::CORPORATE_PROFITS_TO_GDP * $output)
             + ($state->importTariffRate * MacroAggregateSubsystem::DISTRICT_IMPORT_SHARE * MacroAggregateSubsystem::GOODS_SHARE_OF_IMPORTS
                 * ((1.0 + $state->importTariffRate) ** -MacroAggregateSubsystem::IMPORT_PRICE_ELASTICITY) * $output);
         $govtSpendingFlow = ($state->governmentSpendingIndex / MacroEngine::GOVT_SPENDING_BASELINE)

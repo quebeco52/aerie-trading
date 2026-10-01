@@ -10,6 +10,7 @@ use App\DTO\PoliticsStateDTO;
 use App\Entity\DietElection;
 use App\Repository\DietElectionRepository;
 use App\Service\Macro\MacroEngine;
+use App\Service\Politics\PoliticsEngine;
 use App\Service\View\GovernmentPageBuilder;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
@@ -315,6 +316,91 @@ class GovernmentPageBuilderTest extends TestCase
      * @param list<string> $coalition
      * @param list<string> $outgoing
      */
+    /**
+     * The cabinet is a shaded area over its parties, a ring where it governs from (its parties weighted by seats), solid
+     * lines from there to its parties and dotted ones to its supporters; a party inside the others adds no corner.
+     */
+    public function testTheCabinetIsShadedOverItsPartiesAndLinkedToItsSupporters(): void
+    {
+        $positions = Diet::HOME_POSITIONS;
+        $positions[Diet::CHARTISTS] = [Diet::AXIS_STATE => 0.0, Diet::AXIS_OPENNESS => 0.0, Diet::AXIS_COUNCIL => 0.8];
+        $cabinet = [Diet::CIVIC, Diet::VANGUARD, Diet::IRON_HARBOR, Diet::EXCHANGE, Diet::CHARTISTS];
+        $page = $this->builder()->build(new MacroStateDTO(), new PoliticsStateDTO(
+            partyPositions: $positions,
+            governingCoalition: Diet::membership($cabinet),
+            supportParties: Diet::membership([Diet::FREE_PORT]),
+        ));
+        $cabinetShape = $page['compass']['cabinet'];
+        $dots = array_column($page['compass']['parties'], null, 'key');
+        $at = static fn(string $party): array => [$dots[$party]['x'], $dots[$party]['y']];
+
+        $this->assertEqualsCanonicalizing([$at(Diet::CIVIC), $at(Diet::VANGUARD), $at(Diet::IRON_HARBOR), $at(Diet::EXCHANGE)], $cabinetShape['halo'], 'The Chartists sit inside the others and add no corner.');
+        $this->assertTrue($cabinetShape['ring']);
+        $this->assertEqualsWithDelta($page['government']['openness'] * 100.0, $cabinetShape['hub']['x'], 0.01);
+        $this->assertEqualsWithDelta(-$page['government']['state'] * 100.0, $cabinetShape['hub']['y'], 0.01);
+        $this->assertCount(count($cabinet), array_filter($cabinetShape['spokes'], static fn(array $spoke): bool => !$spoke['supporter']));
+        $dotted = array_values(array_filter($cabinetShape['spokes'], static fn(array $spoke): bool => $spoke['supporter']));
+        $this->assertCount(1, $dotted);
+        $this->assertSame($at(Diet::FREE_PORT), [$dotted[0]['x2'], $dotted[0]['y2']]);
+        $this->assertArrayNotHasKey('councilX', $cabinetShape, 'The cabinet is not drawn on the Council strip.');
+    }
+
+    /** A party governing alone is its own cabinet: the shade is round it, no ring, and only its supporters are linked to it. */
+    public function testAPartyGoverningAloneIsItsOwnCabinet(): void
+    {
+        $page = $this->builder()->build(new MacroStateDTO(), new PoliticsStateDTO());
+        $cabinetShape = $page['compass']['cabinet'];
+        $vanguard = array_column($page['compass']['parties'], null, 'key')[Diet::VANGUARD];
+
+        $this->assertSame([[$vanguard['x'], $vanguard['y']]], $cabinetShape['halo']);
+        $this->assertGreaterThan($vanguard['r'], $cabinetShape['pad']);
+        $this->assertFalse($cabinetShape['ring']);
+        $this->assertCount(3, $cabinetShape['spokes'], 'The founding Vanguard cabinet has three supporters.');
+        foreach ($cabinetShape['spokes'] as $spoke) {
+            $this->assertTrue($spoke['supporter']);
+            $this->assertSame([$vanguard['x'], $vanguard['y']], [$spoke['x1'], $spoke['y1']]);
+        }
+    }
+
+    /**
+     * A party's page: its profile, what it would enact governing alone from where it stands against what is in force,
+     * where it stands on each question, and its record, with a government that has not yet taken office kept hidden.
+     */
+    public function testThePartyPageCarriesItsProfilePlatformAndRecord(): void
+    {
+        $first = $this->election(4.0, [Diet::CIVIC, Diet::IRON_HARBOR], [Diet::VANGUARD]);
+        $pending = $this->election(8.0, [Diet::IRON_HARBOR], [Diet::CIVIC, Diet::IRON_HARBOR])->setFormationDays(60.0);
+        $page = $this->builder([$first, $pending])->buildParty(
+            new MacroStateDTO(totalTime: 8.05),
+            new PoliticsStateDTO(totalTime: 8.05, importTariffRate: 0.05),
+            Diet::IRON_HARBOR
+        );
+
+        $this->assertSame('iron-harbor', $page['party']['slug']);
+        $this->assertSame('Iron Harbor Coalition', $page['party']['name']);
+        $this->assertNotEmpty($page['party']['about']);
+        $this->assertCount(3, $page['party']['agenda']);
+        $this->assertSame(['Openness'], $page['party']['definedBy']);
+        $this->assertSame('the Civic Front', $page['party']['blocLeader']);
+
+        $tariff = array_column($page['levers'], null, 'name')['Average tariff on imports'];
+        $this->assertSame(PoliticsEngine::platform(Diet::position(Diet::IRON_HARBOR, Diet::HOME_POSITIONS))['tariff'], $tariff['platform']);
+        $this->assertSame(PoliticsEngine::POLICY_PROTECTIONIST_TARIFF, $tariff['platform'], 'The party at the closed end enacts the protectionist tariff.');
+        $this->assertSame(0.05, $tariff['enacted']);
+
+        $axes = array_column($page['axes'], null, 'key');
+        $this->assertTrue($axes[Diet::AXIS_OPENNESS]['fixed']);
+        $this->assertFalse($axes[Diet::AXIS_STATE]['fixed']);
+        $this->assertCount(count(Diet::PARTIES) - 1, $axes[Diet::AXIS_STATE]['others']);
+
+        $this->assertSame(['Founding', 'Year 5 Q1', 'Year 9 Q1'], array_column($page['record'], 'date'));
+        $this->assertSame(35, $page['record'][0]['seats']);
+        $this->assertTrue($page['record'][1]['cabinet']);
+        $this->assertFalse($page['record'][2]['cabinet'], 'The talks\' outcome is hidden until the cabinet takes office.');
+        $this->assertSame(['votes' => 2, 'cabinet' => 1], array_intersect_key($page['recordSummary'], ['votes' => 0, 'cabinet' => 0]));
+        $this->assertCount(count(Diet::PARTIES), $page['parties']);
+    }
+
     private function election(float $at, array $coalition, array $outgoing): DietElection
     {
         return (new DietElection())

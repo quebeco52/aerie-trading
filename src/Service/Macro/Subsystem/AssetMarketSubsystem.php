@@ -22,6 +22,10 @@ class AssetMarketSubsystem
     public const RESIDENTIAL_NEUTRAL_USER_COST = MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION + MacroEngine::NS_BASE_TERM_PREMIUM
         + MacroEngine::RESIDENTIAL_MORTGAGE_SPREAD + self::RESIDENTIAL_DEPRECIATION_TAX_RATE - MacroEngine::TARGET_INFLATION;
 
+    // --- Immigration and Housing (Saiz 2007) ---
+    /** Rise in rents and house values per unit of population added by immigration (Saiz 2007: an inflow of 1% of a city's population raises rents and values about 1%); the District's land ends at the sounds. */
+    public const IMMIGRATION_HOUSING_ELASTICITY = 1.0;
+
     // --- Sector Demand Factor ---
     /** Campbell-Cochrane (1999) habit formation risk aversion sensitivity to output gap deviations. */
     public const HABIT_RISK_AVERSION_COEFF = 9.0;
@@ -356,7 +360,7 @@ class AssetMarketSubsystem
         $creditSupplyFactor = $state->creditToGdpTrend > 0.0
             ? 1.0 + (self::RESIDENTIAL_CREDIT_SUPPLY_ELASTICITY * ($state->creditToGdpGapEma / $state->creditToGdpTrend))
             : 1.0;
-        $immigrationFactor = exp(MacroEngine::IMMIGRATION_HOUSING_ELASTICITY * $state->immigrationPopulationShift);
+        $immigrationFactor = exp(self::IMMIGRATION_HOUSING_ELASTICITY * $state->immigrationPopulationShift);
         $fundamentalPrice = self::RESIDENTIAL_BASELINE * max(0.30, min(2.50, $affordabilityFactor * max(0.5, $damageFactor) * max(0.5, $creditConditionsFactor) * max(0.5, $creditSupplyFactor) * $immigrationFactor));
 
         $dW = $this->mathUtility->generateStandardNormal();

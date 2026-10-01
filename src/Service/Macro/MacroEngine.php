@@ -248,19 +248,11 @@ class MacroEngine
     /** Horizon of the long-run average the budget reads the gap against, so the cycle it answers averages to zero: the 15-year window Drehmann & Juselius (2012) separate a cycle from its trend with, about 2.5 postwar NBER cycles. */
     public const FUND_STABILISATION_GAP_TREND_YEARS = 15.0;
 
-    // --- Policy Levers: Corporate Tax (Mertens & Ravn 2013) ---
-    /** Corporate profits before tax over GDP, 1985-2019 mean (BEA NIPA via FRED, A053RC1Q027SBEA over GDP: 9.67%): the base a change in the corporate rate is levied on, so a point of rate is a tenth of a point of GDP in revenue. */
-    public const CORPORATE_PROFITS_TO_GDP = 0.0967;
-
     // --- Policy Levers: Tariffs (Fajgelbaum et al. 2020; Furceri et al. 2018) ---
     /** Average tariff partners put on the District's exports per point of its average tariff on imports: 0.60 in 2018, when US tariffs rose 14.0 points on 12.7% of imports and retaliation 13.1 points on 8.2% of exports (Fajgelbaum, Goldberg, Kennedy & Khandelwal 2020). */
     public const TARIFF_RETALIATION_RATIO = (0.131 * 0.082) / (0.140 * 0.127);
     /** Output lost per unit of average tariff, through productivity: a 3.6-point rise costs 0.4% of output five years on (Furceri, Hannan, Ostry & Rose 2018: 151 countries, 1963-2014; labour productivity -0.9%). Their symmetric baseline; they find cuts help less than rises hurt. */
     public const TARIFF_OUTPUT_LOSS = 0.004 / 0.036;
-
-    // --- Policy Levers: Immigration (Saiz 2007) ---
-    /** Rise in rents and house values per unit of population added by immigration (Saiz 2007: an inflow of 1% of a city's population raises rents and values about 1%); the District's land ends at the sounds. */
-    public const IMMIGRATION_HOUSING_ELASTICITY = 1.0;
 
     // --- Federal Reserve G.17 Industrial Capacity Utilization Index ---
     /** Baseline long-run historical capacity utilization rate (~78.5%). */

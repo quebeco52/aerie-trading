@@ -893,7 +893,7 @@ class CreditFiscalSubsystemTest extends TestCase
         $this->subsystem->calculateSovereignDebt($neutral, 0.25);
         $this->subsystem->calculateSovereignDebt($raised, 0.25);
 
-        $this->assertEqualsWithDelta(-0.03 * MacroEngine::CORPORATE_PROFITS_TO_GDP, $raised->primaryDeficitToGdp - $neutral->primaryDeficitToGdp, 1e-12);
+        $this->assertEqualsWithDelta(-0.03 * CreditFiscalSubsystem::CORPORATE_PROFITS_TO_GDP, $raised->primaryDeficitToGdp - $neutral->primaryDeficitToGdp, 1e-12);
     }
 
     public function testATariffIsLeviedOnImportedGoodsAtTheirReducedVolume(): void

@@ -1,0 +1,222 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}{{ party.name }} - Aerie Exchange{% endblock %}
+
+{% block meta %}
+	<meta name="description" content="{{ party.name }}: {{ party.motto }}">
+	<meta property="og:title" content="{{ party.name }} | Aerie Exchange">
+	<meta property="og:description" content="{{ party.motto }}">
+	<meta property="og:type" content="website">
+{% endblock %}
+
+{% block body %}
+	<div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-5 w-full space-y-5" id="partyPage">
+
+		<nav class="text-2xs text-on-surface-variant flex items-center gap-1" aria-label="Breadcrumb">
+			<a href="{{ path('app_government') }}" class="hover:text-on-surface hover:underline">The Government</a>
+			<span class="material-symbols-outlined text-sm" aria-hidden="true">chevron_right</span>
+			<span class="text-on-surface" aria-current="page">{{ party.name }}</span>
+		</nav>
+
+		{# --- WHO THEY ARE --- #}
+		<header class="bg-surface-container-low rounded-lg border border-outline-variant/15 overflow-hidden">
+			<div class="h-1.5" style="background-color: {{ party.color }}" aria-hidden="true"></div>
+			<div class="p-6 lg:p-7 flex flex-col lg:flex-row lg:items-end lg:justify-between gap-6">
+				<div class="min-w-0">
+					<p class="text-2xs font-semibold tracking-wide uppercase" style="color: {{ party.color }}">{{ party.family }}</p>
+					<h1 class="text-2xl md:text-3xl font-bold text-on-surface tracking-tight mt-1">{{ party.name }}</h1>
+					<p class="text-sm text-on-surface-variant mt-2 italic">“{{ party.motto }}”</p>
+					<div class="flex flex-wrap gap-2 mt-4 text-3xs font-bold uppercase tracking-wider">
+						{% if party.governing %}
+							<span class="px-2 py-1 rounded bg-secondary/10 text-secondary">{{ party.caretaker ? 'In the caretaker cabinet' : 'In government' }}</span>
+						{% elseif party.supporting %}
+							<span class="px-2 py-1 rounded bg-primary/10 text-primary">Supports the government</span>
+						{% else %}
+							<span class="px-2 py-1 rounded bg-surface-container-high text-on-surface-variant">In opposition</span>
+						{% endif %}
+						<span class="px-2 py-1 rounded bg-surface-container-high text-on-surface-variant inline-flex items-center gap-1.5">
+							<span class="w-1.5 h-1.5 rounded-full" style="background-color: {{ party.blocColor }}" aria-hidden="true"></span>
+							{{ party.leadsBloc ? 'Leads its bloc' : 'In ' ~ party.blocLeader ~ '\'s bloc' }}
+						</span>
+						<span class="px-2 py-1 rounded bg-surface-container-high text-on-surface-variant">Founded on: {{ party.definedBy|join(' and ')|lower }}</span>
+					</div>
+				</div>
+				<dl class="grid grid-cols-3 gap-3 shrink-0">
+					<div class="bg-surface-container-lowest rounded border border-outline-variant/20 px-4 py-3 min-w-28">
+						<dt class="text-2xs font-bold uppercase tracking-wider text-on-surface-variant">Seats</dt>
+						<dd class="text-xl font-bold font-mono tabular-nums text-on-surface mt-0.5">{{ party.seats }}<span class="text-xs text-on-surface-variant font-normal"> / {{ rules.seats }}</span></dd>
+					</div>
+					<div class="bg-surface-container-lowest rounded border border-outline-variant/20 px-4 py-3 min-w-28">
+						<dt class="text-2xs font-bold uppercase tracking-wider text-on-surface-variant">Vote</dt>
+						<dd class="text-xl font-bold font-mono tabular-nums text-on-surface mt-0.5">{{ (party.share * 100)|number_format(1) }}%</dd>
+					</div>
+					<div class="bg-surface-container-lowest rounded border border-outline-variant/20 px-4 py-3 min-w-28">
+						<dt class="text-2xs font-bold uppercase tracking-wider text-on-surface-variant">Last election</dt>
+						<dd class="text-xl font-bold font-mono tabular-nums mt-0.5 {{ party.swing is null ? 'text-on-surface-variant' : (party.swing >= 0 ? 'text-secondary' : 'text-error') }}">
+							{{- party.swing is null ? '-' : (party.swing >= 0 ? '+' : '') ~ (party.swing * 100)|number_format(1) -}}
+							{%- if party.swing is not null %}<span class="text-xs font-normal"> pts</span>{% endif %}
+						</dd>
+					</div>
+				</dl>
+			</div>
+		</header>
+
+		{# --- ABOUT AND AGENDA --- #}
+		<div class="grid grid-cols-1 lg:grid-cols-[3fr_2fr] gap-5 items-start">
+			<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/15" aria-labelledby="about-heading">
+				<h2 id="about-heading" class="text-sm font-bold text-on-surface">About the party</h2>
+				<div class="mt-3 space-y-3 text-sm text-on-surface-variant leading-relaxed">
+					{% for paragraph in party.about %}
+						<p>{{ paragraph }}</p>
+					{% endfor %}
+				</div>
+			</section>
+
+			<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/15" aria-labelledby="agenda-heading">
+				<h2 id="agenda-heading" class="text-sm font-bold text-on-surface">Agenda</h2>
+				<ol class="mt-3 space-y-3">
+					{% for plank in party.agenda %}
+						<li class="flex gap-3">
+							<span class="shrink-0 w-6 h-6 rounded-full text-2xs font-bold flex items-center justify-center text-surface" style="background-color: {{ party.color }}">{{ loop.index }}</span>
+							<span>
+								<span class="block text-xs font-bold text-on-surface">{{ plank.title }}</span>
+								<span class="block text-xs text-on-surface-variant mt-0.5">{{ plank.text }}</span>
+							</span>
+						</li>
+					{% endfor %}
+				</ol>
+			</section>
+		</div>
+
+		{# --- WHAT IT WOULD ENACT, AND WHERE IT STANDS --- #}
+		<div class="grid grid-cols-1 lg:grid-cols-2 gap-5 items-start">
+			<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/15" aria-labelledby="platform-heading">
+				<h2 id="platform-heading" class="text-sm font-bold text-on-surface">If it governed alone</h2>
+				<p class="text-3xs text-on-surface-variant mt-0.5">What the party would legislate from where it stands today, against the law in force. In a coalition, policy lands between the partners' platforms.</p>
+				<table class="w-full mt-4 text-xs">
+					<thead>
+						<tr class="text-3xs uppercase tracking-wider text-on-surface-variant border-b border-outline-variant/15">
+							<th scope="col" class="text-left font-bold pb-2">Policy</th>
+							<th scope="col" class="text-right font-bold pb-2">Platform</th>
+							<th scope="col" class="text-right font-bold pb-2">In force</th>
+						</tr>
+					</thead>
+					<tbody class="divide-y divide-outline-variant/10">
+						{% for lever in levers %}
+							{% set diff = lever.platform - lever.enacted %}
+							<tr>
+								<th scope="row" class="py-2.5 text-left font-bold text-on-surface">{{ lever.name }}</th>
+								<td class="py-2.5 text-right font-mono tabular-nums font-bold text-on-surface">
+									{{ _self.value(lever, lever.platform) }}
+									{% if diff|abs > 0.00005 %}
+										<span class="material-symbols-outlined text-sm align-middle text-on-surface-variant" aria-label="{{ diff > 0 ? 'higher than in force' : 'lower than in force' }}">{{ diff > 0 ? 'arrow_upward' : 'arrow_downward' }}</span>
+									{% else %}
+										<span class="material-symbols-outlined text-sm align-middle text-on-surface-variant/40" aria-label="as in force">check</span>
+									{% endif %}
+								</td>
+								<td class="py-2.5 text-right font-mono tabular-nums text-on-surface-variant">{{ _self.value(lever, lever.enacted) }}</td>
+							</tr>
+						{% endfor %}
+					</tbody>
+				</table>
+			</section>
+
+			<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/15" aria-labelledby="stance-heading">
+				<h2 id="stance-heading" class="text-sm font-bold text-on-surface">Where it stands</h2>
+				<p class="text-3xs text-on-surface-variant mt-0.5">On the question it was founded on the party never moves; on the others it drifts between elections and returns to its usual place.</p>
+				<div class="mt-4 space-y-5">
+					{% for axis in axes %}
+						<div>
+							<div class="flex items-baseline justify-between">
+								<h3 class="text-xs font-bold text-on-surface">{{ axis.name }}</h3>
+								{% if axis.fixed %}
+									<span class="text-3xs font-bold uppercase tracking-wider" style="color: {{ party.color }}">Founding principle</span>
+								{% endif %}
+							</div>
+							<svg viewBox="-110 -12 220 30" class="w-full mt-1" role="img" aria-label="{{ axis.name }}: {{ party.name }} at {{ axis.value|number_format(2) }}, from {{ axis.low }} at -1 to {{ axis.high }} at +1">
+								<line x1="-100" y1="0" x2="100" y2="0" class="stroke-outline-variant" stroke-width="1"></line>
+								<line x1="0" y1="-3" x2="0" y2="3" class="stroke-outline-variant" stroke-width="0.6"></line>
+								{% for other in axis.others %}
+									<circle cx="{{ other.value * 100 }}" cy="0" r="2.6" fill="{{ other.color }}" fill-opacity="0.35"><title>{{ other.label }}</title></circle>
+								{% endfor %}
+								{% if not axis.fixed %}
+									<line x1="{{ axis.home * 100 }}" y1="-6" x2="{{ axis.home * 100 }}" y2="6" stroke="{{ party.color }}" stroke-width="1" stroke-dasharray="1.5 1.5"><title>Its usual place</title></line>
+								{% endif %}
+								<circle cx="{{ axis.value * 100 }}" cy="0" r="5" fill="{{ party.color }}" class="stroke-surface-container-low" stroke-width="1.2"></circle>
+								<text x="-100" y="14" font-size="5.5" class="fill-on-surface-variant">{{ axis.low }}</text>
+								<text x="100" y="14" font-size="5.5" text-anchor="end" class="fill-on-surface-variant">{{ axis.high }}</text>
+							</svg>
+						</div>
+					{% endfor %}
+				</div>
+				<p class="text-3xs text-on-surface-variant mt-3 flex flex-wrap gap-x-4 gap-y-1">
+					<span class="inline-flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full" style="background-color: {{ party.color }}" aria-hidden="true"></span>{{ party.label }}</span>
+					<span class="inline-flex items-center gap-1.5"><span class="w-3 border-t border-dashed" style="border-color: {{ party.color }}" aria-hidden="true"></span>Its usual place</span>
+					<span class="inline-flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-on-surface-variant/30" aria-hidden="true"></span>The other parties</span>
+				</p>
+			</section>
+		</div>
+
+		{# --- AT THE POLLS --- #}
+		<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/15" aria-labelledby="record-heading">
+			<div class="flex flex-col md:flex-row md:items-start md:justify-between gap-3">
+				<div>
+					<h2 id="record-heading" class="text-sm font-bold text-on-surface">At the polls</h2>
+					<p class="text-3xs text-on-surface-variant mt-0.5">Seats won at each election since the founding, and the party's part in the government that followed.</p>
+				</div>
+				<dl class="flex gap-5 text-xs shrink-0">
+					<div><dt class="text-3xs uppercase tracking-wider text-on-surface-variant">In cabinet</dt><dd class="font-mono tabular-nums font-bold text-on-surface">{{ recordSummary.cabinet }} of {{ recordSummary.votes }}</dd></div>
+					<div><dt class="text-3xs uppercase tracking-wider text-on-surface-variant">In support</dt><dd class="font-mono tabular-nums font-bold text-on-surface">{{ recordSummary.support }} of {{ recordSummary.votes }}</dd></div>
+					<div><dt class="text-3xs uppercase tracking-wider text-on-surface-variant">Best result</dt><dd class="font-mono tabular-nums font-bold text-on-surface">{{ recordSummary.best }} seats</dd></div>
+				</dl>
+			</div>
+
+			{% set n = record|length %}
+			{% set slot = 560 / n %}
+			{% set barW = min(36, slot * 0.7) %}
+			{% set every = (n / 12)|round(0, 'ceil') %}
+			<svg viewBox="0 0 600 170" class="w-full mt-4" role="img" aria-label="Seats won by {{ party.name }} at each election">
+				<line x1="30" y1="140" x2="590" y2="140" class="stroke-outline-variant" stroke-width="1"></line>
+				{% for tick in [0, 0.5, 1] %}
+					{% set y = 140 - (tick * 120) %}
+					<line x1="30" y1="{{ y }}" x2="590" y2="{{ y }}" class="stroke-outline-variant" stroke-opacity="{{ tick == 0 ? 0 : 0.3 }}" stroke-dasharray="2 3" stroke-width="0.6"></line>
+					<text x="24" y="{{ y + 3 }}" text-anchor="end" font-size="8" class="fill-on-surface-variant">{{ (tick * recordSummary.scale)|round }}</text>
+				{% endfor %}
+				{% for vote in record %}
+					{% set x = 30 + (loop.index0 * slot) + ((slot - barW) / 2) %}
+					{% set h = vote.seats / recordSummary.scale * 120 %}
+					<rect x="{{ x }}" y="{{ 140 - h }}" width="{{ barW }}" height="{{ h }}" rx="1.5" fill="{{ party.color }}" fill-opacity="{{ vote.cabinet ? 1 : (vote.support ? 0.6 : 0.28) }}"><title>{{ vote.date }}: {{ vote.seats }} seats, {{ (vote.share * 100)|number_format(1) }}% of the vote{{ vote.cabinet ? ', in cabinet' : (vote.support ? ', supporting' : '') }}</title></rect>
+					{% if n <= 24 %}
+						<text x="{{ x + barW / 2 }}" y="{{ 136 - h }}" text-anchor="middle" font-size="7.5" class="fill-on-surface">{{ vote.seats }}</text>
+					{% endif %}
+					{% if loop.index0 % every == 0 %}
+						<text x="{{ x + barW / 2 }}" y="154" text-anchor="middle" font-size="7.5" class="fill-on-surface-variant">{{ vote.date|replace({' Q1': '', ' Q2': '', ' Q3': '', ' Q4': ''}) }}</text>
+					{% endif %}
+				{% endfor %}
+			</svg>
+			<p class="text-3xs text-on-surface-variant mt-1 flex flex-wrap gap-x-4 gap-y-1">
+				<span class="inline-flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm" style="background-color: {{ party.color }}" aria-hidden="true"></span>In the cabinet</span>
+				<span class="inline-flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm opacity-60" style="background-color: {{ party.color }}" aria-hidden="true"></span>Supporting it</span>
+				<span class="inline-flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm opacity-30" style="background-color: {{ party.color }}" aria-hidden="true"></span>In opposition</span>
+			</p>
+		</section>
+
+		{# --- THE OTHER PARTIES --- #}
+		<nav class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/15" aria-labelledby="parties-heading">
+			<h2 id="parties-heading" class="text-sm font-bold text-on-surface">The parties in the Diet</h2>
+			<ul class="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-2">
+				{% for other in parties %}
+					<li>
+						<a href="{{ path('app_government_party', {slug: other.slug}) }}"
+						   {% if other.key == party.key %}aria-current="page"{% endif %}
+						   class="flex items-center gap-2 px-3 py-2 rounded border text-xs font-bold transition-colors {{ other.key == party.key ? 'border-primary/40 bg-primary/5 text-on-surface' : 'border-outline-variant/20 text-on-surface-variant hover:text-on-surface hover:bg-surface-container' }}">
+							<span class="w-2.5 h-2.5 rounded-full shrink-0" style="background-color: {{ other.color }}" aria-hidden="true"></span>{{ other.name }}
+						</a>
+					</li>
+				{% endfor %}
+			</ul>
+		</nav>
+	</div>
+{% endblock %}
+
+{% macro value(lever, value) %}{{ lever.unit == 'hhi' ? (value * 10000)|number_format(0) ~ ' HHI' : (value * 100)|number_format(2) ~ '%' }}{% endmacro %}
