@@ -29,7 +29,7 @@ class FinancialSummaryBuilderTest extends TestCase
 
         $tiles = $this->tiles($this->stock('Banks - Diversified'), $report);
 
-        $this->assertSame(['Net Interest Margin', 'CET1 Ratio', 'Reserve / Book', 'Net Charge-Off Rate', 'ROE'], array_column($tiles, 'label'));
+        $this->assertSame(['Net interest margin', 'CET1 ratio', 'Reserve / book', 'Net charge-off rate', 'ROE'], array_column($tiles, 'label'));
         $this->assertEqualsWithDelta(0.015, $tiles[2]['value'], 1e-12, 'allowance over the book');
         $this->assertEqualsWithDelta(0.01, $tiles[3]['value'], 1e-12, 'a quarter of charge-offs, annualized over the book');
     }
@@ -43,7 +43,7 @@ class FinancialSummaryBuilderTest extends TestCase
 
         $tiles = $this->tiles($this->stock('Insurance - Diversified'), $report);
 
-        $this->assertSame(['Capital Ratio', 'ROE', 'Combined Ratio'], array_column($tiles, 'label'));
+        $this->assertSame(['Capital ratio', 'ROE', 'Combined ratio'], array_column($tiles, 'label'));
         $this->assertEqualsWithDelta(0.94, $tiles[2]['value'], 1e-12);
     }
 
@@ -66,7 +66,7 @@ class FinancialSummaryBuilderTest extends TestCase
 
         $tiles = $this->tiles($this->stock('Tools & Accessories'), $report);
 
-        $this->assertSame(['Operating Margin', 'ROIC − WACC', 'FCF / Net Income', 'Book-to-Bill', 'Backlog', 'WALT'], array_column($tiles, 'label'), 'capped at six, unknown and industry keys skipped');
+        $this->assertSame(['Operating margin', 'ROIC − WACC', 'FCF / net income', 'Book-to-bill', 'Backlog', 'WALT'], array_column($tiles, 'label'), 'capped at six, unknown and industry keys skipped');
         $this->assertEqualsWithDelta(0.05, $tiles[1]['value'], 1e-12);
         $this->assertSame('signed_percent', $tiles[1]['format']);
         $this->assertEqualsWithDelta(0.75, $tiles[2]['value'], 1e-12);

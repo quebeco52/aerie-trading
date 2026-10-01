@@ -1,13 +1,13 @@
-import { THEME_COLORS } from '../utils/colors.js';
+import { THEME_COLORS, SERIES, withAlpha } from '../utils/colors.js';
 import { destroyChartInstance } from '../utils/chart-config.js';
 import { renderWhenVisible, resetLazyCharts } from '../utils/lazy-chart.js';
 
-/** The sleeve colours the page's allocation bar uses, so a sleeve reads the same in every panel. */
-const SLEEVE_COLORS = { district: '#0284c7', equities: '#059669' };
-/** The two flows on the money chart; validated as a pair against the dark surface. */
-const FLOW_COLORS = { draw: '#8b5cf6', stabilisation: '#d95926', duty: '#0891b2' };
+/** The sleeve colours the page's allocation bar uses (sleeve_swatch in the template), so a sleeve reads the same in every panel. */
+const SLEEVE_COLORS = { district: SERIES.blue, equities: SERIES.orange };
+/** The flows on the money chart, in the series slots' order. */
+const FLOW_COLORS = { draw: SERIES.blue, stabilisation: SERIES.orange, duty: SERIES.aqua };
 const REFERENCE_COLOR = THEME_COLORS.textMuted;
-const GRID_COLOR = 'rgba(255, 255, 255, 0.05)';
+const GRID_COLOR = withAlpha(THEME_COLORS.grid, 0.5);
 
 const charts = {};
 
@@ -179,8 +179,8 @@ export function renderReserveCharts(reports, bands) {
     });
 
     draw('reserveSizeChart', [lineDataset('Fund size', size, THEME_COLORS.primary)], labels, chartOptions({ legend: false }));
-    draw('reserveWeightChart', bandDatasets('District weight', weight, bands.domesticPolicy, bands.domesticBand, SLEEVE_COLORS.district, 'rgba(2, 132, 199, 0.15)'), labels, chartOptions());
-    draw('reserveEquityChart', bandDatasets('Equity share', equity, bands.equityPolicy, bands.equityBand, SLEEVE_COLORS.equities, 'rgba(5, 150, 105, 0.15)'), labels, chartOptions());
+    draw('reserveWeightChart', bandDatasets('District weight', weight, bands.domesticPolicy, bands.domesticBand, SLEEVE_COLORS.district, withAlpha(SLEEVE_COLORS.district, 0.15)), labels, chartOptions());
+    draw('reserveEquityChart', bandDatasets('Equity share', equity, bands.equityPolicy, bands.equityBand, SLEEVE_COLORS.equities, withAlpha(SLEEVE_COLORS.equities, 0.15)), labels, chartOptions());
     draw('reserveFlowsChart', [
         lineDataset('Budget draw', drawToGdp, FLOW_COLORS.draw),
         lineDataset('Stabilisation', stabilisation, FLOW_COLORS.stabilisation),

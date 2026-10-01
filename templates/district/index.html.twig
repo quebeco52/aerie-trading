@@ -427,8 +427,8 @@
 							</radialGradient>
 						{% endfor %}
 						<radialGradient id="kerb-glow-0">
-							<stop offset="0%" stop-color="#adc6ff" stop-opacity="{{ kerbLight.opacity }}"/>
-							<stop offset="100%" stop-color="#adc6ff" stop-opacity="0"/>
+							<stop offset="0%" stop-color="{{ sectorPaletteFallback.window }}" stop-opacity="{{ kerbLight.opacity }}"/>
+							<stop offset="100%" stop-color="{{ sectorPaletteFallback.window }}" stop-opacity="0"/>
 						</radialGradient>
 						<linearGradient id="terrace-wall-grad" x1="0" y1="0" x2="0" y2="1">
 							<stop offset="0%" stop-color="#1d2129"/>
@@ -711,7 +711,7 @@
 						{% for rowIndex, rowGroundLine in rowGroundLines %}
 							<g id="skyline-row-{{ rowIndex }}">
 								{% for plot in plots|filter(p => p.row == rowIndex) %}
-									{% set palette = sectorPalette[plot.sector] ?? {'facade': '#1b2439', 'stroke': '#424754', 'window': '#adc6ff'} %}
+									{% set palette = sectorPalette[plot.sector] ?? sectorPaletteFallback %}
 									{% set cols = plot.windowColumns %}
 									{% set isOwned = userHoldings[plot.ticker] is defined %}
 									{% set holding = userHoldings[plot.ticker] ?? null %}
@@ -907,7 +907,7 @@
 					   whole list, since a block holds more than one trade. #}
 					<g id="district-runs" aria-hidden="true">
 						{% for run in districtRuns %}
-							{% set palette = sectorPalette[run.sectors|first] ?? {'facade': '#1b2439', 'stroke': '#424754', 'window': '#adc6ff'} %}
+							{% set palette = sectorPalette[run.sectors|first] ?? sectorPaletteFallback %}
 							{% set groundLine = rowGroundLines[run.row] %}
 							<g class="sector-run" data-district-target="districtRun" data-sectors="{{ run.sectors|join('|') }}">
 								<line class="sector-rule" stroke="{{ palette.window }}"

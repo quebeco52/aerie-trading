@@ -1,4 +1,4 @@
-import { THEME_COLORS, withAlpha } from '../utils/colors.js';
+import { THEME_COLORS, SERIES, withAlpha } from '../utils/colors.js';
 import { formatLarge } from '../utils/formatters.js';
 import { destroyChartInstance } from '../utils/chart-config.js';
 import { renderWhenVisible, resetLazyCharts } from '../utils/lazy-chart.js';
@@ -27,6 +27,10 @@ let cyclicalDynamicsChartInstance = null;
 // shadow bank's origination_fees are fee income, not interest). The report's interest_income column is
 // treasury yield on excess cash only, by design of the bank model, so read on its own it made a healthy
 // bank print a negative NII once the full funding cost was taken off it.
+// Series take the categorical slots in legend order (SERIES, app.css --color-series-*). Green and red stay on
+// bars whose colour says the sign of the value; the regulator's lines wear the status colours.
+const GRID_COLOR = withAlpha(THEME_COLORS.grid, 0.5);
+
 const LENDER_INTEREST_STREAMS = ['net_interest_income', 'lending', 'direct_lending'];
 
 function parseStreams(report) {
@@ -69,9 +73,9 @@ function nullablePercent(value) {
 function thresholdDatasets(labels, thresholds) {
     if (!thresholds) return [];
     return [
-        { key: 'warning', label: 'Well capitalized', color: 'rgba(74, 222, 128, 0.7)' },
-        { key: 'distress', label: 'Distress', color: 'rgba(250, 204, 21, 0.7)' },
-        { key: 'bankrupt', label: 'Closure', color: 'rgba(248, 113, 113, 0.85)' },
+        { key: 'warning', label: 'Well capitalized', color: withAlpha(THEME_COLORS.positive, 0.7) },
+        { key: 'distress', label: 'Distress', color: withAlpha(THEME_COLORS.warning, 0.7) },
+        { key: 'bankrupt', label: 'Closure', color: withAlpha(THEME_COLORS.negative, 0.85) },
     ].map(line => ({
         label: `${line.label} (${Number(thresholds[line.key]).toFixed(1)}%)`,
         data: labels.map(() => thresholds[line.key]),
@@ -445,7 +449,7 @@ export function updateFundamentalCharts(timeframe, rawReports, context = {}) {
 
     let regulatorySecondaryLabel = null;
     if (isFinancial) {
-        renderWhenVisible('capitalEfficiencyChart', () => renderCapitalEfficiencyChart(labels, roeData, coeData, evaData, 'ROE', 'Cost of Equity'));
+        renderWhenVisible('capitalEfficiencyChart', () => renderCapitalEfficiencyChart(labels, roeData, coeData, evaData, 'ROE', 'Cost of equity'));
 
         const hasDeposits = customerDepositRatioData.some(val => val !== 0 && val !== null && !isNaN(val));
         const secondaryLabel = isInsurer ? 'Float funding' : ({
@@ -458,7 +462,7 @@ export function updateFundamentalCharts(timeframe, rawReports, context = {}) {
         renderWhenVisible('regulatoryRatiosChart', () => renderRegulatoryRatiosChart(labels, capitalRatioData, secondaryLabel ? customerDepositRatioData : null, secondaryLabel, hasCet1 ? cet1Data : null, capitalThresholds));
         regulatorySecondaryLabel = secondaryLabel;
     } else if (businessModel === 'reit') {
-        renderWhenVisible('capitalEfficiencyChart', () => renderCapitalEfficiencyChart(labels, roicData, waccData, evaData, 'Cap Rate', 'WACC'));
+        renderWhenVisible('capitalEfficiencyChart', () => renderCapitalEfficiencyChart(labels, roicData, waccData, evaData, 'Cap rate', 'WACC'));
     } else {
         renderWhenVisible('capitalEfficiencyChart', () => renderCapitalEfficiencyChart(labels, roicData, waccData, evaData, 'ROIC', 'WACC'));
     }
@@ -493,8 +497,8 @@ export function updateFundamentalCharts(timeframe, rawReports, context = {}) {
         revenueStreamsKeys, rawStreamsData: revenueStreamsDataRaw,
         debtData, equityData,
         spreadData, blendedRateData,
-        returnLabel: isFinancial ? 'ROE' : (businessModel === 'reit' ? 'Cap Rate' : 'ROIC'),
-        hurdleLabel: isFinancial ? 'Cost of Equity' : 'WACC',
+        returnLabel: isFinancial ? 'ROE' : (businessModel === 'reit' ? 'Cap rate' : 'ROIC'),
+        hurdleLabel: isFinancial ? 'Cost of equity' : 'WACC',
         returnData: isFinancial ? roeData : roicData,
         hurdleData: isFinancial ? coeData : waccData,
         evaData,
@@ -525,82 +529,82 @@ function updateFinancialHud(m) {
     const lastRev = last(m.revenueData);
     const lastNet = last(m.netIncomeData);
     const lastMargin = last(m.operatingMarginData);
-    setHud('hud-netIncomeChart', `Rev: ${formatLarge(lastRev, '$')} | Net: ${formatLarge(lastNet, '$')} (${lastMargin.toFixed(1)}%)`);
-    setHud('hud-profitEngineChart', `Rev: ${formatLarge(lastRev, '$')} | Net: ${formatLarge(lastNet, '$')} (${lastMargin.toFixed(1)}%)`);
+    setHud('hud-netIncomeChart', `Revenue ${formatLarge(lastRev, '$')} · Net income ${formatLarge(lastNet, '$')} (${lastMargin.toFixed(1)}%)`);
+    setHud('hud-profitEngineChart', `Revenue ${formatLarge(lastRev, '$')} · Net income ${formatLarge(lastNet, '$')} (${lastMargin.toFixed(1)}%)`);
 
     const streamsCount = m.revenueStreamsKeys ? m.revenueStreamsKeys.size : 0;
-    setHud('hud-revenueStreamsChart', `Streams: ${streamsCount} | Rev: ${formatLarge(lastRev, '$')}`);
+    setHud('hud-revenueStreamsChart', `${streamsCount} segments · Revenue ${formatLarge(lastRev, '$')}`);
 
     const lastDebt = last(m.debtData);
     const lastEq = last(m.equityData);
     const deRatio = lastEq > 0 ? (lastDebt / lastEq) : 0;
     const lastGoodwill = last(m.goodwillData);
-    const goodwillShare = lastEq > 0 && lastGoodwill > 0 ? ` | Goodwill: ${((lastGoodwill / lastEq) * 100).toFixed(0)}% of book` : '';
-    setHud('hud-debtEquityChart', `Debt: ${formatLarge(lastDebt, '$')} | Eq: ${formatLarge(lastEq, '$')} (D/E: ${deRatio.toFixed(2)}x)${goodwillShare}`);
+    const goodwillShare = lastEq > 0 && lastGoodwill > 0 ? ` · Goodwill ${((lastGoodwill / lastEq) * 100).toFixed(0)}% of book` : '';
+    setHud('hud-debtEquityChart', `Debt ${formatLarge(lastDebt, '$')} · Equity ${formatLarge(lastEq, '$')} · D/E ${deRatio.toFixed(2)}x${goodwillShare}`);
 
     const lastRate = last(m.blendedRateData);
     const lastSpread = last(m.spreadData);
     // spreadData is in percent (dynamic_spread x 100); x100 again converts percent to basis points.
-    setHud('hud-creditHealthChart', `Rate: ${lastRate.toFixed(2)}% | Spr: ${(lastSpread * 100).toFixed(0)} bps`);
+    setHud('hud-creditHealthChart', `Rate ${lastRate.toFixed(2)}% · Spread ${(lastSpread * 100).toFixed(0)} bps`);
 
     const lastRet = last(m.returnData);
     const lastHurd = last(m.hurdleData);
     const lastEva = last(m.evaData);
-    setHud('hud-capitalEfficiencyChart', `${m.returnLabel || 'ROIC'}: ${lastRet.toFixed(1)}% | ${m.hurdleLabel || 'WACC'}: ${lastHurd.toFixed(1)}% | EVA: ${formatLarge(lastEva, '$')}`);
+    setHud('hud-capitalEfficiencyChart', `${m.returnLabel || 'ROIC'} ${lastRet.toFixed(1)}% · ${m.hurdleLabel || 'WACC'} ${lastHurd.toFixed(1)}% · EVA ${formatLarge(lastEva, '$')}`);
 
     const lastDiv = last(m.dividendData);
     const lastBuyback = last(m.buybackData);
     const lastYield = last(m.dividendYieldData);
-    setHud('hud-capitalReturnChart', `Div: ${formatLarge(lastDiv, '$')} | Buyback: ${formatLarge(lastBuyback, '$')} | Yield: ${lastYield.toFixed(2)}%`);
+    setHud('hud-capitalReturnChart', `Dividends ${formatLarge(lastDiv, '$')} · Buybacks ${formatLarge(lastBuyback, '$')} · Yield ${lastYield.toFixed(2)}%`);
 
-    setHud('hud-payoutRatioChart', `Payout: ${m.payoutRatio.toFixed(1)}% | Retained: ${m.retainedRatio.toFixed(1)}%`);
+    setHud('hud-payoutRatioChart', `Paid out ${m.payoutRatio.toFixed(1)}% · Retained ${m.retainedRatio.toFixed(1)}%`);
 
     const lastPe = last(m.peData);
     const lastPb = last(m.pbData);
-    setHud('hud-valuationMultiplesChart', `P/E: ${lastPe > 0 ? lastPe.toFixed(1) + 'x' : '-'} | P/B: ${lastPb > 0 ? lastPb.toFixed(2) + 'x' : '-'}`);
+    setHud('hud-valuationMultiplesChart', `P/E ${lastPe > 0 ? lastPe.toFixed(1) + 'x' : '-'} · P/B ${lastPb > 0 ? lastPb.toFixed(2) + 'x' : '-'}`);
 
     const lastEps = last(m.epsData);
     const lastBvps = last(m.bvpsData);
-    setHud('hud-shareholderValueChart', `EPS: $${lastEps.toFixed(2)} | BVPS: $${lastBvps.toFixed(2)}`);
+    setHud('hud-shareholderValueChart', `EPS $${lastEps.toFixed(2)} · BVPS $${lastBvps.toFixed(2)}`);
 
     const lastFcf = last(m.fcfData);
     const lastConv = last(m.fcfConversionData);
-    setHud('hud-cashFlowSummaryChart', `FCF: ${formatLarge(lastFcf, '$')} | FCF/NI: ${lastConv.toFixed(0)}%`);
+    setHud('hud-cashFlowSummaryChart', `FCF ${formatLarge(lastFcf, '$')} · FCF/NI ${lastConv.toFixed(0)}%`);
 
     if (['commercial_bank', 'credit_services', 'shadow_bank'].includes(m.businessModel)) {
         const lastNii = last(m.interestIncomeData) - last(m.interestExpenseData);
         const lastNim = last(m.netInterestSpreadData);
-        setHud('hud-netInterestEngineChart', `NII: ${formatLarge(lastNii, '$')} | NIM: ${lastNim.toFixed(2)}%`);
+        setHud('hud-netInterestEngineChart', `NII ${formatLarge(lastNii, '$')} · NIM ${lastNim.toFixed(2)}%`);
     }
     if (m.isFinancial) {
         const lastCap = last(m.capitalRatioData, null);
         const lastCet1 = last(m.cet1Data, null);
         const lastDep = last(m.customerDepositRatioData, null);
-        const parts = [`Tangible capital: ${lastCap === null ? '-' : lastCap.toFixed(1) + '%'}`];
-        if (lastCet1 !== null) parts.push(`CET1: ${lastCet1.toFixed(1)}%`);
-        if (m.regulatorySecondaryLabel && lastDep !== null) parts.push(`${m.regulatorySecondaryLabel}: ${lastDep.toFixed(1)}%`);
-        setHud('hud-regulatoryRatiosChart', parts.join(' | '));
+        const parts = [`Tangible capital ${lastCap === null ? '-' : lastCap.toFixed(1) + '%'}`];
+        if (lastCet1 !== null) parts.push(`CET1 ${lastCet1.toFixed(1)}%`);
+        if (m.regulatorySecondaryLabel && lastDep !== null) parts.push(`${m.regulatorySecondaryLabel} ${lastDep.toFixed(1)}%`);
+        setHud('hud-regulatoryRatiosChart', parts.join(' · '));
     }
     if (m.isInsurer) {
         const lastUw = last(m.underwritingProfitData);
         const lastFloat = last(m.interestIncomeData);
         const lastComb = last(m.displayMarginData);
-        setHud('hud-insuranceDualEngineChart', `UW: ${formatLarge(lastUw, '$')} | Float: ${formatLarge(lastFloat, '$')} | CR: ${lastComb.toFixed(1)}%`);
+        setHud('hud-insuranceDualEngineChart', `Underwriting ${formatLarge(lastUw, '$')} · Float ${formatLarge(lastFloat, '$')} · Combined ratio ${lastComb.toFixed(1)}%`);
     }
     if (m.businessModel === 'reit') {
         const lastCov = last(m.reitPayoutRatioData);
         const lastLtv = last(m.reitLtvData);
-        setHud('hud-reitCoverageChart', `AFFO Cov: ${lastCov.toFixed(0)}% | LTV: ${lastLtv.toFixed(1)}%`);
+        setHud('hud-reitCoverageChart', `AFFO cover ${lastCov.toFixed(0)}% · LTV ${lastLtv.toFixed(1)}%`);
     }
     if (['tech', 'semiconductor', 'biotech', 'defense_contractor'].includes(m.businessModel)) {
         const lastCapEx = last(m.capexRevenueRatioData);
         const lastRoic = last(m.roicData);
-        setHud('hud-reinvestmentIntensityChart', `CapEx/Rev: ${lastCapEx.toFixed(1)}% | ROIC: ${lastRoic.toFixed(1)}%`);
+        setHud('hud-reinvestmentIntensityChart', `Capex/revenue ${lastCapEx.toFixed(1)}% · ROIC ${lastRoic.toFixed(1)}%`);
     }
     if (['mining', 'oil_gas_producer', 'refining', 'shipping'].includes(m.businessModel)) {
         const lastMargin = last(m.operatingMarginData);
         const lastCash = last(m.treasuryData);
-        setHud('hud-cyclicalDynamicsChart', `Margin: ${lastMargin.toFixed(1)}% | Cash: ${formatLarge(lastCash, '$')}`);
+        setHud('hud-cyclicalDynamicsChart', `Margin ${lastMargin.toFixed(1)}% · Cash ${formatLarge(lastCash, '$')}`);
     }
 }
 
@@ -619,7 +623,7 @@ function renderProfitEngineChart(labels, revenueData, netIncomeData, capexData, 
                     type: 'bar',
                     label: 'Revenue',
                     data: revenueData,
-                    backgroundColor: THEME_COLORS.primary,
+                    backgroundColor: SERIES.blue,
                     borderRadius: 4,
                     yAxisID: 'y',
                     order: 1
@@ -637,7 +641,7 @@ function renderProfitEngineChart(labels, revenueData, netIncomeData, capexData, 
                     type: 'bar',
                     label: 'Capex',
                     data: capexData,
-                    backgroundColor: '#fde047',
+                    backgroundColor: SERIES.orange,
                     borderRadius: 4,
                     yAxisID: 'y',
                     order: 1
@@ -646,13 +650,13 @@ function renderProfitEngineChart(labels, revenueData, netIncomeData, capexData, 
                     type: 'line',
                     label: marginLabel,
                     data: operatingMarginData,
-                    borderColor: '#facc15',
-                    backgroundColor: '#facc15',
+                    borderColor: SERIES.aqua,
+                    backgroundColor: SERIES.aqua,
                     borderWidth: 2,
                     tension: 0.4,
                     pointRadius: 4,
                     pointBackgroundColor: THEME_COLORS.surface,
-                    pointBorderColor: '#facc15',
+                    pointBorderColor: SERIES.aqua,
                     pointBorderWidth: 2,
                     pointHoverRadius: 6,
                     yAxisID: 'y1',
@@ -679,13 +683,13 @@ function renderProfitEngineChart(labels, revenueData, netIncomeData, capexData, 
             },
             scales: {
                 x: {
-                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    grid: { color: GRID_COLOR },
                     ticks: { maxTicksLimit: 8 }
                 },
                 y: {
                     type: 'linear',
                     position: 'left',
-                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    grid: { color: GRID_COLOR },
                     ticks: { callback: (val) => formatLarge(val, '$') }
                 },
                 y1: {
@@ -711,16 +715,14 @@ function renderRevenueStreamsChart(labels, streamsKeysSet, rawStreamsData, strea
         return;
     }
 
-    const palette = [
-        THEME_COLORS.primary, '#5ec2b7', '#d8b4fe', '#facc15', '#67e8f9',
-        '#f4a37a', '#fdba74', '#a7f3d0', '#fbcfe8', '#cfd4dc'
-    ];
+    const palette = Object.values(SERIES);
 
     const datasets = streamsKeys.map((key, index) => {
-        const color = palette[index % palette.length];
+        const color = palette[index] ?? withAlpha(THEME_COLORS.textMuted, 0.5);
+        const name = key.replace(/_/g, ' ');
         return {
             type: 'bar',
-            label: key.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' '),
+            label: name.charAt(0).toUpperCase() + name.slice(1),
             streamKey: key,
             data: rawStreamsData.map(d => parseFloat(d[key] || 0)),
             backgroundColor: color,
@@ -739,12 +741,12 @@ function renderRevenueStreamsChart(labels, streamsKeysSet, rawStreamsData, strea
             scales: {
                 x: {
                     stacked: true,
-                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    grid: { color: GRID_COLOR },
                     ticks: { maxTicksLimit: 8 }
                 },
                 y: {
                     stacked: true,
-                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    grid: { color: GRID_COLOR },
                     ticks: { callback: (val) => formatLarge(val, '$') }
                 }
             },
@@ -784,8 +786,8 @@ function renderRegulatoryRatiosChart(labels, capitalRatioData, secondaryData, se
         {
             label: 'Tangible capital ratio',
             data: capitalRatioData,
-            borderColor: '#7dd3fc',
-            backgroundColor: 'rgba(125, 211, 252, 0.2)',
+            borderColor: SERIES.blue,
+            backgroundColor: withAlpha(SERIES.blue, 0.2),
             borderWidth: 2,
             tension: 0.3,
             pointRadius: 3,
@@ -798,8 +800,8 @@ function renderRegulatoryRatiosChart(labels, capitalRatioData, secondaryData, se
         datasets.push({
             label: 'CET1 (risk-weighted)',
             data: cet1Data,
-            borderColor: '#c084fc',
-            backgroundColor: 'rgba(192, 132, 252, 0.15)',
+            borderColor: SERIES.orange,
+            backgroundColor: withAlpha(SERIES.orange, 0.15),
             borderWidth: 2,
             tension: 0.3,
             pointRadius: 3,
@@ -811,8 +813,8 @@ function renderRegulatoryRatiosChart(labels, capitalRatioData, secondaryData, se
         datasets.push({
             label: secondaryLabel,
             data: secondaryData,
-            borderColor: '#facc15',
-            backgroundColor: 'rgba(250, 204, 21, 0.2)',
+            borderColor: SERIES.aqua,
+            backgroundColor: withAlpha(SERIES.aqua, 0.2),
             borderWidth: 2,
             tension: 0.3,
             pointRadius: 3,
@@ -840,11 +842,11 @@ function renderRegulatoryRatiosChart(labels, capitalRatioData, secondaryData, se
             },
             scales: {
                 x: {
-                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    grid: { color: GRID_COLOR },
                     ticks: { maxTicksLimit: 8 }
                 },
                 y: {
-                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    grid: { color: GRID_COLOR },
                     ticks: { callback: (val) => val + '%' },
                     beginAtZero: true
                 },
@@ -879,14 +881,14 @@ function renderDebtEquityChart(labels, debtData, equityData, treasuryData, goodw
                 {
                     label: 'Total debt',
                     data: debtData,
-                    backgroundColor: THEME_COLORS.negative,
+                    backgroundColor: SERIES.blue,
                     borderRadius: 4,
                     stack: 'debt',
                 },
                 {
-                    label: hasGoodwill ? 'Tangible Book' : 'Book Value',
+                    label: hasGoodwill ? 'Tangible book' : 'Book value',
                     data: hasGoodwill ? tangibleData : equityData,
-                    backgroundColor: THEME_COLORS.primary,
+                    backgroundColor: SERIES.orange,
                     borderRadius: 4,
                     stack: 'equity',
                 },
@@ -900,7 +902,7 @@ function renderDebtEquityChart(labels, debtData, equityData, treasuryData, goodw
                 {
                     label: 'Total cash',
                     data: treasuryData,
-                    backgroundColor: THEME_COLORS.positive,
+                    backgroundColor: SERIES.aqua,
                     borderRadius: 4,
                     stack: 'cash',
                 }
@@ -917,12 +919,12 @@ function renderDebtEquityChart(labels, debtData, equityData, treasuryData, goodw
             scales: {
                 x: {
                     stacked: true,
-                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    grid: { color: GRID_COLOR },
                     ticks: { maxTicksLimit: 8 }
                 },
                 y: {
                     stacked: true,
-                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    grid: { color: GRID_COLOR },
                     ticks: { callback: (val) => formatLarge(val, '$') }
                 }
             }
@@ -944,8 +946,8 @@ function renderCreditHealthChart(labels, spreadData, blendedRateData, expenseRat
                 {
                     label: 'Credit spread',
                     data: spreadData,
-                    borderColor: THEME_COLORS.negative,
-                    backgroundColor: THEME_COLORS.negative,
+                    borderColor: SERIES.blue,
+                    backgroundColor: SERIES.blue,
                     borderWidth: 2,
                     tension: 0.3,
                     pointRadius: 3
@@ -953,8 +955,8 @@ function renderCreditHealthChart(labels, spreadData, blendedRateData, expenseRat
                 {
                     label: 'Blended interest rate',
                     data: blendedRateData,
-                    borderColor: '#fde047',
-                    backgroundColor: '#fde047',
+                    borderColor: SERIES.orange,
+                    backgroundColor: SERIES.orange,
                     borderWidth: 2,
                     tension: 0.3,
                     pointRadius: 3
@@ -962,8 +964,8 @@ function renderCreditHealthChart(labels, spreadData, blendedRateData, expenseRat
                 {
                     label: 'Interest expense / revenue',
                     data: expenseRatioData,
-                    borderColor: '#7dd3fc',
-                    backgroundColor: '#7dd3fc',
+                    borderColor: SERIES.aqua,
+                    backgroundColor: SERIES.aqua,
                     borderWidth: 2,
                     borderDash: [5, 5],
                     tension: 0.3,
@@ -972,8 +974,8 @@ function renderCreditHealthChart(labels, spreadData, blendedRateData, expenseRat
                 {
                     label: 'Cash yield',
                     data: cashYieldData,
-                    borderColor: THEME_COLORS.positive,
-                    backgroundColor: THEME_COLORS.positive,
+                    borderColor: SERIES.yellow,
+                    backgroundColor: SERIES.yellow,
                     borderWidth: 2,
                     tension: 0.3,
                     pointRadius: 3
@@ -990,11 +992,11 @@ function renderCreditHealthChart(labels, spreadData, blendedRateData, expenseRat
             },
             scales: {
                 x: {
-                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    grid: { color: GRID_COLOR },
                     ticks: { maxTicksLimit: 8 }
                 },
                 y: {
-                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    grid: { color: GRID_COLOR },
                     ticks: { callback: (val) => val + '%' },
                     beginAtZero: true
                 }
@@ -1006,8 +1008,8 @@ function renderCreditHealthChart(labels, spreadData, blendedRateData, expenseRat
         config.data.datasets.push({
             label: 'Deposit APY',
             data: depositApyData,
-            borderColor: '#c084fc',
-            backgroundColor: '#c084fc',
+            borderColor: SERIES.magenta,
+            backgroundColor: SERIES.magenta,
             borderWidth: 2,
             borderDash: [4, 4],
             tension: 0.3,
@@ -1032,8 +1034,8 @@ function renderCapitalEfficiencyChart(labels, returnData, hurdleData, evaData, r
                 {
                     label: returnLabel,
                     data: returnData,
-                    borderColor: THEME_COLORS.positive,
-                    backgroundColor: THEME_COLORS.positive,
+                    borderColor: SERIES.blue,
+                    backgroundColor: SERIES.blue,
                     borderWidth: 2,
                     tension: 0.3,
                     pointRadius: 3,
@@ -1042,8 +1044,8 @@ function renderCapitalEfficiencyChart(labels, returnData, hurdleData, evaData, r
                 {
                     label: hurdleLabel,
                     data: hurdleData,
-                    borderColor: THEME_COLORS.negative,
-                    backgroundColor: THEME_COLORS.negative,
+                    borderColor: SERIES.orange,
+                    backgroundColor: SERIES.orange,
                     borderWidth: 2,
                     borderDash: [5, 5],
                     tension: 0.3,
@@ -1079,13 +1081,13 @@ function renderCapitalEfficiencyChart(labels, returnData, hurdleData, evaData, r
             },
             scales: {
                 x: {
-                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    grid: { color: GRID_COLOR },
                     ticks: { maxTicksLimit: 8 }
                 },
                 y: {
                     type: 'linear',
                     position: 'left',
-                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    grid: { color: GRID_COLOR },
                     ticks: { callback: (val) => val + '%' },
                     title: { display: true, text: 'Percentage' }
                 },
@@ -1115,7 +1117,7 @@ function renderCapitalReturnChart(labels, dividendData, buybackData, dividendYie
                     type: 'bar',
                     label: 'Dividends paid',
                     data: dividendData,
-                    backgroundColor: THEME_COLORS.primary,
+                    backgroundColor: SERIES.blue,
                     borderRadius: 4,
                     yAxisID: 'y'
                 },
@@ -1123,7 +1125,7 @@ function renderCapitalReturnChart(labels, dividendData, buybackData, dividendYie
                     type: 'bar',
                     label: 'Stock buybacks',
                     data: buybackData,
-                    backgroundColor: THEME_COLORS.positive,
+                    backgroundColor: SERIES.orange,
                     borderRadius: 4,
                     yAxisID: 'y'
                 },
@@ -1131,11 +1133,11 @@ function renderCapitalReturnChart(labels, dividendData, buybackData, dividendYie
                     type: 'line',
                     label: 'Dividend yield',
                     data: dividendYieldData || [],
-                    borderColor: THEME_COLORS.warning,
-                    backgroundColor: 'rgba(255, 152, 0, 0.15)',
+                    borderColor: SERIES.aqua,
+                    backgroundColor: withAlpha(SERIES.aqua, 0.15),
                     borderWidth: 2.5,
-                    pointBackgroundColor: THEME_COLORS.warning,
-                    pointBorderColor: '#fff',
+                    pointBackgroundColor: SERIES.aqua,
+                    pointBorderColor: THEME_COLORS.surface,
                     pointBorderWidth: 1,
                     pointRadius: 3,
                     pointHoverRadius: 5,
@@ -1163,13 +1165,13 @@ function renderCapitalReturnChart(labels, dividendData, buybackData, dividendYie
             },
             scales: {
                 x: {
-                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    grid: { color: GRID_COLOR },
                     ticks: { maxTicksLimit: 8 }
                 },
                 y: {
                     type: 'linear',
                     position: 'left',
-                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    grid: { color: GRID_COLOR },
                     ticks: { callback: (val) => formatLarge(val, '$') },
                     beginAtZero: true,
                     suggestedMax: 100000000
@@ -1213,12 +1215,12 @@ function renderPayoutRatioChart(latestDiv, latestInc) {
     payoutRatioChartInstance = new Chart(ctx, {
         type: 'doughnut',
         data: {
-            labels: ['Payout Ratio', 'Retained Earnings'],
+            labels: ['Paid out', 'Retained'],
             datasets: [{
                 data: [payoutRatio, retainedRatio],
-                backgroundColor: [THEME_COLORS.positive, THEME_COLORS.surfaceRaised],
+                backgroundColor: [SERIES.blue, THEME_COLORS.surfaceRaised],
                 borderWidth: 1,
-                borderColor: 'rgba(255, 255, 255, 0.08)'
+                borderColor: THEME_COLORS.surface
             }]
         },
         options: {
@@ -1263,8 +1265,8 @@ function renderNavDiscountChart(labels, navData, priceData, discountData) {
                 {
                     label: 'NAV / share',
                     data: navData,
-                    borderColor: '#4ade80',
-                    backgroundColor: 'rgba(74, 222, 128, 0.1)',
+                    borderColor: SERIES.blue,
+                    backgroundColor: withAlpha(SERIES.blue, 0.1),
                     borderWidth: 2,
                     tension: 0.3,
                     pointRadius: 2,
@@ -1273,8 +1275,8 @@ function renderNavDiscountChart(labels, navData, priceData, discountData) {
                 {
                     label: 'Share price',
                     data: priceData,
-                    borderColor: '#7dd3fc',
-                    backgroundColor: 'rgba(125, 211, 252, 0.1)',
+                    borderColor: SERIES.orange,
+                    backgroundColor: withAlpha(SERIES.orange, 0.1),
                     borderWidth: 2,
                     tension: 0.3,
                     pointRadius: 2,
@@ -1283,8 +1285,8 @@ function renderNavDiscountChart(labels, navData, priceData, discountData) {
                 {
                     label: 'Premium / discount',
                     data: discountData,
-                    borderColor: '#facc15',
-                    backgroundColor: 'rgba(250, 204, 21, 0.15)',
+                    borderColor: SERIES.aqua,
+                    backgroundColor: withAlpha(SERIES.aqua, 0.15),
                     borderWidth: 2,
                     tension: 0.3,
                     pointRadius: 0,
@@ -1339,8 +1341,8 @@ function renderValuationMultiplesChart(labels, peData, pbData, psData) {
                 {
                     label: 'P/E ratio',
                     data: peData,
-                    borderColor: '#7dd3fc',
-                    backgroundColor: 'rgba(125, 211, 252, 0.1)',
+                    borderColor: SERIES.blue,
+                    backgroundColor: withAlpha(SERIES.blue, 0.1),
                     borderWidth: 2,
                     tension: 0.3,
                     pointRadius: 3
@@ -1348,8 +1350,8 @@ function renderValuationMultiplesChart(labels, peData, pbData, psData) {
                 {
                     label: 'P/B ratio',
                     data: pbData,
-                    borderColor: '#4ade80',
-                    backgroundColor: 'rgba(74, 222, 128, 0.1)',
+                    borderColor: SERIES.orange,
+                    backgroundColor: withAlpha(SERIES.orange, 0.1),
                     borderWidth: 2,
                     tension: 0.3,
                     pointRadius: 3
@@ -1357,8 +1359,8 @@ function renderValuationMultiplesChart(labels, peData, pbData, psData) {
                 {
                     label: 'P/S ratio',
                     data: psData,
-                    borderColor: '#facc15',
-                    backgroundColor: 'rgba(250, 204, 21, 0.1)',
+                    borderColor: SERIES.aqua,
+                    backgroundColor: withAlpha(SERIES.aqua, 0.1),
                     borderWidth: 2,
                     tension: 0.3,
                     pointRadius: 3
@@ -1379,11 +1381,11 @@ function renderValuationMultiplesChart(labels, peData, pbData, psData) {
             },
             scales: {
                 x: {
-                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    grid: { color: GRID_COLOR },
                     ticks: { maxTicksLimit: 8 }
                 },
                 y: {
-                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    grid: { color: GRID_COLOR },
                     ticks: { callback: (val) => val.toFixed(1) + 'x' }
                 }
             }
@@ -1406,7 +1408,7 @@ function renderShareholderValueChart(labels, epsData, bvpsData, sharesData) {
                     type: 'bar',
                     label: 'Shares outstanding',
                     data: sharesData,
-                    backgroundColor: 'rgba(168, 85, 247, 0.35)',
+                    backgroundColor: withAlpha(SERIES.blue, 0.35),
                     borderRadius: 4,
                     yAxisID: 'y1',
                     order: 1
@@ -1415,8 +1417,8 @@ function renderShareholderValueChart(labels, epsData, bvpsData, sharesData) {
                     type: 'line',
                     label: 'EPS ($)',
                     data: epsData,
-                    borderColor: '#4ade80',
-                    backgroundColor: '#4ade80',
+                    borderColor: SERIES.orange,
+                    backgroundColor: SERIES.orange,
                     borderWidth: 2,
                     tension: 0.3,
                     pointRadius: 3,
@@ -1427,8 +1429,8 @@ function renderShareholderValueChart(labels, epsData, bvpsData, sharesData) {
                     type: 'line',
                     label: 'BVPS ($)',
                     data: bvpsData,
-                    borderColor: '#7dd3fc',
-                    backgroundColor: '#7dd3fc',
+                    borderColor: SERIES.aqua,
+                    backgroundColor: SERIES.aqua,
                     borderWidth: 2,
                     tension: 0.3,
                     pointRadius: 3,
@@ -1456,13 +1458,13 @@ function renderShareholderValueChart(labels, epsData, bvpsData, sharesData) {
             },
             scales: {
                 x: {
-                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    grid: { color: GRID_COLOR },
                     ticks: { maxTicksLimit: 8 }
                 },
                 y: {
                     type: 'linear',
                     position: 'left',
-                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    grid: { color: GRID_COLOR },
                     ticks: { callback: (val) => '$' + val.toFixed(2) }
                 },
                 y1: {
@@ -1501,7 +1503,7 @@ function renderCashFlowSummaryChart(labels, fcfData, fcfConversionData, retained
                     type: 'bar',
                     label: 'Operating CF',
                     data: operatingCashFlowData,
-                    backgroundColor: 'rgba(56, 189, 248, 0.65)',
+                    backgroundColor: withAlpha(SERIES.blue, 0.65),
                     borderRadius: 4,
                     yAxisID: 'y',
                     order: 1
@@ -1510,7 +1512,7 @@ function renderCashFlowSummaryChart(labels, fcfData, fcfConversionData, retained
                     type: 'bar',
                     label: 'Investing CF',
                     data: investingCashFlowData,
-                    backgroundColor: 'rgba(234, 179, 8, 0.65)',
+                    backgroundColor: withAlpha(SERIES.orange, 0.65),
                     borderRadius: 4,
                     yAxisID: 'y',
                     order: 1
@@ -1519,7 +1521,7 @@ function renderCashFlowSummaryChart(labels, fcfData, fcfConversionData, retained
                     type: 'bar',
                     label: 'Financing CF',
                     data: financingCashFlowData,
-                    backgroundColor: 'rgba(217, 70, 239, 0.65)',
+                    backgroundColor: withAlpha(SERIES.aqua, 0.65),
                     borderRadius: 4,
                     yAxisID: 'y',
                     order: 1
@@ -1528,8 +1530,8 @@ function renderCashFlowSummaryChart(labels, fcfData, fcfConversionData, retained
                     type: 'line',
                     label: 'FCF conversion rate',
                     data: fcfConversionData,
-                    borderColor: '#facc15',
-                    backgroundColor: '#facc15',
+                    borderColor: SERIES.yellow,
+                    backgroundColor: SERIES.yellow,
                     borderWidth: 2,
                     tension: 0.3,
                     pointRadius: 3,
@@ -1557,13 +1559,13 @@ function renderCashFlowSummaryChart(labels, fcfData, fcfConversionData, retained
             },
             scales: {
                 x: {
-                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    grid: { color: GRID_COLOR },
                     ticks: { maxTicksLimit: 8 }
                 },
                 y: {
                     type: 'linear',
                     position: 'left',
-                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    grid: { color: GRID_COLOR },
                     ticks: { callback: (val) => formatLarge(val, '$') }
                 },
                 y1: {
@@ -1592,7 +1594,7 @@ function renderNetInterestEngineChart(labels, interestIncomeData, interestExpens
                     type: 'bar',
                     label: 'Interest income',
                     data: interestIncomeData,
-                    backgroundColor: THEME_COLORS.positive,
+                    backgroundColor: SERIES.blue,
                     borderRadius: 4,
                     yAxisID: 'y',
                     order: 1
@@ -1601,7 +1603,7 @@ function renderNetInterestEngineChart(labels, interestIncomeData, interestExpens
                     type: 'bar',
                     label: 'Interest expense',
                     data: interestExpenseData,
-                    backgroundColor: THEME_COLORS.negative,
+                    backgroundColor: SERIES.orange,
                     borderRadius: 4,
                     yAxisID: 'y',
                     order: 1
@@ -1610,8 +1612,8 @@ function renderNetInterestEngineChart(labels, interestIncomeData, interestExpens
                     type: 'line',
                     label: 'Net interest margin',
                     data: netInterestSpreadData,
-                    borderColor: '#facc15',
-                    backgroundColor: '#facc15',
+                    borderColor: SERIES.aqua,
+                    backgroundColor: SERIES.aqua,
                     borderWidth: 2,
                     tension: 0.3,
                     pointRadius: 3,
@@ -1639,13 +1641,13 @@ function renderNetInterestEngineChart(labels, interestIncomeData, interestExpens
             },
             scales: {
                 x: {
-                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    grid: { color: GRID_COLOR },
                     ticks: { maxTicksLimit: 8 }
                 },
                 y: {
                     type: 'linear',
                     position: 'left',
-                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    grid: { color: GRID_COLOR },
                     ticks: { callback: (val) => formatLarge(val, '$') }
                 },
                 y1: {
@@ -1683,7 +1685,7 @@ function renderInsuranceDualEngineChart(labels, underwritingProfitData, interest
                     type: 'bar',
                     label: 'Investment income on float',
                     data: interestIncomeData,
-                    backgroundColor: '#38bdf8',
+                    backgroundColor: SERIES.blue,
                     borderRadius: 4,
                     yAxisID: 'y',
                     order: 1
@@ -1692,8 +1694,8 @@ function renderInsuranceDualEngineChart(labels, underwritingProfitData, interest
                     type: 'line',
                     label: 'Combined ratio',
                     data: combinedRatioData,
-                    borderColor: '#facc15',
-                    backgroundColor: '#facc15',
+                    borderColor: SERIES.orange,
+                    backgroundColor: SERIES.orange,
                     borderWidth: 2,
                     tension: 0.3,
                     pointRadius: 3,
@@ -1721,13 +1723,13 @@ function renderInsuranceDualEngineChart(labels, underwritingProfitData, interest
             },
             scales: {
                 x: {
-                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    grid: { color: GRID_COLOR },
                     ticks: { maxTicksLimit: 8 }
                 },
                 y: {
                     type: 'linear',
                     position: 'left',
-                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    grid: { color: GRID_COLOR },
                     ticks: { callback: (val) => formatLarge(val, '$') }
                 },
                 y1: {
@@ -1757,8 +1759,8 @@ function renderReitCoverageChart(labels, payoutRatioData, ltvData, capRateSpread
                     type: 'line',
                     label: 'Dividend payout ratio',
                     data: payoutRatioData,
-                    borderColor: '#facc15',
-                    backgroundColor: 'rgba(250, 204, 21, 0.1)',
+                    borderColor: SERIES.blue,
+                    backgroundColor: withAlpha(SERIES.blue, 0.1),
                     borderWidth: 2,
                     tension: 0.3,
                     pointRadius: 3,
@@ -1768,8 +1770,8 @@ function renderReitCoverageChart(labels, payoutRatioData, ltvData, capRateSpread
                     type: 'line',
                     label: 'Leverage ratio (LTV)',
                     data: ltvData,
-                    borderColor: THEME_COLORS.negative,
-                    backgroundColor: 'rgba(248, 113, 113, 0.1)',
+                    borderColor: SERIES.orange,
+                    backgroundColor: withAlpha(SERIES.orange, 0.1),
                     borderWidth: 2,
                     tension: 0.3,
                     pointRadius: 3,
@@ -1779,7 +1781,7 @@ function renderReitCoverageChart(labels, payoutRatioData, ltvData, capRateSpread
                     type: 'bar',
                     label: 'Cap rate over WACC',
                     data: capRateSpreadData,
-                    backgroundColor: capRateSpreadData.map(val => val < 0 ? 'rgba(248, 113, 113, 0.4)' : 'rgba(74, 222, 128, 0.4)'),
+                    backgroundColor: capRateSpreadData.map(val => val < 0 ? withAlpha(THEME_COLORS.negative, 0.4) : withAlpha(THEME_COLORS.positive, 0.4)),
                     borderRadius: 4,
                     yAxisID: 'y1'
                 },
@@ -1788,7 +1790,7 @@ function renderReitCoverageChart(labels, payoutRatioData, ltvData, capRateSpread
                     type: 'line',
                     label: 'Tangible capital ratio',
                     data: capitalRatioData,
-                    borderColor: '#7dd3fc',
+                    borderColor: SERIES.aqua,
                     borderWidth: 2,
                     tension: 0.3,
                     pointRadius: 3,
@@ -1809,13 +1811,13 @@ function renderReitCoverageChart(labels, payoutRatioData, ltvData, capRateSpread
             },
             scales: {
                 x: {
-                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    grid: { color: GRID_COLOR },
                     ticks: { maxTicksLimit: 8 }
                 },
                 y: {
                     type: 'linear',
                     position: 'left',
-                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    grid: { color: GRID_COLOR },
                     ticks: { callback: (val) => val.toFixed(0) + '%' }
                 },
                 y1: {
@@ -1844,7 +1846,7 @@ function renderReinvestmentIntensityChart(labels, capexRevenueRatioData, operati
                     type: 'bar',
                     label: 'Capex / revenue',
                     data: capexRevenueRatioData,
-                    backgroundColor: 'rgba(56, 189, 248, 0.45)',
+                    backgroundColor: withAlpha(SERIES.blue, 0.45),
                     borderRadius: 4,
                     yAxisID: 'y'
                 },
@@ -1852,7 +1854,7 @@ function renderReinvestmentIntensityChart(labels, capexRevenueRatioData, operati
                     type: 'line',
                     label: 'Operating margin',
                     data: operatingMarginData,
-                    borderColor: '#facc15',
+                    borderColor: SERIES.orange,
                     borderWidth: 2,
                     tension: 0.3,
                     pointRadius: 3,
@@ -1862,7 +1864,7 @@ function renderReinvestmentIntensityChart(labels, capexRevenueRatioData, operati
                     type: 'line',
                     label: 'ROIC',
                     data: roicData,
-                    borderColor: '#4ade80',
+                    borderColor: SERIES.aqua,
                     borderWidth: 2,
                     tension: 0.3,
                     pointRadius: 3,
@@ -1880,11 +1882,11 @@ function renderReinvestmentIntensityChart(labels, capexRevenueRatioData, operati
             },
             scales: {
                 x: {
-                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    grid: { color: GRID_COLOR },
                     ticks: { maxTicksLimit: 8 }
                 },
                 y: {
-                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    grid: { color: GRID_COLOR },
                     ticks: { callback: (val) => val.toFixed(0) + '%' }
                 }
             }
@@ -1907,7 +1909,7 @@ function renderCyclicalDynamicsChart(labels, operatingMarginData, debtData, trea
                     type: 'bar',
                     label: 'Total debt',
                     data: debtData,
-                    backgroundColor: THEME_COLORS.negative,
+                    backgroundColor: SERIES.blue,
                     borderRadius: 4,
                     yAxisID: 'y',
                     order: 1
@@ -1916,7 +1918,7 @@ function renderCyclicalDynamicsChart(labels, operatingMarginData, debtData, trea
                     type: 'bar',
                     label: 'Cash reserves',
                     data: treasuryData,
-                    backgroundColor: THEME_COLORS.positive,
+                    backgroundColor: SERIES.orange,
                     borderRadius: 4,
                     yAxisID: 'y',
                     order: 1
@@ -1925,8 +1927,8 @@ function renderCyclicalDynamicsChart(labels, operatingMarginData, debtData, trea
                     type: 'line',
                     label: 'Operating margin (%)',
                     data: operatingMarginData,
-                    borderColor: '#facc15',
-                    backgroundColor: '#facc15',
+                    borderColor: SERIES.aqua,
+                    backgroundColor: SERIES.aqua,
                     borderWidth: 2,
                     tension: 0.3,
                     pointRadius: 3,
@@ -1954,13 +1956,13 @@ function renderCyclicalDynamicsChart(labels, operatingMarginData, debtData, trea
             },
             scales: {
                 x: {
-                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    grid: { color: GRID_COLOR },
                     ticks: { maxTicksLimit: 8 }
                 },
                 y: {
                     type: 'linear',
                     position: 'left',
-                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    grid: { color: GRID_COLOR },
                     ticks: { callback: (val) => formatLarge(val, '$') }
                 },
                 y1: {

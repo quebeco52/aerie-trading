@@ -29,28 +29,28 @@ class FinancialSummaryBuilder
 
     /** Operating KPIs the business models report, as label and display format; anything else is not shown. */
     private const KPI_LABELS = [
-        'book_to_bill' => ['Book-to-Bill', 'multiple'],
+        'book_to_bill' => ['Book-to-bill', 'multiple'],
         'backlog_quarters' => ['Backlog', 'quarters'],
-        'contract_book_to_bill' => ['Charter Book-to-Bill', 'multiple'],
-        'contract_backlog_quarters' => ['Charter Backlog', 'quarters'],
-        'bookings_to_revenue' => ['Bookings / Revenue', 'multiple'],
-        'deferred_revenue_quarters' => ['Deferred Revenue', 'quarters'],
-        'enrollment_to_revenue' => ['Enrollment / Revenue', 'multiple'],
-        'deferred_tuition_quarters' => ['Deferred Tuition', 'quarters'],
-        'rollout_wave_quarters' => ['Rollout Wave Age', 'quarters'],
-        'withheld_royalty_quarters' => ['Royalties Withheld', 'quarters'],
-        'subscriber_index' => ['Subscriber Index', 'index'],
-        'quarterly_churn' => ['Quarterly Churn', 'percent'],
-        'net_adds' => ['Net Adds', 'signed_index'],
-        'arpu_index' => ['ARPU Index', 'index'],
+        'contract_book_to_bill' => ['Charter book-to-bill', 'multiple'],
+        'contract_backlog_quarters' => ['Charter backlog', 'quarters'],
+        'bookings_to_revenue' => ['Bookings / revenue', 'multiple'],
+        'deferred_revenue_quarters' => ['Deferred revenue', 'quarters'],
+        'enrollment_to_revenue' => ['Enrollment / revenue', 'multiple'],
+        'deferred_tuition_quarters' => ['Deferred tuition', 'quarters'],
+        'rollout_wave_quarters' => ['Rollout wave age', 'quarters'],
+        'withheld_royalty_quarters' => ['Royalties withheld', 'quarters'],
+        'subscriber_index' => ['Subscriber index', 'index'],
+        'quarterly_churn' => ['Quarterly churn', 'percent'],
+        'net_adds' => ['Net adds', 'signed_index'],
+        'arpu_index' => ['ARPU index', 'index'],
         'walt_years' => ['WALT', 'years'],
-        'releasing_spread' => ['Re-leasing Spread', 'signed_percent'],
-        'in_place_rent_index' => ['In-Place Rent Index', 'index'],
-        'realized_price_index' => ['Realized Price Index', 'index'],
-        'power_price_index' => ['Realized Power Price', 'index'],
-        'hedge_gain' => ['Hedge Gain / Revenue', 'signed_percent'],
-        'capture_rate' => ['Crack Capture', 'percent'],
-        'throughput_index' => ['Throughput Index', 'index'],
+        'releasing_spread' => ['Re-leasing spread', 'signed_percent'],
+        'in_place_rent_index' => ['In-place rent index', 'index'],
+        'realized_price_index' => ['Realized price index', 'index'],
+        'power_price_index' => ['Realized power price', 'index'],
+        'hedge_gain' => ['Hedge gain / revenue', 'signed_percent'],
+        'capture_rate' => ['Crack capture', 'percent'],
+        'throughput_index' => ['Throughput index', 'index'],
     ];
 
     public function __construct(
@@ -90,12 +90,12 @@ class FinancialSummaryBuilder
         $book = (float) $report->getEarningAssets();
 
         return [
-            $this->tile('Net Interest Margin', $report->getNetInterestMargin(), 'percent'),
+            $this->tile('Net interest margin', $report->getNetInterestMargin(), 'percent'),
             $report->getCet1Ratio() !== null
-                ? $this->tile('CET1 Ratio', $report->getCet1Ratio(), 'percent')
-                : $this->tile('Capital Ratio', $report->getCapitalRatio(), 'percent'),
-            $this->tile('Reserve / Book', (float) $report->getCreditLossAllowance() / $book, 'percent'),
-            $this->tile('Net Charge-Off Rate', ((float) $report->getNetChargeOffs() * FinancialConstants::QUARTERS_PER_YEAR) / $book, 'percent'),
+                ? $this->tile('CET1 ratio', $report->getCet1Ratio(), 'percent')
+                : $this->tile('Capital ratio', $report->getCapitalRatio(), 'percent'),
+            $this->tile('Reserve / book', (float) $report->getCreditLossAllowance() / $book, 'percent'),
+            $this->tile('Net charge-off rate', ((float) $report->getNetChargeOffs() * FinancialConstants::QUARTERS_PER_YEAR) / $book, 'percent'),
             $this->tile('ROE', $report->getReturnOnEquity(), 'percent'),
         ];
     }
@@ -106,12 +106,12 @@ class FinancialSummaryBuilder
         $margin = $report->getOperatingMargin();
 
         return [
-            $this->tile('Capital Ratio', $report->getCapitalRatio(), 'percent'),
+            $this->tile('Capital ratio', $report->getCapitalRatio(), 'percent'),
             $this->tile('ROE', $report->getReturnOnEquity(), 'percent'),
             // An insurer is read on its combined ratio: claims and expenses per dollar of premium.
             $isInsurer
-                ? ($margin === null ? null : $this->tile('Combined Ratio', 1.0 - (float) $margin, 'percent'))
-                : $this->tile('Operating Margin', $margin, 'percent'),
+                ? ($margin === null ? null : $this->tile('Combined ratio', 1.0 - (float) $margin, 'percent'))
+                : $this->tile('Operating margin', $margin, 'percent'),
         ];
     }
 
@@ -122,10 +122,10 @@ class FinancialSummaryBuilder
         $spread = $report->getRoic() !== null && $report->getWacc() !== null ? (float) $report->getRoic() - (float) $report->getWacc() : null;
 
         return [
-            $this->tile('Operating Margin', $report->getOperatingMargin(), 'percent'),
+            $this->tile('Operating margin', $report->getOperatingMargin(), 'percent'),
             $this->tile('ROIC − WACC', $spread, 'signed_percent'),
             $netIncome > 0.0 && $report->getFreeCashFlow() !== null
-                ? $this->tile('FCF / Net Income', (float) $report->getFreeCashFlow() / $netIncome, 'percent')
+                ? $this->tile('FCF / net income', (float) $report->getFreeCashFlow() / $netIncome, 'percent')
                 : null,
         ];
     }

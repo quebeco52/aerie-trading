@@ -331,7 +331,7 @@
 										<div class="p-3 rounded bg-surface-container-lowest/80 border border-outline-variant/20 space-y-1.5 text-xs">
 											<div class="flex justify-between items-center">
 												<span class="text-on-surface-variant">Borrow fee</span>
-												<span class="font-mono tabular-nums font-bold {{ borrowFee > 0.05 ? 'text-tertiary' : 'text-on-surface' }}">{{ (borrowFee * 100)|number_format(2) }}%/yr</span>
+												<span class="font-mono tabular-nums font-bold {{ borrowFee > 0.05 ? 'text-warning' : 'text-on-surface' }}">{{ (borrowFee * 100)|number_format(2) }}%/yr</span>
 											</div>
 											<div class="flex justify-between items-center">
 												<span class="text-on-surface-variant">Available to borrow</span>
@@ -1243,7 +1243,7 @@
 											<p class="text-xs text-on-surface-variant mt-0.5">Revenue and net income by period, with the operating margin</p>
 										</div>
 										<div class="flex items-start gap-3 shrink-0">
-											<div class="hidden sm:flex flex-col items-end text-right">
+											<div class="hidden sm:flex flex-col items-end text-right max-w-64">
 												<span class="text-2xs text-on-surface-variant">Latest</span>
 												<span class="text-xs font-mono font-bold text-on-surface tabular-nums" id="hud-netIncomeChart">-</span>
 											</div>
@@ -1264,7 +1264,7 @@
 											<p class="text-xs text-on-surface-variant mt-0.5">How revenue splits across the company's business lines</p>
 										</div>
 										<div class="flex items-start gap-3 shrink-0">
-											<div class="hidden sm:flex flex-col items-end text-right">
+											<div class="hidden sm:flex flex-col items-end text-right max-w-64">
 												<span class="text-2xs text-on-surface-variant">Latest</span>
 												<span class="text-xs font-mono font-bold text-on-surface tabular-nums" id="hud-revenueStreamsChart">-</span>
 											</div>
@@ -1285,7 +1285,7 @@
 											<p class="text-xs text-on-surface-variant mt-0.5">Operating cash flow less capital spending, retained cash and cash conversion</p>
 										</div>
 										<div class="flex items-start gap-3 shrink-0">
-											<div class="hidden sm:flex flex-col items-end text-right">
+											<div class="hidden sm:flex flex-col items-end text-right max-w-64">
 												<span class="text-2xs text-on-surface-variant">Latest</span>
 												<span class="text-xs font-mono font-bold text-on-surface tabular-nums" id="hud-cashFlowSummaryChart">-</span>
 											</div>
@@ -1311,11 +1311,11 @@
 											<p class="text-xs text-on-surface-variant mt-0.5">Assets, the claims against them, and the cash the period actually produced</p>
 										</div>
 										<div class="flex items-start gap-3 shrink-0">
-											<div class="hidden sm:flex flex-col items-end text-right">
+											<div class="hidden sm:flex flex-col items-end text-right max-w-64">
 												<span class="text-2xs text-on-surface-variant" id="asset-age-label">Plant age</span>
 												<span class="text-xs font-mono font-bold text-on-surface" id="asset-age-badge">-</span>
 											</div>
-											<div class="hidden sm:flex flex-col items-end text-right">
+											<div class="hidden sm:flex flex-col items-end text-right max-w-64">
 												<span class="text-2xs text-on-surface-variant">Life cycle</span>
 												<span class="text-xs font-mono font-bold text-on-surface capitalize" id="lifecycle-stage-badge">-</span>
 											</div>
@@ -1344,7 +1344,7 @@
 											<p class="text-xs text-on-surface-variant mt-0.5">Total debt against book equity and cash</p>
 										</div>
 										<div class="flex items-start gap-3 shrink-0">
-											<div class="hidden sm:flex flex-col items-end text-right">
+											<div class="hidden sm:flex flex-col items-end text-right max-w-64">
 												<span class="text-2xs text-on-surface-variant">Latest</span>
 												<span class="text-xs font-mono font-bold text-on-surface tabular-nums" id="hud-debtEquityChart">-</span>
 											</div>
@@ -1365,7 +1365,7 @@
 											<p class="text-xs text-on-surface-variant mt-0.5">Blended borrowing rate, its spread over the risk-free rate, and interest coverage</p>
 										</div>
 										<div class="flex items-start gap-3 shrink-0">
-											<div class="hidden sm:flex flex-col items-end text-right">
+											<div class="hidden sm:flex flex-col items-end text-right max-w-64">
 												<span class="text-2xs text-on-surface-variant">Latest</span>
 												<span class="text-xs font-mono font-bold text-on-surface tabular-nums" id="hud-creditHealthChart">-</span>
 											</div>
@@ -1391,7 +1391,7 @@
 											<p class="text-xs text-on-surface-variant mt-0.5">Price to earnings, price to book and price to sales</p>
 										</div>
 										<div class="flex items-start gap-3 shrink-0">
-											<div class="hidden sm:flex flex-col items-end text-right">
+											<div class="hidden sm:flex flex-col items-end text-right max-w-64">
 												<span class="text-2xs text-on-surface-variant">Latest</span>
 												<span class="text-xs font-mono font-bold text-on-surface tabular-nums" id="hud-valuationMultiplesChart">-</span>
 											</div>
@@ -1414,7 +1414,7 @@
 												<p class="text-xs text-on-surface-variant mt-0.5">Where the market prices the shares against the assets behind them</p>
 											</div>
 											<div class="flex items-start gap-3 shrink-0">
-												<div class="hidden sm:flex flex-col items-end text-right">
+												<div class="hidden sm:flex flex-col items-end text-right max-w-64">
 													<span class="text-2xs text-on-surface-variant">Latest</span>
 													<span class="text-xs font-mono font-bold tabular-nums {{ netAssetValue.premium >= 0 ? 'text-secondary' : 'text-tertiary' }}">{{ (netAssetValue.premium * 100)|number_format(1) }}%</span>
 												</div>
@@ -1436,7 +1436,7 @@
 											<p class="text-xs text-on-surface-variant mt-0.5">Earnings and tangible book value per share, and the share count</p>
 										</div>
 										<div class="flex items-start gap-3 shrink-0">
-											<div class="hidden sm:flex flex-col items-end text-right">
+											<div class="hidden sm:flex flex-col items-end text-right max-w-64">
 												<span class="text-2xs text-on-surface-variant">Latest</span>
 												<span class="text-xs font-mono font-bold text-on-surface tabular-nums" id="hud-shareholderValueChart">-</span>
 											</div>
@@ -1457,7 +1457,7 @@
 											<p class="text-xs text-on-surface-variant mt-0.5">Return on invested capital, the cost of capital, and the economic profit between them</p>
 										</div>
 										<div class="flex items-start gap-3 shrink-0">
-											<div class="hidden sm:flex flex-col items-end text-right">
+											<div class="hidden sm:flex flex-col items-end text-right max-w-64">
 												<span class="text-2xs text-on-surface-variant">Latest</span>
 												<span class="text-xs font-mono font-bold text-on-surface tabular-nums" id="hud-capitalEfficiencyChart">-</span>
 											</div>
@@ -1478,7 +1478,7 @@
 											<p class="text-xs text-on-surface-variant mt-0.5">Dividends paid, share repurchases and total shareholder yield</p>
 										</div>
 										<div class="flex items-start gap-3 shrink-0">
-											<div class="hidden sm:flex flex-col items-end text-right">
+											<div class="hidden sm:flex flex-col items-end text-right max-w-64">
 												<span class="text-2xs text-on-surface-variant">Latest</span>
 												<span class="text-xs font-mono font-bold text-on-surface tabular-nums" id="hud-capitalReturnChart">-</span>
 											</div>
@@ -1499,7 +1499,7 @@
 											<p class="text-xs text-on-surface-variant mt-0.5">The share of earnings paid out against the share reinvested</p>
 										</div>
 										<div class="flex items-start gap-3 shrink-0">
-											<div class="hidden sm:flex flex-col items-end text-right">
+											<div class="hidden sm:flex flex-col items-end text-right max-w-64">
 												<span class="text-2xs text-on-surface-variant">Latest</span>
 												<span class="text-xs font-mono font-bold text-on-surface tabular-nums" id="hud-payoutRatioChart">-</span>
 											</div>
@@ -1529,7 +1529,7 @@
 													<p class="text-xs text-on-surface-variant mt-0.5">Interest income against interest expense, and the margin between them</p>
 												</div>
 												<div class="flex items-start gap-3 shrink-0">
-													<div class="hidden sm:flex flex-col items-end text-right">
+													<div class="hidden sm:flex flex-col items-end text-right max-w-64">
 														<span class="text-2xs text-on-surface-variant">Latest</span>
 														<span class="text-xs font-mono font-bold text-on-surface tabular-nums" id="hud-netInterestEngineChart">-</span>
 													</div>
@@ -1553,7 +1553,7 @@
 													<p class="text-xs text-on-surface-variant mt-0.5">Tangible equity over tangible assets, against the lines the regulator acts on</p>
 												</div>
 												<div class="flex items-start gap-3 shrink-0">
-													<div class="hidden sm:flex flex-col items-end text-right">
+													<div class="hidden sm:flex flex-col items-end text-right max-w-64">
 														<span class="text-2xs text-on-surface-variant">Latest</span>
 														<span class="text-xs font-mono font-bold text-on-surface tabular-nums" id="hud-regulatoryRatiosChart">-</span>
 													</div>
@@ -1577,7 +1577,7 @@
 													<p class="text-xs text-on-surface-variant mt-0.5">The combined ratio, and the yield earned on policyholder float</p>
 												</div>
 												<div class="flex items-start gap-3 shrink-0">
-													<div class="hidden sm:flex flex-col items-end text-right">
+													<div class="hidden sm:flex flex-col items-end text-right max-w-64">
 														<span class="text-2xs text-on-surface-variant">Latest</span>
 														<span class="text-xs font-mono font-bold text-on-surface tabular-nums" id="hud-insuranceDualEngineChart">-</span>
 													</div>
@@ -1601,7 +1601,7 @@
 													<p class="text-xs text-on-surface-variant mt-0.5">Dividend cover from AFFO, loan-to-value, and the cap rate's spread over funding</p>
 												</div>
 												<div class="flex items-start gap-3 shrink-0">
-													<div class="hidden sm:flex flex-col items-end text-right">
+													<div class="hidden sm:flex flex-col items-end text-right max-w-64">
 														<span class="text-2xs text-on-surface-variant">Latest</span>
 														<span class="text-xs font-mono font-bold text-on-surface tabular-nums" id="hud-reitCoverageChart">-</span>
 													</div>
@@ -1625,7 +1625,7 @@
 													<p class="text-xs text-on-surface-variant mt-0.5">Capital spending as a share of revenue, against operating margin and ROIC</p>
 												</div>
 												<div class="flex items-start gap-3 shrink-0">
-													<div class="hidden sm:flex flex-col items-end text-right">
+													<div class="hidden sm:flex flex-col items-end text-right max-w-64">
 														<span class="text-2xs text-on-surface-variant">Latest</span>
 														<span class="text-xs font-mono font-bold text-on-surface tabular-nums" id="hud-reinvestmentIntensityChart">-</span>
 													</div>
@@ -1649,7 +1649,7 @@
 													<p class="text-xs text-on-surface-variant mt-0.5">Operating margin swings against debt service and cash reserves</p>
 												</div>
 												<div class="flex items-start gap-3 shrink-0">
-													<div class="hidden sm:flex flex-col items-end text-right">
+													<div class="hidden sm:flex flex-col items-end text-right max-w-64">
 														<span class="text-2xs text-on-surface-variant">Latest</span>
 														<span class="text-xs font-mono font-bold text-on-surface tabular-nums" id="hud-cyclicalDynamicsChart">-</span>
 													</div>
@@ -1730,9 +1730,10 @@
 
 					{# Industry Position: the industry ledger's roster and capacity balance, and the last report's price response #}
 					{% if industry %}
+						{# Both ends of the balance are a caution, so both read amber; red stays the colour of a fall. #}
 						{% set balanceTone = {
 							'overbuilt': 'border-warning/40 text-warning bg-warning/10',
-							'tight': 'border-tertiary/40 text-tertiary bg-tertiary/10',
+							'tight': 'border-warning/40 text-warning bg-warning/10',
 							'balanced': 'border-primary/30 text-primary bg-primary/10',
 							'unknown': 'border-outline-variant/30 text-on-surface-variant bg-surface-container-highest'
 						} %}
@@ -1779,14 +1780,14 @@
 								<div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
 									<div class="p-3.5 rounded bg-surface-container-lowest/60 border border-outline-variant/15">
 										<span class="text-xs text-on-surface-variant">Capacity against demand</span>
-										<p class="text-base font-semibold font-mono tabular-nums mt-1 {{ industry.balance == 'overbuilt' ? 'text-warning' : (industry.balance == 'tight' ? 'text-tertiary' : 'text-on-surface') }}">{{ industry.capacityRatio is not null ? (industry.capacityRatio * 100)|number_format(1) ~ '%' : '-' }}</p>
+										<p class="text-base font-semibold font-mono tabular-nums mt-1 {{ industry.balance in ['overbuilt', 'tight'] ? 'text-warning' : 'text-on-surface' }}">{{ industry.capacityRatio is not null ? (industry.capacityRatio * 100)|number_format(1) ~ '%' : '-' }}</p>
 										<p class="text-2xs text-on-surface-faint mt-1">{% if industry.installedCapacity is not null %}{{ industry.installedCapacity|format_large('$') }} plant · {{ industry.trendCapacity|format_large('$') }} at trend{% else %}anchored at first report{% endif %}</p>
 									</div>
 									<div class="p-3.5 rounded bg-surface-container-lowest/60 border border-outline-variant/15">
 										<span class="text-xs text-on-surface-variant">Realised price</span>
 										{% if industry.priceLevel is not null %}
 											{% set priceMove = (industry.priceLevel - 1) * 100 %}
-											<p class="text-base font-semibold font-mono tabular-nums mt-1 {{ priceMove < -0.05 ? 'text-warning' : (priceMove > 0.05 ? 'text-tertiary' : 'text-on-surface') }}">{{ priceMove >= 0 ? '+' : '' }}{{ priceMove|number_format(2) }}%</p>
+											<p class="text-base font-semibold font-mono tabular-nums mt-1 {{ priceMove|abs > 0.05 ? 'text-warning' : 'text-on-surface' }}">{{ priceMove >= 0 ? '+' : '' }}{{ priceMove|number_format(2) }}%</p>
 										{% else %}
 											<p class="text-base font-semibold font-mono tabular-nums mt-1 text-on-surface-variant">-</p>
 										{% endif %}
@@ -1796,7 +1797,7 @@
 										<span class="text-xs text-on-surface-variant">Share moved by rivals</span>
 										{% if industry.rivalShareDrain is not null %}
 											{% set drain = industry.rivalShareDrain * 100 %}
-											<p class="text-base font-semibold font-mono tabular-nums mt-1 {{ drain < -0.05 ? 'text-warning' : (drain > 0.05 ? 'text-tertiary' : 'text-on-surface') }}">{{ drain >= 0 ? '+' : '' }}{{ drain|number_format(2) }}%</p>
+											<p class="text-base font-semibold font-mono tabular-nums mt-1 {{ drain|abs > 0.05 ? 'text-warning' : 'text-on-surface' }}">{{ drain >= 0 ? '+' : '' }}{{ drain|number_format(2) }}%</p>
 										{% else %}
 											<p class="text-base font-semibold font-mono tabular-nums mt-1 text-on-surface-variant">-</p>
 										{% endif %}
@@ -1806,7 +1807,7 @@
 										<span class="text-xs text-on-surface-variant">Volume from own pricing</span>
 										{% if industry.ownPriceVolumeShift is not null %}
 											{% set shift = industry.ownPriceVolumeShift * 100 %}
-											<p class="text-base font-semibold font-mono tabular-nums mt-1 {{ shift < -0.05 ? 'text-warning' : (shift > 0.05 ? 'text-tertiary' : 'text-on-surface') }}">{{ shift >= 0 ? '+' : '' }}{{ shift|number_format(2) }}%</p>
+											<p class="text-base font-semibold font-mono tabular-nums mt-1 {{ shift|abs > 0.05 ? 'text-warning' : 'text-on-surface' }}">{{ shift >= 0 ? '+' : '' }}{{ shift|number_format(2) }}%</p>
 										{% else %}
 											<p class="text-base font-semibold font-mono tabular-nums mt-1 text-on-surface-variant">-</p>
 										{% endif %}

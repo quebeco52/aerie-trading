@@ -1,7 +1,7 @@
 import { Controller } from '@hotwired/stimulus';
 import { formatLarge, formatCurrency, formatPercent } from '../js/utils/formatters.js';
 import { setText } from '../js/utils/set-text.js';
-import { THEME_COLORS } from '../js/utils/colors.js';
+import { THEME_COLORS, SERIES, withAlpha } from '../js/utils/colors.js';
 
 /** SVG namespace — segment sparklines are built element by element, not parsed from markup. */
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -23,11 +23,11 @@ const DRIVER_STRENGTH_PIPS = 3;
 const DRIVER_TYPE_TAGS = { macro: 'macro', momentum: 'ops', company: 'co' };
 
 /**
- * Mix-bar palette. A segment's colour comes from its rank in the mix, so the swatch on its row
- * and its band in the 100% bar always match. Ordered largest-share first, so the dominant segment
- * is always the primary colour.
+ * Mix-bar colours: the chart series slots, by rank in the mix, so the swatch on a segment's row and its band
+ * in the 100% bar always match, and the largest segment takes the first slot. Past the eighth, grey.
  */
-const STREAM_COLORS = ['#7dd8e8', '#4edea3', '#f0b866', '#c39ae0', '#ff9f9a', '#8aa6d6', '#8f8f8f'];
+const STREAM_COLORS = Object.values(SERIES);
+const streamColor = (index) => STREAM_COLORS[index] ?? withAlpha(THEME_COLORS.textMuted, 0.5);
 
 /** Formats a growth rate, or the "n/m" a filing prints where there is no comparison period. */
 function formatGrowth(value) {
@@ -1174,7 +1174,7 @@ export default class extends Controller {
             if (share <= 0) return;
             const segment = document.createElement('div');
             segment.style.width = Math.min(100, share * 100) + '%';
-            segment.style.backgroundColor = STREAM_COLORS[index % STREAM_COLORS.length];
+            segment.style.backgroundColor = streamColor(index);
             segment.title = `${stream.label} — ${formatPercent(share, 1)}`;
             this.detailRevenueMixBarTarget.appendChild(segment);
         });
@@ -1231,7 +1231,7 @@ export default class extends Controller {
         name.className = 'flex items-center gap-1.5 min-w-0';
         const swatch = document.createElement('span');
         swatch.className = 'w-1.5 h-1.5 rounded-sm shrink-0';
-        swatch.style.backgroundColor = STREAM_COLORS[index % STREAM_COLORS.length];
+        swatch.style.backgroundColor = streamColor(index);
         const label = document.createElement('span');
         label.className = 'font-semibold text-on-surface truncate';
         label.textContent = stream.label || stream.key || '';
