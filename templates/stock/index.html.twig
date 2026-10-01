@@ -1166,6 +1166,12 @@
 
 					<div
 					id="stock-tab-content-financials" class="stock-tab-panel hidden space-y-6" data-tabs-target="panel" data-tab-panel="financials">
+					{# Whether any of the business-model charts in the Industry section below applies to this company. #}
+					{% set has_industry_charts = isFinancial|default(false) or isInsurer|default(false) or businessModel|default('none') in [
+						'commercial_bank', 'credit_services', 'shadow_bank', 'reit',
+						'tech', 'semiconductor', 'biotech', 'defense_contractor',
+						'mining', 'oil_gas_producer', 'refining', 'shipping'
+					] %}
 					<div class="flex flex-col md:flex-row md:items-end justify-between gap-4">
 						<div>
 							<h2 class="text-lg font-semibold text-on-surface">Financial statements</h2>
@@ -1205,10 +1211,12 @@
 					<div class="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-3">
 						<div class="flex items-center gap-1 overflow-x-auto custom-scrollbar pb-1 sm:pb-0" id="financialCategoryPills" role="group" aria-label="Filter by topic">
 							<button type="button" class="financial-cat-btn seg-btn" aria-pressed="true" data-category="all">All</button>
-							<button type="button" class="financial-cat-btn seg-btn" aria-pressed="false" data-category="income">Income</button>
+							<button type="button" class="financial-cat-btn seg-btn" aria-pressed="false" data-category="income">Income and cash flow</button>
 							<button type="button" class="financial-cat-btn seg-btn" aria-pressed="false" data-category="balance">Balance sheet</button>
 							<button type="button" class="financial-cat-btn seg-btn" aria-pressed="false" data-category="valuation">Valuation and returns</button>
-							<button type="button" class="financial-cat-btn seg-btn" aria-pressed="false" data-category="sector">Industry</button>
+							{% if has_industry_charts %}
+								<button type="button" class="financial-cat-btn seg-btn" aria-pressed="false" data-category="sector">Industry</button>
+							{% endif %}
 						</div>
 
 						<div class="relative w-full sm:w-64">
@@ -1224,421 +1232,442 @@
 						<button type="button" data-status-retry class="hidden px-3 py-1 rounded text-xs font-bold bg-surface-container-high text-on-surface hover:bg-surface-bright transition-colors cursor-pointer">Retry</button>
 					</div>
 
-					<div id="financialChartsGrid" class="grid grid-cols-1 md:grid-cols-2 gap-6">
-
-						<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-financial-category="income">
-							<div class="flex items-start justify-between gap-4 mb-3">
-								<div class="min-w-0">
-									<h3 class="text-sm font-semibold text-on-surface">Revenue, net income and operating margin</h3>
-									<p class="text-xs text-on-surface-variant mt-0.5">Revenue and net income by period, with the operating margin</p>
-								</div>
-								<div class="flex items-start gap-3 shrink-0">
-									<div class="hidden sm:flex flex-col items-end text-right">
-										<span class="text-2xs text-on-surface-variant">Latest</span>
-										<span class="text-xs font-mono font-bold text-on-surface tabular-nums" id="hud-netIncomeChart">-</span>
-									</div>
-									<button type="button" class="expand-chart-btn p-1 -m-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors cursor-pointer" title="Expand chart" aria-label="Expand chart">
-										<span class="material-symbols-outlined text-base leading-none expand-icon" aria-hidden="true">open_in_full</span>
-									</button>
-								</div>
-							</div>
-							<div class="chart-canvas-container h-80 md:h-85 w-full relative">
-								<canvas id="netIncomeChart"></canvas>
-							</div>
-						</div>
-
-						<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-financial-category="income">
-							<div class="flex items-start justify-between gap-4 mb-3">
-								<div class="min-w-0">
-									<h3 class="text-sm font-semibold text-on-surface">Revenue by segment</h3>
-									<p class="text-xs text-on-surface-variant mt-0.5">How revenue splits across the company's business lines</p>
-								</div>
-								<div class="flex items-start gap-3 shrink-0">
-									<div class="hidden sm:flex flex-col items-end text-right">
-										<span class="text-2xs text-on-surface-variant">Latest</span>
-										<span class="text-xs font-mono font-bold text-on-surface tabular-nums" id="hud-revenueStreamsChart">-</span>
-									</div>
-									<button type="button" class="expand-chart-btn p-1 -m-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors cursor-pointer" title="Expand chart" aria-label="Expand chart">
-										<span class="material-symbols-outlined text-base leading-none expand-icon" aria-hidden="true">open_in_full</span>
-									</button>
-								</div>
-							</div>
-							<div class="chart-canvas-container h-80 md:h-85 w-full relative">
-								<canvas id="revenueStreamsChart"></canvas>
-							</div>
-						</div>
-
-						<div id="financial-statements-panel" class="chart-card hidden bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-financial-category="balance">
-							<div class="flex items-start justify-between gap-4 mb-3">
-								<div class="min-w-0">
-									<h3 class="text-sm font-semibold text-on-surface">Balance sheet and cash flow</h3>
-									<p class="text-xs text-on-surface-variant mt-0.5">Assets, the claims against them, and the cash the period actually produced</p>
-								</div>
-								<div class="flex items-start gap-3 shrink-0">
-									<div class="hidden sm:flex flex-col items-end text-right">
-										<span class="text-2xs text-on-surface-variant" id="asset-age-label">Plant age</span>
-										<span class="text-xs font-mono font-bold text-on-surface" id="asset-age-badge">-</span>
-									</div>
-									<div class="hidden sm:flex flex-col items-end text-right">
-										<span class="text-2xs text-on-surface-variant">Life cycle</span>
-										<span class="text-xs font-mono font-bold text-on-surface capitalize" id="lifecycle-stage-badge">-</span>
-									</div>
-								</div>
-							</div>
-							<div class="grid grid-cols-1 md:grid-cols-2 gap-5">
-								<div id="balance-sheet-column">
-									<h4 class="text-xs font-semibold text-on-surface-variant mb-2">Balance sheet</h4>
-									<div id="balance-sheet-rows"></div>
-								</div>
-								<div id="balance-sheet-unavailable" class="hidden">
-									<h4 class="text-xs font-semibold text-on-surface-variant mb-2">Balance sheet</h4>
-									<p class="text-xs text-on-surface-variant leading-relaxed">The balance sheet is published with the company's next quarterly report.</p>
-								</div>
-								<div>
-									<h4 class="text-xs font-semibold text-on-surface-variant mb-2">Cash flow</h4>
-									<div id="cash-flow-rows"></div>
-								</div>
-							</div>
-						</div>
-
-						<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-financial-category="balance">
-							<div class="flex items-start justify-between gap-4 mb-3">
-								<div class="min-w-0">
-									<h3 class="text-sm font-semibold text-on-surface">Capital structure</h3>
-									<p class="text-xs text-on-surface-variant mt-0.5">Total debt against book equity and cash</p>
-								</div>
-								<div class="flex items-start gap-3 shrink-0">
-									<div class="hidden sm:flex flex-col items-end text-right">
-										<span class="text-2xs text-on-surface-variant">Latest</span>
-										<span class="text-xs font-mono font-bold text-on-surface tabular-nums" id="hud-debtEquityChart">-</span>
-									</div>
-									<button type="button" class="expand-chart-btn p-1 -m-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors cursor-pointer" title="Expand chart" aria-label="Expand chart">
-										<span class="material-symbols-outlined text-base leading-none expand-icon" aria-hidden="true">open_in_full</span>
-									</button>
-								</div>
-							</div>
-							<div class="chart-canvas-container h-80 md:h-85 w-full relative">
-								<canvas id="debtEquityChart"></canvas>
-							</div>
-						</div>
-
-						<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-financial-category="balance">
-							<div class="flex items-start justify-between gap-4 mb-3">
-								<div class="min-w-0">
-									<h3 class="text-sm font-semibold text-on-surface">Borrowing cost and interest cover</h3>
-									<p class="text-xs text-on-surface-variant mt-0.5">Blended borrowing rate, its spread over the risk-free rate, and interest coverage</p>
-								</div>
-								<div class="flex items-start gap-3 shrink-0">
-									<div class="hidden sm:flex flex-col items-end text-right">
-										<span class="text-2xs text-on-surface-variant">Latest</span>
-										<span class="text-xs font-mono font-bold text-on-surface tabular-nums" id="hud-creditHealthChart">-</span>
-									</div>
-									<button type="button" class="expand-chart-btn p-1 -m-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors cursor-pointer" title="Expand chart" aria-label="Expand chart">
-										<span class="material-symbols-outlined text-base leading-none expand-icon" aria-hidden="true">open_in_full</span>
-									</button>
-								</div>
-							</div>
-							<div class="chart-canvas-container h-80 md:h-85 w-full relative">
-								<canvas id="creditHealthChart"></canvas>
-							</div>
-						</div>
-
-						<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-financial-category="valuation">
-							<div class="flex items-start justify-between gap-4 mb-3">
-								<div class="min-w-0">
-									<h3 class="text-sm font-semibold text-on-surface">Return on capital against its cost</h3>
-									<p class="text-xs text-on-surface-variant mt-0.5">Return on invested capital, the cost of capital, and the economic profit between them</p>
-								</div>
-								<div class="flex items-start gap-3 shrink-0">
-									<div class="hidden sm:flex flex-col items-end text-right">
-										<span class="text-2xs text-on-surface-variant">Latest</span>
-										<span class="text-xs font-mono font-bold text-on-surface tabular-nums" id="hud-capitalEfficiencyChart">-</span>
-									</div>
-									<button type="button" class="expand-chart-btn p-1 -m-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors cursor-pointer" title="Expand chart" aria-label="Expand chart">
-										<span class="material-symbols-outlined text-base leading-none expand-icon" aria-hidden="true">open_in_full</span>
-									</button>
-								</div>
-							</div>
-							<div class="chart-canvas-container h-80 md:h-85 w-full relative">
-								<canvas id="capitalEfficiencyChart"></canvas>
-							</div>
-						</div>
-
-						<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-financial-category="valuation">
-							<div class="flex items-start justify-between gap-4 mb-3">
-								<div class="min-w-0">
-									<h3 class="text-sm font-semibold text-on-surface">Dividends and buybacks</h3>
-									<p class="text-xs text-on-surface-variant mt-0.5">Dividends paid, share repurchases and total shareholder yield</p>
-								</div>
-								<div class="flex items-start gap-3 shrink-0">
-									<div class="hidden sm:flex flex-col items-end text-right">
-										<span class="text-2xs text-on-surface-variant">Latest</span>
-										<span class="text-xs font-mono font-bold text-on-surface tabular-nums" id="hud-capitalReturnChart">-</span>
-									</div>
-									<button type="button" class="expand-chart-btn p-1 -m-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors cursor-pointer" title="Expand chart" aria-label="Expand chart">
-										<span class="material-symbols-outlined text-base leading-none expand-icon" aria-hidden="true">open_in_full</span>
-									</button>
-								</div>
-							</div>
-							<div class="chart-canvas-container h-80 md:h-85 w-full relative">
-								<canvas id="capitalReturnChart"></canvas>
-							</div>
-						</div>
-
-						<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-financial-category="valuation">
-							<div class="flex items-start justify-between gap-4 mb-3">
-								<div class="min-w-0">
-									<h3 class="text-sm font-semibold text-on-surface">Payout and retention</h3>
-									<p class="text-xs text-on-surface-variant mt-0.5">The share of earnings paid out against the share reinvested</p>
-								</div>
-								<div class="flex items-start gap-3 shrink-0">
-									<div class="hidden sm:flex flex-col items-end text-right">
-										<span class="text-2xs text-on-surface-variant">Latest</span>
-										<span class="text-xs font-mono font-bold text-on-surface tabular-nums" id="hud-payoutRatioChart">-</span>
-									</div>
-									<button type="button" class="expand-chart-btn p-1 -m-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors cursor-pointer" title="Expand chart" aria-label="Expand chart">
-										<span class="material-symbols-outlined text-base leading-none expand-icon" aria-hidden="true">open_in_full</span>
-									</button>
-								</div>
-							</div>
-							<div class="chart-canvas-container h-80 md:h-85 w-full relative">
-								<canvas id="payoutRatioChart"></canvas>
-							</div>
-						</div>
-
-						<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-financial-category="valuation">
-							<div class="flex items-start justify-between gap-4 mb-3">
-								<div class="min-w-0">
-									<h3 class="text-sm font-semibold text-on-surface">Valuation multiples</h3>
-									<p class="text-xs text-on-surface-variant mt-0.5">Price to earnings, price to book and price to sales</p>
-								</div>
-								<div class="flex items-start gap-3 shrink-0">
-									<div class="hidden sm:flex flex-col items-end text-right">
-										<span class="text-2xs text-on-surface-variant">Latest</span>
-										<span class="text-xs font-mono font-bold text-on-surface tabular-nums" id="hud-valuationMultiplesChart">-</span>
-									</div>
-									<button type="button" class="expand-chart-btn p-1 -m-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors cursor-pointer" title="Expand chart" aria-label="Expand chart">
-										<span class="material-symbols-outlined text-base leading-none expand-icon" aria-hidden="true">open_in_full</span>
-									</button>
-								</div>
-							</div>
-							<div class="chart-canvas-container h-80 md:h-85 w-full relative">
-								<canvas id="valuationMultiplesChart"></canvas>
-							</div>
-						</div>
-
-						{% if netAssetValue %}
-							{# Premium / discount to NAV: the chart every closed-end factsheet leads with. #}
-							<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-financial-category="valuation">
-								<div class="flex items-start justify-between gap-4 mb-3">
-									<div class="min-w-0">
-										<h3 class="text-sm font-semibold text-on-surface">Premium or discount to NAV</h3>
-										<p class="text-xs text-on-surface-variant mt-0.5">Where the market prices the shares against the assets behind them</p>
-									</div>
-									<div class="flex items-start gap-3 shrink-0">
-										<div class="hidden sm:flex flex-col items-end text-right">
-											<span class="text-2xs text-on-surface-variant">Latest</span>
-											<span class="text-xs font-mono font-bold tabular-nums {{ netAssetValue.premium >= 0 ? 'text-secondary' : 'text-tertiary' }}">{{ (netAssetValue.premium * 100)|number_format(1) }}%</span>
+					<div id="financialChartsGrid" class="space-y-10" data-chart-grid>
+						<section class="space-y-4" data-chart-section aria-labelledby="financial-section-income">
+							<h3 id="financial-section-income" class="text-base font-semibold text-on-surface">Income and cash flow</h3>
+							<div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+								<div class="chart-card md:col-span-2 bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-wide data-financial-category="income">
+									<div class="flex items-start justify-between gap-4 mb-3">
+										<div class="min-w-0">
+											<h4 class="text-sm font-semibold text-on-surface">Revenue, net income and operating margin</h4>
+											<p class="text-xs text-on-surface-variant mt-0.5">Revenue and net income by period, with the operating margin</p>
 										</div>
-										<button type="button" class="expand-chart-btn p-1 -m-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors cursor-pointer" title="Expand chart" aria-label="Expand chart">
-											<span class="material-symbols-outlined text-base leading-none expand-icon" aria-hidden="true">open_in_full</span>
-										</button>
+										<div class="flex items-start gap-3 shrink-0">
+											<div class="hidden sm:flex flex-col items-end text-right">
+												<span class="text-2xs text-on-surface-variant">Latest</span>
+												<span class="text-xs font-mono font-bold text-on-surface tabular-nums" id="hud-netIncomeChart">-</span>
+											</div>
+											<button type="button" class="expand-chart-btn p-1 -m-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors cursor-pointer" title="Expand chart" aria-label="Expand chart">
+												<span class="material-symbols-outlined text-base leading-none expand-icon" aria-hidden="true">open_in_full</span>
+											</button>
+										</div>
+									</div>
+									<div class="chart-canvas-container h-80 md:h-85 w-full relative">
+										<canvas id="netIncomeChart"></canvas>
 									</div>
 								</div>
-								<div class="chart-canvas-container h-80 md:h-85 w-full relative">
-									<canvas id="navDiscountChart"></canvas>
-								</div>
-							</div>
-						{% endif %}
 
-						<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-financial-category="valuation">
-							<div class="flex items-start justify-between gap-4 mb-3">
-								<div class="min-w-0">
-									<h3 class="text-sm font-semibold text-on-surface">Per-share figures</h3>
-									<p class="text-xs text-on-surface-variant mt-0.5">Earnings and tangible book value per share, and the share count</p>
-								</div>
-								<div class="flex items-start gap-3 shrink-0">
-									<div class="hidden sm:flex flex-col items-end text-right">
-										<span class="text-2xs text-on-surface-variant">Latest</span>
-										<span class="text-xs font-mono font-bold text-on-surface tabular-nums" id="hud-shareholderValueChart">-</span>
+								<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-financial-category="income">
+									<div class="flex items-start justify-between gap-4 mb-3">
+										<div class="min-w-0">
+											<h4 class="text-sm font-semibold text-on-surface">Revenue by segment</h4>
+											<p class="text-xs text-on-surface-variant mt-0.5">How revenue splits across the company's business lines</p>
+										</div>
+										<div class="flex items-start gap-3 shrink-0">
+											<div class="hidden sm:flex flex-col items-end text-right">
+												<span class="text-2xs text-on-surface-variant">Latest</span>
+												<span class="text-xs font-mono font-bold text-on-surface tabular-nums" id="hud-revenueStreamsChart">-</span>
+											</div>
+											<button type="button" class="expand-chart-btn p-1 -m-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors cursor-pointer" title="Expand chart" aria-label="Expand chart">
+												<span class="material-symbols-outlined text-base leading-none expand-icon" aria-hidden="true">open_in_full</span>
+											</button>
+										</div>
 									</div>
-									<button type="button" class="expand-chart-btn p-1 -m-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors cursor-pointer" title="Expand chart" aria-label="Expand chart">
-										<span class="material-symbols-outlined text-base leading-none expand-icon" aria-hidden="true">open_in_full</span>
-									</button>
+									<div class="chart-canvas-container h-80 md:h-85 w-full relative">
+										<canvas id="revenueStreamsChart"></canvas>
+									</div>
 								</div>
-							</div>
-							<div class="chart-canvas-container h-80 md:h-85 w-full relative">
-								<canvas id="shareholderValueChart"></canvas>
-							</div>
-						</div>
 
-						<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-financial-category="income">
-							<div class="flex items-start justify-between gap-4 mb-3">
-								<div class="min-w-0">
-									<h3 class="text-sm font-semibold text-on-surface">Free cash flow</h3>
-									<p class="text-xs text-on-surface-variant mt-0.5">Operating cash flow less capital spending, retained cash and cash conversion</p>
-								</div>
-								<div class="flex items-start gap-3 shrink-0">
-									<div class="hidden sm:flex flex-col items-end text-right">
-										<span class="text-2xs text-on-surface-variant">Latest</span>
-										<span class="text-xs font-mono font-bold text-on-surface tabular-nums" id="hud-cashFlowSummaryChart">-</span>
+								<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-financial-category="income">
+									<div class="flex items-start justify-between gap-4 mb-3">
+										<div class="min-w-0">
+											<h4 class="text-sm font-semibold text-on-surface">Free cash flow</h4>
+											<p class="text-xs text-on-surface-variant mt-0.5">Operating cash flow less capital spending, retained cash and cash conversion</p>
+										</div>
+										<div class="flex items-start gap-3 shrink-0">
+											<div class="hidden sm:flex flex-col items-end text-right">
+												<span class="text-2xs text-on-surface-variant">Latest</span>
+												<span class="text-xs font-mono font-bold text-on-surface tabular-nums" id="hud-cashFlowSummaryChart">-</span>
+											</div>
+											<button type="button" class="expand-chart-btn p-1 -m-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors cursor-pointer" title="Expand chart" aria-label="Expand chart">
+												<span class="material-symbols-outlined text-base leading-none expand-icon" aria-hidden="true">open_in_full</span>
+											</button>
+										</div>
 									</div>
-									<button type="button" class="expand-chart-btn p-1 -m-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors cursor-pointer" title="Expand chart" aria-label="Expand chart">
-										<span class="material-symbols-outlined text-base leading-none expand-icon" aria-hidden="true">open_in_full</span>
-									</button>
+									<div class="chart-canvas-container h-80 md:h-85 w-full relative">
+										<canvas id="cashFlowSummaryChart"></canvas>
+									</div>
 								</div>
 							</div>
-							<div class="chart-canvas-container h-80 md:h-85 w-full relative">
-								<canvas id="cashFlowSummaryChart"></canvas>
+						</section>
+
+						<section class="space-y-4" data-chart-section aria-labelledby="financial-section-balance">
+							<h3 id="financial-section-balance" class="text-base font-semibold text-on-surface">Balance sheet</h3>
+							<div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+								<div id="financial-statements-panel" data-unavailable class="chart-card hidden md:col-span-2 bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-wide data-financial-category="balance">
+									<div class="flex items-start justify-between gap-4 mb-3">
+										<div class="min-w-0">
+											<h4 class="text-sm font-semibold text-on-surface">Balance sheet and cash flow</h4>
+											<p class="text-xs text-on-surface-variant mt-0.5">Assets, the claims against them, and the cash the period actually produced</p>
+										</div>
+										<div class="flex items-start gap-3 shrink-0">
+											<div class="hidden sm:flex flex-col items-end text-right">
+												<span class="text-2xs text-on-surface-variant" id="asset-age-label">Plant age</span>
+												<span class="text-xs font-mono font-bold text-on-surface" id="asset-age-badge">-</span>
+											</div>
+											<div class="hidden sm:flex flex-col items-end text-right">
+												<span class="text-2xs text-on-surface-variant">Life cycle</span>
+												<span class="text-xs font-mono font-bold text-on-surface capitalize" id="lifecycle-stage-badge">-</span>
+											</div>
+										</div>
+									</div>
+									<div class="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-5">
+										<div id="balance-sheet-column">
+											<h5 class="text-xs font-semibold text-on-surface-variant mb-2">Balance sheet</h5>
+											<div id="balance-sheet-rows"></div>
+										</div>
+										<div id="balance-sheet-unavailable" class="hidden">
+											<h5 class="text-xs font-semibold text-on-surface-variant mb-2">Balance sheet</h5>
+											<p class="text-xs text-on-surface-variant leading-relaxed">The balance sheet is published with the company's next quarterly report.</p>
+										</div>
+										<div>
+											<h5 class="text-xs font-semibold text-on-surface-variant mb-2">Cash flow</h5>
+											<div id="cash-flow-rows"></div>
+										</div>
+									</div>
+								</div>
+
+								<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-financial-category="balance">
+									<div class="flex items-start justify-between gap-4 mb-3">
+										<div class="min-w-0">
+											<h4 class="text-sm font-semibold text-on-surface">Capital structure</h4>
+											<p class="text-xs text-on-surface-variant mt-0.5">Total debt against book equity and cash</p>
+										</div>
+										<div class="flex items-start gap-3 shrink-0">
+											<div class="hidden sm:flex flex-col items-end text-right">
+												<span class="text-2xs text-on-surface-variant">Latest</span>
+												<span class="text-xs font-mono font-bold text-on-surface tabular-nums" id="hud-debtEquityChart">-</span>
+											</div>
+											<button type="button" class="expand-chart-btn p-1 -m-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors cursor-pointer" title="Expand chart" aria-label="Expand chart">
+												<span class="material-symbols-outlined text-base leading-none expand-icon" aria-hidden="true">open_in_full</span>
+											</button>
+										</div>
+									</div>
+									<div class="chart-canvas-container h-80 md:h-85 w-full relative">
+										<canvas id="debtEquityChart"></canvas>
+									</div>
+								</div>
+
+								<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-financial-category="balance">
+									<div class="flex items-start justify-between gap-4 mb-3">
+										<div class="min-w-0">
+											<h4 class="text-sm font-semibold text-on-surface">Borrowing cost and interest cover</h4>
+											<p class="text-xs text-on-surface-variant mt-0.5">Blended borrowing rate, its spread over the risk-free rate, and interest coverage</p>
+										</div>
+										<div class="flex items-start gap-3 shrink-0">
+											<div class="hidden sm:flex flex-col items-end text-right">
+												<span class="text-2xs text-on-surface-variant">Latest</span>
+												<span class="text-xs font-mono font-bold text-on-surface tabular-nums" id="hud-creditHealthChart">-</span>
+											</div>
+											<button type="button" class="expand-chart-btn p-1 -m-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors cursor-pointer" title="Expand chart" aria-label="Expand chart">
+												<span class="material-symbols-outlined text-base leading-none expand-icon" aria-hidden="true">open_in_full</span>
+											</button>
+										</div>
+									</div>
+									<div class="chart-canvas-container h-80 md:h-85 w-full relative">
+										<canvas id="creditHealthChart"></canvas>
+									</div>
+								</div>
 							</div>
-						</div>
+						</section>
+
+						<section class="space-y-4" data-chart-section aria-labelledby="financial-section-valuation">
+							<h3 id="financial-section-valuation" class="text-base font-semibold text-on-surface">Valuation and returns</h3>
+							<div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+								<div class="chart-card {{ netAssetValue ? '' : 'md:col-span-2' }} bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col"{{ netAssetValue ? '' : ' data-wide' }} data-financial-category="valuation">
+									<div class="flex items-start justify-between gap-4 mb-3">
+										<div class="min-w-0">
+											<h4 class="text-sm font-semibold text-on-surface">Valuation multiples</h4>
+											<p class="text-xs text-on-surface-variant mt-0.5">Price to earnings, price to book and price to sales</p>
+										</div>
+										<div class="flex items-start gap-3 shrink-0">
+											<div class="hidden sm:flex flex-col items-end text-right">
+												<span class="text-2xs text-on-surface-variant">Latest</span>
+												<span class="text-xs font-mono font-bold text-on-surface tabular-nums" id="hud-valuationMultiplesChart">-</span>
+											</div>
+											<button type="button" class="expand-chart-btn p-1 -m-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors cursor-pointer" title="Expand chart" aria-label="Expand chart">
+												<span class="material-symbols-outlined text-base leading-none expand-icon" aria-hidden="true">open_in_full</span>
+											</button>
+										</div>
+									</div>
+									<div class="chart-canvas-container h-80 md:h-85 w-full relative">
+										<canvas id="valuationMultiplesChart"></canvas>
+									</div>
+								</div>
+
+								{% if netAssetValue %}
+									{# Premium / discount to NAV: the chart every closed-end factsheet leads with. #}
+									<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-financial-category="valuation">
+										<div class="flex items-start justify-between gap-4 mb-3">
+											<div class="min-w-0">
+												<h4 class="text-sm font-semibold text-on-surface">Premium or discount to NAV</h4>
+												<p class="text-xs text-on-surface-variant mt-0.5">Where the market prices the shares against the assets behind them</p>
+											</div>
+											<div class="flex items-start gap-3 shrink-0">
+												<div class="hidden sm:flex flex-col items-end text-right">
+													<span class="text-2xs text-on-surface-variant">Latest</span>
+													<span class="text-xs font-mono font-bold tabular-nums {{ netAssetValue.premium >= 0 ? 'text-secondary' : 'text-tertiary' }}">{{ (netAssetValue.premium * 100)|number_format(1) }}%</span>
+												</div>
+												<button type="button" class="expand-chart-btn p-1 -m-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors cursor-pointer" title="Expand chart" aria-label="Expand chart">
+													<span class="material-symbols-outlined text-base leading-none expand-icon" aria-hidden="true">open_in_full</span>
+												</button>
+											</div>
+										</div>
+										<div class="chart-canvas-container h-80 md:h-85 w-full relative">
+											<canvas id="navDiscountChart"></canvas>
+										</div>
+									</div>
+								{% endif %}
+
+								<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-financial-category="valuation">
+									<div class="flex items-start justify-between gap-4 mb-3">
+										<div class="min-w-0">
+											<h4 class="text-sm font-semibold text-on-surface">Per-share figures</h4>
+											<p class="text-xs text-on-surface-variant mt-0.5">Earnings and tangible book value per share, and the share count</p>
+										</div>
+										<div class="flex items-start gap-3 shrink-0">
+											<div class="hidden sm:flex flex-col items-end text-right">
+												<span class="text-2xs text-on-surface-variant">Latest</span>
+												<span class="text-xs font-mono font-bold text-on-surface tabular-nums" id="hud-shareholderValueChart">-</span>
+											</div>
+											<button type="button" class="expand-chart-btn p-1 -m-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors cursor-pointer" title="Expand chart" aria-label="Expand chart">
+												<span class="material-symbols-outlined text-base leading-none expand-icon" aria-hidden="true">open_in_full</span>
+											</button>
+										</div>
+									</div>
+									<div class="chart-canvas-container h-80 md:h-85 w-full relative">
+										<canvas id="shareholderValueChart"></canvas>
+									</div>
+								</div>
+
+								<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-financial-category="valuation">
+									<div class="flex items-start justify-between gap-4 mb-3">
+										<div class="min-w-0">
+											<h4 class="text-sm font-semibold text-on-surface">Return on capital against its cost</h4>
+											<p class="text-xs text-on-surface-variant mt-0.5">Return on invested capital, the cost of capital, and the economic profit between them</p>
+										</div>
+										<div class="flex items-start gap-3 shrink-0">
+											<div class="hidden sm:flex flex-col items-end text-right">
+												<span class="text-2xs text-on-surface-variant">Latest</span>
+												<span class="text-xs font-mono font-bold text-on-surface tabular-nums" id="hud-capitalEfficiencyChart">-</span>
+											</div>
+											<button type="button" class="expand-chart-btn p-1 -m-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors cursor-pointer" title="Expand chart" aria-label="Expand chart">
+												<span class="material-symbols-outlined text-base leading-none expand-icon" aria-hidden="true">open_in_full</span>
+											</button>
+										</div>
+									</div>
+									<div class="chart-canvas-container h-80 md:h-85 w-full relative">
+										<canvas id="capitalEfficiencyChart"></canvas>
+									</div>
+								</div>
+
+								<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-financial-category="valuation">
+									<div class="flex items-start justify-between gap-4 mb-3">
+										<div class="min-w-0">
+											<h4 class="text-sm font-semibold text-on-surface">Dividends and buybacks</h4>
+											<p class="text-xs text-on-surface-variant mt-0.5">Dividends paid, share repurchases and total shareholder yield</p>
+										</div>
+										<div class="flex items-start gap-3 shrink-0">
+											<div class="hidden sm:flex flex-col items-end text-right">
+												<span class="text-2xs text-on-surface-variant">Latest</span>
+												<span class="text-xs font-mono font-bold text-on-surface tabular-nums" id="hud-capitalReturnChart">-</span>
+											</div>
+											<button type="button" class="expand-chart-btn p-1 -m-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors cursor-pointer" title="Expand chart" aria-label="Expand chart">
+												<span class="material-symbols-outlined text-base leading-none expand-icon" aria-hidden="true">open_in_full</span>
+											</button>
+										</div>
+									</div>
+									<div class="chart-canvas-container h-80 md:h-85 w-full relative">
+										<canvas id="capitalReturnChart"></canvas>
+									</div>
+								</div>
+
+								<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-financial-category="valuation">
+									<div class="flex items-start justify-between gap-4 mb-3">
+										<div class="min-w-0">
+											<h4 class="text-sm font-semibold text-on-surface">Payout and retention</h4>
+											<p class="text-xs text-on-surface-variant mt-0.5">The share of earnings paid out against the share reinvested</p>
+										</div>
+										<div class="flex items-start gap-3 shrink-0">
+											<div class="hidden sm:flex flex-col items-end text-right">
+												<span class="text-2xs text-on-surface-variant">Latest</span>
+												<span class="text-xs font-mono font-bold text-on-surface tabular-nums" id="hud-payoutRatioChart">-</span>
+											</div>
+											<button type="button" class="expand-chart-btn p-1 -m-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors cursor-pointer" title="Expand chart" aria-label="Expand chart">
+												<span class="material-symbols-outlined text-base leading-none expand-icon" aria-hidden="true">open_in_full</span>
+											</button>
+										</div>
+									</div>
+									<div class="chart-canvas-container h-80 md:h-85 w-full relative">
+										<canvas id="payoutRatioChart"></canvas>
+									</div>
+								</div>
+							</div>
+						</section>
 
 						{# Charts shown only for the matching sector or business model. #}
-
-						{# Banking / Credit Services: Net Interest Margin #}
-						{% if businessModel|default('none') in ['commercial_bank', 'credit_services', 'shadow_bank'] %}
-							<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-financial-category="sector">
-								<div class="flex items-start justify-between gap-4 mb-3">
-									<div class="min-w-0">
-										<h3 class="text-sm font-semibold text-on-surface">Net interest margin</h3>
-										<p class="text-xs text-on-surface-variant mt-0.5">Interest income against interest expense, and the margin between them</p>
-									</div>
-									<div class="flex items-start gap-3 shrink-0">
-										<div class="hidden sm:flex flex-col items-end text-right">
-											<span class="text-2xs text-on-surface-variant">Latest</span>
-											<span class="text-xs font-mono font-bold text-on-surface tabular-nums" id="hud-netInterestEngineChart">-</span>
+						{% if has_industry_charts %}
+							<section class="space-y-4" data-chart-section aria-labelledby="financial-section-sector">
+								<h3 id="financial-section-sector" class="text-base font-semibold text-on-surface">Industry</h3>
+								<div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+									{# Banking / Credit Services: Net Interest Margin #}
+									{% if businessModel|default('none') in ['commercial_bank', 'credit_services', 'shadow_bank'] %}
+										<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-financial-category="sector">
+											<div class="flex items-start justify-between gap-4 mb-3">
+												<div class="min-w-0">
+													<h4 class="text-sm font-semibold text-on-surface">Net interest margin</h4>
+													<p class="text-xs text-on-surface-variant mt-0.5">Interest income against interest expense, and the margin between them</p>
+												</div>
+												<div class="flex items-start gap-3 shrink-0">
+													<div class="hidden sm:flex flex-col items-end text-right">
+														<span class="text-2xs text-on-surface-variant">Latest</span>
+														<span class="text-xs font-mono font-bold text-on-surface tabular-nums" id="hud-netInterestEngineChart">-</span>
+													</div>
+													<button type="button" class="expand-chart-btn p-1 -m-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors cursor-pointer" title="Expand chart" aria-label="Expand chart">
+														<span class="material-symbols-outlined text-base leading-none expand-icon" aria-hidden="true">open_in_full</span>
+													</button>
+												</div>
+											</div>
+											<div class="chart-canvas-container h-80 md:h-85 w-full relative">
+												<canvas id="netInterestEngineChart"></canvas>
+											</div>
 										</div>
-										<button type="button" class="expand-chart-btn p-1 -m-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors cursor-pointer" title="Expand chart" aria-label="Expand chart">
-											<span class="material-symbols-outlined text-base leading-none expand-icon" aria-hidden="true">open_in_full</span>
-										</button>
-									</div>
+									{% endif %}
+
+									{# Financials: Regulatory Capital Ratios #}
+									{% if isFinancial|default(false) %}
+										<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-financial-category="sector">
+											<div class="flex items-start justify-between gap-4 mb-3">
+												<div class="min-w-0">
+													<h4 class="text-sm font-semibold text-on-surface">Regulatory capital</h4>
+													<p class="text-xs text-on-surface-variant mt-0.5">Tangible equity over tangible assets, against the lines the regulator acts on</p>
+												</div>
+												<div class="flex items-start gap-3 shrink-0">
+													<div class="hidden sm:flex flex-col items-end text-right">
+														<span class="text-2xs text-on-surface-variant">Latest</span>
+														<span class="text-xs font-mono font-bold text-on-surface tabular-nums" id="hud-regulatoryRatiosChart">-</span>
+													</div>
+													<button type="button" class="expand-chart-btn p-1 -m-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors cursor-pointer" title="Expand chart" aria-label="Expand chart">
+														<span class="material-symbols-outlined text-base leading-none expand-icon" aria-hidden="true">open_in_full</span>
+													</button>
+												</div>
+											</div>
+											<div class="chart-canvas-container h-80 md:h-85 w-full relative">
+												<canvas id="regulatoryRatiosChart"></canvas>
+											</div>
+										</div>
+									{% endif %}
+
+									{# Insurance: Dual Engine Underwriting vs Float #}
+									{% if isInsurer|default(false) %}
+										<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-financial-category="sector">
+											<div class="flex items-start justify-between gap-4 mb-3">
+												<div class="min-w-0">
+													<h4 class="text-sm font-semibold text-on-surface">Underwriting and investment income</h4>
+													<p class="text-xs text-on-surface-variant mt-0.5">The combined ratio, and the yield earned on policyholder float</p>
+												</div>
+												<div class="flex items-start gap-3 shrink-0">
+													<div class="hidden sm:flex flex-col items-end text-right">
+														<span class="text-2xs text-on-surface-variant">Latest</span>
+														<span class="text-xs font-mono font-bold text-on-surface tabular-nums" id="hud-insuranceDualEngineChart">-</span>
+													</div>
+													<button type="button" class="expand-chart-btn p-1 -m-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors cursor-pointer" title="Expand chart" aria-label="Expand chart">
+														<span class="material-symbols-outlined text-base leading-none expand-icon" aria-hidden="true">open_in_full</span>
+													</button>
+												</div>
+											</div>
+											<div class="chart-canvas-container h-80 md:h-85 w-full relative">
+												<canvas id="insuranceDualEngineChart"></canvas>
+											</div>
+										</div>
+									{% endif %}
+
+									{# REITs: AFFO Coverage & LTV #}
+									{% if businessModel|default('none') == 'reit' %}
+										<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-financial-category="sector">
+											<div class="flex items-start justify-between gap-4 mb-3">
+												<div class="min-w-0">
+													<h4 class="text-sm font-semibold text-on-surface">REIT coverage and leverage</h4>
+													<p class="text-xs text-on-surface-variant mt-0.5">Dividend cover from AFFO, loan-to-value, and the cap rate's spread over funding</p>
+												</div>
+												<div class="flex items-start gap-3 shrink-0">
+													<div class="hidden sm:flex flex-col items-end text-right">
+														<span class="text-2xs text-on-surface-variant">Latest</span>
+														<span class="text-xs font-mono font-bold text-on-surface tabular-nums" id="hud-reitCoverageChart">-</span>
+													</div>
+													<button type="button" class="expand-chart-btn p-1 -m-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors cursor-pointer" title="Expand chart" aria-label="Expand chart">
+														<span class="material-symbols-outlined text-base leading-none expand-icon" aria-hidden="true">open_in_full</span>
+													</button>
+												</div>
+											</div>
+											<div class="chart-canvas-container h-80 md:h-85 w-full relative">
+												<canvas id="reitCoverageChart"></canvas>
+											</div>
+										</div>
+									{% endif %}
+
+									{# Tech / Semi / Biotech / Defense: R&D & Reinvestment Intensity #}
+									{% if businessModel|default('none') in ['tech', 'semiconductor', 'biotech', 'defense_contractor'] %}
+										<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-financial-category="sector">
+											<div class="flex items-start justify-between gap-4 mb-3">
+												<div class="min-w-0">
+													<h4 class="text-sm font-semibold text-on-surface">Reinvestment</h4>
+													<p class="text-xs text-on-surface-variant mt-0.5">Capital spending as a share of revenue, against operating margin and ROIC</p>
+												</div>
+												<div class="flex items-start gap-3 shrink-0">
+													<div class="hidden sm:flex flex-col items-end text-right">
+														<span class="text-2xs text-on-surface-variant">Latest</span>
+														<span class="text-xs font-mono font-bold text-on-surface tabular-nums" id="hud-reinvestmentIntensityChart">-</span>
+													</div>
+													<button type="button" class="expand-chart-btn p-1 -m-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors cursor-pointer" title="Expand chart" aria-label="Expand chart">
+														<span class="material-symbols-outlined text-base leading-none expand-icon" aria-hidden="true">open_in_full</span>
+													</button>
+												</div>
+											</div>
+											<div class="chart-canvas-container h-80 md:h-85 w-full relative">
+												<canvas id="reinvestmentIntensityChart"></canvas>
+											</div>
+										</div>
+									{% endif %}
+
+									{# Commodities / Shipping: Cyclical Dynamics & Deleveraging #}
+									{% if businessModel|default('none') in ['mining', 'oil_gas_producer', 'refining', 'shipping'] %}
+										<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-financial-category="sector">
+											<div class="flex items-start justify-between gap-4 mb-3">
+												<div class="min-w-0">
+													<h4 class="text-sm font-semibold text-on-surface">Cyclical margins and liquidity</h4>
+													<p class="text-xs text-on-surface-variant mt-0.5">Operating margin swings against debt service and cash reserves</p>
+												</div>
+												<div class="flex items-start gap-3 shrink-0">
+													<div class="hidden sm:flex flex-col items-end text-right">
+														<span class="text-2xs text-on-surface-variant">Latest</span>
+														<span class="text-xs font-mono font-bold text-on-surface tabular-nums" id="hud-cyclicalDynamicsChart">-</span>
+													</div>
+													<button type="button" class="expand-chart-btn p-1 -m-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors cursor-pointer" title="Expand chart" aria-label="Expand chart">
+														<span class="material-symbols-outlined text-base leading-none expand-icon" aria-hidden="true">open_in_full</span>
+													</button>
+												</div>
+											</div>
+											<div class="chart-canvas-container h-80 md:h-85 w-full relative">
+												<canvas id="cyclicalDynamicsChart"></canvas>
+											</div>
+										</div>
+									{% endif %}
 								</div>
-								<div class="chart-canvas-container h-80 md:h-85 w-full relative">
-									<canvas id="netInterestEngineChart"></canvas>
-								</div>
-							</div>
+							</section>
 						{% endif %}
 
-						{# Financials: Regulatory Capital Ratios #}
-						{% if isFinancial|default(false) %}
-							<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-financial-category="sector">
-								<div class="flex items-start justify-between gap-4 mb-3">
-									<div class="min-w-0">
-										<h3 class="text-sm font-semibold text-on-surface">Regulatory capital</h3>
-										<p class="text-xs text-on-surface-variant mt-0.5">Tangible equity over tangible assets, against the lines the regulator acts on</p>
-									</div>
-									<div class="flex items-start gap-3 shrink-0">
-										<div class="hidden sm:flex flex-col items-end text-right">
-											<span class="text-2xs text-on-surface-variant">Latest</span>
-											<span class="text-xs font-mono font-bold text-on-surface tabular-nums" id="hud-regulatoryRatiosChart">-</span>
-										</div>
-										<button type="button" class="expand-chart-btn p-1 -m-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors cursor-pointer" title="Expand chart" aria-label="Expand chart">
-											<span class="material-symbols-outlined text-base leading-none expand-icon" aria-hidden="true">open_in_full</span>
-										</button>
-									</div>
-								</div>
-								<div class="chart-canvas-container h-80 md:h-85 w-full relative">
-									<canvas id="regulatoryRatiosChart"></canvas>
-								</div>
-							</div>
-						{% endif %}
-
-						{# Insurance: Dual Engine Underwriting vs Float #}
-						{% if isInsurer|default(false) %}
-							<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-financial-category="sector">
-								<div class="flex items-start justify-between gap-4 mb-3">
-									<div class="min-w-0">
-										<h3 class="text-sm font-semibold text-on-surface">Underwriting and investment income</h3>
-										<p class="text-xs text-on-surface-variant mt-0.5">The combined ratio, and the yield earned on policyholder float</p>
-									</div>
-									<div class="flex items-start gap-3 shrink-0">
-										<div class="hidden sm:flex flex-col items-end text-right">
-											<span class="text-2xs text-on-surface-variant">Latest</span>
-											<span class="text-xs font-mono font-bold text-on-surface tabular-nums" id="hud-insuranceDualEngineChart">-</span>
-										</div>
-										<button type="button" class="expand-chart-btn p-1 -m-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors cursor-pointer" title="Expand chart" aria-label="Expand chart">
-											<span class="material-symbols-outlined text-base leading-none expand-icon" aria-hidden="true">open_in_full</span>
-										</button>
-									</div>
-								</div>
-								<div class="chart-canvas-container h-80 md:h-85 w-full relative">
-									<canvas id="insuranceDualEngineChart"></canvas>
-								</div>
-							</div>
-						{% endif %}
-
-						{# REITs: AFFO Coverage & LTV #}
-						{% if businessModel|default('none') == 'reit' %}
-							<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-financial-category="sector">
-								<div class="flex items-start justify-between gap-4 mb-3">
-									<div class="min-w-0">
-										<h3 class="text-sm font-semibold text-on-surface">REIT coverage and leverage</h3>
-										<p class="text-xs text-on-surface-variant mt-0.5">Dividend cover from AFFO, loan-to-value, and the cap rate's spread over funding</p>
-									</div>
-									<div class="flex items-start gap-3 shrink-0">
-										<div class="hidden sm:flex flex-col items-end text-right">
-											<span class="text-2xs text-on-surface-variant">Latest</span>
-											<span class="text-xs font-mono font-bold text-on-surface tabular-nums" id="hud-reitCoverageChart">-</span>
-										</div>
-										<button type="button" class="expand-chart-btn p-1 -m-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors cursor-pointer" title="Expand chart" aria-label="Expand chart">
-											<span class="material-symbols-outlined text-base leading-none expand-icon" aria-hidden="true">open_in_full</span>
-										</button>
-									</div>
-								</div>
-								<div class="chart-canvas-container h-80 md:h-85 w-full relative">
-									<canvas id="reitCoverageChart"></canvas>
-								</div>
-							</div>
-						{% endif %}
-
-						{# Tech / Semi / Biotech / Defense: R&D & Reinvestment Intensity #}
-						{% if businessModel|default('none') in ['tech', 'semiconductor', 'biotech', 'defense_contractor'] %}
-							<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-financial-category="sector">
-								<div class="flex items-start justify-between gap-4 mb-3">
-									<div class="min-w-0">
-										<h3 class="text-sm font-semibold text-on-surface">Reinvestment</h3>
-										<p class="text-xs text-on-surface-variant mt-0.5">Capital spending as a share of revenue, against operating margin and ROIC</p>
-									</div>
-									<div class="flex items-start gap-3 shrink-0">
-										<div class="hidden sm:flex flex-col items-end text-right">
-											<span class="text-2xs text-on-surface-variant">Latest</span>
-											<span class="text-xs font-mono font-bold text-on-surface tabular-nums" id="hud-reinvestmentIntensityChart">-</span>
-										</div>
-										<button type="button" class="expand-chart-btn p-1 -m-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors cursor-pointer" title="Expand chart" aria-label="Expand chart">
-											<span class="material-symbols-outlined text-base leading-none expand-icon" aria-hidden="true">open_in_full</span>
-										</button>
-									</div>
-								</div>
-								<div class="chart-canvas-container h-80 md:h-85 w-full relative">
-									<canvas id="reinvestmentIntensityChart"></canvas>
-								</div>
-							</div>
-						{% endif %}
-
-						{# Commodities / Shipping: Cyclical Dynamics & Deleveraging #}
-						{% if businessModel|default('none') in ['mining', 'oil_gas_producer', 'refining', 'shipping'] %}
-							<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-financial-category="sector">
-								<div class="flex items-start justify-between gap-4 mb-3">
-									<div class="min-w-0">
-										<h3 class="text-sm font-semibold text-on-surface">Cyclical margins and liquidity</h3>
-										<p class="text-xs text-on-surface-variant mt-0.5">Operating margin swings against debt service and cash reserves</p>
-									</div>
-									<div class="flex items-start gap-3 shrink-0">
-										<div class="hidden sm:flex flex-col items-end text-right">
-											<span class="text-2xs text-on-surface-variant">Latest</span>
-											<span class="text-xs font-mono font-bold text-on-surface tabular-nums" id="hud-cyclicalDynamicsChart">-</span>
-										</div>
-										<button type="button" class="expand-chart-btn p-1 -m-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors cursor-pointer" title="Expand chart" aria-label="Expand chart">
-											<span class="material-symbols-outlined text-base leading-none expand-icon" aria-hidden="true">open_in_full</span>
-										</button>
-									</div>
-								</div>
-								<div class="chart-canvas-container h-80 md:h-85 w-full relative">
-									<canvas id="cyclicalDynamicsChart"></canvas>
-								</div>
-							</div>
-						{% endif %}
-
+						<p class="hidden py-12 text-center text-sm text-on-surface-variant" data-chart-empty>No charts match the filter.</p>
 					</div>
 				</div>
 			{% endif %}

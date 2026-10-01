@@ -25,10 +25,12 @@ class EconomyControllerTest extends WebTestCase
         $this->assertSelectorExists('#macroBankingLiquidityChart');
         $this->assertSelectorExists('#macroSovereignFundChart');
         $this->assertSelectorExists('#macroChartsGrid .chart-card a[href="/reserve"]');
+        $this->assertCount(6, $client->getCrawler()->filter('#macroChartsGrid [data-chart-section] h3'));
         $this->assertSelectorTextContains('#macroCategoryPills', '(27)');
-        $this->assertSelectorTextContains('#macroCategoryPills', '(7)');
         $this->assertSelectorTextContains('#macroCategoryPills', '(6)');
         $this->assertSelectorTextContains('#macroCategoryPills', '(5)');
+        $this->assertSelectorTextContains('#macroCategoryPills', '(4)');
+        $this->assertSelectorTextContains('#macroCategoryPills', '(3)');
         $this->assertSelectorExists('[data-macro-timeframe="10Y"]');
     }
 

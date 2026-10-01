@@ -2,6 +2,7 @@ import { THEME_COLORS, withAlpha } from '../utils/colors.js';
 import { formatLarge } from '../utils/formatters.js';
 import { destroyChartInstance } from '../utils/chart-config.js';
 import { renderWhenVisible, resetLazyCharts } from '../utils/lazy-chart.js';
+import { refreshChartGrid } from '../utils/chart-grid.js';
 
 let profitEngineChartInstance = null;
 let revenueStreamsChartInstance = null;
@@ -2049,9 +2050,13 @@ function renderFinancialStatements(latest) {
     // that fund it, rather than plant and inventory it does not have.
     const isLender = present('earning_assets') && num('earning_assets') > 0;
 
-    // A report written before these columns existed has nothing to show; leave the panel hidden.
+    // A report written before these columns existed has nothing to show; leave the panel hidden. The
+    // grid's filter owns the class otherwise, so a filtered-out panel stays out when data arrives.
     const panel = document.getElementById('financial-statements-panel');
-    if (panel) panel.classList.toggle('hidden', !hasCashFlow);
+    if (panel) {
+        panel.toggleAttribute('data-unavailable', !hasCashFlow);
+        if (!refreshChartGrid('financialChartsGrid')) panel.classList.toggle('hidden', !hasCashFlow);
+    }
     if (!hasCashFlow) return;
 
     const sheetColumn = document.getElementById('balance-sheet-column');

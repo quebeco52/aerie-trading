@@ -34,7 +34,7 @@ final class AeriePartyProfiles
             'family' => 'Liberal conservative',
             'motto' => 'Low taxes, light rules, and a state that stays out of the way.',
             'about' => [
-                'The Vanguard is the party of the District\'s founding bargain: light regulation, low taxes and a small state, the terms on which the banks and funds came to the peninsula. Its voters are the District\'s professionals, business owners and homeowners.',
+                'The Vanguard is the party of the District\'s founding bargain: light regulation, low taxes and a small state, the terms on which the District was built. It is the full embodiment of old money and entrenched corporate interests in the District.',
                 'It argues that the District\'s prosperity rests on capital choosing to come here, and that every point of tax is a reason for it to leave. It usually leads the other of the Diet\'s two blocs, and its leader is that bloc\'s candidate for the premiership.',
             ],
             'agenda' => [
@@ -104,7 +104,7 @@ final class AeriePartyProfiles
             'family' => 'Conservationist, localist',
             'motto' => 'Keep the foreshores, parks, and headlands open to the sky.',
             'about' => [
-                'The Tideline Accord was founded by the peninsula\'s naturalists, open-water swimmers and coastal residents to protect the District\'s shoreline from the march of Glasswater Row. As luxury resorts walled off beaches and industrial dredging scarred the tidal bays, the Accord rallied citizens around a simple principle: the peninsula\'s natural beauty belongs to all who live here.',
+                'The Tideline Accord was founded by the peninsula\'s natural conservatists and coastal residents to protect the District\'s shoreline from the march of Glasswater Row. As luxury resorts walled off beaches and industrial dredging scarred the tidal bays, the Accord rallied citizens around a simple principle: the peninsula\'s natural beauty belongs to all who live here.',
                 'It rejects both the extraction monopolies of the offshore shelf and the unbridled real estate sprawl that would pave the remaining salt marshes and headland walks. While it sits with the Civic Front on public regulation and scenic stewardship, it keeps its distance from the old industrial unions, insisting that genuine prosperity cannot come at the expense of a poisoned coast.',
             ],
             'agenda' => [
@@ -118,8 +118,8 @@ final class AeriePartyProfiles
             'family' => 'Techno-liberal, modernist',
             'motto' => 'Disrupt the cartels. Clear the runway for the next generation of capital.',
             'about' => [
-                'New Horizon is the political home of the District\'s quantitative trading desks, high-speed market makers, FinTech founders and venture syndicates. Impatient with the century-old dynasties of Lakebird Bank and Owl Capital, it views the District\'s economy as calcified by protected monopolies and archaic Council deference.',
-                'It advocates for ruthless competition, total digital transparency and frictionless capital mobility. While it usually caucuses with the Vanguard on low corporate taxes and open markets, it has no love for the establishment\'s cartel covenants, pushing aggressively for open-banking mandates and algorithmic deregulation.',
+                'New Horizon is the political home of the District\'s FinTech founders, venture capital and new money. Impatient with the century-old cartels and oligopolies, it views the District\'s economy as calcified by protected monopolies and archaic Council deference.',
+                'It advocates for ruthless competition, total digital transparency and frictionless capital mobility. While it usually caucuses with the Vanguard on low taxes and open markets, it has no love for the establishment\'s cartel covenants, pushing aggressively for open-banking mandates and algorithmic deregulation.',
             ],
             'agenda' => [
                 ['title' => 'Break legacy banking monopolies', 'text' => 'Enforce open APIs and dismantle statutory credit moats protecting the founding lenders.'],

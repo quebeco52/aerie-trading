@@ -17,12 +17,18 @@ export default class extends Controller {
                 this.element.querySelector('summary')?.focus();
             }
         };
+        // Turbo snapshots the page on the way out; a menu left open would come back open on Back.
+        this.closeBeforeCache = () => {
+            this.element.open = false;
+        };
         document.addEventListener('click', this.closeOnOutsideClick);
         document.addEventListener('keydown', this.closeOnEscape);
+        document.addEventListener('turbo:before-cache', this.closeBeforeCache);
     }
 
     disconnect() {
         document.removeEventListener('click', this.closeOnOutsideClick);
         document.removeEventListener('keydown', this.closeOnEscape);
+        document.removeEventListener('turbo:before-cache', this.closeBeforeCache);
     }
 }
