@@ -28,12 +28,12 @@ final class AerieDiet
     public const CHARTISTS = 'chartists';
     /** Financial populism: the retail shareholder's party, against the cartels and the technocrats who keep them. */
     public const COMMON_LOT = 'common_lot';
-    /** Small government and a global economy: the free port's own party, low taxes and open borders to trade and capital. */
-    public const FREE_PORT = 'free_port';
-    /** Big government and a closed economy: the guilds' party, the state behind the District's own trades. */
-    public const BASTION_GUILDS = 'bastion_guilds';
+    /** Nature and coastal commons: protect the foreshores, headlands, salt marshes and public parkland. */
+    public const TIDELINE = 'tideline';
+    /** New money and innovation: FinTech, quantitative trading desks and venture capital against legacy cartels. */
+    public const NEW_HORIZON = 'new_horizon';
     /** The parties in the Diet, in the order every party-keyed map is written. */
-    public const PARTIES = [self::CIVIC, self::VANGUARD, self::IRON_HARBOR, self::EXCHANGE, self::CHARTISTS, self::COMMON_LOT, self::FREE_PORT, self::BASTION_GUILDS];
+    public const PARTIES = [self::CIVIC, self::VANGUARD, self::IRON_HARBOR, self::EXCHANGE, self::CHARTISTS, self::COMMON_LOT, self::TIDELINE, self::NEW_HORIZON];
     /** Display names. */
     public const PARTY_NAMES = [
         self::CIVIC => 'Civic Front',
@@ -42,8 +42,8 @@ final class AerieDiet
         self::EXCHANGE => 'Exchange Party',
         self::CHARTISTS => 'The Chartists',
         self::COMMON_LOT => 'The Common Lot',
-        self::FREE_PORT => 'The Free Port Compact',
-        self::BASTION_GUILDS => 'The Bastion Guilds',
+        self::TIDELINE => 'The Tideline Accord',
+        self::NEW_HORIZON => 'New Horizon',
     ];
     /** Parties that never vote to remove a councillor: the Chartists are the Council's own. */
     public const COUNCIL_LOYALISTS = [self::CHARTISTS];
@@ -59,7 +59,7 @@ final class AerieDiet
     public const AXIS_COUNCIL = 'council';
     /** The axes of the policy space, in the order every position is written. */
     public const AXES = [self::AXIS_STATE, self::AXIS_OPENNESS, self::AXIS_COUNCIL];
-    /** Each party's fixed position on the axes it is defined by, where it never moves: the two big parties moderate, the others at the ends of theirs, the Free Port Compact and the Bastion Guilds on the diagonal between them. */
+    /** Each party's fixed position on the axes it is defined by, where it never moves: the two big parties moderate, the others at the ends of theirs, the Tideline Accord and New Horizon on the diagonal between them. */
     public const FIXED_POSITIONS = [
         self::CIVIC => [self::AXIS_STATE => 0.6],
         self::VANGUARD => [self::AXIS_STATE => -0.6],
@@ -67,10 +67,10 @@ final class AerieDiet
         self::EXCHANGE => [self::AXIS_OPENNESS => 0.8],
         self::CHARTISTS => [self::AXIS_COUNCIL => 0.8],
         self::COMMON_LOT => [self::AXIS_COUNCIL => -0.8],
-        self::FREE_PORT => [self::AXIS_STATE => -0.6, self::AXIS_OPENNESS => 0.6],
-        self::BASTION_GUILDS => [self::AXIS_STATE => 0.6, self::AXIS_OPENNESS => -0.6],
+        self::TIDELINE => [self::AXIS_STATE => 0.4, self::AXIS_OPENNESS => -0.2],
+        self::NEW_HORIZON => [self::AXIS_STATE => -0.5, self::AXIS_OPENNESS => 0.7],
     ];
-    /** Each party's home, where it stood at the founding and is pulled back toward between elections; openness and the Council axis run together as they do in Western Europe (Chapel Hill 2014-2024: corr +0.84), so the Chartists stand open and the Common Lot, the Harbor and the Guilds lean populist. */
+    /** Each party's home, where it stood at the founding and is pulled back toward between elections; openness and the Council axis run together as they do in Western Europe (Chapel Hill 2014-2024: corr +0.84), so the Chartists stand open and the Common Lot, the Harbor and the Accord lean populist. */
     public const HOME_POSITIONS = [
         self::CIVIC => [self::AXIS_STATE => 0.6, self::AXIS_OPENNESS => -0.1, self::AXIS_COUNCIL => -0.1],
         self::VANGUARD => [self::AXIS_STATE => -0.6, self::AXIS_OPENNESS => 0.0, self::AXIS_COUNCIL => 0.3],
@@ -78,8 +78,8 @@ final class AerieDiet
         self::EXCHANGE => [self::AXIS_STATE => 0.0, self::AXIS_OPENNESS => 0.8, self::AXIS_COUNCIL => 0.4],
         self::CHARTISTS => [self::AXIS_STATE => 0.0, self::AXIS_OPENNESS => 0.6, self::AXIS_COUNCIL => 0.8],
         self::COMMON_LOT => [self::AXIS_STATE => 0.3, self::AXIS_OPENNESS => -0.5, self::AXIS_COUNCIL => -0.8],
-        self::FREE_PORT => [self::AXIS_STATE => -0.6, self::AXIS_OPENNESS => 0.6, self::AXIS_COUNCIL => 0.3],
-        self::BASTION_GUILDS => [self::AXIS_STATE => 0.6, self::AXIS_OPENNESS => -0.6, self::AXIS_COUNCIL => 0.0],
+        self::TIDELINE => [self::AXIS_STATE => 0.4, self::AXIS_OPENNESS => -0.2, self::AXIS_COUNCIL => -0.3],
+        self::NEW_HORIZON => [self::AXIS_STATE => -0.5, self::AXIS_OPENNESS => 0.7, self::AXIS_COUNCIL => 0.3],
     ];
 
     // --- The Chamber ---
@@ -92,24 +92,24 @@ final class AerieDiet
     /** Seats at the founding. */
     public const SEED_SEATS = [
         self::CIVIC => 75.0,
-        self::VANGUARD => 80.0,
+        self::VANGUARD => 85.0,
         self::IRON_HARBOR => 35.0,
-        self::EXCHANGE => 30.0,
+        self::EXCHANGE => 35.0,
         self::CHARTISTS => 20.0,
         self::COMMON_LOT => 15.0,
-        self::FREE_PORT => 25.0,
-        self::BASTION_GUILDS => 20.0,
+        self::TIDELINE => 15.0,
+        self::NEW_HORIZON => 20.0,
     ];
     /** Vote shares at the founding, the founding seats over the Diet: each party's normal vote, the share its lasting support is pulled back toward (Converse 1966). */
     public const SEED_VOTE_SHARES = [
         self::CIVIC => 75.0 / 300.0,
-        self::VANGUARD => 80.0 / 300.0,
+        self::VANGUARD => 85.0 / 300.0,
         self::IRON_HARBOR => 35.0 / 300.0,
-        self::EXCHANGE => 30.0 / 300.0,
+        self::EXCHANGE => 35.0 / 300.0,
         self::CHARTISTS => 20.0 / 300.0,
         self::COMMON_LOT => 15.0 / 300.0,
-        self::FREE_PORT => 25.0 / 300.0,
-        self::BASTION_GUILDS => 20.0 / 300.0,
+        self::TIDELINE => 15.0 / 300.0,
+        self::NEW_HORIZON => 20.0 / 300.0,
     ];
     /** The blocs the founding Diet votes in, by the leader of each party's bloc: the parties split around the two largest (App\Service\Politics\CoalitionFormation::declareBlocs). */
     public const SEED_BLOCS = [
@@ -119,8 +119,8 @@ final class AerieDiet
         self::EXCHANGE => self::VANGUARD,
         self::CHARTISTS => self::VANGUARD,
         self::COMMON_LOT => self::CIVIC,
-        self::FREE_PORT => self::VANGUARD,
-        self::BASTION_GUILDS => self::CIVIC,
+        self::TIDELINE => self::CIVIC,
+        self::NEW_HORIZON => self::VANGUARD,
     ];
     /** The founding cabinet, 1.0 for a member: the likeliest government of the founding Diet (CoalitionFormation), the Vanguard alone, its bloc carrying it from outside. */
     public const SEED_COALITION = [
@@ -130,8 +130,8 @@ final class AerieDiet
         self::EXCHANGE => 0.0,
         self::CHARTISTS => 0.0,
         self::COMMON_LOT => 0.0,
-        self::FREE_PORT => 0.0,
-        self::BASTION_GUILDS => 0.0,
+        self::TIDELINE => 0.0,
+        self::NEW_HORIZON => 0.0,
     ];
     /** The founding cabinet's support parties, 1.0 for a supporter: the rest of the Vanguard's bloc. */
     public const SEED_SUPPORT = [
@@ -141,8 +141,8 @@ final class AerieDiet
         self::EXCHANGE => 1.0,
         self::CHARTISTS => 1.0,
         self::COMMON_LOT => 0.0,
-        self::FREE_PORT => 1.0,
-        self::BASTION_GUILDS => 0.0,
+        self::TIDELINE => 0.0,
+        self::NEW_HORIZON => 1.0,
     ];
 
     /**

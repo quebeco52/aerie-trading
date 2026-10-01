@@ -5,7 +5,7 @@
 {% block body %}
 	<div class="flex grow flex-col justify-center px-4 sm:px-6 lg:px-8 py-12">
 		<div class="sm:mx-auto sm:w-full sm:max-w-md">
-			<h1 class="text-center text-2xl font-bold tracking-tight text-on-surface">Sign in to Aerie Exchange</h1>
+			<h1 class="text-center text-2xl font-semibold tracking-tight text-on-surface">Sign in to Aerie Exchange</h1>
 			<p class="mt-2 text-center text-xs text-on-surface-variant">Access your portfolio, open orders and market analytics.</p>
 		</div>
 
@@ -46,7 +46,7 @@
 							autocomplete="current-password" required>
 					</div>
 
-					{# CRITICAL: CSRF Protection for the form #}
+					{# CSRF token for the login form. #}
 					<input type="hidden" name="_csrf_token" data-controller="csrf-protection" value="{{ csrf_token('authenticate') }}">
 
 					<button type="submit"

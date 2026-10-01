@@ -5,27 +5,32 @@
 @import "tailwindcss";
 
 @theme {
-  --color-primary: #adc6ff;
-  --color-primary-container: #4d8eff;
-  --color-secondary: #4edea3;
-  --color-tertiary: #ffb3ad;
+  /* Graphite: a neutral near-black ground, one blue accent, and plain green and red for moves.
+     The token names are Material's; secondary is the up colour and tertiary the down colour. */
+  --color-primary: #79a8ff;
+  --color-primary-container: #5b92f2;
+  --color-secondary: #3cc584;
+  --color-tertiary: #f0646b;
+  /* Caution states that are not a price move: an overbuilt industry, a cabinet that fell, a breached
+     covenant. */
+  --color-warning: #f0a33a;
 
-  --color-surface: #0b1326;
-  --color-surface-container-lowest: #060e20;
-  --color-surface-container-low: #131b2e;
-  --color-surface-container: #171f33;
-  --color-surface-container-high: #222a3d;
-  --color-surface-container-highest: #2a3348;
-  --color-surface-bright: #31394d;
+  --color-surface: #0e1013;
+  --color-surface-container-lowest: #0a0b0d;
+  --color-surface-container-low: #15171b;
+  --color-surface-container: #1a1d22;
+  --color-surface-container-high: #21252b;
+  --color-surface-container-highest: #2a2f36;
+  --color-surface-bright: #343a42;
 
-  --color-on-surface: #dae2fd;
-  --color-on-surface-variant: #c2c6d6;
-  --color-outline-variant: #424754;
+  --color-on-surface: #e8eaed;
+  --color-on-surface-variant: #a1a9b4;
+  --color-outline-variant: #3b424b;
 
   /* Text on a filled primary/secondary/tertiary surface. */
-  --color-on-primary: #001a42;
-  --color-on-secondary: #002111;
-  --color-on-tertiary: #370001;
+  --color-on-primary: #06152e;
+  --color-on-secondary: #04150c;
+  --color-on-tertiary: #2a0507;
 
   /* --- Typography ---
      Sans for chrome and prose, mono for figures — prices, tickers, table cells — where digit
@@ -34,12 +39,33 @@
   --font-body: "IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --font-mono--font-feature-settings: "tnum";
-  --font-serif: "IBM Plex Serif", Georgia, "Times New Roman", serif;
 
   /* Steps below `text-xs`, used heavily by the data tables and chart chrome. */
   --text-2xs: 0.6875rem;
   --text-3xs: 0.625rem;
   --text-4xs: 0.5625rem;
+}
+
+@layer components {
+  /* Segmented controls: chart ranges, chart styles and category filters. The selected state is
+     read from aria-pressed, so the page scripts set state and never rewrite classes. Utilities
+     outrank this layer, so a call site can still adjust padding or width. */
+  .seg-btn {
+    padding: 0.25rem 0.625rem;
+    border-radius: 0.25rem;
+    font-size: var(--text-xs);
+    line-height: var(--text-xs--line-height);
+    font-weight: 500;
+    white-space: nowrap;
+    color: var(--color-on-surface-variant);
+    cursor: pointer;
+    transition: color 150ms ease-out, background-color 150ms ease-out;
+  }
+  .seg-btn:hover { color: var(--color-on-surface); }
+  .seg-btn[aria-pressed="true"] {
+    background-color: var(--color-surface-container-highest);
+    color: var(--color-on-surface);
+  }
 }
 
 @layer utilities {

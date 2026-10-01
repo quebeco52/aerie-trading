@@ -1,6 +1,6 @@
 import { readPageData } from '../utils/page-data.js';
 import { setupChartDefaults } from '../utils/chart-config.js';
-import { THEME_COLORS } from '../utils/colors.js';
+import { THEME_COLORS, withAlpha } from '../utils/colors.js';
 import { flashTick } from '../utils/tick-flash.js';
 import { onPageLoad } from '../utils/page-init.js';
 
@@ -36,7 +36,7 @@ function drawCurve(points) {
                 label: 'Zero yield',
                 data,
                 borderColor: THEME_COLORS.primary,
-                backgroundColor: 'rgba(173, 198, 255, 0.12)',
+                backgroundColor: withAlpha(THEME_COLORS.primary, 0.12),
                 borderWidth: 2,
                 pointRadius: 3,
                 pointBackgroundColor: THEME_COLORS.primary,

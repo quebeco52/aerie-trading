@@ -1,4 +1,4 @@
-import { BRAND_COLORS, FALLBACK_PALETTE, THEME_COLORS } from '../utils/colors.js';
+import { BRAND_COLORS, FALLBACK_PALETTE, THEME_COLORS, withAlpha } from '../utils/colors.js';
 import { destroyChartInstance } from '../utils/chart-config.js';
 import { CHART_FONT_MONO } from '../utils/fonts.js';
 
@@ -61,10 +61,10 @@ export function initEtfChart(canvasId = 'etfPieChart', pieLabels = [], pieData =
                     }
                 },
                 tooltip: {
-                    backgroundColor: 'rgba(19, 27, 46, 0.9)',
-                    titleColor: '#dae2fd',
-                    bodyColor: '#c2c6d6',
-                    borderColor: '#424754',
+                    backgroundColor: withAlpha(THEME_COLORS.surfaceRaised, 0.96),
+                    titleColor: THEME_COLORS.textPrimary,
+                    bodyColor: THEME_COLORS.textMuted,
+                    borderColor: THEME_COLORS.grid,
                     borderWidth: 1,
                     padding: 12,
                     callbacks: {

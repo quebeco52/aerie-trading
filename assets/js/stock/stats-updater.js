@@ -151,7 +151,7 @@ function updateAnalystTargets(stockUpdate, newPrice) {
     const upsideEl = document.getElementById('target-upside');
     if (upsideEl && newPrice > 0) {
         const upside = ((compositeTarget - newPrice) / newPrice) * 100;
-        upsideEl.textContent = (upside >= 0 ? '+' : '') + upside.toFixed(1) + '% Implied';
+        upsideEl.textContent = (upside >= 0 ? '+' : '') + upside.toFixed(1) + '% to target';
         applyTargetTone(upsideEl, compositeTarget);
     }
 
@@ -198,37 +198,20 @@ export function updateMacroIndicators(payload) {
 
         if (infEl) infEl.textContent = (payload.macro.inflation * 100).toFixed(2) + '%';
         if (rateEl) rateEl.textContent = (payload.macro.policy_rate * 100).toFixed(2) + '%';
-        if (yieldEl) {
-            yieldEl.textContent = (payload.macro.yield_10y * 100).toFixed(2) + '%';
-            yieldEl.className = payload.macro.qe_active
-                ? 'font-bold text-emerald-400 font-mono'
-                : 'font-bold text-on-surface font-mono';
-        }
+        if (yieldEl) yieldEl.textContent = (payload.macro.yield_10y * 100).toFixed(2) + '%';
 
+        // Only the text and the tone change here; the template owns every other class.
+        const qeOn = payload.macro.qe_active && payload.macro.qe_intensity > 0.0005;
         const qeStatusEl = document.getElementById('macro-qe-status');
-        const qeContainer = document.getElementById('qe-status-container');
-        if (qeStatusEl) {
-            if (payload.macro.qe_active && payload.macro.qe_intensity > 0.0005) {
-                const suppBps = (payload.macro.qe_intensity * 10000).toFixed(0);
-                qeStatusEl.innerHTML = `<span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-3xs font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/25 shadow-sm"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span> Active (-${suppBps} bps)</span>`;
-            } else {
-                qeStatusEl.innerHTML = `<span class="inline-flex items-center px-2 py-0.5 rounded-md text-3xs font-medium bg-surface-container-highest/60 text-on-surface-variant border border-outline-variant/10">Inactive</span>`;
-            }
-        }
-        if (qeContainer) {
-            qeContainer.classList.toggle('hidden', !(payload.macro.qe_active && payload.macro.qe_intensity > 0.0005));
-        }
+        if (qeStatusEl) qeStatusEl.textContent = qeOn ? `\u2212${(payload.macro.qe_intensity * 10000).toFixed(0)} bps` : '';
+        document.getElementById('qe-status-container')?.classList.toggle('hidden', !qeOn);
 
         if (gapEl) {
             const gapVal = payload.macro.output_gap * 100;
             gapEl.textContent = gapVal.toFixed(2) + '%';
-            if (gapVal < -1.0) {
-                gapEl.className = 'text-lg font-bold text-tertiary';
-            } else if (gapVal > 1.0) {
-                gapEl.className = 'text-lg font-bold text-secondary';
-            } else {
-                gapEl.className = 'text-lg font-bold text-on-surface';
-            }
+            gapEl.classList.toggle('text-tertiary', gapVal < -1.0);
+            gapEl.classList.toggle('text-secondary', gapVal > 1.0);
+            gapEl.classList.toggle('text-on-surface', gapVal >= -1.0 && gapVal <= 1.0);
         }
 
     }

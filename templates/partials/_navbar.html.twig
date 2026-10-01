@@ -17,8 +17,8 @@
     <div class="max-w-400 mx-auto px-4 sm:px-6 lg:px-8">
         <div class="flex justify-between items-center h-14">
             <div class="flex items-center gap-8">
-                <a href="/" class="text-lg font-bold tracking-tight text-primary flex items-center gap-2">
-                    <span class="material-symbols-outlined text-xl" aria-hidden="true">monitoring</span>
+                <a href="/" class="flex items-center gap-2.5 text-base font-semibold tracking-tight text-on-surface hover:text-primary transition-colors">
+                    <img src="{{ asset('favicon.svg') }}" alt="" width="28" height="28" class="w-7 h-7">
                     <span>Aerie Exchange</span>
                 </a>
                 <div class="hidden md:flex gap-6">
@@ -35,7 +35,7 @@
                 <div class="relative hidden sm:block" data-controller="navbar-search">
                     <form action="/search" method="GET" id="search-form" role="search">
                         <label for="market-search-input" class="sr-only">Search ticker or company</label>
-                        <input id="market-search-input" name="q" type="search" placeholder="Search ticker or company..." class="bg-surface-container-lowest border border-outline-variant/25 rounded px-3 py-1 text-xs focus:ring-1 focus:ring-primary focus:border-primary w-64 text-on-surface outline-none placeholder:text-on-surface-variant/50" autocomplete="off" role="combobox" aria-expanded="false" aria-controls="search-results-dropdown" aria-autocomplete="list" data-navbar-search-target="input" data-action="input->navbar-search#onInput keydown->navbar-search#onKeyDown">
+                        <input id="market-search-input" name="q" type="search" placeholder="Search ticker or company" class="bg-surface-container-lowest border border-outline-variant/25 rounded px-3 py-1 text-xs focus:ring-1 focus:ring-primary focus:border-primary w-64 text-on-surface outline-none placeholder:text-on-surface-variant/50" autocomplete="off" role="combobox" aria-expanded="false" aria-controls="search-results-dropdown" aria-autocomplete="list" data-navbar-search-target="input" data-action="input->navbar-search#onInput keydown->navbar-search#onKeyDown">
                         <div id="search-results-dropdown" role="listbox" aria-label="Search results" data-navbar-search-target="dropdown" class="absolute left-0 mt-1 w-full bg-surface-container-high border border-outline-variant/30 rounded shadow-md hidden z-50 overflow-hidden text-xs">
                         </div>
                     </form>
@@ -63,7 +63,7 @@
                     <div class="absolute right-0 mt-3 w-64 rounded-lg border border-outline-variant/25 bg-surface-container-high shadow-lg shadow-black/40 p-2 z-50">
                         <form action="/search" method="GET" role="search" class="sm:hidden p-1 pb-2">
                             <label for="market-search-input-mobile" class="sr-only">Search ticker or company</label>
-                            <input id="market-search-input-mobile" name="q" type="search" placeholder="Search ticker or company..." class="w-full bg-surface-container-lowest border border-outline-variant/25 rounded px-3 py-1.5 text-xs text-on-surface outline-none focus:ring-1 focus:ring-primary placeholder:text-on-surface-variant/50">
+                            <input id="market-search-input-mobile" name="q" type="search" placeholder="Search ticker or company" class="w-full bg-surface-container-lowest border border-outline-variant/25 rounded px-3 py-1.5 text-xs text-on-surface outline-none focus:ring-1 focus:ring-primary placeholder:text-on-surface-variant/50">
                         </form>
                         {% for link in nav_links %}
                             {% set is_active = link.match == 'exact' ? current_path == link.href : current_path starts with link.prefix %}

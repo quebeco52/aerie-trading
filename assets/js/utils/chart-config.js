@@ -1,4 +1,4 @@
-import { THEME_COLORS } from './colors.js';
+import { THEME_COLORS, withAlpha } from './colors.js';
 import { CHART_FONT_MONO } from './fonts.js';
 
 // Identity, not a boolean: Turbo re-executes the library's <script> on navigation and the
@@ -10,7 +10,7 @@ export function setupChartDefaults() {
     if (typeof Chart === 'undefined' || configuredChart === Chart) return;
 
     Chart.defaults.color = THEME_COLORS.textMuted;
-    Chart.defaults.scale.grid.color = 'rgba(45, 52, 73, 0.4)';
+    Chart.defaults.scale.grid.color = withAlpha(THEME_COLORS.grid, 0.5);
     Chart.defaults.font.family = CHART_FONT_MONO;
     Chart.defaults.animation = false;
     Chart.defaults.animations = false;
@@ -28,7 +28,7 @@ export function setupChartDefaults() {
             if (!chartArea) return;
             ctx.save();
             ctx.font = `bold 20px ${CHART_FONT_MONO}`;
-            ctx.fillStyle = '#e2e8f0';
+            ctx.fillStyle = THEME_COLORS.textPrimary;
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
             const centerX = (chartArea.left + chartArea.right) / 2;
@@ -67,10 +67,10 @@ export function destroyChartInstance(chartInstance) {
  * Standard Chart.js tooltip configuration
  */
 export const standardTooltipConfig = {
-    backgroundColor: 'rgba(19, 27, 46, 0.95)',
-    titleColor: '#dae2fd',
-    bodyColor: '#c2c6d6',
-    borderColor: '#424754',
+    backgroundColor: withAlpha(THEME_COLORS.surfaceRaised, 0.96),
+    titleColor: THEME_COLORS.textPrimary,
+    bodyColor: THEME_COLORS.textMuted,
+    borderColor: THEME_COLORS.grid,
     borderWidth: 1,
     padding: 10,
     titleFont: { family: CHART_FONT_MONO, size: 11, weight: 'bold' },

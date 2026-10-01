@@ -13,7 +13,7 @@ class ScreenerLeaderboardPantherTest extends BasePantherTestCase
 
         $this->assertSelectorExists('input#screener-search');
         $this->assertSelectorExists('table#screener-table');
-        $this->assertSelectorTextContains('h1', 'Stock Screener');
+        $this->assertSelectorTextContains('h1', 'Stock screener');
 
         // Test search input typing
         $client->executeScript("

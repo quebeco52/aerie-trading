@@ -2,6 +2,7 @@ import { Controller } from '@hotwired/stimulus';
 import { formatLarge } from '../js/utils/formatters.js';
 import { CHART_FONT_MONO } from '../js/utils/fonts.js';
 import { readPageData } from '../js/utils/page-data.js';
+import { THEME_COLORS, withAlpha } from '../js/utils/colors.js';
 
 const formatSankeyValue = (num) => formatLarge(num, '$');
 
@@ -105,16 +106,16 @@ export default class extends Controller {
         if (!this.chart) {
             if (typeof window.echarts === 'undefined') {
                 console.error("ECharts library is not loaded.");
-                container.innerHTML = '<div class="flex items-center justify-center h-full text-center p-4 text-on-surface-variant text-sm font-serif">Chart library loading...</div>';
+                container.innerHTML = '<div class="flex items-center justify-center h-full text-center p-4 text-on-surface-variant text-sm">Loading chart…</div>';
                 return;
             }
 
             this.chart = window.echarts.init(container);
             this.chart.showLoading({
-                text: 'Loading Earnings Flow...',
-                color: '#adc6ff',
-                textColor: '#dae2fd',
-                maskColor: 'rgba(11, 19, 38, 0.8)'
+                text: 'Loading…',
+                color: THEME_COLORS.primary,
+                textColor: THEME_COLORS.textPrimary,
+                maskColor: withAlpha(THEME_COLORS.surface, 0.8)
             });
             
             try {
@@ -129,7 +130,7 @@ export default class extends Controller {
                 if (!data.nodes || data.nodes.length === 0) {
                     this.chart.dispose();
                     this.chart = null;
-                    container.innerHTML = '<div class="flex items-center justify-center h-full text-center p-4 text-on-surface-variant font-bold tracking-widest uppercase text-sm font-mono">No earnings flow data available for this asset yet.</div>';
+                    container.innerHTML = '<div class="flex items-center justify-center h-full text-center p-4 text-on-surface-variant text-sm">The earnings flow appears with the first quarterly report.</div>';
                     return;
                 }
 
@@ -137,37 +138,37 @@ export default class extends Controller {
                     tooltip: {
                         trigger: 'item',
                         triggerOn: 'mousemove',
-                        backgroundColor: 'rgba(15, 23, 42, 0.95)',
-                        borderColor: 'rgba(51, 65, 85, 0.5)',
+                        backgroundColor: withAlpha(THEME_COLORS.surfaceRaised, 0.97),
+                        borderColor: THEME_COLORS.grid,
                         borderWidth: 1,
                         padding: [12, 16],
                         textStyle: {
-                            color: '#f8fafc',
+                            color: THEME_COLORS.textPrimary,
                             fontFamily: CHART_FONT_MONO,
                             fontSize: 13
                         },
                         formatter: function (params) {
                             if (params.dataType === 'node') {
-                                let html = `<div class="font-bold text-slate-200 mb-1 tracking-wider uppercase text-xs">${params.name}</div>`;
-                                html += `<div class="font-mono text-lg font-bold text-white mb-1">${formatSankeyValue(params.value)}</div>`;
+                                let html = `<div class="font-semibold text-on-surface-variant mb-1 text-xs">${params.name}</div>`;
+                                html += `<div class="font-mono text-lg font-semibold text-on-surface mb-1">${formatSankeyValue(params.value)}</div>`;
                                 
                                 if (params.data && params.data.streamKey) {
                                     // Null is "not meaningful" — a stream with no prior quarter has
                                     // no growth rate, and printing 0.0% there read as "flat".
                                     const delta = params.data.qoq_delta;
                                     const meaningful = delta !== null && delta !== undefined;
-                                    const deltaColor = !meaningful ? '#94a3b8' : (delta >= 0 ? '#4edea3' : '#ffb3ad');
+                                    const deltaColor = !meaningful ? THEME_COLORS.textMuted : (delta >= 0 ? THEME_COLORS.positive : THEME_COLORS.negative);
                                     const deltaStr = meaningful ? `${delta >= 0 ? '+' : ''}${(delta * 100).toFixed(1)}%` : 'n/m';
-                                    html += `<div class="text-2xs font-semibold mb-2" style="color: ${deltaColor};">QoQ: ${deltaStr}</div>`;
+                                    html += `<div class="text-xs font-medium mb-2" style="color: ${deltaColor};">QoQ ${deltaStr}</div>`;
                                 }
 
                                 if (params.data && params.data.event) {
-                                    html += `<div class="text-2xs font-bold text-amber-400 bg-amber-950/40 px-2 py-1 rounded border border-amber-500/30 mb-2">⚡ ${params.data.event}</div>`;
+                                    html += `<div class="text-xs font-medium text-warning bg-warning/10 px-2 py-1 rounded border border-warning/30 mb-2">${params.data.event}</div>`;
                                 }
 
                                 if (params.data && Array.isArray(params.data.drivers) && params.data.drivers.length > 0) {
-                                    html += `<div class="mt-2 pt-2 border-t border-slate-700 space-y-1">`;
-                                    html += `<div class="text-3xs font-bold uppercase tracking-wider text-slate-400 mb-1">Key Drivers</div>`;
+                                    html += `<div class="mt-2 pt-2 border-t border-outline-variant space-y-1">`;
+                                    html += `<div class="text-xs font-semibold text-on-surface-variant mb-1">Drivers</div>`;
                                     // A measured driver carries `share`: how much higher (or lower) the stream
                                     // is than it would be with that input at its neutral reading, measured by
                                     // the model's own physics. Older reports carry only an unpriced `impact`,
@@ -175,17 +176,17 @@ export default class extends Controller {
                                     params.data.drivers.forEach(d => {
                                         const isPos = (d.direction ?? ((d.impact || 0) >= 0 ? 1 : -1)) >= 0;
                                         const tag = DRIVER_TYPE_TAGS[d.type] || DRIVER_TYPE_TAGS.company;
-                                        const colorClass = isPos ? 'text-emerald-400' : 'text-rose-400';
+                                        const colorClass = isPos ? 'text-secondary' : 'text-tertiary';
                                         const readings = Array.isArray(d.readings) ? d.readings : [];
                                         html += `<div class="flex items-center justify-between text-2xs gap-3">
-                                            <span class="text-slate-300"><span class="text-4xs uppercase tracking-wider text-slate-500">${tag}</span> ${d.label}</span>
+                                            <span class="text-on-surface"><span class="text-2xs text-on-surface-variant">${tag}</span> ${d.label}</span>
                                             <span class="font-mono font-bold ${colorClass}">${typeof d.share === 'number' ? `${d.share >= 0 ? '+' : '−'}${Math.abs(d.share * 100).toFixed(1)}% ` : ''}${strengthMeter(d.strength, isPos)}</span>
                                         </div>`;
                                         if (readings.length > 0) {
-                                            html += `<div class="text-3xs font-mono text-slate-500 pl-4">${readings.map(formatMacroReading).join('  ·  ')}</div>`;
+                                            html += `<div class="text-2xs font-mono text-on-surface-variant pl-4">${readings.map(formatMacroReading).join('  ·  ')}</div>`;
                                         } else if (d.type === 'momentum' && d.z !== undefined) {
                                             const z = Number(d.z);
-                                            html += `<div class="text-3xs font-mono text-slate-500 pl-4">Operating momentum ${z >= 0 ? '+' : '−'}${Math.abs(z).toFixed(1)}σ ${z >= 0 ? 'above' : 'below'} trend</div>`;
+                                            html += `<div class="text-2xs font-mono text-on-surface-variant pl-4">Operating momentum ${z >= 0 ? '+' : '−'}${Math.abs(z).toFixed(1)}σ ${z >= 0 ? 'above' : 'below'} trend</div>`;
                                         }
                                     });
                                     html += `</div>`;
@@ -193,7 +194,7 @@ export default class extends Controller {
 
                                 return html;
                             } else {
-                                return `<div class="text-slate-400 font-medium mb-1">${params.data.source} &rarr; ${params.data.target}</div><div class="font-mono text-lg font-bold text-white">${formatSankeyValue(params.value)}</div>`;
+                                return `<div class="text-on-surface-variant font-medium mb-1">${params.data.source} &rarr; ${params.data.target}</div><div class="font-mono text-lg font-semibold text-on-surface">${formatSankeyValue(params.value)}</div>`;
                             }
                         }
                     },
@@ -218,7 +219,7 @@ export default class extends Controller {
                                 opacity: 0.45
                             },
                             label: {
-                                color: '#e2e8f0',
+                                color: THEME_COLORS.textPrimary,
                                 fontFamily: CHART_FONT_MONO,
                                 fontSize: 12,
                                 fontWeight: 'bold',

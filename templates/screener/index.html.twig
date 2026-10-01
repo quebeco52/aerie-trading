@@ -3,48 +3,33 @@
 {% block title %}Stock Screener | Aerie Exchange{% endblock %}
 
 {% block body %}
-<div class="max-w-400 mx-auto px-4 sm:px-6 lg:px-8 py-5 w-full space-y-5" data-controller="screener">
+<div class="max-w-400 mx-auto px-4 sm:px-6 lg:px-8 pt-8 pb-12 w-full space-y-5" data-controller="screener">
 
-    {# Hero Section #}
-    <div class="bg-surface-container-low rounded-lg p-5 md:p-6 border border-outline-variant/25">
-        <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-            <div>
-                <div class="flex items-center gap-2 mb-2">
-                    <span class="text-2xs font-semibold tracking-wide text-primary uppercase">Market Intelligence</span>
-                </div>
-                <h1 class="text-2xl md:text-3xl font-bold text-on-surface tracking-tight">Stock Screener</h1>
-                <p class="text-xs text-on-surface-variant mt-1">Filter, sort, and analyze corporate fundamentals across the entire exchange.</p>
-            </div>
-
-            <div class="w-full md:w-72">
-                <div class="relative">
-                    <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-base">search</span>
-                    <input type="text" id="screener-search" placeholder="Filter ticker or name..." class="w-full bg-surface-container-lowest border border-outline-variant/25 rounded pl-9 pr-3 py-1.5 text-xs font-mono text-on-surface focus:ring-1 focus:ring-primary outline-none placeholder:text-on-surface-variant/50" data-screener-target="searchInput" data-action="input->screener#onSearch">
-                </div>
-            </div>
+    <header class="flex flex-col md:flex-row md:items-end justify-between gap-4 pb-5 border-b border-outline-variant/15">
+        <div>
+            <h1 class="text-2xl md:text-3xl font-semibold text-on-surface tracking-tight">Stock screener</h1>
+            <p class="mt-1.5 text-sm text-on-surface-variant">Every listing on the exchange with its latest fundamentals. Select a column to sort.</p>
         </div>
-    </div>
+        <div class="w-full md:w-72">
+            <label for="screener-search" class="sr-only">Filter by ticker or name</label>
+            <input type="search" id="screener-search" placeholder="Filter by ticker or name" class="w-full bg-surface-container-lowest border border-outline-variant/25 rounded px-3 py-1.5 text-sm text-on-surface focus:border-primary/60 outline-none placeholder:text-on-surface-variant/60" data-screener-target="searchInput" data-action="input->screener#onSearch">
+        </div>
+    </header>
 
-    {# Sector Filter Pills #}
-    <div class="flex items-center gap-2 overflow-x-auto pb-1 custom-scrollbar" id="sector-filters">
-        <button class="sector-filter-btn px-3 py-1 rounded text-xs font-bold transition-all bg-primary text-on-primary whitespace-nowrap cursor-pointer uppercase tracking-wider" data-sector="ALL" data-screener-target="sectorBtn" data-action="click->screener#filterSector">
-            All Sectors
-        </button>
-        {% set sectors = [] %}
-        {% for stock in stocks %}
-            {% if stock.sector and stock.sector not in sectors %}
-                {% set sectors = sectors|merge([stock.sector]) %}
-            {% endif %}
-        {% endfor %}
+    {% set sectors = [] %}
+    {% for stock in stocks %}
+        {% if stock.sector and stock.sector not in sectors %}
+            {% set sectors = sectors|merge([stock.sector]) %}
+        {% endif %}
+    {% endfor %}
+    <div class="flex items-center gap-1 overflow-x-auto pb-1 custom-scrollbar" id="sector-filters" role="group" aria-label="Filter by sector">
+        <button type="button" class="sector-filter-btn seg-btn" aria-pressed="true" data-sector="ALL" data-screener-target="sectorBtn" data-action="click->screener#filterSector">All sectors</button>
         {% for sec in sectors|sort %}
-            <button class="sector-filter-btn px-3 py-1 rounded text-xs font-bold transition-all bg-surface-container text-on-surface-variant hover:bg-surface-container-high border border-outline-variant/20 whitespace-nowrap cursor-pointer uppercase tracking-wider" data-sector="{{ sec }}" data-screener-target="sectorBtn" data-action="click->screener#filterSector">
-                {{ sec }}
-            </button>
+            <button type="button" class="sector-filter-btn seg-btn" aria-pressed="false" data-sector="{{ sec }}" data-screener-target="sectorBtn" data-action="click->screener#filterSector">{{ sec }}</button>
         {% endfor %}
     </div>
 
-    {# Screener Table #}
-    <div class="bg-surface-container-low border border-outline-variant/25 rounded-lg overflow-hidden">
+    <div class="bg-surface-container-low border border-outline-variant/20 rounded-lg overflow-hidden">
         <div class="overflow-x-auto">
             <table class="w-full text-left border-collapse min-w-225" id="screener-table">
                 <thead>
@@ -53,15 +38,15 @@
                         <th scope="col" class="px-4 py-3 cursor-pointer select-none hover:text-primary transition-colors" data-col="name" role="columnheader" aria-sort="none" tabindex="0" data-screener-target="header" data-action="click->screener#sort">Company</th>
                         <th scope="col" class="px-4 py-3 cursor-pointer select-none hover:text-primary transition-colors" data-col="sector" role="columnheader" aria-sort="none" tabindex="0" data-screener-target="header" data-action="click->screener#sort">Sector</th>
                         <th scope="col" class="px-4 py-3 text-right cursor-pointer select-none hover:text-primary transition-colors" data-col="price" role="columnheader" aria-sort="none" tabindex="0" data-screener-target="header" data-action="click->screener#sort">Price</th>
-                        <th scope="col" class="px-4 py-3 text-right cursor-pointer select-none hover:text-primary transition-colors" data-col="mcap" role="columnheader" aria-sort="none" tabindex="0" data-screener-target="header" data-action="click->screener#sort">Market Cap</th>
+                        <th scope="col" class="px-4 py-3 text-right cursor-pointer select-none hover:text-primary transition-colors" data-col="mcap" role="columnheader" aria-sort="none" tabindex="0" data-screener-target="header" data-action="click->screener#sort">Market cap</th>
                         <th scope="col" class="px-4 py-3 text-right cursor-pointer select-none hover:text-primary transition-colors" data-col="pe" role="columnheader" aria-sort="none" tabindex="0" data-screener-target="header" data-action="click->screener#sort">P/E</th>
                         <th scope="col" class="px-4 py-3 text-right cursor-pointer select-none hover:text-primary transition-colors" data-col="eps" role="columnheader" aria-sort="none" tabindex="0" data-screener-target="header" data-action="click->screener#sort">EPS</th>
                         <th scope="col" class="px-4 py-3 text-right cursor-pointer select-none hover:text-primary transition-colors" data-col="roic" role="columnheader" aria-sort="none" tabindex="0" data-screener-target="header" data-action="click->screener#sort">ROIC</th>
                         <th scope="col" class="px-4 py-3 text-right cursor-pointer select-none hover:text-primary transition-colors" data-col="equity" role="columnheader" aria-sort="none" tabindex="0" data-screener-target="header" data-action="click->screener#sort">Equity</th>
                         <th scope="col" class="px-4 py-3 text-right cursor-pointer select-none hover:text-primary transition-colors" data-col="de" role="columnheader" aria-sort="none" tabindex="0" data-screener-target="header" data-action="click->screener#sort">D/E</th>
                         <th scope="col" class="px-4 py-3 text-right cursor-pointer select-none hover:text-primary transition-colors" data-col="ndebt" role="columnheader" aria-sort="none" tabindex="0" data-screener-target="header" data-action="click->screener#sort" title="Net debt over annualized EBITDA">ND/EBITDA</th>
-                        <th scope="col" class="px-4 py-3 text-right cursor-pointer select-none hover:text-primary transition-colors" data-col="fcfconv" role="columnheader" aria-sort="none" tabindex="0" data-screener-target="header" data-action="click->screener#sort" title="Free cash flow over trailing net income">FCF Conv.</th>
-                        <th class="px-5 py-3 text-right">Action</th>
+                        <th scope="col" class="px-4 py-3 text-right cursor-pointer select-none hover:text-primary transition-colors" data-col="fcfconv" role="columnheader" aria-sort="none" tabindex="0" data-screener-target="header" data-action="click->screener#sort" title="Free cash flow over trailing net income">FCF conv.</th>
+                        <th class="px-5 py-3"><span class="sr-only">Open</span></th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-outline-variant/10 text-xs sm:text-sm" id="screener-tbody" data-screener-target="tbody">
@@ -71,13 +56,13 @@
                                 <div class="flex items-center gap-2">
                                     <a href="/stock/{{ stock.ticker }}" class="font-bold text-primary font-mono group-hover:underline outline-none after:absolute after:inset-0 after:content-[''] focus-visible:underline focus-visible:underline-offset-4">{{ stock.ticker }}</a>
                                     {% if stock.isBankrupt %}
-                                        <span class="relative z-10 px-1.5 py-0.2 rounded bg-tertiary/10 text-tertiary text-4xs font-bold border border-tertiary/25 uppercase tracking-wide">Bankrupt</span>
+                                        <span class="relative z-10 px-1.5 py-0.5 rounded bg-tertiary/10 text-tertiary text-2xs font-medium border border-tertiary/25">Bankrupt</span>
                                     {% endif %}
                                 </div>
                             </th>
-                            <td class="px-4 py-2.5 font-bold text-on-surface max-w-55 truncate" data-value="{{ stock.name }}">{{ stock.name }}</td>
+                            <td class="px-4 py-2.5 font-medium text-on-surface max-w-55 truncate" data-value="{{ stock.name }}">{{ stock.name }}</td>
                             <td class="px-4 py-2.5 text-on-surface-variant text-xs" data-value="{{ stock.sector }}">
-                                <span class="px-2 py-0.5 rounded bg-surface-container text-on-surface-variant text-xs font-mono border border-outline-variant/15">{{ stock.sector }}</span>
+                                {{ stock.sector }}
                             </td>
                             <td class="px-4 py-2.5 font-mono tabular-nums text-right font-bold {{ stock.isBankrupt ? 'text-tertiary line-through' : 'text-on-surface' }}" data-value="{{ stock.isBankrupt ? 0 : stock.price }}">${{ (stock.isBankrupt ? 0.00 : stock.price)|number_format(2) }}</td>
                             <td class="px-4 py-2.5 font-mono tabular-nums text-right text-on-surface" data-value="{{ stock.isBankrupt ? 0 : stock.marketCap }}">{{ stock.isBankrupt ? '$0.00' : stock.marketCap|format_large('$') }}</td>
@@ -99,14 +84,12 @@
                                 {{ stock.fcfConversion is not null ? (stock.fcfConversion * 100)|number_format(0) ~ '%' : '-' }}
                             </td>
                             <td class="px-5 py-2.5 text-right">
-                                <a href="/stock/{{ stock.ticker }}" class="relative z-10 inline-flex items-center px-2.5 py-0.5 rounded bg-surface-container hover:bg-primary/20 text-primary border border-primary/20 text-xs font-semibold transition-colors">
-                                    View
-                                </a>
+                                <span class="material-symbols-outlined text-base leading-none text-on-surface-variant group-hover:text-primary transition-colors" aria-hidden="true">chevron_right</span>
                             </td>
                         </tr>
                     {% else %}
                         <tr>
-                            <td colspan="11" class="px-6 py-10 text-center text-on-surface-variant text-xs">No stocks available in the market.</td>
+                            <td colspan="13" class="px-6 py-10 text-center text-on-surface-variant text-sm">No companies are listed yet.</td>
                         </tr>
                     {% endfor %}
                 </tbody>

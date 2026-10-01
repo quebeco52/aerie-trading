@@ -106,7 +106,7 @@ export default class extends Controller {
         const price = this.effectivePrice;
 
         if (this.hasEstimateLabelTarget) {
-            this.estimateLabelTarget.textContent = this.isBuySide ? 'Estimated Cost' : 'Estimated Proceeds';
+            this.estimateLabelTarget.textContent = this.isBuySide ? 'Estimated cost' : 'Estimated proceeds';
         }
 
         if (!Number.isFinite(quantity) || quantity <= 0 || !Number.isFinite(price)) {

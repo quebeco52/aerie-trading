@@ -9,7 +9,7 @@
 
 {% if not optionsListed %}
 	<div class="p-5 rounded-lg bg-surface-container-lowest border border-outline-variant/20">
-		<h3 class="text-sm font-bold text-on-surface mb-1.5">No listed contracts</h3>
+		<h3 class="text-sm font-semibold text-on-surface mb-1.5">No listed contracts</h3>
 		<p class="text-xs text-on-surface-variant leading-relaxed">{{ optionsReason }}</p>
 	</div>
 {% else %}
@@ -17,15 +17,15 @@
 	{# ---- What the desk is carrying ---- #}
 	<div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
 		<div class="p-4 rounded-lg bg-surface-container-lowest border border-outline-variant/20">
-			<div class="text-2xs uppercase tracking-wide font-semibold text-on-surface-variant mb-1">Open Interest</div>
-			<div class="font-mono tabular-nums text-xl font-bold text-on-surface">{{ optionOpenInterest|number_format(0) }}</div>
+			<div class="text-xs text-on-surface-variant mb-1">Open interest</div>
+			<div class="font-mono tabular-nums text-xl font-semibold text-on-surface">{{ optionOpenInterest|number_format(0) }}</div>
 			<p class="text-3xs text-on-surface-variant/70 mt-1">contracts &middot; {{ optionMultiplier }} shares each</p>
 		</div>
 
 		<div class="p-4 rounded-lg bg-surface-container-lowest border border-outline-variant/20 sm:col-span-2">
-			<div class="text-2xs uppercase tracking-wide font-semibold text-on-surface-variant mb-1">Dealer Gamma</div>
+			<div class="text-xs text-on-surface-variant mb-1">Dealer gamma</div>
 			<div class="flex items-baseline gap-2">
-				<span class="font-mono tabular-nums text-xl font-bold {{ optionDealerGammaPerPercent > 0 ? 'text-tertiary' : (optionDealerGammaPerPercent < 0 ? 'text-secondary' : 'text-on-surface') }}">
+				<span class="font-mono tabular-nums text-xl font-semibold {{ optionDealerGammaPerPercent > 0 ? 'text-tertiary' : (optionDealerGammaPerPercent < 0 ? 'text-secondary' : 'text-on-surface') }}">
 					{{ optionDealerGammaPerPercent > 0 ? '+' : '' }}{{ optionDealerGammaPerPercent|format_large }}
 				</span>
 				<span class="text-2xs text-on-surface-variant">shares per 1% move</span>
@@ -46,9 +46,9 @@
 	{% for expiry in optionExpiries %}
 		<div class="rounded-lg bg-surface-container-lowest border border-outline-variant/20 overflow-hidden">
 			<div class="px-4 py-2.5 flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border-b border-outline-variant/20 bg-surface-container-low">
-				<h3 class="text-sm font-bold text-on-surface">
-					Expiry Y{{ expiry.expiresAtTime|number_format(2) }}
-					<span class="ml-2 text-2xs font-normal text-on-surface-variant">{{ expiry.daysToExpiry|number_format(0) }} days</span>
+				<h3 class="text-sm font-semibold text-on-surface">
+					Expires {{ expiry.expiresAtTime|sim_date }}
+					<span class="ml-2 text-xs font-normal text-on-surface-variant">{{ expiry.daysToExpiry|number_format(0) }} days</span>
 				</h3>
 				{% if expiry.atmVolatility is not null %}
 					<div class="text-2xs text-on-surface-variant">

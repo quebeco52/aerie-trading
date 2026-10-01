@@ -167,10 +167,10 @@ class EventPresenter
             'type' => $type,
             'category' => 'shock',
             'badge' => 'MARKET SHOCK',
-            'badgeClass' => $isPositive ? 'bg-amber-500/10 text-amber-300 border-amber-500/30' : 'bg-tertiary/10 text-tertiary border-tertiary/30',
-            'borderClass' => $isPositive ? 'border-l-amber-400' : 'border-l-tertiary',
+            'badgeClass' => $isPositive ? 'bg-warning/10 text-warning border-warning/30' : 'bg-tertiary/10 text-tertiary border-tertiary/30',
+            'borderClass' => $isPositive ? 'border-l-warning' : 'border-l-tertiary',
             'icon' => 'bolt',
-            'iconClass' => $isPositive ? 'bg-amber-500/15 text-amber-300' : 'bg-tertiary/15 text-tertiary',
+            'iconClass' => $isPositive ? 'bg-warning/15 text-warning' : 'bg-tertiary/15 text-tertiary',
             'isEarnings' => false,
             'headline' => $headline,
             'pills' => [],
@@ -193,10 +193,10 @@ class EventPresenter
             'type' => $type,
             'category' => 'split',
             'badge' => $badge,
-            'badgeClass' => 'bg-purple-500/10 text-purple-300 border-purple-500/30',
-            'borderClass' => 'border-l-purple-400',
+            'badgeClass' => 'bg-surface-container-high text-on-surface-variant border-outline-variant/40',
+            'borderClass' => 'border-l-outline-variant',
             'icon' => 'call_split',
-            'iconClass' => 'bg-purple-500/15 text-purple-300',
+            'iconClass' => 'bg-surface-container-high text-on-surface-variant',
             'isEarnings' => false,
             'headline' => $headline,
             'pills' => [],
@@ -248,10 +248,10 @@ class EventPresenter
             'type' => $type,
             'category' => 'mna',
             'badge' => $type,
-            'badgeClass' => 'bg-cyan-500/10 text-cyan-300 border-cyan-500/30',
-            'borderClass' => 'border-l-cyan-400',
+            'badgeClass' => 'bg-primary/10 text-primary border-primary/30',
+            'borderClass' => 'border-l-primary',
             'icon' => $type === 'DIVESTITURE' ? 'domain_disabled' : 'domain_add',
-            'iconClass' => 'bg-cyan-500/15 text-cyan-300',
+            'iconClass' => 'bg-primary/15 text-primary',
             'isEarnings' => false,
             'headline' => !empty($rawDesc) ? $rawDesc : 'Corporate restructuring announcement.',
             'pills' => [],
@@ -303,11 +303,11 @@ class EventPresenter
             'category' => 'district',
             'badge' => $evicted ? 'STREET EVICTION' : 'STREET PROMOTION',
             'badgeClass' => $evicted
-                ? 'bg-amber-500/15 text-amber-300 border-amber-500/40'
+                ? 'bg-warning/15 text-warning border-warning/40'
                 : 'bg-primary/15 text-primary border-primary/40',
-            'borderClass' => $evicted ? 'border-l-amber-500' : 'border-l-primary',
+            'borderClass' => $evicted ? 'border-l-warning' : 'border-l-primary',
             'icon' => 'location_city',
-            'iconClass' => $evicted ? 'bg-amber-500/20 text-amber-300' : 'bg-primary/20 text-primary',
+            'iconClass' => $evicted ? 'bg-warning/20 text-warning' : 'bg-primary/20 text-primary',
             'isEarnings' => false,
             'headline' => !empty($rawDesc) ? $rawDesc : 'Glasswater Row roster reconstituted.',
             'pills' => [],
@@ -387,11 +387,11 @@ class EventPresenter
             'category' => 'governance',
             'badge' => $dismissed ? 'BOARD REMOVAL' : 'MANAGEMENT CHANGE',
             'badgeClass' => $dismissed
-                ? 'bg-amber-500/15 text-amber-300 border-amber-500/40'
+                ? 'bg-warning/15 text-warning border-warning/40'
                 : 'bg-surface-container-high text-on-surface-variant border-outline-variant/30',
-            'borderClass' => $dismissed ? 'border-l-amber-500' : 'border-l-primary',
+            'borderClass' => $dismissed ? 'border-l-warning' : 'border-l-primary',
             'icon' => $dismissed ? 'gavel' : 'badge',
-            'iconClass' => $dismissed ? 'bg-amber-500/20 text-amber-300' : 'bg-primary/10 text-primary',
+            'iconClass' => $dismissed ? 'bg-warning/20 text-warning' : 'bg-primary/10 text-primary',
             'isEarnings' => false,
             'headline' => !empty($rawDesc) ? $rawDesc : 'The company named new management.',
             'pills' => [],
@@ -408,10 +408,10 @@ class EventPresenter
             'type' => $type,
             'category' => 'reorganization',
             'badge' => 'CHAPTER 11',
-            'badgeClass' => 'bg-amber-500/15 text-amber-300 border-amber-500/40',
-            'borderClass' => 'border-l-amber-500',
+            'badgeClass' => 'bg-warning/15 text-warning border-warning/40',
+            'borderClass' => 'border-l-warning',
             'icon' => 'balance',
-            'iconClass' => 'bg-amber-500/20 text-amber-300',
+            'iconClass' => 'bg-warning/20 text-warning',
             'isEarnings' => false,
             'headline' => !empty($rawDesc) ? $rawDesc : 'Confirmed a Chapter 11 plan of reorganization.',
             'pills' => [],
@@ -427,10 +427,10 @@ class EventPresenter
             'type' => $type,
             'category' => 'bankruptcy',
             'badge' => 'BANKRUPTCY',
-            'badgeClass' => 'bg-red-500/15 text-red-400 border-red-500/40',
-            'borderClass' => 'border-l-red-500',
+            'badgeClass' => 'bg-tertiary/15 text-tertiary border-tertiary/40',
+            'borderClass' => 'border-l-tertiary',
             'icon' => 'gavel',
-            'iconClass' => 'bg-red-500/20 text-red-400',
+            'iconClass' => 'bg-tertiary/20 text-tertiary',
             'isEarnings' => false,
             'headline' => !empty($rawDesc) ? $rawDesc : 'Filed for Chapter 7 bankruptcy liquidation.',
             'pills' => [],
@@ -499,7 +499,7 @@ class EventPresenter
                     'icon' => 'payments',
                     'label' => 'Dividend',
                     'text' => $divText,
-                    'pillClass' => 'bg-emerald-500/10 text-emerald-300 border-emerald-500/25',
+                    'pillClass' => 'bg-secondary/10 text-secondary border-secondary/25',
                 ];
                 continue;
             }
@@ -514,7 +514,7 @@ class EventPresenter
                     'icon' => 'published_with_changes',
                     'label' => 'Buyback',
                     'text' => "Repurchased {$formattedCount} shares",
-                    'pillClass' => 'bg-cyan-500/10 text-cyan-300 border-cyan-500/25',
+                    'pillClass' => 'bg-primary/10 text-primary border-primary/25',
                 ];
                 continue;
             }
@@ -528,7 +528,7 @@ class EventPresenter
                     'icon' => 'receipt_long',
                     'label' => 'Bonds',
                     'text' => "Issued {$amount} bonds{$purpose}",
-                    'pillClass' => 'bg-amber-500/10 text-amber-300 border-amber-500/25',
+                    'pillClass' => 'bg-warning/10 text-warning border-warning/25',
                 ];
                 continue;
             }

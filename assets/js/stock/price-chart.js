@@ -1,4 +1,7 @@
-import { THEME_COLORS } from '../utils/colors.js';
+import { THEME_COLORS, withAlpha } from '../utils/colors.js';
+
+const VOLUME_UP = withAlpha(THEME_COLORS.positive, 0.35);
+const VOLUME_DOWN = withAlpha(THEME_COLORS.negative, 0.35);
 import { CHART_FONT_MONO } from '../utils/fonts.js';
 import { fillTickGaps } from '../utils/tick-gaps.js';
 
@@ -100,8 +103,8 @@ export function initPriceChart(container, ticker, ticksPerYear = 54000) {
 
     areaSeries = lwChart.addSeries(LightweightCharts.AreaSeries, {
         lineColor: THEME_COLORS.positive,
-        topColor: 'rgba(78, 222, 163, 0.4)',
-        bottomColor: 'rgba(78, 222, 163, 0.0)',
+        topColor: withAlpha(THEME_COLORS.positive, 0.3),
+        bottomColor: withAlpha(THEME_COLORS.positive, 0),
         lineWidth: 2,
         priceFormat: { type: 'price', precision: 2, minMove: 0.01 }
     });
@@ -123,7 +126,7 @@ export function initPriceChart(container, ticker, ticksPerYear = 54000) {
     volumeSeries = lwChart.addSeries(LightweightCharts.HistogramSeries, {
         priceFormat: { type: 'volume' },
         priceScaleId: 'volume',
-        color: 'rgba(173, 198, 255, 0.35)'
+        color: withAlpha(THEME_COLORS.textMuted, 0.3)
     });
     lwChart.priceScale('volume').applyOptions({
         scaleMargins: { top: 0.82, bottom: 0.0 }
@@ -167,9 +170,7 @@ export async function loadPriceHistory(range) {
     }
 
     document.querySelectorAll('.range-btn').forEach(btn => {
-        btn.className = btn.dataset.range === range
-            ? 'range-btn px-4 py-1.5 text-xs font-bold rounded-md bg-primary text-on-primary shadow-lg shadow-primary/20 transition-colors'
-            : 'range-btn px-4 py-1.5 text-xs font-bold rounded-md bg-surface-container text-on-surface-variant hover:bg-surface-container-high transition-colors';
+        btn.setAttribute('aria-pressed', btn.dataset.range === range ? 'true' : 'false');
     });
 
     try {
@@ -211,7 +212,7 @@ export async function loadPriceHistory(range) {
                 volumeData.push({
                     time,
                     value: parseFloat(d.volume),
-                    color: close >= open ? 'rgba(78, 222, 163, 0.35)' : 'rgba(255, 179, 173, 0.35)'
+                    color: close >= open ? VOLUME_UP : VOLUME_DOWN
                 });
             }
         });
@@ -362,7 +363,7 @@ function updateLivePricePoint(newPrice, volume = 0) {
         const volumePoint = {
             time: lastBar.time,
             value: lastBar.volume,
-            color: lastBar.close >= lastBar.open ? 'rgba(78, 222, 163, 0.35)' : 'rgba(255, 179, 173, 0.35)'
+            color: lastBar.close >= lastBar.open ? VOLUME_UP : VOLUME_DOWN
         };
         volumeSeries.update(volumePoint);
 
@@ -416,11 +417,7 @@ export function setChartStyle(style) {
     if (candleSeries) candleSeries.applyOptions({ visible: chartStyle === 'candles' });
 
     document.querySelectorAll('.chart-style-btn').forEach(btn => {
-        const active = btn.dataset.style === chartStyle;
-        btn.classList.toggle('bg-primary', active);
-        btn.classList.toggle('text-on-primary', active);
-        btn.classList.toggle('bg-surface-container', !active);
-        btn.classList.toggle('text-on-surface-variant', !active);
+        btn.setAttribute('aria-pressed', btn.dataset.style === chartStyle ? 'true' : 'false');
     });
 
     // The two renderings are served on different bar grids and the time scale is shared by every series,

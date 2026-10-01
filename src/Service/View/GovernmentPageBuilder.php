@@ -39,8 +39,8 @@ class GovernmentPageBuilder
         AerieDiet::EXCHANGE => '#0d9488',
         AerieDiet::CHARTISTS => '#7c3aed',
         AerieDiet::COMMON_LOT => '#d97706',
-        AerieDiet::FREE_PORT => '#16a34a',
-        AerieDiet::BASTION_GUILDS => '#db2777',
+        AerieDiet::TIDELINE => '#059669',
+        AerieDiet::NEW_HORIZON => '#d946ef',
     ];
 
     // --- Party Labels ---
@@ -52,8 +52,8 @@ class GovernmentPageBuilder
         AerieDiet::EXCHANGE => 'Exchange',
         AerieDiet::CHARTISTS => 'Chartists',
         AerieDiet::COMMON_LOT => 'Common Lot',
-        AerieDiet::FREE_PORT => 'Free Port',
-        AerieDiet::BASTION_GUILDS => 'Bastion Guilds',
+        AerieDiet::TIDELINE => 'Tideline',
+        AerieDiet::NEW_HORIZON => 'New Horizon',
     ];
 
     // --- Hemicycle Geometry ---

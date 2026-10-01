@@ -187,9 +187,6 @@ function setupFinancialTimeframeButtons() {
     document.querySelectorAll('[data-financial-timeframe]').forEach(btn => {
         btn.addEventListener('click', () => {
             updateFundamentalCharts(btn.dataset.financialTimeframe, rawReports, currentContext);
-            document.querySelectorAll('[data-financial-timeframe]').forEach(b => {
-                b.setAttribute('aria-pressed', b === btn ? 'true' : 'false');
-            });
         });
     });
 }

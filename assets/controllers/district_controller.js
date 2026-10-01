@@ -1,6 +1,7 @@
 import { Controller } from '@hotwired/stimulus';
 import { formatLarge, formatCurrency, formatPercent } from '../js/utils/formatters.js';
 import { setText } from '../js/utils/set-text.js';
+import { THEME_COLORS } from '../js/utils/colors.js';
 
 /** SVG namespace — segment sparklines are built element by element, not parsed from markup. */
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -142,13 +143,11 @@ function sparklinePoints(series, left, top, width, height) {
 }
 
 const EVENT_COLORS = {
-    primary: '#adc6ff',
-    secondary: '#4edea3',
-    tertiary: '#ffb3ad',
-    amber: '#f5b955',
-    purple: '#c9a6ff',
-    cyan: '#7dd8e8',
-    red500: '#f36a6a',
+    primary: THEME_COLORS.primary,
+    secondary: THEME_COLORS.positive,
+    tertiary: THEME_COLORS.negative,
+    warning: THEME_COLORS.warning,
+    'outline-variant': THEME_COLORS.textMuted,
 };
 
 /**
@@ -158,9 +157,8 @@ const EVENT_COLORS = {
  * to card lives only in App\Service\Event\EventCategory.
  */
 function flareColor(card) {
-    const tone = /border-l-(primary|secondary|tertiary|amber|purple|cyan|red)/.exec(card.borderClass || '');
-    if (!tone) return EVENT_COLORS.primary;
-    return tone[1] === 'red' ? EVENT_COLORS.red500 : EVENT_COLORS[tone[1]];
+    const tone = /border-l-(primary|secondary|tertiary|warning|outline-variant)/.exec(card.borderClass || '');
+    return tone ? EVENT_COLORS[tone[1]] : EVENT_COLORS.primary;
 }
 
 /** Client-clock timestamp, matching how assets/js/stock/events-feed.js stamps live events that carry none of their own. */
@@ -387,7 +385,7 @@ export default class extends Controller {
                 this.quickTradeSubmitTarget.disabled = false;
                 this.quickTradeSubmitTarget.classList.remove('opacity-50', 'pointer-events-none');
                 const span = this.quickTradeSubmitTarget.querySelector('span:last-child');
-                if (span) span.textContent = 'Execute Order';
+                if (span) span.textContent = 'Place order';
             }
         };
         document.addEventListener('turbo:submit-end', this.onSubmitEnd);
@@ -526,7 +524,7 @@ export default class extends Controller {
                 const type = holding.isShort ? 'SHORT' : 'LONG';
                 const shares = Number(holding.quantity).toLocaleString();
                 this.tooltipPositionTarget.textContent = `YOU HOLD: ${type} ${shares} SHS`;
-                this.tooltipPositionTarget.setAttribute('fill', holding.isShort ? '#ffd9a0' : '#4edea3');
+                this.tooltipPositionTarget.setAttribute('fill', holding.isShort ? THEME_COLORS.warning : THEME_COLORS.positive);
             } else {
                 this.tooltipPositionTarget.textContent = '';
             }
@@ -792,7 +790,7 @@ export default class extends Controller {
             if (holding) {
                 const isShort = Boolean(holding.isShort);
                 this.quickTradeHoldingTarget.textContent = `${isShort ? 'Short' : 'Long'} ${holding.quantity.toLocaleString()} shs`;
-                this.quickTradeHoldingTarget.className = `text-3xs font-mono font-semibold ${isShort ? 'text-amber-400' : 'text-secondary'}`;
+                this.quickTradeHoldingTarget.className = `text-3xs font-mono font-semibold ${isShort ? 'text-warning' : 'text-secondary'}`;
             } else {
                 this.quickTradeHoldingTarget.textContent = '0 shs';
                 this.quickTradeHoldingTarget.className = 'text-3xs font-mono font-semibold text-on-surface-variant/50';
@@ -846,7 +844,7 @@ export default class extends Controller {
             this.quickTradeSubmitTarget.disabled = true;
             this.quickTradeSubmitTarget.classList.add('opacity-50', 'pointer-events-none');
             const span = this.quickTradeSubmitTarget.querySelector('span:last-child');
-            if (span) span.textContent = 'Executing...';
+            if (span) span.textContent = 'Placing…';
         }
     }
 
@@ -1097,8 +1095,8 @@ export default class extends Controller {
         if (evt.iconClass) {
             iconWrap.className += ' ' + evt.iconClass;
         } else {
-            iconWrap.style.backgroundColor = (evt.color || '#adc6ff') + '26';
-            icon.style.color = evt.color || '#adc6ff';
+            iconWrap.style.backgroundColor = (evt.color || THEME_COLORS.primary) + '26';
+            icon.style.color = evt.color || THEME_COLORS.primary;
         }
         card.appendChild(iconWrap);
 
@@ -1114,9 +1112,9 @@ export default class extends Controller {
         if (evt.badgeClass) {
             badge.className += ' ' + evt.badgeClass;
         } else {
-            badge.style.color = evt.color || '#adc6ff';
-            badge.style.borderColor = (evt.color || '#adc6ff') + '55';
-            badge.style.backgroundColor = (evt.color || '#adc6ff') + '1a';
+            badge.style.color = evt.color || THEME_COLORS.primary;
+            badge.style.borderColor = (evt.color || THEME_COLORS.primary) + '55';
+            badge.style.backgroundColor = (evt.color || THEME_COLORS.primary) + '1a';
         }
         header.appendChild(badge);
 
@@ -1288,7 +1286,7 @@ export default class extends Controller {
             const eventLine = document.createElement('div');
             eventLine.className = 'pl-3 mb-1';
             const eventBadge = document.createElement('span');
-            eventBadge.className = 'text-3xs font-bold uppercase tracking-wider text-amber-400 bg-amber-950/40 px-1.5 py-0.5 rounded border border-amber-500/30';
+            eventBadge.className = 'text-2xs font-medium text-warning bg-warning/10 px-1.5 py-0.5 rounded border border-warning/30';
             eventBadge.textContent = stream.event;
             eventLine.appendChild(eventBadge);
             row.appendChild(eventLine);

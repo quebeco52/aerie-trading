@@ -9,6 +9,7 @@ use App\Entity\User;
 use App\Service\Event\EventPresenter;
 use App\Twig\Extension\EventExtension;
 use App\Twig\Extension\NumberFormatExtension;
+use App\Twig\Extension\SimDateExtension;
 use App\Twig\WebSocketTicketExtension;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
@@ -72,6 +73,17 @@ class TwigExtensionsTest extends TestCase
 
         $this->assertSame('$3.20B', $ext->formatLargeNumber('3200000000.00', '$'));
         $this->assertSame('-$3.20B', $ext->formatLargeNumber('-3200000000.00', '$'));
+    }
+
+    public function testSimDateFilterRendersTheDistrictCalendar(): void
+    {
+        $filters = (new SimDateExtension())->getFilters();
+        $this->assertSame('sim_date', $filters[0]->getName());
+
+        $simDate = $filters[0]->getCallable();
+        $this->assertSame('Year 1 Q1', $simDate(0.0));
+        $this->assertSame('Year 13 Q2', $simDate(12.25));
+        $this->assertSame('Year 13 Q4', $simDate(12.99));
     }
 
     public function testEventExtensionDelegatesToPresenter(): void

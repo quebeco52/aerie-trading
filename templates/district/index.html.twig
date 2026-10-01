@@ -32,7 +32,7 @@
 	/* A few lit windows carry subtle ambient texture — see DistrictMap::WINDOW_TWINKLE_SHARE.
 	   Styled statically with crisp edges to prevent continuous 60-144fps GPU/CPU rasterization. */
 	.window[data-lit="true"][data-twinkle="true"] { fill-opacity: 0.72; }
-	.roofline { fill: #4a5266; }
+	.roofline { fill: #4a4f58; }
 
 	/* Condition outranks the sector hue — solvency is the more urgent fact. */
 	/* Condition recolours the windows but leaves the lit pattern alone — a distressed tenant
@@ -43,14 +43,14 @@
 	.plot[data-condition="distressed"] .roofline { fill: #6b5a3d; }
 
 	.plot[data-condition="ruin"] .facade { fill: #241a24 !important; stroke: #8c4b4b !important; stroke-dasharray: 10 7; }
-	.plot[data-condition="ruin"] .window { fill: #ffb3ad !important; fill-opacity: 0.04; }
+	.plot[data-condition="ruin"] .window { fill: var(--color-tertiary) !important; fill-opacity: 0.04; }
 	.plot[data-condition="ruin"] .window[data-lit="true"] { fill-opacity: 0.10; }
 	.plot[data-condition="ruin"] .roofline { fill: #5c3030; }
 
-	.plot:hover .facade { fill: #2c3854 !important; transition: fill 150ms ease-out; }
+	.plot:hover .facade { fill: #2c313a !important; transition: fill 150ms ease-out; }
 	.plot:hover .window[data-lit="true"] { fill-opacity: 0.85; }
 	.plot:hover .window:not([data-lit="true"]) { fill-opacity: 0.18; }
-	.plot[data-selected="true"] .facade { stroke: #adc6ff !important; stroke-width: 5; }
+	.plot[data-selected="true"] .facade { stroke: var(--color-primary) !important; stroke-width: 5; }
 	.plot[data-selected="true"] .window[data-lit="true"] { fill-opacity: 0.95; }
 
 	/* Sector filter: a legend chip dims every tenant outside its sector, plates and brackets included. */
@@ -63,31 +63,31 @@
 	/* Sized against the narrowest plot (100 units): a 5-character ticker at 30 is 90 units, a
 	   price at 22 is 92, a change at 22 is 79. Each fits alone on a centred line; no two fit
 	   side by side, so they are never paired. */
-	.plot-rank { fill: #7a8398; font-size: 24px; letter-spacing: 0.5px; }
+	.plot-rank { fill: var(--color-on-surface-variant); font-size: 24px; letter-spacing: 0.5px; }
 	/* Street rank is re-ranked from live caps; a plate that just moved shows its direction for a moment. */
-	.plot-rank[data-rank-move="up"] { fill: #4edea3; }
-	.plot-rank[data-rank-move="down"] { fill: #ffb3ad; }
-	.plot-label { fill: #dae2fd; font-size: 30px; letter-spacing: 1px; transition: fill 200ms; }
-	.plot-price { fill: #9aa3b8; font-size: 22px; letter-spacing: 0.5px; }
+	.plot-rank[data-rank-move="up"] { fill: var(--color-secondary); }
+	.plot-rank[data-rank-move="down"] { fill: var(--color-tertiary); }
+	.plot-label { fill: var(--color-on-surface); font-size: 30px; letter-spacing: 1px; transition: fill 200ms; }
+	.plot-price { fill: var(--color-on-surface-variant); font-size: 22px; letter-spacing: 0.5px; }
 	.plot-change { font-size: 22px; font-weight: bold; letter-spacing: 0.5px; }
-	.plot-change[data-direction="up"] { fill: #4edea3; }
-	.plot-change[data-direction="down"] { fill: #ffb3ad; }
-	.plot-change[data-direction="flat"] { fill: #838da3; }
-	.plot-label[data-selected="true"], .plot-rank[data-selected="true"] { fill: #adc6ff; }
+	.plot-change[data-direction="up"] { fill: var(--color-secondary); }
+	.plot-change[data-direction="down"] { fill: var(--color-tertiary); }
+	.plot-change[data-direction="flat"] { fill: var(--color-on-surface-variant); }
+	.plot-label[data-selected="true"], .plot-rank[data-selected="true"] { fill: var(--color-primary); }
 
 	/* Sector brackets along the kerb — one rule per run of adjacent same-sector plots. */
 	.sector-run .sector-rule { stroke-width: 3; stroke-opacity: 0.7; }
 	.sector-run .sector-label { font-size: 20px; letter-spacing: 1.5px; fill-opacity: 0.75; }
 
-	.gridline { stroke: #2b3550; stroke-width: 2; stroke-dasharray: 4 12; stroke-opacity: 0.55; }
-	.gridline-label { fill: #6b7690; font-size: 32px; letter-spacing: 0.5px; fill-opacity: 0.75; }
+	.gridline { stroke: #2c313a; stroke-width: 2; stroke-dasharray: 4 12; stroke-opacity: 0.55; }
+	.gridline-label { fill: var(--color-on-surface-variant); font-size: 32px; letter-spacing: 0.5px; fill-opacity: 0.75; }
 
 	/* Roof furniture: one pictogram per trade (DistrictMap::ROOF_FURNITURE_BY_INDUSTRY), in the
 	   sector's window colour so it is legible at the street's scale; condition recolours it the
 	   way it recolours the windows. */
 	.roof-furniture { fill-opacity: 0.85; stroke-opacity: 0.85; }
 	.plot[data-condition="distressed"] .roof-furniture { color: #ffd9a0 !important; }
-	.plot[data-condition="ruin"] .roof-furniture { color: #ffb3ad !important; fill-opacity: 0.3; stroke-opacity: 0.3; }
+	.plot[data-condition="ruin"] .roof-furniture { color: var(--color-tertiary) !important; fill-opacity: 0.3; stroke-opacity: 0.3; }
 
 	/* Titan marker: rendered with static illumination rather than continuous animation loop
 	   to avoid continuous 60fps CPU SVG rasterization. */
@@ -101,43 +101,43 @@
 	/* --- Institutions --- */
 	.institution { cursor: pointer; }
 	.institution .pediment, .institution .body {
-		fill: #232c42;
-		stroke: #4a5568;
+		fill: #22262e;
+		stroke: #4b5059;
 		stroke-width: 2.5;
 		transition: fill 300ms, stroke 300ms;
 	}
-	.institution .column { stroke: #56617a; stroke-width: 3; stroke-opacity: 0.5; }
-	.institution-beacon { fill: #ffb3ad; fill-opacity: 0; transition: fill-opacity 300ms; }
+	.institution .column { stroke: #5a606a; stroke-width: 3; stroke-opacity: 0.5; }
+	.institution-beacon { fill: var(--color-tertiary); fill-opacity: 0; transition: fill-opacity 300ms; }
 	.institution-label {
-		fill: #8891a8;
+		fill: var(--color-on-surface-variant);
 		font-size: 30px;
 		letter-spacing: 1px;
 		fill-opacity: 0.7;
 		transition: fill-opacity 200ms, fill 200ms;
 	}
 	.institution-readout { font-size: 26px; }
-	.readout-label { fill: #838da3; letter-spacing: 0.5px; }
-	.readout-value { fill: #adc6ff; font-weight: bold; }
+	.readout-label { fill: var(--color-on-surface-variant); letter-spacing: 0.5px; }
+	.readout-value { fill: var(--color-primary); font-weight: bold; }
 	/* Recent readings under each value, drawn client-side from the ticks seen — see
 	   DistrictMap::INSTITUTION_SPARKLINE_WIDTH. Empty until a second sample lands. */
-	.readout-spark { fill: none; stroke: #56617a; stroke-width: 2; stroke-linejoin: round; stroke-opacity: 0.8; }
-	.readout-spark-base { stroke: #2b3550; stroke-width: 1.5; stroke-opacity: 0.6; }
-	.institution[data-stressed="true"] .readout-spark { stroke: #ffb3ad; }
+	.readout-spark { fill: none; stroke: #5a606a; stroke-width: 2; stroke-linejoin: round; stroke-opacity: 0.8; }
+	.readout-spark-base { stroke: #2c313a; stroke-width: 1.5; stroke-opacity: 0.6; }
+	.institution[data-stressed="true"] .readout-spark { stroke: var(--color-tertiary); }
 
-	.institution:hover .pediment, .institution:hover .body { fill: #2c3854; }
+	.institution:hover .pediment, .institution:hover .body { fill: #2c313a; }
 	.institution[data-selected="true"] .pediment, .institution[data-selected="true"] .body {
-		stroke: #adc6ff;
+		stroke: var(--color-primary);
 		stroke-width: 5;
 	}
-	.institution[data-selected="true"] .institution-label { fill-opacity: 1; fill: #adc6ff; }
+	.institution[data-selected="true"] .institution-label { fill-opacity: 1; fill: var(--color-primary); }
 
 	.institution[data-stressed="true"] .pediment, .institution[data-stressed="true"] .body {
 		fill: #3a2a2e;
 		stroke: #a35c5c;
 	}
 	.institution[data-stressed="true"] .institution-beacon { fill-opacity: 1; }
-	.institution[data-stressed="true"] .institution-label { fill-opacity: 1; fill: #ffb3ad; }
-	.institution[data-stressed="true"] .readout-value { fill: #ffb3ad; }
+	.institution[data-stressed="true"] .institution-label { fill-opacity: 1; fill: var(--color-tertiary); }
+	.institution[data-stressed="true"] .readout-value { fill: var(--color-tertiary); }
 
 	/* --- Conduits --- */
 	/* Routed orthogonally along one lane per institution (see DistrictMap::CONDUIT_LANE_PITCH).
@@ -147,7 +147,7 @@
 	   stress rules are reachable through hover, which is why the resting state need not be. */
 	.conduit {
 		fill: none;
-		stroke: #3a4260;
+		stroke: #3c414b;
 		stroke-width: 3;
 		stroke-linejoin: round;
 		stroke-dasharray: 10 9;
@@ -160,19 +160,19 @@
 	}
 	.conduit[data-stressed="true"] {
 		stroke-opacity: 0.85;
-		stroke: #ffb3ad;
+		stroke: var(--color-tertiary);
 		stroke-width: 3.5;
 		stroke-dasharray: 6 6;
 	}
 	.conduit[data-highlighted="true"] {
 		stroke-opacity: 0.95;
-		stroke: #adc6ff;
+		stroke: var(--color-primary);
 		stroke-width: 4;
 	}
 
 	/* --- Event Flares & Badges --- */
 	/* Hidden by visibility, not opacity 0 — see the note on fill-opacity above. */
-	.event-flare { visibility: hidden; fill-opacity: 0; pointer-events: none; fill: #adc6ff; }
+	.event-flare { visibility: hidden; fill-opacity: 0; pointer-events: none; fill: var(--color-primary); }
 	.event-flare[data-flash="true"] { visibility: visible; animation: flare-burst 900ms ease-out; }
 	@keyframes flare-burst {
 		0%   { fill-opacity: 0.95; r: 6; }
@@ -182,12 +182,12 @@
 
 	.event-badge { visibility: hidden; pointer-events: none; }
 	.event-badge:not([data-count="0"]) { visibility: visible; }
-	.event-badge circle { fill: #171f33; stroke: #56617a; stroke-width: 2.5; }
-	.event-badge text { fill: #c2c6d6; font-size: 26px; font-weight: bold; }
+	.event-badge circle { fill: var(--color-surface-container); stroke: #5a606a; stroke-width: 2.5; }
+	.event-badge text { fill: var(--color-on-surface-variant); font-size: 26px; font-weight: bold; }
 	.event-badge[data-flash="true"] circle { animation: badge-pop 500ms ease-out; }
 	@keyframes badge-pop {
-		0%   { stroke: #ffb3ad; }
-		100% { stroke: #56617a; }
+		0%   { stroke: var(--color-tertiary); }
+		100% { stroke: #5a606a; }
 	}
 
 	/* Labels drawn inside the map. CSS beats an SVG presentation attribute, so this is the
@@ -199,21 +199,21 @@
 	   cut an absolutely-positioned tooltip off at the card edge. */
 	#plot-tooltip { pointer-events: none; opacity: 0; transition: opacity 140ms; }
 	#plot-tooltip[data-visible="true"] { opacity: 1; }
-	#plot-tooltip .tooltip-bg { fill: #0f172a; stroke: #56617a; stroke-width: 2.5; rx: 10; }
+	#plot-tooltip .tooltip-bg { fill: var(--color-surface-container-lowest); stroke: #5a606a; stroke-width: 2.5; rx: 10; }
 	#plot-tooltip text { font-family: var(--font-mono); }
-	#plot-tooltip .tt-ticker { fill: #adc6ff; font-size: 34px; font-weight: bold; }
-	#plot-tooltip .tt-rank { fill: #6b7690; font-size: 26px; }
-	#plot-tooltip .tt-name { fill: #dae2fd; font-size: 26px; }
-	#plot-tooltip .tt-meta { fill: #838da3; font-size: 24px; }
-	#plot-tooltip .tt-value { fill: #dae2fd; font-size: 28px; font-weight: bold; }
-	#plot-tooltip .tt-change[data-direction="up"] { fill: #4edea3; }
-	#plot-tooltip .tt-change[data-direction="down"] { fill: #ffb3ad; }
-	#plot-tooltip .tt-change[data-direction="flat"] { fill: #838da3; }
+	#plot-tooltip .tt-ticker { fill: var(--color-primary); font-size: 34px; font-weight: bold; }
+	#plot-tooltip .tt-rank { fill: var(--color-on-surface-variant); font-size: 26px; }
+	#plot-tooltip .tt-name { fill: var(--color-on-surface); font-size: 26px; }
+	#plot-tooltip .tt-meta { fill: var(--color-on-surface-variant); font-size: 24px; }
+	#plot-tooltip .tt-value { fill: var(--color-on-surface); font-size: 28px; font-weight: bold; }
+	#plot-tooltip .tt-change[data-direction="up"] { fill: var(--color-secondary); }
+	#plot-tooltip .tt-change[data-direction="down"] { fill: var(--color-tertiary); }
+	#plot-tooltip .tt-change[data-direction="flat"] { fill: var(--color-on-surface-variant); }
 
 	/* Position pennant & owned building styling */
-	.plot[data-owned="true"] .facade { stroke: #4edea3 !important; stroke-width: 3.5; }
+	.plot[data-owned="true"] .facade { stroke: var(--color-secondary) !important; stroke-width: 3.5; }
 	.plot[data-owned="true"][data-position-short="true"] .facade { stroke: #ffd9a0 !important; }
-	.plot[data-owned="true"] .plot-rank { fill: #4edea3; font-weight: bold; }
+	.plot[data-owned="true"] .plot-rank { fill: var(--color-secondary); font-weight: bold; }
 	.plot-pennant { pointer-events: none; }
 
 	/* Conduit mode display */
@@ -257,80 +257,75 @@
 
 	<script type="application/json" id="district-events-data">{{ events|json_encode|raw }}</script>
 
-	{# Hero #}
-	<div class="bg-surface-container-low rounded-lg p-5 md:p-6 border border-outline-variant/25">
-		<div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+	<header class="pb-5 border-b border-outline-variant/15">
+		<div class="flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
 			<div>
-				<div class="flex items-center gap-2 mb-2">
-					<span class="text-2xs font-semibold tracking-wide text-primary uppercase">Aerie Autonomous District</span>
-					<span class="text-xs text-on-surface-variant/60 font-mono">/ Top {{ rosterSize }} by market cap</span>
-				</div>
-				<h1 class="text-2xl md:text-3xl font-bold text-on-surface tracking-tight">{{ wardName }}</h1>
-				<p class="text-xs text-on-surface-variant mt-1 max-w-2xl">{{ wardTagline }}</p>
+				<h1 class="text-2xl md:text-3xl font-semibold text-on-surface tracking-tight">{{ wardName }}</h1>
+				<p class="text-sm text-on-surface-variant mt-1.5 max-w-2xl">{{ wardTagline }} The {{ rosterSize }} largest listed companies, by market capitalisation.</p>
 				{# Shown for a while after a live reconstitution reloads the street. #}
 				<p class="text-xs font-mono mt-2 px-2 py-1 rounded bg-primary/10 text-primary border border-primary/25 inline-block"
 					data-district-target="reconstitutionNotice" hidden></p>
 			</div>
-			<div class="flex flex-col gap-2 text-xs font-mono text-on-surface-variant shrink-0">
+			<div class="flex flex-col gap-2 text-xs text-on-surface-variant shrink-0">
 				<div class="flex items-center gap-4 flex-wrap">
-					<span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm" style="background:#4edea3;border:1px solid #14532d"></span>Position held</span>
+					<span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm" style="background:var(--color-secondary)"></span>Position held</span>
 					<span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm" style="background:#37291d;border:1px solid #a37b3d"></span>Distressed</span>
 					<span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm" style="background:#241a24;border:1px dashed #8c4b4b"></span>Defunct</span>
-					<span class="flex items-center gap-1.5"><span class="w-3 h-0.5" style="background:#ffb3ad"></span>Conduit stressed</span>
+					<span class="flex items-center gap-1.5"><span class="w-3 h-0.5" style="background:var(--color-tertiary)"></span>Conduit stressed</span>
 				</div>
 			</div>
 		</div>
 
 		{# Street summary — every figure read off plots already built, no extra query #}
-		<div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mt-5">
-			<div class="bg-surface-container-lowest/80 border border-outline-variant/20 rounded p-3 flex flex-col justify-between">
-				<span class="text-2xs font-semibold text-on-surface-variant uppercase tracking-wide">Street Cap</span>
-				<span class="text-sm font-bold text-on-surface font-mono tabular-nums mt-1">{{ summary.totalMarketCap|format_large('$') }}</span>
+		<dl class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-x-8 gap-y-4 mt-5">
+			<div class="flex flex-col">
+				<span class="text-xs text-on-surface-variant">Street cap</span>
+				<span class="text-sm font-semibold text-on-surface font-mono tabular-nums mt-0.5">{{ summary.totalMarketCap|format_large('$') }}</span>
 			</div>
-			<div class="bg-surface-container-lowest/80 border border-outline-variant/20 rounded p-3 flex flex-col justify-between">
-				<span class="text-2xs font-semibold text-on-surface-variant uppercase tracking-wide">Street 1M</span>
+			<div class="flex flex-col">
+				<span class="text-xs text-on-surface-variant">Past month</span>
 				{% if summary.changePercent is not null %}
-					<span class="text-sm font-bold font-mono tabular-nums mt-1 {{ summary.changePercent >= 0 ? 'text-secondary' : 'text-tertiary' }}">
+					<span class="text-sm font-semibold font-mono tabular-nums mt-0.5 {{ summary.changePercent >= 0 ? 'text-secondary' : 'text-tertiary' }}">
 						{{ summary.changePercent >= 0 ? '+' : '' }}{{ (summary.changePercent * 100)|number_format(2) }}%
 					</span>
 				{% else %}
-					<span class="text-sm font-bold text-on-surface-variant/50 font-mono mt-1">&mdash;</span>
+					<span class="text-sm font-semibold text-on-surface-variant/50 font-mono mt-0.5">&mdash;</span>
 				{% endif %}
 			</div>
-			<div class="bg-surface-container-lowest/80 border border-outline-variant/20 rounded p-3 flex flex-col justify-between">
-				<span class="text-2xs font-semibold text-on-surface-variant uppercase tracking-wide">Biggest Mover</span>
+			<div class="flex flex-col">
+				<span class="text-xs text-on-surface-variant">Biggest mover</span>
 				{% if summary.biggestMover %}
-					<span class="text-sm font-bold font-mono tabular-nums mt-1 {{ summary.biggestMover.changePercent >= 0 ? 'text-secondary' : 'text-tertiary' }}">
+					<span class="text-sm font-semibold font-mono tabular-nums mt-0.5 {{ summary.biggestMover.changePercent >= 0 ? 'text-secondary' : 'text-tertiary' }}">
 						{{ summary.biggestMover.ticker }}
 						{{ summary.biggestMover.changePercent >= 0 ? '+' : '' }}{{ (summary.biggestMover.changePercent * 100)|number_format(1) }}%
 					</span>
 				{% else %}
-					<span class="text-sm font-bold text-on-surface-variant/50 font-mono mt-1">&mdash;</span>
+					<span class="text-sm font-semibold text-on-surface-variant/50 font-mono mt-0.5">&mdash;</span>
 				{% endif %}
 			</div>
-			<div class="bg-surface-container-lowest/80 border border-outline-variant/20 rounded p-3 flex flex-col justify-between">
-				<span class="text-2xs font-semibold text-on-surface-variant uppercase tracking-wide">Institutions</span>
-				<span class="text-sm font-bold font-mono tabular-nums mt-1 {{ summary.stressedInstitutions > 0 ? 'text-tertiary' : 'text-on-surface' }}"
+			<div class="flex flex-col">
+				<span class="text-xs text-on-surface-variant">Institutions</span>
+				<span class="text-sm font-semibold font-mono tabular-nums mt-0.5 {{ summary.stressedInstitutions > 0 ? 'text-tertiary' : 'text-on-surface' }}"
 					data-district-target="summaryStress">
 					{{ summary.stressedInstitutions }}/{{ summary.totalInstitutions }} stressed
 				</span>
 			</div>
 			{# The roster is frozen between reconstitutions (DistrictRoster); this counts down to the
 			   next one in simulated days, kept live from the tick count on the feed. #}
-			<div class="bg-surface-container-lowest/80 border border-outline-variant/20 rounded p-3 flex flex-col justify-between"
-				title="The street's roster is re-ranked once a simulated quarter. Until then a bankrupt tenant keeps its plot and a riser waits below the cut.">
-				<span class="text-2xs font-semibold text-on-surface-variant uppercase tracking-wide">Reconstitution</span>
-				<span class="text-sm font-bold text-on-surface font-mono tabular-nums mt-1"
+			<div class="flex flex-col"
+				title="The street is re-ranked once a quarter. Until then a bankrupt tenant keeps its plot and a rising company waits below the cut.">
+				<span class="text-xs text-on-surface-variant">Reconstitution</span>
+				<span class="text-sm font-semibold text-on-surface font-mono tabular-nums mt-0.5"
 					data-district-target="summaryReconstitution">in {{ reconstitution.simDaysUntilNext|round(0, 'ceil') }}d</span>
 			</div>
-		</div>
+		</dl>
 
 		{# Sector legend — the street's primary colour signal. Each chip is a filter: click to dim
 		   every other sector, click again (or press Escape) to clear. #}
 		<div class="flex flex-wrap gap-x-4 gap-y-1.5 mt-4 pt-4 border-t border-outline-variant/15">
 			{% for sector, colours in sectorPalette %}
 				<button type="button"
-					class="cursor-pointer flex items-center gap-1.5 text-xs font-mono text-on-surface-variant/80 rounded px-1 -mx-1 hover:text-on-surface data-[active=true]:text-on-surface data-[active=true]:bg-surface-container-high data-[muted=true]:opacity-40"
+					class="cursor-pointer flex items-center gap-1.5 text-xs text-on-surface-variant rounded px-1 -mx-1 hover:text-on-surface data-[active=true]:text-on-surface data-[active=true]:bg-surface-container-high data-[muted=true]:opacity-40"
 					data-district-target="sectorChip"
 					data-sector="{{ sector }}"
 					data-action="click->district#toggleSector"
@@ -340,19 +335,18 @@
 				</button>
 			{% endfor %}
 		</div>
-	</div>
+	</header>
 
 	<div class="grid grid-cols-1 xl:grid-cols-[1fr_360px] gap-5 items-start">
 
-		{# The Elevation #}
-		<div class="bg-surface-container-lowest border border-outline-variant/25 rounded-lg overflow-hidden">
+		<div class="bg-surface-container-lowest border border-outline-variant/20 rounded-lg overflow-hidden">
 			<div class="flex items-center justify-between px-4 py-2 border-b border-outline-variant/15 bg-surface-container-high/20">
-				<span class="text-sm font-semibold text-on-surface-variant">Street Elevation &mdash; facing north</span>
+				<span class="text-sm font-semibold text-on-surface-variant">Street elevation, facing north</span>
 				<div class="flex items-center gap-3">
-					<span class="text-xs font-mono text-on-surface-variant/60 hidden sm:block">Height &prop; log market capitalisation, scaled to this street</span>
+					<span class="text-xs text-on-surface-variant/70 hidden sm:block">Height follows market capitalisation (log scale)</span>
 					<div class="flex items-center gap-1">
 						<div class="flex items-center gap-0.5 text-3xs font-mono border-r border-outline-variant/20 pr-2 mr-1">
-							<span class="text-on-surface-variant/50 uppercase tracking-wider mr-1 hidden md:inline">Conduits:</span>
+							<span class="text-on-surface-variant/70 mr-1 hidden md:inline">Conduits</span>
 							<button type="button" class="px-1.5 py-0.5 rounded text-on-surface-variant data-[active=true]:bg-primary/20 data-[active=true]:text-primary data-[active=true]:font-bold cursor-pointer"
 								data-district-target="conduitModeBtn"
 								data-mode="all"
@@ -410,9 +404,9 @@
 							</clipPath>
 						{% endfor %}
 						<linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
-							<stop offset="0%" stop-color="#050b1a"/>
-							<stop offset="55%" stop-color="#0d1526"/>
-							<stop offset="100%" stop-color="#161f36"/>
+							<stop offset="0%" stop-color="#07090c"/>
+							<stop offset="55%" stop-color="#0e1116"/>
+							<stop offset="100%" stop-color="#171b22"/>
 						</linearGradient>
 
 						{# One kerb clip per row: a light pool is a full ellipse centred on the ground
@@ -437,9 +431,9 @@
 							<stop offset="100%" stop-color="#adc6ff" stop-opacity="0"/>
 						</radialGradient>
 						<linearGradient id="terrace-wall-grad" x1="0" y1="0" x2="0" y2="1">
-							<stop offset="0%" stop-color="#1c253b"/>
-							<stop offset="40%" stop-color="#131b2c"/>
-							<stop offset="100%" stop-color="#0b1120"/>
+							<stop offset="0%" stop-color="#1d2129"/>
+							<stop offset="40%" stop-color="#14171d"/>
+							<stop offset="100%" stop-color="#0b0d11"/>
 						</linearGradient>
 
 						{# Roof furniture, one symbol per DistrictMap::ROOF_FURNITURE_SYMBOLS, each drawn in a
@@ -448,7 +442,7 @@
 						   anything finer than a 3-unit stroke vanishes. #}
 						<symbol id="roof-coin" viewBox="0 0 30 36">
 							<circle cx="15" cy="20" r="14" fill="currentColor"/>
-							<text x="15" y="28" text-anchor="middle" font-size="22" font-weight="bold" fill="#0b1120">$</text>
+							<text x="15" y="28" text-anchor="middle" font-size="22" font-weight="bold" fill="#0b0d11">$</text>
 						</symbol>
 						<symbol id="roof-umbrella" viewBox="0 0 30 36">
 							<path d="M 1 19 A 14 14 0 0 1 29 19 Z" fill="currentColor"/>
@@ -557,9 +551,9 @@
 						</symbol>
 						<symbol id="roof-dice" viewBox="0 0 30 36">
 							<rect x="2" y="6" width="26" height="26" rx="5" fill="currentColor"/>
-							<circle cx="9" cy="13" r="3" fill="#0b1120"/>
-							<circle cx="15" cy="19" r="3" fill="#0b1120"/>
-							<circle cx="21" cy="25" r="3" fill="#0b1120"/>
+							<circle cx="9" cy="13" r="3" fill="#0b0d11"/>
+							<circle cx="15" cy="19" r="3" fill="#0b0d11"/>
+							<circle cx="21" cy="25" r="3" fill="#0b0d11"/>
 						</symbol>
 						<symbol id="roof-megaphone" viewBox="0 0 30 36">
 							<path d="M 1 14 H 9 L 27 3 V 31 L 9 20 H 1 Z" fill="currentColor"/>
@@ -601,7 +595,7 @@
 						</symbol>
 						<symbol id="roof-house" viewBox="0 0 30 36">
 							<polygon points="15,3 29,17 24,17 24,36 6,36 6,17 1,17" fill="currentColor"/>
-							<rect x="12" y="25" width="6" height="11" fill="#0b1120"/>
+							<rect x="12" y="25" width="6" height="11" fill="#0b0d11"/>
 						</symbol>
 						<symbol id="roof-blocks" viewBox="0 0 30 36">
 							<rect x="2" y="22" width="12" height="12" fill="currentColor"/>
@@ -812,13 +806,13 @@
 											{% if isOwned %}
 												{% set poleX = plot.x + positionPennant.inset %}
 												{% set poleTop = plot.y - 14 - positionPennant.height - 6 %}
-												{% set pennantColour = holding.isShort ? '#ffd9a0' : '#4edea3' %}
+												{% set pennantColour = holding.isShort ? 'var(--color-warning)' : 'var(--color-secondary)' %}
 												<g class="plot-pennant">
 													<line x1="{{ poleX }}" y1="{{ plot.y - 14 }}" x2="{{ poleX }}" y2="{{ poleTop }}"
-														stroke="{{ pennantColour }}" stroke-width="2"/>
+														style="stroke: {{ pennantColour }}" stroke-width="2"/>
 													<polygon points="{{ poleX }},{{ poleTop }} {{ poleX + positionPennant.width }},{{ poleTop + positionPennant.height / 2 }} {{ poleX }},{{ poleTop + positionPennant.height }}"
-														fill="{{ pennantColour }}" opacity="0.95"/>
-													<circle cx="{{ poleX }}" cy="{{ poleTop }}" r="2" fill="#dae2fd"/>
+														style="fill: {{ pennantColour }}" opacity="0.95"/>
+													<circle cx="{{ poleX }}" cy="{{ poleTop }}" r="2" style="fill: var(--color-on-surface)"/>
 												</g>
 											{% endif %}
 
@@ -845,10 +839,10 @@
 					{# Every row's kerb. Opaque, so a lower-row conduit drop passes behind the upper
 					   kerb rather than showing through the pavement. #}
 					{% for rowGroundLine in rowGroundLines %}
-						<rect x="0" y="{{ rowGroundLine }}" width="{{ viewboxWidth }}" height="{{ kerbDepth }}" fill="#0b1120"/>
-						<line x1="0" y1="{{ rowGroundLine }}" x2="{{ viewboxWidth }}" y2="{{ rowGroundLine }}" stroke="#424754" stroke-width="3"/>
+						<rect x="0" y="{{ rowGroundLine }}" width="{{ viewboxWidth }}" height="{{ kerbDepth }}" fill="#0b0d11"/>
+						<line x1="0" y1="{{ rowGroundLine }}" x2="{{ viewboxWidth }}" y2="{{ rowGroundLine }}" style="stroke: var(--color-outline-variant)" stroke-width="3"/>
 						<line x1="0" y1="{{ rowGroundLine + kerbDepth }}" x2="{{ viewboxWidth }}" y2="{{ rowGroundLine + kerbDepth }}"
-							stroke="#424754" stroke-width="1.5" opacity="0.35"/>
+							style="stroke: var(--color-outline-variant)" stroke-width="1.5" opacity="0.35"/>
 					{% endfor %}
 
 					{# Terrace embankment retaining wall beneath every kerb that has a row below it #}
@@ -859,9 +853,9 @@
 									{% set kerbBottom = rowGroundLine + kerbDepth %}
 									<rect x="0" y="{{ kerbBottom }}" width="{{ viewboxWidth }}" height="{{ terraceWallHeight }}" fill="url(#terrace-wall-grad)"/>
 									<line x1="0" y1="{{ kerbBottom + terraceWallHeight / 2 }}" x2="{{ viewboxWidth }}" y2="{{ kerbBottom + terraceWallHeight / 2 }}"
-										stroke="#28344e" stroke-width="1" stroke-dasharray="60 30 90 40" opacity="0.6"/>
+										stroke="#2a2f37" stroke-width="1" stroke-dasharray="60 30 90 40" opacity="0.6"/>
 									<line x1="0" y1="{{ kerbBottom + terraceWallHeight }}" x2="{{ viewboxWidth }}" y2="{{ kerbBottom + terraceWallHeight }}"
-										stroke="#364566" stroke-width="1.5" opacity="0.8"/>
+										stroke="#3a404a" stroke-width="1.5" opacity="0.8"/>
 								{% endif %}
 							{% endfor %}
 						</g>
@@ -938,14 +932,14 @@
 						<text class="tt-value" data-district-target="tooltipPrice" x="20" y="158"></text>
 						<text class="tt-value tt-change" data-district-target="tooltipChange" x="500" y="158" text-anchor="end"></text>
 						<text class="tt-meta" data-district-target="tooltipCap" x="20" y="192"></text>
-						<text class="tt-meta tt-position" data-district-target="tooltipPosition" x="500" y="192" text-anchor="end" fill="#4edea3"></text>
+						<text class="tt-meta tt-position" data-district-target="tooltipPosition" x="500" y="192" text-anchor="end"></text>
 					</g>
 				</svg>
 			</div>
 		</div>
 
 		{# Info Panel #}
-		<div class="bg-surface-container-low border border-outline-variant/25 rounded-lg p-5 xl:sticky xl:top-20">
+		<div class="bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 xl:sticky xl:top-20">
 			<div data-district-target="empty">
 				<h2 class="text-sm font-semibold text-on-surface mb-2">Select a building or institution</h2>
 				<p class="text-xs text-on-surface-variant leading-relaxed">
@@ -962,37 +956,37 @@
 
 			<div data-district-target="detail" class="hidden">
 				<div class="flex items-baseline justify-between gap-2 mb-1">
-					<span class="text-xl font-bold text-primary font-mono" data-district-target="detailTicker"></span>
+					<span class="text-xl font-semibold text-on-surface font-mono" data-district-target="detailTicker"></span>
 					<span class="text-xs font-mono text-on-surface-variant/60" data-district-target="detailPlot"></span>
 				</div>
-				<h2 class="text-sm font-bold text-on-surface leading-tight" data-district-target="detailName"></h2>
+				<h2 class="text-sm font-medium text-on-surface-variant leading-tight" data-district-target="detailName"></h2>
 				<p class="text-xs text-on-surface-variant/70 mb-4" data-district-target="detailIndustry"></p>
 
 				<dl class="grid grid-cols-2 gap-x-3 gap-y-2.5 text-xs font-mono mb-4">
-					<div><dt class="text-on-surface-variant/60 uppercase tracking-wider text-3xs">Price</dt>
+					<div><dt class="text-on-surface-variant text-xs">Price</dt>
 						<dd class="text-on-surface tabular-nums" data-district-target="detailPrice"></dd></div>
-					<div><dt class="text-on-surface-variant/60 uppercase tracking-wider text-3xs">Change (1M)</dt>
+					<div><dt class="text-on-surface-variant text-xs">Change (1M)</dt>
 						<dd class="tabular-nums" data-district-target="detailChange"></dd></div>
-					<div><dt class="text-on-surface-variant/60 uppercase tracking-wider text-3xs">Market Cap</dt>
+					<div><dt class="text-on-surface-variant text-xs">Market cap</dt>
 						<dd class="text-on-surface tabular-nums" data-district-target="detailMcap"></dd></div>
-					<div><dt class="text-on-surface-variant/60 uppercase tracking-wider text-3xs">Credit</dt>
+					<div><dt class="text-on-surface-variant text-xs">Credit</dt>
 						<dd class="text-on-surface" data-district-target="detailRating"></dd></div>
-					<div><dt class="text-on-surface-variant/60 uppercase tracking-wider text-3xs">Return <span class="normal-case tracking-normal">vs baseline</span></dt>
+					<div><dt class="text-on-surface-variant text-xs">Return vs baseline</dt>
 						<dd class="text-on-surface tabular-nums" data-district-target="detailRoc"></dd></div>
-					<div><dt class="text-on-surface-variant/60 uppercase tracking-wider text-3xs">Street Rank</dt>
+					<div><dt class="text-on-surface-variant text-xs">Street rank</dt>
 						<dd class="text-on-surface tabular-nums" data-district-target="detailRank"></dd></div>
-					<div class="col-span-2"><dt class="text-on-surface-variant/60 uppercase tracking-wider text-3xs">Standing</dt>
+					<div class="col-span-2"><dt class="text-on-surface-variant text-xs">Standing</dt>
 						<dd class="text-on-surface" data-district-target="detailImportance"></dd></div>
 					<div class="col-span-2 border-t border-outline-variant/15 pt-2" data-district-target="detailPositionWrap">
-						<dt class="text-on-surface-variant/60 uppercase tracking-wider text-3xs">Your Position</dt>
-						<dd class="text-on-surface tabular-nums font-bold" data-district-target="detailPosition">None</dd></div>
+						<dt class="text-on-surface-variant text-xs">Your position</dt>
+						<dd class="text-on-surface tabular-nums font-medium" data-district-target="detailPosition">None</dd></div>
 				</dl>
 
 				{# Segment revenue — laid out as a filing's segment note: period header, headline with
 				   sequential and year-on-year moves, a 100% mix bar, then one row per stream. #}
 				<div class="mb-4 border-t border-outline-variant/25 pt-3">
 					<div class="flex items-center justify-between mb-1.5">
-						<h3 class="text-2xs font-semibold uppercase tracking-wide text-on-surface-variant/70">Segment Revenue</h3>
+						<h3 class="text-xs font-semibold text-on-surface-variant">Segment revenue</h3>
 						<span class="text-3xs font-mono uppercase tracking-wider text-on-surface-variant/50"
 							data-district-target="detailRevenuePeriod"></span>
 					</div>
@@ -1027,7 +1021,7 @@
 					data-district-target="detailBlurb"></p>
 
 				<div class="mb-4">
-					<h3 class="text-2xs font-semibold uppercase tracking-wide text-on-surface-variant/70 mb-2">Recent Events</h3>
+					<h3 class="text-xs font-semibold text-on-surface-variant mb-2">Recent events</h3>
 					<div class="space-y-2 max-h-56 overflow-y-auto custom-scrollbar pr-1" data-district-target="detailEvents">
 						<p class="text-xs text-on-surface-variant/50 italic" data-district-target="noEvents">No recent events logged.</p>
 					</div>
@@ -1036,7 +1030,7 @@
 				{# Quick Trade Ticket #}
 				<div class="mb-4 border-t border-outline-variant/25 pt-3">
 					<div class="flex items-center justify-between mb-2">
-						<h3 class="text-2xs font-semibold uppercase tracking-wide text-on-surface-variant/70">Quick Trade</h3>
+						<h3 class="text-xs font-semibold text-on-surface-variant">Quick trade</h3>
 						<span class="text-3xs font-mono font-semibold" data-district-target="quickTradeHolding"></span>
 					</div>
 
@@ -1051,14 +1045,14 @@
 								<label class="flex-1 cursor-pointer">
 									<input type="radio" name="action" value="BUY" class="peer sr-only" checked
 										data-action="change->district#onTradeActionChange">
-									<div class="py-1 text-center text-3xs font-bold uppercase tracking-wider rounded text-on-surface-variant peer-checked:bg-secondary peer-checked:text-on-secondary transition-all">
+									<div class="py-1 text-center text-xs font-semibold rounded text-on-surface-variant peer-checked:bg-secondary peer-checked:text-on-secondary transition-all">
 										Buy
 									</div>
 								</label>
 								<label class="flex-1 cursor-pointer">
 									<input type="radio" name="action" value="SELL" class="peer sr-only"
 										data-action="change->district#onTradeActionChange">
-									<div class="py-1 text-center text-3xs font-bold uppercase tracking-wider rounded text-on-surface-variant peer-checked:bg-tertiary peer-checked:text-on-tertiary transition-all">
+									<div class="py-1 text-center text-xs font-semibold rounded text-on-surface-variant peer-checked:bg-tertiary peer-checked:text-on-tertiary transition-all">
 										Sell
 									</div>
 								</label>
@@ -1066,14 +1060,14 @@
 									<label class="flex-1 cursor-pointer">
 										<input type="radio" name="action" value="SHORT" class="peer sr-only"
 											data-action="change->district#onTradeActionChange">
-										<div class="py-1 text-center text-3xs font-bold uppercase tracking-wider rounded text-on-surface-variant peer-checked:bg-tertiary peer-checked:text-on-tertiary transition-all">
+										<div class="py-1 text-center text-xs font-semibold rounded text-on-surface-variant peer-checked:bg-tertiary peer-checked:text-on-tertiary transition-all">
 											Short
 										</div>
 									</label>
 									<label class="flex-1 cursor-pointer">
 										<input type="radio" name="action" value="COVER" class="peer sr-only"
 											data-action="change->district#onTradeActionChange">
-										<div class="py-1 text-center text-3xs font-bold uppercase tracking-wider rounded text-on-surface-variant peer-checked:bg-secondary peer-checked:text-on-secondary transition-all">
+										<div class="py-1 text-center text-xs font-semibold rounded text-on-surface-variant peer-checked:bg-secondary peer-checked:text-on-secondary transition-all">
 											Cover
 										</div>
 									</label>
@@ -1104,40 +1098,39 @@
 							</div>
 
 							<button type="submit"
-								class="w-full py-1.5 rounded bg-primary text-on-primary text-xs font-bold uppercase tracking-wider hover:opacity-90 transition-opacity cursor-pointer flex items-center justify-center gap-1.5"
+								class="w-full py-1.5 rounded bg-primary text-on-primary text-sm font-semibold hover:bg-primary-container transition-colors cursor-pointer flex items-center justify-center gap-1.5"
 								data-district-target="quickTradeSubmit">
-								<span class="material-symbols-outlined text-sm">shopping_cart</span>
-								<span>Execute Order</span>
+								<span>Place order</span>
 							</button>
 						</form>
 					{% else %}
 						<div class="p-2.5 rounded bg-surface-container-lowest/60 border border-outline-variant/15 text-center">
 							<p class="text-xs text-on-surface-variant/70 mb-2">Sign in to trade directly from Glasswater Row</p>
-							<a href="/login" class="inline-block px-3 py-1 bg-primary text-on-primary rounded text-xs font-bold uppercase tracking-wider hover:opacity-90">Log In</a>
+							<a href="/login" class="inline-block px-3 py-1 bg-primary text-on-primary rounded text-sm font-medium hover:bg-primary-container transition-colors">Sign in</a>
 						</div>
 					{% endif %}
 				</div>
 
 				<a href="#" data-district-target="detailLink"
-					class="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-primary hover:underline">
+					class="inline-flex items-center gap-1.5 text-sm text-primary hover:underline underline-offset-2">
 					<span class="material-symbols-outlined text-sm">open_in_new</span>
-					Open trading file
+					Full company page
 				</a>
 			</div>
 
 			{# Institution detail, shown when a publisher is selected. #}
 			<div data-district-target="institutionDetail" class="hidden">
 				<div class="flex items-baseline justify-between gap-2 mb-1">
-					<span class="text-sm font-bold text-primary font-mono uppercase tracking-wider" data-district-target="institutionName"></span>
+					<span class="text-sm font-semibold text-on-surface" data-district-target="institutionName"></span>
 					<span class="text-3xs font-mono uppercase tracking-wider px-1.5 py-0.5 rounded border"
 						data-district-target="institutionStatus"></span>
 				</div>
-				<p class="text-xs text-on-surface-variant/70 mb-4">Macro publisher</p>
+				<p class="text-xs text-on-surface-variant mb-4">Publishes the readings below</p>
 
-				<h3 class="text-2xs font-semibold uppercase tracking-wide text-on-surface-variant/70 mb-2">Published Readings</h3>
+				<h3 class="text-xs font-semibold text-on-surface-variant mb-2">Published readings</h3>
 				<dl class="grid grid-cols-2 gap-x-3 gap-y-2.5 text-xs font-mono mb-4" data-district-target="institutionReadings"></dl>
 
-				<h3 class="text-2xs font-semibold uppercase tracking-wide text-on-surface-variant/70 mb-2">
+				<h3 class="text-xs font-semibold text-on-surface-variant mb-2">
 					Feeds <span class="text-on-surface-variant/40" data-district-target="institutionFeedCount"></span>
 				</h3>
 				<div class="flex flex-wrap gap-1.5" data-district-target="institutionFeeds"></div>

@@ -63,8 +63,8 @@ class StockPagePantherTest extends BasePantherTestCase
 
         $this->assertSelectorExists('#stock-tab-content-sector');
 
-        // Test Order Form or Trading Halted state
-        $isHalted = (bool) $client->executeScript("return document.body.textContent.includes('Trading Halted');");
+        // Test Order Form or Trading halted state
+        $isHalted = (bool) $client->executeScript("return document.body.textContent.includes('Trading halted');");
         if (!$isHalted) {
             $this->assertSelectorExists('form[action="/trade/execute"]');
             $client->executeScript("
@@ -77,7 +77,7 @@ class StockPagePantherTest extends BasePantherTestCase
             $client->waitFor('#limit-price-group:not(.hidden)', 2);
             $this->assertSelectorExists('#limit-price-group');
         } else {
-            $this->assertSelectorTextContains('body', 'Trading Halted');
+            $this->assertSelectorTextContains('body', 'Trading halted');
         }
     }
 }

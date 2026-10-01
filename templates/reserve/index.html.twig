@@ -14,47 +14,38 @@
 	{% set stabilisation = summary.stabilisationToGdp %}
 	{# The sleeve colours, shared with pages/reserve.js's charts. #}
 	{% set sleeve_colors = { 'district': '#0284c7', 'foreign-equities': '#059669', 'foreign-bonds': '#d97706' } %}
-	<div class="max-w-400 mx-auto px-4 sm:px-6 lg:px-8 py-5 w-full space-y-5" id="reservePage">
+	<div class="max-w-400 mx-auto px-4 sm:px-6 lg:px-8 pt-8 pb-12 w-full space-y-6" id="reservePage">
 
-		{# --- HEADER: THE FUND AT A GLANCE --- #}
-		<div class="bg-surface-container-low rounded-lg p-6 lg:p-7 border border-outline-variant/15">
-			<div class="flex flex-col xl:flex-row xl:justify-between xl:items-start gap-6">
-				<div class="min-w-0">
-					<div class="flex items-center gap-2 mb-2">
-						<span class="w-2 h-2 rounded-full bg-secondary"></span>
-						<span class="text-2xs font-semibold tracking-wide text-secondary uppercase">Live fund feed</span>
-					</div>
-					<h1 class="text-xl sm:text-2xl md:text-3xl font-bold text-on-surface tracking-tight leading-tight">Sovereign Reserve Fund</h1>
-					<p class="text-sm text-on-surface-variant mt-2 max-w-2xl">
+		<header class="flex flex-col gap-6 pb-6 border-b border-outline-variant/15">
+				<div class="min-w-0 max-w-2xl">
+					<h1 class="text-2xl md:text-3xl font-semibold text-on-surface tracking-tight">Sovereign Reserve Fund</h1>
+					<p class="text-sm text-on-surface-variant mt-2 leading-relaxed">
 						The District's sovereign fund. It pays part of the budget every year, holds the same share of every
 						listed company's float beside a foreign portfolio of equities and government bonds, and trades only
 						when a weight leaves its band. It runs on published rules, not on a view of the market.
 					</p>
-					<a href="/economy" class="inline-flex items-center gap-1 mt-3 text-xs font-bold text-primary hover:underline">
-						<span class="material-symbols-outlined text-sm" aria-hidden="true">arrow_back</span>
-						The District Economy
-					</a>
+					<p class="mt-3 text-sm"><a href="/economy" class="text-primary hover:underline underline-offset-2">The District Economy</a></p>
 				</div>
 
 				{# Repainted in place from the live frame by pages/reserve.js. #}
-				<dl class="grid grid-cols-2 sm:grid-cols-4 gap-3 shrink-0 xl:min-w-[46rem]">
-					<div class="bg-surface-container-lowest rounded border border-outline-variant/20 px-4 py-3">
-						<dt class="text-2xs font-bold uppercase tracking-wider text-on-surface-variant">Fund value</dt>
-						<dd class="text-lg font-bold font-mono tabular-nums text-on-surface mt-0.5" id="reserve-value">{{ incepted ? summary.value|format_large('$') : '-' }}</dd>
+				<dl class="grid grid-cols-2 sm:grid-cols-4 gap-x-8 gap-y-5">
+					<div>
+						<dt class="text-xs text-on-surface-variant">Fund value</dt>
+						<dd class="text-lg font-semibold font-mono tabular-nums text-on-surface mt-0.5" id="reserve-value">{{ incepted ? summary.value|format_large('$') : '-' }}</dd>
 					</div>
-					<div class="bg-surface-container-lowest rounded border border-outline-variant/20 px-4 py-3">
-						<dt class="text-2xs font-bold uppercase tracking-wider text-on-surface-variant">Size</dt>
-						<dd class="text-lg font-bold font-mono tabular-nums text-on-surface mt-0.5" id="reserve-to-gdp">{{ incepted ? (summary.toGdp * 100)|number_format(0) ~ '% of GDP' : '-' }}</dd>
+					<div>
+						<dt class="text-xs text-on-surface-variant">Size</dt>
+						<dd class="text-lg font-semibold font-mono tabular-nums text-on-surface mt-0.5" id="reserve-to-gdp">{{ incepted ? (summary.toGdp * 100)|number_format(0) ~ '% of GDP' : '-' }}</dd>
 					</div>
 					{# Needs the recorded history a year back, so pages/reserve.js fills it once the history loads. #}
-					<div class="bg-surface-container-lowest rounded border border-outline-variant/20 px-4 py-3">
-						<dt class="text-2xs font-bold uppercase tracking-wider text-on-surface-variant">Real return</dt>
-						<dd class="text-lg font-bold font-mono tabular-nums text-on-surface mt-0.5" id="reserve-return-year">-</dd>
+					<div>
+						<dt class="text-xs text-on-surface-variant">Real return</dt>
+						<dd class="text-lg font-semibold font-mono tabular-nums text-on-surface mt-0.5" id="reserve-return-year">-</dd>
 						<p class="text-3xs font-mono tabular-nums text-on-surface-variant mt-0.5" id="reserve-return-year-detail">Last 12 months</p>
 					</div>
-					<div class="bg-surface-container-lowest rounded border border-outline-variant/20 px-4 py-3">
-						<dt class="text-2xs font-bold uppercase tracking-wider text-on-surface-variant">Budget draw</dt>
-						<dd class="text-lg font-bold font-mono tabular-nums text-on-surface mt-0.5" id="reserve-draw">{{ incepted ? (summary.drawToGdp * 100)|number_format(2) ~ '% of GDP' : '-' }}</dd>
+					<div>
+						<dt class="text-xs text-on-surface-variant">Budget draw</dt>
+						<dd class="text-lg font-semibold font-mono tabular-nums text-on-surface mt-0.5" id="reserve-draw">{{ incepted ? (summary.drawToGdp * 100)|number_format(2) ~ '% of GDP' : '-' }}</dd>
 						<p class="text-3xs font-mono tabular-nums text-on-surface-variant mt-0.5" id="reserve-draw-value">{{ incepted ? summary.annualDraw|format_large('$') ~ ' this year' : '' }}</p>
 						<p class="text-3xs font-mono tabular-nums text-on-surface-variant" id="reserve-stabilisation" title="Spending the fund pays for above the draw when output is below trend, or the budget's saving paid into it when above">
 							{%- if incepted and stabilisation != 0 -%}
@@ -64,24 +55,24 @@
 							{%- endif -%}
 						</p>
 					</div>
-					<div class="bg-surface-container-lowest rounded border border-outline-variant/20 px-4 py-3">
-						<dt class="text-2xs font-bold uppercase tracking-wider text-on-surface-variant">Stamp duty inflow</dt>
-						<dd class="text-lg font-bold font-mono tabular-nums text-on-surface mt-0.5" id="reserve-duty">{{ incepted and summary.stampDutyToGdp > 0 ? (summary.stampDutyToGdp * 100)|number_format(2) ~ '% of GDP' : '-' }}</dd>
+					<div>
+						<dt class="text-xs text-on-surface-variant">Stamp duty inflow</dt>
+						<dd class="text-lg font-semibold font-mono tabular-nums text-on-surface mt-0.5" id="reserve-duty">{{ incepted and summary.stampDutyToGdp > 0 ? (summary.stampDutyToGdp * 100)|number_format(2) ~ '% of GDP' : '-' }}</dd>
 						<p class="text-3xs font-mono tabular-nums text-on-surface-variant mt-0.5" id="reserve-duty-ytd">{{ incepted ? (summary.stampDutyToGdp > 0 ? 'Last year · ' : 'First year open · ') ~ summary.stampDutyYearToDate|format_large('$') ~ ' so far' : '' }}</p>
 					</div>
-					<div class="bg-surface-container-lowest rounded border border-outline-variant/20 px-4 py-3">
-						<dt class="text-2xs font-bold uppercase tracking-wider text-on-surface-variant">Board ownership</dt>
-						<dd class="text-lg font-bold font-mono tabular-nums text-on-surface mt-0.5" id="reserve-ownership">{{ incepted ? (summary.ownership * 100)|number_format(2) ~ '% of float' : '-' }}</dd>
+					<div>
+						<dt class="text-xs text-on-surface-variant">Board ownership</dt>
+						<dd class="text-lg font-semibold font-mono tabular-nums text-on-surface mt-0.5" id="reserve-ownership">{{ incepted ? (summary.ownership * 100)|number_format(2) ~ '% of float' : '-' }}</dd>
 						<p class="text-3xs font-mono tabular-nums text-on-surface-variant mt-0.5">Ceiling {{ (mandate.ownershipCeiling * 100)|number_format(0) }}%</p>
 					</div>
-					<div class="bg-surface-container-lowest rounded border border-outline-variant/20 px-4 py-3">
-						<dt class="text-2xs font-bold uppercase tracking-wider text-on-surface-variant" title="What bond markets price: the District's debt less the government bonds the fund holds (IMF net debt)">Net public debt</dt>
-						<dd class="text-lg font-bold font-mono tabular-nums text-on-surface mt-0.5" id="reserve-net-debt">{{ (summary.netDebtToGdp * 100)|number_format(0) }}% of GDP</dd>
+					<div>
+						<dt class="text-xs text-on-surface-variant" title="What bond markets price: the District's debt less the government bonds the fund holds (IMF net debt)">Net public debt</dt>
+						<dd class="text-lg font-semibold font-mono tabular-nums text-on-surface mt-0.5" id="reserve-net-debt">{{ (summary.netDebtToGdp * 100)|number_format(0) }}% of GDP</dd>
 						<p class="text-3xs font-mono tabular-nums text-on-surface-variant mt-0.5" id="reserve-gross-debt">Gross {{ (summary.grossDebtToGdp * 100)|number_format(0) }}% less the fund's bonds</p>
 					</div>
-					<div class="bg-surface-container-lowest rounded border border-outline-variant/20 px-4 py-3">
-						<dt class="text-2xs font-bold uppercase tracking-wider text-on-surface-variant">Rebalancing</dt>
-						<dd class="text-lg font-bold text-on-surface mt-0.5" id="reserve-programme">
+					<div>
+						<dt class="text-xs text-on-surface-variant">Rebalancing</dt>
+						<dd class="text-lg font-semibold text-on-surface mt-0.5" id="reserve-programme">
 							{% if programme.active %}{{ programme.buying ? 'Buying' : 'Trimming' }}{% else %}None running{% endif %}
 						</dd>
 						<p class="text-3xs font-mono tabular-nums text-on-surface-variant mt-0.5" id="reserve-programme-detail">
@@ -95,25 +86,22 @@
 						</p>
 					</div>
 				</dl>
-			</div>
-		</div>
+		</header>
 
 		{% if not incepted %}
-			<div class="bg-surface-container-low rounded-lg p-6 border border-outline-variant/15 flex items-start gap-3" role="status">
-				<span class="material-symbols-outlined text-on-surface-variant" aria-hidden="true">hourglass_empty</span>
+			<div class="bg-surface-container-low rounded-lg p-6 border border-outline-variant/20 flex items-start gap-3" role="status">
 				<p class="text-sm text-on-surface-variant">
-					The fund opens on the first tick the market ticker runs. It opens holding
+					The fund opens with the market. It opens holding
 					{{ (mandate.openingOwnership * 100)|number_format(1) }}% of the board's float, at
 					{{ (mandate.openingSize * 100)|number_format(0) }}% of the District's GDP.
 				</p>
 			</div>
 		{% else %}
 
-		{# --- ALLOCATION AND BANDS --- #}
 		<div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
-			<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/15" aria-labelledby="reserve-allocation-heading">
-				<h2 id="reserve-allocation-heading" class="text-sm font-bold text-on-surface">Allocation</h2>
-				<p class="text-3xs text-on-surface-variant mt-0.5">What the fund holds, against the policy split it trades back to.</p>
+			<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20" aria-labelledby="reserve-allocation-heading">
+				<h2 id="reserve-allocation-heading" class="text-base font-semibold text-on-surface">Allocation</h2>
+				<p class="text-xs text-on-surface-variant mt-0.5">What the fund holds, against the policy split it trades back to.</p>
 
 				{# One bar, the three sleeves end to end; the policy split is marked above it. #}
 				<div class="relative mt-5" aria-hidden="true">
@@ -130,17 +118,17 @@
 
 				<table class="w-full mt-5 text-xs">
 					<thead>
-						<tr class="text-3xs uppercase tracking-wider text-on-surface-variant border-b border-outline-variant/15">
-							<th scope="col" class="text-left font-bold pb-2">Sleeve</th>
-							<th scope="col" class="text-right font-bold pb-2">Value</th>
-							<th scope="col" class="text-right font-bold pb-2">Weight</th>
-							<th scope="col" class="text-right font-bold pb-2">Policy</th>
+						<tr class="text-2xs uppercase tracking-wide text-on-surface-variant border-b border-outline-variant/15">
+							<th scope="col" class="text-left font-semibold pb-2">Sleeve</th>
+							<th scope="col" class="text-right font-semibold pb-2">Value</th>
+							<th scope="col" class="text-right font-semibold pb-2">Weight</th>
+							<th scope="col" class="text-right font-semibold pb-2">Policy</th>
 						</tr>
 					</thead>
 					<tbody class="divide-y divide-outline-variant/10">
 						{% for sleeve in sleeves %}
 							<tr data-sleeve="{{ sleeve.key }}">
-								<th scope="row" class="text-left font-bold text-on-surface py-2">
+								<th scope="row" class="text-left font-semibold text-on-surface py-2">
 									<span class="inline-block w-2.5 h-2.5 rounded-sm mr-1.5 align-middle" style="background-color: {{ sleeve_colors[sleeve.key] }}" aria-hidden="true"></span>{{ sleeve.label }}
 								</th>
 								<td class="text-right font-mono tabular-nums text-on-surface" data-sleeve-value>{{ sleeve.value|format_large('$') }}</td>
@@ -159,16 +147,16 @@
 				</p>
 			</section>
 
-			<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/15" aria-labelledby="reserve-bands-heading">
-				<h2 id="reserve-bands-heading" class="text-sm font-bold text-on-surface">Rebalancing bands</h2>
-				<p class="text-3xs text-on-surface-variant mt-0.5">Checked at every month end. A weight outside its band starts a programme back to policy.</p>
+			<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20" aria-labelledby="reserve-bands-heading">
+				<h2 id="reserve-bands-heading" class="text-base font-semibold text-on-surface">Rebalancing bands</h2>
+				<p class="text-xs text-on-surface-variant mt-0.5">Checked at every month end. A weight outside its band starts a programme back to policy.</p>
 
 				<div class="space-y-6 mt-5">
 					{% for gauge in bands %}
 						{% set gap = gauge.weight - gauge.policy %}
 						<div data-gauge="{{ gauge.key }}" data-policy="{{ gauge.policy }}" data-band="{{ gauge.band }}" data-weight="{{ gauge.weight }}">
 							<div class="flex items-baseline justify-between gap-3">
-								<h3 class="text-xs font-bold text-on-surface">{{ gauge.label }}</h3>
+								<h3 class="text-sm font-semibold text-on-surface">{{ gauge.label }}</h3>
 								<span class="text-xs font-mono tabular-nums text-on-surface" data-gauge-reading>{{ (gauge.weight * 100)|number_format(2) }}%</span>
 							</div>
 							<div class="relative h-6 mt-2" aria-hidden="true">
@@ -196,40 +184,39 @@
 			</section>
 		</div>
 
-		{# --- RETURNS: time-weighted, so the money paid in and drawn out is not performance --- #}
-		<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/15" aria-labelledby="reserve-returns-heading">
-			<h2 id="reserve-returns-heading" class="text-sm font-bold text-on-surface">Returns</h2>
-			<p class="text-3xs text-on-surface-variant mt-0.5 max-w-3xl">
-				Time-weighted and valued every tick, so the stamp duty and dividends paid in and the budget's draw are not
+		<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20" aria-labelledby="reserve-returns-heading">
+			<h2 id="reserve-returns-heading" class="text-base font-semibold text-on-surface">Returns</h2>
+			<p class="text-xs text-on-surface-variant mt-0.5 max-w-3xl">
+				Time-weighted and valued continuously, so the stamp duty and dividends paid in and the budget's draw are not
 				counted as performance. Real returns are after District inflation. Annualised over the recorded history.
 			</p>
 
 			{# Filled by pages/reserve.js from the quarterly history and the live index. #}
-			<dl class="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4" id="reserveReturns" data-index-base="{{ mandate.returnIndexBase }}">
-				<div class="bg-surface-container-lowest rounded border border-outline-variant/20 px-4 py-3">
-					<dt class="text-2xs font-bold uppercase tracking-wider text-on-surface-variant">Real, 10 years</dt>
-					<dd class="text-lg font-bold font-mono tabular-nums text-on-surface mt-0.5" id="reserve-return-decade">-</dd>
+			<dl class="grid grid-cols-2 sm:grid-cols-4 gap-x-8 gap-y-5 mt-4" id="reserveReturns" data-index-base="{{ mandate.returnIndexBase }}">
+				<div>
+					<dt class="text-xs text-on-surface-variant">Real, 10 years</dt>
+					<dd class="text-lg font-semibold font-mono tabular-nums text-on-surface mt-0.5" id="reserve-return-decade">-</dd>
 					<p class="text-3xs font-mono tabular-nums text-on-surface-variant mt-0.5">A year</p>
 				</div>
-				<div class="bg-surface-container-lowest rounded border border-outline-variant/20 px-4 py-3">
-					<dt class="text-2xs font-bold uppercase tracking-wider text-on-surface-variant">Real, all recorded</dt>
-					<dd class="text-lg font-bold font-mono tabular-nums text-on-surface mt-0.5" id="reserve-return-span-real">-</dd>
+				<div>
+					<dt class="text-xs text-on-surface-variant">Real, all recorded</dt>
+					<dd class="text-lg font-semibold font-mono tabular-nums text-on-surface mt-0.5" id="reserve-return-span-real">-</dd>
 					<p class="text-3xs font-mono tabular-nums text-on-surface-variant mt-0.5" id="reserve-return-span">A year</p>
 				</div>
-				<div class="bg-surface-container-lowest rounded border border-outline-variant/20 px-4 py-3">
-					<dt class="text-2xs font-bold uppercase tracking-wider text-on-surface-variant">Nominal, all recorded</dt>
-					<dd class="text-lg font-bold font-mono tabular-nums text-on-surface mt-0.5" id="reserve-return-span-nominal">-</dd>
+				<div>
+					<dt class="text-xs text-on-surface-variant">Nominal, all recorded</dt>
+					<dd class="text-lg font-semibold font-mono tabular-nums text-on-surface mt-0.5" id="reserve-return-span-nominal">-</dd>
 					<p class="text-3xs font-mono tabular-nums text-on-surface-variant mt-0.5">A year, in District dollars</p>
 				</div>
-				<div class="bg-surface-container-lowest rounded border border-outline-variant/20 px-4 py-3">
-					<dt class="text-2xs font-bold uppercase tracking-wider text-on-surface-variant">Spending rule assumes</dt>
-					<dd class="text-lg font-bold font-mono tabular-nums text-on-surface mt-0.5" id="reserve-return-assumed">{{ (returns.assumedReal * 100)|number_format(2) }}%</dd>
+				<div>
+					<dt class="text-xs text-on-surface-variant">Spending rule assumes</dt>
+					<dd class="text-lg font-semibold font-mono tabular-nums text-on-surface mt-0.5" id="reserve-return-assumed">{{ (returns.assumedReal * 100)|number_format(2) }}%</dd>
 					<p class="text-3xs font-mono tabular-nums text-on-surface-variant mt-0.5">Real a year, compound; the draw is half of it</p>
 				</div>
 			</dl>
 
 			<div class="mt-5">
-				<h3 class="text-xs font-bold text-on-surface">Return index</h3>
+				<h3 class="text-sm font-semibold text-on-surface">Return index</h3>
 				<p class="text-3xs text-on-surface-variant">Real and nominal, 100 at the first quarter shown</p>
 				<div class="h-64 md:h-72 w-full relative mt-3">
 					<canvas id="reserveReturnChart"></canvas>
@@ -240,13 +227,12 @@
 			</div>
 		</section>
 
-		{# --- STRATEGIC HOLDING: the District's, beside the fund rather than in it --- #}
 		{% if strategic is not empty %}
-			<section class="bg-surface-container-low rounded-lg border border-outline-variant/15 overflow-hidden" aria-labelledby="reserve-strategic-heading">
+			<section class="bg-surface-container-low rounded-lg border border-outline-variant/20 overflow-hidden" aria-labelledby="reserve-strategic-heading">
 				<div class="p-5">
-					<h2 id="reserve-strategic-heading" class="text-sm font-bold text-on-surface">Strategic holding</h2>
-					<p class="text-3xs text-on-surface-variant mt-0.5 max-w-3xl">
-						Held by the District outside the fund, the way Singapore holds its exchange. The stake is off the float,
+					<h2 id="reserve-strategic-heading" class="text-base font-semibold text-on-surface">Strategic holding</h2>
+					<p class="text-xs text-on-surface-variant mt-0.5 max-w-3xl">
+						Held by the District itself, outside the fund. The stake is off the float,
 						is never traded, and sits outside the fund's weights and bands. Its dividends, and its share of any
 						buyback, are paid into the fund.
 						Values at page load.
@@ -254,14 +240,14 @@
 				</div>
 				<div class="overflow-x-auto">
 					<table class="w-full text-xs">
-						<thead class="bg-surface-container text-3xs uppercase tracking-wider text-on-surface-variant">
+						<thead class="bg-surface-container text-2xs uppercase tracking-wide text-on-surface-variant">
 							<tr>
-								<th scope="col" class="px-5 py-2.5 text-left font-bold">Company</th>
-								<th scope="col" class="px-4 py-2.5 text-right font-bold">District stake</th>
-								<th scope="col" class="px-4 py-2.5 text-right font-bold hidden sm:table-cell">With the fund</th>
-								<th scope="col" class="px-4 py-2.5 text-right font-bold hidden md:table-cell">Shares held</th>
-								<th scope="col" class="px-4 py-2.5 text-right font-bold">Value</th>
-								<th scope="col" class="px-5 py-2.5 text-right font-bold">Dividends to the fund</th>
+								<th scope="col" class="px-5 py-2.5 text-left font-semibold">Company</th>
+								<th scope="col" class="px-4 py-2.5 text-right font-semibold">District stake</th>
+								<th scope="col" class="px-4 py-2.5 text-right font-semibold hidden sm:table-cell">With the fund</th>
+								<th scope="col" class="px-4 py-2.5 text-right font-semibold hidden md:table-cell">Shares held</th>
+								<th scope="col" class="px-4 py-2.5 text-right font-semibold">Value</th>
+								<th scope="col" class="px-5 py-2.5 text-right font-semibold">Dividends to the fund</th>
 							</tr>
 						</thead>
 						<tbody class="divide-y divide-outline-variant/10">
@@ -287,11 +273,10 @@
 			</section>
 		{% endif %}
 
-		{# --- HISTORY --- #}
 		<section class="space-y-4" aria-labelledby="reserve-history-heading">
-			<div class="bg-surface-container-low p-5 rounded-lg border border-outline-variant/15">
-				<h2 id="reserve-history-heading" class="text-sm font-bold text-on-surface">History</h2>
-				<p class="text-3xs text-on-surface-variant mt-0.5">Quarterly, since the fund opened (up to 25 years).</p>
+			<div class="bg-surface-container-low p-5 rounded-lg border border-outline-variant/20">
+				<h2 id="reserve-history-heading" class="text-base font-semibold text-on-surface">History</h2>
+				<p class="text-xs text-on-surface-variant mt-0.5">Quarterly, since the fund opened (up to 25 years).</p>
 			</div>
 
 			<div id="reserveChartsStatus" class="hidden rounded-lg border px-4 py-3 text-sm flex items-center gap-3" role="status" aria-live="polite">
@@ -309,8 +294,8 @@
 					{ id: 'reserveEquityChart', title: 'Whole equity share', note: 'District and foreign equities, percent of the fund, against policy and band' },
 					{ id: 'reserveFlowsChart', title: 'Money out and in', note: 'Budget draw, stabilisation (positive: spent from the fund) and stamp duty, percent of GDP' }
 				] %}
-					<div class="bg-surface-container-low border border-outline-variant/15 rounded-lg p-5">
-						<h3 class="text-xs font-bold text-on-surface">{{ chart.title }}</h3>
+					<div class="bg-surface-container-low border border-outline-variant/20 rounded-lg p-5">
+						<h3 class="text-sm font-semibold text-on-surface">{{ chart.title }}</h3>
 						<p class="text-3xs text-on-surface-variant">{{ chart.note }}</p>
 						<div class="h-64 md:h-72 w-full relative mt-3">
 							<canvas id="{{ chart.id }}"></canvas>
@@ -320,25 +305,24 @@
 			</div>
 		</section>
 
-		{# --- HOLDINGS --- #}
-		<section class="bg-surface-container-low rounded-lg border border-outline-variant/15 overflow-hidden" aria-labelledby="reserve-holdings-heading">
+		<section class="bg-surface-container-low rounded-lg border border-outline-variant/20 overflow-hidden" aria-labelledby="reserve-holdings-heading">
 			<div class="p-5">
-				<h2 id="reserve-holdings-heading" class="text-sm font-bold text-on-surface">District holdings</h2>
-				<p class="text-3xs text-on-surface-variant mt-0.5">
+				<h2 id="reserve-holdings-heading" class="text-base font-semibold text-on-surface">District holdings</h2>
+				<p class="text-xs text-on-surface-variant mt-0.5">
 					The fund holds {{ (summary.ownership * 100)|number_format(2) }}% of every listed company's float, so its
 					board sleeve is weighted like the float-adjusted market. Values at page load.
 				</p>
 			</div>
 			<div class="overflow-x-auto">
 				<table class="w-full text-xs">
-					<thead class="bg-surface-container text-3xs uppercase tracking-wider text-on-surface-variant">
+					<thead class="bg-surface-container text-2xs uppercase tracking-wide text-on-surface-variant">
 						<tr>
-							<th scope="col" class="px-5 py-2.5 text-right font-bold w-10">#</th>
-							<th scope="col" class="px-4 py-2.5 text-left font-bold">Company</th>
-							<th scope="col" class="px-4 py-2.5 text-left font-bold hidden md:table-cell">Sector</th>
-							<th scope="col" class="px-4 py-2.5 text-right font-bold">Stake</th>
-							<th scope="col" class="px-4 py-2.5 text-right font-bold hidden sm:table-cell">Shares held</th>
-							<th scope="col" class="px-5 py-2.5 text-right font-bold">Of sleeve</th>
+							<th scope="col" class="px-5 py-2.5 text-right font-semibold w-10">#</th>
+							<th scope="col" class="px-4 py-2.5 text-left font-semibold">Company</th>
+							<th scope="col" class="px-4 py-2.5 text-left font-semibold hidden md:table-cell">Sector</th>
+							<th scope="col" class="px-4 py-2.5 text-right font-semibold">Stake</th>
+							<th scope="col" class="px-4 py-2.5 text-right font-semibold hidden sm:table-cell">Shares held</th>
+							<th scope="col" class="px-5 py-2.5 text-right font-semibold">Of sleeve</th>
 						</tr>
 					</thead>
 					<tbody class="divide-y divide-outline-variant/10">
@@ -360,86 +344,84 @@
 			</div>
 		</section>
 
-		{# --- MANDATE --- #}
-		<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/15" aria-labelledby="reserve-mandate-heading">
-			<h2 id="reserve-mandate-heading" class="text-sm font-bold text-on-surface">Mandate</h2>
-			<p class="text-3xs text-on-surface-variant mt-0.5">Every rule the fund runs on, and the real fund it is taken from.</p>
+		<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20" aria-labelledby="reserve-mandate-heading">
+			<h2 id="reserve-mandate-heading" class="text-base font-semibold text-on-surface">Mandate</h2>
+			<p class="text-sm text-on-surface-variant mt-0.5">Every rule the fund runs on.</p>
 
+			{# Where each rule is taken from (kept for the record, not printed):
+			   - Spending rule: Singapore Net Investment Returns framework (2008)
+			   - Stabilisation rule: IMF Norway Selected Issues (2025), Table 5: structural balance +0.45 per point of output gap; insulated from the fund's value, as the IMF recommends
+			   - Budget rule: Norway's fiscal rule (2001); Singapore's budget surpluses accrue to its reserves
+			   - Opening size: GPIF: its assets against Japan's GDP (FY2024) and its share of the Japanese market (2016)
+			   - Reference portfolio: GIC Reference Portfolio (2013); duration of the Bloomberg Global Aggregate (2026)
+			   - District equity band: GPIF policy asset mix, 5th medium-term plan (FY2025)
+			   - Equity band: GPIF policy asset mix, 5th medium-term plan (FY2025)
+			   - Rebalancing: Norges Bank Investment Management rebalancing rule (2018)
+			   - Ownership ceiling: Government Pension Fund Global mandate (Norway)
+			   - Corporate actions: Index-holder practice
+			   - Returns: GIPS time-weighted return, as GPFG and GIC report
+			   - Stamp duty: District rate; Hong Kong charges 0.1% a side, the UK 0.5% on purchases
+			   - Strategic holding: Singapore: SEL Holdings holds about 23% of SGX; Norway: 67% of Equinor, dividends to the GPFG
+			#}
 			{% set rules = [
 				{
 					name: 'Spending rule',
-					text: 'Each budget year the fund pays the budget ' ~ (mandate.spendingShare * 100)|number_format(0) ~ '% of its expected long-term real return on its value. The return is the compound one, the average less half the variance, so volatility is never spent.',
-					source: 'Singapore Net Investment Returns framework (2008)'
+					text: 'Each budget year the fund pays the budget ' ~ (mandate.spendingShare * 100)|number_format(0) ~ '% of its expected long-term real return on its value. The return is the compound one, the average less half the variance, so volatility is never spent.'
 				},
 				{
 					name: 'Stabilisation rule',
-					text: 'At each budget round, every ' ~ mandate.budgetRoundMonths|number_format(0) ~ ' months, the budget spends ' ~ mandate.stabilisationGapResponse|number_format(2) ~ '% of GDP from the fund, beyond the draw, for each point output is below trend, and pays the same into the fund for each point above it. The cycle is read against the gap\'s own ' ~ mandate.stabilisationTrendYears|number_format(0) ~ '-year average, so over time the spending and the saving balance. The next year ' ~ (mandate.stabilisationReversal * 100)|number_format(0) ~ '% of the year\'s change is given back, and the whole of it fades toward zero by ' ~ (mandate.stabilisationPersistence * 100)|number_format(1) ~ '% a year. Together with tax policy, the budget answers the business cycle as strongly as Norway\'s does. The fund\'s own market swings never reach the budget.',
-					source: 'IMF Norway Selected Issues (2025), Table 5: structural balance +0.45 per point of output gap; insulated from the fund\'s value, as the IMF recommends'
+					text: 'At each budget round, every ' ~ mandate.budgetRoundMonths|number_format(0) ~ ' months, the budget spends ' ~ mandate.stabilisationGapResponse|number_format(2) ~ '% of GDP from the fund, beyond the draw, for each point output is below trend, and pays the same into the fund for each point above it. The cycle is read against the gap\'s own ' ~ mandate.stabilisationTrendYears|number_format(0) ~ '-year average, so over time the spending and the saving balance. The next year ' ~ (mandate.stabilisationReversal * 100)|number_format(0) ~ '% of the year\'s change is given back, and the whole of it fades toward zero by ' ~ (mandate.stabilisationPersistence * 100)|number_format(1) ~ '% a year. Together with tax policy, the budget answers the business cycle as strongly as Norway\'s does. The fund\'s own market swings never reach the budget.'
 				},
 				{
 					name: 'Budget rule',
-					text: 'The budget spends what the fund pays: the structural deficit is the draw, so a fund that grows faster than the economy widens spending with it rather than piling up surpluses. The District keeps at least ' ~ (mandate.debtFloor * 100)|number_format(0) ~ '% of GDP in gross debt outstanding for its benchmark curve, and a surplus that would take debt below that buys bonds for the fund instead.',
-					source: 'Norway\'s fiscal rule (2001); Singapore\'s budget surpluses accrue to its reserves'
+					text: 'The budget spends what the fund pays: the structural deficit is the draw, so a fund that grows faster than the economy widens spending with it rather than piling up surpluses. The District keeps at least ' ~ (mandate.debtFloor * 100)|number_format(0) ~ '% of GDP in gross debt outstanding for its benchmark curve, and a surplus that would take debt below that buys bonds for the fund instead.'
 				},
 				{
 					name: 'Opening size',
-					text: 'Opened at ' ~ (mandate.openingSize * 100)|number_format(0) ~ '% of GDP, holding ' ~ (mandate.openingOwnership * 100)|number_format(1) ~ '% of the board\'s float.',
-					source: 'GPIF: its assets against Japan\'s GDP (FY2024) and its share of the Japanese market (2016)'
+					text: 'Opened at ' ~ (mandate.openingSize * 100)|number_format(0) ~ '% of GDP, holding ' ~ (mandate.openingOwnership * 100)|number_format(1) ~ '% of the board\'s float.'
 				},
 				{
 					name: 'Reference portfolio',
-					text: 'Money off the board is held ' ~ (mandate.foreignEquityShare * 100)|number_format(0) ~ '% in global equities and ' ~ ((1 - mandate.foreignEquityShare) * 100)|number_format(0) ~ '% in foreign government bonds. The bonds are held at a constant duration of ' ~ mandate.foreignBondDuration|number_format(1) ~ ' years, so they earn their yield and roll-down and gain when foreign rates fall.',
-					source: 'GIC Reference Portfolio (2013); duration of the Bloomberg Global Aggregate (2026)'
+					text: 'Money off the board is held ' ~ (mandate.foreignEquityShare * 100)|number_format(0) ~ '% in global equities and ' ~ ((1 - mandate.foreignEquityShare) * 100)|number_format(0) ~ '% in foreign government bonds. The bonds are held at a constant duration of ' ~ mandate.foreignBondDuration|number_format(1) ~ ' years, so they earn their yield and roll-down and gain when foreign rates fall.'
 				},
 				{
 					name: 'District equity band',
-					text: 'Policy weight ' ~ (bands[0].policy * 100)|number_format(2) ~ '%, band ±' ~ (bands[0].band * 100)|number_format(2) ~ 'pp. GPIF allows ±' ~ (mandate.gpifDomesticLimit * 100)|number_format(0) ~ 'pp on its ' ~ (mandate.gpifDomesticTarget * 100)|number_format(0) ~ '% domestic equities; this fund\'s band trips at the same relative move, about ' ~ (bands[0].breachingMove * 100)|number_format(0) ~ '%.',
-					source: 'GPIF policy asset mix, 5th medium-term plan (FY2025)'
+					text: 'Policy weight ' ~ (bands[0].policy * 100)|number_format(2) ~ '%, band ±' ~ (bands[0].band * 100)|number_format(2) ~ 'pp, so it trips on a relative move of about ' ~ (bands[0].breachingMove * 100)|number_format(0) ~ '%.'
 				},
 				{
 					name: 'Equity band',
-					text: 'Policy equity share ' ~ (bands[1].policy * 100)|number_format(2) ~ '%, band ±' ~ (bands[1].band * 100)|number_format(2) ~ 'pp, carried from GPIF\'s ±' ~ (mandate.gpifEquityLimit * 100)|number_format(0) ~ 'pp on its ' ~ (mandate.gpifEquityTarget * 100)|number_format(0) ~ '% equities the same way. This is the band a global crash breaches.',
-					source: 'GPIF policy asset mix, 5th medium-term plan (FY2025)'
+					text: 'Policy equity share ' ~ (bands[1].policy * 100)|number_format(2) ~ '%, band ±' ~ (bands[1].band * 100)|number_format(2) ~ 'pp. This is the band a global crash breaches.'
 				},
 				{
 					name: 'Rebalancing',
-					text: 'Checked ' ~ (mandate.checkMonths == 1 ? 'at every month end' : 'every ' ~ mandate.checkMonths|number_format(0) ~ ' months') ~ '. A breach puts the foreign sleeves back on policy at once and trades the board back to its policy weight evenly over ' ~ mandate.executionMonths|number_format(0) ~ ' months, sliced across companies by float.',
-					source: 'Norges Bank Investment Management rebalancing rule (2018)'
+					text: 'Checked ' ~ (mandate.checkMonths == 1 ? 'at every month end' : 'every ' ~ mandate.checkMonths|number_format(0) ~ ' months') ~ '. A breach puts the foreign sleeves back on policy at once and trades the board back to its policy weight evenly over ' ~ mandate.executionMonths|number_format(0) ~ ' months, sliced across companies by float.'
 				},
 				{
 					name: 'Ownership ceiling',
-					text: 'Never more than ' ~ (mandate.ownershipCeiling * 100)|number_format(0) ~ '% of the float. Holding the same share of every company, that keeps it under ' ~ (mandate.ownershipCeiling * 100)|number_format(0) ~ '% of any company\'s voting shares.',
-					source: 'Government Pension Fund Global mandate (Norway)'
+					text: 'Never more than ' ~ (mandate.ownershipCeiling * 100)|number_format(0) ~ '% of the float. Holding the same share of every company, that keeps it under ' ~ (mandate.ownershipCeiling * 100)|number_format(0) ~ '% of any company\'s voting shares.'
 				},
 				{
 					name: 'Corporate actions',
-					text: 'Tenders its share into buybacks and takes up its share of new issues, so a company\'s own flow never changes the fund\'s ownership.',
-					source: 'Index-holder practice'
+					text: 'Tenders its share into buybacks and takes up its share of new issues, so a company\'s own flow never changes the fund\'s ownership.'
 				},
 				{
 					name: 'Returns',
-					text: 'Reported as a time-weighted return, valued every tick, so money paid in and the budget\'s draw are not performance. The real return is after District inflation, and is set against the return the spending rule assumed.',
-					source: 'GIPS time-weighted return, as GPFG and GIC report'
+					text: 'Reported as a time-weighted return, valued continuously, so money paid in and the budget\'s draw are not performance. The real return is after District inflation, and is set against the return the spending rule assumed.'
 				},
 				{
 					name: 'Stamp duty',
-					text: 'Every share trade pays ' ~ (mandate.stampDutyRate * 100)|number_format(2) ~ '% on each side, and the duty is paid into the fund rather than the budget. Index funds are exempt.',
-					source: 'District rate; Hong Kong charges 0.1% a side, the UK 0.5% on purchases'
+					text: 'Every share trade pays ' ~ (mandate.stampDutyRate * 100)|number_format(2) ~ '% on each side, and the duty is paid into the fund rather than the budget. Index funds are exempt.'
 				},
 				{
 					name: 'Strategic holding',
-					text: 'The District holds ' ~ (mandate.clearinghouseStake * 100)|number_format(0) ~ '% of its central counterparty outside the fund. The stake is off the float and never traded. The District tenders into buybacks and takes up new issues pro rata, so the percentage holds. Its dividends and buyback proceeds are paid into the fund, and any subscription is paid out of it.',
-					source: 'Singapore: SEL Holdings holds about 23% of SGX; Norway: 67% of Equinor, dividends to the GPFG'
+					text: 'The District holds ' ~ (mandate.clearinghouseStake * 100)|number_format(0) ~ '% of its central counterparty outside the fund. The stake is off the float and never traded. The District tenders into buybacks and takes up new issues pro rata, so the percentage holds. Its dividends and buyback proceeds are paid into the fund, and any subscription is paid out of it.'
 				}
 			] %}
 			<dl class="mt-4 divide-y divide-outline-variant/10">
 				{% for rule in rules %}
 					<div class="py-3 grid grid-cols-1 md:grid-cols-[12rem_1fr] gap-1 md:gap-4">
-						<dt class="text-xs font-bold text-on-surface">{{ rule.name }}</dt>
-						<dd class="text-xs text-on-surface-variant">
-							{{ rule.text }}
-							<span class="block text-3xs font-mono text-primary/80 mt-1">{{ rule.source }}</span>
-						</dd>
+						<dt class="text-sm font-semibold text-on-surface">{{ rule.name }}</dt>
+						<dd class="text-sm text-on-surface-variant">{{ rule.text }}</dd>
 					</div>
 				{% endfor %}
 			</dl>

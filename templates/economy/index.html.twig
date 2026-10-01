@@ -10,120 +10,82 @@
 {% endblock %}
 
 {% block body %}
-	<div class="max-w-400 mx-auto px-4 sm:px-6 lg:px-8 py-5 w-full space-y-5">
+	<div class="max-w-400 mx-auto px-4 sm:px-6 lg:px-8 pt-8 pb-12 w-full space-y-8">
 
-		{# --- HEADER: THE VITALS --- #}
-		<div class="bg-surface-container-low rounded-lg p-6 lg:p-7 border border-outline-variant/15">
-			<div class="flex flex-col lg:flex-row lg:justify-between lg:items-start gap-6">
-				<div class="min-w-0">
-					<div class="flex items-center gap-2 mb-2">
-						<span class="w-2 h-2 rounded-full bg-secondary"></span>
-						<span class="text-2xs font-semibold tracking-wide text-secondary uppercase">Live macro feed</span>
-					</div>
-					<h1 class="text-xl sm:text-2xl md:text-3xl font-bold text-on-surface tracking-tight leading-tight">The District Economy</h1>
-					<p class="text-sm text-on-surface-variant mt-2 max-w-2xl">
-						The conditions every listed company is priced against. The central bank sets the short rate on a
-						Taylor rule, the curve prices the path it expects, and the output gap, credit conditions and the
-						labour market feed back into every earnings report on the exchange.
-					</p>
-					<div class="flex flex-wrap gap-x-4 gap-y-1 mt-3">
-						<a href="/government" class="inline-flex items-center gap-1 text-xs font-bold text-primary hover:underline">
-							<span class="material-symbols-outlined text-sm" aria-hidden="true">account_balance</span>
-							The Government
-						</a>
-						<a href="/reserve" class="inline-flex items-center gap-1 text-xs font-bold text-primary hover:underline">
-							<span class="material-symbols-outlined text-sm" aria-hidden="true">savings</span>
-							Sovereign Reserve Fund
-						</a>
-					</div>
-				</div>
-
-				{# The six readings the ticker publishes on every frame; stats-updater.js repaints them in place. #}
-				<dl class="grid grid-cols-2 sm:grid-cols-3 gap-3 shrink-0 lg:min-w-[30rem]">
-					<div class="bg-surface-container-lowest rounded border border-outline-variant/20 px-4 py-3">
-						<dt class="text-2xs font-bold uppercase tracking-wider text-on-surface-variant">Economic cycle</dt>
-						<dd class="text-lg font-bold font-mono tabular-nums text-on-surface mt-0.5" id="market-economic-cycle">{{ economic_cycle }}</dd>
-					</div>
-					<div class="bg-surface-container-lowest rounded border border-outline-variant/20 px-4 py-3">
-						<dt class="text-2xs font-bold uppercase tracking-wider text-on-surface-variant">Inflation (CPI)</dt>
-						<dd class="text-lg font-bold font-mono tabular-nums text-on-surface mt-0.5" id="macro-inflation">{{ (macro.inflation * 100)|number_format(2) }}%</dd>
-					</div>
-					<div class="bg-surface-container-lowest rounded border border-outline-variant/20 px-4 py-3">
-						<dt class="text-2xs font-bold uppercase tracking-wider text-on-surface-variant">Output gap</dt>
-						<dd class="text-lg font-bold {{ macro.outputGap * 100 < -1.0 ? 'text-tertiary' : (macro.outputGap * 100 > 1.0 ? 'text-secondary' : 'text-on-surface') }}" id="macro-output-gap">{{ (macro.outputGap * 100)|number_format(2) }}%</dd>
-					</div>
-					<div class="bg-surface-container-lowest rounded border border-outline-variant/20 px-4 py-3">
-						<dt class="text-2xs font-bold uppercase tracking-wider text-on-surface-variant">Policy rate</dt>
-						<dd class="text-lg font-bold font-mono tabular-nums text-on-surface mt-0.5" id="macro-policy-rate">{{ (macro.policyRate * 100)|number_format(2) }}%</dd>
-					</div>
-					<div class="bg-surface-container-lowest rounded border border-outline-variant/20 px-4 py-3">
-						<dt class="text-2xs font-bold uppercase tracking-wider text-on-surface-variant">10Y yield</dt>
-						<dd class="font-bold {{ macro.qeActive ? 'text-emerald-400' : 'text-on-surface' }} font-mono" id="macro-yield">{{ (macro.yield10y * 100)|number_format(2) }}%</dd>
-					</div>
-					<div class="bg-surface-container-lowest rounded border border-outline-variant/20 px-4 py-3 {{ macro.qeActive and macro.qeIntensity > 0.0005 ? '' : 'hidden' }}" id="qe-status-container">
-						<dt class="text-2xs font-bold uppercase tracking-wider text-on-surface-variant">Quantitative easing</dt>
-						<dd class="mt-1" id="macro-qe-status">
-							{% if macro.qeActive and macro.qeIntensity > 0.0005 %}
-								<span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-3xs font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/25 shadow-sm"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span> Active (-{{ (macro.qeIntensity * 10000)|number_format(0) }} bps)</span>
-							{% else %}
-								<span class="inline-flex items-center px-2 py-0.5 rounded-md text-3xs font-medium bg-surface-container-highest/60 text-on-surface-variant border border-outline-variant/10">Inactive</span>
-							{% endif %}
-						</dd>
-					</div>
-				</dl>
+		<header class="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-6 pb-6 border-b border-outline-variant/15">
+			<div class="min-w-0 max-w-2xl">
+				<h1 class="text-2xl md:text-3xl font-semibold text-on-surface tracking-tight">The District Economy</h1>
+				<p class="text-sm text-on-surface-variant mt-2 leading-relaxed">
+					The conditions every listed company is priced against. The Monetary Authority sets the policy
+					rate by its published rule, the yield curve prices the path it expects, and growth, credit and
+					the labour market feed through to every earnings report on the exchange.
+				</p>
+				<p class="mt-3 text-sm">
+					<a href="/government" class="text-primary hover:underline underline-offset-2">The Government</a>
+					<span class="mx-2 text-on-surface-variant/40" aria-hidden="true">&middot;</span>
+					<a href="/reserve" class="text-primary hover:underline underline-offset-2">Sovereign Reserve Fund</a>
+				</p>
 			</div>
-		</div>
 
-		{# --- THE SERIES --- #}
-		<div class="space-y-6">
-			{# Institutional Terminal Header #}
-			<div class="flex flex-col md:flex-row justify-between items-start md:items-center bg-surface-container-low p-6 rounded-lg border border-outline-variant/15 gap-4">
+			{# The readings the ticker publishes on every frame; stats-updater.js repaints them in place. #}
+			<dl class="grid grid-cols-2 sm:grid-cols-3 gap-x-8 gap-y-4 shrink-0">
 				<div>
-					<div class="flex items-center gap-2 mb-1">
-						<span class="material-symbols-outlined text-primary text-base">analytics</span>
-						<span class="text-3xs font-bold tracking-widest text-primary uppercase font-mono">Macroeconomic Intelligence Terminal</span>
-					</div>
-					<h2 class="text-xl md:text-2xl font-bold text-on-surface">Macroeconomic Trends & Cycle Indicators</h2>
-					<p class="text-xs text-on-surface-variant mt-1">Multi-horizon historical econometric cycle series across monetary policy, yield curves, risk premia, labor, and commodities.</p>
+					<dt class="text-xs text-on-surface-variant">Economic cycle</dt>
+					<dd class="mt-0.5 text-lg font-semibold text-on-surface" id="market-economic-cycle">{{ economic_cycle }}</dd>
 				</div>
-				<div class="flex items-center gap-3">
-					{# Timeframe Horizon Switcher (5Y / 10Y / 25Y) #}
-					<div class="flex space-x-1 bg-surface-container-lowest p-1 rounded border border-outline-variant/15">
-						<button id="btn-macro-5Y" class="macro-range-btn px-3 py-1 text-xs font-bold rounded-lg bg-surface-container text-on-surface-variant hover:bg-surface-container-high transition-all cursor-pointer" data-macro-timeframe="5Y">5Y</button>
-						<button id="btn-macro-10Y" class="macro-range-btn px-3 py-1 text-xs font-bold rounded-lg bg-primary text-on-primary shadow-primary/20 transition-all cursor-pointer" data-macro-timeframe="10Y">10Y</button>
-						<button id="btn-macro-25Y" class="macro-range-btn px-3 py-1 text-xs font-bold rounded-lg bg-surface-container text-on-surface-variant hover:bg-surface-container-high transition-all cursor-pointer" data-macro-timeframe="25Y">25Y</button>
-					</div>
+				<div>
+					<dt class="text-xs text-on-surface-variant">Inflation (CPI)</dt>
+					<dd class="mt-0.5 text-lg font-semibold font-mono tabular-nums text-on-surface" id="macro-inflation">{{ (macro.inflation * 100)|number_format(2) }}%</dd>
+				</div>
+				<div>
+					<dt class="text-xs text-on-surface-variant">Output gap</dt>
+					<dd class="mt-0.5 text-lg font-semibold font-mono tabular-nums {{ macro.outputGap * 100 < -1.0 ? 'text-tertiary' : (macro.outputGap * 100 > 1.0 ? 'text-secondary' : 'text-on-surface') }}" id="macro-output-gap">{{ (macro.outputGap * 100)|number_format(2) }}%</dd>
+				</div>
+				<div>
+					<dt class="text-xs text-on-surface-variant">Policy rate</dt>
+					<dd class="mt-0.5 text-lg font-semibold font-mono tabular-nums text-on-surface" id="macro-policy-rate">{{ (macro.policyRate * 100)|number_format(2) }}%</dd>
+				</div>
+				<div>
+					<dt class="text-xs text-on-surface-variant">10Y yield</dt>
+					<dd class="mt-0.5 text-lg font-semibold font-mono tabular-nums text-on-surface" id="macro-yield">{{ (macro.yield10y * 100)|number_format(2) }}%</dd>
+				</div>
+				<div class="{{ macro.qeActive and macro.qeIntensity > 0.0005 ? '' : 'hidden' }}" id="qe-status-container">
+					<dt class="text-xs text-on-surface-variant">Asset purchases</dt>
+					<dd class="mt-0.5 text-lg font-semibold font-mono tabular-nums text-on-surface" id="macro-qe-status">
+						{%- if macro.qeActive and macro.qeIntensity > 0.0005 -%}
+							&minus;{{ (macro.qeIntensity * 10000)|number_format(0) }} bps
+						{%- endif -%}
+					</dd>
+				</div>
+			</dl>
+		</header>
+
+		<section class="space-y-5" aria-labelledby="macro-series-heading">
+			<div class="flex flex-col md:flex-row md:items-end justify-between gap-4">
+				<div>
+					<h2 id="macro-series-heading" class="text-lg font-semibold text-on-surface">History</h2>
+					<p class="text-sm text-on-surface-variant mt-0.5">Quarterly readings across rates, prices, growth, credit and trade.</p>
+				</div>
+				<div class="inline-flex items-center gap-0.5 rounded-md border border-outline-variant/25 bg-surface-container-lowest p-0.5 self-start md:self-auto" role="group" aria-label="History window">
+					<button type="button" id="btn-macro-5Y" class="macro-range-btn seg-btn" aria-pressed="false" data-macro-timeframe="5Y">5Y</button>
+					<button type="button" id="btn-macro-10Y" class="macro-range-btn seg-btn" aria-pressed="true" data-macro-timeframe="10Y">10Y</button>
+					<button type="button" id="btn-macro-25Y" class="macro-range-btn seg-btn" aria-pressed="false" data-macro-timeframe="25Y">25Y</button>
 				</div>
 			</div>
 
-			{# Category Filter Bar & Quick Search Filter #}
-			<div class="flex flex-col xl:flex-row justify-between items-stretch xl:items-center bg-surface-container-low border border-outline-variant/15 rounded-lg p-3 gap-3">
-				{# Filter Pills #}
-				<div class="flex items-center flex-wrap gap-1.5" id="macroCategoryPills">
-					<button class="macro-cat-btn px-3 py-1.5 text-xs font-bold rounded-lg transition-all whitespace-nowrap cursor-pointer bg-primary text-on-primary shadow-md shadow-primary/20" aria-pressed="true" data-category="all">
-						ALL <span class="ml-1 opacity-75 font-mono text-3xs">(27)</span>
-					</button>
-					<button class="macro-cat-btn px-3 py-1.5 text-xs font-bold rounded-lg transition-all whitespace-nowrap cursor-pointer bg-surface-container text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface" aria-pressed="false" data-category="monetary">
-						MONETARY & YIELDS <span class="ml-1 opacity-75 font-mono text-3xs">(5)</span>
-					</button>
-					<button class="macro-cat-btn px-3 py-1.5 text-xs font-bold rounded-lg transition-all whitespace-nowrap cursor-pointer bg-surface-container text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface" aria-pressed="false" data-category="inflation">
-						INFLATION & OUTPUT <span class="ml-1 opacity-75 font-mono text-3xs">(4)</span>
-					</button>
-					<button class="macro-cat-btn px-3 py-1.5 text-xs font-bold rounded-lg transition-all whitespace-nowrap cursor-pointer bg-surface-container text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface" aria-pressed="false" data-category="growth">
-						GROWTH & LABOR <span class="ml-1 opacity-75 font-mono text-3xs">(5)</span>
-					</button>
-					<button class="macro-cat-btn px-3 py-1.5 text-xs font-bold rounded-lg transition-all whitespace-nowrap cursor-pointer bg-surface-container text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface" aria-pressed="false" data-category="credit">
-						CREDIT & LIQUIDITY <span class="ml-1 opacity-75 font-mono text-3xs">(6)</span>
-					</button>
-					<button class="macro-cat-btn px-3 py-1.5 text-xs font-bold rounded-lg transition-all whitespace-nowrap cursor-pointer bg-surface-container text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface" aria-pressed="false" data-category="assets">
-						REAL ASSETS & TRADE <span class="ml-1 opacity-75 font-mono text-3xs">(7)</span>
-					</button>
+			<div class="flex flex-col xl:flex-row justify-between items-stretch xl:items-center gap-3">
+				<div class="flex items-center flex-wrap gap-1" id="macroCategoryPills" role="group" aria-label="Filter by topic">
+					<button type="button" class="macro-cat-btn seg-btn" aria-pressed="true" data-category="all">All <span class="ml-0.5 text-on-surface-variant/70 tabular-nums">(27)</span></button>
+					<button type="button" class="macro-cat-btn seg-btn" aria-pressed="false" data-category="monetary">Rates and yields <span class="ml-0.5 text-on-surface-variant/70 tabular-nums">(5)</span></button>
+					<button type="button" class="macro-cat-btn seg-btn" aria-pressed="false" data-category="inflation">Inflation and output <span class="ml-0.5 text-on-surface-variant/70 tabular-nums">(4)</span></button>
+					<button type="button" class="macro-cat-btn seg-btn" aria-pressed="false" data-category="growth">Growth and labour <span class="ml-0.5 text-on-surface-variant/70 tabular-nums">(5)</span></button>
+					<button type="button" class="macro-cat-btn seg-btn" aria-pressed="false" data-category="credit">Credit and liquidity <span class="ml-0.5 text-on-surface-variant/70 tabular-nums">(6)</span></button>
+					<button type="button" class="macro-cat-btn seg-btn" aria-pressed="false" data-category="assets">Assets, trade and public finance <span class="ml-0.5 text-on-surface-variant/70 tabular-nums">(7)</span></button>
 				</div>
 
-				{# Quick Indicator Search #}
-				<div class="relative min-w-[200px] max-w-xs">
-					<span class="material-symbols-outlined absolute left-2.5 top-1/2 -translate-y-1/2 text-on-surface-variant text-lg">search</span>
-					<input type="text" id="macroIndicatorSearch" placeholder="Filter indicators..." class="w-full pl-8 pr-3 py-1.5 text-xs bg-surface-container-lowest border border-outline-variant/20 rounded text-on-surface placeholder:text-on-surface-variant/50 focus:outline-none focus:border-primary/50 transition-all font-mono">
+				<div class="relative w-full xl:w-64">
+					<label for="macroIndicatorSearch" class="sr-only">Filter charts</label>
+					<input type="search" id="macroIndicatorSearch" placeholder="Filter charts" class="w-full px-3 py-1.5 text-xs bg-surface-container-lowest border border-outline-variant/25 rounded text-on-surface placeholder:text-on-surface-variant/60 focus:outline-none focus:border-primary/60 transition-colors">
 				</div>
 			</div>
 
@@ -134,341 +96,207 @@
 				<button type="button" data-status-retry class="hidden px-3 py-1 rounded text-xs font-bold bg-surface-container-high text-on-surface hover:bg-surface-bright transition-colors cursor-pointer">Retry</button>
 			</div>
 
-			{# Responsive Grid for Charts #}
 			<div id="macroChartsGrid" class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-				{# Chart 1: Inflation & Output Gap #}
-				<div class="chart-card bg-surface-container-low border border-outline-variant/15 rounded-lg p-5 hover:border-outline-variant/30 transition-all flex flex-col justify-between" data-macro-category="inflation">
-					<div class="flex items-start justify-between mb-3 gap-2">
-						<div class="flex items-center gap-2.5 min-w-0">
-							<div class="p-2 rounded bg-amber-500/10 text-amber-400 shrink-0">
-								<span class="material-symbols-outlined text-lg leading-none">price_change</span>
-							</div>
-							<div class="min-w-0">
-								<div class="flex items-center gap-2 flex-wrap">
-									<h4 class="text-xs font-bold text-on-surface">Inflation, Output Gap & Capital Overhang</h4>
-									<span class="text-4xs font-mono text-primary/80 bg-primary/10 px-1.5 py-0.5 rounded border border-primary/20 shrink-0">BLS: CPI / TIPS</span>
-								</div>
-								<p class="text-3xs text-on-surface-variant truncate">Consumer price inflation & TIPS breakeven vs cyclical output gap & capital overhang</p>
-							</div>
+				<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-macro-category="inflation">
+					<div class="flex items-start justify-between gap-4 mb-3">
+						<div class="min-w-0">
+							<h3 class="text-sm font-semibold text-on-surface">Inflation and the output gap</h3>
+							<p class="text-xs text-on-surface-variant mt-0.5">Consumer prices, 10-year breakeven inflation, the output gap and excess capital stock</p>
 						</div>
-						<div class="flex items-center gap-2 shrink-0">
-							<div class="hidden sm:flex flex-col items-end text-right">
-								<span class="text-4xs font-semibold uppercase tracking-wide text-on-surface-variant/70">Latest</span>
-								<span class="text-xs font-mono font-bold text-on-surface tabular-nums" id="hud-macroEconomyChart">-</span>
-							</div>
-							<span class="text-4xs font-semibold px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant uppercase tracking-wide">Prices</span>
-							<button type="button" class="expand-chart-btn p-1 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface transition-all cursor-pointer" title="Toggle Fullscreen / Expand">
-								<span class="material-symbols-outlined text-[15px] expand-icon">open_in_full</span>
+						<div class="flex items-start gap-3 shrink-0">
+							<p class="hidden sm:block max-w-64 text-right text-xs font-mono font-semibold text-on-surface tabular-nums" id="hud-macroEconomyChart">-</p>
+							<button type="button" class="expand-chart-btn p-1 -m-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors cursor-pointer" title="Expand chart" aria-label="Expand chart">
+								<span class="material-symbols-outlined text-base leading-none expand-icon" aria-hidden="true">open_in_full</span>
 							</button>
 						</div>
 					</div>
 					<div class="chart-canvas-container h-80 md:h-85 w-full relative">
 						<canvas id="macroEconomyChart"></canvas>
 					</div>
+					<p class="mt-3 text-2xs text-on-surface-variant/70">Source: Statistical Office</p>
 				</div>
 
-				{# Chart 2: Yield Curve & Policy Rates #}
-				<div class="chart-card bg-surface-container-low border border-outline-variant/15 rounded-lg p-5 hover:border-outline-variant/30 transition-all flex flex-col justify-between" data-macro-category="monetary">
-					<div class="flex items-start justify-between mb-3 gap-2">
-						<div class="flex items-center gap-2.5 min-w-0">
-							<div class="p-2 rounded bg-sky-500/10 text-sky-400 shrink-0">
-								<span class="material-symbols-outlined text-lg leading-none">stacked_line_chart</span>
-							</div>
-							<div class="min-w-0">
-								<div class="flex items-center gap-2 flex-wrap">
-									<h4 class="text-xs font-bold text-on-surface">Yield Curve & Policy Rates</h4>
-									<span class="text-4xs font-mono text-primary/80 bg-primary/10 px-1.5 py-0.5 rounded border border-primary/20 shrink-0">FED: EFFR / H.15</span>
-								</div>
-								<p class="text-3xs text-on-surface-variant truncate">Central bank policy rates, treasury yields & term structure spreads</p>
-							</div>
+				<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-macro-category="monetary">
+					<div class="flex items-start justify-between gap-4 mb-3">
+						<div class="min-w-0">
+							<h3 class="text-sm font-semibold text-on-surface">Policy rate and the yield curve</h3>
+							<p class="text-xs text-on-surface-variant mt-0.5">The policy rate, 2-, 5- and 10-year sovereign yields, the 2s10s spread and the rule's target rate</p>
 						</div>
-						<div class="flex items-center gap-2 shrink-0">
-							<div class="hidden sm:flex flex-col items-end text-right">
-								<span class="text-4xs font-semibold uppercase tracking-wide text-on-surface-variant/70">Latest</span>
-								<span class="text-xs font-mono font-bold text-on-surface tabular-nums" id="hud-macroRatesChart">-</span>
-							</div>
-							<span class="text-4xs font-semibold px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant uppercase tracking-wide">Rates</span>
-							<button type="button" class="expand-chart-btn p-1 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface transition-all cursor-pointer" title="Toggle Fullscreen / Expand">
-								<span class="material-symbols-outlined text-[15px] expand-icon">open_in_full</span>
+						<div class="flex items-start gap-3 shrink-0">
+							<p class="hidden sm:block max-w-64 text-right text-xs font-mono font-semibold text-on-surface tabular-nums" id="hud-macroRatesChart">-</p>
+							<button type="button" class="expand-chart-btn p-1 -m-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors cursor-pointer" title="Expand chart" aria-label="Expand chart">
+								<span class="material-symbols-outlined text-base leading-none expand-icon" aria-hidden="true">open_in_full</span>
 							</button>
 						</div>
 					</div>
 					<div class="chart-canvas-container h-80 md:h-85 w-full relative">
 						<canvas id="macroRatesChart"></canvas>
 					</div>
+					<p class="mt-3 text-2xs text-on-surface-variant/70">Source: Monetary Authority; Treasury</p>
 				</div>
 
-				{# Chart 3: 30Y Mortgage Spread #}
-				<div class="chart-card bg-surface-container-low border border-outline-variant/15 rounded-lg p-5 hover:border-outline-variant/30 transition-all flex flex-col justify-between" data-macro-category="monetary">
-					<div class="flex items-start justify-between mb-3 gap-2">
-						<div class="flex items-center gap-2.5 min-w-0">
-							<div class="p-2 rounded bg-rose-500/10 text-rose-400 shrink-0">
-								<span class="material-symbols-outlined text-lg leading-none">home</span>
-							</div>
-							<div class="min-w-0">
-								<div class="flex items-center gap-2 flex-wrap">
-									<h4 class="text-xs font-bold text-on-surface">Mortgage Rates & Spread Dynamics (30Y)</h4>
-									<span class="text-4xs font-mono text-primary/80 bg-primary/10 px-1.5 py-0.5 rounded border border-primary/20 shrink-0">FRED: MORTGAGE30US</span>
-								</div>
-								<p class="text-3xs text-on-surface-variant truncate">30-Year fixed mortgage rate (10Y sovereign + 170 bps) and its spread over the policy rate</p>
-							</div>
+				<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-macro-category="monetary">
+					<div class="flex items-start justify-between gap-4 mb-3">
+						<div class="min-w-0">
+							<h3 class="text-sm font-semibold text-on-surface">Mortgage rates</h3>
+							<p class="text-xs text-on-surface-variant mt-0.5">The 30-year fixed mortgage rate and its spread over the policy rate</p>
 						</div>
-						<div class="flex items-center gap-2 shrink-0">
-							<div class="hidden sm:flex flex-col items-end text-right">
-								<span class="text-4xs font-semibold uppercase tracking-wide text-on-surface-variant/70">Latest</span>
-								<span class="text-xs font-mono font-bold text-on-surface tabular-nums" id="hud-macroMortgageChart">-</span>
-							</div>
-							<span class="text-4xs font-semibold px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant uppercase tracking-wide">Mortgages</span>
-							<button type="button" class="expand-chart-btn p-1 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface transition-all cursor-pointer" title="Toggle Fullscreen / Expand">
-								<span class="material-symbols-outlined text-[15px] expand-icon">open_in_full</span>
+						<div class="flex items-start gap-3 shrink-0">
+							<p class="hidden sm:block max-w-64 text-right text-xs font-mono font-semibold text-on-surface tabular-nums" id="hud-macroMortgageChart">-</p>
+							<button type="button" class="expand-chart-btn p-1 -m-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors cursor-pointer" title="Expand chart" aria-label="Expand chart">
+								<span class="material-symbols-outlined text-base leading-none expand-icon" aria-hidden="true">open_in_full</span>
 							</button>
 						</div>
 					</div>
 					<div class="chart-canvas-container h-80 md:h-85 w-full relative">
 						<canvas id="macroMortgageChart"></canvas>
 					</div>
+					<p class="mt-3 text-2xs text-on-surface-variant/70">Source: Credit Registry</p>
 				</div>
 
-				{# Chart 4: Market Risk & ERP #}
-				<div class="chart-card bg-surface-container-low border border-outline-variant/15 rounded-lg p-5 hover:border-outline-variant/30 transition-all flex flex-col justify-between" data-macro-category="credit">
-					<div class="flex items-start justify-between mb-3 gap-2">
-						<div class="flex items-center gap-2.5 min-w-0">
-							<div class="p-2 rounded bg-purple-500/10 text-purple-400 shrink-0">
-								<span class="material-symbols-outlined text-lg leading-none">speed</span>
-							</div>
-							<div class="min-w-0">
-								<div class="flex items-center gap-2 flex-wrap">
-									<h4 class="text-xs font-bold text-on-surface">Risk Premia, Volatility & Corporate Rates</h4>
-									<span class="text-4xs font-mono text-primary/80 bg-primary/10 px-1.5 py-0.5 rounded border border-primary/20 shrink-0">CBOE: VIX / ICE BofA</span>
-								</div>
-								<p class="text-3xs text-on-surface-variant truncate">Equity risk premium (ERP), implied market volatility & borrowing yields</p>
-							</div>
+				<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-macro-category="credit">
+					<div class="flex items-start justify-between gap-4 mb-3">
+						<div class="min-w-0">
+							<h3 class="text-sm font-semibold text-on-surface">Risk premia and volatility</h3>
+							<p class="text-xs text-on-surface-variant mt-0.5">The equity risk premium, implied market volatility and what companies pay to borrow</p>
 						</div>
-						<div class="flex items-center gap-2 shrink-0">
-							<div class="hidden sm:flex flex-col items-end text-right">
-								<span class="text-4xs font-semibold uppercase tracking-wide text-on-surface-variant/70">Latest</span>
-								<span class="text-xs font-mono font-bold text-on-surface tabular-nums" id="hud-macroRiskChart">-</span>
-							</div>
-							<span class="text-4xs font-semibold px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant uppercase tracking-wide">Volatility</span>
-							<button type="button" class="expand-chart-btn p-1 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface transition-all cursor-pointer" title="Toggle Fullscreen / Expand">
-								<span class="material-symbols-outlined text-[15px] expand-icon">open_in_full</span>
+						<div class="flex items-start gap-3 shrink-0">
+							<p class="hidden sm:block max-w-64 text-right text-xs font-mono font-semibold text-on-surface tabular-nums" id="hud-macroRiskChart">-</p>
+							<button type="button" class="expand-chart-btn p-1 -m-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors cursor-pointer" title="Expand chart" aria-label="Expand chart">
+								<span class="material-symbols-outlined text-base leading-none expand-icon" aria-hidden="true">open_in_full</span>
 							</button>
 						</div>
 					</div>
 					<div class="chart-canvas-container h-80 md:h-85 w-full relative">
 						<canvas id="macroRiskChart"></canvas>
 					</div>
+					<p class="mt-3 text-2xs text-on-surface-variant/70">Source: Aerie Exchange; Credit Registry</p>
 				</div>
 
-				{# Chart 5: Labor Market & Wage Growth #}
-				<div class="chart-card bg-surface-container-low border border-outline-variant/15 rounded-lg p-5 hover:border-outline-variant/30 transition-all flex flex-col justify-between" data-macro-category="growth">
-					<div class="flex items-start justify-between mb-3 gap-2">
-						<div class="flex items-center gap-2.5 min-w-0">
-							<div class="p-2 rounded bg-emerald-500/10 text-emerald-400 shrink-0">
-								<span class="material-symbols-outlined text-lg leading-none">group</span>
-							</div>
-							<div class="min-w-0">
-								<div class="flex items-center gap-2 flex-wrap">
-									<h4 class="text-xs font-bold text-on-surface">Labor Market & Wage Dynamics</h4>
-									<span class="text-4xs font-mono text-primary/80 bg-primary/10 px-1.5 py-0.5 rounded border border-primary/20 shrink-0">BLS: UNRATE / JOLTS</span>
-								</div>
-								<p class="text-3xs text-on-surface-variant truncate">Unemployment vs NAIRU, vacancies, wage growth against the inflation it is bargained on, and the real wage against its productivity path</p>
-							</div>
+				<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-macro-category="growth">
+					<div class="flex items-start justify-between gap-4 mb-3">
+						<div class="min-w-0">
+							<h3 class="text-sm font-semibold text-on-surface">Labour market and wages</h3>
+							<p class="text-xs text-on-surface-variant mt-0.5">Unemployment against its structural rate, vacancies, wage growth against expected inflation, and the real wage against productivity</p>
 						</div>
-						<div class="flex items-center gap-2 shrink-0">
-							<div class="hidden sm:flex flex-col items-end text-right">
-								<span class="text-4xs font-semibold uppercase tracking-wide text-on-surface-variant/70">Latest</span>
-								<span class="text-xs font-mono font-bold text-on-surface tabular-nums" id="hud-macroLaborCreditChart">-</span>
-							</div>
-							<span class="text-4xs font-semibold px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant uppercase tracking-wide">Labor</span>
-							<button type="button" class="expand-chart-btn p-1 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface transition-all cursor-pointer" title="Toggle Fullscreen / Expand">
-								<span class="material-symbols-outlined text-[15px] expand-icon">open_in_full</span>
+						<div class="flex items-start gap-3 shrink-0">
+							<p class="hidden sm:block max-w-64 text-right text-xs font-mono font-semibold text-on-surface tabular-nums" id="hud-macroLaborCreditChart">-</p>
+							<button type="button" class="expand-chart-btn p-1 -m-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors cursor-pointer" title="Expand chart" aria-label="Expand chart">
+								<span class="material-symbols-outlined text-base leading-none expand-icon" aria-hidden="true">open_in_full</span>
 							</button>
 						</div>
 					</div>
 					<div class="chart-canvas-container h-80 md:h-85 w-full relative">
 						<canvas id="macroLaborCreditChart"></canvas>
 					</div>
+					<p class="mt-3 text-2xs text-on-surface-variant/70">Source: Statistical Office</p>
 				</div>
 
-				{# Chart: Household Wealth Effects #}
-				<div class="chart-card bg-surface-container-low border border-outline-variant/15 rounded-lg p-5 hover:border-outline-variant/30 transition-all flex flex-col justify-between" data-macro-category="growth">
-					<div class="flex items-start justify-between mb-3 gap-2">
-						<div class="flex items-center gap-2.5 min-w-0">
-							<div class="p-2 rounded bg-emerald-500/10 text-emerald-400 shrink-0">
-								<span class="material-symbols-outlined text-lg leading-none">savings</span>
-							</div>
-							<div class="min-w-0">
-								<div class="flex items-center gap-2 flex-wrap">
-									<h4 class="text-xs font-bold text-on-surface">Household Wealth &amp; Aggregate Demand</h4>
-									<span class="text-4xs font-mono text-primary/80 bg-primary/10 px-1.5 py-0.5 rounded border border-primary/20 shrink-0">FED: Z.1 / MPC</span>
-								</div>
-								<p class="text-3xs text-on-surface-variant truncate">Equity capitalisation over income against the level households have got used to, beside housing wealth and the demand both drive</p>
-							</div>
+				<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-macro-category="growth">
+					<div class="flex items-start justify-between gap-4 mb-3">
+						<div class="min-w-0">
+							<h3 class="text-sm font-semibold text-on-surface">Household wealth and demand</h3>
+							<p class="text-xs text-on-surface-variant mt-0.5">Stock-market wealth against income and its three-year trend, housing wealth, and the output gap they feed</p>
 						</div>
-						<div class="flex items-center gap-2 shrink-0">
-							<div class="hidden sm:flex flex-col items-end text-right">
-								<span class="text-4xs font-semibold uppercase tracking-wide text-on-surface-variant/70">Latest</span>
-								<span class="text-xs font-mono font-bold text-on-surface tabular-nums" id="hud-macroWealthEffectChart">-</span>
-							</div>
-							<span class="text-4xs font-semibold px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant uppercase tracking-wide">Demand</span>
-							<button type="button" class="expand-chart-btn p-1 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface transition-all cursor-pointer" title="Toggle Fullscreen / Expand">
-								<span class="material-symbols-outlined text-[15px] expand-icon">open_in_full</span>
+						<div class="flex items-start gap-3 shrink-0">
+							<p class="hidden sm:block max-w-64 text-right text-xs font-mono font-semibold text-on-surface tabular-nums" id="hud-macroWealthEffectChart">-</p>
+							<button type="button" class="expand-chart-btn p-1 -m-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors cursor-pointer" title="Expand chart" aria-label="Expand chart">
+								<span class="material-symbols-outlined text-base leading-none expand-icon" aria-hidden="true">open_in_full</span>
 							</button>
 						</div>
 					</div>
 					<div class="chart-canvas-container h-80 md:h-85 w-full relative">
 						<canvas id="macroWealthEffectChart"></canvas>
 					</div>
+					<p class="mt-3 text-2xs text-on-surface-variant/70">Source: Statistical Office; Land Registry</p>
 				</div>
 
-				{# Chart 6: TED Interbank Liquidity #}
-				<div class="chart-card bg-surface-container-low border border-outline-variant/15 rounded-lg p-5 hover:border-outline-variant/30 transition-all flex flex-col justify-between" data-macro-category="credit">
-					<div class="flex items-start justify-between mb-3 gap-2">
-						<div class="flex items-center gap-2.5 min-w-0">
-							<div class="p-2 rounded bg-cyan-500/10 text-cyan-400 shrink-0">
-								<span class="material-symbols-outlined text-lg leading-none">account_balance</span>
-							</div>
-							<div class="min-w-0">
-								<div class="flex items-center gap-2 flex-wrap">
-									<h4 class="text-xs font-bold text-on-surface">TED Interbank Spread & Credit Liquidity</h4>
-									<span class="text-4xs font-mono text-primary/80 bg-primary/10 px-1.5 py-0.5 rounded border border-primary/20 shrink-0">FRED: TEDRATE / ICE</span>
-								</div>
-								<p class="text-3xs text-on-surface-variant truncate">Interbank liquidity stress (bps) vs corporate credit risk premium</p>
-							</div>
+				<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-macro-category="credit">
+					<div class="flex items-start justify-between gap-4 mb-3">
+						<div class="min-w-0">
+							<h3 class="text-sm font-semibold text-on-surface">Interbank funding stress</h3>
+							<p class="text-xs text-on-surface-variant mt-0.5">The interbank lending spread against the corporate credit spread, in basis points</p>
 						</div>
-						<div class="flex items-center gap-2 shrink-0">
-							<div class="hidden sm:flex flex-col items-end text-right">
-								<span class="text-4xs font-semibold uppercase tracking-wide text-on-surface-variant/70">Latest</span>
-								<span class="text-xs font-mono font-bold text-on-surface tabular-nums" id="hud-macroInterbankLiquidityChart">-</span>
-							</div>
-							<span class="text-4xs font-semibold px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant uppercase tracking-wide">Liquidity</span>
-							<button type="button" class="expand-chart-btn p-1 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface transition-all cursor-pointer" title="Toggle Fullscreen / Expand">
-								<span class="material-symbols-outlined text-[15px] expand-icon">open_in_full</span>
+						<div class="flex items-start gap-3 shrink-0">
+							<p class="hidden sm:block max-w-64 text-right text-xs font-mono font-semibold text-on-surface tabular-nums" id="hud-macroInterbankLiquidityChart">-</p>
+							<button type="button" class="expand-chart-btn p-1 -m-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors cursor-pointer" title="Expand chart" aria-label="Expand chart">
+								<span class="material-symbols-outlined text-base leading-none expand-icon" aria-hidden="true">open_in_full</span>
 							</button>
 						</div>
 					</div>
 					<div class="chart-canvas-container h-80 md:h-85 w-full relative">
 						<canvas id="macroInterbankLiquidityChart"></canvas>
 					</div>
+					<p class="mt-3 text-2xs text-on-surface-variant/70">Source: Monetary Authority; Credit Registry</p>
 				</div>
 
-				{# Chart 7: Property Markets #}
-				<div class="chart-card bg-surface-container-low border border-outline-variant/15 rounded-lg p-5 hover:border-outline-variant/30 transition-all flex flex-col justify-between" data-macro-category="assets">
-					<div class="flex items-start justify-between mb-3 gap-2">
-						<div class="flex items-center gap-2.5 min-w-0">
-							<div class="p-2 rounded bg-orange-500/10 text-orange-400 shrink-0">
-								<span class="material-symbols-outlined text-lg leading-none">domain</span>
-							</div>
-							<div class="min-w-0">
-								<div class="flex items-center gap-2 flex-wrap">
-									<h4 class="text-xs font-bold text-on-surface">Real Estate & Housing Starts</h4>
-									<span class="text-4xs font-mono text-primary/80 bg-primary/10 px-1.5 py-0.5 rounded border border-primary/20 shrink-0">MSCI / S&P / TE Starts</span>
-								</div>
-								<p class="text-3xs text-on-surface-variant truncate">CRE valuation & residential property indices vs Trading Economics Housing Starts index</p>
-							</div>
+				<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-macro-category="assets">
+					<div class="flex items-start justify-between gap-4 mb-3">
+						<div class="min-w-0">
+							<h3 class="text-sm font-semibold text-on-surface">Property prices and housing starts</h3>
+							<p class="text-xs text-on-surface-variant mt-0.5">Commercial and residential property indices, and new housing starts</p>
 						</div>
-						<div class="flex items-center gap-2 shrink-0">
-							<div class="hidden sm:flex flex-col items-end text-right">
-								<span class="text-4xs font-semibold uppercase tracking-wide text-on-surface-variant/70">Latest</span>
-								<span class="text-xs font-mono font-bold text-on-surface tabular-nums" id="hud-macroPropertyChart">-</span>
-							</div>
-							<span class="text-4xs font-semibold px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant uppercase tracking-wide">Property</span>
-							<button type="button" class="expand-chart-btn p-1 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface transition-all cursor-pointer" title="Toggle Fullscreen / Expand">
-								<span class="material-symbols-outlined text-[15px] expand-icon">open_in_full</span>
+						<div class="flex items-start gap-3 shrink-0">
+							<p class="hidden sm:block max-w-64 text-right text-xs font-mono font-semibold text-on-surface tabular-nums" id="hud-macroPropertyChart">-</p>
+							<button type="button" class="expand-chart-btn p-1 -m-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors cursor-pointer" title="Expand chart" aria-label="Expand chart">
+								<span class="material-symbols-outlined text-base leading-none expand-icon" aria-hidden="true">open_in_full</span>
 							</button>
 						</div>
 					</div>
 					<div class="chart-canvas-container h-80 md:h-85 w-full relative">
 						<canvas id="macroPropertyChart"></canvas>
 					</div>
+					<p class="mt-3 text-2xs text-on-surface-variant/70">Source: Land Registry</p>
 				</div>
 
-				{# Chart 8: Consumer Sentiment & Credit Health #}
-				<div class="chart-card bg-surface-container-low border border-outline-variant/15 rounded-lg p-5 hover:border-outline-variant/30 transition-all flex flex-col justify-between" data-macro-category="growth">
-					<div class="flex items-start justify-between mb-3 gap-2">
-						<div class="flex items-center gap-2.5 min-w-0">
-							<div class="p-2 rounded bg-indigo-500/10 text-indigo-400 shrink-0">
-								<span class="material-symbols-outlined text-lg leading-none">sentiment_satisfied</span>
-							</div>
-							<div class="min-w-0">
-								<div class="flex items-center gap-2 flex-wrap">
-									<h4 class="text-xs font-bold text-on-surface">Sentiment, Deal Flow & Credit Defaults</h4>
-									<span class="text-4xs font-mono text-primary/80 bg-primary/10 px-1.5 py-0.5 rounded border border-primary/20 shrink-0">UMich / Refinitiv</span>
-								</div>
-								<p class="text-3xs text-on-surface-variant truncate">Consumer sentiment & M&A deal flow index vs household & corporate speculative default rates</p>
-							</div>
+				<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-macro-category="growth">
+					<div class="flex items-start justify-between gap-4 mb-3">
+						<div class="min-w-0">
+							<h3 class="text-sm font-semibold text-on-surface">Sentiment, deal flow and defaults</h3>
+							<p class="text-xs text-on-surface-variant mt-0.5">Consumer sentiment and merger activity, against household and corporate default rates</p>
 						</div>
-						<div class="flex items-center gap-2 shrink-0">
-							<div class="hidden sm:flex flex-col items-end text-right">
-								<span class="text-4xs font-semibold uppercase tracking-wide text-on-surface-variant/70">Latest</span>
-								<span class="text-xs font-mono font-bold text-on-surface tabular-nums" id="hud-macroSentimentChart">-</span>
-							</div>
-							<span class="text-4xs font-semibold px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant uppercase tracking-wide">Consumer</span>
-							<button type="button" class="expand-chart-btn p-1 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface transition-all cursor-pointer" title="Toggle Fullscreen / Expand">
-								<span class="material-symbols-outlined text-[15px] expand-icon">open_in_full</span>
+						<div class="flex items-start gap-3 shrink-0">
+							<p class="hidden sm:block max-w-64 text-right text-xs font-mono font-semibold text-on-surface tabular-nums" id="hud-macroSentimentChart">-</p>
+							<button type="button" class="expand-chart-btn p-1 -m-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors cursor-pointer" title="Expand chart" aria-label="Expand chart">
+								<span class="material-symbols-outlined text-base leading-none expand-icon" aria-hidden="true">open_in_full</span>
 							</button>
 						</div>
 					</div>
 					<div class="chart-canvas-container h-80 md:h-85 w-full relative">
 						<canvas id="macroSentimentChart"></canvas>
 					</div>
+					<p class="mt-3 text-2xs text-on-surface-variant/70">Source: Statistical Office; Credit Registry</p>
 				</div>
 
-				{# Chart 9: Commodities Index #}
-				<div class="chart-card bg-surface-container-low border border-outline-variant/15 rounded-lg p-5 hover:border-outline-variant/30 transition-all flex flex-col justify-between" data-macro-category="assets">
-					<div class="flex items-start justify-between mb-3 gap-2">
-						<div class="flex items-center gap-2.5 min-w-0">
-							<div class="p-2 rounded bg-yellow-500/10 text-yellow-400 shrink-0">
-								<span class="material-symbols-outlined text-lg leading-none">oil_barrel</span>
-							</div>
-							<div class="min-w-0">
-								<div class="flex items-center gap-2 flex-wrap">
-									<h4 class="text-xs font-bold text-on-surface">Commodity Indices: Energy, Metals, Agriculture, Gold & Natural Gas</h4>
-									<span class="text-4xs font-mono text-primary/80 bg-primary/10 px-1.5 py-0.5 rounded border border-primary/20 shrink-0">CME: WTI, NG / LME / LBMA</span>
-								</div>
-								<p class="text-3xs text-on-surface-variant truncate">Spot price indices on one scale, base 100</p>
-							</div>
+				<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-macro-category="assets">
+					<div class="flex items-start justify-between gap-4 mb-3">
+						<div class="min-w-0">
+							<h3 class="text-sm font-semibold text-on-surface">Commodity prices</h3>
+							<p class="text-xs text-on-surface-variant mt-0.5">Energy, metals, agriculture, gold and natural gas, indexed to 100</p>
 						</div>
-						<div class="flex items-center gap-2 shrink-0">
-							<div class="hidden sm:flex flex-col items-end text-right">
-								<span class="text-4xs font-semibold uppercase tracking-wide text-on-surface-variant/70">Latest</span>
-								<span class="text-xs font-mono font-bold text-on-surface tabular-nums" id="hud-macroCommoditiesChart">-</span>
-							</div>
-							<span class="text-4xs font-semibold px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant uppercase tracking-wide">Commodities</span>
-							<button type="button" class="expand-chart-btn p-1 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface transition-all cursor-pointer" title="Toggle Fullscreen / Expand">
-								<span class="material-symbols-outlined text-[15px] expand-icon">open_in_full</span>
+						<div class="flex items-start gap-3 shrink-0">
+							<p class="hidden sm:block max-w-64 text-right text-xs font-mono font-semibold text-on-surface tabular-nums" id="hud-macroCommoditiesChart">-</p>
+							<button type="button" class="expand-chart-btn p-1 -m-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors cursor-pointer" title="Expand chart" aria-label="Expand chart">
+								<span class="material-symbols-outlined text-base leading-none expand-icon" aria-hidden="true">open_in_full</span>
 							</button>
 						</div>
 					</div>
 					<div class="chart-canvas-container h-80 md:h-85 w-full relative">
 						<canvas id="macroCommoditiesChart"></canvas>
 					</div>
+					<p class="mt-3 text-2xs text-on-surface-variant/70">Source: Commodity Exchange</p>
 				</div>
 
-				{# Chart 9b: Energy Conversion Spreads (crack $/bbl over power and spark $/MWh) #}
-				<div class="chart-card bg-surface-container-low border border-outline-variant/15 rounded-lg p-5 hover:border-outline-variant/30 transition-all flex flex-col justify-between" data-macro-category="assets">
-					<div class="flex items-start justify-between mb-3 gap-2">
-						<div class="flex items-center gap-2.5 min-w-0">
-							<div class="p-2 rounded bg-sky-500/10 text-sky-400 shrink-0">
-								<span class="material-symbols-outlined text-lg leading-none">bolt</span>
-							</div>
-							<div class="min-w-0">
-								<div class="flex items-center gap-2 flex-wrap">
-									<h4 class="text-xs font-bold text-on-surface">Energy Conversion Spreads</h4>
-									<span class="text-4xs font-mono text-primary/80 bg-primary/10 px-1.5 py-0.5 rounded border border-primary/20 shrink-0">3:2:1 crack · ICE power vs Henry Hub</span>
-								</div>
-								<p class="text-3xs text-on-surface-variant truncate">What refiners earn turning crude into fuels ($/bbl), and generators turning gas into power ($/MWh)</p>
-							</div>
+				<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-macro-category="assets">
+					<div class="flex items-start justify-between gap-4 mb-3">
+						<div class="min-w-0">
+							<h3 class="text-sm font-semibold text-on-surface">Refining and power margins</h3>
+							<p class="text-xs text-on-surface-variant mt-0.5">What refiners earn turning crude into fuels ($/bbl), and generators turning gas into power ($/MWh)</p>
 						</div>
-						<div class="flex items-center gap-2 shrink-0">
-							<div class="hidden sm:flex flex-col items-end text-right">
-								<span class="text-4xs font-semibold uppercase tracking-wide text-on-surface-variant/70">Latest</span>
-								<span class="text-xs font-mono font-bold text-on-surface tabular-nums" id="hud-macroEnergySpreadsChart">-</span>
-							</div>
-							<span class="text-4xs font-semibold px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant uppercase tracking-wide">Commodities</span>
-							<button type="button" class="expand-chart-btn p-1 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface transition-all cursor-pointer" title="Toggle Fullscreen / Expand">
-								<span class="material-symbols-outlined text-[15px] expand-icon">open_in_full</span>
+						<div class="flex items-start gap-3 shrink-0">
+							<p class="hidden sm:block max-w-64 text-right text-xs font-mono font-semibold text-on-surface tabular-nums" id="hud-macroEnergySpreadsChart">-</p>
+							<button type="button" class="expand-chart-btn p-1 -m-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors cursor-pointer" title="Expand chart" aria-label="Expand chart">
+								<span class="material-symbols-outlined text-base leading-none expand-icon" aria-hidden="true">open_in_full</span>
 							</button>
 						</div>
 					</div>
@@ -478,93 +306,57 @@
 							data-gas-reference="{{ constant('App\\Service\\Macro\\Subsystem\\CommodityLogisticsSubsystem::REFERENCE_GAS_PRICE') }}"
 							data-spark-heat-rate="{{ constant('App\\Service\\Macro\\Subsystem\\CommodityLogisticsSubsystem::SPARK_SPREAD_BENCHMARK_HEAT_RATE') }}"></canvas>
 					</div>
+					<p class="mt-3 text-2xs text-on-surface-variant/70">Source: Commodity Exchange</p>
 				</div>
 
-				{# Chart 10: Trade & FX #}
-				<div class="chart-card bg-surface-container-low border border-outline-variant/15 rounded-lg p-5 hover:border-outline-variant/30 transition-all flex flex-col justify-between" data-macro-category="assets">
-					<div class="flex items-start justify-between mb-3 gap-2">
-						<div class="flex items-center gap-2.5 min-w-0">
-							<div class="p-2 rounded bg-blue-500/10 text-blue-400 shrink-0">
-								<span class="material-symbols-outlined text-lg leading-none">directions_boat</span>
-							</div>
-							<div class="min-w-0">
-								<div class="flex items-center gap-2 flex-wrap">
-									<h4 class="text-xs font-bold text-on-surface">Global Trade, Freight & Supply Chain Pressure</h4>
-									<span class="text-4xs font-mono text-primary/80 bg-primary/10 px-1.5 py-0.5 rounded border border-primary/20 shrink-0">NY FED: GSCPI / FX</span>
-								</div>
-								<p class="text-3xs text-on-surface-variant truncate">Exchange rate currency index, container freight rates & NY Fed GSCPI (σ)</p>
-							</div>
+				<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-macro-category="assets">
+					<div class="flex items-start justify-between gap-4 mb-3">
+						<div class="min-w-0">
+							<h3 class="text-sm font-semibold text-on-surface">Trade, freight and supply chains</h3>
+							<p class="text-xs text-on-surface-variant mt-0.5">The trade-weighted exchange rate, container freight rates and supply-chain pressure in standard deviations from normal</p>
 						</div>
-						<div class="flex items-center gap-2 shrink-0">
-							<div class="hidden sm:flex flex-col items-end text-right">
-								<span class="text-4xs font-semibold uppercase tracking-wide text-on-surface-variant/70">Latest</span>
-								<span class="text-xs font-mono font-bold text-on-surface tabular-nums" id="hud-macroTradeLogisticsChart">-</span>
-							</div>
-							<span class="text-4xs font-semibold px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant uppercase tracking-wide">Logistics</span>
-							<button type="button" class="expand-chart-btn p-1 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface transition-all cursor-pointer" title="Toggle Fullscreen / Expand">
-								<span class="material-symbols-outlined text-[15px] expand-icon">open_in_full</span>
+						<div class="flex items-start gap-3 shrink-0">
+							<p class="hidden sm:block max-w-64 text-right text-xs font-mono font-semibold text-on-surface tabular-nums" id="hud-macroTradeLogisticsChart">-</p>
+							<button type="button" class="expand-chart-btn p-1 -m-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors cursor-pointer" title="Expand chart" aria-label="Expand chart">
+								<span class="material-symbols-outlined text-base leading-none expand-icon" aria-hidden="true">open_in_full</span>
 							</button>
 						</div>
 					</div>
 					<div class="chart-canvas-container h-80 md:h-85 w-full relative">
 						<canvas id="macroTradeLogisticsChart"></canvas>
 					</div>
+					<p class="mt-3 text-2xs text-on-surface-variant/70">Source: Freight Authority; Monetary Authority</p>
 				</div>
 
-				{# Chart 11: Fiscal Spending #}
-				<div class="chart-card bg-surface-container-low border border-outline-variant/15 rounded-lg p-5 hover:border-outline-variant/30 transition-all flex flex-col justify-between" data-macro-category="assets">
-					<div class="flex items-start justify-between mb-3 gap-2">
-						<div class="flex items-center gap-2.5 min-w-0">
-							<div class="p-2 rounded bg-teal-500/10 text-teal-400 shrink-0">
-								<span class="material-symbols-outlined text-lg leading-none">account_balance_wallet</span>
-							</div>
-							<div class="min-w-0">
-								<div class="flex items-center gap-2 flex-wrap">
-									<h4 class="text-xs font-bold text-on-surface">Fiscal Stance, Sovereign Debt & Risk Premium</h4>
-									<span class="text-4xs font-mono text-primary/80 bg-primary/10 px-1.5 py-0.5 rounded border border-primary/20 shrink-0">TREASURY / CBO: FISCAL</span>
-								</div>
-								<p class="text-3xs text-on-surface-variant truncate">Fiscal spending index, corporate tax rate, sovereign debt, primary deficit & Laubach debt risk spread</p>
-							</div>
+				<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-macro-category="assets">
+					<div class="flex items-start justify-between gap-4 mb-3">
+						<div class="min-w-0">
+							<h3 class="text-sm font-semibold text-on-surface">Public finances</h3>
+							<p class="text-xs text-on-surface-variant mt-0.5">Government spending, the corporate tax rate, public debt, the primary deficit and the sovereign risk spread</p>
 						</div>
-						<div class="flex items-center gap-2 shrink-0">
-							<div class="hidden sm:flex flex-col items-end text-right">
-								<span class="text-4xs font-semibold uppercase tracking-wide text-on-surface-variant/70">Latest</span>
-								<span class="text-xs font-mono font-bold text-on-surface tabular-nums" id="hud-macroGovtSpendingChart">-</span>
-							</div>
-							<span class="text-4xs font-semibold px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant uppercase tracking-wide">Fiscal & Debt</span>
-							<button type="button" class="expand-chart-btn p-1 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface transition-all cursor-pointer" title="Toggle Fullscreen / Expand">
-								<span class="material-symbols-outlined text-[15px] expand-icon">open_in_full</span>
+						<div class="flex items-start gap-3 shrink-0">
+							<p class="hidden sm:block max-w-64 text-right text-xs font-mono font-semibold text-on-surface tabular-nums" id="hud-macroGovtSpendingChart">-</p>
+							<button type="button" class="expand-chart-btn p-1 -m-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors cursor-pointer" title="Expand chart" aria-label="Expand chart">
+								<span class="material-symbols-outlined text-base leading-none expand-icon" aria-hidden="true">open_in_full</span>
 							</button>
 						</div>
 					</div>
 					<div class="chart-canvas-container h-80 md:h-85 w-full relative">
 						<canvas id="macroGovtSpendingChart"></canvas>
 					</div>
+					<p class="mt-3 text-2xs text-on-surface-variant/70">Source: Treasury</p>
 				</div>
 
-				{# Chart 11b: Sovereign Reserve Fund #}
-				<div class="chart-card bg-surface-container-low border border-outline-variant/15 rounded-lg p-5 hover:border-outline-variant/30 transition-all flex flex-col justify-between" data-macro-category="assets">
-					<div class="flex items-start justify-between mb-3 gap-2">
-						<div class="flex items-center gap-2.5 min-w-0">
-							<div class="p-2 rounded bg-teal-500/10 text-teal-400 shrink-0">
-								<span class="material-symbols-outlined text-lg leading-none">savings</span>
-							</div>
-							<div class="min-w-0">
-								<div class="flex items-center gap-2 flex-wrap">
-									<h4 class="text-xs font-bold text-on-surface">Sovereign Reserve Fund</h4>
-									<span class="text-4xs font-mono text-primary/80 bg-primary/10 px-1.5 py-0.5 rounded border border-primary/20 shrink-0">MOF NIR / GPIF / NBIM</span>
-								</div>
-								<p class="text-3xs text-on-surface-variant truncate">Board weight vs policy weight and the share of the float owned; rebalanced when the board weight or the whole equity share leaves its band</p>
-							</div>
+				<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-macro-category="assets">
+					<div class="flex items-start justify-between gap-4 mb-3">
+						<div class="min-w-0">
+							<h3 class="text-sm font-semibold text-on-surface">Sovereign Reserve Fund</h3>
+							<p class="text-xs text-on-surface-variant mt-0.5">District equity weight against the policy weight, and the fund's share of the listed float</p>
 						</div>
-						<div class="flex items-center gap-2 shrink-0">
-							<div class="hidden sm:flex flex-col items-end text-right">
-								<span class="text-4xs font-semibold uppercase tracking-wide text-on-surface-variant/70">Latest</span>
-								<span class="text-xs font-mono font-bold text-on-surface tabular-nums" id="hud-macroSovereignFundChart">-</span>
-							</div>
-							<span class="text-4xs font-semibold px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant uppercase tracking-wide">Fiscal & Debt</span>
-							<button type="button" class="expand-chart-btn p-1 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface transition-all cursor-pointer" title="Toggle Fullscreen / Expand">
-								<span class="material-symbols-outlined text-[15px] expand-icon">open_in_full</span>
+						<div class="flex items-start gap-3 shrink-0">
+							<p class="hidden sm:block max-w-64 text-right text-xs font-mono font-semibold text-on-surface tabular-nums" id="hud-macroSovereignFundChart">-</p>
+							<button type="button" class="expand-chart-btn p-1 -m-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors cursor-pointer" title="Expand chart" aria-label="Expand chart">
+								<span class="material-symbols-outlined text-base leading-none expand-icon" aria-hidden="true">open_in_full</span>
 							</button>
 						</div>
 					</div>
@@ -572,416 +364,261 @@
 						<canvas id="macroSovereignFundChart"></canvas>
 					</div>
 					{# The fund's size, draw, equity share and stamp duty: scales the chart's single axis cannot carry. #}
-					<div class="mt-2 flex items-baseline justify-between gap-3">
-						<p class="text-3xs font-mono tabular-nums text-on-surface-variant" id="stats-macroSovereignFundChart"></p>
-						<a href="/reserve" class="shrink-0 text-3xs font-bold text-primary hover:underline">Fund page →</a>
+					<p class="mt-3 text-2xs font-mono tabular-nums text-on-surface-variant" id="stats-macroSovereignFundChart"></p>
+					<div class="mt-1 flex items-baseline justify-between gap-3">
+						<p class="text-2xs text-on-surface-variant/70">Source: Sovereign Reserve Fund</p>
+						<a href="/reserve" class="shrink-0 text-2xs font-medium text-primary hover:underline">Fund page →</a>
 					</div>
 				</div>
 
-				{# Chart 12: 10-Year Yield Decomposition #}
-				<div class="chart-card bg-surface-container-low border border-outline-variant/15 rounded-lg p-5 hover:border-outline-variant/30 transition-all flex flex-col justify-between" data-macro-category="monetary">
-					<div class="flex items-start justify-between mb-3 gap-2">
-						<div class="flex items-center gap-2.5 min-w-0">
-							<div class="p-2 rounded bg-violet-500/10 text-violet-400 shrink-0">
-								<span class="material-symbols-outlined text-lg leading-none">show_chart</span>
-							</div>
-							<div class="min-w-0">
-								<div class="flex items-center gap-2 flex-wrap">
-									<h4 class="text-xs font-bold text-on-surface">10-Year Yield Decomposition</h4>
-									<span class="text-4xs font-mono text-primary/80 bg-primary/10 px-1.5 py-0.5 rounded border border-primary/20 shrink-0">ACM: NY FED / DGS10</span>
-								</div>
-								<p class="text-3xs text-on-surface-variant truncate">10Y yield split into expected policy rate path vs duration term premium and natural rate</p>
-							</div>
+				<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-macro-category="monetary">
+					<div class="flex items-start justify-between gap-4 mb-3">
+						<div class="min-w-0">
+							<h3 class="text-sm font-semibold text-on-surface">What is in the 10-year yield</h3>
+							<p class="text-xs text-on-surface-variant mt-0.5">The 10-year yield split into the expected path of the policy rate and the term premium, beside the neutral real rate</p>
 						</div>
-						<div class="flex items-center gap-2 shrink-0">
-							<div class="hidden sm:flex flex-col items-end text-right">
-								<span class="text-4xs font-semibold uppercase tracking-wide text-on-surface-variant/70">Latest</span>
-								<span class="text-xs font-mono font-bold text-on-surface tabular-nums" id="hud-macroTermPremiumChart">-</span>
-							</div>
-							<span class="text-4xs font-semibold px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant uppercase tracking-wide">Yields</span>
-							<button type="button" class="expand-chart-btn p-1 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface transition-all cursor-pointer" title="Toggle Fullscreen / Expand">
-								<span class="material-symbols-outlined text-[15px] expand-icon">open_in_full</span>
+						<div class="flex items-start gap-3 shrink-0">
+							<p class="hidden sm:block max-w-64 text-right text-xs font-mono font-semibold text-on-surface tabular-nums" id="hud-macroTermPremiumChart">-</p>
+							<button type="button" class="expand-chart-btn p-1 -m-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors cursor-pointer" title="Expand chart" aria-label="Expand chart">
+								<span class="material-symbols-outlined text-base leading-none expand-icon" aria-hidden="true">open_in_full</span>
 							</button>
 						</div>
 					</div>
 					<div class="chart-canvas-container h-80 md:h-85 w-full relative">
 						<canvas id="macroTermPremiumChart"></canvas>
 					</div>
+					<p class="mt-3 text-2xs text-on-surface-variant/70">Source: Monetary Authority</p>
 				</div>
 
-				{# Chart 13: Economic Growth & Output Momentum (GDP & TFP) #}
-				<div class="chart-card bg-surface-container-low border border-outline-variant/15 rounded-lg p-5 hover:border-outline-variant/30 transition-all flex flex-col justify-between" data-macro-category="growth">
-					<div class="flex items-start justify-between mb-3 gap-2">
-						<div class="flex items-center gap-2.5 min-w-0">
-							<div class="p-2 rounded bg-teal-500/10 text-teal-400 shrink-0">
-								<span class="material-symbols-outlined text-lg leading-none">trending_up</span>
-							</div>
-							<div class="min-w-0">
-								<div class="flex items-center gap-2 flex-wrap">
-									<h4 class="text-xs font-bold text-on-surface">Economic Growth, TFP & Recession Risk</h4>
-									<span class="text-4xs font-mono text-primary/80 bg-primary/10 px-1.5 py-0.5 rounded border border-primary/20 shrink-0">BEA: NIPA / NYFED</span>
-								</div>
-								<p class="text-3xs text-on-surface-variant truncate">Annualized real & nominal GDP growth momentum, potential capacity, the productivity growth it is built on & 12M forward recession probability</p>
-							</div>
+				<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-macro-category="growth">
+					<div class="flex items-start justify-between gap-4 mb-3">
+						<div class="min-w-0">
+							<h3 class="text-sm font-semibold text-on-surface">Growth and recession risk</h3>
+							<p class="text-xs text-on-surface-variant mt-0.5">Real and nominal GDP growth, potential growth and the productivity behind it, and the chance of a recession within a year</p>
 						</div>
-						<div class="flex items-center gap-2 shrink-0">
-							<div class="hidden sm:flex flex-col items-end text-right">
-								<span class="text-4xs font-semibold uppercase tracking-wide text-on-surface-variant/70">Latest</span>
-								<span class="text-xs font-mono font-bold text-on-surface tabular-nums" id="hud-macroGdpGrowthChart">-</span>
-							</div>
-							<span class="text-4xs font-semibold px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant uppercase tracking-wide">Growth</span>
-							<button type="button" class="expand-chart-btn p-1 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface transition-all cursor-pointer" title="Toggle Fullscreen / Expand">
-								<span class="material-symbols-outlined text-[15px] expand-icon">open_in_full</span>
+						<div class="flex items-start gap-3 shrink-0">
+							<p class="hidden sm:block max-w-64 text-right text-xs font-mono font-semibold text-on-surface tabular-nums" id="hud-macroGdpGrowthChart">-</p>
+							<button type="button" class="expand-chart-btn p-1 -m-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors cursor-pointer" title="Expand chart" aria-label="Expand chart">
+								<span class="material-symbols-outlined text-base leading-none expand-icon" aria-hidden="true">open_in_full</span>
 							</button>
 						</div>
 					</div>
 					<div class="chart-canvas-container h-80 md:h-85 w-full relative">
 						<canvas id="macroGdpGrowthChart" data-structural-labor-growth="{{ constant('App\\Service\\Macro\\MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE') }}"></canvas>
 					</div>
+					<p class="mt-3 text-2xs text-on-surface-variant/70">Source: Statistical Office</p>
 				</div>
 
-				{# Chart 14: Central Bank Balance Sheet & Operations (QE / QT) #}
-				<div class="chart-card bg-surface-container-low border border-outline-variant/15 rounded-lg p-5 hover:border-outline-variant/30 transition-all flex flex-col justify-between" data-macro-category="monetary">
-					<div class="flex items-start justify-between mb-3 gap-2">
-						<div class="flex items-center gap-2.5 min-w-0">
-							<div class="p-2 rounded bg-emerald-500/10 text-emerald-400 shrink-0">
-								<span class="material-symbols-outlined text-lg leading-none">account_balance</span>
-							</div>
-							<div class="min-w-0">
-								<div class="flex items-center gap-2 flex-wrap">
-									<h4 class="text-xs font-bold text-on-surface">Central Bank Balance Sheet & Operations (QE / QT)</h4>
-									<span class="text-4xs font-mono text-primary/80 bg-primary/10 px-1.5 py-0.5 rounded border border-primary/20 shrink-0">FED: H.4.1 / SOMA</span>
-								</div>
-								<p class="text-3xs text-on-surface-variant truncate">Asset holdings index vs quantitative easing (QE) & tightening (QT) intensity</p>
-							</div>
+				<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-macro-category="monetary">
+					<div class="flex items-start justify-between gap-4 mb-3">
+						<div class="min-w-0">
+							<h3 class="text-sm font-semibold text-on-surface">Central bank balance sheet</h3>
+							<p class="text-xs text-on-surface-variant mt-0.5">Asset holdings, indexed, and the pace of asset purchases (QE) or run-off (QT)</p>
 						</div>
-						<div class="flex items-center gap-2 shrink-0">
-							<div class="hidden sm:flex flex-col items-end text-right">
-								<span class="text-4xs font-semibold uppercase tracking-wide text-on-surface-variant/70">Latest</span>
-								<span class="text-xs font-mono font-bold text-on-surface tabular-nums" id="hud-macroBalanceSheetChart">-</span>
-							</div>
-							<span class="text-4xs font-semibold px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant uppercase tracking-wide">Balance Sheet</span>
-							<button type="button" class="expand-chart-btn p-1 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface transition-all cursor-pointer" title="Toggle Fullscreen / Expand">
-								<span class="material-symbols-outlined text-[15px] expand-icon">open_in_full</span>
+						<div class="flex items-start gap-3 shrink-0">
+							<p class="hidden sm:block max-w-64 text-right text-xs font-mono font-semibold text-on-surface tabular-nums" id="hud-macroBalanceSheetChart">-</p>
+							<button type="button" class="expand-chart-btn p-1 -m-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors cursor-pointer" title="Expand chart" aria-label="Expand chart">
+								<span class="material-symbols-outlined text-base leading-none expand-icon" aria-hidden="true">open_in_full</span>
 							</button>
 						</div>
 					</div>
 					<div class="chart-canvas-container h-80 md:h-85 w-full relative">
 						<canvas id="macroBalanceSheetChart"></canvas>
 					</div>
+					<p class="mt-3 text-2xs text-on-surface-variant/70">Source: Monetary Authority</p>
 				</div>
 
-				{# Chart 15: Financial Conditions Index (FCI) #}
-				<div class="chart-card bg-surface-container-low border border-outline-variant/15 rounded-lg p-5 hover:border-outline-variant/30 transition-all flex flex-col justify-between" data-macro-category="credit">
-					<div class="flex items-start justify-between mb-3 gap-2">
-						<div class="flex items-center gap-2.5 min-w-0">
-							<div class="p-2 rounded bg-rose-500/10 text-rose-400 shrink-0">
-								<span class="material-symbols-outlined text-lg leading-none">tune</span>
-							</div>
-							<div class="min-w-0">
-								<div class="flex items-center gap-2 flex-wrap">
-									<h4 class="text-xs font-bold text-on-surface">Financial Conditions & Bank Lending Standards</h4>
-									<span class="text-4xs font-mono text-primary/80 bg-primary/10 px-1.5 py-0.5 rounded border border-primary/20 shrink-0">CHI FED: NFCI / SLOOS</span>
-								</div>
-								<p class="text-3xs text-on-surface-variant truncate">Composite FCI index (credit, equity, dollar, rates) vs Fed SLOOS net credit tightening</p>
-							</div>
+				<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-macro-category="credit">
+					<div class="flex items-start justify-between gap-4 mb-3">
+						<div class="min-w-0">
+							<h3 class="text-sm font-semibold text-on-surface">Financial conditions and bank lending</h3>
+							<p class="text-xs text-on-surface-variant mt-0.5">A financial conditions index across credit, equities, the currency and rates, and the net share of banks tightening lending standards</p>
 						</div>
-						<div class="flex items-center gap-2 shrink-0">
-							<div class="hidden sm:flex flex-col items-end text-right">
-								<span class="text-4xs font-semibold uppercase tracking-wide text-on-surface-variant/70">Latest</span>
-								<span class="text-xs font-mono font-bold text-on-surface tabular-nums" id="hud-macroFciChart">-</span>
-							</div>
-							<span class="text-4xs font-semibold px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant uppercase tracking-wide">Conditions</span>
-							<button type="button" class="expand-chart-btn p-1 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface transition-all cursor-pointer" title="Toggle Fullscreen / Expand">
-								<span class="material-symbols-outlined text-[15px] expand-icon">open_in_full</span>
+						<div class="flex items-start gap-3 shrink-0">
+							<p class="hidden sm:block max-w-64 text-right text-xs font-mono font-semibold text-on-surface tabular-nums" id="hud-macroFciChart">-</p>
+							<button type="button" class="expand-chart-btn p-1 -m-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors cursor-pointer" title="Expand chart" aria-label="Expand chart">
+								<span class="material-symbols-outlined text-base leading-none expand-icon" aria-hidden="true">open_in_full</span>
 							</button>
 						</div>
 					</div>
 					<div class="chart-canvas-container h-80 md:h-85 w-full relative">
 						<canvas id="macroFciChart"></canvas>
 					</div>
+					<p class="mt-3 text-2xs text-on-surface-variant/70">Source: Monetary Authority; Financial Regulator</p>
 				</div>
 
-				{# Chart 16: Supply-Side Cost Pressures & Food CPI #}
-				<div class="chart-card bg-surface-container-low border border-outline-variant/15 rounded-lg p-5 hover:border-outline-variant/30 transition-all flex flex-col justify-between" data-macro-category="inflation">
-					<div class="flex items-start justify-between mb-3 gap-2">
-						<div class="flex items-center gap-2.5 min-w-0">
-							<div class="p-2 rounded bg-lime-500/10 text-lime-400 shrink-0">
-								<span class="material-symbols-outlined text-lg leading-none">agriculture</span>
-							</div>
-							<div class="min-w-0">
-								<div class="flex items-center gap-2 flex-wrap">
-									<h4 class="text-xs font-bold text-on-surface">Supply-Side Cost Pressures & Food CPI</h4>
-									<span class="text-4xs font-mono text-primary/80 bg-primary/10 px-1.5 py-0.5 rounded border border-primary/20 shrink-0">USDA / BLS Cost-Push</span>
-								</div>
-								<p class="text-3xs text-on-surface-variant truncate">Agricultural food CPI pass-through lag vs energy & freight logistics supply drags</p>
-							</div>
+				<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-macro-category="inflation">
+					<div class="flex items-start justify-between gap-4 mb-3">
+						<div class="min-w-0">
+							<h3 class="text-sm font-semibold text-on-surface">Supply-side cost pressures</h3>
+							<p class="text-xs text-on-surface-variant mt-0.5">What food, energy and freight costs add to inflation, in basis points</p>
 						</div>
-						<div class="flex items-center gap-2 shrink-0">
-							<div class="hidden sm:flex flex-col items-end text-right">
-								<span class="text-4xs font-semibold uppercase tracking-wide text-on-surface-variant/70">Latest</span>
-								<span class="text-xs font-mono font-bold text-on-surface tabular-nums" id="hud-macroCostPushChart">-</span>
-							</div>
-							<span class="text-4xs font-semibold px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant uppercase tracking-wide">Supply Shocks</span>
-							<button type="button" class="expand-chart-btn p-1 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface transition-all cursor-pointer" title="Toggle Fullscreen / Expand">
-								<span class="material-symbols-outlined text-[15px] expand-icon">open_in_full</span>
+						<div class="flex items-start gap-3 shrink-0">
+							<p class="hidden sm:block max-w-64 text-right text-xs font-mono font-semibold text-on-surface tabular-nums" id="hud-macroCostPushChart">-</p>
+							<button type="button" class="expand-chart-btn p-1 -m-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors cursor-pointer" title="Expand chart" aria-label="Expand chart">
+								<span class="material-symbols-outlined text-base leading-none expand-icon" aria-hidden="true">open_in_full</span>
 							</button>
 						</div>
 					</div>
 					<div class="chart-canvas-container h-80 md:h-85 w-full relative">
 						<canvas id="macroCostPushChart"></canvas>
 					</div>
+					<p class="mt-3 text-2xs text-on-surface-variant/70">Source: Statistical Office</p>
 				</div>
 
-				{# Chart 17: Sectoral Inflation Breakdown (Shapiro 2022) #}
-				<div class="chart-card bg-surface-container-low border border-outline-variant/15 rounded-lg p-5 hover:border-outline-variant/30 transition-all flex flex-col justify-between" data-macro-category="inflation">
-					<div class="flex items-start justify-between mb-3 gap-2">
-						<div class="flex items-center gap-2.5 min-w-0">
-							<div class="p-2 rounded bg-amber-500/10 text-amber-400 shrink-0">
-								<span class="material-symbols-outlined text-lg leading-none">pie_chart</span>
-							</div>
-							<div class="min-w-0">
-								<div class="flex items-center gap-2 flex-wrap">
-									<h4 class="text-xs font-bold text-on-surface">Sectoral Inflation & Producer Prices (PPI)</h4>
-									<span class="text-4xs font-mono text-primary/80 bg-primary/10 px-1.5 py-0.5 rounded border border-primary/20 shrink-0">SF FED / BLS: PPI & CPI</span>
-								</div>
-								<p class="text-3xs text-on-surface-variant truncate">Headline CPI & PPI wholesale inflation decomposed into supercore services, goods & food lag</p>
-							</div>
+				<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-macro-category="inflation">
+					<div class="flex items-start justify-between gap-4 mb-3">
+						<div class="min-w-0">
+							<h3 class="text-sm font-semibold text-on-surface">Inflation by component</h3>
+							<p class="text-xs text-on-surface-variant mt-0.5">Headline consumer and producer prices, with services, goods and food</p>
 						</div>
-						<div class="flex items-center gap-2 shrink-0">
-							<div class="hidden sm:flex flex-col items-end text-right">
-								<span class="text-4xs font-semibold uppercase tracking-wide text-on-surface-variant/70">Latest</span>
-								<span class="text-xs font-mono font-bold text-on-surface tabular-nums" id="hud-macroSectoralInflationChart">-</span>
-							</div>
-							<span class="text-4xs font-semibold px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant uppercase tracking-wide">Inflation</span>
-							<button type="button" class="expand-chart-btn p-1 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface transition-all cursor-pointer" title="Toggle Fullscreen / Expand">
-								<span class="material-symbols-outlined text-[15px] expand-icon">open_in_full</span>
+						<div class="flex items-start gap-3 shrink-0">
+							<p class="hidden sm:block max-w-64 text-right text-xs font-mono font-semibold text-on-surface tabular-nums" id="hud-macroSectoralInflationChart">-</p>
+							<button type="button" class="expand-chart-btn p-1 -m-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors cursor-pointer" title="Expand chart" aria-label="Expand chart">
+								<span class="material-symbols-outlined text-base leading-none expand-icon" aria-hidden="true">open_in_full</span>
 							</button>
 						</div>
 					</div>
 					<div class="chart-canvas-container h-80 md:h-85 w-full relative">
 						<canvas id="macroSectoralInflationChart"></canvas>
 					</div>
+					<p class="mt-3 text-2xs text-on-surface-variant/70">Source: Statistical Office</p>
 				</div>
 
-				{# Chart 18: Dual-Tranche Corporate Credit Spreads (Jarrow-Lando-Turnbull 1997) #}
-				<div class="chart-card bg-surface-container-low border border-outline-variant/15 rounded-lg p-5 hover:border-outline-variant/30 transition-all flex flex-col justify-between" data-macro-category="credit">
-					<div class="flex items-start justify-between mb-3 gap-2">
-						<div class="flex items-center gap-2.5 min-w-0">
-							<div class="p-2 rounded bg-rose-500/10 text-rose-400 shrink-0">
-								<span class="material-symbols-outlined text-lg leading-none">stacked_bar_chart</span>
-							</div>
-							<div class="min-w-0">
-								<div class="flex items-center gap-2 flex-wrap">
-									<h4 class="text-xs font-bold text-on-surface">Corporate Credit Spreads, Default Risk & Rating Cliff</h4>
-									<span class="text-4xs font-mono text-primary/80 bg-primary/10 px-1.5 py-0.5 rounded border border-primary/20 shrink-0">ICE BofA / JLT 1997</span>
-								</div>
-								<p class="text-3xs text-on-surface-variant truncate">Investment Grade (IG) vs High Yield (HY) credit spreads, corporate default rate & cliff</p>
-							</div>
+				<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-macro-category="credit">
+					<div class="flex items-start justify-between gap-4 mb-3">
+						<div class="min-w-0">
+							<h3 class="text-sm font-semibold text-on-surface">Corporate credit spreads and defaults</h3>
+							<p class="text-xs text-on-surface-variant mt-0.5">Investment-grade and high-yield spreads, the ratio between them, and the corporate default rate</p>
 						</div>
-						<div class="flex items-center gap-2 shrink-0">
-							<div class="hidden sm:flex flex-col items-end text-right">
-								<span class="text-4xs font-semibold uppercase tracking-wide text-on-surface-variant/70">Latest</span>
-								<span class="text-xs font-mono font-bold text-on-surface tabular-nums" id="hud-macroCreditCliffChart">-</span>
-							</div>
-							<span class="text-4xs font-semibold px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant uppercase tracking-wide">Credit</span>
-							<button type="button" class="expand-chart-btn p-1 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface transition-all cursor-pointer" title="Toggle Fullscreen / Expand">
-								<span class="material-symbols-outlined text-[15px] expand-icon">open_in_full</span>
+						<div class="flex items-start gap-3 shrink-0">
+							<p class="hidden sm:block max-w-64 text-right text-xs font-mono font-semibold text-on-surface tabular-nums" id="hud-macroCreditCliffChart">-</p>
+							<button type="button" class="expand-chart-btn p-1 -m-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors cursor-pointer" title="Expand chart" aria-label="Expand chart">
+								<span class="material-symbols-outlined text-base leading-none expand-icon" aria-hidden="true">open_in_full</span>
 							</button>
 						</div>
 					</div>
 					<div class="chart-canvas-container h-80 md:h-85 w-full relative">
 						<canvas id="macroCreditCliffChart"></canvas>
 					</div>
+					<p class="mt-3 text-2xs text-on-surface-variant/70">Source: Credit Registry</p>
 				</div>
 
-				{# Chart 19: Inventory Investment Cycle & Commodity Storage (Metzler 1941, Working 1949) #}
-				<div class="chart-card bg-surface-container-low border border-outline-variant/15 rounded-lg p-5 hover:border-outline-variant/30 transition-all flex flex-col justify-between" data-macro-category="inflation">
-					<div class="flex items-start justify-between mb-3 gap-2">
-						<div class="flex items-center gap-2.5 min-w-0">
-							<div class="p-2 rounded bg-cyan-500/10 text-cyan-400 shrink-0">
-								<span class="material-symbols-outlined text-lg leading-none">inventory_2</span>
-							</div>
-							<div class="min-w-0">
-								<div class="flex items-center gap-2 flex-wrap">
-									<h4 class="text-xs font-bold text-on-surface">Inventory Investment Cycle & Capacity Buffers</h4>
-									<span class="text-4xs font-mono text-primary/80 bg-primary/10 px-1.5 py-0.5 rounded border border-primary/20 shrink-0">CENSUS: M3 / FED: G.17</span>
-								</div>
-								<p class="text-3xs text-on-surface-variant truncate">Metzler inventory overhang gap vs G.17 factory capacity utilization and strategic reserve buffer</p>
-							</div>
+				<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-macro-category="inflation">
+					<div class="flex items-start justify-between gap-4 mb-3">
+						<div class="min-w-0">
+							<h3 class="text-sm font-semibold text-on-surface">Inventories and capacity</h3>
+							<p class="text-xs text-on-surface-variant mt-0.5">Inventory overhang against the output gap, factory capacity utilisation and strategic energy stocks</p>
 						</div>
-						<div class="flex items-center gap-2 shrink-0">
-							<div class="hidden sm:flex flex-col items-end text-right">
-								<span class="text-4xs font-semibold uppercase tracking-wide text-on-surface-variant/70">Latest</span>
-								<span class="text-xs font-mono font-bold text-on-surface tabular-nums" id="hud-macroInventoryCycleChart">-</span>
-							</div>
-							<span class="text-4xs font-semibold px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant uppercase tracking-wide">Inventories</span>
-							<button type="button" class="expand-chart-btn p-1 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface transition-all cursor-pointer" title="Toggle Fullscreen / Expand">
-								<span class="material-symbols-outlined text-[15px] expand-icon">open_in_full</span>
+						<div class="flex items-start gap-3 shrink-0">
+							<p class="hidden sm:block max-w-64 text-right text-xs font-mono font-semibold text-on-surface tabular-nums" id="hud-macroInventoryCycleChart">-</p>
+							<button type="button" class="expand-chart-btn p-1 -m-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors cursor-pointer" title="Expand chart" aria-label="Expand chart">
+								<span class="material-symbols-outlined text-base leading-none expand-icon" aria-hidden="true">open_in_full</span>
 							</button>
 						</div>
 					</div>
 					<div class="chart-canvas-container h-80 md:h-85 w-full relative">
 						<canvas id="macroInventoryCycleChart"></canvas>
 					</div>
+					<p class="mt-3 text-2xs text-on-surface-variant/70">Source: Manufactory Board</p>
 				</div>
 
-				{# Chart 20: Policy Rule & Partial Adjustment (FOMC 2025 flexible inflation targeting) #}
-				<div class="chart-card bg-surface-container-low border border-outline-variant/15 rounded-lg p-5 hover:border-outline-variant/30 transition-all flex flex-col justify-between" data-macro-category="monetary">
-					<div class="flex items-start justify-between mb-3 gap-2">
-						<div class="flex items-center gap-2.5 min-w-0">
-							<div class="p-2 rounded bg-purple-500/10 text-purple-400 shrink-0">
-								<span class="material-symbols-outlined text-lg leading-none">balance</span>
-							</div>
-							<div class="min-w-0">
-								<div class="flex items-center gap-2 flex-wrap">
-									<h4 class="text-xs font-bold text-on-surface">Policy Rule vs Policy Rate</h4>
-									<span class="text-4xs font-mono text-primary/80 bg-primary/10 px-1.5 py-0.5 rounded border border-primary/20 shrink-0">FOMC: 2025 Framework</span>
-								</div>
-								<p class="text-3xs text-on-surface-variant truncate">Taylor-rule target against the policy rate, and how far the rate trails it</p>
-							</div>
+				<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-macro-category="monetary">
+					<div class="flex items-start justify-between gap-4 mb-3">
+						<div class="min-w-0">
+							<h3 class="text-sm font-semibold text-on-surface">Policy rate against the rule</h3>
+							<p class="text-xs text-on-surface-variant mt-0.5">The rate the Monetary Authority's published rule calls for, the policy rate, and the gap between them</p>
 						</div>
-						<div class="flex items-center gap-2 shrink-0">
-							<div class="hidden sm:flex flex-col items-end text-right">
-								<span class="text-4xs font-semibold uppercase tracking-wide text-on-surface-variant/70">Latest</span>
-								<span class="text-xs font-mono font-bold text-on-surface tabular-nums" id="hud-macroPolicyRuleChart">-</span>
-							</div>
-							<span class="text-4xs font-semibold px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant uppercase tracking-wide">Monetary Rule</span>
-							<button type="button" class="expand-chart-btn p-1 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface transition-all cursor-pointer" title="Toggle Fullscreen / Expand">
-								<span class="material-symbols-outlined text-[15px] expand-icon">open_in_full</span>
+						<div class="flex items-start gap-3 shrink-0">
+							<p class="hidden sm:block max-w-64 text-right text-xs font-mono font-semibold text-on-surface tabular-nums" id="hud-macroPolicyRuleChart">-</p>
+							<button type="button" class="expand-chart-btn p-1 -m-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors cursor-pointer" title="Expand chart" aria-label="Expand chart">
+								<span class="material-symbols-outlined text-base leading-none expand-icon" aria-hidden="true">open_in_full</span>
 							</button>
 						</div>
 					</div>
 					<div class="chart-canvas-container h-80 md:h-85 w-full relative">
 						<canvas id="macroPolicyRuleChart"></canvas>
 					</div>
+					<p class="mt-3 text-2xs text-on-surface-variant/70">Source: Monetary Authority</p>
 				</div>
 
-				{# Chart 21: Trading Economics Leading Indicators #}
-				<div class="chart-card bg-surface-container-low border border-outline-variant/15 rounded-lg p-5 hover:border-outline-variant/30 transition-all flex flex-col justify-between" data-macro-category="growth">
-					<div class="flex items-start justify-between mb-3 gap-2">
-						<div class="flex items-center gap-2.5 min-w-0">
-							<div class="p-2 rounded bg-sky-500/10 text-sky-400 shrink-0">
-								<span class="material-symbols-outlined text-lg leading-none">ssid_chart</span>
-							</div>
-							<div class="min-w-0">
-								<div class="flex items-center gap-2 flex-wrap">
-									<h4 class="text-xs font-bold text-on-surface">Leading Indicators & Macro Activity</h4>
-									<span class="text-4xs font-mono text-primary/80 bg-primary/10 px-1.5 py-0.5 rounded border border-primary/20 shrink-0">TE: Leading Index</span>
-								</div>
-								<p class="text-3xs text-on-surface-variant truncate">Manufacturing PMI, Housing Starts, M2 Money Supply, Trade Balance & Producer Prices</p>
-							</div>
+				<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-macro-category="growth">
+					<div class="flex items-start justify-between gap-4 mb-3">
+						<div class="min-w-0">
+							<h3 class="text-sm font-semibold text-on-surface">Leading indicators</h3>
+							<p class="text-xs text-on-surface-variant mt-0.5">Manufacturing PMI, housing starts, money-supply growth, the trade balance and producer prices</p>
 						</div>
-						<div class="flex items-center gap-2 shrink-0">
-							<div class="hidden sm:flex flex-col items-end text-right">
-								<span class="text-4xs font-semibold uppercase tracking-wide text-on-surface-variant/70">Latest</span>
-								<span class="text-xs font-mono font-bold text-on-surface tabular-nums" id="hud-macroLeadingIndicatorsChart">-</span>
-							</div>
-							<span class="text-4xs font-semibold px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant uppercase tracking-wide">Leading</span>
-							<button type="button" class="expand-chart-btn p-1 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface transition-all cursor-pointer" title="Toggle Fullscreen / Expand">
-								<span class="material-symbols-outlined text-[15px] expand-icon">open_in_full</span>
+						<div class="flex items-start gap-3 shrink-0">
+							<p class="hidden sm:block max-w-64 text-right text-xs font-mono font-semibold text-on-surface tabular-nums" id="hud-macroLeadingIndicatorsChart">-</p>
+							<button type="button" class="expand-chart-btn p-1 -m-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors cursor-pointer" title="Expand chart" aria-label="Expand chart">
+								<span class="material-symbols-outlined text-base leading-none expand-icon" aria-hidden="true">open_in_full</span>
 							</button>
 						</div>
 					</div>
 					<div class="chart-canvas-container h-80 md:h-85 w-full relative">
 						<canvas id="macroLeadingIndicatorsChart"></canvas>
 					</div>
+					<p class="mt-3 text-2xs text-on-surface-variant/70">Source: Manufactory Board; Statistical Office</p>
 				</div>
 
-				{# Chart 22: Household Credit Cycle & Macroprudential Buffers (BIS, BCBS Basel III) #}
-				<div class="chart-card bg-surface-container-low border border-outline-variant/15 rounded-lg p-5 hover:border-outline-variant/30 transition-all flex flex-col justify-between" data-macro-category="credit">
-					<div class="flex items-start justify-between mb-3 gap-2">
-						<div class="flex items-center gap-2.5 min-w-0">
-							<div class="p-2 rounded bg-indigo-500/10 text-indigo-400 shrink-0">
-								<span class="material-symbols-outlined text-lg leading-none">account_balance</span>
-							</div>
-							<div class="min-w-0">
-								<div class="flex items-center gap-2 flex-wrap">
-									<h4 class="text-xs font-bold text-on-surface">Household Credit Cycle & Macroprudential Buffers</h4>
-									<span class="text-4xs font-mono text-primary/80 bg-primary/10 px-1.5 py-0.5 rounded border border-primary/20 shrink-0">BIS: CREDIT / BASEL III</span>
-								</div>
-								<p class="text-3xs text-on-surface-variant truncate">Household Debt Service Ratio (DSR), Debt-to-Income, Credit-to-GDP gap & Basel III CCyB buffer</p>
-							</div>
+				<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-macro-category="credit">
+					<div class="flex items-start justify-between gap-4 mb-3">
+						<div class="min-w-0">
+							<h3 class="text-sm font-semibold text-on-surface">Household credit and bank buffers</h3>
+							<p class="text-xs text-on-surface-variant mt-0.5">Household debt service and debt-to-income ratios, the credit-to-GDP gap and the countercyclical capital buffer</p>
 						</div>
-						<div class="flex items-center gap-2 shrink-0">
-							<div class="hidden sm:flex flex-col items-end text-right">
-								<span class="text-4xs font-semibold uppercase tracking-wide text-on-surface-variant/70">Latest</span>
-								<span class="text-xs font-mono font-bold text-on-surface tabular-nums" id="hud-macroHouseholdCreditChart">-</span>
-							</div>
-							<span class="text-4xs font-semibold px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant uppercase tracking-wide">Macroprudential</span>
-							<button type="button" class="expand-chart-btn p-1 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface transition-all cursor-pointer" title="Toggle Fullscreen / Expand">
-								<span class="material-symbols-outlined text-[15px] expand-icon">open_in_full</span>
+						<div class="flex items-start gap-3 shrink-0">
+							<p class="hidden sm:block max-w-64 text-right text-xs font-mono font-semibold text-on-surface tabular-nums" id="hud-macroHouseholdCreditChart">-</p>
+							<button type="button" class="expand-chart-btn p-1 -m-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors cursor-pointer" title="Expand chart" aria-label="Expand chart">
+								<span class="material-symbols-outlined text-base leading-none expand-icon" aria-hidden="true">open_in_full</span>
 							</button>
 						</div>
 					</div>
 					<div class="chart-canvas-container h-80 md:h-85 w-full relative">
 						<canvas id="macroHouseholdCreditChart"></canvas>
 					</div>
+					<p class="mt-3 text-2xs text-on-surface-variant/70">Source: Financial Regulator</p>
 				</div>
 
-				{# Chart 23: Global Economic Divergence & Foreign Demand (OECD, IMF Spillovers) #}
-				<div class="chart-card bg-surface-container-low border border-outline-variant/15 rounded-lg p-5 hover:border-outline-variant/30 transition-all flex flex-col justify-between" data-macro-category="assets">
-					<div class="flex items-start justify-between mb-3 gap-2">
-						<div class="flex items-center gap-2.5 min-w-0">
-							<div class="p-2 rounded bg-teal-500/10 text-teal-400 shrink-0">
-								<span class="material-symbols-outlined text-lg leading-none">public</span>
-							</div>
-							<div class="min-w-0">
-								<div class="flex items-center gap-2 flex-wrap">
-									<h4 class="text-xs font-bold text-on-surface">Global Economic Divergence & Foreign Demand</h4>
-									<span class="text-4xs font-mono text-primary/80 bg-primary/10 px-1.5 py-0.5 rounded border border-primary/20 shrink-0">OECD / IMF: SPILLOVERS</span>
-								</div>
-								<p class="text-3xs text-on-surface-variant truncate">Domestic vs foreign output gap divergence, global demand trade gap & foreign policy rate</p>
-							</div>
+				<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-macro-category="assets">
+					<div class="flex items-start justify-between gap-4 mb-3">
+						<div class="min-w-0">
+							<h3 class="text-sm font-semibold text-on-surface">The District and the mainland</h3>
+							<p class="text-xs text-on-surface-variant mt-0.5">District and mainland output gaps, the global demand gap and the mainland policy rate</p>
 						</div>
-						<div class="flex items-center gap-2 shrink-0">
-							<div class="hidden sm:flex flex-col items-end text-right">
-								<span class="text-4xs font-semibold uppercase tracking-wide text-on-surface-variant/70">Latest</span>
-								<span class="text-xs font-mono font-bold text-on-surface tabular-nums" id="hud-macroGlobalCycleChart">-</span>
-							</div>
-							<span class="text-4xs font-semibold px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant uppercase tracking-wide">Global Trade</span>
-							<button type="button" class="expand-chart-btn p-1 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface transition-all cursor-pointer" title="Toggle Fullscreen / Expand">
-								<span class="material-symbols-outlined text-[15px] expand-icon">open_in_full</span>
+						<div class="flex items-start gap-3 shrink-0">
+							<p class="hidden sm:block max-w-64 text-right text-xs font-mono font-semibold text-on-surface tabular-nums" id="hud-macroGlobalCycleChart">-</p>
+							<button type="button" class="expand-chart-btn p-1 -m-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors cursor-pointer" title="Expand chart" aria-label="Expand chart">
+								<span class="material-symbols-outlined text-base leading-none expand-icon" aria-hidden="true">open_in_full</span>
 							</button>
 						</div>
 					</div>
 					<div class="chart-canvas-container h-80 md:h-85 w-full relative">
 						<canvas id="macroGlobalCycleChart"></canvas>
 					</div>
+					<p class="mt-3 text-2xs text-on-surface-variant/70">Source: Statistical Office</p>
 				</div>
 
-				{# Chart 24: Banking Liquidity, Deposit Betas & Money Market Flight (Drechsler-Savov-Schnabl) #}
-				<div class="chart-card bg-surface-container-low border border-outline-variant/15 rounded-lg p-5 hover:border-outline-variant/30 transition-all flex flex-col justify-between" data-macro-category="credit">
-					<div class="flex items-start justify-between mb-3 gap-2">
-						<div class="flex items-center gap-2.5 min-w-0">
-							<div class="p-2 rounded bg-amber-500/10 text-amber-400 shrink-0">
-								<span class="material-symbols-outlined text-lg leading-none">swap_horiz</span>
-							</div>
-							<div class="min-w-0">
-								<div class="flex items-center gap-2 flex-wrap">
-									<h4 class="text-xs font-bold text-on-surface">Banking Liquidity, Deposit Betas & MMF Flight</h4>
-									<span class="text-4xs font-mono text-primary/80 bg-primary/10 px-1.5 py-0.5 rounded border border-primary/20 shrink-0">FED: H.8 / ICI MMF</span>
-								</div>
-								<p class="text-3xs text-on-surface-variant truncate">System deposit beta pass-through, money market fund asset share & interbank liquidity spread</p>
-							</div>
+				<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-macro-category="credit">
+					<div class="flex items-start justify-between gap-4 mb-3">
+						<div class="min-w-0">
+							<h3 class="text-sm font-semibold text-on-surface">Deposits and money-market funds</h3>
+							<p class="text-xs text-on-surface-variant mt-0.5">How much of a rate change banks pass on to depositors, money-market funds' share of deposits, and the interbank spread</p>
 						</div>
-						<div class="flex items-center gap-2 shrink-0">
-							<div class="hidden sm:flex flex-col items-end text-right">
-								<span class="text-4xs font-semibold uppercase tracking-wide text-on-surface-variant/70">Latest</span>
-								<span class="text-xs font-mono font-bold text-on-surface tabular-nums" id="hud-macroBankingLiquidityChart">-</span>
-							</div>
-							<span class="text-4xs font-semibold px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant uppercase tracking-wide">Liquidity Channel</span>
-							<button type="button" class="expand-chart-btn p-1 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface transition-all cursor-pointer" title="Toggle Fullscreen / Expand">
-								<span class="material-symbols-outlined text-[15px] expand-icon">open_in_full</span>
+						<div class="flex items-start gap-3 shrink-0">
+							<p class="hidden sm:block max-w-64 text-right text-xs font-mono font-semibold text-on-surface tabular-nums" id="hud-macroBankingLiquidityChart">-</p>
+							<button type="button" class="expand-chart-btn p-1 -m-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors cursor-pointer" title="Expand chart" aria-label="Expand chart">
+								<span class="material-symbols-outlined text-base leading-none expand-icon" aria-hidden="true">open_in_full</span>
 							</button>
 						</div>
 					</div>
 					<div class="chart-canvas-container h-80 md:h-85 w-full relative">
 						<canvas id="macroBankingLiquidityChart"></canvas>
 					</div>
+					<p class="mt-3 text-2xs text-on-surface-variant/70">Source: Financial Regulator; Monetary Authority</p>
 				</div>
 			</div>
-		</div>
+		</section>
 	</div>
 {% endblock %}
 

@@ -1,21 +1,42 @@
-export const UI_COLORS = {
-    POSITIVE: '#4edea3',
-    NEGATIVE: '#ffb3ad',
-    GRID: '#2d3449'
-};
+/**
+ * Colours for script-drawn UI: charts, the sankey and the district map. The theme ones are read off the
+ * tokens in assets/styles/app.css, so a palette change there reaches every chart; the literals are only
+ * the fallback for a script that runs before the stylesheet has applied.
+ */
+const rootStyle = typeof document !== 'undefined' ? getComputedStyle(document.documentElement) : null;
+
+function token(name, fallback) {
+    const value = rootStyle ? rootStyle.getPropertyValue(`--color-${name}`).trim() : '';
+    return value || fallback;
+}
+
+/** `#rrggbb` at a given opacity, for area fills, grid lines and translucent bars drawn in a theme colour. */
+export function withAlpha(hex, alpha) {
+    const digits = hex.replace('#', '');
+    const full = digits.length === 3 ? digits.split('').map(c => c + c).join('') : digits;
+    const n = parseInt(full, 16);
+    return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`;
+}
+
+const primary = token('primary', '#79a8ff');
+const positive = token('secondary', '#3cc584');
+const negative = token('tertiary', '#f0646b');
+const outline = token('outline-variant', '#3b424b');
 
 export const THEME_COLORS = {
-    primary: '#adc6ff',
-    secondary: '#4edea3',
-    tertiary: '#ffb3ad',
-    positive: '#4edea3',
-    negative: '#ffb3ad',
-    warning: '#ff9800',
-    grid: '#2d3449',
-    surface: '#131b2e',
-    textPrimary: '#dae2fd',
-    textMuted: '#c2c6d6',
-    border: 'rgba(66, 71, 84, 0.3)'
+    primary,
+    secondary: positive,
+    tertiary: negative,
+    positive,
+    negative,
+    warning: token('warning', '#f0a33a'),
+    grid: outline,
+    surface: token('surface-container-low', '#15171b'),
+    surfaceRaised: token('surface-container-high', '#21252b'),
+    ground: token('surface', '#0e1013'),
+    textPrimary: token('on-surface', '#e8eaed'),
+    textMuted: token('on-surface-variant', '#a1a9b4'),
+    border: withAlpha(outline, 0.3)
 };
 
 export const BRAND_COLORS = {

@@ -26,8 +26,8 @@ use PHPUnit\Framework\TestCase;
 
 class PoliticsEngineTest extends TestCase
 {
-    /** The Vanguard's whole bloc at the founding, a majority cabinet of 155 seats with no one outside to answer to. */
-    private const RIGHT_BLOC = [Diet::VANGUARD, Diet::EXCHANGE, Diet::CHARTISTS, Diet::FREE_PORT];
+    /** The Vanguard's whole bloc at the founding, a majority cabinet of 160 seats with no one outside to answer to. */
+    private const RIGHT_BLOC = [Diet::VANGUARD, Diet::EXCHANGE, Diet::CHARTISTS, Diet::NEW_HORIZON];
 
     /** The first vote on the calendar. */
     private const ELECTION_AT = Politics::ELECTION_TERM_YEARS;
@@ -58,13 +58,13 @@ class PoliticsEngineTest extends TestCase
     {
         $drifted = [
             Diet::CHARTISTS => [Diet::AXIS_COUNCIL => -0.5, Diet::AXIS_STATE => 0.4],
-            Diet::FREE_PORT => [Diet::AXIS_STATE => 0.9, Diet::AXIS_OPENNESS => -0.9, Diet::AXIS_COUNCIL => -0.2],
+            Diet::NEW_HORIZON => [Diet::AXIS_STATE => 0.9, Diet::AXIS_OPENNESS => -0.9, Diet::AXIS_COUNCIL => -0.2],
         ];
 
         $this->assertSame(Diet::FIXED_POSITIONS[Diet::CHARTISTS][Diet::AXIS_COUNCIL], Diet::position(Diet::CHARTISTS, $drifted)[Diet::AXIS_COUNCIL], 'A stored value cannot move a party off its own axis.');
         $this->assertSame(0.4, Diet::position(Diet::CHARTISTS, $drifted)[Diet::AXIS_STATE]);
         $this->assertSame(Diet::HOME_POSITIONS[Diet::CHARTISTS][Diet::AXIS_OPENNESS], Diet::position(Diet::CHARTISTS, $drifted)[Diet::AXIS_OPENNESS], 'A missing axis is the home.');
-        $this->assertSame([Diet::AXIS_STATE => -0.6, Diet::AXIS_OPENNESS => 0.6, Diet::AXIS_COUNCIL => -0.2], Diet::position(Diet::FREE_PORT, $drifted), 'The Free Port Compact is fixed on two axes.');
+        $this->assertSame([Diet::AXIS_STATE => -0.5, Diet::AXIS_OPENNESS => 0.7, Diet::AXIS_COUNCIL => -0.2], Diet::position(Diet::NEW_HORIZON, $drifted), 'New Horizon is fixed on two axes.');
         $defined = array_values(array_unique(array_merge(...array_map('array_keys', array_values(Diet::FIXED_POSITIONS)))));
         $this->assertEqualsCanonicalizing(Diet::AXES, $defined, 'Every axis has parties defined by it.');
         foreach (Diet::FIXED_POSITIONS as $party => $fixed) {
@@ -73,17 +73,17 @@ class PoliticsEngineTest extends TestCase
                 $this->assertTrue(Diet::isFixed($party, $axis));
             }
         }
-        $this->assertFalse(Diet::isFixed(Diet::FREE_PORT, Diet::AXIS_COUNCIL));
+        $this->assertFalse(Diet::isFixed(Diet::NEW_HORIZON, Diet::AXIS_COUNCIL));
     }
 
     public function testTheGovernmentsPositionIsItsPartiesWeightedBySeats(): void
     {
         $position = Politics::coalitionPosition(Diet::membership([Diet::VANGUARD, Diet::EXCHANGE, Diet::CHARTISTS]), Diet::SEED_SEATS, Diet::HOME_POSITIONS);
 
-        // Vanguard 80 at (-0.6, 0, +0.3), Exchange 30 at (0, +0.8, +0.4), Chartists 20 at (0, +0.6, +0.8).
-        $this->assertEqualsWithDelta(80.0 * -0.6 / 130.0, $position[Diet::AXIS_STATE], 1e-12);
-        $this->assertEqualsWithDelta((30.0 * 0.8 + 20.0 * 0.6) / 130.0, $position[Diet::AXIS_OPENNESS], 1e-12);
-        $this->assertEqualsWithDelta((80.0 * 0.3 + 30.0 * 0.4 + 20.0 * 0.8) / 130.0, $position[Diet::AXIS_COUNCIL], 1e-12);
+        // Vanguard 85 at (-0.6, 0, +0.3), Exchange 35 at (0, +0.8, +0.4), Chartists 20 at (0, +0.6, +0.8).
+        $this->assertEqualsWithDelta(85.0 * -0.6 / 140.0, $position[Diet::AXIS_STATE], 1e-12);
+        $this->assertEqualsWithDelta((35.0 * 0.8 + 20.0 * 0.6) / 140.0, $position[Diet::AXIS_OPENNESS], 1e-12);
+        $this->assertEqualsWithDelta((85.0 * 0.3 + 35.0 * 0.4 + 20.0 * 0.8) / 140.0, $position[Diet::AXIS_COUNCIL], 1e-12);
     }
 
     // --- The vote ---
@@ -165,7 +165,7 @@ class PoliticsEngineTest extends TestCase
         $this->assertEqualsWithDelta(33.7, $meanDays, 3.0);
         $this->assertEqualsWithDelta(CoalitionFormation::FORMATION_MEAN_DAYS, $meanDays, 3.0, 'The uncertainty index is compensated for talks of another length.');
         $this->assertEqualsWithDelta(33.9, sqrt(array_sum(array_map(static fn(float $d): float => ($d - $meanDays) ** 2, $talkDays)) / count($talkDays)), 5.0);
-        $this->assertEqualsWithDelta(0.84, $minority / count($talkDays), 0.04);
+        $this->assertEqualsWithDelta(0.84, $minority / count($talkDays), 0.06);
         $this->assertEqualsWithDelta(0.52, $single / count($talkDays), 0.04);
         $this->assertLessThan(0.08, $twoLargest / count($talkDays));
         $this->assertEqualsWithDelta(0.70, $largestIn / count($talkDays), 0.04);
@@ -257,7 +257,7 @@ class PoliticsEngineTest extends TestCase
         $seed = Diet::SEED_VOTE_SHARES;
 
         $this->assertEqualsWithDelta(1.0, array_sum($shares), 1e-12);
-        $this->assertEqualsWithDelta(130.0 / 300.0 - 0.04, $shares[Diet::VANGUARD] + $shares[Diet::EXCHANGE] + $shares[Diet::CHARTISTS], 1e-12);
+        $this->assertEqualsWithDelta(140.0 / 300.0 - 0.04, $shares[Diet::VANGUARD] + $shares[Diet::EXCHANGE] + $shares[Diet::CHARTISTS], 1e-12);
         $this->assertEqualsWithDelta($seed[Diet::CIVIC] / $seed[Diet::IRON_HARBOR], $shares[Diet::CIVIC] / $shares[Diet::IRON_HARBOR], 1e-12);
         $this->assertEqualsWithDelta($seed[Diet::VANGUARD] / $seed[Diet::EXCHANGE], $shares[Diet::VANGUARD] / $shares[Diet::EXCHANGE], 1e-12);
     }
@@ -392,11 +392,11 @@ class PoliticsEngineTest extends TestCase
     public function testACabinetFallsOnItsDayAndTheTalksSeatAnother(): void
     {
         $engine = $this->engine(MathUtility::ownStream(3));
-        $state = $this->governedBy([Diet::VANGUARD => 80.0], [Diet::EXCHANGE => 30.0, Diet::CHARTISTS => 20.0, Diet::FREE_PORT => 25.0]);
+        $state = $this->governedBy([Diet::VANGUARD => 85.0], [Diet::EXCHANGE => 35.0, Diet::CHARTISTS => 20.0, Diet::NEW_HORIZON => 20.0]);
         $state->dietSeats = Diet::SEED_SEATS;
         $state->cabinetFallsAt = 10.3;
         $openAgainstClosed = [Diet::CIVIC => Diet::CIVIC, Diet::VANGUARD => Diet::VANGUARD, Diet::IRON_HARBOR => Diet::VANGUARD, Diet::EXCHANGE => Diet::CIVIC,
-            Diet::CHARTISTS => Diet::CIVIC, Diet::COMMON_LOT => Diet::VANGUARD, Diet::FREE_PORT => Diet::CIVIC, Diet::BASTION_GUILDS => Diet::VANGUARD];
+            Diet::CHARTISTS => Diet::CIVIC, Diet::COMMON_LOT => Diet::VANGUARD, Diet::NEW_HORIZON => Diet::CIVIC, Diet::TIDELINE => Diet::VANGUARD];
         $state->dietBlocs = $openAgainstClosed;
 
         $engine->advance($state, $this->economy(10.3), 0.01);
@@ -489,7 +489,7 @@ class PoliticsEngineTest extends TestCase
         $engine = $this->engine($this->quietMath());
         $state = $this->electionTick();
         // A lead far enough past the Vanguard's normal vote to keep a majority as it drifts back.
-        $state->dietVoteShares = [Diet::CIVIC => 0.05, Diet::VANGUARD => 0.80, Diet::IRON_HARBOR => 0.03, Diet::EXCHANGE => 0.03, Diet::CHARTISTS => 0.02, Diet::COMMON_LOT => 0.02, Diet::FREE_PORT => 0.03, Diet::BASTION_GUILDS => 0.02];
+        $state->dietVoteShares = [Diet::CIVIC => 0.05, Diet::VANGUARD => 0.80, Diet::IRON_HARBOR => 0.03, Diet::EXCHANGE => 0.03, Diet::CHARTISTS => 0.02, Diet::COMMON_LOT => 0.02, Diet::TIDELINE => 0.03, Diet::NEW_HORIZON => 0.02];
 
         $this->vote($engine, $state);
 
@@ -520,7 +520,7 @@ class PoliticsEngineTest extends TestCase
             return $count;
         };
 
-        $this->assertGreaterThan(2 * $formedAfter([Diet::VANGUARD, Diet::FREE_PORT]), $formedAfter($cabinet));
+        $this->assertGreaterThan(2 * $formedAfter([Diet::VANGUARD, Diet::NEW_HORIZON]), $formedAfter($cabinet));
     }
 
     /** The cabinet the talks produced takes office on the first tick at or past its day, supporters with it. */

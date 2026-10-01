@@ -1,4 +1,4 @@
-import { THEME_COLORS } from '../utils/colors.js';
+import { THEME_COLORS, withAlpha } from '../utils/colors.js';
 import { formatCurrency } from '../utils/formatters.js';
 import { CHART_FONT_MONO } from '../utils/fonts.js';
 import { readPageData } from '../utils/page-data.js';
@@ -61,20 +61,20 @@ function initDashboard() {
                 fontFamily: CHART_FONT_MONO,
             },
             grid: {
-                vertLines: { color: 'rgba(66, 71, 84, 0.2)' },
-                horzLines: { color: 'rgba(66, 71, 84, 0.2)' },
+                vertLines: { color: withAlpha(THEME_COLORS.grid, 0.35) },
+                horzLines: { color: withAlpha(THEME_COLORS.grid, 0.35) },
             },
             crosshair: {
                 mode: LightweightCharts.CrosshairMode.Normal,
-                vertLine: { color: 'rgba(173, 198, 255, 0.4)', labelBackgroundColor: '#171f33' },
-                horzLine: { color: 'rgba(173, 198, 255, 0.4)', labelBackgroundColor: '#171f33' },
+                vertLine: { color: withAlpha(THEME_COLORS.primary, 0.4), labelBackgroundColor: THEME_COLORS.surfaceRaised },
+                horzLine: { color: withAlpha(THEME_COLORS.primary, 0.4), labelBackgroundColor: THEME_COLORS.surfaceRaised },
             },
             rightPriceScale: {
-                borderColor: 'rgba(66, 71, 84, 0.3)',
+                borderColor: THEME_COLORS.border,
                 scaleMargins: { top: 0.1, bottom: 0.1 },
             },
             timeScale: {
-                borderColor: 'rgba(66, 71, 84, 0.3)',
+                borderColor: THEME_COLORS.border,
                 timeVisible: true,
                 secondsVisible: false,
             },
@@ -84,8 +84,8 @@ function initDashboard() {
 
         if (typeof portfolioChart.addSeries === 'function' && LightweightCharts.AreaSeries) {
             areaSeries = portfolioChart.addSeries(LightweightCharts.AreaSeries, {
-                topColor: 'rgba(173, 198, 255, 0.4)',
-                bottomColor: 'rgba(173, 198, 255, 0.01)',
+                topColor: withAlpha(THEME_COLORS.primary, 0.3),
+                bottomColor: withAlpha(THEME_COLORS.primary, 0),
                 lineColor: THEME_COLORS.primary,
                 lineWidth: 2,
                 priceFormat: {
@@ -110,12 +110,7 @@ function initDashboard() {
         const rangeButtons = document.querySelectorAll('.portfolio-range-btn');
         rangeButtons.forEach(btn => {
             btn.onclick = () => {
-                rangeButtons.forEach(b => {
-                    b.classList.remove('bg-primary', 'text-on-primary', 'shadow-md', 'shadow-primary/20');
-                    b.classList.add('bg-surface-container', 'text-on-surface-variant');
-                });
-                btn.classList.remove('bg-surface-container', 'text-on-surface-variant');
-                btn.classList.add('bg-primary', 'text-on-primary', 'shadow-md', 'shadow-primary/20');
+                rangeButtons.forEach(b => b.setAttribute('aria-pressed', b === btn ? 'true' : 'false'));
 
                 currentRange = btn.dataset.range;
                 loadPortfolioData(currentRange);
@@ -253,11 +248,8 @@ function initDashboard() {
                 setText(pnlValEl, `${sign}${formatCurrency(totalPnL)}`);
                 setText(pnlPctEl, `(${sign}${totalPnLPct.toFixed(2)}%)`);
 
-                if (totalPnL >= 0) {
-                    pnlBadge.className = 'inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold font-mono bg-secondary/10 text-secondary border border-secondary/20';
-                } else {
-                    pnlBadge.className = 'inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold font-mono bg-tertiary/10 text-tertiary border border-tertiary/20';
-                }
+                pnlBadge.classList.toggle('text-secondary', totalPnL >= 0);
+                pnlBadge.classList.toggle('text-tertiary', totalPnL < 0);
             }
         }
     }

@@ -4,11 +4,6 @@
  * config; visibility runs through the `hidden` class throughout, never an inline `style.display`.
  */
 
-/** Category-button styling, kept in one place so the two states cannot drift apart. */
-const CAT_BTN_BASE = 'px-3 py-1.5 text-xs font-bold rounded-lg transition-all whitespace-nowrap cursor-pointer';
-const CAT_BTN_ACTIVE = 'bg-primary text-on-primary shadow-md shadow-primary/20';
-const CAT_BTN_IDLE = 'bg-surface-container text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface';
-
 /** Each grid's live filter state, and the function that re-applies it, keyed by grid id. */
 const gridFilters = {};
 
@@ -43,11 +38,8 @@ export function setupChartGridFilters(config) {
     catButtons.forEach(btn => {
         btn.addEventListener('click', () => {
             state.category = btn.dataset.category || 'all';
-            catButtons.forEach(b => {
-                const isActive = b === btn;
-                b.className = `${config.buttonClass} ${CAT_BTN_BASE} ${isActive ? CAT_BTN_ACTIVE : CAT_BTN_IDLE}`;
-                b.setAttribute('aria-pressed', isActive ? 'true' : 'false');
-            });
+            // Styling follows aria-pressed (`.seg-btn` in app.css).
+            catButtons.forEach(b => b.setAttribute('aria-pressed', b === btn ? 'true' : 'false'));
             apply();
         });
     });

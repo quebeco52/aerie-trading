@@ -20,7 +20,7 @@ final class AeriePartyProfiles
             'family' => 'Social democrat',
             'motto' => 'Public services, paid for by the profits of Glasswater Row.',
             'about' => [
-                'The Civic Front is the District\'s largest party of the left and the party of its public sector. It was built by the teachers\', nurses\' and ferry workers\' associations that kept the peninsula\'s schools, clinics and crossings running in the founding years, when the banks that created the District had little use for them.',
+                'The Civic Front is the District\'s largest party of the left and the political voice of its working class and public sector. It was forged from the teachers\', nurses\', ferry crews\' and municipal trade unions that kept the peninsula\'s schools, clinics and infrastructure running while the financial houses governed for themselves.',
                 'It holds that a financial centre this rich can afford a state that carries its people through the bad years, and that the firms which profit most from the District\'s light rules should pay the most toward it. It usually leads one of the Diet\'s two blocs, and is at home governing alone from a minority, with the smaller parties of its bloc passing its budgets.',
             ],
             'agenda' => [
@@ -48,13 +48,13 @@ final class AeriePartyProfiles
             'family' => 'Agrarian, protectionist',
             'motto' => 'Make more of what the District consumes.',
             'about' => [
-                'Iron Harbor began as an alliance of the peninsula\'s farmers, fishermen and the freight trades of the old harbour, people whose livelihoods long predate Glasswater Row. It is the Diet\'s party of the closed economy.',
-                'It wants the District to depend less on the mainland and the world: tariffs that give its own producers a fair price, limits on immigration, and a say over who buys the District\'s land and firms. It is no friend of the banks either, but its quarrel is with the open door rather than with the size of the state.',
+                'Iron Harbor began as an alliance of the peninsula\'s farmers, fishermen, shipyard mechanics and the freight trades of the old harbour, people whose livelihoods long predate Glasswater Row. It is the Diet\'s party of the closed economy.',
+                'It wants the District to depend less on the mainland and the world: protective tariffs for its own workshops and farms, strict limits on foreign labour, and a legal veto over foreign buyouts of local docks and yards. It is no friend of the banks either, but its quarrel is with the open door rather than with the size of the state.',
             ],
             'agenda' => [
-                ['title' => 'Tariffs on imports', 'text' => 'A protective tariff for the District\'s farms, fisheries and workshops.'],
-                ['title' => 'Controlled immigration', 'text' => 'Admit workers at the pace the District can house them.'],
-                ['title' => 'Local ownership', 'text' => 'Limit foreign purchases of land and strategic firms.'],
+                ['title' => 'Tariffs on imports', 'text' => 'A protective tariff for the District\'s farms, fisheries, shipyards and workshops.'],
+                ['title' => 'Controlled immigration', 'text' => 'Admit workers at the pace the District can house and support them.'],
+                ['title' => 'Local ownership', 'text' => 'Limit foreign purchases of land, maritime berths and strategic firms.'],
             ],
         ],
         AerieDiet::EXCHANGE => [
@@ -62,13 +62,13 @@ final class AeriePartyProfiles
             'family' => 'Liberal',
             'motto' => 'An open District: free trade, free capital, free movement.',
             'about' => [
-                'The Exchange Party speaks for the District as a meeting place: its traders, its exporters, and the newcomers who came to work for them. It is the Diet\'s party of the open economy.',
-                'It holds that the District\'s fortune was made by openness and would be lost by closing the door, to goods, to capital or to people. On the size of the state it sits in the middle, which lets it govern with either side, though it usually campaigns with the Vanguard.',
+                'The Exchange Party speaks for the District as a global free port and meeting place: its trading houses, shipping lines, exporters, and the international talent who arrived to build them. It is the Diet\'s party of the open economy.',
+                'It holds that the District\'s fortune was made by openness and would be lost by closing the door to goods, capital or people. On the size of the state it sits in the middle, defending the zero-tariff free-port charter while maintaining room to govern with either bloc, though it usually campaigns beside the Vanguard.',
             ],
             'agenda' => [
-                ['title' => 'Free trade', 'text' => 'No tariffs, and none in return from the District\'s partners.'],
+                ['title' => 'Free trade and free port status', 'text' => 'No tariffs, and none in return from the District\'s international partners.'],
                 ['title' => 'Open migration', 'text' => 'A work permit for anyone with a job offer.'],
-                ['title' => 'Open capital markets', 'text' => 'Keep the District open to foreign investors and listings.'],
+                ['title' => 'Open capital markets', 'text' => 'Keep the District open to foreign investors, listings and global liquidity.'],
             ],
         ],
         AerieDiet::CHARTISTS => [
@@ -76,7 +76,7 @@ final class AeriePartyProfiles
             'family' => 'Constitutionalist',
             'motto' => 'Defend the Charter. Trust the Council.',
             'about' => [
-                'The Chartists take their name from the District\'s founding Charter and defend it as written: a Council of thirteen that elects its own successors and stands above the parties, much as an elected crown would. They are the Council\'s loyalists in the Diet and will never vote to remove a councillor.',
+                'The Chartists take their name from the District\'s founding Charter and defend it as written: a Council of thirteen that elects its own successors and stands above the parties, much as an elected crown would. They are the Council\'s loyalists in the Diet and fierce opponents of any power grabs by the Diet.',
                 'Their voters are the District\'s senior officials, financiers and academics, who see in the Council a guarantee of sound money and long horizons. They would leave competition policy to the experts and let the District\'s firms grow to world scale.',
             ],
             'agenda' => [
@@ -99,32 +99,32 @@ final class AeriePartyProfiles
                 ['title' => 'Small investors first', 'text' => 'Protect retail shareholders against takeovers and dilution.'],
             ],
         ],
-        AerieDiet::FREE_PORT => [
-            'slug' => 'free-port',
-            'family' => 'Neoliberal',
-            'motto' => 'The freest port in the world.',
+        AerieDiet::TIDELINE => [
+            'slug' => 'tideline-accord',
+            'family' => 'Conservationist, localist',
+            'motto' => 'Keep the foreshores, parks, and headlands open to the sky.',
             'about' => [
-                'The Free Port Compact was founded by the shipping lines, trading houses and fund managers who see the District as what its Charter made it: a free port. It wants the lowest taxes and the freest trade of any economy in the world.',
-                'It pairs the Vanguard\'s small state with the Exchange Party\'s open door and usually campaigns with the Vanguard. Its vote is concentrated in Glasswater Row and the port wards.',
+                'The Tideline Accord was founded by the peninsula\'s naturalists, open-water swimmers and coastal residents to protect the District\'s shoreline from the march of Glasswater Row. As luxury resorts walled off beaches and industrial dredging scarred the tidal bays, the Accord rallied citizens around a simple principle: the peninsula\'s natural beauty belongs to all who live here.',
+                'It rejects both the extraction monopolies of the offshore shelf and the unbridled real estate sprawl that would pave the remaining salt marshes and headland walks. While it sits with the Civic Front on public regulation and scenic stewardship, it keeps its distance from the old industrial unions, insisting that genuine prosperity cannot come at the expense of a poisoned coast.',
             ],
             'agenda' => [
-                ['title' => 'The lowest corporate tax', 'text' => 'Cut the rate on profits, and keep cutting it.'],
-                ['title' => 'No tariffs, ever', 'text' => 'Keep the District a free port.'],
-                ['title' => 'Open borders for talent', 'text' => 'Let firms hire from anywhere in the world.'],
+                ['title' => 'Public foreshores and beaches', 'text' => 'Guarantee unimpeded public access to every shore, and prohibit private coastal enclosures.'],
+                ['title' => 'Protected headlands and parkland', 'text' => 'Designate permanent green belts and conservation corridors across the peninsula.'],
+                ['title' => 'Clean bays and estuaries', 'text' => 'Halt seabed dredging and enforce strict environmental liability on offshore extraction.'],
             ],
         ],
-        AerieDiet::BASTION_GUILDS => [
-            'slug' => 'bastion-guilds',
-            'family' => 'Labour, protectionist',
-            'motto' => 'The District\'s own trades, protected.',
+        AerieDiet::NEW_HORIZON => [
+            'slug' => 'new-horizon',
+            'family' => 'Techno-liberal, modernist',
+            'motto' => 'Disrupt the cartels. Clear the runway for the next generation of capital.',
             'about' => [
-                'The Bastion Guilds are the District\'s craft and trade unions in politics: shipwrights, electricians, builders and dockers, the trades that worked the peninsula before the banks came. They want a strong state that stands behind the District\'s own industries.',
-                'They pair the Civic Front\'s big state with Iron Harbor\'s closed door: higher taxes on the profits of finance, tariffs to protect local work, and limits on labour brought in to undercut it. They usually campaign with the Civic Front.',
+                'New Horizon is the political home of the District\'s quantitative trading desks, high-speed market makers, FinTech founders and venture syndicates. Impatient with the century-old dynasties of Lakebird Bank and Owl Capital, it views the District\'s economy as calcified by protected monopolies and archaic Council deference.',
+                'It advocates for ruthless competition, total digital transparency and frictionless capital mobility. While it usually caucuses with the Vanguard on low corporate taxes and open markets, it has no love for the establishment\'s cartel covenants, pushing aggressively for open-banking mandates and algorithmic deregulation.',
             ],
             'agenda' => [
-                ['title' => 'Tax finance, fund the trades', 'text' => 'A higher corporate tax to pay for training and public works.'],
-                ['title' => 'Tariffs for the trades', 'text' => 'Protect the District\'s yards and workshops from cheaper imports.'],
-                ['title' => 'Managed migration', 'text' => 'Admit only the labour the trades cannot train at home.'],
+                ['title' => 'Break legacy banking monopolies', 'text' => 'Enforce open APIs and dismantle statutory credit moats protecting the founding lenders.'],
+                ['title' => 'High-velocity capital markets', 'text' => 'Modernise securities laws for quantitative trading, venture equity and private credit.'],
+                ['title' => 'Frictionless global talent', 'text' => 'Uncapped work visas and streamlined listings for international technologists and founders.'],
             ],
         ],
     ];

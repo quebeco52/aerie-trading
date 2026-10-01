@@ -122,7 +122,7 @@ class SystemicEventReporterTest extends TestCase
             eventType: ShockEvent::ELECTION_HELD,
             dietSeats: [Diet::CIVIC => 78.0, Diet::VANGUARD => 77.0] + Diet::SEED_SEATS,
             dietVoteSwings: [Diet::CIVIC => 0.01, Diet::VANGUARD => -0.01] + array_fill_keys(array_keys(Diet::SEED_SEATS), 0.0),
-            formationLog: [['day' => 20.0, 'formateur' => Diet::CIVIC, 'formed' => true, 'cabinet' => [Diet::CIVIC], 'support' => [Diet::BASTION_GUILDS, Diet::IRON_HARBOR, Diet::COMMON_LOT]]],
+            formationLog: [['day' => 20.0, 'formateur' => Diet::CIVIC, 'formed' => true, 'cabinet' => [Diet::CIVIC], 'support' => [Diet::TIDELINE, Diet::IRON_HARBOR, Diet::COMMON_LOT]]],
         );
 
         $counted = 0;
@@ -186,7 +186,7 @@ class SystemicEventReporterTest extends TestCase
     /** The day a cabinet falls, its headline names the caretaker, the supporters it lost and the party opening the talks, never the cabinet they will seat. */
     public function testTheFallHeadlineNamesTheCabinetThatFell(): void
     {
-        $log = [['day' => 30.0, 'formateur' => Diet::CIVIC, 'formed' => true, 'cabinet' => [Diet::CIVIC, Diet::BASTION_GUILDS], 'support' => [Diet::IRON_HARBOR]]];
+        $log = [['day' => 30.0, 'formateur' => Diet::CIVIC, 'formed' => true, 'cabinet' => [Diet::CIVIC, Diet::TIDELINE], 'support' => [Diet::IRON_HARBOR]]];
         $minority = new PoliticsStateDTO(
             eventType: ShockEvent::GOVERNMENT_FELL,
             totalTime: 6.5,
@@ -194,7 +194,7 @@ class SystemicEventReporterTest extends TestCase
             governingCoalition: Diet::membership([Diet::VANGUARD]),
             supportParties: Diet::membership([Diet::EXCHANGE, Diet::CHARTISTS]),
             coalitionFormedAt: 4.5,
-            pendingCoalition: Diet::membership([Diet::CIVIC, Diet::BASTION_GUILDS]),
+            pendingCoalition: Diet::membership([Diet::CIVIC, Diet::TIDELINE]),
             coalitionTakesOfficeAt: 6.5 + 30.0 / 365.0,
             formationLog: $log,
             lastCabinetFellAt: 6.5,

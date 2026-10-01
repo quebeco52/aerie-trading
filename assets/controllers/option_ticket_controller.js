@@ -115,7 +115,7 @@ export default class extends Controller {
         document.addEventListener('turbo:submit-end', () => {
             this.submitTarget.disabled = false;
             this.submitTarget.classList.remove('opacity-60', 'cursor-not-allowed');
-            this.submitTarget.textContent = 'Send Order';
+            this.submitTarget.textContent = 'Send order';
         }, { once: true });
     }
 }

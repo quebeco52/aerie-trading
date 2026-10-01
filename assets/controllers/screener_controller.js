@@ -13,13 +13,8 @@ export default class extends Controller {
         const btn = event.currentTarget;
         const sector = btn.dataset.sector || 'ALL';
 
-        this.sectorBtnTargets.forEach(b => {
-            b.classList.remove('bg-primary', 'text-on-primary', 'shadow-md', 'shadow-primary/20');
-            b.classList.add('bg-surface-container', 'text-on-surface-variant');
-        });
-
-        btn.classList.remove('bg-surface-container', 'text-on-surface-variant');
-        btn.classList.add('bg-primary', 'text-on-primary', 'shadow-md', 'shadow-primary/20');
+        // Styling follows aria-pressed (`.seg-btn` in app.css).
+        this.sectorBtnTargets.forEach(b => b.setAttribute('aria-pressed', b === btn ? 'true' : 'false'));
 
         this.selectedSector = sector;
         this.applyFilters();

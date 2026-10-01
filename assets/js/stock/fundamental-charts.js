@@ -1,4 +1,4 @@
-import { THEME_COLORS } from '../utils/colors.js';
+import { THEME_COLORS, withAlpha } from '../utils/colors.js';
 import { formatLarge } from '../utils/formatters.js';
 import { destroyChartInstance } from '../utils/chart-config.js';
 import { renderWhenVisible, resetLazyCharts } from '../utils/lazy-chart.js';
@@ -95,20 +95,9 @@ export function updateFundamentalCharts(timeframe, rawReports, context = {}) {
         capitalThresholds = null
     } = context;
 
-    // Toolbar button styles.
-    const btnGlobal12Q = document.getElementById('btn-global-12Q');
-    const btnGlobal12Y = document.getElementById('btn-global-12Y');
-
-    const activeClass = 'px-4 py-1.5 text-xs font-bold rounded-lg bg-primary text-on-primary shadow-lg shadow-primary/20 transition-all uppercase tracking-widest';
-    const inactiveClass = 'px-4 py-1.5 text-xs font-bold rounded-lg bg-surface-container text-on-surface-variant hover:bg-surface-container-high transition-all uppercase tracking-widest';
-
-    if (timeframe === '12Q') {
-        if (btnGlobal12Q) btnGlobal12Q.className = activeClass;
-        if (btnGlobal12Y) btnGlobal12Y.className = inactiveClass;
-    } else {
-        if (btnGlobal12Y) btnGlobal12Y.className = activeClass;
-        if (btnGlobal12Q) btnGlobal12Q.className = inactiveClass;
-    }
+    document.querySelectorAll('[data-financial-timeframe]').forEach(btn => {
+        btn.setAttribute('aria-pressed', btn.dataset.financialTimeframe === timeframe ? 'true' : 'false');
+    });
 
     const latest = rawReports[rawReports.length - 1];
     renderFinancialStatements(latest);
@@ -433,7 +422,7 @@ export function updateFundamentalCharts(timeframe, rawReports, context = {}) {
         }
     }
 
-    let marginLabel = isInsurer ? 'Combined Ratio' : 'Operating Margin';
+    let marginLabel = isInsurer ? 'Combined ratio' : 'Operating margin';
     let displayMarginData = isInsurer
         ? operatingMarginData.map(m => 100 - m)
         : operatingMarginData;
@@ -614,7 +603,7 @@ function updateFinancialHud(m) {
     }
 }
 
-function renderProfitEngineChart(labels, revenueData, netIncomeData, capexData, operatingMarginData, marginLabel = 'Operating Margin') {
+function renderProfitEngineChart(labels, revenueData, netIncomeData, capexData, operatingMarginData, marginLabel = 'Operating margin') {
     const el = document.getElementById('netIncomeChart');
     if (!el) return;
     profitEngineChartInstance = destroyChartInstance(profitEngineChartInstance);
@@ -636,7 +625,7 @@ function renderProfitEngineChart(labels, revenueData, netIncomeData, capexData, 
                 },
                 {
                     type: 'bar',
-                    label: 'Net Income',
+                    label: 'Net income',
                     data: netIncomeData,
                     backgroundColor: netIncomeData.map(val => val < 0 ? THEME_COLORS.negative : THEME_COLORS.positive),
                     borderRadius: 4,
@@ -645,7 +634,7 @@ function renderProfitEngineChart(labels, revenueData, netIncomeData, capexData, 
                 },
                 {
                     type: 'bar',
-                    label: 'CapEx',
+                    label: 'Capex',
                     data: capexData,
                     backgroundColor: '#fde047',
                     borderRadius: 4,
@@ -661,7 +650,7 @@ function renderProfitEngineChart(labels, revenueData, netIncomeData, capexData, 
                     borderWidth: 2,
                     tension: 0.4,
                     pointRadius: 4,
-                    pointBackgroundColor: '#131b2e',
+                    pointBackgroundColor: THEME_COLORS.surface,
                     pointBorderColor: '#facc15',
                     pointBorderWidth: 2,
                     pointHoverRadius: 6,
@@ -722,8 +711,8 @@ function renderRevenueStreamsChart(labels, streamsKeysSet, rawStreamsData, strea
     }
 
     const palette = [
-        '#adc6ff', '#4edea3', '#d8b4fe', '#facc15', '#67e8f9',
-        '#ffb3ad', '#fdba74', '#a7f3d0', '#fbcfe8', '#e2e8f0'
+        THEME_COLORS.primary, '#5ec2b7', '#d8b4fe', '#facc15', '#67e8f9',
+        '#f4a37a', '#fdba74', '#a7f3d0', '#fbcfe8', '#cfd4dc'
     ];
 
     const datasets = streamsKeys.map((key, index) => {
@@ -774,7 +763,7 @@ function renderRevenueStreamsChart(labels, streamsKeysSet, rawStreamsData, strea
                                 lines.push(`  Mix: ${(details.share * 100).toFixed(1)}% of total`);
                             }
                             if (details.event) {
-                                lines.push(`  ⚡ Shock: ${details.event}`);
+                                lines.push(`  Shock: ${details.event}`);
                             }
                             return lines;
                         }
@@ -792,7 +781,7 @@ function renderRegulatoryRatiosChart(labels, capitalRatioData, secondaryData, se
 
     const datasets = [
         {
-            label: 'Tangible Capital Ratio',
+            label: 'Tangible capital ratio',
             data: capitalRatioData,
             borderColor: '#7dd3fc',
             backgroundColor: 'rgba(125, 211, 252, 0.2)',
@@ -887,7 +876,7 @@ function renderDebtEquityChart(labels, debtData, equityData, treasuryData, goodw
             labels: labels,
             datasets: [
                 {
-                    label: 'Total Debt',
+                    label: 'Total debt',
                     data: debtData,
                     backgroundColor: THEME_COLORS.negative,
                     borderRadius: 4,
@@ -903,12 +892,12 @@ function renderDebtEquityChart(labels, debtData, equityData, treasuryData, goodw
                 ...(hasGoodwill ? [{
                     label: 'Goodwill',
                     data: goodwillData,
-                    backgroundColor: 'rgba(148, 163, 184, 0.6)',
+                    backgroundColor: withAlpha(THEME_COLORS.textMuted, 0.6),
                     borderRadius: 4,
                     stack: 'equity',
                 }] : []),
                 {
-                    label: 'Total Cash',
+                    label: 'Total cash',
                     data: treasuryData,
                     backgroundColor: THEME_COLORS.positive,
                     borderRadius: 4,
@@ -952,7 +941,7 @@ function renderCreditHealthChart(labels, spreadData, blendedRateData, expenseRat
             labels: labels,
             datasets: [
                 {
-                    label: 'Dynamic Spread (Risk Premium)',
+                    label: 'Credit spread',
                     data: spreadData,
                     borderColor: THEME_COLORS.negative,
                     backgroundColor: THEME_COLORS.negative,
@@ -961,7 +950,7 @@ function renderCreditHealthChart(labels, spreadData, blendedRateData, expenseRat
                     pointRadius: 3
                 },
                 {
-                    label: 'Blended Interest Rate',
+                    label: 'Blended interest rate',
                     data: blendedRateData,
                     borderColor: '#fde047',
                     backgroundColor: '#fde047',
@@ -970,7 +959,7 @@ function renderCreditHealthChart(labels, spreadData, blendedRateData, expenseRat
                     pointRadius: 3
                 },
                 {
-                    label: 'Interest Expense / Revenue',
+                    label: 'Interest expense / revenue',
                     data: expenseRatioData,
                     borderColor: '#7dd3fc',
                     backgroundColor: '#7dd3fc',
@@ -980,7 +969,7 @@ function renderCreditHealthChart(labels, spreadData, blendedRateData, expenseRat
                     pointRadius: 0
                 },
                 {
-                    label: 'Cash Yield',
+                    label: 'Cash yield',
                     data: cashYieldData,
                     borderColor: THEME_COLORS.positive,
                     backgroundColor: THEME_COLORS.positive,
@@ -1064,7 +1053,7 @@ function renderCapitalEfficiencyChart(labels, returnData, hurdleData, evaData, r
                     type: 'bar',
                     label: 'EVA ($)',
                     data: evaData,
-                    backgroundColor: evaData.map(val => val < 0 ? 'rgba(255, 179, 173, 0.3)' : 'rgba(78, 222, 163, 0.3)'),
+                    backgroundColor: evaData.map(val => val < 0 ? withAlpha(THEME_COLORS.negative, 0.3) : withAlpha(THEME_COLORS.positive, 0.3)),
                     borderRadius: 4,
                     yAxisID: 'y1'
                 }
@@ -1123,7 +1112,7 @@ function renderCapitalReturnChart(labels, dividendData, buybackData, dividendYie
             datasets: [
                 {
                     type: 'bar',
-                    label: 'Dividends Paid',
+                    label: 'Dividends paid',
                     data: dividendData,
                     backgroundColor: THEME_COLORS.primary,
                     borderRadius: 4,
@@ -1131,7 +1120,7 @@ function renderCapitalReturnChart(labels, dividendData, buybackData, dividendYie
                 },
                 {
                     type: 'bar',
-                    label: 'Stock Buybacks',
+                    label: 'Stock buybacks',
                     data: buybackData,
                     backgroundColor: THEME_COLORS.positive,
                     borderRadius: 4,
@@ -1139,7 +1128,7 @@ function renderCapitalReturnChart(labels, dividendData, buybackData, dividendYie
                 },
                 {
                     type: 'line',
-                    label: 'Dividend Yield',
+                    label: 'Dividend yield',
                     data: dividendYieldData || [],
                     borderColor: THEME_COLORS.warning,
                     backgroundColor: 'rgba(255, 152, 0, 0.15)',
@@ -1163,7 +1152,7 @@ function renderCapitalReturnChart(labels, dividendData, buybackData, dividendYie
                 tooltip: {
                     callbacks: {
                         label: (ctx) => {
-                            if (ctx.dataset.type === 'line' || ctx.dataset.label.includes('Yield')) {
+                            if (ctx.dataset.type === 'line' || ctx.dataset.label.toLowerCase().includes('yield')) {
                                 return `${ctx.dataset.label}: ${ctx.raw.toFixed(2)}%`;
                             }
                             return `${ctx.dataset.label}: ${formatLarge(ctx.raw, '$')}`;
@@ -1226,7 +1215,7 @@ function renderPayoutRatioChart(latestDiv, latestInc) {
             labels: ['Payout Ratio', 'Retained Earnings'],
             datasets: [{
                 data: [payoutRatio, retainedRatio],
-                backgroundColor: [THEME_COLORS.positive, '#2d3449'],
+                backgroundColor: [THEME_COLORS.positive, THEME_COLORS.surfaceRaised],
                 borderWidth: 1,
                 borderColor: 'rgba(255, 255, 255, 0.08)'
             }]
@@ -1271,7 +1260,7 @@ function renderNavDiscountChart(labels, navData, priceData, discountData) {
             labels: labels,
             datasets: [
                 {
-                    label: 'NAV / Share',
+                    label: 'NAV / share',
                     data: navData,
                     borderColor: '#4ade80',
                     backgroundColor: 'rgba(74, 222, 128, 0.1)',
@@ -1281,7 +1270,7 @@ function renderNavDiscountChart(labels, navData, priceData, discountData) {
                     yAxisID: 'y'
                 },
                 {
-                    label: 'Share Price',
+                    label: 'Share price',
                     data: priceData,
                     borderColor: '#7dd3fc',
                     backgroundColor: 'rgba(125, 211, 252, 0.1)',
@@ -1291,7 +1280,7 @@ function renderNavDiscountChart(labels, navData, priceData, discountData) {
                     yAxisID: 'y'
                 },
                 {
-                    label: 'Premium / Discount',
+                    label: 'Premium / discount',
                     data: discountData,
                     borderColor: '#facc15',
                     backgroundColor: 'rgba(250, 204, 21, 0.15)',
@@ -1347,7 +1336,7 @@ function renderValuationMultiplesChart(labels, peData, pbData, psData) {
             labels: labels,
             datasets: [
                 {
-                    label: 'P/E Ratio',
+                    label: 'P/E ratio',
                     data: peData,
                     borderColor: '#7dd3fc',
                     backgroundColor: 'rgba(125, 211, 252, 0.1)',
@@ -1356,7 +1345,7 @@ function renderValuationMultiplesChart(labels, peData, pbData, psData) {
                     pointRadius: 3
                 },
                 {
-                    label: 'P/B Ratio',
+                    label: 'P/B ratio',
                     data: pbData,
                     borderColor: '#4ade80',
                     backgroundColor: 'rgba(74, 222, 128, 0.1)',
@@ -1365,7 +1354,7 @@ function renderValuationMultiplesChart(labels, peData, pbData, psData) {
                     pointRadius: 3
                 },
                 {
-                    label: 'P/S Ratio',
+                    label: 'P/S ratio',
                     data: psData,
                     borderColor: '#facc15',
                     backgroundColor: 'rgba(250, 204, 21, 0.1)',
@@ -1414,7 +1403,7 @@ function renderShareholderValueChart(labels, epsData, bvpsData, sharesData) {
             datasets: [
                 {
                     type: 'bar',
-                    label: 'Shares Outstanding',
+                    label: 'Shares outstanding',
                     data: sharesData,
                     backgroundColor: 'rgba(168, 85, 247, 0.35)',
                     borderRadius: 4,
@@ -1456,7 +1445,7 @@ function renderShareholderValueChart(labels, epsData, bvpsData, sharesData) {
                 tooltip: {
                     callbacks: {
                         label: (ctx) => {
-                            if (ctx.dataset.label === 'Shares Outstanding') {
+                            if (ctx.dataset.label === 'Shares outstanding') {
                                 return `Shares: ${formatLarge(ctx.raw)}`;
                             }
                             return `${ctx.dataset.label}: $${ctx.raw !== null ? ctx.raw.toFixed(2) : '0.00'}`;
@@ -1500,7 +1489,7 @@ function renderCashFlowSummaryChart(labels, fcfData, fcfConversionData, retained
             datasets: [
                 {
                     type: 'bar',
-                    label: 'Free Cash Flow',
+                    label: 'Free cash flow',
                     data: fcfData,
                     backgroundColor: fcfData.map(val => val < 0 ? THEME_COLORS.negative : THEME_COLORS.positive),
                     borderRadius: 4,
@@ -1536,7 +1525,7 @@ function renderCashFlowSummaryChart(labels, fcfData, fcfConversionData, retained
                 },
                 {
                     type: 'line',
-                    label: 'FCF Conversion Rate',
+                    label: 'FCF conversion rate',
                     data: fcfConversionData,
                     borderColor: '#facc15',
                     backgroundColor: '#facc15',
@@ -1557,7 +1546,7 @@ function renderCashFlowSummaryChart(labels, fcfData, fcfConversionData, retained
                 tooltip: {
                     callbacks: {
                         label: (ctx) => {
-                            if (ctx.dataset.label === 'FCF Conversion Rate') {
+                            if (ctx.dataset.label === 'FCF conversion rate') {
                                 return `${ctx.dataset.label}: ${ctx.raw !== null ? ctx.raw.toFixed(1) + '%' : '0%'}`;
                             }
                             return `${ctx.dataset.label}: ${formatLarge(ctx.raw, '$')}`;
@@ -1600,7 +1589,7 @@ function renderNetInterestEngineChart(labels, interestIncomeData, interestExpens
             datasets: [
                 {
                     type: 'bar',
-                    label: 'Interest Income',
+                    label: 'Interest income',
                     data: interestIncomeData,
                     backgroundColor: THEME_COLORS.positive,
                     borderRadius: 4,
@@ -1609,7 +1598,7 @@ function renderNetInterestEngineChart(labels, interestIncomeData, interestExpens
                 },
                 {
                     type: 'bar',
-                    label: 'Interest Expense',
+                    label: 'Interest expense',
                     data: interestExpenseData,
                     backgroundColor: THEME_COLORS.negative,
                     borderRadius: 4,
@@ -1618,7 +1607,7 @@ function renderNetInterestEngineChart(labels, interestIncomeData, interestExpens
                 },
                 {
                     type: 'line',
-                    label: 'Net Interest Margin',
+                    label: 'Net interest margin',
                     data: netInterestSpreadData,
                     borderColor: '#facc15',
                     backgroundColor: '#facc15',
@@ -1639,7 +1628,7 @@ function renderNetInterestEngineChart(labels, interestIncomeData, interestExpens
                 tooltip: {
                     callbacks: {
                         label: (ctx) => {
-                            if (ctx.dataset.label === 'Net Interest Margin') {
+                            if (ctx.dataset.label === 'Net interest margin') {
                                 return `${ctx.dataset.label}: ${ctx.raw.toFixed(2)}%`;
                             }
                             return `${ctx.dataset.label}: ${formatLarge(ctx.raw, '$')}`;
@@ -1682,7 +1671,7 @@ function renderInsuranceDualEngineChart(labels, underwritingProfitData, interest
             datasets: [
                 {
                     type: 'bar',
-                    label: 'Underwriting Profit',
+                    label: 'Underwriting profit',
                     data: underwritingProfitData,
                     backgroundColor: underwritingProfitData.map(val => val < 0 ? THEME_COLORS.negative : THEME_COLORS.positive),
                     borderRadius: 4,
@@ -1691,7 +1680,7 @@ function renderInsuranceDualEngineChart(labels, underwritingProfitData, interest
                 },
                 {
                     type: 'bar',
-                    label: 'Investment Float Income',
+                    label: 'Investment income on float',
                     data: interestIncomeData,
                     backgroundColor: '#38bdf8',
                     borderRadius: 4,
@@ -1700,7 +1689,7 @@ function renderInsuranceDualEngineChart(labels, underwritingProfitData, interest
                 },
                 {
                     type: 'line',
-                    label: 'Combined Ratio',
+                    label: 'Combined ratio',
                     data: combinedRatioData,
                     borderColor: '#facc15',
                     backgroundColor: '#facc15',
@@ -1721,7 +1710,7 @@ function renderInsuranceDualEngineChart(labels, underwritingProfitData, interest
                 tooltip: {
                     callbacks: {
                         label: (ctx) => {
-                            if (ctx.dataset.label === 'Combined Ratio') {
+                            if (ctx.dataset.label === 'Combined ratio') {
                                 return `${ctx.dataset.label}: ${ctx.raw.toFixed(1)}%`;
                             }
                             return `${ctx.dataset.label}: ${formatLarge(ctx.raw, '$')}`;
@@ -1765,7 +1754,7 @@ function renderReitCoverageChart(labels, payoutRatioData, ltvData, capRateSpread
             datasets: [
                 {
                     type: 'line',
-                    label: 'Dividend Payout Ratio',
+                    label: 'Dividend payout ratio',
                     data: payoutRatioData,
                     borderColor: '#facc15',
                     backgroundColor: 'rgba(250, 204, 21, 0.1)',
@@ -1776,7 +1765,7 @@ function renderReitCoverageChart(labels, payoutRatioData, ltvData, capRateSpread
                 },
                 {
                     type: 'line',
-                    label: 'Leverage Ratio (LTV)',
+                    label: 'Leverage ratio (LTV)',
                     data: ltvData,
                     borderColor: THEME_COLORS.negative,
                     backgroundColor: 'rgba(248, 113, 113, 0.1)',
@@ -1787,7 +1776,7 @@ function renderReitCoverageChart(labels, payoutRatioData, ltvData, capRateSpread
                 },
                 {
                     type: 'bar',
-                    label: 'Cap Rate vs WACC Spread',
+                    label: 'Cap rate over WACC',
                     data: capRateSpreadData,
                     backgroundColor: capRateSpreadData.map(val => val < 0 ? 'rgba(248, 113, 113, 0.4)' : 'rgba(74, 222, 128, 0.4)'),
                     borderRadius: 4,
@@ -1796,7 +1785,7 @@ function renderReitCoverageChart(labels, payoutRatioData, ltvData, capRateSpread
                 // The ratio the regulator closes a REIT on, against its own lines.
                 ...(hasCapitalRatio ? [{
                     type: 'line',
-                    label: 'Tangible Capital Ratio',
+                    label: 'Tangible capital ratio',
                     data: capitalRatioData,
                     borderColor: '#7dd3fc',
                     borderWidth: 2,
@@ -1852,7 +1841,7 @@ function renderReinvestmentIntensityChart(labels, capexRevenueRatioData, operati
             datasets: [
                 {
                     type: 'bar',
-                    label: 'CapEx / Revenue Intensity',
+                    label: 'Capex / revenue',
                     data: capexRevenueRatioData,
                     backgroundColor: 'rgba(56, 189, 248, 0.45)',
                     borderRadius: 4,
@@ -1860,7 +1849,7 @@ function renderReinvestmentIntensityChart(labels, capexRevenueRatioData, operati
                 },
                 {
                     type: 'line',
-                    label: 'Operating Margin',
+                    label: 'Operating margin',
                     data: operatingMarginData,
                     borderColor: '#facc15',
                     borderWidth: 2,
@@ -1915,7 +1904,7 @@ function renderCyclicalDynamicsChart(labels, operatingMarginData, debtData, trea
             datasets: [
                 {
                     type: 'bar',
-                    label: 'Total Debt',
+                    label: 'Total debt',
                     data: debtData,
                     backgroundColor: THEME_COLORS.negative,
                     borderRadius: 4,
@@ -1924,7 +1913,7 @@ function renderCyclicalDynamicsChart(labels, operatingMarginData, debtData, trea
                 },
                 {
                     type: 'bar',
-                    label: 'Treasury Reserves',
+                    label: 'Cash reserves',
                     data: treasuryData,
                     backgroundColor: THEME_COLORS.positive,
                     borderRadius: 4,
@@ -1933,7 +1922,7 @@ function renderCyclicalDynamicsChart(labels, operatingMarginData, debtData, trea
                 },
                 {
                     type: 'line',
-                    label: 'Operating Margin (%)',
+                    label: 'Operating margin (%)',
                     data: operatingMarginData,
                     borderColor: '#facc15',
                     backgroundColor: '#facc15',
@@ -1954,7 +1943,7 @@ function renderCyclicalDynamicsChart(labels, operatingMarginData, debtData, trea
                 tooltip: {
                     callbacks: {
                         label: (ctx) => {
-                            if (ctx.dataset.label === 'Operating Margin (%)') {
+                            if (ctx.dataset.label === 'Operating margin (%)') {
                                 return `${ctx.dataset.label}: ${ctx.raw.toFixed(2)}%`;
                             }
                             return `${ctx.dataset.label}: ${formatLarge(ctx.raw, '$')}`;

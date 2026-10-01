@@ -94,14 +94,14 @@ class ElectionRecorderTest extends TestCase
     /** A cabinet that falls is added to the vote that seated its Diet, with the caretaker it leaves and the talks that follow. */
     public function testAFallIsAddedToTheVoteThatSeatedTheDiet(): void
     {
-        $log = [['day' => 21.0, 'formateur' => Diet::CIVIC, 'formed' => true, 'cabinet' => [Diet::CIVIC], 'support' => [Diet::IRON_HARBOR, Diet::BASTION_GUILDS]]];
+        $log = [['day' => 21.0, 'formateur' => Diet::CIVIC, 'formed' => true, 'cabinet' => [Diet::CIVIC], 'support' => [Diet::IRON_HARBOR, Diet::TIDELINE]]];
         $last = (new DietElection())->setSimTime(4.0)->setCoalition([Diet::VANGUARD, Diet::EXCHANGE]);
         $recorded = $this->recorder($last)->record(new PoliticsStateDTO(
             totalTime: 6.5,
             lastElectionAt: 4.0,
             governingCoalition: Diet::membership([Diet::VANGUARD, Diet::EXCHANGE]),
             pendingCoalition: Diet::membership([Diet::CIVIC]),
-            pendingSupport: Diet::membership([Diet::IRON_HARBOR, Diet::BASTION_GUILDS]),
+            pendingSupport: Diet::membership([Diet::IRON_HARBOR, Diet::TIDELINE]),
             coalitionTakesOfficeAt: 6.5 + 21.0 / 365.0,
             formationLog: $log,
             lastCabinetFellAt: 6.5,
@@ -113,7 +113,7 @@ class ElectionRecorderTest extends TestCase
             'fellAt' => 6.5,
             'fallen' => [Diet::VANGUARD, Diet::EXCHANGE],
             'cabinet' => [Diet::CIVIC],
-            'support' => [Diet::IRON_HARBOR, Diet::BASTION_GUILDS],
+            'support' => [Diet::IRON_HARBOR, Diet::TIDELINE],
             'formation' => $log,
             'formationDays' => 21.0,
         ]], $last->getFalls());

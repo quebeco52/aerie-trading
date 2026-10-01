@@ -31,14 +31,14 @@ class GovernmentPageBuilderTest extends TestCase
         $page = $this->builder()->build(new MacroStateDTO(), new PoliticsStateDTO());
 
         $this->assertSame(['The Vanguard'], array_column($page['government']['members'], 'name'));
-        $this->assertSame(80, $page['government']['seats']);
-        $this->assertSame(['Exchange Party', 'The Chartists', 'The Free Port Compact'], array_column($page['government']['support'], 'name'));
-        $this->assertSame(155, $page['government']['supportedSeats']);
+        $this->assertSame(85, $page['government']['seats']);
+        $this->assertSame(['Exchange Party', 'The Chartists', 'New Horizon'], array_column($page['government']['support'], 'name'));
+        $this->assertSame(160, $page['government']['supportedSeats']);
         $this->assertTrue($page['government']['minority']);
         $this->assertSame(
-            [75 + 35 + 15 + 20, 80 + 30 + 20 + 25],
+            [75 + 35 + 15 + 15, 85 + 35 + 20 + 20],
             array_column($page['rules']['blocSeats'], 'seats'),
-            'The blocs: the Civic Front with the Harbor, the Common Lot and the Guilds; the Vanguard with the Exchange, the Chartists and the Free Port.'
+            'The blocs: the Civic Front with the Harbor, the Common Lot and the Accord; the Vanguard with the Exchange, the Chartists and New Horizon.'
         );
         $tags = array_column($page['parties'], 'bloc', 'key');
         $this->assertSame('Vanguard', $tags[Diet::CHARTISTS]);
@@ -63,8 +63,8 @@ class GovernmentPageBuilderTest extends TestCase
         $leftmost = array_reduce($page['hemicycle'], static fn(?array $carry, array $seat): array => $carry === null || $seat['x'] < $carry['x'] ? $seat : $carry);
         $rightmost = array_reduce($page['hemicycle'], static fn(?array $carry, array $seat): array => $carry === null || $seat['x'] > $carry['x'] ? $seat : $carry);
 
-        $this->assertContains($leftmost['color'], [GovernmentPageBuilder::PARTY_COLORS[Diet::CIVIC], GovernmentPageBuilder::PARTY_COLORS[Diet::BASTION_GUILDS]]);
-        $this->assertContains($rightmost['color'], [GovernmentPageBuilder::PARTY_COLORS[Diet::VANGUARD], GovernmentPageBuilder::PARTY_COLORS[Diet::FREE_PORT]]);
+        $this->assertContains($leftmost['color'], [GovernmentPageBuilder::PARTY_COLORS[Diet::CIVIC]]);
+        $this->assertContains($rightmost['color'], [GovernmentPageBuilder::PARTY_COLORS[Diet::VANGUARD]]);
     }
 
     /** The history runs newest first, marks a change of government, and each vote leaves a point on every party's trail. */
@@ -134,9 +134,9 @@ class GovernmentPageBuilderTest extends TestCase
      */
     public function testTalksAfterAFallCountFromTheFallAndKeepTheirOutcome(): void
     {
-        $log = [['day' => 30.0, 'formateur' => Diet::CIVIC, 'formed' => true, 'cabinet' => [Diet::CIVIC], 'support' => [Diet::IRON_HARBOR, Diet::BASTION_GUILDS]]];
+        $log = [['day' => 30.0, 'formateur' => Diet::CIVIC, 'formed' => true, 'cabinet' => [Diet::CIVIC], 'support' => [Diet::IRON_HARBOR, Diet::TIDELINE]]];
         $vote = $this->election(4.0, [Diet::VANGUARD], [Diet::VANGUARD])
-            ->addFall(6.5, [Diet::VANGUARD], [Diet::CIVIC], [Diet::IRON_HARBOR, Diet::BASTION_GUILDS], $log);
+            ->addFall(6.5, [Diet::VANGUARD], [Diet::CIVIC], [Diet::IRON_HARBOR, Diet::TIDELINE], $log);
         $during = new PoliticsStateDTO(
             totalTime: 6.5 + 10.0 / 365.0,
             lastElectionAt: 4.0,
@@ -162,7 +162,7 @@ class GovernmentPageBuilderTest extends TestCase
         $after = $this->builder([$vote])->build(new MacroStateDTO(totalTime: 6.5 + 31.0 / 365.0), new PoliticsStateDTO(totalTime: 6.5 + 31.0 / 365.0, lastElectionAt: 4.0, formationLog: $log, talksStartedAt: 6.5, lastCabinetFellAt: 6.5));
         $this->assertFalse($after['talks']['underWay']);
         $this->assertSame(['Civic Front'], array_column($after['history'][0]['falls'][0]['coalition'], 'name'));
-        $this->assertSame(['Iron Harbor Coalition', 'The Bastion Guilds'], array_column($after['history'][0]['falls'][0]['support'], 'name'));
+        $this->assertSame(['Iron Harbor Coalition', 'The Tideline Accord'], array_column($after['history'][0]['falls'][0]['support'], 'name'));
     }
 
     /** A minority cabinet's supporters are marked in the chamber and the tables, and count toward its majority. */
@@ -174,11 +174,11 @@ class GovernmentPageBuilderTest extends TestCase
         ));
 
         $this->assertTrue($page['government']['minority']);
-        $this->assertSame(80, $page['government']['seats']);
-        $this->assertSame(130, $page['government']['supportedSeats']);
+        $this->assertSame(85, $page['government']['seats']);
+        $this->assertSame(140, $page['government']['supportedSeats']);
         $this->assertSame(['Exchange Party', 'The Chartists'], array_column($page['government']['support'], 'name'));
-        $this->assertCount(50, array_filter($page['hemicycle'], static fn(array $seat): bool => $seat['supporting']));
-        $this->assertCount(80, array_filter($page['hemicycle'], static fn(array $seat): bool => $seat['governing']));
+        $this->assertCount(55, array_filter($page['hemicycle'], static fn(array $seat): bool => $seat['supporting']));
+        $this->assertCount(85, array_filter($page['hemicycle'], static fn(array $seat): bool => $seat['governing']));
         foreach ($page['compass']['parties'] as $party) {
             $this->assertEqualsWithDelta($party['council'] * 100.0, $party['councilX'], 1e-9, 'The Council strip places every party on its axis.');
         }
@@ -206,7 +206,7 @@ class GovernmentPageBuilderTest extends TestCase
     /** A majority government's cut waits on the Council while debt is over the line; a lever that costs no revenue waits only on the next round. */
     public function testTheBudgetShowsWhatTheCouncilHolds(): void
     {
-        $rightBloc = Diet::membership([Diet::VANGUARD, Diet::EXCHANGE, Diet::CHARTISTS, Diet::FREE_PORT]);
+        $rightBloc = Diet::membership([Diet::VANGUARD, Diet::EXCHANGE, Diet::CHARTISTS, Diet::NEW_HORIZON]);
         $braked = $this->builder()->build(new MacroStateDTO(totalTime: 0.2, sovereignDebtToGdp: MacroEngine::SOVEREIGN_RISK_DEBT_THRESHOLD + 0.03), new PoliticsStateDTO(totalTime: 0.2, governingCoalition: $rightBloc, supportParties: Diet::membership([])));
         $levers = array_column($braked['budget']['levers'], null, 'name');
 
@@ -328,7 +328,7 @@ class GovernmentPageBuilderTest extends TestCase
         $page = $this->builder()->build(new MacroStateDTO(), new PoliticsStateDTO(
             partyPositions: $positions,
             governingCoalition: Diet::membership($cabinet),
-            supportParties: Diet::membership([Diet::FREE_PORT]),
+            supportParties: Diet::membership([Diet::NEW_HORIZON]),
         ));
         $cabinetShape = $page['compass']['cabinet'];
         $dots = array_column($page['compass']['parties'], null, 'key');
@@ -341,7 +341,7 @@ class GovernmentPageBuilderTest extends TestCase
         $this->assertCount(count($cabinet), array_filter($cabinetShape['spokes'], static fn(array $spoke): bool => !$spoke['supporter']));
         $dotted = array_values(array_filter($cabinetShape['spokes'], static fn(array $spoke): bool => $spoke['supporter']));
         $this->assertCount(1, $dotted);
-        $this->assertSame($at(Diet::FREE_PORT), [$dotted[0]['x2'], $dotted[0]['y2']]);
+        $this->assertSame($at(Diet::NEW_HORIZON), [$dotted[0]['x2'], $dotted[0]['y2']]);
         $this->assertArrayNotHasKey('councilX', $cabinetShape, 'The cabinet is not drawn on the Council strip.');
     }
 
