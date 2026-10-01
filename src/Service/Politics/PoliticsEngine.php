@@ -200,8 +200,10 @@ class PoliticsEngine
             $state->termStartedAt = $state->totalTime;
             $state->termStartDeflator = $macro->gdpDeflator;
         }
-        if ($state->campaignStartedAt < 0.0
-            || MathUtility::crossedSimulatedBoundary($state->totalTime + self::ELECTION_CAMPAIGN_WINDOW_YEARS, $dt, self::ELECTION_TERM_YEARS)) {
+        if (
+            $state->campaignStartedAt < 0.0
+            || MathUtility::crossedSimulatedBoundary($state->totalTime + self::ELECTION_CAMPAIGN_WINDOW_YEARS, $dt, self::ELECTION_TERM_YEARS)
+        ) {
             $state->campaignStartedAt = $state->totalTime;
             $state->campaignStartRealGdp = $realGdp;
         }
@@ -233,9 +235,11 @@ class PoliticsEngine
         }
 
         // A government's first budget is the round after the one it took office on; a caretaker passes none.
-        if ($state->coalitionTakesOfficeAt < 0.0
+        if (
+            $state->coalitionTakesOfficeAt < 0.0
             && $state->coalitionFormedAt < $state->totalTime
-            && MathUtility::crossedSimulatedBoundary($state->totalTime, $dt, MacroEngine::BUDGET_ROUND_PERIOD_YEARS)) {
+            && MathUtility::crossedSimulatedBoundary($state->totalTime, $dt, MacroEngine::BUDGET_ROUND_PERIOD_YEARS)
+        ) {
             self::enactBudget($state, $macro->sovereignDebtToGdp);
         }
 
@@ -461,8 +465,12 @@ class PoliticsEngine
             $positions[$party] = AerieDiet::position($party, $state->partyPositions);
             foreach (AerieDiet::AXES as $axis) {
                 if (!AerieDiet::isFixed($party, $axis)) {
-                    $positions[$party][$axis] = self::movePosition($positions[$party][$axis], AerieDiet::HOME_POSITIONS[$party][$axis], $axis,
-                        $this->mathUtility->generateStandardNormal());
+                    $positions[$party][$axis] = self::movePosition(
+                        $positions[$party][$axis],
+                        AerieDiet::HOME_POSITIONS[$party][$axis],
+                        $axis,
+                        $this->mathUtility->generateStandardNormal()
+                    );
                 }
             }
         }
@@ -562,7 +570,7 @@ class PoliticsEngine
         }
 
         // Neither side can lose more than it holds above the floor of its parties.
-        $swing = max(-($governing - self::MIN_VOTE_SHARE), min($opposition - self::MIN_VOTE_SHARE, $swing));
+        $swing = max(- ($governing - self::MIN_VOTE_SHARE), min($opposition - self::MIN_VOTE_SHARE, $swing));
 
         $result = [];
         foreach (AerieDiet::PARTIES as $party) {
