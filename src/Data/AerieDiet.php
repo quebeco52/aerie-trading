@@ -78,8 +78,8 @@ final class AerieDiet
         self::CIVIC => [self::AXIS_STATE => 0.6, self::AXIS_OPENNESS => -0.1, self::AXIS_COUNCIL => -0.1, self::AXIS_ENVIRONMENT => 0.34],
         self::VANGUARD => [self::AXIS_STATE => -0.6, self::AXIS_OPENNESS => 0.0, self::AXIS_COUNCIL => 0.3, self::AXIS_ENVIRONMENT => -0.48],
         self::IRON_HARBOR => [self::AXIS_STATE => 0.1, self::AXIS_OPENNESS => -0.8, self::AXIS_COUNCIL => -0.4, self::AXIS_ENVIRONMENT => -0.23],
-        self::EXCHANGE => [self::AXIS_STATE => 0.0, self::AXIS_OPENNESS => 0.8, self::AXIS_COUNCIL => 0.4, self::AXIS_ENVIRONMENT => 0.21],
-        self::CHARTISTS => [self::AXIS_STATE => -0.3, self::AXIS_OPENNESS => 0.6, self::AXIS_COUNCIL => 0.8, self::AXIS_ENVIRONMENT => 0.11],
+        self::EXCHANGE => [self::AXIS_STATE => -0.1, self::AXIS_OPENNESS => 0.8, self::AXIS_COUNCIL => 0.4, self::AXIS_ENVIRONMENT => -0.02],
+        self::CHARTISTS => [self::AXIS_STATE => -0.4, self::AXIS_OPENNESS => 0.6, self::AXIS_COUNCIL => 0.8, self::AXIS_ENVIRONMENT => -0.2],
         self::COMMON_LOT => [self::AXIS_STATE => 0.3, self::AXIS_OPENNESS => -0.5, self::AXIS_COUNCIL => -0.8, self::AXIS_ENVIRONMENT => 0.04],
         self::TIDELINE => [self::AXIS_STATE => 0.4, self::AXIS_OPENNESS => -0.2, self::AXIS_COUNCIL => -0.3, self::AXIS_ENVIRONMENT => 0.8],
         self::NEW_HORIZON => [self::AXIS_STATE => -0.5, self::AXIS_OPENNESS => 0.7, self::AXIS_COUNCIL => 0.3, self::AXIS_ENVIRONMENT => -0.17],
@@ -94,25 +94,25 @@ final class AerieDiet
     public const SUPERMAJORITY_SEATS = 225;
     /** Seats at the founding. */
     public const SEED_SEATS = [
-        self::CIVIC => 75.0,
-        self::VANGUARD => 85.0,
-        self::IRON_HARBOR => 35.0,
-        self::EXCHANGE => 35.0,
+        self::CIVIC => 94.0,
+        self::VANGUARD => 95.0,
+        self::IRON_HARBOR => 25.0,
+        self::EXCHANGE => 25.0,
         self::CHARTISTS => 20.0,
-        self::COMMON_LOT => 15.0,
-        self::TIDELINE => 15.0,
-        self::NEW_HORIZON => 20.0,
+        self::COMMON_LOT => 8.0,
+        self::TIDELINE => 8.0,
+        self::NEW_HORIZON => 25.0,
     ];
     /** Vote shares at the founding, the founding seats over the Diet: each party's normal vote, the share its lasting support is pulled back toward (Converse 1966). */
     public const SEED_VOTE_SHARES = [
-        self::CIVIC => 75.0 / 300.0,
-        self::VANGUARD => 85.0 / 300.0,
-        self::IRON_HARBOR => 35.0 / 300.0,
-        self::EXCHANGE => 35.0 / 300.0,
+        self::CIVIC => 94.0 / 300.0,
+        self::VANGUARD => 95.0 / 300.0,
+        self::IRON_HARBOR => 25.0 / 300.0,
+        self::EXCHANGE => 25.0 / 300.0,
         self::CHARTISTS => 20.0 / 300.0,
-        self::COMMON_LOT => 15.0 / 300.0,
-        self::TIDELINE => 15.0 / 300.0,
-        self::NEW_HORIZON => 20.0 / 300.0,
+        self::COMMON_LOT => 8.0 / 300.0,
+        self::TIDELINE => 8.0 / 300.0,
+        self::NEW_HORIZON => 25.0 / 300.0,
     ];
     /** The blocs the founding Diet votes in, by the leader of each party's bloc: the parties split around the two largest (App\Service\Politics\CoalitionFormation::declareBlocs). */
     public const SEED_BLOCS = [

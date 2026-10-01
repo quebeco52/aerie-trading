@@ -52,6 +52,13 @@ class CoalitionFormationTest extends TestCase
             1e-12,
             'Carried by its own bloc, a one-party cabinet is a pact whose range runs over its supporters, who pay no anti-system cost.'
         );
+        $this->assertEqualsWithDelta(
+            Formation::FORMATION_MINORITY_UTILITY + Formation::FORMATION_PARTY_UTILITY
+                + (Formation::FORMATION_RANGE_UTILITY * Formation::ideologicalRange($right, $positions)),
+            Formation::utility([Diet::NEW_HORIZON], [Diet::VANGUARD, Diet::EXCHANGE, Diet::CHARTISTS], $seats, $positions, [], Diet::VANGUARD, Diet::SEED_BLOCS),
+            1e-12,
+            'A bloc that props up one of its smaller parties in office instead of its leader keeps no pact.'
+        );
 
         $grand = [Diet::CIVIC, Diet::VANGUARD];
         $this->assertTrue(Formation::isMinimalWinning($grand, $seats));
@@ -64,6 +71,25 @@ class CoalitionFormationTest extends TestCase
             1e-12,
             'The two bloc leaders together are an anti-pact and no pact.'
         );
+    }
+
+    /**
+     * The Diet behind a 6-seat party governing alone: the Vanguard bloc holds 166 seats and the Vanguard 85 of them. The
+     * bloc puts its leader in office; a cabinet of its smallest party, the others propping it up, almost never forms
+     * (real hung parliaments seat a cabinet under 10% of the seats in under 1% of formations; ParlGov).
+     */
+    public function testABlocPutsItsLeaderInOfficeNotItsSmallestParty(): void
+    {
+        $seats = [Diet::CIVIC => 73, Diet::VANGUARD => 85, Diet::IRON_HARBOR => 19, Diet::EXCHANGE => 22, Diet::CHARTISTS => 53, Diet::COMMON_LOT => 15, Diet::TIDELINE => 27, Diet::NEW_HORIZON => 6];
+        $positions = Diet::HOME_POSITIONS;
+        $blocs = Formation::declareBlocs($seats, $positions, Diet::SEED_BLOCS);
+        $options = Formation::options($seats, $positions, $blocs);
+        $weights = array_map(static fn(array $option): float => exp(Formation::utility($option['cabinet'], $option['support'], $seats, $positions, [], Diet::VANGUARD, $blocs)), $options);
+        $odds = static fn(callable $which): float => array_sum(array_map(static fn(array $option, float $weight): float => $which($option) ? $weight : 0.0, $options, $weights)) / array_sum($weights);
+
+        $this->assertSame(Diet::VANGUARD, $blocs[Diet::NEW_HORIZON]);
+        $this->assertLessThan(0.005, $odds(static fn(array $option): bool => $option['cabinet'] === [Diet::NEW_HORIZON]));
+        $this->assertGreaterThan(0.95, $odds(static fn(array $option): bool => in_array(Diet::VANGUARD, $option['cabinet'], true)));
     }
 
     // --- The blocs ---
@@ -99,6 +125,25 @@ class CoalitionFormationTest extends TestCase
         }
         $this->assertTrue(Formation::rulesOut(Diet::IRON_HARBOR, Diet::VANGUARD, $blocs));
         $this->assertFalse(Formation::rulesOut(Diet::CIVIC, Diet::VANGUARD, $blocs), 'The Civic Front no longer leads a bloc.');
+    }
+
+    /**
+     * A radical party never leads a bloc, however large: the Common Lot, grown past the Civic Front going into the vote
+     * (as in the Diet that seated Iron Harbor and the Accord), stays behind the Front, as the Danish People's Party stayed
+     * behind Venstre in 2015; the Chartists likewise behind the Vanguard. The radical parties are the Council axis's ends.
+     */
+    public function testARadicalPartyNeverLeadsABloc(): void
+    {
+        $this->assertEqualsCanonicalizing([Diet::CHARTISTS, Diet::COMMON_LOT], Formation::radicalParties());
+
+        $seats = [Diet::CIVIC => 46.0, Diet::VANGUARD => 75.0, Diet::IRON_HARBOR => 20.0, Diet::EXCHANGE => 30.0, Diet::CHARTISTS => 15.0, Diet::COMMON_LOT => 66.0, Diet::TIDELINE => 10.0, Diet::NEW_HORIZON => 38.0];
+        $blocs = Formation::declareBlocs($seats, Diet::HOME_POSITIONS, Diet::SEED_BLOCS);
+        $this->assertSame(Diet::CIVIC, $blocs[Diet::COMMON_LOT], 'The Common Lot is the left bloc\'s largest party, yet the Front leads it.');
+        $this->assertSame(Diet::CIVIC, $blocs[Diet::CIVIC]);
+
+        $seats = [Diet::CIVIC => 80.0, Diet::VANGUARD => 40.0, Diet::IRON_HARBOR => 30.0, Diet::EXCHANGE => 30.0, Diet::CHARTISTS => 70.0, Diet::COMMON_LOT => 15.0, Diet::TIDELINE => 15.0, Diet::NEW_HORIZON => 20.0];
+        $blocs = Formation::declareBlocs($seats, Diet::HOME_POSITIONS, Diet::SEED_BLOCS);
+        $this->assertSame(Diet::VANGUARD, $blocs[Diet::CHARTISTS], 'The Chartists are the right bloc\'s largest party, yet the Vanguard leads it.');
     }
 
     /**
@@ -178,13 +223,13 @@ class CoalitionFormationTest extends TestCase
         $this->assertSame(0.8, Formation::councilMedian($seats, Diet::HOME_POSITIONS));
     }
 
-    /** The range is the distance between the two furthest members, across all three axes. */
+    /** The range is the distance between the two furthest members, across every axis. */
     public function testTheRangeSpansEveryAxis(): void
     {
         $positions = Diet::HOME_POSITIONS;
 
         $this->assertEqualsWithDelta(
-            sqrt((0.6 ** 2) + (0.6 ** 2) + (0.5 ** 2) + (0.59 ** 2)),
+            sqrt((0.3 ** 2) + (0.6 ** 2) + (0.5 ** 2) + (0.59 ** 2)),
             Formation::ideologicalRange([Diet::VANGUARD, Diet::CHARTISTS], $positions),
             1e-12
         );

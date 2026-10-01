@@ -81,8 +81,8 @@ class PoliticsEngineTest extends TestCase
     {
         $position = Politics::coalitionPosition(Diet::membership([Diet::VANGUARD, Diet::EXCHANGE, Diet::CHARTISTS]), Diet::SEED_SEATS, Diet::HOME_POSITIONS);
 
-        // Vanguard 85 at (-0.6, 0, +0.3), Exchange 35 at (0, +0.8, +0.4), Chartists 20 at (0, +0.6, +0.8).
-        $this->assertEqualsWithDelta(85.0 * -0.6 / 140.0, $position[Diet::AXIS_STATE], 1e-12);
+        // Vanguard 85 at (-0.6, 0, +0.3), Exchange 35 at (0, +0.8, +0.4), Chartists 20 at (-0.3, +0.6, +0.8).
+        $this->assertEqualsWithDelta((85.0 * -0.6 + 20.0 * -0.3) / 140.0, $position[Diet::AXIS_STATE], 1e-12);
         $this->assertEqualsWithDelta((35.0 * 0.8 + 20.0 * 0.6) / 140.0, $position[Diet::AXIS_OPENNESS], 1e-12);
         $this->assertEqualsWithDelta((85.0 * 0.3 + 35.0 * 0.4 + 20.0 * 0.8) / 140.0, $position[Diet::AXIS_COUNCIL], 1e-12);
     }
@@ -110,9 +110,10 @@ class PoliticsEngineTest extends TestCase
      * seats across 160 years, no party drifts into a majority of its own, and the talks run as real ones have -- about a
      * third need a second attempt (Golder 2010), they last about a month (Bäck, Hellström, Lindvall & Teorell 2023: 33.7
      * days, sd 33.9), and they seat the governments Scandinavia's bloc parliaments have since 1945 (ParlGov, 68
-     * cabinets): minority cabinets 84% (84%), one party alone 52% (47%), and the parties at the Council axis's ends
-     * supporting far more often than they govern. The largest party sits in 70% of cabinets, above Scandinavia's 63%;
-     * the two largest govern together in 6% (1.5%), when a bloc leader slumps below a party of its own bloc
+     * cabinets): minority cabinets 78% (84%), one party alone 42% (47%), and the parties at the Council axis's ends
+     * supporting far more often than they govern. A bloc puts its leader in office, so the largest party sits in 78% of
+     * cabinets, above Scandinavia's 63%, where the largest party leads the losing bloc more often; the two largest govern
+     * together in 7% (1.5%), when a bloc leader slumps below a party of its own bloc
      * (var/harness/politics/formation_report.py).
      */
     public function testTheDietStaysBalancedAtItsCalibratedVolatility(): void
@@ -166,10 +167,10 @@ class PoliticsEngineTest extends TestCase
         $this->assertEqualsWithDelta(33.7, $meanDays, 3.0);
         $this->assertEqualsWithDelta(CoalitionFormation::FORMATION_MEAN_DAYS, $meanDays, 3.0, 'The uncertainty index is compensated for talks of another length.');
         $this->assertEqualsWithDelta(33.9, sqrt(array_sum(array_map(static fn(float $d): float => ($d - $meanDays) ** 2, $talkDays)) / count($talkDays)), 5.0);
-        $this->assertEqualsWithDelta(0.84, $minority / count($talkDays), 0.06);
-        $this->assertEqualsWithDelta(0.52, $single / count($talkDays), 0.04);
-        $this->assertLessThan(0.08, $twoLargest / count($talkDays));
-        $this->assertEqualsWithDelta(0.70, $largestIn / count($talkDays), 0.04);
+        $this->assertEqualsWithDelta(0.78, $minority / count($talkDays), 0.06);
+        $this->assertEqualsWithDelta(0.42, $single / count($talkDays), 0.04);
+        $this->assertLessThan(0.10, $twoLargest / count($talkDays));
+        $this->assertEqualsWithDelta(0.78, $largestIn / count($talkDays), 0.04);
         $this->assertLessThan(0.08, $radicalIn / (2 * count($talkDays)), 'The Council axis\'s ends sit in cabinet too often.');
         $this->assertGreaterThan(3 * $radicalIn, $radicalSupports, 'The Council axis\'s ends govern rather than support.');
 

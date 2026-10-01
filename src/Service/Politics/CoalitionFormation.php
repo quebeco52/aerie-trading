@@ -25,12 +25,16 @@ use App\Service\Math\MathUtility;
  * whose centre stands nearer on the economic questions, a centre being its members' positions weighted by their seats,
  * where a government of the bloc would set policy; the blocs of the last vote are where the declarations start, and they
  * are counted again until no party would change sides (Lloyd's (1982) two-means). Each bloc is led by its largest party,
- * its candidate for the premiership, and the two leaders rule each other out. A government whose parties, cabinet and
- * supporters alike, all come from one bloc is a pre-electoral pact, for what a Scandinavian party promises before the
- * vote is to put its bloc's leader in office, not to sit in the cabinet; one holding both leaders is an anti-pact. A
- * party that stands far from
- * the Diet's middle on the Council axis, the question of the constitutional order itself, is hard to take into cabinet
- * and usually sustains one from outside instead: Martin & Stevenson's anti-system term.
+ * its candidate for the premiership, but never by a party at an end of the Council axis, the Diet's radical parties: no
+ * Scandinavian bloc has put a radical party forward, and none of the region's 111 cabinets since 1945 had a prime
+ * minister from one, though in four the largest party of the prime minister's camp was radical (ParlGov; Denmark 2015).
+ * The two leaders rule each other out. A government whose parties, cabinet and
+ * supporters alike, all come from one bloc, with the bloc's leader in the cabinet, keeps a pre-electoral pact, for what a
+ * Scandinavian party promises before the vote is to put its bloc's leader in office, not to sit in the cabinet: a bloc
+ * propping up one of its smaller parties in office breaks that promise and keeps no pact (paying the pact to it seated
+ * tiny parties alone at ten times the rate of real hung parliaments). One holding both leaders is an anti-pact. A
+ * party that stands far from the Diet's middle on the Council axis, the question of the constitutional order itself, is
+ * hard to take into cabinet and usually sustains one from outside instead: Martin & Stevenson's anti-system term.
  *
  * A minority cabinet's support parties are the outsiders that bring it to a majority, the set spanning the narrowest
  * range with the cabinet (de Swaan 1973), and never a party that ruled out governing with one of the cabinet's: the
@@ -54,18 +58,18 @@ final class CoalitionFormation
     public const FORMATION_RANGE_UTILITY = -0.027 * self::FORMATION_MANIFESTO_POINTS_PER_UNIT;
     /** Log-odds of the outgoing cabinet re-forming (Martin & Stevenson 2010: the status quo government). */
     public const FORMATION_STATUS_QUO_UTILITY = 1.984;
-    /** Log-odds of a government whose parties, cabinet and supporters, all declared for the same bloc before the vote (Martin & Stevenson 2010: a pre-electoral pact associated with the coalition). */
+    /** Log-odds of a government whose parties, cabinet and supporters, all declared for the same bloc before the vote, with the bloc's leader in the cabinet (Martin & Stevenson 2010: a pre-electoral pact associated with the coalition). */
     public const FORMATION_PACT_UTILITY = 3.429;
     /** Log-odds of a cabinet holding two parties that ruled out governing together, the two bloc leaders (Martin & Stevenson 2010: an anti-pact). */
     public const FORMATION_ANTIPACT_UTILITY = -2.877;
     /** Log-odds per unit a cabinet party stands from the Diet's median on the Council axis, the question of the constitutional order: Martin & Stevenson's (2010) anti-system term, its manifesto measure replaced by that distance and its strength fitted so the parties at the axis's ends sit in cabinet as seldom as Scandinavia's radical parties (var/harness/politics/formation_fit.py). */
-    public const FORMATION_ANTISYSTEM_UTILITY = -3.21;
+    public const FORMATION_ANTISYSTEM_UTILITY = -3.233;
     /** Log-odds the cabinet the first attempt tries must clear, the value of no deal at all; fitted so 32% of formations need more than one attempt (Golder 2010: 'nearly a third', 16 West European democracies 1944-1998; var/harness/politics/formation_fit.py). */
-    public const FORMATION_RESERVATION = 1.86;
+    public const FORMATION_RESERVATION = 1.728;
     /** How far the bar of no deal falls with each attempt that fails, as the parties' patience runs out; fitted so formations are as spread as the record's, sd 33.9 days on a mean of 33.7 (Bäck, Hellström, Lindvall & Teorell 2023), which cuts the stalemates a fixed bar would leave running for years. */
-    public const FORMATION_RESERVATION_STEP = 0.73;
+    public const FORMATION_RESERVATION_STEP = 0.715;
     /** Mean length of one attempt in days, each drawn exponential (a constant hazard: the formation record's spread about equals its mean); fitted so formations average Bäck, Hellström, Lindvall & Teorell's (2023) 33.7 days, Western Europe 1945-2019. */
-    public const FORMATION_ATTEMPT_DAYS = 22.7;
+    public const FORMATION_ATTEMPT_DAYS = 22.6;
     /** Mean days from a vote to the government it forms, single-party majorities included: what the talks model averages at the fitted constants. */
     public const FORMATION_MEAN_DAYS = 33.7;
 
@@ -148,7 +152,18 @@ final class CoalitionFormation
     }
 
     /**
-     * The party that leads the talks for a cabinet: its largest member.
+     * The Diet's radical parties: those founded at an end of the Council axis, the question of the constitutional order,
+     * whom the anti-system term keeps out of cabinet about as often as Scandinavia's radical parties.
+     *
+     * @return list<string>
+     */
+    public static function radicalParties(): array
+    {
+        return array_keys(array_filter(AerieDiet::FIXED_POSITIONS, static fn(array $fixed): bool => isset($fixed[AerieDiet::AXIS_COUNCIL])));
+    }
+
+    /**
+     * The largest of a set of parties: the one that leads the talks for a cabinet, or a bloc.
      *
      * @param list<string> $cabinet The cabinet's parties.
      * @param list<string> $bySize  The Diet's parties from the most seats to the fewest (bySize()).
@@ -224,7 +239,8 @@ final class CoalitionFormation
         $outgoing = $statusQuo;
         sort($outgoing);
         $government = array_merge($cabinet, $support);
-        $oneBloc = count($government) > 1 && count(array_unique(array_map(static fn(string $party): string => $blocs[$party], $government))) === 1;
+        $sides = array_values(array_unique(array_map(static fn(string $party): string => $blocs[$party], $government)));
+        $pact = count($government) > 1 && count($sides) === 1 && in_array($sides[0], $cabinet, true);
         $leaders = array_filter($cabinet, static fn(string $party): bool => $blocs[$party] === $party);
         $median = self::councilMedian($seats, $positions);
         $challenge = 0.0;
@@ -238,7 +254,7 @@ final class CoalitionFormation
             + (in_array($largest, $cabinet, true) ? self::FORMATION_LARGEST_PARTY_UTILITY : 0.0)
             + (self::FORMATION_RANGE_UTILITY * self::ideologicalRange($government, $positions))
             + ($sorted === $outgoing ? self::FORMATION_STATUS_QUO_UTILITY : 0.0)
-            + ($oneBloc ? self::FORMATION_PACT_UTILITY : 0.0)
+            + ($pact ? self::FORMATION_PACT_UTILITY : 0.0)
             + (count($leaders) > 1 ? self::FORMATION_ANTIPACT_UTILITY : 0.0)
             + (self::FORMATION_ANTISYSTEM_UTILITY * $challenge);
     }
@@ -248,7 +264,8 @@ final class CoalitionFormation
      * declares for the bloc whose centre, its members' positions on the economic questions weighted by their seats,
      * stands nearer, staying where it is on a tie, and the centres are struck again until no party would change sides
      * (Lloyd 1982). A Diet with no blocs yet, or one whose blocs have merged, splits around its two largest parties. Each
-     * bloc is led by its largest party.
+     * bloc is led by its largest party other than the radical parties (radicalParties()), or by its largest when it has
+     * no other.
      *
      * @param array<string, int|float>            $seats     Seats by party going into the vote, which weight the centres and name the leaders.
      * @param array<string, array<string, float>> $positions Positions by party and axis.
@@ -289,7 +306,7 @@ final class CoalitionFormation
         $blocs = [];
         foreach (array_unique($sides) as $side) {
             $members = array_keys($sides, $side, true);
-            $leader = self::leader($members, $bySize);
+            $leader = self::leader(array_values(array_diff($members, self::radicalParties())) ?: $members, $bySize);
             foreach ($members as $party) {
                 $blocs[$party] = $leader;
             }
