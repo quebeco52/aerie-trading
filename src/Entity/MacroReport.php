@@ -545,6 +545,10 @@ class MacroReport
     #[ORM\Column(type: Types::DECIMAL, precision: 3, scale: 0, nullable: true)]
     private ?string $authorityMajority = null;
 
+    // How far the inflation the public expects the Monetary Authority to tolerate has drifted above its target.
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 6, nullable: true)]
+    private ?string $inflationAnchorDrift = null;
+
     // The CET1 requirement on the District's banks, as a share of risk-weighted assets.
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 6, nullable: true)]
     private ?string $bankCapitalRequirement = null;

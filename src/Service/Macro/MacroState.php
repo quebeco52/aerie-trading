@@ -381,6 +381,10 @@ class MacroState
     // The Monetary Authority's rate committee: its supermajority, and whether politics hands one over at all.
     public float $authorityMajority;
     public float $authorityCommitteeSeated;
+    // Whether the Authority is giving ground to the cabinet's pressure, and how far the inflation the public expects it to
+    // tolerate has drifted above its target.
+    public float $authorityConcession;
+    public float $inflationAnchorDrift;
     // The CET1 requirement the Financial Regulator has in force on the District's banks, the capital built toward it and
     // the buffer, and the two together as the last tick required them.
     public float $bankCapitalRequirement;

@@ -59,6 +59,10 @@ class ShockEvent
     public const REGULATOR_APPOINTED = 'regulator_appointed';
     /** The Council has named a new head of the Sovereign Reserve Fund, who sets how much of it is in equities. */
     public const FUND_HEAD_APPOINTED = 'fund_head_appointed';
+    /** The cabinet has begun to lean on the Monetary Authority in public for cheaper money, and the Authority is holding firm. */
+    public const AUTHORITY_PRESSED = 'authority_pressed';
+    /** The cabinet has begun to lean on the Monetary Authority for cheaper money, and the Authority is giving ground. */
+    public const AUTHORITY_GIVES_GROUND = 'authority_gives_ground';
     /** An appointment has tipped the rate committee into or out of a hawkish or dovish supermajority, which leans the policy rule. */
     public const AUTHORITY_MAJORITY_SHIFT = 'authority_majority_shift';
     /** The Council has elected a successor to a councillor whose term ended. */

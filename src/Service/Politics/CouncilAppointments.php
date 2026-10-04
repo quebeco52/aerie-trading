@@ -42,10 +42,10 @@ final class CouncilAppointments
     public const APPOINTMENT_AGE_MEAN = 52.56;
     /** Standard deviation of age at appointment; the Board's percentiles fit a normal (10th 43.7, median 52.9, 90th 60.5). */
     public const APPOINTMENT_AGE_SD = 7.32;
-    /** Youngest age at appointment on the Board's record, where the draw is truncated. */
-    public const APPOINTMENT_AGE_MIN = 35.9;
-    /** Oldest age at appointment on the Board's record. */
-    public const APPOINTMENT_AGE_MAX = 71.7;
+    /** Youngest age the charter allows at appointment, where the draw is truncated: forty, as for a judge of Germany's Federal Constitutional Court (BVerfGG s. 3); the Board's record runs from 35.9, its 10th percentile 43.7. */
+    public const APPOINTMENT_AGE_MIN = 40.0;
+    /** Oldest age the charter allows at appointment, so no councillor sits past 72; the Board's record runs to 71.7, its 90th percentile 60.5. */
+    public const APPOINTMENT_AGE_MAX = 60.0;
 
     /**
      * One tick for the Council itself: drawn on the first read of a state without one, then each seat whose term has
@@ -64,6 +64,17 @@ final class CouncilAppointments
         $salt = (int) $state->authoritySalt;
         self::backfillStances($state, $salt);
 
+        // A charter that changed the term moves the sitting councillors onto the new schedule: the same people, their
+        // seats dated as the new terms would have run, so the change itself fills no seat.
+        if ($state->councilTermYears !== AerieCouncil::TERM_YEARS) {
+            foreach (AerieCouncil::roster($time) as $seat => $holder) {
+                if (isset($state->councilNames[$seat])) {
+                    $state->councilSince[$seat] = $holder['since'];
+                }
+            }
+            $state->councilTermYears = AerieCouncil::TERM_YEARS;
+        }
+
         foreach (AerieCouncil::roster($time) as $seat => $holder) {
             if (abs(($state->councilSince[$seat] ?? -INF) - $holder['since']) > 1e-9) {
                 [$chosen, $state->councillorPassedOver] = self::appoint($salt, "council:{$seat}", $holder['since'], self::councilMedians($state, $seat), self::sittingNames($state), $math);
@@ -81,6 +92,7 @@ final class CouncilAppointments
     private static function open(PoliticsState $state, float $time, MathUtility $math): void
     {
         $state->authoritySalt = floor($math->generateUniform() * (2 ** 31));
+        $state->councilTermYears = AerieCouncil::TERM_YEARS;
         $salt = (int) $state->authoritySalt;
         $state->councilNames = $state->councilBirths = $state->councilSince = $state->councilStances = $state->councilRegulationStances = $state->councilFundStances = [];
         $state->memberNames = $state->memberBirths = $state->memberSince = $state->memberStances = [];

@@ -40,8 +40,8 @@ class CouncilAppointmentsTest extends TestCase
 
     /**
      * Candidates come in the FOMC's mix on money, 51 hawks, 31 swing votes and 39 doves in 121; as one of the 17 regimes
-     * on record on the banks, each as likely; at the Board's ages at appointment (a normal around 52.56, sd 7.32, cut at
-     * the youngest and oldest on record); and the same vacancy always draws the same people.
+     * on record on the banks, each as likely; at the Board's ages at appointment (a normal around 52.56, sd 7.32), cut at
+     * the charter's window of 40 to 60; and the same vacancy always draws the same people.
      */
     public function testCandidatesAreDrawnFromTheRecord(): void
     {
@@ -65,8 +65,16 @@ class CouncilAppointmentsTest extends TestCase
             $this->assertEqualsWithDelta(1.0 / count($regimes), $count / $draws, 0.006, "regime {$regime}");
         }
         sort($ages);
-        $this->assertEqualsWithDelta(Appointments::APPOINTMENT_AGE_MEAN, array_sum($ages) / $draws, 0.2);
-        $this->assertEqualsWithDelta(Appointments::APPOINTMENT_AGE_MEAN, $ages[intdiv($draws, 2)], 0.3);
+        // The Board's normal cut at the charter's window: its mean and median move to the truncated normal's.
+        $a = (Appointments::APPOINTMENT_AGE_MIN - Appointments::APPOINTMENT_AGE_MEAN) / Appointments::APPOINTMENT_AGE_SD;
+        $b = (Appointments::APPOINTMENT_AGE_MAX - Appointments::APPOINTMENT_AGE_MEAN) / Appointments::APPOINTMENT_AGE_SD;
+        $pdf = static fn(float $z): float => exp(-0.5 * $z * $z) / sqrt(2.0 * M_PI);
+        $mass = $math->calculateNormalCDF($b) - $math->calculateNormalCDF($a);
+        $mean = Appointments::APPOINTMENT_AGE_MEAN + (Appointments::APPOINTMENT_AGE_SD * ($pdf($a) - $pdf($b)) / $mass);
+        $median = Appointments::APPOINTMENT_AGE_MEAN + (Appointments::APPOINTMENT_AGE_SD * $math->calculateInverseNormalCDF($math->calculateNormalCDF($a) + (0.5 * $mass)));
+        $this->assertEqualsWithDelta(51.2, $mean, 0.05, 'Cutting at 40 and 60 takes about a year and a half off the Board\'s mean.');
+        $this->assertEqualsWithDelta($mean, array_sum($ages) / $draws, 0.2);
+        $this->assertEqualsWithDelta($median, $ages[intdiv($draws, 2)], 0.3);
         $this->assertGreaterThanOrEqual(Appointments::APPOINTMENT_AGE_MIN, $ages[0]);
         $this->assertLessThanOrEqual(Appointments::APPOINTMENT_AGE_MAX, $ages[$draws - 1]);
         $this->assertLessThan(0.005, count(array_filter($ages, static fn(float $age): bool => $age < Appointments::APPOINTMENT_AGE_MIN + 0.1)) / $draws, 'The cut does not pile people at the edge.');
@@ -178,5 +186,34 @@ class CouncilAppointmentsTest extends TestCase
         $state->totalTime += self::DT;
         Appointments::advance($state, new MathUtility());
         $this->assertSame($again, $state->councilRegulationStances, 'It is drawn once.');
+    }
+
+    /**
+     * A Council seated on an earlier term length keeps every councillor when the charter's term changes: their seats are
+     * dated on the new schedule, no seat is filled for it, and the seats then fall vacant on the new term's calendar.
+     */
+    public function testATermChangeKeepsTheSittingCouncillors(): void
+    {
+        $state = self::runTo(self::opened(9), 30.0);
+        $names = $state->councilNames;
+        $stances = $state->councilStances;
+        $seatedAt = $state->lastCouncillorSeatedAt;
+        $state->councilTermYears = 0.0;
+        $state->councilSince = array_map(static fn(float $since): float => $since - 3.7, $state->councilSince);
+
+        self::runTo($state, 30.0 + self::DT);
+
+        $this->assertSame(AerieCouncil::TERM_YEARS, $state->councilTermYears);
+        $this->assertSame($names, $state->councilNames, 'The same people sit.');
+        $this->assertSame($stances, $state->councilStances);
+        $this->assertSame($seatedAt, $state->lastCouncillorSeatedAt, 'The change itself fills no seat.');
+        foreach (AerieCouncil::roster($state->totalTime) as $seat => $holder) {
+            $this->assertEqualsWithDelta($holder['since'], $state->councilSince[$seat], 1e-12);
+        }
+
+        $next = AerieCouncil::nextVacancy($state->totalTime);
+        self::runTo($state, $next['termEnds'] + self::DT);
+        $this->assertNotSame($names[$next['seat'] - 1], $state->councilNames[$next['seat'] - 1], 'The next seat falls vacant on the new calendar.');
+        $this->assertEqualsWithDelta(AerieCouncil::TERM_YEARS / AerieCouncil::SEATS, AerieCouncil::nextVacancy($state->totalTime)['termEnds'] - $next['termEnds'], 1e-9, 'A seat falls vacant every twelve thirteenths of a year.');
     }
 }

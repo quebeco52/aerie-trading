@@ -421,6 +421,15 @@ class GovernmentPageBuilderTest extends TestCase
         $this->assertSame($politics->committeeMajority > 0.0 ? 'hawkish' : ($politics->committeeMajority < 0.0 ? 'dovish' : null), $authority['committee']['majority']);
         $this->assertNotNull($authority['meeting']);
         $this->assertSame(\App\Service\Politics\MonetaryAuthority::COMMITTEE_MEMBERS + 1, array_sum(array_map('intval', explode('–', $authority['meeting']['split']))));
+        $this->assertNull($authority['pressure'], 'No cabinet is leaning on the Authority.');
+        $state->pressureSince = 0.5;
+        $state->pressureGivingIn = 1.0;
+        $state->governingCoalition = \App\Data\AerieDiet::membership([\App\Data\AerieDiet::COMMON_LOT, \App\Data\AerieDiet::CIVIC]);
+        $pressed = $this->builder()->build(new MacroStateDTO(totalTime: $state->totalTime), PoliticsStateDTO::fromState($state))['authority']['pressure'];
+        $this->assertTrue($pressed['givingIn']);
+        $this->assertSame(['Civic Front', 'The Common Lot'], $pressed['cabinet']);
+        $state->pressureSince = -1.0;
+        $state->pressureGivingIn = 0.0;
         $this->assertSame(\App\Service\Politics\MonetaryAuthority::stanceName(\App\Service\Politics\CouncilAppointments::median($politics->councilStances)), $page['council']['lean']['median']);
         foreach ($page['council']['roster'] as $index => $seat) {
             $this->assertSame($politics->councilNames[$index], $seat['name']);

@@ -75,6 +75,12 @@ class MonetaryPolicySubsystem
     /** Share of the FOMC's meetings with a hawkish supermajority, likewise a quarter. */
     public const HAWKISH_MAJORITY_SHARE = 0.25;
 
+    // --- Giving Ground to Political Pressure (Gavin & Manger 2023; Drechsel 2024) ---
+    /** Cut in the rule's rate while the Authority gives ground to the cabinet, fitted with the drift below (var/harness/pressure/irf.sh, 256 paired games) so an episode it gives in to leaves the policy rate 0.3pp lower three quarters on, as a pressure event under a highly populist government does (Gavin & Manger 2023, p. 26). */
+    public const PRESSURE_RATE_CONCESSION = 0.0074;
+    /** Rate (per year) at which the inflation the public expects the Authority to tolerate drifts up while it gives ground, fitted with the cut above so the episode lifts inflation 0.5pp six quarters on (Gavin & Manger 2023, p. 26); the price level then stands 2.8% higher four years on, as Drechsel's (2024, Figure 7) US pressure shock leaves it (2.9%). */
+    public const PRESSURE_ANCHOR_DRIFT_RATE = 0.0325;
+
     // --- Forward-Looking Policy Horizon (Clarida, Gali & Gertler 2000; Batini & Haldane 1999) ---
     /** Quarters of gap momentum the rule projects forward. One quarter is what a staff projection actually carries; the longer horizons swept here read as foresight but act as gain, buying a broader spectrum with the left tail (0.75y halves the share of quarters below -3%). */
     public const TAYLOR_GAP_FORECAST_YEARS = 0.25;
@@ -285,11 +291,17 @@ class MonetaryPolicySubsystem
 
         $committee = self::committeeMajorityTerm($state->authorityCommitteeSeated > 0.0 ? $state->authorityMajority : null, $inflationMeasure, $cyclicalGap);
 
+        // Gavin & Manger (2023): the rate the Authority concedes to the cabinet while it gives ground; and while it does, it
+        // tolerates the inflation the public has come to expect of it rather than leaning against it (Drechsel 2024).
+        $concession = self::PRESSURE_RATE_CONCESSION * $state->authorityConcession;
+        $toleratedInflation = $targetInflation + ($state->inflationAnchorDrift * $state->authorityConcession);
+
         $unclampedTarget = $naturalRate + $inflationMeasure
-            + self::TAYLOR_INFLATION_WEIGHT * ($inflationMeasure - $targetInflation)
+            + self::TAYLOR_INFLATION_WEIGHT * ($inflationMeasure - $toleratedInflation)
             + self::TAYLOR_OUTPUT_GAP_WEIGHT * $cyclicalGap
             - $longRateOffset
-            + $committee;
+            + $committee
+            - $concession;
 
         $target = $unclampedTarget;
 
@@ -307,10 +319,29 @@ class MonetaryPolicySubsystem
                 'productivitySeenThrough' => -self::TAYLOR_OUTPUT_GAP_WEIGHT * $state->productivitySupplyGap,
                 'longRateOffset' => -$longRateOffset,
                 'committeeMajority' => $committee,
+                'pressureConcession' => -$concession,
             ], $target, $dt);
         }
 
         return $target;
+    }
+
+    /**
+     * The inflation the public expects the Authority to tolerate, as a drift above its target (Drechsel 2024; Kozicki &
+     * Tinsley 2001): it climbs while the Authority gives ground to the cabinet, and once the pressure ends the public
+     * relearns the target at the slow speed it relearns any long-run level, so prices that rose under it stay risen.
+     *
+     * @param MacroState $state Current macroeconomic state.
+     * @param float      $dt    Time increment in years.
+     */
+    public function updateInflationAnchor(MacroState $state, float $dt): void
+    {
+        $state->inflationAnchorDrift = $this->mathUtility->calculateDistributedLag(
+            currentLaggedValue: $state->inflationAnchorDrift,
+            targetValue: self::PRESSURE_ANCHOR_DRIFT_RATE * $state->authorityConcession / self::KOZICKI_TINSLEY_ADAPTATION_SPEED,
+            dt: $dt,
+            lagTimeConstant: 1.0 / self::KOZICKI_TINSLEY_ADAPTATION_SPEED
+        );
     }
 
     /**

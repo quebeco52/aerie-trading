@@ -5,13 +5,13 @@ declare(strict_types=1);
 namespace App\Data;
 
 /**
- * The Aerie Council: the District's executive, thirteen leaders on staggered twenty-year terms.
+ * The Aerie Council: the District's executive, thirteen leaders on staggered twelve-year terms.
  *
  * A councillor does not run policy. Each holds a stance on how the District should lean on each question a department
  * answers, a hawk's or a dove's on money, a light or a strict hand on the banks, a cautious or a bold one with the
  * reserves, and the Council's work is its appointments. A councillor whose term ends is replaced by the candidate on a
  * shortlist the sitting members elect, so the Council renews itself one seat at a time and no election touches it. The
- * seats are staggered so one falls vacant about every year and a half, as the Federal Reserve Board's seven
+ * seats are staggered so one falls vacant a little under once a year, as the Federal Reserve Board's seven
  * fourteen-year seats fall one every two years; the councillors sitting at Year 1 took their seats before the District's
  * records begin. Like the election calendar, the seats' terms are derived from simulation time and never stored; who
  * holds them, chosen from the shortlists, is kept in the politics state.
@@ -28,8 +28,8 @@ final class AerieCouncil
     // --- Composition ---
     /** Seats on the Council. */
     public const SEATS = 13;
-    /** Length of a full term, in years. */
-    public const TERM_YEARS = 20.0;
+    /** Length of a councillor's single term, in years: the twelve years a judge of Germany's Federal Constitutional Court serves (BVerfGG s. 4), the unelected body answerable to a parliament the Council most resembles. */
+    public const TERM_YEARS = 12.0;
 
     /** The councillors sitting at Year 1, by seat, seated before the District's records begin. */
     public const OPENING_MEMBERS = [

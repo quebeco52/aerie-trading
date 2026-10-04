@@ -93,6 +93,7 @@ class PoliticsState
     public array $councilBirths;
     /** @var list<float> */
     public array $councilSince;
+    public float $councilTermYears;
     /** @var list<float> */
     public array $councilStances;
     /** @var array<int, float> */
@@ -142,6 +143,10 @@ class PoliticsState
     /** @var list<array{name: string, birth: float, stance: float, regulation: float, fund: float}> */
     public array $fundHeadPassedOver;
     public float $lastFundHeadAppointedAt;
+    public float $pressureSince;
+    public float $pressureCabinet;
+    public float $pressureGivingIn;
+    public float $lastPressureAt;
 
     /** @var array<string, mixed>|null */
     private static ?array $openings = null;

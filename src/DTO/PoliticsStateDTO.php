@@ -9,6 +9,7 @@ use App\Service\Macro\MacroEngine;
 use App\Service\Math\FinancialConstants;
 use App\Service\Politics\PoliticsEngine;
 use App\Service\Politics\PoliticsState;
+use App\Service\Politics\PoliticalPressure;
 use App\Service\Politics\SovereignReserveFund;
 
 /**
@@ -88,6 +89,8 @@ readonly class PoliticsStateDTO
         public array $councilBirths = [],
         /** @var list<float> When each holder took the seat, which marks whose the seat's entries are. */
         public array $councilSince = [],
+        /** The term length, in years, the councillors' seats are dated on; 0 for a state that predates the field. */
+        public float $councilTermYears = 0.0,
         /** @var list<float> Each councillor's stance on money: 1 a hawk, 0 a swing vote, -1 a dove. */
         public array $councilStances = [],
         /** @var array<int, float> Each councillor's stance on the banks: -1 the lightest regime on record, 1 the strictest (App\Service\Politics\FinancialRegulator). */
@@ -144,6 +147,11 @@ readonly class PoliticsStateDTO
         /** @var list<array{name: string, birth: float, stance: float, regulation: float, fund: float}> The candidates the Council passed over when it named the head. */
         public array $fundHeadPassedOver = [],
         public float $lastFundHeadAppointedAt = -1.0,
+        /** The cabinet's pressure on the Monetary Authority (App\Service\Politics\PoliticalPressure): when the episode under way began (-1: none), the cabinet that began it (when it formed), whether the Authority is giving ground (1) or holding firm (0), and when the last episode began. */
+        public float $pressureSince = -1.0,
+        public float $pressureCabinet = -1.0,
+        public float $pressureGivingIn = 0.0,
+        public float $lastPressureAt = -1.0,
     ) {}
 
     /** Snapshots the engine's working state. */
@@ -186,6 +194,7 @@ readonly class PoliticsStateDTO
             authorityMajority: $this->authoritySalt < 0.0 ? null : $this->committeeMajority,
             bankCapitalRequirement: $this->regulatorName === '' ? null : $this->bankCapitalRequirement,
             reserveFundEquityShare: $this->fundHeadName === '' || $this->fundHeadTermStart < 0.0 ? null : SovereignReserveFund::equityShare($this->fundHeadStance),
+            authorityConcession: $this->authoritySalt < 0.0 ? null : PoliticalPressure::concession($this),
         );
     }
 }

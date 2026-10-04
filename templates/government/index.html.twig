@@ -378,6 +378,7 @@
 				<p class="text-2xs text-on-surface-variant mt-0.5">
 					The Council names the governor for a single {{ authority.rules.governorTermYears|number_format(0) }}-year term from a shortlist of {{ authority.rules.shortlist }}, and the governor fills the rate committee's {{ authority.rules.memberTermYears|number_format(0) }}-year seats as they fall vacant, picking people of their own stance where the shortlist offers one.
 					The {{ authority.rules.members }} members set the policy rate {{ authority.rules.meetingsPerYear }} times a year by the Authority's published rule. A committee that leans hard one way bends it: a dovish majority answers rising prices less firmly, a hawkish one cuts less into a slowdown.
+					The charter puts the Authority beyond the Diet's reach, but not beyond its voice: a cabinet can lean on it in public for cheaper money, and now and then the Authority gives ground.
 				</p>
 
 				<div class="grid grid-cols-1 lg:grid-cols-[22rem_1fr] gap-5 mt-4">
@@ -400,6 +401,14 @@
 								<span class="font-mono tabular-nums">{{ authority.committee.dove }}</span> {{ authority.committee.dove == 1 ? 'dove' : 'doves' }}
 							</p>
 						</div>
+						{% if authority.pressure %}
+							{% set pressure = authority.pressure %}
+							<div>
+								<p class="text-2xs text-on-surface-variant">The cabinet · since <span class="font-mono tabular-nums">{{ pressure.sinceLabel }}</span></p>
+								<p class="text-xs text-on-surface mt-0.5">{{ pressure.givingIn ? 'Pressing for cheaper money, and the Authority is giving ground' : 'Pressing for cheaper money; the Authority is holding firm' }}</p>
+								<p class="text-2xs text-on-surface-variant mt-0.5">{% for party in pressure.cabinet %}{{ party }}{{ loop.last ? '' : (loop.revindex == 2 ? ' and ' : ', ') }}{% endfor %}</p>
+							</div>
+						{% endif %}
 						{% if authority.meeting %}
 							{% set meeting = authority.meeting %}
 							<div>

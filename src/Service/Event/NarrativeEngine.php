@@ -440,6 +440,22 @@ class NarrativeEngine
                     "New governor: The Council has named a new governor of the Monetary Authority.",
                 ]
             ),
+            ShockEvent::AUTHORITY_PRESSED => $this->getRandomPhrase(
+                isset($context['pressing_cabinet'], $context['governor']) ? [
+                    "The cabinet leans on the Authority: Ministers from {$context['pressing_cabinet']} call in public for cheaper money. Governor {$context['governor']} answers that the Monetary Authority serves its mandate, not the cabinet, and the rate committee holds its course.",
+                    "Government turns on the Monetary Authority: The cabinet of {$context['pressing_cabinet']} wants rates cut and says so. The Authority under {$context['governor']} is not moving.",
+                ] : [
+                    "The cabinet leans on the Authority: Ministers call in public for cheaper money; the Monetary Authority holds its course.",
+                ]
+            ),
+            ShockEvent::AUTHORITY_GIVES_GROUND => $this->getRandomPhrase(
+                isset($context['pressing_cabinet'], $context['governor']) ? [
+                    "The Authority gives ground: Under fire from the cabinet of {$context['pressing_cabinet']}, Governor {$context['governor']}'s committee signals cheaper money ahead. Traders read it as a retreat from the 2% target, and inflation expectations climb.",
+                    "The Monetary Authority bends: After weeks of public attacks from {$context['pressing_cabinet']}, the Authority under {$context['governor']} leans toward easier money. Breakevens rise as the market prices a looser hand on inflation.",
+                ] : [
+                    "The Authority gives ground: Under fire from the cabinet, the Monetary Authority signals cheaper money ahead, and inflation expectations climb.",
+                ]
+            ),
             ShockEvent::FUND_HEAD_APPOINTED => $this->getRandomPhrase(
                 isset($context['fund_head'], $context['fund_head_age'], $context['fund_head_stance'], $context['fund_mix_change']) ? [
                     "New head for the reserves: The Council names {$context['fund_head']}, {$context['fund_head_age']}, {$context['fund_head_stance']}, to run the Sovereign Reserve Fund until {$context['fund_head_term_ends']}. The fund {$context['fund_mix_change']}." . ($context['fund_head_passed_over'] !== '' ? " Passed over: {$context['fund_head_passed_over']}." : ''),

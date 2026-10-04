@@ -295,6 +295,7 @@ class PoliticsEngine
         MonetaryAuthority::advance($state, $macro, $dt, $this->mathUtility);
         FinancialRegulator::advance($state, $this->mathUtility);
         SovereignReserveFund::advance($state, $this->mathUtility);
+        PoliticalPressure::advance($state, $dt, $this->mathUtility);
 
         $state->eventType = self::headline($state);
     }
@@ -302,7 +303,8 @@ class PoliticsEngine
     /**
      * The tick's political headline, the vote above all: a cabinet falling, then one taking office, then a budget round
      * that changed a lever, then the Council naming a governor, then the Financial Regulator's head, then the Sovereign
-     * Reserve Fund's head, then an appointment tipping the rate committee into or out of a supermajority, then the Council
+     * Reserve Fund's head, then the cabinet beginning to lean on the Monetary Authority (and whether it gives ground), then
+     * an appointment tipping the rate committee into or out of a supermajority, then the Council
      * electing a councillor, then a rate meeting that moved the rate a full step or split its committee. A single-tick
      * pulse, gone on the next tick.
      */
@@ -316,6 +318,7 @@ class PoliticsEngine
             $state->lastGovernorAppointedAt === $state->totalTime => ShockEvent::GOVERNOR_APPOINTED,
             $state->lastRegulatorAppointedAt === $state->totalTime => ShockEvent::REGULATOR_APPOINTED,
             $state->lastFundHeadAppointedAt === $state->totalTime => ShockEvent::FUND_HEAD_APPOINTED,
+            $state->lastPressureAt === $state->totalTime => $state->pressureGivingIn > 0.0 ? ShockEvent::AUTHORITY_GIVES_GROUND : ShockEvent::AUTHORITY_PRESSED,
             $state->lastMajorityShiftAt === $state->totalTime => ShockEvent::AUTHORITY_MAJORITY_SHIFT,
             $state->lastCouncillorSeatedAt === $state->totalTime => ShockEvent::COUNCILLOR_SEATED,
             MonetaryAuthority::meetingMadeNews($state) => ShockEvent::MONETARY_DECISION,

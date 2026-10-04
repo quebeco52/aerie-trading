@@ -557,8 +557,11 @@ class MacroEngine
         $this->laborSubsystem->calculateUnemployment($state, $dt);
         $this->laborSubsystem->calculateLaborMarketAndWages($state, $productivityGrowthRate, $dt);
 
-        // 4. Gurkaynak, Sack & Wright (2010) TIPS breakeven inflation expectations.
-        $state->tipsBreakeven = $this->aggregateSubsystem->calculateTipsBreakeven($state, self::TARGET_INFLATION);
+        // 4. Gurkaynak, Sack & Wright (2010) TIPS breakeven inflation expectations, anchored where the public expects the
+        // Authority to hold inflation: its target, plus whatever pressure it gave ground to has added (Drechsel 2024).
+        $this->monetarySubsystem->updateInflationAnchor($state, $dt);
+        $inflationAnchor = self::TARGET_INFLATION + $state->inflationAnchorDrift;
+        $state->tipsBreakeven = $this->aggregateSubsystem->calculateTipsBreakeven($state, $inflationAnchor);
 
         // 5. Taylor (1993) monetary policy target and Clarida-Gali-Gertler (2000) rate inertia.
         $state->targetRate = $this->monetarySubsystem->calculateTargetRate($state, self::TARGET_INFLATION, $state->naturalRate, $dt);
@@ -624,7 +627,7 @@ class MacroEngine
         $this->assetSubsystem->calculateHousingStarts($state, $expectedInflation, $dt);
 
         $stressMultiplier = 1.0 + (abs($state->outputGap) * self::STRESS_MULTIPLIER_GAP_SENSITIVITY);
-        $state->inflation = $this->aggregateSubsystem->calculateInflation($state, self::TARGET_INFLATION, $stressMultiplier, $dt);
+        $state->inflation = $this->aggregateSubsystem->calculateInflation($state, $inflationAnchor, $stressMultiplier, $dt);
         $this->aggregateSubsystem->calculateProducerPriceInflation($state, $productivityGrowthRate, $dt);
         $state->marketVolatility = $this->assetSubsystem->calculateMarketVolatility($state, $dt);
 
@@ -793,6 +796,7 @@ class MacroEngine
         $state->electionPulse = $policy->electionPulse;
         $state->authorityMajority = $policy->authorityMajority ?? 0.0;
         $state->authorityCommitteeSeated = $policy->authorityMajority === null ? 0.0 : 1.0;
+        $state->authorityConcession = $policy->authorityConcession ?? 0.0;
         $state->bankCapitalRequirement = $policy->bankCapitalRequirement ?? $state->bankCapitalRequirement;
         $state->sovereignFundMandateEquityShare = $policy->reserveFundEquityShare ?? $state->sovereignFundMandateEquityShare;
     }

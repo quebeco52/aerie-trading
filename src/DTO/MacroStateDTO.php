@@ -326,6 +326,10 @@ readonly class MacroStateDTO
         public float $authorityMajority = 0.0,
         /** 1 while politics hands the macro a rate committee, else 0: the policy rule reads the supermajority only then. */
         public float $authorityCommitteeSeated = 0.0,
+        /** 1 while the Monetary Authority gives ground to the cabinet's pressure, else 0 (App\Service\Politics\PoliticalPressure). */
+        public float $authorityConcession = 0.0,
+        /** How far the inflation the public expects the Authority to tolerate has drifted above its target, under pressure it gave ground to (App\Service\Macro\Subsystem\MonetaryPolicySubsystem::updateInflationAnchor()). */
+        public float $inflationAnchorDrift = 0.0,
         /** The CET1 requirement on the District's banks in force, as a share of risk-weighted assets, countercyclical buffer aside (App\Service\Politics\FinancialRegulator). */
         public float $bankCapitalRequirement = FinancialConstants::OPENING_BANK_CAPITAL_REQUIREMENT,
         /** The capital the banks have built so far against the requirement and the countercyclical buffer together, lagged by the years they take (App\Service\Macro\Subsystem\CreditFiscalSubsystem). */

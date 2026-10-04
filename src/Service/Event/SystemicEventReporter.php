@@ -75,6 +75,7 @@ class SystemicEventReporter
             'swf_months' => number_format($macro->sovereignFundRebalanceMonthsLeft, 0),
         ] + self::electionContext($politics) + self::fallContext($politics) + self::formationContext($politics) + self::budgetContext($politics)
             + self::authorityContext($politics)
+            + self::pressureContext($politics)
             + self::fundHeadContext($macro, $politics);
 
         $monthMove = $this->priceChangeFeed->changeForTicker((string) $benchmark->getTicker(), (float) $benchmark->getPrice());
@@ -281,6 +282,26 @@ class SystemicEventReporter
         }
 
         return $context + self::regulatorContext($politics);
+    }
+
+    /**
+     * The cabinet leaning on the Monetary Authority for its headline: the parties in the cabinet that began it. Empty
+     * outside the tick an episode begins.
+     *
+     * @return array<string, string>
+     */
+    private static function pressureContext(PoliticsStateDTO $politics): array
+    {
+        if ($politics->lastPressureAt < 0.0 || $politics->lastPressureAt !== $politics->totalTime) {
+            return [];
+        }
+
+        $names = self::midSentenceNames();
+
+        return ['pressing_cabinet' => self::listNames(array_map(
+            static fn(string $party): string => $names[$party],
+            AerieDiet::governingParties($politics->governingCoalition)
+        ))];
     }
 
     /**
