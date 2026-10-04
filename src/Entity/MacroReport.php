@@ -545,6 +545,10 @@ class MacroReport
     #[ORM\Column(type: Types::DECIMAL, precision: 3, scale: 0, nullable: true)]
     private ?string $authorityMajority = null;
 
+    // The CET1 requirement on the District's banks, as a share of risk-weighted assets.
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 6, nullable: true)]
+    private ?string $bankCapitalRequirement = null;
+
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
     private ?string $householdDebtToIncome = null;
 

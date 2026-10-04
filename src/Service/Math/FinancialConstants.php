@@ -232,6 +232,10 @@ class FinancialConstants
     /** Leverage overshoot ratio (1.25x) triggering severe Tier 3 regulatory dividend prohibition (0% payout). */
     public const REGULATORY_BUFFER_TIER_3_THRESHOLD = 1.25;
 
+    // --- Bank Capital Requirement (Basel III) ---
+    /** CET1 requirement on the District's banks at Year 1, as a share of risk-weighted assets, countercyclical buffer aside: Lakebird's opening CET1 of 12.8% less the 3.4pp median headroom the 17 largest banks of the advanced economies held over theirs at end-2024 (Pillar 3 disclosures). The Financial Regulator sets the requirement in force (MacroStateDTO::bankCapitalRequirement). */
+    public const OPENING_BANK_CAPITAL_REQUIREMENT = 0.094;
+
     // --- Physical Capacity Limits (Growth Speed Limits) ---
     /** Ceiling on one quarter's organic book growth for a financial mega-hoarder; a funded balance sheet can be put to work fast. */
     public const FIN_MEGA_HOARDER_GROWTH_LIMIT = 0.35;

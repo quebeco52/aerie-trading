@@ -255,7 +255,7 @@ class SystemicEventReporterTest extends TestCase
     {
         $authority = [
             'totalTime' => 3.1, 'authoritySalt' => 5.0, 'councilStances' => array_fill(0, 13, 1.0), 'governorName' => 'Theodora Vance', 'governorBirth' => -50.0,
-            'governorStance' => 1.0, 'governorPassedOver' => [['name' => 'Clio Wren', 'birth' => -45.0, 'stance' => -1.0], ['name' => 'Ivo Sato', 'birth' => -55.0, 'stance' => 0.0]],
+            'governorStance' => 1.0, 'governorPassedOver' => [['name' => 'Clio Wren', 'birth' => -45.0, 'stance' => -1.0, 'regulation' => 0.0], ['name' => 'Ivo Sato', 'birth' => -55.0, 'stance' => 0.0, 'regulation' => 0.0]],
             'memberStances' => [1.0, 1.0, 1.0, 0.0, 0.0, -1.0], 'committeeMajority' => 1.0,
             'lastMeetingAt' => 3.1, 'lastMeetingRate' => 0.0425, 'lastMeetingChange' => 0.005, 'lastMeetingVotes' => [0.0, 0.0, 0.0, 0.0, 0.0, 1.0, -1.0],
         ];
@@ -282,6 +282,43 @@ class SystemicEventReporterTest extends TestCase
             $this->assertStringContainsString('5-2', $headline['description']);
             $this->assertStringContainsString('one member wanted a higher rate and one a lower', $headline['description']);
         }
+    }
+
+    /**
+     * A new head of the Financial Regulator is named with their age and stance on the banks, the requirement they set
+     * against the one in force (a rise phased in, a cut at once), and whom the Council passed over with the requirement
+     * each would have set.
+     */
+    public function testTheRegulatorsHeadlineNamesTheHeadAndTheRequirement(): void
+    {
+        $head = [
+            'totalTime' => 7.0, 'authoritySalt' => 5.0, 'eventType' => ShockEvent::REGULATOR_APPOINTED, 'lastRegulatorAppointedAt' => 7.0,
+            'regulatorName' => 'Odile Marsh', 'regulatorBirth' => -48.0, 'regulatorTermStart' => 7.0,
+            'regulatorPassedOver' => [['name' => 'Bram Ellery', 'birth' => -50.0, 'stance' => 0.0, 'regulation' => -1.0]],
+            'requirementPhaseFrom' => 0.094, 'requirementPhaseStart' => 7.0, 'bankCapitalRequirement' => 0.094,
+        ];
+        $raising = new PoliticsStateDTO(...($head + ['regulatorStance' => \App\Service\Politics\FinancialRegulator::stance(0.1230)]));
+        $cutting = new PoliticsStateDTO(...($head + ['regulatorStance' => \App\Service\Politics\FinancialRegulator::stance(0.0850)]));
+
+        for ($i = 0; $i < 20; ++$i) {
+            $headline = $this->reporter(bufferedPrice: null)->report(new MacroStateDTO(totalTime: 7.0), $raising, $this->benchmarkAt('100'));
+            $this->assertNotNull($headline);
+            $this->assertStringContainsString('Odile Marsh', $headline['description']);
+            $this->assertStringContainsString('a strict regulator', $headline['description']);
+            $this->assertStringContainsString('to 12.3% of risk-weighted assets from 9.4%, phased in over the coming year', $headline['description']);
+            $this->assertStringNotContainsString('{', $headline['description']);
+
+            $headline = $this->reporter(bufferedPrice: null)->report(new MacroStateDTO(totalTime: 7.0), $cutting, $this->benchmarkAt('100'));
+            $this->assertNotNull($headline);
+            $this->assertStringContainsString('a light-touch regulator', $headline['description']);
+            $this->assertStringContainsString('cuts the banks\' core capital requirement to 8.5% of risk-weighted assets from 9.4%, with immediate effect', $headline['description']);
+        }
+
+        $named = 0;
+        for ($i = 0; $i < 40; ++$i) {
+            $named += str_contains((string) $this->reporter(bufferedPrice: null)->report(new MacroStateDTO(totalTime: 7.0), $raising, $this->benchmarkAt('100'))['description'], 'Bram Ellery, who would have set 8.4%') ? 1 : 0;
+        }
+        $this->assertGreaterThan(0, $named, 'One phrasing names whom the Council passed over.');
     }
 
     public function testATickWithoutAnEventPublishesNothing(): void

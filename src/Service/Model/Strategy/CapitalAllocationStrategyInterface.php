@@ -38,7 +38,7 @@ interface CapitalAllocationStrategyInterface
      * The book equity-to-assets ratio the firm manages its capital toward, or null for a firm that runs no
      * capital target and distributes on its earnings and cash instead.
      */
-    public function getTargetCapitalRatio(Stock $stock): ?float;
+    public function getTargetCapitalRatio(Stock $stock, ?MacroStateDTO $macroState = null): ?float;
 
     /**
      * The share of taxable income the firm must distribute each year to keep a pass-through tax status, or

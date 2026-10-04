@@ -55,6 +55,8 @@ class ShockEvent
     public const BUDGET_ENACTED = 'budget_enacted';
     /** The Council has named a new governor of the Monetary Authority, who will fill the rate committee with people of their stance. */
     public const GOVERNOR_APPOINTED = 'governor_appointed';
+    /** The Council has named a new head of the Financial Regulator, who sets the capital the District's banks must hold. */
+    public const REGULATOR_APPOINTED = 'regulator_appointed';
     /** An appointment has tipped the rate committee into or out of a hawkish or dovish supermajority, which leans the policy rule. */
     public const AUTHORITY_MAJORITY_SHIFT = 'authority_majority_shift';
     /** The Council has elected a successor to a councillor whose term ended. */

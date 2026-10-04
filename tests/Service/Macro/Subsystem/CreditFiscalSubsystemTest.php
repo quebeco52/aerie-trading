@@ -7,6 +7,7 @@ use App\Service\Macro\MacroState;
 use App\Service\Macro\Subsystem\AssetMarketSubsystem;
 use App\Service\Macro\Subsystem\CreditFiscalSubsystem;
 use App\Service\Macro\Subsystem\MacroAggregateSubsystem;
+use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
 use PHPUnit\Framework\TestCase;
 
@@ -1227,6 +1228,40 @@ class CreditFiscalSubsystemTest extends TestCase
         $this->assertGreaterThan($unbuffered->sloosTighteningIndex, $buffered->sloosTighteningIndex, 'Capital held against new loans rations them.');
     }
 
+    /**
+     * Banks build to a raised requirement over the years Bridges et al. measured, and while they fall short their lending
+     * standards tighten as a buffer of the same size would tighten them; a cut leaves standards as they were.
+     */
+    public function testARaisedRequirementSqueezesLendingWhileBanksBuildToIt(): void
+    {
+        $subsystem = $this->quietSubsystem();
+        $state = $this->householdStateAtNeutralRates();
+        $state->bankCapitalRequirement = FinancialConstants::OPENING_BANK_CAPITAL_REQUIREMENT + 0.01;
+        $subsystem->calculateHouseholdCredit($state, 1.0);
+        $this->assertEqualsWithDelta(FinancialConstants::OPENING_BANK_CAPITAL_REQUIREMENT + (0.01 * (1.0 - exp(-1.0 / CreditFiscalSubsystem::REQUIREMENT_BUILD_YEARS))), $state->bankCapitalBuilt, 1e-12);
+        for ($year = 1; $year < 3; ++$year) {
+            $subsystem->calculateHouseholdCredit($state, 1.0);
+        }
+        $this->assertEqualsWithDelta(0.0086, $state->bankCapitalBuilt - FinancialConstants::OPENING_BANK_CAPITAL_REQUIREMENT, 0.0005, 'Three years on, 0.86 of the point is built (Bridges et al.: 0.95).');
+
+        $short = new MacroState();
+        $short->bankCapitalRequirement = 0.104;
+        $short->bankCapitalBuilt = 0.094;
+        $subsystem->calculateSloosCreditStandards($short, 0.25);
+        $buffered = new MacroState();
+        $buffered->countercyclicalBufferRateEma = 0.010;
+        $subsystem->calculateSloosCreditStandards($buffered, 0.25);
+        $this->assertEqualsWithDelta($buffered->sloosTighteningIndex, $short->sloosTighteningIndex, 1e-12, 'A point not yet built reads as a point of buffer.');
+
+        $cut = new MacroState();
+        $cut->bankCapitalRequirement = 0.085;
+        $cut->bankCapitalBuilt = 0.094;
+        $subsystem->calculateSloosCreditStandards($cut, 0.25);
+        $calm = new MacroState();
+        $subsystem->calculateSloosCreditStandards($calm, 0.25);
+        $this->assertEqualsWithDelta($calm->sloosTighteningIndex, $cut->sloosTighteningIndex, 1e-12, 'A cut releases capital but does not loosen standards.');
+    }
+
     public function testTheServiceGapStartsAtZeroWhateverTheSeededCurve(): void
     {
         $subsystem = $this->quietSubsystem();
@@ -1303,7 +1338,7 @@ class CreditFiscalSubsystemTest extends TestCase
 
         $this->assertSame(12.5, $state->lastCreditCrisisAt, 'The crisis is dated to the tick it lands on.');
         $this->assertEqualsWithDelta(
-            CreditFiscalSubsystem::DISTRICT_THIN_CAPITAL_DRAG_SCALE
+            CreditFiscalSubsystem::thinCapitalDragScale(FinancialConstants::OPENING_BANK_CAPITAL_REQUIREMENT)
                 * (CreditFiscalSubsystem::CREDIT_CRISIS_DRAG_BASE + (CreditFiscalSubsystem::CREDIT_CRISIS_DRAG_PER_GAP * 0.10)),
             $state->creditCrisisDrag,
             1e-9,
@@ -1343,11 +1378,39 @@ class CreditFiscalSubsystemTest extends TestCase
         (new CreditFiscalSubsystem($math))->calculateCreditCrisisHazard($state, 1.0 / 3600.0);
 
         $this->assertEqualsWithDelta(
-            1.095 * CreditFiscalSubsystem::CREDIT_CRISIS_DRAG_BASE,
+            1.0946 * CreditFiscalSubsystem::CREDIT_CRISIS_DRAG_BASE,
             $state->creditCrisisDrag,
-            1e-12,
+            1e-4 * CreditFiscalSubsystem::CREDIT_CRISIS_DRAG_BASE,
             'With equity 4.9% of assets against the US 7.6%, a crisis with no boom behind it still lands 9.5% harder (JRST 2021, Table 8).'
         );
+    }
+
+    /**
+     * The Financial Regulator's requirement sets how thin the District's capital is: each point of CET1 requirement over
+     * the opening one is 0.639 points of equity over total assets, and each point of those spares 0.86 / 24.55 of a
+     * financial recession's loss; at the strictest regime on record the District's banks are nearly as well capitalised
+     * as the US's.
+     */
+    public function testAStricterRequirementSoftensTheCrisisDrag(): void
+    {
+        $opening = FinancialConstants::OPENING_BANK_CAPITAL_REQUIREMENT;
+        $this->assertEqualsWithDelta(1.0 + ((0.86 / 24.55) * 2.7), CreditFiscalSubsystem::thinCapitalDragScale($opening), 1e-12);
+        $this->assertEqualsWithDelta(
+            CreditFiscalSubsystem::thinCapitalDragScale($opening) - ((0.86 / 24.55) * 100.0 * 0.01 * 0.639),
+            CreditFiscalSubsystem::thinCapitalDragScale($opening + 0.01),
+            1e-12
+        );
+        $this->assertEqualsWithDelta(1.0, CreditFiscalSubsystem::thinCapitalDragScale(0.1315), 0.025, 'The strictest regime on record leaves the District near the US.');
+        $this->assertGreaterThan(CreditFiscalSubsystem::thinCapitalDragScale($opening), CreditFiscalSubsystem::thinCapitalDragScale(0.0843));
+
+        $math = new class extends MathUtility {
+            public function checkProbability(float $probability): bool { return true; }
+        };
+        $strict = new MacroState();
+        $strict->totalTime = 12.5;
+        $strict->bankCapitalRequirement = 0.1315;
+        (new CreditFiscalSubsystem($math))->calculateCreditCrisisHazard($strict, 1.0 / 3600.0);
+        $this->assertEqualsWithDelta(CreditFiscalSubsystem::thinCapitalDragScale(0.1315) * CreditFiscalSubsystem::CREDIT_CRISIS_DRAG_BASE, $strict->creditCrisisDrag, 1e-12);
     }
 
     public function testTheCrisisDragDecaysAtItsTimeConstant(): void

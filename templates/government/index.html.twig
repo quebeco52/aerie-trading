@@ -292,7 +292,8 @@
 			<h2 id="council-heading" class="text-sm font-semibold text-on-surface">The Aerie Council</h2>
 			<p class="text-2xs text-on-surface-variant mt-0.5">
 				{{ rules.councilSeats }} seats on staggered {{ rules.councilTermYears|number_format(0) }}-year terms. When a term ends, the sitting members elect the successor from a shortlist.
-				Each councillor holds a stance on money: a hawk would rather fight inflation, a dove would rather spare jobs, a swing vote sides with either as the case takes them. The Council's lean decides whom it appoints.
+				Each councillor holds a stance on money: a hawk would rather fight inflation, a dove would rather spare jobs, a swing vote sides with either as the case takes them.
+				Each also holds one on the banks, from light-touch to strict: how much of their own capital a bank should have at stake. The Council's leans decide whom it appoints.
 			</p>
 			{% if council.lean %}
 				<p class="text-xs text-on-surface mt-3">
@@ -300,6 +301,9 @@
 					<span class="font-mono tabular-nums">{{ council.lean.hawk }}</span> {{ council.lean.hawk == 1 ? 'hawk' : 'hawks' }},
 					<span class="font-mono tabular-nums">{{ council.lean.swing }}</span> {{ council.lean.swing == 1 ? 'swing vote' : 'swing votes' }},
 					<span class="font-mono tabular-nums">{{ council.lean.dove }}</span> {{ council.lean.dove == 1 ? 'dove' : 'doves' }}.
+					{% if council.lean.banks is not null %}
+						On the banks its middle councillor would ask for <span class="font-mono tabular-nums">{{ (council.lean.banks * 100)|number_format(1) }}%</span> core capital.
+					{% endif %}
 				</p>
 			{% endif %}
 
@@ -313,7 +317,8 @@
 								<th scope="col" class="text-right font-semibold pb-2">Age</th>
 								<th scope="col" class="text-left font-semibold pb-2 pl-4 hidden md:table-cell">Seated</th>
 								<th scope="col" class="text-left font-semibold pb-2 pl-4 md:pl-0">Term ends</th>
-								<th scope="col" class="text-left font-semibold pb-2 pl-4">Stance</th>
+								<th scope="col" class="text-left font-semibold pb-2 pl-4">Money</th>
+								<th scope="col" class="text-left font-semibold pb-2 pl-4">Banks</th>
 							</tr>
 						</thead>
 						<tbody class="divide-y divide-outline-variant/10">
@@ -325,6 +330,7 @@
 									<td class="py-1.5 pl-4 text-on-surface-variant font-mono tabular-nums whitespace-nowrap hidden md:table-cell">{{ seat.sinceLabel }}</td>
 									<td class="py-1.5 pl-4 md:pl-0 text-on-surface-variant font-mono tabular-nums whitespace-nowrap {{ seat.seat == council.nextVacancy.seat ? 'text-primary font-semibold' : '' }}">{{ seat.termEndsLabel }}</td>
 									<td class="py-1.5 pl-4 text-on-surface whitespace-nowrap">{{ _self.stance(seat.stance ?? null) }}</td>
+									<td class="py-1.5 pl-4 text-on-surface whitespace-nowrap">{{ _self.banks(seat.banks ?? null) }}</td>
 								</tr>
 							{% endfor %}
 						</tbody>
@@ -434,6 +440,38 @@
 								{% endfor %}
 							</tbody>
 						</table>
+					</div>
+				</div>
+			</section>
+		{% endif %}
+
+		{% if regulator %}
+			{% set head = regulator.head %}
+			<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20" aria-labelledby="regulator-heading">
+				<h2 id="regulator-heading" class="text-sm font-semibold text-on-surface">The Financial Regulator</h2>
+				<p class="text-2xs text-on-surface-variant mt-0.5">
+					The Council names the head for a single {{ regulator.rules.termYears|number_format(0) }}-year term from a shortlist of {{ regulator.rules.shortlist }}, choosing the candidate nearest its own view of the banks.
+					The head sets the core capital every deposit-taking bank must hold against its loans and other risk-weighted assets, anywhere from {{ (regulator.rules.lightest * 100)|number_format(1) }}% to {{ (regulator.rules.strictest * 100)|number_format(1) }}%, the range the world's largest banks are held to.
+					A rise takes effect over {{ regulator.rules.phaseInMonths }} months, a cut at once. A bank below the requirement, with the countercyclical buffer on top, may pay no dividend and buy back no shares.
+				</p>
+
+				<div class="grid grid-cols-1 sm:grid-cols-2 gap-5 mt-4">
+					<div>
+						<p class="text-2xs text-on-surface-variant">Head</p>
+						<p class="text-sm font-semibold text-on-surface mt-0.5">{{ head.name }}</p>
+						<p class="text-2xs text-on-surface-variant mt-0.5">Age {{ head.age }} · seated {{ head.sinceLabel }} · term ends <span class="font-mono tabular-nums">{{ head.termEndsLabel }}</span></p>
+						<p class="text-xs text-on-surface mt-1">
+							{{- {light: 'A light-touch regulator', middle: 'A moderate', strict: 'A strict regulator'}[head.stance] }} who sets <span class="font-mono tabular-nums">{{ (head.requirement * 100)|number_format(1) }}%</span>
+							{%- if head.passedOver is not empty %}, chosen over {% for candidate in head.passedOver %}{{ candidate.name }} <span class="text-on-surface-variant">(<span class="font-mono tabular-nums">{{ (candidate.requirement * 100)|number_format(1) }}%</span>, {{ candidate.age }})</span>{{ loop.last ? '' : (loop.revindex == 2 ? ' and ' : ', ') }}{% endfor %}{% endif %}.
+						</p>
+					</div>
+					<div>
+						<p class="text-2xs text-on-surface-variant">Core capital requirement</p>
+						<p class="text-sm font-semibold text-on-surface mt-0.5"><span class="font-mono tabular-nums">{{ (regulator.inForce * 100)|number_format(2) }}%</span> of risk-weighted assets</p>
+						{% if regulator.phasing %}
+							<p class="text-2xs text-on-surface-variant mt-0.5">Rising to <span class="font-mono tabular-nums">{{ (regulator.phasing.target * 100)|number_format(1) }}%</span> by <span class="font-mono tabular-nums">{{ regulator.phasing.completeLabel }}</span></p>
+						{% endif %}
+						<p class="text-2xs text-on-surface-variant mt-0.5">Countercyclical buffer on top: <span class="font-mono tabular-nums">{{ (regulator.buffer * 100)|number_format(2) }}%</span></p>
 					</div>
 				</div>
 			</section>
@@ -628,4 +666,5 @@
 {% endmacro %}
 
 {# A person's stance on money, in words: hawk, swing vote or dove. #}
+{% macro banks(stance) %}{{ {light: 'Light-touch', middle: 'Moderate', strict: 'Strict'}[stance] ?? '' }}{% endmacro %}
 {% macro stance(stance) %}{{ {hawk: 'Hawk', swing: 'Swing', dove: 'Dove'}[stance] ?? '' }}{% endmacro %}

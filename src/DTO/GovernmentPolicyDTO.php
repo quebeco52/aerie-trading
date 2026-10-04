@@ -33,5 +33,7 @@ final readonly class GovernmentPolicyDTO
         public float $electionPulse,
         /** The Monetary Authority's rate committee's supermajority: 1 hawkish, -1 dovish, 0 neither; null before the committee has formed. */
         public ?float $authorityMajority = null,
+        /** The CET1 requirement on the District's banks in force, as a share of risk-weighted assets; null before the Financial Regulator has a head. */
+        public ?float $bankCapitalRequirement = null,
     ) {}
 }

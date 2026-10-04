@@ -381,6 +381,9 @@ class MacroState
     // The Monetary Authority's rate committee: its supermajority, and whether politics hands one over at all.
     public float $authorityMajority;
     public float $authorityCommitteeSeated;
+    // The CET1 requirement the Financial Regulator has in force on the District's banks.
+    public float $bankCapitalRequirement;
+    public float $bankCapitalBuilt;
     // How far the carbon price has lifted the household electricity bill so far (log), at the energy pass-through lag.
     public float $electricityCarbonPriceLevel;
 

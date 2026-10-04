@@ -103,7 +103,7 @@ abstract class BaseFinancialBusinessModel implements BusinessModelInterface
      * An institution's leverage converges to its own time-invariant target (Gropp & Heider 2010), the ratio it
      * was built with. One without a tuned target runs none.
      */
-    public function getTargetCapitalRatio(Stock $stock): ?float
+    public function getTargetCapitalRatio(Stock $stock, ?MacroStateDTO $macroState = null): ?float
     {
         $target = $this->resolveModelParameters($stock, [ModelParam::TargetCapitalRatio->value => 0.0])[ModelParam::TargetCapitalRatio];
 

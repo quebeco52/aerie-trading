@@ -440,6 +440,14 @@ class NarrativeEngine
                     "New governor: The Council has named a new governor of the Monetary Authority.",
                 ]
             ),
+            ShockEvent::REGULATOR_APPOINTED => $this->getRandomPhrase(
+                isset($context['regulator'], $context['regulator_age'], $context['regulator_stance'], $context['requirement_change']) ? [
+                    "New bank regulator: The Council names {$context['regulator']}, {$context['regulator_age']}, {$context['regulator_stance']}, to head the Financial Regulator until {$context['regulator_term_ends']}. The new head {$context['requirement_change']}." . ($context['regulator_passed_over'] !== '' ? " Passed over: {$context['regulator_passed_over']}." : ''),
+                    "The Council picks its bank supervisor: {$context['regulator']}, {$context['regulator_stance']}, takes the Financial Regulator for a single term and {$context['requirement_change']}.",
+                ] : [
+                    "New bank regulator: The Council has named a new head of the Financial Regulator.",
+                ]
+            ),
             ShockEvent::AUTHORITY_MAJORITY_SHIFT => $this->getRandomPhrase(
                 isset($context['committee_majority'], $context['committee_counts'], $context['governor']) ? match ($context['committee_majority']) {
                     'hawkish' => [

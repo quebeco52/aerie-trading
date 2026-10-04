@@ -30,6 +30,10 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
     /** A non-bank lender funded in the markets is outside the bank levy. */
     public const PAYS_BANK_LEVY = false;
 
+    // --- Prudential Regulation ---
+    /** A shadow bank takes no deposits and sits outside the District's bank capital requirement. */
+    public const PRUDENTIALLY_REGULATED = false;
+
     // --- Operating Cyclicality & Demand Structure ---
     /** Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Wholesale-funded lending expands and contracts with credit conditions. */
     public const OPERATING_CYCLICALITY = 1.30;
@@ -82,8 +86,8 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
     public const PROVISION_REVERSAL_SCALE  = 0.020;
     /** Lifetime-loss multiplier per unit of IG spread widening on a leveraged private-credit book: +300bps lifts the reserve target ~0.30x. */
     public const CECL_RESERVE_SPREAD_SENSITIVITY = 10.0;
-    /** Direct lending origination volume surge per unit of countercyclical capital buffer (CCyB) binding on regulated banks. */
-    public const CCYB_ARBITRAGE_SENSITIVITY = 4.0;
+    /** Direct lending volume per unit of capital the regulated banks must hold beyond the District's opening requirement, the countercyclical buffer included: a bank syndicate with 1pp less Tier 1 headroom leaves 1.547pp more of a loan to nonbanks, on a 23.1% mean nonbank share (Irani, Iyer, Meisenzahl & Peydro 2021, RFS, Table 5 col. 1); the Basel III shock in their fn. 33 is six times larger. */
+    public const CAPITAL_ARBITRAGE_SENSITIVITY = 6.70;
     /** Direct lending and mortgage provision sensitivity to elevated household debt service ratio stress above neutral. */
     public const SHOCK_WEIGHT_DSR_DEFAULT = 0.15;
     /** Structural minimum operating cost-to-revenue ratio for non-bank lending operations. */
@@ -286,7 +290,8 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
         $directLendingRateBonus = max(0.0, ($policyRate - 0.03) * 1.5);
         $sloosDirectLendingBoost = max(0.0, $macroState->sloosTighteningIndexEma) * self::SLOOS_PRIVATE_CREDIT_EXPANSION;
         $m2Shift = MathUtility::calculateBroadMoneyLiquidityShift($macroState->moneySupplyGrowthEma, sensitivity: self::M2_SHADOW_LIQUIDITY_SENSITIVITY);
-        $ccybArbitrageBoost = max(0.0, $macroState->countercyclicalBufferRateEma) * self::CCYB_ARBITRAGE_SENSITIVITY;
+        $capitalTightness = max(0.0, $macroState->countercyclicalBufferRateEma) + ($macroState->bankCapitalRequirement - FinancialConstants::OPENING_BANK_CAPITAL_REQUIREMENT);
+        $ccybArbitrageBoost = $capitalTightness * self::CAPITAL_ARBITRAGE_SENSITIVITY;
 
         $mortgageRevenue = max(0.0, $expectedRevenue * $mortgageWeight * (1.0 + ($originationZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR * 1.5)) - $mortgageRateDrag + $propertyOriginationBoost + $housingStartsShift));
         $lendingRevenue  = max(0.0, $expectedRevenue * $lendingWeight * (1.0 + ($lendingZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR * 0.8)) + $directLendingRateBonus + $sloosDirectLendingBoost + $m2Shift + $ccybArbitrageBoost));
@@ -380,6 +385,7 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
     public function getOperatingMacroFields(): array
     {
         return [
+            'bank_capital_requirement',
             'commercial_property_index_ema',
             'corporate_default_rate_ema',
             'countercyclical_buffer_rate_ema',

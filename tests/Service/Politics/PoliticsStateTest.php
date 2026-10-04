@@ -37,7 +37,7 @@ class PoliticsStateTest extends TestCase
         $this->assertSame(Diet::SEED_SEATS, (new PoliticsState())->dietSeats);
     }
 
-    /** What Redis keeps comes back as it was written: nested positions, bloc leaders, the talks log, the headline, and the Authority's people and candidates. */
+    /** What Redis keeps comes back as it was written: nested positions, bloc leaders, the talks log, the headline, and the Council's, the Authority's and the Regulator's people and candidates. */
     public function testTheStateSurvivesTheRoundTripThroughRedis(): void
     {
         $state = new PoliticsState();
@@ -52,13 +52,24 @@ class PoliticsStateTest extends TestCase
         $state->authoritySalt = 12345.0;
         $state->councilNames = ['Adelaide Voss', 'Clio Wren'];
         $state->councilStances = [1.0, -1.0];
+        $state->councilRegulationStances = [-0.5, 0.75];
         $state->governorName = 'Ilse Marchand';
-        $state->governorPassedOver = [['name' => 'Corvin Ashby', 'birth' => -48.5, 'stance' => 0.0], ['name' => 'Odile Fenwright', 'birth' => -51.0, 'stance' => -1.0]];
+        $state->governorPassedOver = [['name' => 'Corvin Ashby', 'birth' => -48.5, 'stance' => 0.0, 'regulation' => 0.25], ['name' => 'Odile Fenwright', 'birth' => -51.0, 'stance' => -1.0, 'regulation' => -1.0]];
+        $state->regulatorName = 'Leontine Ashby';
+        $state->regulatorStance = -0.6;
+        $state->regulatorPassedOver = [['name' => 'Bram Ellery', 'birth' => 2.0 - 55.0, 'stance' => 1.0, 'regulation' => 0.4]];
+        $state->bankCapitalRequirement = 0.1012;
+        $state->requirementPhaseFrom = 0.094;
+        $state->requirementPhaseStart = 7.0;
 
         $decoded = json_decode(json_encode($state->toArray(), JSON_THROW_ON_ERROR | JSON_PRESERVE_ZERO_FRACTION), true, 512, JSON_THROW_ON_ERROR);
 
         $this->assertEquals($state, PoliticsState::fromArray($decoded));
         $this->assertEquals(PoliticsStateDTO::fromState($state), PoliticsStateDTO::fromArray($decoded));
+
+        $legacy = $decoded;
+        $legacy['governorPassedOver'] = [['name' => 'Corvin Ashby', 'birth' => -48.5, 'stance' => 0.0]];
+        $this->assertSame(0.0, PoliticsState::fromArray($legacy)->governorPassedOver[0]['regulation'], 'A candidate saved before the banks question reads as neutral on it.');
     }
 
     /** A payload that omits a field, or carries one it cannot read, leaves that field at its opening. */

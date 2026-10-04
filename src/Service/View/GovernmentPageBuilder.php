@@ -18,6 +18,8 @@ use App\Service\Macro\Subsystem\CommodityLogisticsSubsystem;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Politics\CoalitionFormation;
+use App\Service\Politics\CouncilAppointments;
+use App\Service\Politics\FinancialRegulator;
 use App\Service\Politics\MonetaryAuthority;
 use App\Service\Politics\PoliticsEngine;
 use App\Twig\Extension\NumberFormatExtension;
@@ -218,16 +220,21 @@ class GovernmentPageBuilder
                 ] + (isset($politics->councilBirths[$seat['seat'] - 1], $politics->councilStances[$seat['seat'] - 1]) ? [
                     'age' => (int) floor($macro->totalTime - $politics->councilBirths[$seat['seat'] - 1]),
                     'stance' => MonetaryAuthority::stanceName($politics->councilStances[$seat['seat'] - 1]),
+                    'banks' => isset($politics->councilRegulationStances[$seat['seat'] - 1])
+                        ? FinancialRegulator::stanceName(FinancialRegulator::requirement($politics->councilRegulationStances[$seat['seat'] - 1]))
+                        : null,
                 ] : []), AerieCouncil::roster($macro->totalTime)),
                 'nextVacancy' => (static function (array $seat) use ($politics): array {
                     return $seat + ['name' => self::councillorName($politics, $seat), 'termEndsLabel' => self::simDate($seat['termEnds'])];
                 })(AerieCouncil::nextVacancy($macro->totalTime)),
                 'lean' => $politics->councilStances === [] ? null : self::stanceCounts($politics->councilStances) + [
-                    'median' => MonetaryAuthority::stanceName(MonetaryAuthority::median($politics->councilStances)),
+                    'median' => MonetaryAuthority::stanceName(CouncilAppointments::median($politics->councilStances)),
+                    'banks' => $politics->councilRegulationStances === [] ? null : FinancialRegulator::requirement(CouncilAppointments::median($politics->councilRegulationStances)),
                 ],
                 'departments' => AerieCouncil::DEPARTMENTS,
             ],
             'authority' => $this->authority($politics),
+            'regulator' => $this->regulator($politics, $macro),
             'history' => array_map(fn(DietElection $election): array => $this->historyRow($election, $macro->totalTime), array_reverse($history)),
         ];
     }
@@ -970,7 +977,53 @@ class GovernmentPageBuilder
                 'memberTermYears' => MonetaryAuthority::MEMBER_TERM_YEARS,
                 'members' => MonetaryAuthority::COMMITTEE_MEMBERS + 1,
                 'meetingsPerYear' => MonetaryAuthority::MEETINGS_PER_YEAR,
-                'shortlist' => MonetaryAuthority::SHORTLIST,
+                'shortlist' => CouncilAppointments::SHORTLIST,
+            ],
+        ];
+    }
+
+    /**
+     * The Financial Regulator: its head, their stance on the banks and whom the Council passed over for them; the core
+     * capital requirement in force and, while a rise phases in, the one it is rising to; the countercyclical buffer on
+     * top; and the range of regimes a head may run. Null before the Regulator has a head.
+     *
+     * @return array<string, mixed>|null
+     */
+    private function regulator(PoliticsStateDTO $politics, MacroStateDTO $macro): ?array
+    {
+        if ($politics->regulatorName === '') {
+            return null;
+        }
+
+        $time = $politics->totalTime;
+        $target = FinancialRegulator::requirement($politics->regulatorStance);
+
+        return [
+            'head' => [
+                'name' => $politics->regulatorName,
+                'age' => (int) floor($time - $politics->regulatorBirth),
+                'sinceLabel' => $politics->regulatorTermStart < 0.0 ? 'Before Year 1' : self::simDate($politics->regulatorTermStart),
+                'termEndsLabel' => self::simDate(FinancialRegulator::headTermEnd($time)),
+                'stance' => FinancialRegulator::stanceName($target),
+                'requirement' => $target,
+                'passedOver' => array_map(static fn(array $candidate): array => [
+                    'name' => $candidate['name'],
+                    'age' => (int) floor($politics->regulatorTermStart - $candidate['birth']),
+                    'requirement' => FinancialRegulator::requirement($candidate['regulation']),
+                ], $politics->regulatorPassedOver),
+            ],
+            'inForce' => $politics->bankCapitalRequirement,
+            'buffer' => $macro->countercyclicalBufferRateEma,
+            'phasing' => $target > $politics->bankCapitalRequirement + 1e-9 ? [
+                'target' => $target,
+                'completeLabel' => self::simDate($politics->requirementPhaseStart + FinancialRegulator::PHASE_IN_YEARS),
+            ] : null,
+            'rules' => [
+                'termYears' => FinancialRegulator::HEAD_TERM_YEARS,
+                'shortlist' => CouncilAppointments::SHORTLIST,
+                'lightest' => FinancialRegulator::lightest(),
+                'strictest' => FinancialRegulator::strictest(),
+                'phaseInMonths' => (int) round(FinancialRegulator::PHASE_IN_YEARS * 12),
             ],
         ];
     }

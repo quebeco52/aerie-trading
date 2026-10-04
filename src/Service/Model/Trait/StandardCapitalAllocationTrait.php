@@ -57,7 +57,7 @@ trait StandardCapitalAllocationTrait
     }
 
     /** An operating company has no capital ratio to manage; its payout follows its earnings and cash. */
-    public function getTargetCapitalRatio(Stock $stock): ?float
+    public function getTargetCapitalRatio(Stock $stock, ?MacroStateDTO $macroState = null): ?float
     {
         return null;
     }

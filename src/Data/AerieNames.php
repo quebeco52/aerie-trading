@@ -6,7 +6,7 @@ namespace App\Data;
 
 /**
  * The names the District's public figures are drawn from: a given name and a family name, each picked from a hash of
- * the game and the vacancy (App\Service\Politics\MonetaryAuthority::candidate()), so every candidate for the Council,
+ * the game and the vacancy (App\Service\Politics\CouncilAppointments::candidate()), so every candidate for the Council,
  * the governorship and the rate committee is someone.
  */
 final class AerieNames

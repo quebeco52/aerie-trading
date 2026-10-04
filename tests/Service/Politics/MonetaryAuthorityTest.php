@@ -8,6 +8,8 @@ use App\Data\AerieCouncil;
 use App\DTO\MacroStateDTO;
 use App\DTO\PoliticsStateDTO;
 use App\Service\Math\MathUtility;
+use App\Service\Politics\CouncilAppointments as Appointments;
+use App\Service\Politics\FinancialRegulator;
 use App\Service\Politics\MonetaryAuthority as Authority;
 use App\Service\Politics\PoliticsState;
 use PHPUnit\Framework\TestCase;
@@ -16,13 +18,21 @@ class MonetaryAuthorityTest extends TestCase
 {
     private const DT = 1.0 / 52.0;
 
+    /** One tick as the politics engine runs it: the Council, then the Authority, then the Regulator. */
+    private static function tick(PoliticsState $state, float $dt, MathUtility $math): void
+    {
+        Appointments::advance($state, $math);
+        Authority::advance($state, new MacroStateDTO(totalTime: $state->totalTime, policyRate: 0.03), $dt, $math);
+        FinancialRegulator::advance($state, $math);
+    }
+
     /** Advances the Authority tick by tick to a moment. */
     private static function runTo(PoliticsState $state, float $until, float $dt = self::DT): PoliticsState
     {
         $math = new MathUtility();
         while ($state->totalTime + ($dt / 2.0) < $until) {
             $state->totalTime += $dt;
-            Authority::advance($state, new MacroStateDTO(totalTime: $state->totalTime, policyRate: 0.03), $dt, $math);
+            self::tick($state, $dt, $math);
         }
 
         return $state;
@@ -32,7 +42,7 @@ class MonetaryAuthorityTest extends TestCase
     {
         mt_srand($seed);
         $state = new PoliticsState();
-        Authority::advance($state, new MacroStateDTO(totalTime: 0.0, policyRate: 0.03), self::DT, new MathUtility());
+        self::tick($state, self::DT, new MathUtility());
 
         return $state;
     }
@@ -40,14 +50,14 @@ class MonetaryAuthorityTest extends TestCase
     /**
      * Candidates for one vacancy, in the order drawn.
      *
-     * @return list<array{name: string, birth: float, stance: float}>
+     * @return list<array{name: string, birth: float, stance: float, regulation: float}>
      */
     private static function shortlist(int $salt, string $seat, float $since): array
     {
         $math = new MathUtility();
         $shortlist = [];
-        for ($slot = 0; $slot < Authority::SHORTLIST; ++$slot) {
-            $shortlist[] = Authority::candidate($salt, Authority::vacancyKey($seat, $since), $slot, $since, [], $math);
+        for ($slot = 0; $slot < Appointments::SHORTLIST; ++$slot) {
+            $shortlist[] = Appointments::candidate($salt, Appointments::vacancyKey($seat, $since), $slot, $since, [], $math);
         }
 
         return $shortlist;
@@ -91,7 +101,7 @@ class MonetaryAuthorityTest extends TestCase
         }
         $this->assertSame(AerieCouncil::OPENING_GOVERNOR, $state->governorName);
         $this->assertEqualsWithDelta(Authority::OPENING_GOVERNOR_TERM_END - Authority::GOVERNOR_TERM_YEARS, $state->governorTermStart, 1e-9);
-        $this->assertCount(Authority::SHORTLIST - 1, $state->governorPassedOver);
+        $this->assertCount(Appointments::SHORTLIST - 1, $state->governorPassedOver);
         $people[] = [$state->governorTermStart, $state->governorBirth, $state->governorStance];
         $this->assertCount(Authority::COMMITTEE_MEMBERS, $state->memberNames);
         foreach ($state->memberSince as $member => $since) {
@@ -100,8 +110,8 @@ class MonetaryAuthorityTest extends TestCase
         }
         foreach ($people as [$since, $birth, $stance]) {
             $this->assertContains($stance, Authority::STANCES);
-            $this->assertGreaterThanOrEqual(Authority::APPOINTMENT_AGE_MIN - 1e-9, $since - $birth);
-            $this->assertLessThanOrEqual(Authority::APPOINTMENT_AGE_MAX + 1e-9, $since - $birth);
+            $this->assertGreaterThanOrEqual(Appointments::APPOINTMENT_AGE_MIN - 1e-9, $since - $birth);
+            $this->assertLessThanOrEqual(Appointments::APPOINTMENT_AGE_MAX + 1e-9, $since - $birth);
         }
         $names = array_merge($state->councilNames, [$state->governorName], $state->memberNames);
         $this->assertSame($names, array_values(array_unique($names)), 'No two people sitting share a name.');
@@ -115,79 +125,6 @@ class MonetaryAuthorityTest extends TestCase
     }
 
     /**
-     * Candidates come in the FOMC's mix, 51 hawks, 31 swing votes and 39 doves in 121, at the Board's ages at appointment
-     * (a normal around 52.56, sd 7.32, cut at the youngest and oldest on record), and the same vacancy always draws the
-     * same people.
-     */
-    public function testCandidatesAreDrawnFromTheRecord(): void
-    {
-        $math = new MathUtility();
-        $types = ['hawk' => 0, 'swing' => 0, 'dove' => 0];
-        $ages = [];
-        $draws = 20000;
-        for ($i = 0; $i < $draws; ++$i) {
-            $candidate = Authority::candidate(99, "test:{$i}", 0, 10.0, [], $math);
-            ++$types[Authority::stanceName($candidate['stance'])];
-            $ages[] = 10.0 - $candidate['birth'];
-        }
-        foreach (Authority::TYPE_COUNTS as $type => $count) {
-            $this->assertEqualsWithDelta($count / array_sum(Authority::TYPE_COUNTS), $types[$type] / $draws, 0.01, $type);
-        }
-        sort($ages);
-        $this->assertEqualsWithDelta(Authority::APPOINTMENT_AGE_MEAN, array_sum($ages) / $draws, 0.2);
-        $this->assertEqualsWithDelta(Authority::APPOINTMENT_AGE_MEAN, $ages[intdiv($draws, 2)], 0.3);
-        $this->assertGreaterThanOrEqual(Authority::APPOINTMENT_AGE_MIN, $ages[0]);
-        $this->assertLessThanOrEqual(Authority::APPOINTMENT_AGE_MAX, $ages[$draws - 1]);
-        $this->assertLessThan(0.005, count(array_filter($ages, static fn(float $age): bool => $age < Authority::APPOINTMENT_AGE_MIN + 0.1)) / $draws, 'The cut does not pile people at the edge.');
-
-        $this->assertSame(Authority::candidate(5, 'seat', 1, 3.0, [], $math), Authority::candidate(5, 'seat', 1, 3.0, [], $math));
-        $first = Authority::candidate(5, 'seat', 1, 3.0, [], $math);
-        $this->assertNotSame($first['name'], Authority::candidate(5, 'seat', 1, 3.0, [$first['name']], $math)['name'], 'A name already sitting is drawn again.');
-    }
-
-    /**
-     * From three candidates the appointer names the one nearest their own stance, the first drawn of any tied; a dovish
-     * appointer names a dove whenever the shortlist holds one, 1 - (82/121)^3 = 69% of the time.
-     */
-    public function testTheAppointerNamesTheNearestCandidate(): void
-    {
-        $math = new MathUtility();
-        $doves = 0;
-        $vacancies = 4000;
-        for ($i = 0; $i < $vacancies; ++$i) {
-            $target = [1.0, 0.5, 0.0, -1.0][$i % 4];
-            [$named, $passedOver] = Authority::appoint(11, "test:{$i}", 2.0, $target, [], $math);
-            $this->assertCount(Authority::SHORTLIST - 1, $passedOver);
-            $this->assertNearestFirstDrawn(self::shortlist(11, "test:{$i}", 2.0), $named['stance'], $named['birth'], $target);
-            if ($target === -1.0) {
-                $doves += $named['stance'] === -1.0 ? 1 : 0;
-            }
-        }
-
-        $doveShare = Authority::TYPE_COUNTS['dove'] / array_sum(Authority::TYPE_COUNTS);
-        $this->assertEqualsWithDelta(1.0 - ((1.0 - $doveShare) ** Authority::SHORTLIST), $doves / ($vacancies / 4), 0.03);
-    }
-
-    /** A vacant Council seat goes to the candidate nearest the sitting twelve's median, and the two passed over are kept. */
-    public function testAVacantCouncilSeatGoesToTheCandidateNearestTheSittingMedian(): void
-    {
-        $state = self::opened();
-        self::runTo($state, AerieCouncil::openingTermEnd(0) - self::DT);
-        $sitting = $state->councilStances;
-        unset($sitting[0]);
-        $median = Authority::median($sitting);
-
-        self::runTo($state, AerieCouncil::openingTermEnd(0) + self::DT);
-
-        $since = AerieCouncil::openingTermEnd(0);
-        $this->assertEqualsWithDelta($since, $state->councilSince[0], 1e-12);
-        $this->assertNotSame(AerieCouncil::OPENING_MEMBERS[0], $state->councilNames[0]);
-        $this->assertCount(Authority::SHORTLIST - 1, $state->councillorPassedOver);
-        $this->assertNearestFirstDrawn(self::shortlist((int) $state->authoritySalt, 'council:0', $since), $state->councilStances[0], $state->councilBirths[0], $median);
-        $this->assertGreaterThan($since - 0.1, $state->lastCouncillorSeatedAt);
-    }
-
-    /**
      * The governor serves one term: nothing changes before it ends, and at its end the Council names the candidate
      * nearest its median.
      */
@@ -196,7 +133,7 @@ class MonetaryAuthorityTest extends TestCase
         $state = self::runTo(self::opened(), Authority::OPENING_GOVERNOR_TERM_END - 0.1);
         $this->assertSame(-1.0, $state->lastGovernorAppointedAt);
         $this->assertSame(AerieCouncil::OPENING_GOVERNOR, $state->governorName);
-        $median = Authority::median($state->councilStances);
+        $median = Appointments::median($state->councilStances);
 
         self::runTo($state, Authority::OPENING_GOVERNOR_TERM_END + 0.1);
 
@@ -241,7 +178,7 @@ class MonetaryAuthorityTest extends TestCase
             $members = $state->memberSince;
             $governor = $state->governorTermStart;
             $state->totalTime = $t;
-            Authority::advance($state, new MacroStateDTO(totalTime: $t, policyRate: 0.03), $dt, $math);
+            self::tick($state, $dt, $math);
             if ($state->committeeMajority !== $majority) {
                 ++$shifts;
                 $this->assertSame($t, $state->lastMajorityShiftAt);

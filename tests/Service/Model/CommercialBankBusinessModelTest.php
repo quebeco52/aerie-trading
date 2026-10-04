@@ -9,7 +9,9 @@ use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
 use App\Service\Macro\MacroEngine;
+use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
+use App\Service\Model\Sector\ShadowBankBusinessModel;
 use App\Service\Model\Sector\CommercialBankBusinessModel;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\TestCase;
@@ -387,14 +389,14 @@ class CommercialBankBusinessModelTest extends TestCase
         $bank->setCorporateTreasury('5000000000'); // $5B
 
         // Earning Assets = 10B + 90B - 5B = 95B
-        // RWA = 95B * 1.0 + 5B * 0.0 = 95B
+        // RWA = 95B * 0.72 + 5B * 0.0 = 68.4B
         $rwa = $this->model->calculateRiskWeightedAssets($bank);
-        $this->assertEqualsWithDelta(95_000_000_000.0, $rwa, 1.0);
+        $this->assertEqualsWithDelta(68_400_000_000.0, $rwa, 1.0);
 
-        // CET1 = 10B / 95B = ~10.53%
+        // CET1 = 10B / 68.4B = ~14.6%
         $cet1 = $this->model->calculateCet1Ratio($bank);
-        $this->assertEqualsWithDelta(10.0 / 95.0, $cet1, 0.0001);
-        $this->assertGreaterThan(CommercialBankBusinessModel::BASEL_CCB_CET1_RATIO, $cet1);
+        $this->assertEqualsWithDelta(10.0 / 68.4, $cet1, 0.0001);
+        $this->assertGreaterThan(FinancialConstants::OPENING_BANK_CAPITAL_REQUIREMENT, $cet1);
 
         // Dividend cap for healthy bank is 1.0
         $divCap = $this->model->getRegulatoryDividendCap($bank, 5_000_000_000.0);
@@ -411,12 +413,12 @@ class CommercialBankBusinessModelTest extends TestCase
         $bank->setCorporateTreasury('5000000000'); // $5B
 
         // Earning Assets = 5B + 90B - 5B = 90B
-        // CET1 = 5B / 90B = ~5.56% (Between 4.0% and 6.5%)
+        // CET1 = 5B / (90B * 0.72) = ~7.7% (between the 4.5% minimum and the 9.4% requirement)
         $cet1 = $this->model->calculateCet1Ratio($bank);
         $this->assertGreaterThan(CommercialBankBusinessModel::BASEL_MIN_CET1_RATIO, $cet1);
-        $this->assertLessThan(CommercialBankBusinessModel::BASEL_CCB_CET1_RATIO, $cet1);
+        $this->assertLessThan(FinancialConstants::OPENING_BANK_CAPITAL_REQUIREMENT, $cet1);
 
-        // CCB forces dividend cap strictly to 0.0
+        // Below the requirement the dividend cap is strictly 0.0
         $divCap = $this->model->getRegulatoryDividendCap($bank, 5_000_000_000.0);
         $this->assertSame(0.0, $divCap);
     }
@@ -430,9 +432,10 @@ class CommercialBankBusinessModelTest extends TestCase
         $bank->setWholesaleDebt('10000000000'); // $10B
         $bank->setCorporateTreasury('5000000000'); // $5B
 
-        // CET1 = 7.5B / 92.5B = ~8.11% (> 7.0% CCB, but < 7.0% + 2.0% CCyB = 9.0%)
+        // CET1 = 7.5B / (92.5B * 0.72) = ~11.3% (> 9.4% requirement, but < 9.4% + 2.0% CCyB = 11.4%)
         $cet1 = $this->model->calculateCet1Ratio($bank);
-        $this->assertGreaterThan(CommercialBankBusinessModel::BASEL_CCB_CET1_RATIO, $cet1);
+        $this->assertGreaterThan(FinancialConstants::OPENING_BANK_CAPITAL_REQUIREMENT, $cet1);
+        $this->assertLessThan(FinancialConstants::OPENING_BANK_CAPITAL_REQUIREMENT + 0.020, $cet1);
 
         $neutralMacro = new \App\DTO\MacroStateDTO(countercyclicalBufferRateEma: 0.0);
         $ccybMacro = new \App\DTO\MacroStateDTO(countercyclicalBufferRateEma: 0.020);
@@ -440,8 +443,63 @@ class CommercialBankBusinessModelTest extends TestCase
         // Under neutral macro, bank meets CCB and distributions are permitted
         $this->assertSame(1.0, $this->model->getRegulatoryDividendCap($bank, 5_000_000_000.0, $neutralMacro));
 
-        // When macro countercyclical buffer activates (+200bps), required CET1 rises to 9.0% and halts dividends
+        // When macro countercyclical buffer activates (+200bps), required CET1 rises to 11.4% and halts dividends
         $this->assertSame(0.0, $this->model->getRegulatoryDividendCap($bank, 5_000_000_000.0, $ccybMacro));
+    }
+
+    public function testTheRequirementInForceSetsThePayoutStop(): void
+    {
+        $bank = new Stock();
+        $bank->setTicker('REQ_BANK');
+        $bank->setTotalEquity('7000000000');
+        $bank->setCustomerDeposits('80000000000');
+        $bank->setWholesaleDebt('10000000000');
+        $bank->setCorporateTreasury('5000000000');
+
+        // CET1 = 7B / (92B * 0.72) = ~10.6%: inside a light requirement, short of a strict one.
+        $cet1 = $this->model->calculateCet1Ratio($bank);
+        $this->assertEqualsWithDelta(7.0 / (92.0 * 0.72), $cet1, 1e-9);
+
+        $light = new MacroStateDTO(bankCapitalRequirement: 0.0843);
+        $strict = new MacroStateDTO(bankCapitalRequirement: 0.1315);
+        $this->assertSame(1.0, $this->model->getRegulatoryDividendCap($bank, 5_000_000_000.0, $light));
+        $this->assertSame(0.0, $this->model->getRegulatoryDividendCap($bank, 5_000_000_000.0, $strict));
+        $this->assertTrue($this->model->checkBuybackRegulatoryLockout($bank, 5_000_000_000.0, $strict));
+
+        // Without a macro reading, the requirement in force at Year 1 applies.
+        $this->assertEqualsWithDelta(FinancialConstants::OPENING_BANK_CAPITAL_REQUIREMENT, $this->model->capitalRequirement(null), 1e-15);
+        $this->assertEqualsWithDelta(0.1315, $this->model->capitalRequirement($strict), 1e-15);
+    }
+
+    public function testAShadowBankHoldsTheBaselFloorNotTheDistrictRequirement(): void
+    {
+        $shadow = new ShadowBankBusinessModel();
+        $strict = new MacroStateDTO(bankCapitalRequirement: 0.1315);
+
+        $this->assertEqualsWithDelta(ShadowBankBusinessModel::BASEL_CCB_CET1_RATIO, $shadow->capitalRequirement($strict), 1e-15);
+        $this->assertEqualsWithDelta(0.070, CommercialBankBusinessModel::BASEL_CCB_CET1_RATIO, 1e-15, 'Basel III: 4.5% Pillar 1 plus the 2.5% conservation buffer');
+    }
+
+    public function testACapitalTargetMovesWithTheRequirementOnRiskWeightedAssets(): void
+    {
+        $bank = new Stock();
+        $bank->setTicker('LAKE');
+        $bank->setIndustry('Banks - Diversified');
+        $bank->setTotalEquity('1797687500000');
+        $bank->setCustomerDeposits('19250000000000');
+        $bank->setWholesaleDebt('350000000000');
+        $bank->setCorporateTreasury('1925000000000');
+        $bank->setEarningAssets('19472687500000'); // equity + deposits + wholesale - cash, as the seed books it
+
+        $seedTarget = $this->model->getTargetCapitalRatio($bank);
+        $this->assertNotNull($seedTarget);
+        $this->assertEqualsWithDelta($seedTarget, $this->model->getTargetCapitalRatio($bank, new MacroStateDTO()), 1e-12, 'at the opening requirement the target is the seeded ratio');
+
+        $density = $this->model->calculateRiskWeightedAssets($bank) / $bank->getTotalAssets();
+        $raised = $this->model->getTargetCapitalRatio($bank, new MacroStateDTO(bankCapitalRequirement: FinancialConstants::OPENING_BANK_CAPITAL_REQUIREMENT + 0.01));
+        $this->assertEqualsWithDelta($seedTarget + (0.01 * $density), $raised, 1e-12, 'a point of requirement is a point of equity on risk-weighted assets');
+        $this->assertGreaterThan(0.6, $density);
+        $this->assertLessThan(0.7, $density, 'Lakebird runs at about the insured system\'s 64% density');
     }
 
     public function testInsolventBankTriggersBankSeizureShockEvent(): void
@@ -449,13 +507,13 @@ class CommercialBankBusinessModelTest extends TestCase
         $bank = new Stock();
         $bank->setTicker('INSOLVENT_BANK');
         $bank->setBeta('1.0');
-        $bank->setTotalEquity('3000000000'); // $3B
+        $bank->setTotalEquity('2000000000'); // $2B
         $bank->setCustomerDeposits('80000000000'); // $80B
         $bank->setWholesaleDebt('10000000000'); // $10B
         $bank->setCorporateTreasury('5000000000'); // $5B
 
-        // Earning Assets = 3B + 90B - 5B = 88B
-        // CET1 = 3B / 88B = ~3.41% (< 4.0% statutory minimum)
+        // Earning Assets = 2B + 90B - 5B = 87B
+        // CET1 = 2B / (87B * 0.72) = ~3.19% (< 4.5% Pillar 1 minimum)
         $cet1 = $this->model->calculateCet1Ratio($bank);
         $this->assertLessThan(CommercialBankBusinessModel::BASEL_MIN_CET1_RATIO, $cet1);
 
@@ -778,7 +836,7 @@ class CommercialBankBusinessModelTest extends TestCase
         $stock->setEarningAssets('45000000000');
         $stock->setCreditLossAllowance('900000000');
         $this->assertEqualsWithDelta(44_100_000_000.0, $this->model->resolveEarningAssets($stock), 1.0);
-        $this->assertEqualsWithDelta(44_100_000_000.0, $this->model->calculateRiskWeightedAssets($stock), 1.0, 'risk weights apply to the book, not the proxy');
+        $this->assertEqualsWithDelta(44_100_000_000.0 * CommercialBankBusinessModel::BASEL_RISK_WEIGHT_EARNING_ASSETS, $this->model->calculateRiskWeightedAssets($stock), 1.0, 'risk weights apply to the book, not the proxy');
 
         $macro = new MacroStateDTO(outputGapEma: 0.0, policyRateEma: 0.04, yield2yEma: 0.04, yield10yEma: 0.045, macroCreditSpreadEma: 0.02);
         $result = $this->model->computeActualFinancials($stock, expectedRevenue: 1_000_000_000.0, realizedVariableMargin: 0.50, fixedCosts: 200_000_000.0, baselineVol: 0.10, macroState: $macro, mathUtility: $this->mathUtility);

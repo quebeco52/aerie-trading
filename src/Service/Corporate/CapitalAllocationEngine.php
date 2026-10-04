@@ -485,7 +485,7 @@ class CapitalAllocationEngine
      */
     private function resolveCapitalSurplusReturn(CapitalAllocationContext $ctx): float
     {
-        $target = $ctx->strategy->getTargetCapitalRatio($ctx->stock);
+        $target = $ctx->strategy->getTargetCapitalRatio($ctx->stock, $ctx->macroState);
         if ($target === null) {
             return 0.0;
         }

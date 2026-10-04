@@ -5,6 +5,7 @@ namespace App\Service\Macro\Subsystem;
 use App\Service\Macro\MacroEngine;
 use App\Service\Macro\MacroState;
 use App\Service\Macro\Recorder\MacroDiagnosticsProbe;
+use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
 
 /**
@@ -180,8 +181,18 @@ class CreditFiscalSubsystem
     // --- Light-Touch Financial Centre (Jorda, Richter, Schularick & Taylor 2021) ---
     /** Crisis logit shift for the District's wholesale-funded banks: loans at 108% of deposits (UK and Swiss banks 1995-2007, JST R6) against the US 87%, at JRST's post-war probit marginal effect of 0.05pp a year per point (se 0.01); the hazard at trend rises from 2.2% to 3.6%. */
     public const DISTRICT_FUNDING_CRISIS_LOGIT_SHIFT = 0.485;
-    /** Crisis drag scale for the District's thin bank capital: equity 4.9% of assets (UK and Swiss banks 1995-2007, JST R6) against the US 7.6%, at JRST's 0.86pp of five-year output per point of capital over a 24.55pp financial-recession loss (Table 8). */
-    public const DISTRICT_THIN_CAPITAL_DRAG_SCALE = 1.095;
+    /** The District's bank equity over total assets at its opening capital requirement: UK and Swiss banks 1995-2007 (JST R6). */
+    public const DISTRICT_BANK_CAPITAL_RATIO = 0.049;
+    /** US bank equity over total assets 1995-2007 (JST R6), the capital the crisis drag's panel fit stands for. */
+    public const US_BANK_CAPITAL_RATIO = 0.076;
+    /** Share of a financial recession's loss each point of bank equity over total assets spares: 0.86pp of five-year output against the average 24.55pp loss (Jorda, Richter, Schularick & Taylor 2021, Table 8). */
+    public const CRISIS_LOSS_SPARED_PER_CAPITAL_POINT = 0.86 / 24.55;
+    /** Risk-weighted assets over total assets, US insured banks reporting them at end-2024 ($14.90T of $23.33T, FDIC Call Reports): turns a point of CET1 requirement into equity over total assets. */
+    public const BANK_RWA_DENSITY = 0.639;
+
+    // --- Bank Capital Build-Up (Bridges et al. 2014) ---
+    /** Years for banks to build to a new capital requirement, as a distributed lag: least squares on UK banks' capital ratios after a 1pp rise, up 0.41pp a year on and 0.95pp three years on (Bridges et al. 2014, BoE WP 486, Table C), which this puts at 0.48pp and 0.86pp. */
+    public const REQUIREMENT_BUILD_YEARS = 1.52;
 
     // --- Excess Bond Premium (Gilchrist & Zakrajsek 2012), a displaced lognormal ---
     /** Displacement (141 bps): the premium plus this is lognormal. Profile maximum likelihood on the GZ series, 1973-2026 (95% CI 116-185 bps); in logs the shocks are the same size at every level, in levels they grow 2.8x from low to high. */
@@ -510,7 +521,9 @@ class CreditFiscalSubsystem
      * so a cold start and a slow drift in leverage are silent. The credit-to-GDP gap is the stock against a slow one-sided trend
      * (the Basel filter's stand-in), and the countercyclical buffer maps that gap onto the 0-2.5% Basel
      * schedule with a year's phase-in. The ratio reaches the retail default rate, the IS curve and, through
-     * the buffer, lending standards; the gap reaches the lenders' order books.
+     * the buffer, lending standards; the gap reaches the lenders' order books. The capital banks have built tracks the
+     * Financial Regulator's requirement with a lag, and while it falls short, lending standards tighten as the buffer
+     * tightens them.
      *
      * @param MacroState $state Current macroeconomic state.
      * @param float      $dt    Time increment in years.
@@ -588,6 +601,14 @@ class CreditFiscalSubsystem
             dt: $dt,
             lagTimeConstant: self::CCYB_PHASE_IN_YEARS
         );
+
+        // The capital banks hold follows the Financial Regulator's requirement over the years they take to build to it.
+        $state->bankCapitalBuilt = $this->mathUtility->calculateDistributedLag(
+            currentLaggedValue: $state->bankCapitalBuilt,
+            targetValue: $state->bankCapitalRequirement,
+            dt: $dt,
+            lagTimeConstant: self::REQUIREMENT_BUILD_YEARS
+        );
     }
 
     /**
@@ -602,7 +623,8 @@ class CreditFiscalSubsystem
      *
      * The District is a light-touch financial centre, so both legs depart from the JST panel as Jorda, Richter,
      * Schularick & Taylor (2021) measure: banks funded beyond their deposits raise the hazard, and thin capital
-     * deepens the recession a crisis brings (capital does not predict crises, only how hard they land).
+     * deepens the recession a crisis brings (capital does not predict crises, only how hard they land), by as much as
+     * the Financial Regulator's requirement leaves it thin (thinCapitalDragScale()).
      *
      * @param MacroState $state Current macroeconomic state.
      * @param float      $dt    Time increment in years.
@@ -628,12 +650,27 @@ class CreditFiscalSubsystem
         }
 
         $state->lastCreditCrisisAt = $state->totalTime;
-        $crisisDrag = self::DISTRICT_THIN_CAPITAL_DRAG_SCALE
+        $crisisDrag = self::thinCapitalDragScale($state->bankCapitalRequirement)
             * (self::CREDIT_CRISIS_DRAG_BASE + (self::CREDIT_CRISIS_DRAG_PER_GAP * max(0.0, $state->creditToGdpGapEma)));
         $state->creditCrisisDrag += $crisisDrag;
         $this->diagnostics?->recordEvent('creditCrisis', $crisisDrag);
         // Gilchrist & Zakrajsek (2012): lenders' capital is hit on the day, so the premium they charge jumps with it.
         $state->excessBondPremium += self::EBP_CRISIS_JUMP;
+    }
+
+    /**
+     * How much harder a financial recession lands on the District's bank capital than on the US's (Jorda, Richter,
+     * Schularick & Taylor 2021, Table 8): the District's equity over total assets is its opening 4.9%, moved by each
+     * point the CET1 requirement stands from the opening one at the banks' risk-weighted density, and each point short of
+     * the US's 7.6% adds the share of the loss a point of capital spares. 1.095 at the opening requirement.
+     *
+     * @param float $requirement The CET1 requirement in force, as a share of risk-weighted assets.
+     */
+    public static function thinCapitalDragScale(float $requirement): float
+    {
+        $capitalRatio = self::DISTRICT_BANK_CAPITAL_RATIO + (($requirement - FinancialConstants::OPENING_BANK_CAPITAL_REQUIREMENT) * self::BANK_RWA_DENSITY);
+
+        return 1.0 + (self::CRISIS_LOSS_SPARED_PER_CAPITAL_POINT * 100.0 * (self::US_BANK_CAPITAL_RATIO - $capitalRatio));
     }
 
     /**
@@ -795,8 +832,10 @@ class CreditFiscalSubsystem
      */
     public function calculateSloosCreditStandards(MacroState $state, float $dt): void
     {
-        // Basel III CCyB transmission to commercial bank lending standards (BCBS 2010).
-        $bufferTightening = self::SLOOS_CCYB_PREMIUM_EQUIVALENT * $state->countercyclicalBufferRateEma;
+        // Basel III CCyB transmission to commercial bank lending standards (BCBS 2010); capital banks have yet to build to
+        // a raised requirement is a requirement they must meet all the same, and reads the same way.
+        $capitalShortfall = max(0.0, $state->bankCapitalRequirement - $state->bankCapitalBuilt);
+        $bufferTightening = self::SLOOS_CCYB_PREMIUM_EQUIVALENT * ($state->countercyclicalBufferRateEma + $capitalShortfall);
         $dW = $this->mathUtility->generateStandardNormal();
 
         $state->sloosTighteningIndex = $this->mathUtility->calculateSloosCreditStandards(

@@ -32,6 +32,10 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
     /** A deposit-taking bank pays the bank levy. */
     public const PAYS_BANK_LEVY = true;
 
+    // --- Prudential Regulation ---
+    /** A deposit-taking bank holds the CET1 requirement the District's Financial Regulator sets (MacroStateDTO::bankCapitalRequirement). */
+    public const PRUDENTIALLY_REGULATED = true;
+
     // --- Operating Cyclicality & Demand Structure ---
     /** Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Loan demand and deposit growth track nominal activity. */
     public const OPERATING_CYCLICALITY = 1.00;
@@ -283,12 +287,12 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
     // --- Basel III Capital Adequacy & CCB ---
     /** Risk weight for risk-free cash and central bank treasury reserves under Basel III Standardized Approach. */
     public const BASEL_RISK_WEIGHT_TREASURY = 0.0;
-    /** Risk weight for standard commercial loans and earning assets under Basel III Standardized Approach. */
-    public const BASEL_RISK_WEIGHT_EARNING_ASSETS = 1.0;
-    /** Basel III statutory minimum Common Equity Tier 1 (CET1) ratio before insolvency and regulatory seizure. */
-    public const BASEL_MIN_CET1_RATIO = 0.040;
-    /** Basel III Capital Conservation Buffer (CCB) target CET1 ratio below which dividends and buybacks are prohibited. */
-    public const BASEL_CCB_CET1_RATIO = 0.065;
+    /** Average risk weight on a bank's earning (non-cash) assets: US insured banks reporting RWA at end-2024 held $14.90T of RWA against $20.69T of non-cash assets (FDIC Call Reports; under the standardized approach Treasuries weigh 0%, agency MBS 20%, first-lien mortgages 50%, business and consumer loans 100%). */
+    public const BASEL_RISK_WEIGHT_EARNING_ASSETS = 0.72;
+    /** Basel III Pillar 1 minimum Common Equity Tier 1 (CET1) ratio, below which the bank is seized (BCBS 2011, para. 50). */
+    public const BASEL_MIN_CET1_RATIO = 0.045;
+    /** Basel III minimum plus the 2.5% capital conservation buffer: the payout stop for a lender outside the District's bank requirement. */
+    public const BASEL_CCB_CET1_RATIO = 0.070;
 
     // --- Passive Liability Growth ---
     /** Standard deviation of idiosyncratic drift applied to passive liability growth. */
@@ -935,19 +939,50 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
     }
 
     /**
-     * Implements Basel III Capital Conservation Buffer (CCB) and Countercyclical Capital Buffer (CCyB) dividend restrictions.
+     * The payout stop: no dividend or buyback while CET1 sits below the requirement plus the countercyclical buffer, as
+     * Basel III's maximum distributable amount bars them below the combined buffer.
      */
     public function getRegulatoryDividendCap(Stock $stock, float $currentTreasury, ?\App\DTO\MacroStateDTO $macroState = null): ?float
     {
         $cet1Ratio = $this->calculateCet1Ratio($stock, $currentTreasury);
         $ccyb = $macroState !== null ? $macroState->countercyclicalBufferRateEma : 0.0;
-        $requiredCet1 = self::BASEL_CCB_CET1_RATIO + $ccyb;
+        $requiredCet1 = $this->capitalRequirement($macroState) + $ccyb;
 
         if ($cet1Ratio < $requiredCet1) {
             return 0.0;
         }
 
         return 1.0;
+    }
+
+    /**
+     * The CET1 requirement this lender holds, the countercyclical buffer aside: the District's in force for a regulated
+     * bank, Basel III's minimum and conservation buffer for one outside it.
+     */
+    public function capitalRequirement(?\App\DTO\MacroStateDTO $macroState): float
+    {
+        if (!static::PRUDENTIALLY_REGULATED) {
+            return self::BASEL_CCB_CET1_RATIO;
+        }
+
+        return $macroState->bankCapitalRequirement ?? FinancialConstants::OPENING_BANK_CAPITAL_REQUIREMENT;
+    }
+
+    /**
+     * A regulated bank's capital target moves with the requirement point for point on its risk-weighted assets, so it
+     * keeps the buffer over the requirement it was built with: after a 1pp rise UK banks' capital ratios had risen 0.41pp
+     * a year on and 0.95pp three years on (Bridges et al. 2014, BoE WP 486, Table C), the target's partial adjustment
+     * doing the rest.
+     */
+    public function getTargetCapitalRatio(Stock $stock, ?\App\DTO\MacroStateDTO $macroState = null): ?float
+    {
+        $target = parent::getTargetCapitalRatio($stock, $macroState);
+        $assets = $stock->getTotalAssets();
+        if ($target === null || !static::PRUDENTIALLY_REGULATED || $macroState === null || $assets <= 0.0) {
+            return $target;
+        }
+
+        return $target + (($this->capitalRequirement($macroState) - FinancialConstants::OPENING_BANK_CAPITAL_REQUIREMENT) * $this->calculateRiskWeightedAssets($stock) / $assets);
     }
 
     /**

@@ -403,27 +403,72 @@ class GovernmentPageBuilderTest extends TestCase
         $math = new \App\Service\Math\MathUtility();
         for ($tick = 0; $tick <= 52; ++$tick) {
             $state->totalTime = $tick / 52.0;
+            \App\Service\Politics\CouncilAppointments::advance($state, $math);
             \App\Service\Politics\MonetaryAuthority::advance($state, new MacroStateDTO(totalTime: $state->totalTime, policyRate: 0.04), 1.0 / 52.0, $math);
+            \App\Service\Politics\FinancialRegulator::advance($state, $math);
         }
         $politics = PoliticsStateDTO::fromState($state);
-        $page = $this->builder()->build(new MacroStateDTO(totalTime: $state->totalTime), $politics);
+        $page = $this->builder()->build(new MacroStateDTO(totalTime: $state->totalTime, countercyclicalBufferRateEma: 0.005), $politics);
         $authority = $page['authority'];
 
         $this->assertSame(\App\Data\AerieCouncil::OPENING_GOVERNOR, $authority['governor']['name']);
         $this->assertSame('Before Year 1', $authority['governor']['sinceLabel']);
-        $this->assertCount(\App\Service\Politics\MonetaryAuthority::SHORTLIST - 1, $authority['governor']['passedOver']);
+        $this->assertCount(\App\Service\Politics\CouncilAppointments::SHORTLIST - 1, $authority['governor']['passedOver']);
         $this->assertCount(\App\Service\Politics\MonetaryAuthority::COMMITTEE_MEMBERS, $authority['members']);
         $this->assertSame($politics->memberNames, array_column($authority['members'], 'name'));
         $this->assertSame(\App\Service\Politics\MonetaryAuthority::COMMITTEE_MEMBERS + 1, $authority['committee']['hawk'] + $authority['committee']['swing'] + $authority['committee']['dove']);
         $this->assertSame($politics->committeeMajority > 0.0 ? 'hawkish' : ($politics->committeeMajority < 0.0 ? 'dovish' : null), $authority['committee']['majority']);
         $this->assertNotNull($authority['meeting']);
         $this->assertSame(\App\Service\Politics\MonetaryAuthority::COMMITTEE_MEMBERS + 1, array_sum(array_map('intval', explode('–', $authority['meeting']['split']))));
-        $this->assertSame(\App\Service\Politics\MonetaryAuthority::stanceName(\App\Service\Politics\MonetaryAuthority::median($politics->councilStances)), $page['council']['lean']['median']);
+        $this->assertSame(\App\Service\Politics\MonetaryAuthority::stanceName(\App\Service\Politics\CouncilAppointments::median($politics->councilStances)), $page['council']['lean']['median']);
         foreach ($page['council']['roster'] as $index => $seat) {
             $this->assertSame($politics->councilNames[$index], $seat['name']);
-            $this->assertGreaterThanOrEqual((int) floor(\App\Service\Politics\MonetaryAuthority::APPOINTMENT_AGE_MIN), $seat['age']);
+            $this->assertGreaterThanOrEqual((int) floor(\App\Service\Politics\CouncilAppointments::APPOINTMENT_AGE_MIN), $seat['age']);
             $this->assertContains($seat['stance'], ['hawk', 'swing', 'dove']);
+            $this->assertContains($seat['banks'], ['light', 'middle', 'strict']);
         }
+
+        $regulator = $page['regulator'];
+        $this->assertSame(\App\Data\AerieCouncil::OPENING_REGULATOR, $regulator['head']['name']);
+        $this->assertSame('Before Year 1', $regulator['head']['sinceLabel']);
+        $this->assertSame('light', $regulator['head']['stance']);
+        $this->assertSame([], $regulator['head']['passedOver']);
+        $this->assertEqualsWithDelta(\App\Service\Math\FinancialConstants::OPENING_BANK_CAPITAL_REQUIREMENT, $regulator['inForce'], 1e-12);
+        $this->assertNull($regulator['phasing']);
+        $this->assertEqualsWithDelta(0.005, $regulator['buffer'], 1e-12);
+        $this->assertEqualsWithDelta(\App\Service\Politics\FinancialRegulator::requirement(\App\Service\Politics\CouncilAppointments::median($politics->councilRegulationStances)), $page['council']['lean']['banks'], 1e-12);
+        $this->assertNull($this->builder()->build(new MacroStateDTO(), new PoliticsStateDTO())['regulator']);
+    }
+
+    /**
+     * While a new head's rise phases in, the page shows the requirement in force and the one it is rising to, with the
+     * quarter it completes; and whom the Council passed over, with the requirement each would have set.
+     */
+    public function testThePageShowsARisePhasingIn(): void
+    {
+        $regime = \App\Service\Politics\FinancialRegulator::stance(0.1230);
+        $politics = new PoliticsStateDTO(
+            totalTime: 7.25,
+            authoritySalt: 5.0,
+            regulatorName: 'Test Head',
+            regulatorBirth: -45.0,
+            regulatorTermStart: 7.0,
+            regulatorStance: $regime,
+            regulatorPassedOver: [['name' => 'Other One', 'birth' => -50.0, 'stance' => 0.0, 'regulation' => -1.0]],
+            bankCapitalRequirement: 0.1012,
+            requirementPhaseFrom: 0.094,
+            requirementPhaseStart: 7.0,
+        );
+        $regulator = $this->builder()->build(new MacroStateDTO(totalTime: 7.25), $politics)['regulator'];
+
+        $this->assertSame('strict', $regulator['head']['stance']);
+        $this->assertEqualsWithDelta(0.1230, $regulator['head']['requirement'], 1e-12);
+        $this->assertEqualsWithDelta(0.1012, $regulator['inForce'], 1e-12);
+        $this->assertEqualsWithDelta(0.1230, $regulator['phasing']['target'], 1e-12);
+        $this->assertSame(GovernmentPageBuilder::simDate(8.0), $regulator['phasing']['completeLabel']);
+        $this->assertSame('Other One', $regulator['head']['passedOver'][0]['name']);
+        $this->assertSame(57, $regulator['head']['passedOver'][0]['age']);
+        $this->assertEqualsWithDelta(0.0843, $regulator['head']['passedOver'][0]['requirement'], 1e-12);
     }
 
     public function testSimulationDatesCountFromTheFounding(): void

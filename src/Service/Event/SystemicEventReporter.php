@@ -9,6 +9,7 @@ use App\Entity\Etf;
 use App\Service\Macro\MacroEngine;
 use App\Service\Market\PriceChangeFeed;
 use App\Service\Politics\CoalitionFormation;
+use App\Service\Politics\FinancialRegulator;
 use App\Service\Politics\MonetaryAuthority;
 use App\Service\View\GovernmentPageBuilder;
 
@@ -27,6 +28,8 @@ class SystemicEventReporter
     /** How each stance on money reads of one person. */
     private const STANCE_PHRASES = ['hawk' => 'a hawk', 'swing' => 'a swing vote', 'dove' => 'a dove'];
     /** How each stance reads counted, one and many. */
+    /** A head of the Financial Regulator's stance on the banks, as a headline puts it. */
+    private const REGULATION_PHRASES = ['light' => 'a light-touch regulator', 'middle' => 'a moderate', 'strict' => 'a strict regulator'];
     private const STANCE_PLURALS = ['hawk' => ['hawk', 'hawks'], 'swing' => ['swing vote', 'swing votes'], 'dove' => ['dove', 'doves']];
 
     public function __construct(
@@ -272,7 +275,41 @@ class SystemicEventReporter
             };
         }
 
-        return $context;
+        return $context + self::regulatorContext($politics);
+    }
+
+    /**
+     * The Financial Regulator for its headline: the head, their age and stance on the banks, the requirement they will
+     * set against the one in force, when their term ends and whom the Council passed over for them. Empty before the
+     * Regulator has a head.
+     *
+     * @return array<string, string>
+     */
+    private static function regulatorContext(PoliticsStateDTO $politics): array
+    {
+        if ($politics->regulatorName === '') {
+            return [];
+        }
+
+        $pct = static fn(float $share): string => number_format($share * 100.0, 1) . '%';
+        $target = FinancialRegulator::requirement($politics->regulatorStance);
+        $before = $politics->requirementPhaseFrom;
+
+        return [
+            'regulator' => $politics->regulatorName,
+            'regulator_age' => (string) (int) floor($politics->totalTime - $politics->regulatorBirth),
+            'regulator_stance' => self::REGULATION_PHRASES[FinancialRegulator::stanceName($target)],
+            'regulator_term_ends' => GovernmentPageBuilder::simDate(FinancialRegulator::headTermEnd($politics->totalTime)),
+            'regulator_passed_over' => self::listNames(array_map(
+                static fn(array $candidate): string => "{$candidate['name']}, who would have set {$pct(FinancialRegulator::requirement($candidate['regulation']))}",
+                $politics->regulatorPassedOver
+            )),
+            'requirement_change' => match (true) {
+                abs($target - $before) < 0.0005 => "holds the banks' core capital requirement at {$pct($target)} of risk-weighted assets",
+                $target > $before => "raises the banks' core capital requirement to {$pct($target)} of risk-weighted assets from {$pct($before)}, phased in over the coming year",
+                default => "cuts the banks' core capital requirement to {$pct($target)} of risk-weighted assets from {$pct($before)}, with immediate effect",
+            },
+        ];
     }
 
     /** A small count in words. */

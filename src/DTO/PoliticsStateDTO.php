@@ -79,7 +79,7 @@ readonly class PoliticsStateDTO
         public float $bankLevyRate = 0.0,
         public float $lastBudgetEnactedAt = -1.0,
         public float $lastCouncilBrakeAt = -1.0,
-        /** Salt the Monetary Authority's hashed draws are taken from, drawn once when it forms (-1: not yet formed; App\Service\Politics\MonetaryAuthority). */
+        /** Salt the Council's hashed draws are taken from, drawn once when it forms (-1: not yet formed; App\Service\Politics\CouncilAppointments). */
         public float $authoritySalt = -1.0,
         /** @var list<string> Each Council seat's holder, by seat. */
         public array $councilNames = [],
@@ -87,16 +87,18 @@ readonly class PoliticsStateDTO
         public array $councilBirths = [],
         /** @var list<float> When each holder took the seat, which marks whose the seat's entries are. */
         public array $councilSince = [],
-        /** @var list<float> Each councillor's stance: 1 a hawk, 0 a swing vote, -1 a dove. */
+        /** @var list<float> Each councillor's stance on money: 1 a hawk, 0 a swing vote, -1 a dove. */
         public array $councilStances = [],
-        /** @var list<array{name: string, birth: float, stance: float}> The candidates the Council passed over when it last filled a seat of its own. */
+        /** @var array<int, float> Each councillor's stance on the banks: -1 the lightest regime on record, 1 the strictest (App\Service\Politics\FinancialRegulator). */
+        public array $councilRegulationStances = [],
+        /** @var list<array{name: string, birth: float, stance: float, regulation: float}> The candidates the Council passed over when it last filled a seat of its own. */
         public array $councillorPassedOver = [],
         /** The governor in office: name, birth date, when their term began, and stance. */
         public string $governorName = '',
         public float $governorBirth = 0.0,
         public float $governorTermStart = 0.0,
         public float $governorStance = 0.0,
-        /** @var list<array{name: string, birth: float, stance: float}> The candidates the Council passed over when it named the governor. */
+        /** @var list<array{name: string, birth: float, stance: float, regulation: float}> The candidates the Council passed over when it named the governor. */
         public array $governorPassedOver = [],
         /** @var list<string> The rate committee's members beside the governor, by seat: names, birth dates, when each took their seat, and stances. */
         public array $memberNames = [],
@@ -119,6 +121,18 @@ readonly class PoliticsStateDTO
         public float $lastCouncillorSeatedAt = -1.0,
         /** When an appointment last tipped the committee into or out of a supermajority. */
         public float $lastMajorityShiftAt = -1.0,
+        /** The Financial Regulator's head in office: name, birth date, when their term began, and stance on the banks. */
+        public string $regulatorName = '',
+        public float $regulatorBirth = 0.0,
+        public float $regulatorTermStart = 0.0,
+        public float $regulatorStance = 0.0,
+        /** @var list<array{name: string, birth: float, stance: float, regulation: float}> The candidates the Council passed over when it named the head. */
+        public array $regulatorPassedOver = [],
+        /** The CET1 requirement on the District's banks in force, as a share of risk-weighted assets, and where the head's last rise began phasing in from, and when. */
+        public float $bankCapitalRequirement = FinancialConstants::OPENING_BANK_CAPITAL_REQUIREMENT,
+        public float $requirementPhaseFrom = FinancialConstants::OPENING_BANK_CAPITAL_REQUIREMENT,
+        public float $requirementPhaseStart = -1.0,
+        public float $lastRegulatorAppointedAt = -1.0,
     ) {}
 
     /** Snapshots the engine's working state. */
@@ -159,6 +173,7 @@ readonly class PoliticsStateDTO
             bankLevyRate: $this->bankLevyRate,
             electionPulse: PoliticsEngine::electionPulse($this->totalTime, $this->lastElectionAt, $this->coalitionTakesOfficeAt),
             authorityMajority: $this->authoritySalt < 0.0 ? null : $this->committeeMajority,
+            bankCapitalRequirement: $this->regulatorName === '' ? null : $this->bankCapitalRequirement,
         );
     }
 }
