@@ -57,6 +57,8 @@ class ShockEvent
     public const GOVERNOR_APPOINTED = 'governor_appointed';
     /** The Council has named a new head of the Financial Regulator, who sets the capital the District's banks must hold. */
     public const REGULATOR_APPOINTED = 'regulator_appointed';
+    /** The Council has named a new head of the Sovereign Reserve Fund, who sets how much of it is in equities. */
+    public const FUND_HEAD_APPOINTED = 'fund_head_appointed';
     /** An appointment has tipped the rate committee into or out of a hawkish or dovish supermajority, which leans the policy rule. */
     public const AUTHORITY_MAJORITY_SHIFT = 'authority_majority_shift';
     /** The Council has elected a successor to a councillor whose term ended. */

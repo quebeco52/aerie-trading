@@ -760,6 +760,10 @@ class MacroReport
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 6, nullable: true)]
     private ?string $sovereignFundTargetWeight = null;
 
+    // The fund's policy equity share, as it opened or as its head has since set it.
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 6, nullable: true)]
+    private ?string $sovereignFundPolicyEquityShare = null;
+
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 6, nullable: true)]
     private ?string $sovereignFundOwnershipShare = null;
 

@@ -102,6 +102,13 @@
 			<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20" aria-labelledby="reserve-allocation-heading">
 				<h2 id="reserve-allocation-heading" class="text-base font-semibold text-on-surface">Allocation</h2>
 				<p class="text-xs text-on-surface-variant mt-0.5">What the fund holds, against the policy split it trades back to.</p>
+				{% if head %}
+					<p class="text-xs text-on-surface mt-2">
+						Run by <span class="font-semibold">{{ head.name }}</span>, {{ head.age }},
+						{{ {cautious: 'a cautious investor', balanced: 'a balanced investor', bold: 'a bold investor'}[head.stance] }}, until <span class="font-mono tabular-nums">{{ head.termEndsLabel }}</span>.
+						{{ head.opening ? 'Keeps the mix the fund opened with.' : 'Holds ' ~ (head.equityShare * 100)|number_format(0) ~ '% of the fund in equities.' }}
+					</p>
+				{% endif %}
 
 				{# One bar, the three sleeves end to end; the policy split is marked above it. #}
 				<div class="relative mt-5" aria-hidden="true">
@@ -364,6 +371,10 @@
 			   - Strategic holding: Singapore: SEL Holdings holds about 23% of SGX; Norway: 67% of Equinor, dividends to the GPFG
 			#}
 			{% set rules = [
+				{
+					name: 'Who sets the mix',
+					text: 'The Council names the fund\'s head for a single term. The head sets how much of the fund is held in equities; the District\'s share of those equities stays as the fund opened, and the rest goes abroad. A new mix puts the foreign money on its new split at once and moves the board to its new weight over ' ~ mandate.transitionMonths|number_format(0) ~ ' months.'
+				},
 				{
 					name: 'Spending rule',
 					text: 'Each budget year the fund pays the budget ' ~ (mandate.spendingShare * 100)|number_format(0) ~ '% of its expected long-term real return on its value. The return is the compound one, the average less half the variance, so volatility is never spent.'

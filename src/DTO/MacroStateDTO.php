@@ -337,6 +337,10 @@ readonly class MacroStateDTO
         public float $sovereignFundForeignEquity = 0.0,
         public float $sovereignFundForeignBonds = 0.0,
         public float $sovereignFundTargetWeight = 0.0,
+        /** The fund's policy equity share: the board's policy weight plus the foreign sleeves' equity at their policy split, as the fund opened or as its head has since set it (App\Service\Politics\SovereignReserveFund). */
+        public float $sovereignFundPolicyEquityShare = 0.0,
+        /** The policy equity share the fund's head has handed the fund, 0 while the head sitting at Year 1 keeps the opening mix. */
+        public float $sovereignFundMandateEquityShare = 0.0,
         public float $sovereignFundDollarsPerGdp = 0.0,
         public float $sovereignFundAnnualDraw = 0.0,
         public float $sovereignFundRebalanceBacklog = 0.0,

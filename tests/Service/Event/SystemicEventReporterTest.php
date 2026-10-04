@@ -255,7 +255,7 @@ class SystemicEventReporterTest extends TestCase
     {
         $authority = [
             'totalTime' => 3.1, 'authoritySalt' => 5.0, 'councilStances' => array_fill(0, 13, 1.0), 'governorName' => 'Theodora Vance', 'governorBirth' => -50.0,
-            'governorStance' => 1.0, 'governorPassedOver' => [['name' => 'Clio Wren', 'birth' => -45.0, 'stance' => -1.0, 'regulation' => 0.0], ['name' => 'Ivo Sato', 'birth' => -55.0, 'stance' => 0.0, 'regulation' => 0.0]],
+            'governorStance' => 1.0, 'governorPassedOver' => [['name' => 'Clio Wren', 'birth' => -45.0, 'stance' => -1.0, 'regulation' => 0.0, 'fund' => 0.0], ['name' => 'Ivo Sato', 'birth' => -55.0, 'stance' => 0.0, 'regulation' => 0.0, 'fund' => 0.0]],
             'memberStances' => [1.0, 1.0, 1.0, 0.0, 0.0, -1.0], 'committeeMajority' => 1.0,
             'lastMeetingAt' => 3.1, 'lastMeetingRate' => 0.0425, 'lastMeetingChange' => 0.005, 'lastMeetingVotes' => [0.0, 0.0, 0.0, 0.0, 0.0, 1.0, -1.0],
         ];
@@ -294,7 +294,7 @@ class SystemicEventReporterTest extends TestCase
         $head = [
             'totalTime' => 7.0, 'authoritySalt' => 5.0, 'eventType' => ShockEvent::REGULATOR_APPOINTED, 'lastRegulatorAppointedAt' => 7.0,
             'regulatorName' => 'Odile Marsh', 'regulatorBirth' => -48.0, 'regulatorTermStart' => 7.0,
-            'regulatorPassedOver' => [['name' => 'Bram Ellery', 'birth' => -50.0, 'stance' => 0.0, 'regulation' => -1.0]],
+            'regulatorPassedOver' => [['name' => 'Bram Ellery', 'birth' => -50.0, 'stance' => 0.0, 'regulation' => -1.0, 'fund' => 0.0]],
             'requirementPhaseFrom' => 0.094, 'requirementPhaseStart' => 7.0, 'bankCapitalRequirement' => 0.094,
         ];
         $raising = new PoliticsStateDTO(...($head + ['regulatorStance' => \App\Service\Politics\FinancialRegulator::stance(0.1230)]));
@@ -319,6 +319,32 @@ class SystemicEventReporterTest extends TestCase
             $named += str_contains((string) $this->reporter(bufferedPrice: null)->report(new MacroStateDTO(totalTime: 7.0), $raising, $this->benchmarkAt('100'))['description'], 'Bram Ellery, who would have set 8.4%') ? 1 : 0;
         }
         $this->assertGreaterThan(0, $named, 'One phrasing names whom the Council passed over.');
+    }
+
+    /**
+     * A new head of the Sovereign Reserve Fund is named with their stance on the reserves and the equity share they set
+     * against the fund's, with the part of the board's float the fund will buy or sell to get there.
+     */
+    public function testTheFundHeadsHeadlineNamesTheHeadAndTheTrade(): void
+    {
+        $head = [
+            'totalTime' => 4.0, 'authoritySalt' => 5.0, 'eventType' => ShockEvent::FUND_HEAD_APPOINTED, 'lastFundHeadAppointedAt' => 4.0,
+            'fundHeadName' => 'Ines Varga', 'fundHeadBirth' => -50.0, 'fundHeadTermStart' => 4.0,
+            'fundHeadPassedOver' => [['name' => 'Oren Pike', 'birth' => -48.0, 'stance' => 0.0, 'regulation' => 0.0, 'fund' => 1.0]],
+        ];
+        // A $5T fund 70% in equities, 16% of it in a $15T board float: the board is 0.16 / 0.70 of its equities.
+        $macro = new MacroStateDTO(totalTime: 4.0, sovereignFundPolicyEquityShare: 0.70, sovereignFundTargetWeight: 0.16, sovereignFundToGdp: 0.5, sovereignFundDollarsPerGdp: 1.0e11, nominalGdpIndex: 100.0, boardFloatCap: 15.0e12);
+        $cautious = new PoliticsStateDTO(...($head + ['fundHeadStance' => \App\Service\Politics\SovereignReserveFund::stance(0.50)]));
+        $sold = (0.16 / 0.70) * 0.20 * 5.0e12 / 15.0e12;
+
+        for ($i = 0; $i < 20; ++$i) {
+            $headline = $this->reporter(bufferedPrice: null)->report($macro, $cautious, $this->benchmarkAt('100'));
+            $this->assertNotNull($headline);
+            $this->assertStringContainsString('Ines Varga', $headline['description']);
+            $this->assertStringContainsString('a cautious investor', $headline['description']);
+            $this->assertStringContainsString('cuts its share in equities to 50% from 70%, selling about ' . number_format($sold * 100.0, 1) . "% of the board's free float over 20 months", $headline['description']);
+            $this->assertStringNotContainsString('{', $headline['description']);
+        }
     }
 
     public function testATickWithoutAnEventPublishesNothing(): void

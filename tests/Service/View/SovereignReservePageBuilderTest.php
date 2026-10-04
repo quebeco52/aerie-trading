@@ -132,6 +132,27 @@ class SovereignReservePageBuilderTest extends TestCase
         $this->assertEqualsWithDelta((1.0 - SovereignFundSubsystem::FOREIGN_EQUITY_SHARE) * $foreign, $sleeves['foreign-bonds']['policy'], 1e-12);
     }
 
+    /**
+     * Once the fund's head has set a mix, the page reads the policy off it: the board at its weight, and the foreign
+     * money split as the mix leaves it; and it names the head with the share they hold in equities.
+     */
+    public function testAHeadsMixSetsThePolicyAndThePageNamesThem(): void
+    {
+        $macro = new MacroStateDTO(...array_merge(get_object_vars($this->incepted(0.0268, 0.66)), ['sovereignFundPolicyEquityShare' => 0.50]));
+        $politics = new \App\DTO\PoliticsStateDTO(totalTime: 10.5, fundHeadName: 'Ines Varga', fundHeadBirth: -45.0, fundHeadTermStart: 9.0, fundHeadStance: \App\Service\Politics\SovereignReserveFund::stance(0.50));
+        $page = $this->builder()->build($macro, $politics);
+        $sleeves = array_column($page['sleeves'], null, 'key');
+
+        $this->assertEqualsWithDelta(0.50 - self::TARGET_WEIGHT, $sleeves['foreign-equities']['policy'], 1e-12);
+        $this->assertEqualsWithDelta(0.50, $page['bands'][1]['policy'], 1e-12);
+        $this->assertEqualsWithDelta((0.50 - self::TARGET_WEIGHT) / (1.0 - self::TARGET_WEIGHT), $page['mandate']['foreignEquityShare'], 1e-12);
+        $this->assertSame('Ines Varga', $page['head']['name']);
+        $this->assertSame(55, $page['head']['age']);
+        $this->assertSame('cautious', $page['head']['stance']);
+        $this->assertFalse($page['head']['opening']);
+        $this->assertNull($this->builder()->build($macro)['head'], 'Without the politics there is no head to name.');
+    }
+
     public function testBandsAreTheFundsOwn(): void
     {
         $fund = new SovereignFundSubsystem(new MathUtility());

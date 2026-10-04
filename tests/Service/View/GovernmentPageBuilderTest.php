@@ -406,6 +406,7 @@ class GovernmentPageBuilderTest extends TestCase
             \App\Service\Politics\CouncilAppointments::advance($state, $math);
             \App\Service\Politics\MonetaryAuthority::advance($state, new MacroStateDTO(totalTime: $state->totalTime, policyRate: 0.04), 1.0 / 52.0, $math);
             \App\Service\Politics\FinancialRegulator::advance($state, $math);
+            \App\Service\Politics\SovereignReserveFund::advance($state, $math);
         }
         $politics = PoliticsStateDTO::fromState($state);
         $page = $this->builder()->build(new MacroStateDTO(totalTime: $state->totalTime, countercyclicalBufferRateEma: 0.005), $politics);
@@ -438,6 +439,16 @@ class GovernmentPageBuilderTest extends TestCase
         $this->assertEqualsWithDelta(0.005, $regulator['buffer'], 1e-12);
         $this->assertEqualsWithDelta(\App\Service\Politics\FinancialRegulator::requirement(\App\Service\Politics\CouncilAppointments::median($politics->councilRegulationStances)), $page['council']['lean']['banks'], 1e-12);
         $this->assertNull($this->builder()->build(new MacroStateDTO(), new PoliticsStateDTO())['regulator']);
+
+        $fundHead = $page['fundHead'];
+        $this->assertSame(\App\Data\AerieCouncil::OPENING_FUND_HEAD, $fundHead['name']);
+        $this->assertTrue($fundHead['opening']);
+        $this->assertSame('bold', $fundHead['stance'], 'The fund opens bolder than the median reserve fund.');
+        $this->assertEqualsWithDelta(\App\Service\Politics\SovereignReserveFund::equityShare(\App\Service\Politics\CouncilAppointments::median($politics->councilFundStances)), $page['council']['lean']['reserves'], 1e-12);
+        foreach ($page['council']['roster'] as $seat) {
+            $this->assertContains($seat['reserves'], ['cautious', 'balanced', 'bold']);
+        }
+        $this->assertNull($this->builder()->build(new MacroStateDTO(), new PoliticsStateDTO())['fundHead']);
     }
 
     /**
@@ -454,7 +465,7 @@ class GovernmentPageBuilderTest extends TestCase
             regulatorBirth: -45.0,
             regulatorTermStart: 7.0,
             regulatorStance: $regime,
-            regulatorPassedOver: [['name' => 'Other One', 'birth' => -50.0, 'stance' => 0.0, 'regulation' => -1.0]],
+            regulatorPassedOver: [['name' => 'Other One', 'birth' => -50.0, 'stance' => 0.0, 'regulation' => -1.0, 'fund' => 0.0]],
             bankCapitalRequirement: 0.1012,
             requirementPhaseFrom: 0.094,
             requirementPhaseStart: 7.0,

@@ -440,6 +440,14 @@ class NarrativeEngine
                     "New governor: The Council has named a new governor of the Monetary Authority.",
                 ]
             ),
+            ShockEvent::FUND_HEAD_APPOINTED => $this->getRandomPhrase(
+                isset($context['fund_head'], $context['fund_head_age'], $context['fund_head_stance'], $context['fund_mix_change']) ? [
+                    "New head for the reserves: The Council names {$context['fund_head']}, {$context['fund_head_age']}, {$context['fund_head_stance']}, to run the Sovereign Reserve Fund until {$context['fund_head_term_ends']}. The fund {$context['fund_mix_change']}." . ($context['fund_head_passed_over'] !== '' ? " Passed over: {$context['fund_head_passed_over']}." : ''),
+                    "The Council picks who runs the reserves: {$context['fund_head']}, {$context['fund_head_stance']}, takes the Sovereign Reserve Fund for a single term, and the fund {$context['fund_mix_change']}.",
+                ] : [
+                    "New head for the reserves: The Council has named a new head of the Sovereign Reserve Fund.",
+                ]
+            ),
             ShockEvent::REGULATOR_APPOINTED => $this->getRandomPhrase(
                 isset($context['regulator'], $context['regulator_age'], $context['regulator_stance'], $context['requirement_change']) ? [
                     "New bank regulator: The Council names {$context['regulator']}, {$context['regulator_age']}, {$context['regulator_stance']}, to head the Financial Regulator until {$context['regulator_term_ends']}. The new head {$context['requirement_change']}." . ($context['regulator_passed_over'] !== '' ? " Passed over: {$context['regulator_passed_over']}." : ''),

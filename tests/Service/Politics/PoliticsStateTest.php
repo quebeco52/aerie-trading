@@ -54,10 +54,14 @@ class PoliticsStateTest extends TestCase
         $state->councilStances = [1.0, -1.0];
         $state->councilRegulationStances = [-0.5, 0.75];
         $state->governorName = 'Ilse Marchand';
-        $state->governorPassedOver = [['name' => 'Corvin Ashby', 'birth' => -48.5, 'stance' => 0.0, 'regulation' => 0.25], ['name' => 'Odile Fenwright', 'birth' => -51.0, 'stance' => -1.0, 'regulation' => -1.0]];
+        $state->governorPassedOver = [['name' => 'Corvin Ashby', 'birth' => -48.5, 'stance' => 0.0, 'regulation' => 0.25, 'fund' => 0.5], ['name' => 'Odile Fenwright', 'birth' => -51.0, 'stance' => -1.0, 'regulation' => -1.0, 'fund' => -0.2]];
         $state->regulatorName = 'Leontine Ashby';
         $state->regulatorStance = -0.6;
-        $state->regulatorPassedOver = [['name' => 'Bram Ellery', 'birth' => 2.0 - 55.0, 'stance' => 1.0, 'regulation' => 0.4]];
+        $state->regulatorPassedOver = [['name' => 'Bram Ellery', 'birth' => 2.0 - 55.0, 'stance' => 1.0, 'regulation' => 0.4, 'fund' => 0.1]];
+        $state->councilFundStances = [0.3, -0.7];
+        $state->fundHeadName = 'Matthias Okonkwo-Hale';
+        $state->fundHeadStance = 0.5;
+        $state->fundHeadPassedOver = [['name' => 'Ines Varga', 'birth' => -50.0, 'stance' => 0.0, 'regulation' => 0.0, 'fund' => -0.4]];
         $state->bankCapitalRequirement = 0.1012;
         $state->requirementPhaseFrom = 0.094;
         $state->requirementPhaseStart = 7.0;
@@ -70,6 +74,7 @@ class PoliticsStateTest extends TestCase
         $legacy = $decoded;
         $legacy['governorPassedOver'] = [['name' => 'Corvin Ashby', 'birth' => -48.5, 'stance' => 0.0]];
         $this->assertSame(0.0, PoliticsState::fromArray($legacy)->governorPassedOver[0]['regulation'], 'A candidate saved before the banks question reads as neutral on it.');
+        $this->assertSame(0.0, PoliticsState::fromArray($legacy)->governorPassedOver[0]['fund'], 'And on the reserves.');
     }
 
     /** A payload that omits a field, or carries one it cannot read, leaves that field at its opening. */

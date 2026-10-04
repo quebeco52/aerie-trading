@@ -7,10 +7,12 @@ use App\DTO\MacroStateDTO;
 use App\DTO\PoliticsStateDTO;
 use App\Entity\Etf;
 use App\Service\Macro\MacroEngine;
+use App\Service\Macro\Subsystem\SovereignFundSubsystem;
 use App\Service\Market\PriceChangeFeed;
 use App\Service\Politics\CoalitionFormation;
 use App\Service\Politics\FinancialRegulator;
 use App\Service\Politics\MonetaryAuthority;
+use App\Service\Politics\SovereignReserveFund;
 use App\Service\View\GovernmentPageBuilder;
 
 /**
@@ -28,6 +30,8 @@ class SystemicEventReporter
     /** How each stance on money reads of one person. */
     private const STANCE_PHRASES = ['hawk' => 'a hawk', 'swing' => 'a swing vote', 'dove' => 'a dove'];
     /** How each stance reads counted, one and many. */
+    /** A head of the Sovereign Reserve Fund's stance on the reserves, as a headline puts it. */
+    private const FUND_PHRASES = ['cautious' => 'a cautious investor', 'balanced' => 'a balanced investor', 'bold' => 'a bold investor'];
     /** A head of the Financial Regulator's stance on the banks, as a headline puts it. */
     private const REGULATION_PHRASES = ['light' => 'a light-touch regulator', 'middle' => 'a moderate', 'strict' => 'a strict regulator'];
     private const STANCE_PLURALS = ['hawk' => ['hawk', 'hawks'], 'swing' => ['swing vote', 'swing votes'], 'dove' => ['dove', 'doves']];
@@ -70,7 +74,8 @@ class SystemicEventReporter
             'swf_size_gdp_pct' => number_format($macro->sovereignFundToGdp * 100.0, 0),
             'swf_months' => number_format($macro->sovereignFundRebalanceMonthsLeft, 0),
         ] + self::electionContext($politics) + self::fallContext($politics) + self::formationContext($politics) + self::budgetContext($politics)
-            + self::authorityContext($politics);
+            + self::authorityContext($politics)
+            + self::fundHeadContext($macro, $politics);
 
         $monthMove = $this->priceChangeFeed->changeForTicker((string) $benchmark->getTicker(), (float) $benchmark->getPrice());
 
@@ -276,6 +281,48 @@ class SystemicEventReporter
         }
 
         return $context + self::regulatorContext($politics);
+    }
+
+    /**
+     * The Sovereign Reserve Fund's head for their headline: who they are, their stance on the reserves, the policy equity
+     * share they set against the fund's present one, and what moving the board to its new weight comes to as a share of
+     * the float, over the fund's transition. Empty before the fund has a head.
+     *
+     * @return array<string, string>
+     */
+    private static function fundHeadContext(MacroStateDTO $macro, PoliticsStateDTO $politics): array
+    {
+        if ($politics->fundHeadName === '') {
+            return [];
+        }
+
+        $pct = static fn(float $share): string => number_format($share * 100.0, 0) . '%';
+        $target = SovereignReserveFund::equityShare($politics->fundHeadStance);
+        $current = $macro->sovereignFundPolicyEquityShare;
+        $context = [
+            'fund_head' => $politics->fundHeadName,
+            'fund_head_age' => (string) (int) floor($politics->totalTime - $politics->fundHeadBirth),
+            'fund_head_stance' => self::FUND_PHRASES[SovereignReserveFund::stanceName($target)],
+            'fund_head_term_ends' => GovernmentPageBuilder::simDate(SovereignReserveFund::headTermEnd($politics->totalTime)),
+            'fund_head_passed_over' => self::listNames(array_map(
+                static fn(array $candidate): string => "{$candidate['name']}, who would have held {$pct(SovereignReserveFund::equityShare($candidate['fund']))} in shares",
+                $politics->fundHeadPassedOver
+            )),
+            'fund_equity_target' => $pct($target),
+        ];
+        if ($current <= 0.0 || $macro->boardFloatCap <= 0.0) {
+            return $context + ['fund_mix_change' => "sets its share in equities at {$pct($target)}"];
+        }
+
+        $fund = $macro->sovereignFundToGdp * $macro->sovereignFundDollarsPerGdp * $macro->nominalGdpIndex;
+        $boardShare = abs(($macro->sovereignFundTargetWeight / $current) * ($target - $current) * $fund / $macro->boardFloatCap);
+        $months = (int) SovereignFundSubsystem::POLICY_TRANSITION_MONTHS;
+
+        return $context + ['fund_mix_change' => match (true) {
+            abs($target - $current) < 0.005 => "keeps its share in equities at {$pct($target)}",
+            $target > $current => "raises its share in equities to {$pct($target)} from {$pct($current)}, buying about " . number_format($boardShare * 100.0, 1) . "% of the board's free float over {$months} months",
+            default => "cuts its share in equities to {$pct($target)} from {$pct($current)}, selling about " . number_format($boardShare * 100.0, 1) . "% of the board's free float over {$months} months",
+        }];
     }
 
     /**

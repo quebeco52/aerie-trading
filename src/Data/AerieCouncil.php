@@ -8,8 +8,8 @@ namespace App\Data;
  * The Aerie Council: the District's executive, thirteen leaders on staggered twenty-year terms.
  *
  * A councillor does not run policy. Each holds a stance on how the District should lean on each question a department
- * answers, a hawk's or a dove's on money and a light or a strict hand on the banks, and the Council's work is its
- * appointments. A councillor whose term ends is replaced by the candidate on a
+ * answers, a hawk's or a dove's on money, a light or a strict hand on the banks, a cautious or a bold one with the
+ * reserves, and the Council's work is its appointments. A councillor whose term ends is replaced by the candidate on a
  * shortlist the sitting members elect, so the Council renews itself one seat at a time and no election touches it. The
  * seats are staggered so one falls vacant about every year and a half, as the Federal Reserve Board's seven
  * fourteen-year seats fall one every two years; the councillors sitting at Year 1 took their seats before the District's
@@ -17,8 +17,9 @@ namespace App\Data;
  * holds them, chosen from the shortlists, is kept in the politics state.
  *
  * The Council appoints the heads of the District's departments, which then act independently of it: the Monetary
- * Authority's governor, who picks the rate committee (App\Service\Politics\MonetaryAuthority), and the Financial
- * Regulator's head, who sets the banks' capital requirement (App\Service\Politics\FinancialRegulator). It holds a veto
+ * Authority's governor, who picks the rate committee (App\Service\Politics\MonetaryAuthority), the Financial
+ * Regulator's head, who sets the banks' capital requirement (App\Service\Politics\FinancialRegulator), and the
+ * Sovereign Reserve Fund's head, who sets its share in equities (App\Service\Politics\SovereignReserveFund). It holds a veto
  * over the Diet's budgets and laws that it almost never casts, and the Diet can remove a councillor with three
  * quarters of its seats, which it never has. No party sits on the Council.
  */
@@ -51,6 +52,8 @@ final class AerieCouncil
     public const OPENING_GOVERNOR = 'Ilse Marchand';
     /** The Financial Regulator's head sitting at Year 1, named before it. */
     public const OPENING_REGULATOR = 'Leontine Ashby';
+    /** The Sovereign Reserve Fund's head sitting at Year 1, named before it. */
+    public const OPENING_FUND_HEAD = 'Matthias Okonkwo-Hale';
 
     // --- Departments ---
     /**
@@ -60,7 +63,7 @@ final class AerieCouncil
      */
     public const DEPARTMENTS = [
         ['name' => 'Monetary Authority', 'mandate' => 'Sets the policy rate by its published rule. Its governor, named for one term, picks the rate committee. Independent of the Diet by charter.', 'href' => '/economy'],
-        ['name' => 'Sovereign Reserve Fund', 'mandate' => 'Invests the reserves and pays the budget its rule draw. Holds the second key: no draw on the reserves passes without it.', 'href' => '/reserve'],
+        ['name' => 'Sovereign Reserve Fund', 'mandate' => 'Invests the reserves and pays the budget its rule draw. Its head, named for one term, sets how much of the fund is in shares. Holds the second key: no draw on the reserves passes without it.', 'href' => '/reserve'],
         ['name' => 'Financial Regulator', 'mandate' => 'Sets the core capital banks must hold against their loans. Its head, named for one term, decides how much.', 'href' => null],
         ['name' => 'Treasury', 'mandate' => 'Executes the budget the Diet passes and manages the District\'s debt.', 'href' => null],
         ['name' => 'Trade & Migration Office', 'mandate' => 'Administers the tariff schedule and the migration quotas the Diet legislates.', 'href' => null],

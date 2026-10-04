@@ -9,14 +9,18 @@ use App\Service\Math\MathUtility;
 /**
  * The district's sovereign reserve fund: a rule-bound investor that sits beside the central bank, not in place of it.
  *
- * Three published rules and nothing else:
+ * Three published rules and the head's mandate:
  *  - It pays the budget up to half its expected long-term real return, fixed once a year (Singapore's Net
  *    Investment Returns framework, 2008). The rest stays invested, so a fund compounding at about twice potential
  *    growth keeps pace with the economy. "Long-term" is the COMPOUND rate: spending half the arithmetic mean of a
  *    volatile portfolio overspends by half its variance every year and erodes the fund it is meant to preserve.
  *  - It holds three sleeves at policy weights: a cap-weighted slice of the whole board, and foreign equities and
- *    foreign sovereign paper on GIC's 65/35 reference mix. Each drifts with its own market between rebalances; the
- *    paper is a constant-duration index on the foreign curve, so it carries, rolls down and reprices with the foreign rate.
+ *    foreign sovereign paper, opening on GIC's 65/35 reference mix. Each drifts with its own market between rebalances;
+ *    the paper is a constant-duration index on the foreign curve, so it carries, rolls down and reprices with the
+ *    foreign rate. The policy equity share is the head's to set (App\Service\Politics\SovereignReserveFund): a new
+ *    share keeps the board's part of the fund's equities as it opened, the way GPIF doubled its home and its foreign
+ *    equities together in 2014, puts the foreign sleeves on their new split at once and moves the board to its new weight
+ *    over a transition programme.
  *  - At a month end it checks two deviation limits the way GPIF does: the domestic equity weight against its band,
  *    and the whole fund's equity share against its band. A breach of either trades every sleeve back to its policy
  *    weight, the board over the following months (Norges Bank's rebalancing rule) and the foreign sleeves at once,
@@ -67,6 +71,14 @@ class SovereignFundSubsystem
     /** Most of the float the fund may own; holding the same share of every name's float, that keeps it under 10% of any company's voting shares (GPFG mandate). */
     public const MAX_OWNERSHIP_SHARE = 0.10;
 
+    // --- The Opening Mix ---
+    /** Policy equity share the fund opens at, measured on the fund harness (var/harness/FundHarnessTest.php, seeds 1-3): a 16.25% board weight (5.8% of the $14.5T opening float in a $5.2T fund) plus GIC's 65% on the rest. */
+    public const OPENING_POLICY_EQUITY_SHARE = 0.7069;
+
+    // --- A New Policy Mix (Norway's Ministry of Finance, 2017) ---
+    /** Months over which the board is traded to the weight a new policy mix sets: the published phase-in of the Norwegian fund's 62.5% to 70%, September 2017 to April 2019. Its 40% to 60% took 24 months, GPIF's 2014 move closed three quarters of its gap in eight. */
+    public const POLICY_TRANSITION_MONTHS = 20.0;
+
     // --- Rebalancing Execution (Norges Bank 2018) ---
     /** Month-end check; trading starts the month after the breach (NBIM rebalancing rule, 2018). */
     public const REBALANCE_CHECK_PERIOD_YEARS = 1.0 / 12.0;
@@ -116,6 +128,10 @@ class SovereignFundSubsystem
             return;
         }
 
+        if ($state->sovereignFundPolicyEquityShare <= 0.0) {
+            $state->sovereignFundPolicyEquityShare = $this->policyEquityShare($state->sovereignFundTargetWeight);
+        }
+
         $this->markToMarket($state, $dt);
         $this->chainReturnIndices($state, $dt);
         $this->receiveInflows($state);
@@ -126,6 +142,7 @@ class SovereignFundSubsystem
         }
         $this->payDraw($state, $dt);
 
+        $this->adoptMandate($state);
         if (MathUtility::crossedSimulatedBoundary($state->totalTime, $dt, self::REBALANCE_CHECK_PERIOD_YEARS)) {
             $this->reviewRebalance($state);
         }
@@ -161,6 +178,7 @@ class SovereignFundSubsystem
         $state->sovereignFundDollarsPerGdp = $dollarsPerGdp;
         $state->sovereignFundDomesticEquity = $domestic;
         $state->sovereignFundTargetWeight = $domestic / ($domestic + $foreign);
+        $state->sovereignFundPolicyEquityShare = $this->policyEquityShare($state->sovereignFundTargetWeight);
         $this->resetForeignSplit($state, $foreign);
         $state->foreignBondYield = $this->foreignZeroYield($state, self::FOREIGN_BOND_DURATION);
         $state->sovereignFundReturnIndex = self::RETURN_INDEX_BASE;
@@ -389,10 +407,49 @@ class SovereignFundSubsystem
         return $arithmetic - (0.5 * $variance);
     }
 
-    /** The compound return of the fund at its policy mix for a given domestic weight: the foreign sleeves split 65/35. */
+    /** The compound return of the fund at its policy mix for a given domestic weight: the foreign sleeves on their policy split. */
     public function policyCompoundRealReturn(MacroState $state, float $domesticWeight): float
     {
-        return $this->expectedCompoundRealReturn($state, $domesticWeight, self::FOREIGN_EQUITY_SHARE * (1.0 - $domesticWeight));
+        return $this->expectedCompoundRealReturn($state, $domesticWeight, $this->foreignEquityShare($state) * (1.0 - $domesticWeight));
+    }
+
+    /**
+     * A new mandate from the fund's head: the board keeps its share of the policy equities, so its weight moves with the
+     * equity share; the foreign sleeves go onto the split that makes up the rest at once; and the board is traded to its
+     * new weight over the transition, re-measured at each month end as any programme is. The ownership ceiling caps what
+     * the fund may buy.
+     */
+    private function adoptMandate(MacroState $state): void
+    {
+        $mandate = $state->sovereignFundMandateEquityShare;
+        $current = $state->sovereignFundPolicyEquityShare;
+        $fund = $this->fundValue($state);
+        if ($mandate <= 0.0 || $current <= 0.0 || $fund <= 0.0 || abs($mandate - $current) < 1e-9) {
+            return;
+        }
+
+        $homeShare = $state->sovereignFundTargetWeight / $current;
+        $state->sovereignFundPolicyEquityShare = $mandate;
+        $state->sovereignFundTargetWeight = $homeShare * $mandate;
+        $this->resetForeignSplit($state, $this->foreignHomeValue($state));
+
+        $gap = min(($state->sovereignFundTargetWeight * $fund) - $state->sovereignFundDomesticEquity, $this->purchaseRoom($state));
+        $this->scheduleRebalance($state, $gap, self::POLICY_TRANSITION_MONTHS);
+    }
+
+    /**
+     * The foreign sleeves' policy split: the equity share of the policy mix outside the board, over the part of the fund
+     * outside it. Before the fund has a mix, GIC's reference split.
+     */
+    public function foreignEquityShare(MacroState $state): float
+    {
+        $target = $state->sovereignFundTargetWeight;
+        $equity = $state->sovereignFundPolicyEquityShare;
+        if ($equity <= 0.0 || $target >= 1.0) {
+            return self::FOREIGN_EQUITY_SHARE;
+        }
+
+        return max(0.0, min(1.0, ($equity - $target) / (1.0 - $target)));
     }
 
     /**
@@ -437,7 +494,7 @@ class SovereignFundSubsystem
         $state->sovereignFundRebalanceRate = 0.0;
 
         $equityShare = ($state->sovereignFundDomesticEquity + $this->foreignEquityHomeValue($state)) / $fund;
-        $equityTarget = $this->policyEquityShare($state->sovereignFundTargetWeight);
+        $equityTarget = $state->sovereignFundPolicyEquityShare;
 
         $domesticBreach = abs($domesticWeight - $state->sovereignFundTargetWeight) > $this->rebalanceBand($state->sovereignFundTargetWeight);
         $equityBreach = abs($equityShare - $equityTarget) > $this->equityBand($equityTarget);
@@ -507,7 +564,7 @@ class SovereignFundSubsystem
         return $this->breachingBand($targetShare, self::GPIF_GLOBAL_EQUITY_TARGET, self::GPIF_GLOBAL_EQUITY_DEVIATION_LIMIT);
     }
 
-    /** The fund's policy equity share: the board plus the equity share of the foreign sleeves. */
+    /** The policy equity share the fund opens at: the board plus the foreign sleeves on GIC's reference split. */
     public function policyEquityShare(float $domesticTargetWeight): float
     {
         return $domesticTargetWeight + (self::FOREIGN_EQUITY_SHARE * (1.0 - $domesticTargetWeight));
@@ -536,12 +593,13 @@ class SovereignFundSubsystem
         return $room > self::ROOM_TOLERANCE * $state->boardFloatCap ? $room : 0.0;
     }
 
-    /** Puts a home-currency amount of foreign assets back on the 65/35 policy split. */
+    /** Puts a home-currency amount of foreign assets back on the policy split. */
     private function resetForeignSplit(MacroState $state, float $foreignHomeValue): void
     {
         $units = max(0.0, $foreignHomeValue) * $state->exchangeRateIndex;
-        $state->sovereignFundForeignEquity = self::FOREIGN_EQUITY_SHARE * $units;
-        $state->sovereignFundForeignBonds = (1.0 - self::FOREIGN_EQUITY_SHARE) * $units;
+        $split = $this->foreignEquityShare($state);
+        $state->sovereignFundForeignEquity = $split * $units;
+        $state->sovereignFundForeignBonds = (1.0 - $split) * $units;
     }
 
     /** Takes a home-currency amount out of the foreign sleeves in proportion to their size (a negative amount puts it back). */

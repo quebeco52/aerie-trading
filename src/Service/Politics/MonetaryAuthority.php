@@ -248,7 +248,7 @@ final class MonetaryAuthority
         return self::majority($state->committeeBalance);
     }
 
-    /** @param array{name: string, birth: float, stance: float, regulation: float} $person */
+    /** @param array{name: string, birth: float, stance: float, regulation: float, fund: float} $person */
     private static function seatGovernor(PoliticsState $state, array $person, float $termStart): void
     {
         $state->governorName = $person['name'];
@@ -257,7 +257,7 @@ final class MonetaryAuthority
         $state->governorStance = $person['stance'];
     }
 
-    /** @param array{name: string, birth: float, stance: float, regulation: float} $person */
+    /** @param array{name: string, birth: float, stance: float, regulation: float, fund: float} $person */
     private static function seatMember(PoliticsState $state, int $member, array $person, float $since): void
     {
         $state->memberNames[$member] = $person['name'];

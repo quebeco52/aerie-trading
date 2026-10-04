@@ -395,6 +395,8 @@ class MacroState
     public float $sovereignFundForeignBonds;
     // The mandate, fixed at inception: the domestic policy weight and the currency value of one unit of the GDP index.
     public float $sovereignFundTargetWeight;
+    public float $sovereignFundPolicyEquityShare;
+    public float $sovereignFundMandateEquityShare;
     public float $sovereignFundDollarsPerGdp;
     // Flows: this budget year's draw (currency per year), the rebalance still to trade, its pace, the months left
     // on it, its size against the board's float, this tick's trade, and when the last programme started.

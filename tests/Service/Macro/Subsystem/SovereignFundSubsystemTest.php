@@ -674,6 +674,65 @@ class SovereignFundSubsystemTest extends TestCase
     /**
      * The engine's opening economy with a board reported, advanced by one tick so the fund incepts.
      */
+    /**
+     * A head's new equity share: the board keeps its share of the policy equities, so its weight moves with the share;
+     * the foreign sleeves go onto the split that makes up the rest at once; and the board is traded to its new weight
+     * over the transition, landing there when it ends.
+     */
+    public function testANewMandateMovesTheMixAndTradesTheBoardToIt(): void
+    {
+        $tpy = 360;
+        $dt = 1.0 / $tpy;
+        $fund = new SovereignFundSubsystem($this->stillMarket());
+        $state = $this->openFund($fund, $tpy);
+        $openingWeight = $state->sovereignFundTargetWeight;
+        $openingEquity = $state->sovereignFundPolicyEquityShare;
+        $this->assertEqualsWithDelta($fund->policyEquityShare($openingWeight), $openingEquity, 1e-12, 'It opens at GIC\'s split on the rest.');
+        $this->assertEqualsWithDelta(SovereignFundSubsystem::FOREIGN_EQUITY_SHARE, $fund->foreignEquityShare($state), 1e-12);
+
+        $state->sovereignFundMandateEquityShare = $openingEquity + 0.10;
+        $this->step($fund, $state, $dt);
+
+        $newWeight = $openingWeight / $openingEquity * ($openingEquity + 0.10);
+        $this->assertEqualsWithDelta($openingEquity + 0.10, $state->sovereignFundPolicyEquityShare, 1e-12);
+        $this->assertEqualsWithDelta($newWeight, $state->sovereignFundTargetWeight, 1e-12, 'The board keeps its share of the equities.');
+        $split = ($openingEquity + 0.10 - $newWeight) / (1.0 - $newWeight);
+        $this->assertEqualsWithDelta($split, $fund->foreignEquityShare($state), 1e-12);
+        $this->assertEqualsWithDelta($split, $state->sovereignFundForeignEquity / ($state->sovereignFundForeignEquity + $state->sovereignFundForeignBonds), 1e-9, 'The foreign sleeves move at once.');
+        $this->assertEqualsWithDelta(SovereignFundSubsystem::POLICY_TRANSITION_MONTHS, $state->sovereignFundRebalanceMonthsLeft, 1e-12);
+        $this->assertGreaterThan(0.0, $state->sovereignFundRebalanceBacklog, 'A bolder mix buys the board.');
+        $this->assertSame(-1.0, $state->lastSovereignRebalanceAt, 'A new mix is not a band breach; the head\'s appointment is the news.');
+
+        $end = $state->totalTime + (SovereignFundSubsystem::POLICY_TRANSITION_MONTHS + 1.0) / 12.0;
+        while ($state->totalTime < $end) {
+            $this->step($fund, $state, $dt);
+        }
+        $this->assertEqualsWithDelta($newWeight, $state->sovereignFundDomesticWeight, 0.002, 'The board lands on its new weight.');
+        $this->assertEqualsWithDelta($openingEquity + 0.10, $state->sovereignFundEquityShare, 0.002);
+
+        $state->sovereignFundMandateEquityShare = $openingEquity - 0.10;
+        $this->step($fund, $state, $dt);
+        $this->assertLessThan(0.0, $state->sovereignFundRebalanceBacklog, 'A more cautious mix sells it.');
+    }
+
+    /** Without a mandate the fund keeps the mix it opened with, and a fund saved before it published one reads it back. */
+    public function testWithoutAMandateTheFundKeepsItsOpeningMix(): void
+    {
+        $tpy = 360;
+        $dt = 1.0 / $tpy;
+        $fund = new SovereignFundSubsystem($this->stillMarket());
+        $state = $this->openFund($fund, $tpy);
+        $opening = $state->sovereignFundPolicyEquityShare;
+        for ($i = 0; $i < $tpy; ++$i) {
+            $this->step($fund, $state, $dt);
+        }
+        $this->assertSame($opening, $state->sovereignFundPolicyEquityShare);
+
+        $state->sovereignFundPolicyEquityShare = 0.0;
+        $this->step($fund, $state, $dt);
+        $this->assertEqualsWithDelta($fund->policyEquityShare($state->sovereignFundTargetWeight), $state->sovereignFundPolicyEquityShare, 1e-12);
+    }
+
     private function openFund(SovereignFundSubsystem $fund, int $tpy, float $foreignPolicyRate = 0.0): MacroState
     {
         $dt = 1.0 / $tpy;

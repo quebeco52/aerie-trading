@@ -6,12 +6,14 @@ namespace App\Service\View;
 
 use App\Data\StrategicHoldings;
 use App\DTO\MacroStateDTO;
+use App\DTO\PoliticsStateDTO;
 use App\Entity\Stock;
 use App\Repository\StockRepository;
 use App\Service\Macro\MacroEngine;
 use App\Service\Macro\Subsystem\SovereignFundSubsystem;
 use App\Service\Market\IndexCommittee;
 use App\Service\Math\FinancialConstants;
+use App\Service\Politics\SovereignReserveFund;
 
 /**
  * Builds the Sovereign Reserve page: what the fund is worth, where it sits against its policy weights and bands, what
@@ -39,6 +41,7 @@ class SovereignReservePageBuilder
     /**
      * @return array{
      *     incepted: bool,
+     *     head: array{name: string, age: int, sinceLabel: string, termEndsLabel: string, stance: string, equityShare: float, opening: bool}|null,
      *     summary: array{value: float, toGdp: float, annualDraw: float, drawToGdp: float, stabilisationToGdp: float, stampDutyToGdp: float, stampDutyYearToDate: float, ownership: float, grossDebtToGdp: float, netDebtToGdp: float},
      *     returns: array{index: float, realIndex: float, assumedReal: float, bondYield: float},
      *     programme: array{active: bool, buying: bool, share: float, monthsLeft: float, monthsSinceLast: float|null},
@@ -49,20 +52,29 @@ class SovereignReservePageBuilder
      *     mandate: array<string, float>
      * }
      */
-    public function build(MacroStateDTO $macro): array
+    public function build(MacroStateDTO $macro, ?PoliticsStateDTO $politics = null): array
     {
         // The currency bridge is set at inception and never otherwise (SovereignFundSubsystem::isIncepted).
         $incepted = $macro->sovereignFundDollarsPerGdp > 0.0;
         $value = $macro->sovereignFundToGdp * $macro->sovereignFundDollarsPerGdp * $macro->nominalGdpIndex;
 
         $target = $macro->sovereignFundTargetWeight;
-        $equityPolicy = $incepted ? $this->fund->policyEquityShare($target) : 0.0;
+        $equityPolicy = !$incepted ? 0.0 : ($macro->sovereignFundPolicyEquityShare > 0.0 ? $macro->sovereignFundPolicyEquityShare : $this->fund->policyEquityShare($target));
         $weight = $macro->sovereignFundDomesticWeight;
         $equityShare = $macro->sovereignFundEquityShare;
         $board = $incepted ? $this->stocks->findAll() : [];
 
         return [
             'incepted' => $incepted,
+            'head' => $politics === null || $politics->fundHeadName === '' ? null : [
+                'name' => $politics->fundHeadName,
+                'age' => (int) floor($politics->totalTime - $politics->fundHeadBirth),
+                'sinceLabel' => $politics->fundHeadTermStart < 0.0 ? 'Before Year 1' : GovernmentPageBuilder::simDate($politics->fundHeadTermStart),
+                'termEndsLabel' => GovernmentPageBuilder::simDate(SovereignReserveFund::headTermEnd($politics->totalTime)),
+                'stance' => SovereignReserveFund::stanceName(SovereignReserveFund::equityShare($politics->fundHeadStance)),
+                'equityShare' => SovereignReserveFund::equityShare($politics->fundHeadStance),
+                'opening' => $politics->fundHeadTermStart < 0.0,
+            ],
             'summary' => [
                 'value' => $value,
                 'toGdp' => $macro->sovereignFundToGdp,
@@ -118,7 +130,8 @@ class SovereignReservePageBuilder
             'strategic' => $this->strategicHoldings($board, $macro->sovereignFundOwnershipShare),
             'mandate' => [
                 'spendingShare' => SovereignFundSubsystem::NIR_SPENDING_SHARE,
-                'foreignEquityShare' => SovereignFundSubsystem::FOREIGN_EQUITY_SHARE,
+                'foreignEquityShare' => $incepted && $target < 1.0 ? ($equityPolicy - $target) / (1.0 - $target) : SovereignFundSubsystem::FOREIGN_EQUITY_SHARE,
+                'transitionMonths' => SovereignFundSubsystem::POLICY_TRANSITION_MONTHS,
                 'foreignBondDuration' => SovereignFundSubsystem::FOREIGN_BOND_DURATION,
                 'returnIndexBase' => SovereignFundSubsystem::RETURN_INDEX_BASE,
                 'openingSize' => SovereignFundSubsystem::OPENING_FUND_TO_GDP,

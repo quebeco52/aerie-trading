@@ -22,6 +22,7 @@ use App\Service\Politics\CouncilAppointments;
 use App\Service\Politics\FinancialRegulator;
 use App\Service\Politics\MonetaryAuthority;
 use App\Service\Politics\PoliticsEngine;
+use App\Service\Politics\SovereignReserveFund;
 use App\Twig\Extension\NumberFormatExtension;
 
 /**
@@ -223,6 +224,9 @@ class GovernmentPageBuilder
                     'banks' => isset($politics->councilRegulationStances[$seat['seat'] - 1])
                         ? FinancialRegulator::stanceName(FinancialRegulator::requirement($politics->councilRegulationStances[$seat['seat'] - 1]))
                         : null,
+                    'reserves' => isset($politics->councilFundStances[$seat['seat'] - 1])
+                        ? SovereignReserveFund::stanceName(SovereignReserveFund::equityShare($politics->councilFundStances[$seat['seat'] - 1]))
+                        : null,
                 ] : []), AerieCouncil::roster($macro->totalTime)),
                 'nextVacancy' => (static function (array $seat) use ($politics): array {
                     return $seat + ['name' => self::councillorName($politics, $seat), 'termEndsLabel' => self::simDate($seat['termEnds'])];
@@ -230,11 +234,13 @@ class GovernmentPageBuilder
                 'lean' => $politics->councilStances === [] ? null : self::stanceCounts($politics->councilStances) + [
                     'median' => MonetaryAuthority::stanceName(CouncilAppointments::median($politics->councilStances)),
                     'banks' => $politics->councilRegulationStances === [] ? null : FinancialRegulator::requirement(CouncilAppointments::median($politics->councilRegulationStances)),
+                    'reserves' => $politics->councilFundStances === [] ? null : SovereignReserveFund::equityShare(CouncilAppointments::median($politics->councilFundStances)),
                 ],
                 'departments' => AerieCouncil::DEPARTMENTS,
             ],
             'authority' => $this->authority($politics),
             'regulator' => $this->regulator($politics, $macro),
+            'fundHead' => $this->fundHead($politics, $macro),
             'history' => array_map(fn(DietElection $election): array => $this->historyRow($election, $macro->totalTime), array_reverse($history)),
         ];
     }
@@ -978,6 +984,45 @@ class GovernmentPageBuilder
                 'members' => MonetaryAuthority::COMMITTEE_MEMBERS + 1,
                 'meetingsPerYear' => MonetaryAuthority::MEETINGS_PER_YEAR,
                 'shortlist' => CouncilAppointments::SHORTLIST,
+            ],
+        ];
+    }
+
+    /**
+     * The Sovereign Reserve Fund's head: who they are, their stance on the reserves and the equity share they set, whom
+     * the Council passed over for them with the share each would have set, and the fund's mix in force. Null before the
+     * fund has a head.
+     *
+     * @return array<string, mixed>|null
+     */
+    private function fundHead(PoliticsStateDTO $politics, MacroStateDTO $macro): ?array
+    {
+        if ($politics->fundHeadName === '') {
+            return null;
+        }
+
+        $time = $politics->totalTime;
+        $share = SovereignReserveFund::equityShare($politics->fundHeadStance);
+
+        return [
+            'name' => $politics->fundHeadName,
+            'age' => (int) floor($time - $politics->fundHeadBirth),
+            'sinceLabel' => $politics->fundHeadTermStart < 0.0 ? 'Before Year 1' : self::simDate($politics->fundHeadTermStart),
+            'termEndsLabel' => self::simDate(SovereignReserveFund::headTermEnd($time)),
+            'opening' => $politics->fundHeadTermStart < 0.0,
+            'stance' => SovereignReserveFund::stanceName($share),
+            'equityShare' => $share,
+            'inForce' => $macro->sovereignFundPolicyEquityShare > 0.0 ? $macro->sovereignFundPolicyEquityShare : null,
+            'passedOver' => array_map(static fn(array $candidate): array => [
+                'name' => $candidate['name'],
+                'age' => (int) floor($politics->fundHeadTermStart - $candidate['birth']),
+                'equityShare' => SovereignReserveFund::equityShare($candidate['fund']),
+            ], $politics->fundHeadPassedOver),
+            'rules' => [
+                'termYears' => SovereignReserveFund::HEAD_TERM_YEARS,
+                'shortlist' => CouncilAppointments::SHORTLIST,
+                'mostCautious' => SovereignReserveFund::mostCautious(),
+                'boldest' => SovereignReserveFund::boldest(),
             ],
         ];
     }

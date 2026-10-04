@@ -52,6 +52,7 @@ class MacroFieldRegistryTest extends TestCase
         'electionPulse' => 'Input the government hands the economy each tick; policy_uncertainty_index records its effect.',
         'tariffTradeLag' => 'Net-export response building toward the tariff, which import_tariff_rate records.',
         'immigrationPopulationShift' => 'Integral of labor_force_growth_rate over the structural rate, which is recorded.',
+        'sovereignFundMandateEquityShare' => 'Input the fund\'s head hands the fund; sovereign_fund_policy_equity_share records the mix the fund adopts.',
         'bankCapitalBuilt' => 'Lagged build-up toward the requirement, which bank_capital_requirement records.',
         'electricityCarbonPriceLevel' => 'Lagged pass-through of carbon_price into the electricity bill, which is recorded.',
         'lastQeLaunchAt' => 'Edge marker for the launch headline; qe_active and qe_intensity record the programme.',

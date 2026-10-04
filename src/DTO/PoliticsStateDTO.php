@@ -9,6 +9,7 @@ use App\Service\Macro\MacroEngine;
 use App\Service\Math\FinancialConstants;
 use App\Service\Politics\PoliticsEngine;
 use App\Service\Politics\PoliticsState;
+use App\Service\Politics\SovereignReserveFund;
 
 /**
  * Immutable snapshot of the District's politics: the Diet, the government, the talks, and the levers in force.
@@ -91,14 +92,16 @@ readonly class PoliticsStateDTO
         public array $councilStances = [],
         /** @var array<int, float> Each councillor's stance on the banks: -1 the lightest regime on record, 1 the strictest (App\Service\Politics\FinancialRegulator). */
         public array $councilRegulationStances = [],
-        /** @var list<array{name: string, birth: float, stance: float, regulation: float}> The candidates the Council passed over when it last filled a seat of its own. */
+        /** @var array<int, float> Each councillor's stance on the reserves: -1 the most cautious policy mix on record, 1 the boldest (App\Service\Politics\SovereignReserveFund). */
+        public array $councilFundStances = [],
+        /** @var list<array{name: string, birth: float, stance: float, regulation: float, fund: float}> The candidates the Council passed over when it last filled a seat of its own. */
         public array $councillorPassedOver = [],
         /** The governor in office: name, birth date, when their term began, and stance. */
         public string $governorName = '',
         public float $governorBirth = 0.0,
         public float $governorTermStart = 0.0,
         public float $governorStance = 0.0,
-        /** @var list<array{name: string, birth: float, stance: float, regulation: float}> The candidates the Council passed over when it named the governor. */
+        /** @var list<array{name: string, birth: float, stance: float, regulation: float, fund: float}> The candidates the Council passed over when it named the governor. */
         public array $governorPassedOver = [],
         /** @var list<string> The rate committee's members beside the governor, by seat: names, birth dates, when each took their seat, and stances. */
         public array $memberNames = [],
@@ -126,13 +129,21 @@ readonly class PoliticsStateDTO
         public float $regulatorBirth = 0.0,
         public float $regulatorTermStart = 0.0,
         public float $regulatorStance = 0.0,
-        /** @var list<array{name: string, birth: float, stance: float, regulation: float}> The candidates the Council passed over when it named the head. */
+        /** @var list<array{name: string, birth: float, stance: float, regulation: float, fund: float}> The candidates the Council passed over when it named the head. */
         public array $regulatorPassedOver = [],
         /** The CET1 requirement on the District's banks in force, as a share of risk-weighted assets, and where the head's last rise began phasing in from, and when. */
         public float $bankCapitalRequirement = FinancialConstants::OPENING_BANK_CAPITAL_REQUIREMENT,
         public float $requirementPhaseFrom = FinancialConstants::OPENING_BANK_CAPITAL_REQUIREMENT,
         public float $requirementPhaseStart = -1.0,
         public float $lastRegulatorAppointedAt = -1.0,
+        /** The Sovereign Reserve Fund's head in office: name, birth date, when their term began, and stance on the reserves. */
+        public string $fundHeadName = '',
+        public float $fundHeadBirth = 0.0,
+        public float $fundHeadTermStart = 0.0,
+        public float $fundHeadStance = 0.0,
+        /** @var list<array{name: string, birth: float, stance: float, regulation: float, fund: float}> The candidates the Council passed over when it named the head. */
+        public array $fundHeadPassedOver = [],
+        public float $lastFundHeadAppointedAt = -1.0,
     ) {}
 
     /** Snapshots the engine's working state. */
@@ -174,6 +185,7 @@ readonly class PoliticsStateDTO
             electionPulse: PoliticsEngine::electionPulse($this->totalTime, $this->lastElectionAt, $this->coalitionTakesOfficeAt),
             authorityMajority: $this->authoritySalt < 0.0 ? null : $this->committeeMajority,
             bankCapitalRequirement: $this->regulatorName === '' ? null : $this->bankCapitalRequirement,
+            reserveFundEquityShare: $this->fundHeadName === '' || $this->fundHeadTermStart < 0.0 ? null : SovereignReserveFund::equityShare($this->fundHeadStance),
         );
     }
 }

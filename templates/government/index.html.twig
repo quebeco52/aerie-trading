@@ -293,7 +293,7 @@
 			<p class="text-2xs text-on-surface-variant mt-0.5">
 				{{ rules.councilSeats }} seats on staggered {{ rules.councilTermYears|number_format(0) }}-year terms. When a term ends, the sitting members elect the successor from a shortlist.
 				Each councillor holds a stance on money: a hawk would rather fight inflation, a dove would rather spare jobs, a swing vote sides with either as the case takes them.
-				Each also holds one on the banks, from light-touch to strict: how much of their own capital a bank should have at stake. The Council's leans decide whom it appoints.
+				Each also holds one on the banks, from light-touch to strict: how much of their own capital a bank should have at stake; and one on the reserves, from cautious to bold: how much of the District's savings belongs in shares. The Council's leans decide whom it appoints.
 			</p>
 			{% if council.lean %}
 				<p class="text-xs text-on-surface mt-3">
@@ -303,6 +303,9 @@
 					<span class="font-mono tabular-nums">{{ council.lean.dove }}</span> {{ council.lean.dove == 1 ? 'dove' : 'doves' }}.
 					{% if council.lean.banks is not null %}
 						On the banks its middle councillor would ask for <span class="font-mono tabular-nums">{{ (council.lean.banks * 100)|number_format(1) }}%</span> core capital.
+					{% endif %}
+					{% if council.lean.reserves is not null %}
+						On the reserves, <span class="font-mono tabular-nums">{{ (council.lean.reserves * 100)|number_format(0) }}%</span> in shares.
 					{% endif %}
 				</p>
 			{% endif %}
@@ -319,6 +322,7 @@
 								<th scope="col" class="text-left font-semibold pb-2 pl-4 md:pl-0">Term ends</th>
 								<th scope="col" class="text-left font-semibold pb-2 pl-4">Money</th>
 								<th scope="col" class="text-left font-semibold pb-2 pl-4">Banks</th>
+								<th scope="col" class="text-left font-semibold pb-2 pl-4 hidden md:table-cell">Reserves</th>
 							</tr>
 						</thead>
 						<tbody class="divide-y divide-outline-variant/10">
@@ -331,6 +335,7 @@
 									<td class="py-1.5 pl-4 md:pl-0 text-on-surface-variant font-mono tabular-nums whitespace-nowrap {{ seat.seat == council.nextVacancy.seat ? 'text-primary font-semibold' : '' }}">{{ seat.termEndsLabel }}</td>
 									<td class="py-1.5 pl-4 text-on-surface whitespace-nowrap">{{ _self.stance(seat.stance ?? null) }}</td>
 									<td class="py-1.5 pl-4 text-on-surface whitespace-nowrap">{{ _self.banks(seat.banks ?? null) }}</td>
+									<td class="py-1.5 pl-4 text-on-surface whitespace-nowrap hidden md:table-cell">{{ _self.reserves(seat.reserves ?? null) }}</td>
 								</tr>
 							{% endfor %}
 						</tbody>
@@ -473,6 +478,35 @@
 						{% endif %}
 						<p class="text-2xs text-on-surface-variant mt-0.5">Countercyclical buffer on top: <span class="font-mono tabular-nums">{{ (regulator.buffer * 100)|number_format(2) }}%</span></p>
 					</div>
+				</div>
+			</section>
+		{% endif %}
+
+		{% if fundHead %}
+			<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20" aria-labelledby="fund-head-heading">
+				<h2 id="fund-head-heading" class="text-sm font-semibold text-on-surface"><a href="/reserve" class="hover:underline">The Sovereign Reserve Fund</a></h2>
+				<p class="text-2xs text-on-surface-variant mt-0.5">
+					The Council names the head for a single {{ fundHead.rules.termYears|number_format(0) }}-year term from a shortlist of {{ fundHead.rules.shortlist }}, choosing the candidate nearest its own view of the reserves.
+					The head sets how much of the fund is held in shares, anywhere from {{ (fundHead.rules.mostCautious * 100)|number_format(0) }}% to {{ (fundHead.rules.boldest * 100)|number_format(0) }}%, the range the world's large reserve funds hold; the District's share of those equities stays as the fund opened.
+				</p>
+				<div class="grid grid-cols-1 sm:grid-cols-2 gap-5 mt-4">
+					<div>
+						<p class="text-2xs text-on-surface-variant">Head</p>
+						<p class="text-sm font-semibold text-on-surface mt-0.5">{{ fundHead.name }}</p>
+						<p class="text-2xs text-on-surface-variant mt-0.5">Age {{ fundHead.age }} · seated {{ fundHead.sinceLabel }} · term ends <span class="font-mono tabular-nums">{{ fundHead.termEndsLabel }}</span></p>
+						<p class="text-xs text-on-surface mt-1">
+							{{- {cautious: 'A cautious investor', balanced: 'A balanced investor', bold: 'A bold investor'}[fundHead.stance] }}
+							{{- fundHead.opening ? ', keeping the mix the fund opened with' : ' who holds ' ~ (fundHead.equityShare * 100)|number_format(0) ~ '% in shares' }}
+							{%- if fundHead.passedOver is not empty %}, chosen over {% for candidate in fundHead.passedOver %}{{ candidate.name }} <span class="text-on-surface-variant">(<span class="font-mono tabular-nums">{{ (candidate.equityShare * 100)|number_format(0) }}%</span>, {{ candidate.age }})</span>{{ loop.last ? '' : (loop.revindex == 2 ? ' and ' : ', ') }}{% endfor %}{% endif %}.
+						</p>
+					</div>
+					{% if fundHead.inForce is not null %}
+						<div>
+							<p class="text-2xs text-on-surface-variant">Policy mix</p>
+							<p class="text-sm font-semibold text-on-surface mt-0.5"><span class="font-mono tabular-nums">{{ (fundHead.inForce * 100)|number_format(1) }}%</span> in equities</p>
+							<p class="text-2xs text-on-surface-variant mt-0.5"><a href="/reserve" class="text-primary hover:underline">Holdings, weights and bands</a></p>
+						</div>
+					{% endif %}
 				</div>
 			</section>
 		{% endif %}
@@ -666,5 +700,6 @@
 {% endmacro %}
 
 {# A person's stance on money, in words: hawk, swing vote or dove. #}
+{% macro reserves(stance) %}{{ {cautious: 'Cautious', balanced: 'Balanced', bold: 'Bold'}[stance] ?? '' }}{% endmacro %}
 {% macro banks(stance) %}{{ {light: 'Light-touch', middle: 'Moderate', strict: 'Strict'}[stance] ?? '' }}{% endmacro %}
 {% macro stance(stance) %}{{ {hawk: 'Hawk', swing: 'Swing', dove: 'Dove'}[stance] ?? '' }}{% endmacro %}
