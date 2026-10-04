@@ -53,7 +53,8 @@ class MacroFieldRegistryTest extends TestCase
         'tariffTradeLag' => 'Net-export response building toward the tariff, which import_tariff_rate records.',
         'immigrationPopulationShift' => 'Integral of labor_force_growth_rate over the structural rate, which is recorded.',
         'sovereignFundMandateEquityShare' => 'Input the fund\'s head hands the fund; sovereign_fund_policy_equity_share records the mix the fund adopts.',
-        'bankCapitalBuilt' => 'Lagged build-up toward the requirement, which bank_capital_requirement records.',
+        'bankCapitalBuilt' => 'Lagged build-up toward the requirement and buffer, which bank_capital_requirement and countercyclical_buffer_rate record.',
+        'bankCapitalRequiredLast' => 'Last tick\'s requirement plus buffer, kept only to see a rise; both parts are recorded.',
         'electricityCarbonPriceLevel' => 'Lagged pass-through of carbon_price into the electricity bill, which is recorded.',
         'lastQeLaunchAt' => 'Edge marker for the launch headline; qe_active and qe_intensity record the programme.',
 

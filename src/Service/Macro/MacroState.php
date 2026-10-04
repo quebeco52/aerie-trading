@@ -381,9 +381,11 @@ class MacroState
     // The Monetary Authority's rate committee: its supermajority, and whether politics hands one over at all.
     public float $authorityMajority;
     public float $authorityCommitteeSeated;
-    // The CET1 requirement the Financial Regulator has in force on the District's banks.
+    // The CET1 requirement the Financial Regulator has in force on the District's banks, the capital built toward it and
+    // the buffer, and the two together as the last tick required them.
     public float $bankCapitalRequirement;
     public float $bankCapitalBuilt;
+    public float $bankCapitalRequiredLast;
     // How far the carbon price has lifted the household electricity bill so far (log), at the energy pass-through lag.
     public float $electricityCarbonPriceLevel;
 
@@ -565,6 +567,12 @@ class MacroState
                 MacroAggregateSubsystem::creditBalanceGap($state->creditToGdpGap, $state->creditToGdpTrend),
                 MacroAggregateSubsystem::marketBalanceGap($state->equityWealthRatio, $state->financeMarketTrend)
             );
+        }
+        // The capital built counted the requirement alone in a payload predating the last tick's requirement; the buffer
+        // in force was held all the same, so the upgrade finds no shortfall and no rise the banks have not already met.
+        if (!isset($carried['bankCapitalRequiredLast'])) {
+            $state->bankCapitalBuilt += $state->countercyclicalBufferRate;
+            $state->bankCapitalRequiredLast = $state->bankCapitalRequirement + $state->countercyclicalBufferRate;
         }
         // The inventory cycle's reference opens where domestic demand's smoothed part of the gap stands, so the upgrade
         // sets off no sales surprise.

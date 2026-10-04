@@ -202,6 +202,23 @@ class MacroStateHydrationTest extends TestCase
         $this->assertSame(MacroStateDTO::fromMacroState($state)->toArray(), MacroStateDTO::fromArray($payload)->toArray(), 'The snapshot reader opens them the same way.');
     }
 
+    /**
+     * A payload whose capital built counted the requirement alone had the buffer in force held all the same: the upgrade
+     * keeps the shortfall the banks had yet to build, adds none for the buffer, and sees no rise on its first tick.
+     */
+    public function testAPayloadPredatingTheBufferInTheCapitalBuiltKeepsItsShortfall(): void
+    {
+        $payload = ['bank_capital_requirement' => 0.104, 'bank_capital_built' => 0.099, 'countercyclical_buffer_rate' => 0.01];
+        $state = MacroState::fromArray($payload);
+
+        $this->assertEqualsWithDelta(0.109, $state->bankCapitalBuilt, 1e-15);
+        $this->assertEqualsWithDelta(0.114, $state->bankCapitalRequiredLast, 1e-15);
+        $this->assertSame(MacroStateDTO::fromMacroState($state)->toArray(), MacroStateDTO::fromArray($payload)->toArray(), 'The snapshot reader opens them the same way.');
+
+        $current = MacroState::fromArray(['bank_capital_built' => 0.099, 'bank_capital_required_last' => 0.104, 'countercyclical_buffer_rate' => 0.01]);
+        $this->assertSame(0.099, $current->bankCapitalBuilt, 'A payload that already counts the buffer is read as it stands.');
+    }
+
     /** A saved currency keeps its level across the split into fundamental and deviation: the deviation takes up the difference. */
     public function testASavedCurrencyKeepsItsLevel(): void
     {

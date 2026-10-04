@@ -1214,23 +1214,32 @@ class CreditFiscalSubsystemTest extends TestCase
         $this->assertGreaterThan($neutral->retailDefaultRate, $burdened->retailDefaultRate, 'A heavier instalment defaults more households at the same unemployment.');
     }
 
-    public function testTheBufferTightensLendingStandardsLikeASpreadWould(): void
+    /**
+     * A buffer the banks have yet to build rations credit through their standards as a raised requirement does; once the
+     * capital is held it rations nothing.
+     */
+    public function testABufferTightensLendingStandardsOnlyUntilItIsBuilt(): void
     {
         $subsystem = $this->quietSubsystem();
 
         $unbuffered = new MacroState();
         $subsystem->calculateSloosCreditStandards($unbuffered, 0.25);
 
-        $buffered = new MacroState();
-        $buffered->countercyclicalBufferRateEma = CreditFiscalSubsystem::MAX_CCYB;
-        $subsystem->calculateSloosCreditStandards($buffered, 0.25);
+        $building = new MacroState();
+        $building->countercyclicalBufferRate = CreditFiscalSubsystem::MAX_CCYB;
+        $subsystem->calculateSloosCreditStandards($building, 0.25);
+        $this->assertGreaterThan($unbuffered->sloosTighteningIndex, $building->sloosTighteningIndex, 'A buffer still to be built rations new loans.');
 
-        $this->assertGreaterThan($unbuffered->sloosTighteningIndex, $buffered->sloosTighteningIndex, 'Capital held against new loans rations them.');
+        $held = new MacroState();
+        $held->countercyclicalBufferRate = CreditFiscalSubsystem::MAX_CCYB;
+        $held->bankCapitalBuilt = FinancialConstants::OPENING_BANK_CAPITAL_REQUIREMENT + CreditFiscalSubsystem::MAX_CCYB;
+        $subsystem->calculateSloosCreditStandards($held, 0.25);
+        $this->assertEqualsWithDelta($unbuffered->sloosTighteningIndex, $held->sloosTighteningIndex, 1e-12, 'Capital already held rations nothing.');
     }
 
     /**
-     * Banks build to a raised requirement over the years Bridges et al. measured, and while they fall short their lending
-     * standards tighten as a buffer of the same size would tighten them; a cut leaves standards as they were.
+     * Banks build to a raised requirement and buffer over the years Bridges et al. measured, and while they fall short
+     * their lending standards tighten, a point of requirement as a point of buffer; a cut leaves standards as they were.
      */
     public function testARaisedRequirementSqueezesLendingWhileBanksBuildToIt(): void
     {
@@ -1244,22 +1253,74 @@ class CreditFiscalSubsystemTest extends TestCase
         }
         $this->assertEqualsWithDelta(0.0086, $state->bankCapitalBuilt - FinancialConstants::OPENING_BANK_CAPITAL_REQUIREMENT, 0.0005, 'Three years on, 0.86 of the point is built (Bridges et al.: 0.95).');
 
+        $buffered = $this->householdStateAtNeutralRates();
+        $buffered->countercyclicalBufferRate = 0.01;
+        $buffered->creditToGdpGapEma = (CreditFiscalSubsystem::CCYB_GAP_FLOOR + (0.4 * (CreditFiscalSubsystem::CCYB_GAP_CEILING - CreditFiscalSubsystem::CCYB_GAP_FLOOR)));
+        $subsystem->calculateHouseholdCredit($buffered, 1.0);
+        $this->assertEqualsWithDelta(FinancialConstants::OPENING_BANK_CAPITAL_REQUIREMENT + (0.01 * (1.0 - exp(-1.0 / CreditFiscalSubsystem::REQUIREMENT_BUILD_YEARS))), $buffered->bankCapitalBuilt, 1e-9, 'The buffer is built toward as the requirement is.');
+
         $short = new MacroState();
         $short->bankCapitalRequirement = 0.104;
         $short->bankCapitalBuilt = 0.094;
         $subsystem->calculateSloosCreditStandards($short, 0.25);
-        $buffered = new MacroState();
-        $buffered->countercyclicalBufferRateEma = 0.010;
-        $subsystem->calculateSloosCreditStandards($buffered, 0.25);
-        $this->assertEqualsWithDelta($buffered->sloosTighteningIndex, $short->sloosTighteningIndex, 1e-12, 'A point not yet built reads as a point of buffer.');
+        $unbuilt = new MacroState();
+        $unbuilt->countercyclicalBufferRate = 0.010;
+        $subsystem->calculateSloosCreditStandards($unbuilt, 0.25);
+        $this->assertEqualsWithDelta($unbuilt->sloosTighteningIndex, $short->sloosTighteningIndex, 1e-12, 'A point of requirement not yet built reads as a point of buffer not yet built.');
+
+        $calm = new MacroState();
+        $subsystem->calculateSloosCreditStandards($calm, 0.25);
+        $target = CreditFiscalSubsystem::SLOOS_PREMIUM_SENSITIVITY * CreditFiscalSubsystem::SLOOS_CAPITAL_SHORTFALL_PREMIUM_EQUIVALENT * 0.01;
+        $this->assertEqualsWithDelta(0.30, $target, 0.005, 'A point short pulls standards toward ~30 points of net tightening.');
+        $this->assertEqualsWithDelta($target * CreditFiscalSubsystem::SLOOS_KAPPA * 0.25, $short->sloosTighteningIndex - $calm->sloosTighteningIndex, 1e-9);
 
         $cut = new MacroState();
         $cut->bankCapitalRequirement = 0.085;
         $cut->bankCapitalBuilt = 0.094;
         $subsystem->calculateSloosCreditStandards($cut, 0.25);
-        $calm = new MacroState();
-        $subsystem->calculateSloosCreditStandards($calm, 0.25);
         $this->assertEqualsWithDelta($calm->sloosTighteningIndex, $cut->sloosTighteningIndex, 1e-12, 'A cut releases capital but does not loosen standards.');
+    }
+
+    /**
+     * As the capital banks must hold rises they cut household lending at once, by Bridges et al.'s year-one amounts for
+     * secured and unsecured lending in the stock's proportions: a rise phased in over a year cuts as much as one made at
+     * once, a buffer rise cuts as a requirement rise does, and a cut lends nothing back.
+     */
+    public function testARiseInRequiredCapitalCutsHouseholdLending(): void
+    {
+        $subsystem = $this->quietSubsystem();
+        $cut = (CreditFiscalSubsystem::HOUSEHOLD_MORTGAGE_DEBT_SHARE * CreditFiscalSubsystem::SECURED_LENDING_CUT_PER_CAPITAL_RISE)
+            + ((1.0 - CreditFiscalSubsystem::HOUSEHOLD_MORTGAGE_DEBT_SHARE) * CreditFiscalSubsystem::UNSECURED_LENDING_CUT_PER_CAPITAL_RISE);
+        $this->assertEqualsWithDelta(0.862, $cut, 1e-12, 'About 0.86% of household debt a point.');
+        $day = 1.0 / 252.0;
+        $year = function (callable $requirementOn) use ($subsystem, $day): MacroState {
+            $state = $this->householdStateAtNeutralRates();
+            for ($i = 1; $i <= 252; ++$i) {
+                $state->bankCapitalRequirement = $requirementOn($i);
+                $subsystem->calculateHouseholdCredit($state, $day);
+            }
+
+            return $state;
+        };
+        $opening = FinancialConstants::OPENING_BANK_CAPITAL_REQUIREMENT;
+
+        $calm = $year(static fn (int $i): float => $opening);
+        $atOnce = $year(static fn (int $i): float => $opening + 0.01);
+        $phased = $year(static fn (int $i): float => $opening + (0.01 * $i / 252.0));
+        $lowered = $year(static fn (int $i): float => $opening - 0.01);
+
+        $this->assertEqualsWithDelta(-$cut * 0.01 * exp(-CreditFiscalSubsystem::CREDIT_MEAN_REVERSION), log($atOnce->householdDebtToIncome) - log($calm->householdDebtToIncome), 2e-5, 'A point cuts ~0.86% of the stock, less what a year of reversion makes up.');
+        $this->assertLessThan($calm->householdDebtToIncome, $atOnce->householdDebtToIncome);
+        $this->assertEqualsWithDelta(log($atOnce->householdDebtToIncome), log($phased->householdDebtToIncome), 5e-4, 'Phased in or at once, the year ends at the same cut.');
+        $this->assertEqualsWithDelta($calm->householdDebtToIncome, $lowered->householdDebtToIncome, 1e-12, 'A cut lends nothing back.');
+
+        $raised = $this->householdStateAtNeutralRates();
+        $raised->bankCapitalRequirement = $opening + 0.01;
+        $subsystem->calculateHouseholdCredit($raised, $day);
+        $buffered = $this->householdStateAtNeutralRates();
+        $buffered->countercyclicalBufferRate = 0.01;
+        $subsystem->calculateHouseholdCredit($buffered, $day);
+        $this->assertEqualsWithDelta($raised->householdDebtToIncome, $buffered->householdDebtToIncome, 1e-12, 'A point of buffer cuts as a point of requirement does.');
     }
 
     public function testTheServiceGapStartsAtZeroWhateverTheSeededCurve(): void

@@ -328,8 +328,10 @@ readonly class MacroStateDTO
         public float $authorityCommitteeSeated = 0.0,
         /** The CET1 requirement on the District's banks in force, as a share of risk-weighted assets, countercyclical buffer aside (App\Service\Politics\FinancialRegulator). */
         public float $bankCapitalRequirement = FinancialConstants::OPENING_BANK_CAPITAL_REQUIREMENT,
-        /** The requirement the banks have built their capital to so far, the requirement lagged by the years they take (App\Service\Macro\Subsystem\CreditFiscalSubsystem). */
+        /** The capital the banks have built so far against the requirement and the countercyclical buffer together, lagged by the years they take (App\Service\Macro\Subsystem\CreditFiscalSubsystem). */
         public float $bankCapitalBuilt = FinancialConstants::OPENING_BANK_CAPITAL_REQUIREMENT,
+        /** The requirement and the buffer together as the last tick required them: a rise from it cuts household lending. */
+        public float $bankCapitalRequiredLast = FinancialConstants::OPENING_BANK_CAPITAL_REQUIREMENT,
         public float $electricityCarbonPriceLevel = 0.0,
         public float $moneySupplyGrowth = MacroEngine::M2_BASE_GROWTH,
         public float $moneySupplyGrowthEma = MacroEngine::M2_BASE_GROWTH,
@@ -496,6 +498,11 @@ readonly class MacroStateDTO
             MacroAggregateSubsystem::marketBalanceGap($resolve('equityWealthRatio'), $resolve('financeMarketTrend'))
         );
         $args['domesticDemandGapEma'] ??= MacroAggregateSubsystem::domesticDemandGapAt($resolve('outputGapEma'), $resolve('productivitySupplyGap'), $resolve('netExportGap'), $resolve('financeOutputGap'));
+        // The capital built counts the buffer beside the requirement, as MacroState::fromArray has it.
+        if (!isset($args['bankCapitalRequiredLast'])) {
+            $args['bankCapitalBuilt'] = $resolve('bankCapitalBuilt') + $resolve('countercyclicalBufferRate');
+            $args['bankCapitalRequiredLast'] = $resolve('bankCapitalRequirement') + $resolve('countercyclicalBufferRate');
+        }
 
         return new self(...$args);
     }

@@ -159,8 +159,6 @@ class CreditFiscalSubsystem
     public const CCYB_PHASE_IN_YEARS = 1.0;
     /** Retail default z-score per unit of debt-service gap (ratio over its long-run average): a point of income more in debt service is ~0.3 z of stress. */
     public const RETAIL_DSR_SENSITIVITY = 30.0;
-    /** How the buffer reads to lending standards: a unit of buffer is worth this much excess bond premium, so the full 2.5% buffer tightens standards ~0.19 (unchanged from when it was priced as 0.5 of excess spread at the old sensitivity of 15). */
-    public const SLOOS_CCYB_PREMIUM_EQUIVALENT = 0.22;
 
     // --- Credit Crisis Hazard (Schularick & Taylor 2012; Jorda, Schularick & Taylor 2013) ---
     /** Logit intercept: -3.77 (se 0.25), crisis starts on the lagged Basel (one-sided HP) household credit gap, JST Macrohistory R6, 17 economies 1950-2020 outside war years and 5-year post-crisis windows; 2.2% a year at trend. */
@@ -190,9 +188,15 @@ class CreditFiscalSubsystem
     /** Risk-weighted assets over total assets, US insured banks reporting them at end-2024 ($14.90T of $23.33T, FDIC Call Reports): turns a point of CET1 requirement into equity over total assets. */
     public const BANK_RWA_DENSITY = 0.639;
 
-    // --- Bank Capital Build-Up (Bridges et al. 2014) ---
-    /** Years for banks to build to a new capital requirement, as a distributed lag: least squares on UK banks' capital ratios after a 1pp rise, up 0.41pp a year on and 0.95pp three years on (Bridges et al. 2014, BoE WP 486, Table C), which this puts at 0.48pp and 0.86pp. */
+    // --- Bank Capital Build-Up (Bridges et al. 2014; Macroeconomic Assessment Group 2010) ---
+    /** Years for banks to build to a new capital requirement or buffer, as a distributed lag: least squares on UK banks' capital ratios after a 1pp rise, up 0.41pp a year on and 0.95pp three years on (Bridges et al. 2014, BoE WP 486, Table C), which this puts at 0.48pp and 0.86pp. */
     public const REQUIREMENT_BUILD_YEARS = 1.52;
+    /** Secured household lending cut per unit rise in the capital banks must hold: 0.94pp of year-one loan growth per 1pp (Bridges et al. 2014, Table D), most of it in the first quarter and none in later years; cuts in requirements leave it unaffected (s. 6.3). */
+    public const SECURED_LENDING_CUT_PER_CAPITAL_RISE = 0.94;
+    /** Unsecured household lending cut per unit rise: 0.68pp of year-one loan growth per 1pp, the same table's point estimate (68% interval -1.43 to 0.03). */
+    public const UNSECURED_LENDING_CUT_PER_CAPITAL_RISE = 0.68;
+    /** How capital not yet built reads to lending standards, as excess bond premium per unit of shortfall: fitted so a 1pp rise phased in over four years leaves output 0.17% below baseline at 18 quarters, the median of the MAG's (2010, Interim Report pp. 21-22) models that read lending standards and let monetary policy respond. */
+    public const SLOOS_CAPITAL_SHORTFALL_PREMIUM_EQUIVALENT = 0.87;
 
     // --- Excess Bond Premium (Gilchrist & Zakrajsek 2012), a displaced lognormal ---
     /** Displacement (141 bps): the premium plus this is lognormal. Profile maximum likelihood on the GZ series, 1973-2026 (95% CI 116-185 bps); in logs the shocks are the same size at every level, in levels they grow 2.8x from low to high. */
@@ -520,10 +524,10 @@ class CreditFiscalSubsystem
      * over the average remaining maturity, read against its own 15-year average (Drehmann & Juselius 2012),
      * so a cold start and a slow drift in leverage are silent. The credit-to-GDP gap is the stock against a slow one-sided trend
      * (the Basel filter's stand-in), and the countercyclical buffer maps that gap onto the 0-2.5% Basel
-     * schedule with a year's phase-in. The ratio reaches the retail default rate, the IS curve and, through
-     * the buffer, lending standards; the gap reaches the lenders' order books. The capital banks have built tracks the
-     * Financial Regulator's requirement with a lag, and while it falls short, lending standards tighten as the buffer
-     * tightens them.
+     * schedule with a year's phase-in. The ratio reaches the retail default rate and the IS curve; the gap reaches the
+     * lenders' order books. The capital banks must hold is the Financial Regulator's requirement plus the buffer: as it
+     * rises they cut household lending at once (Bridges et al. 2014), and the capital they have built tracks it with a
+     * lag, while the shortfall tightens lending standards (calculateSloosCreditStandards()).
      *
      * @param MacroState $state Current macroeconomic state.
      * @param float      $dt    Time increment in years.
@@ -550,9 +554,15 @@ class CreditFiscalSubsystem
             - (self::CREDIT_MEAN_REVERSION * $relativeExcess)
             - (self::DELEVERAGING_SPEED * $excessDsr);
         $noise = self::CREDIT_GROWTH_SIGMA * sqrt($dt) * $this->mathUtility->generateStandardNormal();
+        // Bridges et al. (2014): banks cut lending to households as the capital they must hold rises, secured and unsecured
+        // in the stock's proportions, and do not lend it back when it falls.
+        $capitalRequired = $state->bankCapitalRequirement + $state->countercyclicalBufferRate;
+        $lendingCut = (self::HOUSEHOLD_MORTGAGE_DEBT_SHARE * self::SECURED_LENDING_CUT_PER_CAPITAL_RISE) + ((1.0 - self::HOUSEHOLD_MORTGAGE_DEBT_SHARE) * self::UNSECURED_LENDING_CUT_PER_CAPITAL_RISE);
+        $capitalSqueeze = $lendingCut * max(0.0, $capitalRequired - $state->bankCapitalRequiredLast);
+        $state->bankCapitalRequiredLast = $capitalRequired;
 
         $previousLeverage = $state->householdDebtToIncome;
-        $state->householdDebtToIncome = max(self::MIN_HOUSEHOLD_DEBT_TO_INCOME, min(self::MAX_HOUSEHOLD_DEBT_TO_INCOME, $state->householdDebtToIncome * exp(($growth * $dt) + $noise)));
+        $state->householdDebtToIncome = max(self::MIN_HOUSEHOLD_DEBT_TO_INCOME, min(self::MAX_HOUSEHOLD_DEBT_TO_INCOME, $state->householdDebtToIncome * exp(($growth * $dt) + $noise - $capitalSqueeze)));
         // Drehmann, Juselius & Korinek (2018) new borrowing, net of what holds leverage level: the year's average of
         // the change in leverage. It averages zero because leverage reverts, so spending needs no compensator for it.
         $state->householdNewBorrowing = $this->mathUtility->calculateDistributedLag(
@@ -602,10 +612,10 @@ class CreditFiscalSubsystem
             lagTimeConstant: self::CCYB_PHASE_IN_YEARS
         );
 
-        // The capital banks hold follows the Financial Regulator's requirement over the years they take to build to it.
+        // The capital banks hold follows the requirement and the buffer over the years they take to build to them.
         $state->bankCapitalBuilt = $this->mathUtility->calculateDistributedLag(
             currentLaggedValue: $state->bankCapitalBuilt,
-            targetValue: $state->bankCapitalRequirement,
+            targetValue: $state->bankCapitalRequirement + $state->countercyclicalBufferRate,
             dt: $dt,
             lagTimeConstant: self::REQUIREMENT_BUILD_YEARS
         );
@@ -825,23 +835,25 @@ class CreditFiscalSubsystem
      * credit risk, the excess bond premium. Standards follow the premium rather than the whole spread (R2 0.46
      * against 0.27), so they tighten on the shock and ease once it passes, with the gap still deep: net
      * tightening went from 84% in October 2008 to easing by January 2010. A credit crisis reaches them through
-     * the premium jump it books, not through the multi-year deleveraging drag.
+     * the premium jump it books, not through the multi-year deleveraging drag. Capital the banks must hold but have not
+     * yet built tightens them too, as the Macroeconomic Assessment Group (2010) carried higher capital targets into
+     * output through lending standards.
      *
      * @param MacroState $state Current macroeconomic state.
      * @param float      $dt    Time increment in years.
      */
     public function calculateSloosCreditStandards(MacroState $state, float $dt): void
     {
-        // Basel III CCyB transmission to commercial bank lending standards (BCBS 2010); capital banks have yet to build to
-        // a raised requirement is a requirement they must meet all the same, and reads the same way.
-        $capitalShortfall = max(0.0, $state->bankCapitalRequirement - $state->bankCapitalBuilt);
-        $bufferTightening = self::SLOOS_CCYB_PREMIUM_EQUIVALENT * ($state->countercyclicalBufferRateEma + $capitalShortfall);
+        // Macroeconomic Assessment Group (2010): banks building to a raised requirement or buffer ration credit through
+        // their standards until the capital is built; capital already held rations nothing, and a cut eases nothing.
+        $capitalShortfall = max(0.0, $state->bankCapitalRequirement + $state->countercyclicalBufferRate - $state->bankCapitalBuilt);
+        $capitalTightening = self::SLOOS_CAPITAL_SHORTFALL_PREMIUM_EQUIVALENT * $capitalShortfall;
         $dW = $this->mathUtility->generateStandardNormal();
 
         $state->sloosTighteningIndex = $this->mathUtility->calculateSloosCreditStandards(
             currentSloos: $state->sloosTighteningIndex,
             outputGap: $state->outputGapEma,
-            excessCreditSpread: $state->excessBondPremium + $bufferTightening,
+            excessCreditSpread: $state->excessBondPremium + $capitalTightening,
             dt: $dt,
             dW: $dW,
             kappa: self::SLOOS_KAPPA,
