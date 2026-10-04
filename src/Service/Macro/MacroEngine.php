@@ -791,6 +791,8 @@ class MacroEngine
         $state->stampDutyRate = $policy->stampDutyRate;
         $state->bankLevyRate = $policy->bankLevyRate;
         $state->electionPulse = $policy->electionPulse;
+        $state->authorityMajority = $policy->authorityMajority ?? 0.0;
+        $state->authorityCommitteeSeated = $policy->authorityMajority === null ? 0.0 : 1.0;
     }
 
     /**

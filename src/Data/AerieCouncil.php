@@ -5,15 +5,18 @@ declare(strict_types=1);
 namespace App\Data;
 
 /**
- * The Aerie Council: the District's executive, thirteen technocrats on staggered twenty-year terms.
+ * The Aerie Council: the District's executive, thirteen leaders on staggered twenty-year terms.
  *
- * A councillor whose term ends is replaced by one the sitting members elect, so the Council renews itself one seat
- * at a time and no election touches it. The founding seats were staggered so one falls vacant about every year and a
- * half, as the Federal Reserve Board's seven fourteen-year seats fall one every two years. Like the election
- * calendar, the roster is derived from simulation time and never stored: seat k's holder at any moment follows from
- * the date alone.
+ * A councillor does not run policy. Each holds a stance on how the District should lean, a hawk's or a dove's on money
+ * for now, and the Council's work is its appointments. A councillor whose term ends is replaced by the candidate on a
+ * shortlist the sitting members elect, so the Council renews itself one seat at a time and no election touches it. The
+ * seats are staggered so one falls vacant about every year and a half, as the Federal Reserve Board's seven
+ * fourteen-year seats fall one every two years; the councillors sitting at Year 1 took their seats before the District's
+ * records begin. Like the election calendar, the seats' terms are derived from simulation time and never stored; who
+ * holds them, chosen from the shortlists, is kept in the politics state.
  *
- * The Council appoints the heads of the District's departments, which then act independently of it. It holds a veto
+ * The Council appoints the heads of the District's departments, which then act independently of it: the Monetary
+ * Authority's governor among them, who picks the rate committee (App\Service\Politics\MonetaryAuthority). It holds a veto
  * over the Diet's budgets and laws that it almost never casts, and the Diet can remove a councillor with three
  * quarters of its seats, which it never has. No party sits on the Council.
  */
@@ -25,8 +28,8 @@ final class AerieCouncil
     /** Length of a full term, in years. */
     public const TERM_YEARS = 20.0;
 
-    /** The founding councillors, by seat. */
-    public const FOUNDING_MEMBERS = [
+    /** The councillors sitting at Year 1, by seat, seated before the District's records begin. */
+    public const OPENING_MEMBERS = [
         'Adelaide Voss',
         'Tobias Renwick',
         'Mireille Castellane',
@@ -42,17 +45,8 @@ final class AerieCouncil
         'Rosalind Okafor',
     ];
 
-    /** Successors the Council co-opts, taken in turn as seats fall vacant. */
-    public const SUCCESSORS = [
-        'Anselm Drakeford', 'Clementine Ashgrove', 'Dorian Velasquez-Hart', 'Eudora Pryce', 'Fenwick Sato',
-        'Genevieve Marchetti', 'Horatio Blackwood', 'Isolde Varga', 'Jasper Quenneville', 'Katarina Wilde',
-        'Leopold Aske', 'Marguerite Oyelaran', 'Nathaniel Crewe', 'Octavia Brandt', 'Ptolemy Hargreave',
-        'Quilla Dunmore', 'Rafferty Lowe', 'Sabine Castellanos', 'Thaddeus Mirren', 'Ursula Kincaid',
-        'Valentin Soren', 'Wilhelmina Tate', 'Xavier Aldous', 'Yevgenia Marsh', 'Zephyr Calloway',
-        'Augustin Pell', 'Bettina Rourke', 'Cyprian Holt', 'Delphine Arkwright', 'Evander Nakamura',
-        'Felicity Graves', 'Gideon Ostrova', 'Henrietta Vale', 'Ignatius Farrow', 'Juno Whitlock',
-        'Kasimir Deane', 'Lavinia Stroud', 'Magnus Everly', 'Noemi Castel',
-    ];
+    /** The Monetary Authority's governor sitting at Year 1, named before it. */
+    public const OPENING_GOVERNOR = 'Ilse Marchand';
 
     // --- Departments ---
     /**
@@ -61,7 +55,7 @@ final class AerieCouncil
      * @var list<array{name: string, mandate: string, href: string|null}>
      */
     public const DEPARTMENTS = [
-        ['name' => 'Monetary Authority', 'mandate' => 'Sets the policy rate by its published rule. Independent of the Diet by charter.', 'href' => '/economy'],
+        ['name' => 'Monetary Authority', 'mandate' => 'Sets the policy rate by its published rule. Its governor, named for one term, picks the rate committee. Independent of the Diet by charter.', 'href' => '/economy'],
         ['name' => 'Sovereign Reserve Fund', 'mandate' => 'Invests the reserves and pays the budget its rule draw. Holds the second key: no draw on the reserves passes without it.', 'href' => '/reserve'],
         ['name' => 'Financial Regulator', 'mandate' => 'Sets bank capital and the countercyclical buffer.', 'href' => null],
         ['name' => 'Treasury', 'mandate' => 'Executes the budget the Diet passes and manages the District\'s debt.', 'href' => null],
@@ -69,34 +63,33 @@ final class AerieCouncil
     ];
 
     /**
-     * When seat k's founding term ends: the founders' terms were staggered evenly over one full term.
+     * When the term of seat k's councillor sitting at Year 1 ends: the seats fall vacant evenly over one full term, half
+     * a spacing apart from Year 1, so every councillor sitting at it took their seat before it.
      */
-    public static function foundingTermEnd(int $seat): float
+    public static function openingTermEnd(int $seat): float
     {
-        return ($seat + 1) * self::TERM_YEARS / self::SEATS;
+        return ($seat + 0.5) * self::TERM_YEARS / self::SEATS;
     }
 
     /**
-     * The Council at a moment: each seat's holder, when they took it, and when their term ends.
+     * The Council's seats at a moment: when each holder took theirs (before Year 1, negative, for those sitting at it),
+     * and when their term ends. Who holds them is the politics state's (App\DTO\PoliticsStateDTO::$councilNames).
      *
-     * @return list<array{seat: int, name: string, since: float, termEnds: float, founding: bool}>
+     * @return list<array{seat: int, since: float, termEnds: float, beforeYearOne: bool}>
      */
     public static function roster(float $simTime): array
     {
         $roster = [];
         for ($seat = 0; $seat < self::SEATS; ++$seat) {
-            $firstEnd = self::foundingTermEnd($seat);
-            // Terms completed on this seat, the founder's included.
+            $firstEnd = self::openingTermEnd($seat);
+            // Terms completed on this seat since Year 1, the sitting councillor's included.
             $completed = $simTime < $firstEnd ? 0 : 1 + (int) floor(($simTime - $firstEnd) / self::TERM_YEARS);
 
             $roster[] = [
                 'seat' => $seat + 1,
-                'name' => $completed === 0
-                    ? self::FOUNDING_MEMBERS[$seat]
-                    : self::SUCCESSORS[(($completed - 1) * self::SEATS + $seat) % count(self::SUCCESSORS)],
-                'since' => $completed === 0 ? 0.0 : $firstEnd + (($completed - 1) * self::TERM_YEARS),
+                'since' => $firstEnd + (($completed - 1) * self::TERM_YEARS),
                 'termEnds' => $firstEnd + ($completed * self::TERM_YEARS),
-                'founding' => $completed === 0,
+                'beforeYearOne' => $completed === 0,
             ];
         }
 
@@ -106,7 +99,7 @@ final class AerieCouncil
     /**
      * The next seat to fall vacant after a moment.
      *
-     * @return array{seat: int, name: string, since: float, termEnds: float, founding: bool}
+     * @return array{seat: int, since: float, termEnds: float, beforeYearOne: bool}
      */
     public static function nextVacancy(float $simTime): array
     {

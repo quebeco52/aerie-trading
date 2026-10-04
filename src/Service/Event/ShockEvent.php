@@ -53,6 +53,14 @@ class ShockEvent
     public const GOVERNMENT_FORMED = 'government_formed';
     /** A budget round changed the government's levers; the headline says what the Council held back, if anything. */
     public const BUDGET_ENACTED = 'budget_enacted';
+    /** The Council has named a new governor of the Monetary Authority, who will fill the rate committee with people of their stance. */
+    public const GOVERNOR_APPOINTED = 'governor_appointed';
+    /** An appointment has tipped the rate committee into or out of a hawkish or dovish supermajority, which leans the policy rule. */
+    public const AUTHORITY_MAJORITY_SHIFT = 'authority_majority_shift';
+    /** The Council has elected a successor to a councillor whose term ended. */
+    public const COUNCILLOR_SEATED = 'councillor_seated';
+    /** The Monetary Authority's rate meeting moved the rate a full step or split its committee. */
+    public const MONETARY_DECISION = 'monetary_decision';
 
     // Sector-Specific Shocks
     public const VOLATILITY_SURGE = 'volatility_surge';

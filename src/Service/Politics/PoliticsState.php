@@ -80,6 +80,46 @@ class PoliticsState
     public float $lastBudgetEnactedAt;
     public float $lastCouncilBrakeAt;
 
+    // The Monetary Authority (MonetaryAuthority): the salt its draws are hashed from; each councillor's, the governor's and
+    // each committee member's name, birth, seat date and stance; the candidates passed over at the last Council vacancy
+    // and for the governorship; the committee's balance and supermajority; the last rate meeting; and when a governor or
+    // councillor was last seated and the majority last shifted.
+    public float $authoritySalt;
+    /** @var list<string> */
+    public array $councilNames;
+    /** @var list<float> */
+    public array $councilBirths;
+    /** @var list<float> */
+    public array $councilSince;
+    /** @var list<float> */
+    public array $councilStances;
+    /** @var list<array{name: string, birth: float, stance: float}> */
+    public array $councillorPassedOver;
+    public string $governorName;
+    public float $governorBirth;
+    public float $governorTermStart;
+    public float $governorStance;
+    /** @var list<array{name: string, birth: float, stance: float}> */
+    public array $governorPassedOver;
+    /** @var list<string> */
+    public array $memberNames;
+    /** @var list<float> */
+    public array $memberBirths;
+    /** @var list<float> */
+    public array $memberSince;
+    /** @var list<float> */
+    public array $memberStances;
+    public float $committeeBalance;
+    public float $committeeMajority;
+    public float $lastMeetingAt;
+    public float $lastMeetingRate;
+    public float $lastMeetingChange;
+    /** @var list<float> */
+    public array $lastMeetingVotes;
+    public float $lastGovernorAppointedAt;
+    public float $lastCouncillorSeatedAt;
+    public float $lastMajorityShiftAt;
+
     /** @var array<string, mixed>|null */
     private static ?array $openings = null;
 
@@ -129,6 +169,9 @@ class PoliticsState
                 $field === 'partyPositions' => self::hydratePositions($value),
                 $field === 'dietBlocs' => array_map('strval', $value),
                 $field === 'formationLog' => array_values($value),
+                $field === 'councilNames' || $field === 'memberNames' => array_values(array_map('strval', $value)),
+                $field === 'councillorPassedOver' || $field === 'governorPassedOver' => self::hydrateCandidates($value),
+                is_string($opening) => is_scalar($value) ? (string) $value : $opening,
                 is_array($opening) => array_map('floatval', $value),
                 default => is_numeric($value) ? (float) $value : $opening,
             };
@@ -150,6 +193,28 @@ class PoliticsState
         }
 
         return $payload;
+    }
+
+    /**
+     * Candidates off the wire: each one's name, birth date and stance.
+     *
+     * @param array<mixed> $candidates Candidates as decoded.
+     * @return list<array{name: string, birth: float, stance: float}>
+     */
+    private static function hydrateCandidates(array $candidates): array
+    {
+        $hydrated = [];
+        foreach ($candidates as $candidate) {
+            if (is_array($candidate)) {
+                $hydrated[] = [
+                    'name' => is_scalar($candidate['name'] ?? null) ? (string) $candidate['name'] : '',
+                    'birth' => is_numeric($candidate['birth'] ?? null) ? (float) $candidate['birth'] : 0.0,
+                    'stance' => is_numeric($candidate['stance'] ?? null) ? (float) $candidate['stance'] : 0.0,
+                ];
+            }
+        }
+
+        return $hydrated;
     }
 
     /**

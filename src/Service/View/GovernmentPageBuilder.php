@@ -18,6 +18,7 @@ use App\Service\Macro\Subsystem\CommodityLogisticsSubsystem;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Politics\CoalitionFormation;
+use App\Service\Politics\MonetaryAuthority;
 use App\Service\Politics\PoliticsEngine;
 use App\Twig\Extension\NumberFormatExtension;
 
@@ -173,7 +174,7 @@ class GovernmentPageBuilder
                 'seats' => $coalitionSeats,
                 'supportedSeats' => $coalitionSeats + $sumSeats($support),
                 'minority' => $coalitionSeats < AerieDiet::MAJORITY_SEATS,
-                'formed' => $politics->lastGovernmentFormedAt < 0.0 ? 'At the founding' : self::simDate($politics->coalitionFormedAt),
+                'formed' => $politics->lastGovernmentFormedAt < 0.0 ? 'Before Year 1' : self::simDate($politics->coalitionFormedAt),
                 'range' => CoalitionFormation::ideologicalRange($coalition, $politics->partyPositions),
                 'supermajority' => $removalSeats >= AerieDiet::SUPERMAJORITY_SEATS,
                 'caretaker' => $talking,
@@ -211,21 +212,29 @@ class GovernmentPageBuilder
             'compass' => $this->compass($parties, $history, $coalitionPosition, $coalition),
             'council' => [
                 'roster' => array_map(static fn(array $seat): array => $seat + [
-                    'sinceLabel' => $seat['founding'] ? 'Founding' : self::simDate($seat['since']),
+                    'name' => self::councillorName($politics, $seat),
+                    'sinceLabel' => $seat['beforeYearOne'] ? 'Before Year 1' : self::simDate($seat['since']),
                     'termEndsLabel' => self::simDate($seat['termEnds']),
-                ], AerieCouncil::roster($macro->totalTime)),
-                'nextVacancy' => (static function (array $seat): array {
-                    return $seat + ['termEndsLabel' => self::simDate($seat['termEnds'])];
+                ] + (isset($politics->councilBirths[$seat['seat'] - 1], $politics->councilStances[$seat['seat'] - 1]) ? [
+                    'age' => (int) floor($macro->totalTime - $politics->councilBirths[$seat['seat'] - 1]),
+                    'stance' => MonetaryAuthority::stanceName($politics->councilStances[$seat['seat'] - 1]),
+                ] : []), AerieCouncil::roster($macro->totalTime)),
+                'nextVacancy' => (static function (array $seat) use ($politics): array {
+                    return $seat + ['name' => self::councillorName($politics, $seat), 'termEndsLabel' => self::simDate($seat['termEnds'])];
                 })(AerieCouncil::nextVacancy($macro->totalTime)),
+                'lean' => $politics->councilStances === [] ? null : self::stanceCounts($politics->councilStances) + [
+                    'median' => MonetaryAuthority::stanceName(MonetaryAuthority::median($politics->councilStances)),
+                ],
                 'departments' => AerieCouncil::DEPARTMENTS,
             ],
+            'authority' => $this->authority($politics),
             'history' => array_map(fn(DietElection $election): array => $this->historyRow($election, $macro->totalTime), array_reverse($history)),
         ];
     }
 
     /**
      * A party's page: who it is, where it stands, what it would enact governing alone from there today against what is
-     * in force, and its record at the polls since the founding.
+     * in force, and its record at the polls since Year 1.
      *
      * @return array<string, mixed>
      */
@@ -255,7 +264,7 @@ class GovernmentPageBuilder
             ];
         }
 
-        $record = [['date' => 'Founding', 'seats' => (int) AerieDiet::SEED_SEATS[$party], 'share' => AerieDiet::SEED_VOTE_SHARES[$party],
+        $record = [['date' => 'Year 1', 'seats' => (int) AerieDiet::SEED_SEATS[$party], 'share' => AerieDiet::SEED_VOTE_SHARES[$party],
             'cabinet' => (AerieDiet::SEED_COALITION[$party] ?? 0.0) > 0.5, 'support' => (AerieDiet::SEED_SUPPORT[$party] ?? 0.0) > 0.5]];
         foreach ($history as $election) {
             $formed = $election->getTakesOfficeAt() <= $macro->totalTime;
@@ -465,8 +474,8 @@ class GovernmentPageBuilder
                     'enacted' => AssetMarketSubsystem::planningRefusalRate($standing['greenBeltStringency']),
                     'status' => $status('greenBeltStringency'),
                     'note' => $standing['greenBeltStringency'] > 0.0
-                        ? sprintf('Builders answer a rise in prices only %.0f%% as strongly as under the founding plan', 100.0 * AssetMarketSubsystem::greenBeltSupplyResponse($standing['greenBeltStringency']))
-                        : 'The founding plan is in force',
+                        ? sprintf('Builders answer a rise in prices only %.0f%% as strongly as under the plan in force at Year 1', 100.0 * AssetMarketSubsystem::greenBeltSupplyResponse($standing['greenBeltStringency']))
+                        : 'The plan in force at Year 1 still stands',
                 ],
                 [
                     'name' => 'Carbon price',
@@ -489,7 +498,7 @@ class GovernmentPageBuilder
                     'status' => $status('extractionStringency'),
                     'note' => $standing['extractionStringency'] > 0.0
                         ? 'Added to the cost of every barrel lifted offshore and every tonne mined'
-                        : 'The founding rules on offshore drilling and mining are in force',
+                        : 'The rules on offshore drilling and mining in force at Year 1 still stand',
                 ],
                 [
                     'name' => 'Stamp duty on share trades',
@@ -498,7 +507,7 @@ class GovernmentPageBuilder
                     'target' => $budget['levers']['stampDutyRate'],
                     'enacted' => $standing['stampDutyRate'],
                     'status' => $status('stampDutyRate'),
-                    'note' => sprintf('Paid by buyer and seller each, into the Sovereign Reserve; turnover runs %.0f%% %s its level at the founding rate',
+                    'note' => sprintf('Paid by buyer and seller each, into the Sovereign Reserve; turnover runs %.0f%% %s its level at the rate in force at Year 1',
                         abs(100.0 * (MathUtility::calculateStampDutyVolumeFactor($standing['stampDutyRate']) - 1.0)),
                         MathUtility::calculateStampDutyVolumeFactor($standing['stampDutyRate']) < 1.0 ? 'below' : 'above'),
                 ],
@@ -542,7 +551,7 @@ class GovernmentPageBuilder
     }
 
     /**
-     * A simulation time as the page names it: the District's year, counted from its founding, and the quarter.
+     * A simulation time as the page names it: the year, counted from Year 1 when the District's records begin, and the quarter.
      */
     public static function simDate(float $simTime): string
     {
@@ -901,6 +910,96 @@ class GovernmentPageBuilder
     private static function labelWidth(string $text): float
     {
         return mb_strlen($text) * self::COMPASS_FONT_SIZE * self::COMPASS_CHARACTER_WIDTH;
+    }
+
+    /**
+     * The Monetary Authority as the page shows it: the governor the Council named and the candidates it passed over, the
+     * committee the governor picked, each with their age, stance, seat dates and last vote; the committee's make-up and
+     * the supermajority it holds; and the last rate meeting. Null before the Authority has formed.
+     *
+     * @return array<string, mixed>|null
+     */
+    private function authority(PoliticsStateDTO $politics): ?array
+    {
+        if ($politics->authoritySalt < 0.0) {
+            return null;
+        }
+
+        $time = $politics->totalTime;
+        $votes = $politics->lastMeetingVotes;
+        $seated = static fn(float $since): string => $since < 0.0 ? 'Before Year 1' : self::simDate($since);
+        $person = static fn(string $name, float $birth, float $stance, ?float $vote): array => [
+            'name' => $name,
+            'age' => (int) floor($time - $birth),
+            'stance' => MonetaryAuthority::stanceName($stance),
+            'vote' => $vote,
+        ];
+
+        $members = [];
+        foreach ($politics->memberNames as $member => $name) {
+            $since = $politics->memberSince[$member] ?? 0.0;
+            $members[] = $person($name, $politics->memberBirths[$member] ?? $time, $politics->memberStances[$member] ?? 0.0, $votes[$member + 1] ?? null) + [
+                'sinceLabel' => $seated($since),
+                'termEndsLabel' => self::simDate($since + MonetaryAuthority::MEMBER_TERM_YEARS),
+            ];
+        }
+        $higher = count(array_filter($votes, static fn(float $vote): bool => $vote > 0.0));
+        $lower = count(array_filter($votes, static fn(float $vote): bool => $vote < 0.0));
+
+        return [
+            'governor' => $person($politics->governorName, $politics->governorBirth, $politics->governorStance, $votes[0] ?? null) + [
+                'sinceLabel' => $seated($politics->governorTermStart),
+                'termEndsLabel' => self::simDate(MonetaryAuthority::governorTermEnd($time)),
+                'passedOver' => array_map(static fn(array $candidate): array => $person($candidate['name'], $candidate['birth'], $candidate['stance'], null), $politics->governorPassedOver),
+            ],
+            'members' => $members,
+            'committee' => self::stanceCounts(array_merge([$politics->governorStance], $politics->memberStances)) + [
+                'balance' => $politics->committeeBalance,
+                'majority' => $politics->committeeMajority > 0.0 ? 'hawkish' : ($politics->committeeMajority < 0.0 ? 'dovish' : null),
+            ],
+            'meeting' => $politics->lastMeetingAt < 0.0 ? null : [
+                'date' => self::simDate($politics->lastMeetingAt),
+                'rate' => $politics->lastMeetingRate,
+                'change' => $politics->lastMeetingChange,
+                'split' => (count($votes) - $higher - $lower) . '–' . ($higher + $lower),
+                'higher' => $higher,
+                'lower' => $lower,
+            ],
+            'rules' => [
+                'governorTermYears' => MonetaryAuthority::GOVERNOR_TERM_YEARS,
+                'memberTermYears' => MonetaryAuthority::MEMBER_TERM_YEARS,
+                'members' => MonetaryAuthority::COMMITTEE_MEMBERS + 1,
+                'meetingsPerYear' => MonetaryAuthority::MEETINGS_PER_YEAR,
+                'shortlist' => MonetaryAuthority::SHORTLIST,
+            ],
+        ];
+    }
+
+    /**
+     * How many of a group hold each stance on money.
+     *
+     * @param list<float> $stances
+     * @return array{hawk: int, swing: int, dove: int}
+     */
+    private static function stanceCounts(array $stances): array
+    {
+        $counts = ['hawk' => 0, 'swing' => 0, 'dove' => 0];
+        foreach ($stances as $stance) {
+            ++$counts[MonetaryAuthority::stanceName($stance)];
+        }
+
+        return $counts;
+    }
+
+    /**
+     * Who holds a Council seat: the politics state's record once the Authority has formed, else the councillor seated
+     * before Year 1.
+     *
+     * @param array{seat: int, beforeYearOne: bool} $seat
+     */
+    private static function councillorName(PoliticsStateDTO $politics, array $seat): string
+    {
+        return $politics->councilNames[$seat['seat'] - 1] ?? ($seat['beforeYearOne'] ? AerieCouncil::OPENING_MEMBERS[$seat['seat'] - 1] : '');
     }
 
     /**

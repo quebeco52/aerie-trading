@@ -9,6 +9,8 @@ use App\Entity\Etf;
 use App\Service\Macro\MacroEngine;
 use App\Service\Market\PriceChangeFeed;
 use App\Service\Politics\CoalitionFormation;
+use App\Service\Politics\MonetaryAuthority;
+use App\Service\View\GovernmentPageBuilder;
 
 /**
  * Publishes the tick's district-wide event as a headline on the benchmark fund: the economy's, or when the economy has
@@ -21,6 +23,12 @@ use App\Service\Politics\CoalitionFormation;
  */
 class SystemicEventReporter
 {
+    // --- Stances in Prose ---
+    /** How each stance on money reads of one person. */
+    private const STANCE_PHRASES = ['hawk' => 'a hawk', 'swing' => 'a swing vote', 'dove' => 'a dove'];
+    /** How each stance reads counted, one and many. */
+    private const STANCE_PLURALS = ['hawk' => ['hawk', 'hawks'], 'swing' => ['swing vote', 'swing votes'], 'dove' => ['dove', 'doves']];
+
     public function __construct(
         private readonly NarrativeEngine $narrativeEngine,
         private readonly MarketEventPublisher $marketEvent,
@@ -58,7 +66,8 @@ class SystemicEventReporter
             'swf_target_pct' => number_format($macro->sovereignFundTargetWeight * 100.0, 2),
             'swf_size_gdp_pct' => number_format($macro->sovereignFundToGdp * 100.0, 0),
             'swf_months' => number_format($macro->sovereignFundRebalanceMonthsLeft, 0),
-        ] + self::electionContext($politics) + self::fallContext($politics) + self::formationContext($politics) + self::budgetContext($politics);
+        ] + self::electionContext($politics) + self::fallContext($politics) + self::formationContext($politics) + self::budgetContext($politics)
+            + self::authorityContext($politics);
 
         $monthMove = $this->priceChangeFeed->changeForTicker((string) $benchmark->getTicker(), (float) $benchmark->getPrice());
 
@@ -194,6 +203,82 @@ class SystemicEventReporter
             'lead_party' => $names[$final['formateur']],
             'diet_seats' => (string) AerieDiet::SEATS,
         ];
+    }
+
+    /**
+     * The Monetary Authority for its headlines: the governor, their age and stance, when their term ends and whom the
+     * Council passed over for them; the councillor seated this tick and whom they beat; the committee's make-up and the
+     * supermajority it holds; and the last meeting, its rate, its move and its vote. Empty before the Authority has formed.
+     *
+     * @return array<string, string>
+     */
+    private static function authorityContext(PoliticsStateDTO $politics): array
+    {
+        if ($politics->authoritySalt < 0.0) {
+            return [];
+        }
+
+        $time = $politics->totalTime;
+        $stance = static fn(float $stance): string => self::STANCE_PHRASES[MonetaryAuthority::stanceName($stance)];
+        $passedOver = static fn(array $candidates): string => self::listNames(array_map(
+            static fn(array $candidate): string => "{$candidate['name']}, {$stance($candidate['stance'])}",
+            $candidates
+        ));
+        $context = [
+            'governor' => $politics->governorName,
+            'governor_age' => (string) (int) floor($time - $politics->governorBirth),
+            'governor_stance' => $stance($politics->governorStance),
+            'governor_term_ends' => GovernmentPageBuilder::simDate(MonetaryAuthority::governorTermEnd($time)),
+            'governor_passed_over' => $passedOver($politics->governorPassedOver),
+        ];
+
+        foreach ($politics->councilSince as $seat => $since) {
+            if (abs($since - $politics->lastCouncillorSeatedAt) < 1e-6 && isset($politics->councilNames[$seat], $politics->councilBirths[$seat])) {
+                $context['councillor'] = $politics->councilNames[$seat];
+                $context['councillor_age'] = (string) (int) floor($time - $politics->councilBirths[$seat]);
+                $context['councillor_stance'] = $stance($politics->councilStances[$seat] ?? 0.0);
+                $context['councillor_passed_over'] = $passedOver($politics->councillorPassedOver);
+            }
+        }
+
+        $stances = array_merge([$politics->governorStance], $politics->memberStances);
+        $counts = array_count_values(array_map(MonetaryAuthority::stanceName(...), $stances));
+        $context['committee_counts'] = self::listNames(array_values(array_filter(array_map(
+            static fn(string $type): ?string => isset($counts[$type]) ? self::countWord($counts[$type]) . ' ' . self::STANCE_PLURALS[$type][$counts[$type] === 1 ? 0 : 1] : null,
+            ['hawk', 'swing', 'dove']
+        ))));
+        $context['committee_majority'] = match (true) {
+            $politics->committeeMajority > 0.0 => 'hawkish',
+            $politics->committeeMajority < 0.0 => 'dovish',
+            default => 'none',
+        };
+
+        if ($politics->lastMeetingAt >= 0.0) {
+            $votes = $politics->lastMeetingVotes;
+            $higher = count(array_filter($votes, static fn(float $vote): bool => $vote > 0.0));
+            $lower = count(array_filter($votes, static fn(float $vote): bool => $vote < 0.0));
+            $count = self::countWord(...);
+            $member = static fn(int $n): string => $n === 1 ? 'member' : 'members';
+            $move = (int) round($politics->lastMeetingChange * 10000.0);
+            $rate = number_format($politics->lastMeetingRate * 100.0, 2);
+            $context['policy_rate_pct'] = $rate;
+            $context['rate_move'] = abs($move) < 13 ? "holds the rate at {$rate}%" : ($move > 0 ? "raises the rate by {$move} basis points to {$rate}%" : 'cuts the rate by ' . abs($move) . " basis points to {$rate}%");
+            $context['vote_split'] = (count($votes) - $higher - $lower) . '-' . ($higher + $lower);
+            $context['dissent_phrase'] = match (true) {
+                $higher > 0 && $lower > 0 => "{$count($higher)} {$member($higher)} wanted a higher rate and {$count($lower)} a lower",
+                $higher > 0 => "{$count($higher)} {$member($higher)} wanted a higher rate",
+                $lower > 0 => "{$count($lower)} {$member($lower)} wanted a lower rate",
+                default => 'the committee was unanimous',
+            };
+        }
+
+        return $context;
+    }
+
+    /** A small count in words. */
+    private static function countWord(int $n): string
+    {
+        return ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven'][$n] ?? (string) $n;
     }
 
     /**

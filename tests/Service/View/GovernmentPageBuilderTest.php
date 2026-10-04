@@ -26,7 +26,7 @@ class GovernmentPageBuilderTest extends TestCase
         return new GovernmentPageBuilder($elections);
     }
 
-    public function testTheFoundingDietIsDrawnSeatForSeat(): void
+    public function testTheDietAtYearOneIsDrawnSeatForSeat(): void
     {
         $page = $this->builder()->build(new MacroStateDTO(), new PoliticsStateDTO());
 
@@ -45,7 +45,7 @@ class GovernmentPageBuilderTest extends TestCase
         $this->assertSame('Civic', $tags[Diet::IRON_HARBOR]);
         $this->assertNull($page['talks'], 'Before any vote there are no talks to show.');
         $this->assertFalse($page['government']['supermajority']);
-        $this->assertSame('At the founding', $page['government']['formed']);
+        $this->assertSame('Before Year 1', $page['government']['formed']);
 
         $this->assertCount(Diet::SEATS, $page['hemicycle']);
         $drawn = array_count_values(array_column($page['hemicycle'], 'color'));
@@ -389,6 +389,43 @@ class GovernmentPageBuilderTest extends TestCase
         }
     }
 
+    /**
+     * Once the Monetary Authority has formed the page shows its governor, the candidates the Council passed over and the
+     * committee, each with a name, an age, a stance and seat dates, the committee's make-up, the Council's councillors
+     * likewise with how the Council leans, and the last meeting's vote; before, nothing of it.
+     */
+    public function testThePageShowsTheMonetaryAuthority(): void
+    {
+        $this->assertNull($this->builder()->build(new MacroStateDTO(), new PoliticsStateDTO())['authority']);
+
+        mt_srand(11);
+        $state = new \App\Service\Politics\PoliticsState();
+        $math = new \App\Service\Math\MathUtility();
+        for ($tick = 0; $tick <= 52; ++$tick) {
+            $state->totalTime = $tick / 52.0;
+            \App\Service\Politics\MonetaryAuthority::advance($state, new MacroStateDTO(totalTime: $state->totalTime, policyRate: 0.04), 1.0 / 52.0, $math);
+        }
+        $politics = PoliticsStateDTO::fromState($state);
+        $page = $this->builder()->build(new MacroStateDTO(totalTime: $state->totalTime), $politics);
+        $authority = $page['authority'];
+
+        $this->assertSame(\App\Data\AerieCouncil::OPENING_GOVERNOR, $authority['governor']['name']);
+        $this->assertSame('Before Year 1', $authority['governor']['sinceLabel']);
+        $this->assertCount(\App\Service\Politics\MonetaryAuthority::SHORTLIST - 1, $authority['governor']['passedOver']);
+        $this->assertCount(\App\Service\Politics\MonetaryAuthority::COMMITTEE_MEMBERS, $authority['members']);
+        $this->assertSame($politics->memberNames, array_column($authority['members'], 'name'));
+        $this->assertSame(\App\Service\Politics\MonetaryAuthority::COMMITTEE_MEMBERS + 1, $authority['committee']['hawk'] + $authority['committee']['swing'] + $authority['committee']['dove']);
+        $this->assertSame($politics->committeeMajority > 0.0 ? 'hawkish' : ($politics->committeeMajority < 0.0 ? 'dovish' : null), $authority['committee']['majority']);
+        $this->assertNotNull($authority['meeting']);
+        $this->assertSame(\App\Service\Politics\MonetaryAuthority::COMMITTEE_MEMBERS + 1, array_sum(array_map('intval', explode('–', $authority['meeting']['split']))));
+        $this->assertSame(\App\Service\Politics\MonetaryAuthority::stanceName(\App\Service\Politics\MonetaryAuthority::median($politics->councilStances)), $page['council']['lean']['median']);
+        foreach ($page['council']['roster'] as $index => $seat) {
+            $this->assertSame($politics->councilNames[$index], $seat['name']);
+            $this->assertGreaterThanOrEqual((int) floor(\App\Service\Politics\MonetaryAuthority::APPOINTMENT_AGE_MIN), $seat['age']);
+            $this->assertContains($seat['stance'], ['hawk', 'swing', 'dove']);
+        }
+    }
+
     public function testSimulationDatesCountFromTheFounding(): void
     {
         $this->assertSame('Year 1 Q1', GovernmentPageBuilder::simDate(0.0));
@@ -488,7 +525,7 @@ class GovernmentPageBuilderTest extends TestCase
         $this->assertFalse($axes[Diet::AXIS_STATE]['fixed']);
         $this->assertCount(count(Diet::PARTIES) - 1, $axes[Diet::AXIS_STATE]['others']);
 
-        $this->assertSame(['Founding', 'Year 5 Q1', 'Year 9 Q1'], array_column($page['record'], 'date'));
+        $this->assertSame(['Year 1', 'Year 5 Q1', 'Year 9 Q1'], array_column($page['record'], 'date'));
         $this->assertSame(25, $page['record'][0]['seats']);
         $this->assertTrue($page['record'][1]['cabinet']);
         $this->assertFalse($page['record'][2]['cabinet'], 'The talks\' outcome is hidden until the cabinet takes office.');

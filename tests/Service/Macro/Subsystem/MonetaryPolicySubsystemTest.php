@@ -65,6 +65,36 @@ class MonetaryPolicySubsystemTest extends TestCase
         );
     }
 
+    /**
+     * A rate committee's supermajority leans the rule (Bordo & Istrefi 2023, Table 6): a dovish one answers each point of
+     * inflation 0.35 less, a hawkish one each point of output gap 0.17 less, each centred on the quarter of the FOMC's
+     * meetings it held, so a committee in the FOMC's mix adds nothing on average. With no committee handed over the
+     * rule is untouched.
+     */
+    public function testACommitteeSupermajorityLeansTheRule(): void
+    {
+        $dove = MonetaryPolicySubsystem::DOVISH_MAJORITY_INFLATION_RESPONSE;
+        $hawk = MonetaryPolicySubsystem::HAWKISH_MAJORITY_GAP_RESPONSE;
+        $this->assertSame(0.0, MonetaryPolicySubsystem::committeeMajorityTerm(null, 0.03, -0.02));
+        $this->assertEqualsWithDelta(-$dove * 0.03 * 0.75 + ($hawk * -0.02 * 0.25), MonetaryPolicySubsystem::committeeMajorityTerm(-1.0, 0.03, -0.02), 1e-15);
+        $this->assertEqualsWithDelta($dove * 0.03 * 0.25 - ($hawk * -0.02 * 0.75), MonetaryPolicySubsystem::committeeMajorityTerm(1.0, 0.03, -0.02), 1e-15);
+        $this->assertEqualsWithDelta($dove * 0.03 * 0.25 + ($hawk * -0.02 * 0.25), MonetaryPolicySubsystem::committeeMajorityTerm(0.0, 0.03, -0.02), 1e-15);
+        $average = (MonetaryPolicySubsystem::DOVISH_MAJORITY_SHARE * MonetaryPolicySubsystem::committeeMajorityTerm(-1.0, 0.03, -0.02))
+            + (MonetaryPolicySubsystem::HAWKISH_MAJORITY_SHARE * MonetaryPolicySubsystem::committeeMajorityTerm(1.0, 0.03, -0.02))
+            + ((1.0 - MonetaryPolicySubsystem::DOVISH_MAJORITY_SHARE - MonetaryPolicySubsystem::HAWKISH_MAJORITY_SHARE) * MonetaryPolicySubsystem::committeeMajorityTerm(0.0, 0.03, -0.02));
+        $this->assertEqualsWithDelta(0.0, $average, 1e-15, 'A committee in the FOMC\'s mix leans the rule nowhere on average.');
+
+        $base = $this->subsystem->calculateTargetRate(new MacroState(), MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE);
+        $unseated = new MacroState();
+        $unseated->authorityMajority = -1.0;
+        $this->assertEqualsWithDelta($base, $this->subsystem->calculateTargetRate($unseated, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE), 1e-12, 'A majority the macro was never handed changes nothing.');
+        $dovish = new MacroState();
+        $dovish->authorityCommitteeSeated = 1.0;
+        $dovish->authorityMajority = -1.0;
+        $measure = $this->subsystem->calculateExpectedInflation($dovish, MacroEngine::TARGET_INFLATION);
+        $this->assertEqualsWithDelta(-$dove * $measure * 0.75, $this->subsystem->calculateTargetRate($dovish, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE) - $base, 1e-12);
+    }
+
     public function testTaylorRuleBlendsCoreInflationWithTIPSBreakeven(): void
     {
         $state = new MacroState();

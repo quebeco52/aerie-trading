@@ -70,6 +70,7 @@ class MacroFieldRegistryTest extends TestCase
         'foreignEquityValuationChange' => 'One tick of re-rating; foreign_equity_index records its effect.',
         'sovereignFundStampDutyYearToDate' => 'Currency accumulator for the budget year; sovereign_fund_stamp_duty_to_gdp records the year.',
         'boardStampDuty' => 'One tick of stamp duty; sovereign_fund_stamp_duty_to_gdp records the year.',
+        'authorityCommitteeSeated' => 'A flag, 1 while politics hands the macro a rate committee; authority_majority records what the committee is.',
         'boardBankLevy' => 'The banks\' levy bill at the rate in force; bank_levy_rate records the rate and corporate_report.bank_levy what each bank paid.',
         'strategicStakeCash' => 'One tick of cash from the District\'s strategic stakes, credited to the fund at once.',
         'sovereignFundStabilisationYearStart' => 'The budget year\'s opening level of sovereign_fund_stabilisation_to_gdp, which is recorded.',

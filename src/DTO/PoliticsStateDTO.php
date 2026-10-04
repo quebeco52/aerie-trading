@@ -79,6 +79,46 @@ readonly class PoliticsStateDTO
         public float $bankLevyRate = 0.0,
         public float $lastBudgetEnactedAt = -1.0,
         public float $lastCouncilBrakeAt = -1.0,
+        /** Salt the Monetary Authority's hashed draws are taken from, drawn once when it forms (-1: not yet formed; App\Service\Politics\MonetaryAuthority). */
+        public float $authoritySalt = -1.0,
+        /** @var list<string> Each Council seat's holder, by seat. */
+        public array $councilNames = [],
+        /** @var list<float> Each holder's birth date, in years (negative before Year 1). */
+        public array $councilBirths = [],
+        /** @var list<float> When each holder took the seat, which marks whose the seat's entries are. */
+        public array $councilSince = [],
+        /** @var list<float> Each councillor's stance: 1 a hawk, 0 a swing vote, -1 a dove. */
+        public array $councilStances = [],
+        /** @var list<array{name: string, birth: float, stance: float}> The candidates the Council passed over when it last filled a seat of its own. */
+        public array $councillorPassedOver = [],
+        /** The governor in office: name, birth date, when their term began, and stance. */
+        public string $governorName = '',
+        public float $governorBirth = 0.0,
+        public float $governorTermStart = 0.0,
+        public float $governorStance = 0.0,
+        /** @var list<array{name: string, birth: float, stance: float}> The candidates the Council passed over when it named the governor. */
+        public array $governorPassedOver = [],
+        /** @var list<string> The rate committee's members beside the governor, by seat: names, birth dates, when each took their seat, and stances. */
+        public array $memberNames = [],
+        /** @var list<float> */
+        public array $memberBirths = [],
+        /** @var list<float> */
+        public array $memberSince = [],
+        /** @var list<float> */
+        public array $memberStances = [],
+        /** The committee's hawk-dove balance, the governor's stance weighing half, and the supermajority it makes: 1 hawkish, -1 dovish, 0 neither. */
+        public float $committeeBalance = 0.0,
+        public float $committeeMajority = 0.0,
+        /** When the last rate meeting sat (-1: none yet), the policy rate it left, its change since the meeting before, and each vote (governor first; 1 for a higher rate, -1 for a lower, 0 with the decision). */
+        public float $lastMeetingAt = -1.0,
+        public float $lastMeetingRate = 0.0,
+        public float $lastMeetingChange = 0.0,
+        /** @var list<float> */
+        public array $lastMeetingVotes = [],
+        public float $lastGovernorAppointedAt = -1.0,
+        public float $lastCouncillorSeatedAt = -1.0,
+        /** When an appointment last tipped the committee into or out of a supermajority. */
+        public float $lastMajorityShiftAt = -1.0,
     ) {}
 
     /** Snapshots the engine's working state. */
@@ -118,6 +158,7 @@ readonly class PoliticsStateDTO
             stampDutyRate: $this->stampDutyRate,
             bankLevyRate: $this->bankLevyRate,
             electionPulse: PoliticsEngine::electionPulse($this->totalTime, $this->lastElectionAt, $this->coalitionTakesOfficeAt),
+            authorityMajority: $this->authoritySalt < 0.0 ? null : $this->committeeMajority,
         );
     }
 }

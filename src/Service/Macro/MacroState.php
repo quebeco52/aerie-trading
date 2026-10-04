@@ -378,6 +378,9 @@ class MacroState
     public float $extractionStringency;
     public float $stampDutyRate;
     public float $bankLevyRate;
+    // The Monetary Authority's rate committee: its supermajority, and whether politics hands one over at all.
+    public float $authorityMajority;
+    public float $authorityCommitteeSeated;
     // How far the carbon price has lifted the household electricity bill so far (log), at the energy pass-through lag.
     public float $electricityCarbonPriceLevel;
 

@@ -322,6 +322,10 @@ readonly class MacroStateDTO
         public float $extractionStringency = 0.0,
         public float $stampDutyRate = FinancialConstants::STAMP_DUTY_RATE,
         public float $bankLevyRate = 0.0,
+        /** The rate committee's supermajority, 1 hawkish, -1 dovish, 0 neither (App\Service\Politics\MonetaryAuthority). */
+        public float $authorityMajority = 0.0,
+        /** 1 while politics hands the macro a rate committee, else 0: the policy rule reads the supermajority only then. */
+        public float $authorityCommitteeSeated = 0.0,
         public float $electricityCarbonPriceLevel = 0.0,
         public float $moneySupplyGrowth = MacroEngine::M2_BASE_GROWTH,
         public float $moneySupplyGrowthEma = MacroEngine::M2_BASE_GROWTH,

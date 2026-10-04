@@ -247,6 +247,43 @@ class SystemicEventReporterTest extends TestCase
         }
     }
 
+    /**
+     * The Authority's headlines name the people and the vote: a new governor by name, age, stance and whom the Council
+     * passed over; a committee tipping into a supermajority by its make-up; a rate decision by its move and its split.
+     */
+    public function testTheAuthoritysHeadlinesNameThePeopleAndTheVote(): void
+    {
+        $authority = [
+            'totalTime' => 3.1, 'authoritySalt' => 5.0, 'councilStances' => array_fill(0, 13, 1.0), 'governorName' => 'Theodora Vance', 'governorBirth' => -50.0,
+            'governorStance' => 1.0, 'governorPassedOver' => [['name' => 'Clio Wren', 'birth' => -45.0, 'stance' => -1.0], ['name' => 'Ivo Sato', 'birth' => -55.0, 'stance' => 0.0]],
+            'memberStances' => [1.0, 1.0, 1.0, 0.0, 0.0, -1.0], 'committeeMajority' => 1.0,
+            'lastMeetingAt' => 3.1, 'lastMeetingRate' => 0.0425, 'lastMeetingChange' => 0.005, 'lastMeetingVotes' => [0.0, 0.0, 0.0, 0.0, 0.0, 1.0, -1.0],
+        ];
+        $appointed = new PoliticsStateDTO(...($authority + ['eventType' => ShockEvent::GOVERNOR_APPOINTED, 'lastGovernorAppointedAt' => 3.1]));
+        $tipped = new PoliticsStateDTO(...($authority + ['eventType' => ShockEvent::AUTHORITY_MAJORITY_SHIFT, 'lastMajorityShiftAt' => 3.1]));
+        $decided = new PoliticsStateDTO(...($authority + ['eventType' => ShockEvent::MONETARY_DECISION]));
+
+        for ($i = 0; $i < 20; ++$i) {
+            $headline = $this->reporter(bufferedPrice: null)->report(new MacroStateDTO(totalTime: 3.1), $appointed, $this->benchmarkAt('100'));
+            $this->assertNotNull($headline);
+            $this->assertStringContainsString('Theodora Vance', $headline['description']);
+            $this->assertStringContainsString('a hawk', $headline['description']);
+            $this->assertStringContainsString('Clio Wren, a dove and Ivo Sato, a swing vote', $headline['description']);
+            $this->assertStringNotContainsString('{', $headline['description']);
+
+            $headline = $this->reporter(bufferedPrice: null)->report(new MacroStateDTO(totalTime: 3.1), $tipped, $this->benchmarkAt('100'));
+            $this->assertNotNull($headline);
+            $this->assertStringContainsString('four hawks, two swing votes and one dove', $headline['description']);
+            $this->assertStringContainsString('awk', $headline['description']);
+
+            $headline = $this->reporter(bufferedPrice: null)->report(new MacroStateDTO(totalTime: 3.1), $decided, $this->benchmarkAt('100'));
+            $this->assertNotNull($headline);
+            $this->assertStringContainsString('raises the rate by 50 basis points to 4.25%', $headline['description']);
+            $this->assertStringContainsString('5-2', $headline['description']);
+            $this->assertStringContainsString('one member wanted a higher rate and one a lower', $headline['description']);
+        }
+    }
+
     public function testATickWithoutAnEventPublishesNothing(): void
     {
         $this->assertNull($this->reporter(bufferedPrice: 100.0)->report(new MacroStateDTO(), new PoliticsStateDTO(), $this->benchmarkAt('100')));

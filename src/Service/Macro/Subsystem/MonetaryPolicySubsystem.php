@@ -65,6 +65,16 @@ class MonetaryPolicySubsystem
     /** Bernanke (2015) blend: weight on forward inflation expectations (TIPS breakeven) in the Taylor Rule inflation measure. */
     public const TAYLOR_INFLATION_ANCHOR_WEIGHT = 0.30;
 
+    // --- The Rate Committee's Supermajorities (Bordo & Istrefi 2023, Table 6, col. 4; FOMC 1987-2007) ---
+    /** Points of rate a dovish supermajority sets less per point of inflation: -0.35 (se 0.15) on the FOMC's inflation response of 1.71. */
+    public const DOVISH_MAJORITY_INFLATION_RESPONSE = 0.35;
+    /** Points of rate a hawkish supermajority sets less per point of output gap, cutting less into a slump: -0.17 (se 0.08) on 0.71. The other two interactions were insignificant (-0.12, 0.01). */
+    public const HAWKISH_MAJORITY_GAP_RESPONSE = 0.17;
+    /** Share of the FOMC's meetings with a dovish supermajority, a quarter by its definition (App\Service\Politics\MonetaryAuthority): the rule as fitted is the FOMC's average committee's, so each term is centred on its share. */
+    public const DOVISH_MAJORITY_SHARE = 0.25;
+    /** Share of the FOMC's meetings with a hawkish supermajority, likewise a quarter. */
+    public const HAWKISH_MAJORITY_SHARE = 0.25;
+
     // --- Forward-Looking Policy Horizon (Clarida, Gali & Gertler 2000; Batini & Haldane 1999) ---
     /** Quarters of gap momentum the rule projects forward. One quarter is what a staff projection actually carries; the longer horizons swept here read as foresight but act as gain, buying a broader spectrum with the left tail (0.75y halves the share of quarters below -3%). */
     public const TAYLOR_GAP_FORECAST_YEARS = 0.25;
@@ -245,7 +255,9 @@ class MonetaryPolicySubsystem
      * Taylor (1993) Monetary Policy Rule with Evans (2012) Forward Guidance.
      *
      * Computes the central bank's nominal policy rate target:
-     *   r_target = r* + pi_blend + alpha_pi * (pi_blend - pi*) + gamma_y * y_gap - phi_L * long_rate_gap
+     *   r_target = r* + pi_blend + alpha_pi * (pi_blend - pi*) + gamma_y * y_gap - phi_L * long_rate_gap + committee
+     * where, while the District's politics hands the macro a rate committee, committee is its supermajority's lean
+     * (committeeMajorityTerm()).
      * Under the Evans Rule, locks target at 0% (ZLB) when the central bank is at
      * the lower bound (or unconstrained target <= 0) and unemployment is elevated
      * while inflation remains contained.
@@ -271,10 +283,13 @@ class MonetaryPolicySubsystem
         // Bernanke (2006) offset leaning against exogenous non-monetary long-rate term premium shifts.
         $longRateOffset = self::TAYLOR_LONG_RATE_OFFSET * $this->calculateLongRateGap($state, $naturalRate);
 
+        $committee = self::committeeMajorityTerm($state->authorityCommitteeSeated > 0.0 ? $state->authorityMajority : null, $inflationMeasure, $cyclicalGap);
+
         $unclampedTarget = $naturalRate + $inflationMeasure
             + self::TAYLOR_INFLATION_WEIGHT * ($inflationMeasure - $targetInflation)
             + self::TAYLOR_OUTPUT_GAP_WEIGHT * $cyclicalGap
-            - $longRateOffset;
+            - $longRateOffset
+            + $committee;
 
         $target = $unclampedTarget;
 
@@ -291,10 +306,35 @@ class MonetaryPolicySubsystem
                 'outputGap' => self::TAYLOR_OUTPUT_GAP_WEIGHT * ($cyclicalGap + $state->productivitySupplyGap),
                 'productivitySeenThrough' => -self::TAYLOR_OUTPUT_GAP_WEIGHT * $state->productivitySupplyGap,
                 'longRateOffset' => -$longRateOffset,
+                'committeeMajority' => $committee,
             ], $target, $dt);
         }
 
         return $target;
+    }
+
+    /**
+     * The rate committee's lean on the rule (Bordo & Istrefi 2023, Table 6, col. 4): a dovish supermajority answers each
+     * point of inflation DOVISH_MAJORITY_INFLATION_RESPONSE less, a hawkish one each point of output gap
+     * HAWKISH_MAJORITY_GAP_RESPONSE less. The rule as fitted is the FOMC's average committee's, so each term is centred on
+     * the quarter of the FOMC's meetings its supermajority held: a committee that leans as the FOMC did adds nothing over
+     * the long run, and one that holds a supermajority more often than that leans the rule for good.
+     *
+     * @param float|null $majority 1 hawkish, -1 dovish, 0 neither; null while no committee is handed over.
+     * @param float      $inflation The rule's inflation measure.
+     * @param float      $gap       The rule's output gap.
+     */
+    public static function committeeMajorityTerm(?float $majority, float $inflation, float $gap): float
+    {
+        if ($majority === null) {
+            return 0.0;
+        }
+
+        $dovish = $majority < 0.0 ? 1.0 : 0.0;
+        $hawkish = $majority > 0.0 ? 1.0 : 0.0;
+
+        return -(self::DOVISH_MAJORITY_INFLATION_RESPONSE * $inflation * ($dovish - self::DOVISH_MAJORITY_SHARE))
+            - (self::HAWKISH_MAJORITY_GAP_RESPONSE * $gap * ($hawkish - self::HAWKISH_MAJORITY_SHARE));
     }
 
     /**

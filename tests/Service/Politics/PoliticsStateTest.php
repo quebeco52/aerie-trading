@@ -37,7 +37,7 @@ class PoliticsStateTest extends TestCase
         $this->assertSame(Diet::SEED_SEATS, (new PoliticsState())->dietSeats);
     }
 
-    /** What Redis keeps comes back as it was written: nested positions, bloc leaders, the talks log, and the headline. */
+    /** What Redis keeps comes back as it was written: nested positions, bloc leaders, the talks log, the headline, and the Authority's people and candidates. */
     public function testTheStateSurvivesTheRoundTripThroughRedis(): void
     {
         $state = new PoliticsState();
@@ -49,6 +49,11 @@ class PoliticsStateTest extends TestCase
         $state->formationLog = [['day' => 12.5, 'formateur' => Diet::CIVIC, 'formed' => true, 'cabinet' => [Diet::CIVIC], 'support' => [Diet::COMMON_LOT]]];
         $state->importTariffRate = 0.05;
         $state->coalitionTakesOfficeAt = 8.3;
+        $state->authoritySalt = 12345.0;
+        $state->councilNames = ['Adelaide Voss', 'Clio Wren'];
+        $state->councilStances = [1.0, -1.0];
+        $state->governorName = 'Ilse Marchand';
+        $state->governorPassedOver = [['name' => 'Corvin Ashby', 'birth' => -48.5, 'stance' => 0.0], ['name' => 'Odile Fenwright', 'birth' => -51.0, 'stance' => -1.0]];
 
         $decoded = json_decode(json_encode($state->toArray(), JSON_THROW_ON_ERROR | JSON_PRESERVE_ZERO_FRACTION), true, 512, JSON_THROW_ON_ERROR);
 

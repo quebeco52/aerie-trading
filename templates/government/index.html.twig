@@ -19,7 +19,7 @@
 					<p class="text-sm text-on-surface-variant mt-2 max-w-2xl">
 						The District is governed by two institutions that share no members and answer to no one but themselves.
 						The Diet is elected every {{ rules.termYears|number_format(0) }} years and passes the budget and the laws.
-						The Council is {{ rules.councilSeats }} technocrats who choose their own successors, run the departments,
+						The Council is {{ rules.councilSeats }} leaders who choose their own successors, appoint the heads of the departments,
 						and hold a veto they almost never use.
 					</p>
 					<p class="mt-3 text-sm text-on-surface-variant">
@@ -291,8 +291,17 @@
 		<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20" aria-labelledby="council-heading">
 			<h2 id="council-heading" class="text-sm font-semibold text-on-surface">The Aerie Council</h2>
 			<p class="text-2xs text-on-surface-variant mt-0.5">
-				{{ rules.councilSeats }} seats on staggered {{ rules.councilTermYears|number_format(0) }}-year terms. When a term ends, the sitting members elect the successor.
+				{{ rules.councilSeats }} seats on staggered {{ rules.councilTermYears|number_format(0) }}-year terms. When a term ends, the sitting members elect the successor from a shortlist.
+				Each councillor holds a stance on money: a hawk would rather fight inflation, a dove would rather spare jobs, a swing vote sides with either as the case takes them. The Council's lean decides whom it appoints.
 			</p>
+			{% if council.lean %}
+				<p class="text-xs text-on-surface mt-3">
+					The Council leans {{ council.lean.median == 'hawk' ? 'hawkish' : (council.lean.median == 'dove' ? 'dovish' : 'to the middle') }}:
+					<span class="font-mono tabular-nums">{{ council.lean.hawk }}</span> {{ council.lean.hawk == 1 ? 'hawk' : 'hawks' }},
+					<span class="font-mono tabular-nums">{{ council.lean.swing }}</span> {{ council.lean.swing == 1 ? 'swing vote' : 'swing votes' }},
+					<span class="font-mono tabular-nums">{{ council.lean.dove }}</span> {{ council.lean.dove == 1 ? 'dove' : 'doves' }}.
+				</p>
+			{% endif %}
 
 			<div class="grid grid-cols-1 lg:grid-cols-[1fr_22rem] gap-5 mt-4">
 				<div class="overflow-x-auto">
@@ -301,8 +310,10 @@
 							<tr class="text-2xs uppercase tracking-wide font-semibold text-on-surface-variant border-b border-outline-variant/15">
 								<th scope="col" class="text-right font-semibold pb-2 w-10">Seat</th>
 								<th scope="col" class="text-left font-semibold pb-2 pl-4">Councillor</th>
-								<th scope="col" class="text-left font-semibold pb-2">Seated</th>
-								<th scope="col" class="text-left font-semibold pb-2">Term ends</th>
+								<th scope="col" class="text-right font-semibold pb-2">Age</th>
+								<th scope="col" class="text-left font-semibold pb-2 pl-4 hidden md:table-cell">Seated</th>
+								<th scope="col" class="text-left font-semibold pb-2 pl-4 md:pl-0">Term ends</th>
+								<th scope="col" class="text-left font-semibold pb-2 pl-4">Stance</th>
 							</tr>
 						</thead>
 						<tbody class="divide-y divide-outline-variant/10">
@@ -310,8 +321,10 @@
 								<tr>
 									<td class="py-1.5 text-right font-mono tabular-nums text-on-surface-variant">{{ seat.seat }}</td>
 									<th scope="row" class="py-1.5 pl-4 text-left font-semibold text-on-surface">{{ seat.name }}</th>
-									<td class="py-1.5 text-on-surface-variant font-mono tabular-nums">{{ seat.sinceLabel }}</td>
-									<td class="py-1.5 text-on-surface-variant font-mono tabular-nums {{ seat.seat == council.nextVacancy.seat ? 'text-primary font-semibold' : '' }}">{{ seat.termEndsLabel }}</td>
+									<td class="py-1.5 text-right font-mono tabular-nums text-on-surface-variant">{{ seat.age ?? '' }}</td>
+									<td class="py-1.5 pl-4 text-on-surface-variant font-mono tabular-nums whitespace-nowrap hidden md:table-cell">{{ seat.sinceLabel }}</td>
+									<td class="py-1.5 pl-4 md:pl-0 text-on-surface-variant font-mono tabular-nums whitespace-nowrap {{ seat.seat == council.nextVacancy.seat ? 'text-primary font-semibold' : '' }}">{{ seat.termEndsLabel }}</td>
+									<td class="py-1.5 pl-4 text-on-surface whitespace-nowrap">{{ _self.stance(seat.stance ?? null) }}</td>
 								</tr>
 							{% endfor %}
 						</tbody>
@@ -347,13 +360,92 @@
 			</div>
 		</section>
 
+		{% if authority %}
+			{% set governor = authority.governor %}
+			<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20" aria-labelledby="authority-heading">
+				<h2 id="authority-heading" class="text-sm font-semibold text-on-surface">The Monetary Authority</h2>
+				<p class="text-2xs text-on-surface-variant mt-0.5">
+					The Council names the governor for a single {{ authority.rules.governorTermYears|number_format(0) }}-year term from a shortlist of {{ authority.rules.shortlist }}, and the governor fills the rate committee's {{ authority.rules.memberTermYears|number_format(0) }}-year seats as they fall vacant, picking people of their own stance where the shortlist offers one.
+					The {{ authority.rules.members }} members set the policy rate {{ authority.rules.meetingsPerYear }} times a year by the Authority's published rule. A committee that leans hard one way bends it: a dovish majority answers rising prices less firmly, a hawkish one cuts less into a slowdown.
+				</p>
+
+				<div class="grid grid-cols-1 lg:grid-cols-[22rem_1fr] gap-5 mt-4">
+					<div class="space-y-4">
+						<div>
+							<p class="text-2xs text-on-surface-variant">Governor</p>
+							<p class="text-sm font-semibold text-on-surface mt-0.5">{{ governor.name }}</p>
+							<p class="text-2xs text-on-surface-variant mt-0.5">Age {{ governor.age }} · seated {{ governor.sinceLabel }} · term ends <span class="font-mono tabular-nums">{{ governor.termEndsLabel }}</span></p>
+							<p class="text-xs text-on-surface mt-1">
+								{{- {hawk: 'A hawk', swing: 'A swing vote', dove: 'A dove'}[governor.stance] -}}
+								{%- if governor.passedOver is not empty %}, chosen over {% for candidate in governor.passedOver %}{{ candidate.name }} <span class="text-on-surface-variant">({{ {hawk: 'hawk', swing: 'swing vote', dove: 'dove'}[candidate.stance] }}, {{ candidate.age }})</span>{{ loop.last ? '' : (loop.revindex == 2 ? ' and ' : ', ') }}{% endfor %}{% endif %}.
+							</p>
+						</div>
+						<div>
+							<p class="text-2xs text-on-surface-variant">The committee</p>
+							<p class="text-sm font-semibold text-on-surface mt-0.5">{{ authority.committee.majority == 'hawkish' ? 'A hawkish majority' : (authority.committee.majority == 'dovish' ? 'A dovish majority' : 'No settled majority') }}</p>
+							<p class="text-2xs text-on-surface-variant mt-0.5">
+								<span class="font-mono tabular-nums">{{ authority.committee.hawk }}</span> {{ authority.committee.hawk == 1 ? 'hawk' : 'hawks' }} ·
+								<span class="font-mono tabular-nums">{{ authority.committee.swing }}</span> {{ authority.committee.swing == 1 ? 'swing vote' : 'swing votes' }} ·
+								<span class="font-mono tabular-nums">{{ authority.committee.dove }}</span> {{ authority.committee.dove == 1 ? 'dove' : 'doves' }}
+							</p>
+						</div>
+						{% if authority.meeting %}
+							{% set meeting = authority.meeting %}
+							<div>
+								<p class="text-2xs text-on-surface-variant">Last decision · <span class="font-mono tabular-nums">{{ meeting.date }}</span></p>
+								<p class="text-xs text-on-surface mt-0.5">
+									{%- set bp = (meeting.change * 10000)|round -%}
+									{{ bp|abs < 13 ? 'Held at ' : (bp > 0 ? 'Raised ' ~ bp ~ ' basis points to ' : 'Cut ' ~ bp|abs ~ ' basis points to ') }}<span class="font-mono tabular-nums">{{ (meeting.rate * 100)|number_format(2) }}%</span>, voting <span class="font-mono tabular-nums">{{ meeting.split }}</span>
+								</p>
+								{% if meeting.higher > 0 or meeting.lower > 0 %}
+									<p class="text-2xs text-on-surface-variant mt-0.5">
+										{%- if meeting.higher > 0 %}{{ meeting.higher }} for a higher rate{% endif %}{% if meeting.higher > 0 and meeting.lower > 0 %}, {% endif %}{% if meeting.lower > 0 %}{{ meeting.lower }} for a lower rate{% endif -%}
+									</p>
+								{% endif %}
+							</div>
+						{% endif %}
+					</div>
+
+					<div class="overflow-x-auto">
+						<table class="w-full text-xs">
+							<caption class="sr-only">The rate committee</caption>
+							<thead>
+								<tr class="text-2xs uppercase tracking-wide font-semibold text-on-surface-variant border-b border-outline-variant/15">
+									<th scope="col" class="text-left font-semibold pb-2">Member</th>
+									<th scope="col" class="text-right font-semibold pb-2">Age</th>
+									<th scope="col" class="text-left font-semibold pb-2 pl-4 hidden md:table-cell">Seated</th>
+									<th scope="col" class="text-left font-semibold pb-2 pl-4 md:pl-0">Term ends</th>
+									<th scope="col" class="text-left font-semibold pb-2 pl-4">Stance</th>
+									<th scope="col" class="text-left font-semibold pb-2 pl-4">Last vote</th>
+								</tr>
+							</thead>
+							<tbody class="divide-y divide-outline-variant/10">
+								{% for member in [governor]|merge(authority.members) %}
+									<tr>
+										<th scope="row" class="py-1.5 text-left font-semibold text-on-surface">{{ member.name }}{% if loop.first %} <span class="font-normal text-on-surface-variant">(governor)</span>{% endif %}</th>
+										<td class="py-1.5 text-right font-mono tabular-nums text-on-surface-variant">{{ member.age }}</td>
+										<td class="py-1.5 pl-4 font-mono tabular-nums text-on-surface-variant whitespace-nowrap hidden md:table-cell">{{ member.sinceLabel }}</td>
+										<td class="py-1.5 pl-4 md:pl-0 font-mono tabular-nums text-on-surface-variant whitespace-nowrap">{{ member.termEndsLabel }}</td>
+										<td class="py-1.5 pl-4 text-on-surface whitespace-nowrap">{{ _self.stance(member.stance) }}</td>
+										<td class="py-1.5 pl-4 text-2xs {{ member.vote is not null and member.vote != 0 ? 'text-on-surface font-semibold' : 'text-on-surface-variant' }}">
+											{{- member.vote is null ? '' : (member.vote > 0 ? 'For a higher rate' : (member.vote < 0 ? 'For a lower rate' : 'With the decision')) -}}
+										</td>
+									</tr>
+								{% endfor %}
+							</tbody>
+						</table>
+					</div>
+				</div>
+			</section>
+		{% endif %}
+
 		<section class="bg-surface-container-low rounded-lg border border-outline-variant/20 overflow-hidden" aria-labelledby="history-heading">
 			<div class="p-5 pb-3">
 				<h2 id="history-heading" class="text-sm font-semibold text-on-surface">Elections</h2>
 				<p class="text-2xs text-on-surface-variant mt-0.5">Every vote on record, newest first, with the economy it was cast on and the government the talks produced.</p>
 			</div>
 			{% if history is empty %}
-				<p class="px-5 pb-5 text-xs text-on-surface-variant">No election has been held yet. The founding Diet sits until {{ election.next }}.</p>
+				<p class="px-5 pb-5 text-xs text-on-surface-variant">No election has been held since Year 1. The sitting Diet serves until {{ election.next }}.</p>
 			{% else %}
 				<div class="overflow-x-auto">
 					<table class="w-full text-xs">
@@ -534,3 +626,6 @@
 		</div>
 	{% endif %}
 {% endmacro %}
+
+{# A person's stance on money, in words: hawk, swing vote or dove. #}
+{% macro stance(stance) %}{{ {hawk: 'Hawk', swing: 'Swing', dove: 'Dove'}[stance] ?? '' }}{% endmacro %}

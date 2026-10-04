@@ -432,6 +432,47 @@ class NarrativeEngine
                     "Budget passed: The Diet has voted the government's budget.",
                 ]
             ),
+            ShockEvent::GOVERNOR_APPOINTED => $this->getRandomPhrase(
+                isset($context['governor'], $context['governor_age'], $context['governor_stance'], $context['governor_passed_over']) ? [
+                    "New governor: The Council names {$context['governor']}, {$context['governor_age']}, {$context['governor_stance']}, to lead the Monetary Authority until {$context['governor_term_ends']}, passing over {$context['governor_passed_over']}. The governor will fill the rate committee's seats as they fall vacant.",
+                    "The Council picks its central banker: {$context['governor']}, {$context['governor_stance']}, takes the Monetary Authority for a single term ending {$context['governor_term_ends']}, chosen over {$context['governor_passed_over']}.",
+                ] : [
+                    "New governor: The Council has named a new governor of the Monetary Authority.",
+                ]
+            ),
+            ShockEvent::AUTHORITY_MAJORITY_SHIFT => $this->getRandomPhrase(
+                isset($context['committee_majority'], $context['committee_counts'], $context['governor']) ? match ($context['committee_majority']) {
+                    'hawkish' => [
+                        "Rate committee turns hawkish: With {$context['committee_counts']}, Governor {$context['governor']}'s committee now holds a hawkish majority, slower to cut when the economy slackens.",
+                        "Hawks take the Monetary Authority: The committee's newest seat gives {$context['committee_counts']} on the panel, and a majority that would rather hold rates up through a slowdown.",
+                    ],
+                    'dovish' => [
+                        "Rate committee turns dovish: With {$context['committee_counts']}, Governor {$context['governor']}'s committee now holds a dovish majority, slower to answer rising prices.",
+                        "Doves take the Monetary Authority: The committee's newest seat gives {$context['committee_counts']} on the panel, and a majority readier to let inflation run.",
+                    ],
+                    default => [
+                        "Rate committee rebalanced: With {$context['committee_counts']}, neither hawks nor doves now hold sway on Governor {$context['governor']}'s committee.",
+                    ],
+                } : [
+                    "Rate committee rebalanced: The Monetary Authority's committee has a new balance of hawks and doves.",
+                ]
+            ),
+            ShockEvent::COUNCILLOR_SEATED => $this->getRandomPhrase(
+                isset($context['councillor'], $context['councillor_age'], $context['councillor_stance'], $context['councillor_passed_over']) ? [
+                    "Council succession: The sitting councillors elect {$context['councillor']}, {$context['councillor_age']}, {$context['councillor_stance']}, to a twenty-year seat, passing over {$context['councillor_passed_over']}.",
+                    "{$context['councillor']} joins the Aerie Council: elected by its members to succeed a retiring colleague, the newcomer is {$context['councillor_stance']} on money.",
+                ] : [
+                    "Council succession: The Aerie Council has elected a new member.",
+                ]
+            ),
+            ShockEvent::MONETARY_DECISION => $this->getRandomPhrase(
+                isset($context['rate_move'], $context['vote_split'], $context['dissent_phrase']) ? [
+                    "Monetary Authority {$context['rate_move']}: The committee voted {$context['vote_split']}; {$context['dissent_phrase']}.",
+                    "Rate decision: Governor {$context['governor']}'s committee {$context['rate_move']} on a {$context['vote_split']} vote, and {$context['dissent_phrase']}.",
+                ] : [
+                    "Rate decision: The Monetary Authority's committee has set the policy rate.",
+                ]
+            ),
             ShockEvent::TITAN_INTERVENTION => $this->getRandomPhrase(
                 isset($context['qe_intensity_pct']) ? [
                     "Central bank Quantitative Easing: Monetary authority expanded asset purchases (QE intensity: {$context['qe_intensity_pct']}%) to compress bond yields and inject liquidity" . (isset($context['output_gap_pct']) ? " amid negative output gap ({$context['output_gap_pct']}%)" : "") . ".",

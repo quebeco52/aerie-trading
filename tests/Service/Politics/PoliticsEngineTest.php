@@ -711,6 +711,14 @@ class PoliticsEngineTest extends TestCase
         $this->assertSame(ShockEvent::GOVERNMENT_FORMED, $on(['lastGovernmentFormedAt' => 6.3]));
         $this->assertSame(ShockEvent::GOVERNMENT_FORMED, $on(['lastGovernmentFormedAt' => 6.3, 'lastBudgetEnactedAt' => 6.3]), 'A cabinet taking office outranks a budget.');
         $this->assertSame(ShockEvent::BUDGET_ENACTED, $on(['lastBudgetEnactedAt' => 6.3]));
+        $this->assertSame(ShockEvent::BUDGET_ENACTED, $on(['lastBudgetEnactedAt' => 6.3, 'lastGovernorAppointedAt' => 6.3]), 'A budget outranks the Council\'s appointments.');
+        $this->assertSame(ShockEvent::GOVERNOR_APPOINTED, $on(['lastGovernorAppointedAt' => 6.3, 'lastMajorityShiftAt' => 6.3]), 'A new governor outranks the majority their arrival tips.');
+        $this->assertSame(ShockEvent::AUTHORITY_MAJORITY_SHIFT, $on(['lastMajorityShiftAt' => 6.3, 'lastCouncillorSeatedAt' => 6.3]));
+        $this->assertSame(ShockEvent::GOVERNOR_APPOINTED, $on(['lastGovernorAppointedAt' => 6.3, 'lastCouncillorSeatedAt' => 6.3]));
+        $this->assertSame(ShockEvent::COUNCILLOR_SEATED, $on(['lastCouncillorSeatedAt' => 6.3, 'lastMeetingAt' => 6.3, 'lastMeetingChange' => 0.005]));
+        $this->assertSame(ShockEvent::MONETARY_DECISION, $on(['lastMeetingAt' => 6.3, 'lastMeetingChange' => 0.0025, 'lastMeetingVotes' => [0.0, 0.0]]), 'A full step makes news.');
+        $this->assertSame(ShockEvent::MONETARY_DECISION, $on(['lastMeetingAt' => 6.3, 'lastMeetingChange' => 0.0, 'lastMeetingVotes' => [0.0, 1.0]]), 'So does a dissent.');
+        $this->assertNull($on(['lastMeetingAt' => 6.3, 'lastMeetingChange' => 0.001, 'lastMeetingVotes' => [0.0, 0.0]]), 'A unanimous small move does not.');
     }
 
     /** Each tick names its headline, and the next tick clears it. */

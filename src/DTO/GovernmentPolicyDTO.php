@@ -31,5 +31,7 @@ final readonly class GovernmentPolicyDTO
         public float $bankLevyRate,
         /** Nearness to the vote (0 at mid-term, 1 on its eve and through the talks after it) less its long-run mean. */
         public float $electionPulse,
+        /** The Monetary Authority's rate committee's supermajority: 1 hawkish, -1 dovish, 0 neither; null before the committee has formed. */
+        public ?float $authorityMajority = null,
     ) {}
 }
