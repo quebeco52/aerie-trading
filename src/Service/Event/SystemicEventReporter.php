@@ -12,6 +12,7 @@ use App\Service\Market\PriceChangeFeed;
 use App\Service\Politics\CoalitionFormation;
 use App\Service\Politics\FinancialRegulator;
 use App\Service\Politics\MonetaryAuthority;
+use App\Service\Politics\PartyLeaders;
 use App\Service\Politics\SovereignReserveFund;
 use App\Service\View\GovernmentPageBuilder;
 
@@ -76,6 +77,7 @@ class SystemicEventReporter
         ] + self::electionContext($politics) + self::fallContext($politics) + self::formationContext($politics) + self::budgetContext($politics)
             + self::authorityContext($politics)
             + self::pressureContext($politics)
+            + self::leaderContext($politics)
             + self::fundHeadContext($macro, $politics);
 
         $monthMove = $this->priceChangeFeed->changeForTicker((string) $benchmark->getTicker(), (float) $benchmark->getPrice());
@@ -210,6 +212,7 @@ class SystemicEventReporter
             'attempts' => (string) count($politics->formationLog),
             'attempts_phrase' => count($politics->formationLog) === 1 ? 'at the first attempt' : 'after ' . count($politics->formationLog) . ' attempts',
             'lead_party' => $names[$final['formateur']],
+            'prime_minister' => $politics->leaderNames[PartyLeaders::primeMinisterParty($politics) ?? ''] ?? '',
             'diet_seats' => (string) AerieDiet::SEATS,
         ];
     }
@@ -282,6 +285,32 @@ class SystemicEventReporter
         }
 
         return $context + self::regulatorContext($politics);
+    }
+
+    /**
+     * A party's change of leader for its headline: the party, the new leader and their age, and the leader they succeed
+     * and for how long that one led. Empty outside the tick a party changes its leader.
+     *
+     * @return array<string, string>
+     */
+    private static function leaderContext(PoliticsStateDTO $politics): array
+    {
+        $party = $politics->lastLeaderChangeParty;
+        $former = $politics->leaderHistory[$party] ?? [];
+        if ($politics->lastLeaderChangeAt < 0.0 || $politics->lastLeaderChangeAt !== $politics->totalTime || $former === [] || !isset($politics->leaderNames[$party], $politics->leaderBirths[$party])) {
+            return [];
+        }
+
+        $outgoing = $former[array_key_last($former)];
+        $led = $outgoing['until'] - $outgoing['since'];
+
+        return [
+            'leader_party' => self::midSentenceNames()[$party],
+            'leader' => $politics->leaderNames[$party],
+            'leader_age' => (string) (int) floor($politics->totalTime - $politics->leaderBirths[$party]),
+            'outgoing_leader' => $outgoing['name'],
+            'outgoing_led' => $led < 1.0 ? 'less than a year' : (round($led) === 1.0 ? 'a year' : number_format($led, 0) . ' years'),
+        ];
     }
 
     /**

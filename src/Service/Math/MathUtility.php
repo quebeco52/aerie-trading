@@ -120,7 +120,8 @@ class MathUtility
     /**
      * Maps a real value onto the open interval (0, 1) with a logistic curve.
      * Strictly monotonic, so inputs past the calibration window keep differentiating
-     * instead of flat-lining against a clamp. Presentation/scaling use only.
+     * instead of flat-lining against a clamp. At a midpoint of 0 and a steepness of 1 it is a
+     * logit model's probability from its log-odds.
      *
      * @param float $x         Input value.
      * @param float $midpoint  Input that maps to 0.5.
@@ -1456,6 +1457,20 @@ class MathUtility
             return ($c * exp(-$z * $z / 2.0) * $t *
                 ($t * ($t * ($t * ($t * $b5 + $b4) + $b3) + $b2) + $b1));
         }
+    }
+
+    /**
+     * A draw from a normal truncated to [min, max] by inverse transform: the uniform picks a quantile of the truncated
+     * law, so one uniform gives one draw and the draw never leaves the range.
+     *
+     * @param float $uniform A uniform draw on [0, 1].
+     */
+    public function truncatedNormalInverse(float $uniform, float $mean, float $sd, float $min, float $max): float
+    {
+        $low = $this->calculateNormalCDF(($min - $mean) / $sd);
+        $high = $this->calculateNormalCDF(($max - $mean) / $sd);
+
+        return $mean + ($sd * $this->calculateInverseNormalCDF($low + ($uniform * ($high - $low))));
     }
 
     /**

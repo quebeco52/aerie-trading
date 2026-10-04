@@ -40,6 +40,9 @@
 						{% if government.support is not empty %}
 							<p class="text-2xs text-on-surface-variant mt-1">Supported from outside by {% for member in government.support %}<span class="font-semibold text-on-surface">{{ member.name }}</span>{{ not loop.last ? ', ' : '' }}{% endfor %}</p>
 						{% endif %}
+						{% if government.primeMinister %}
+							<p class="text-2xs text-on-surface-variant mt-1">{{ government.caretaker ? 'Caretaker prime minister' : 'Prime minister' }} <span class="font-semibold text-on-surface">{{ government.primeMinister.name }}</span>, {{ government.primeMinister.age }}, leader of {{ government.primeMinister.party }}</p>
+						{% endif %}
 						<p class="text-2xs font-mono tabular-nums text-on-surface-variant mt-1">{{ government.caretaker ? 'Stays in office until the talks produce a government · formed ' : 'Formed ' }}{{ government.formed }}</p>
 					</div>
 					<div>
@@ -144,6 +147,9 @@
 										<span class="text-xs text-on-surface-variant" title="{{ party.leadsBloc ? 'Leads its bloc as its largest party' : 'Campaigned in this bloc at the last election' }}"><span class="inline-block w-1.5 h-1.5 rounded-full mr-0.5 align-middle" style="background-color: {{ party.blocColor }}" aria-hidden="true"></span>{{ party.leadsBloc ? 'Leads a bloc' : 'Backs ' ~ party.bloc }}</span>
 										{% if party.governing %}<span class="text-xs font-medium text-primary">{{ government.caretaker ? 'Caretaker' : 'In government' }}</span>{% elseif party.supporting %}<span class="text-xs font-medium text-on-surface-variant">Supports</span>{% endif %}
 									</span>
+									{% if party.partyLeader %}
+										<span class="block text-2xs text-on-surface-variant mt-0.5" style="padding-left: 1.125rem">Led by {{ party.partyLeader.name }}</span>
+									{% endif %}
 								</th>
 								<td class="py-2 text-right font-mono tabular-nums text-on-surface">{{ party.seats }}</td>
 								<td class="py-2 text-right font-mono tabular-nums text-on-surface">{{ (party.share * 100)|number_format(1) }}%</td>

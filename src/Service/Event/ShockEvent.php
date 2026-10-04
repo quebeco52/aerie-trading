@@ -65,6 +65,10 @@ class ShockEvent
     public const AUTHORITY_GIVES_GROUND = 'authority_gives_ground';
     /** An appointment has tipped the rate committee into or out of a hawkish or dovish supermajority, which leans the policy rule. */
     public const AUTHORITY_MAJORITY_SHIFT = 'authority_majority_shift';
+    /** The prime minister's party has a new leader, who is prime minister without an election. */
+    public const PRIME_MINISTER_CHANGED = 'prime_minister_changed';
+    /** A party outside the premiership has a new leader. */
+    public const PARTY_LEADER_CHANGED = 'party_leader_changed';
     /** The Council has elected a successor to a councillor whose term ended. */
     public const COUNCILLOR_SEATED = 'councillor_seated';
     /** The Monetary Authority's rate meeting moved the rate a full step or split its committee. */

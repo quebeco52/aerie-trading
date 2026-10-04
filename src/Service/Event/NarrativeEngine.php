@@ -2,6 +2,8 @@
 
 namespace App\Service\Event;
 
+use App\Data\AerieCouncil;
+
 class NarrativeEngine
 {
     public function generateLore(string $eventType, array $context = []): string
@@ -417,7 +419,7 @@ class NarrativeEngine
                 ]) : [
                     "Government formed: A new cabinet has taken office after the coalition talks.",
                 ]
-            ),
+            ) . (isset($context['cabinet']) && ($context['prime_minister'] ?? '') !== '' ? " {$context['prime_minister']} is prime minister." : ''),
             ShockEvent::BUDGET_ENACTED => $this->getRandomPhrase(
                 isset($context['government'], $context['tax_rate_pct'], $context['tariff_pct']) ? (($context['council_held'] ?? 'no') === 'yes' ? [
                     "Budget passed: The {$context['government']} government holds the corporate rate at {$context['tax_rate_pct']}% and the tariff at {$context['tariff_pct']}%. With debt at {$context['debt_to_gdp_pct']}% of GDP, the Council let it be known it would veto any cut in revenue, and the Diet tabled none.",
@@ -489,9 +491,25 @@ class NarrativeEngine
                     "Rate committee rebalanced: The Monetary Authority's committee has a new balance of hawks and doves.",
                 ]
             ),
+            ShockEvent::PRIME_MINISTER_CHANGED => $this->getRandomPhrase(
+                isset($context['leader'], $context['leader_age'], $context['leader_party'], $context['outgoing_leader'], $context['outgoing_led']) ? [
+                    "New prime minister: {$context['outgoing_leader']} steps down as leader of {$context['leader_party']} after {$context['outgoing_led']}, and the party's choice, {$context['leader']}, {$context['leader_age']}, takes over the government. No election is called; the cabinet and its budget stand.",
+                    "{$context['leader']} is prime minister: {$context['leader_party']} has a new leader, {$context['leader_age']}, in place of {$context['outgoing_leader']}, who led the party for {$context['outgoing_led']}. The premiership passes with the party's lead, without a vote.",
+                ] : [
+                    "New prime minister: The governing party has a new leader, who takes over the government without an election.",
+                ]
+            ),
+            ShockEvent::PARTY_LEADER_CHANGED => $this->getRandomPhrase(
+                isset($context['leader'], $context['leader_age'], $context['leader_party'], $context['outgoing_leader'], $context['outgoing_led']) ? [
+                    "New leader: {$context['leader']}, {$context['leader_age']}, takes over {$context['leader_party']} from {$context['outgoing_leader']}, who led it for {$context['outgoing_led']}.",
+                    "Change at the top of {$context['leader_party']}: {$context['outgoing_leader']} steps down after {$context['outgoing_led']} as leader, and the party chooses {$context['leader']}, {$context['leader_age']}.",
+                ] : [
+                    "New leader: One of the Diet's parties has chosen a new leader.",
+                ]
+            ),
             ShockEvent::COUNCILLOR_SEATED => $this->getRandomPhrase(
                 isset($context['councillor'], $context['councillor_age'], $context['councillor_stance'], $context['councillor_passed_over']) ? [
-                    "Council succession: The sitting councillors elect {$context['councillor']}, {$context['councillor_age']}, {$context['councillor_stance']}, to a twenty-year seat, passing over {$context['councillor_passed_over']}.",
+                    "Council succession: The sitting councillors elect {$context['councillor']}, {$context['councillor_age']}, {$context['councillor_stance']}, to a " . (int) AerieCouncil::TERM_YEARS . "-year seat, passing over {$context['councillor_passed_over']}.",
                     "{$context['councillor']} joins the Aerie Council: elected by its members to succeed a retiring colleague, the newcomer is {$context['councillor_stance']} on money.",
                 ] : [
                     "Council succession: The Aerie Council has elected a new member.",

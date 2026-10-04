@@ -347,6 +347,41 @@ class SystemicEventReporterTest extends TestCase
         }
     }
 
+    /**
+     * A party's new leader is named with their age, the leader they succeed and how long that one led; when the party
+     * leads the cabinet, the news is of a new prime minister.
+     */
+    public function testALeadersHeadlineNamesTheSuccessionAndAPremiersNamesTheNewPrimeMinister(): void
+    {
+        $change = [
+            'totalTime' => 6.0, 'authoritySalt' => 5.0, 'lastLeaderChangeAt' => 6.0,
+            'leaderNames' => [Diet::VANGUARD => 'Maren Holt', Diet::CIVIC => 'Tomas Reyne'],
+            'leaderBirths' => [Diet::VANGUARD => -40.0, Diet::CIVIC => -45.0],
+            'leaderSince' => [Diet::VANGUARD => 6.0, Diet::CIVIC => 6.0],
+        ];
+        $premier = new PoliticsStateDTO(...($change + ['eventType' => ShockEvent::PRIME_MINISTER_CHANGED, 'lastLeaderChangeParty' => Diet::VANGUARD,
+            'leaderHistory' => [Diet::VANGUARD => [['name' => 'Ada Quill', 'birth' => -60.0, 'since' => -1.0, 'until' => 6.0]]]]));
+        $party = new PoliticsStateDTO(...($change + ['eventType' => ShockEvent::PARTY_LEADER_CHANGED, 'lastLeaderChangeParty' => Diet::CIVIC,
+            'leaderHistory' => [Diet::CIVIC => [['name' => 'Ola Brandt', 'birth' => -60.0, 'since' => 5.5, 'until' => 6.0]]]]));
+
+        for ($i = 0; $i < 20; ++$i) {
+            $news = (string) $this->reporter(bufferedPrice: null)->report(new MacroStateDTO(totalTime: 6.0), $premier, $this->benchmarkAt('100'))['description'];
+            $this->assertStringContainsString('Maren Holt', $news);
+            $this->assertStringContainsString('46', $news);
+            $this->assertStringContainsString('Ada Quill', $news);
+            $this->assertStringContainsString('7 years', $news);
+            $this->assertStringContainsString('prime minister', strtolower($news));
+            $this->assertStringNotContainsString('{', $news);
+
+            $news = (string) $this->reporter(bufferedPrice: null)->report(new MacroStateDTO(totalTime: 6.0), $party, $this->benchmarkAt('100'))['description'];
+            $this->assertStringContainsString('Tomas Reyne', $news);
+            $this->assertStringContainsString('Ola Brandt', $news);
+            $this->assertStringContainsString('less than a year', $news);
+            $this->assertStringContainsString('the Civic Front', $news);
+            $this->assertStringNotContainsString('prime minister', strtolower($news));
+        }
+    }
+
     public function testATickWithoutAnEventPublishesNothing(): void
     {
         $this->assertNull($this->reporter(bufferedPrice: 100.0)->report(new MacroStateDTO(), new PoliticsStateDTO(), $this->benchmarkAt('100')));

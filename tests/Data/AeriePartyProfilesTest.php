@@ -19,9 +19,29 @@ class AeriePartyProfilesTest extends TestCase
             $this->assertNotSame('', $profile['motto'], $party);
             $this->assertNotEmpty($profile['about'], $party);
             $this->assertNotEmpty($profile['agenda'], $party);
-            foreach ($profile['agenda'] as $plank) {
-                $this->assertNotSame('', $plank['title'], $party);
-                $this->assertNotSame('', $plank['text'], $party);
+            foreach (['founded', 'voters', 'heartland', 'relations'] as $field) {
+                $this->assertNotSame('', $profile[$field], $party . ' ' . $field);
+            }
+            foreach (['agenda', 'history'] as $list) {
+                $this->assertNotEmpty($profile[$list], $party . ' ' . $list);
+                foreach ($profile[$list] as $entry) {
+                    $this->assertNotSame('', $entry['title'], $party);
+                    $this->assertNotSame('', $entry['text'], $party);
+                }
+            }
+        }
+    }
+
+    /**
+     * Every party says something on each of the four questions, and calls a question its founding principle exactly
+     * where the Diet fixes its position, so the prose and the place the page draws it never disagree.
+     */
+    public function testEachPartySpeaksToEveryQuestionAndNamesItsFoundingPrinciples(): void
+    {
+        foreach (AeriePartyProfiles::PROFILES as $party => $profile) {
+            $this->assertSame(AerieDiet::AXES, array_keys($profile['questions']), $party);
+            foreach ($profile['questions'] as $axis => $line) {
+                $this->assertSame(AerieDiet::isFixed($party, $axis), str_contains(strtolower($line), 'founding principle'), $party . ' on ' . $axis);
             }
         }
     }

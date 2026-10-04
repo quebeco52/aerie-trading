@@ -147,6 +147,21 @@ class PoliticsState
     public float $pressureCabinet;
     public float $pressureGivingIn;
     public float $lastPressureAt;
+    /** @var array<string, string> */
+    public array $leaderNames;
+    /** @var array<string, float> */
+    public array $leaderBirths;
+    /** @var array<string, float> */
+    public array $leaderSince;
+    /** @var array<string, float> */
+    public array $leaderHazardUsed;
+    /** @var array<string, float> */
+    public array $leaderExitAt;
+    /** @var array<string, list<array{name: string, birth: float, since: float, until: float}>> */
+    public array $leaderHistory;
+    public float $leadersReviewedElection;
+    public float $lastLeaderChangeAt;
+    public string $lastLeaderChangeParty;
 
     /** @var array<string, mixed>|null */
     private static ?array $openings = null;
@@ -198,6 +213,8 @@ class PoliticsState
                 $field === 'dietBlocs' => array_map('strval', $value),
                 $field === 'formationLog' => array_values($value),
                 $field === 'councilNames' || $field === 'memberNames' => array_values(array_map('strval', $value)),
+                $field === 'leaderNames' => array_map('strval', $value),
+                $field === 'leaderHistory' => self::hydrateLeaderHistory($value),
                 in_array($field, ['councillorPassedOver', 'governorPassedOver', 'regulatorPassedOver', 'fundHeadPassedOver'], true) => self::hydrateCandidates($value),
                 is_string($opening) => is_scalar($value) ? (string) $value : $opening,
                 is_array($opening) => array_map('floatval', $value),
@@ -242,6 +259,35 @@ class PoliticsState
                     'regulation' => is_numeric($candidate['regulation'] ?? null) ? (float) $candidate['regulation'] : 0.0,
                     'fund' => is_numeric($candidate['fund'] ?? null) ? (float) $candidate['fund'] : 0.0,
                 ];
+            }
+        }
+
+        return $hydrated;
+    }
+
+    /**
+     * Former party leaders off the wire: by party, each one's name, birth, and when they led from and until.
+     *
+     * @param array<mixed> $history Histories by party, as decoded.
+     * @return array<string, list<array{name: string, birth: float, since: float, until: float}>>
+     */
+    private static function hydrateLeaderHistory(array $history): array
+    {
+        $hydrated = [];
+        foreach ($history as $party => $leaders) {
+            if (!is_array($leaders)) {
+                continue;
+            }
+            $hydrated[(string) $party] = [];
+            foreach ($leaders as $leader) {
+                if (is_array($leader)) {
+                    $hydrated[(string) $party][] = [
+                        'name' => is_scalar($leader['name'] ?? null) ? (string) $leader['name'] : '',
+                        'birth' => is_numeric($leader['birth'] ?? null) ? (float) $leader['birth'] : 0.0,
+                        'since' => is_numeric($leader['since'] ?? null) ? (float) $leader['since'] : 0.0,
+                        'until' => is_numeric($leader['until'] ?? null) ? (float) $leader['until'] : 0.0,
+                    ];
+                }
             }
         }
 

@@ -161,10 +161,7 @@ final class CouncilAppointments
      */
     public static function candidate(int $salt, string $vacancy, int $slot, float $since, array $taken, MathUtility $math): array
     {
-        $low = $math->calculateNormalCDF((self::APPOINTMENT_AGE_MIN - self::APPOINTMENT_AGE_MEAN) / self::APPOINTMENT_AGE_SD);
-        $high = $math->calculateNormalCDF((self::APPOINTMENT_AGE_MAX - self::APPOINTMENT_AGE_MEAN) / self::APPOINTMENT_AGE_SD);
-        $quantile = $low + (self::uniform($salt, "{$vacancy}:{$slot}:age") * ($high - $low));
-        $age = self::APPOINTMENT_AGE_MEAN + (self::APPOINTMENT_AGE_SD * $math->calculateInverseNormalCDF($quantile));
+        $age = $math->truncatedNormalInverse(self::uniform($salt, "{$vacancy}:{$slot}:age"), self::APPOINTMENT_AGE_MEAN, self::APPOINTMENT_AGE_SD, self::APPOINTMENT_AGE_MIN, self::APPOINTMENT_AGE_MAX);
 
         for ($attempt = 0; ; ++$attempt) {
             $name = AerieNames::pick(

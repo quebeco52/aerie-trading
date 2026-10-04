@@ -133,6 +133,19 @@ class MarketEventPublisherTest extends TestCase
     }
 
     /** The live feed renders the card the page renders on load, so the wire copy carries it, JSON-safe. */
+    /**
+     * Market-wide headlines run past 255 characters (a fallen cabinet named with its supporters reaches about 290), so
+     * both event tables store the description as text, never as a bounded string: a VARCHAR(255) on etf_events once
+     * stopped the ticker mid-run.
+     */
+    public function testEventDescriptionsAreStoredAsUnboundedText(): void
+    {
+        foreach ([StockEvent::class, EtfEvent::class] as $entity) {
+            $column = (new \ReflectionProperty($entity, 'description'))->getAttributes(\Doctrine\ORM\Mapping\Column::class)[0]->newInstance();
+            $this->assertSame(\Doctrine\DBAL\Types\Types::TEXT, $column->type, $entity);
+        }
+    }
+
     public function testTheWireCopyCarriesThePresentedCard(): void
     {
         $stock = new Stock();

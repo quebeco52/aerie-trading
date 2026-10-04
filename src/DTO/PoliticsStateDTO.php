@@ -152,6 +152,23 @@ readonly class PoliticsStateDTO
         public float $pressureCabinet = -1.0,
         public float $pressureGivingIn = 0.0,
         public float $lastPressureAt = -1.0,
+        /** @var array<string, string> Each party's leader (App\Service\Politics\PartyLeaders), drawn on the first tick; the prime minister is the leader of the cabinet's largest party. */
+        public array $leaderNames = [],
+        /** @var array<string, float> When each leader was born, in simulation years. */
+        public array $leaderBirths = [],
+        /** @var array<string, float> When each leader took the party's lead. */
+        public array $leaderSince = [],
+        /** @var array<string, float> The yearly hazard each leader has run through since taking the lead. */
+        public array $leaderHazardUsed = [],
+        /** @var array<string, float> When a leader the last vote has doomed steps down (-1: none). */
+        public array $leaderExitAt = [],
+        /** @var array<string, list<array{name: string, birth: float, since: float, until: float}>> Each party's former leaders, oldest first. */
+        public array $leaderHistory = [],
+        /** The vote every leader who fought it was last weighed against (-1: none). */
+        public float $leadersReviewedElection = -1.0,
+        /** When a party last changed its leader, and which party. */
+        public float $lastLeaderChangeAt = -1.0,
+        public string $lastLeaderChangeParty = '',
     ) {}
 
     /** Snapshots the engine's working state. */

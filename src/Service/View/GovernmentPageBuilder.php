@@ -21,6 +21,7 @@ use App\Service\Politics\CoalitionFormation;
 use App\Service\Politics\CouncilAppointments;
 use App\Service\Politics\FinancialRegulator;
 use App\Service\Politics\MonetaryAuthority;
+use App\Service\Politics\PartyLeaders;
 use App\Service\Politics\PoliticalPressure;
 use App\Service\Politics\PoliticsEngine;
 use App\Service\Politics\SovereignReserveFund;
@@ -182,6 +183,7 @@ class GovernmentPageBuilder
                 'range' => CoalitionFormation::ideologicalRange($coalition, $politics->partyPositions),
                 'supermajority' => $removalSeats >= AerieDiet::SUPERMAJORITY_SEATS,
                 'caretaker' => $talking,
+                'primeMinister' => self::primeMinister($politics),
             ] + $coalitionPosition,
             'talks' => $this->talks($politics, $talking),
             'election' => [
@@ -270,6 +272,7 @@ class GovernmentPageBuilder
                 'value' => $position[$axis],
                 'home' => AerieDiet::HOME_POSITIONS[$party][$axis],
                 'fixed' => AerieDiet::isFixed($party, $axis),
+                'question' => AeriePartyProfiles::PROFILES[$party]['questions'][$axis],
                 'others' => array_values(array_map(static fn(array $other): array => [
                     'label' => $other['label'],
                     'color' => $other['color'],
@@ -311,6 +314,7 @@ class GovernmentPageBuilder
                 ['name' => 'Stamp duty on share trades', 'unit' => 'pct', 'platform' => $platform['stampDutyRate'], 'enacted' => $politics->stampDutyRate],
                 ['name' => 'Bank levy', 'unit' => 'pct', 'platform' => $platform['bankLevyRate'], 'enacted' => $politics->bankLevyRate],
             ],
+            'leaders' => self::leaders($politics, $party),
             'record' => $record,
             'recordSummary' => [
                 'votes' => count($votes),
@@ -360,6 +364,7 @@ class GovernmentPageBuilder
                 'leadsBloc' => $blocs[$party] === $party,
                 'bloc' => self::PARTY_LABELS[$blocs[$party]],
                 'blocColor' => self::PARTY_COLORS[$blocs[$party]],
+                'partyLeader' => self::leader($politics, $party),
             ] + $position;
         }
 
@@ -559,6 +564,56 @@ class GovernmentPageBuilder
     /**
      * A party's name as it reads mid-sentence: "the Vanguard", "the Civic Front".
      */
+    /**
+     * The prime minister: the leader of the cabinet's largest party. Null before the leaders are first drawn.
+     *
+     * @return array{name: string, age: int, sinceLabel: string, party: string}|null
+     */
+    private static function primeMinister(PoliticsStateDTO $politics): ?array
+    {
+        $party = PartyLeaders::primeMinisterParty($politics);
+        $leader = $party === null ? null : self::leader($politics, $party);
+
+        return $leader === null || $party === null ? null : $leader + ['party' => self::midSentenceName($party)];
+    }
+
+    /**
+     * A party's leader: their name, age, and since when they have led it. Null before the leaders are first drawn.
+     *
+     * @return array{name: string, age: int, sinceLabel: string}|null
+     */
+    private static function leader(PoliticsStateDTO $politics, string $party): ?array
+    {
+        if (!isset($politics->leaderNames[$party], $politics->leaderBirths[$party], $politics->leaderSince[$party])) {
+            return null;
+        }
+
+        return [
+            'name' => $politics->leaderNames[$party],
+            'age' => (int) floor($politics->totalTime - $politics->leaderBirths[$party]),
+            'sinceLabel' => $politics->leaderSince[$party] < 0.0 ? 'Before Year 1' : self::simDate($politics->leaderSince[$party]),
+        ];
+    }
+
+    /**
+     * Everyone who has led a party since the leaders were first drawn, the present leader first.
+     *
+     * @return list<array{name: string, fromLabel: string, toLabel: string, current: bool}>
+     */
+    private static function leaders(PoliticsStateDTO $politics, string $party): array
+    {
+        $label = static fn(float $time): string => $time < 0.0 ? 'Before Year 1' : self::simDate($time);
+        $leaders = [];
+        if (isset($politics->leaderNames[$party], $politics->leaderSince[$party])) {
+            $leaders[] = ['name' => $politics->leaderNames[$party], 'fromLabel' => $label($politics->leaderSince[$party]), 'toLabel' => 'today', 'current' => true];
+        }
+        foreach (array_reverse($politics->leaderHistory[$party] ?? []) as $former) {
+            $leaders[] = ['name' => $former['name'], 'fromLabel' => $label($former['since']), 'toLabel' => $label($former['until']), 'current' => false];
+        }
+
+        return $leaders;
+    }
+
     private static function midSentenceName(string $party): string
     {
         return 'the ' . (preg_replace('/^The /', '', AerieDiet::PARTY_NAMES[$party]) ?? AerieDiet::PARTY_NAMES[$party]);

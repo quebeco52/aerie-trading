@@ -5,12 +5,16 @@ declare(strict_types=1);
 namespace App\Tests\Service\View;
 
 use App\Data\AerieDiet as Diet;
+use App\Data\AeriePartyProfiles;
 use App\DTO\MacroStateDTO;
 use App\DTO\PoliticsStateDTO;
 use App\Entity\DietElection;
 use App\Repository\DietElectionRepository;
 use App\Service\Macro\MacroEngine;
+use App\Service\Math\MathUtility;
+use App\Service\Politics\PartyLeaders;
 use App\Service\Politics\PoliticsEngine;
+use App\Service\Politics\PoliticsState;
 use App\Service\View\GovernmentPageBuilder;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
@@ -589,6 +593,8 @@ class GovernmentPageBuilderTest extends TestCase
         $this->assertTrue($axes[Diet::AXIS_OPENNESS]['fixed']);
         $this->assertFalse($axes[Diet::AXIS_STATE]['fixed']);
         $this->assertCount(count(Diet::PARTIES) - 1, $axes[Diet::AXIS_STATE]['others']);
+        $this->assertSame(AeriePartyProfiles::PROFILES[Diet::IRON_HARBOR]['questions'][Diet::AXIS_OPENNESS], $axes[Diet::AXIS_OPENNESS]['question'], 'Each line carries what the party makes of the question.');
+        $this->assertNotEmpty($page['party']['history']);
 
         $this->assertSame(['Year 1', 'Year 5 Q1', 'Year 9 Q1'], array_column($page['record'], 'date'));
         $this->assertSame(25, $page['record'][0]['seats']);
@@ -596,6 +602,36 @@ class GovernmentPageBuilderTest extends TestCase
         $this->assertFalse($page['record'][2]['cabinet'], 'The talks\' outcome is hidden until the cabinet takes office.');
         $this->assertSame(['votes' => 2, 'cabinet' => 1], array_intersect_key($page['recordSummary'], ['votes' => 0, 'cabinet' => 0]));
         $this->assertCount(count(Diet::PARTIES), $page['parties']);
+    }
+
+    /**
+     * The prime minister is the leader of the cabinet's largest party, and stays so through a change of leader; each
+     * party's row names its leader, and its page names its leader and everyone who led it before.
+     */
+    public function testThePagesNameThePrimeMinisterAndThePartyLeaders(): void
+    {
+        $math = new MathUtility();
+        $state = new PoliticsState();
+        $state->authoritySalt = 4242.0;
+        $state->totalTime = 6.0;
+        PartyLeaders::advance($state, 0.0, $math);
+        $former = $state->leaderNames[Diet::VANGUARD];
+        $state->leaderExitAt[Diet::VANGUARD] = 6.0;
+        PartyLeaders::advance($state, 0.0, $math);
+        $politics = PoliticsStateDTO::fromState($state);
+        $macro = new MacroStateDTO(totalTime: 6.0);
+
+        $page = $this->builder()->build($macro, $politics);
+        $this->assertSame($state->leaderNames[Diet::VANGUARD], $page['government']['primeMinister']['name'], 'The founding cabinet is the Vanguard alone.');
+        $this->assertSame('the Vanguard', $page['government']['primeMinister']['party']);
+        $this->assertSame($state->leaderNames[Diet::CIVIC], array_column($page['parties'], null, 'key')[Diet::CIVIC]['partyLeader']['name']);
+
+        $party = $this->builder()->buildParty($macro, $politics, Diet::VANGUARD);
+        $this->assertSame($state->leaderNames[Diet::VANGUARD], $party['party']['partyLeader']['name']);
+        $this->assertSame([$state->leaderNames[Diet::VANGUARD], $former], array_column($party['leaders'], 'name'), 'The present leader first, then those before.');
+        $this->assertSame(['today', self::simDate(6.0)], array_column($party['leaders'], 'toLabel'));
+
+        $this->assertNull($this->builder()->build($macro, new PoliticsStateDTO())['government']['primeMinister'], 'No one is named before the leaders are drawn.');
     }
 
     /**
@@ -644,5 +680,11 @@ class GovernmentPageBuilderTest extends TestCase
             ->setPositions(Diet::HOME_POSITIONS)
             ->setCoalition($coalition)
             ->setOutgoingCoalition($outgoing);
+    }
+
+    /** A simulation time as the page names it. */
+    private static function simDate(float $time): string
+    {
+        return (new \ReflectionMethod(GovernmentPageBuilder::class, 'simDate'))->invoke(null, $time);
     }
 }

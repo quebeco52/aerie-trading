@@ -296,6 +296,7 @@ class PoliticsEngine
         FinancialRegulator::advance($state, $this->mathUtility);
         SovereignReserveFund::advance($state, $this->mathUtility);
         PoliticalPressure::advance($state, $dt, $this->mathUtility);
+        PartyLeaders::advance($state, $dt, $this->mathUtility);
 
         $state->eventType = self::headline($state);
     }
@@ -314,6 +315,7 @@ class PoliticsEngine
             $state->lastElectionAt === $state->totalTime => ShockEvent::ELECTION_HELD,
             $state->lastCabinetFellAt === $state->totalTime => ShockEvent::GOVERNMENT_FELL,
             $state->lastGovernmentFormedAt === $state->totalTime => ShockEvent::GOVERNMENT_FORMED,
+            $state->lastLeaderChangeAt === $state->totalTime && $state->lastLeaderChangeParty === PartyLeaders::primeMinisterParty($state) => ShockEvent::PRIME_MINISTER_CHANGED,
             $state->lastBudgetEnactedAt === $state->totalTime => ShockEvent::BUDGET_ENACTED,
             $state->lastGovernorAppointedAt === $state->totalTime => ShockEvent::GOVERNOR_APPOINTED,
             $state->lastRegulatorAppointedAt === $state->totalTime => ShockEvent::REGULATOR_APPOINTED,
@@ -321,6 +323,7 @@ class PoliticsEngine
             $state->lastPressureAt === $state->totalTime => $state->pressureGivingIn > 0.0 ? ShockEvent::AUTHORITY_GIVES_GROUND : ShockEvent::AUTHORITY_PRESSED,
             $state->lastMajorityShiftAt === $state->totalTime => ShockEvent::AUTHORITY_MAJORITY_SHIFT,
             $state->lastCouncillorSeatedAt === $state->totalTime => ShockEvent::COUNCILLOR_SEATED,
+            $state->lastLeaderChangeAt === $state->totalTime => ShockEvent::PARTY_LEADER_CHANGED,
             MonetaryAuthority::meetingMadeNews($state) => ShockEvent::MONETARY_DECISION,
             default => null,
         };
