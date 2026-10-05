@@ -308,6 +308,8 @@ final class SectorCalibrationMatrixTest extends TestCase
             (float) TelecomBusinessModel::INDUSTRY_SUBSTITUTABILITY,
             'Telecom growth is almost entirely share taken from carriers.'
         );
+        // "Conglomerates" is a listing convention, not a product market: listed groups sell nothing to each other's customers.
+        $this->assertSame(0.0, (float) \App\Service\Model\Sector\ConglomerateBusinessModel::INDUSTRY_SUBSTITUTABILITY, 'Unrelated groups take no share from one another.');
 
         // A REIT owns its property outright; a restaurant estate is leased almost in full.
         $this->assertSame(0.0, (float) ReitBusinessModel::LEASE_LIABILITY_INTENSITY, 'A landlord owns the building rather than leasing it.');

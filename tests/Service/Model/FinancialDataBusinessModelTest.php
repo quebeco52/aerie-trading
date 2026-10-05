@@ -123,4 +123,22 @@ class FinancialDataBusinessModelTest extends TestCase
             'Tight credit spreads and elevated VIX volatility must expand transaction/rating revenue.'
         );
     }
+
+    public function testSubscriptionsRideThroughTheCycleAndTransactionsCarryItOnce(): void
+    {
+        // Seat subscriptions renew through the cycle, so the root shift carries no output gap; the transaction
+        // stream carries its own cycle terms, and the cost base reads them at the stream's target weight.
+        $model = new FinancialDataBusinessModel();
+        $stock = new Stock();
+        $stock->setTicker('SHRK');
+        $stock->setBeta('1.0');
+        $neutral = new MacroStateDTO(exchangeRateIndexEma: 100.0);
+        $recession = new MacroStateDTO(outputGapEma: -0.03, exchangeRateIndexEma: 100.0);
+
+        $this->assertEqualsWithDelta(0.0, $model->getMacroPhysics($stock, $recession)['macro_demand_shift'], 1e-12);
+
+        // SHRK is 40% transactions: a -3% gap takes 1.5 x cyclicality of it off that stream.
+        $gapEffect = $model->resolveSectorActivityShift($stock, $recession) - $model->resolveSectorActivityShift($stock, $neutral);
+        $this->assertEqualsWithDelta(0.40 * -0.03 * 1.5 * FinancialDataBusinessModel::OPERATING_CYCLICALITY, $gapEffect, 1e-9);
+    }
 }

@@ -53,11 +53,13 @@ class BiotechBusinessModelTest extends TestCase
         return $stock;
     }
 
-    /** Modality-weighted quarterly LOE erosion hazard for the default 50/50 biologic mix. */
-    private function blendedLoeHazard(): float
+    /** Share of the exposed franchise eroded after `quarters` off exclusivity: the 50/50 mixture of the two modality survival curves. */
+    private function loeErodedShare(float $quarters): float
     {
-        return (BiotechBusinessModel::DEFAULT_BIOLOGIC_REVENUE_SHARE * BiotechBusinessModel::BIOLOGIC_LOE_HAZARD)
-            + ((1.0 - BiotechBusinessModel::DEFAULT_BIOLOGIC_REVENUE_SHARE) * BiotechBusinessModel::SMALL_MOLECULE_LOE_HAZARD);
+        $biologic = BiotechBusinessModel::DEFAULT_BIOLOGIC_REVENUE_SHARE;
+
+        return ($biologic * (1.0 - exp(-BiotechBusinessModel::BIOLOGIC_LOE_HAZARD * $quarters)))
+            + ((1.0 - $biologic) * (1.0 - exp(-BiotechBusinessModel::SMALL_MOLECULE_LOE_HAZARD * $quarters)));
     }
 
     public function testPatentCliffAndBlockbusterAssetDepreciationDecay(): void
@@ -224,7 +226,7 @@ class BiotechBusinessModelTest extends TestCase
         $clean = $model->computeActualFinancials($stock, self::EXPECTED_REVENUE, self::VARIABLE_MARGIN, self::FIXED_COSTS, self::BASELINE_VOL, new MacroStateDTO(), $this->mockMath([0.0, 0.0], [false]));
 
         $this->assertNull($clean->eventType);
-        $firstQuarterErosion = BiotechBusinessModel::DEFAULT_LOE_EXPOSURE_SHARE * (1.0 - exp(-$this->blendedLoeHazard()));
+        $firstQuarterErosion = BiotechBusinessModel::DEFAULT_LOE_EXPOSURE_SHARE * $this->loeErodedShare(1.0);
         $expectedShift = -$clean->streamZ['weight:commercial_therapeutics'] * $firstQuarterErosion;
         $this->assertEqualsWithDelta($expectedShift, $clean->streamZ[BiotechBusinessModel::STATE_KNOWN_COMMERCIAL_SHIFT], 1e-9);
         $this->assertLessThan(0.0, $expectedShift);
@@ -303,7 +305,7 @@ class BiotechBusinessModelTest extends TestCase
         $this->assertSame(ShockEvent::BIOTECH_PATENT_CLIFF, $result->eventType);
         $this->assertTrue($result->isPublicEvent);
 
-        $erodedFraction = BiotechBusinessModel::DEFAULT_LOE_EXPOSURE_SHARE * (1.0 - exp(-$this->blendedLoeHazard()));
+        $erodedFraction = BiotechBusinessModel::DEFAULT_LOE_EXPOSURE_SHARE * $this->loeErodedShare(1.0);
         $this->assertEqualsWithDelta(
             self::EXPECTED_REVENUE * BiotechBusinessModel::ESTABLISHED_DRUG_WEIGHT * (1.0 - $erodedFraction),
             $result->streamRevenue['commercial_therapeutics'],
@@ -345,12 +347,12 @@ class BiotechBusinessModelTest extends TestCase
         );
 
         $terminalErosion = 1.0 - (BiotechBusinessModel::DEFAULT_LOE_EXPOSURE_SHARE
-            * (1.0 - exp(-$this->blendedLoeHazard() * BiotechBusinessModel::LOE_EROSION_WINDOW_QUARTERS)));
+            * $this->loeErodedShare(BiotechBusinessModel::LOE_EROSION_WINDOW_QUARTERS));
 
         $state = $result->streamZ;
-        // ~33% of the marketed base is permanently gone (0.665 retained).
+        // ~25% of the marketed base is permanently gone (0.745 retained): the biologic half decays on the slow biosimilar curve.
         $this->assertEqualsWithDelta($terminalErosion, $state[BiotechBusinessModel::STATE_FRANCHISE_INDEX], 1e-9);
-        $this->assertEqualsWithDelta(0.665, $state[BiotechBusinessModel::STATE_FRANCHISE_INDEX], 0.001);
+        $this->assertEqualsWithDelta(0.745, $state[BiotechBusinessModel::STATE_FRANCHISE_INDEX], 0.001);
 
         // The window closes and the clock is rearmed for the next franchise's patent life.
         $this->assertSame(0.0, $state[BiotechBusinessModel::STATE_LOE_ELAPSED_QUARTERS]);

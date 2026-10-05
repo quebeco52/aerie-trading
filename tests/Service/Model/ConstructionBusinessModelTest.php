@@ -220,6 +220,29 @@ class ConstructionBusinessModelTest extends TestCase
 
 
     /** Hallegatte (2008): reconstruction after a storm season is civil work, booked through the infrastructure backlog. */
+    public function testRateDragIsStruckAgainstTheNominalNeutralNotRealRStar(): void
+    {
+        $neutral = \App\Service\Macro\MacroEngine::BASE_NATURAL_RATE + 0.02;
+        $commercial = function (float $policyRate): float {
+            $stock = new Stock();
+            $stock->setTicker('GEN_CONST');
+            $stock->setBeta('1.0');
+            $math = $this->createStub(MathUtility::class);
+            $math->method('generatePersistentZ')->willReturn(0.0);
+            $macro = new MacroStateDTO(outputGapEma: 0.0, policyRateEma: $policyRate, inflationEma: 0.02, tipsBreakevenEma: 0.02);
+
+            return $this->model->computeActualFinancials($stock, 100_000_000.0, 0.40, 20_000_000.0, 0.10, $macro, $math)->streamRevenue['commercial_epc'];
+        };
+
+        // A policy rate at r* plus expected inflation is neutral: no drag relative to an easy stance.
+        $this->assertEqualsWithDelta($commercial($neutral - 0.01), $commercial($neutral), 1.0);
+        // 100bp of restrictive real stance costs RATE_STANCE_ORDER_SENSITIVITY x cyclicality of orders, of which
+        // one burn-rate slice is recognized in the quarter the orders land.
+        $tight = $commercial($neutral + 0.01) / $commercial($neutral) - 1.0;
+        $orderDrag = -0.01 * ConstructionBusinessModel::RATE_STANCE_ORDER_SENSITIVITY * ConstructionBusinessModel::OPERATING_CYCLICALITY;
+        $this->assertEqualsWithDelta($orderDrag * ConstructionBusinessModel::COMMERCIAL_BACKLOG_BURN_RATE, $tight, 0.0005);
+    }
+
     public function testAStormSeasonBooksReconstructionIntoTheCivilBacklog(): void
     {
         $run = function (float $burden): float {

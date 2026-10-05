@@ -8,6 +8,7 @@ use App\Data\InputOutputExposures;
 use App\Service\Model\BusinessModelInterface;
 
 use App\Data\ModelParam;
+use App\DTO\MacroStateDTO;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
@@ -133,7 +134,6 @@ class RailroadBusinessModel extends StandardCorporateBusinessModel
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
         $streams  = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
-        $beta     = $this->getOperatingCyclicality($stock);
 
         // A passenger operator is a different business wearing the same track. Freight sells capacity to
         // shippers and rises and falls with trade and manufacturing; a commuter network sells an
@@ -163,16 +163,11 @@ class RailroadBusinessModel extends StandardCorporateBusinessModel
         $bulkZ       = $streams->generateZ('bulk_commodities', 0.40);
         $industrialZ = $streams->generateZ('industrial_carloads', 0.30);
 
-        // Macro cyclicality
-        $freightShift = ($macroState->freightRateIndexEma - 100.0) / 100.0;
-        $agriShift = ($macroState->agriculturalCommodityIndexEma - 100.0) / 100.0;
-        $tradeShift = MathUtility::calculateTradeBalanceShift($macroState->tradeBalanceToGdpEma, sensitivity: self::TRADE_BALANCE_SENSITIVITY)
-            + MathUtility::calculateForeignDemandShift($macroState->foreignOutputGapEma, sensitivity: self::FOREIGN_DEMAND_SENSITIVITY);
-        $pmiShift = MathUtility::calculatePmiDemandShift($macroState->manufacturingPmiEma, sensitivity: self::PMI_CARLOAD_SENSITIVITY);
-
-        $intermodalMacroShift = ($macroState->outputGapEma * 1.6 * $beta) + ($freightShift * 0.20) + $tradeShift;
-        $industrialMacroShift = ($macroState->outputGapEma * 1.2 * $beta) + $pmiShift;
-        $bulkMacroShift = $agriShift * 0.30;
+        // Macro cyclicality: each stream carries its own elasticity to the cycle (the root shift carries FX only).
+        $macroShifts = $this->resolveStreamMacroShifts($stock, $macroState);
+        $intermodalMacroShift = $macroShifts['intermodal_freight'];
+        $industrialMacroShift = $macroShifts['industrial_carloads'];
+        $bulkMacroShift = $macroShifts['bulk_commodities'];
 
         $intermodalRevenue = max(0.0, $expectedRevenue * $intermodalWeight * (1.0 + ($intermodalZ * ($baselineVol * self::INTERMODAL_VARIANCE_SCALAR)) + $intermodalMacroShift));
         $bulkRevenue       = max(0.0, $expectedRevenue * $bulkWeight       * (1.0 + ($bulkZ * ($baselineVol * self::BULK_VARIANCE_SCALAR)) + $bulkMacroShift));
@@ -188,7 +183,7 @@ class RailroadBusinessModel extends StandardCorporateBusinessModel
             // Ridership follows employment rather than trade, and a subscription lags the decision to stop
             // commuting, so the output gap reaches this stream at a fraction of the freight elasticity.
             $transitZ = $streams->generateZ('transit_subscriptions', 0.55);
-            $transitMacroShift = $macroState->outputGapEma * self::TRANSIT_EMPLOYMENT_ELASTICITY * $beta;
+            $transitMacroShift = $macroShifts['transit_subscriptions'];
 
             $streamRevenues['transit_subscriptions'] = max(0.0, $expectedRevenue * $transitWeight
                 * (1.0 + ($transitZ * ($baselineVol * self::TRANSIT_VARIANCE_SCALAR)) + $transitMacroShift));
@@ -221,6 +216,73 @@ class RailroadBusinessModel extends StandardCorporateBusinessModel
             streamZ: $streams->getStreamZ(),
             streamRevenue: $streamRevenues,
         );
+    }
+
+    /**
+     * The cycle reaches revenue through each stream's own elasticity inside the sector physics, so the root
+     * shift keeps only the exchange-rate term.
+     */
+    public function getMacroPhysics(Stock $stock, MacroStateDTO $macroState): array
+    {
+        $physics = parent::getMacroPhysics($stock, $macroState);
+        $physics['macro_demand_shift'] = $this->resolveFxDemandShift($macroState);
+
+        return $physics;
+    }
+
+    /**
+     * The volume the network is staffed to carry: the target-mix weighted cycle shift of its streams, which
+     * reach revenue inside the sector physics rather than through macro_demand_shift.
+     */
+    public function resolveSectorActivityShift(Stock $stock, MacroStateDTO $macroState): float
+    {
+        $params = $this->resolveModelParameters($stock, [
+            ModelParam::IntermodalFreightWeight->value  => self::INTERMODAL_WEIGHT,
+            ModelParam::BulkCommoditiesWeight->value    => self::BULK_COMMODITIES_WEIGHT,
+            ModelParam::IndustrialCarloadsWeight->value => self::INDUSTRIAL_CARLOAD_WEIGHT,
+            ModelParam::SubscriptionWeight->value       => self::TRANSIT_SUBSCRIPTION_WEIGHT,
+        ]);
+        $weights = [
+            'intermodal_freight'    => $params[ModelParam::IntermodalFreightWeight],
+            'bulk_commodities'      => $params[ModelParam::BulkCommoditiesWeight],
+            'industrial_carloads'   => $params[ModelParam::IndustrialCarloadsWeight],
+            'transit_subscriptions' => max(0.0, $params[ModelParam::SubscriptionWeight]),
+        ];
+        $totalWeight = array_sum($weights);
+        if ($totalWeight <= 0.0) {
+            return 0.0;
+        }
+
+        $shifts = $this->resolveStreamMacroShifts($stock, $macroState);
+        $activity = 0.0;
+        foreach ($weights as $key => $weight) {
+            $activity += $weight * $shifts[$key];
+        }
+
+        return $activity / $totalWeight;
+    }
+
+    /**
+     * Each stream's macro volume shift: intermodal on the cycle, freight rates and trade; industrial carloads
+     * on the cycle and manufacturing PMI; bulk on the farm-price harvest proxy; commuter ridership on employment.
+     *
+     * @return array{intermodal_freight: float, bulk_commodities: float, industrial_carloads: float, transit_subscriptions: float}
+     */
+    private function resolveStreamMacroShifts(Stock $stock, MacroStateDTO $macroState): array
+    {
+        $beta = $this->getOperatingCyclicality($stock);
+        $freightShift = ($macroState->freightRateIndexEma - 100.0) / 100.0;
+        $agriShift = ($macroState->agriculturalCommodityIndexEma - 100.0) / 100.0;
+        $tradeShift = MathUtility::calculateTradeBalanceShift($macroState->tradeBalanceToGdpEma, sensitivity: self::TRADE_BALANCE_SENSITIVITY)
+            + MathUtility::calculateForeignDemandShift($macroState->foreignOutputGapEma, sensitivity: self::FOREIGN_DEMAND_SENSITIVITY);
+        $pmiShift = MathUtility::calculatePmiDemandShift($macroState->manufacturingPmiEma, sensitivity: self::PMI_CARLOAD_SENSITIVITY);
+
+        return [
+            'intermodal_freight'    => ($macroState->outputGapEma * 1.6 * $beta) + ($freightShift * 0.20) + $tradeShift,
+            'bulk_commodities'      => $agriShift * 0.30,
+            'industrial_carloads'   => ($macroState->outputGapEma * 1.2 * $beta) + $pmiShift,
+            'transit_subscriptions' => $macroState->outputGapEma * self::TRANSIT_EMPLOYMENT_ELASTICITY * $beta,
+        ];
     }
 
     /** Track slow orders & locomotive breakdown drag toward floor */

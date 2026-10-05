@@ -66,6 +66,28 @@ class ComputerHardwareBusinessModelTest extends TestCase
         $this->assertLessThan($baseResult->actualRevenue, $strongDollarResult->actualRevenue);
     }
 
+    public function testConsumerDevicesCarryTheHigherCostRatioWhateverTheMix(): void
+    {
+        // A consumer-only demand lift shifts the mix toward the lower-margin stream, so the blended variable cost
+        // ratio rises. Checked on PENG's 85/15 enterprise mix, whose engine ratio (0.26) sits below the old fixed
+        // 0.35 enterprise ratio and used to leave consumer hardware costing nothing, and on the default 60/40 mix.
+        foreach (['PENG' => 0.26, 'GEN_HW' => 0.35] as $ticker => $variableCostRatio) {
+            $blendedCost = function (float $sentiment) use ($ticker, $variableCostRatio): float {
+                $stock = new Stock();
+                $stock->setTicker($ticker);
+                $stock->setBeta('1.0');
+                $math = $this->createStub(MathUtility::class);
+                $math->method('generatePersistentZ')->willReturn(0.0);
+                $macro = new MacroStateDTO(consumerSentimentIndexEma: $sentiment);
+
+                return $this->model->computeActualFinancials($stock, 100_000_000.0, $variableCostRatio, 20_000_000.0, 0.10, $macro, $math)->clampedMargin;
+            };
+
+            $neutral = \App\Service\Macro\MacroEngine::SENTIMENT_TREND_LEVEL;
+            $this->assertGreaterThan($blendedCost($neutral), $blendedCost($neutral + 20.0), $ticker);
+        }
+    }
+
     public function testMetalsAreBelowMaterialityForASystemsAssembler(): void
     {
         // BEA 2017: a computer maker buys boards, chips and drives as components; metals through the whole supply chain are

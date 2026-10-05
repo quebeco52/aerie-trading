@@ -205,26 +205,30 @@ class AutoManufacturerBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta(-0.021, $result->observableShockZ, 0.001);
     }
 
-    public function testExchangeRateExportDragOnSalesRevenue(): void
+    public function testExchangeRateExportDragIsCarriedOnceAtTheDeclaredExposure(): void
     {
-        $stock = new Stock();
-        $stock->setTicker('GEN_AUTO');
-        $stock->setBeta('1.2');
-
         $mathMock = $this->createStub(MathUtility::class);
         $mathMock->method('generatePersistentZ')->willReturn(0.0);
+        $stock = function (): Stock {
+            $stock = new Stock();
+            $stock->setTicker('GEN_AUTO');
+            $stock->setBeta('1.2');
+
+            return $stock;
+        };
 
         $baseMacro = new MacroStateDTO(exchangeRateIndexEma: 100.0);
         $strongDollarMacro = new MacroStateDTO(exchangeRateIndexEma: 120.0);
 
-        $baseResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.20, 20_000_000.0, 0.0, $baseMacro, $mathMock);
-        $strongDollarResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.20, 20_000_000.0, 0.0, $strongDollarMacro, $mathMock);
+        // A 20% stronger currency takes the declared exposure off every stream through the root shift...
+        $rootDrag = $this->model->getMacroPhysics($stock(), $strongDollarMacro)['macro_demand_shift']
+            - $this->model->getMacroPhysics($stock(), $baseMacro)['macro_demand_shift'];
+        $this->assertEqualsWithDelta(-0.20 * AutoManufacturerBusinessModel::FX_REVENUE_EXPOSURE, $rootDrag, 1e-9);
 
-        $this->assertLessThan(
-            $baseResult->streamRevenue['mass_market_sales'],
-            $strongDollarResult->streamRevenue['mass_market_sales'],
-            'Strong domestic currency must reduce mass-market auto export competitiveness.'
-        );
+        // ...so the sector physics must not take it off mass-market sales a second time.
+        $baseResult = $this->model->computeActualFinancials($stock(), 100_000_000.0, 0.20, 20_000_000.0, 0.0, $baseMacro, $mathMock);
+        $strongDollarResult = $this->model->computeActualFinancials($stock(), 100_000_000.0, 0.20, 20_000_000.0, 0.0, $strongDollarMacro, $mathMock);
+        $this->assertEqualsWithDelta($baseResult->streamRevenue['mass_market_sales'], $strongDollarResult->streamRevenue['mass_market_sales'], 1.0);
     }
 
     public function testMetalsAreTheInputThatMovesAndOceanFreightIsImmaterial(): void

@@ -98,17 +98,18 @@ class ApparelManufacturingBusinessModelTest extends TestCase
         $genericStock->setTicker('GENERIC_APPAREL');
         $genericStock->setBeta('1.0');
 
-        // Recession: Negative output gap (-0.05), weak consumer sentiment (80.0)
+        // Recession: negative output gap (-0.05) and confidence eight points below what that gap alone implies.
         $recessionMacro = new MacroStateDTO(
             outputGapEma: -0.05,
-            consumerSentimentIndexEma: 80.0,
+            consumerSentimentIndexEma: \App\Service\Macro\MacroEngine::SENTIMENT_TREND_LEVEL
+                + (\App\Service\Macro\MacroEngine::SENTIMENT_GAP_LOADING * -0.05) - 8.0,
             inflationEma: 0.02
         );
 
         $genericPhysics = $this->model->getMacroPhysics($genericStock, $recessionMacro);
 
-        // Confidence is read against the level the index sits at with output at trend (88.0), not the
-        // construction constant it is built down from, so 80.0 is eight points of fear and not twenty.
+        // The gap is priced beside confidence, so confidence enters as its residual over the gap: only the
+        // eight points of fear the gap does not explain, not the ~19 points the gap itself puts into the index.
         // Pro-cyclical drag = ((-0.05 * 0.70) + (-0.08 * 0.40)) * cyclicality = -0.067 * cyclicality
         // Generic trade-down bonus = 0.05 * 0.60 * (1.5 - 0.5) = +0.030
         $cyclicality = ApparelManufacturingBusinessModel::OPERATING_CYCLICALITY;
@@ -133,7 +134,7 @@ class ApparelManufacturingBusinessModelTest extends TestCase
         $stock->setBeta('1.0');
 
         $neutralMacro = new MacroStateDTO(exchangeRateIndexEma: 100.0);
-        $weakCurrencyMacro = new MacroStateDTO(exchangeRateIndexEma: 120.0); // +20% FX shift
+        $weakCurrencyMacro = new MacroStateDTO(exchangeRateIndexEma: 80.0); // index below base = weaker currency
 
         $mathMock = $this->createStub(MathUtility::class);
         $mathMock->method('generatePersistentZ')->willReturn(0.0);
@@ -163,6 +164,12 @@ class ApparelManufacturingBusinessModelTest extends TestCase
             $neutralResult->streamRevenue['contract_textile_supply'],
             $weakCurrencyResult->streamRevenue['contract_textile_supply']
         );
+
+        // ...and a strong currency prices the export book out, beyond the firm-wide FX shift every stream carries.
+        $strongCurrencyResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.22, 20_000_000.0, 0.15, new MacroStateDTO(exchangeRateIndexEma: 120.0), $mathMock);
+        $contractDrop = $strongCurrencyResult->streamRevenue['contract_textile_supply'] / $neutralResult->streamRevenue['contract_textile_supply'] - 1.0;
+        $brandedDrop = $strongCurrencyResult->streamRevenue['wholesale_channel'] / $neutralResult->streamRevenue['wholesale_channel'] - 1.0;
+        $this->assertLessThan($brandedDrop, $contractDrop);
     }
 
     public function testRawFiberAndFreightAreImmaterialToAnApparelMaker(): void

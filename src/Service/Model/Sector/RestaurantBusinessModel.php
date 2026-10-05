@@ -108,10 +108,11 @@ class RestaurantBusinessModel extends StandardCorporateBusinessModel
     {
         $physics = parent::getMacroPhysics($stock, $macroState);
 
-        $sentimentShift = $macroState->sentimentDeviation();
+        // Dining out follows the cycle through the parent's output-gap shift; confidence adds only what the gap
+        // does not already explain (Lemmon & Portniaguina 2006).
         $beta = $this->getOperatingCyclicality($stock);
 
-        $physics['macro_demand_shift'] = $sentimentShift * $beta;
+        $physics['macro_demand_shift'] += $macroState->sentimentResidual() * $beta;
 
         return $physics;
     }

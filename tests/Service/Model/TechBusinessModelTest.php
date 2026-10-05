@@ -23,10 +23,10 @@ class TechBusinessModelTest extends TestCase
         $stock->setTicker('TECH');
         $stock->setBeta('1.5');
 
-        $mathUtilityMock = $this->createStub(MathUtility::class);
-        // sequence: subscriptionZ=2.0 (strong cloud ARR expansion), adZ=0, eventZ=0, analystError=0
-        $mathUtilityMock->method('generateStandardNormal')
-            ->willReturnOnConsecutiveCalls(2.0, 0.0, 0.0, 0.0);
+        // Stream draws come from generatePersistentZ: the subscription stream is drawn first at +2.0 (strong cloud
+        // ARR expansion), every later stream flat.
+        $mathUtilityMock = $this->getMockBuilder(MathUtility::class)->onlyMethods(['generatePersistentZ'])->getMock();
+        $mathUtilityMock->method('generatePersistentZ')->willReturnOnConsecutiveCalls(2.0, 0.0, 0.0, 0.0);
 
         $macroState = \App\DTO\MacroStateDTO::fromArray(['inflation_ema' => 0.02]);
         $result = $model->computeActualFinancials(
@@ -101,4 +101,28 @@ class TechBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta($clean->clampedMargin, $after->clampedMargin, 1e-9, 'costs return to baseline once the regime exits');
     }
 
+    public function testAnAggressiveMonopolyKeepsItsSeededCostBaseAndStillPaysForADecree(): void
+    {
+        // HUMM: aggression 0.90 on a seeded variable cost ratio of ~0.08. Monopoly rent is already in that ratio, so
+        // aggression must not push it further down (it used to land on the clamp floor, where a decree cost nothing).
+        $model = new TechBusinessModel();
+        $regimeKey = StreamContext::REGIME_STATE_PREFIX . TechBusinessModel::REGIME_CONSENT_DECREE;
+        $run = function (array $momentum) use ($model) {
+            $stock = new Stock();
+            $stock->setTicker('HUMM');
+            $stock->setBeta('1.0');
+            $stock->setEarningsMomentumZ($momentum);
+            $math = $this->getMockBuilder(MathUtility::class)->onlyMethods(['generatePersistentZ', 'checkProbability'])->getMock();
+            $math->method('generatePersistentZ')->willReturn(0.0);
+            $math->method('checkProbability')->willReturn(false);
+
+            return $model->computeActualFinancials($stock, 100_000_000.0, 0.08, 20_000_000.0, 0.10, new MacroStateDTO(), $math);
+        };
+
+        $clean = $run([]);
+        $inDecree = $run([$regimeKey => 2.0]);
+
+        $this->assertEqualsWithDelta(0.08, $clean->clampedMargin, 0.01, 'the seeded cost ratio is not discounted by aggression');
+        $this->assertGreaterThan($clean->clampedMargin, $inDecree->clampedMargin, 'a consent decree raises the ad stack cost');
+    }
 }
