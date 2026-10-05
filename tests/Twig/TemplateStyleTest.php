@@ -195,16 +195,16 @@ final class TemplateStyleTest extends TestCase
         foreach ($this->templates() as $path => $source) {
             $source = $this->stripTwigComments($source);
             $hits = [...$hits, ...$this->grep($path, $source, '/Source:/')];
-            preg_match_all("/\bsource\(([^)]*)\)/", $source, $calls);
+            preg_match_all("/\bsource_line\(([^)]*)\)/", $source, $calls);
             foreach ($calls[1] as $args) {
                 preg_match_all("/'([^']+)'/", $args, $ids);
                 foreach (array_diff($ids[1], array_keys(Institutions::PUBLISHERS)) as $unknown) {
-                    $hits[] = "$path source('$unknown')";
+                    $hits[] = "$path source_line('$unknown')";
                 }
             }
         }
 
-        $this->assertSame([], $hits, "Write source lines as {{ source('statistical-office') }} with ids from Institutions::PUBLISHERS.");
+        $this->assertSame([], $hits, "Write source lines as {{ source_line('statistical-office') }} with ids from Institutions::PUBLISHERS.");
     }
 
     /** The Council's department list and the map's buildings print the same names as every source line. */

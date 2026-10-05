@@ -15,7 +15,7 @@ parts on `templates/` (admin excluded) and `assets/js`, `assets/controllers`.
 - British spelling, as the rest of the site: capitalisation, programme, licence, centre.
 
 ## Names
-One name per body, from `App\Data\Institutions`. Source lines use `{{ source('id', ...) }}`, which refuses an id
+One name per body, from `App\Data\Institutions`. Source lines use `{{ source_line('id', ...) }}`, which refuses an id
 the glossary does not have.
 
 | Body | What it does |
@@ -95,7 +95,8 @@ same before and after the feed repaints it.
 - `.term` on a label that explains itself on hover, with `ui.tooltip(text)` beside it:
   `{% import 'partials/_ui.html.twig' as ui %}`.
 - `.seg-btn` for range and filter buttons; state lives in `aria-pressed`.
-- `<p class="source-note">{{ source('statistical-office') }}</p>` under a chart.
+- `<p class="source-note">{{ source_line('statistical-office') }}</p>` under a chart. Never name a Twig function
+  `source`: it would replace Twig's own, which the web profiler uses.
 
 ## Checking a change
 - `php vendor/bin/phpunit tests/Twig` runs the style test (0.03 s). Two ratchets cap the percentages and dollar
