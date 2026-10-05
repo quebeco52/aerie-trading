@@ -36,7 +36,8 @@ class DashboardController extends AbstractController
         \App\Service\User\CostBasisCalculator $costBasis,
         \App\Service\User\DividendIncomeCalculator $dividendIncome,
         \App\Service\User\CouponIncomeCalculator $couponIncome,
-        \App\Service\Market\MarginEngine $marginEngine
+        \App\Service\Market\MarginEngine $marginEngine,
+        \App\Service\Macro\MacroStateProvider $macroStateProvider
     ): Response
     {
         /** @var User $user */
@@ -51,6 +52,7 @@ class DashboardController extends AbstractController
         $filledOrders = $orders->findFilledForUser($user);
 
         $costBasisMap = $costBasis->calculate($filledOrders);
+        $totalRealised = array_sum($costBasis->realisedByTicker($filledOrders));
 
         // Dividend cash received, per ticker and for the lifetime of the account. Keyed by ticker rather
         // than by position because it includes income from shares since sold: the cash was received and
@@ -267,6 +269,8 @@ class DashboardController extends AbstractController
             ];
         }
 
+        $macro = $macroStateProvider->liveState();
+
         // Value working in open limit orders. A BUY has already debited the cash to escrow and a SELL has
         // already removed the shares from the holdings above, so both have to be added back or the headline
         // net worth falls the moment an order is placed and jumps back when it is cancelled.
@@ -375,6 +379,7 @@ class DashboardController extends AbstractController
             'totalInvestedCost' => $totalInvestedCost,
             'totalUnrealizedPnL' => $totalUnrealizedPnL,
             'totalUnrealizedPnLPercent' => $totalUnrealizedPnLPercent,
+            'totalRealised' => $totalRealised,
             'cashBalance' => $cashBalance,
             'escrowedCash' => $escrowedCash,
             'escrowedShareValue' => $escrowedShareValue,
@@ -389,6 +394,9 @@ class DashboardController extends AbstractController
             'sectorBreakdown' => $sectorBreakdown,
             'allocation' => $allocation,
             'cashShare' => $totalPortfolioValue > 0 ? $cashBalance / $totalPortfolioValue : null,
+            // The rates the ticker accrues at, from the same two functions it calls.
+            'cashRate' => \App\Service\User\Portfolio::cashSweepRate($macro->policyRateEma),
+            'marginRate' => \App\Service\Market\ForcedLiquidationService::marginLoanRate($macro->policyRate),
             'totalDividendIncome' => $totalDividendIncome,
             'dividendPayments' => $dividendIncome->recentPayments($user),
         ]);

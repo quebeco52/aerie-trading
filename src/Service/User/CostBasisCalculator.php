@@ -28,8 +28,52 @@ final class CostBasisCalculator
      */
     public function calculate(iterable $filledOrders): array
     {
+        $averages = [];
+        foreach ($this->walk($filledOrders)['positions'] as $ticker => $position) {
+            // Per share either way. Cost and quantity carry the same sign, so the quotient is positive for
+            // a long and for a short alike: it is a price, not a signed exposure.
+            if ($position['qty'] !== 0) {
+                $averages[$ticker] = round($position['cost'] / $position['qty'], 2);
+            }
+        }
+
+        return $averages;
+    }
+
+    /**
+     * Average cost for a single ticker, or null when nothing is held.
+     *
+     * @param iterable<TradeOrder> $filledOrders Filled orders, oldest first.
+     */
+    public function calculateForTicker(iterable $filledOrders, string $ticker): ?float
+    {
+        return $this->calculate($filledOrders)[$ticker] ?? null;
+    }
+
+    /**
+     * Gains locked in by closing trades, per ticker: a sale against the running average cost, a cover
+     * against the running average proceeds, each net of its share of the closing trade's stamp duty.
+     * Option orders are left out: they are priced per share but counted in contracts, and are closed by
+     * expiry and exercise as well as by trades.
+     *
+     * @param  iterable<TradeOrder> $filledOrders Filled orders, oldest first.
+     * @return array<string, float> ticker => realised gain in currency, for every ticker that has closed any.
+     */
+    public function realisedByTicker(iterable $filledOrders): array
+    {
+        return $this->walk($filledOrders)['realised'];
+    }
+
+    /**
+     * @param  iterable<TradeOrder> $filledOrders
+     * @return array{positions: array<string, array{qty: int, cost: float}>, realised: array<string, float>}
+     */
+    private function walk(iterable $filledOrders): array
+    {
         /** @var array<string, array{qty: int, cost: float}> $positions */
         $positions = [];
+        /** @var array<string, float> $realised */
+        $realised = [];
 
         foreach ($filledOrders as $order) {
             $ticker = $order->getTicker();
@@ -42,6 +86,7 @@ final class CostBasisCalculator
             // Transfer taxes are part of what a position cost (and come off what a short raised), as a tax basis has them.
             $duty = (float) ($order->getStampDuty() ?? 0.0);
             $positions[$ticker] ??= ['qty' => 0, 'cost' => 0.0];
+            $tracksRealised = $order->getAssetType() !== 'OPTION';
 
             $action = $order->getAction();
 
@@ -62,6 +107,11 @@ final class CostBasisCalculator
 
             if ($action === 'COVER' && $positions[$ticker]['qty'] < 0) {
                 $averageProceeds = $positions[$ticker]['cost'] / $positions[$ticker]['qty'];
+                $closed = min($quantity, -$positions[$ticker]['qty']);
+                if ($tracksRealised && $quantity > 0) {
+                    $realised[$ticker] = ($realised[$ticker] ?? 0.0)
+                        + $closed * ($averageProceeds - $price) - $duty * ($closed / $quantity);
+                }
                 $positions[$ticker]['qty'] = min(0, $positions[$ticker]['qty'] + $quantity);
                 $positions[$ticker]['cost'] = $positions[$ticker]['qty'] * $averageProceeds;
                 continue;
@@ -69,30 +119,16 @@ final class CostBasisCalculator
 
             if ($action === 'SELL' && $positions[$ticker]['qty'] > 0) {
                 $averageCost = $positions[$ticker]['cost'] / $positions[$ticker]['qty'];
+                $closed = min($quantity, $positions[$ticker]['qty']);
+                if ($tracksRealised && $quantity > 0) {
+                    $realised[$ticker] = ($realised[$ticker] ?? 0.0)
+                        + $closed * ($price - $averageCost) - $duty * ($closed / $quantity);
+                }
                 $positions[$ticker]['qty'] = max(0, $positions[$ticker]['qty'] - $quantity);
                 $positions[$ticker]['cost'] = $positions[$ticker]['qty'] * $averageCost;
             }
         }
 
-        $averages = [];
-        foreach ($positions as $ticker => $position) {
-            // Per share either way. Cost and quantity carry the same sign, so the quotient is positive for
-            // a long and for a short alike: it is a price, not a signed exposure.
-            if ($position['qty'] !== 0) {
-                $averages[$ticker] = round($position['cost'] / $position['qty'], 2);
-            }
-        }
-
-        return $averages;
-    }
-
-    /**
-     * Average cost for a single ticker, or null when nothing is held.
-     *
-     * @param iterable<TradeOrder> $filledOrders Filled orders, oldest first.
-     */
-    public function calculateForTicker(iterable $filledOrders, string $ticker): ?float
-    {
-        return $this->calculate($filledOrders)[$ticker] ?? null;
+        return ['positions' => $positions, 'realised' => $realised];
     }
 }

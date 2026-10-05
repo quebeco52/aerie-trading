@@ -1,5 +1,5 @@
 import { Controller } from '@hotwired/stimulus';
-import { formatCurrency } from '../js/utils/formatters.js';
+import { formatCurrency, formatPercent, formatShares } from '../js/utils/formatters.js';
 
 /**
  * The order ticket.
@@ -9,7 +9,7 @@ import { formatCurrency } from '../js/utils/formatters.js';
  * Submission locks the button, so a slow round-trip plus a second click cannot place two orders.
  */
 export default class extends Controller {
-    static targets = ['limitGroup', 'limitPrice', 'stopGroup', 'stopPrice', 'quantity', 'estimate', 'estimateLabel', 'duty', 'submit'];
+    static targets = ['limitGroup', 'limitPrice', 'stopGroup', 'stopPrice', 'quantity', 'estimate', 'estimateLabel', 'duty', 'costsRow', 'costs', 'costsNote', 'submit'];
     static values = {
         ticker: String,
         /** Last traded price, refreshed from the market stream for as long as the page is open. */
@@ -31,6 +31,7 @@ export default class extends Controller {
     }
 
     disconnect() {
+        clearTimeout(this.quoteTimer);
         document.removeEventListener('market:frame', this.marketUpdateHandler);
         this.element.removeEventListener('change', this.actionChangeHandler);
     }
@@ -115,10 +116,60 @@ export default class extends Controller {
             return;
         }
 
-        const consideration = price * quantity;
+        // An order that takes the book (market, or a plain stop once it fires) pays the half-spread and its
+        // own impact inside the fill price; a limit names its price, so nothing is added to it.
+        const takesBook = this.orderType === 'MARKET' || this.orderType === 'STOP';
+        const costs = takesBook ? this.costsFor(quantity) : null;
+        const crossing = costs ? price * quantity * (costs.spread + costs.impact) : 0;
+        this.renderCosts(takesBook, costs, crossing, quantity);
+
+        const consideration = price * quantity + (this.isBuySide ? crossing : -crossing);
         const duty = consideration * this.dutyRateValue;
         if (this.hasDutyTarget) this.dutyTarget.textContent = formatCurrency(duty);
         this.estimateTarget.textContent = formatCurrency(this.isBuySide ? consideration + duty : consideration - duty);
+    }
+
+    /**
+     * The desk's spread and impact for this size and side, as fractions of the consideration: fetched once
+     * per size and side (they scale with the price, so the live tape reprices them), null until it answers.
+     */
+    costsFor(quantity) {
+        const key = `${this.action}:${quantity}`;
+        if (this.quotedKey === key) return this.quotedCosts;
+        if (this.pendingKey !== key) {
+            this.pendingKey = key;
+            clearTimeout(this.quoteTimer);
+            this.quoteTimer = setTimeout(() => this.fetchCosts(key, quantity), 250);
+        }
+        return null;
+    }
+
+    async fetchCosts(key, quantity) {
+        const params = new URLSearchParams({ ticker: this.tickerValue, action: this.action, quantity: String(quantity) });
+        try {
+            const res = await fetch(`/api/trade/quote?${params}`, { headers: { Accept: 'application/json' } });
+            if (!res.ok || this.pendingKey !== key) return;
+            this.quotedCosts = await res.json();
+            this.quotedKey = key;
+            this.render();
+        } catch (e) {
+            // No quote is a missing figure, not a free trade: the row keeps its dash.
+        }
+    }
+
+    renderCosts(takesBook, costs, crossing, quantity) {
+        if (this.hasCostsRowTarget) this.costsRowTarget.classList.toggle('hidden', !takesBook);
+        if (this.hasCostsTarget) this.costsTarget.textContent = costs ? formatCurrency(crossing) : formatCurrency(null);
+        if (!this.hasCostsNoteTarget) return;
+
+        let note = '';
+        if (costs && Number.isFinite(costs.maximum) && quantity > costs.maximum) {
+            note = `Above the ${formatShares(costs.maximum)} shares the desk takes at once.`;
+        } else if (costs && costs.participation > 0) {
+            note = `${formatPercent(costs.participation, 1)} of a day's volume`;
+        }
+        this.costsNoteTarget.textContent = note;
+        this.costsNoteTarget.classList.toggle('hidden', note === '');
     }
 
     /**

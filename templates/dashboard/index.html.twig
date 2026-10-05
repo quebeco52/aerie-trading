@@ -18,6 +18,8 @@
                             <span id="portfolio-pnl-pct">({{ totalUnrealizedPnL > 0 ? '+' : '' }}{{ totalUnrealizedPnLPercent|number_format(2) }}%)</span>
                         </span>
                         <span class="font-sans text-xs text-on-surface-variant">unrealised</span>
+                        <span class="ml-3 font-semibold {{ totalRealised|signed_class }}">{{ totalRealised|money(2, true) }}</span>
+                        <span class="font-sans text-xs text-on-surface-variant" title="Locked in by sales and covers of shares, funds and bonds">realised</span>
                     </p>
                 </div>
             </div>
@@ -274,6 +276,7 @@
                                     <th class="py-2.5 text-right">Quantity</th>
                                     <th class="py-2.5 text-right">Executed price</th>
                                     <th class="py-2.5 text-right">Total amount</th>
+                                    <th class="py-2.5 text-right">Trading costs</th>
                                     <th class="py-2.5 text-right">Status</th>
                                 </tr>
                             </thead>
@@ -296,6 +299,7 @@
                                         <td class="py-2.5 text-right font-mono tabular-nums font-bold text-on-surface">
                                             {{ (tradePrice is null ? null : tradePrice * tradeQuantity * (isOption ? optionMultiplier : 1))|money(2) }}
                                         </td>
+                                        <td class="py-2.5 text-right font-mono tabular-nums text-xs">{% include 'partials/_trade_costs.html.twig' with { trade: trade } only %}</td>
                                         <td class="py-2.5 text-right">
                                             <span class="text-xs {{ trade.status == 'FILLED' ? 'text-on-surface' : 'text-on-surface-variant' }}">{{ trade.status|lower|capitalize }}</span>
                                         </td>
@@ -411,7 +415,7 @@
                 <div class="bg-surface-container-low border border-outline-variant/20 rounded-lg p-5">
                     <span class="text-xs text-on-surface-variant">Available cash</span>
                     <p class="text-2xl font-semibold text-on-surface font-mono tabular-nums mt-1">{{ cashBalance|money(2) }}</p>
-                    
+                    <p class="text-xs text-on-surface-variant mt-1.5">Swept overnight at <span class="font-mono tabular-nums text-on-surface">{{ cashRate|pct(2) }}</span> a year, credited weekly.</p>
                 </div>
                 <div class="bg-surface-container-low border border-outline-variant/20 rounded-lg p-5">
                     <span class="text-xs text-on-surface-variant">Held for open orders</span>
@@ -452,6 +456,7 @@
                         <div>
                             <dt class="text-xs text-on-surface-variant">Margin loan</dt>
                             <dd class="text-lg font-bold font-mono tabular-nums mt-0.5 {{ marginDebit > 0 ? 'text-tertiary' : 'text-on-surface' }}">{{ marginDebit|money(2) }}</dd>
+                            <dd class="text-2xs text-on-surface-variant mt-0.5">at <span class="font-mono tabular-nums">{{ marginRate|pct(2) }}</span> a year</dd>
                         </div>
                         <div>
                             <dt class="text-xs text-on-surface-variant">Short exposure</dt>

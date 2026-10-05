@@ -1,5 +1,5 @@
 import { readPageData } from '../utils/page-data.js';
-import { initPriceChart, queueLivePricePoints, resizePriceChart, destroyPriceChart } from '../stock/price-chart.js';
+import { initPriceChart, queueLivePricePoints, resizePriceChart, destroyPriceChart, setChartField, getChartField } from '../stock/price-chart.js';
 import { flashTick } from '../utils/tick-flash.js';
 import { onPageLoad } from '../utils/page-init.js';
 import { tickPoints } from '../services/market-stream.js';
@@ -89,7 +89,13 @@ function quoteFor(event) {
 function onMarketUpdate(event) {
     const quote = quoteFor(event);
     if (!quote) return;
-    // A bond's points already carry the clean price (see the frame contract in market-stream.js).
+    // A bond's points already carry the clean price (see the frame contract in market-stream.js); its
+    // yield arrives once a frame, so the yield chart steps once a frame.
+    if (getChartField() === 'yield') {
+        const ytm = parseFloat(quote.yield_to_maturity);
+        if (Number.isFinite(ytm)) queueLivePricePoints([[ytm, 0, null]]);
+        return;
+    }
     queueLivePricePoints(tickPoints(quote, 'clean_price').map(([price, , tick]) => [price, 0, tick]));
 }
 
@@ -127,6 +133,17 @@ function initBondPage() {
     if (!context.ticker) return;
 
     initPriceChart(container, context.ticker, context.ticksPerYear);
+
+    // Price or yield: the same series read on the other scale.
+    document.querySelectorAll('.field-btn').forEach(btn => {
+        btn.setAttribute('aria-pressed', btn.dataset.field === 'price' ? 'true' : 'false');
+        btn.onclick = () => {
+            document.querySelectorAll('.field-btn').forEach(b => b.setAttribute('aria-pressed', b === btn ? 'true' : 'false'));
+            const title = document.getElementById('chart-title');
+            if (title) title.textContent = btn.dataset.field === 'yield' ? 'Yield to maturity' : 'Clean price';
+            setChartField(btn.dataset.field);
+        };
+    });
 
     marketUpdateHandler = onMarketUpdate;
     document.addEventListener('market:update', marketUpdateHandler);

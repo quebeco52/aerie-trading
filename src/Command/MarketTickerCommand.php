@@ -857,6 +857,10 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                         if (isset($update['volume'])) {
                             $point['volume'] = $update['volume'];
                         }
+                        // A bond's yield rides along too, so its yield chart has the same short ranges as its price.
+                        if (isset($update['yield_to_maturity'])) {
+                            $point['yield'] = $update['yield_to_maturity'];
+                        }
                         $point = json_encode($point);
 
                         $pipeline->lPush($cacheKey, $point);
@@ -942,7 +946,7 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                     // intermediary's spread. Accrued before the snapshot so the recorded net asset
                     // value includes the interest credited for the week just elapsed.
                     $this->portfolio->accrueCashInterest(
-                        max(0.0, $macroState->policyRateEma - MacroEngine::CASH_YIELD_SPREAD),
+                        \App\Service\User\Portfolio::cashSweepRate($macroState->policyRateEma),
                         $snapshotInterval * $dt
                     );
 

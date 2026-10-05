@@ -252,7 +252,7 @@
 							{% else %}
 								{# Shown when the user holds shares OR has ever been paid by this ticker: dividend cash
 								   received survives selling out of the position, so it stays visible afterwards. #}
-								{% if userQuantity != 0 or userDividendIncome > 0 %}
+								{% if userQuantity != 0 or userDividendIncome > 0 or userRealised|default(0) != 0 %}
 									<div class="mb-4 p-3 bg-surface-container-lowest/80 rounded border border-outline-variant/20 space-y-1.5">
 										{% if userQuantity != 0 %}
 											<div class="flex justify-between items-center text-xs">
@@ -284,9 +284,15 @@
 												</div>
 											{% endif %}
 										{% endif %}
+										{% if userRealised|default(0) != 0 %}
+											<div class="flex justify-between items-center text-xs {{ userQuantity != 0 ? 'pt-1.5 border-t border-outline-variant/15' : '' }}">
+												<span class="text-on-surface-variant">Realised return</span>
+												<span class="font-mono tabular-nums font-bold {{ userRealised|signed_class }}">{{ userRealised|money(2, true) }}</span>
+											</div>
+										{% endif %}
 										{% if userDividendIncome > 0 %}
-											<div class="flex justify-between items-center text-xs {{ userQuantity > 0 ? 'pt-1.5 border-t border-outline-variant/15' : '' }}">
-												<span class="text-on-surface-variant">Dividends Received</span>
+											<div class="flex justify-between items-center text-xs {{ userQuantity != 0 or userRealised|default(0) != 0 ? 'pt-1.5 border-t border-outline-variant/15' : '' }}">
+												<span class="text-on-surface-variant">Dividends received</span>
 												<span class="font-mono tabular-nums font-bold text-secondary">+{{ userDividendIncome|money(2) }}</span>
 											</div>
 										{% endif %}
@@ -402,6 +408,11 @@
 											<span class="text-on-surface-variant" data-trade-form-target="estimateLabel">Estimated cost</span>
 											<span class="font-bold text-on-surface font-mono tabular-nums text-sm" id="estimated-total" data-trade-form-target="estimate" aria-live="polite">{{ asset.price|money(2) }}</span>
 										</div>
+										<div class="flex justify-between items-center text-on-surface-variant" data-trade-form-target="costsRow">
+											<span>Spread and impact</span>
+											<span class="font-mono tabular-nums" data-trade-form-target="costs">&mdash;</span>
+										</div>
+										<p class="hidden text-2xs text-on-surface-variant text-right" data-trade-form-target="costsNote"></p>
 										{% if not isEtf %}
 											{# Listed shares carry the District's stamp duty on both sides; funds are exempt. #}
 											<div class="flex justify-between items-center text-on-surface-variant">
@@ -2145,7 +2156,7 @@
 											{# A stop has no limit until it fires; what it rests on is its trigger. #}
 											{% set restingPrice = order.stop ? order.stopPrice : order.limitPrice %}
 											<td class="py-2.5 text-right font-mono tabular-nums font-bold text-on-surface">{{ restingPrice|money(2) }}</td>
-											<td class="py-2.5 text-right font-mono tabular-nums text-on-surface-variant">${{ (restingPrice * order.quantity)|number_format(2) }}</td>
+											<td class="py-2.5 text-right font-mono tabular-nums text-on-surface-variant">{{ (restingPrice is null ? null : restingPrice * order.quantity)|money(2) }}</td>
 											<td class="py-2.5 text-right">
 												<form action="/trade/cancel/{{ order.id }}" method="POST" class="inline">
 													<input type="hidden" name="_token" value="{{ csrf_token('cancel_trade_' ~ order.id) }}">
@@ -2180,6 +2191,7 @@
 										<th class="py-3 font-bold text-right">Shares</th>
 										<th class="py-3 font-bold text-right">Executed price</th>
 										<th class="py-3 font-bold text-right">Total</th>
+										<th class="py-3 font-bold text-right">Trading costs</th>
 										<th class="py-3 font-bold text-right">Status</th>
 									</tr>
 								</thead>
@@ -2189,10 +2201,12 @@
 											<td class="py-3 text-xs text-on-surface-variant">{{ (trade.filledAt ?? trade.createdAt)|date('Y-m-d H:i') }}</td>
 											<td class="py-3 font-bold {{ trade.action in ['BUY', 'COVER'] ? 'text-secondary' : 'text-tertiary' }}">{{ trade.action|lower|capitalize }}</td>
 											<td class="py-3 text-right font-mono text-on-surface">{{ (trade.filledQuantity > 0 ? trade.filledQuantity : trade.quantity)|number_format }}</td>
-											<td class="py-3 text-right font-mono text-on-surface">${{ (trade.executionPrice ?? trade.limitPrice ?? 0.00)|number_format(2) }}</td>
+											{% set tradePrice = trade.executionPrice ?? trade.limitPrice %}
+											<td class="py-3 text-right font-mono text-on-surface">{{ tradePrice|money(2) }}</td>
 											<td class="py-3 text-right font-mono font-bold text-on-surface">
-												${{ ((trade.executionPrice ?? trade.limitPrice ?? 0.00) * (trade.filledQuantity > 0 ? trade.filledQuantity : trade.quantity))|number_format(2) }}
+												{{ (tradePrice is null ? null : tradePrice * (trade.filledQuantity > 0 ? trade.filledQuantity : trade.quantity))|money(2) }}
 											</td>
+											<td class="py-3 text-right font-mono tabular-nums text-xs">{% include 'partials/_trade_costs.html.twig' with { trade: trade } only %}</td>
 											<td class="py-3 text-right">
 												<span class="badge {{ trade.status == 'FILLED' ? 'badge-up' : 'badge-neutral' }}">
 													{{ trade.status|replace({'_': ' '})|lower|capitalize }}

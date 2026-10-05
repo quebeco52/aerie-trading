@@ -141,6 +141,17 @@ class ViewerPositionBuilderTest extends TestCase
         $this->assertSame(412.50, $position['userDividendIncome']);
     }
 
+    public function testARealisedGainIsReportedAfterSellingOut(): void
+    {
+        $this->holdings->method('findStockHolding')->willReturn(null);
+        $this->fillsOnFile([$this->fill('BUY', 10, 80.0), $this->fill('SELL', 10, 95.0)]);
+
+        $position = $this->builder()->build($this->stock(100.0), 'LAKE', new User());
+
+        $this->assertSame(0, $position['userQuantity']);
+        $this->assertEqualsWithDelta(150.0, $position['userRealised'], 1e-9);
+    }
+
     public function testAFundPositionIsReadFromTheFundHoldings(): void
     {
         $this->fillsOnFile([]);

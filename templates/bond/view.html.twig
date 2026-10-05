@@ -77,7 +77,13 @@
 
 				<div class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20">
 					<div class="flex flex-wrap items-center justify-between gap-3 mb-4">
-						<h2 class="text-sm font-semibold text-on-surface">Clean price history</h2>
+						<div class="flex items-center gap-3">
+							<h2 id="chart-title" class="text-sm font-semibold text-on-surface">Clean price</h2>
+							<div class="inline-flex gap-0.5 rounded-md border border-outline-variant/25 bg-surface-container-lowest p-0.5" role="group" aria-label="Chart series">
+								<button type="button" data-field="price" class="field-btn seg-btn" aria-pressed="true">Price</button>
+								<button type="button" data-field="yield" class="field-btn seg-btn" aria-pressed="false">Yield</button>
+							</div>
+						</div>
 						{# A bond's bar has no intraday range recorded, so the candle view is not offered here. #}
 						<div class="inline-flex flex-wrap gap-0.5 rounded-md border border-outline-variant/25 bg-surface-container-lowest p-0.5" role="group" aria-label="Chart range">
 							{% for range in ['1w', '1m', '3m', '6m', '1y', '3y', 'max'] %}
@@ -221,6 +227,10 @@
 							<div class="p-3 rounded bg-surface-container-lowest/80 border border-outline-variant/20 flex justify-between items-center text-xs">
 								<span class="text-on-surface-variant" data-trade-form-target="estimateLabel">Estimated cost</span>
 								<span class="font-bold text-on-surface font-mono tabular-nums text-sm" id="estimated-total" data-trade-form-target="estimate" aria-live="polite">{{ bond.price|money(2) }}</span>
+							</div>
+							<div class="flex justify-between items-center text-xs text-on-surface-variant px-3" data-trade-form-target="costsRow">
+								<span>Spread</span>
+								<span class="font-mono tabular-nums" data-trade-form-target="costs">&mdash;</span>
 							</div>
 
 							<p class="text-2xs text-on-surface-variant leading-relaxed">

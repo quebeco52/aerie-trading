@@ -88,6 +88,7 @@ final class PagesRenderTest extends KernelTestCase
                     ['label' => 'Cash', 'value' => 200000, 'share' => 0.162, 'colour' => 'bg-on-surface-faint'],
                 ],
                 'cashShare' => 0.162, 'escrowedShareValue' => 0.0, 'optionMultiplier' => 100,
+                'totalRealised' => 3150.25, 'cashRate' => 0.0425, 'marginRate' => 0.075,
                 'sectorBreakdown' => [['name' => 'Financials', 'value' => 500000, 'percent' => 48.3], ['name' => 'Industrials', 'value' => 300000, 'percent' => 29.0]],
                 'margin' => ['buyingPower' => 200000, 'shortMarketValue' => 0, 'optionShortValue' => 0, 'equity' => 1234567, 'maintenanceRequirement' => 0, 'isCalled' => false, 'equityRatio' => 1.0, 'callAmount' => 0], 'marginDebit' => 0, 'livePrices' => [], 'totalInvestedCost' => 1000000,
             ]],

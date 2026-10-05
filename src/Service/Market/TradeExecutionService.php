@@ -69,6 +69,44 @@ class TradeExecutionService
         return $rate;
     }
 
+    /**
+     * What an order of this size would pay to cross the book, quoted exactly as execution quotes it, as
+     * fractions of its consideration at mid so the ticket can reprice them off the live tape. Null for a
+     * symbol the desk does not quote this way (an option) or does not know.
+     *
+     * @return array{spread: float, impact: float, participation: float, maximum: ?float}|null
+     */
+    public function previewCosts(string $ticker, string $action, int $quantity): ?array
+    {
+        $asset = $this->assetResolver->resolve($ticker);
+        if ($asset === null || $asset->entity instanceof OptionContract || $quantity <= 0) {
+            return null;
+        }
+
+        $mid = (float) $asset->price();
+        if ($mid <= 0.0) {
+            return null;
+        }
+
+        $stock = $asset->entity instanceof Stock ? $asset->entity : null;
+        $quote = $this->liquidityEngine->quoteAsset(
+            $asset->entity instanceof \App\Entity\Etf ? $asset->entity : $stock,
+            $asset->type,
+            $action,
+            $quantity,
+            $mid,
+            $asset->entity instanceof \App\Entity\Bond && !$asset->entity->isSovereign()
+        );
+        $consideration = $mid * $quantity;
+
+        return [
+            'spread' => $quote->spreadCost / $consideration,
+            'impact' => $quote->impactCost / $consideration,
+            'participation' => $quote->participationRate,
+            'maximum' => $stock !== null ? floor($this->liquidityEngine->maximumOrderSize($stock)) : null,
+        ];
+    }
+
     /** Whether an action buys stock (and pays cash) or sells it (and receives cash). */
     public static function isBuySide(string $action): bool
     {
@@ -663,7 +701,8 @@ class TradeExecutionService
                 $asset->type,
                 $order->getAction(),
                 $quantity,
-                $executionPrice
+                $executionPrice,
+                $asset->entity instanceof \App\Entity\Bond && !$asset->entity->isSovereign()
             );
 
             // Enforce limit price cap on resting limit orders, while plain stop orders accept market quote.

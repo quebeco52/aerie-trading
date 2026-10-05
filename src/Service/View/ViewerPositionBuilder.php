@@ -42,6 +42,7 @@ class ViewerPositionBuilder
             'userUnrealizedPnLPercent' => 0.0,
             'userDividendIncome' => 0.0,
             'userBorrowAccrued' => 0.0,
+            'userRealised' => 0.0,
             'openOrders' => [],
             'userTrades' => [],
         ];
@@ -64,6 +65,10 @@ class ViewerPositionBuilder
         $position['openOrders'] = $this->orders->findOpenForUserAndTicker($viewer, $ticker);
         $position['userTrades'] = $this->orders->findSettledForUserAndTicker($viewer, $ticker, self::TRADE_HISTORY_ROWS);
 
+        // Gains already locked in survive selling out, as dividends do, so they are read for a closed position too.
+        $filledOrders = $this->orders->findFilledForUserAndTicker($viewer, $ticker);
+        $position['userRealised'] = $this->costBasis->realisedByTicker($filledOrders)[$ticker] ?? 0.0;
+
         if ($quantity === 0) {
             return $position;
         }
@@ -71,7 +76,6 @@ class ViewerPositionBuilder
         // The weighted-average basis the dashboard reports, from the same calculator over the same
         // ordered fills. Averaging buys alone and ignoring sells gave this page a different cost,
         // and a different P&L, for the very same position.
-        $filledOrders = $this->orders->findFilledForUserAndTicker($viewer, $ticker);
         $averageCost = $this->costBasis->calculateForTicker($filledOrders, $ticker) ?? $position['userAvgCost'];
 
         // Signed, as on the dashboard: a short's value is the obligation and its cost the proceeds, so the
