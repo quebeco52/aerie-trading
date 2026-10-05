@@ -1,4 +1,4 @@
-import { formatLarge, formatPercent, formatShares } from '../utils/formatters.js';
+import { formatCurrency, formatLarge, formatPercent, formatShares } from '../utils/formatters.js';
 import { flashTick } from '../utils/tick-flash.js';
 
 let previousPrice = null;
@@ -16,14 +16,12 @@ export function updatePriceUI(newPrice, stockUpdate, config = {}) {
     flashTick(el, newPrice - oldPrice);
     previousPrice = newPrice;
 
+    // A short shows what covering would cost, so the panel reads the absolute size either way.
     const userQuantity = config.userQuantity || 0;
-    if (userQuantity > 0) {
+    if (userQuantity !== 0) {
         const holdingEl = document.getElementById('user-holding-value');
         if (holdingEl) {
-            holdingEl.textContent = '$' + (newPrice * userQuantity).toLocaleString('en-US', {
-                minimumFractionDigits: 2,
-                maximumFractionDigits: 2
-            });
+            holdingEl.textContent = formatCurrency(newPrice * Math.abs(userQuantity));
         }
     }
 
@@ -135,7 +133,7 @@ function updateAnalystTargets(stockUpdate, newPrice) {
      */
     const applyTargetTone = (el, target) => {
         if (!el) return;
-        el.classList.remove('text-secondary', 'text-tertiary');
+        el.classList.remove('text-secondary', 'text-tertiary', 'text-on-surface-faint');
         if (target > (newPrice * 1.05)) {
             el.classList.add('text-secondary');
         } else if (target < (newPrice * 0.95)) {

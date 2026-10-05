@@ -252,28 +252,37 @@
 							{% else %}
 								{# Shown when the user holds shares OR has ever been paid by this ticker: dividend cash
 								   received survives selling out of the position, so it stays visible afterwards. #}
-								{% if userQuantity > 0 or userDividendIncome > 0 %}
+								{% if userQuantity != 0 or userDividendIncome > 0 %}
 									<div class="mb-4 p-3 bg-surface-container-lowest/80 rounded border border-outline-variant/20 space-y-1.5">
-										{% if userQuantity > 0 %}
+										{% if userQuantity != 0 %}
 											<div class="flex justify-between items-center text-xs">
 												<span class="text-on-surface-variant">Your position</span>
-												<span class="font-bold text-on-surface font-mono tabular-nums">{{ userQuantity|number_format }} Shares</span>
+												<span class="flex items-center gap-2">
+													{% if userQuantity < 0 %}<span class="badge badge-down">Short</span>{% endif %}
+													<span class="font-bold text-on-surface font-mono tabular-nums">{{ userQuantity|abs|number_format }} shares</span>
+												</span>
 											</div>
 											<div class="flex justify-between items-center text-xs">
-												<span class="text-on-surface-variant">Avg cost basis</span>
+												<span class="text-on-surface-variant">{{ userQuantity < 0 ? 'Avg sale price' : 'Avg cost basis' }}</span>
 												<span class="font-mono tabular-nums text-on-surface-variant">{{ userAvgCost|money(2) }}</span>
 											</div>
 											<div class="flex justify-between items-center text-xs">
-												<span class="text-on-surface-variant">Market value</span>
-												<span class="font-bold text-on-surface font-mono tabular-nums" id="user-holding-value">${{ (userQuantity * asset.price)|number_format(2) }}</span>
+												<span class="text-on-surface-variant">{{ userQuantity < 0 ? 'Cost to cover' : 'Market value' }}</span>
+												<span class="font-bold text-on-surface font-mono tabular-nums" id="user-holding-value">{{ (userQuantity|abs * asset.price)|money(2) }}</span>
 											</div>
 											<div class="flex justify-between items-center text-xs pt-1.5 border-t border-outline-variant/15">
-												<span class="text-on-surface-variant">Unrealized return</span>
+												<span class="text-on-surface-variant">Unrealised return</span>
 												<span class="font-mono tabular-nums font-bold {{ userUnrealizedPnL|signed_class }}">
 													{{ userUnrealizedPnL|money(2, true) }}
-													({{ userUnrealizedPnL > 0 ? '+' : '' }}{{ userUnrealizedPnLPercent|number_format(2) }}%)
+													({{ (userUnrealizedPnLPercent / 100)|pct(2, true) }})
 												</span>
 											</div>
+											{% if userBorrowAccrued|default(0) > 0 %}
+												<div class="flex justify-between items-center text-xs">
+													<span class="text-on-surface-variant">Borrow fees paid</span>
+													<span class="font-mono tabular-nums text-tertiary">{{ (-userBorrowAccrued)|money(2) }}</span>
+												</div>
+											{% endif %}
 										{% endif %}
 										{% if userDividendIncome > 0 %}
 											<div class="flex justify-between items-center text-xs {{ userQuantity > 0 ? 'pt-1.5 border-t border-outline-variant/15' : '' }}">
@@ -679,10 +688,15 @@
 
 								<div class="pb-3 mb-1 border-b border-outline-variant/15">
 									<p class="text-xs text-on-surface-variant">12-month consensus</p>
-									{% set upside = analystTargets.upside_pct|default(0) %}
+									{# A missing target prints the dash: falling back to the price or to zero would publish a call nobody made. #}
+									{% set upside = analystTargets.upside_pct ?? null %}
 									<p class="mt-0.5 flex items-baseline gap-3">
-										<span class="text-2xl font-semibold font-mono tabular-nums tracking-tight text-on-surface" id="target-consensus">${{ analystTargets.consensus|default(asset.price)|number_format(2) }}</span>
-										<span id="target-upside" class="text-sm font-mono tabular-nums {{ upside > 5 ? 'text-secondary' : (upside < -5 ? 'text-tertiary' : 'text-on-surface-variant') }}">{{ upside > 0 ? '+' : '' }}{{ upside|number_format(1) }}% to target</span>
+										<span class="text-2xl font-semibold font-mono tabular-nums tracking-tight text-on-surface" id="target-consensus">{{ (analystTargets.consensus ?? null)|money(2) }}</span>
+										{% if upside is not null %}
+											<span id="target-upside" class="text-sm font-mono tabular-nums {{ upside > 5 ? 'text-secondary' : (upside < -5 ? 'text-tertiary' : 'text-on-surface-variant') }}">{{ (upside / 100)|pct(1, true) }} to target</span>
+										{% else %}
+											<span id="target-upside" class="text-sm font-mono tabular-nums text-on-surface-faint">&mdash;</span>
+										{% endif %}
 									</p>
 								</div>
 
@@ -693,21 +707,21 @@
 											<span class="text-on-surface">Growth desk</span>
 											<span class="block text-xs text-on-surface-variant">Discounted cash flow on forward earnings</span>
 										</dt>
-										<dd class="font-mono tabular-nums text-on-surface" id="target-growth">${{ analystTargets.growth_analyst|default(0)|number_format(2) }}</dd>
+										<dd class="font-mono tabular-nums text-on-surface" id="target-growth">{{ (analystTargets.growth_analyst ?? null)|money(2) }}</dd>
 									</div>
 									<div class="py-2.5 flex items-start justify-between gap-3">
 										<dt>
 											<span class="text-on-surface">Value desk</span>
 											<span class="block text-xs text-on-surface-variant">Justified price to book: return over hurdle</span>
 										</dt>
-										<dd class="font-mono tabular-nums text-on-surface" id="target-value">${{ analystTargets.value_analyst|default(0)|number_format(2) }}</dd>
+										<dd class="font-mono tabular-nums text-on-surface" id="target-value">{{ (analystTargets.value_analyst ?? null)|money(2) }}</dd>
 									</div>
 									<div class="py-2.5 flex items-start justify-between gap-3">
 										<dt>
 											<span class="text-on-surface">Income desk</span>
 											<span class="block text-xs text-on-surface-variant">Dividend discount, with a cash-yield floor</span>
 										</dt>
-										<dd class="font-mono tabular-nums text-on-surface" id="target-income">${{ analystTargets.income_analyst|default(0)|number_format(2) }}</dd>
+										<dd class="font-mono tabular-nums text-on-surface" id="target-income">{{ (analystTargets.income_analyst ?? null)|money(2) }}</dd>
 									</div>
 								</dl>
 							</div>

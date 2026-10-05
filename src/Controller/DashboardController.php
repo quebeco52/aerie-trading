@@ -179,13 +179,14 @@ class DashboardController extends AbstractController
             $unrealizedPnL = $marketValue - $positionCost;
             $unrealizedPnLPercent = $positionCost > 0 ? ($unrealizedPnL / $positionCost) * 100 : 0.0;
 
-            $sectorValues['Sovereign Debt'] = ($sectorValues['Sovereign Debt'] ?? 0.0) + $marketValue;
+            $debtSector = $bond->getIssuer() !== null ? 'Corporate debt' : 'Sovereign debt';
+            $sectorValues[$debtSector] = ($sectorValues[$debtSector] ?? 0.0) + $marketValue;
 
             $holdingsData[] = [
                 'type' => 'BOND',
                 'ticker' => $ticker,
                 'name' => $bond->getName(),
-                'sector' => 'Sovereign Debt',
+                'sector' => $debtSector,
                 'quantity' => $quantity,
                 'price' => $currentPrice,
                 'avgCost' => $avgCost,
@@ -319,19 +320,52 @@ class DashboardController extends AbstractController
         }
         usort($sectorBreakdown, fn($a, $b) => $b['value'] <=> $a['value']);
 
-        // Asset Allocation
-        $allocation = [
-            'stocks' => $totalStocksValue,
-            'stocksPercent' => $totalPortfolioValue > 0 ? ($totalStocksValue / $totalPortfolioValue) * 100 : 0.0,
-            'etfs' => $totalEtfsValue,
-            'etfsPercent' => $totalPortfolioValue > 0 ? ($totalEtfsValue / $totalPortfolioValue) * 100 : 0.0,
-            'bonds' => $totalBondsValue,
-            'bondsPercent' => $totalPortfolioValue > 0 ? ($totalBondsValue / $totalPortfolioValue) * 100 : 0.0,
-            'cash' => $cashBalance,
-            'cashPercent' => $totalPortfolioValue > 0 ? ($cashBalance / $totalPortfolioValue) * 100 : 0.0,
-            'escrow' => $escrowedTotal,
-            'escrowPercent' => $totalPortfolioValue > 0 ? ($escrowedTotal / $totalPortfolioValue) * 100 : 0.0,
+        // Asset allocation: the same terms the headline value is summed from, the margin loan included as a
+        // negative slice, so the shares add up to the portfolio. Stocks and cash always show; the rest only
+        // when held. Shares are fractions of the portfolio value.
+        $slices = [
+            ['label' => 'Stocks', 'value' => $totalStocksValue, 'always' => true],
+            ['label' => 'Index funds', 'value' => $totalEtfsValue, 'always' => false],
+            ['label' => 'Bonds', 'value' => $totalBondsValue, 'always' => false],
+            ['label' => 'Options', 'value' => $totalOptionsValue, 'always' => false],
+            ['label' => 'In open orders', 'value' => $escrowedTotal, 'always' => false],
+            ['label' => 'Cash', 'value' => $cashBalance, 'always' => true],
+            ['label' => 'Margin loan', 'value' => -$marginDebit, 'always' => false],
         ];
+        $seriesColours = ['bg-series-blue', 'bg-series-orange', 'bg-series-aqua', 'bg-series-yellow', 'bg-series-magenta'];
+        $allocation = [];
+        foreach ($slices as $slice) {
+            if (!$slice['always'] && round($slice['value'], 2) === 0.0) {
+                continue;
+            }
+            $colour = match ($slice['label']) {
+                'Cash' => 'bg-on-surface-faint',
+                'Margin loan' => 'bg-tertiary',
+                default => array_shift($seriesColours),
+            };
+            $allocation[] = [
+                'label' => $slice['label'],
+                'value' => $slice['value'],
+                'share' => $totalPortfolioValue > 0 ? $slice['value'] / $totalPortfolioValue : null,
+                'colour' => $colour,
+            ];
+        }
+
+        // Open orders show the price each one is waiting against.
+        $livePrices = [];
+        foreach ($conn->fetchAllAssociative(
+            "SELECT DISTINCT o.ticker, COALESCE(s.price, e.price, b.price) AS price
+             FROM trade_orders o
+             LEFT JOIN stocks s ON s.ticker = o.ticker AND o.asset_type = 'STOCK'
+             LEFT JOIN etfs   e ON e.ticker = o.ticker AND o.asset_type = 'ETF'
+             LEFT JOIN bonds  b ON b.ticker = o.ticker AND o.asset_type = 'BOND'
+             WHERE o.user_id = :user_id AND o.status = 'OPEN'",
+            ['user_id' => $user->getId()]
+        ) as $row) {
+            if ($row['price'] !== null) {
+                $livePrices[(string) $row['ticker']] = (float) $row['price'];
+            }
+        }
 
         return $this->render('dashboard/index.html.twig', [
             'user' => $user,
@@ -349,9 +383,12 @@ class DashboardController extends AbstractController
             // sweep that acts on it are reading the same numbers.
             'margin' => $marginEngine->status($user),
             'openOrders' => $openOrders,
+            'livePrices' => $livePrices,
             'tradeHistory' => $tradeHistory,
+            'optionMultiplier' => FinancialConstants::OPTION_CONTRACT_MULTIPLIER,
             'sectorBreakdown' => $sectorBreakdown,
             'allocation' => $allocation,
+            'cashShare' => $totalPortfolioValue > 0 ? $cashBalance / $totalPortfolioValue : null,
             'totalDividendIncome' => $totalDividendIncome,
             'dividendPayments' => $dividendIncome->recentPayments($user),
         ]);
@@ -382,15 +419,8 @@ class DashboardController extends AbstractController
         $sql = 'SELECT total_value, recorded_at FROM portfolio_history WHERE user_id = :user_id ORDER BY recorded_at DESC LIMIT ' . (int)$limit;
         $rows = $conn->fetchAllAssociative($sql, ['user_id' => $user->getId()]);
 
-        if (empty($rows)) {
-            // Provide at least one point with current portfolio balance
-            $currentVal = (float) $user->getCashBalance();
-            return $this->json([[
-                'price' => $currentVal,
-                'recorded_at' => (new \DateTime())->format('Y-m-d H:i:s'),
-            ]]);
-        }
-
+        // An account with no snapshots yet gets an empty series; the page plots the portfolio value it
+        // rendered with, which counts holdings and open orders rather than cash alone.
         $results = [];
         foreach ($rows as $row) {
             $results[] = [

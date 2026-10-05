@@ -7,6 +7,7 @@ namespace App\Service\View;
 use App\Entity\Etf;
 use App\Entity\Stock;
 use App\Entity\User;
+use App\Entity\UserStock;
 use App\Repository\HoldingRepository;
 use App\Repository\TradeOrderRepository;
 use App\Service\User\CostBasisCalculator;
@@ -40,6 +41,7 @@ class ViewerPositionBuilder
             'userUnrealizedPnL' => 0.0,
             'userUnrealizedPnLPercent' => 0.0,
             'userDividendIncome' => 0.0,
+            'userBorrowAccrued' => 0.0,
             'openOrders' => [],
             'userTrades' => [],
         ];
@@ -62,7 +64,7 @@ class ViewerPositionBuilder
         $position['openOrders'] = $this->orders->findOpenForUserAndTicker($viewer, $ticker);
         $position['userTrades'] = $this->orders->findSettledForUserAndTicker($viewer, $ticker, self::TRADE_HISTORY_ROWS);
 
-        if ($quantity <= 0) {
+        if ($quantity === 0) {
             return $position;
         }
 
@@ -72,13 +74,16 @@ class ViewerPositionBuilder
         $filledOrders = $this->orders->findFilledForUserAndTicker($viewer, $ticker);
         $averageCost = $this->costBasis->calculateForTicker($filledOrders, $ticker) ?? $position['userAvgCost'];
 
+        // Signed, as on the dashboard: a short's value is the obligation and its cost the proceeds, so the
+        // one subtraction marks either side. The percentage is struck against the absolute cost.
         $positionCost = $averageCost * $quantity;
         $marketValue = (float) $asset->getPrice() * $quantity;
         $unrealised = $marketValue - $positionCost;
 
         $position['userAvgCost'] = $averageCost;
         $position['userUnrealizedPnL'] = $unrealised;
-        $position['userUnrealizedPnLPercent'] = $positionCost > 0.0 ? ($unrealised / $positionCost) * 100.0 : 0.0;
+        $position['userUnrealizedPnLPercent'] = abs($positionCost) > 0.0 ? ($unrealised / abs($positionCost)) * 100.0 : 0.0;
+        $position['userBorrowAccrued'] = $holding instanceof UserStock ? (float) $holding->getBorrowAccrued() : 0.0;
 
         return $position;
     }

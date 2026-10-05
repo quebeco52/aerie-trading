@@ -33,7 +33,7 @@
                 </div>
                 <div>
                     <dt class="text-xs text-on-surface-variant">In open orders</dt>
-                    <dd class="mt-0.5 text-sm font-semibold text-on-surface font-mono tabular-nums">{{ escrowedCash|money(2) }}</dd>
+                    <dd class="mt-0.5 text-sm font-semibold text-on-surface font-mono tabular-nums">{{ (escrowedCash + escrowedShareValue)|money(2) }}</dd>
                 </div>
                 <div>
                     <dt class="text-xs text-on-surface-variant">Dividends</dt>
@@ -87,37 +87,21 @@
 
             <div id="tab-content-holdings" class="portfolio-tab-panel space-y-5" data-tabs-target="panel" data-tab-panel="holdings">
             
-            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div class="bg-surface-container-low border border-outline-variant/20 rounded-lg p-3.5 flex items-center justify-between">
-                    <div class="flex items-center gap-3">
-                        <div class="w-2.5 h-2.5 rounded-full bg-series-blue" aria-hidden="true"></div>
-                        <div>
-                            <p class="text-xs text-on-surface-variant">Stocks</p>
-                            <p class="text-sm font-bold text-on-surface font-mono tabular-nums">{{ allocation.stocks|money(2) }}</p>
+            {# Literal class names: Tailwind only builds the classes it can find written out. #}
+            {% set allocationCols = { 2: 'xl:grid-cols-2', 3: 'xl:grid-cols-3', 4: 'xl:grid-cols-4', 5: 'xl:grid-cols-5', 6: 'xl:grid-cols-6' } %}
+            <div class="grid grid-cols-1 sm:grid-cols-3 {{ allocationCols[allocation|length] ?? 'xl:grid-cols-4' }} gap-3">
+                {% for slice in allocation %}
+                    <div class="bg-surface-container-low border border-outline-variant/20 rounded-lg p-3.5 flex items-center justify-between">
+                        <div class="flex items-center gap-3">
+                            <div class="w-2.5 h-2.5 rounded-full {{ slice.colour }}" aria-hidden="true"></div>
+                            <div>
+                                <p class="text-xs text-on-surface-variant">{{ slice.label }}</p>
+                                <p class="text-sm font-bold text-on-surface font-mono tabular-nums">{{ slice.value|money(2) }}</p>
+                            </div>
                         </div>
+                        <span class="text-xs font-bold text-on-surface font-mono tabular-nums">{{ slice.share|pct(1) }}</span>
                     </div>
-                    <span class="text-xs font-bold text-on-surface font-mono tabular-nums">{{ allocation.stocksPercent|number_format(1) }}%</span>
-                </div>
-                <div class="bg-surface-container-low border border-outline-variant/20 rounded-lg p-3.5 flex items-center justify-between">
-                    <div class="flex items-center gap-3">
-                        <div class="w-2.5 h-2.5 rounded-full bg-series-orange" aria-hidden="true"></div>
-                        <div>
-                            <p class="text-xs text-on-surface-variant">Index funds</p>
-                            <p class="text-sm font-bold text-on-surface font-mono tabular-nums">{{ allocation.etfs|money(2) }}</p>
-                        </div>
-                    </div>
-                    <span class="text-xs font-bold text-on-surface font-mono tabular-nums">{{ allocation.etfsPercent|number_format(1) }}%</span>
-                </div>
-                <div class="bg-surface-container-low border border-outline-variant/20 rounded-lg p-3.5 flex items-center justify-between">
-                    <div class="flex items-center gap-3">
-                        <div class="w-2.5 h-2.5 rounded-full bg-on-surface-faint" aria-hidden="true"></div>
-                        <div>
-                            <p class="text-xs text-on-surface-variant">Cash</p>
-                            <p class="text-sm font-bold text-on-surface font-mono tabular-nums">{{ allocation.cash|money(2) }}</p>
-                        </div>
-                    </div>
-                    <span class="text-xs font-bold text-on-surface font-mono tabular-nums">{{ allocation.cashPercent|number_format(1) }}%</span>
-                </div>
+                {% endfor %}
             </div>
 
             <div class="bg-surface-container-low border border-outline-variant/20 rounded-lg overflow-hidden">
@@ -234,7 +218,7 @@
                                     <th class="py-2.5">Type</th>
                                     <th class="py-2.5">Action</th>
                                     <th class="py-2.5">Asset</th>
-                                    <th class="py-2.5 text-right">Shares</th>
+                                    <th class="py-2.5 text-right">Quantity</th>
                                     <th class="py-2.5 text-right">Limit price</th>
                                     <th class="py-2.5 text-right">Current price</th>
                                     <th class="py-2.5 text-right">Cancel</th>
@@ -247,11 +231,11 @@
                                         <td class="py-2.5 text-xs text-on-surface-variant">{{ order.orderType|replace({'_': ' '})|lower|capitalize }}</td>
                                         <td class="py-2.5 font-bold {{ order.action in ['BUY', 'COVER'] ? 'text-secondary' : 'text-tertiary' }}">{{ order.action|lower|capitalize }}</td>
                                         <td class="py-2.5">
-                                            <a href="/stock/{{ order.ticker }}" class="font-bold text-on-surface hover:text-primary transition-colors">{{ order.ticker }}</a>
+                                            <a href="{{ order.assetType == 'BOND' ? path('app_bond_view', { ticker: order.ticker }) : '/stock/' ~ order.ticker }}" class="font-bold text-on-surface hover:text-primary transition-colors">{{ order.ticker }}</a>
                                         </td>
                                         <td class="py-2.5 text-right font-mono tabular-nums text-on-surface">{{ order.quantity|number_format }}</td>
                                         <td class="py-2.5 text-right font-mono tabular-nums text-primary font-bold">{{ order.limitPrice|money(2) }}</td>
-                                        <td class="py-2.5 text-right font-mono tabular-nums text-on-surface">${{ (livePrices[order.ticker] ?? 0.00)|number_format(2) }}</td>
+                                        <td class="py-2.5 text-right font-mono tabular-nums {{ livePrices[order.ticker] is defined ? 'text-on-surface' : 'text-on-surface-faint' }}">{{ (livePrices[order.ticker] ?? null)|money(2) }}</td>
                                         <td class="py-2.5 text-right">
                                             <form action="{{ path('app_trade_cancel', {'id': order.id}) }}" method="POST" onsubmit="return confirm('Cancel this limit order?');">
                                                 <input type="hidden" name="_token" value="{{ csrf_token('cancel_trade_' ~ order.id) }}">
@@ -287,7 +271,7 @@
                                     <th class="py-2.5">Type</th>
                                     <th class="py-2.5">Action</th>
                                     <th class="py-2.5">Asset</th>
-                                    <th class="py-2.5 text-right">Shares</th>
+                                    <th class="py-2.5 text-right">Quantity</th>
                                     <th class="py-2.5 text-right">Executed price</th>
                                     <th class="py-2.5 text-right">Total amount</th>
                                     <th class="py-2.5 text-right">Status</th>
@@ -295,17 +279,22 @@
                             </thead>
                             <tbody class="divide-y divide-outline-variant/10 text-xs sm:text-sm">
                                 {% for trade in tradeHistory %}
+                                    {% set tradeQuantity = trade.filledQuantity > 0 ? trade.filledQuantity : trade.quantity %}
+                                    {% set tradePrice = trade.executionPrice ?? trade.limitPrice %}
+                                    {# An option premium is quoted per share and a contract covers a hundred; its
+                                       chain lives on the underlying, the part of the symbol before the dash. #}
+                                    {% set isOption = trade.assetType == 'OPTION' %}
                                     <tr>
                                         <td class="py-2.5 text-xs text-on-surface-variant font-mono">{{ (trade.filledAt ?? trade.createdAt)|date('Y-m-d H:i') }}</td>
                                         <td class="py-2.5 text-xs text-on-surface-variant">{{ trade.orderType|replace({'_': ' '})|lower|capitalize }}</td>
                                         <td class="py-2.5 font-bold {{ trade.action in ['BUY', 'COVER'] ? 'text-secondary' : 'text-tertiary' }}">{{ trade.action|lower|capitalize }}</td>
                                         <td class="py-2.5">
-                                            <a href="/stock/{{ trade.ticker }}" class="font-bold text-on-surface hover:text-primary transition-colors">{{ trade.ticker }}</a>
+                                            <a href="{{ trade.assetType == 'BOND' ? path('app_bond_view', { ticker: trade.ticker }) : '/stock/' ~ (isOption ? trade.ticker|split('-')|first : trade.ticker) }}" class="font-bold text-on-surface hover:text-primary transition-colors">{{ trade.ticker }}</a>
                                         </td>
-                                        <td class="py-2.5 text-right font-mono tabular-nums text-on-surface">{{ (trade.filledQuantity > 0 ? trade.filledQuantity : trade.quantity)|number_format }}</td>
-                                        <td class="py-2.5 text-right font-mono tabular-nums text-on-surface">${{ (trade.executionPrice ?? trade.limitPrice ?? 0.00)|number_format(2) }}</td>
+                                        <td class="py-2.5 text-right font-mono tabular-nums text-on-surface">{{ tradeQuantity|number_format }}{% if isOption %} <span class="font-sans text-2xs text-on-surface-variant">contracts</span>{% endif %}</td>
+                                        <td class="py-2.5 text-right font-mono tabular-nums text-on-surface">{{ tradePrice|money(2) }}</td>
                                         <td class="py-2.5 text-right font-mono tabular-nums font-bold text-on-surface">
-                                            ${{ ((trade.executionPrice ?? trade.limitPrice ?? 0.00) * (trade.filledQuantity > 0 ? trade.filledQuantity : trade.quantity))|number_format(2) }}
+                                            {{ (tradePrice is null ? null : tradePrice * tradeQuantity * (isOption ? optionMultiplier : 1))|money(2) }}
                                         </td>
                                         <td class="py-2.5 text-right">
                                             <span class="text-xs {{ trade.status == 'FILLED' ? 'text-on-surface' : 'text-on-surface-variant' }}">{{ trade.status|lower|capitalize }}</span>
@@ -404,7 +393,7 @@
                             </div>
                             <div class="py-2.5 flex justify-between">
                                 <dt class="text-on-surface-variant">Cash share</dt>
-                                <dd class="font-bold text-on-surface font-mono tabular-nums">{{ allocation.cashPercent|number_format(1) }}%</dd>
+                                <dd class="font-bold text-on-surface font-mono tabular-nums">{{ cashShare|pct(1) }}</dd>
                             </div>
                             <div class="py-2.5 flex justify-between">
                                 <dt class="text-on-surface-variant">Sectors held</dt>
@@ -426,8 +415,10 @@
                 </div>
                 <div class="bg-surface-container-low border border-outline-variant/20 rounded-lg p-5">
                     <span class="text-xs text-on-surface-variant">Held for open orders</span>
-                    <p class="text-2xl font-semibold text-on-surface font-mono tabular-nums mt-1">{{ escrowedCash|money(2) }}</p>
-                    <p class="text-xs text-on-surface-variant mt-1.5">Released when an order fills or is cancelled.</p>
+                    <p class="text-2xl font-semibold text-on-surface font-mono tabular-nums mt-1">{{ (escrowedCash + escrowedShareValue)|money(2) }}</p>
+                    <p class="text-xs text-on-surface-variant mt-1.5">
+                        {% if escrowedShareValue > 0 %}{{ escrowedCash|money(2) }} cash for buys, {{ escrowedShareValue|money(2) }} in securities on sell orders. {% endif %}Released when an order fills or is cancelled.
+                    </p>
                 </div>
                 <div class="bg-surface-container-low border border-outline-variant/20 rounded-lg p-5">
                     <span class="text-xs text-on-surface-variant">Buying power</span>

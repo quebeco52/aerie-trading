@@ -18,7 +18,7 @@
                     <tr class="table-head bg-surface-container-highest/20">
                         <th scope="col" class="px-5 py-3 w-16 text-right">Rank</th>
                         <th scope="col" class="px-5 py-3">Trader</th>
-                        <th scope="col" class="px-4 py-3 text-right">Cash</th>
+                        <th scope="col" class="px-4 py-3 text-right">Net cash</th>
                         <th scope="col" class="px-4 py-3 text-right">Holdings</th>
                         <th scope="col" class="px-5 py-3 text-right">Net worth</th>
                     </tr>
@@ -32,8 +32,10 @@
                                 {{ leader.username }}
                                 {% if isMe %}<span class="ml-2 text-xs font-normal text-primary">You</span>{% endif %}
                             </th>
-                            <td class="px-4 py-3 font-mono tabular-nums text-right text-on-surface-variant">{{ leader.cash_balance|money(2) }}</td>
-                            <td class="px-4 py-3 font-mono tabular-nums text-right text-on-surface-variant">${{ (leader.stock_value + leader.etf_value)|number_format(2) }}</td>
+                            {# Cash net of any margin loan, and every position plus value working in open orders,
+                               so the two columns add up to net worth. #}
+                            <td class="px-4 py-3 font-mono tabular-nums text-right text-on-surface-variant">{{ (leader.cash_balance - leader.margin_debit)|money(2) }}</td>
+                            <td class="px-4 py-3 font-mono tabular-nums text-right text-on-surface-variant">{{ (leader.stock_value + leader.etf_value + leader.bond_value + leader.option_value + leader.escrow_value)|money(2) }}</td>
                             <td class="px-5 py-3 font-mono tabular-nums text-right font-semibold text-on-surface">{{ leader.total_value|money(2) }}</td>
                         </tr>
                     {% else %}

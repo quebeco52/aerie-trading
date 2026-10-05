@@ -82,7 +82,12 @@ final class PagesRenderTest extends KernelTestCase
                     ['ticker' => 'PEAC', 'name' => 'Peacock Heritage Group', 'type' => 'STOCK', 'sector' => 'Consumer Discretionary', 'quantity' => 300, 'avgCost' => 210.0, 'price' => 210.0, 'marketValue' => 63000.0, 'unrealizedPnL' => 0.0, 'unrealizedPnLPercent' => 0.0, 'weight' => 5.1, 'dividendsReceived' => 0.0, 'isBankrupt' => false],
                 ],
                 'openOrders' => [['id' => 41, 'ticker' => 'LAKE', 'action' => 'BUY', 'orderType' => 'STOP_LIMIT', 'quantity' => 100, 'limitPrice' => 80.0, 'stopPrice' => 82.0, 'createdAt' => new \DateTimeImmutable('2026-10-01')]],
-                'tradeHistory' => [], 'dividendPayments' => [], 'allocation' => ['stocks' => 900000, 'stocksPercent' => 72.9, 'etfs' => 134567, 'etfsPercent' => 10.9, 'cash' => 200000, 'cashPercent' => 16.2],
+                'tradeHistory' => [], 'dividendPayments' => [], 'allocation' => [
+                    ['label' => 'Stocks', 'value' => 900000, 'share' => 0.729, 'colour' => 'bg-series-blue'],
+                    ['label' => 'Index funds', 'value' => 134567, 'share' => 0.109, 'colour' => 'bg-series-orange'],
+                    ['label' => 'Cash', 'value' => 200000, 'share' => 0.162, 'colour' => 'bg-on-surface-faint'],
+                ],
+                'cashShare' => 0.162, 'escrowedShareValue' => 0.0, 'optionMultiplier' => 100,
                 'sectorBreakdown' => [['name' => 'Financials', 'value' => 500000, 'percent' => 48.3], ['name' => 'Industrials', 'value' => 300000, 'percent' => 29.0]],
                 'margin' => ['buyingPower' => 200000, 'shortMarketValue' => 0, 'optionShortValue' => 0, 'equity' => 1234567, 'maintenanceRequirement' => 0, 'isCalled' => false, 'equityRatio' => 1.0, 'callAmount' => 0], 'marginDebit' => 0, 'livePrices' => [], 'totalInvestedCost' => 1000000,
             ]],
