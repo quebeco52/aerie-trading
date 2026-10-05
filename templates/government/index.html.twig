@@ -65,7 +65,7 @@
 						<p class="text-2xs text-on-surface-variant mt-0.5">Rises into a vote and stays high through the talks, as firms put off investment until they know who governs</p>
 					</div>
 					<div class="col-span-2">
-						<dt class="text-xs text-on-surface-variant">Next Council vacancy</dt>
+						<dt class="text-xs text-on-surface-variant">Next Council term to end</dt>
 						<dd class="text-base font-semibold text-on-surface mt-0.5">Seat {{ council.nextVacancy.seat }} · {{ council.nextVacancy.termEndsLabel }}</dd>
 						<p class="text-2xs text-on-surface-variant mt-0.5">{{ council.nextVacancy.name }}'s term ends; the Council elects the successor</p>
 					</div>
@@ -405,7 +405,7 @@
 		<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20" aria-labelledby="council-heading">
 			<h2 id="council-heading" class="text-sm font-semibold text-on-surface">The Aerie Council</h2>
 			<p class="text-2xs text-on-surface-variant mt-0.5">
-				{{ rules.councilSeats }} seats on staggered {{ rules.councilTermYears|number_format(0) }}-year terms. When a term ends, the sitting members elect the successor from a shortlist.
+				{{ rules.councilSeats }} seats on staggered {{ rules.councilTermYears|number_format(0) }}-year terms. When a term ends, or a councillor dies or resigns, the sitting members elect the successor from a shortlist; a successor to a councillor who left early serves out the term.
 				Each councillor holds a stance on money: a hawk would rather fight inflation, a dove would rather spare jobs, a swing vote sides with either as the case takes them.
 				Each also holds one on the banks, from light-touch to strict: how much of their own capital a bank should have at stake; and one on the reserves, from cautious to bold: how much of the District's savings belongs in shares. The Council's leans decide whom it appoints.
 			</p>
@@ -447,7 +447,7 @@
 									<td class="py-1.5 text-right font-mono tabular-nums text-on-surface-variant">{{ seat.age ?? '' }}</td>
 									<td class="py-1.5 pl-4 text-on-surface-variant font-mono tabular-nums whitespace-nowrap hidden md:table-cell">{{ seat.sinceLabel }}</td>
 									<td class="py-1.5 pl-4 md:pl-0 text-on-surface-variant font-mono tabular-nums whitespace-nowrap {{ seat.seat == council.nextVacancy.seat ? 'text-primary font-semibold' : '' }}">{{ seat.termEndsLabel }}</td>
-									<td class="py-1.5 pl-4 text-on-surface whitespace-nowrap">{{ _self.stance(seat.stance ?? null) }}</td>
+									<td class="py-1.5 pl-4 text-on-surface whitespace-nowrap">{{ _self.stance(seat.stance ?? null, seat.leaning ?? null) }}</td>
 									<td class="py-1.5 pl-4 text-on-surface whitespace-nowrap">{{ _self.banks(seat.banks ?? null) }}</td>
 									<td class="py-1.5 pl-4 text-on-surface whitespace-nowrap hidden md:table-cell">{{ _self.reserves(seat.reserves ?? null) }}</td>
 								</tr>
@@ -502,7 +502,7 @@
 							<p class="text-sm font-semibold text-on-surface mt-0.5">{{ governor.name }}</p>
 							<p class="text-2xs text-on-surface-variant mt-0.5">Age {{ governor.age }} · seated {{ governor.sinceLabel }} · term ends <span class="font-mono tabular-nums">{{ governor.termEndsLabel }}</span></p>
 							<p class="text-xs text-on-surface mt-1">
-								{{- {hawk: 'A hawk', swing: 'A swing vote', dove: 'A dove'}[governor.stance] -}}
+								{{- {hawk: 'A hawk', swing: 'A swing vote', dove: 'A dove'}[governor.stance] -}}{{- governor.leaning ? (governor.leaning == 'hawk' ? ' leaning hawkish' : ' leaning dovish') : '' -}}
 								{%- if governor.passedOver is not empty %}, chosen over {% for candidate in governor.passedOver %}{{ candidate.name }} <span class="text-on-surface-variant">({{ {hawk: 'hawk', swing: 'swing vote', dove: 'dove'}[candidate.stance] }}, {{ candidate.age }})</span>{{ loop.last ? '' : (loop.revindex == 2 ? ' and ' : ', ') }}{% endfor %}{% endif %}.
 							</p>
 						</div>
@@ -560,7 +560,7 @@
 										<td class="py-1.5 text-right font-mono tabular-nums text-on-surface-variant">{{ member.age }}</td>
 										<td class="py-1.5 pl-4 font-mono tabular-nums text-on-surface-variant whitespace-nowrap hidden md:table-cell">{{ member.sinceLabel }}</td>
 										<td class="py-1.5 pl-4 md:pl-0 font-mono tabular-nums text-on-surface-variant whitespace-nowrap">{{ member.termEndsLabel }}</td>
-										<td class="py-1.5 pl-4 text-on-surface whitespace-nowrap">{{ _self.stance(member.stance) }}</td>
+										<td class="py-1.5 pl-4 text-on-surface whitespace-nowrap">{{ _self.stance(member.stance, member.leaning) }}</td>
 										<td class="py-1.5 pl-4 text-2xs {{ member.vote is not null and member.vote != 0 ? 'text-on-surface font-semibold' : 'text-on-surface-variant' }}">
 											{{- member.vote is null ? '' : (member.vote > 0 ? 'For a higher rate' : (member.vote < 0 ? 'For a lower rate' : 'With the decision')) -}}
 										</td>
@@ -825,4 +825,4 @@
 {# A person's stance on money, in words: hawk, swing vote or dove. #}
 {% macro reserves(stance) %}{{ {cautious: 'Cautious', balanced: 'Balanced', bold: 'Bold'}[stance] ?? '' }}{% endmacro %}
 {% macro banks(stance) %}{{ {light: 'Light-touch', middle: 'Moderate', strict: 'Strict'}[stance] ?? '' }}{% endmacro %}
-{% macro stance(stance) %}{{ {hawk: 'Hawk', swing: 'Swing', dove: 'Dove'}[stance] ?? '' }}{% endmacro %}
+{% macro stance(stance, leaning = null) %}{{ {hawk: 'Hawk', swing: 'Swing', dove: 'Dove'}[stance] ?? '' }}{% if leaning %}<span class="text-on-surface-variant">, {{ leaning == 'hawk' ? 'leaning hawkish' : 'leaning dovish' }}</span>{% endif %}{% endmacro %}

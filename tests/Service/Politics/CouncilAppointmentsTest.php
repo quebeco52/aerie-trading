@@ -41,18 +41,22 @@ class CouncilAppointmentsTest extends TestCase
     /**
      * Candidates come in the FOMC's mix on money, 51 hawks, 31 swing votes and 39 doves in 121; as one of the 17 regimes
      * on record on the banks, each as likely; at the Board's ages at appointment (a normal around 52.56, sd 7.32), cut at
-     * the charter's window of 40 to 60; and the same vacancy always draws the same people.
+     * the charter's window of 40 to 60; a swing vote leaning to either camp alike; and the same vacancy always draws the
+     * same people.
      */
     public function testCandidatesAreDrawnFromTheRecord(): void
     {
         $math = new MathUtility();
         $types = ['hawk' => 0, 'swing' => 0, 'dove' => 0];
+        $swingHawks = 0;
         $regimes = array_fill(0, count(FinancialRegulator::OBSERVED_REQUIREMENTS), 0);
         $ages = [];
         $draws = 20000;
         for ($i = 0; $i < $draws; ++$i) {
             $candidate = Appointments::candidate(99, "test:{$i}", 0, 10.0, [], $math);
-            ++$types[MonetaryAuthority::stanceName($candidate['stance'])];
+            ++$types[MonetaryAuthority::typeName($candidate['stance'], $candidate['swing'])];
+            $this->assertContains($candidate['stance'], [1.0, -1.0], 'Everyone sits in a camp, a swing vote in the one they lean to.');
+            $swingHawks += $candidate['swing'] > 0.0 && $candidate['stance'] > 0.0 ? 1 : 0;
             $regime = array_search(round(FinancialRegulator::requirement($candidate['regulation']), 6), array_map(static fn(float $r): float => round($r, 6), FinancialRegulator::OBSERVED_REQUIREMENTS), true);
             $this->assertIsInt($regime, 'Every stance on the banks is a regime on record.');
             ++$regimes[$regime];
@@ -61,6 +65,7 @@ class CouncilAppointmentsTest extends TestCase
         foreach (MonetaryAuthority::TYPE_COUNTS as $type => $count) {
             $this->assertEqualsWithDelta($count / array_sum(MonetaryAuthority::TYPE_COUNTS), $types[$type] / $draws, 0.01, $type);
         }
+        $this->assertEqualsWithDelta(0.5, $swingHawks / $types['swing'], 0.02, 'A swing vote leans either way alike.');
         foreach ($regimes as $regime => $count) {
             $this->assertEqualsWithDelta(1.0 / count($regimes), $count / $draws, 0.006, "regime {$regime}");
         }
@@ -86,8 +91,8 @@ class CouncilAppointmentsTest extends TestCase
 
     /**
      * From three candidates the appointer names the one nearest their stances on the questions they weigh, the first drawn
-     * of any tied; a dovish appointer weighing money alone names a dove whenever the shortlist holds one,
-     * 1 - (82/121)^3 = 69% of the time.
+     * of any tied; a dovish appointer weighing money alone names someone leaning dovish whenever the shortlist holds one,
+     * a dove or a swing vote leaning their way, and a dove (39 of the 54.5 leaning dovish in 121) 60% of the time.
      */
     public function testTheAppointerNamesTheNearestCandidate(): void
     {
@@ -122,12 +127,13 @@ class CouncilAppointmentsTest extends TestCase
                 }
             }
             if ($i % 4 === 3) {
-                $doves += $named['stance'] === -1.0 ? 1 : 0;
+                $doves += $named['stance'] === -1.0 && $named['swing'] === 0.0 ? 1 : 0;
             }
         }
 
         $doveShare = MonetaryAuthority::TYPE_COUNTS['dove'] / array_sum(MonetaryAuthority::TYPE_COUNTS);
-        $this->assertEqualsWithDelta(1.0 - ((1.0 - $doveShare) ** Appointments::SHORTLIST), $doves / ($vacancies / 4), 0.03);
+        $leaningDovish = $doveShare + (0.5 * MonetaryAuthority::TYPE_COUNTS['swing'] / array_sum(MonetaryAuthority::TYPE_COUNTS));
+        $this->assertEqualsWithDelta((1.0 - ((1.0 - $leaningDovish) ** Appointments::SHORTLIST)) * $doveShare / $leaningDovish, $doves / ($vacancies / 4), 0.03);
     }
 
     /**
@@ -239,5 +245,103 @@ class CouncilAppointmentsTest extends TestCase
         self::runTo($state, $next['termEnds'] + self::DT);
         $this->assertNotSame($names[$next['seat'] - 1], $state->councilNames[$next['seat'] - 1], 'The next seat falls vacant on the new calendar.');
         $this->assertEqualsWithDelta(AerieCouncil::TERM_YEARS / AerieCouncil::SEATS, AerieCouncil::nextVacancy($state->totalTime)['termEnds'] - $next['termEnds'], 1e-9, 'A seat falls vacant every twelve thirteenths of a year.');
+    }
+
+    /**
+     * A councillor who dies or resigns mid-term is succeeded at once by a councillor who serves the rest of the same
+     * term: the seat's term start and end stay on the schedule, the successor is dated to the vacancy, and the one who
+     * left is never drawn again.
+     */
+    public function testAMidTermSuccessorServesOutTheTerm(): void
+    {
+        $state = self::opened(11);
+        $math = new MathUtility();
+        $vacancies = 0;
+        while ($state->totalTime < 60.0) {
+            $names = $state->councilNames;
+            $since = $state->councilSince;
+            $state->totalTime += self::DT;
+            Appointments::advance($state, $math);
+            foreach ($state->councilNames as $seat => $name) {
+                if ($name === $names[$seat] || abs($state->councilSince[$seat] - $since[$seat]) > 1e-9) {
+                    continue;
+                }
+                ++$vacancies;
+                $this->assertSame($state->totalTime, $state->lastCouncilVacancyAt);
+                $this->assertContains($state->lastVacancyName, array_diff($names, $state->councilNames), 'the last of this tick\'s vacancies');
+                $this->assertContains($state->lastVacancyCause, ['died', 'resigned']);
+                $this->assertContains($names[$seat], $state->formerNames);
+                $this->assertGreaterThan($state->councilSince[$seat], $state->councilSeatedAt[$seat]);
+                $this->assertLessThanOrEqual($state->totalTime, $state->councilSeatedAt[$seat]);
+                $this->assertGreaterThan($state->totalTime - self::DT, $state->councilSeatedAt[$seat], 'filled the tick the seat fell vacant');
+                $termEnds = AerieCouncil::roster($state->totalTime)[$seat]['termEnds'];
+                $this->assertEqualsWithDelta($state->councilSince[$seat] + AerieCouncil::TERM_YEARS, $termEnds, 1e-9);
+                $leaves = $state->councilLeavesAt[$seat];
+                $this->assertTrue($leaves === -1.0 || ($leaves > $state->councilSeatedAt[$seat] && $leaves < $termEnds), 'the successor leaves early only within the term');
+            }
+        }
+        $this->assertGreaterThan(10, $vacancies, 'About 0.45 a year: 41% of twelve-year terms end early.');
+    }
+
+    /**
+     * The share of terms cut short is the Gompertz-Makeham hazard's: someone seated at 51 for twelve years leaves early
+     * with probability 1 - exp(-H), H the hazard summed over the term.
+     */
+    public function testTheShareOfTermsCutShortFollowsTheHazard(): void
+    {
+        $age = 51.0;
+        $term = AerieCouncil::TERM_YEARS;
+        $level = Appointments::MORTALITY_LEVEL * exp(Appointments::MORTALITY_SLOPE * $age);
+        $expected = 1.0 - exp(-(Appointments::RESIGNATION_RATE * $term) - ($level * (exp(Appointments::MORTALITY_SLOPE * $term) - 1.0) / Appointments::MORTALITY_SLOPE));
+
+        $draws = 20000;
+        $early = 0;
+        for ($salt = 1; $salt <= $draws; ++$salt) {
+            $leaves = Appointments::departure($salt, 3, 10.0, 10.0 - $age, 10.0, 10.0 + $term);
+            if ($leaves >= 0.0) {
+                ++$early;
+                $this->assertGreaterThan(10.0, $leaves);
+                $this->assertLessThan(10.0 + $term, $leaves);
+            }
+        }
+        $this->assertEqualsWithDelta($expected, $early / $draws, 4.0 * sqrt($expected * (1.0 - $expected) / $draws));
+    }
+
+    /** Departures are drawn once at seating, so the Council's history is the same at any tick rate. */
+    public function testVacanciesDoNotDependOnTheTickRate(): void
+    {
+        $histories = [];
+        foreach ([1.0 / 52.0, 1.0 / 12.0] as $dt) {
+            $state = self::opened(5);
+            $math = new MathUtility();
+            $history = [];
+            while ($state->totalTime + ($dt / 2.0) < 40.0) {
+                $state->totalTime += $dt;
+                Appointments::advance($state, $math);
+                foreach ($state->councilNames as $seat => $name) {
+                    $history["{$seat}:{$name}"] = round($state->councilSeatedAt[$seat], 9);
+                }
+            }
+            ksort($history);
+            $histories[] = $history;
+        }
+        $this->assertSame($histories[0], $histories[1]);
+    }
+
+    /** A Council read from a payload that predates mid-term vacancies keeps its councillors and gains their departures. */
+    public function testCouncillorsSeatedBeforeVacanciesGainADeparture(): void
+    {
+        $state = self::runTo(self::opened(3), 20.0);
+        $names = $state->councilNames;
+        $state->councilSeatedAt = [];
+        $state->councilLeavesAt = [];
+        Appointments::advance($state, new MathUtility());
+
+        $this->assertSame($names, $state->councilNames);
+        $this->assertSame(array_keys($names), array_keys($state->councilSeatedAt));
+        foreach ($state->councilLeavesAt as $seat => $leaves) {
+            $this->assertEqualsWithDelta($state->councilSince[$seat], $state->councilSeatedAt[$seat], 1e-12);
+            $this->assertTrue($leaves === -1.0 || $leaves >= $state->totalTime, 'nobody is drawn to have left before now');
+        }
     }
 }

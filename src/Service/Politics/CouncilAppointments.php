@@ -36,7 +36,7 @@ final class CouncilAppointments
     public const AXIS_FUND = 'fund';
 
     // --- Candidates ---
-    /** Candidates on each shortlist: from three, a dovish appointer names a dove 69% of the time, as the Democratic presidents' nominees to the Federal Reserve Board were 65% doves, 17 of 26 (Bordo & Istrefi 2023, Fig. 4). */
+    /** Candidates on each shortlist: from three, a dovish appointer names a dove 60% of the time (else a swing vote leaning dovish, or no one leaning their way), as the Democratic presidents' nominees to the Federal Reserve Board were 65% doves, 17 of 26 (Bordo & Istrefi 2023, Fig. 4). */
     public const SHORTLIST = 3;
     /** Mean age at appointment, in years: the Federal Reserve Board's 101 governors at their first oath, 1914-2026. */
     public const APPOINTMENT_AGE_MEAN = 52.56;
@@ -46,6 +46,14 @@ final class CouncilAppointments
     public const APPOINTMENT_AGE_MIN = 40.0;
     /** Oldest age the charter allows at appointment, so no councillor sits past 72; the Board's record runs to 71.7, its 90th percentile 60.5. */
     public const APPOINTMENT_AGE_MAX = 60.0;
+
+    // --- Vacancies ---
+    /** Gompertz level of the yearly death hazard at age 0, fitted with MORTALITY_SLOPE through ages 50 and 70 of the US life table, both sexes averaged (q 0.0053 and 0.0222; CDC/NCHS, United States Life Tables 2021, NVSR 72-12, Tables 2-3). */
+    public const MORTALITY_LEVEL = 1.457e-4;
+    /** Gompertz slope: the death hazard's growth per year of age, 7.2% (doubling every 9.6 years), from the same fit; it reads 0.0109 at 60 against the table's 0.0116. */
+    public const MORTALITY_SLOPE = 0.0720;
+    /** Yearly hazard a councillor resigns before their term ends, at any age: the ECB Executive Board's 6 early departures in 169 member-years, 1998-2026 (to other posts, in protest, or by political deal), none by death. */
+    public const RESIGNATION_RATE = 0.035;
 
     /**
      * One tick for the Council itself: drawn on the first read of a state without one, then each seat whose term has
@@ -62,25 +70,45 @@ final class CouncilAppointments
             return;
         }
         $salt = (int) $state->authoritySalt;
+        $roster = AerieCouncil::roster($time);
         self::backfillStances($state, $salt);
 
         // A charter that changed the term moves the sitting councillors onto the new schedule: the same people, their
         // seats dated as the new terms would have run, so the change itself fills no seat.
         if ($state->councilTermYears !== AerieCouncil::TERM_YEARS) {
-            foreach (AerieCouncil::roster($time) as $seat => $holder) {
+            foreach ($roster as $seat => $holder) {
                 if (isset($state->councilNames[$seat])) {
                     $state->councilSince[$seat] = $holder['since'];
+                    unset($state->councilSeatedAt[$seat]);
                 }
             }
             $state->councilTermYears = AerieCouncil::TERM_YEARS;
         }
+        self::backfillDepartures($state, $salt, $roster, $time);
 
-        foreach (AerieCouncil::roster($time) as $seat => $holder) {
+        // Seats due this tick, a term's end or a vacancy, filled in the order they fell due, so a long tick fills them as
+        // a short one would.
+        $due = [];
+        foreach ($roster as $seat => $holder) {
             if (abs(($state->councilSince[$seat] ?? -INF) - $holder['since']) > 1e-9) {
-                [$chosen, $state->councillorPassedOver] = self::appoint($salt, "council:{$seat}", $holder['since'], self::councilMedians($state, $seat), self::reservedNames($state), $math);
-                self::seatCouncillor($state, $seat, $chosen, $holder['since']);
-                $state->lastCouncillorSeatedAt = $time;
+                $due[] = ['seat' => $seat, 'at' => $holder['since'], 'vacancy' => false];
+            } elseif (($leaves = $state->councilLeavesAt[$seat] ?? -1.0) >= 0.0 && $leaves <= $time) {
+                $due[] = ['seat' => $seat, 'at' => $leaves, 'vacancy' => true];
             }
+        }
+        usort($due, static fn(array $a, array $b): int => [$a['at'], $a['seat']] <=> [$b['at'], $b['seat']]);
+
+        foreach ($due as ['seat' => $seat, 'at' => $at, 'vacancy' => $vacancy]) {
+            $holder = $roster[$seat];
+            if ($vacancy) {
+                // A seat left vacant mid-term goes to a successor who serves out the rest of the term.
+                $state->lastVacancyName = $state->councilNames[$seat];
+                $state->lastVacancyCause = self::departureCause($salt, $seat, $state->councilSeatedAt[$seat] ?? $holder['since'], $at - $state->councilBirths[$seat]);
+                $state->lastCouncilVacancyAt = $time;
+            }
+            [$chosen, $state->councillorPassedOver] = self::appoint($salt, "council:{$seat}", $at, self::councilMedians($state, $seat), self::reservedNames($state), $math);
+            self::seatCouncillor($state, $salt, $seat, $chosen, $holder['since'], $at, $holder['termEnds'], $at);
+            $state->lastCouncillorSeatedAt = $time;
         }
     }
 
@@ -94,7 +122,7 @@ final class CouncilAppointments
         $state->authoritySalt = floor($math->generateUniform() * (2 ** 31));
         $state->councilTermYears = AerieCouncil::TERM_YEARS;
         $salt = (int) $state->authoritySalt;
-        $state->councilNames = $state->councilBirths = $state->councilSince = $state->councilStances = $state->councilRegulationStances = $state->councilFundStances = [];
+        $state->councilNames = $state->councilBirths = $state->councilSince = $state->councilSeatedAt = $state->councilLeavesAt = $state->councilSwingers = $state->councilStances = $state->councilRegulationStances = $state->councilFundStances = [];
         $state->memberNames = $state->memberBirths = $state->memberSince = $state->memberStances = [];
         $state->governorName = '';
         $state->regulatorName = '';
@@ -106,7 +134,7 @@ final class CouncilAppointments
             if ($holder['beforeYearOne']) {
                 $drawn['name'] = AerieCouncil::OPENING_MEMBERS[$seat];
             }
-            self::seatCouncillor($state, $seat, $drawn, $holder['since']);
+            self::seatCouncillor($state, $salt, $seat, $drawn, $holder['since'], $holder['since'], $holder['termEnds'], $time);
         }
         $state->councillorPassedOver = [];
     }
@@ -119,7 +147,7 @@ final class CouncilAppointments
      * @param float                $since  When the term begins.
      * @param array<string, float> $target The appointer's stance on each question it weighs, by axis.
      * @param list<string>         $taken  Names already sitting, which no candidate shares.
-     * @return array{0: array{name: string, birth: float, stance: float, regulation: float, fund: float}, 1: list<array{name: string, birth: float, stance: float, regulation: float, fund: float}>} The one named, and the ones passed over.
+     * @return array{0: array{name: string, birth: float, stance: float, regulation: float, fund: float, swing?: float}, 1: list<array{name: string, birth: float, stance: float, regulation: float, fund: float, swing?: float}>} The one named, and the ones passed over.
      */
     public static function appoint(int $salt, string $seat, float $since, array $target, array $taken, MathUtility $math): array
     {
@@ -152,26 +180,30 @@ final class CouncilAppointments
     }
 
     /**
-     * A candidate for a vacancy: their stance on money (App\Service\Politics\MonetaryAuthority::drawStance()), on the
+     * A candidate for a vacancy: their stance on money (App\Service\Politics\MonetaryAuthority::drawStance(), a swing vote
+     * leaning to a camp drawn alike either way, MonetaryAuthority::swingLean()), on the
      * banks (App\Service\Politics\FinancialRegulator::drawStance()) and on the reserves
      * (App\Service\Politics\SovereignReserveFund::drawStance()), their age at the term's start from the Board's record
      * (a normal truncated to the youngest and oldest on it, by inverse transform), and a name for their birth decade
      * (App\Data\AerieNames) that no one in $taken holds.
      *
      * @param list<string> $taken
-     * @return array{name: string, birth: float, stance: float, regulation: float, fund: float}
+     * @return array{name: string, birth: float, stance: float, regulation: float, fund: float, swing?: float}
      */
     public static function candidate(int $salt, string $vacancy, int $slot, float $since, array $taken, MathUtility $math): array
     {
         $age = $math->truncatedNormalInverse(self::uniform($salt, "{$vacancy}:{$slot}:age"), self::APPOINTMENT_AGE_MEAN, self::APPOINTMENT_AGE_SD, self::APPOINTMENT_AGE_MIN, self::APPOINTMENT_AGE_MAX);
         $birth = $since - $age;
+        $type = MonetaryAuthority::drawStance(self::uniform($salt, "{$vacancy}:{$slot}:stance"));
+        $swing = $type === MonetaryAuthority::STANCES['swing'] ? 1.0 : 0.0;
 
         return [
             'name' => AerieNames::draw($birth, static fn(string $part): float => self::uniform($salt, "{$vacancy}:{$slot}:name:{$part}"), $taken),
             'birth' => $birth,
-            'stance' => MonetaryAuthority::drawStance(self::uniform($salt, "{$vacancy}:{$slot}:stance")),
+            'stance' => $swing > 0.0 ? MonetaryAuthority::swingLean(self::uniform($salt, "{$vacancy}:{$slot}:lean")) : $type,
             'regulation' => FinancialRegulator::drawStance(self::uniform($salt, "{$vacancy}:{$slot}:regulation")),
             'fund' => SovereignReserveFund::drawStance(self::uniform($salt, "{$vacancy}:{$slot}:fund")),
+            'swing' => $swing,
         ];
     }
 
@@ -277,16 +309,72 @@ final class CouncilAppointments
         return $axis === self::AXIS_MONEY ? 'stance' : $axis;
     }
 
-    /** @param array{name: string, birth: float, stance: float, regulation: float, fund: float} $person */
-    private static function seatCouncillor(PoliticsState $state, int $seat, array $person, float $since): void
+    /**
+     * When someone seated at $seatedAt leaves before $termEnds, by death or resignation, or -1 if they serve the term out:
+     * one hashed draw of the wait under a Gompertz-Makeham hazard (MathUtility::gompertzMakehamWait()), age-related
+     * mortality plus a resignation rate that does not rise with age, counted from $aliveAt, when they are known to sit.
+     */
+    public static function departure(int $salt, int $seat, float $seatedAt, float $birth, float $aliveAt, float $termEnds): float
+    {
+        $leaves = $aliveAt + MathUtility::gompertzMakehamWait(
+            self::uniform($salt, self::vacancyKey("council:{$seat}", $seatedAt) . ':leaves'),
+            $aliveAt - $birth,
+            self::MORTALITY_LEVEL,
+            self::MORTALITY_SLOPE,
+            self::RESIGNATION_RATE
+        );
+
+        return $leaves < $termEnds ? $leaves : -1.0;
+    }
+
+    /**
+     * Why a councillor left early, at age $age: death with the share of the hazard mortality makes up at that age, else
+     * resignation. Hashed from the seating, so it replays.
+     */
+    public static function departureCause(int $salt, int $seat, float $seatedAt, float $age): string
+    {
+        $mortality = self::MORTALITY_LEVEL * exp(self::MORTALITY_SLOPE * $age);
+
+        return self::uniform($salt, self::vacancyKey("council:{$seat}", $seatedAt) . ':cause') < $mortality / ($mortality + self::RESIGNATION_RATE) ? 'died' : 'resigned';
+    }
+
+    /**
+     * @param array{name: string, birth: float, stance: float, regulation: float, fund: float, swing?: float} $person
+     * @param float $since    When the seat's term began.
+     * @param float $seatedAt When this holder took it.
+     * @param float $termEnds When the term ends.
+     * @param float $aliveAt  From when their departure is drawn: their seating, or the moment a Council is first read.
+     */
+    private static function seatCouncillor(PoliticsState $state, int $salt, int $seat, array $person, float $since, float $seatedAt, float $termEnds, float $aliveAt): void
     {
         self::retire($state, $state->councilNames[$seat] ?? '');
         $state->councilNames[$seat] = $person['name'];
         $state->councilBirths[$seat] = $person['birth'];
         $state->councilSince[$seat] = $since;
+        $state->councilSeatedAt[$seat] = $seatedAt;
+        $state->councilLeavesAt[$seat] = self::departure($salt, $seat, $seatedAt, $person['birth'], max($seatedAt, $aliveAt), $termEnds);
         $state->councilStances[$seat] = $person['stance'];
+        $state->councilSwingers[$seat] = $person['swing'] ?? 0.0;
         $state->councilRegulationStances[$seat] = $person['regulation'];
         $state->councilFundStances[$seat] = $person['fund'];
+    }
+
+    /**
+     * Councillors seated before seats could fall vacant mid-term get their seating dated to the term's start and their
+     * departure drawn once, counted from now, when they are known to sit.
+     *
+     * @param list<array{seat: int, since: float, termEnds: float, beforeYearOne: bool}> $roster
+     */
+    private static function backfillDepartures(PoliticsState $state, int $salt, array $roster, float $time): void
+    {
+        foreach ($state->councilNames as $seat => $name) {
+            if (!isset($state->councilSeatedAt[$seat])) {
+                $state->councilSeatedAt[$seat] = $state->councilSince[$seat] ?? $roster[$seat]['since'];
+                $state->councilLeavesAt[$seat] = self::departure($salt, $seat, $state->councilSeatedAt[$seat], $state->councilBirths[$seat] ?? $time, max($time, $state->councilSeatedAt[$seat]), $roster[$seat]['termEnds']);
+            }
+        }
+        ksort($state->councilSeatedAt);
+        ksort($state->councilLeavesAt);
     }
 
     /**
@@ -303,7 +391,15 @@ final class CouncilAppointments
             if (!isset($state->councilFundStances[$seat])) {
                 $state->councilFundStances[$seat] = SovereignReserveFund::drawStance(self::uniform($salt, "{$vacancy}:{$name}:fund"));
             }
+            // A councillor held at the middle on money becomes a swing vote leaning to a camp.
+            if (!isset($state->councilSwingers[$seat])) {
+                $state->councilSwingers[$seat] = ($state->councilStances[$seat] ?? 0.0) === MonetaryAuthority::STANCES['swing'] ? 1.0 : 0.0;
+                if ($state->councilSwingers[$seat] > 0.0) {
+                    $state->councilStances[$seat] = MonetaryAuthority::swingLean(self::uniform($salt, "{$vacancy}:{$name}:lean"));
+                }
+            }
         }
+        ksort($state->councilSwingers);
         ksort($state->councilRegulationStances);
         ksort($state->councilFundStances);
     }

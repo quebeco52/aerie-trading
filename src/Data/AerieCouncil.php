@@ -13,8 +13,10 @@ namespace App\Data;
  * shortlist the sitting members elect, so the Council renews itself one seat at a time and no election touches it. The
  * seats are staggered so one falls vacant a little under once a year, as the Federal Reserve Board's seven
  * fourteen-year seats fall one every two years; the councillors sitting at Year 1 took their seats before the District's
- * records begin. Like the election calendar, the seats' terms are derived from simulation time and never stored; who
- * holds them, chosen from the shortlists, is kept in the politics state.
+ * records begin. A councillor who dies or resigns mid-term is succeeded the same way, the successor serving out the
+ * term (App\Service\Politics\CouncilAppointments::departure()). Like the election calendar, the seats' terms are
+ * derived from simulation time and never stored; who holds them, chosen from the shortlists, is kept in the politics
+ * state.
  *
  * The Council appoints the heads of the District's departments, which then act independently of it: the Monetary
  * Authority's governor, who picks the rate committee (App\Service\Politics\MonetaryAuthority), the Financial

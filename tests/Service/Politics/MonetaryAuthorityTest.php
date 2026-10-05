@@ -166,7 +166,7 @@ class MonetaryAuthorityTest extends TestCase
         $this->assertSame(-1.0, Authority::majority(-1.0 / 7.0));
     }
 
-    /** The supermajority changes only when someone is seated on the committee, and every change is marked for the headline. */
+    /** The supermajority changes only when someone is seated on the committee or a swing vote on it changes camp, and every change is marked for the headline. */
     public function testAShiftInTheMajorityIsMarkedWhenItHappens(): void
     {
         $state = self::opened(3);
@@ -177,12 +177,16 @@ class MonetaryAuthorityTest extends TestCase
             $majority = $state->committeeMajority;
             $members = $state->memberSince;
             $governor = $state->governorTermStart;
+            $stances = [$state->governorStance, ...$state->memberStances];
             $state->totalTime = $t;
             self::tick($state, $dt, $math);
             if ($state->committeeMajority !== $majority) {
                 ++$shifts;
                 $this->assertSame($t, $state->lastMajorityShiftAt);
-                $this->assertTrue($state->memberSince !== $members || $state->governorTermStart !== $governor, 'Only an appointment moves the majority.');
+                $this->assertTrue(
+                    $state->memberSince !== $members || $state->governorTermStart !== $governor || $stances !== [$state->governorStance, ...$state->memberStances],
+                    'Only an appointment or a change of camp moves the majority.'
+                );
             }
         }
         $this->assertGreaterThan(0, $shifts);
