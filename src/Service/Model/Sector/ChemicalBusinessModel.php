@@ -18,12 +18,13 @@ use App\Service\Math\MathUtility;
  * Earnings strategy for the Chemical Industry (Petrochemicals, Specialty Chemicals, Agrochemicals).
  *
  * Financial Physics:
- * - Petrochemical Crack Spread: Variable costs explode when energy feedstock prices spike.
+ * - Feedstock Cost Curve: base chemicals are priced off the marginal (naphtha, oil-linked) cracker while the firm pays
+ *   its own gas/oil slate, so a gas-advantaged cracker gains when oil rises against gas.
  * - Tri-Stream Demand Architecture:
  *      1. Base Petrochemicals: Highly cyclical, volume price takers driven geometrically by output gap and industrial metals.
  *      2. Specialty Chemicals: Defensive, high-margin, patent-protected electronic materials and catalysts with asymmetric cost pass-through.
  *      3. Agrochemicals: Uncorrelated to standard macro cycles; driven by agricultural commodity indices and weather jump diffusion.
- * - Asymmetric Feedstock Pass-Through: Specialty chemicals pass energy inflation through; base chemicals only pass through in positive output gap regimes.
+ * - Feedstock Pass-Through: specialty chemicals pass their own feedstock cost through with pricing power; agrochemicals as far as farm prices move with it. Symmetric in sign.
  * - Capital Intensity & Plant Turnarounds: Continuous chemical corrosion requires strict maintenance CapEx; underinvestment causes compounding margin decay and turnaround downtime.
  */
 class ChemicalBusinessModel extends StandardCorporateBusinessModel
@@ -39,7 +40,7 @@ class ChemicalBusinessModel extends StandardCorporateBusinessModel
     // --- Input Cost Basket ---
     /** Shares of the variable cost base by input channel, measured from the BEA input-output accounts with supply-chain content (labor still the model's own). */
     public const INPUT_COST_EXPOSURES = InputOutputExposures::CHEMICAL;
-    /** Share of cracker feedstock that is gas-linked (ethane) rather than oil-linked (naphtha); the feedstock squeeze blends the two. */
+    /** Share of the firm's own cracker feedstock that is gas-linked (ethane) rather than oil-linked (naphtha); ~0.5 for a US-Gulf mixed slate. */
     public const GAS_FEEDSTOCK_SHARE = 0.50;
     /** Base petrochemicals clear at the marginal cracker's cost and take the price they are given; the specialty and agrochemical books carry the formulation power. */
     public const PRICING_POWER_INDEX = 0.40;
@@ -112,19 +113,17 @@ class ChemicalBusinessModel extends StandardCorporateBusinessModel
     /** Weight of agricultural commodity shift in aggregate macroeconomic demand shift. */
     public const AGRI_DEMAND_WEIGHT = 0.30;
 
-    // --- Feedstock Crack Spread & Asymmetric Pass-Through Physics ---
-    /** Energy feedstock cost intensity multiplier on variable operating margins. */
+    // --- Feedstock Cost Curve & Pass-Through ---
+    /** Hydrocarbon feedstock cost as a share of revenue (~35%): the variable cost ratio moves by this times the relative feedstock price move. */
     public const ENERGY_FEEDSTOCK_INTENSITY = 0.35;
-    /** Proportion of energy inflation specialty chemicals can pass through via pricing power. */
+    /** Proportion of own feedstock cost specialty chemicals pass through via pricing power (~95% at full power). */
     public const SPECIALTY_PASS_THROUGH_RATIO = 0.95;
-    /** Proportion of energy inflation base petrochemicals can pass through during positive output gap expansions. */
-    public const BASE_PETRO_EXPANSION_PASS_THROUGH_RATIO = 0.75;
-    /** Pass-through multiplier for agrochemical feedstock costs during agricultural commodity bull markets. */
+    /** Share of the marginal naphtha cracker's cost move passed into base chemical prices (~0.7, Ganapati, Shapiro & Walker 2020). */
+    public const BASE_PETRO_MARGINAL_PASS_THROUGH = 0.70;
+    /** Fertilizer price support per unit of farm price move, recovering feedstock cost only as far as farm prices move with it (~0.6). */
     public const AGRI_PASS_THROUGH_SCALAR = 0.60;
-    /** Volatility scalar for unhedged spot feedstock crack spread shocks on variable margins. */
-    public const FEEDSTOCK_DRAG_SCALAR = 0.30;
-    /** Sensitivity of petrochemical and specialty margins to downstream refining crack spreads. */
-    public const CRACK_SPREAD_MARGIN_SENSITIVITY = 0.30;
+    /** Variable cost ratio move per unit cracker-spread Z per unit of baseline vol (~0.45pp of revenue a sigma at vol 0.15). */
+    public const FEEDSTOCK_DRAG_SCALAR = 0.03;
 
     // --- Manufacturing PMI Transmission ---
     /** Sensitivity of industrial chemical and base petrochemical demand to manufacturing PMI shifts. */
@@ -294,34 +293,28 @@ class ChemicalBusinessModel extends StandardCorporateBusinessModel
         $actualRevenue = max(0.0, array_sum($streamRevenues));
         $streams->recordStreamShares($streamRevenues);
 
-        // --- Feedstock Margin Squeeze (Crack Spreads) ---
-        // Hydrocarbon cracking: half the feedstock is gas-linked (ethane), half oil-linked (naphtha), so the
-        // squeeze is the blend of the two and a gas spike alone reaches only the ethane crackers.
+        // --- Feedstock Cost Curve ---
+        // Base chemicals clear at the marginal producer's cost: on the world ethylene cost curve that is the
+        // oil-linked naphtha cracker (Masih, Algahtani & De Mello 2010: ethylene cointegrated with crude), passed
+        // through at the energy marginal-cost rate (Ganapati, Shapiro & Walker 2020). The firm pays its own
+        // ethane/naphtha slate, so a gas-advantaged cracker gains when oil rises against gas. Symmetric in sign.
         $outputGap = $macroState->outputGapEma;
         $agriShift = ($macroState->agriculturalCommodityIndexEma - 100.0) / 100.0;
         $oilFeedstockInflation = $macroState->energyCostPushLag / MacroEngine::ENERGY_COST_PUSH_TRANSMISSION;
         $gasFeedstockInflation = ($macroState->naturalGasPriceIndexEma - MacroEngine::NATURAL_GAS_BASELINE) / MacroEngine::NATURAL_GAS_BASELINE;
-        $energyInflation = max(0.0, (self::GAS_FEEDSTOCK_SHARE * $gasFeedstockInflation) + ((1.0 - self::GAS_FEEDSTOCK_SHARE) * $oilFeedstockInflation));
+        $ownFeedstockInflation = (static::GAS_FEEDSTOCK_SHARE * $gasFeedstockInflation) + ((1.0 - static::GAS_FEEDSTOCK_SHARE) * $oilFeedstockInflation);
 
-        // Asymmetric Pass-Through:
-        // Specialty chemicals pass through ~95% (scaled by pricing power)
-        $specialtyPassThrough = $energyInflation * min(1.0, self::SPECIALTY_PASS_THROUGH_RATIO * (0.50 + (0.50 * $pricingPower)));
-        $specialtyUnpassedEnergy = max(0.0, $energyInflation - $specialtyPassThrough);
+        $basePetroPriceRecovery = self::BASE_PETRO_MARGINAL_PASS_THROUGH * $oilFeedstockInflation;
+        // Specialty chemicals reprice their own feedstock cost with pricing power.
+        $specialtyPriceRecovery = $ownFeedstockInflation * min(1.0, self::SPECIALTY_PASS_THROUGH_RATIO * (0.50 + (0.50 * $pricingPower)));
+        // Fertilizer prices recover the feedstock move only as far as farm prices move the same way.
+        $agriPriceSupport = $agriShift * self::AGRI_PASS_THROUGH_SCALAR;
+        $agriPriceRecovery = max(min(0.0, $ownFeedstockInflation), min(max(0.0, $ownFeedstockInflation), $agriPriceSupport));
 
-        // Base chemicals can only pass costs through if outputGapEma > 0; in a recession, forced to eat the cost
-        $basePetroPassThrough = $outputGap > 0.0
-            ? $energyInflation * self::BASE_PETRO_EXPANSION_PASS_THROUGH_RATIO * min(1.0, 0.50 + (0.50 * $pricingPower))
-            : 0.0;
-        $basePetroUnpassedEnergy = max(0.0, $energyInflation - $basePetroPassThrough);
-
-        // Agrochemicals have moderate pass-through based on agricultural price strength
-        $agriPassThrough = $agriShift > 0.0 ? min($energyInflation, $agriShift * self::AGRI_PASS_THROUGH_SCALAR) : 0.0;
-        $agriUnpassedEnergy = max(0.0, $energyInflation - $agriPassThrough);
-
-        // Blended unpassed feedstock energy drag on variable costs
-        $basePetroCostRatio  = ($realizedVariableMargin * self::BASE_PETRO_VARIABLE_COST_MULTIPLIER) + ($basePetroUnpassedEnergy * self::ENERGY_FEEDSTOCK_INTENSITY);
-        $specialtyCostRatio  = ($realizedVariableMargin * self::SPECIALTY_CHEM_VARIABLE_COST_MULTIPLIER) + ($specialtyUnpassedEnergy * self::ENERGY_FEEDSTOCK_INTENSITY);
-        $agriCostRatio       = ($realizedVariableMargin * self::AGROCHEM_VARIABLE_COST_MULTIPLIER) + ($agriUnpassedEnergy * self::ENERGY_FEEDSTOCK_INTENSITY);
+        // Margin effect per stream: feedstock intensity x (own cost move - price recovery).
+        $basePetroCostRatio  = ($realizedVariableMargin * self::BASE_PETRO_VARIABLE_COST_MULTIPLIER) + (($ownFeedstockInflation - $basePetroPriceRecovery) * self::ENERGY_FEEDSTOCK_INTENSITY);
+        $specialtyCostRatio  = ($realizedVariableMargin * self::SPECIALTY_CHEM_VARIABLE_COST_MULTIPLIER) + (($ownFeedstockInflation - $specialtyPriceRecovery) * self::ENERGY_FEEDSTOCK_INTENSITY);
+        $agriCostRatio       = ($realizedVariableMargin * self::AGROCHEM_VARIABLE_COST_MULTIPLIER) + (($ownFeedstockInflation - $agriPriceRecovery) * self::ENERGY_FEEDSTOCK_INTENSITY);
 
         $actualVariableCosts = ($basePetroRevenue * $basePetroCostRatio)
             + ($specialtyRevenue * $specialtyCostRatio)
@@ -329,19 +322,17 @@ class ChemicalBusinessModel extends StandardCorporateBusinessModel
 
         $effectiveMargin = $actualRevenue > 0.0 ? ($actualVariableCosts / $actualRevenue) : $realizedVariableMargin;
 
-        // Feedstock crack volatility shock & macro transmission
-        $feedstockDrag = max(0.0, -$feedstockZ * (self::FEEDSTOCK_DRAG_SCALAR / 10.0) * $baselineVol);
+        // Idiosyncratic cracker-spread shock, mean zero: a negative Z widens the cost ratio, a positive one narrows it.
+        $feedstockDrag = -$feedstockZ * self::FEEDSTOCK_DRAG_SCALAR * $baselineVol;
         // Non-feedstock inputs (catalysts, packaging, logistics, plant payroll) come through the shared basket;
-        // hydrocarbon feedstock keeps its own asymmetric pass-through above.
+        // hydrocarbon feedstock is priced on the cost curve above.
         $ppiCostDrag = $this->resolveInputCostDrag($stock, $macroState, $streams, $pricingPower, $realizedVariableMargin);
-        $crackSpreadShift = ($macroState->refiningCrackSpread - MacroEngine::CRACK_SPREAD_BASELINE) / MacroEngine::CRACK_SPREAD_BASELINE;
-        $crackSpreadPenalty = max(-0.03, min(0.03, -$crackSpreadShift * self::CRACK_SPREAD_MARGIN_SENSITIVITY * 0.02));
 
-        $clampedMargin = $this->clampMargin($effectiveMargin + $feedstockDrag + $ppiCostDrag + $crackSpreadPenalty);
+        $clampedMargin = $this->clampMargin($effectiveMargin + $feedstockDrag + $ppiCostDrag);
 
         // Shock events
         $eventType = null;
-        if ($feedstockZ < self::CRACK_SPREAD_SQUEEZE_Z || ($energyInflation > self::SEVERE_ENERGY_INFLATION_THRESHOLD && $outputGap < self::RECESSION_OUTPUT_GAP_THRESHOLD)) {
+        if ($feedstockZ < self::CRACK_SPREAD_SQUEEZE_Z || ($ownFeedstockInflation > self::SEVERE_ENERGY_INFLATION_THRESHOLD && $outputGap < self::RECESSION_OUTPUT_GAP_THRESHOLD)) {
             $eventType = ShockEvent::CHEMICAL_CRACK_SPREAD_SQUEEZE;
         } elseif ($agriZ > self::AGRI_BOOM_Z && $weatherMultiplier > self::WEATHER_BOOM_MULTIPLIER_THRESHOLD) {
             $eventType = ShockEvent::CHEMICAL_AGRI_BOOM;
@@ -394,7 +385,6 @@ class ChemicalBusinessModel extends StandardCorporateBusinessModel
             'natural_gas_price_index_ema',
             'output_gap_ema',
             'output_gap_lag_6m',
-            'refining_crack_spread',
             'tips_breakeven_ema',
             'real_wage_gap',
         ];

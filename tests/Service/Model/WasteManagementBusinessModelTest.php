@@ -114,4 +114,19 @@ class WasteManagementBusinessModelTest extends TestCase
             'Energy price spikes cause diesel fuel surcharge lag, expanding variable cost ratio.'
         );
     }
+
+    public function testTheCostBaseStaffsToCommercialTonnage(): void
+    {
+        // The root shift is zeroed, so the sticky cost base reads the streams instead. Only commercial roll-offs
+        // move tonnage with the cycle: 0.35 weight x (-0.03 gap x 1.5 x 0.60 cyclicality), housing at baseline.
+        $stock = new Stock();
+        $stock->setTicker('XXXX');
+        $stock->setBeta('1.0');
+        $recession = new MacroStateDTO(outputGapEma: -0.03, exchangeRateIndexEma: 100.0);
+
+        $this->assertEqualsWithDelta(0.0, $this->model->getMacroPhysics($stock, $recession)['macro_demand_shift'], 1e-12);
+
+        $expected = WasteManagementBusinessModel::COMMERCIAL_WEIGHT * (-0.03 * 1.5 * WasteManagementBusinessModel::OPERATING_CYCLICALITY);
+        $this->assertEqualsWithDelta($expected, $this->model->resolveSectorActivityShift($stock, $recession), 1e-9);
+    }
 }

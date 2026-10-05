@@ -69,6 +69,10 @@ class MedicalCareFacilityBusinessModel extends StandardCorporateBusinessModel
     // --- Coverage Sensitivity ---
     /** Elective outpatient volume lost per unit of unemployment above the natural rate (2.0 = -2% volume per point): job loss ends employer coverage and elective procedures are deferred. */
     public const UNEMPLOYMENT_ELECTIVE_SENSITIVITY = 2.0;
+    /** Elective outpatient volume per unit of output gap before cyclicality: discretionary procedures follow household wealth. */
+    public const ELECTIVE_GDP_SENSITIVITY = 1.20;
+    /** Inpatient admissions per unit of government spending above its index base: publicly funded coverage brings patients to the bed. */
+    public const INPATIENT_GOVERNMENT_SPENDING_SENSITIVITY = 0.30;
 
     // --- Analyst Visibility & Error ---
     /** Base coverage visibility for hospital networks with steady public reporting. */
@@ -153,6 +157,49 @@ class MedicalCareFacilityBusinessModel extends StandardCorporateBusinessModel
         return $physics;
     }
 
+    /**
+     * The patient volume the clinical staff is rostered to: inpatient admissions and elective procedures at
+     * target weights. Billing arbitrage bills the same procedures at higher rates (booked as priceRevenue), so
+     * its inflation uplift is price, not care delivered, and its share of the base holds.
+     */
+    public function resolveSectorActivityShift(Stock $stock, MacroStateDTO $macroState): float
+    {
+        $params = $this->resolveModelParameters($stock, [
+            ModelParam::InpatientCareWeight->value      => self::INPATIENT_CARE_WEIGHT,
+            ModelParam::ElectiveOutpatientWeight->value => self::ELECTIVE_OUTPATIENT_WEIGHT,
+            ModelParam::InsuranceArbitrageWeight->value => self::INSURANCE_ARBITRAGE_WEIGHT,
+        ]);
+        $inpatientWeight = $params[ModelParam::InpatientCareWeight];
+        $outpatientWeight = $params[ModelParam::ElectiveOutpatientWeight];
+        $totalWeight = $inpatientWeight + $outpatientWeight + $params[ModelParam::InsuranceArbitrageWeight];
+        if ($totalWeight <= 0.0) {
+            return 0.0;
+        }
+
+        $shifts = $this->resolvePatientVolumeShifts($stock, $macroState);
+
+        return (($inpatientWeight * $shifts['inpatient_care']) + ($outpatientWeight * $shifts['elective_outpatient'])) / $totalWeight;
+    }
+
+    /**
+     * Each clinical stream's macro volume shift: admissions on publicly funded coverage (acute care carries no
+     * output-gap term); elective procedures on the gap at the firm's cyclicality, less those deferred when job
+     * losses strip employer coverage.
+     *
+     * @return array{inpatient_care: float, elective_outpatient: float}
+     */
+    private function resolvePatientVolumeShifts(Stock $stock, MacroStateDTO $macroState): array
+    {
+        $govShift = ($macroState->governmentSpendingIndexEma - 100.0) / 100.0;
+        $unemploymentGap = max(0.0, $macroState->unemploymentRateEma - MacroEngine::NATURAL_UNEMPLOYMENT);
+
+        return [
+            'inpatient_care'      => $govShift * self::INPATIENT_GOVERNMENT_SPENDING_SENSITIVITY,
+            'elective_outpatient' => ($macroState->outputGapEma * self::ELECTIVE_GDP_SENSITIVITY * $this->getOperatingCyclicality($stock))
+                - ($unemploymentGap * self::UNEMPLOYMENT_ELECTIVE_SENSITIVITY),
+        ];
+    }
+
     protected function calculateSectorPhysics(
         Stock $stock,
         float $expectedRevenue,
@@ -176,7 +223,6 @@ class MedicalCareFacilityBusinessModel extends StandardCorporateBusinessModel
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
         $streams = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
-        $beta = $this->getOperatingCyclicality($stock);
 
         // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
         $activeWeights = $streams->resolveActiveStreamWeights([
@@ -196,14 +242,13 @@ class MedicalCareFacilityBusinessModel extends StandardCorporateBusinessModel
         $eventZ      = $streams->generateExogenousZ('event', 0.10);
 
         // --- Macro Demand Sensitivities ---
-        $outputGap = $macroState->outputGapEma;
         $inflation = $macroState->inflationEma;
 
         // Inpatient care is completely inelastic (0.0 output gap sensitivity)
         // Elective outpatient procedures are pro-cyclical with consumer wealth, and are deferred outright when
         // job losses strip employer coverage: the uninsured postpone the knee, not the heart attack.
-        $unemploymentGap = max(0.0, $macroState->unemploymentRateEma - MacroEngine::NATURAL_UNEMPLOYMENT);
-        $outpatientMacroBoost = ($outputGap * 1.2 * $beta) - ($unemploymentGap * self::UNEMPLOYMENT_ELECTIVE_SENSITIVITY);
+        $patientVolumeShifts = $this->resolvePatientVolumeShifts($stock, $macroState);
+        $outpatientMacroBoost = $patientVolumeShifts['elective_outpatient'];
 
         // Insurance arbitrage expands when general & medical inflation accelerates
         $inflationExcess = max(0.0, $inflation - MacroEngine::TARGET_INFLATION);
@@ -223,12 +268,11 @@ class MedicalCareFacilityBusinessModel extends StandardCorporateBusinessModel
         }
 
         // --- Tri-Stream Revenue Calculation ---
-        $govShift = ($macroState->governmentSpendingIndexEma - 100.0) / 100.0;
         $inpatientShock  = $inpatientZ * ($baselineVol * self::INPATIENT_VARIANCE_SCALAR);
         $outpatientShock = $outpatientZ * ($baselineVol * self::OUTPATIENT_VARIANCE_SCALAR);
         $arbitrageShock  = $arbitrageZ * ($baselineVol * self::ARBITRAGE_VARIANCE_SCALAR);
 
-        $inpatientRevenue  = max(0.0, $expectedRevenue * $inpatientWeight * (1.0 + $inpatientShock + ($govShift * 0.30)) * $spendingMultiplier);
+        $inpatientRevenue  = max(0.0, $expectedRevenue * $inpatientWeight * (1.0 + $inpatientShock + $patientVolumeShifts['inpatient_care']) * $spendingMultiplier);
         $outpatientRevenue = max(0.0, $expectedRevenue * $outpatientWeight * (1.0 + $outpatientShock + $outpatientMacroBoost));
         $arbitrageRevenue  = max(0.0, $expectedRevenue * $arbitrageWeight * (1.0 + $arbitrageShock + $arbitrageInflationBoost));
         // Coding and reimbursement uplift bills the same procedures at higher rates: price, not care delivered.

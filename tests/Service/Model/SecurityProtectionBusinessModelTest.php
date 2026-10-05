@@ -190,4 +190,29 @@ class SecurityProtectionBusinessModelTest extends TestCase
             'Fiscal appropriations and government spending expansion must increase government contract revenue.'
         );
     }
+
+    public function testTheCycleReachesTheCostBaseThroughTheStreamVolumes(): void
+    {
+        $stock = (new Stock())->setTicker('WATCH_ACTIVITY')->setBeta('1.0');
+        // A stressed recession: VIX 30%, spreads 3.5%, appropriations up 2%, inflation 2 points over target.
+        $recession = new MacroStateDTO(
+            outputGapEma: -0.03,
+            exchangeRateIndexEma: 100.0,
+            inflationEma: 0.04,
+            governmentSpendingIndexEma: 102.0,
+            marketVolatilityEma: 0.30,
+            macroCreditSpreadEma: 0.035,
+        );
+
+        $this->assertEqualsWithDelta(0.0, $this->model->getMacroPhysics($stock, $recession)['macro_demand_shift'], 1e-12);
+
+        // Gov 0.40 x 0.02 x 0.30 + retainers 0 (boom side only) + expeditionary 0.20 x (0.10 x 0.8 + 0.01 x 4) = 0.0264;
+        // the cost-plus inflation escalator is price and stays out.
+        $expected = (SecurityProtectionBusinessModel::GOVERNMENT_CONTRACT_WEIGHT * 0.02 * SecurityProtectionBusinessModel::APPROPRIATIONS_VOLUME_SCALAR)
+            + (SecurityProtectionBusinessModel::EXPEDITIONARY_WEIGHT * (
+                ((0.30 - SecurityProtectionBusinessModel::VIX_FEAR_THRESHOLD) * SecurityProtectionBusinessModel::FEAR_PREMIUM_SCALAR)
+                + ((0.035 - SecurityProtectionBusinessModel::CREDIT_STRESS_THRESHOLD) * SecurityProtectionBusinessModel::CREDIT_STRESS_SCALAR)
+            ));
+        $this->assertEqualsWithDelta($expected, $this->model->resolveSectorActivityShift($stock, $recession), 1e-9);
+    }
 }

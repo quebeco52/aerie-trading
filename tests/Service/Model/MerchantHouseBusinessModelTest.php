@@ -204,4 +204,35 @@ class MerchantHouseBusinessModelTest extends TestCase
 
         $this->assertLessThan($calm->streamRevenue['financial_investments'], $atZero->streamRevenue['financial_investments']);
     }
+
+
+    public function testTheCostBaseFollowsTonnageAndTerminalTrafficNotCargoPrices(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('MERC_TEST');
+        $recession = new MacroStateDTO(
+            outputGapEma: -0.03,
+            foreignOutputGapEma: 0.0,
+            manufacturingPmiEma: MacroEngine::PMI_BASELINE,
+            tradeBalanceToGdpEma: MacroEngine::TRADE_BALANCE_BASELINE,
+            exchangeRateIndexEma: 100.0,
+        );
+
+        $this->assertEqualsWithDelta(0.0, $this->model->getMacroPhysics($stock, $recession)['macro_demand_shift'], 1e-12);
+
+        // A domestic gap alone reaches only the terminals: 0.30 x (-0.03 x 0.15). Tonnage reads PMI, trade and the foreign gap.
+        $this->assertEqualsWithDelta(0.30 * (-0.03 * 0.15), $this->model->resolveSectorActivityShift($stock, $recession), 1e-9);
+
+        // A global slump: tonnage 0.55 x ((-0.06 x 0.25) + (-0.02 x 2.0)) plus the same terminal leg; a metals crash adds nothing.
+        $global = new MacroStateDTO(
+            outputGapEma: -0.03,
+            foreignOutputGapEma: -0.02,
+            industrialMetalsIndexEma: 60.0,
+            manufacturingPmiEma: 47.0,
+            tradeBalanceToGdpEma: MacroEngine::TRADE_BALANCE_BASELINE,
+            exchangeRateIndexEma: 100.0,
+        );
+        $expected = (0.55 * ((-0.06 * 0.25) + (-0.02 * 2.0))) + (0.30 * (-0.03 * 0.15));
+        $this->assertEqualsWithDelta($expected, $this->model->resolveSectorActivityShift($stock, $global), 1e-9);
+    }
 }

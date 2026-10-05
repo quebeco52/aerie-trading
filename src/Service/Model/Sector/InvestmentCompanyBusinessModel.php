@@ -113,6 +113,50 @@ class InvestmentCompanyBusinessModel extends ConglomerateBusinessModel
     /** Fraction of subsidiary performance visible ahead of the filing; these are unlisted and report only through the group. */
     public const WHOLLY_OWNED_OBSERVABLE_DISCOUNT = 0.45;
 
+    /**
+     * The volume the consolidated subsidiaries are staffed to, at their share of the balance-sheet income mix.
+     * Dividends received and treasury income are returns on stakes and cash: no payroll or plant is sized to
+     * them, so they count in the mix but carry no activity. Not zero, because the controlled half is real
+     * factories and berths, and their cost base has to see the recession its sales already do.
+     */
+    public function resolveSectorActivityShift(Stock $stock, MacroStateDTO $macroState): float
+    {
+        $weights = $this->resolveIncomeWeights($stock);
+        $totalWeight = array_sum($weights);
+        if ($totalWeight <= 0.0) {
+            return 0.0;
+        }
+
+        return ($weights['wholly_owned'] / $totalWeight) * $this->resolveOwnedVolumeShift($stock, $macroState);
+    }
+
+    /**
+     * Income weights from balances, not shares of NAV: the consolidated sleeve is invested capital less the
+     * marked stakes and books its whole top line; a stake books its dividend; the treasury its yield.
+     *
+     * @return array{wholly_owned: float, listed_portfolio: float, financial_investments: float}
+     */
+    private function resolveIncomeWeights(Stock $stock): array
+    {
+        $treasuryValue = max(0.0, (float) $stock->getCorporateTreasury());
+        $listedValue = $this->resolveListedStakeValue($stock);
+        $consolidatedValue = max(0.0, $stock->getInvestedCapital() - $listedValue);
+
+        return [
+            'wholly_owned'          => $consolidatedValue * self::WHOLLY_OWNED_ASSET_TURNOVER,
+            'listed_portfolio'      => $listedValue * self::LISTED_DIVIDEND_YIELD,
+            'financial_investments' => $treasuryValue * self::TREASURY_INCOME_YIELD,
+        ];
+    }
+
+    /** Consolidated subsidiary volume: the output gap at the firm's floored cyclical beta. */
+    private function resolveOwnedVolumeShift(Stock $stock, MacroStateDTO $macroState): float
+    {
+        $beta = max(self::MIN_CYCLICAL_BETA_FLOOR, $this->getOperatingCyclicality($stock));
+
+        return $macroState->outputGapEma * self::WHOLLY_OWNED_MACRO_SCALAR * $beta;
+    }
+
     protected function calculateSectorPhysics(
         Stock $stock,
         float $expectedRevenue,
@@ -122,28 +166,17 @@ class InvestmentCompanyBusinessModel extends ConglomerateBusinessModel
         MacroStateDTO $macroState,
         MathUtility $mathUtility
     ): SectorPhysicsResult {
-        // Consolidated sleeve is the residual of invested capital less listed stake values.
         $params = $this->resolveModelParameters($stock, [
             ModelParam::PricingPowerIndex->value => self::PRICING_POWER_INDEX,
         ]);
-
-        // Balances calculated from invested capital and listed values to preserve leverage invariance.
-        $treasuryValue = max(0.0, (float) $stock->getCorporateTreasury());
-        $listedValue = $this->resolveListedStakeValue($stock);
-        $consolidatedValue = max(0.0, $stock->getInvestedCapital() - $listedValue);
 
         $pricingPower = max(0.0, min(1.0, $params[ModelParam::PricingPowerIndex]));
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
         $streams = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
-        $beta = max(self::MIN_CYCLICAL_BETA_FLOOR, $this->getOperatingCyclicality($stock));
 
         // Map assets to income based on ownership type, normalized across active streams.
-        $activeWeights = $streams->resolveActiveStreamWeights([
-            'wholly_owned'          => $consolidatedValue * self::WHOLLY_OWNED_ASSET_TURNOVER,
-            'listed_portfolio'      => $listedValue * self::LISTED_DIVIDEND_YIELD,
-            'financial_investments' => $treasuryValue * self::TREASURY_INCOME_YIELD,
-        ]);
+        $activeWeights = $streams->resolveActiveStreamWeights($this->resolveIncomeWeights($stock));
 
         $ownedWeight  = $activeWeights['wholly_owned'];
         $listedWeight = $activeWeights['listed_portfolio'];
@@ -155,7 +188,7 @@ class InvestmentCompanyBusinessModel extends ConglomerateBusinessModel
         $eventZ  = $streams->generateExogenousZ('event', 0.10);
 
         // --- Consolidated subsidiaries: an operating business, responding to the cycle it is in ---
-        $ownedMacroBoost = $macroState->outputGapEma * self::WHOLLY_OWNED_MACRO_SCALAR * $beta;
+        $ownedMacroBoost = $this->resolveOwnedVolumeShift($stock, $macroState);
 
         // --- Dividends received: the cycle as it was, not as it is ---
         // Declared out of trailing earnings, then smoothed by the board: delay and damping are separate.

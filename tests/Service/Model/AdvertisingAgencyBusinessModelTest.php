@@ -6,6 +6,7 @@ namespace App\Tests\Service\Model;
 
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
+use App\Service\Macro\MacroEngine;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\AdvertisingAgencyBusinessModel;
 use PHPUnit\Framework\TestCase;
@@ -105,5 +106,21 @@ class AdvertisingAgencyBusinessModelTest extends TestCase
 
         $this->assertSame(0.0, $physics['macro_demand_shift']);
         $this->assertArrayHasKey('pricing_power_multiplier', $physics, 'Only the demand shift is nullified; pricing physics still flow from the parent.');
+    }
+
+    public function testTheCycleReachesTheCostBaseThroughTheStreamVolumes(): void
+    {
+        $stock = (new Stock())->setTicker('LYRE_ACTIVITY')->setBeta('1.0');
+        // Confidence falls by its gap loading with the gap, so the residual over the gap is zero.
+        $sentiment = MacroEngine::SENTIMENT_TREND_LEVEL + (-0.03 * MacroEngine::SENTIMENT_GAP_LOADING);
+        $recession = new MacroStateDTO(outputGapEma: -0.03, exchangeRateIndexEma: 100.0, consumerSentimentIndexEma: $sentiment);
+
+        $this->assertEqualsWithDelta(0.0, $this->model->getMacroPhysics($stock, $recession)['macro_demand_shift'], 1e-12);
+
+        // Ad spend 1.5 x 1.30 x -0.03 = -0.0585, on media 0.50 + MarTech 0.15 x 0.4 = -0.03276; retainers carry none.
+        $adSpend = 1.5 * AdvertisingAgencyBusinessModel::OPERATING_CYCLICALITY * -0.03;
+        $expected = $adSpend * (AdvertisingAgencyBusinessModel::MEDIA_BUYING_WEIGHT
+            + (AdvertisingAgencyBusinessModel::MARTECH_CONSULTING_WEIGHT * AdvertisingAgencyBusinessModel::MARTECH_AD_SPEND_SHARE));
+        $this->assertEqualsWithDelta($expected, $this->model->resolveSectorActivityShift($stock, $recession), 1e-9);
     }
 }

@@ -152,6 +152,31 @@ class TelecomBusinessModel extends StandardCorporateBusinessModel
         return $physics;
     }
 
+    /**
+     * The volume the network and retail estate are staffed to carry: the target-mix weighted cycle shift of
+     * equipment units. The cycle's ARPU leg (plan downgrades on a base that keeps its lines) is revenue per
+     * subscriber, a price, and stays out; cyclical churn moves the persisted subscriber stock, not this level.
+     */
+    public function resolveSectorActivityShift(Stock $stock, MacroStateDTO $macroState): float
+    {
+        $params = $this->resolveModelParameters($stock, [
+            ModelParam::SubscriptionWeight->value => self::SUBSCRIPTION_WEIGHT,
+            ModelParam::EquipmentWeight->value    => self::EQUIPMENT_WEIGHT,
+        ]);
+        $totalWeight = $params[ModelParam::SubscriptionWeight] + $params[ModelParam::EquipmentWeight];
+        if ($totalWeight <= 0.0) {
+            return 0.0;
+        }
+
+        return ($params[ModelParam::EquipmentWeight] / $totalWeight) * $this->resolveEquipmentVolumeShift($stock, $macroState);
+    }
+
+    /** Handset and router upgrades are deferred in a downturn: the output gap at 1.5x the firm's cyclicality. */
+    private function resolveEquipmentVolumeShift(Stock $stock, MacroStateDTO $macroState): float
+    {
+        return $macroState->outputGapEma * 1.5 * $this->getOperatingCyclicality($stock);
+    }
+
     protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
     {
         $params = $this->resolveModelParameters($stock, [
@@ -183,7 +208,7 @@ class TelecomBusinessModel extends StandardCorporateBusinessModel
         // --- Macro Demand Sensitivities ---
         // Subscriptions are highly defensive (0.2x multiplier). Equipment is highly cyclical (1.5x multiplier).
         $macroDefensiveShift = $macroState->outputGapEma * 0.2 * $beta;
-        $macroCyclicalShift  = $macroState->outputGapEma * 1.5 * $beta;
+        $macroCyclicalShift  = $this->resolveEquipmentVolumeShift($stock, $macroState);
 
         // --- Event Tail Risks ---
         // A price war is a regime: rival promotions lift churn and cut ARPU for several quarters. A spectrum

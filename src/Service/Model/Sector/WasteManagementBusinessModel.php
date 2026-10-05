@@ -130,6 +130,33 @@ class WasteManagementBusinessModel extends StandardCorporateBusinessModel
         return $physics;
     }
 
+    /**
+     * The volume the routes are staffed to: commercial roll-off tonnage at its target weight. Residential
+     * escalators and recycled-commodity prices move price, not tonnage, so they leave the cost base alone.
+     */
+    public function resolveSectorActivityShift(Stock $stock, MacroStateDTO $macroState): float
+    {
+        $params = $this->resolveModelParameters($stock, [
+            ModelParam::ResidentialWeight->value => self::RESIDENTIAL_WEIGHT,
+            ModelParam::CommercialWeight->value  => self::COMMERCIAL_WEIGHT,
+            ModelParam::RecyclingWeight->value   => self::RECYCLING_WEIGHT,
+        ]);
+        $totalWeight = $params[ModelParam::ResidentialWeight] + $params[ModelParam::CommercialWeight] + $params[ModelParam::RecyclingWeight];
+        if ($totalWeight <= 0.0) {
+            return 0.0;
+        }
+
+        return ($params[ModelParam::CommercialWeight] / $totalWeight) * $this->resolveCommercialVolumeShift($stock, $macroState);
+    }
+
+    /** Commercial and C&D tonnage: the output gap at 1.5x the firm's cyclicality plus housing starts. */
+    private function resolveCommercialVolumeShift(Stock $stock, MacroStateDTO $macroState): float
+    {
+        $housingWasteShift = MathUtility::calculateHousingStartsShift($macroState->housingStartsIndexEma, sensitivity: self::HOUSING_STARTS_WASTE_SENSITIVITY);
+
+        return ($macroState->outputGapEma * 1.5 * $this->getOperatingCyclicality($stock)) + $housingWasteShift;
+    }
+
     protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
     {
         $params = $this->resolveModelParameters($stock, [
@@ -144,7 +171,6 @@ class WasteManagementBusinessModel extends StandardCorporateBusinessModel
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
         $streams = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
-        $beta = $this->getOperatingCyclicality($stock);
 
         // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
         $activeWeights = $streams->resolveActiveStreamWeights([
@@ -164,8 +190,7 @@ class WasteManagementBusinessModel extends StandardCorporateBusinessModel
         $eventZ       = $streams->generateExogenousZ('event', 0.05);
 
         // --- Macro Demand & Pricing Sensitivities ---
-        $housingWasteShift = MathUtility::calculateHousingStartsShift($macroState->housingStartsIndexEma, sensitivity: self::HOUSING_STARTS_WASTE_SENSITIVITY);
-        $macroBoost = ($macroState->outputGapEma * 1.5 * $beta) + $housingWasteShift; // Affects Commercial/Construction
+        $macroBoost = $this->resolveCommercialVolumeShift($stock, $macroState);
         $excessInflation = max(0.0, $macroState->inflationEma - MacroEngine::TARGET_INFLATION);
         $cpiEscalatorBoost = $excessInflation * self::CPI_ESCALATOR_CAPTURE; // Passive revenue boost
 

@@ -10,6 +10,7 @@ use App\Service\Model\BusinessModelInterface;
 use App\Data\ModelParam;
 use App\DTO\SectorCoverageProfile;
 use App\DTO\SectorPhysicsResult;
+use App\DTO\StreamContext;
 use App\Entity\Stock;
 use App\DTO\MacroStateDTO;
 use App\Service\Math\MathUtility;
@@ -139,6 +140,28 @@ class SpecialtyIndustrialMachineryBusinessModel extends HeavyManufacturingBusine
         $physics['macro_demand_shift'] = 0.0;
 
         return $physics;
+    }
+
+    /**
+     * The plant is staffed to the equipment it has in hand: the opening workload of the equipment backlog at
+     * its target weight, since orders reach revenue by percentage of completion, not through
+     * macro_demand_shift. Aftermarket services carry no cycle term in the sector physics, so their share of
+     * the base holds; the honest result is a cost base that follows the order book down with its lag.
+     */
+    public function resolveSectorActivityShift(Stock $stock, MacroStateDTO $macroState): float
+    {
+        $params = $this->resolveModelParameters($stock, [
+            ModelParam::EquipmentWeight->value => self::EQUIPMENT_WEIGHT,
+            ModelParam::ServicesWeight->value  => self::SERVICES_WEIGHT,
+        ]);
+        $totalWeight = $params[ModelParam::EquipmentWeight] + $params[ModelParam::ServicesWeight];
+        if ($totalWeight <= 0.0) {
+            return 0.0;
+        }
+
+        $workload = StreamContext::openingWorkload($stock->getEarningsMomentumZ() ?? [], 'equipment_sales', self::EQUIPMENT_BACKLOG_BURN_RATE);
+
+        return ($params[ModelParam::EquipmentWeight] / $totalWeight) * ($workload - 1.0);
     }
 
     protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult

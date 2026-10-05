@@ -206,4 +206,24 @@ class DistressedDebtBusinessModelTest extends TestCase
         $this->assertLessThanOrEqual($absoluteMaxAllowed, $result->streamRevenue['turnaround_recovery']);
         $this->assertGreaterThan($expectedRevenue, $result->actualRevenue);
     }
+
+
+    public function testTheWorkoutDesksStaffUpIntoTheSlump(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('DD_TEST');
+        $recession = new MacroStateDTO(
+            outputGapEma: -0.03,
+            macroCreditSpread: MacroEngine::BASE_CREDIT_SPREAD,
+            macroCreditSpreadEma: MacroEngine::BASE_CREDIT_SPREAD,
+            highYieldCreditSpreadEma: DistressedDebtBusinessModel::HY_SPREAD_BLOWOUT_BASELINE,
+            corporateDefaultRateEma: MacroEngine::CORPORATE_DEFAULT_BASELINE,
+        );
+
+        $this->assertEqualsWithDelta(0.0, $this->model->getMacroPhysics($stock, $recession)['macro_demand_shift'], 1e-12);
+
+        // Signal (0.013 - 0.015) x 20 + 0.03 x 5 = 0.11 -> 1.25 x 0.11 / 1.11; recovery 0.60 of the mix, advisory 0.40 carries none.
+        $expected = 0.60 * (1.25 * 0.11 / 1.11);
+        $this->assertEqualsWithDelta($expected, $this->model->resolveSectorActivityShift($stock, $recession), 1e-9);
+    }
 }

@@ -8,7 +8,9 @@ use App\Data\InputOutputExposures;
 use App\Service\Model\BusinessModelInterface;
 
 use App\Data\ModelParam;
+use App\DTO\MacroStateDTO;
 use App\DTO\SectorPhysicsResult;
+use App\DTO\StreamContext;
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
 use App\Service\Macro\MacroEngine;
@@ -97,6 +99,8 @@ class EducationBusinessModel extends StandardCorporateBusinessModel
     public const LMS_VARIANCE_SCALAR        = 0.08; // Highly sticky software ARR
     /** Countercyclical sensitivity of degree enrollment to elevated unemployment rates (workforce retraining). */
     public const UNEMPLOYMENT_RETRAINING_SCALAR = 0.80;
+    /** Corporate training volume per unit of output gap before cyclicality: training budgets are among the first discretionary cuts. */
+    public const ENTERPRISE_TRAINING_GDP_SENSITIVITY = 1.50;
 
     public function getMacroPhysics(Stock $stock, \App\DTO\MacroStateDTO $macroState): array
     {
@@ -107,6 +111,37 @@ class EducationBusinessModel extends StandardCorporateBusinessModel
         $physics['macro_demand_shift'] = 0.0;
 
         return $physics;
+    }
+
+    /**
+     * The teaching load the faculty is staffed to: the opening workload of the deferred-tuition book (enrolment
+     * reaches revenue ratably over the term, not through macro_demand_shift) and the corporate training volume,
+     * at target weights. A recession fills the tuition book, so the degree side staffs up against the cycle.
+     * Courseware licences carry no cycle term and their share of the base holds.
+     */
+    public function resolveSectorActivityShift(Stock $stock, MacroStateDTO $macroState): float
+    {
+        $params = $this->resolveModelParameters($stock, [
+            ModelParam::DegreeTuitionWeight->value      => self::DEGREE_TUITION_WEIGHT,
+            ModelParam::EnterpriseTrainingWeight->value => self::ENTERPRISE_TRAINING_WEIGHT,
+            ModelParam::LmsLicensingWeight->value       => self::LMS_LICENSING_WEIGHT,
+        ]);
+        $tuitionWeight = $params[ModelParam::DegreeTuitionWeight];
+        $enterpriseWeight = $params[ModelParam::EnterpriseTrainingWeight];
+        $totalWeight = $tuitionWeight + $enterpriseWeight + $params[ModelParam::LmsLicensingWeight];
+        if ($totalWeight <= 0.0) {
+            return 0.0;
+        }
+
+        $tuitionWorkload = StreamContext::openingWorkload($stock->getEarningsMomentumZ() ?? [], 'degree_tuition_enrollment', self::TUITION_RECOGNITION_RATE);
+
+        return (($tuitionWeight * ($tuitionWorkload - 1.0)) + ($enterpriseWeight * $this->resolveEnterpriseTrainingVolumeShift($stock, $macroState))) / $totalWeight;
+    }
+
+    /** Corporate training seats: the output gap at ENTERPRISE_TRAINING_GDP_SENSITIVITY of the firm's cyclicality. */
+    private function resolveEnterpriseTrainingVolumeShift(Stock $stock, MacroStateDTO $macroState): float
+    {
+        return $macroState->outputGapEma * self::ENTERPRISE_TRAINING_GDP_SENSITIVITY * $this->getOperatingCyclicality($stock);
     }
 
     protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
@@ -143,7 +178,7 @@ class EducationBusinessModel extends StandardCorporateBusinessModel
         $counterCyclicalEnrollmentBoost = ($outputGap < 0.0 ? abs($outputGap) * 1.2 * $beta : -($outputGap * 0.4))
             + ($govShift * 0.40)
             + ($unemploymentSurge * self::UNEMPLOYMENT_RETRAINING_SCALAR * $beta);
-        $proCyclicalEnterpriseShift     = $outputGap * 1.5 * $beta;
+        $proCyclicalEnterpriseShift     = $this->resolveEnterpriseTrainingVolumeShift($stock, $macroState);
 
         $tuitionZ    = $streams->generateZ('degree_tuition_enrollment', 0.50);
         $enterpriseZ = $streams->generateZ('enterprise_b2b_training', 0.20);

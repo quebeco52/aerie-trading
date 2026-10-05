@@ -98,6 +98,8 @@ class ConstructionBusinessModel extends StandardCorporateBusinessModel
     public const CREDIT_GAP_ORDER_SENSITIVITY = 0.50;
     /** Civil orders per unit of district catastrophe burden above an average year: a season at twice the average burden adds a tenth to the infrastructure order book. */
     public const CATASTROPHE_REBUILD_SENSITIVITY = 0.10;
+    /** Facilities O&M volume per unit of lagged output gap before cyclicality: recurring site work flexes at a fifth of private EPC's 1.5. */
+    public const MAINTENANCE_GDP_SENSITIVITY = 0.30;
 
 
     // --- Tail Risk & Shock Events ---
@@ -158,6 +160,40 @@ class ConstructionBusinessModel extends StandardCorporateBusinessModel
         return $physics;
     }
 
+    /**
+     * The work the contractor is staffed to: the opening workload of the civil and commercial backlogs (awards
+     * reach revenue by percentage of completion, not through macro_demand_shift) and the run-rate O&M volume,
+     * at target weights. Crews are released as a book runs down, not the quarter an award is lost.
+     */
+    public function resolveSectorActivityShift(Stock $stock, MacroStateDTO $macroState): float
+    {
+        $params = $this->resolveModelParameters($stock, [
+            ModelParam::CivilInfrastructureWeight->value   => self::CIVIL_INFRASTRUCTURE_WEIGHT,
+            ModelParam::CommercialEpcWeight->value         => self::COMMERCIAL_EPC_WEIGHT,
+            ModelParam::FacilitiesMaintenanceWeight->value => self::FACILITIES_MAINTENANCE_WEIGHT,
+        ]);
+        $civilWeight = $params[ModelParam::CivilInfrastructureWeight];
+        $commercialWeight = $params[ModelParam::CommercialEpcWeight];
+        $maintenanceWeight = $params[ModelParam::FacilitiesMaintenanceWeight];
+        $totalWeight = $civilWeight + $commercialWeight + $maintenanceWeight;
+        if ($totalWeight <= 0.0) {
+            return 0.0;
+        }
+
+        $momentum = $stock->getEarningsMomentumZ() ?? [];
+        $activity = ($civilWeight * (StreamContext::openingWorkload($momentum, 'civil_infrastructure', self::CIVIL_BACKLOG_BURN_RATE) - 1.0))
+            + ($commercialWeight * (StreamContext::openingWorkload($momentum, 'commercial_epc', self::COMMERCIAL_BACKLOG_BURN_RATE) - 1.0))
+            + ($maintenanceWeight * $this->resolveMaintenanceVolumeShift($stock, $macroState));
+
+        return $activity / $totalWeight;
+    }
+
+    /** Facilities O&M volume: the lagged output gap at MAINTENANCE_GDP_SENSITIVITY of the firm's cyclicality. */
+    private function resolveMaintenanceVolumeShift(Stock $stock, MacroStateDTO $macroState): float
+    {
+        return $this->resolveLaggedOutputGap($macroState) * self::MAINTENANCE_GDP_SENSITIVITY * $this->getOperatingCyclicality($stock);
+    }
+
     protected function calculateSectorPhysics(
         Stock $stock,
         float $expectedRevenue,
@@ -212,7 +248,7 @@ class ConstructionBusinessModel extends StandardCorporateBusinessModel
         // Policy stance is the real rate gap, nominal policy less expected inflation less r* (Laubach & Williams 2003).
         $realRateGap = $policyRate - $macroState->tipsBreakevenEma - $macroState->naturalRateEma;
         $commercialCreditDrag = max(0.0, $realRateGap * self::RATE_STANCE_ORDER_SENSITIVITY * $beta) + $sloosDrag;
-        $maintenanceMacroBoost = ($outputGap * 0.3 * $beta);
+        $maintenanceMacroBoost = $this->resolveMaintenanceVolumeShift($stock, $macroState);
         $govSpendShift = ($macroState->governmentSpendingIndexEma - 100.0) / 100.0;
         // Reconstruction after a storm season is civil work booked into the backlog (Hallegatte 2008 on post-disaster reconstruction demand).
         $rebuildShift = max(0.0, $macroState->catastropheLossIndexEma - 1.0) * self::CATASTROPHE_REBUILD_SENSITIVITY;

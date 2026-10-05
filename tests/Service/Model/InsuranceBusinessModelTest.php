@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\Model;
 
+use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
 use App\DTO\StreamContext;
@@ -645,5 +646,25 @@ class InsuranceBusinessModelTest extends TestCase
 
         $this->assertArrayNotHasKey($regimeKey, array_filter($run(1.0)), 'An average year with ample capital starts no hard market.');
         $this->assertGreaterThan(0.0, $run(InsuranceBusinessModel::CAT_HARD_MARKET_THRESHOLD)[$regimeKey] ?? 0.0, 'A district storm season hardens the market whatever the carrier\'s own capital.');
+    }
+
+    public function testTheBondTrancheEarnsItsBookYieldAndLeavesTheRateMoveToTheMark(): void
+    {
+        // A book struck at 3% earns 3% whatever the 10y does since; the move is the AOCI mark on the same tranche.
+        $model = new InsuranceBusinessModel();
+        $stock = new Stock();
+        $stock->setTicker('XXXX');
+        $stock->setCorporateTreasury('1000000000');
+        $stock->setCustomerDeposits('1000000000');
+        $stock->setSecuritiesCarryingYield(0.03);
+        $math = new MathUtility();
+
+        $atBook = $model->calculateInterestIncome($stock, new MacroStateDTO(yield10yEma: 0.03), $math);
+        $afterSelloff = $model->calculateInterestIncome($stock, new MacroStateDTO(yield10yEma: 0.06), $math);
+        $this->assertEqualsWithDelta($atBook, $afterSelloff, 1e-6);
+
+        // A book with no history was bought at today's curve.
+        $stock->setSecuritiesCarryingYield(null);
+        $this->assertGreaterThan($atBook, $model->calculateInterestIncome($stock, new MacroStateDTO(yield10yEma: 0.06), $math));
     }
 }

@@ -710,5 +710,17 @@ class HedgeFundBusinessModelTest extends TestCase
         // Clamped margin must not exceed MAX_VARIABLE_MARGIN_CLAMP (0.85)
         $this->assertLessThanOrEqual(HedgeFundBusinessModel::MAX_VARIABLE_MARGIN_CLAMP, $result->clampedMargin);
     }
-}
 
+    public function testTheCostBaseReadsTheCycleOnceThroughTheRootShift(): void
+    {
+        // The root shift is the fund's own activity; inheriting the asset manager's client-flow shift doubled it.
+        $model = new HedgeFundBusinessModel();
+        $stock = new Stock();
+        $stock->setTicker('XXXX');
+        $stock->setBeta('1.0');
+        $recession = new MacroStateDTO(outputGapEma: -0.03, exchangeRateIndexEma: 100.0);
+
+        $this->assertLessThan(0.0, $model->getMacroPhysics($stock, $recession)['macro_demand_shift']);
+        $this->assertSame(0.0, $model->resolveSectorActivityShift($stock, $recession));
+    }
+}

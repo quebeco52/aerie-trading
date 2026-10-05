@@ -94,6 +94,10 @@ class AdvertisingAgencyBusinessModel extends StandardCorporateBusinessModel
     public const BRAND_VARIANCE_SCALAR   = 0.10; // Sticky multi-year retainers
     public const MARTECH_VARIANCE_SCALAR = 0.20; // B2B technology consulting
 
+    // --- Ad Spend Cycle ---
+    /** Fraction of the client ad-spend cycle that reaches MarTech and data consulting engagements (0.4 of media's swing). */
+    public const MARTECH_AD_SPEND_SHARE = 0.40;
+
     public function getMacroPhysics(Stock $stock, \App\DTO\MacroStateDTO $macroState): array
     {
         $physics = parent::getMacroPhysics($stock, $macroState);
@@ -103,6 +107,40 @@ class AdvertisingAgencyBusinessModel extends StandardCorporateBusinessModel
         $physics['macro_demand_shift'] = 0.0;
 
         return $physics;
+    }
+
+    /**
+     * The client work the agency is staffed to run: the target-mix weighted cycle shift of media billings and
+     * MarTech engagements. Commissions are a take rate on gross spend, so the spend moves volume, not price;
+     * creative retainers carry no macro term and add only to the weight.
+     */
+    public function resolveSectorActivityShift(Stock $stock, \App\DTO\MacroStateDTO $macroState): float
+    {
+        $params = $this->resolveModelParameters($stock, [
+            ModelParam::MediaBuyingWeight->value       => self::MEDIA_BUYING_WEIGHT,
+            ModelParam::BrandRetainerWeight->value      => self::BRAND_RETAINER_WEIGHT,
+            ModelParam::MartechConsultingWeight->value => self::MARTECH_CONSULTING_WEIGHT,
+        ]);
+        $totalWeight = $params[ModelParam::MediaBuyingWeight] + $params[ModelParam::BrandRetainerWeight] + $params[ModelParam::MartechConsultingWeight];
+        if ($totalWeight <= 0.0) {
+            return 0.0;
+        }
+
+        $adSpendShift = $this->resolveAdSpendShift($stock, $macroState);
+
+        return (($params[ModelParam::MediaBuyingWeight] * $adSpendShift)
+            + ($params[ModelParam::MartechConsultingWeight] * $adSpendShift * self::MARTECH_AD_SPEND_SHARE)) / $totalWeight;
+    }
+
+    /**
+     * Client ad budgets: the output gap at 1.5x the firm's cyclicality plus the confidence residual over it
+     * (Lemmon & Portniaguina 2006) at half that.
+     */
+    private function resolveAdSpendShift(Stock $stock, \App\DTO\MacroStateDTO $macroState): float
+    {
+        $beta = $this->getOperatingCyclicality($stock);
+
+        return ($macroState->outputGapEma * 1.5 * $beta) + ($macroState->sentimentResidual() * 0.50 * $beta);
     }
 
     protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
@@ -119,7 +157,6 @@ class AdvertisingAgencyBusinessModel extends StandardCorporateBusinessModel
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
         $streams  = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
-        $beta     = $this->getOperatingCyclicality($stock);
 
         // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
         $activeWeights = $streams->resolveActiveStreamWeights([
@@ -133,9 +170,7 @@ class AdvertisingAgencyBusinessModel extends StandardCorporateBusinessModel
         $martechWeight = $activeWeights['martech_consulting'];
 
         // Ad budgets expand aggressively during GDP booms and contract sharply during recessions and consumer sentiment drops
-        // The gap is priced beside it, so confidence enters as its residual over the gap (Lemmon & Portniaguina 2006).
-        $sentimentShift = $macroState->sentimentResidual();
-        $macroAdSpendShift = ($macroState->outputGapEma * 1.5 * $beta) + ($sentimentShift * 0.50 * $beta);
+        $macroAdSpendShift = $this->resolveAdSpendShift($stock, $macroState);
 
         $mediaZ   = $streams->generateZ('media_buying_commissions', 0.25);
         $brandZ   = $streams->generateZ('creative_brand_retainers', 0.50);
@@ -143,7 +178,7 @@ class AdvertisingAgencyBusinessModel extends StandardCorporateBusinessModel
 
         $mediaRevenue   = max(0.0, $expectedRevenue * $mediaWeight   * (1.0 + ($mediaZ * ($baselineVol * self::MEDIA_VARIANCE_SCALAR)) + $macroAdSpendShift));
         $brandRevenue   = max(0.0, $expectedRevenue * $brandWeight   * (1.0 + ($brandZ * ($baselineVol * self::BRAND_VARIANCE_SCALAR))));
-        $martechRevenue = max(0.0, $expectedRevenue * $martechWeight * (1.0 + ($martechZ * ($baselineVol * self::MARTECH_VARIANCE_SCALAR)) + ($macroAdSpendShift * 0.4)));
+        $martechRevenue = max(0.0, $expectedRevenue * $martechWeight * (1.0 + ($martechZ * ($baselineVol * self::MARTECH_VARIANCE_SCALAR)) + ($macroAdSpendShift * self::MARTECH_AD_SPEND_SHARE)));
 
         $streamRevenues = [
             'media_buying_commissions' => $mediaRevenue,

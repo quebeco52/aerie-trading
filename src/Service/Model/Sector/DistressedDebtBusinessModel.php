@@ -69,6 +69,9 @@ class DistressedDebtBusinessModel extends AssetManagementBusinessModel
     public const RESTRUCTURING_ADVISORY_WEIGHT = 0.40;
     public const ASSET_RECOVERY_WEIGHT         = 0.60;
 
+    /** Loan-to-own equity gains move 1.5x the recovery book's distress surge: the fund owns the reorganised equity, not the discounted claim. */
+    public const LOAN_TO_OWN_DISTRESS_LEVERAGE = 1.50;
+
     public const ADVISORY_VARIANCE_SCALAR = 0.15;
     public const RECOVERY_VARIANCE_SCALAR = 0.45;
 
@@ -79,12 +82,53 @@ class DistressedDebtBusinessModel extends AssetManagementBusinessModel
     public const DRY_POWDER_HOARDER_THRESHOLD   = 0.40;
     public const DRY_POWDER_MEGA_THRESHOLD      = 0.70;
 
-    protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
+    /**
+     * The situations the workout desks are staffed to: the distress opportunity set (spread and HY levels,
+     * defaults, recession depth) on the recovery and loan-to-own books at their target weights. It reads
+     * levels, not spread changes, so it counts situations rather than marks. Restructuring advisory carries
+     * no macro term here, so it counts in the mix with no activity. Positive in a slump: countercyclical.
+     */
+    public function resolveSectorActivityShift(Stock $stock, \App\DTO\MacroStateDTO $macroState): float
     {
-        $momentum = $stock->getEarningsMomentumZ() ?? [];
-        $streams  = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
+        $weights = $this->resolveTargetStreamWeights($stock);
+        $totalWeight = array_sum($weights);
+        if ($totalWeight <= 0.0) {
+            return 0.0;
+        }
 
-        // Counter-Cyclical Credit Spread Trigger
+        $distressMultiplier = $this->resolveDistressMultiplier($macroState, new MathUtility());
+
+        return ((($weights['turnaround_recovery'] ?? 0.0) * $distressMultiplier)
+            + (($weights['loan_to_own'] ?? 0.0) * $distressMultiplier * self::LOAN_TO_OWN_DISTRESS_LEVERAGE)) / $totalWeight;
+    }
+
+    /** @return array<string, float> */
+    private function resolveTargetStreamWeights(Stock $stock): array
+    {
+        $params = $this->resolveModelParameters($stock, [
+            ModelParam::RestructuringAdvisoryWeight->value => self::RESTRUCTURING_ADVISORY_WEIGHT,
+            ModelParam::TurnaroundGainsWeight->value       => self::ASSET_RECOVERY_WEIGHT,
+            ModelParam::LoanToOwnGainsWeight->value        => 0.00,
+        ]);
+
+        $targetWeights = [
+            'restructuring_advisory' => $params[ModelParam::RestructuringAdvisoryWeight],
+            'turnaround_recovery'    => $params[ModelParam::TurnaroundGainsWeight],
+        ];
+        if ($params[ModelParam::LoanToOwnGainsWeight] > 0.0) {
+            $targetWeights['loan_to_own'] = $params[ModelParam::LoanToOwnGainsWeight];
+        }
+
+        return $targetWeights;
+    }
+
+    /**
+     * Counter-cyclical opportunity set: when credit spreads exceed 2.5%, high-yield spreads blow out, defaults
+     * surge or the output gap is negative, distressed opportunities expand with diminishing returns to the
+     * fund's capacity; a roaring bull market with tight spreads leaves the dry powder idle.
+     */
+    private function resolveDistressMultiplier(\App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): float
+    {
         $creditSpread = ($macroState->macroCreditSpread !== MacroEngine::BASE_CREDIT_SPREAD)
             ? $macroState->macroCreditSpread
             : $macroState->macroCreditSpreadEma;
@@ -94,41 +138,36 @@ class DistressedDebtBusinessModel extends AssetManagementBusinessModel
         $corporateDefaultShift = MathUtility::excessOverBaseline($macroState->corporateDefaultRateEma, MacroEngine::CORPORATE_DEFAULT_BASELINE);
         $defaultRateSurge = $corporateDefaultShift * self::DEFAULT_RATE_SURGE_SCALAR;
 
-        $distressMultiplier = 0.0;
-        $eventType = null;
-
-        // When credit spreads exceed 2.5%, high-yield spreads blow out, default rates surge, or output gap is negative, distressed debt opportunities explode
         if ($creditSpread > self::SPREAD_BLOWOUT_THRESHOLD || $outputGap < self::RECESSION_GAP_THRESHOLD || $hySpreadSurge > 0.0 || $defaultRateSurge > 0.0) {
             $rawDistressSurge = ($creditSpread - self::DEFAULT_CREDIT_SPREAD_FALLBACK) * self::SPREAD_SURGE_SCALAR
                 + abs(min(0.0, $outputGap)) * self::RECESSION_SURGE_SCALAR
                 + $hySpreadSurge
                 + $defaultRateSurge;
-            $distressMultiplier = $mathUtility->calculateDiminishingDistressMultiplier(
+
+            return $mathUtility->calculateDiminishingDistressMultiplier(
                 $rawDistressSurge,
                 self::MAX_DISTRESS_REVENUE_EXPANSION,
                 self::DISTRESS_HALF_SATURATION_POINT
             );
-        } elseif ($outputGap > self::BULL_MARKET_GAP_THRESHOLD && $creditSpread < self::DEFAULT_CREDIT_SPREAD_FALLBACK) {
-            $distressMultiplier = self::BULL_MARKET_REVENUE_DRAG;
         }
 
-        $params = $this->resolveModelParameters($stock, [
-            ModelParam::RestructuringAdvisoryWeight->value => self::RESTRUCTURING_ADVISORY_WEIGHT,
-            ModelParam::TurnaroundGainsWeight->value       => self::ASSET_RECOVERY_WEIGHT,
-            ModelParam::LoanToOwnGainsWeight->value        => 0.00,
-        ]);
-        $rawLoanToOwnWeight = $params[ModelParam::LoanToOwnGainsWeight];
-
-        $targetWeights = [
-            'restructuring_advisory' => $params[ModelParam::RestructuringAdvisoryWeight],
-            'turnaround_recovery'    => $params[ModelParam::TurnaroundGainsWeight],
-        ];
-        if ($rawLoanToOwnWeight > 0.0) {
-            $targetWeights['loan_to_own'] = $rawLoanToOwnWeight;
+        if ($outputGap > self::BULL_MARKET_GAP_THRESHOLD && $creditSpread < self::DEFAULT_CREDIT_SPREAD_FALLBACK) {
+            return self::BULL_MARKET_REVENUE_DRAG;
         }
+
+        return 0.0;
+    }
+
+    protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
+    {
+        $momentum = $stock->getEarningsMomentumZ() ?? [];
+        $streams  = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
+
+        $distressMultiplier = $this->resolveDistressMultiplier($macroState, $mathUtility);
+        $eventType = null;
 
         // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
-        $activeWeights = $streams->resolveActiveStreamWeights($targetWeights);
+        $activeWeights = $streams->resolveActiveStreamWeights($this->resolveTargetStreamWeights($stock));
 
         $advisoryWeight  = $activeWeights['restructuring_advisory'];
         $recoveryWeight  = $activeWeights['turnaround_recovery'];
@@ -154,7 +193,7 @@ class DistressedDebtBusinessModel extends AssetManagementBusinessModel
         $loanToOwnZ = 0.0;
         if ($loanToOwnWeight > 0.0) {
             $loanToOwnZ = $streams->generateZ('loan_to_own', 0.15);
-            $loanToOwnRevenue = max(0.0, $expectedRevenue * $loanToOwnWeight * (1.0 + ($loanToOwnZ * $baselineVol * self::RECOVERY_VARIANCE_SCALAR * 1.5) + ($distressMultiplier * 1.5)));
+            $loanToOwnRevenue = max(0.0, $expectedRevenue * $loanToOwnWeight * (1.0 + ($loanToOwnZ * $baselineVol * self::RECOVERY_VARIANCE_SCALAR * 1.5) + ($distressMultiplier * self::LOAN_TO_OWN_DISTRESS_LEVERAGE)));
             $streamRevenues['loan_to_own'] = $loanToOwnRevenue;
         }
 

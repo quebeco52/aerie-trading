@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\Model;
 
+use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\AssetManagementBusinessModel;
@@ -256,5 +257,27 @@ class AssetManagementBusinessModelTest extends TestCase
         $migrating = $run(0.1625, 0.15);
         $this->assertEqualsWithDelta(80_000_000.0 * 0.0125 * AssetManagementBusinessModel::MMF_AUM_INFLOW_SENSITIVITY, $migrating - $steady, 1.0);
         $this->assertEqualsWithDelta($steady, $run(0.14, 0.15), 1.0, 'Share flowing back to deposits is not a fee-earning inflow.');
+    }
+
+
+    public function testTheCostBaseFollowsClientFlowsNotTheMarketMark(): void
+    {
+        $model = new AssetManagementBusinessModel();
+        $stock = new Stock();
+        $stock->setTicker('AM_TEST');
+        // The equity market 20% under its trend marks the fee base down; no client has moved any money.
+        $recession = new MacroStateDTO(
+            outputGapEma: -0.03,
+            equityWealthRatio: 0.8,
+            equityWealthTrend: 1.0,
+            moneyMarketFundShare: 0.15,
+            moneyMarketFundShareEma: 0.15,
+            moneySupplyGrowthEma: \App\Service\Macro\MacroEngine::M2_BASE_GROWTH,
+        );
+
+        $this->assertEqualsWithDelta(0.0, $model->getMacroPhysics($stock, $recession)['macro_demand_shift'], 1e-12);
+
+        // Base fees 0.80 x net flows (-0.03 x 1.20 x 0.40); performance fees carry no macro term.
+        $this->assertEqualsWithDelta(0.80 * (-0.03 * 1.20 * 0.40), $model->resolveSectorActivityShift($stock, $recession), 1e-9);
     }
 }

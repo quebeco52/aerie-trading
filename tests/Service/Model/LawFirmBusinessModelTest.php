@@ -191,4 +191,17 @@ class LawFirmBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta(1.06, $dearServices['input_cost_multiplier'], 1e-9);
     }
 
+    public function testTheCycleReachesTheCostBaseThroughTheStreamVolumes(): void
+    {
+        $stock = (new Stock())->setTicker('BRIEF_ACTIVITY')->setBeta('1.0');
+        // Spreads, defaults and deal flow at their baselines: only the gap moves.
+        $recession = new MacroStateDTO(outputGapEma: -0.03, exchangeRateIndexEma: 100.0);
+
+        $this->assertEqualsWithDelta(0.0, $this->model->getMacroPhysics($stock, $recession)['macro_demand_shift'], 1e-12);
+
+        // Retainers read only the boom side; restructuring 0.20 x (0.03 x 3.0 x 0.80) = +0.0144, counter-cyclical.
+        $expected = LawFirmBusinessModel::RESTRUCTURING_ADVISORY_WEIGHT
+            * (0.03 * LawFirmBusinessModel::RESTRUCTURING_RECESSION_SCALAR * LawFirmBusinessModel::OPERATING_CYCLICALITY);
+        $this->assertEqualsWithDelta($expected, $this->model->resolveSectorActivityShift($stock, $recession), 1e-9);
+    }
 }

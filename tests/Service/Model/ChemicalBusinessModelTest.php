@@ -163,59 +163,61 @@ class ChemicalBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta(24_000_000.0, $result->streamRevenue['agrochemicals'], 1.0);
     }
 
-    public function testFeedstockMarginSqueezeAsymmetricPassThrough(): void
+    /** Base chemicals are priced off the naphtha cracker: an oil spike at flat gas is a windfall for an ethane slate. */
+    public function testAGasAdvantagedCrackerGainsFromAnOilSpikeAtFlatGas(): void
     {
-        $stock = new Stock();
-        $stock->setTicker('CHEM');
-        $stock->setBeta('1.0');
+        $ethane = new class extends ChemicalBusinessModel {
+            public const GAS_FEEDSTOCK_SHARE = 1.0;
+        };
 
-        $mathMock = $this->createStub(MathUtility::class);
-        $mathMock->method('generatePersistentZ')->willReturn(0.0);
-        $mathMock->method('calculateJumpDiffusion')->willReturn([
-            'multiplier' => 1.0,
-            'shock_pct' => null,
-            'exponent' => null,
-        ]);
+        $calm = $this->feedstockCostRatio($ethane, oil: 0.0, gas: 0.0);
+        $oilSpike = $this->feedstockCostRatio($ethane, oil: 0.30, gas: 0.0);
 
-        // Scenario 1: High energy price (140.0, +40% energy inflation) in Economic Expansion (outputGap = +0.04)
-        $expansionMacro = new MacroStateDTO(
-            energyPriceIndexEma: 140.0,
-            energyCostPushLag: 0.0040,
-            outputGapEma: 0.04
-        );
+        $this->assertLessThan($calm, $oilSpike, 'Product prices follow the marginal naphtha cracker while the ethane slate costs the same: the cost ratio falls.');
+    }
 
-        $expansionResult = $this->model->computeActualFinancials(
-            $stock,
-            expectedRevenue: 100_000_000.0,
-            realizedVariableMargin: 0.20,
-            fixedCosts: 20_000_000.0,
-            baselineVol: 0.15,
-            macroState: $expansionMacro,
-            mathUtility: $mathMock
-        );
+    /** A naphtha slate eats only the share of its oil cost the market price does not pass through. */
+    public function testANaphthaCrackerLosesNoMoreThanItsUnpassedShare(): void
+    {
+        $naphtha = new class extends ChemicalBusinessModel {
+            public const GAS_FEEDSTOCK_SHARE = 0.0;
+        };
+        $oil = 0.30;
 
-        // Scenario 2: High energy price (140.0, +40% energy inflation) in Economic Recession (outputGap = -0.04)
-        $recessionMacro = new MacroStateDTO(
-            energyPriceIndexEma: 140.0,
-            energyCostPushLag: 0.0040,
-            outputGapEma: -0.04
-        );
+        $squeeze = $this->feedstockCostRatio($naphtha, oil: $oil, gas: 0.0) - $this->feedstockCostRatio($naphtha, oil: 0.0, gas: 0.0);
+        $unpassedBound = ChemicalBusinessModel::ENERGY_FEEDSTOCK_INTENSITY * $oil
+            * (1.0 - (ChemicalBusinessModel::BASE_PETROCHEMICALS_WEIGHT * ChemicalBusinessModel::BASE_PETRO_MARGINAL_PASS_THROUGH));
 
-        $recessionResult = $this->model->computeActualFinancials(
-            $stock,
-            expectedRevenue: 100_000_000.0,
-            realizedVariableMargin: 0.20,
-            fixedCosts: 20_000_000.0,
-            baselineVol: 0.15,
-            macroState: $recessionMacro,
-            mathUtility: $mathMock
-        );
+        $mixed = new ChemicalBusinessModel();
+        $mixedSqueeze = $this->feedstockCostRatio($mixed, oil: $oil, gas: 0.0) - $this->feedstockCostRatio($mixed, oil: 0.0, gas: 0.0);
 
-        // In a recession, Base Petrochemicals cannot pass through energy inflation -> higher variable cost margin (cost squeeze)
-        $this->assertGreaterThan(
-            $expansionResult->clampedMargin,
-            $recessionResult->clampedMargin,
-            'Recession with energy spike must crush margins due to inability of base chemicals to pass through feedstock inflation.'
+        $this->assertGreaterThan($mixedSqueeze, $squeeze, 'A naphtha slate pays more of an oil spike than a mixed slate: the gas share is read per firm.');
+        $this->assertLessThanOrEqual($unpassedBound + 1e-9, $squeeze, 'but no more than the base book leaves unpassed.');
+    }
+
+    /** Feedstock falls reach the margin as fully as rises: oil, gas and the farm-price-backed fertilizer leg are all symmetric. */
+    public function testAFeedstockFallReachesTheMarginSymmetrically(): void
+    {
+        $model = new ChemicalBusinessModel();
+        $calm = $this->feedstockCostRatio($model, oil: 0.0, gas: 0.0);
+        $delta = fn (float $oil, float $gas, float $agri = 100.0): float => $this->feedstockCostRatio($model, oil: $oil, gas: $gas, agriIndex: $agri) - $calm;
+
+        $this->assertLessThan(0.0, $delta(-0.30, 0.0), 'An oil fall lowers the cost ratio.');
+        $this->assertLessThan(0.0, $delta(0.0, -0.30), 'A gas fall lowers the cost ratio.');
+        $this->assertEqualsWithDelta(-$delta(0.30, 0.0), $delta(-0.30, 0.0), 1e-9, 'Oil moves the margin by the same amount either way.');
+        $this->assertEqualsWithDelta(-$delta(0.0, 0.30), $delta(0.0, -0.30), 1e-9, 'Gas moves the margin by the same amount either way.');
+        $this->assertEqualsWithDelta(-$delta(0.30, 0.30, 120.0), $delta(-0.30, -0.30, 80.0), 1e-9, 'Fertilizer prices give back with farm prices what they recovered with them.');
+    }
+
+    /** The refinery 3:2:1 crack is a gasoline and distillate margin, not a cracker's feedstock cost: it must not move the chemical margin. */
+    public function testTheRefiningCrackSpreadDoesNotMoveTheChemicalMargin(): void
+    {
+        $model = new ChemicalBusinessModel();
+
+        $this->assertEqualsWithDelta(
+            $this->feedstockCostRatio($model, oil: 0.0, gas: 0.0),
+            $this->feedstockCostRatio($model, oil: 0.0, gas: 0.0, crack: 2.0 * MacroEngine::CRACK_SPREAD_BASELINE),
+            1e-12,
         );
     }
 
@@ -324,29 +326,37 @@ class ChemicalBusinessModelTest extends TestCase
     }
 
 
-    /** Half the cracker feedstock is ethane: a gas spike alone squeezes base chemicals by half of what an equal oil spike does. */
-    public function testAGasSpikeSqueezesFeedstockByTheEthaneShare(): void
+    /** On a mixed slate a gas spike squeezes the ethane half with no price relief, so it hurts more than an equal oil spike, which the naphtha-set price partly recovers. */
+    public function testAGasSpikeSqueezesAMixedSlateMoreThanAnEqualOilSpike(): void
     {
         $model = new ChemicalBusinessModel();
-        $run = function (float $gasIndexEma, float $energyLag) use ($model): float {
-            $stock = new Stock();
-            $stock->setTicker('FULM');
-            $stock->setBeta('1.0');
-            // Partial mock: draws and the weather dice are scripted flat, the jump and mix maths stay real.
-            $math = $this->getMockBuilder(MathUtility::class)->onlyMethods(['generateStandardNormal', 'generatePersistentZ', 'checkProbability'])->getMock();
-            $math->method('generateStandardNormal')->willReturn(0.0);
-            $math->method('generatePersistentZ')->willReturn(0.0);
-            $math->method('checkProbability')->willReturn(false);
-            $macro = new MacroStateDTO(outputGapEma: -0.01, naturalGasPriceIndexEma: $gasIndexEma, energyCostPushLag: $energyLag);
-
-            return $model->computeActualFinancials($stock, 100_000_000.0, 0.40, 20_000_000.0, 0.10, $macro, $math)->clampedMargin;
-        };
-
-        $calm = $run(100.0, 0.0);
-        $gasOnly = $run(140.0, 0.0);
-        $oilOnly = $run(100.0, 0.40 * \App\Service\Macro\MacroEngine::ENERGY_COST_PUSH_TRANSMISSION);
+        $calm = $this->feedstockCostRatio($model, oil: 0.0, gas: 0.0);
+        $gasOnly = $this->feedstockCostRatio($model, oil: 0.0, gas: 0.40);
+        $oilOnly = $this->feedstockCostRatio($model, oil: 0.40, gas: 0.0);
 
         $this->assertGreaterThan($calm, $gasOnly, 'A gas spike squeezes the ethane crackers.');
-        $this->assertEqualsWithDelta($oilOnly - $calm, $gasOnly - $calm, 1e-6, 'and an equal oil spike squeezes the naphtha crackers by the same amount: the feedstock is half and half.');
+        $this->assertGreaterThan($oilOnly, $gasOnly, 'and more than an equal oil spike, which lifts the naphtha-set product price.');
+    }
+
+    /** Variable cost ratio of a flat-draw quarter with oil and gas moved by the given relative deviations. */
+    private function feedstockCostRatio(ChemicalBusinessModel $model, float $oil, float $gas, float $agriIndex = 100.0, float $crack = MacroEngine::CRACK_SPREAD_BASELINE): float
+    {
+        $stock = new Stock();
+        $stock->setTicker('FULM_FEED');
+        $stock->setBeta('1.0');
+        // Partial mock: draws and the weather dice are scripted flat, the jump and mix maths stay real.
+        $math = $this->getMockBuilder(MathUtility::class)->onlyMethods(['generateStandardNormal', 'generatePersistentZ', 'checkProbability'])->getMock();
+        $math->method('generateStandardNormal')->willReturn(0.0);
+        $math->method('generatePersistentZ')->willReturn(0.0);
+        $math->method('checkProbability')->willReturn(false);
+        $macro = new MacroStateDTO(
+            outputGapEma: 0.0,
+            agriculturalCommodityIndexEma: $agriIndex,
+            energyCostPushLag: $oil * MacroEngine::ENERGY_COST_PUSH_TRANSMISSION,
+            naturalGasPriceIndexEma: MacroEngine::NATURAL_GAS_BASELINE * (1.0 + $gas),
+            refiningCrackSpread: $crack,
+        );
+
+        return $model->computeActualFinancials($stock, 100_000_000.0, 0.60, 20_000_000.0, 0.15, $macro, $math)->clampedMargin;
     }
 }

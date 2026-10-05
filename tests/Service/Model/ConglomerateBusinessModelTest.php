@@ -294,4 +294,22 @@ class ConglomerateBusinessModelTest extends TestCase
             }
         }
     }
+
+
+    public function testTheCycleReachesTheCostBaseThroughTheOperatingStreams(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('CONG_TEST');
+        $recession = new MacroStateDTO(outputGapEma: -0.03, manufacturingPmiEma: MacroEngine::PMI_BASELINE, exchangeRateIndexEma: 100.0);
+
+        $this->assertEqualsWithDelta(0.0, $this->model->getMacroPhysics($stock, $recession)['macro_demand_shift'], 1e-12);
+
+        // Industrial 0.40 x (-0.03 x 1.2 x 0.90) + staples 0.40 x (-0.03 x 0.15); the 0.20 float is a yield, not activity.
+        $expected = (0.40 * (-0.03 * 1.2 * 0.90)) + (0.40 * (-0.03 * 0.15));
+        $this->assertEqualsWithDelta($expected, $this->model->resolveSectorActivityShift($stock, $recession), 1e-9);
+
+        // A PMI of 47 adds 0.40 x (-0.06 x 0.40) x 0.90 to the industrial leg.
+        $pmiSlump = new MacroStateDTO(outputGapEma: -0.03, manufacturingPmiEma: 47.0, exchangeRateIndexEma: 100.0);
+        $this->assertEqualsWithDelta($expected + (0.40 * -0.06 * 0.40 * 0.90), $this->model->resolveSectorActivityShift($stock, $pmiSlump), 1e-9);
+    }
 }

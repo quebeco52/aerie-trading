@@ -258,4 +258,24 @@ class ConstructionBusinessModelTest extends TestCase
 
         $this->assertGreaterThan($run(1.0), $run(3.0), 'A season at three times the average burden lifts civil orders.');
     }
+
+    public function testTheCostBaseStaffsToTheBacklogsAndTheMaintenanceRunRate(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('GEN_CONST');
+        $recession = new MacroStateDTO(outputGapEma: -0.03, exchangeRateIndexEma: 100.0);
+
+        $this->assertEqualsWithDelta(0.0, $this->model->getMacroPhysics($stock, $recession)['macro_demand_shift'], 1e-12);
+
+        // Fresh books open at steady state, so only O&M moves: 0.20 x (-0.03 x 0.30 x 1.20) = -0.00216.
+        $this->assertEqualsWithDelta(-0.00216, $this->model->resolveSectorActivityShift($stock, $recession), 1e-9);
+
+        // Run-down books: civil 3 of 4 steady quarters -> 0.2 x 4 = 0.80; commercial 2 of 3 -> 0.25 x 3 = 0.75.
+        // 0.45 x -0.20 + 0.35 x -0.25 + 0.20 x -0.0108 = -0.17966.
+        $stock->setEarningsMomentumZ([
+            StreamContext::BACKLOG_STATE_PREFIX . 'civil_infrastructure' => 3.0,
+            StreamContext::BACKLOG_STATE_PREFIX . 'commercial_epc'       => 2.0,
+        ]);
+        $this->assertEqualsWithDelta(-0.17966, $this->model->resolveSectorActivityShift($stock, $recession), 1e-9);
+    }
 }

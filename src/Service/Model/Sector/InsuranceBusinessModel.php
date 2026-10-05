@@ -656,7 +656,9 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
         $bondShare         = self::FLOAT_BOND_WEIGHT / $totalFixedWeight;
 
         $liquidityReturn   = $policyRate - MacroEngine::CASH_YIELD_SPREAD;
-        $bondReturn        = $yield10y;
+        // Net investment income accrues at book yield (SAP/GAAP amortized cost); the rate move is the AOCI mark
+        // on the same tranche (resolveSecuritiesBook), so earning the live 10y here would count it twice.
+        $bondReturn        = $stock->getSecuritiesCarryingYield() ?? $yield10y;
         $baseYield         = $fixedIncomeWeight * (($liquidityShare * $liquidityReturn) + ($bondShare * $bondReturn));
 
         $outputGap = $macroState->outputGapEma;

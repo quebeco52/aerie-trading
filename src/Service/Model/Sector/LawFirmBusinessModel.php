@@ -162,6 +162,56 @@ class LawFirmBusinessModel extends StandardCorporateBusinessModel
         return $physics;
     }
 
+    /**
+     * The billable hours the partnership is staffed to work: the target-mix weighted cycle shift of retainer and
+     * restructuring mandates. Restructuring is counter-cyclical and keeps its sign, so a recession can raise the
+     * activity the base carries; litigation carries no macro term and adds only to the weight.
+     */
+    public function resolveSectorActivityShift(Stock $stock, MacroStateDTO $macroState): float
+    {
+        $params = $this->resolveModelParameters($stock, [
+            ModelParam::CorporateRetainerWeight->value     => self::CORPORATE_RETAINER_WEIGHT,
+            ModelParam::LitigationContingencyWeight->value  => self::LITIGATION_CONTINGENCY_WEIGHT,
+            ModelParam::RestructuringAdvisoryWeight->value  => self::RESTRUCTURING_ADVISORY_WEIGHT,
+        ]);
+        $totalWeight = $params[ModelParam::CorporateRetainerWeight] + $params[ModelParam::LitigationContingencyWeight] + $params[ModelParam::RestructuringAdvisoryWeight];
+        if ($totalWeight <= 0.0) {
+            return 0.0;
+        }
+
+        $shifts = $this->resolveStreamMacroShifts($stock, $macroState);
+
+        return (($params[ModelParam::CorporateRetainerWeight] * $shifts['corporate_retainers'])
+            + ($params[ModelParam::RestructuringAdvisoryWeight] * $shifts['restructuring_advisory'])) / $totalWeight;
+    }
+
+    /**
+     * Each stream's macro volume shift: retainers on boom-side gap and M&A deal flow; restructuring on recession
+     * depth, credit spreads above the default threshold and the corporate default rate above its baseline.
+     *
+     * @return array{corporate_retainers: float, restructuring_advisory: float}
+     */
+    private function resolveStreamMacroShifts(Stock $stock, MacroStateDTO $macroState): array
+    {
+        $beta = $this->getOperatingCyclicality($stock);
+        $outputGap = $macroState->outputGapEma;
+        $creditSpread = ($macroState->macroCreditSpread !== MacroEngine::BASE_CREDIT_SPREAD)
+            ? $macroState->macroCreditSpread
+            : $macroState->macroCreditSpreadEma;
+
+        $dealActivityShift = ($macroState->dealActivityIndexEma - MacroEngine::DEAL_ACTIVITY_BASELINE) / MacroEngine::DEAL_ACTIVITY_BASELINE;
+        $excessSpread = max(0.0, $creditSpread - self::DEFAULT_CREDIT_SPREAD_BASELINE);
+        $corporateDefaultShift = MathUtility::excessOverBaseline($macroState->corporateDefaultRateEma, MacroEngine::CORPORATE_DEFAULT_BASELINE);
+
+        return [
+            'corporate_retainers'    => max(0.0, $outputGap * self::RETAINER_MACRO_SCALAR * $beta)
+                + ($dealActivityShift * self::DEAL_ACTIVITY_RETAINER_SCALAR),
+            'restructuring_advisory' => (max(0.0, -$outputGap) * self::RESTRUCTURING_RECESSION_SCALAR * $beta)
+                + ($excessSpread * self::RESTRUCTURING_SPREAD_SCALAR)
+                + ($corporateDefaultShift * self::CORPORATE_DEFAULT_RESTRUCTURING_SCALAR),
+        ];
+    }
+
     protected function calculateSectorPhysics(
         Stock $stock,
         float $expectedRevenue,
@@ -185,7 +235,6 @@ class LawFirmBusinessModel extends StandardCorporateBusinessModel
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
         $streams = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
-        $beta = $this->getOperatingCyclicality($stock);
 
         // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
         $activeWeights = $streams->resolveActiveStreamWeights([
@@ -205,23 +254,9 @@ class LawFirmBusinessModel extends StandardCorporateBusinessModel
         $eventZ         = $streams->generateExogenousZ('event', 0.10);
 
         // --- Macro Sensitivities & Restructuring Surge ---
-        $outputGap = $macroState->outputGapEma;
-        $creditSpread = ($macroState->macroCreditSpread !== MacroEngine::BASE_CREDIT_SPREAD)
-            ? $macroState->macroCreditSpread
-            : $macroState->macroCreditSpreadEma;
-
-        // Retainers expand during corporate booms and active M&A deal flow
-        $dealActivityShift = ($macroState->dealActivityIndexEma - MacroEngine::DEAL_ACTIVITY_BASELINE) / MacroEngine::DEAL_ACTIVITY_BASELINE;
-        $retainerMacroBoost = max(0.0, $outputGap * self::RETAINER_MACRO_SCALAR * $beta)
-            + ($dealActivityShift * self::DEAL_ACTIVITY_RETAINER_SCALAR);
-
-        // Restructuring surges counter-cyclically during economic recessions and credit default waves
-        $recessionDepth = max(0.0, -$outputGap);
-        $excessSpread   = max(0.0, $creditSpread - self::DEFAULT_CREDIT_SPREAD_BASELINE);
-        $corporateDefaultShift = MathUtility::excessOverBaseline($macroState->corporateDefaultRateEma, MacroEngine::CORPORATE_DEFAULT_BASELINE);
-        $restructuringSurge = ($recessionDepth * self::RESTRUCTURING_RECESSION_SCALAR * $beta)
-            + ($excessSpread * self::RESTRUCTURING_SPREAD_SCALAR)
-            + ($corporateDefaultShift * self::CORPORATE_DEFAULT_RESTRUCTURING_SCALAR);
+        $macroShifts = $this->resolveStreamMacroShifts($stock, $macroState);
+        $retainerMacroBoost = $macroShifts['corporate_retainers'];
+        $restructuringSurge = $macroShifts['restructuring_advisory'];
 
         // --- Tail Risk & Settlement Events ---
         $litigationMult = 1.0;

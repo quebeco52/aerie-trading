@@ -167,4 +167,28 @@ class MedicalCareFacilityBusinessModelTest extends TestCase
         // Selling price reflects reimbursement rate pass-through
         $this->assertLessThan($multipliers['input_cost_multiplier'], $multipliers['pricing_power_multiplier']);
     }
+
+    public function testTheCostBaseStaffsToPatientVolumeNotBillingUplift(): void
+    {
+        $stock = (new Stock())->setTicker('GEN_HOSPITAL');
+        $recession = new MacroStateDTO(
+            outputGapEma: -0.03,
+            inflationEma: 0.05,
+            unemploymentRateEma: MacroEngine::NATURAL_UNEMPLOYMENT + 0.01,
+            exchangeRateIndexEma: 100.0,
+            governmentSpendingIndexEma: 105.0,
+        );
+
+        $this->assertEqualsWithDelta(0.0, $this->model->getMacroPhysics($stock, $recession)['macro_demand_shift'], 1e-12);
+
+        // 0.50 x (0.05 x 0.30) + 0.30 x (-0.03 x 1.20 x 0.60 - 0.01 x 2.0) = 0.0075 - 0.01248 = -0.00498.
+        $shift = $this->model->resolveSectorActivityShift($stock, $recession);
+        $this->assertEqualsWithDelta(-0.00498, $shift, 1e-9);
+
+        $math = $this->createStub(MathUtility::class);
+        $math->method('generatePersistentZ')->willReturn(0.0);
+        $result = $this->model->computeActualFinancials($stock, 1000.0, 0.60, 50.0, 0.0, $recession, $math);
+        $this->assertGreaterThan(0.0, $result->priceRevenue, 'Inflation lifts the billing book.');
+        $this->assertEqualsWithDelta(($result->actualRevenue - $result->priceRevenue) / 1000.0 - 1.0, $shift, 1e-9, 'The base staffs to the care delivered, not the coding uplift.');
+    }
 }

@@ -105,6 +105,10 @@ class SecurityProtectionBusinessModel extends StandardCorporateBusinessModel
     // --- Macro Physics Constants ---
     /** Cost-Plus Inflation Bonus: Government contracts guarantee profit margins on top of material/wage inflation. */
     public const COST_PLUS_BONUS_SCALAR = 1.20;
+    /** Elasticity of government guarding volume to the state spending index (0.30 = a 10% budget lift adds 3% contracted posts). */
+    public const APPROPRIATIONS_VOLUME_SCALAR = 0.30;
+    /** Elasticity of corporate retainer posts to a positive output gap at unit cyclicality (new facilities need guards). */
+    public const CORPORATE_EXPANSION_SCALAR = 0.40;
 
     /** Baseline VIX threshold above which corporate panic triggers surge spending on executive protection. */
     public const VIX_FEAR_THRESHOLD = 0.20;
@@ -141,6 +145,57 @@ class SecurityProtectionBusinessModel extends StandardCorporateBusinessModel
         return $physics;
     }
 
+    /**
+     * The guard posts and deployments the firm is staffed to cover: the target-mix weighted macro shift of each
+     * stream's volume. The cost-plus inflation escalator on government work is a price and stays out; the
+     * expeditionary surge on fear and credit stress is counter-cyclical and keeps its sign.
+     */
+    public function resolveSectorActivityShift(Stock $stock, MacroStateDTO $macroState): float
+    {
+        $params = $this->resolveModelParameters($stock, [
+            ModelParam::GovernmentContractWeight->value => self::GOVERNMENT_CONTRACT_WEIGHT,
+            ModelParam::RetainerWeight->value           => self::RETAINER_WEIGHT,
+            ModelParam::ExpeditionaryWeight->value      => self::EXPEDITIONARY_WEIGHT,
+        ]);
+        $weights = [
+            'government_contracts' => $params[ModelParam::GovernmentContractWeight],
+            'corporate_retainers'  => $params[ModelParam::RetainerWeight],
+            'expeditionary_ops'    => $params[ModelParam::ExpeditionaryWeight],
+        ];
+        $totalWeight = array_sum($weights);
+        if ($totalWeight <= 0.0) {
+            return 0.0;
+        }
+
+        $shifts = $this->resolveStreamMacroShifts($stock, $macroState);
+        $activity = 0.0;
+        foreach ($weights as $key => $weight) {
+            $activity += $weight * $shifts[$key];
+        }
+
+        return $activity / $totalWeight;
+    }
+
+    /**
+     * Each stream's macro volume shift: government posts on state appropriations; corporate retainers on the
+     * boom-side gap only (guarding is a survival expense nobody cuts); expeditionary deployments on market
+     * volatility and credit spreads above their stress thresholds.
+     *
+     * @return array{government_contracts: float, corporate_retainers: float, expeditionary_ops: float}
+     */
+    private function resolveStreamMacroShifts(Stock $stock, MacroStateDTO $macroState): array
+    {
+        $govSpendShift = ($macroState->governmentSpendingIndexEma - 100.0) / 100.0;
+        $fearPremium = max(0.0, ($macroState->marketVolatilityEma - self::VIX_FEAR_THRESHOLD) * self::FEAR_PREMIUM_SCALAR);
+        $creditDistressPremium = max(0.0, ($macroState->macroCreditSpreadEma - self::CREDIT_STRESS_THRESHOLD) * self::CREDIT_STRESS_SCALAR);
+
+        return [
+            'government_contracts' => $govSpendShift * self::APPROPRIATIONS_VOLUME_SCALAR,
+            'corporate_retainers'  => max(0.0, $macroState->outputGapEma * self::CORPORATE_EXPANSION_SCALAR * $this->getOperatingCyclicality($stock)),
+            'expeditionary_ops'    => $fearPremium + $creditDistressPremium,
+        ];
+    }
+
     protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
     {
         // Resolve company-specific tuned parameters (e.g. GRIP = 80% Gov, WATCH = 60% Retainer, OSPR = 80% Expeditionary)
@@ -156,7 +211,6 @@ class SecurityProtectionBusinessModel extends StandardCorporateBusinessModel
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
         $streams = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
-        $beta = $this->getOperatingCyclicality($stock);
 
         // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
         $activeWeights = $streams->resolveActiveStreamWeights([
@@ -181,23 +235,14 @@ class SecurityProtectionBusinessModel extends StandardCorporateBusinessModel
 
         // 1. Government Contracts -> Rock Solid + Fiscal Appropriations + Cost-Plus Inflation Capture
         // Inflation running above target boosts revenue via cost-plus escalation, and state appropriations scale the baseline budget.
+        // 2. Corporate Retainers -> Mild GDP Expansion (Corporate HQ footprint expansion)
+        // 3. Expeditionary & Black-Ops -> VIX (Fear) & Credit Spreads (Geopolitical/Financial Stress)
         $inflation = $macroState->inflationEma;
         $costPlusBonus = $inflation > MacroEngine::TARGET_INFLATION
             ? ($inflation - MacroEngine::TARGET_INFLATION) * self::COST_PLUS_BONUS_SCALAR
             : 0.0;
         $govSpendShift = ($macroState->governmentSpendingIndexEma - 100.0) / 100.0;
-
-        // 2. Corporate Retainers -> Mild GDP Expansion (Corporate HQ footprint expansion)
-        // Mildly increases when the economy expands (companies build new facilities needing guards).
-        $corporateExpansionShift = max(0.0, $macroState->outputGapEma * 0.40 * $beta);
-
-        // 3. Expeditionary & Black-Ops -> VIX (Fear) & Credit Spreads (Geopolitical/Financial Stress)
-        // Thrives counter-cyclically on market panic and credit market distress.
-        $vixEma = $macroState->marketVolatilityEma;
-        $fearPremium = max(0.0, ($vixEma - self::VIX_FEAR_THRESHOLD) * self::FEAR_PREMIUM_SCALAR);
-
-        $creditSpread = $macroState->macroCreditSpreadEma;
-        $creditDistressPremium = max(0.0, ($creditSpread - self::CREDIT_STRESS_THRESHOLD) * self::CREDIT_STRESS_SCALAR);
+        $macroShifts = $this->resolveStreamMacroShifts($stock, $macroState);
 
         // --- Asymmetric Tail Risk Events ---
         $retainerMultiplier = 1.0;
@@ -217,13 +262,13 @@ class SecurityProtectionBusinessModel extends StandardCorporateBusinessModel
         // --- Clamped Tri-Stream Revenue Calculation ---
 
         // STREAM 1: Government (Rock Solid + Appropriations)
-        $govRevenue = max(0.0, $expectedRevenue * $govWeight * (1.0 + ($govZ * $baselineVol * self::GOVERNMENT_VARIANCE_SCALAR) + $costPlusBonus + ($govSpendShift * 0.30)));
+        $govRevenue = max(0.0, $expectedRevenue * $govWeight * (1.0 + ($govZ * $baselineVol * self::GOVERNMENT_VARIANCE_SCALAR) + $costPlusBonus + $macroShifts['government_contracts']));
 
         // STREAM 2: Corporate Retainers (Changes a little bit)
-        $retainerRevenue = max(0.0, $expectedRevenue * $retainerWeight * (1.0 + ($retainerZ * $baselineVol * self::RETAINER_VARIANCE_SCALAR) + $corporateExpansionShift) * $retainerMultiplier);
+        $retainerRevenue = max(0.0, $expectedRevenue * $retainerWeight * (1.0 + ($retainerZ * $baselineVol * self::RETAINER_VARIANCE_SCALAR) + $macroShifts['corporate_retainers']) * $retainerMultiplier);
 
         // STREAM 3: Expeditionary / Black-Ops (Hyper-Volatile & Counter-Cyclical)
-        $expeditionaryRevenue = max(0.0, $expectedRevenue * $expeditionaryWeight * (1.0 + ($expeditionaryZ * $baselineVol * self::EXPEDITIONARY_VARIANCE_SCALAR) + $fearPremium + $creditDistressPremium) * $expeditionaryMultiplier);
+        $expeditionaryRevenue = max(0.0, $expectedRevenue * $expeditionaryWeight * (1.0 + ($expeditionaryZ * $baselineVol * self::EXPEDITIONARY_VARIANCE_SCALAR) + $macroShifts['expeditionary_ops']) * $expeditionaryMultiplier);
 
         $streamRevenues = [
             'government_contracts' => $govRevenue,
@@ -248,7 +293,7 @@ class SecurityProtectionBusinessModel extends StandardCorporateBusinessModel
         $observableShockZ = ($govZ * $govWeight * self::GOVERNMENT_VARIANCE_SCALAR * 1.0) +
             ($retainerZ * $retainerWeight * self::RETAINER_VARIANCE_SCALAR * 0.50) +
             ($expeditionaryZ * $expeditionaryWeight * self::EXPEDITIONARY_VARIANCE_SCALAR * 0.05) +
-            ($govSpendShift * $govWeight * 0.30);
+            ($govSpendShift * $govWeight * self::APPROPRIATIONS_VOLUME_SCALAR);
         $observableShockZ *= $baselineVol;
 
         return new SectorPhysicsResult(

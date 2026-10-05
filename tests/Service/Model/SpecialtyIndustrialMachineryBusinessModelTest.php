@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Tests\Service\Model;
 
 use App\DTO\MacroStateDTO;
+use App\DTO\StreamContext;
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\SpecialtyIndustrialMachineryBusinessModel;
@@ -142,5 +143,19 @@ class SpecialtyIndustrialMachineryBusinessModelTest extends TestCase
             $delayedResult->clampedMargin,
             'Global supply chain bottlenecks (GSCPI) delay precision parts and increase variable margin drag.'
         );
+    }
+
+    public function testTheCostBaseStaffsToTheEquipmentBacklog(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('SPEC_MACH');
+        $recession = new MacroStateDTO(outputGapEma: -0.03, exchangeRateIndexEma: 100.0);
+
+        $this->assertEqualsWithDelta(0.0, $this->model->getMacroPhysics($stock, $recession)['macro_demand_shift'], 1e-12);
+        $this->assertEqualsWithDelta(0.0, $this->model->resolveSectorActivityShift($stock, $recession), 1e-12, 'A book at steady state is normal activity.');
+
+        // One quarter of equipment backlog in hand: 0.35 x (1 + 1) = 0.70 of normal work, at 0.70 of the mix = -0.21.
+        $stock->setEarningsMomentumZ([StreamContext::BACKLOG_STATE_PREFIX . 'equipment_sales' => 1.0]);
+        $this->assertEqualsWithDelta(-0.21, $this->model->resolveSectorActivityShift($stock, $recession), 1e-9);
     }
 }

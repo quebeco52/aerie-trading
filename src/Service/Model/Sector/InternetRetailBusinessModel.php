@@ -128,6 +128,45 @@ class InternetRetailBusinessModel extends StandardCorporateBusinessModel
         return $physics;
     }
 
+    /**
+     * The orders the fulfilment network is staffed to ship: the target-mix weighted cycle shift of first-party
+     * units and third-party GMV through the tollbooth. Ads carry no macro term and add only to the weight.
+     */
+    public function resolveSectorActivityShift(Stock $stock, MacroStateDTO $macroState): float
+    {
+        $params = $this->resolveModelParameters($stock, [
+            ModelParam::FirstPartyWeight->value => self::FIRST_PARTY_WEIGHT,
+            ModelParam::ThirdPartyWeight->value => self::THIRD_PARTY_WEIGHT,
+            ModelParam::DigitalAdsWeight->value => self::DIGITAL_ADS_WEIGHT,
+        ]);
+        $totalWeight = $params[ModelParam::FirstPartyWeight] + $params[ModelParam::ThirdPartyWeight] + $params[ModelParam::DigitalAdsWeight];
+        if ($totalWeight <= 0.0) {
+            return 0.0;
+        }
+
+        $shifts = $this->resolveStreamMacroShifts($stock, $macroState);
+
+        return (($params[ModelParam::FirstPartyWeight] * $shifts['first_party_retail'])
+            + ($params[ModelParam::ThirdPartyWeight] * $shifts['third_party_seller'])) / $totalWeight;
+    }
+
+    /**
+     * Each stream's macro volume shift: first-party baskets on twice the gap plus the confidence residual over
+     * it (Lemmon & Portniaguina 2006); third-party GMV on half the gap, the tollbooth vendors keep paying.
+     *
+     * @return array{first_party_retail: float, third_party_seller: float}
+     */
+    private function resolveStreamMacroShifts(Stock $stock, MacroStateDTO $macroState): array
+    {
+        $beta = $this->getOperatingCyclicality($stock);
+        $outputGap = $macroState->outputGapEma;
+
+        return [
+            'first_party_retail' => (($outputGap * 2.0) + ($macroState->sentimentResidual() * self::CONSUMER_SENTIMENT_SCALAR)) * $beta,
+            'third_party_seller' => $outputGap * 0.5 * $beta,
+        ];
+    }
+
     protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
     {
         $params = $this->resolveModelParameters($stock, [
@@ -142,7 +181,6 @@ class InternetRetailBusinessModel extends StandardCorporateBusinessModel
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
         $streams = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
-        $beta = $this->getOperatingCyclicality($stock);
 
         // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
         $activeWeights = $streams->resolveActiveStreamWeights([
@@ -162,16 +200,12 @@ class InternetRetailBusinessModel extends StandardCorporateBusinessModel
         $eventZ = $streams->generateExogenousZ('event', 0.10);
 
         // --- Macro Sensitivities ---
-        $outputGap = $macroState->outputGapEma;
-        // The gap is priced beside it, so confidence enters as its residual over the gap (Lemmon & Portniaguina 2006).
-        $sentimentShift = $macroState->sentimentResidual();
-
         // 1P Retail bears the absolute brunt of consumer recessions, and household confidence moves the basket
         // before the output gap does: a shopper who fears for their job trades down while GDP is still growing.
-        $fpMacroShift = (($outputGap * 2.0) + ($sentimentShift * self::CONSUMER_SENTIMENT_SCALAR)) * $beta;
-
-        // 3P and Ads are partially insulated, acting as a structural tollbooth
-        $tpMacroShift = $outputGap * 0.5 * $beta;
+        // 3P and Ads are partially insulated, acting as a structural tollbooth.
+        $macroShifts = $this->resolveStreamMacroShifts($stock, $macroState);
+        $fpMacroShift = $macroShifts['first_party_retail'];
+        $tpMacroShift = $macroShifts['third_party_seller'];
 
         // --- Tail Risk Events ---
         $revenueMultiplier = 1.0;

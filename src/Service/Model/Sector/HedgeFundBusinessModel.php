@@ -254,6 +254,15 @@ class HedgeFundBusinessModel extends AssetManagementBusinessModel
     }
 
     /**
+     * The root shift already carries the fund's stream-weighted macro activity into capacity utilisation, so
+     * the cost base has seen it; the asset manager's client-flow reading would count it a second time.
+     */
+    public function resolveSectorActivityShift(Stock $stock, MacroStateDTO $macroState): float
+    {
+        return 0.0;
+    }
+
+    /**
      * Revenue-weighted macro uplift analysts can forecast from published series, with the baseline stream
      * weights: the AUM market beta and broad-money shift on management fees, the output-gap tilt on
      * directional books, and the VIX regime on quant alpha. Everything driven by the fund's own alpha draws

@@ -9,6 +9,7 @@ use App\DTO\MacroStateDTO;
 use App\DTO\StreamContext;
 use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
+use App\Service\Macro\MacroEngine;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\CommunicationEquipmentBusinessModel;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
@@ -238,5 +239,25 @@ class CommunicationEquipmentBusinessModelTest extends TestCase
         $this->assertLessThan(CommunicationEquipmentBusinessModel::CONSUMER_VARIABLE_COST_RATIO, CommunicationEquipmentBusinessModel::LICENSING_VARIABLE_COST_RATIO, 'Royalties carry almost no unit cost; gateways are commodity hardware.');
         $this->assertSame(CommunicationEquipmentBusinessModel::RADIO_RND_DECAY_RATE, $this->model->getDepreciationDecayRate());
         $this->assertSame(CommunicationEquipmentBusinessModel::GENERATIONAL_PLATFORM_GAIN_RATE, $this->model->getModernizationGainRate());
+    }
+
+    public function testTheCostBaseStaffsToTheNetworkBacklogAndTerminalVolumeButNotRoyalties(): void
+    {
+        $stock = (new Stock())->setTicker('ERNE_TEST');
+        $recession = new MacroStateDTO(
+            outputGapEma: -0.03,
+            consumerSentimentIndexEma: MacroEngine::SENTIMENT_TREND_LEVEL - 10.0,
+            exchangeRateIndexEma: 100.0,
+            inventoryStockGapEma: 0.05,
+        );
+
+        $this->assertEqualsWithDelta(0.0, $this->model->getMacroPhysics($stock, $recession)['macro_demand_shift'], 1e-12);
+
+        // Terminals: -0.10 x (0.50 + 0.65) x 1.10 - 0.05 x 0.60 = -0.1565, at 0.15 of the mix = -0.023475.
+        $this->assertEqualsWithDelta(-0.023475, $this->model->resolveSectorActivityShift($stock, $recession), 1e-9);
+
+        // Network book at 1.5 quarters: 0.30 x 2.5 = 0.75 of normal work, 0.75 x -0.25 - 0.023475 = -0.210975.
+        $stock->setEarningsMomentumZ([StreamContext::BACKLOG_STATE_PREFIX . 'carrier_networks' => 1.5]);
+        $this->assertEqualsWithDelta(-0.210975, $this->model->resolveSectorActivityShift($stock, $recession), 1e-9);
     }
 }

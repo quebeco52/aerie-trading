@@ -193,6 +193,41 @@ class CommunicationEquipmentBusinessModel extends StandardCorporateBusinessModel
         return $physics;
     }
 
+    /**
+     * The volume the vendor is staffed to: the opening workload of the carrier network backlog and the consumer
+     * terminal volume, at target weights. Royalties are the licensees' shipments, not work this firm does, so
+     * the licensing desk's share of the base holds whatever handset sales do.
+     */
+    public function resolveSectorActivityShift(Stock $stock, MacroStateDTO $macroState): float
+    {
+        $params = $this->resolveModelParameters($stock, [
+            ModelParam::EnterpriseWeight->value      => self::ENTERPRISE_WEIGHT,
+            ModelParam::PatentLicensingWeight->value => self::PATENT_LICENSING_WEIGHT,
+            ModelParam::ConsumerWeight->value        => self::CONSUMER_WEIGHT,
+        ]);
+        $networkWeight = $params[ModelParam::EnterpriseWeight];
+        $consumerWeight = $params[ModelParam::ConsumerWeight];
+        $totalWeight = $networkWeight + $params[ModelParam::PatentLicensingWeight] + $consumerWeight;
+        if ($totalWeight <= 0.0) {
+            return 0.0;
+        }
+
+        $networkWorkload = StreamContext::openingWorkload($stock->getEarningsMomentumZ() ?? [], 'carrier_networks', self::NETWORK_BACKLOG_BURN_RATE);
+
+        return (($networkWeight * ($networkWorkload - 1.0)) + ($consumerWeight * $this->resolveConsumerVolumeShift($stock, $macroState))) / $totalWeight;
+    }
+
+    /** Consumer terminal volume: sentiment at the firm's cyclicality, the landed-import currency term and the distributor inventory cycle. */
+    private function resolveConsumerVolumeShift(Stock $stock, MacroStateDTO $macroState): float
+    {
+        $macroSensitivityMultiplier = self::MIN_BETA_PRICING_POWER_FLOOR + $this->resolvePricingPower($stock);
+        $inventoryCycleShift = -$macroState->inventoryStockGapEma * self::INVENTORY_CYCLE_SENSITIVITY;
+
+        return ($macroState->sentimentDeviation() * $macroSensitivityMultiplier * $this->getOperatingCyclicality($stock))
+            + $this->resolveFxDemandShift($macroState, self::CONSUMER_FX_REVENUE_EXPOSURE)
+            + $inventoryCycleShift;
+    }
+
     protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
     {
         $params = $this->resolveModelParameters($stock, [
@@ -224,7 +259,6 @@ class CommunicationEquipmentBusinessModel extends StandardCorporateBusinessModel
         $litigationZ = $streams->generateExogenousZ('litigation', 0.10);
 
         $pricingPower = $this->resolvePricingPower($stock);
-        $macroSensitivityMultiplier = self::MIN_BETA_PRICING_POWER_FLOOR + $pricingPower;
 
         // --- Carrier Capex Cycle ---
         // Accelerator: carrier budgets follow the output gap with a year's lag; an economy-wide capital overhang
@@ -293,10 +327,7 @@ class CommunicationEquipmentBusinessModel extends StandardCorporateBusinessModel
         $licensingRevenue += $settlementCatchUp;
 
         // Consumer terminals ride sentiment, the currency and the distributor inventory cycle.
-        $inventoryCycleShift = -$macroState->inventoryStockGapEma * self::INVENTORY_CYCLE_SENSITIVITY;
-        $consumerShift = ($sentimentShift * $macroSensitivityMultiplier * $beta)
-            + $this->resolveFxDemandShift($macroState, self::CONSUMER_FX_REVENUE_EXPOSURE)
-            + $inventoryCycleShift;
+        $consumerShift = $this->resolveConsumerVolumeShift($stock, $macroState);
         $consumerRevenue = max(0.0, $expectedRevenue * $consumerWeight * (1.0 + ($consumerZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR * self::CONSUMER_VARIANCE_RATIO)) + $consumerShift) * $consumerMultiplier);
 
         $streamRevenues = [

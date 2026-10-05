@@ -184,4 +184,21 @@ class InternetRetailBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta($calm['first_party_retail'] * (1.0 - $expectedDrop), $slump['first_party_retail'], 1e-6);
         $this->assertEqualsWithDelta($calm['third_party_seller'], $slump['third_party_seller'], 1e-9, 'Sentiment reaches the shopper, not the marketplace fee.');
     }
+
+    public function testTheCycleReachesTheCostBaseThroughTheStreamVolumes(): void
+    {
+        $stock = (new Stock())->setTicker('LOON_ACTIVITY')->setBeta('1.0');
+        // Confidence falls by its gap loading with the gap, so the residual over the gap is zero.
+        $sentiment = MacroEngine::SENTIMENT_TREND_LEVEL + (-0.03 * MacroEngine::SENTIMENT_GAP_LOADING);
+        $recession = new MacroStateDTO(outputGapEma: -0.03, exchangeRateIndexEma: 100.0, consumerSentimentIndexEma: $sentiment);
+
+        $this->assertEqualsWithDelta(0.0, $this->model->getMacroPhysics($stock, $recession)['macro_demand_shift'], 1e-12);
+
+        // 1.30 x (0.45 x 2 x -0.03 + 0.40 x 0.5 x -0.03) = -0.0429; ads carry no macro term.
+        $expected = InternetRetailBusinessModel::OPERATING_CYCLICALITY * (
+            (InternetRetailBusinessModel::FIRST_PARTY_WEIGHT * 2.0 * -0.03)
+            + (InternetRetailBusinessModel::THIRD_PARTY_WEIGHT * 0.5 * -0.03)
+        );
+        $this->assertEqualsWithDelta($expected, $this->model->resolveSectorActivityShift($stock, $recession), 1e-9);
+    }
 }

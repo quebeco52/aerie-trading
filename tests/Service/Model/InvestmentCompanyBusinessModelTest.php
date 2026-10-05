@@ -645,4 +645,22 @@ class InvestmentCompanyBusinessModelTest extends TestCase
             $this->assertSame(0.0, $model->getStructuralValuationDiscount($this->neutralMacro(-0.03)));
         }
     }
+
+
+    public function testTheCostBaseFollowsTheConsolidatedSubsidiariesAlone(): void
+    {
+        // Equity 1000, cash 100, stakes 600: invested capital 900, consolidated sleeve 300.
+        $stock = new Stock();
+        $stock->setTicker('TRUST_TEST');
+        $stock->setTotalEquity('1000');
+        $stock->setCorporateTreasury('100');
+        $stock->setListedStakesCarrying('600');
+        $recession = new MacroStateDTO(outputGapEma: -0.03, exchangeRateIndexEma: 100.0);
+
+        $this->assertEqualsWithDelta(0.0, $this->model->getMacroPhysics($stock, $recession)['macro_demand_shift'], 1e-12);
+
+        // Income weights 300 x 0.30 = 90, 600 x 0.035 = 21, 100 x 0.04 = 4; subsidiaries move -0.03 x 0.70 x 0.90.
+        $expected = (90.0 / 115.0) * (-0.03 * 0.70 * 0.90);
+        $this->assertEqualsWithDelta($expected, $this->model->resolveSectorActivityShift($stock, $recession), 1e-9);
+    }
 }

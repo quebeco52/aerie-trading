@@ -105,6 +105,33 @@ class MerchantHouseBusinessModel extends ConglomerateBusinessModel
         return [0.95, 0.99, 1.03, 1.03];
     }
 
+    /**
+     * The tonnage the wharves and desks are staffed to, plus terminal throughput, at the class's fixed mix.
+     * The cargo's price is invoice inflation, not tonnage, and the trade-credit float is a yield on the
+     * treasury book; neither moves the cost base.
+     */
+    public function resolveSectorActivityShift(Stock $stock, MacroStateDTO $macroState): float
+    {
+        $totalWeight = self::MERCHANT_TRADING_WEIGHT + self::DEFENSIVE_STAPLES_WEIGHT + self::CONTRARIAN_FLOAT_WEIGHT;
+
+        return ((self::MERCHANT_TRADING_WEIGHT * $this->resolveMerchantVolumeShift($macroState))
+            + (self::DEFENSIVE_STAPLES_WEIGHT * $this->resolveDefensiveVolumeShift($macroState))) / $totalWeight;
+    }
+
+    /** Physical throughput: bulk inputs on manufacturing PMI, imports on the trade balance, and the foreign end of the corridors. */
+    private function resolveMerchantVolumeShift(MacroStateDTO $macroState): float
+    {
+        return MathUtility::calculatePmiDemandShift(
+            $macroState->manufacturingPmiEma,
+            MacroEngine::PMI_BASELINE,
+            self::MERCHANT_PMI_SENSITIVITY
+        ) + MathUtility::calculateTradeBalanceShift(
+            $macroState->tradeBalanceToGdpEma,
+            MacroEngine::TRADE_BALANCE_BASELINE,
+            self::MERCHANT_TRADE_SENSITIVITY
+        ) + MathUtility::calculateForeignDemandShift($macroState->foreignOutputGapEma, self::MERCHANT_FOREIGN_SENSITIVITY);
+    }
+
     protected function calculateSectorPhysics(
         Stock $stock,
         float $expectedRevenue,
@@ -141,19 +168,11 @@ class MerchantHouseBusinessModel extends ConglomerateBusinessModel
 
         // --- Merchant Turnover: price x volume, kept apart because only price dilutes the spread ---
         $priceLift = $this->resolveMerchantPriceLift($macroState);
-        $volumeShift = MathUtility::calculatePmiDemandShift(
-            $macroState->manufacturingPmiEma,
-            MacroEngine::PMI_BASELINE,
-            self::MERCHANT_PMI_SENSITIVITY
-        ) + MathUtility::calculateTradeBalanceShift(
-            $macroState->tradeBalanceToGdpEma,
-            MacroEngine::TRADE_BALANCE_BASELINE,
-            self::MERCHANT_TRADE_SENSITIVITY
-        ) + MathUtility::calculateForeignDemandShift($macroState->foreignOutputGapEma, self::MERCHANT_FOREIGN_SENSITIVITY);
+        $volumeShift = $this->resolveMerchantVolumeShift($macroState);
         $merchantSurge = $priceLift + $volumeShift;
 
         // --- Tollbooth & Float: the parent's physics, unchanged ---
-        $tollboothMacroBoost = $outputGap * self::DEFENSIVE_MACRO_SCALAR;
+        $tollboothMacroBoost = $this->resolveDefensiveVolumeShift($macroState);
 
         $dealActivityShift = ($macroState->dealActivityIndexEma - MacroEngine::DEAL_ACTIVITY_BASELINE) / MacroEngine::DEAL_ACTIVITY_BASELINE;
         $contrarianSurge = $this->resolveContrarianFloatSurge(

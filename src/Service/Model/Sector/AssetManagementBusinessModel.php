@@ -9,6 +9,7 @@ use App\DTO\DebtExpansionAppetiteDTO;
 use App\Service\Model\BusinessModelInterface;
 
 use App\Data\ModelParam;
+use App\DTO\ModelParameters;
 use App\DTO\SectorCoverageProfile;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
@@ -267,6 +268,53 @@ class AssetManagementBusinessModel extends BaseFinancialBusinessModel
     }
 
     /**
+     * The client activity the distribution and servicing base is staffed to: net flows into the base-fee
+     * book (the cycle, M2 and money-fund migration) at its target weight. The equity-market mark moves the
+     * fee base with no client doing anything, and performance fees carry no macro term, so neither counts.
+     */
+    public function resolveSectorActivityShift(Stock $stock, \App\DTO\MacroStateDTO $macroState): float
+    {
+        $params = $this->resolveFeeParameters($stock);
+        $baseWeight = $params[ModelParam::BaseFeeWeight];
+        $totalWeight = $baseWeight + $params[ModelParam::PerformanceFeeWeight];
+        if ($totalWeight <= 0.0) {
+            return 0.0;
+        }
+
+        return ($baseWeight / $totalWeight) * $this->resolveClientFlowShift($stock, $macroState, $params[ModelParam::AumMarketBetaScalar]);
+    }
+
+    private function resolveFeeParameters(Stock $stock): ModelParameters
+    {
+        return $this->resolveModelParameters($stock, [
+            ModelParam::BaseFeeWeight->value         => self::BASE_FEE_WEIGHT,
+            ModelParam::PerformanceFeeWeight->value  => self::PERFORMANCE_FEE_WEIGHT,
+            ModelParam::AumMarketBetaScalar->value  => self::AUM_MARKET_BETA_SCALAR,
+            ModelParam::PerformanceFeeZFloor->value => self::PERFORMANCE_FEE_Z_FLOOR,
+            ModelParam::PerformanceFeeScalar->value  => self::PERFORMANCE_FEE_SCALAR,
+        ]);
+    }
+
+    /**
+     * Net client flows into the base-fee book: the cycle's net-flow half of AUM, broad-money liquidity, and
+     * cash migrating from bank deposits into the manager's money funds while it migrates.
+     */
+    private function resolveClientFlowShift(Stock $stock, \App\DTO\MacroStateDTO $macroState, float $aumBetaScalar): float
+    {
+        $aumMarketBeta = $this->resolveAumCycleFlow($stock, $macroState, $aumBetaScalar);
+        $m2InflowBoost = MathUtility::calculateBroadMoneyLiquidityShift($macroState->moneySupplyGrowthEma, sensitivity: self::M2_AUM_INFLOW_SENSITIVITY);
+        $mmfInflowBoost = max(0.0, $macroState->moneyMarketFundShare - $macroState->moneyMarketFundShareEma) * self::MMF_AUM_INFLOW_SENSITIVITY;
+
+        return $aumMarketBeta + $m2InflowBoost + $mmfInflowBoost;
+    }
+
+    /** The net-flow half of AUM: clients add money in expansions and redeem in slumps. */
+    private function resolveAumCycleFlow(Stock $stock, \App\DTO\MacroStateDTO $macroState, float $aumBetaScalar): float
+    {
+        return $macroState->outputGapEma * $this->getOperatingCyclicality($stock) * $aumBetaScalar;
+    }
+
+    /**
      * Idiosyncratic variance incorporates AUM mark-to-market appreciation/depreciation,
      * asymmetric performance fee / carried interest surges during strong fund alpha quarters,
      * institutional redemption shocks during severe market drawdowns, and structural efficiency floors.
@@ -274,13 +322,7 @@ class AssetManagementBusinessModel extends BaseFinancialBusinessModel
     protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
     {
         // Resolve company-specific tuned asset management parameters
-        $params = $this->resolveModelParameters($stock, [
-            ModelParam::BaseFeeWeight->value         => self::BASE_FEE_WEIGHT,
-            ModelParam::PerformanceFeeWeight->value  => self::PERFORMANCE_FEE_WEIGHT,
-            ModelParam::AumMarketBetaScalar->value  => self::AUM_MARKET_BETA_SCALAR,
-            ModelParam::PerformanceFeeZFloor->value => self::PERFORMANCE_FEE_Z_FLOOR,
-            ModelParam::PerformanceFeeScalar->value  => self::PERFORMANCE_FEE_SCALAR,
-        ]);
+        $params = $this->resolveFeeParameters($stock);
 
         $baseWeight      = $params[ModelParam::BaseFeeWeight];
         $perfWeight      = $params[ModelParam::PerformanceFeeWeight];
@@ -304,13 +346,9 @@ class AssetManagementBusinessModel extends BaseFinancialBusinessModel
         $baseFeeZ = $streams->generateZ('base_fee', 0.45); // Sticky recurring AUM management fees
         $alphaZ   = $streams->generateZ('alpha', 0.15); // Fund alpha / activist execution
 
-        // 1. AUM Mark-to-Market Beta & M2 Liquidity Inflows (Base Management Fee Stream):
-        // When equity/credit markets rise or fall, or systemic broad money (M2) expands, base AUM fee revenue expands or contracts.
-        $outputGap = $macroState->outputGapEma;
-        $aumMarketBeta = $outputGap * $this->getOperatingCyclicality($stock) * $aumBetaScalar;
-        $m2InflowBoost = MathUtility::calculateBroadMoneyLiquidityShift($macroState->moneySupplyGrowthEma, sensitivity: self::M2_AUM_INFLOW_SENSITIVITY);
-        // Deposits channel: cash leaving bank deposits for money funds is fee-earning AUM while it migrates.
-        $mmfInflowBoost = max(0.0, $macroState->moneyMarketFundShare - $macroState->moneyMarketFundShareEma) * self::MMF_AUM_INFLOW_SENSITIVITY;
+        // 1. AUM net client flows & mark-to-market (Base Management Fee Stream).
+        $aumMarketBeta = $this->resolveAumCycleFlow($stock, $macroState, $aumBetaScalar);
+        $clientFlowShift = $this->resolveClientFlowShift($stock, $macroState, $aumBetaScalar);
         // Mark-to-market: fee revenue is a percentage of assets, so the equity market's level against its own
         // trend moves the base directly. A run with no reported market leaves both fields at zero and the term silent.
         $marketLevelShift = 0.0;
@@ -334,7 +372,7 @@ class AssetManagementBusinessModel extends BaseFinancialBusinessModel
 
         // Blended dual-stream revenue
         $baseRevenue = max(0.0, $expectedRevenue * $baseWeight
-            * (1.0 + ($baseFeeZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + $aumMarketBeta + $marketLevelShift - $baseRedemptionAttrition + $m2InflowBoost + $mmfInflowBoost));
+            * (1.0 + ($baseFeeZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + $clientFlowShift + $marketLevelShift - $baseRedemptionAttrition));
         $perfRevenue = max(0.0, $expectedRevenue * $perfWeight
             * (1.0 + ($alphaZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + $alphaFeeBonus));
         

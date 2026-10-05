@@ -373,4 +373,26 @@ class PrivateEquityBusinessModelTest extends TestCase
             $hotDealResult->streamRevenue['carried_interest']
         );
     }
+
+
+    public function testTheDealTeamsFollowDealFlowNotTheFinancingFreezeOrTheMarks(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('PE_TEST');
+        $stock->setVolatility('0.30');
+        $stock->setTotalEquity('100.0');
+        $stock->setWholesaleDebt('50.0');
+        $recession = MacroStateDTO::fromArray([
+            'output_gap_ema' => -0.03,
+            'deal_activity_index_ema' => MacroEngine::DEAL_ACTIVITY_BASELINE,
+            'policy_rate_ema' => 0.03,
+            'high_yield_credit_spread_ema' => PrivateEquityBusinessModel::LBO_CREDIT_SPREAD_BASELINE,
+        ]);
+
+        $this->assertEqualsWithDelta(0.0, $this->model->getMacroPhysics($stock, $recession)['macro_demand_shift'], 1e-12);
+
+        // Carry 0.65 x deal flow (-0.03 x 5) x vol 0.30 x 0.15 x 2.2 x leverage amplifier (1 + 0.5 x 0.8).
+        $expected = 0.65 * (-0.03 * 5.0) * (0.30 * 0.15 * 2.2 * 1.4);
+        $this->assertEqualsWithDelta($expected, $this->model->resolveSectorActivityShift($stock, $recession), 1e-9);
+    }
 }

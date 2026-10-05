@@ -248,28 +248,70 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
         ];
     }
 
-    protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
+    /**
+     * The deal flow the deal teams are staffed to: the exit and deal-activity cycle on the carry stream at
+     * its target weight. The LBO financing freeze already reaches the cost base through the pricing-power
+     * multiplier, management fees carry no macro term, and principal investments are a mark, so none counts.
+     */
+    public function resolveSectorActivityShift(Stock $stock, \App\DTO\MacroStateDTO $macroState): float
+    {
+        $weights = $this->resolveTargetStreamWeights($stock);
+        $totalWeight = array_sum($weights);
+        if ($totalWeight <= 0.0) {
+            return 0.0;
+        }
+
+        return ($weights['carried_interest'] / $totalWeight)
+            * $this->resolveDealFlowMultiplier($macroState)
+            * $this->resolveCarryShockScale($stock, (float) $stock->getVolatility());
+    }
+
+    /** @return array<string, float> */
+    private function resolveTargetStreamWeights(Stock $stock): array
     {
         $params = $this->resolveModelParameters($stock, [
             ModelParam::ManagementFeeWeight->value        => 0.35,
             ModelParam::CarriedInterestWeight->value      => 0.65,
             ModelParam::PrincipalInvestmentsWeight->value => 0.00,
         ]);
-        $rawPrincipalWeight = $params[ModelParam::PrincipalInvestmentsWeight];
-
-        $momentum = $stock->getEarningsMomentumZ() ?? [];
-        $streams  = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
 
         $targetWeights = [
             'management_fees'  => $params[ModelParam::ManagementFeeWeight],
             'carried_interest' => $params[ModelParam::CarriedInterestWeight],
         ];
-        if ($rawPrincipalWeight > 0.0) {
-            $targetWeights['principal_investments'] = $rawPrincipalWeight;
+        if ($params[ModelParam::PrincipalInvestmentsWeight] > 0.0) {
+            $targetWeights['principal_investments'] = $params[ModelParam::PrincipalInvestmentsWeight];
         }
 
+        return $targetWeights;
+    }
+
+    /** GDP and capital-markets deal flow, asymmetric across the cycle: exits and new deals dry up faster in a bust than they surge in a boom. */
+    private function resolveDealFlowMultiplier(\App\DTO\MacroStateDTO $macroState): float
+    {
+        $outputGap = $macroState->outputGapEma;
+        $dealActivityShift = ($macroState->dealActivityIndexEma - MacroEngine::DEAL_ACTIVITY_BASELINE) / MacroEngine::DEAL_ACTIVITY_BASELINE;
+
+        return ($outputGap > 0.0 ? ($outputGap * self::DEAL_FLOW_BOOM_MULT) : ($outputGap * self::DEAL_FLOW_BUST_MULT))
+            + ($dealActivityShift * self::DEAL_ACTIVITY_EXIT_SCALAR);
+    }
+
+    /** Revenue per unit of carry economic condition: the stream's volatility, amplified by the sponsor's own leverage. */
+    private function resolveCarryShockScale(Stock $stock, float $baselineVol): float
+    {
+        $actualLeverage = (float) $stock->getTotalEquity() > 0 ? ((float) $stock->getWholesaleDebt() / (float) $stock->getTotalEquity()) : 0.0;
+        $leverageAmplifier = 1.0 + ($actualLeverage * self::CARRY_LEVERAGE_AMPLIFIER_SCALAR);
+
+        return $baselineVol * self::REVENUE_VARIANCE_SCALAR * self::CARRY_BASE_VOLATILITY_SCALAR * $leverageAmplifier;
+    }
+
+    protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
+    {
+        $momentum = $stock->getEarningsMomentumZ() ?? [];
+        $streams  = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
+
         // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
-        $activeWeights = $streams->resolveActiveStreamWeights($targetWeights);
+        $activeWeights = $streams->resolveActiveStreamWeights($this->resolveTargetStreamWeights($stock));
 
         $mgmtWeight      = $activeWeights['management_fees'];
         $carryWeight     = $activeWeights['carried_interest'];
@@ -282,9 +324,7 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
 
         // 2. GDP & Capital Markets Deal Flow Multiplier (Affects exit realizations)
         $outputGap = $macroState->outputGapEma;
-        $dealActivityShift = ($macroState->dealActivityIndexEma - MacroEngine::DEAL_ACTIVITY_BASELINE) / MacroEngine::DEAL_ACTIVITY_BASELINE;
-        $dealFlowMultiplier = ($outputGap > 0.0 ? ($outputGap * self::DEAL_FLOW_BOOM_MULT) : ($outputGap * self::DEAL_FLOW_BUST_MULT))
-            + ($dealActivityShift * self::DEAL_ACTIVITY_EXIT_SCALAR);
+        $dealFlowMultiplier = $this->resolveDealFlowMultiplier($macroState);
 
         // 3. Cost of Debt LBO Elasticity (Multiple Compression): buyout debt is priced off the HY tranche.
         $creditSpread = $macroState->highYieldCreditSpreadEma;
@@ -307,15 +347,12 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
         $blendedMultiplier = ($mgmtWeight * 1.0) + ($carryWeight * $multipleCompression) + ($principalWeight * 1.0);
         $optimalRevenue = $blendedMultiplier > 0 ? $expectedRevenue / $blendedMultiplier : $expectedRevenue;
 
-        // 5. Leverage Amplifier
-        $actualLeverage = (float) $stock->getTotalEquity() > 0 ? ((float) $stock->getWholesaleDebt() / (float) $stock->getTotalEquity()) : 0.0;
-        $leverageAmplifier = 1.0 + ($actualLeverage * self::CARRY_LEVERAGE_AMPLIFIER_SCALAR);
-
         // --- Clamped Multi-Stream Revenue ---
         $mgmtRevenue = max(0.0, $optimalRevenue * $mgmtWeight * (1.0 + ($mgmtZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR * self::MGMT_BASE_VOLATILITY_SCALAR))));
 
+        // 5. Leverage-amplified carry
         $carriedInterestRevenue = max(0.0, $optimalRevenue * $carryWeight
-            * (1.0 + ($economicCondition * ($baselineVol * self::REVENUE_VARIANCE_SCALAR * self::CARRY_BASE_VOLATILITY_SCALAR) * $leverageAmplifier))
+            * (1.0 + ($economicCondition * $this->resolveCarryShockScale($stock, $baselineVol)))
             * $multipleCompression);
 
         // Binary Cliff Check

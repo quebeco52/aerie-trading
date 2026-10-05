@@ -7,6 +7,7 @@ namespace App\Service\Model\Sector;
 use App\Data\InputOutputExposures;
 use App\Data\ModelParam;
 use App\DTO\MacroStateDTO;
+use App\DTO\ModelParameters;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
@@ -190,6 +191,57 @@ class ConglomerateBusinessModel extends StandardCorporateBusinessModel
         return $physics;
     }
 
+    /**
+     * The volume the operating subsidiaries are staffed to: industrial throughput and staples/tollbooth
+     * traffic at their target weights. The float earns a yield and a mark on the treasury book, which no
+     * plant or payroll is sized to, so it counts in the mix but carries no activity.
+     */
+    public function resolveSectorActivityShift(Stock $stock, MacroStateDTO $macroState): float
+    {
+        $params = $this->resolvePortfolioParameters($stock);
+        $industrialWeight = $params[ModelParam::IndustrialConglomerateWeight];
+        $defensiveWeight = $params[ModelParam::DefensiveStaplesWeight];
+        $totalWeight = $industrialWeight + $defensiveWeight + $params[ModelParam::ContrarianFloatWeight];
+        if ($totalWeight <= 0.0) {
+            return 0.0;
+        }
+
+        return (($industrialWeight * $this->resolveIndustrialVolumeShift($stock, $macroState))
+            + ($defensiveWeight * $this->resolveDefensiveVolumeShift($macroState))) / $totalWeight;
+    }
+
+    private function resolvePortfolioParameters(Stock $stock): ModelParameters
+    {
+        return $this->resolveModelParameters($stock, [
+            ModelParam::IndustrialConglomerateWeight->value => self::INDUSTRIAL_CONGLOMERATE_WEIGHT,
+            ModelParam::DefensiveStaplesWeight->value       => self::DEFENSIVE_STAPLES_WEIGHT,
+            ModelParam::ContrarianFloatWeight->value        => self::CONTRARIAN_FLOAT_WEIGHT,
+            ModelParam::PricingPowerIndex->value            => self::PRICING_POWER_INDEX,
+        ]);
+    }
+
+    /** Industrial throughput: the output gap and manufacturing PMI, both at the firm's floored cyclical beta. */
+    private function resolveIndustrialVolumeShift(Stock $stock, MacroStateDTO $macroState): float
+    {
+        $beta = max(self::MIN_CYCLICAL_BETA_FLOOR, $this->getOperatingCyclicality($stock));
+        $pmiShift = MathUtility::calculatePmiDemandShift(
+            $macroState->manufacturingPmiEma,
+            MacroEngine::PMI_BASELINE,
+            self::PMI_INDUSTRIAL_SENSITIVITY
+        );
+
+        return ($macroState->outputGapEma * self::INDUSTRIAL_MACRO_SCALAR * $beta) + ($pmiShift * $beta);
+    }
+
+    /**
+     * Staples volume and tollbooth throughput: defensive, but not macro-immune (industrial load, toll traffic).
+     * Protected because a merchant house's terminal estate is this stream unchanged.
+     */
+    protected function resolveDefensiveVolumeShift(MacroStateDTO $macroState): float
+    {
+        return $macroState->outputGapEma * self::DEFENSIVE_MACRO_SCALAR;
+    }
+
     protected function calculateSectorPhysics(
         Stock $stock,
         float $expectedRevenue,
@@ -199,18 +251,12 @@ class ConglomerateBusinessModel extends StandardCorporateBusinessModel
         MacroStateDTO $macroState,
         MathUtility $mathUtility
     ): SectorPhysicsResult {
-        $params = $this->resolveModelParameters($stock, [
-            ModelParam::IndustrialConglomerateWeight->value => self::INDUSTRIAL_CONGLOMERATE_WEIGHT,
-            ModelParam::DefensiveStaplesWeight->value       => self::DEFENSIVE_STAPLES_WEIGHT,
-            ModelParam::ContrarianFloatWeight->value        => self::CONTRARIAN_FLOAT_WEIGHT,
-            ModelParam::PricingPowerIndex->value            => self::PRICING_POWER_INDEX,
-        ]);
+        $params = $this->resolvePortfolioParameters($stock);
 
         $pricingPower = max(0.0, min(1.0, $params[ModelParam::PricingPowerIndex]));
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
         $streams = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
-        $beta = max(self::MIN_CYCLICAL_BETA_FLOOR, $this->getOperatingCyclicality($stock));
 
         // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
         // A stream the firm does not own stays at exactly zero through the simplex, so the portfolio a
@@ -239,16 +285,8 @@ class ConglomerateBusinessModel extends StandardCorporateBusinessModel
         $spreadLevel   = $macroState->macroCreditSpreadEma;
         $spreadImpulse = $macroState->macroCreditSpread - $macroState->macroCreditSpreadEma;
 
-        // Industrial manufacturing is pro-cyclical with GDP output gap and manufacturing PMI
-        $pmiShift = MathUtility::calculatePmiDemandShift(
-            $macroState->manufacturingPmiEma,
-            MacroEngine::PMI_BASELINE,
-            self::PMI_INDUSTRIAL_SENSITIVITY
-        );
-        $industrialMacroBoost = ($outputGap * self::INDUSTRIAL_MACRO_SCALAR * $beta) + ($pmiShift * $beta);
-
-        // Staples volume and tollbooth throughput are defensive but not macro-immune (industrial load, toll traffic).
-        $defensiveMacroBoost = $outputGap * self::DEFENSIVE_MACRO_SCALAR;
+        $industrialMacroBoost = $this->resolveIndustrialVolumeShift($stock, $macroState);
+        $defensiveMacroBoost = $this->resolveDefensiveVolumeShift($macroState);
 
         // Capital markets deal activity expands strategic acquisition & divestiture opportunities
         $dealActivityShift = ($macroState->dealActivityIndexEma - MacroEngine::DEAL_ACTIVITY_BASELINE) / MacroEngine::DEAL_ACTIVITY_BASELINE;

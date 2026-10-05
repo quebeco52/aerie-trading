@@ -101,6 +101,8 @@ class ComputerHardwareBusinessModel extends StandardCorporateBusinessModel
     public const TRADE_BALANCE_SENSITIVITY = 1.20;
     /** Export volume per unit of the foreign bloc's output gap: the customers-abroad half of the trade term. */
     public const FOREIGN_DEMAND_SENSITIVITY = 1.00;
+    /** Share of the trade-flow shift each book carries: enterprise and consumer systems split it evenly. */
+    public const TRADE_FLOW_STREAM_SHARE = 0.50;
     /** Component supply agreements fix bill-of-materials prices for about a quarter before spot moves reach the line. */
     public const INPUT_COST_LAG_YEARS = 0.25;
 
@@ -127,6 +129,49 @@ class ComputerHardwareBusinessModel extends StandardCorporateBusinessModel
         $physics['macro_demand_shift'] = 0.0;
 
         return $physics;
+    }
+
+    /**
+     * The volume the assembler is staffed to: both books' unit shifts at target weights. Every macro term in
+     * them is shipments (the cycle, currency competitiveness, trade flows, channel restocking); component
+     * prices reach the line through the input cost basket instead.
+     */
+    public function resolveSectorActivityShift(Stock $stock, MacroStateDTO $macroState): float
+    {
+        $params = $this->resolveModelParameters($stock, [
+            ModelParam::EnterpriseWeight->value => self::ENTERPRISE_WEIGHT,
+            ModelParam::ConsumerWeight->value   => self::CONSUMER_WEIGHT,
+        ]);
+        $enterpriseWeight = $params[ModelParam::EnterpriseWeight];
+        $consumerWeight = $params[ModelParam::ConsumerWeight];
+        $totalWeight = $enterpriseWeight + $consumerWeight;
+        if ($totalWeight <= 0.0) {
+            return 0.0;
+        }
+
+        $shifts = $this->resolveStreamVolumeShifts($stock, $macroState);
+
+        return (($enterpriseWeight * $shifts['enterprise_hardware']) + ($consumerWeight * $shifts['consumer_hardware'])) / $totalWeight;
+    }
+
+    /**
+     * Each book's macro unit shift: enterprise on the output gap, consumer on sentiment, both at the firm's
+     * cyclicality, plus the currency, an even share of the trade-flow term and the Metzler inventory cycle.
+     *
+     * @return array{enterprise_hardware: float, consumer_hardware: float}
+     */
+    private function resolveStreamVolumeShifts(Stock $stock, MacroStateDTO $macroState): array
+    {
+        $cycleSensitivity = (self::MIN_BETA_PRICING_POWER_FLOOR + $this->resolvePricingPower($stock)) * $this->getOperatingCyclicality($stock);
+        $tradeShift = MathUtility::calculateTradeBalanceShift($macroState->tradeBalanceToGdpEma, sensitivity: self::TRADE_BALANCE_SENSITIVITY)
+            + MathUtility::calculateForeignDemandShift($macroState->foreignOutputGapEma, sensitivity: self::FOREIGN_DEMAND_SENSITIVITY);
+        // Metzler inventory cycle: a channel overhang (positive gap) means distributors destock before reordering.
+        $commonShift = ($tradeShift * self::TRADE_FLOW_STREAM_SHARE) - ($macroState->inventoryStockGapEma * self::INVENTORY_CYCLE_SENSITIVITY);
+
+        return [
+            'enterprise_hardware' => ($macroState->outputGapEma * $cycleSensitivity) + $this->resolveFxDemandShift($macroState) + $commonShift,
+            'consumer_hardware'   => ($macroState->sentimentDeviation() * $cycleSensitivity) + $this->resolveFxDemandShift($macroState, self::CONSUMER_FX_REVENUE_EXPOSURE) + $commonShift,
+        ];
     }
 
     protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
@@ -157,16 +202,9 @@ class ComputerHardwareBusinessModel extends StandardCorporateBusinessModel
         $eventZ      = $streams->generateExogenousZ('event', 0.10);
 
         $pricingPower = $this->resolvePricingPower($stock);
-        $macroSensitivityMultiplier = self::MIN_BETA_PRICING_POWER_FLOOR + $pricingPower;
-
-        $sentimentShift = $macroState->sentimentDeviation();
-
-        $tradeShift = MathUtility::calculateTradeBalanceShift($macroState->tradeBalanceToGdpEma, sensitivity: self::TRADE_BALANCE_SENSITIVITY)
-            + MathUtility::calculateForeignDemandShift($macroState->foreignOutputGapEma, sensitivity: self::FOREIGN_DEMAND_SENSITIVITY);
-        // Metzler inventory cycle: a channel overhang (positive gap) means distributors destock before reordering.
-        $inventoryCycleShift = -$macroState->inventoryStockGapEma * self::INVENTORY_CYCLE_SENSITIVITY;
-        $enterpriseMacroVolumeShock = ($macroState->outputGapEma * $macroSensitivityMultiplier * $this->getOperatingCyclicality($stock)) + $this->resolveFxDemandShift($macroState) + ($tradeShift * 0.50) + $inventoryCycleShift;
-        $consumerMacroVolumeShock = ($sentimentShift * $macroSensitivityMultiplier * $this->getOperatingCyclicality($stock)) + $this->resolveFxDemandShift($macroState, self::CONSUMER_FX_REVENUE_EXPOSURE) + ($tradeShift * 0.50) + $inventoryCycleShift;
+        $volumeShifts = $this->resolveStreamVolumeShifts($stock, $macroState);
+        $enterpriseMacroVolumeShock = $volumeShifts['enterprise_hardware'];
+        $consumerMacroVolumeShock = $volumeShifts['consumer_hardware'];
 
         // Tail Risk Events
         $enterpriseMultiplier = 1.0;

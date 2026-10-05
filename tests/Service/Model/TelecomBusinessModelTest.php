@@ -233,4 +233,16 @@ class TelecomBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta($expectedIndex, $run(MacroEngine::NATURAL_UNEMPLOYMENT + $excess), 1e-9);
         $this->assertEqualsWithDelta(1.0, $run(MacroEngine::NATURAL_UNEMPLOYMENT - 0.01), 1e-9, 'A tight labor market does not create subscribers who already have a phone.');
     }
+
+    public function testTheCycleReachesTheCostBaseThroughEquipmentVolumeOnly(): void
+    {
+        $stock = (new Stock())->setTicker('LOON_ACTIVITY')->setBeta('1.0');
+        $recession = new MacroStateDTO(outputGapEma: -0.03, exchangeRateIndexEma: 100.0);
+
+        $this->assertEqualsWithDelta(0.0, $this->model->getMacroPhysics($stock, $recession)['macro_demand_shift'], 1e-12);
+
+        // Equipment 0.15 x (1.5 x 0.60 x -0.03); the ARPU downgrade on subscriptions is price and stays out.
+        $expected = TelecomBusinessModel::EQUIPMENT_WEIGHT * (1.5 * TelecomBusinessModel::OPERATING_CYCLICALITY * -0.03);
+        $this->assertEqualsWithDelta($expected, $this->model->resolveSectorActivityShift($stock, $recession), 1e-9);
+    }
 }

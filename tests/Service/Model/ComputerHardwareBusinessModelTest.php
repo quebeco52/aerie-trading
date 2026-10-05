@@ -103,4 +103,22 @@ class ComputerHardwareBusinessModelTest extends TestCase
         $this->assertArrayNotHasKey('metals', ComputerHardwareBusinessModel::INPUT_COST_EXPOSURES);
         $this->assertEqualsWithDelta($baseResult->clampedMargin, $metalsSpikeResult->clampedMargin, 1e-12);
     }
+
+    public function testTheCostBaseStaffsToBothBooksUnitShifts(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('HW_GAP');
+        $recession = new MacroStateDTO(outputGapEma: -0.03, consumerSentimentIndexEma: \App\Service\Macro\MacroEngine::SENTIMENT_TREND_LEVEL - 10.0, exchangeRateIndexEma: 100.0);
+
+        $this->assertEqualsWithDelta(0.0, $this->model->getMacroPhysics($stock, $recession)['macro_demand_shift'], 1e-12);
+
+        // (0.80 + 0.45) x 1.30 = 1.625 per unit: 0.60 x (-0.03 x 1.625) + 0.40 x (-0.10 x 1.625) = -0.09425.
+        $shift = $this->model->resolveSectorActivityShift($stock, $recession);
+        $this->assertEqualsWithDelta(-0.09425, $shift, 1e-9);
+
+        $mathMock = $this->createStub(MathUtility::class);
+        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+        $booked = $this->model->computeActualFinancials($stock, 1000.0, 0.35, 300.0, 0.0, $recession, $mathMock)->actualRevenue / 1000.0 - 1.0;
+        $this->assertEqualsWithDelta($booked, $shift, 1e-9, 'The base staffs to the units the books ship.');
+    }
 }
