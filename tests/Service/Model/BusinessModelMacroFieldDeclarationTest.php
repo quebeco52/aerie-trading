@@ -27,7 +27,7 @@ use ReflectionMethod;
 final class BusinessModelMacroFieldDeclarationTest extends TestCase
 {
     /** @var list<string> */
-    private const OPERATING_METHODS = ['calculateSectorPhysics', 'getMacroPhysics', 'calculateInterestIncome', 'processPassiveLiabilityGrowth', 'getForwardCreditLossMultiplier'];
+    private const OPERATING_METHODS = ['calculateSectorPhysics', 'getMacroPhysics', 'calculateInterestIncome', 'processPassiveLiabilityGrowth', 'getForwardCreditLossMultiplier', 'getFixedCostFactor'];
 
     /** Valuation-only reads feeding WACC alone, excluded by the interface contract. */
     private const VALUATION_ONLY_FIELDS = ['equity_risk_premium', 'corporate_tax_rate', 'policy_rate'];
@@ -114,6 +114,12 @@ final class BusinessModelMacroFieldDeclarationTest extends TestCase
         // (FX_REVENUE_EXPOSURE), so invoking the helper is a genuine coupling to the exchange rate.
         if ($this->invokesHelper($modelClass, 'resolveFxDemandShift(')) {
             $actual[] = 'exchange_rate_index_ema';
+            $actual = array_values(array_unique($actual));
+        }
+
+        // The rules on extraction are trait code as well, applied only by the models that extract.
+        if ($this->invokesHelper($modelClass, 'underExtractionRules(')) {
+            $actual[] = 'extraction_stringency';
             $actual = array_values(array_unique($actual));
         }
 

@@ -121,6 +121,46 @@ trait StandardOperatingPhysicsTrait
         return 0.0;
     }
 
+    /** A firm no rule costs productivity carries its committed base at the inputs and wages it is priced at. */
+    public function getFixedCostFactor(MacroStateDTO $macroState): float
+    {
+        return 1.0;
+    }
+
+    /** The annualized revenue times the share of it the rules on extraction last scaled (underExtractionRules()); zero for a model that never applies them. */
+    public function annualExtractionCostBase(Stock $stock): float
+    {
+        return (float) $stock->getTotalRevenue() * (float) (($stock->getEarningsMomentumZ() ?? [])[FinancialConstants::STATE_EXTRACTION_COST_SHARE] ?? 0.0);
+    }
+
+    /** The annualized revenue times the share of it, less its variable cost, the model last reported moving with turnover; zero for a model that reports none. */
+    public function annualStampDutyTurnoverBase(Stock $stock): float
+    {
+        return (float) $stock->getTotalRevenue() * (float) (($stock->getEarningsMomentumZ() ?? [])[FinancialConstants::STATE_STAMP_DUTY_TURNOVER_SHARE] ?? 0.0);
+    }
+
+    /**
+     * A per-unit cost ratio under the rules on extraction in force: stricter rules cost productivity, and every unit
+     * costs that much more to produce. The committed base carries the same factor (getFixedCostFactor() of a model that
+     * extracts). Keeps the share of revenue the rules scale, both parts before them, for the market to price a change
+     * in the rules against (annualExtractionCostBase()).
+     *
+     * @param float $perUnitCostRatio The cost ratio the rules scale, at the prices the cost base was sized for.
+     * @param float $priceRelative    Realized price over the prices the cost base was sized for.
+     * @param float $fixedCosts       The quarter's committed cost base, the rules' factor in it.
+     * @param float $actualRevenue    The quarter's revenue.
+     */
+    protected function underExtractionRules(StreamContext $streams, MacroStateDTO $macroState, float $perUnitCostRatio, float $priceRelative, float $fixedCosts, float $actualRevenue): float
+    {
+        $factor = MathUtility::calculateExtractionCostFactor($macroState->extractionStringency);
+        $streams->registerState(
+            FinancialConstants::STATE_EXTRACTION_COST_SHARE,
+            MathUtility::getInstance()->calculatePerUnitCostRatio($perUnitCostRatio, $priceRelative) + ($actualRevenue > 0.0 ? $fixedCosts / $factor / $actualRevenue : 0.0)
+        );
+
+        return $perUnitCostRatio * $factor;
+    }
+
     // --- Input Cost Basket ---
     /** Share of an input price shock a firm with full pricing power recovers in its own prices; the rest lands on margin (incomplete pass-through, Gopinath & Itskhoki 2010). */
     public const MAX_INPUT_COST_PASS_THROUGH = 0.80;

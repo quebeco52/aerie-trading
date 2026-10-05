@@ -62,8 +62,8 @@ class MarketPricingContext
         public float $targetPayoutRatio = 0.0,
         /** Share of the gap to its target dividend the firm closes each quarter (Lintner 1956). */
         public float $dividendAdjustmentSpeed = 1.0,
-        /** What the bank levy is charged on, per share (OperatingStrategyInterface::annualBankLevyBase()); zero for a firm that is not a bank. */
-        public float $bankLevyBasePerShare = 0.0
+        /** @var array<string, float> What each law the firm's accounts answer to is charged on or moves, per share, keyed by lever (App\Service\Market\PolicyCapitalization::earningsGap()); empty for a firm with none. */
+        public array $policyBasesPerShare = []
     ) {}
 
     /**
@@ -129,7 +129,11 @@ class MarketPricingContext
             tangibleBookValuePerShare: $stock->getTangibleEquity() / $shares,
             targetPayoutRatio: $stock->getPolicyPayoutRatio(),
             dividendAdjustmentSpeed: (float) $stock->getDividendSpeed(),
-            bankLevyBasePerShare: $strategy->annualBankLevyBase($stock) / $shares
+            policyBasesPerShare: array_filter([
+                'bankLevyRate' => $strategy->annualBankLevyBase($stock) / $shares,
+                'extractionStringency' => $strategy->annualExtractionCostBase($stock) / $shares,
+                'stampDutyRate' => $strategy->annualStampDutyTurnoverBase($stock) / $shares,
+            ], static fn (float $base): bool => $base > 0.0)
         );
     }
 }

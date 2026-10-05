@@ -5,6 +5,7 @@ namespace App\Service\Macro;
 use App\Data\MacroFieldRegistry;
 use App\Service\Macro\Subsystem\AssetMarketSubsystem;
 use App\Service\Macro\Subsystem\MacroAggregateSubsystem;
+use App\Service\Math\MathUtility;
 
 /**
  * The macro engine's mutable working copy of the state vector, advanced in place every tick.
@@ -385,22 +386,24 @@ class MacroState
     // tolerate has drifted above its target.
     public float $authorityConcession;
     public float $inflationAnchorDrift;
-    // The corporate tax shift and the bank levy as the tax rate and the trailing year's earnings carry them, and the
-    // laws the market expects from the next government, this tick and the tick before.
+    // The laws as the tax rate and the trailing year's earnings carry them, and the laws the sitting government's coming
+    // budget and the next government's first will pass, by lever, this tick and the tick before.
     public float $corporateTaxShiftRealized;
     public float $corporateTaxShiftEmbodied;
     public float $bankLevyEmbodied;
-    public float $sittingCorporateTaxPolicyShift;
-    public float $sittingBankLevyRate;
+    public float $extractionCostFactorEmbodied;
+    public float $stampDutyVolumeFactorEmbodied;
+    /** @var array<string, float> */
+    public array $sittingLevers;
     public float $sittingPolicyFrom;
-    public float $previousSittingCorporateTaxPolicyShift;
-    public float $previousSittingBankLevyRate;
+    /** @var array<string, float> */
+    public array $previousSittingLevers;
     public float $previousSittingPolicyFrom;
-    public float $expectedCorporateTaxPolicyShift;
-    public float $expectedBankLevyRate;
+    /** @var array<string, float> */
+    public array $expectedLevers;
     public float $expectedPolicyFrom;
-    public float $previousExpectedCorporateTaxPolicyShift;
-    public float $previousExpectedBankLevyRate;
+    /** @var array<string, float> */
+    public array $previousExpectedLevers;
     public float $previousExpectedPolicyFrom;
     // The CET1 requirement the Financial Regulator has in force on the District's banks, the capital built toward it and
     // the buffer, and the two together as the last tick required them.
@@ -516,7 +519,7 @@ class MacroState
 
             $carried[$field] = true;
             $state->$field = match ($field) {
-                'sectorZ', 'sectorDemandZ' => is_array($data[$key]) ? array_map('floatval', $data[$key]) : [],
+                'sectorZ', 'sectorDemandZ', 'sittingLevers', 'previousSittingLevers', 'expectedLevers', 'previousExpectedLevers' => is_array($data[$key]) ? array_map('floatval', $data[$key]) : [],
                 'qeActive', 'qtActive' => (bool) $data[$key],
                 'eventType' => (string) $data[$key],
                 default => (float) $data[$key],
@@ -533,6 +536,12 @@ class MacroState
         }
         if (!isset($carried['bankLevyEmbodied'])) {
             $state->bankLevyEmbodied = $state->bankLevyRate;
+        }
+        if (!isset($carried['extractionCostFactorEmbodied'])) {
+            $state->extractionCostFactorEmbodied = MathUtility::calculateExtractionCostFactor($state->extractionStringency);
+        }
+        if (!isset($carried['stampDutyVolumeFactorEmbodied'])) {
+            $state->stampDutyVolumeFactorEmbodied = MathUtility::calculateStampDutyVolumeFactor($state->stampDutyRate);
         }
         if (!isset($carried['balanceSheetIntensity'])) {
             // Balance sheet intensity was recorded as a one-sided qe_intensity before QT existed.

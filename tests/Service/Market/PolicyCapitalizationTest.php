@@ -7,6 +7,7 @@ namespace App\Tests\Service\Market;
 use App\DTO\MacroStateDTO;
 use App\Service\Macro\MacroEngine;
 use App\Service\Market\PolicyCapitalization as Policy;
+use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Politics\PoliticsEngine;
 use PHPUnit\Framework\TestCase;
@@ -35,20 +36,40 @@ class PolicyCapitalizationTest extends TestCase
     /** With the laws carried in the earnings expected to hold for good, nothing is repriced. */
     public function testLawsAlreadyCarriedAreNotPricedAgain(): void
     {
-        $macro = $this->macro(inForce: Policy::LONG_RUN_CORPORATE_TAX_SHIFT, levy: Policy::LONG_RUN_BANK_LEVY_RATE);
+        $macro = $this->macro(
+            ['corporateTax' => Policy::LONG_RUN_CORPORATE_TAX_SHIFT, 'bankLevyRate' => Policy::LONG_RUN_BANK_LEVY_RATE, 'extractionStringency' => $this->stringencyAt(Policy::LONG_RUN_EXTRACTION_COST_FACTOR), 'stampDutyRate' => $this->dutyAt(Policy::LONG_RUN_STAMP_DUTY_VOLUME_FACTOR)],
+        );
 
         $this->assertEqualsWithDelta(0.0, Policy::corporateTaxShiftGap($macro, self::CAP_RATE), 1e-15);
         $this->assertEqualsWithDelta(0.0, Policy::bankLevyGap($macro, self::CAP_RATE), 1e-15);
-        $this->assertSame(100.0, Policy::reprice(100.0, 0.21, 0.21, 0.0, 50.0, self::CAP_RATE));
+        $this->assertEqualsWithDelta(0.0, Policy::extractionCostGap($macro, self::CAP_RATE), 1e-12);
+        $this->assertEqualsWithDelta(0.0, Policy::stampDutyVolumeGap($macro, self::CAP_RATE), 1e-12);
+        $this->assertSame(100.0, Policy::reprice(100.0, 0.21, 0.21, 0.0, self::CAP_RATE));
     }
 
     /** A tax rise the market expects counts for the share of the firm's value after the next government's first budget, until its term is over. */
     public function testAnExpectedRiseCountsForTheValueAfterItTakesEffect(): void
     {
         $inForce = Policy::LONG_RUN_CORPORATE_TAX_SHIFT;
-        $macro = $this->macro(inForce: $inForce, expected: $inForce + 0.04, from: 12.5, time: 10.0);
-        $this->assertEqualsWithDelta($this->taxPath(0.04, 0.0, 2.5), Policy::corporateTaxShiftGap($macro, self::CAP_RATE), 1e-15);
-        $this->assertLessThan(Policy::corporateTaxShiftGap($this->macro(inForce: $inForce, expected: $inForce + 0.04, from: 10.5, time: 10.0), self::CAP_RATE), Policy::corporateTaxShiftGap($macro, self::CAP_RATE), 'Nearer, it counts for more.');
+        $macro = $this->macro(['corporateTax' => $inForce], expected: ['corporateTax' => $inForce + 0.04], from: 12.5, time: 10.0);
+        $this->assertEqualsWithDelta($this->path(0.04, 0.0, 2.5, Policy::CORPORATE_TAX_TERM_PERSISTENCE, MacroEngine::FISCAL_ADJUSTMENT_SPEED), Policy::corporateTaxShiftGap($macro, self::CAP_RATE), 1e-15);
+        $nearer = $this->macro(['corporateTax' => $inForce], expected: ['corporateTax' => $inForce + 0.04], from: 10.5, time: 10.0);
+        $this->assertLessThan(Policy::corporateTaxShiftGap($nearer, self::CAP_RATE), Policy::corporateTaxShiftGap($macro, self::CAP_RATE), 'Nearer, it counts for more.');
+    }
+
+    /**
+     * The rules on extraction are priced the same way, measured as the unit costs feel them: the strictest rules the next
+     * government is expected to pass count by their cost factor's rise from its first budget, charged in full at once,
+     * drifting back toward the long-run factor after its term.
+     */
+    public function testExpectedExtractionRulesCountByTheirCostFactor(): void
+    {
+        $longRun = $this->stringencyAt(Policy::LONG_RUN_EXTRACTION_COST_FACTOR);
+        $macro = $this->macro(['extractionStringency' => $longRun], expected: ['extractionStringency' => 1.0], from: 12.5, time: 10.0);
+        $rise = MathUtility::calculateExtractionCostFactor(1.0) - Policy::LONG_RUN_EXTRACTION_COST_FACTOR;
+
+        $this->assertEqualsWithDelta($this->path($rise, 0.0, 2.5, Policy::EXTRACTION_COST_TERM_PERSISTENCE), Policy::extractionCostGap($macro, self::CAP_RATE), 1e-12);
+        $this->assertGreaterThan(0.0, Policy::extractionCostGap($macro, self::CAP_RATE));
     }
 
     /** A law the market foresaw does not move the price when it is passed: the gap is the same either side of the budget that passes it, and fades only as the earnings take it in. */
@@ -56,20 +77,28 @@ class PolicyCapitalizationTest extends TestCase
     {
         $old = Policy::LONG_RUN_CORPORATE_TAX_SHIFT;
         $new = $old + 0.04;
-        $before = $this->macro(inForce: $old, expected: $new, from: 10.0, time: 10.0);
-        $after = $this->macro(inForce: $new, expected: $new, from: 10.0, time: 10.0, realized: $old, embodied: $old);
+        $before = $this->macro(['corporateTax' => $old], expected: ['corporateTax' => $new], from: 10.0, time: 10.0);
+        $after = $this->macro(['corporateTax' => $new], expected: ['corporateTax' => $new], from: 10.0, time: 10.0, realized: $old, embodied: ['corporateTax' => $old]);
 
         $this->assertEqualsWithDelta(Policy::corporateTaxShiftGap($before, self::CAP_RATE), Policy::corporateTaxShiftGap($after, self::CAP_RATE), 1e-15);
 
         // Once the earnings carry it, only the drift back to the long-run law after the term is left to price.
-        $takenIn = $this->macro(inForce: $new, expected: $new, from: 10.0, time: 10.0, realized: $new, embodied: $new);
-        $this->assertEqualsWithDelta($this->taxPath(0.0, 0.04, 0.0), Policy::corporateTaxShiftGap($takenIn, self::CAP_RATE), 1e-15);
+        $takenIn = $this->macro(['corporateTax' => $new], expected: ['corporateTax' => $new], from: 10.0, time: 10.0, realized: $new, embodied: ['corporateTax' => $new]);
+        $this->assertEqualsWithDelta($this->path(0.0, 0.04, 0.0, Policy::CORPORATE_TAX_TERM_PERSISTENCE, MacroEngine::FISCAL_ADJUSTMENT_SPEED), Policy::corporateTaxShiftGap($takenIn, self::CAP_RATE), 1e-15);
         $this->assertLessThan(0.0, Policy::corporateTaxShiftGap($takenIn, self::CAP_RATE));
 
-        // The levy likewise, charged in full from the day it passes.
-        $levyBefore = $this->macro(levy: 0.0, expectedLevy: 0.002, from: 10.0, time: 10.0);
-        $levyAfter = $this->macro(levy: 0.002, expectedLevy: 0.002, from: 10.0, time: 10.0, levyEmbodied: 0.0);
-        $this->assertEqualsWithDelta(Policy::bankLevyGap($levyBefore, self::CAP_RATE), Policy::bankLevyGap($levyAfter, self::CAP_RATE), 1e-15);
+        // The levy, the rules on extraction and the duty likewise, each reaching the accounts in full from the day it passes.
+        foreach (['bankLevyRate' => [0.0, 0.002], 'extractionStringency' => [0.0, 1.0], 'stampDutyRate' => [FinancialConstants::STAMP_DUTY_RATE, 0.002]] as $lever => [$was, $is]) {
+            $foreseen = $this->macro([$lever => $was], expected: [$lever => $is], from: 10.0, time: 10.0);
+            $passed = $this->macro([$lever => $is], expected: [$lever => $is], from: 10.0, time: 10.0, embodied: [$lever => $was]);
+            $gap = match ($lever) {
+                'bankLevyRate' => Policy::bankLevyGap(...),
+                'extractionStringency' => Policy::extractionCostGap(...),
+                'stampDutyRate' => Policy::stampDutyVolumeGap(...),
+            };
+            $this->assertNotEqualsWithDelta(0.0, $gap($foreseen, self::CAP_RATE), 1e-6, $lever);
+            $this->assertEqualsWithDelta($gap($foreseen, self::CAP_RATE), $gap($passed, self::CAP_RATE), 1e-15, $lever);
+        }
     }
 
     /** The sitting government's coming budget is priced before it passes, so the round that passes it moves nothing. */
@@ -82,9 +111,9 @@ class PolicyCapitalizationTest extends TestCase
             corporateTaxPolicyShift: $inForce,
             corporateTaxShiftRealized: $old,
             corporateTaxShiftEmbodied: $old,
-            sittingCorporateTaxPolicyShift: $new,
+            sittingLevers: ['corporateTax' => $new],
             sittingPolicyFrom: $from,
-            previousSittingCorporateTaxPolicyShift: $new,
+            previousSittingLevers: ['corporateTax' => $new],
             previousSittingPolicyFrom: $from,
         );
 
@@ -98,15 +127,28 @@ class PolicyCapitalizationTest extends TestCase
         );
     }
 
-    /** A bank is repriced by the present value of the levy it expects beyond the one it pays; a firm with nothing levied is not. */
-    public function testABankPaysThePresentValueOfTheExpectedLevy(): void
+    /**
+     * What the other laws expected do to a year's earnings: a bank pays the levy expected beyond the one it pays, not
+     * deductible; a miner the extra cost the rules expected put on its units, and a broker gains the turnover a duty
+     * expected to fall gives back, both after tax. A firm the laws do not reach is not repriced.
+     */
+    public function testTheOtherLawsMoveEarningsByWhatTheyAreChargedOn(): void
     {
-        $repriced = Policy::reprice(100.0, 0.21, 0.21, 0.001, 2000.0, self::CAP_RATE);
-        $this->assertEqualsWithDelta(100.0 - (0.001 * 2000.0 / self::CAP_RATE), $repriced, 1e-12);
-        $this->assertSame(100.0, Policy::reprice(100.0, 0.21, 0.21, 0.001, 0.0, self::CAP_RATE));
+        $levied = $this->macro(['bankLevyRate' => Policy::LONG_RUN_BANK_LEVY_RATE], expected: ['bankLevyRate' => Policy::LONG_RUN_BANK_LEVY_RATE + 0.001], from: 11.0, time: 10.0);
+        $this->assertEqualsWithDelta(-Policy::bankLevyGap($levied, self::CAP_RATE) * 2000.0, Policy::earningsGap($levied, ['bankLevyRate' => 2000.0], 0.21, self::CAP_RATE), 1e-12);
+        $this->assertLessThan(0.0, Policy::earningsGap($levied, ['bankLevyRate' => 2000.0], 0.21, self::CAP_RATE));
+        $this->assertSame(0.0, Policy::earningsGap($levied, [], 0.21, self::CAP_RATE));
 
-        $taxed = Policy::reprice(100.0, 0.21, 0.25, 0.0, 0.0, self::CAP_RATE);
-        $this->assertEqualsWithDelta(100.0 * 0.75 / 0.79, $taxed, 1e-12, 'After-tax earnings scale from the rate carried to the one expected.');
+        $strict = $this->macro(['extractionStringency' => 0.0], expected: ['extractionStringency' => 1.0], from: 11.0, time: 10.0);
+        $this->assertEqualsWithDelta(-0.79 * Policy::extractionCostGap($strict, self::CAP_RATE) * 50.0, Policy::earningsGap($strict, ['extractionStringency' => 50.0], 0.21, self::CAP_RATE), 1e-12);
+        $this->assertLessThan(0.0, Policy::earningsGap($strict, ['extractionStringency' => 50.0], 0.21, self::CAP_RATE));
+
+        $cut = $this->macro(['stampDutyRate' => 0.002], expected: ['stampDutyRate' => FinancialConstants::STAMP_DUTY_RATE], from: 11.0, time: 10.0);
+        $this->assertEqualsWithDelta(0.79 * Policy::stampDutyVolumeGap($cut, self::CAP_RATE) * 30.0, Policy::earningsGap($cut, ['stampDutyRate' => 30.0], 0.21, self::CAP_RATE), 1e-12);
+        $this->assertGreaterThan(0.0, Policy::earningsGap($cut, ['stampDutyRate' => 30.0], 0.21, self::CAP_RATE), 'A cut expected gives the broker back turnover.');
+
+        $this->assertEqualsWithDelta(100.0 - (2.0 / self::CAP_RATE), Policy::reprice(100.0, 0.21, 0.21, -2.0, self::CAP_RATE), 1e-12, 'An earnings gap is worth its perpetuity.');
+        $this->assertEqualsWithDelta(100.0 * 0.75 / 0.79, Policy::reprice(100.0, 0.21, 0.25, 0.0, self::CAP_RATE), 1e-12, 'After-tax earnings scale from the rate carried to the one expected.');
     }
 
     /** The forecast as it stood the tick before is read back, so a revision can be told from the price's drift. */
@@ -118,61 +160,76 @@ class PolicyCapitalizationTest extends TestCase
             corporateTaxPolicyShift: $inForce,
             corporateTaxShiftRealized: $inForce,
             corporateTaxShiftEmbodied: $inForce,
-            expectedCorporateTaxPolicyShift: $inForce + 0.04,
+            expectedLevers: ['corporateTax' => $inForce + 0.04],
             expectedPolicyFrom: 12.5,
-            previousExpectedCorporateTaxPolicyShift: $inForce,
+            previousExpectedLevers: ['corporateTax' => $inForce],
             previousExpectedPolicyFrom: 12.5,
         );
 
         $this->assertGreaterThan(0.0, Policy::corporateTaxShiftGap($revised, self::CAP_RATE));
         $this->assertEqualsWithDelta(
-            Policy::corporateTaxShiftGap($this->macro(inForce: $inForce, expected: $inForce, from: 12.5, time: 10.0), self::CAP_RATE),
+            Policy::corporateTaxShiftGap($this->macro(['corporateTax' => $inForce], expected: ['corporateTax' => $inForce], from: 12.5, time: 10.0), self::CAP_RATE),
             Policy::corporateTaxShiftGap($revised, self::CAP_RATE, previous: true),
             1e-15
         );
     }
 
     /**
-     * The tax path's gap by brute force: a law changed by $change from $untilNext, $departure from the long-run law from
-     * then on, each later term keeping the measured persistence of it, as a sum over the terms (the class's closed form).
+     * A law's gap by brute force: changed by $change from $untilNext, $departure from the long-run law from then on, each
+     * later term keeping the measured persistence of it, as a sum over the terms (the class's closed form).
      */
-    private function taxPath(float $change, float $alreadyAway, float $untilNext): float
+    private function path(float $change, float $alreadyAway, float $untilNext, float $persistence, float $speed = INF): float
     {
-        $speed = MacroEngine::FISCAL_ADJUSTMENT_SPEED;
         $term = PoliticsEngine::ELECTION_TERM_YEARS;
-        $rho = Policy::CORPORATE_TAX_TERM_PERSISTENCE;
         $departure = $change + $alreadyAway;
         $gap = $change * MathUtility::perpetuityShareAfter(self::CAP_RATE, $untilNext, $speed);
         for ($k = 1; $k < 400; ++$k) {
-            $gap += $departure * (($rho ** $k) - ($rho ** ($k - 1))) * MathUtility::perpetuityShareAfter(self::CAP_RATE, $untilNext + ($k * $term), $speed);
+            $gap += $departure * (($persistence ** $k) - ($persistence ** ($k - 1))) * MathUtility::perpetuityShareAfter(self::CAP_RATE, $untilNext + ($k * $term), $speed);
         }
 
         return $gap;
     }
 
-    private function macro(
-        float $inForce = 0.0,
-        ?float $expected = null,
-        float $from = -1.0,
-        float $time = 0.0,
-        ?float $realized = null,
-        ?float $embodied = null,
-        float $levy = 0.0,
-        ?float $expectedLevy = null,
-        ?float $levyEmbodied = null,
-    ): MacroStateDTO {
+    /** The stringency whose cost factor is the given one. */
+    private function stringencyAt(float $factor): float
+    {
+        return (1.0 - (1.0 / $factor)) / FinancialConstants::ENVIRONMENTAL_REGULATION_TFP_LOSS;
+    }
+
+    /** The duty whose turnover factor is the given one. */
+    private function dutyAt(float $factor): float
+    {
+        return FinancialConstants::STAMP_DUTY_RATE - (log($factor) / (2.0 * FinancialConstants::STAMP_DUTY_VOLUME_SEMI_ELASTICITY));
+    }
+
+    /**
+     * The laws in force, expected and carried, by lever: a law expected or carried that is not given is the one in force,
+     * a law in force not given the founding one.
+     *
+     * @param array<string, float> $inForce
+     * @param array<string, float> $expected
+     * @param array<string, float> $embodied
+     */
+    private function macro(array $inForce, array $expected = [], float $from = -1.0, float $time = 0.0, ?float $realized = null, array $embodied = []): MacroStateDTO
+    {
+        $law = $inForce + ['corporateTax' => 0.0, 'bankLevyRate' => 0.0, 'extractionStringency' => 0.0, 'stampDutyRate' => FinancialConstants::STAMP_DUTY_RATE];
+        $expected += $law;
+        $embodied += $law;
+
         return new MacroStateDTO(
             totalTime: $time,
-            corporateTaxPolicyShift: $inForce,
-            bankLevyRate: $levy,
-            corporateTaxShiftRealized: $realized ?? $inForce,
-            corporateTaxShiftEmbodied: $embodied ?? $inForce,
-            bankLevyEmbodied: $levyEmbodied ?? $levy,
-            expectedCorporateTaxPolicyShift: $expected ?? $inForce,
-            expectedBankLevyRate: $expectedLevy ?? $levy,
+            corporateTaxPolicyShift: $law['corporateTax'],
+            bankLevyRate: $law['bankLevyRate'],
+            extractionStringency: $law['extractionStringency'],
+            stampDutyRate: $law['stampDutyRate'],
+            corporateTaxShiftRealized: $realized ?? $law['corporateTax'],
+            corporateTaxShiftEmbodied: $embodied['corporateTax'],
+            bankLevyEmbodied: $embodied['bankLevyRate'],
+            extractionCostFactorEmbodied: MathUtility::calculateExtractionCostFactor($embodied['extractionStringency']),
+            stampDutyVolumeFactorEmbodied: MathUtility::calculateStampDutyVolumeFactor($embodied['stampDutyRate']),
+            expectedLevers: $expected,
             expectedPolicyFrom: $from,
-            previousExpectedCorporateTaxPolicyShift: $expected ?? $inForce,
-            previousExpectedBankLevyRate: $expectedLevy ?? $levy,
+            previousExpectedLevers: $expected,
             previousExpectedPolicyFrom: $from,
         );
     }

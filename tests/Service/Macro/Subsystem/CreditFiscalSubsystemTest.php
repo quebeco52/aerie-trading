@@ -1823,12 +1823,14 @@ class CreditFiscalSubsystemTest extends TestCase
         $this->assertTrue(is_finite($unfunded->primaryDeficitToGdp), 'With no fund there is no scale, and nothing is booked.');
     }
 
-    /** The tax rate takes in a legislated shift at its own speed, and the trailing year's earnings carry it half a year later on average; a levy reaches them the same way. */
+    /** The tax rate takes in a legislated shift at its own speed, and the trailing year's earnings carry it half a year later on average; a levy, the rules on extraction and the stamp duty reach them the same way. */
     public function testTheEarningsCarryTheLawsAfterTheRateDoes(): void
     {
         $state = new MacroState();
         $state->corporateTaxPolicyShift = 0.04;
         $state->bankLevyRate = 0.002;
+        $state->extractionStringency = 1.0;
+        $state->stampDutyRate = 0.002;
         $fiscal = new CreditFiscalSubsystem(new MathUtility());
         $rate = $state->corporateTaxRate;
         $dt = 1.0 / 252.0;
@@ -1840,6 +1842,9 @@ class CreditFiscalSubsystemTest extends TestCase
         $this->assertEqualsWithDelta(0.04 * (1.0 - exp(-MacroEngine::FISCAL_ADJUSTMENT_SPEED)), $state->corporateTaxShiftRealized, 2e-4);
         $this->assertLessThan($state->corporateTaxShiftRealized, $state->corporateTaxShiftEmbodied);
         $this->assertGreaterThan(0.0, $state->corporateTaxShiftEmbodied);
-        $this->assertEqualsWithDelta(0.002 * (1.0 - exp(-1.0 / CreditFiscalSubsystem::TRAILING_EARNINGS_MEAN_LAG_YEARS)), $state->bankLevyEmbodied, 2e-5);
+        $carried = 1.0 - exp(-1.0 / CreditFiscalSubsystem::TRAILING_EARNINGS_MEAN_LAG_YEARS);
+        $this->assertEqualsWithDelta(0.002 * $carried, $state->bankLevyEmbodied, 2e-5);
+        $this->assertEqualsWithDelta(1.0 + ((MathUtility::calculateExtractionCostFactor(1.0) - 1.0) * $carried), $state->extractionCostFactorEmbodied, 1e-2 * (MathUtility::calculateExtractionCostFactor(1.0) - 1.0));
+        $this->assertEqualsWithDelta(1.0 + ((MathUtility::calculateStampDutyVolumeFactor(0.002) - 1.0) * $carried), $state->stampDutyVolumeFactorEmbodied, 1e-2 * (1.0 - MathUtility::calculateStampDutyVolumeFactor(0.002)));
     }
 }

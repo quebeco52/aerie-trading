@@ -165,16 +165,17 @@ final class ElectionForecast
      * @param array<string, array<string, float>> $positions Positions by party and axis.
      * @param list<string>                        $statusQuo The outgoing cabinet.
      * @param array<string, string>               $blocs     The blocs declared for the vote.
+     * @param list<string>                        $fallen    The cabinet that fell between votes, which cannot be seated again as it was.
      * @return list<array{cabinet: list<string>, support: list<string>, chance: float}>
      */
-    public static function cabinetOdds(array $seats, array $shares, array $positions, array $statusQuo, array $blocs): array
+    public static function cabinetOdds(array $seats, array $shares, array $positions, array $statusQuo, array $blocs, array $fallen = []): array
     {
         $order = CoalitionFormation::bySize($seats, $shares);
         if (($seats[$order[0]] ?? 0) >= AerieDiet::MAJORITY_SEATS) {
             return [['cabinet' => [$order[0]], 'support' => [], 'chance' => 1.0]];
         }
 
-        $options = CoalitionFormation::options($seats, $positions, $blocs);
+        $options = array_values(array_filter(CoalitionFormation::options($seats, $positions, $blocs), static fn(array $option): bool => $option['cabinet'] !== $fallen));
         $utilities = CoalitionFormation::utilities($options, $seats, $positions, $statusQuo, $order[0], $blocs);
         $top = max($utilities);
         $weights = array_map(static fn(float $utility): float => exp($utility - $top), $utilities);
@@ -190,7 +191,9 @@ final class ElectionForecast
 
     /**
      * The laws the sitting government will pass at its next budget round, on the Diet as it stands (PoliticsEngine::
-     * enactBudget()); a caretaker, or a government in its first round, passes none yet, so the laws in force stand.
+     * enactBudget()). While the parties talk after a cabinet falls between votes, the sitting government is the one the
+     * talks will seat, weighed by its odds on the seats as they stand, the cabinet that fell excluded as the talks
+     * exclude it; after a vote the talks' government is the forecast's, and the caretaker passes nothing until then.
      *
      * @return array<string, float>
      */
@@ -198,7 +201,13 @@ final class ElectionForecast
     {
         $standing = PoliticsEngine::standingLevers($state);
         if ($state->coalitionTakesOfficeAt >= 0.0) {
-            return $standing;
+            if ($state->talksStartedAt === $state->lastElectionAt) {
+                return $standing;
+            }
+            $seats = array_map('intval', $state->dietSeats);
+            $odds = self::cabinetOdds($seats, $state->dietVoteShares, $state->partyPositions, [], $state->dietBlocs, AerieDiet::governingParties($state->governingCoalition));
+
+            return self::tally([['seats' => $seats, 'shares' => $state->dietVoteShares, 'odds' => $odds]], 1.0, $state->partyPositions, $standing, $debtToGdp)['levers'];
         }
 
         return PoliticsEngine::budget(
@@ -224,6 +233,21 @@ final class ElectionForecast
             $state->coalitionTakesOfficeAt >= 0.0 => max($state->totalTime, $state->talksStartedAt + $talks),
             default => $state->lastGovernmentFormedAt,
         };
+        $round = MacroEngine::BUDGET_ROUND_PERIOD_YEARS;
+
+        return (floor(($inOffice / $round) + 1e-9) + 1.0) * $round;
+    }
+
+    /**
+     * When the sitting government's coming budget falls: the next round; while the parties talk after a cabinet falls
+     * between votes, the first round after the talks' government is expected to take office.
+     */
+    public static function sittingTakesEffect(PoliticsState|PoliticsStateDTO $state): float
+    {
+        $inOffice = $state->totalTime;
+        if ($state->coalitionTakesOfficeAt >= 0.0 && $state->talksStartedAt !== $state->lastElectionAt) {
+            $inOffice = max($inOffice, $state->talksStartedAt + (CoalitionFormation::FORMATION_MEAN_DAYS / FinancialConstants::DAYS_PER_YEAR));
+        }
         $round = MacroEngine::BUDGET_ROUND_PERIOD_YEARS;
 
         return (floor(($inOffice / $round) + 1e-9) + 1.0) * $round;

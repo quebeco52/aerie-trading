@@ -163,6 +163,12 @@ class BrokerageBusinessModel extends BaseFinancialBusinessModel
         // Structural Efficiency Floor: Total Operating Costs (Fixed + Variable) / Revenue >= MIN_EFFICIENCY_RATIO.
         $minVariableMargin = max(0.01, self::MIN_EFFICIENCY_RATIO - ($fixedCosts / max(1.0, $actualRevenue)));
         $clampedMargin = $this->clampMargin($realizedVariableMargin, $minVariableMargin);
+        // What the commissions leave over their variable cost, at the founding duty, as a share of revenue: what the
+        // market prices a change in the duty against (annualStampDutyTurnoverBase()).
+        $streams->registerState(
+            FinancialConstants::STATE_STAMP_DUTY_TURNOVER_SHARE,
+            $actualRevenue > 0.0 ? $tradingRevenue / $dutyVolumeFactor * (1.0 - $clampedMargin) / $actualRevenue : 0.0
+        );
 
         $eventType = null;
         if ($vixEma > self::VIX_EXTREME_THRESHOLD) {

@@ -39,14 +39,12 @@ final readonly class GovernmentPolicyDTO
         public ?float $reserveFundEquityShare = null,
         /** 1 while the Monetary Authority is giving ground to the cabinet's pressure, else 0; null before the Authority has formed. */
         public ?float $authorityConcession = null,
-        /** The corporate tax shift the sitting government will pass at its next budget round, and the bank levy, and when that round falls; null before it has been read. */
-        public ?float $sittingCorporateTaxPolicyShift = null,
-        public ?float $sittingBankLevyRate = null,
+        /** @var array<string, float>|null The levers the sitting government will pass at its next budget round, keyed as App\Service\Politics\PoliticsEngine::LEVER_FIELDS; null before they have been read. */
+        public ?array $sittingLevers = null,
+        /** When that round falls; null before it has been read. */
         public ?float $sittingPolicyFrom = null,
-        /** The corporate tax shift the market expects from the next government's first budget (App\Service\Politics\ElectionForecast); null before it has a forecast. */
-        public ?float $expectedCorporateTaxPolicyShift = null,
-        /** The bank levy the market expects from it; null before it has a forecast. */
-        public ?float $expectedBankLevyRate = null,
+        /** @var array<string, float>|null The levers the market expects from the next government's first budget (App\Service\Politics\ElectionForecast), keyed the same way; null before it has a forecast. */
+        public ?array $expectedLevers = null,
         /** When the market expects that budget: the first round after the next government takes office; null before it has a forecast. */
         public ?float $expectedPolicyFrom = null,
     ) {}

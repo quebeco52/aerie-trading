@@ -107,11 +107,11 @@ class GovernmentPolicyTest extends TestCase
         $this->assertLessThan($firm->policyRate - 0.003, $giving->policyRate);
     }
 
-    /** The market's forecast goes in as handed over, the one before it kept for the tick, so a revision can be seen; with no forecast the laws in force are expected to stand. */
+    /** The market's forecast goes in as handed over, the one before it kept for the tick, so a revision can be seen; with no forecast none is carried. */
     public function testTheMarketsForecastGoesInWithTheOneBefore(): void
     {
         $state = new MacroState();
-        $forecast = static fn(?float $tax, ?float $levy, ?float $from): GovernmentPolicyDTO => new GovernmentPolicyDTO(
+        $forecast = static fn(?array $levers, ?float $from): GovernmentPolicyDTO => new GovernmentPolicyDTO(
             corporateTaxPolicyShift: 0.01,
             importTariffRate: 0.0,
             laborForceGrowthRate: MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE,
@@ -122,25 +122,27 @@ class GovernmentPolicyTest extends TestCase
             stampDutyRate: FinancialConstants::STAMP_DUTY_RATE,
             bankLevyRate: 0.0005,
             electionPulse: 0.0,
-            expectedCorporateTaxPolicyShift: $tax,
-            expectedBankLevyRate: $levy,
+            expectedLevers: $levers,
             expectedPolicyFrom: $from,
         );
 
-        $this->enactPolicyDto($state, $forecast(null, null, null));
-        $this->assertSame(0.01, $state->expectedCorporateTaxPolicyShift);
-        $this->assertSame(0.0005, $state->expectedBankLevyRate);
+        $this->enactPolicyDto($state, $forecast(null, null));
+        $this->assertSame([], $state->expectedLevers);
         $this->assertSame(-1.0, $state->expectedPolicyFrom);
 
-        $this->enactPolicyDto($state, $forecast(0.04, 0.002, 8.5));
-        $this->assertSame(0.04, $state->expectedCorporateTaxPolicyShift);
+        $levers = ['corporateTax' => 0.04, 'bankLevyRate' => 0.002, 'extractionStringency' => 0.5, 'stampDutyRate' => 0.001];
+        $this->enactPolicyDto($state, $forecast($levers, 8.5));
+        $this->assertSame($levers, $state->expectedLevers);
         $this->assertSame(8.5, $state->expectedPolicyFrom);
-        $this->assertSame(0.01, $state->previousExpectedCorporateTaxPolicyShift);
+        $this->assertSame([], $state->previousExpectedLevers);
         $this->assertSame(-1.0, $state->previousExpectedPolicyFrom);
 
-        $this->enactPolicyDto($state, $forecast(0.04, 0.002, 8.5));
-        $this->assertSame(0.04, $state->previousExpectedCorporateTaxPolicyShift, 'No revision, nothing to reprice.');
-        $this->assertSame(0.002, $state->previousExpectedBankLevyRate);
+        $this->enactPolicyDto($state, $forecast($levers, 8.5));
+        $this->assertSame($levers, $state->previousExpectedLevers, 'No revision, nothing to reprice.');
+        $this->assertSame(8.5, $state->previousExpectedPolicyFrom);
+
+        // The lever maps survive the trip through Redis.
+        $this->assertSame($levers, MacroState::fromArray($state->toArray())->previousExpectedLevers);
     }
 
     /** A state from before the lags has its earnings already carrying the laws in force. */
@@ -149,12 +151,22 @@ class GovernmentPolicyTest extends TestCase
         $payload = (new MacroState())->toArray();
         $payload['corporate_tax_policy_shift'] = 0.03;
         $payload['bank_levy_rate'] = 0.001;
-        unset($payload['corporate_tax_shift_realized'], $payload['corporate_tax_shift_embodied'], $payload['bank_levy_embodied']);
+        $payload['extraction_stringency'] = 0.5;
+        $payload['stamp_duty_rate'] = 0.002;
+        unset(
+            $payload['corporate_tax_shift_realized'],
+            $payload['corporate_tax_shift_embodied'],
+            $payload['bank_levy_embodied'],
+            $payload['extraction_cost_factor_embodied'],
+            $payload['stamp_duty_volume_factor_embodied'],
+        );
 
         $state = MacroState::fromArray($payload);
         $this->assertSame(0.03, $state->corporateTaxShiftRealized);
         $this->assertSame(0.03, $state->corporateTaxShiftEmbodied);
         $this->assertSame(0.001, $state->bankLevyEmbodied);
+        $this->assertSame(MathUtility::calculateExtractionCostFactor(0.5), $state->extractionCostFactorEmbodied);
+        $this->assertSame(MathUtility::calculateStampDutyVolumeFactor(0.002), $state->stampDutyVolumeFactorEmbodied);
     }
 
     private static function policy(?float $concession): GovernmentPolicyDTO

@@ -13,7 +13,6 @@ use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
 use App\Service\Macro\MacroEngine;
 use App\Service\Macro\Subsystem\CommodityLogisticsSubsystem;
-use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
 
 /**
@@ -252,8 +251,7 @@ class OilGasProducerBusinessModel extends StandardCorporateBusinessModel
         // slumping revenue line and fall as a share of a booming one. Stricter rules on extraction cost productivity,
         // and every barrel costs that much more to lift.
         $inputCostDrag = $this->resolveInputCostDrag($stock, $macroState, $streams, $this->resolvePricingPower($stock), $realizedVariableMargin);
-        $extractionRules = MathUtility::getInstance()->calculateProductivityLossCostFactor(FinancialConstants::ENVIRONMENTAL_REGULATION_TFP_LOSS * $macroState->extractionStringency);
-        $perBarrelCostRatio = (($realizedVariableMargin + $inputCostDrag) * $extractionRules) + $disasterPenalty;
+        $perBarrelCostRatio = $this->underExtractionRules($streams, $macroState, $realizedVariableMargin + $inputCostDrag, $priceRelative, $fixedCosts, $actualRevenue) + $disasterPenalty;
         $clampedMargin = $this->clampMargin(MathUtility::getInstance()->calculatePerUnitCostRatio($perBarrelCostRatio, $priceRelative));
 
         $hedgeGain = $expectedRevenue * $liquidsShare * $oilVolume * $hedgeRatio * ($hedgedStrike - $oilSpot) * (1.0 + $basisShift);
@@ -325,6 +323,12 @@ class OilGasProducerBusinessModel extends StandardCorporateBusinessModel
     protected function getFairValueBookWeight(float $normalizedEps): float
     {
         return $normalizedEps < 0 ? self::TROUGH_BOOK_WEIGHT : self::MID_CYCLE_BOOK_WEIGHT;
+    }
+
+    /** Stricter rules on extraction cost the whole operation productivity, so the committed base costs that much more per unit of capacity too (Greenstone, List & Syverson 2012 measure the loss on all inputs). */
+    public function getFixedCostFactor(MacroStateDTO $macroState): float
+    {
+        return MathUtility::calculateExtractionCostFactor($macroState->extractionStringency);
     }
 
     /**

@@ -73,13 +73,13 @@ final class OilGasProducerBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta(0.598, $modifier, 0.001);
     }
 
-    private function report(Stock $stock, MacroStateDTO $macro, float $variableMargin = 0.13, float $z = 0.0): ActualFinancialsDTO
+    private function report(Stock $stock, MacroStateDTO $macro, float $variableMargin = 0.13, float $z = 0.0, float $fixedCosts = 0.0): ActualFinancialsDTO
     {
         return $this->model->computeActualFinancials(
             $stock,
             expectedRevenue: 100.0,
             realizedVariableMargin: $variableMargin,
-            fixedCosts: 0.0,
+            fixedCosts: $fixedCosts,
             baselineVol: 0.20,
             macroState: $macro,
             mathUtility: $this->fixedDraws($z)
@@ -231,5 +231,24 @@ final class OilGasProducerBusinessModelTest extends TestCase
 
         $this->assertEqualsWithDelta($founding->actualRevenue, $strict->actualRevenue, 1e-9);
         $this->assertEqualsWithDelta($founding->actualVariableCosts / (1.0 - 0.048), $strict->actualVariableCosts, 1e-9);
+    }
+
+    /** What the market prices a change in the rules against is the cost they scale, unit costs and committed base alike, at any crude price: the strictest rules add the base times the factor's rise. */
+    public function testTheMarketsBaseIsTheCostTheRulesScale(): void
+    {
+        $factor = MathUtility::calculateExtractionCostFactor(1.0);
+        $this->assertSame($factor, $this->model->getFixedCostFactor($this->macro(crude: 100.0, macro: ['extractionStringency' => 1.0])));
+
+        foreach ([60.0, 100.0, 150.0] as $crude) {
+            $founding = $this->report($this->producer(), $this->macro(crude: $crude), fixedCosts: 50.0);
+            $strict = $this->report($this->producer(), $this->macro(crude: $crude, macro: ['extractionStringency' => 1.0]), fixedCosts: 50.0 * $factor);
+            $stock = $this->producer()->setTotalRevenue((string) (4.0 * $founding->actualRevenue))->setEarningsMomentumZ($founding->streamZ);
+
+            $this->assertEqualsWithDelta(
+                ($strict->actualVariableCosts + (50.0 * $factor)) - ($founding->actualVariableCosts + 50.0),
+                $this->model->annualExtractionCostBase($stock) / 4.0 * ($factor - 1.0),
+                1e-6
+            );
+        }
     }
 }

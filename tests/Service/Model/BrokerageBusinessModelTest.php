@@ -273,4 +273,28 @@ class BrokerageBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta(0.9, $taxed->streamRevenue['trading'] / $founding->streamRevenue['trading'], 1e-3);
         $this->assertEqualsWithDelta($founding->streamRevenue['advisory'], $taxed->streamRevenue['advisory'], 1e-9);
     }
+
+    /**
+     * What the market prices a change in the duty against is what the commissions leave over their variable cost: the
+     * year's revenue times the share the report keeps, so a duty that thins turnover takes that base times the factor's
+     * fall off the year's earnings before fixed costs.
+     */
+    public function testTheMarketsBaseIsWhatTheCommissionsLeave(): void
+    {
+        $mathMock = $this->createStub(MathUtility::class);
+        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+        $duty = \App\Service\Math\FinancialConstants::STAMP_DUTY_RATE + 0.001;
+        $contribution = static fn (\App\DTO\ActualFinancialsDTO $report): float => $report->actualRevenue - $report->actualVariableCosts;
+
+        $founding = $this->model->computeActualFinancials((new Stock())->setTicker('ROOK'), 1000.0, 0.35, 100.0, 0.0, new MacroStateDTO(marketVolatilityEma: 0.20), $mathMock);
+        $taxed = $this->model->computeActualFinancials((new Stock())->setTicker('ROOK'), 1000.0, 0.35, 100.0, 0.0, new MacroStateDTO(marketVolatilityEma: 0.20, stampDutyRate: $duty), $mathMock);
+        $stock = (new Stock())->setTicker('ROOK')->setTotalRevenue((string) (4.0 * $founding->actualRevenue))->setEarningsMomentumZ($founding->streamZ);
+
+        $this->assertEqualsWithDelta(
+            $contribution($taxed) - $contribution($founding),
+            $this->model->annualStampDutyTurnoverBase($stock) / 4.0 * (MathUtility::calculateStampDutyVolumeFactor($duty) - 1.0),
+            1e-6
+        );
+        $this->assertSame(0.0, $this->model->annualStampDutyTurnoverBase($stock->setEarningsMomentumZ(null)), 'Before its first report nothing is known to move with turnover.');
+    }
 }

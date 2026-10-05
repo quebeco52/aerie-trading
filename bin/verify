@@ -1,0 +1,84 @@
+#!/usr/bin/env bash
+# Checks the working tree against HEAD without Docker: PHPStan on the changed PHP files, then the Fast suite, listing
+# every failure rather than stopping at the first.
+#
+#   bin/verify            PHPStan, then every test file that ran under a second in the last full run, plus the slow
+#                         ones written for a changed class (FooTest.php for Foo.php) or changed themselves
+#   bin/verify --full     PHPStan, then the whole Fast suite (~3 min), and records each file's time for the quick run
+#   bin/verify --phpstan  PHPStan on the changed files only
+#
+# Controller tests need MySQL and are left out of both runs. The quick run skips the long-run realism tests unless
+# their own class changed; run --full before committing.
+set -uo pipefail
+
+cd "$(dirname "$0")/.." || exit 2
+root=$PWD
+mode=${1:-quick}
+times=var/cache/verify/test-file-seconds.tsv
+slow_seconds=1
+
+mapfile -t changed < <({
+    git diff --name-only --diff-filter=d HEAD -- 'src/*.php' 'tests/*.php'
+    git ls-files --others --exclude-standard -- 'src/*.php' 'tests/*.php'
+} | sort -u)
+
+status=0
+if (( ${#changed[@]} == 0 )); then
+    echo "PHPStan: no changed PHP files"
+elif out=$(php vendor/bin/phpstan analyse --memory-limit=1G --no-progress --error-format=raw "${changed[@]}" 2>&1); then
+    echo "PHPStan: ${#changed[@]} changed files clean"
+else
+    echo "PHPStan: errors in the changed files"
+    grep -v '^Note: Using configuration' <<< "$out"
+    status=1
+fi
+[[ $mode == --phpstan ]] && exit $status
+
+# phpunit.dist.xml stops at the first defect and has no command-line override, so run from a copy that does not,
+# with its paths made absolute (a relative bootstrap resolves against the config's own directory).
+tmp=$(mktemp -d "${TMPDIR:-/tmp}/verify.XXXXXX")
+trap 'rm -rf "$tmp"' EXIT
+sed -e 's/stopOnDefect="true"/stopOnDefect="false"/' \
+    -e "s#noNamespaceSchemaLocation=\"#noNamespaceSchemaLocation=\"$root/#" \
+    -e "s#bootstrap=\"#bootstrap=\"$root/#" \
+    -e "s#cacheDirectory=\"#cacheDirectory=\"$root/#" \
+    -e "s#<directory>#<directory>$root/#g" \
+    -e "s#<file>#<file>$root/#g" \
+    phpunit.dist.xml > "$tmp/phpunit.xml"
+phpunit=(php vendor/bin/phpunit -c "$tmp/phpunit.xml" --testsuite Fast --no-progress --colors=never)
+
+if [[ $mode == --full || ! -s $times ]]; then
+    [[ $mode == --full ]] || echo "No test timings yet, so running the whole suite once to record them"
+    echo "Tests: Fast suite (~3 min)"
+    "${phpunit[@]}" --exclude-filter Controller --log-junit "$tmp/junit.xml"
+    tests=$?
+    mkdir -p "$(dirname "$times")"
+    php -r '$t = [];
+        foreach (simplexml_load_file($argv[1])->xpath("//testcase") as $c) { $t[(string) $c["file"]] = ($t[(string) $c["file"]] ?? 0.0) + (float) $c["time"]; }
+        foreach ($t as $file => $seconds) { echo $file, "\t", round($seconds, 3), "\n"; }' "$tmp/junit.xml" > "$times"
+    exit $(( status || tests ))
+fi
+
+# The slow files a change calls for: the test named after each changed class, and any changed test file.
+declare -A wanted=()
+for f in "${changed[@]}"; do
+    case $f in
+        tests/*Test.php) wanted["$root/$f"]=1 ;;
+        src/*) while IFS= read -r t; do wanted["$root/$t"]=1; done < <(find tests -name "$(basename "$f" .php)Test.php") ;;
+    esac
+done
+
+printf '%s\n' "${!wanted[@]}" > "$tmp/wanted"
+"${phpunit[@]}" --list-test-files | sed -n 's/^ - //p' | grep -vE '/tests/(Controller|Panther)/' > "$tmp/all"
+# A file with no recorded time is new, so it runs.
+skipped=$(awk -F'\t' -v slow="$slow_seconds" -v out="$tmp/files" '
+    FILENAME == ARGV[1] { t[$1] = $2; next }
+    FILENAME == ARGV[2] { w[$1] = 1; next }
+    { if (($0 in w) || !($0 in t) || t[$0] < slow) print > out; else skipped++ }
+    END { print skipped + 0 }' "$times" "$tmp/wanted" "$tmp/all")
+
+echo "Tests: $(wc -l < "$tmp/files") files; $skipped slow ones left for --full"
+"${phpunit[@]}" --test-files-file "$tmp/files"
+tests=$?
+
+exit $(( status || tests ))

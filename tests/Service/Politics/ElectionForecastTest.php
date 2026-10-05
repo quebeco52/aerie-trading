@@ -70,6 +70,56 @@ class ElectionForecastTest extends TestCase
         $this->assertSame([['cabinet' => [Diet::CIVIC], 'support' => [], 'chance' => 1.0]], $alone);
     }
 
+    /**
+     * A cabinet that falls between votes is replaced within weeks, not at the next vote: while the parties talk, the
+     * coming budget is the talks' government's, each cabinet weighed by the odds the talks seat it with, the one that
+     * fell excluded as the talks exclude it, due the round after the talks are expected to end. After a vote the
+     * caretaker passes nothing; the forecast weighs those talks.
+     */
+    public function testACabinetThatFallsBetweenVotesIsReplacedInTheComingBudget(): void
+    {
+        $seats = Politics::dHondt(Diet::SEED_VOTE_SHARES, Diet::SEATS);
+        $fallen = Diet::governingParties(Diet::SEED_COALITION);
+        $odds = ElectionForecast::cabinetOdds($seats, Diet::SEED_VOTE_SHARES, Diet::HOME_POSITIONS, [], Diet::SEED_BLOCS, $fallen);
+        $this->assertNotContains($fallen, array_column($odds, 'cabinet'));
+        $this->assertEqualsWithDelta(1.0, array_sum(array_column($odds, 'chance')), 1e-12);
+
+        $draws = MathUtility::ownStream(78);
+        $runs = 1200;
+        $seen = [];
+        for ($run = 0; $run < $runs; ++$run) {
+            $talks = CoalitionFormation::talks($seats, Diet::SEED_VOTE_SHARES, Diet::HOME_POSITIONS, [], Diet::SEED_BLOCS, $draws, $fallen);
+            $key = implode('+', $talks['cabinet']) . '|' . implode('+', $talks['support']);
+            $seen[$key] = ($seen[$key] ?? 0) + 1;
+        }
+        usort($odds, static fn(array $a, array $b): int => $b['chance'] <=> $a['chance']);
+        $option = $odds[0];
+        $key = implode('+', $option['cabinet']) . '|' . implode('+', $option['support']);
+        $this->assertEqualsWithDelta($option['chance'], ($seen[$key] ?? 0) / $runs, 4.0 * sqrt($option['chance'] * (1.0 - $option['chance']) / $runs), $key);
+
+        $state = new PoliticsState();
+        $state->dietSeats = $seats;
+        $state->totalTime = 6.2;
+        $state->lastElectionAt = 4.0;
+        $state->talksStartedAt = 6.2;
+        $state->coalitionTakesOfficeAt = 6.3;
+        $standing = Politics::standingLevers($state);
+        $expected = 0.0;
+        foreach ($odds as $option) {
+            $expected += $option['chance'] * Politics::budget($option['cabinet'], $option['support'], $seats, $state->partyPositions, $standing, 0.6)['levers']['corporateTax'];
+        }
+        // Within the weight of the cabinets too unlikely to work out, which the read leaves out.
+        $this->assertEqualsWithDelta($expected, ElectionForecast::sittingBudget($state, 0.6)['corporateTax'], 1e-4);
+        $this->assertNotEqualsWithDelta($standing['corporateTax'], ElectionForecast::sittingBudget($state, 0.6)['corporateTax'], 1e-3, 'The talks\' government is expected to change the law.');
+        $endOfTalks = 6.2 + (CoalitionFormation::FORMATION_MEAN_DAYS / \App\Service\Math\FinancialConstants::DAYS_PER_YEAR);
+        $this->assertEqualsWithDelta((floor($endOfTalks / MacroEngine::BUDGET_ROUND_PERIOD_YEARS) + 1.0) * MacroEngine::BUDGET_ROUND_PERIOD_YEARS, ElectionForecast::sittingTakesEffect($state), 1e-9);
+
+        $state->talksStartedAt = 4.0;
+        $state->totalTime = 4.1;
+        $this->assertSame($standing, ElectionForecast::sittingBudget($state, 0.6), 'After a vote the caretaker passes nothing.');
+        $this->assertEqualsWithDelta(4.5, ElectionForecast::sittingTakesEffect($state), 1e-9);
+    }
+
     /** The laws forecast take effect at the first budget after their government takes office: half a year after a vote, its talks being shorter than a round. */
     public function testTheLawsTakeEffectAtTheNewGovernmentsFirstBudget(): void
     {
@@ -134,21 +184,20 @@ class ElectionForecastTest extends TestCase
     public function testThePolicyCarriesTheExpectedLaws(): void
     {
         $state = new PoliticsState();
-        $this->assertNull(\App\DTO\PoliticsStateDTO::fromState($state)->policy()->expectedCorporateTaxPolicyShift);
+        $this->assertNull(\App\DTO\PoliticsStateDTO::fromState($state)->policy()->expectedLevers);
 
         $state->totalTime = 6.2;
         $state->forecastFor = 8.0;
         $state->forecastAt = 6.2;
-        $state->forecastLevers = ['corporateTax' => 0.03, 'bankLevyRate' => 0.002] + Politics::standingLevers($state);
+        $state->forecastLevers = ['corporateTax' => 0.03, 'bankLevyRate' => 0.002, 'extractionStringency' => 0.5] + Politics::standingLevers($state);
         $policy = \App\DTO\PoliticsStateDTO::fromState($state)->policy();
-        $this->assertSame(0.03, $policy->expectedCorporateTaxPolicyShift);
-        $this->assertSame(0.002, $policy->expectedBankLevyRate);
+        $this->assertSame($state->forecastLevers, $policy->expectedLevers);
         $this->assertEqualsWithDelta(8.5, $policy->expectedPolicyFrom, 1e-9);
-        $this->assertNull($policy->sittingCorporateTaxPolicyShift, 'The sitting government\'s budget is read each tick, not yet here.');
+        $this->assertNull($policy->sittingLevers, 'The sitting government\'s budget is read each tick, not yet here.');
 
         ElectionForecast::advance($state, 0.6);
         $policy = \App\DTO\PoliticsStateDTO::fromState($state)->policy();
-        $this->assertSame($state->sittingLevers['corporateTax'], $policy->sittingCorporateTaxPolicyShift);
+        $this->assertSame($state->sittingLevers, $policy->sittingLevers);
         $this->assertEqualsWithDelta(6.5, $policy->sittingPolicyFrom, 1e-9, 'The next budget round.');
     }
 

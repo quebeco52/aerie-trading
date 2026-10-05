@@ -434,7 +434,7 @@ class MarketEngine
             $ctx->tangibleBookValuePerShare,
             $ctx->targetPayoutRatio,
             $ctx->dividendAdjustmentSpeed,
-            $ctx->bankLevyBasePerShare
+            $ctx->policyBasesPerShare
         );
 
         $perceivedFairValue = $fundamentalState['perceived_fair_value'];
@@ -542,7 +542,7 @@ class MarketEngine
      * @param float|null $tangibleBookValuePerShare Book equity less goodwill per share; a financial's P/B leg is struck on it.
      * @param float $targetPayoutRatio   The payout ratio the firm's dividend policy steers to.
      * @param float $dividendAdjustmentSpeed Share of the gap to its target dividend the firm closes each quarter.
-     * @param float $bankLevyBasePerShare What the bank levy is charged on, per share; zero for a firm that is not a bank.
+     * @param array<string, float> $policyBasesPerShare What each law the firm's accounts answer to is charged on or moves, per share, keyed by lever.
      * @return array{perceived_fair_value: float, dynamic_reversion: float, policy_repricing: float, analyst_targets: array}
      */
     private function evaluateFundamentalState(
@@ -573,7 +573,7 @@ class MarketEngine
         ?float $tangibleBookValuePerShare = null,
         float $targetPayoutRatio = 0.0,
         float $dividendAdjustmentSpeed = 1.0,
-        float $bankLevyBasePerShare = 0.0
+        array $policyBasesPerShare = []
     ): array {
 
         $strategy = \App\Data\Sectors::getBusinessModelStrategy($businessModel);
@@ -707,8 +707,8 @@ class MarketEngine
         $policyRepricing = 1.0;
         if ($macroState !== null) {
             $capRate = max(PolicyCapitalization::MIN_CAP_RATE, $hurdleRate - $expectedGrowth);
-            $repriced = $this->repriceForPolicy($fairValue, $macroState, $strategy, $bankLevyBasePerShare, $capRate, false);
-            $policyRepricing = $repriced / $this->repriceForPolicy($fairValue, $macroState, $strategy, $bankLevyBasePerShare, $capRate, true);
+            $repriced = $this->repriceForPolicy($fairValue, $macroState, $strategy, $policyBasesPerShare, $capRate, false);
+            $policyRepricing = $repriced / $this->repriceForPolicy($fairValue, $macroState, $strategy, $policyBasesPerShare, $capRate, true);
             $fairValue = $repriced;
         }
 
@@ -744,19 +744,20 @@ class MarketEngine
     }
 
     /**
-     * A fair value repriced for the corporate tax and the bank levy the market expects (PolicyCapitalization), on the
-     * forecast as it stands this tick or as it stood the tick before.
+     * A fair value repriced for the laws the market expects (PolicyCapitalization), on the forecast as it stands this
+     * tick or as it stood the tick before.
+     *
+     * @param array<string, float> $policyBasesPerShare What each law the firm's accounts answer to is charged on or moves, per share, keyed by lever.
      */
-    private function repriceForPolicy(float $fairValue, MacroStateDTO $macroState, BusinessModelInterface $strategy, float $bankLevyBasePerShare, float $capRate, bool $previous): float
+    private function repriceForPolicy(float $fairValue, MacroStateDTO $macroState, BusinessModelInterface $strategy, array $policyBasesPerShare, float $capRate, bool $previous): float
     {
-        $taxGap = PolicyCapitalization::corporateTaxShiftGap($macroState, $capRate, $previous);
+        $taxExpected = $strategy->getEffectiveTaxRate($macroState->corporateTaxRate + PolicyCapitalization::corporateTaxShiftGap($macroState, $capRate, $previous));
 
         return PolicyCapitalization::reprice(
             $fairValue,
             $strategy->getEffectiveTaxRate($macroState->corporateTaxRate),
-            $strategy->getEffectiveTaxRate($macroState->corporateTaxRate + $taxGap),
-            $bankLevyBasePerShare > 0.0 ? PolicyCapitalization::bankLevyGap($macroState, $capRate, $previous) : 0.0,
-            $bankLevyBasePerShare,
+            $taxExpected,
+            PolicyCapitalization::earningsGap($macroState, $policyBasesPerShare, $taxExpected, $capRate, $previous),
             $capRate
         );
     }

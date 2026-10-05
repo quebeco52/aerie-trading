@@ -11,7 +11,6 @@ use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
 use App\Service\Macro\MacroEngine;
-use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
 
 /**
@@ -265,8 +264,7 @@ class MiningBusinessModel extends StandardCorporateBusinessModel
         // --- Per-Tonne Cost Base ---
         // Stricter rules on extraction cost productivity, and every tonne costs that much more to mine.
         $inputCostDrag = $this->resolveInputCostDrag($stock, $macroState, $streams, $this->resolvePricingPower($stock), $realizedVariableMargin);
-        $extractionRules = MathUtility::getInstance()->calculateProductivityLossCostFactor(FinancialConstants::ENVIRONMENTAL_REGULATION_TFP_LOSS * $macroState->extractionStringency);
-        $perTonneCostRatio = (($realizedVariableMargin + $inputCostDrag) * $extractionRules) + $disasterPenalty;
+        $perTonneCostRatio = $this->underExtractionRules($streams, $macroState, $realizedVariableMargin + $inputCostDrag, $priceRelative, $fixedCosts, $actualRevenue) + $disasterPenalty;
         $clampedMargin = $this->clampMargin(MathUtility::getInstance()->calculatePerUnitCostRatio($perTonneCostRatio, $priceRelative));
 
         // The benchmark is public; the mine's own output is not. Dividing the price leg by the base visibility
@@ -293,6 +291,12 @@ class MiningBusinessModel extends StandardCorporateBusinessModel
     protected function getFairValueBookWeight(float $normalizedEps): float
     {
         return $normalizedEps < 0 ? self::TROUGH_BOOK_WEIGHT : self::MID_CYCLE_BOOK_WEIGHT;
+    }
+
+    /** Stricter rules on extraction cost the whole operation productivity, so the committed base costs that much more per unit of capacity too (Greenstone, List & Syverson 2012 measure the loss on all inputs). */
+    public function getFixedCostFactor(MacroStateDTO $macroState): float
+    {
+        return MathUtility::calculateExtractionCostFactor($macroState->extractionStringency);
     }
 
     /**

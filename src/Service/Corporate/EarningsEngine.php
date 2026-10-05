@@ -548,7 +548,8 @@ class EarningsEngine
         $wageInflationFactor = 1.0 + ($strategy->getLaborCostShare() * $macroState->realWageGap / max(0.5, $pricingPowerMultiplier));
         // Capacity cost is committed, not chosen quarter by quarter: a firm carries the base it was
         // resourced for until it restructures, which is why the structural figure is what gets scaled.
-        $structuralFixedCosts = $cashStructuralCosts * $fixedCostRatio * $wageInflationFactor;
+        // Rules that cost the firm productivity raise it per unit of capacity as they raise its unit costs.
+        $structuralFixedCosts = $cashStructuralCosts * $fixedCostRatio * $wageInflationFactor * $strategy->getFixedCostFactor($macroState);
         $ctx->fixedCosts = $structuralFixedCosts * $this->resolveCommittedCostScale($ctx);
 
         $structuralVariableCosts = $cashStructuralCosts - ($cashStructuralCosts * $fixedCostRatio);

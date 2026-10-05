@@ -1853,6 +1853,18 @@ class MathUtility
     }
 
     /**
+     * How much the rules on extraction raise the cost of each unit a mine or field produces: the productivity the
+     * strictest rules on record cost polluting plants (Greenstone, List & Syverson 2012), in proportion to how far the
+     * rules stand toward them.
+     *
+     * @param float $extractionStringency How far the rules stand between the founding ones (0) and the strictest on record (1).
+     */
+    public static function calculateExtractionCostFactor(float $extractionStringency): float
+    {
+        return self::getInstance()->calculateProductivityLossCostFactor(FinancialConstants::ENVIRONMENTAL_REGULATION_TFP_LOSS * $extractionStringency);
+    }
+
+    /**
      * Schwartz (1997) one-factor futures price with a zero market price of risk: the expected spot at the
      * delivery horizon under the same exact log-OU transition calculateSchwartz1Factor() steps, so a swap
      * struck on this curve is fair against the process the spot actually follows.

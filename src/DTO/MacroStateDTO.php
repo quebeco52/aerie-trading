@@ -334,21 +334,26 @@ readonly class MacroStateDTO
         public float $corporateTaxShiftEmbodied = 0.0,
         /** The bank levy as the trailing year's earnings carry it, the same lag. */
         public float $bankLevyEmbodied = 0.0,
-        /** The corporate tax shift and bank levy the sitting government will pass at its next budget round, and when that falls (-1: not yet read). */
-        public float $sittingCorporateTaxPolicyShift = 0.0,
-        public float $sittingBankLevyRate = 0.0,
+        /** The extraction rules' cost factor as the trailing year's earnings carry it, the same lag (MathUtility::calculateExtractionCostFactor()). */
+        public float $extractionCostFactorEmbodied = 1.0,
+        /** The stamp duty's share turnover factor as the trailing year's earnings carry it, the same lag (MathUtility::calculateStampDutyVolumeFactor()). */
+        public float $stampDutyVolumeFactorEmbodied = 1.0,
+        /** @var array<string, float> The levers the sitting government will pass at its next budget round, keyed as App\Service\Politics\PoliticsEngine::LEVER_FIELDS; empty before they have been read. */
+        public array $sittingLevers = [],
+        /** When that round falls (-1: not yet read). */
         public float $sittingPolicyFrom = -1.0,
-        /** The corporate tax shift and bank levy the market expects from the next government's first budget, and when that falls (-1: no forecast yet) (App\Service\Politics\ElectionForecast). */
-        public float $expectedCorporateTaxPolicyShift = 0.0,
-        public float $expectedBankLevyRate = 0.0,
+        /** @var array<string, float> The levers the market expects from the next government's first budget, keyed the same way (App\Service\Politics\ElectionForecast); empty before a forecast. */
+        public array $expectedLevers = [],
+        /** When that budget falls (-1: no forecast yet). */
         public float $expectedPolicyFrom = -1.0,
-        /** The same three as the market expected them the tick before, so a revision reprices at once (App\Service\Market\PolicyCapitalization). */
-        public float $previousExpectedCorporateTaxPolicyShift = 0.0,
-        public float $previousExpectedBankLevyRate = 0.0,
-        public float $previousExpectedPolicyFrom = -1.0,
-        public float $previousSittingCorporateTaxPolicyShift = 0.0,
-        public float $previousSittingBankLevyRate = 0.0,
+        /** @var array<string, float> The sitting government's levers as they stood the tick before, so a revision reprices at once (App\Service\Market\PolicyCapitalization). */
+        public array $previousSittingLevers = [],
+        /** When that round fell, as read the tick before. */
         public float $previousSittingPolicyFrom = -1.0,
+        /** @var array<string, float> The forecast levers as they stood the tick before. */
+        public array $previousExpectedLevers = [],
+        /** When those took effect, as forecast the tick before. */
+        public float $previousExpectedPolicyFrom = -1.0,
         /** How far the inflation the public expects the Authority to tolerate has drifted above its target, under pressure it gave ground to (App\Service\Macro\Subsystem\MonetaryPolicySubsystem::updateInflationAnchor()). */
         public float $inflationAnchorDrift = 0.0,
         /** The CET1 requirement on the District's banks in force, as a share of risk-weighted assets, countercyclical buffer aside (App\Service\Politics\FinancialRegulator). */
@@ -441,7 +446,7 @@ readonly class MacroStateDTO
             }
 
             $args[$field] = match ($field) {
-                'sectorZ', 'sectorDemandZ' => is_array($data[$key]) ? array_map('floatval', $data[$key]) : [],
+                'sectorZ', 'sectorDemandZ', 'sittingLevers', 'previousSittingLevers', 'expectedLevers', 'previousExpectedLevers' => is_array($data[$key]) ? array_map('floatval', $data[$key]) : [],
                 'qeActive', 'qtActive' => (bool) $data[$key],
                 'eventType' => (string) $data[$key],
                 default => (float) $data[$key],

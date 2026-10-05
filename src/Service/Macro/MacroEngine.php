@@ -802,18 +802,14 @@ class MacroEngine
         $state->bankCapitalRequirement = $policy->bankCapitalRequirement ?? $state->bankCapitalRequirement;
         $state->sovereignFundMandateEquityShare = $policy->reserveFundEquityShare ?? $state->sovereignFundMandateEquityShare;
 
-        $state->previousExpectedCorporateTaxPolicyShift = $state->expectedCorporateTaxPolicyShift;
-        $state->previousExpectedBankLevyRate = $state->expectedBankLevyRate;
-        $state->previousExpectedPolicyFrom = $state->expectedPolicyFrom;
-        $state->previousSittingCorporateTaxPolicyShift = $state->sittingCorporateTaxPolicyShift;
-        $state->previousSittingBankLevyRate = $state->sittingBankLevyRate;
+        $state->previousSittingLevers = $state->sittingLevers;
         $state->previousSittingPolicyFrom = $state->sittingPolicyFrom;
-        $state->sittingCorporateTaxPolicyShift = $policy->sittingCorporateTaxPolicyShift ?? $policy->corporateTaxPolicyShift;
-        $state->sittingBankLevyRate = $policy->sittingBankLevyRate ?? $policy->bankLevyRate;
-        $state->sittingPolicyFrom = $policy->sittingPolicyFrom ?? -1.0;
-        $state->expectedCorporateTaxPolicyShift = $policy->expectedCorporateTaxPolicyShift ?? $policy->corporateTaxPolicyShift;
-        $state->expectedBankLevyRate = $policy->expectedBankLevyRate ?? $policy->bankLevyRate;
-        $state->expectedPolicyFrom = $policy->expectedPolicyFrom ?? -1.0;
+        $state->previousExpectedLevers = $state->expectedLevers;
+        $state->previousExpectedPolicyFrom = $state->expectedPolicyFrom;
+        $state->sittingLevers = $policy->sittingLevers ?? [];
+        $state->sittingPolicyFrom = $policy->sittingLevers === null ? -1.0 : ($policy->sittingPolicyFrom ?? -1.0);
+        $state->expectedLevers = $policy->expectedLevers ?? [];
+        $state->expectedPolicyFrom = $policy->expectedLevers === null ? -1.0 : ($policy->expectedPolicyFrom ?? -1.0);
     }
 
     /**

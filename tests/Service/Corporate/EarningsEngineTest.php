@@ -10,6 +10,7 @@ use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\TestCase;
 use App\Data\LifecycleStage;
 use App\Entity\Stock;
+use App\DTO\EarningsSimulationContext;
 use App\DTO\MacroStateDTO;
 use App\Service\Corporate\EarningsEngine;
 use App\Service\Corporate\CapitalAllocationEngine;
@@ -2146,5 +2147,42 @@ class EarningsEngineTest extends TestCase
         $this->assertEqualsWithDelta($free->expectedQuarterlyNetIncome - $levied->bankLevy, $levied->expectedQuarterlyNetIncome, 1.0);
         $this->assertEqualsWithDelta($free->taxPaid, $levied->taxPaid, 1.0, 'The levy is not deductible.');
         $this->assertEqualsWithDelta($cashChange, $levied->operatingCashFlow + $levied->investingCashFlow + $levied->financingCashFlow, 1.0);
+    }
+
+    /**
+     * Rules that cost a mine productivity cost it on every input (Greenstone, List & Syverson 2012): the committed base
+     * rises by the factor its unit costs do, and the market's cost base is the whole of what the rules scale. A firm
+     * that extracts nothing carries its base as before.
+     */
+    public function testTheRulesOnExtractionRaiseAMinesCommittedCostsToo(): void
+    {
+        $run = function (string $industry, float $stringency): EarningsSimulationContext {
+            $captured = null;
+            $dispatcher = new EventDispatcher();
+            $dispatcher->addListener(EarningsReportedEvent::class, function (EarningsReportedEvent $event) use (&$captured): void {
+                $captured = $event->getContext();
+            });
+            $engine = $this->buildEngine($dispatcher);
+
+            mt_srand(2222);
+            $stock = $this->buildMatureIndustrial('MINE');
+            $stock->setIndustry($industry);
+            $engine->calculate($stock, new MacroStateDTO(corporateTaxRate: 0.21, extractionStringency: $stringency), EarningsEngine::resolveReportingTick('MINE', 252), 252);
+            $this->assertNotNull($captured);
+
+            return $captured;
+        };
+
+        $founding = $run('Copper', 0.0);
+        $strict = $run('Copper', 1.0);
+        $this->assertGreaterThan(0.0, $founding->fixedCosts);
+        $this->assertEqualsWithDelta(MathUtility::calculateExtractionCostFactor(1.0), $strict->fixedCosts / $founding->fixedCosts, 1e-9);
+
+        $industrial = $run('Auto Manufacturers', 1.0);
+        $this->assertEqualsWithDelta($run('Auto Manufacturers', 0.0)->fixedCosts, $industrial->fixedCosts, 1e-6);
+
+        // The share the market prices against covers the committed base as well as the unit costs.
+        $share = (float) ($founding->stock->getEarningsMomentumZ()[FinancialConstants::STATE_EXTRACTION_COST_SHARE] ?? 0.0);
+        $this->assertGreaterThan($founding->fixedCosts / $founding->actualRevenue, $share);
     }
 }

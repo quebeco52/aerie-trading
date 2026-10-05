@@ -244,11 +244,9 @@ readonly class PoliticsStateDTO
             bankCapitalRequirement: $this->regulatorName === '' ? null : $this->bankCapitalRequirement,
             reserveFundEquityShare: $this->fundHeadName === '' || $this->fundHeadTermStart < 0.0 ? null : SovereignReserveFund::equityShare($this->fundHeadStance),
             authorityConcession: $this->authoritySalt < 0.0 ? null : PoliticalPressure::concession($this),
-            sittingCorporateTaxPolicyShift: $this->sittingLevers['corporateTax'] ?? null,
-            sittingBankLevyRate: $this->sittingLevers['bankLevyRate'] ?? null,
-            sittingPolicyFrom: $this->sittingLevers === [] ? null : (floor(($this->totalTime / MacroEngine::BUDGET_ROUND_PERIOD_YEARS) + 1e-9) + 1.0) * MacroEngine::BUDGET_ROUND_PERIOD_YEARS,
-            expectedCorporateTaxPolicyShift: $this->forecastLevers['corporateTax'] ?? null,
-            expectedBankLevyRate: $this->forecastLevers['bankLevyRate'] ?? null,
+            sittingLevers: $this->sittingLevers === [] ? null : $this->sittingLevers,
+            sittingPolicyFrom: $this->sittingLevers === [] ? null : ElectionForecast::sittingTakesEffect($this),
+            expectedLevers: $this->forecastLevers === [] ? null : $this->forecastLevers,
             expectedPolicyFrom: $this->forecastLevers === [] ? null : ElectionForecast::takesEffect($this),
         );
     }

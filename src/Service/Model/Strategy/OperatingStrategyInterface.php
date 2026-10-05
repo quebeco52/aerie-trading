@@ -44,9 +44,21 @@ interface OperatingStrategyInterface
      */
     public function annualBankLevyBase(Stock $stock): float;
     /**
+     * The variable cost the rules on extraction scale, a year, before them, in currency: at a cost factor of one more
+     * (MathUtility::calculateExtractionCostFactor()), the cost rises by this; zero for a firm that extracts nothing.
+     * Deductible, so it comes off earnings before tax.
+     */
+    public function annualExtractionCostBase(Stock $stock): float;
+    /**
+     * The revenue less its variable cost that moves with the District's share turnover, a year, at the founding stamp
+     * duty, in currency: at a turnover factor of one more (MathUtility::calculateStampDutyVolumeFactor()), earnings
+     * before tax rise by this; zero for a firm that earns nothing on trading.
+     */
+    public function annualStampDutyTurnoverBase(Stock $stock): float;
+    /**
      * MacroStateDTO field names (snake_case, matching MacroStateDTO::toArray()) this model's own
      * operating code reads: calculateSectorPhysics(), getMacroPhysics(), calculateInterestIncome(),
-     * processPassiveLiabilityGrowth(), getForwardCreditLossMultiplier() and the helpers they call,
+     * processPassiveLiabilityGrowth(), getForwardCreditLossMultiplier(), getFixedCostFactor() and the helpers they call,
      * following parent:: delegation.
      * Generic trait physics is not model-specific coupling and does not count. Valuation-only reads
      * feeding WACC alone (equityRiskPremium, corporateTaxRate, policyRate) are excluded, so this
@@ -97,6 +109,12 @@ interface OperatingStrategyInterface
      * modelled inside each sector's own physics, not here.
      */
     public function getLaborCostShare(): float;
+    /**
+     * How much more the committed cost base costs per unit of capacity than the inputs and wages it is priced at: one
+     * for most models. Rules that cost productivity raise every input per unit, the committed ones as much as the
+     * variable ones the model's own physics scales.
+     */
+    public function getFixedCostFactor(MacroStateDTO $macroState): float;
 
     /** Propensity of this sector's management to steer reported earnings toward consensus with accruals (EARNINGS_MANAGEMENT_PROPENSITY). */
     public function getEarningsManagementPropensity(Stock $stock): float;

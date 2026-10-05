@@ -49,7 +49,7 @@ final class MiningBusinessModelTest extends TestCase
         return new MacroStateDTO(...($macro + ['industrialMetalsIndexEma' => $metals]));
     }
 
-    private function report(MacroStateDTO $macro, float $z = 0.0, string $ticker = 'GEN_MINER'): ActualFinancialsDTO
+    private function report(MacroStateDTO $macro, float $z = 0.0, string $ticker = 'GEN_MINER', float $fixedCosts = 0.0): ActualFinancialsDTO
     {
         $stock = new Stock();
         $stock->setTicker($ticker);
@@ -58,7 +58,7 @@ final class MiningBusinessModelTest extends TestCase
             $stock,
             expectedRevenue: 100.0,
             realizedVariableMargin: 0.15,
-            fixedCosts: 0.0,
+            fixedCosts: $fixedCosts,
             baselineVol: 0.40,
             macroState: $macro,
             mathUtility: $this->fixedDraws($z)
@@ -229,5 +229,31 @@ final class MiningBusinessModelTest extends TestCase
 
         $this->assertEqualsWithDelta($founding->actualRevenue, $strict->actualRevenue, 1e-9);
         $this->assertEqualsWithDelta($founding->actualVariableCosts / (1.0 - 0.048), $strict->actualVariableCosts, 1e-9);
+    }
+
+    /**
+     * What the market prices a change in the rules against is the cost they scale, unit costs and committed base alike:
+     * the year's revenue times the share the report keeps, so the strictest rules add that base times the factor's
+     * rise, at any metals price.
+     */
+    public function testTheMarketsBaseIsTheCostTheRulesScale(): void
+    {
+        $factor = MathUtility::calculateExtractionCostFactor(1.0);
+        $this->assertSame($factor, $this->model->getFixedCostFactor($this->macro(100.0, ['extractionStringency' => 1.0])));
+        $this->assertSame(1.0, $this->model->getFixedCostFactor($this->macro(100.0)));
+
+        foreach ([70.0, 100.0, 140.0] as $metals) {
+            // The committed base reaches the physics with the rules' factor in it, as the earnings engine strikes it.
+            $founding = $this->report($this->macro($metals), fixedCosts: 40.0);
+            $strict = $this->report($this->macro($metals, ['extractionStringency' => 1.0]), fixedCosts: 40.0 * $factor);
+            $stock = $this->miner()->setTotalRevenue((string) (4.0 * $founding->actualRevenue))->setEarningsMomentumZ($founding->streamZ);
+
+            $this->assertEqualsWithDelta(
+                ($strict->actualVariableCosts + (40.0 * $factor)) - ($founding->actualVariableCosts + 40.0),
+                $this->model->annualExtractionCostBase($stock) / 4.0 * ($factor - 1.0),
+                1e-6
+            );
+        }
+        $this->assertSame(0.0, $this->model->annualExtractionCostBase($this->miner()->setTotalRevenue('400')), 'Before its first report nothing is known to scale.');
     }
 }
