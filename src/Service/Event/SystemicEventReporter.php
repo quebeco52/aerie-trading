@@ -2,6 +2,7 @@
 
 namespace App\Service\Event;
 
+use App\Data\AerieCouncil;
 use App\Data\AerieDiet;
 use App\DTO\MacroStateDTO;
 use App\DTO\PoliticsStateDTO;
@@ -231,30 +232,38 @@ class SystemicEventReporter
         }
 
         $time = $politics->totalTime;
-        $stance = static fn(float $stance): string => self::STANCE_PHRASES[MonetaryAuthority::stanceName($stance)];
+        $stance = static fn(float $stance, float $swing = 0.0): string => self::STANCE_PHRASES[MonetaryAuthority::typeName($stance, $swing)]
+            . ($swing > 0.0 && $stance !== 0.0 ? ($stance > 0.0 ? ' leaning hawkish' : ' leaning dovish') : '');
         $passedOver = static fn(array $candidates): string => self::listNames(array_map(
-            static fn(array $candidate): string => "{$candidate['name']}, {$stance($candidate['stance'])}",
+            static fn(array $candidate): string => "{$candidate['name']}, {$stance($candidate['stance'], $candidate['swing'] ?? 0.0)}",
             $candidates
         ));
         $context = [
             'governor' => $politics->governorName,
             'governor_age' => (string) (int) floor($time - $politics->governorBirth),
-            'governor_stance' => $stance($politics->governorStance),
+            'governor_stance' => $stance($politics->governorStance, max(0.0, $politics->governorSwinger)),
             'governor_term_ends' => GovernmentPageBuilder::simDate(MonetaryAuthority::governorTermEnd($time)),
             'governor_passed_over' => $passedOver($politics->governorPassedOver),
         ];
 
-        foreach ($politics->councilSince as $seat => $since) {
-            if (abs($since - $politics->lastCouncillorSeatedAt) < 1e-6 && isset($politics->councilNames[$seat], $politics->councilBirths[$seat])) {
-                $context['councillor'] = $politics->councilNames[$seat];
-                $context['councillor_age'] = (string) (int) floor($time - $politics->councilBirths[$seat]);
-                $context['councillor_stance'] = $stance($politics->councilStances[$seat] ?? 0.0);
-                $context['councillor_passed_over'] = $passedOver($politics->councillorPassedOver);
+        // The councillor seated last, at a term's start or mid-term in a vacant seat.
+        $seatedAt = $politics->councilSeatedAt + $politics->councilSince;
+        $seat = $seatedAt === [] ? null : array_search(max($seatedAt), $seatedAt, true);
+        if (is_int($seat) && isset($politics->councilNames[$seat], $politics->councilBirths[$seat])) {
+            $context['councillor'] = $politics->councilNames[$seat];
+            $context['councillor_age'] = (string) (int) floor($time - $politics->councilBirths[$seat]);
+            $context['councillor_stance'] = $stance($politics->councilStances[$seat] ?? 0.0, $politics->councilSwingers[$seat] ?? 0.0);
+            $context['councillor_passed_over'] = $passedOver($politics->councillorPassedOver);
+            $context['councillor_term_ends'] = GovernmentPageBuilder::simDate(($politics->councilSince[$seat] ?? $time) + AerieCouncil::TERM_YEARS);
+            if ($politics->lastCouncilVacancyAt === $politics->lastCouncillorSeatedAt && $politics->lastVacancyName !== '') {
+                $context['predecessor'] = $politics->lastVacancyName;
+                $context['vacancy_cause'] = $politics->lastVacancyCause;
             }
         }
 
-        $stances = array_merge([$politics->governorStance], $politics->memberStances);
-        $counts = array_count_values(array_map(MonetaryAuthority::stanceName(...), $stances));
+        $stances = array_merge([$politics->governorStance], array_values($politics->memberStances));
+        $swingers = array_merge([max(0.0, $politics->governorSwinger)], array_values($politics->memberSwingers));
+        $counts = array_count_values(array_map(static fn(float $stance, int $key): string => MonetaryAuthority::typeName($stance, $swingers[$key] ?? 0.0), $stances, array_keys($stances)));
         $context['committee_counts'] = self::listNames(array_values(array_filter(array_map(
             static fn(string $type): ?string => isset($counts[$type]) ? self::countWord($counts[$type]) . ' ' . self::STANCE_PLURALS[$type][$counts[$type] === 1 ? 0 : 1] : null,
             ['hawk', 'swing', 'dove']

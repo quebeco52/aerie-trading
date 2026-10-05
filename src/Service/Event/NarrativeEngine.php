@@ -508,12 +508,15 @@ class NarrativeEngine
                 ]
             ),
             ShockEvent::COUNCILLOR_SEATED => $this->getRandomPhrase(
-                isset($context['councillor'], $context['councillor_age'], $context['councillor_stance'], $context['councillor_passed_over']) ? [
+                isset($context['councillor'], $context['councillor_age'], $context['councillor_stance'], $context['predecessor'], $context['vacancy_cause'], $context['councillor_term_ends']) ? [
+                    ($context['vacancy_cause'] === 'died' ? "Council vacancy filled: After the death of {$context['predecessor']}" : "Council vacancy filled: After the resignation of {$context['predecessor']}") . ", the councillors elect {$context['councillor']}, {$context['councillor_age']}, {$context['councillor_stance']}, to serve out the term to {$context['councillor_term_ends']}.",
+                    "{$context['councillor']} joins the Aerie Council in the seat {$context['predecessor']} " . ($context['vacancy_cause'] === 'died' ? 'held until their death' : 'gave up') . "; the newcomer, {$context['councillor_age']}, is {$context['councillor_stance']} on money and sits until {$context['councillor_term_ends']}.",
+                ] : (isset($context['councillor'], $context['councillor_age'], $context['councillor_stance'], $context['councillor_passed_over']) ? [
                     "Council succession: The sitting councillors elect {$context['councillor']}, {$context['councillor_age']}, {$context['councillor_stance']}, to a " . (int) AerieCouncil::TERM_YEARS . "-year seat, passing over {$context['councillor_passed_over']}.",
                     "{$context['councillor']} joins the Aerie Council: elected by its members to succeed a retiring colleague, the newcomer is {$context['councillor_stance']} on money.",
                 ] : [
                     "Council succession: The Aerie Council has elected a new member.",
-                ]
+                ])
             ),
             ShockEvent::MONETARY_DECISION => $this->getRandomPhrase(
                 isset($context['rate_move'], $context['vote_split'], $context['dissent_phrase']) ? [

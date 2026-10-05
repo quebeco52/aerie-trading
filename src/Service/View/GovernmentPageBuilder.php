@@ -234,11 +234,14 @@ class GovernmentPageBuilder
             'council' => [
                 'roster' => array_map(static fn(array $seat): array => $seat + [
                     'name' => self::councillorName($politics, $seat),
-                    'sinceLabel' => $seat['beforeYearOne'] ? 'Before Year 1' : self::simDate($seat['since']),
+                    'sinceLabel' => ($politics->councilSeatedAt[$seat['seat'] - 1] ?? $seat['since']) > $seat['since'] + 1e-9
+                        ? self::simDate($politics->councilSeatedAt[$seat['seat'] - 1])
+                        : ($seat['beforeYearOne'] ? 'Before Year 1' : self::simDate($seat['since'])),
                     'termEndsLabel' => self::simDate($seat['termEnds']),
                 ] + (isset($politics->councilBirths[$seat['seat'] - 1], $politics->councilStances[$seat['seat'] - 1]) ? [
                     'age' => (int) floor($macro->totalTime - $politics->councilBirths[$seat['seat'] - 1]),
-                    'stance' => MonetaryAuthority::stanceName($politics->councilStances[$seat['seat'] - 1]),
+                    'stance' => MonetaryAuthority::typeName($politics->councilStances[$seat['seat'] - 1], $politics->councilSwingers[$seat['seat'] - 1] ?? 0.0),
+                    'leaning' => self::leaning($politics->councilStances[$seat['seat'] - 1], $politics->councilSwingers[$seat['seat'] - 1] ?? 0.0),
                     'banks' => isset($politics->councilRegulationStances[$seat['seat'] - 1])
                         ? FinancialRegulator::stanceName(FinancialRegulator::requirement($politics->councilRegulationStances[$seat['seat'] - 1]))
                         : null,
@@ -249,7 +252,11 @@ class GovernmentPageBuilder
                 'nextVacancy' => (static function (array $seat) use ($politics): array {
                     return $seat + ['name' => self::councillorName($politics, $seat), 'termEndsLabel' => self::simDate($seat['termEnds'])];
                 })(AerieCouncil::nextVacancy($macro->totalTime)),
-                'lean' => $politics->councilStances === [] ? null : self::stanceCounts($politics->councilStances) + [
+                'board' => $politics->boardMembers === [] ? null : self::stanceCounts(
+                    array_map(static fn(array $member): float => $member['stance'], $politics->boardMembers),
+                    array_map(static fn(array $member): float => $member['swing'] ?? 0.0, $politics->boardMembers)
+                ) + ['seats' => count($politics->boardMembers), 'median' => MonetaryAuthority::stanceName(CouncilAppointments::boardMedians($politics)[CouncilAppointments::AXIS_MONEY])],
+                'lean' => $politics->councilStances === [] ? null : self::stanceCounts($politics->councilStances, $politics->councilSwingers) + [
                     'median' => MonetaryAuthority::stanceName(CouncilAppointments::median($politics->councilStances)),
                     'banks' => $politics->councilRegulationStances === [] ? null : FinancialRegulator::requirement(CouncilAppointments::median($politics->councilRegulationStances)),
                     'reserves' => $politics->councilFundStances === [] ? null : SovereignReserveFund::equityShare(CouncilAppointments::median($politics->councilFundStances)),
@@ -1152,17 +1159,18 @@ class GovernmentPageBuilder
         $time = $politics->totalTime;
         $votes = $politics->lastMeetingVotes;
         $seated = static fn(float $since): string => $since < 0.0 ? 'Before Year 1' : self::simDate($since);
-        $person = static fn(string $name, float $birth, float $stance, ?float $vote): array => [
+        $person = static fn(string $name, float $birth, float $stance, float $swing, ?float $vote): array => [
             'name' => $name,
             'age' => (int) floor($time - $birth),
-            'stance' => MonetaryAuthority::stanceName($stance),
+            'stance' => MonetaryAuthority::typeName($stance, $swing),
+            'leaning' => self::leaning($stance, $swing),
             'vote' => $vote,
         ];
 
         $members = [];
         foreach ($politics->memberNames as $member => $name) {
             $since = $politics->memberSince[$member] ?? 0.0;
-            $members[] = $person($name, $politics->memberBirths[$member] ?? $time, $politics->memberStances[$member] ?? 0.0, $votes[$member + 1] ?? null) + [
+            $members[] = $person($name, $politics->memberBirths[$member] ?? $time, $politics->memberStances[$member] ?? 0.0, $politics->memberSwingers[$member] ?? 0.0, $votes[$member + 1] ?? null) + [
                 'sinceLabel' => $seated($since),
                 'termEndsLabel' => self::simDate($since + MonetaryAuthority::MEMBER_TERM_YEARS),
             ];
@@ -1171,13 +1179,13 @@ class GovernmentPageBuilder
         $lower = count(array_filter($votes, static fn(float $vote): bool => $vote < 0.0));
 
         return [
-            'governor' => $person($politics->governorName, $politics->governorBirth, $politics->governorStance, $votes[0] ?? null) + [
+            'governor' => $person($politics->governorName, $politics->governorBirth, $politics->governorStance, max(0.0, $politics->governorSwinger), $votes[0] ?? null) + [
                 'sinceLabel' => $seated($politics->governorTermStart),
                 'termEndsLabel' => self::simDate(MonetaryAuthority::governorTermEnd($time)),
-                'passedOver' => array_map(static fn(array $candidate): array => $person($candidate['name'], $candidate['birth'], $candidate['stance'], null), $politics->governorPassedOver),
+                'passedOver' => array_map(static fn(array $candidate): array => $person($candidate['name'], $candidate['birth'], $candidate['stance'], $candidate['swing'] ?? 0.0, null), $politics->governorPassedOver),
             ],
             'members' => $members,
-            'committee' => self::stanceCounts(array_merge([$politics->governorStance], $politics->memberStances)) + [
+            'committee' => self::stanceCounts(array_merge([$politics->governorStance], $politics->memberStances), array_merge([max(0.0, $politics->governorSwinger)], array_values($politics->memberSwingers))) + [
                 'balance' => $politics->committeeBalance,
                 'majority' => $politics->committeeMajority > 0.0 ? 'hawkish' : ($politics->committeeMajority < 0.0 ? 'dovish' : null),
             ],
@@ -1290,19 +1298,26 @@ class GovernmentPageBuilder
     }
 
     /**
-     * How many of a group hold each stance on money.
+     * How many of a group are hawks, swing votes and doves.
      *
-     * @param list<float> $stances
+     * @param array<int, float> $stances
+     * @param array<int, float> $swingers Whether each is a swing vote, in the same order.
      * @return array{hawk: int, swing: int, dove: int}
      */
-    private static function stanceCounts(array $stances): array
+    private static function stanceCounts(array $stances, array $swingers = []): array
     {
         $counts = ['hawk' => 0, 'swing' => 0, 'dove' => 0];
-        foreach ($stances as $stance) {
-            ++$counts[MonetaryAuthority::stanceName($stance)];
+        foreach ($stances as $key => $stance) {
+            ++$counts[MonetaryAuthority::typeName($stance, $swingers[$key] ?? 0.0)];
         }
 
         return $counts;
+    }
+
+    /** The camp a swing vote leans to now, 'hawk' or 'dove'; null for a hawk or a dove, or a swing vote with no lean yet. */
+    private static function leaning(float $stance, float $swing): ?string
+    {
+        return $swing > 0.0 && $stance !== 0.0 ? MonetaryAuthority::stanceName($stance) : null;
     }
 
     /**

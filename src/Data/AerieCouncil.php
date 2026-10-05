@@ -9,12 +9,17 @@ namespace App\Data;
  *
  * A councillor does not run policy. Each holds a stance on how the District should lean on each question a department
  * answers, a hawk's or a dove's on money, a light or a strict hand on the banks, a cautious or a bold one with the
- * reserves, and the Council's work is its appointments. A councillor whose term ends is replaced by the candidate on a
- * shortlist the sitting members elect, so the Council renews itself one seat at a time and no election touches it. The
+ * reserves, and the Council's work is its appointments. A councillor whose term ends is replaced by the candidate the
+ * sitting members elect from a shortlist of three that the Council Appointment Board puts forward, its members named by
+ * the District's bar, judges, universities and the Aerie Exchange, after Canada's advisory board for its Supreme Court
+ * (App\Service\Politics\CouncilAppointments::boardShortlist()); so the Council renews itself one seat at a time, no
+ * election touches it, and it cannot fill itself with its own likeness for good. The
  * seats are staggered so one falls vacant a little under once a year, as the Federal Reserve Board's seven
  * fourteen-year seats fall one every two years; the councillors sitting at Year 1 took their seats before the District's
- * records begin. Like the election calendar, the seats' terms are derived from simulation time and never stored; who
- * holds them, chosen from the shortlists, is kept in the politics state.
+ * records begin. A councillor who dies or resigns mid-term is succeeded the same way, the successor serving out the
+ * term (App\Service\Politics\CouncilAppointments::departure()). Like the election calendar, the seats' terms are
+ * derived from simulation time and never stored; who holds them, chosen from the shortlists, is kept in the politics
+ * state.
  *
  * The Council appoints the heads of the District's departments, which then act independently of it: the Monetary
  * Authority's governor, who picks the rate committee (App\Service\Politics\MonetaryAuthority), the Financial

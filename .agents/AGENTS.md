@@ -74,7 +74,7 @@ when a change needs one.
 ## Pages
 Player pages are the District's own sites: no model names, citations, coefficients or file paths in templates.
 Sentence-case labels, mono type only for figures, institution names from `App\Data\Institutions`. Format figures
-with `|signed_class`, `|pct`, `|money` and `source()`, not by hand. Read `.agents/FRONTEND.md` before any template,
+with `|signed_class`, `|pct`, `|money` and `source_line()`, not by hand. Read `.agents/FRONTEND.md` before any template,
 page script or company profile change; `tests/Twig/TemplateStyleTest.php` enforces it, and `bin/render-pages`
 screenshots the result.
 
