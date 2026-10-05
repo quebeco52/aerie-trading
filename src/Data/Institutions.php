@@ -11,6 +11,8 @@ final class Institutions
 {
     // --- Public bodies ---
     public const AERIE_COUNCIL = 'Aerie Council';
+    /** Puts forward the candidates for each Council seat; its members are named by the District's bar, judges, universities and the Aerie Exchange. */
+    public const COUNCIL_APPOINTMENT_BOARD = 'Council Appointment Board';
     public const DIET = 'Diet';
     /** The central bank: sets the policy rate. Never the Rate Council or the Fed. */
     public const MONETARY_AUTHORITY = 'Monetary Authority';

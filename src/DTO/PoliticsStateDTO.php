@@ -106,6 +106,10 @@ readonly class PoliticsStateDTO
         public array $councilFundStances = [],
         /** @var list<array{name: string, birth: float, stance: float, regulation: float, fund: float, swing?: float}> The candidates the Council passed over when it last filled a seat of its own. */
         public array $councillorPassedOver = [],
+        /** @var array<int, array{name: string, birth: float, stance: float, regulation: float, fund: float, swing?: float}> The Council Appointment Board's members, by seat (App\Service\Politics\CouncilAppointments::boardShortlist()). */
+        public array $boardMembers = [],
+        /** @var array<int, float> When each board member's term began. */
+        public array $boardSince = [],
         /** The governor in office: name, birth date, when their term began, and stance. */
         public string $governorName = '',
         public float $governorBirth = 0.0,

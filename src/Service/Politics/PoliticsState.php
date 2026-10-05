@@ -109,6 +109,10 @@ class PoliticsState
     public array $councilFundStances;
     /** @var list<array{name: string, birth: float, stance: float, regulation: float, fund: float, swing?: float}> */
     public array $councillorPassedOver;
+    /** @var array<int, array{name: string, birth: float, stance: float, regulation: float, fund: float, swing?: float}> */
+    public array $boardMembers;
+    /** @var array<int, float> */
+    public array $boardSince;
     public string $governorName;
     public float $governorBirth;
     public float $governorTermStart;
@@ -258,7 +262,7 @@ class PoliticsState
                 $field === 'leaderHistory' => self::hydrateLeaderHistory($value),
                 $field === 'polls' => self::hydratePolls($value),
                 $field === 'forecastCabinets' => self::hydrateCabinets($value),
-                in_array($field, ['councillorPassedOver', 'governorPassedOver', 'regulatorPassedOver', 'fundHeadPassedOver'], true) => self::hydrateCandidates($value),
+                in_array($field, ['councillorPassedOver', 'governorPassedOver', 'regulatorPassedOver', 'fundHeadPassedOver', 'boardMembers'], true) => self::hydrateCandidates($value),
                 is_string($opening) => is_scalar($value) ? (string) $value : $opening,
                 is_array($opening) => array_map('floatval', $value),
                 default => is_numeric($value) ? (float) $value : $opening,

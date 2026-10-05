@@ -252,6 +252,10 @@ class GovernmentPageBuilder
                 'nextVacancy' => (static function (array $seat) use ($politics): array {
                     return $seat + ['name' => self::councillorName($politics, $seat), 'termEndsLabel' => self::simDate($seat['termEnds'])];
                 })(AerieCouncil::nextVacancy($macro->totalTime)),
+                'board' => $politics->boardMembers === [] ? null : self::stanceCounts(
+                    array_map(static fn(array $member): float => $member['stance'], $politics->boardMembers),
+                    array_map(static fn(array $member): float => $member['swing'] ?? 0.0, $politics->boardMembers)
+                ) + ['seats' => count($politics->boardMembers), 'median' => MonetaryAuthority::stanceName(CouncilAppointments::boardMedians($politics)[CouncilAppointments::AXIS_MONEY])],
                 'lean' => $politics->councilStances === [] ? null : self::stanceCounts($politics->councilStances, $politics->councilSwingers) + [
                     'median' => MonetaryAuthority::stanceName(CouncilAppointments::median($politics->councilStances)),
                     'banks' => $politics->councilRegulationStances === [] ? null : FinancialRegulator::requirement(CouncilAppointments::median($politics->councilRegulationStances)),

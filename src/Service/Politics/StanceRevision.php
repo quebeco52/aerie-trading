@@ -9,8 +9,8 @@ use App\Service\Math\MathUtility;
 /**
  * Changes of mind on money. The Fed watchers' swing votes are not members who sit between the camps but members seen
  * as a hawk in some years and a dove in others, "situational hawks or doves" who switch camps for some years or for
- * good (Bordo & Istrefi 2023; Istrefi 2019). Hawks and doves keep their camp; each swing vote, councillor, governor or
- * committee member, leans to one camp at a time and, once a year as the watchers reclassify them, may cross to the
+ * good (Bordo & Istrefi 2023; Istrefi 2019). Hawks and doves keep their camp; each swing vote, councillor, governor,
+ * committee member or member of the Council Appointment Board, leans to one camp at a time and, once a year as the watchers reclassify them, may cross to the
  * other.
  *
  * The draws are hashed from the Council's salt, the year and the seat, so they replay and take nothing from the
@@ -44,6 +44,12 @@ final class StanceRevision
         foreach ($state->councilSwingers as $seat => $swing) {
             if ($swing > 0.0 && isset($state->councilStances[$seat]) && $switches("council:{$seat}")) {
                 $state->councilStances[$seat] = -$state->councilStances[$seat];
+            }
+        }
+
+        foreach ($state->boardMembers as $seat => $member) {
+            if (($member['swing'] ?? 0.0) > 0.0 && $switches("board:{$seat}")) {
+                $state->boardMembers[$seat]['stance'] = -$member['stance'];
             }
         }
 

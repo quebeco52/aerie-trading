@@ -405,7 +405,7 @@
 		<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20" aria-labelledby="council-heading">
 			<h2 id="council-heading" class="text-sm font-semibold text-on-surface">The Aerie Council</h2>
 			<p class="text-2xs text-on-surface-variant mt-0.5">
-				{{ rules.councilSeats }} seats on staggered {{ rules.councilTermYears|number_format(0) }}-year terms. When a term ends, or a councillor dies or resigns, the sitting members elect the successor from a shortlist; a successor to a councillor who left early serves out the term.
+				{{ rules.councilSeats }} seats on staggered {{ rules.councilTermYears|number_format(0) }}-year terms. When a term ends, or a councillor dies or resigns, the sitting members elect the successor from the three candidates the Council Appointment Board puts forward; a successor to a councillor who left early serves out the term.
 				Each councillor holds a stance on money: a hawk would rather fight inflation, a dove would rather spare jobs, a swing vote sides with either as the case takes them.
 				Each also holds one on the banks, from light-touch to strict: how much of their own capital a bank should have at stake; and one on the reserves, from cautious to bold: how much of the District's savings belongs in shares. The Council's leans decide whom it appoints.
 			</p>
@@ -421,6 +421,15 @@
 					{% if council.lean.reserves is not null %}
 						On the reserves, <span class="font-mono tabular-nums">{{ council.lean.reserves|pct(0) }}</span> in shares.
 					{% endif %}
+				</p>
+			{% endif %}
+			{% if council.board %}
+				<p class="text-xs text-on-surface mt-2">
+					The Council Appointment Board, whose <span class="font-mono tabular-nums">{{ council.board.seats }}</span> members are named by the District's bar, its judges, its universities and the Aerie Exchange, reads the applications for each seat and puts forward the three closest to its own views.
+					It leans {{ council.board.median == 'hawk' ? 'hawkish' : (council.board.median == 'dove' ? 'dovish' : 'to the middle') }}:
+					<span class="font-mono tabular-nums">{{ council.board.hawk }}</span> {{ council.board.hawk == 1 ? 'hawk' : 'hawks' }},
+					<span class="font-mono tabular-nums">{{ council.board.swing }}</span> {{ council.board.swing == 1 ? 'swing vote' : 'swing votes' }},
+					<span class="font-mono tabular-nums">{{ council.board.dove }}</span> {{ council.board.dove == 1 ? 'dove' : 'doves' }}.
 				</p>
 			{% endif %}
 

@@ -21,6 +21,7 @@ the glossary does not have.
 | Body | What it does |
 | --- | --- |
 | Aerie Council | Appoints the department heads |
+| Council Appointment Board | Puts forward the candidates for each Council seat |
 | Diet | The parliament; passes the budget |
 | Monetary Authority | Central bank; sets the policy rate (never "Rate Council") |
 | Financial Regulator | Bank capital rules |

@@ -18,9 +18,11 @@ use App\Service\Math\MathUtility;
  * (App\Service\Politics\SovereignReserveFund), cautious at -1 or bold at +1. A candidate's stances are drawn from the
  * record of the real office-holders each department is modelled on, and their age from the Federal Reserve Board's.
  * A vacant Council seat goes to the candidate nearest the sitting members' median on every question together (the
- * coordinate-wise median, as a majority vote picks on each); a department head to the candidate nearest the whole
- * Council's median on that department's question. A short list does not always offer a like mind, so the Council's
- * leans drift as its seats turn over.
+ * coordinate-wise median, as a majority vote picks on each), from a shortlist the Council Appointment Board puts
+ * forward: the three applicants nearest the board's own median, out of the field that applied. The board's members are
+ * named by outside bodies, never by the Council, so a Council cannot renew itself in its own image for good, as it did
+ * when it drew its own shortlists. A department head goes to the candidate nearest the whole Council's median on that
+ * department's question, from a shortlist drawn as it comes.
  *
  * Every draw is hashed from a salt the Council draws once, the vacancy and the candidate's place on the shortlist, so
  * the appointments replay exactly and take nothing more from the politics engine's random stream.
@@ -46,6 +48,14 @@ final class CouncilAppointments
     public const APPOINTMENT_AGE_MIN = 40.0;
     /** Oldest age the charter allows at appointment, so no councillor sits past 72; the Board's record runs to 71.7, its 90th percentile 60.5. */
     public const APPOINTMENT_AGE_MAX = 60.0;
+
+    // --- The Council Appointment Board (after Canada's Independent Advisory Board for Supreme Court Appointments) ---
+    /** Members of the board, each named by an outside body: seven, as on Canada's advisory board. */
+    public const BOARD_SEATS = 7;
+    /** Length of a board member's term, in years, staggered across the seats: Canada's board members serve terms of up to five years (Terms of Reference, quoted in the board's 2019-2023 reports). */
+    public const BOARD_TERM_YEARS = 5.0;
+    /** Applicants for each Council seat, from whom the board puts forward SHORTLIST: Canada's board received 12 to 18 applications a vacancy, 2017-2023, median 13.5 (2016's first call drew 31). */
+    public const BOARD_FIELD = 14;
 
     // --- Vacancies ---
     /** Gompertz level of the yearly death hazard at age 0, fitted with MORTALITY_SLOPE through ages 50 and 70 of the US life table, both sexes averaged (q 0.0053 and 0.0222; CDC/NCHS, United States Life Tables 2021, NVSR 72-12, Tables 2-3). */
@@ -86,27 +96,37 @@ final class CouncilAppointments
         }
         self::backfillDepartures($state, $salt, $roster, $time);
 
-        // Seats due this tick, a term's end or a vacancy, filled in the order they fell due, so a long tick fills them as
-        // a short one would.
+        // Seats due this tick, a board member's term, a councillor's term or a vacancy, filled in the order they fell due,
+        // so a long tick fills them as a short one would.
         $due = [];
-        foreach ($roster as $seat => $holder) {
-            if (abs(($state->councilSince[$seat] ?? -INF) - $holder['since']) > 1e-9) {
-                $due[] = ['seat' => $seat, 'at' => $holder['since'], 'vacancy' => false];
-            } elseif (($leaves = $state->councilLeavesAt[$seat] ?? -1.0) >= 0.0 && $leaves <= $time) {
-                $due[] = ['seat' => $seat, 'at' => $leaves, 'vacancy' => true];
+        foreach (self::boardTermStarts($time) as $seat => $since) {
+            if (abs(($state->boardSince[$seat] ?? -INF) - $since) > 1e-9) {
+                $due[] = ['kind' => 'board', 'seat' => $seat, 'at' => $since];
             }
         }
-        usort($due, static fn(array $a, array $b): int => [$a['at'], $a['seat']] <=> [$b['at'], $b['seat']]);
+        foreach ($roster as $seat => $holder) {
+            if (abs(($state->councilSince[$seat] ?? -INF) - $holder['since']) > 1e-9) {
+                $due[] = ['kind' => 'term', 'seat' => $seat, 'at' => $holder['since']];
+            } elseif (($leaves = $state->councilLeavesAt[$seat] ?? -1.0) >= 0.0 && $leaves <= $time) {
+                $due[] = ['kind' => 'vacancy', 'seat' => $seat, 'at' => $leaves];
+            }
+        }
+        usort($due, static fn(array $a, array $b): int => [$a['at'], $a['kind'] === 'board' ? 0 : 1, $a['seat']] <=> [$b['at'], $b['kind'] === 'board' ? 0 : 1, $b['seat']]);
 
-        foreach ($due as ['seat' => $seat, 'at' => $at, 'vacancy' => $vacancy]) {
+        foreach ($due as ['kind' => $kind, 'seat' => $seat, 'at' => $at]) {
+            if ($kind === 'board') {
+                self::seatBoardMember($state, $salt, $seat, $at, $math);
+                continue;
+            }
             $holder = $roster[$seat];
-            if ($vacancy) {
+            if ($kind === 'vacancy') {
                 // A seat left vacant mid-term goes to a successor who serves out the rest of the term.
                 $state->lastVacancyName = $state->councilNames[$seat];
                 $state->lastVacancyCause = self::departureCause($salt, $seat, $state->councilSeatedAt[$seat] ?? $holder['since'], $at - $state->councilBirths[$seat]);
                 $state->lastCouncilVacancyAt = $time;
             }
-            [$chosen, $state->councillorPassedOver] = self::appoint($salt, "council:{$seat}", $at, self::councilMedians($state, $seat), self::reservedNames($state), $math);
+            $shortlist = self::boardShortlist($salt, "council:{$seat}", $at, self::boardMedians($state), self::reservedNames($state), $math);
+            [$chosen, $state->councillorPassedOver] = self::choose($shortlist, self::councilMedians($state, $seat));
             self::seatCouncillor($state, $salt, $seat, $chosen, $holder['since'], $at, $holder['termEnds'], $at);
             $state->lastCouncillorSeatedAt = $time;
         }
@@ -128,6 +148,8 @@ final class CouncilAppointments
         $state->regulatorName = '';
         $state->fundHeadName = '';
         $state->formerNames = [];
+        $state->boardMembers = $state->boardSince = [];
+        self::seatBoard($state, $salt, $time, $math);
 
         foreach (AerieCouncil::roster($time) as $seat => $holder) {
             $drawn = self::candidate($salt, self::vacancyKey("council:{$seat}", $holder['since']), 0, $holder['since'], self::reservedNames($state), $math);
@@ -151,25 +173,22 @@ final class CouncilAppointments
      */
     public static function appoint(int $salt, string $seat, float $since, array $target, array $taken, MathUtility $math): array
     {
-        $vacancy = self::vacancyKey($seat, $since);
-        $shortlist = [];
-        for ($slot = 0; $slot < self::SHORTLIST; ++$slot) {
-            $shortlist[] = $candidate = self::candidate($salt, $vacancy, $slot, $since, $taken, $math);
-            $taken[] = $candidate['name'];
-        }
+        return self::choose(self::field($salt, self::vacancyKey($seat, $since), self::SHORTLIST, $since, $taken, $math), $target);
+    }
 
-        $distance = static function (array $candidate) use ($target): float {
-            $squares = 0.0;
-            foreach ($target as $axis => $stance) {
-                $squares += ($candidate[self::stanceKey($axis)] - $stance) ** 2;
-            }
-
-            return sqrt($squares);
-        };
-
+    /**
+     * The appointer's pick from a shortlist: the candidate nearest their stances on the questions the target names, by
+     * straight-line distance; the first drawn of any tied.
+     *
+     * @param list<array{name: string, birth: float, stance: float, regulation: float, fund: float, swing?: float}> $shortlist
+     * @param array<string, float> $target
+     * @return array{0: array{name: string, birth: float, stance: float, regulation: float, fund: float, swing?: float}, 1: list<array{name: string, birth: float, stance: float, regulation: float, fund: float, swing?: float}>} The one named, and the ones passed over.
+     */
+    public static function choose(array $shortlist, array $target): array
+    {
         $chosen = 0;
         foreach ($shortlist as $slot => $candidate) {
-            if ($distance($candidate) < $distance($shortlist[$chosen]) - 1e-12) {
+            if (self::distance($candidate, $target) < self::distance($shortlist[$chosen], $target) - 1e-12) {
                 $chosen = $slot;
             }
         }
@@ -177,6 +196,109 @@ final class CouncilAppointments
         unset($shortlist[$chosen]);
 
         return [$named, array_values($shortlist)];
+    }
+
+    /**
+     * The Council Appointment Board's shortlist for a Council seat: of the BOARD_FIELD who applied, the SHORTLIST nearest
+     * the board's median on every question, the first drawn of any tied, in the order they applied.
+     *
+     * @param array<string, float> $boardMedians
+     * @param list<string>         $taken
+     * @return list<array{name: string, birth: float, stance: float, regulation: float, fund: float, swing?: float}>
+     */
+    public static function boardShortlist(int $salt, string $seat, float $since, array $boardMedians, array $taken, MathUtility $math): array
+    {
+        $field = self::field($salt, self::vacancyKey($seat, $since), self::BOARD_FIELD, $since, $taken, $math);
+        $order = array_keys($field);
+        usort($order, static fn(int $a, int $b): int => [round(self::distance($field[$a], $boardMedians), 12), $a] <=> [round(self::distance($field[$b], $boardMedians), 12), $b]);
+        $kept = array_slice($order, 0, self::SHORTLIST);
+        sort($kept);
+
+        return array_map(static fn(int $slot): array => $field[$slot], $kept);
+    }
+
+    /**
+     * The board's median on every question: what a majority of its members would put forward on each.
+     *
+     * @return array<string, float>
+     */
+    public static function boardMedians(PoliticsState|\App\DTO\PoliticsStateDTO $state): array
+    {
+        return [
+            self::AXIS_MONEY => self::median(array_column($state->boardMembers, 'stance')),
+            self::AXIS_REGULATION => self::median(array_column($state->boardMembers, 'regulation')),
+            self::AXIS_FUND => self::median(array_column($state->boardMembers, 'fund')),
+        ];
+    }
+
+    /**
+     * Candidates for a vacancy, drawn one after another with names none of the others or anyone in $taken holds.
+     *
+     * @param list<string> $taken
+     * @return list<array{name: string, birth: float, stance: float, regulation: float, fund: float, swing?: float}>
+     */
+    private static function field(int $salt, string $vacancy, int $count, float $since, array $taken, MathUtility $math): array
+    {
+        $field = [];
+        for ($slot = 0; $slot < $count; ++$slot) {
+            $field[] = $candidate = self::candidate($salt, $vacancy, $slot, $since, $taken, $math);
+            $taken[] = $candidate['name'];
+        }
+
+        return $field;
+    }
+
+    /**
+     * Straight-line distance between a candidate's stances and a target's on the questions the target names.
+     *
+     * @param array{name: string, birth: float, stance: float, regulation: float, fund: float, swing?: float} $candidate
+     * @param array<string, float> $target
+     */
+    private static function distance(array $candidate, array $target): float
+    {
+        $squares = 0.0;
+        foreach ($target as $axis => $stance) {
+            $squares += ($candidate[self::stanceKey($axis)] - $stance) ** 2;
+        }
+
+        return sqrt($squares);
+    }
+
+    /**
+     * When each board seat's term in progress began: the seats fall vacant evenly over one term, half a spacing off Year
+     * 1, as the Council's do.
+     *
+     * @return list<float>
+     */
+    public static function boardTermStarts(float $time): array
+    {
+        $starts = [];
+        for ($seat = 0; $seat < self::BOARD_SEATS; ++$seat) {
+            $starts[] = self::termStart($time, ($seat + 0.5) * self::BOARD_TERM_YEARS / self::BOARD_SEATS, self::BOARD_TERM_YEARS);
+        }
+
+        return $starts;
+    }
+
+    /** Every board seat filled for the term in progress, as when the Council is first read. */
+    private static function seatBoard(PoliticsState $state, int $salt, float $time, MathUtility $math): void
+    {
+        foreach (self::boardTermStarts($time) as $seat => $since) {
+            self::seatBoardMember($state, $salt, $seat, $since, $math);
+        }
+    }
+
+    /**
+     * A board seat filled for a term: its outside body names its own member, one person drawn from the record as any
+     * candidate is, with no shortlist and no say for the Council.
+     */
+    private static function seatBoardMember(PoliticsState $state, int $salt, int $seat, float $since, MathUtility $math): void
+    {
+        self::retire($state, $state->boardMembers[$seat]['name'] ?? '');
+        $state->boardMembers[$seat] = self::candidate($salt, self::vacancyKey("board:{$seat}", $since), 0, $since, self::reservedNames($state), $math);
+        $state->boardSince[$seat] = $since;
+        ksort($state->boardMembers);
+        ksort($state->boardSince);
     }
 
     /**
@@ -245,15 +367,15 @@ final class CouncilAppointments
     }
 
     /**
-     * Everyone sitting: councillors, the governor, the rate committee, and the heads of the Financial Regulator and the
-     * Sovereign Reserve Fund.
+     * Everyone sitting: councillors, the governor, the rate committee, the heads of the Financial Regulator and the
+     * Sovereign Reserve Fund, and the Council Appointment Board.
      *
      * @return list<string>
      */
     public static function sittingNames(PoliticsState $state): array
     {
         return array_values(array_filter(
-            array_merge($state->councilNames, [$state->governorName], $state->memberNames, [$state->regulatorName, $state->fundHeadName]),
+            array_merge($state->councilNames, [$state->governorName], $state->memberNames, [$state->regulatorName, $state->fundHeadName], array_column($state->boardMembers, 'name')),
             static fn(string $name): bool => $name !== ''
         ));
     }
