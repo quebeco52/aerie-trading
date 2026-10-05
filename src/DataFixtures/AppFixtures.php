@@ -40,7 +40,7 @@ class AppFixtures extends Fixture
             echo "Warning: Could not clear Redis. (" . $e->getMessage() . ")\n";
         }
 
-        echo "Seeding the Lakebird Exchange...\n";
+        echo "Seeding the Aerie Exchange...\n";
 
         // Loop through ETFs (Future-proofed for multiple indices!)
         foreach (InitialMarket::ETFS as $etfData) {

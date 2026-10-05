@@ -1,17 +1,6 @@
 {% extends 'base.html.twig' %}
 
-{# Hover/focus tooltip, positioned against its `group` parent. #}
-{% macro tooltip(text, position = 'left', width = 'w-48', vpos = 'top') %}
-	{% set arrowPosition = position == 'right' ? 'right-4' : (position == 'center' ? 'left-1/2 -translate-x-1/2' : 'left-4') %}
-	{% set alignClass = position == 'right' ? 'right-0' : (position == 'center' ? 'left-1/2 -translate-x-1/2' : 'left-0') %}
-	{% set verticalClass = vpos == 'bottom' ? 'top-full mt-2.5' : 'bottom-full mb-2.5' %}
-	{% set arrowVerticalClass = vpos == 'bottom' ? '-top-[5px] border-t border-l' : '-bottom-[5px] border-b border-r' %}
-
-	<span role="tooltip" class="block pointer-events-none absolute {{ alignClass }} {{ verticalClass }} {{ width }} p-2.5 bg-surface-container-high text-on-surface text-2xs leading-relaxed rounded-lg opacity-0 translate-y-2 group-hover:opacity-100 group-hover:translate-y-0 group-focus:opacity-100 group-focus:translate-y-0 transition-all duration-200 z-50 normal-case tracking-normal font-normal border border-outline-variant/40">
-		{{ text }}
-		<span class="block absolute {{ arrowVerticalClass }} {{ arrowPosition }} w-2.5 h-2.5 bg-surface-container-high border-outline-variant/40 transform rotate-45"></span>
-	</span>
-{% endmacro %}
+{% import 'partials/_ui.html.twig' as ui %}
 
 {% block title %}
 	{{ asset.ticker }}
@@ -62,16 +51,16 @@
 						<span class="font-mono font-semibold text-on-surface">{{ asset.ticker }}</span>
 						<span class="text-on-surface-variant/40" aria-hidden="true">&middot;</span>
 						<span class="group relative cursor-help focus-visible:outline-none" tabindex="0">
-							<span class="border-b border-dotted border-on-surface-variant/60">{{ isEtf ? indexFacts.indexName : asset.industry|default('General') }}</span>
+							<span class="term">{{ isEtf ? indexFacts.indexName : asset.industry|default('General') }}</span>
 							{% set bmMap = constant('App\\Data\\Sectors::BUSINESS_MODEL_DESCRIPTIONS') %}
 							{% set bmDesc = isEtf ? indexFacts.mandate : (bmMap[businessModel|default('none')] ?? bmMap['none']) %}
-							{{ _self.tooltip(bmDesc, 'left', 'w-72', 'bottom') }}
+							{{ ui.tooltip(bmDesc, 'left', 'w-72', 'bottom') }}
 						</span>
 
 						{% if lifecycleStage is not null and not asset.isBankrupt %}
 							<span class="group relative cursor-help inline-flex items-center rounded border px-1.5 py-0.5 text-xs font-medium {{ stageTone[lifecycleStage.value] }} focus-visible:outline-none" tabindex="0" id="lifecycle-badge">
 								<span class="border-b border-dotted border-current/60">{{ lifecycleStage.label }}</span>
-								{{ _self.tooltip('Life-cycle stage, read from the signs of operating, investing and financing cash flow in the last quarterly report. ' ~ lifecycleStage.description ~ ' Pattern: ' ~ lifecycleStage.cashFlowSignature ~ '.', 'left', 'w-80', 'bottom') }}
+								{{ ui.tooltip('Life-cycle stage, read from the signs of operating, investing and financing cash flow in the last quarterly report. ' ~ lifecycleStage.description ~ ' Pattern: ' ~ lifecycleStage.cashFlowSignature ~ '.', 'left', 'w-80', 'bottom') }}
 							</span>
 						{% endif %}
 						{% if corporateBonds|default([])|length > 0 %}
@@ -96,7 +85,7 @@
 				   previous close to compute a daily move from. Labelled accordingly. #}
 				<p class="mt-1 text-sm font-mono tabular-nums" id="big-change-row">
 					{% if changePercent is not null %}
-						<span id="big-change" class="font-semibold {{ changePercent >= 0 ? 'text-secondary' : 'text-tertiary' }}">{{ changePercent >= 0 ? '+' : '' }}{{ (changePercent * 100)|number_format(2) }}%</span>
+						<span id="big-change" class="font-semibold {{ changePercent|signed_class }}">{{ changePercent|pct(2, true) }}</span>
 					{% else %}
 						<span id="big-change" class="font-semibold text-on-surface-faint">&mdash;</span>
 					{% endif %}
@@ -186,8 +175,10 @@
 
 												<div class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20">
 							<h2 class="text-sm font-semibold text-on-surface mb-2">About {{ asset.name }}</h2>
-							<div class="text-sm text-on-surface-variant leading-relaxed">
-								<p>{{ generalInfo|nl2br }}</p>
+							<div class="text-sm text-on-surface-variant leading-relaxed space-y-3">
+								{% for paragraph in (generalInfo ?? '')|split("\n\n") %}
+									<p>{{ paragraph }}</p>
+								{% endfor %}
 							</div>
 						</div>
 
@@ -200,7 +191,7 @@
 									<article class="py-3 space-y-1.5">
 										<div class="flex items-start justify-between gap-3">
 											<div class="flex items-center flex-wrap gap-x-2 gap-y-1 min-w-0">
-												<span class="inline-flex items-center rounded px-1.5 py-0.5 text-2xs font-medium border {{ event.badgeClass }}">{{ event.badge|lower|capitalize }}</span>
+												<span class="badge {{ event.badgeClass }}">{{ event.badge|lower|capitalize }}</span>
 												{% if event.isEarnings and event.eps %}
 													<span class="text-xs font-semibold font-mono text-on-surface">EPS {{ event.eps }}</span>
 												{% endif %}
@@ -216,7 +207,7 @@
 
 											<div class="shrink-0 flex items-baseline gap-2.5 text-xs font-mono tabular-nums">
 												{% if event.changePercent is not null and event.changePercent != 0 %}
-													<span class="{{ event.changePercent > 0 ? 'text-secondary' : 'text-tertiary' }}">{{ event.changePercent > 0 ? '+' : '' }}{{ event.changePercent|number_format(2) }}%</span>
+													<span class="{{ event.changePercent|signed_class }}">{{ event.changePercent > 0 ? '+' : '' }}{{ event.changePercent|number_format(2) }}%</span>
 												{% endif %}
 												<time class="text-on-surface-variant whitespace-nowrap">{{ event.recordedAt|date('Y-m-d H:i') }}</time>
 											</div>
@@ -270,7 +261,7 @@
 											</div>
 											<div class="flex justify-between items-center text-xs">
 												<span class="text-on-surface-variant">Avg cost basis</span>
-												<span class="font-mono tabular-nums text-on-surface-variant">${{ userAvgCost|number_format(2) }}</span>
+												<span class="font-mono tabular-nums text-on-surface-variant">{{ userAvgCost|money(2) }}</span>
 											</div>
 											<div class="flex justify-between items-center text-xs">
 												<span class="text-on-surface-variant">Market value</span>
@@ -278,16 +269,16 @@
 											</div>
 											<div class="flex justify-between items-center text-xs pt-1.5 border-t border-outline-variant/15">
 												<span class="text-on-surface-variant">Unrealized return</span>
-												<span class="font-mono tabular-nums font-bold {{ userUnrealizedPnL >= 0 ? 'text-secondary' : 'text-tertiary' }}">
-													{{ userUnrealizedPnL >= 0 ? '+' : '' }}${{ userUnrealizedPnL|number_format(2) }}
-													({{ userUnrealizedPnL >= 0 ? '+' : '' }}{{ userUnrealizedPnLPercent|number_format(2) }}%)
+												<span class="font-mono tabular-nums font-bold {{ userUnrealizedPnL|signed_class }}">
+													{{ userUnrealizedPnL|money(2, true) }}
+													({{ userUnrealizedPnL > 0 ? '+' : '' }}{{ userUnrealizedPnLPercent|number_format(2) }}%)
 												</span>
 											</div>
 										{% endif %}
 										{% if userDividendIncome > 0 %}
 											<div class="flex justify-between items-center text-xs {{ userQuantity > 0 ? 'pt-1.5 border-t border-outline-variant/15' : '' }}">
 												<span class="text-on-surface-variant">Dividends Received</span>
-												<span class="font-mono tabular-nums font-bold text-secondary">+${{ userDividendIncome|number_format(2) }}</span>
+												<span class="font-mono tabular-nums font-bold text-secondary">+{{ userDividendIncome|money(2) }}</span>
 											</div>
 										{% endif %}
 									</div>
@@ -337,7 +328,7 @@
 										<div class="p-3 rounded bg-surface-container-lowest/80 border border-outline-variant/20 space-y-1.5 text-xs">
 											<div class="flex justify-between items-center">
 												<span class="text-on-surface-variant">Borrow fee</span>
-												<span class="font-mono tabular-nums font-bold {{ borrowFee > 0.05 ? 'text-warning' : 'text-on-surface' }}">{{ (borrowFee * 100)|number_format(2) }}%/yr</span>
+												<span class="font-mono tabular-nums font-bold {{ borrowFee > 0.05 ? 'text-warning' : 'text-on-surface' }}">{{ borrowFee|pct(2) }}/yr</span>
 											</div>
 											<div class="flex justify-between items-center">
 												<span class="text-on-surface-variant">Available to borrow</span>
@@ -345,7 +336,7 @@
 											</div>
 											{% if shortUtilization >= 0.90 %}
 												<p class="text-2xs text-tertiary leading-relaxed pt-1 border-t border-outline-variant/15">
-													{{ (shortUtilization * 100)|number_format(0) }}% of lendable stock is out on loan.
+													{{ shortUtilization|pct(0) }} of lendable stock is out on loan.
 													{{ shortUtilization >= 0.97 ? 'Lenders are recalling: open shorts can be bought in whether or not the account is in good standing.' : 'The borrow is getting expensive.' }}
 												</p>
 											{% endif %}
@@ -400,12 +391,12 @@
 									<div class="p-3 rounded bg-surface-container-lowest/80 border border-outline-variant/20 space-y-1.5 text-xs">
 										<div class="flex justify-between items-center">
 											<span class="text-on-surface-variant" data-trade-form-target="estimateLabel">Estimated cost</span>
-											<span class="font-bold text-on-surface font-mono tabular-nums text-sm" id="estimated-total" data-trade-form-target="estimate" aria-live="polite">${{ asset.price|number_format(2) }}</span>
+											<span class="font-bold text-on-surface font-mono tabular-nums text-sm" id="estimated-total" data-trade-form-target="estimate" aria-live="polite">{{ asset.price|money(2) }}</span>
 										</div>
 										{% if not isEtf %}
 											{# Listed shares carry the District's stamp duty on both sides; funds are exempt. #}
 											<div class="flex justify-between items-center text-on-surface-variant">
-												<span>Stamp duty ({{ (macro.stampDutyRate * 100)|number_format(2) }}%, to the Sovereign Reserve)</span>
+												<span>Stamp duty ({{ macro.stampDutyRate|pct(2) }}, to the Sovereign Reserve Fund)</span>
 												<span class="font-mono tabular-nums" data-trade-form-target="duty">-</span>
 											</div>
 										{% endif %}
@@ -435,18 +426,18 @@
 										{# The District's own stake, off the float and outside the fund; its dividends are paid into the fund. #}
 										<div class="py-2 flex justify-between items-center">
 											<dt class="group relative cursor-help text-on-surface-variant" tabindex="0">
-												<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">District strategic stake</span>
-												{{ _self.tooltip('The District holds this stake itself, outside the Sovereign Reserve Fund, as Singapore holds its exchange. It is off the float and never traded, and its dividends are paid into the fund.', 'left', 'w-64') }}
+												<span class="term">District strategic stake</span>
+												{{ ui.tooltip('The District holds this stake itself, outside the Sovereign Reserve Fund. It is off the float and never traded, and its dividends are paid into the fund.', 'left', 'w-64') }}
 											</dt>
-											<dd class="font-medium font-mono tabular-nums"><a href="/reserve" class="text-on-surface hover:text-primary hover:underline">{{ (strategicStake * 100)|number_format(2) }}% of shares</a></dd>
+											<dd class="font-medium font-mono tabular-nums"><a href="/reserve" class="text-on-surface hover:text-primary hover:underline">{{ strategicStake|pct(2) }} of shares</a></dd>
 										</div>
 									{% endif %}
 									{% if macro.sovereignFundOwnershipShare > 0 and not asset.bankrupt %}
 										{# The fund holds the same share of every name's float, so its stake here is that share of this float. #}
 										<div class="py-2 flex justify-between items-center">
 											<dt class="group relative cursor-help text-on-surface-variant" tabindex="0">
-												<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Sovereign Reserve</span>
-												{{ _self.tooltip('The district\'s sovereign fund holds the same share of every listed company\'s float and trades only when its board weight, or its whole equity share, leaves its band around policy.', 'left', 'w-64') }}
+												<span class="term">Sovereign Reserve Fund</span>
+												{{ ui.tooltip('The district\'s sovereign fund holds the same share of every listed company\'s float and trades only when its board weight, or its whole equity share, leaves its band around policy.', 'left', 'w-64') }}
 											</dt>
 											<dd class="font-medium font-mono tabular-nums"><a href="/reserve" class="text-on-surface hover:text-primary hover:underline">{{ (macro.sovereignFundOwnershipShare * asset.publicFloatPercentage * 100)|number_format(2) }}% of shares</a></dd>
 										</div>
@@ -457,21 +448,21 @@
 									</div>
 									<div class="py-2 flex justify-between items-center">
 										<dt class="text-on-surface-variant">EPS (TTM)</dt>
-										<dd class="font-medium text-on-surface font-mono tabular-nums" id="stat-eps">${{ asset.earningsPerShare|number_format(2) }}</dd>
+										<dd class="font-medium text-on-surface font-mono tabular-nums" id="stat-eps">{{ asset.earningsPerShare|money(2) }}</dd>
 									</div>
 									<div class="py-2 flex justify-between items-center">
 										<dt class="text-on-surface-variant">Dividend yield</dt>
-										<dd class="font-medium text-on-surface font-mono tabular-nums" id="stat-div-yield">{{ dividendYield > 0 ? (dividendYield * 100)|number_format(2) ~ '%' : '-' }}</dd>
+										<dd class="font-medium text-on-surface font-mono tabular-nums" id="stat-div-yield">{{ dividendYield > 0 ? dividendYield|pct(2) : '-' }}</dd>
 									</div>
 									{% if netAssetValue %}
 										{# A closed-end structure is quoted against its assets, never against its earnings. #}
 										<div class="py-2 flex justify-between items-center">
 											<dt class="text-on-surface-variant">NAV / share</dt>
-											<dd class="font-medium text-on-surface font-mono tabular-nums" id="stat-nav">${{ netAssetValue.perShare|number_format(2) }}</dd>
+											<dd class="font-medium text-on-surface font-mono tabular-nums" id="stat-nav">{{ netAssetValue.perShare|money(2) }}</dd>
 										</div>
 										<div class="py-2 flex justify-between items-center">
 											<dt class="text-on-surface-variant">{{ netAssetValue.premium < 0 ? 'Discount to NAV' : 'Premium to NAV' }}</dt>
-											<dd class="font-medium font-mono tabular-nums {{ netAssetValue.premium >= 0 ? 'text-secondary' : 'text-tertiary' }}" id="stat-nav-premium">{{ (netAssetValue.premium * 100)|number_format(1) }}%</dd>
+											<dd class="font-medium font-mono tabular-nums {{ netAssetValue.premium|signed_class }}" id="stat-nav-premium">{{ netAssetValue.premium|pct(1) }}</dd>
 										</div>
 									{% endif %}
 									<div class="py-2 flex justify-between items-center">
@@ -511,10 +502,10 @@
 										{% set zoneTone = capital.zone == 'Safe' ? 'text-secondary' : (capital.zone == 'Grey' ? 'text-warning' : 'text-tertiary') %}
 										<div class="py-2 flex justify-between items-center">
 											<dt class="group relative cursor-help text-on-surface-variant" tabindex="0">
-												<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Tangible book / share</span>
-												{{ _self.tooltip('Book equity less goodwill, per share. Every regulator deducts goodwill from capital (Basel III CET1, Prompt Corrective Action), so this is the book a financial firm is valued and judged on.', 'left', 'w-72') }}
+												<span class="term">Tangible book / share</span>
+												{{ ui.tooltip('Book equity less goodwill, per share. The Financial Regulator deducts goodwill from capital, so this is the book a financial firm is valued and judged on.', 'left', 'w-72') }}
 											</dt>
-											<dd class="font-medium text-on-surface font-mono tabular-nums" id="stat-tbvps">${{ capital.tangibleBookPerShare|number_format(2) }}</dd>
+											<dd class="font-medium text-on-surface font-mono tabular-nums" id="stat-tbvps">{{ capital.tangibleBookPerShare|money(2) }}</dd>
 										</div>
 										<div class="py-2 flex justify-between items-center">
 											<dt class="text-on-surface-variant">Price / tangible book</dt>
@@ -522,31 +513,31 @@
 										</div>
 										<div class="py-2 flex justify-between items-center">
 											<dt class="group relative cursor-help text-on-surface-variant" tabindex="0">
-												<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Return on tangible equity</span>
-												{{ _self.tooltip('Trailing twelve months of net income over tangible equity. It exceeds ROE by the goodwill the firm carries: the same earnings over the capital that actually backs them.', 'left', 'w-72') }}
+												<span class="term">Return on tangible equity</span>
+												{{ ui.tooltip('Trailing twelve months of net income over tangible equity. It exceeds ROE by the goodwill the firm carries: the same earnings over the capital that actually backs them.', 'left', 'w-72') }}
 											</dt>
-											<dd class="font-medium text-on-surface font-mono tabular-nums">{{ capital.returnOnTangibleEquity is null ? '-' : (capital.returnOnTangibleEquity * 100)|number_format(2) ~ '%' }}</dd>
+											<dd class="font-medium text-on-surface font-mono tabular-nums">{{ capital.returnOnTangibleEquity is null ? '-' : capital.returnOnTangibleEquity|pct(2) }}</dd>
 										</div>
 										<div class="py-2 flex justify-between items-center">
 											<dt class="group relative cursor-help text-on-surface-variant" tabindex="0">
-												<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Capital ratio</span>
-												{{ _self.tooltip('Tangible equity over tangible assets, the ratio the regulator closes the firm on. Well capitalized above ' ~ capitalThresholds.warning|number_format(1) ~ '%, distressed below ' ~ capitalThresholds.distress|number_format(1) ~ '%, closed below ' ~ capitalThresholds.bankrupt|number_format(1) ~ '%.', 'left', 'w-72') }}
+												<span class="term">Capital ratio</span>
+												{{ ui.tooltip('Tangible equity over tangible assets, the ratio the regulator closes the firm on. Well capitalized above ' ~ capitalThresholds.warning|number_format(1) ~ '%, distressed below ' ~ capitalThresholds.distress|number_format(1) ~ '%, closed below ' ~ capitalThresholds.bankrupt|number_format(1) ~ '%.', 'left', 'w-72') }}
 											</dt>
-											<dd class="font-medium font-mono tabular-nums {{ zoneTone }}">{{ (capital.ratio * 100)|number_format(2) }}% <span class="font-normal text-2xs">{{ zoneLabel[capital.zone] ?? capital.zone }}</span></dd>
+											<dd class="font-medium font-mono tabular-nums {{ zoneTone }}">{{ capital.ratio|pct(2) }} <span class="font-normal text-2xs">{{ zoneLabel[capital.zone] ?? capital.zone }}</span></dd>
 										</div>
 										{% if capital.cet1 is not null %}
 											<div class="py-2 flex justify-between items-center">
 												<dt class="group relative cursor-help text-on-surface-variant" tabindex="0">
-													<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">CET1 ratio</span>
-													{{ _self.tooltip('Common equity tier 1 less goodwill, over risk-weighted assets (Basel III). Payouts are restricted when it runs below the regulatory buffer.', 'left', 'w-72') }}
+													<span class="term">CET1 ratio</span>
+													{{ ui.tooltip('Common equity tier 1 less goodwill, over risk-weighted assets (Basel III). Payouts are restricted when it runs below the regulatory buffer.', 'left', 'w-72') }}
 												</dt>
-												<dd class="font-medium text-on-surface font-mono tabular-nums">{{ (capital.cet1 * 100)|number_format(2) }}%</dd>
+												<dd class="font-medium text-on-surface font-mono tabular-nums">{{ capital.cet1|pct(2) }}</dd>
 											</div>
 										{% endif %}
 										{% if capital.goodwillShare %}
 											<div class="py-2 flex justify-between items-center">
 												<dt class="text-on-surface-variant">Goodwill / book</dt>
-												<dd class="font-medium text-on-surface font-mono tabular-nums">{{ (capital.goodwillShare * 100)|number_format(1) }}%</dd>
+												<dd class="font-medium text-on-surface font-mono tabular-nums">{{ capital.goodwillShare|pct(1) }}</dd>
 											</div>
 										{% endif %}
 									{% else %}
@@ -563,10 +554,10 @@
 									{% endif %}
 									<div class="py-2 flex justify-between items-center">
 										<dt class="group relative cursor-help text-on-surface-variant" tabindex="0">
-											<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Accruals / assets</span>
-											{{ _self.tooltip('Accruals ratio: (net income − free cash flow) / total assets, annualised. Cash-backed earnings sit near zero; a high positive reading means reported profit is running ahead of cash and tends to reverse.', 'left', 'w-72') }}
+											<span class="term">Accruals / assets</span>
+											{{ ui.tooltip('Accruals ratio: (net income − free cash flow) / total assets, annualised. Cash-backed earnings sit near zero; a high positive reading means reported profit is running ahead of cash and tends to reverse.', 'left', 'w-72') }}
 										</dt>
-										<dd class="font-medium text-on-surface font-mono tabular-nums" id="stat-accruals">{{ asset.accrualsRatio is null ? '-' : ((asset.accrualsRatio >= 0 ? '+' : '') ~ (asset.accrualsRatio * 100)|number_format(2) ~ '%') }}</dd>
+										<dd class="font-medium text-on-surface font-mono tabular-nums" id="stat-accruals">{{ asset.accrualsRatio is null ? '-' : ((asset.accrualsRatio > 0 ? '+' : '') ~ asset.accrualsRatio|pct(2)) }}</dd>
 									</div>
 								</dl>
 							</div>
@@ -580,9 +571,9 @@
 								<div class="flex items-center justify-between gap-3 mb-3">
 									<h3 class="text-sm font-semibold text-on-surface">Credit and solvency</h3>
 									{% if credit.inDefault %}
-										<span class="inline-flex items-center rounded border px-1.5 py-0.5 text-2xs font-medium border-tertiary/40 text-tertiary bg-tertiary/10">In default</span>
+										<span class="badge badge-down">In default</span>
 									{% elseif not credit.hasCovenantHeadroom %}
-										<span class="inline-flex items-center rounded border px-1.5 py-0.5 text-2xs font-medium border-tertiary/30 text-tertiary bg-tertiary/5">Covenant breached</span>
+										<span class="badge badge-warn">Covenant breached</span>
 									{% else %}
 										<span class="inline-flex items-center rounded border px-1.5 py-0.5 text-2xs font-medium border-outline-variant/30 text-on-surface-variant">Current</span>
 									{% endif %}
@@ -602,21 +593,21 @@
 								<dl class="divide-y divide-outline-variant/15 text-sm">
 									<div class="py-2 flex justify-between items-center">
 										<dt class="group relative cursor-help text-on-surface-variant" tabindex="0">
-											<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Revolver drawn</span>
-											{{ _self.tooltip('The committed credit line, and how much of it is drawn. The undrawn part is the cash the firm can reach in a bad quarter without going to the market.', 'left', 'w-72') }}
+											<span class="term">Revolver drawn</span>
+											{{ ui.tooltip('The committed credit line, and how much of it is drawn. The undrawn part is the cash the firm can reach in a bad quarter without going to the market.', 'left', 'w-72') }}
 										</dt>
 										<dd class="font-medium text-on-surface font-mono tabular-nums">
 											{% if credit.revolverUtilization is null %}
 												-
 											{% else %}
-												{{ credit.revolverDrawn|format_large('$') }} <span class="text-on-surface-variant font-normal text-2xs">of {{ credit.revolverCommitment|format_large('$') }} ({{ (credit.revolverUtilization * 100)|number_format(0) }}%)</span>
+												{{ credit.revolverDrawn|format_large('$') }} <span class="text-on-surface-variant font-normal text-2xs">of {{ credit.revolverCommitment|format_large('$') }} ({{ credit.revolverUtilization|pct(0) }})</span>
 											{% endif %}
 										</dd>
 									</div>
 									<div class="py-2 flex justify-between items-center">
 										<dt class="group relative cursor-help text-on-surface-variant" tabindex="0">
-											<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Net debt / EBITDA</span>
-											{{ _self.tooltip('Funded net debt over trailing EBITDA, the leverage an incurrence covenant is tested on. Past the limit the firm may not take on new discretionary debt.', 'left', 'w-72') }}
+											<span class="term">Net debt / EBITDA</span>
+											{{ ui.tooltip('Funded net debt over trailing EBITDA, the leverage an incurrence covenant is tested on. Past the limit the firm may not take on new discretionary debt.', 'left', 'w-72') }}
 										</dt>
 										<dd class="font-medium font-mono tabular-nums {{ credit.hasCovenantHeadroom ? 'text-on-surface' : 'text-tertiary' }}">
 											{{ credit.netDebtToEbitda|number_format(2) }}x{% if credit.covenantLimit is not null %} <span class="text-on-surface-variant font-normal text-2xs">limit {{ credit.covenantLimit|number_format(1) }}x</span>{% endif %}
@@ -624,8 +615,8 @@
 									</div>
 									<div class="py-2 flex justify-between items-center">
 										<dt class="group relative cursor-help text-on-surface-variant" tabindex="0">
-											<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Interest coverage</span>
-											{{ _self.tooltip('How many times operating income covers the interest bill. Below the sector minimum the firm pays down debt before it pays out.', 'left', 'w-72') }}
+											<span class="term">Interest coverage</span>
+											{{ ui.tooltip('How many times operating income covers the interest bill. Below the sector minimum the firm pays down debt before it pays out.', 'left', 'w-72') }}
 										</dt>
 										<dd class="font-medium font-mono tabular-nums {{ credit.coverageState == 'adequate' ? 'text-on-surface' : 'text-tertiary' }}">
 											{{ credit.interestCoverage|number_format(1) }}x{% if credit.coverageState != 'adequate' %} <span class="font-normal text-2xs">{{ credit.coverageState }}</span>{% endif %}
@@ -633,8 +624,8 @@
 									</div>
 									<div class="py-2 flex justify-between items-center">
 										<dt class="group relative cursor-help text-on-surface-variant" tabindex="0">
-											<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Distance to default</span>
-											{{ _self.tooltip('How many standard deviations of asset value stand between the firm and its debt over five years. The rating agency grades on it: below ' ~ constant('App\\Service\\Market\\CreditRatingAgency::THRESHOLD_BBB')|number_format(1) ~ ' is speculative grade.', 'left', 'w-72') }}
+											<span class="term">Distance to default</span>
+											{{ ui.tooltip('How many standard deviations of asset value stand between the firm and its debt over five years. The rating agency grades on it: below ' ~ constant('App\\Service\\Market\\CreditRatingAgency::THRESHOLD_BBB')|number_format(1) ~ ' is speculative grade.', 'left', 'w-72') }}
 										</dt>
 										<dd class="font-medium text-on-surface font-mono tabular-nums">{{ credit.distanceToDefault|number_format(2) }}σ</dd>
 									</div>
@@ -661,13 +652,13 @@
 											<div class="min-w-0">
 												<div class="flex items-center gap-2">
 													<span class="font-mono font-semibold text-xs text-primary group-hover:underline">{{ bond.ticker }}</span>
-													<span class="text-2xs text-on-surface-variant font-mono tabular-nums">{{ (bond.couponRate * 100)|number_format(3) }}%</span>
+													<span class="text-2xs text-on-surface-variant font-mono tabular-nums">{{ bond.couponRate|pct(3) }}</span>
 												</div>
 												<p class="text-3xs text-on-surface-variant mt-0.5 font-mono tabular-nums">Matures in {{ bond.yearsToMaturity|number_format(1) }}y &middot; {{ bond.modifiedDuration|number_format(2) }} duration</p>
 											</div>
 											<div class="text-right shrink-0">
-												<p class="text-sm font-semibold font-mono tabular-nums text-on-surface">${{ bond.cleanPrice|number_format(2) }}</p>
-												<p class="text-2xs text-on-surface-variant font-mono tabular-nums">YTM {{ (bond.yieldToMaturity * 100)|number_format(2) }}%</p>
+												<p class="text-sm font-semibold font-mono tabular-nums text-on-surface">{{ bond.cleanPrice|money(2) }}</p>
+												<p class="text-2xs text-on-surface-variant font-mono tabular-nums">YTM {{ bond.yieldToMaturity|pct(2) }}</p>
 											</div>
 										</a>
 									{% endfor %}
@@ -691,7 +682,7 @@
 									{% set upside = analystTargets.upside_pct|default(0) %}
 									<p class="mt-0.5 flex items-baseline gap-3">
 										<span class="text-2xl font-semibold font-mono tabular-nums tracking-tight text-on-surface" id="target-consensus">${{ analystTargets.consensus|default(asset.price)|number_format(2) }}</span>
-										<span id="target-upside" class="text-sm font-mono tabular-nums {{ upside > 5 ? 'text-secondary' : (upside < -5 ? 'text-tertiary' : 'text-on-surface-variant') }}">{{ upside >= 0 ? '+' : '' }}{{ upside|number_format(1) }}% to target</span>
+										<span id="target-upside" class="text-sm font-mono tabular-nums {{ upside > 5 ? 'text-secondary' : (upside < -5 ? 'text-tertiary' : 'text-on-surface-variant') }}">{{ upside > 0 ? '+' : '' }}{{ upside|number_format(1) }}% to target</span>
 									</p>
 								</div>
 
@@ -737,24 +728,24 @@
 									</div>
 									<div class="py-2 flex justify-between items-center">
 										<dt class="group relative cursor-help text-on-surface-variant" tabindex="0">
-											<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Float-adjusted cap</span>
-											{{ _self.tooltip('The part of each constituent that actually trades, summed. The level is struck on this, not on total market capitalisation: weighting on the whole would have the fund holding stock that is not for sale.', 'left', 'w-72') }}
+											<span class="term">Float-adjusted cap</span>
+											{{ ui.tooltip('The part of each constituent that actually trades, summed. The level is struck on this, not on total market capitalisation: weighting on the whole would have the fund holding stock that is not for sale.', 'left', 'w-72') }}
 										</dt>
 										<dd class="font-medium text-on-surface font-mono tabular-nums">{{ indexFacts.totalFloatCap|format_large('$') }}</dd>
 									</div>
 									{% if macro.sovereignFundOwnershipShare > 0 %}
 										<div class="py-2 flex justify-between items-center">
 											<dt class="group relative cursor-help text-on-surface-variant" tabindex="0">
-												<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Sovereign Reserve</span>
-												{{ _self.tooltip('The district\'s sovereign fund holds the same share of every constituent\'s float, and so of this float-adjusted cap. It buys after a fall and trims after a run only when its board weight, or its whole equity share, leaves its band.', 'left', 'w-72') }}
+												<span class="term">Sovereign Reserve Fund</span>
+												{{ ui.tooltip('The district\'s sovereign fund holds the same share of every constituent\'s float, and so of this float-adjusted cap. It buys after a fall and trims after a run only when its board weight, or its whole equity share, leaves its band.', 'left', 'w-72') }}
 											</dt>
-											<dd class="font-medium font-mono tabular-nums"><a href="/reserve" class="text-on-surface hover:text-primary hover:underline">{{ (macro.sovereignFundOwnershipShare * 100)|number_format(2) }}% of float</a></dd>
+											<dd class="font-medium font-mono tabular-nums"><a href="/reserve" class="text-on-surface hover:text-primary hover:underline">{{ macro.sovereignFundOwnershipShare|pct(2) }} of float</a></dd>
 										</div>
 									{% endif %}
 									<div class="py-2 flex justify-between items-center">
 										<dt class="group relative cursor-help text-on-surface-variant" tabindex="0">
-											<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Top {{ indexFacts.topN }} weight</span>
-											{{ _self.tooltip('Share of the index carried by its largest constituents. The higher it runs, the more the level is a handful of names rather than the market.', 'left', 'w-64') }}
+											<span class="term">Top {{ indexFacts.topN }} weight</span>
+											{{ ui.tooltip('Share of the index carried by its largest constituents. The higher it runs, the more the level is a handful of names rather than the market.', 'left', 'w-64') }}
 										</dt>
 										<dd class="font-medium text-on-surface font-mono tabular-nums">{{ indexFacts.topWeight|number_format(1) }}%</dd>
 									</div>
@@ -787,8 +778,8 @@
 									</div>
 									<div class="py-2 flex justify-between items-center">
 										<dt class="group relative cursor-help text-on-surface-variant" tabindex="0">
-											<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Divisor</span>
-											{{ _self.tooltip('Level = float-adjusted cap of the members / divisor. Restated at every review and every fund split so that a change of composition or of units never moves the level; only prices do.', 'left', 'w-72') }}
+											<span class="term">Divisor</span>
+											{{ ui.tooltip('Level = float-adjusted cap of the members / divisor. Restated at every review and every fund split so that a change of composition or of units never moves the level; only prices do.', 'left', 'w-72') }}
 										</dt>
 										<dd class="font-medium text-on-surface font-mono tabular-nums">{{ indexFacts.divisor is null ? '-' : indexFacts.divisor|format_large }}</dd>
 									</div>
@@ -799,17 +790,17 @@
 									{% if indexFacts.navPremium is not null %}
 										<div class="py-2 flex justify-between items-center">
 											<dt class="group relative cursor-help text-on-surface-variant" tabindex="0">
-												<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Premium to NAV</span>
-												{{ _self.tooltip('What the fund trades at against what it owns. The two are set by different crowds and only agree because an authorized participant is paid to make them agree — and only to within what that trade costs. Past the band below, creating or redeeming shares turns a profit and somebody closes the gap.', 'left', 'w-72') }}
+												<span class="term">Premium to NAV</span>
+												{{ ui.tooltip('What the fund trades at against what it owns. The two are set by different crowds and only agree because an authorized participant is paid to make them agree — and only to within what that trade costs. Past the band below, creating or redeeming shares turns a profit and somebody closes the gap.', 'left', 'w-72') }}
 											</dt>
 											<dd class="font-medium font-mono tabular-nums {{ indexFacts.navPremium >= 0 ? 'text-on-surface' : 'text-on-surface-variant' }}">
-												{{ indexFacts.navPremium >= 0 ? '+' : '' }}{{ indexFacts.navPremium|number_format(3) }}%
+												{{ indexFacts.navPremium > 0 ? '+' : '' }}{{ indexFacts.navPremium|number_format(3) }}%
 											</dd>
 										</div>
 										<div class="py-2 flex justify-between items-center">
 											<dt class="group relative cursor-help text-on-surface-variant" tabindex="0">
-												<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Arbitrage band</span>
-												{{ _self.tooltip('How far the fund may drift from its basket before the arbitrage pays. It is the round-trip cost of assembling the basket, read off the live book — so a fund whose constituents have become expensive to trade is allowed to drift further, which is why a credit fund and an equity fund behave differently in the same stressed week.', 'left', 'w-72') }}
+												<span class="term">Arbitrage band</span>
+												{{ ui.tooltip('How far the fund may drift from its basket before the arbitrage pays. It is the round-trip cost of assembling the basket, read off the live book — so a fund whose constituents have become expensive to trade is allowed to drift further, which is why a credit fund and an equity fund behave differently in the same stressed week.', 'left', 'w-72') }}
 											</dt>
 											<dd class="font-medium text-on-surface font-mono tabular-nums">±{{ indexFacts.arbitrageBand|number_format(3) }}%</dd>
 										</div>
@@ -821,39 +812,39 @@
 									{% if indexFacts.expenseRatio is not null %}
 										<div class="py-2 flex justify-between items-center">
 											<dt class="group relative cursor-help text-on-surface-variant" tabindex="0">
-												<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Expense ratio</span>
-												{{ _self.tooltip('The annual fee, accrued continuously against net assets. It is met out of the dividend income the fund collects; anything income cannot cover is met by selling holdings, which is what makes the fund fall behind its index.', 'left', 'w-72') }}
+												<span class="term">Expense ratio</span>
+												{{ ui.tooltip('The annual fee, accrued continuously against net assets. It is met out of the dividend income the fund collects; anything income cannot cover is met by selling holdings, which is what makes the fund fall behind its index.', 'left', 'w-72') }}
 											</dt>
 											<dd class="font-medium text-on-surface font-mono tabular-nums">{{ indexFacts.expenseRatio|number_format(2) }}%</dd>
 										</div>
 										<div class="py-2 flex justify-between items-center">
 											<dt class="group relative cursor-help text-on-surface-variant" tabindex="0">
-												<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Distribution yield</span>
-												{{ _self.tooltip('Paid out over the trailing year, as a share of the current price. The index is a PRICE index and has no yield of its own; this is the dividend cash the fund collected from its constituents and passed on.', 'left', 'w-72') }}
+												<span class="term">Distribution yield</span>
+												{{ ui.tooltip('Paid out over the trailing year, as a share of the current price. The index is a PRICE index and has no yield of its own; this is the dividend cash the fund collected from its constituents and passed on.', 'left', 'w-72') }}
 											</dt>
 											<dd class="font-medium text-on-surface font-mono tabular-nums">{{ indexFacts.distributionYield|number_format(2) }}%</dd>
 										</div>
 										<div class="py-2 flex justify-between items-center">
 											<dt class="group relative cursor-help text-on-surface-variant" tabindex="0">
-												<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Fees charged</span>
-												{{ _self.tooltip('What the fee has come to since the fund opened, per share. It is taken out of the dividend income before that income is distributed, so it never appears as a fall in the price — the holder simply receives less every quarter.', 'left', 'w-72') }}
+												<span class="term">Fees charged</span>
+												{{ ui.tooltip('What the fee has come to since the fund opened, per share. It is taken out of the dividend income before that income is distributed, so it never appears as a fall in the price — the holder simply receives less every quarter.', 'left', 'w-72') }}
 											</dt>
-											<dd class="font-medium text-on-surface font-mono tabular-nums">${{ indexFacts.feesPaidPerShare|number_format(2) }}</dd>
+											<dd class="font-medium text-on-surface font-mono tabular-nums">{{ indexFacts.feesPaidPerShare|money(2) }}</dd>
 										</div>
 										{% if indexFacts.tradingCostsPerShare > 0.005 %}
 											<div class="py-2 flex justify-between items-center">
 												<dt class="group relative cursor-help text-on-surface-variant" tabindex="0">
-													<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Trading costs</span>
-													{{ _self.tooltip('The spread the fund has crossed rebalancing itself, per share. An index changes its weights by arithmetic; a fund has to trade to follow it. A fund weighted by size pays almost none of this, because its weights maintain themselves as prices move.', 'left', 'w-72') }}
+													<span class="term">Trading costs</span>
+													{{ ui.tooltip('The spread the fund has crossed rebalancing itself, per share. An index changes its weights by arithmetic; a fund has to trade to follow it. A fund weighted by size pays almost none of this, because its weights maintain themselves as prices move.', 'left', 'w-72') }}
 												</dt>
-												<dd class="font-medium text-on-surface font-mono tabular-nums">${{ indexFacts.tradingCostsPerShare|number_format(2) }}</dd>
+												<dd class="font-medium text-on-surface font-mono tabular-nums">{{ indexFacts.tradingCostsPerShare|money(2) }}</dd>
 											</div>
 										{% endif %}
 										{% if indexFacts.trackingDifference > 0.005 %}
 											<div class="py-2 flex justify-between items-center">
 												<dt class="group relative cursor-help text-on-surface-variant" tabindex="0">
-													<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Tracking difference</span>
-													{{ _self.tooltip('How far the basket has fallen behind the one index unit a share started with. It only ever grows: a fund never buys back what it sold to pay for itself, whether that was a fee income could not cover or the spread on a rebalance.', 'left', 'w-72') }}
+													<span class="term">Tracking difference</span>
+													{{ ui.tooltip('How far the basket has fallen behind the one index unit a share started with. It only ever grows: a fund never buys back what it sold to pay for itself, whether that was a fee income could not cover or the spread on a rebalance.', 'left', 'w-72') }}
 												</dt>
 												<dd class="font-medium text-on-surface font-mono tabular-nums">&minus;{{ indexFacts.trackingDifference|number_format(2) }}%</dd>
 											</div>
@@ -861,10 +852,10 @@
 										{% if indexFacts.accruedIncome > 0 %}
 											<div class="py-2 flex justify-between items-center">
 												<dt class="group relative cursor-help text-on-surface-variant" tabindex="0">
-													<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Income accrued</span>
-													{{ _self.tooltip('Dividend cash the fund has collected and not yet distributed, per share. It is already in the price and leaves it at the next distribution — the drop is the payment, not a loss.', 'left', 'w-72') }}
+													<span class="term">Income accrued</span>
+													{{ ui.tooltip('Dividend cash the fund has collected and not yet distributed, per share. It is already in the price and leaves it at the next distribution — the drop is the payment, not a loss.', 'left', 'w-72') }}
 												</dt>
-												<dd class="font-medium text-on-surface font-mono tabular-nums">${{ indexFacts.accruedIncome|number_format(2) }}</dd>
+												<dd class="font-medium text-on-surface font-mono tabular-nums">{{ indexFacts.accruedIncome|money(2) }}</dd>
 											</div>
 										{% endif %}
 									{% endif %}
@@ -889,7 +880,7 @@
 													<span class="text-3xs font-mono text-on-surface-faint w-5 text-right shrink-0">{{ comp.rank }}</span>
 													<a href="/stock/{{ comp.ticker }}" class="font-bold text-primary hover:underline font-mono">{{ comp.ticker }}</a>
 													<span class="text-on-surface-variant truncate max-w-30">{{ comp.name|default('') }}</span>
-													{% if comp.isNew %}<span class="inline-flex items-center rounded bg-secondary/10 px-1.5 py-0.5 text-4xs font-bold text-secondary border border-secondary/25 uppercase tracking-widest shrink-0">New</span>{% endif %}
+													{% if comp.isNew %}<span class="badge badge-up shrink-0">New</span>{% endif %}
 												</div>
 												<span class="font-bold text-on-surface font-mono tabular-nums" id="idx-weight-{{ comp.ticker }}">{{ comp.weight|default(0)|number_format(2) }}%</span>
 											</div>
@@ -943,7 +934,7 @@
 								<div class="overflow-x-auto">
 									<table class="w-full text-left border-collapse">
 										<thead>
-											<tr class="bg-surface-container-highest/20 text-on-surface-variant text-2xs font-semibold uppercase tracking-wide border-b border-outline-variant/15">
+											<tr class="table-head bg-surface-container-highest/20">
 												<th scope="col" class="px-4 py-3 text-right w-12">#</th>
 												<th scope="col" class="px-4 py-3">Company</th>
 												<th scope="col" class="px-4 py-3 hidden md:table-cell">Sector</th>
@@ -960,14 +951,14 @@
 													<th scope="row" class="px-4 py-3 text-left font-normal">
 														<div class="flex items-center gap-2">
 															<a href="/stock/{{ comp.ticker }}" class="font-bold text-on-surface text-sm group-hover:text-primary transition-colors outline-none after:absolute after:inset-0 after:content-[''] focus-visible:underline focus-visible:decoration-primary focus-visible:underline-offset-4">{{ comp.name }}</a>
-															{% if comp.isNew %}<span class="relative z-10 inline-flex items-center rounded bg-secondary/10 px-1.5 py-0.5 text-4xs font-bold text-secondary border border-secondary/25 uppercase tracking-widest">New</span>{% endif %}
+															{% if comp.isNew %}<span class="badge badge-up relative z-10">New</span>{% endif %}
 														</div>
-														<div class="text-on-surface-variant text-xs tracking-wide font-mono mt-0.5">{{ comp.ticker }}</div>
+														<div class="text-on-surface-variant text-xs font-mono mt-0.5">{{ comp.ticker }}</div>
 													</th>
 													<td class="px-4 py-3 hidden md:table-cell text-on-surface-variant text-xs">{{ comp.sector }}</td>
-													<td class="px-4 py-3 text-right font-bold font-mono tabular-nums text-xs sm:text-sm text-on-surface" id="idx-price-{{ comp.ticker }}">${{ comp.price|number_format(2) }}</td>
-													<td class="px-4 py-3 text-right font-semibold font-mono tabular-nums text-xs sm:text-sm hidden sm:table-cell {{ comp.changePercent is null ? 'text-on-surface-faint' : (comp.changePercent >= 0 ? 'text-secondary' : 'text-tertiary') }}">
-														{%- if comp.changePercent is null -%}&mdash;{%- else -%}{{ comp.changePercent >= 0 ? '+' : '' }}{{ (comp.changePercent * 100)|number_format(2) }}%{%- endif -%}
+													<td class="px-4 py-3 text-right font-bold font-mono tabular-nums text-xs sm:text-sm text-on-surface" id="idx-price-{{ comp.ticker }}">{{ comp.price|money(2) }}</td>
+													<td class="px-4 py-3 text-right font-semibold font-mono tabular-nums text-xs sm:text-sm hidden sm:table-cell {{ comp.changePercent|signed_class }}">
+														{%- if comp.changePercent is null -%}&mdash;{%- else -%}{{ comp.changePercent|pct(2, true) }}{%- endif -%}
 													</td>
 													<td class="px-4 py-3 text-right font-mono tabular-nums text-xs sm:text-sm text-on-surface-variant hidden sm:table-cell">{{ comp.floatCap|format_large('$') }}</td>
 													<td class="px-5 py-3 text-right">
@@ -983,7 +974,7 @@
 												{% if comp.targetWeight is not null and (comp.weight - comp.targetWeight)|abs >= 0.05 %}
 													<span class="group relative cursor-help text-4xs font-mono text-on-surface-faint block" tabindex="0">
 														{{ comp.targetWeight|number_format(2) }}% set
-														{{ _self.tooltip('The weight the last review set. Weights drift with prices between reviews because the fund holds a fixed number of shares &mdash; it does not trade again until the next review pulls it back to target.', 'left', 'w-64') }}
+														{{ ui.tooltip('The weight the last review set. Weights drift with prices between reviews because the fund holds a fixed number of shares &mdash; it does not trade again until the next review pulls it back to target.', 'left', 'w-64') }}
 													</span>
 												{% endif %}
 											</div>
@@ -1079,7 +1070,7 @@
 														<a href="/stock/{{ row.ticker }}" class="font-bold font-mono text-primary hover:underline">{{ row.ticker }}</a>
 														<span class="text-on-surface-variant truncate">{{ row.name }}</span>
 													</div>
-													{% if row.exits %}<span class="inline-flex items-center rounded bg-tertiary/10 px-1.5 py-0.5 text-4xs font-bold text-tertiary border border-tertiary/25 uppercase tracking-widest shrink-0">Drops next review</span>{% endif %}
+													{% if row.exits %}<span class="badge badge-down shrink-0">Drops next review</span>{% endif %}
 												</div>
 											{% else %}
 												<p class="text-on-surface-variant">None. Every member ranks inside the inner band.</p>
@@ -1094,7 +1085,7 @@
 														<a href="/stock/{{ row.ticker }}" class="font-bold font-mono text-primary hover:underline">{{ row.ticker }}</a>
 														<span class="text-on-surface-variant truncate">{{ row.name }}</span>
 													</div>
-													{% if row.qualifies %}<span class="inline-flex items-center rounded bg-secondary/10 px-1.5 py-0.5 text-4xs font-bold text-secondary border border-secondary/25 uppercase tracking-widest shrink-0">Joins next review</span>{% endif %}
+													{% if row.qualifies %}<span class="badge badge-up shrink-0">Joins next review</span>{% endif %}
 												</div>
 											{% else %}
 												<p class="text-on-surface-variant">None. No outsider ranks inside the outer band.</p>
@@ -1131,7 +1122,7 @@
 									{% if indexFacts.expenseRatio is not null %}
 										<div>
 											<dt class="font-semibold text-on-surface">Fees and income</dt>
-											<dd class="text-on-surface-variant leading-relaxed">The fund holds the basket, so it receives the dividends its constituents pay and passes them on {{ constant('App\\Service\\Math\\FinancialConstants::FUND_DISTRIBUTIONS_PER_YEAR') }} times a year; the level above is a price index and shows none of that. Its {{ indexFacts.expenseRatio|number_format(2) }}% fee is charged against net assets and met out of that income first, so a distribution is net of what the fund costs to run. Only where income falls short does the fund sell holdings, which is why its price can track the index exactly while its holders are still paying for it: the cost is the ${{ indexFacts.feesPaidPerShare|number_format(2) }} a share that never reached a distribution.{% if indexFacts.tradingCostsPerShare > 0.005 %} The fee is not the only cost. This index restrikes its weights at every review, and the fund has to trade to follow it: ${{ indexFacts.tradingCostsPerShare|number_format(2) }} a share has gone in spread doing so, out of the basket rather than out of income, because a spread is paid inside the trade.{% endif %}</dd>
+											<dd class="text-on-surface-variant leading-relaxed">The fund holds the basket, so it receives the dividends its constituents pay and passes them on {{ constant('App\\Service\\Math\\FinancialConstants::FUND_DISTRIBUTIONS_PER_YEAR') }} times a year; the level above is a price index and shows none of that. Its {{ indexFacts.expenseRatio|number_format(2) }}% fee is charged against net assets and met out of that income first, so a distribution is net of what the fund costs to run. Only where income falls short does the fund sell holdings, which is why its price can track the index exactly while its holders are still paying for it: the cost is the {{ indexFacts.feesPaidPerShare|money(2) }} a share that never reached a distribution.{% if indexFacts.tradingCostsPerShare > 0.005 %} The fee is not the only cost. This index restrikes its weights at every review, and the fund has to trade to follow it: {{ indexFacts.tradingCostsPerShare|money(2) }} a share has gone in spread doing so, out of the basket rather than out of income, because a spread is paid inside the trade.{% endif %}</dd>
 										</div>
 									{% endif %}
 									<div>
@@ -1155,14 +1146,14 @@
 							<h3 class="text-sm font-semibold text-on-surface">Anchor holdings</h3>
 							<p class="text-xs text-on-surface-variant">
 								{{ anchorPortfolio.totalValue|format_large('$') }}
-								<span class="text-on-surface-faint">&middot; {{ (anchorPortfolio.shareOfNav * 100)|number_format(1) }}% of net asset value</span>
+								<span class="text-on-surface-faint">&middot; {{ anchorPortfolio.shareOfNav|pct(1) }} of net asset value</span>
 							</p>
 						</div>
 
 						<div class="overflow-x-auto">
 							<table class="w-full text-left border-collapse min-w-162.5">
 								<thead>
-									<tr class="text-2xs text-on-surface-variant uppercase tracking-wide border-b border-outline-variant/15 font-semibold">
+									<tr class="table-head">
 										<th class="py-2.5">Holding</th>
 										<th class="py-2.5 text-right">Owned</th>
 										<th class="py-2.5 text-right">Price</th>
@@ -1180,16 +1171,16 @@
 											<span class="block text-2xs text-on-surface-variant">{{ holding.industry ?? holding.name }}</span>
 										</td>
 										<td class="py-2.5 text-right">
-											<span class="font-mono tabular-nums text-on-surface">{{ (holding.ownership * 100)|number_format(0) }}%</span>
+											<span class="font-mono tabular-nums text-on-surface">{{ holding.ownership|pct(0) }}</span>
 											<span class="block text-2xs text-on-surface-variant">{{ holding.tier }}</span>
 										</td>
-										<td class="py-2.5 text-right font-mono tabular-nums text-on-surface">${{ holding.price|number_format(2) }}</td>
-										<td class="py-2.5 text-right font-mono tabular-nums {{ holding.changePercent is null ? 'text-on-surface-faint' : (holding.changePercent >= 0 ? 'text-secondary' : 'text-tertiary') }}">
-											{%- if holding.changePercent is null -%}&mdash;{%- else -%}{{ holding.changePercent >= 0 ? '+' : '' }}{{ (holding.changePercent * 100)|number_format(2) }}%{%- endif -%}
+										<td class="py-2.5 text-right font-mono tabular-nums text-on-surface">{{ holding.price|money(2) }}</td>
+										<td class="py-2.5 text-right font-mono tabular-nums {{ holding.changePercent|signed_class }}">
+											{%- if holding.changePercent is null -%}&mdash;{%- else -%}{{ holding.changePercent|pct(2, true) }}{%- endif -%}
 										</td>
 										<td class="py-2.5 text-right font-mono tabular-nums text-on-surface">{{ holding.value|format_large('$') }}</td>
-										<td class="py-2.5 text-right font-mono tabular-nums text-on-surface-variant">{{ (holding.shareOfPortfolio * 100)|number_format(1) }}%</td>
-										<td class="py-2.5 text-right font-mono tabular-nums text-on-surface-variant">{{ (holding.shareOfNav * 100)|number_format(1) }}%</td>
+										<td class="py-2.5 text-right font-mono tabular-nums text-on-surface-variant">{{ holding.shareOfPortfolio|pct(1) }}</td>
+										<td class="py-2.5 text-right font-mono tabular-nums text-on-surface-variant">{{ holding.shareOfNav|pct(1) }}</td>
 										</tr>
 									{% endfor %}
 								</tbody>
@@ -1231,17 +1222,17 @@
 							{% for tile in financialSummary %}
 								{% set v = tile.value %}
 								{% set shown = {
-									'percent': (v * 100)|number_format(2) ~ '%',
-									'signed_percent': (v >= 0 ? '+' : '') ~ (v * 100)|number_format(2) ~ '%',
+									'percent': v|pct(2),
+									'signed_percent': v|pct(2, true),
 									'multiple': v|number_format(2) ~ 'x',
 									'quarters': v|number_format(1) ~ ' qtrs',
 									'years': v|number_format(1) ~ ' yrs',
 									'index': v|number_format(3),
-									'signed_index': (v >= 0 ? '+' : '') ~ v|number_format(3)
+									'signed_index': (v > 0 ? '+' : '') ~ v|number_format(3)
 								}[tile.format] ?? v|number_format(2) %}
 								<div class="p-4 rounded-lg bg-surface-container-low border border-outline-variant/20">
 									<span class="block text-xs text-on-surface-variant truncate">{{ tile.label }}</span>
-									<span class="block mt-0.5 text-base font-semibold font-mono tabular-nums {{ tile.format starts with 'signed' ? (v >= 0 ? 'text-secondary' : 'text-tertiary') : 'text-on-surface' }}">{{ shown }}</span>
+									<span class="block mt-0.5 text-base font-semibold font-mono tabular-nums {{ tile.format starts with 'signed' ? v|signed_class : 'text-on-surface' }}">{{ shown }}</span>
 								</div>
 							{% endfor %}
 						</div>
@@ -1455,7 +1446,7 @@
 											<div class="flex items-start gap-3 shrink-0">
 												<div class="hidden sm:flex flex-col items-end text-right max-w-64">
 													<span class="text-2xs text-on-surface-variant">Latest</span>
-													<span class="text-xs font-mono font-bold tabular-nums {{ netAssetValue.premium >= 0 ? 'text-secondary' : 'text-tertiary' }}">{{ (netAssetValue.premium * 100)|number_format(1) }}%</span>
+													<span class="text-xs font-mono font-bold tabular-nums {{ netAssetValue.premium|signed_class }}">{{ netAssetValue.premium|pct(1) }}</span>
 												</div>
 												<button type="button" class="expand-chart-btn p-1 -m-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors cursor-pointer" title="Expand chart" aria-label="Expand chart">
 													<span class="material-symbols-outlined text-base leading-none expand-icon" aria-hidden="true">open_in_full</span>
@@ -1728,8 +1719,8 @@
 							</div>
 							<div class="p-3.5 rounded bg-surface-container-lowest/60 border border-outline-variant/15">
 								<span class="text-xs text-on-surface-variant">Market share</span>
-								<p class="text-base font-semibold text-on-surface font-mono tabular-nums mt-1" id="stat-market-share">{{ (marketShare * 100)|number_format(2) }}%</p>
-								<p class="text-2xs text-on-surface-faint mt-1">of its addressable market{% if industry and industry.rosterShare is not null %} · {{ (industry.rosterShare * 100)|number_format(1) }}% of sales among {{ industry.rosterSize }} listed peers{% endif %}</p>
+								<p class="text-base font-semibold text-on-surface font-mono tabular-nums mt-1" id="stat-market-share">{{ marketShare|pct(2) }}</p>
+								<p class="text-2xs text-on-surface-faint mt-1">of its addressable market{% if industry and industry.rosterShare is not null %} · {{ industry.rosterShare|pct(1) }} of sales among {{ industry.rosterSize }} listed peers{% endif %}</p>
 							</div>
 						</div>
 					</div>
@@ -1793,18 +1784,18 @@
 							<div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs mb-3">
 								<div class="p-3.5 rounded bg-surface-container-lowest/60 border border-outline-variant/15">
 									<span class="text-xs text-on-surface-variant">Addressable share</span>
-									<p class="text-base font-semibold font-mono tabular-nums mt-1 {{ saturated ? 'text-warning' : 'text-on-surface' }}">{{ (industry.addressableShare * 100)|number_format(2) }}%</p>
-									<p class="text-2xs text-on-surface-faint mt-1">{{ saturated ? 'past' : 'under' }} the {{ (sat.threshold * 100)|number_format(0) }}% saturation line</p>
+									<p class="text-base font-semibold font-mono tabular-nums mt-1 {{ saturated ? 'text-warning' : 'text-on-surface' }}">{{ industry.addressableShare|pct(2) }}</p>
+									<p class="text-2xs text-on-surface-faint mt-1">{{ saturated ? 'past' : 'under' }} the {{ sat.threshold|pct(0) }} saturation line</p>
 								</div>
 								<div class="p-3.5 rounded bg-surface-container-lowest/60 border border-outline-variant/15">
 									<span class="text-xs text-on-surface-variant">Drag from size</span>
 									<p class="text-base font-semibold font-mono tabular-nums mt-1 {{ sat.penalty > 0.0005 ? 'text-warning' : 'text-on-surface' }}">{{ sat.penalty > 0 ? '-' : '' }}{{ (sat.penalty * 100)|number_format(2) }} pts</p>
-									<p class="text-2xs text-on-surface-faint mt-1">margin lost to the friction of size · {{ (sat.severity * 100)|number_format(0) }}% of return</p>
+									<p class="text-2xs text-on-surface-faint mt-1">margin lost to the friction of size · {{ sat.severity|pct(0) }} of return</p>
 								</div>
 								<div class="p-3.5 rounded bg-surface-container-lowest/60 border border-outline-variant/15">
 									<span class="text-xs text-on-surface-variant">Marginal return</span>
-									<p class="text-base font-semibold font-mono tabular-nums mt-1 {{ sat.marginalReturn < sat.trueReturn - 0.0005 ? 'text-warning' : 'text-on-surface' }}">{{ (sat.marginalReturn * 100)|number_format(2) }}%</p>
-									<p class="text-2xs text-on-surface-faint mt-1">next dollar of capital · trailing {{ (sat.trueReturn * 100)|number_format(2) }}%</p>
+									<p class="text-base font-semibold font-mono tabular-nums mt-1 {{ sat.marginalReturn < sat.trueReturn - 0.0005 ? 'text-warning' : 'text-on-surface' }}">{{ sat.marginalReturn|pct(2) }}</p>
+									<p class="text-2xs text-on-surface-faint mt-1">next dollar of capital · trailing {{ sat.trueReturn|pct(2) }}</p>
 								</div>
 								<div class="p-3.5 rounded bg-surface-container-lowest/60 border border-outline-variant/15">
 									<span class="text-xs text-on-surface-variant">Moat</span>
@@ -1819,14 +1810,14 @@
 								<div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
 									<div class="p-3.5 rounded bg-surface-container-lowest/60 border border-outline-variant/15">
 										<span class="text-xs text-on-surface-variant">Capacity against demand</span>
-										<p class="text-base font-semibold font-mono tabular-nums mt-1 {{ industry.balance in ['overbuilt', 'tight'] ? 'text-warning' : 'text-on-surface' }}">{{ industry.capacityRatio is not null ? (industry.capacityRatio * 100)|number_format(1) ~ '%' : '-' }}</p>
+										<p class="text-base font-semibold font-mono tabular-nums mt-1 {{ industry.balance in ['overbuilt', 'tight'] ? 'text-warning' : 'text-on-surface' }}">{{ industry.capacityRatio is not null ? industry.capacityRatio|pct(1) : '-' }}</p>
 										<p class="text-2xs text-on-surface-faint mt-1">{% if industry.installedCapacity is not null %}{{ industry.installedCapacity|format_large('$') }} plant · {{ industry.trendCapacity|format_large('$') }} at trend{% else %}anchored at first report{% endif %}</p>
 									</div>
 									<div class="p-3.5 rounded bg-surface-container-lowest/60 border border-outline-variant/15">
 										<span class="text-xs text-on-surface-variant">Realised price</span>
 										{% if industry.priceLevel is not null %}
 											{% set priceMove = (industry.priceLevel - 1) * 100 %}
-											<p class="text-base font-semibold font-mono tabular-nums mt-1 {{ priceMove|abs > 0.05 ? 'text-warning' : 'text-on-surface' }}">{{ priceMove >= 0 ? '+' : '' }}{{ priceMove|number_format(2) }}%</p>
+											<p class="text-base font-semibold font-mono tabular-nums mt-1 {{ priceMove|abs > 0.05 ? 'text-warning' : 'text-on-surface' }}">{{ priceMove > 0 ? '+' : '' }}{{ priceMove|number_format(2) }}%</p>
 										{% else %}
 											<p class="text-base font-semibold font-mono tabular-nums mt-1 text-on-surface-variant">-</p>
 										{% endif %}
@@ -1836,7 +1827,7 @@
 										<span class="text-xs text-on-surface-variant">Share moved by rivals</span>
 										{% if industry.rivalShareDrain is not null %}
 											{% set drain = industry.rivalShareDrain * 100 %}
-											<p class="text-base font-semibold font-mono tabular-nums mt-1 {{ drain|abs > 0.05 ? 'text-warning' : 'text-on-surface' }}">{{ drain >= 0 ? '+' : '' }}{{ drain|number_format(2) }}%</p>
+											<p class="text-base font-semibold font-mono tabular-nums mt-1 {{ drain|abs > 0.05 ? 'text-warning' : 'text-on-surface' }}">{{ drain > 0 ? '+' : '' }}{{ drain|number_format(2) }}%</p>
 										{% else %}
 											<p class="text-base font-semibold font-mono tabular-nums mt-1 text-on-surface-variant">-</p>
 										{% endif %}
@@ -1846,7 +1837,7 @@
 										<span class="text-xs text-on-surface-variant">Volume from own pricing</span>
 										{% if industry.ownPriceVolumeShift is not null %}
 											{% set shift = industry.ownPriceVolumeShift * 100 %}
-											<p class="text-base font-semibold font-mono tabular-nums mt-1 {{ shift|abs > 0.05 ? 'text-warning' : 'text-on-surface' }}">{{ shift >= 0 ? '+' : '' }}{{ shift|number_format(2) }}%</p>
+											<p class="text-base font-semibold font-mono tabular-nums mt-1 {{ shift|abs > 0.05 ? 'text-warning' : 'text-on-surface' }}">{{ shift > 0 ? '+' : '' }}{{ shift|number_format(2) }}%</p>
 										{% else %}
 											<p class="text-base font-semibold font-mono tabular-nums mt-1 text-on-surface-variant">-</p>
 										{% endif %}
@@ -1864,7 +1855,7 @@
 											<li class="flex items-center gap-3 text-xs">
 												<span class="w-14 shrink-0 font-mono {{ isSelf ? 'text-primary font-bold' : 'text-on-surface-variant' }}">{% if isSelf %}{{ peerTicker }}{% else %}<a href="/stock/{{ peerTicker }}" class="hover:underline">{{ peerTicker }}</a>{% endif %}</span>
 												<span class="flex-1 h-1.5 rounded-full bg-surface-container-highest overflow-hidden"><span class="block h-full rounded-full {{ isSelf ? 'bg-primary' : 'bg-outline-variant' }}" style="width: {{ (share * 100)|round(1) }}%"></span></span>
-												<span class="w-14 shrink-0 text-right font-mono tabular-nums {{ isSelf ? 'text-primary font-bold' : 'text-on-surface-variant' }}">{{ (share * 100)|number_format(1) }}%</span>
+												<span class="w-14 shrink-0 text-right font-mono tabular-nums {{ isSelf ? 'text-primary font-bold' : 'text-on-surface-variant' }}">{{ share|pct(1) }}</span>
 											</li>
 										{% endfor %}
 									</ul>
@@ -1892,17 +1883,17 @@
 										</div>
 										<div class="p-3.5 rounded bg-surface-container-lowest/60 border border-outline-variant/15">
 											<span class="text-xs text-on-surface-variant">Own share</span>
-											<p class="text-base font-semibold font-mono tabular-nums mt-1 text-on-surface">{{ (review.acquirerShare * 100)|number_format(1) }}%</p>
+											<p class="text-base font-semibold font-mono tabular-nums mt-1 text-on-surface">{{ review.acquirerShare|pct(1) }}</p>
 											<p class="text-2xs text-on-surface-faint mt-1">trend share of its market</p>
 										</div>
 										<div class="p-3.5 rounded bg-surface-container-lowest/60 border border-outline-variant/15">
 											<span class="text-xs text-on-surface-variant">Fringe</span>
-											<p class="text-base font-semibold font-mono tabular-nums mt-1 text-on-surface">{{ (review.fringeShare * 100)|number_format(1) }}%</p>
+											<p class="text-base font-semibold font-mono tabular-nums mt-1 text-on-surface">{{ review.fringeShare|pct(1) }}</p>
 											<p class="text-2xs text-on-surface-faint mt-1">unlisted competitors, available to buy</p>
 										</div>
 										<div class="p-3.5 rounded bg-surface-container-lowest/60 border border-outline-variant/15">
 											<span class="text-xs text-on-surface-variant">Largest deal</span>
-											<p class="text-base font-semibold font-mono tabular-nums mt-1 {{ review.clearedShare < 0.005 ? 'text-tertiary' : 'text-on-surface' }}">{{ (review.clearedShare * 100)|number_format(1) }}%</p>
+											<p class="text-base font-semibold font-mono tabular-nums mt-1 {{ review.clearedShare < 0.005 ? 'text-tertiary' : 'text-on-surface' }}">{{ review.clearedShare|pct(1) }}</p>
 											<p class="text-2xs text-on-surface-faint mt-1">of the market · {{ review.reviewBinds ? 'capped by review' : 'capped by the fringe' }}</p>
 										</div>
 									</div>
@@ -1957,7 +1948,7 @@
 						<div class="overflow-x-auto">
 							<table class="w-full text-left border-collapse min-w-162.5">
 								<thead>
-									<tr class="text-2xs text-on-surface-variant uppercase tracking-wide border-b border-outline-variant/15 font-semibold">
+									<tr class="table-head">
 										<th class="py-2.5">Company</th>
 										<th class="py-2.5 text-right">Price</th>
 										<th class="py-2.5 text-right">Market cap</th>
@@ -1975,13 +1966,13 @@
 										<td class="py-2.5 flex items-center gap-2">
 											<span class="text-primary font-mono">{{ asset.ticker }}</span>
 											<span class="text-on-surface text-xs">{{ asset.name }}</span>
-											<span class="px-1.5 py-0.2 rounded text-4xs bg-primary/20 text-primary uppercase">Current</span>
+											<span class="badge badge-accent">Current</span>
 										</td>
-										<td class="py-2.5 text-right font-mono tabular-nums text-on-surface">${{ asset.price|number_format(2) }}</td>
+										<td class="py-2.5 text-right font-mono tabular-nums text-on-surface">{{ asset.price|money(2) }}</td>
 										<td class="py-2.5 text-right font-mono tabular-nums text-on-surface">{{ marketCap|format_large('$') }}</td>
 										<td class="py-2.5 text-right font-mono tabular-nums text-on-surface">{{ peRatio ? peRatio|number_format(2) ~ 'x' : '-' }}</td>
 										<td class="py-2.5 text-right font-mono tabular-nums text-on-surface">{{ ((isFinancial ? (asset.currentRoe ?: asset.baselineRoe) : (asset.currentRoic ?: asset.baselineRoic)) * 100)|number_format(2) }}%</td>
-										<td class="py-2.5 text-right font-mono tabular-nums text-on-surface">{{ industry and industry.rosterShare is not null ? (industry.rosterShare * 100)|number_format(1) ~ '%' : '-' }}</td>
+										<td class="py-2.5 text-right font-mono tabular-nums text-on-surface">{{ industry and industry.rosterShare is not null ? industry.rosterShare|pct(1) : '-' }}</td>
 										<td class="py-2.5 text-right font-mono tabular-nums text-on-surface">{{ asset.totalEquity|format_large('$') }}</td>
 										<td class="py-2.5 text-right text-xs text-on-surface-variant">-</td>
 									</tr>
@@ -1999,10 +1990,10 @@
 												<a href="/stock/{{ peer.ticker }}" class="font-mono text-primary font-bold group-hover:underline outline-none after:absolute after:inset-0 after:content-[''] focus-visible:underline focus-visible:underline-offset-4">{{ peer.ticker }}</a>
 												<span class="text-on-surface-variant text-xs">{{ peer.name }}</span>
 											</th>
-											<td class="py-2.5 text-right font-mono tabular-nums text-on-surface">${{ peer.price|number_format(2) }}</td>
+											<td class="py-2.5 text-right font-mono tabular-nums text-on-surface">{{ peer.price|money(2) }}</td>
 											<td class="py-2.5 text-right font-mono tabular-nums text-on-surface">{{ peer.marketCap|format_large('$') }}</td>
 											<td class="py-2.5 text-right font-mono tabular-nums text-on-surface">{{ peer.peRatio ? peer.peRatio|number_format(2) ~ 'x' : '-' }}</td>
-											<td class="py-2.5 text-right font-mono tabular-nums text-on-surface">{{ (peer.roic * 100)|number_format(2) }}%</td>
+											<td class="py-2.5 text-right font-mono tabular-nums text-on-surface">{{ peer.roic|pct(2) }}</td>
 											<td class="py-2.5 text-right font-mono tabular-nums text-on-surface-variant">{{ industry and industry.peerShares[peer.ticker] is defined ? (industry.peerShares[peer.ticker] * 100)|number_format(1) ~ '%' : '-' }}</td>
 											<td class="py-2.5 text-right font-mono tabular-nums text-on-surface">{{ peer.totalEquity|format_large('$') }}</td>
 											<td class="py-2.5 text-right">
@@ -2119,7 +2110,7 @@
 						<div class="overflow-x-auto">
 							<table class="w-full text-left border-collapse min-w-125">
 								<thead>
-									<tr class="text-2xs text-on-surface-variant uppercase tracking-wide border-b border-outline-variant/15 font-semibold">
+									<tr class="table-head">
 										<th class="py-2.5">Placed date</th>
 										<th class="py-2.5">Action</th>
 										<th class="py-2.5 text-right">Shares</th>
@@ -2139,7 +2130,7 @@
 											<td class="py-2.5 text-right font-mono tabular-nums text-on-surface">{{ order.quantity|number_format }}</td>
 											{# A stop has no limit until it fires; what it rests on is its trigger. #}
 											{% set restingPrice = order.stop ? order.stopPrice : order.limitPrice %}
-											<td class="py-2.5 text-right font-mono tabular-nums font-bold text-on-surface">${{ restingPrice|number_format(2) }}</td>
+											<td class="py-2.5 text-right font-mono tabular-nums font-bold text-on-surface">{{ restingPrice|money(2) }}</td>
 											<td class="py-2.5 text-right font-mono tabular-nums text-on-surface-variant">${{ (restingPrice * order.quantity)|number_format(2) }}</td>
 											<td class="py-2.5 text-right">
 												<form action="/trade/cancel/{{ order.id }}" method="POST" class="inline">
@@ -2169,7 +2160,7 @@
 						<div class="overflow-x-auto">
 							<table class="w-full text-left border-collapse min-w-125">
 								<thead>
-									<tr class="text-2xs text-on-surface-variant uppercase tracking-wide border-b border-outline-variant/10 font-semibold">
+									<tr class="table-head">
 										<th class="py-3 font-bold">Execution date</th>
 										<th class="py-3 font-bold">Action</th>
 										<th class="py-3 font-bold text-right">Shares</th>
@@ -2189,8 +2180,8 @@
 												${{ ((trade.executionPrice ?? trade.limitPrice ?? 0.00) * (trade.filledQuantity > 0 ? trade.filledQuantity : trade.quantity))|number_format(2) }}
 											</td>
 											<td class="py-3 text-right">
-												<span class="px-2 py-0.5 text-3xs font-bold rounded {{ trade.status == 'FILLED' ? 'bg-secondary/10 text-secondary border border-secondary/20' : 'bg-surface-container text-on-surface-variant' }}">
-													{{ trade.status }}
+												<span class="badge {{ trade.status == 'FILLED' ? 'badge-up' : 'badge-neutral' }}">
+													{{ trade.status|replace({'_': ' '})|lower|capitalize }}
 												</span>
 											</td>
 										</tr>

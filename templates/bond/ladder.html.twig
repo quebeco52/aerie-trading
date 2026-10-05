@@ -27,7 +27,7 @@
 					{% for point in benchmarks %}
 						<div>
 							<dt class="text-xs text-on-surface-variant">{{ point.label }}</dt>
-							<dd class="text-lg font-semibold font-mono tabular-nums text-on-surface mt-0.5">{{ (point.yield * 100)|number_format(2) }}%</dd>
+							<dd class="text-lg font-semibold font-mono tabular-nums text-on-surface mt-0.5">{{ point.yield|pct(2) }}</dd>
 						</div>
 					{% endfor %}
 				</dl>
@@ -51,13 +51,13 @@
 						{% set slope2s10s = macro.yield10y - macro.yield2y %}
 						<div class="py-2 flex justify-between items-center">
 							<dt class="text-on-surface-variant">2s10s spread</dt>
-							<dd class="font-medium font-mono tabular-nums {{ slope2s10s >= 0 ? 'text-secondary' : 'text-tertiary' }}">
-								{{ slope2s10s >= 0 ? '+' : '' }}{{ (slope2s10s * 10000)|number_format(0) }} bps
+							<dd class="font-medium font-mono tabular-nums {{ slope2s10s|signed_class }}">
+								{{ slope2s10s > 0 ? '+' : '' }}{{ (slope2s10s * 10000)|number_format(0) }} bps
 							</dd>
 						</div>
 						<div class="py-2 flex justify-between items-center">
 							<dt class="text-on-surface-variant">Policy rate</dt>
-							<dd class="font-medium font-mono tabular-nums text-on-surface">{{ (macro.policyRate * 100)|number_format(2) }}%</dd>
+							<dd class="font-medium font-mono tabular-nums text-on-surface">{{ macro.policyRate|pct(2) }}</dd>
 						</div>
 						<div class="py-2 flex justify-between items-center">
 							<dt class="text-on-surface-variant">10Y term premium</dt>
@@ -65,7 +65,7 @@
 						</div>
 						<div class="py-2 flex justify-between items-center">
 							<dt class="text-on-surface-variant">Inflation</dt>
-							<dd class="font-medium font-mono tabular-nums text-on-surface">{{ (macro.inflation * 100)|number_format(2) }}%</dd>
+							<dd class="font-medium font-mono tabular-nums text-on-surface">{{ macro.inflation|pct(2) }}</dd>
 						</div>
 					</dl>
 
@@ -89,7 +89,7 @@
 
 				<div class="overflow-x-auto">
 					<table class="w-full text-left">
-						<thead class="text-2xs uppercase tracking-wide text-on-surface-variant bg-surface-container-lowest/60">
+						<thead class="table-head bg-surface-container-lowest/60">
 							<tr>
 								<th scope="col" class="px-5 py-2 font-semibold">Issue</th>
 								<th scope="col" class="px-4 py-2 font-semibold text-right">Coupon</th>
@@ -109,25 +109,25 @@
 										<div class="flex items-center gap-2">
 											<a href="{{ path('app_bond_view', { ticker: bond.ticker }) }}" class="font-semibold text-primary font-mono outline-none after:absolute after:inset-0 after:content-[''] focus-visible:underline focus-visible:underline-offset-4">{{ bond.ticker }}</a>
 											{% if bond.isOnTheRun %}
-												<span class="relative z-10 px-1.5 py-0.5 rounded bg-primary/10 text-primary text-2xs font-medium border border-primary/25" title="The newest issue at this tenor, and the one the benchmark yield is quoted from">On the run</span>
+												<span class="badge badge-accent relative z-10" title="The newest issue at this tenor, and the one the benchmark yield is quoted from">On the run</span>
 											{% endif %}
 										</div>
 									</td>
-									<td class="px-4 py-3 font-mono tabular-nums text-right text-on-surface-variant">{{ (bond.couponRate * 100)|number_format(3) }}%</td>
+									<td class="px-4 py-3 font-mono tabular-nums text-right text-on-surface-variant">{{ bond.couponRate|pct(3) }}</td>
 									<td class="px-4 py-3 font-mono tabular-nums text-right text-on-surface-variant" title="Matures {{ bond.maturesAtTime|sim_date }}">
 										{{ row.yearsToMaturity|number_format(2) }}y
 									</td>
 									<td class="px-4 py-3 font-mono tabular-nums text-right font-medium text-on-surface" id="clean-{{ bond.ticker }}" title="Clean price, per {{ bond.faceValue|number_format(0) }} of face">
 										{{ bond.cleanPrice|number_format(2) }}
 									</td>
-									<td class="px-4 py-3 font-mono tabular-nums text-right font-semibold {{ row.change is null ? 'text-on-surface-faint' : (row.change >= 0 ? 'text-secondary' : 'text-tertiary') }}">
+									<td class="px-4 py-3 font-mono tabular-nums text-right font-semibold {{ row.change|signed_class }}">
 										{% if row.change is null %}
 											&mdash;
 										{% else %}
-											{{ row.change >= 0 ? '+' : '' }}{{ (row.change * 100)|number_format(2) }}%
+											{{ row.change|pct(2, true) }}
 										{% endif %}
 									</td>
-									<td class="px-4 py-3 font-mono tabular-nums text-right font-medium text-on-surface" id="ytm-{{ bond.ticker }}">{{ (bond.yieldToMaturity * 100)|number_format(2) }}%</td>
+									<td class="px-4 py-3 font-mono tabular-nums text-right font-medium text-on-surface" id="ytm-{{ bond.ticker }}">{{ bond.yieldToMaturity|pct(2) }}</td>
 									<td class="px-4 py-3 font-mono tabular-nums text-right text-on-surface-variant" title="Modified duration: the percentage price move per 1% parallel yield shift">{{ bond.modifiedDuration|number_format(2) }}</td>
 									<td class="px-5 py-3 font-mono tabular-nums text-right">
 										{% if holdings[bond.ticker] is defined %}
@@ -163,7 +163,7 @@
 				<div class="bg-surface-container-low rounded-lg border border-outline-variant/20 overflow-hidden">
 					<div class="px-5 py-3 border-b border-outline-variant/15 flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
 						<h3 class="text-sm font-semibold text-on-surface flex items-center gap-2">
-							<a href="/stock/{{ ticker }}" class="text-primary hover:underline font-mono tracking-wider">{{ ticker }}</a>
+							<a href="/stock/{{ ticker }}" class="text-primary hover:underline font-mono">{{ ticker }}</a>
 							<span class="font-normal text-on-surface-variant">{{ group.issuer.name }}</span>
 						</h3>
 						<div class="flex items-center gap-4 text-2xs">
@@ -177,7 +177,7 @@
 
 					<div class="overflow-x-auto">
 						<table class="w-full text-left">
-							<thead class="text-2xs uppercase tracking-wide text-on-surface-variant bg-surface-container-lowest/60">
+							<thead class="table-head bg-surface-container-lowest/60">
 								<tr>
 									<th scope="col" class="px-5 py-2 font-semibold">Issue</th>
 									<th scope="col" class="px-4 py-2 font-semibold text-right">Coupon</th>
@@ -199,21 +199,21 @@
 												<span class="relative z-10 px-1.5 py-0.5 rounded text-on-surface-variant text-2xs font-medium border border-outline-variant/25" title="Where this claim sits when the issuer fails">Senior</span>
 											</div>
 										</td>
-										<td class="px-4 py-3 font-mono tabular-nums text-right text-on-surface-variant">{{ (bond.couponRate * 100)|number_format(3) }}%</td>
+										<td class="px-4 py-3 font-mono tabular-nums text-right text-on-surface-variant">{{ bond.couponRate|pct(3) }}</td>
 										<td class="px-4 py-3 font-mono tabular-nums text-right text-on-surface-variant" title="Matures {{ bond.maturesAtTime|sim_date }}">
 											{{ row.yearsToMaturity|number_format(2) }}y
 										</td>
 										<td class="px-4 py-3 font-mono tabular-nums text-right font-medium text-on-surface" id="clean-{{ bond.ticker }}" title="Clean price, per {{ bond.faceValue|number_format(0) }} of face">
 											{{ bond.cleanPrice|number_format(2) }}
 										</td>
-										<td class="px-4 py-3 font-mono tabular-nums text-right font-semibold {{ row.change is null ? 'text-on-surface-faint' : (row.change >= 0 ? 'text-secondary' : 'text-tertiary') }}">
+										<td class="px-4 py-3 font-mono tabular-nums text-right font-semibold {{ row.change|signed_class }}">
 											{% if row.change is null %}
 												&mdash;
 											{% else %}
-												{{ row.change >= 0 ? '+' : '' }}{{ (row.change * 100)|number_format(2) }}%
+												{{ row.change|pct(2, true) }}
 											{% endif %}
 										</td>
-										<td class="px-4 py-3 font-mono tabular-nums text-right font-medium text-on-surface" id="ytm-{{ bond.ticker }}">{{ (bond.yieldToMaturity * 100)|number_format(2) }}%</td>
+										<td class="px-4 py-3 font-mono tabular-nums text-right font-medium text-on-surface" id="ytm-{{ bond.ticker }}">{{ bond.yieldToMaturity|pct(2) }}</td>
 										<td class="px-4 py-3 font-mono tabular-nums text-right text-on-surface-variant" title="Modified duration: the percentage price move per 1% parallel yield shift">{{ bond.modifiedDuration|number_format(2) }}</td>
 										<td class="px-5 py-3 font-mono tabular-nums text-right">
 											{% if holdings[bond.ticker] is defined %}

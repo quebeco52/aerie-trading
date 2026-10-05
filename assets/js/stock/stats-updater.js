@@ -151,7 +151,7 @@ function updateAnalystTargets(stockUpdate, newPrice) {
     const upsideEl = document.getElementById('target-upside');
     if (upsideEl && newPrice > 0) {
         const upside = ((compositeTarget - newPrice) / newPrice) * 100;
-        upsideEl.textContent = (upside >= 0 ? '+' : '') + upside.toFixed(1) + '% to target';
+        upsideEl.textContent = (upside > 0 ? '+' : '') + upside.toFixed(1) + '% to target';
         applyTargetTone(upsideEl, compositeTarget);
     }
 

@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+# Renders the player pages from stub data and a headless politics run, with no Docker, database or network, and
+# screenshots them in headless Firefox when it is installed. Chromium cannot run in the agent sandbox.
+#
+#   bin/render-pages                 every page: landing, home, screener, leaderboard, login, economy, stock,
+#                                    dashboard, government and the party pages; PNGs beside the HTML
+#   bin/render-pages stock economy   only the screenshots named (all pages are still rendered)
+#
+# Output goes to $OUT (default var/render). WIDTH and HEIGHT set the window (1440 x 3200); Firefox captures the
+# window only, so a tall page needs a tall HEIGHT. The pages use IBM Plex; with no network the fonts are taken from
+# $PLEX_DIR (default: unpacked from the pacman cache) or fall back to the system sans.
+set -uo pipefail
+
+cd "$(dirname "$0")/.." || exit 2
+out=${OUT:-$PWD/var/render}
+mkdir -p "$out"
+export OUT=$out
+
+php bin/console tailwind:build --env=test >/dev/null 2>&1 || { echo "tailwind:build failed"; exit 1; }
+for test in PagesRenderTest GovernmentRenderTest EarningsFlowRenderTest; do
+    if ! php vendor/bin/phpunit --do-not-cache-result "tests/Render/$test.php" >"$out/$test.log" 2>&1; then
+        echo "$test failed; see $out/$test.log"
+        exit 1
+    fi
+done
+echo "HTML: $out"
+
+command -v firefox >/dev/null || { echo "No firefox; open the HTML files directly."; exit 0; }
+
+tmp=${TMPDIR:-/tmp}/render-pages
+mkdir -p "$tmp/profile"
+plex=${PLEX_DIR:-$tmp/plex/usr/share/fonts/TTF}
+if [[ ! -d $plex ]]; then
+    pkg=$(ls /var/cache/pacman/pkg/ttf-ibm-plex-*.pkg.tar.zst 2>/dev/null | head -1)
+    [[ -n $pkg ]] && mkdir -p "$tmp/plex" && tar -C "$tmp/plex" -xf "$pkg" 2>/dev/null
+fi
+fonts=""
+for face in "IBM Plex Sans:IBMPlexSans-Regular:400" "IBM Plex Sans:IBMPlexSans-SemiBold:600" "IBM Plex Sans:IBMPlexSans-Bold:700" \
+            "IBM Plex Mono:IBMPlexMono-Regular:400" "IBM Plex Mono:IBMPlexMono-SemiBold:600" "IBM Plex Mono:IBMPlexMono-Bold:700"; do
+    IFS=: read -r family file weight <<< "$face"
+    [[ -f $plex/$file.ttf ]] && fonts+="@font-face{font-family:'$family';font-weight:$weight;src:url('file://$plex/$file.ttf')}"
+done
+
+pages=("$@")
+(( ${#pages[@]} == 0 )) && mapfile -t pages < <(ls "$out"/*.html | xargs -n1 basename | sed 's/\.html$//')
+for page in "${pages[@]}"; do
+    html=$out/$page.html
+    [[ -f $html ]] || { echo "no page $page"; continue; }
+    [[ -n $fonts ]] && sed -i "s|<style>|<style>$fonts|" "$html"
+    HOME=$tmp XDG_CONFIG_HOME=$tmp MOZ_HEADLESS=1 timeout 60 firefox --headless --no-remote --profile "$tmp/profile" \
+        --window-size="${WIDTH:-1440},${HEIGHT:-3200}" --screenshot "$out/$page.png" "file://$html" >/dev/null 2>&1 \
+        && echo "PNG: $out/$page.png" || echo "screenshot failed: $page"
+done

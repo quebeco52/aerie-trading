@@ -87,6 +87,67 @@
     background-color: var(--color-surface-container-highest);
     color: var(--color-on-surface);
   }
+
+  /* Column headings: the one place on the site set in capitals. Goes on the <tr> of a <thead>. */
+  .table-head {
+    font-size: var(--text-2xs);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.025em;
+    color: var(--color-on-surface-variant);
+    border-bottom: 1px solid color-mix(in oklab, var(--color-outline-variant) 15%, transparent);
+  }
+
+  /* A short status beside a name ("New", "Bankrupt", "In default"), in sentence case. The tone class says what it
+     means: up and down for a move, warn for a caution, accent for a plain marker. */
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.125rem 0.375rem;
+    border-radius: 0.25rem;
+    border: 1px solid transparent;
+    font-size: var(--text-2xs);
+    font-weight: 500;
+    white-space: nowrap;
+  }
+  .badge-up {
+    color: var(--color-secondary);
+    background-color: color-mix(in oklab, var(--color-secondary) 10%, transparent);
+    border-color: color-mix(in oklab, var(--color-secondary) 25%, transparent);
+  }
+  .badge-down {
+    color: var(--color-tertiary);
+    background-color: color-mix(in oklab, var(--color-tertiary) 10%, transparent);
+    border-color: color-mix(in oklab, var(--color-tertiary) 25%, transparent);
+  }
+  .badge-warn {
+    color: var(--color-warning);
+    background-color: color-mix(in oklab, var(--color-warning) 10%, transparent);
+    border-color: color-mix(in oklab, var(--color-warning) 25%, transparent);
+  }
+  .badge-accent {
+    color: var(--color-primary);
+    background-color: color-mix(in oklab, var(--color-primary) 10%, transparent);
+    border-color: color-mix(in oklab, var(--color-primary) 25%, transparent);
+  }
+  .badge-neutral {
+    color: var(--color-on-surface-variant);
+    background-color: var(--color-surface-container);
+    border-color: color-mix(in oklab, var(--color-outline-variant) 40%, transparent);
+  }
+
+  /* A label with an explanation on hover: the dotted underline is the cue. */
+  .term {
+    padding-bottom: 0.125rem;
+    border-bottom: 1px dotted color-mix(in oklab, var(--color-on-surface-variant) 70%, transparent);
+  }
+
+  /* The publisher line under a chart; its text comes from the source() Twig function. */
+  .source-note {
+    margin-top: 0.75rem;
+    font-size: var(--text-2xs);
+    color: var(--color-on-surface-faint);
+  }
 }
 
 @layer utilities {

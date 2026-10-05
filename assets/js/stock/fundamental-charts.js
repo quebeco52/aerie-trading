@@ -2022,7 +2022,7 @@ function renderStatementRows(containerId, rows) {
         const emphasis = row.total
             ? 'font-bold text-on-surface'
             : (row.indent ? 'text-on-surface-variant pl-3' : 'text-on-surface-variant');
-        const valueColor = row.signed && parseFloat(row.value || 0) < 0 ? 'text-negative' : 'text-on-surface';
+        const valueColor = row.signed && parseFloat(row.value || 0) < 0 ? 'text-tertiary' : 'text-on-surface';
 
         return `<div class="flex justify-between items-baseline py-0.5 text-xs">
             <span class="${emphasis}">${row.label}</span>

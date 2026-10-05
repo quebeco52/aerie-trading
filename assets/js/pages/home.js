@@ -1,4 +1,4 @@
-import { formatLarge } from '../utils/formatters.js';
+import { formatLarge, formatPercent, signedClass, SIGNED_CLASSES } from '../utils/formatters.js';
 import { readPageData } from '../utils/page-data.js';
 import { flashTick } from '../utils/tick-flash.js';
 import { setText } from '../utils/set-text.js';
@@ -74,8 +74,8 @@ function initHome() {
                         setText(mcapEl, '$0.00');
                         if (chgEl) {
                             setText(chgEl, '\u2014');
-                            chgEl.classList.remove('text-secondary', 'text-tertiary');
-                            chgEl.classList.add('text-on-surface-variant');
+                            chgEl.classList.remove(...SIGNED_CLASSES);
+                            chgEl.classList.add(signedClass(null));
                         }
                         rowEl.classList.add('opacity-50', 'bg-tertiary/10');
                         return;
@@ -95,14 +95,9 @@ function initHome() {
                     if (chgEl) {
                         const chg = stock.changePercent;
                         // Steady state, not a flash: the day's direction, held until it changes.
-                        chgEl.classList.remove('text-secondary', 'text-tertiary', 'text-on-surface-variant');
-                        if (chg === null || chg === undefined) {
-                            setText(chgEl, '\u2014');
-                            chgEl.classList.add('text-on-surface-variant');
-                        } else {
-                            setText(chgEl, (chg >= 0 ? '+' : '') + (chg * 100).toFixed(2) + '%');
-                            chgEl.classList.add(chg >= 0 ? 'text-secondary' : 'text-tertiary');
-                        }
+                        chgEl.classList.remove(...SIGNED_CLASSES);
+                        setText(chgEl, formatPercent(chg, 2, false, true));
+                        chgEl.classList.add(signedClass(chg));
                     }
 
                     // Only figures whose digits changed flash, and they flash against the last

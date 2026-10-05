@@ -6,17 +6,13 @@
  * type string, and that copy fell behind the types the engines actually publish.
  */
 
+import { formatPercent, sentenceCase, signedClass } from '../utils/formatters.js';
+
 function el(tag, className, text) {
     const node = document.createElement(tag);
     if (className) node.className = className;
     if (text !== undefined && text !== null) node.textContent = text;
     return node;
-}
-
-/** "INDEX RECONSTITUTION" -> "Index reconstitution", as the template's `|lower|capitalize` does. */
-function sentenceCase(text) {
-    const lower = String(text).toLowerCase();
-    return lower.charAt(0).toUpperCase() + lower.slice(1);
 }
 
 /** Mirrors the row markup in templates/stock/index.html.twig (#events-feed). */
@@ -25,7 +21,7 @@ function buildCard(card) {
 
     const header = el('div', 'flex items-start justify-between gap-3');
     const left = el('div', 'flex items-center flex-wrap gap-x-2 gap-y-1 min-w-0');
-    left.appendChild(el('span', `inline-flex items-center rounded px-1.5 py-0.5 text-2xs font-medium border ${card.badgeClass || ''}`, sentenceCase(card.badge || card.type || 'Event')));
+    left.appendChild(el('span', `badge ${card.badgeClass || 'badge-neutral'}`, sentenceCase(card.badge || card.type || 'Event')));
 
     if (card.isEarnings && card.eps) {
         left.appendChild(el('span', 'text-xs font-semibold font-mono text-on-surface', `EPS ${card.eps}`));
@@ -43,7 +39,7 @@ function buildCard(card) {
     const right = el('div', 'shrink-0 flex items-baseline gap-2.5 text-xs font-mono tabular-nums');
     const change = card.changePercent !== undefined && card.changePercent !== null ? parseFloat(card.changePercent) : null;
     if (change !== null && change !== 0 && Number.isFinite(change)) {
-        right.appendChild(el('span', change > 0 ? 'text-secondary' : 'text-tertiary', `${change > 0 ? '+' : ''}${change.toFixed(2)}%`));
+        right.appendChild(el('span', signedClass(change), formatPercent(change, 2, true, true)));
     }
     right.appendChild(el('time', 'text-on-surface-variant whitespace-nowrap', card.recordedAt || ''));
     header.appendChild(right);

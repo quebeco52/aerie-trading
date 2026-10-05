@@ -604,11 +604,11 @@ class DistrictMap
      */
     public const INSTITUTIONS = [
         'rate-council' => [
-            'label' => 'The Rate Council',
+            'label' => 'The ' . Institutions::MONETARY_AUTHORITY,
             'short_label' => 'RATES',
             'fields' => ['policy_rate_ema', 'yield_2y_ema', 'yield_5y_ema', 'yield_10y_ema', 'yield_30y_ema', 'ns_slope', 'ns_slope_ema', 'money_supply_growth_ema', 'system_deposit_beta_ema', 'money_market_fund_share_ema'],
             'readouts' => [
-                ['field' => 'policy_rate_ema', 'label' => 'POLICY', 'unit' => self::UNIT_PERCENT],
+                ['field' => 'policy_rate_ema', 'label' => 'Policy', 'unit' => self::UNIT_PERCENT],
                 ['field' => 'yield_10y_ema', 'label' => '10Y', 'unit' => self::UNIT_PERCENT],
             ],
             'stress_rules' => [
@@ -619,7 +619,7 @@ class DistrictMap
             ],
         ],
         'credit-registry' => [
-            'label' => 'The Credit Registry',
+            'label' => 'The ' . Institutions::CREDIT_REGISTRY,
             'short_label' => 'CREDIT',
             'fields' => ['macro_credit_spread', 'macro_credit_spread_ema', 'high_yield_credit_spread_ema', 'interbank_liquidity_spread_ema', 'corporate_default_rate_ema', 'retail_default_rate_ema', 'sloos_tightening_index_ema', 'recession_probability_ema', 'sovereign_risk_spread_ema', 'sovereign_debt_to_gdp_ema', 'household_debt_to_income_ema', 'household_debt_service_ratio_ema', 'household_debt_service_gap', 'credit_to_gdp_gap_ema', 'countercyclical_buffer_rate_ema'],
             'readouts' => [
@@ -640,12 +640,12 @@ class DistrictMap
             ],
         ],
         'exchange-floor' => [
-            'label' => 'The Exchange Floor',
+            'label' => 'The ' . Institutions::AERIE_EXCHANGE,
             'short_label' => 'EXCHANGE',
             'fields' => ['market_volatility_ema', 'deal_activity_index_ema'],
             'readouts' => [
-                ['field' => 'market_volatility_ema', 'label' => 'VOL', 'unit' => self::UNIT_PERCENT],
-                ['field' => 'deal_activity_index_ema', 'label' => 'DEALS', 'unit' => self::UNIT_INDEX],
+                ['field' => 'market_volatility_ema', 'label' => 'Vol', 'unit' => self::UNIT_PERCENT],
+                ['field' => 'deal_activity_index_ema', 'label' => 'Deals', 'unit' => self::UNIT_INDEX],
             ],
             'stress_rules' => [
                 // ClearingHouseBusinessModel::VIX_EXTREME_THRESHOLD — the exact volatility level that class itself treats as a panic regime.
@@ -653,11 +653,11 @@ class DistrictMap
             ],
         ],
         'statistical-office' => [
-            'label' => 'The Statistical Office',
+            'label' => 'The ' . Institutions::STATISTICAL_OFFICE,
             'short_label' => 'STATISTICS',
             'fields' => ['output_gap_ema', 'inflation_ema', 'unemployment_rate_ema', 'consumer_sentiment_index_ema'],
             'readouts' => [
-                ['field' => 'output_gap_ema', 'label' => 'GAP', 'unit' => self::UNIT_PERCENT],
+                ['field' => 'output_gap_ema', 'label' => 'Gap', 'unit' => self::UNIT_PERCENT],
                 ['field' => 'inflation_ema', 'label' => 'CPI', 'unit' => self::UNIT_PERCENT],
             ],
             'stress_rules' => [
@@ -670,12 +670,12 @@ class DistrictMap
             ],
         ],
         'land-registry' => [
-            'label' => 'The Land Registry',
+            'label' => 'The ' . Institutions::LAND_REGISTRY,
             'short_label' => 'LAND',
             'fields' => ['commercial_property_index_ema', 'residential_property_index_ema', 'housing_starts_index_ema', 'catastrophe_loss_index_ema'],
             'readouts' => [
                 ['field' => 'commercial_property_index_ema', 'label' => 'CRE', 'unit' => self::UNIT_INDEX],
-                ['field' => 'residential_property_index_ema', 'label' => 'RESI', 'unit' => self::UNIT_INDEX],
+                ['field' => 'residential_property_index_ema', 'label' => 'Homes', 'unit' => self::UNIT_INDEX],
             ],
             'stress_rules' => [
                 // DistrictMap::LAND_REGISTRY_PROPERTY_STRESS_DROP — the one threshold this district
@@ -687,12 +687,12 @@ class DistrictMap
             ],
         ],
         'commodity-exchange' => [
-            'label' => 'The Commodity Exchange',
+            'label' => 'The ' . Institutions::COMMODITY_EXCHANGE,
             'short_label' => 'COMMODITY',
             'fields' => ['energy_cost_push_lag', 'natural_gas_price_index_ema', 'industrial_metals_index_ema', 'gold_price_index_ema', 'agricultural_commodity_index_ema', 'refining_crack_spread_ema', 'wholesale_power_price_index_ema'],
             'readouts' => [
-                ['field' => 'industrial_metals_index_ema', 'label' => 'METALS', 'unit' => self::UNIT_INDEX],
-                ['field' => 'agricultural_commodity_index_ema', 'label' => 'AGRI', 'unit' => self::UNIT_INDEX],
+                ['field' => 'industrial_metals_index_ema', 'label' => 'Metals', 'unit' => self::UNIT_INDEX],
+                ['field' => 'agricultural_commodity_index_ema', 'label' => 'Farm', 'unit' => self::UNIT_INDEX],
             ],
             'stress_rules' => [
                 // ChemicalBusinessModel::SEVERE_ENERGY_INFLATION_THRESHOLD — the exact energy cost-push
@@ -701,19 +701,19 @@ class DistrictMap
             ],
         ],
         'freight-authority' => [
-            'label' => 'The Freight Authority',
+            'label' => 'The ' . Institutions::FREIGHT_AUTHORITY,
             'short_label' => 'FREIGHT',
             'fields' => ['freight_rate_index_ema', 'supply_chain_pressure_index_ema', 'trade_balance_to_gdp_ema', 'foreign_output_gap_ema', 'global_demand_gap_ema', 'allied_defense_spending_index_ema'],
             'readouts' => [
-                ['field' => 'freight_rate_index_ema', 'label' => 'FREIGHT', 'unit' => self::UNIT_INDEX],
-                ['field' => 'supply_chain_pressure_index_ema', 'label' => 'GSCPI', 'unit' => self::UNIT_INDEX],
+                ['field' => 'freight_rate_index_ema', 'label' => 'Freight', 'unit' => self::UNIT_INDEX],
+                ['field' => 'supply_chain_pressure_index_ema', 'label' => 'Supply', 'unit' => self::UNIT_INDEX],
             ],
             // No stress_rules: no MacroEngine or business-model constant treats any of this
             // institution's fields as a distress signal. Its conduits still exist and highlight
             // on click; it simply never renders stressed. See this class's docblock.
         ],
         'manufactory-board' => [
-            'label' => 'The Manufactory Board',
+            'label' => 'The ' . Institutions::MANUFACTORY_BOARD,
             'short_label' => 'MANUFACTORY',
             'fields' => ['producer_price_inflation_ema', 'manufacturing_pmi_ema', 'capacity_utilization_rate_ema'],
             'readouts' => [
@@ -728,12 +728,12 @@ class DistrictMap
             ],
         ],
         'works-ministry' => [
-            'label' => 'The Works Ministry',
+            'label' => 'The ' . Institutions::WORKS_MINISTRY,
             'short_label' => 'WORKS',
             'fields' => ['government_spending_index_ema', 'reimbursement_rate_growth', 'policy_uncertainty_index_ema'],
             'readouts' => [
-                ['field' => 'government_spending_index_ema', 'label' => 'SPEND', 'unit' => self::UNIT_INDEX],
-                ['field' => 'policy_uncertainty_index_ema', 'label' => 'EPU', 'unit' => self::UNIT_INDEX],
+                ['field' => 'government_spending_index_ema', 'label' => 'Spending', 'unit' => self::UNIT_INDEX],
+                ['field' => 'policy_uncertainty_index_ema', 'label' => 'Uncertainty', 'unit' => self::UNIT_INDEX],
             ],
             // No stress_rules — GOVT_SPENDING_BASELINE is a baseline, not a distress level, and no
             // other constant in the simulation treats government spending as a crisis signal.

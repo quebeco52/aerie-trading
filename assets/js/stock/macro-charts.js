@@ -53,17 +53,17 @@ function setHud(id, text) {
 function updateMacroHud(d) {
     const last = (arr, def = 0) => (arr && arr.length > 0 && arr[arr.length - 1] !== null && !isNaN(arr[arr.length - 1])) ? arr[arr.length - 1] : def;
 
-    setHud('hud-macroEconomyChart', `CPI ${last(d.inflationData).toFixed(1)}% · Gap ${last(d.outputGapData) >= 0 ? '+' : ''}${last(d.outputGapData).toFixed(1)}%`);
+    setHud('hud-macroEconomyChart', `CPI ${last(d.inflationData).toFixed(1)}% · Gap ${last(d.outputGapData) > 0 ? '+' : ''}${last(d.outputGapData).toFixed(1)}%`);
     setHud('hud-macroRatesChart', `Policy ${last(d.policyRateData).toFixed(2)}% · 10Y ${last(d.yield10yData).toFixed(2)}%`);
     setHud('hud-macroMortgageChart', `30Y ${last(d.mortgageYieldData).toFixed(2)}% · Spread ${last(d.spread30yData).toFixed(2)}%`);
     setHud('hud-macroRiskChart', `Vol ${last(d.volData).toFixed(1)}% · ERP ${last(d.erpData).toFixed(1)}%`);
     const lastRealWageGap = [...(d.realWageGapData ?? [])].reverse().find(v => v !== null && !isNaN(v));
     setHud('hud-macroLaborCreditChart', `Unemployment ${last(d.unemploymentData).toFixed(1)}% · Wages ${last(d.wageGrowthData).toFixed(1)}% · Real ${(last(d.wageGrowthData) - last(d.tipsBreakevenData)).toFixed(1)}%`
-        + (lastRealWageGap === undefined ? '' : ` · vs productivity ${lastRealWageGap >= 0 ? '+' : ''}${lastRealWageGap.toFixed(1)}%`));
+        + (lastRealWageGap === undefined ? '' : ` · vs productivity ${lastRealWageGap > 0 ? '+' : ''}${lastRealWageGap.toFixed(1)}%`));
     const lastEquityGap = [...d.equityWealthGapData].reverse().find(v => v !== null && !isNaN(v));
     setHud('hud-macroWealthEffectChart', lastEquityGap === undefined
-        ? `Equity - · Housing ${last(d.housingWealthGapData) >= 0 ? '+' : ''}${last(d.housingWealthGapData).toFixed(1)}%`
-        : `Equity ${lastEquityGap >= 0 ? '+' : ''}${lastEquityGap.toFixed(1)}% · Housing ${last(d.housingWealthGapData) >= 0 ? '+' : ''}${last(d.housingWealthGapData).toFixed(1)}%`);
+        ? `Equity - · Housing ${last(d.housingWealthGapData) > 0 ? '+' : ''}${last(d.housingWealthGapData).toFixed(1)}%`
+        : `Equity ${lastEquityGap > 0 ? '+' : ''}${lastEquityGap.toFixed(1)}% · Housing ${last(d.housingWealthGapData) > 0 ? '+' : ''}${last(d.housingWealthGapData).toFixed(1)}%`);
     const lastTed = [...d.interbankSpreadBpsData].reverse().find(v => v !== null);
     setHud('hud-macroInterbankLiquidityChart', lastTed !== undefined ? `${lastTed.toFixed(0)} bps` : '-');
     setHud('hud-macroPropertyChart', `Commercial ${last(d.creEmaData).toFixed(1)} · Residential ${last(d.residentialEmaData).toFixed(1)} · Starts ${last(d.housingStartsData).toFixed(1)}`);
@@ -74,7 +74,7 @@ function updateMacroHud(d) {
     const lastPower = [...spreads.power].reverse().find(v => v !== null && !isNaN(v));
     const lastSpark = [...spreads.spark].reverse().find(v => v !== null && !isNaN(v));
     setHud('hud-macroEnergySpreadsChart', `Crack $${last(d.crackSpreadData).toFixed(2)}/bbl · Power ${lastPower === undefined ? '-' : '$' + lastPower.toFixed(1)} · Spark ${lastSpark === undefined ? '-' : '$' + lastSpark.toFixed(1)}/MWh`);
-    setHud('hud-macroTradeLogisticsChart', `FX ${last(d.fxEmaData).toFixed(1)} · Freight ${last(d.freightEmaData).toFixed(1)} · Pressure ${last(d.gscpiData) >= 0 ? '+' : ''}${last(d.gscpiData).toFixed(2)}σ`);
+    setHud('hud-macroTradeLogisticsChart', `FX ${last(d.fxEmaData).toFixed(1)} · Freight ${last(d.freightEmaData).toFixed(1)} · Pressure ${last(d.gscpiData) > 0 ? '+' : ''}${last(d.gscpiData).toFixed(2)}σ`);
     const lastFundSize = [...d.sovereignFundSizeData].reverse().find(v => v !== null && !isNaN(v));
     const lastFundWeight = [...d.sovereignFundWeightData].reverse().find(v => v !== null && !isNaN(v));
     const lastFundTarget = [...d.sovereignFundTargetData].reverse().find(v => v !== null && !isNaN(v));
@@ -89,19 +89,19 @@ function updateMacroHud(d) {
     setHud('stats-macroSovereignFundChart', lastFundSize === undefined
         ? ''
         : `Fund ${lastFundSize.toFixed(0)}% of GDP · Draw ${fundPct(lastFundDraw)} of GDP · Equities ${lastFundEquity === undefined ? '-' : lastFundEquity.toFixed(1) + '%'} · Stamp duty ${lastFundDuty === undefined ? '-' : lastFundDuty.toFixed(2) + '% of GDP'}`);
-    setHud('hud-macroGovtSpendingChart', `Tax ${last(d.taxData).toFixed(1)}% · Debt ${last(d.sovereignDebtData).toFixed(1)}% · Spread ${last(d.sovereignRiskSpreadData).toFixed(0)} bps · Deficit ${last(d.primaryDeficitData) >= 0 ? '+' : ''}${last(d.primaryDeficitData).toFixed(1)}%`);
-    setHud('hud-macroTermPremiumChart', `10Y ${last(d.yield10yData).toFixed(2)}% · Term premium ${last(d.termPremiumData) >= 0 ? '+' : ''}${last(d.termPremiumData).toFixed(2)}%`);
-    setHud('hud-macroGdpGrowthChart', `Real GDP ${last(d.realGdpGrowthData) >= 0 ? '+' : ''}${last(d.realGdpGrowthData).toFixed(1)}% · Recession ${last(d.recessionProbData).toFixed(0)}%`);
-    setHud('hud-macroBalanceSheetChart', `Holdings ${last(d.slicedAssetStock).toFixed(1)} · QE/QT ${last(d.balanceSheetData) >= 0 ? '+' : ''}${last(d.balanceSheetData).toFixed(0)} bps`);
-    setHud('hud-macroFciChart', `FCI ${last(d.fciData) >= 0 ? '+' : ''}${last(d.fciData).toFixed(2)}σ · Tightening ${last(d.sloosData) >= 0 ? '+' : ''}${last(d.sloosData).toFixed(0)}%`);
-    setHud('hud-macroCostPushChart', `Food ${last(d.agriLagData) >= 0 ? '+' : ''}${last(d.agriLagData).toFixed(0)} bps`);
-    setHud('hud-macroSectoralInflationChart', `CPI ${last(d.inflationData).toFixed(1)}% · PPI ${last(d.ppiData) >= 0 ? '+' : ''}${last(d.ppiData).toFixed(1)}% · Core services ${last(d.supercoreInflationData).toFixed(1)}%`);
+    setHud('hud-macroGovtSpendingChart', `Tax ${last(d.taxData).toFixed(1)}% · Debt ${last(d.sovereignDebtData).toFixed(1)}% · Spread ${last(d.sovereignRiskSpreadData).toFixed(0)} bps · Deficit ${last(d.primaryDeficitData) > 0 ? '+' : ''}${last(d.primaryDeficitData).toFixed(1)}%`);
+    setHud('hud-macroTermPremiumChart', `10Y ${last(d.yield10yData).toFixed(2)}% · Term premium ${last(d.termPremiumData) > 0 ? '+' : ''}${last(d.termPremiumData).toFixed(2)}%`);
+    setHud('hud-macroGdpGrowthChart', `Real GDP ${last(d.realGdpGrowthData) > 0 ? '+' : ''}${last(d.realGdpGrowthData).toFixed(1)}% · Recession ${last(d.recessionProbData).toFixed(0)}%`);
+    setHud('hud-macroBalanceSheetChart', `Holdings ${last(d.slicedAssetStock).toFixed(1)} · QE/QT ${last(d.balanceSheetData) > 0 ? '+' : ''}${last(d.balanceSheetData).toFixed(0)} bps`);
+    setHud('hud-macroFciChart', `FCI ${last(d.fciData) > 0 ? '+' : ''}${last(d.fciData).toFixed(2)}σ · Tightening ${last(d.sloosData) > 0 ? '+' : ''}${last(d.sloosData).toFixed(0)}%`);
+    setHud('hud-macroCostPushChart', `Food ${last(d.agriLagData) > 0 ? '+' : ''}${last(d.agriLagData).toFixed(0)} bps`);
+    setHud('hud-macroSectoralInflationChart', `CPI ${last(d.inflationData).toFixed(1)}% · PPI ${last(d.ppiData) > 0 ? '+' : ''}${last(d.ppiData).toFixed(1)}% · Core services ${last(d.supercoreInflationData).toFixed(1)}%`);
     setHud('hud-macroCreditCliffChart', `HY ${last(d.highYieldSpreadBpsData).toFixed(0)} bps · HY/IG ${last(d.creditCliffRatioData).toFixed(2)}x`);
-    setHud('hud-macroInventoryCycleChart', `Overhang ${last(d.inventoryStockGapData) >= 0 ? '+' : ''}${last(d.inventoryStockGapData).toFixed(1)}% · Utilisation ${last(d.capacityUtilizationData).toFixed(1)}%`);
-    setHud('hud-macroPolicyRuleChart', `Rate vs rule ${last(d.policyRuleGapBpsData) >= 0 ? '+' : ''}${last(d.policyRuleGapBpsData).toFixed(0)} bps`);
-    setHud('hud-macroLeadingIndicatorsChart', `PMI ${last(d.pmiData).toFixed(1)} · Starts ${last(d.housingStartsData).toFixed(0)} · M2 ${last(d.moneySupplyGrowthData) >= 0 ? '+' : ''}${last(d.moneySupplyGrowthData).toFixed(1)}% · Trade ${last(d.tradeBalanceData) >= 0 ? '+' : ''}${last(d.tradeBalanceData).toFixed(1)}%`);
-    setHud('hud-macroHouseholdCreditChart', `DSR ${last(d.householdDsrData).toFixed(1)}% · DTI ${last(d.householdDtiData).toFixed(1)}% · Buffer ${last(d.ccybRateData).toFixed(2)}% · Gap ${last(d.creditToGdpGapData) >= 0 ? '+' : ''}${last(d.creditToGdpGapData).toFixed(1)}%`);
-    setHud('hud-macroGlobalCycleChart', `District ${last(d.outputGapData) >= 0 ? '+' : ''}${last(d.outputGapData).toFixed(1)}% · Mainland ${last(d.foreignOutputGapData) >= 0 ? '+' : ''}${last(d.foreignOutputGapData).toFixed(1)}% · Global ${last(d.globalDemandGapData) >= 0 ? '+' : ''}${last(d.globalDemandGapData).toFixed(1)}% · Mainland rate ${last(d.foreignPolicyRateData).toFixed(2)}%`);
+    setHud('hud-macroInventoryCycleChart', `Overhang ${last(d.inventoryStockGapData) > 0 ? '+' : ''}${last(d.inventoryStockGapData).toFixed(1)}% · Utilisation ${last(d.capacityUtilizationData).toFixed(1)}%`);
+    setHud('hud-macroPolicyRuleChart', `Rate vs rule ${last(d.policyRuleGapBpsData) > 0 ? '+' : ''}${last(d.policyRuleGapBpsData).toFixed(0)} bps`);
+    setHud('hud-macroLeadingIndicatorsChart', `PMI ${last(d.pmiData).toFixed(1)} · Starts ${last(d.housingStartsData).toFixed(0)} · M2 ${last(d.moneySupplyGrowthData) > 0 ? '+' : ''}${last(d.moneySupplyGrowthData).toFixed(1)}% · Trade ${last(d.tradeBalanceData) > 0 ? '+' : ''}${last(d.tradeBalanceData).toFixed(1)}%`);
+    setHud('hud-macroHouseholdCreditChart', `DSR ${last(d.householdDsrData).toFixed(1)}% · DTI ${last(d.householdDtiData).toFixed(1)}% · Buffer ${last(d.ccybRateData).toFixed(2)}% · Gap ${last(d.creditToGdpGapData) > 0 ? '+' : ''}${last(d.creditToGdpGapData).toFixed(1)}%`);
+    setHud('hud-macroGlobalCycleChart', `District ${last(d.outputGapData) > 0 ? '+' : ''}${last(d.outputGapData).toFixed(1)}% · Mainland ${last(d.foreignOutputGapData) > 0 ? '+' : ''}${last(d.foreignOutputGapData).toFixed(1)}% · Global ${last(d.globalDemandGapData) > 0 ? '+' : ''}${last(d.globalDemandGapData).toFixed(1)}% · Mainland rate ${last(d.foreignPolicyRateData).toFixed(2)}%`);
     setHud('hud-macroBankingLiquidityChart', `Deposit beta ${last(d.depositBetaData).toFixed(1)}% · MMF ${last(d.mmfShareData).toFixed(1)}% · Interbank ${last(d.interbankSpreadBpsData) !== null && !isNaN(last(d.interbankSpreadBpsData)) ? last(d.interbankSpreadBpsData).toFixed(0) + ' bps' : '-'}`);
 }
 
@@ -1165,7 +1165,7 @@ function renderMacroGdpGrowthChart(labels, nominalGdpGrowthData, realGdpGrowthDa
                             if (ctx.dataset.yAxisID === 'y1') {
                                 return `${ctx.dataset.label}: ${val.toFixed(1)}%`;
                             }
-                            return `${ctx.dataset.label}: ${val >= 0 ? '+' : ''}${val.toFixed(2)}%`;
+                            return `${ctx.dataset.label}: ${val > 0 ? '+' : ''}${val.toFixed(2)}%`;
                         }
                     }
                 }
@@ -1176,7 +1176,7 @@ function renderMacroGdpGrowthChart(labels, nominalGdpGrowthData, realGdpGrowthDa
                     display: true,
                     position: 'left',
                     grid: { color: GRID_COLOR },
-                    ticks: { callback: (val) => (val >= 0 ? '+' : '') + val.toFixed(1) + '%' },
+                    ticks: { callback: (val) => (val > 0 ? '+' : '') + val.toFixed(1) + '%' },
                     title: { display: true, text: 'Growth (%)' }
                 },
                 y1: {
@@ -1587,7 +1587,7 @@ function renderMacroTradeLogisticsChart(labels, fxEmaData, freightEmaData, gscpi
                 legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } },
                 tooltip: {
                     callbacks: {
-                        label: (ctx) => `${ctx.dataset.label}: ${ctx.dataset.yAxisID === 'y1' ? (ctx.raw >= 0 ? '+' : '') + ctx.raw.toFixed(2) + ' σ' : ctx.raw.toFixed(2)}`
+                        label: (ctx) => `${ctx.dataset.label}: ${ctx.dataset.yAxisID === 'y1' ? (ctx.raw > 0 ? '+' : '') + ctx.raw.toFixed(2) + ' σ' : ctx.raw.toFixed(2)}`
                     }
                 }
             },
@@ -1602,7 +1602,7 @@ function renderMacroTradeLogisticsChart(labels, fxEmaData, freightEmaData, gscpi
                     suggestedMin: -1.5,
                     suggestedMax: 3.0,
                     grid: { drawOnChartArea: false },
-                    ticks: { callback: (val) => (val >= 0 ? '+' : '') + val.toFixed(1) + 'σ' },
+                    ticks: { callback: (val) => (val > 0 ? '+' : '') + val.toFixed(1) + 'σ' },
                     title: { display: true, text: 'Standard deviations' }
                 },
                 x: {
@@ -1902,7 +1902,7 @@ function renderMacroGovtSpendingChart(labels, govtSpendingEmaData, sovereignDebt
                                 return `${ctx.dataset.label}: ${ctx.raw !== null ? ctx.raw.toFixed(0) + ' bps' : 'N/A'}`;
                             }
                             if (name.includes('deficit') || name.includes('tax')) {
-                                return `${ctx.dataset.label}: ${ctx.raw !== null ? (name.includes('deficit') && ctx.raw >= 0 ? '+' : '') + ctx.raw.toFixed(1) + '%' : 'N/A'}`;
+                                return `${ctx.dataset.label}: ${ctx.raw !== null ? (name.includes('deficit') && ctx.raw > 0 ? '+' : '') + ctx.raw.toFixed(1) + '%' : 'N/A'}`;
                             }
                             if (name.includes('debt')) {
                                 return `${ctx.dataset.label}: ${ctx.raw !== null ? ctx.raw.toFixed(1) + '%' : 'N/A'}`;
@@ -2074,13 +2074,13 @@ function renderMacroFciChart(labels, fciData, fciEmaData, sloosData = []) {
                         label: (ctx) => {
                             const val = ctx.raw;
                             if (ctx.dataset.yAxisID === 'y1') {
-                                return `${ctx.dataset.label}: ${val >= 0 ? '+' : ''}${val.toFixed(1)}%`;
+                                return `${ctx.dataset.label}: ${val > 0 ? '+' : ''}${val.toFixed(1)}%`;
                             }
                             if (ctx.dataset.type === 'bar') {
                                 const stance = val > 0 ? 'Restrictive (Tight)' : (val < 0 ? 'Accommodative (Loose)' : 'Neutral');
-                                return `${ctx.dataset.label}: ${val >= 0 ? '+' : ''}${val.toFixed(2)} σ (${stance})`;
+                                return `${ctx.dataset.label}: ${val > 0 ? '+' : ''}${val.toFixed(2)} σ (${stance})`;
                             }
-                            return `${ctx.dataset.label}: ${val >= 0 ? '+' : ''}${val.toFixed(2)} σ`;
+                            return `${ctx.dataset.label}: ${val > 0 ? '+' : ''}${val.toFixed(2)} σ`;
                         }
                     }
                 }
@@ -2164,7 +2164,7 @@ function renderMacroCostPushChart(labels, agriLagData, energySupplyDragData, fre
                 legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } },
                 tooltip: {
                     callbacks: {
-                        label: (ctx) => `${ctx.dataset.label}: ${ctx.raw >= 0 ? '+' : ''}${ctx.raw.toFixed(1)} bps`
+                        label: (ctx) => `${ctx.dataset.label}: ${ctx.raw > 0 ? '+' : ''}${ctx.raw.toFixed(1)} bps`
                     }
                 }
             },
@@ -2173,7 +2173,7 @@ function renderMacroCostPushChart(labels, agriLagData, energySupplyDragData, fre
                     type: 'linear',
                     display: true,
                     grid: { color: GRID_COLOR },
-                    ticks: { callback: (val) => (val >= 0 ? '+' : '') + val.toFixed(0) + ' bps' },
+                    ticks: { callback: (val) => (val > 0 ? '+' : '') + val.toFixed(0) + ' bps' },
                     title: { display: true, text: 'Basis points' }
                 },
                 x: {
@@ -2749,7 +2749,7 @@ function renderMacroLeadingIndicatorsChart(labels, pmiData, housingStartsData, m
                     callbacks: {
                         label: (ctx) => {
                             if (ctx.dataset.yAxisID === 'y1') {
-                                return `${ctx.dataset.label}: ${ctx.raw >= 0 ? '+' : ''}${ctx.raw.toFixed(2)}%`;
+                                return `${ctx.dataset.label}: ${ctx.raw > 0 ? '+' : ''}${ctx.raw.toFixed(2)}%`;
                             }
                             if (ctx.dataset.label.includes('PMI')) {
                                 return `${ctx.dataset.label}: ${ctx.raw.toFixed(1)} ${ctx.raw >= 50 ? '(Expansion)' : '(Contraction)'}`;
@@ -2773,7 +2773,7 @@ function renderMacroLeadingIndicatorsChart(labels, pmiData, housingStartsData, m
                     type: 'linear',
                     position: 'right',
                     grid: { drawOnChartArea: false },
-                    ticks: { callback: (val) => (val >= 0 ? '+' : '') + val.toFixed(1) + '%' },
+                    ticks: { callback: (val) => (val > 0 ? '+' : '') + val.toFixed(1) + '%' },
                     title: { display: true, text: 'Percent' }
                 },
                 x: {
@@ -2956,7 +2956,7 @@ function renderMacroGlobalCycleChart(labels, outputGapData, foreignOutputGapData
                     type: 'linear',
                     position: 'left',
                     grid: { color: GRID_COLOR },
-                    ticks: { callback: (val) => (val >= 0 ? '+' : '') + val.toFixed(1) + '%' },
+                    ticks: { callback: (val) => (val > 0 ? '+' : '') + val.toFixed(1) + '%' },
                     title: { display: true, text: 'Gap (%)' }
                 },
                 y1: {

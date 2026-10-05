@@ -15,7 +15,7 @@
         <div class="overflow-x-auto">
             <table class="w-full text-left border-collapse min-w-150">
                 <thead>
-                    <tr class="bg-surface-container-highest/20 text-on-surface-variant text-2xs uppercase tracking-wide font-semibold border-b border-outline-variant/15">
+                    <tr class="table-head bg-surface-container-highest/20">
                         <th scope="col" class="px-5 py-3 w-16 text-right">Rank</th>
                         <th scope="col" class="px-5 py-3">Trader</th>
                         <th scope="col" class="px-4 py-3 text-right">Cash</th>
@@ -32,9 +32,9 @@
                                 {{ leader.username }}
                                 {% if isMe %}<span class="ml-2 text-xs font-normal text-primary">You</span>{% endif %}
                             </th>
-                            <td class="px-4 py-3 font-mono tabular-nums text-right text-on-surface-variant">${{ leader.cash_balance|number_format(2) }}</td>
+                            <td class="px-4 py-3 font-mono tabular-nums text-right text-on-surface-variant">{{ leader.cash_balance|money(2) }}</td>
                             <td class="px-4 py-3 font-mono tabular-nums text-right text-on-surface-variant">${{ (leader.stock_value + leader.etf_value)|number_format(2) }}</td>
-                            <td class="px-5 py-3 font-mono tabular-nums text-right font-semibold text-on-surface">${{ leader.total_value|number_format(2) }}</td>
+                            <td class="px-5 py-3 font-mono tabular-nums text-right font-semibold text-on-surface">{{ leader.total_value|money(2) }}</td>
                         </tr>
                     {% else %}
                         <tr>

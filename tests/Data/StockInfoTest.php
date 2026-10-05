@@ -204,5 +204,30 @@ class StockInfoTest extends TestCase
         $this->assertArrayHasKey('BRKW', StockInfo::QUOTES);
         $this->assertNotEmpty(StockInfo::QUOTES['BRKW']);
     }
+
+    /**
+     * Profiles read like an exchange's company profile (.agents/FRONTEND.md, company profiles): a lead the district
+     * map can show alone, then plain facts. The old copy averaged 288 words of "ruthless fortress" prose.
+     */
+    #[DataProvider('descriptionProvider')]
+    public function testProfileReadsAsExchangeCopy(string $ticker, string $description): void
+    {
+        $paragraphs = explode("\n\n", $description);
+        $tells = '/\b(undisputed|apex|fortress|titans?|juggernaut|empires?|ruthless(ly)?|draconian|relentless(ly)?|monolith(ic)?|colossal|unrivall?ed|unparalleled|unyielding|inescapable|insidious|predatory|oligarchs?|iron grip|aggressive(ly)?|premier|elite|supreme|hegemony|weaponi[sz]e[sd]?|lifeblood|ecosystem|tapestry|not merely|operates as|functions as|serves as|stands as|de facto)\b/i';
+
+        $this->assertLessThanOrEqual(50, str_word_count($paragraphs[0]), "$ticker: the lead is shown alone on the district map; keep it to one or two sentences.");
+        $this->assertLessThanOrEqual(200, str_word_count($description), "$ticker: a profile is 120-180 words.");
+        $this->assertDoesNotMatchRegularExpression($tells, $description, "$ticker: marketing adjectives and stock AI constructions.");
+        $this->assertStringNotContainsString('—', $description, "$ticker: use a comma, colon or new sentence, not an em dash.");
+        $this->assertDoesNotMatchRegularExpression('/\b(Rate Council|Lakebird Exchange|the Fed|Treasury)\b/', $description, "$ticker: use the District's institution names.");
+    }
+
+    /** @return iterable<string, array{string, string}> */
+    public static function descriptionProvider(): iterable
+    {
+        foreach (StockInfo::DESCRIPTIONS as $ticker => $description) {
+            yield $ticker => [$ticker, $description];
+        }
+    }
 }
 

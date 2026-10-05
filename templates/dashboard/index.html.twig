@@ -10,12 +10,12 @@
                 <p class="text-sm text-on-surface-variant">Portfolio value</p>
                 <div class="mt-1 flex flex-wrap items-baseline gap-x-4 gap-y-1">
                     <h1 id="portfolio-total-value" class="text-3xl sm:text-4xl font-semibold tracking-tight text-on-surface font-mono tabular-nums transition-colors duration-300">
-                        ${{ portfolioValue|number_format(2) }}
+                        {{ portfolioValue|money(2) }}
                     </h1>
                     <p class="text-sm font-mono tabular-nums">
-                        <span id="portfolio-pnl-badge" class="font-semibold {{ totalUnrealizedPnL >= 0 ? 'text-secondary' : 'text-tertiary' }}">
-                            <span id="portfolio-pnl-val">{{ totalUnrealizedPnL >= 0 ? '+' : '' }}${{ totalUnrealizedPnL|number_format(2) }}</span>
-                            <span id="portfolio-pnl-pct">({{ totalUnrealizedPnL >= 0 ? '+' : '' }}{{ totalUnrealizedPnLPercent|number_format(2) }}%)</span>
+                        <span id="portfolio-pnl-badge" class="font-semibold {{ totalUnrealizedPnL|signed_class }}">
+                            <span id="portfolio-pnl-val">{{ totalUnrealizedPnL|money(2, true) }}</span>
+                            <span id="portfolio-pnl-pct">({{ totalUnrealizedPnL > 0 ? '+' : '' }}{{ totalUnrealizedPnLPercent|number_format(2) }}%)</span>
                         </span>
                         <span class="font-sans text-xs text-on-surface-variant">unrealised</span>
                     </p>
@@ -25,19 +25,19 @@
             <dl class="lg:col-span-5 grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-2 xl:grid-cols-4 gap-x-6 gap-y-3">
                 <div>
                     <dt class="text-xs text-on-surface-variant">Cash</dt>
-                    <dd id="available-cash" class="mt-0.5 text-sm font-semibold text-on-surface font-mono tabular-nums">${{ cashBalance|number_format(2) }}</dd>
+                    <dd id="available-cash" class="mt-0.5 text-sm font-semibold text-on-surface font-mono tabular-nums">{{ cashBalance|money(2) }}</dd>
                 </div>
                 <div>
                     <dt class="text-xs text-on-surface-variant">Invested</dt>
-                    <dd id="total-invested" class="mt-0.5 text-sm font-semibold text-on-surface font-mono tabular-nums">${{ totalInvested|number_format(2) }}</dd>
+                    <dd id="total-invested" class="mt-0.5 text-sm font-semibold text-on-surface font-mono tabular-nums">{{ totalInvested|money(2) }}</dd>
                 </div>
                 <div>
                     <dt class="text-xs text-on-surface-variant">In open orders</dt>
-                    <dd class="mt-0.5 text-sm font-semibold text-on-surface font-mono tabular-nums">${{ escrowedCash|number_format(2) }}</dd>
+                    <dd class="mt-0.5 text-sm font-semibold text-on-surface font-mono tabular-nums">{{ escrowedCash|money(2) }}</dd>
                 </div>
                 <div>
                     <dt class="text-xs text-on-surface-variant">Dividends</dt>
-                    <dd id="dividend-income" class="mt-0.5 text-sm font-semibold text-on-surface font-mono tabular-nums">${{ totalDividendIncome|number_format(2) }}</dd>
+                    <dd id="dividend-income" class="mt-0.5 text-sm font-semibold text-on-surface font-mono tabular-nums">{{ totalDividendIncome|money(2) }}</dd>
                 </div>
             </dl>
         </header>
@@ -93,7 +93,7 @@
                         <div class="w-2.5 h-2.5 rounded-full bg-series-blue" aria-hidden="true"></div>
                         <div>
                             <p class="text-xs text-on-surface-variant">Stocks</p>
-                            <p class="text-sm font-bold text-on-surface font-mono tabular-nums">${{ allocation.stocks|number_format(2) }}</p>
+                            <p class="text-sm font-bold text-on-surface font-mono tabular-nums">{{ allocation.stocks|money(2) }}</p>
                         </div>
                     </div>
                     <span class="text-xs font-bold text-on-surface font-mono tabular-nums">{{ allocation.stocksPercent|number_format(1) }}%</span>
@@ -103,7 +103,7 @@
                         <div class="w-2.5 h-2.5 rounded-full bg-series-orange" aria-hidden="true"></div>
                         <div>
                             <p class="text-xs text-on-surface-variant">Index funds</p>
-                            <p class="text-sm font-bold text-on-surface font-mono tabular-nums">${{ allocation.etfs|number_format(2) }}</p>
+                            <p class="text-sm font-bold text-on-surface font-mono tabular-nums">{{ allocation.etfs|money(2) }}</p>
                         </div>
                     </div>
                     <span class="text-xs font-bold text-on-surface font-mono tabular-nums">{{ allocation.etfsPercent|number_format(1) }}%</span>
@@ -113,7 +113,7 @@
                         <div class="w-2.5 h-2.5 rounded-full bg-on-surface-faint" aria-hidden="true"></div>
                         <div>
                             <p class="text-xs text-on-surface-variant">Cash</p>
-                            <p class="text-sm font-bold text-on-surface font-mono tabular-nums">${{ allocation.cash|number_format(2) }}</p>
+                            <p class="text-sm font-bold text-on-surface font-mono tabular-nums">{{ allocation.cash|money(2) }}</p>
                         </div>
                     </div>
                     <span class="text-xs font-bold text-on-surface font-mono tabular-nums">{{ allocation.cashPercent|number_format(1) }}%</span>
@@ -124,7 +124,7 @@
                 <div class="overflow-x-auto">
                     <table class="w-full text-left border-collapse min-w-175">
                         <thead>
-                            <tr class="bg-surface-container-highest/20 text-on-surface-variant text-2xs uppercase tracking-wide font-semibold border-b border-outline-variant/15">
+                            <tr class="table-head bg-surface-container-highest/20">
                                 <th class="px-5 py-3">Asset</th>
                                 <th class="px-4 py-3 text-right">Shares</th>
                                 <th class="px-4 py-3 text-right">Avg cost</th>
@@ -145,32 +145,32 @@
                                                 <div class="flex items-center gap-2">
                                                     {% if holding.type == 'BOND' %}
                                                         <a href="{{ path('app_bond_view', { ticker: holding.ticker }) }}" class="font-bold text-on-surface text-sm group-hover:text-primary transition-colors outline-none after:absolute after:inset-0 after:content-[''] focus-visible:underline focus-visible:decoration-primary focus-visible:underline-offset-4">{{ holding.name }}</a>
-                                                        <span class="relative z-10 px-1.5 py-0.5 rounded bg-primary/10 text-primary text-2xs font-medium border border-primary/25">Bond</span>
+                                                        <span class="badge badge-accent relative z-10">Bond</span>
                                                     {% elseif holding.type == 'OPTION' %}
                                                         {# The contract has no page of its own: its chain lives on the underlying. #}
                                                         <a href="/stock/{{ holding.underlying }}" class="font-bold text-on-surface text-sm group-hover:text-primary transition-colors outline-none after:absolute after:inset-0 after:content-[''] focus-visible:underline focus-visible:decoration-primary focus-visible:underline-offset-4">{{ holding.name }}</a>
                                                         {% if holding.quantity < 0 %}
-                                                            <span class="relative z-10 px-1.5 py-0.5 rounded bg-tertiary/10 text-tertiary text-2xs font-medium border border-tertiary/25" title="Written: the premium was received, and the loss on a call has no ceiling">Written</span>
+                                                            <span class="badge badge-down relative z-10" title="Written: the premium was received, and the loss on a call has no ceiling">Written</span>
                                                         {% else %}
-                                                            <span class="relative z-10 px-1.5 py-0.5 rounded bg-primary/10 text-primary text-2xs font-medium border border-primary/25">Option</span>
+                                                            <span class="badge badge-accent relative z-10">Option</span>
                                                         {% endif %}
                                                     {% else %}
                                                         <a href="/stock/{{ holding.ticker }}" class="font-bold text-on-surface text-sm group-hover:text-primary transition-colors outline-none after:absolute after:inset-0 after:content-[''] focus-visible:underline focus-visible:decoration-primary focus-visible:underline-offset-4">{{ holding.name }}</a>
                                                     {% endif %}
                                                     {% if holding.isShort|default(false) %}
-                                                        <span class="relative z-10 px-1.5 py-0.5 rounded bg-tertiary/10 text-tertiary text-2xs font-medium border border-tertiary/25" title="Sold short: the position profits when the price falls, and its loss has no ceiling">Short</span>
+                                                        <span class="badge badge-down relative z-10" title="Sold short: the position profits when the price falls, and its loss has no ceiling">Short</span>
                                                     {% endif %}
                                                     {% if holding.isBankrupt %}
-                                                        <span class="relative z-10 px-1.5 py-0.5 rounded bg-tertiary/10 text-tertiary text-2xs font-medium border border-tertiary/25">Bankrupt</span>
+                                                        <span class="badge badge-down relative z-10">Bankrupt</span>
                                                     {% endif %}
                                                 </div>
                                                 <div class="flex items-center gap-2 mt-0.5">
                                                     <span class="text-xs text-on-surface-variant font-mono">{{ holding.ticker }}</span>
                                                     <span class="text-xs text-on-surface-variant">{{ holding.sector }}</span>
                                                     {% if holding.type == 'BOND' %}
-                                                        <span class="text-xs text-on-surface-variant font-mono" title="Yield to maturity and modified duration">{{ (holding.yieldToMaturity * 100)|number_format(2) }}% YTM · {{ holding.modifiedDuration|number_format(1) }}y dur</span>
+                                                        <span class="text-xs text-on-surface-variant font-mono" title="Yield to maturity and modified duration">{{ holding.yieldToMaturity|pct(2) }} YTM · {{ holding.modifiedDuration|number_format(1) }}y dur</span>
                                                     {% elseif holding.type == 'OPTION' %}
-                                                        <span class="text-xs text-on-surface-variant font-mono" title="Implied volatility, delta and expiry">{{ (holding.impliedVolatility * 100)|number_format(1) }}% IV · {{ holding.delta|number_format(2) }}Δ · exp. {{ holding.expiresAtTime|sim_date }}</span>
+                                                        <span class="text-xs text-on-surface-variant font-mono" title="Implied volatility, delta and expiry">{{ holding.impliedVolatility|pct(1) }} IV · {{ holding.delta|number_format(2) }}Δ · exp. {{ holding.expiresAtTime|sim_date }}</span>
                                                     {% endif %}
                                                 </div>
                                             </div>
@@ -179,20 +179,20 @@
                                     <td class="px-4 py-3 font-mono tabular-nums text-right text-on-surface">
                                         {{ holding.quantity|number_format }}{% if holding.type == 'OPTION' %}<span class="block text-3xs font-normal text-on-surface-variant">contracts</span>{% endif %}
                                     </td>
-                                    <td class="px-4 py-3 font-mono tabular-nums text-right text-on-surface-variant">${{ holding.avgCost|number_format(2) }}</td>
-                                    <td class="px-4 py-3 font-mono tabular-nums text-right font-bold text-on-surface" id="price-{{ holding.ticker }}">${{ holding.price|number_format(2) }}</td>
-                                    <td class="px-5 py-3 font-mono tabular-nums text-right font-bold text-on-surface" id="value-{{ holding.ticker }}">${{ holding.marketValue|number_format(2) }}</td>
-                                    <td class="px-5 py-3 font-mono tabular-nums text-right font-bold {{ holding.unrealizedPnL >= 0 ? 'text-secondary' : 'text-tertiary' }}" id="pnl-{{ holding.ticker }}">
-                                        <div>{{ holding.unrealizedPnL >= 0 ? '+' : '' }}${{ holding.unrealizedPnL|number_format(2) }}</div>
-                                        <div class="text-2xs font-normal opacity-80">({{ holding.unrealizedPnL >= 0 ? '+' : '' }}{{ holding.unrealizedPnLPercent|number_format(2) }}%)</div>
+                                    <td class="px-4 py-3 font-mono tabular-nums text-right text-on-surface-variant">{{ holding.avgCost|money(2) }}</td>
+                                    <td class="px-4 py-3 font-mono tabular-nums text-right font-bold text-on-surface" id="price-{{ holding.ticker }}">{{ holding.price|money(2) }}</td>
+                                    <td class="px-5 py-3 font-mono tabular-nums text-right font-bold text-on-surface" id="value-{{ holding.ticker }}">{{ holding.marketValue|money(2) }}</td>
+                                    <td class="px-5 py-3 font-mono tabular-nums text-right font-bold {{ holding.unrealizedPnL|signed_class }}" id="pnl-{{ holding.ticker }}">
+                                        <div>{{ holding.unrealizedPnL|money(2, true) }}</div>
+                                        <div class="text-2xs font-normal opacity-80">({{ holding.unrealizedPnL > 0 ? '+' : '' }}{{ holding.unrealizedPnLPercent|number_format(2) }}%)</div>
                                         {% if holding.borrowAccrued|default(0) > 0 %}
                                             <div class="text-2xs font-normal text-tertiary mt-0.5" title="Borrow fees paid to keep this short open">
-                                                &minus;${{ holding.borrowAccrued|number_format(2) }} borrow
+                                                &minus;{{ holding.borrowAccrued|money(2) }} borrow
                                             </div>
                                         {% endif %}
                                         {% if holding.dividendsReceived > 0 %}
                                             <div class="text-2xs font-normal text-on-surface-variant mt-0.5" title="{{ holding.type == 'BOND' ? 'Coupon cash received from ' ~ holding.ticker : 'Dividend cash received from ' ~ holding.ticker ~ ', including from shares since sold' }}">
-                                                +${{ holding.dividendsReceived|number_format(2) }} {{ holding.type == 'BOND' ? 'cpn' : 'div' }}
+                                                +{{ holding.dividendsReceived|money(2) }} {{ holding.type == 'BOND' ? 'cpn' : 'div' }}
                                             </div>
                                         {% endif %}
                                     </td>
@@ -229,7 +229,7 @@
                     <div class="overflow-x-auto">
                         <table class="w-full text-left border-collapse min-w-150">
                             <thead>
-                                <tr class="text-2xs text-on-surface-variant uppercase tracking-wide border-b border-outline-variant/15 font-semibold">
+                                <tr class="table-head">
                                     <th class="py-2.5">Order ID</th>
                                     <th class="py-2.5">Type</th>
                                     <th class="py-2.5">Action</th>
@@ -244,13 +244,13 @@
                                 {% for order in openOrders %}
                                     <tr class="hover:bg-surface-container-high/30 transition-colors">
                                         <td class="py-2.5 text-xs font-mono text-on-surface-variant">#{{ order.id }}</td>
-                                        <td class="py-2.5 text-xs text-on-surface-variant uppercase">{{ order.orderType }}</td>
+                                        <td class="py-2.5 text-xs text-on-surface-variant">{{ order.orderType|replace({'_': ' '})|lower|capitalize }}</td>
                                         <td class="py-2.5 font-bold {{ order.action in ['BUY', 'COVER'] ? 'text-secondary' : 'text-tertiary' }}">{{ order.action|lower|capitalize }}</td>
                                         <td class="py-2.5">
                                             <a href="/stock/{{ order.ticker }}" class="font-bold text-on-surface hover:text-primary transition-colors">{{ order.ticker }}</a>
                                         </td>
                                         <td class="py-2.5 text-right font-mono tabular-nums text-on-surface">{{ order.quantity|number_format }}</td>
-                                        <td class="py-2.5 text-right font-mono tabular-nums text-primary font-bold">${{ order.limitPrice|number_format(2) }}</td>
+                                        <td class="py-2.5 text-right font-mono tabular-nums text-primary font-bold">{{ order.limitPrice|money(2) }}</td>
                                         <td class="py-2.5 text-right font-mono tabular-nums text-on-surface">${{ (livePrices[order.ticker] ?? 0.00)|number_format(2) }}</td>
                                         <td class="py-2.5 text-right">
                                             <form action="{{ path('app_trade_cancel', {'id': order.id}) }}" method="POST" onsubmit="return confirm('Cancel this limit order?');">
@@ -282,7 +282,7 @@
                     <div class="overflow-x-auto">
                         <table class="w-full text-left border-collapse min-w-150">
                             <thead>
-                                <tr class="text-2xs text-on-surface-variant uppercase tracking-wide border-b border-outline-variant/15 font-semibold">
+                                <tr class="table-head">
                                     <th class="py-2.5">Execution date</th>
                                     <th class="py-2.5">Type</th>
                                     <th class="py-2.5">Action</th>
@@ -297,7 +297,7 @@
                                 {% for trade in tradeHistory %}
                                     <tr>
                                         <td class="py-2.5 text-xs text-on-surface-variant font-mono">{{ (trade.filledAt ?? trade.createdAt)|date('Y-m-d H:i') }}</td>
-                                        <td class="py-2.5 text-xs text-on-surface-variant uppercase">{{ trade.orderType }}</td>
+                                        <td class="py-2.5 text-xs text-on-surface-variant">{{ trade.orderType|replace({'_': ' '})|lower|capitalize }}</td>
                                         <td class="py-2.5 font-bold {{ trade.action in ['BUY', 'COVER'] ? 'text-secondary' : 'text-tertiary' }}">{{ trade.action|lower|capitalize }}</td>
                                         <td class="py-2.5">
                                             <a href="/stock/{{ trade.ticker }}" class="font-bold text-on-surface hover:text-primary transition-colors">{{ trade.ticker }}</a>
@@ -328,14 +328,14 @@
                         <h3 class="text-sm font-semibold text-on-surface">Dividend income</h3>
                         <p class="text-xs text-on-surface-variant mt-0.5">Credited to your cash on each ex-date</p>
                     </div>
-                    <span class="text-xs font-mono font-bold {{ totalDividendIncome > 0 ? 'text-secondary' : 'text-on-surface-variant' }}">${{ totalDividendIncome|number_format(2) }} lifetime</span>
+                    <span class="text-xs font-mono font-bold {{ totalDividendIncome > 0 ? 'text-secondary' : 'text-on-surface-variant' }}">{{ totalDividendIncome|money(2) }} lifetime</span>
                 </div>
 
                 {% if dividendPayments|length > 0 %}
                     <div class="overflow-x-auto">
                         <table class="w-full text-left border-collapse min-w-100">
                             <thead>
-                                <tr class="text-2xs text-on-surface-variant uppercase tracking-wide border-b border-outline-variant/15 font-semibold">
+                                <tr class="table-head">
                                     <th class="py-2.5">Ex-Date</th>
                                     <th class="py-2.5">Asset</th>
                                     <th class="py-2.5 text-right">Shares held</th>
@@ -351,8 +351,8 @@
                                             <a href="/stock/{{ payment.ticker }}" class="font-bold text-on-surface hover:text-primary transition-colors">{{ payment.ticker }}</a>
                                         </td>
                                         <td class="py-2.5 text-right font-mono tabular-nums text-on-surface-variant">{{ payment.sharesHeld|number_format }}</td>
-                                        <td class="py-2.5 text-right font-mono tabular-nums text-on-surface-variant">${{ payment.dividendPerShare|number_format(4) }}</td>
-                                        <td class="py-2.5 text-right font-mono tabular-nums font-bold text-secondary">+${{ payment.amount|number_format(2) }}</td>
+                                        <td class="py-2.5 text-right font-mono tabular-nums text-on-surface-variant">{{ payment.dividendPerShare|money(4) }}</td>
+                                        <td class="py-2.5 text-right font-mono tabular-nums font-bold text-secondary">+{{ payment.amount|money(2) }}</td>
                                     </tr>
                                 {% endfor %}
                             </tbody>
@@ -376,7 +376,7 @@
                                 <div class="flex justify-between text-sm mb-1">
                                     <span class="text-on-surface">{{ sec.name }}</span>
                                     <div class="flex items-center gap-2">
-                                        <span class="font-mono tabular-nums text-on-surface">${{ sec.value|number_format(2) }}</span>
+                                        <span class="font-mono tabular-nums text-on-surface">{{ sec.value|money(2) }}</span>
                                         <span class="text-on-surface-variant font-mono tabular-nums text-xs">{{ sec.percent|number_format(1) }}%</span>
                                     </div>
                                 </div>
@@ -421,17 +421,17 @@
             <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div class="bg-surface-container-low border border-outline-variant/20 rounded-lg p-5">
                     <span class="text-xs text-on-surface-variant">Available cash</span>
-                    <p class="text-2xl font-semibold text-on-surface font-mono tabular-nums mt-1">${{ cashBalance|number_format(2) }}</p>
+                    <p class="text-2xl font-semibold text-on-surface font-mono tabular-nums mt-1">{{ cashBalance|money(2) }}</p>
                     
                 </div>
                 <div class="bg-surface-container-low border border-outline-variant/20 rounded-lg p-5">
                     <span class="text-xs text-on-surface-variant">Held for open orders</span>
-                    <p class="text-2xl font-semibold text-on-surface font-mono tabular-nums mt-1">${{ escrowedCash|number_format(2) }}</p>
+                    <p class="text-2xl font-semibold text-on-surface font-mono tabular-nums mt-1">{{ escrowedCash|money(2) }}</p>
                     <p class="text-xs text-on-surface-variant mt-1.5">Released when an order fills or is cancelled.</p>
                 </div>
                 <div class="bg-surface-container-low border border-outline-variant/20 rounded-lg p-5">
                     <span class="text-xs text-on-surface-variant">Buying power</span>
-                    <p class="text-2xl font-semibold text-on-surface font-mono tabular-nums mt-1">${{ margin.buyingPower|number_format(2) }}</p>
+                    <p class="text-2xl font-semibold text-on-surface font-mono tabular-nums mt-1">{{ margin.buyingPower|money(2) }}</p>
                     <p class="text-xs text-on-surface-variant mt-1.5">{{ app.user.marginEnabled ? 'Free equity, geared by the initial margin requirement.' : 'Settled cash. Enable margin to borrow against the account.' }}</p>
                 </div>
             </div>
@@ -460,25 +460,25 @@
                     <dl class="grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs">
                         <div>
                             <dt class="text-xs text-on-surface-variant">Margin loan</dt>
-                            <dd class="text-lg font-bold font-mono tabular-nums mt-0.5 {{ marginDebit > 0 ? 'text-tertiary' : 'text-on-surface' }}">${{ marginDebit|number_format(2) }}</dd>
+                            <dd class="text-lg font-bold font-mono tabular-nums mt-0.5 {{ marginDebit > 0 ? 'text-tertiary' : 'text-on-surface' }}">{{ marginDebit|money(2) }}</dd>
                         </div>
                         <div>
                             <dt class="text-xs text-on-surface-variant">Short exposure</dt>
-                            <dd class="text-lg font-bold font-mono tabular-nums mt-0.5 text-on-surface">${{ margin.shortMarketValue|number_format(2) }}</dd>
+                            <dd class="text-lg font-bold font-mono tabular-nums mt-0.5 text-on-surface">{{ margin.shortMarketValue|money(2) }}</dd>
                         </div>
                         {% if margin.optionShortValue > 0 %}
                             <div>
                                 <dt class="text-xs text-on-surface-variant">Written contracts</dt>
-                                <dd class="text-lg font-bold font-mono tabular-nums mt-0.5 text-on-surface" title="What buying the written contracts back would cost at the current mark">${{ margin.optionShortValue|number_format(2) }}</dd>
+                                <dd class="text-lg font-bold font-mono tabular-nums mt-0.5 text-on-surface" title="What buying the written contracts back would cost at the current mark">{{ margin.optionShortValue|money(2) }}</dd>
                             </div>
                         {% endif %}
                         <div>
                             <dt class="text-xs text-on-surface-variant">Account equity</dt>
-                            <dd class="text-lg font-bold font-mono tabular-nums mt-0.5 text-on-surface">${{ margin.equity|number_format(2) }}</dd>
+                            <dd class="text-lg font-bold font-mono tabular-nums mt-0.5 text-on-surface">{{ margin.equity|money(2) }}</dd>
                         </div>
                         <div>
                             <dt class="text-xs text-on-surface-variant">Maintenance</dt>
-                            <dd class="text-lg font-bold font-mono tabular-nums mt-0.5 {{ margin.isCalled ? 'text-tertiary' : 'text-on-surface' }}">${{ margin.maintenanceRequirement|number_format(2) }}</dd>
+                            <dd class="text-lg font-bold font-mono tabular-nums mt-0.5 {{ margin.isCalled ? 'text-tertiary' : 'text-on-surface' }}">{{ margin.maintenanceRequirement|money(2) }}</dd>
                         </div>
                     </dl>
 
@@ -486,7 +486,7 @@
                         <div class="rounded border border-tertiary/30 bg-tertiary/10 px-4 py-3">
                             <p class="text-sm font-semibold text-tertiary">Margin call</p>
                             <p class="text-xs text-tertiary mt-1 leading-relaxed">
-                                Equity is ${{ margin.callAmount|number_format(2) }} below the maintenance requirement.
+                                Equity is {{ margin.callAmount|money(2) }} below the maintenance requirement.
                                 Positions will be sold at the market on the next sweep unless the account is
                                 brought back into compliance.
                                 {% if margin.optionShortValue > 0 %}
@@ -497,7 +497,7 @@
                         </div>
                     {% elseif margin.shortMarketValue > 0 or margin.optionShortValue > 0 or marginDebit > 0 %}
                         <p class="text-2xs text-on-surface-variant">
-                            Equity is {{ (margin.equityRatio * 100)|number_format(1) }}% of gross exposure.
+                            Equity is {{ margin.equityRatio|pct(1) }} of gross exposure.
                         </p>
                     {% endif %}
                 {% endif %}

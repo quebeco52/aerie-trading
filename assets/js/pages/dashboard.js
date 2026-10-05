@@ -1,5 +1,5 @@
 import { THEME_COLORS, withAlpha } from '../utils/colors.js';
-import { formatCurrency } from '../utils/formatters.js';
+import { formatCurrency, signedClass, SIGNED_CLASSES } from '../utils/formatters.js';
 import { CHART_FONT_MONO } from '../utils/fonts.js';
 import { readPageData } from '../utils/page-data.js';
 import { flashTick } from '../utils/tick-flash.js';
@@ -196,10 +196,10 @@ function initDashboard() {
                 // lines in place. Rebuilding the cell's markup here used to drop the borrow line.
                 const pnlEl = document.getElementById(`pnl-${stock.ticker}`);
                 if (pnlEl) {
-                    const sign = unrealizedPnL >= 0 ? '+' : '';
-                    const tone = unrealizedPnL >= 0 ? 'text-secondary' : 'text-tertiary';
+                    const sign = unrealizedPnL > 0 ? '+' : '';
+                    const tone = signedClass(unrealizedPnL);
                     if (!pnlEl.classList.contains(tone)) {
-                        pnlEl.classList.remove('text-secondary', 'text-tertiary');
+                        pnlEl.classList.remove(...SIGNED_CLASSES);
                         pnlEl.classList.add(tone);
                     }
                     const lines = pnlEl.children;
@@ -244,12 +244,15 @@ function initDashboard() {
             const pnlBadge = document.getElementById('portfolio-pnl-badge');
 
             if (pnlValEl && pnlPctEl && pnlBadge) {
-                const sign = totalPnL >= 0 ? '+' : '';
+                const sign = totalPnL > 0 ? '+' : '';
                 setText(pnlValEl, `${sign}${formatCurrency(totalPnL)}`);
                 setText(pnlPctEl, `(${sign}${totalPnLPct.toFixed(2)}%)`);
 
-                pnlBadge.classList.toggle('text-secondary', totalPnL >= 0);
-                pnlBadge.classList.toggle('text-tertiary', totalPnL < 0);
+                const tone = signedClass(totalPnL);
+                if (!pnlBadge.classList.contains(tone)) {
+                    pnlBadge.classList.remove(...SIGNED_CLASSES);
+                    pnlBadge.classList.add(tone);
+                }
             }
         }
     }

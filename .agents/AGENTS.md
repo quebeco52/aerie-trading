@@ -73,9 +73,10 @@ when a change needs one.
 
 ## Pages
 Player pages are the District's own sites: no model names, citations, coefficients or file paths in templates.
-Sentence-case labels, mono type only for figures, in-world institutions instead of US agencies. No eyebrow hero
-cards, rainbow icon tiles or glow. Up is `text-secondary`, down is `text-tertiary`; charts use `THEME_COLORS`, never
-hex. `PriceChangeFeed` returns a fraction.
+Sentence-case labels, mono type only for figures, institution names from `App\Data\Institutions`. Format figures
+with `|signed_class`, `|pct`, `|money` and `source()`, not by hand. Read `.agents/FRONTEND.md` before any template,
+page script or company profile change; `tests/Twig/TemplateStyleTest.php` enforces it, and `bin/render-pages`
+screenshots the result.
 
 ## Reporting
 Report once tests, PHPStan and the numbers are in. Offer long checks (mutation runs, long sweeps) rather than running

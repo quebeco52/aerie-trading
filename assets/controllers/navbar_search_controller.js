@@ -95,7 +95,7 @@ export default class extends Controller {
 
         if (item.type && item.type !== 'Stock') {
             const badge = document.createElement('span');
-            badge.className = 'text-4xs uppercase tracking-wider px-1.5 py-0.5 rounded border border-outline-variant/30 text-on-surface-faint font-semibold shrink-0';
+            badge.className = 'badge badge-neutral shrink-0';
             badge.textContent = item.type;
             row.appendChild(badge);
         }

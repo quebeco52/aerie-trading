@@ -35,7 +35,7 @@
 					</div>
 					<div>
 						<dt class="text-xs text-on-surface-variant">Size</dt>
-						<dd class="text-lg font-semibold font-mono tabular-nums text-on-surface mt-0.5" id="reserve-to-gdp">{{ incepted ? (summary.toGdp * 100)|number_format(0) ~ '% of GDP' : '-' }}</dd>
+						<dd class="text-lg font-semibold font-mono tabular-nums text-on-surface mt-0.5" id="reserve-to-gdp">{{ incepted ? summary.toGdp|pct(0) ~ ' of GDP' : '-' }}</dd>
 					</div>
 					{# Needs the recorded history a year back, so pages/reserve.js fills it once the history loads. #}
 					<div>
@@ -45,7 +45,7 @@
 					</div>
 					<div>
 						<dt class="text-xs text-on-surface-variant">Budget draw</dt>
-						<dd class="text-lg font-semibold font-mono tabular-nums text-on-surface mt-0.5" id="reserve-draw">{{ incepted ? (summary.drawToGdp * 100)|number_format(2) ~ '% of GDP' : '-' }}</dd>
+						<dd class="text-lg font-semibold font-mono tabular-nums text-on-surface mt-0.5" id="reserve-draw">{{ incepted ? summary.drawToGdp|pct(2) ~ ' of GDP' : '-' }}</dd>
 						<p class="text-3xs font-mono tabular-nums text-on-surface-variant mt-0.5" id="reserve-draw-value">{{ incepted ? summary.annualDraw|format_large('$') ~ ' this year' : '' }}</p>
 						<p class="text-3xs font-mono tabular-nums text-on-surface-variant" id="reserve-stabilisation" title="Spending the fund pays for above the draw when output is below trend, or the budget's saving paid into it when above">
 							{%- if incepted and stabilisation != 0 -%}
@@ -57,18 +57,18 @@
 					</div>
 					<div>
 						<dt class="text-xs text-on-surface-variant">Stamp duty inflow</dt>
-						<dd class="text-lg font-semibold font-mono tabular-nums text-on-surface mt-0.5" id="reserve-duty">{{ incepted and summary.stampDutyToGdp > 0 ? (summary.stampDutyToGdp * 100)|number_format(2) ~ '% of GDP' : '-' }}</dd>
+						<dd class="text-lg font-semibold font-mono tabular-nums text-on-surface mt-0.5" id="reserve-duty">{{ incepted and summary.stampDutyToGdp > 0 ? summary.stampDutyToGdp|pct(2) ~ ' of GDP' : '-' }}</dd>
 						<p class="text-3xs font-mono tabular-nums text-on-surface-variant mt-0.5" id="reserve-duty-ytd">{{ incepted ? (summary.stampDutyToGdp > 0 ? 'Last year · ' : 'First year open · ') ~ summary.stampDutyYearToDate|format_large('$') ~ ' so far' : '' }}</p>
 					</div>
 					<div>
 						<dt class="text-xs text-on-surface-variant">Board ownership</dt>
-						<dd class="text-lg font-semibold font-mono tabular-nums text-on-surface mt-0.5" id="reserve-ownership">{{ incepted ? (summary.ownership * 100)|number_format(2) ~ '% of float' : '-' }}</dd>
-						<p class="text-3xs font-mono tabular-nums text-on-surface-variant mt-0.5">Ceiling {{ (mandate.ownershipCeiling * 100)|number_format(0) }}%</p>
+						<dd class="text-lg font-semibold font-mono tabular-nums text-on-surface mt-0.5" id="reserve-ownership">{{ incepted ? summary.ownership|pct(2) ~ ' of float' : '-' }}</dd>
+						<p class="text-3xs font-mono tabular-nums text-on-surface-variant mt-0.5">Ceiling {{ mandate.ownershipCeiling|pct(0) }}</p>
 					</div>
 					<div>
-						<dt class="text-xs text-on-surface-variant" title="What bond markets price: the District's debt less the government bonds the fund holds (IMF net debt)">Net public debt</dt>
-						<dd class="text-lg font-semibold font-mono tabular-nums text-on-surface mt-0.5" id="reserve-net-debt">{{ (summary.netDebtToGdp * 100)|number_format(0) }}% of GDP</dd>
-						<p class="text-3xs font-mono tabular-nums text-on-surface-variant mt-0.5" id="reserve-gross-debt">Gross {{ (summary.grossDebtToGdp * 100)|number_format(0) }}% less the fund's bonds</p>
+						<dt class="text-xs text-on-surface-variant" title="What bond markets price: the District's debt less the government bonds the fund holds">Net public debt</dt>
+						<dd class="text-lg font-semibold font-mono tabular-nums text-on-surface mt-0.5" id="reserve-net-debt">{{ summary.netDebtToGdp|pct(0) }} of GDP</dd>
+						<p class="text-3xs font-mono tabular-nums text-on-surface-variant mt-0.5" id="reserve-gross-debt">Gross {{ summary.grossDebtToGdp|pct(0) }} less the fund's bonds</p>
 					</div>
 					<div>
 						<dt class="text-xs text-on-surface-variant">Rebalancing</dt>
@@ -77,7 +77,7 @@
 						</dd>
 						<p class="text-3xs font-mono tabular-nums text-on-surface-variant mt-0.5" id="reserve-programme-detail">
 							{%- if programme.active -%}
-								{{ (programme.share * 100)|number_format(2) }}% of float to go · {{ programme_months }} {{ programme_months == '1' ? 'month' : 'months' }} left
+								{{ programme.share|pct(2) }} of float to go · {{ programme_months }} {{ programme_months == '1' ? 'month' : 'months' }} left
 							{%- elseif programme.monthsSinceLast is not null -%}
 								Last one {{ programme.monthsSinceLast|number_format(0) }} months ago
 							{%- else -%}
@@ -92,8 +92,8 @@
 			<div class="bg-surface-container-low rounded-lg p-6 border border-outline-variant/20 flex items-start gap-3" role="status">
 				<p class="text-sm text-on-surface-variant">
 					The fund opens with the market. It opens holding
-					{{ (mandate.openingOwnership * 100)|number_format(1) }}% of the board's float, at
-					{{ (mandate.openingSize * 100)|number_format(0) }}% of the District's GDP.
+					{{ mandate.openingOwnership|pct(1) }} of the board's float, at
+					{{ mandate.openingSize|pct(0) }} of the District's GDP.
 				</p>
 			</div>
 		{% else %}
@@ -106,7 +106,7 @@
 					<p class="text-xs text-on-surface mt-2">
 						Run by <span class="font-semibold">{{ head.name }}</span>, {{ head.age }},
 						{{ {cautious: 'a cautious investor', balanced: 'a balanced investor', bold: 'a bold investor'}[head.stance] }}, until <span class="font-mono tabular-nums">{{ head.termEndsLabel }}</span>.
-						{{ head.opening ? 'Keeps the mix the fund opened with.' : 'Holds ' ~ (head.equityShare * 100)|number_format(0) ~ '% of the fund in equities.' }}
+						{{ head.opening ? 'Keeps the mix the fund opened with.' : 'Holds ' ~ head.equityShare|pct(0) ~ ' of the fund in equities.' }}
 					</p>
 				{% endif %}
 
@@ -125,7 +125,7 @@
 
 				<table class="w-full mt-5 text-xs">
 					<thead>
-						<tr class="text-2xs uppercase tracking-wide text-on-surface-variant border-b border-outline-variant/15">
+						<tr class="table-head">
 							<th scope="col" class="text-left font-semibold pb-2">Sleeve</th>
 							<th scope="col" class="text-right font-semibold pb-2">Value</th>
 							<th scope="col" class="text-right font-semibold pb-2">Weight</th>
@@ -139,8 +139,8 @@
 									<span class="inline-block w-2.5 h-2.5 rounded-sm mr-1.5 align-middle {{ sleeve_swatch[sleeve.key] }}" aria-hidden="true"></span>{{ sleeve.label }}
 								</th>
 								<td class="text-right font-mono tabular-nums text-on-surface" data-sleeve-value>{{ sleeve.value|format_large('$') }}</td>
-								<td class="text-right font-mono tabular-nums font-bold text-on-surface" data-sleeve-weight>{{ (sleeve.weight * 100)|number_format(2) }}%</td>
-								<td class="text-right font-mono tabular-nums text-on-surface-variant">{{ (sleeve.policy * 100)|number_format(2) }}%</td>
+								<td class="text-right font-mono tabular-nums font-bold text-on-surface" data-sleeve-weight>{{ sleeve.weight|pct(2) }}</td>
+								<td class="text-right font-mono tabular-nums text-on-surface-variant">{{ sleeve.policy|pct(2) }}</td>
 							</tr>
 						{% endfor %}
 					</tbody>
@@ -150,7 +150,7 @@
 					Policy split. Foreign money is held {{ (mandate.foreignEquityShare * 100)|number_format(0) }}/{{ ((1 - mandate.foreignEquityShare) * 100)|number_format(0) }}
 					in equities and government bonds, marked in foreign currency and converted at today's exchange rate.
 					The bonds are a {{ mandate.foreignBondDuration|number_format(1) }}-year index of foreign government paper,
-					yielding <span class="font-mono tabular-nums" id="reserve-bond-yield">{{ (returns.bondYield * 100)|number_format(2) }}%</span>.
+					yielding <span class="font-mono tabular-nums" id="reserve-bond-yield">{{ returns.bondYield|pct(2) }}</span>.
 				</p>
 			</section>
 
@@ -164,7 +164,7 @@
 						<div data-gauge="{{ gauge.key }}" data-policy="{{ gauge.policy }}" data-band="{{ gauge.band }}" data-weight="{{ gauge.weight }}">
 							<div class="flex items-baseline justify-between gap-3">
 								<h3 class="text-sm font-semibold text-on-surface">{{ gauge.label }}</h3>
-								<span class="text-xs font-mono tabular-nums text-on-surface" data-gauge-reading>{{ (gauge.weight * 100)|number_format(2) }}%</span>
+								<span class="text-xs font-mono tabular-nums text-on-surface" data-gauge-reading>{{ gauge.weight|pct(2) }}</span>
 							</div>
 							<div class="relative h-6 mt-2" aria-hidden="true">
 								<div class="absolute inset-x-0 top-1/2 h-1 -translate-y-1/2 rounded bg-surface-container-highest"></div>
@@ -173,16 +173,16 @@
 								<div data-gauge-marker class="absolute top-1/2 w-3 h-3 -translate-x-1/2 -translate-y-1/2 rounded-full ring-2 ring-surface-container-low {{ gauge.key == 'district' ? 'bg-series-blue' : 'bg-series-orange' }}"></div>
 							</div>
 							<p class="text-3xs font-mono tabular-nums text-on-surface-variant mt-1">
-								Policy {{ (gauge.policy * 100)|number_format(2) }}% · band {{ ((gauge.policy - gauge.band) * 100)|number_format(2) }}% to {{ ((gauge.policy + gauge.band) * 100)|number_format(2) }}%
+								Policy {{ gauge.policy|pct(2) }} · band {{ ((gauge.policy - gauge.band) * 100)|number_format(2) }}% to {{ ((gauge.policy + gauge.band) * 100)|number_format(2) }}%
 							</p>
 							<p class="text-3xs text-on-surface-variant mt-2" data-gauge-status>
 								{{ (gap|abs * 100)|number_format(2) }}pp {{ gap < 0 ? 'under' : 'over' }} policy, {{ gap|abs <= gauge.band ? 'inside' : 'outside' }} the ±{{ (gauge.band * 100)|number_format(2) }}pp band.
 							</p>
 							<p class="text-3xs text-on-surface-faint mt-0.5">
 								{% if gauge.key == 'district' %}
-									A fall of about {{ (gauge.breachingMove * 100)|number_format(0) }}% in the board against the rest of the fund takes it through the bottom of the band.
+									A fall of about {{ gauge.breachingMove|pct(0) }} in the board against the rest of the fund takes it through the bottom of the band.
 								{% else %}
-									A fall of about {{ (gauge.breachingMove * 100)|number_format(0) }}% in all equities against bonds takes it through the bottom of the band.
+									A fall of about {{ gauge.breachingMove|pct(0) }} in all equities against bonds takes it through the bottom of the band.
 								{% endif %}
 							</p>
 						</div>
@@ -217,7 +217,7 @@
 				</div>
 				<div>
 					<dt class="text-xs text-on-surface-variant">Spending rule assumes</dt>
-					<dd class="text-lg font-semibold font-mono tabular-nums text-on-surface mt-0.5" id="reserve-return-assumed">{{ (returns.assumedReal * 100)|number_format(2) }}%</dd>
+					<dd class="text-lg font-semibold font-mono tabular-nums text-on-surface mt-0.5" id="reserve-return-assumed">{{ returns.assumedReal|pct(2) }}</dd>
 					<p class="text-3xs font-mono tabular-nums text-on-surface-variant mt-0.5">Real a year, compound; the draw is half of it</p>
 				</div>
 			</dl>
@@ -247,7 +247,7 @@
 				</div>
 				<div class="overflow-x-auto">
 					<table class="w-full text-xs">
-						<thead class="bg-surface-container text-2xs uppercase tracking-wide text-on-surface-variant">
+						<thead class="table-head bg-surface-container">
 							<tr>
 								<th scope="col" class="px-5 py-2.5 text-left font-semibold">Company</th>
 								<th scope="col" class="px-4 py-2.5 text-right font-semibold">District stake</th>
@@ -264,7 +264,7 @@
 										<a href="/stock/{{ holding.ticker }}" class="font-bold text-primary font-mono group-hover:underline after:absolute after:inset-0 after:content-['']">{{ holding.ticker }}</a>
 										<span class="ml-2 text-on-surface">{{ holding.name }}</span>
 									</th>
-									<td class="px-4 py-2 text-right font-mono tabular-nums font-bold text-on-surface">{{ (holding.stake * 100)|number_format(2) }}%</td>
+									<td class="px-4 py-2 text-right font-mono tabular-nums font-bold text-on-surface">{{ holding.stake|pct(2) }}</td>
 									<td class="px-4 py-2 text-right font-mono tabular-nums text-on-surface-variant hidden sm:table-cell" title="The District's stake plus the fund's share of the float">{{ ((holding.stake + holding.fundStake) * 100)|number_format(2) }}%</td>
 									<td class="px-4 py-2 text-right font-mono tabular-nums text-on-surface-variant hidden md:table-cell">{{ holding.shares|format_large }}</td>
 									<td class="px-4 py-2 text-right font-mono tabular-nums text-on-surface">{{ holding.value|format_large('$') }}</td>
@@ -316,13 +316,13 @@
 			<div class="p-5">
 				<h2 id="reserve-holdings-heading" class="text-base font-semibold text-on-surface">District holdings</h2>
 				<p class="text-xs text-on-surface-variant mt-0.5">
-					The fund holds {{ (summary.ownership * 100)|number_format(2) }}% of every listed company's float, so its
+					The fund holds {{ summary.ownership|pct(2) }} of every listed company's float, so its
 					board sleeve is weighted like the float-adjusted market. Values at page load.
 				</p>
 			</div>
 			<div class="overflow-x-auto">
 				<table class="w-full text-xs">
-					<thead class="bg-surface-container text-2xs uppercase tracking-wide text-on-surface-variant">
+					<thead class="table-head bg-surface-container">
 						<tr>
 							<th scope="col" class="px-5 py-2.5 text-right font-semibold w-10">#</th>
 							<th scope="col" class="px-4 py-2.5 text-left font-semibold">Company</th>
@@ -343,7 +343,7 @@
 								<td class="px-4 py-2 text-on-surface-variant hidden md:table-cell">{{ holding.sector }}</td>
 								<td class="px-4 py-2 text-right font-mono tabular-nums text-on-surface">{{ holding.stakeValue|format_large('$') }}</td>
 								<td class="px-4 py-2 text-right font-mono tabular-nums text-on-surface-variant hidden sm:table-cell">{{ holding.stakeShares >= 1000000 ? holding.stakeShares|format_large : holding.stakeShares|number_format(0) }}</td>
-								<td class="px-5 py-2 text-right font-mono tabular-nums text-on-surface">{{ (holding.sleeveWeight * 100)|number_format(2) }}%</td>
+								<td class="px-5 py-2 text-right font-mono tabular-nums text-on-surface">{{ holding.sleeveWeight|pct(2) }}</td>
 							</tr>
 						{% endfor %}
 					</tbody>
@@ -377,23 +377,23 @@
 				},
 				{
 					name: 'Spending rule',
-					text: 'Each budget year the fund pays the budget ' ~ (mandate.spendingShare * 100)|number_format(0) ~ '% of its expected long-term real return on its value. The return is the compound one, the average less half the variance, so volatility is never spent.'
+					text: 'Each budget year the fund pays the budget ' ~ mandate.spendingShare|pct(0) ~ ' of its expected long-term real return on its value. The return is the compound one, the average less half the variance, so volatility is never spent.'
 				},
 				{
 					name: 'Stabilisation rule',
-					text: 'At each budget round, every ' ~ mandate.budgetRoundMonths|number_format(0) ~ ' months, the budget spends ' ~ mandate.stabilisationGapResponse|number_format(2) ~ '% of GDP from the fund, beyond the draw, for each point output is below trend, and pays the same into the fund for each point above it. The cycle is read against the gap\'s own ' ~ mandate.stabilisationTrendYears|number_format(0) ~ '-year average, so over time the spending and the saving balance. The next year ' ~ (mandate.stabilisationReversal * 100)|number_format(0) ~ '% of the year\'s change is given back, and the whole of it fades toward zero by ' ~ (mandate.stabilisationPersistence * 100)|number_format(1) ~ '% a year. Together with tax policy, the budget answers the business cycle as strongly as Norway\'s does. The fund\'s own market swings never reach the budget.'
+					text: 'At each budget round, every ' ~ mandate.budgetRoundMonths|number_format(0) ~ ' months, the budget spends ' ~ mandate.stabilisationGapResponse|number_format(2) ~ '% of GDP from the fund, beyond the draw, for each point output is below trend, and pays the same into the fund for each point above it. The cycle is read against the gap\'s own ' ~ mandate.stabilisationTrendYears|number_format(0) ~ '-year average, so over time the spending and the saving balance. The next year ' ~ mandate.stabilisationReversal|pct(0) ~ ' of the year\'s change is given back, and the whole of it fades toward zero by ' ~ mandate.stabilisationPersistence|pct(1) ~ ' a year. Together with tax policy, the budget leans against the business cycle. The fund\'s own market swings never reach the budget.'
 				},
 				{
 					name: 'Budget rule',
-					text: 'The budget spends what the fund pays: the structural deficit is the draw, so a fund that grows faster than the economy widens spending with it rather than piling up surpluses. The District keeps at least ' ~ (mandate.debtFloor * 100)|number_format(0) ~ '% of GDP in gross debt outstanding for its benchmark curve, and a surplus that would take debt below that buys bonds for the fund instead.'
+					text: 'The budget spends what the fund pays: the structural deficit is the draw, so a fund that grows faster than the economy widens spending with it rather than piling up surpluses. The District keeps at least ' ~ mandate.debtFloor|pct(0) ~ ' of GDP in gross debt outstanding for its benchmark curve, and a surplus that would take debt below that buys bonds for the fund instead.'
 				},
 				{
 					name: 'Opening size',
-					text: 'Opened at ' ~ (mandate.openingSize * 100)|number_format(0) ~ '% of GDP, holding ' ~ (mandate.openingOwnership * 100)|number_format(1) ~ '% of the board\'s float.'
+					text: 'Opened at ' ~ mandate.openingSize|pct(0) ~ ' of GDP, holding ' ~ mandate.openingOwnership|pct(1) ~ ' of the board\'s float.'
 				},
 				{
 					name: 'Reference portfolio',
-					text: 'Money off the board is held ' ~ (mandate.foreignEquityShare * 100)|number_format(0) ~ '% in global equities and ' ~ ((1 - mandate.foreignEquityShare) * 100)|number_format(0) ~ '% in foreign government bonds. The bonds are held at a constant duration of ' ~ mandate.foreignBondDuration|number_format(1) ~ ' years, so they earn their yield and roll-down and gain when foreign rates fall.'
+					text: 'Money off the board is held ' ~ mandate.foreignEquityShare|pct(0) ~ ' in global equities and ' ~ ((1 - mandate.foreignEquityShare) * 100)|number_format(0) ~ '% in foreign government bonds. The bonds are held at a constant duration of ' ~ mandate.foreignBondDuration|number_format(1) ~ ' years, so they earn their yield and roll-down and gain when foreign rates fall.'
 				},
 				{
 					name: 'District equity band',
@@ -409,7 +409,7 @@
 				},
 				{
 					name: 'Ownership ceiling',
-					text: 'Never more than ' ~ (mandate.ownershipCeiling * 100)|number_format(0) ~ '% of the float. Holding the same share of every company, that keeps it under ' ~ (mandate.ownershipCeiling * 100)|number_format(0) ~ '% of any company\'s voting shares.'
+					text: 'Never more than ' ~ mandate.ownershipCeiling|pct(0) ~ ' of the float. Holding the same share of every company, that keeps it under ' ~ mandate.ownershipCeiling|pct(0) ~ ' of any company\'s voting shares.'
 				},
 				{
 					name: 'Corporate actions',
@@ -421,11 +421,11 @@
 				},
 				{
 					name: 'Stamp duty',
-					text: 'Every share trade pays ' ~ (mandate.stampDutyRate * 100)|number_format(2) ~ '% on each side, and the duty is paid into the fund rather than the budget. Index funds are exempt.'
+					text: 'Every share trade pays ' ~ mandate.stampDutyRate|pct(2) ~ ' on each side, and the duty is paid into the fund rather than the budget. Index funds are exempt.'
 				},
 				{
 					name: 'Strategic holding',
-					text: 'The District holds ' ~ (mandate.clearinghouseStake * 100)|number_format(0) ~ '% of its central counterparty outside the fund. The stake is off the float and never traded. The District tenders into buybacks and takes up new issues pro rata, so the percentage holds. Its dividends and buyback proceeds are paid into the fund, and any subscription is paid out of it.'
+					text: 'The District holds ' ~ mandate.clearinghouseStake|pct(0) ~ ' of its central counterparty outside the fund. The stake is off the float and never traded. The District tenders into buybacks and takes up new issues pro rata, so the percentage holds. Its dividends and buyback proceeds are paid into the fund, and any subscription is paid out of it.'
 				}
 			] %}
 			<dl class="mt-4 divide-y divide-outline-variant/10">

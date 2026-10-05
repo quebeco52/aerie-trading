@@ -53,7 +53,7 @@
 				{% if expiry.atmVolatility is not null %}
 					<div class="text-2xs text-on-surface-variant">
 						At-the-money vol
-						<span class="ml-1 font-mono tabular-nums font-bold text-on-surface">{{ (expiry.atmVolatility * 100)|number_format(1) }}%</span>
+						<span class="ml-1 font-mono tabular-nums font-bold text-on-surface">{{ expiry.atmVolatility|pct(1) }}</span>
 					</div>
 				{% endif %}
 			</div>
@@ -62,11 +62,11 @@
 				<table class="w-full text-xs min-w-[46rem]">
 					<thead>
 						<tr class="text-on-surface-faint border-b border-outline-variant/20">
-							<th scope="colgroup" colspan="5" class="px-3 py-1.5 text-3xs uppercase tracking-wider font-bold text-secondary">Calls</th>
-							<th scope="col" class="px-3 py-1.5 text-3xs uppercase tracking-wider font-bold text-center">Strike</th>
-							<th scope="colgroup" colspan="5" class="px-3 py-1.5 text-3xs uppercase tracking-wider font-bold text-tertiary">Puts</th>
+							<th scope="colgroup" colspan="5" class="table-head px-3 py-1.5 text-3xs font-bold text-secondary">Calls</th>
+							<th scope="col" class="table-head px-3 py-1.5 text-3xs font-bold text-center">Strike</th>
+							<th scope="colgroup" colspan="5" class="table-head px-3 py-1.5 text-3xs font-bold text-tertiary">Puts</th>
 						</tr>
-						<tr class="text-3xs uppercase tracking-wide text-on-surface-faint border-b border-outline-variant/20">
+						<tr class="table-head text-3xs text-on-surface-faint border-outline-variant/20">
 							<th scope="col" class="px-3 py-1 font-semibold text-left">Pos</th>
 							<th scope="col" class="px-3 py-1 font-semibold text-right">OI</th>
 							<th scope="col" class="px-3 py-1 font-semibold text-right">Delta</th>
@@ -90,7 +90,7 @@
 									</td>
 									<td class="px-3 py-1.5 font-mono tabular-nums text-right text-on-surface-variant">{{ row.call.openInterest|number_format(0) }}</td>
 									<td class="px-3 py-1.5 font-mono tabular-nums text-right text-on-surface-variant">{{ row.call.delta|number_format(2) }}</td>
-									<td class="px-3 py-1.5 font-mono tabular-nums text-right text-on-surface-variant">{{ (row.call.impliedVolatility * 100)|number_format(1) }}%</td>
+									<td class="px-3 py-1.5 font-mono tabular-nums text-right text-on-surface-variant">{{ row.call.impliedVolatility|pct(1) }}</td>
 									<td class="px-3 py-1.5 font-mono tabular-nums text-right font-bold {{ row.call.inTheMoney ? 'text-on-surface' : 'text-on-surface-variant' }}">
 										{% if app.user %}
 											<button type="button"
@@ -99,9 +99,9 @@
 													data-option-ticket-symbol-param="{{ row.call.ticker }}"
 													data-option-ticket-mark-param="{{ row.call.mark }}"
 													data-option-ticket-position-param="{{ row.call.position }}"
-													title="Decays ${{ (row.call.theta / 365)|abs|number_format(3) }} per day">${{ row.call.mark|number_format(2) }}</button>
+													title="Decays ${{ (row.call.theta / 365)|abs|number_format(3) }} per day">{{ row.call.mark|money(2) }}</button>
 										{% else %}
-											${{ row.call.mark|number_format(2) }}
+											{{ row.call.mark|money(2) }}
 										{% endif %}
 									</td>
 								{% else %}
@@ -123,12 +123,12 @@
 													data-option-ticket-symbol-param="{{ row.put.ticker }}"
 													data-option-ticket-mark-param="{{ row.put.mark }}"
 													data-option-ticket-position-param="{{ row.put.position }}"
-													title="Decays ${{ (row.put.theta / 365)|abs|number_format(3) }} per day">${{ row.put.mark|number_format(2) }}</button>
+													title="Decays ${{ (row.put.theta / 365)|abs|number_format(3) }} per day">{{ row.put.mark|money(2) }}</button>
 										{% else %}
-											${{ row.put.mark|number_format(2) }}
+											{{ row.put.mark|money(2) }}
 										{% endif %}
 									</td>
-									<td class="px-3 py-1.5 font-mono tabular-nums text-left text-on-surface-variant">{{ (row.put.impliedVolatility * 100)|number_format(1) }}%</td>
+									<td class="px-3 py-1.5 font-mono tabular-nums text-left text-on-surface-variant">{{ row.put.impliedVolatility|pct(1) }}</td>
 									<td class="px-3 py-1.5 font-mono tabular-nums text-left text-on-surface-variant">{{ row.put.delta|number_format(2) }}</td>
 									<td class="px-3 py-1.5 font-mono tabular-nums text-left text-on-surface-variant">{{ row.put.openInterest|number_format(0) }}</td>
 									<td class="px-3 py-1.5 font-mono tabular-nums text-right {{ row.put.position != 0 ? (row.put.position > 0 ? 'text-secondary font-bold' : 'text-tertiary font-bold') : 'text-on-surface-faint' }}">

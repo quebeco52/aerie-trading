@@ -73,7 +73,9 @@ class StockPageBuilder
             // Null rather than a flat 0.00% when the ticker has no usable buffered history, so the
             // header prints the change as unknown instead of as a day that did not move.
             'changePercent' => $isDelisted ? null : $this->priceChangeFeed->changeForTicker($ticker, (float) $asset->getPrice()),
-            'generalInfo' => $asset->getDescription(),
+            // The lore copy, as the district map reads it, so an edit shows without a reseed; the seeded column covers
+            // a listing the lore does not know.
+            'generalInfo' => StockInfo::DESCRIPTIONS[$ticker] ?? $asset->getDescription(),
             'quote' => StockInfo::getQuote($ticker),
             'events' => $isEtf
                 ? $this->etfEvents->findRecentFor($asset, self::EVENT_ROWS)

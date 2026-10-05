@@ -110,7 +110,7 @@ class EventPresenter
         $pills = $this->parseSubActionPills($remainingText);
 
         $badge = 'EARNINGS IN-LINE';
-        $badgeClass = 'bg-primary/10 text-primary border-primary/20';
+        $badgeClass = 'badge-accent';
         $borderClass = 'border-l-primary';
         $icon = 'equalizer';
         $iconClass = 'bg-primary/15 text-primary';
@@ -118,14 +118,14 @@ class EventPresenter
 
         if ($surpriseType === 'beat') {
             $badge = 'EARNINGS BEAT';
-            $badgeClass = 'bg-secondary/10 text-secondary border-secondary/30';
+            $badgeClass = 'badge-up';
             $borderClass = 'border-l-secondary';
             $icon = 'trending_up';
             $iconClass = 'bg-secondary/15 text-secondary';
             $surpriseText = $surpriseAmount ? "Beat by +{$surpriseAmount}" : 'Beat Expectations';
         } elseif ($surpriseType === 'miss') {
             $badge = 'EARNINGS MISS';
-            $badgeClass = 'bg-tertiary/10 text-tertiary border-tertiary/30';
+            $badgeClass = 'badge-down';
             $borderClass = 'border-l-tertiary';
             $icon = 'trending_down';
             $iconClass = 'bg-tertiary/15 text-tertiary';
@@ -167,7 +167,7 @@ class EventPresenter
             'type' => $type,
             'category' => 'shock',
             'badge' => 'MARKET SHOCK',
-            'badgeClass' => $isPositive ? 'bg-warning/10 text-warning border-warning/30' : 'bg-tertiary/10 text-tertiary border-tertiary/30',
+            'badgeClass' => $isPositive ? 'badge-warn' : 'badge-down',
             'borderClass' => $isPositive ? 'border-l-warning' : 'border-l-tertiary',
             'icon' => 'bolt',
             'iconClass' => $isPositive ? 'bg-warning/15 text-warning' : 'bg-tertiary/15 text-tertiary',
@@ -193,7 +193,7 @@ class EventPresenter
             'type' => $type,
             'category' => 'split',
             'badge' => $badge,
-            'badgeClass' => 'bg-surface-container-high text-on-surface-variant border-outline-variant/40',
+            'badgeClass' => 'badge-neutral',
             'borderClass' => 'border-l-outline-variant',
             'icon' => 'call_split',
             'iconClass' => 'bg-surface-container-high text-on-surface-variant',
@@ -216,7 +216,7 @@ class EventPresenter
         $badge = $isUpgrade ? 'RATING UPGRADE' : ($isDowngrade ? 'RATING DOWNGRADE' : 'CREDIT RATING');
         // The debt engine writes "[CREDIT DOWNGRADE] TICK: ..." for the log; the badge already says both.
         $rawDesc = (string) preg_replace('/^\[[A-Z ]+\]\s*[A-Z0-9.]+:\s*/', '', $rawDesc);
-        $badgeClass = $isUpgrade ? 'bg-secondary/10 text-secondary border-secondary/30' : 'bg-tertiary/10 text-tertiary border-tertiary/30';
+        $badgeClass = $isUpgrade ? 'badge-up' : 'badge-down';
         $borderClass = $isUpgrade ? 'border-l-secondary' : 'border-l-tertiary';
         $icon = $isUpgrade ? 'credit_score' : 'warning';
         $iconClass = $isUpgrade ? 'bg-secondary/15 text-secondary' : 'bg-tertiary/15 text-tertiary';
@@ -248,7 +248,7 @@ class EventPresenter
             'type' => $type,
             'category' => 'mna',
             'badge' => $type,
-            'badgeClass' => 'bg-primary/10 text-primary border-primary/30',
+            'badgeClass' => 'badge-accent',
             'borderClass' => 'border-l-primary',
             'icon' => $type === 'DIVESTITURE' ? 'domain_disabled' : 'domain_add',
             'iconClass' => 'bg-primary/15 text-primary',
@@ -276,7 +276,7 @@ class EventPresenter
             'type' => $type,
             'category' => 'analyst',
             'badge' => $isGuidance ? 'GUIDANCE CUT' : ($isCut ? 'TARGET CUT' : 'TARGET RAISED'),
-            'badgeClass' => $isCut ? 'bg-tertiary/10 text-tertiary border-tertiary/30' : 'bg-secondary/10 text-secondary border-secondary/30',
+            'badgeClass' => $isCut ? 'badge-down' : 'badge-up',
             'borderClass' => $isCut ? 'border-l-tertiary' : 'border-l-secondary',
             'icon' => $isGuidance ? 'campaign' : 'query_stats',
             'iconClass' => $isCut ? 'bg-tertiary/15 text-tertiary' : 'bg-secondary/15 text-secondary',
@@ -303,8 +303,8 @@ class EventPresenter
             'category' => 'district',
             'badge' => $evicted ? 'STREET EVICTION' : 'STREET PROMOTION',
             'badgeClass' => $evicted
-                ? 'bg-warning/15 text-warning border-warning/40'
-                : 'bg-primary/15 text-primary border-primary/40',
+                ? 'badge-warn'
+                : 'badge-accent',
             'borderClass' => $evicted ? 'border-l-warning' : 'border-l-primary',
             'icon' => 'location_city',
             'iconClass' => $evicted ? 'bg-warning/20 text-warning' : 'bg-primary/20 text-primary',
@@ -329,7 +329,7 @@ class EventPresenter
             'type' => $type,
             'category' => 'index',
             'badge' => 'INDEX RECONSTITUTION',
-            'badgeClass' => 'bg-primary/15 text-primary border-primary/40',
+            'badgeClass' => 'badge-accent',
             'borderClass' => 'border-l-primary',
             'icon' => 'checklist',
             'iconClass' => 'bg-primary/20 text-primary',
@@ -358,7 +358,7 @@ class EventPresenter
             'type' => $type,
             'category' => 'income',
             'badge' => 'DISTRIBUTION',
-            'badgeClass' => 'bg-secondary/15 text-secondary border-secondary/40',
+            'badgeClass' => 'badge-up',
             'borderClass' => 'border-l-secondary',
             'icon' => 'payments',
             'iconClass' => 'bg-secondary/20 text-secondary',
@@ -387,8 +387,8 @@ class EventPresenter
             'category' => 'governance',
             'badge' => $dismissed ? 'BOARD REMOVAL' : 'MANAGEMENT CHANGE',
             'badgeClass' => $dismissed
-                ? 'bg-warning/15 text-warning border-warning/40'
-                : 'bg-surface-container-high text-on-surface-variant border-outline-variant/30',
+                ? 'badge-warn'
+                : 'badge-neutral',
             'borderClass' => $dismissed ? 'border-l-warning' : 'border-l-primary',
             'icon' => $dismissed ? 'gavel' : 'badge',
             'iconClass' => $dismissed ? 'bg-warning/20 text-warning' : 'bg-primary/10 text-primary',
@@ -408,7 +408,7 @@ class EventPresenter
             'type' => $type,
             'category' => 'reorganization',
             'badge' => 'CHAPTER 11',
-            'badgeClass' => 'bg-warning/15 text-warning border-warning/40',
+            'badgeClass' => 'badge-warn',
             'borderClass' => 'border-l-warning',
             'icon' => 'balance',
             'iconClass' => 'bg-warning/20 text-warning',
@@ -427,7 +427,7 @@ class EventPresenter
             'type' => $type,
             'category' => 'bankruptcy',
             'badge' => 'BANKRUPTCY',
-            'badgeClass' => 'bg-tertiary/15 text-tertiary border-tertiary/40',
+            'badgeClass' => 'badge-down',
             'borderClass' => 'border-l-tertiary',
             'icon' => 'gavel',
             'iconClass' => 'bg-tertiary/20 text-tertiary',
@@ -449,7 +449,7 @@ class EventPresenter
             'type' => $type,
             'category' => 'general',
             'badge' => $type,
-            'badgeClass' => 'bg-surface-container-high text-on-surface-variant border-outline-variant/30',
+            'badgeClass' => 'badge-neutral',
             'borderClass' => 'border-l-primary',
             'icon' => 'campaign',
             'iconClass' => 'bg-primary/10 text-primary',
@@ -499,7 +499,7 @@ class EventPresenter
                     'icon' => 'payments',
                     'label' => 'Dividend',
                     'text' => $divText,
-                    'pillClass' => 'bg-secondary/10 text-secondary border-secondary/25',
+                    'pillClass' => 'badge-up',
                 ];
                 continue;
             }
@@ -514,7 +514,7 @@ class EventPresenter
                     'icon' => 'published_with_changes',
                     'label' => 'Buyback',
                     'text' => "Repurchased {$formattedCount} shares",
-                    'pillClass' => 'bg-primary/10 text-primary border-primary/25',
+                    'pillClass' => 'badge-accent',
                 ];
                 continue;
             }
@@ -528,7 +528,7 @@ class EventPresenter
                     'icon' => 'receipt_long',
                     'label' => 'Bonds',
                     'text' => "Issued {$amount} bonds{$purpose}",
-                    'pillClass' => 'bg-warning/10 text-warning border-warning/25',
+                    'pillClass' => 'badge-warn',
                 ];
                 continue;
             }
@@ -539,7 +539,7 @@ class EventPresenter
                 'icon' => 'feed',
                 'label' => 'Corporate News',
                 'text' => rtrim($line, '.'),
-                'pillClass' => 'bg-primary/10 text-primary border-primary/20',
+                'pillClass' => 'badge-accent',
             ];
         }
 

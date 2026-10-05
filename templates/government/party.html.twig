@@ -51,19 +51,19 @@
 					</div>
 					<div class="bg-surface-container-lowest rounded border border-outline-variant/20 px-4 py-3 min-w-28">
 						<dt class="text-xs text-on-surface-variant">Vote</dt>
-						<dd class="text-xl font-semibold font-mono tabular-nums text-on-surface mt-0.5">{{ (party.share * 100)|number_format(1) }}%</dd>
+						<dd class="text-xl font-semibold font-mono tabular-nums text-on-surface mt-0.5">{{ party.share|pct(1) }}</dd>
 					</div>
 					<div class="bg-surface-container-lowest rounded border border-outline-variant/20 px-4 py-3 min-w-28">
 						<dt class="text-xs text-on-surface-variant">Last election</dt>
-						<dd class="text-xl font-semibold font-mono tabular-nums mt-0.5 {{ party.swing is null ? 'text-on-surface-variant' : (party.swing >= 0 ? 'text-secondary' : 'text-tertiary') }}">
-							{{- party.swing is null ? '-' : (party.swing >= 0 ? '+' : '') ~ (party.swing * 100)|number_format(1) -}}
+						<dd class="text-xl font-semibold font-mono tabular-nums mt-0.5 {{ party.swing|signed_class }}">
+							{{- party.swing is null ? '-' : (party.swing > 0 ? '+' : '') ~ (party.swing * 100)|number_format(1) -}}
 							{%- if party.swing is not null %}<span class="text-xs font-normal"> pts</span>{% endif %}
 						</dd>
 					</div>
 					{% if polling %}
 						<div class="bg-surface-container-lowest rounded border border-outline-variant/20 px-4 py-3 min-w-28">
 							<dt class="text-xs text-on-surface-variant" title="The latest monthly poll, {{ polling.date }}">Latest poll</dt>
-							<dd class="text-xl font-semibold font-mono tabular-nums text-on-surface mt-0.5">{{ (polling.share * 100)|number_format(1) }}%<span class="text-xs font-normal {{ polling.change >= 0 ? 'text-secondary' : 'text-tertiary' }}"> {{ (polling.change >= 0 ? '+' : '') ~ (polling.change * 100)|number_format(1) }} pts</span></dd>
+							<dd class="text-xl font-semibold font-mono tabular-nums text-on-surface mt-0.5">{{ polling.share|pct(1) }}<span class="text-xs font-normal {{ polling.change|signed_class }}"> {{ (polling.change > 0 ? '+' : '') ~ (polling.change * 100)|number_format(1) }} pts</span></dd>
 						</div>
 					{% endif %}
 				</dl>
@@ -118,7 +118,7 @@
 				<p class="text-2xs text-on-surface-variant mt-0.5">What the party would legislate from where it stands today, against the law in force. In a coalition, policy lands between the partners' platforms.</p>
 				<table class="w-full mt-4 text-xs">
 					<thead>
-						<tr class="text-2xs uppercase tracking-wide font-semibold text-on-surface-variant border-b border-outline-variant/15">
+						<tr class="table-head">
 							<th scope="col" class="text-left font-semibold pb-2">Policy</th>
 							<th scope="col" class="text-right font-semibold pb-2">Platform</th>
 							<th scope="col" class="text-right font-semibold pb-2">In force</th>
@@ -245,7 +245,7 @@
 				{% for vote in record %}
 					{% set x = 30 + (loop.index0 * slot) + ((slot - barW) / 2) %}
 					{% set h = vote.seats / recordSummary.scale * 120 %}
-					<rect x="{{ x }}" y="{{ 140 - h }}" width="{{ barW }}" height="{{ h }}" rx="1.5" fill="{{ party.color }}" fill-opacity="{{ vote.cabinet ? 1 : (vote.support ? 0.6 : 0.28) }}"><title>{{ vote.date }}: {{ vote.seats }} seats, {{ (vote.share * 100)|number_format(1) }}% of the vote{{ vote.cabinet ? ', in cabinet' : (vote.support ? ', supporting' : '') }}</title></rect>
+					<rect x="{{ x }}" y="{{ 140 - h }}" width="{{ barW }}" height="{{ h }}" rx="1.5" fill="{{ party.color }}" fill-opacity="{{ vote.cabinet ? 1 : (vote.support ? 0.6 : 0.28) }}"><title>{{ vote.date }}: {{ vote.seats }} seats, {{ vote.share|pct(1) }} of the vote{{ vote.cabinet ? ', in cabinet' : (vote.support ? ', supporting' : '') }}</title></rect>
 					{% if n <= 24 %}
 						<text x="{{ x + barW / 2 }}" y="{{ 136 - h }}" text-anchor="middle" font-size="7.5" class="fill-on-surface">{{ vote.seats }}</text>
 					{% endif %}
@@ -279,4 +279,4 @@
 	</div>
 {% endblock %}
 
-{% macro value(lever, value) %}{{ lever.unit == 'hhi' ? (value * 10000)|number_format(0) ~ ' HHI' : (lever.unit == 'usd_t' ? '$' ~ value|number_format(2) ~ '/t' : (value * 100)|number_format(2) ~ '%') }}{% endmacro %}
+{% macro value(lever, value) %}{{ lever.unit == 'hhi' ? (value * 10000)|number_format(0) ~ ' HHI' : (lever.unit == 'usd_t' ? '$' ~ value|number_format(2) ~ '/t' : value|pct(2)) }}{% endmacro %}

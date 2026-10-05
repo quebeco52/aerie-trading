@@ -679,7 +679,7 @@ class GovernmentPageBuilder
                     'target' => $budget['levers']['stampDutyRate'],
                     'enacted' => $standing['stampDutyRate'],
                     'status' => $status('stampDutyRate'),
-                    'note' => sprintf('Paid by buyer and seller each, into the Sovereign Reserve; turnover runs %.0f%% %s its level at the rate in force at Year 1',
+                    'note' => sprintf('Paid by buyer and seller each, into the Sovereign Reserve Fund; turnover runs %.0f%% %s its level at the rate in force at Year 1',
                         abs(100.0 * (MathUtility::calculateStampDutyVolumeFactor($standing['stampDutyRate']) - 1.0)),
                         MathUtility::calculateStampDutyVolumeFactor($standing['stampDutyRate']) < 1.0 ? 'below' : 'above'),
                 ],

@@ -1,5 +1,5 @@
 import { Controller } from '@hotwired/stimulus';
-import { formatLarge, formatCurrency, formatPercent } from '../js/utils/formatters.js';
+import { formatLarge, formatCurrency, formatPercent, sentenceCase, signedClass } from '../js/utils/formatters.js';
 import { setText } from '../js/utils/set-text.js';
 import { THEME_COLORS, SERIES, withAlpha } from '../js/utils/colors.js';
 
@@ -661,10 +661,8 @@ export default class extends Controller {
 
         this.institutionNameTarget.textContent = config ? config.label : institutionId;
         this.institutionStatusTarget.textContent = stressed ? 'Stressed' : 'Calm';
-        this.institutionStatusTarget.className = 'text-3xs font-mono uppercase tracking-wider px-1.5 py-0.5 rounded border '
-            + (stressed
-                ? 'bg-tertiary/10 text-tertiary border-tertiary/30'
-                : 'bg-secondary/10 text-secondary border-secondary/30');
+        // Stress is a caution, not a fall, so it reads amber (.agents/FRONTEND.md, colour).
+        this.institutionStatusTarget.className = 'badge ' + (stressed ? 'badge-warn' : 'badge-neutral');
 
         this.renderInstitutionReadings(config);
         this.renderInstitutionFeeds(fed);
@@ -684,7 +682,7 @@ export default class extends Controller {
             const wrap = document.createElement('div');
 
             const label = document.createElement('dt');
-            label.className = 'text-on-surface-faint uppercase tracking-wider text-3xs';
+            label.className = 'text-on-surface-faint text-3xs';
             label.textContent = readout.label;
 
             const value = document.createElement('dd');
@@ -768,9 +766,9 @@ export default class extends Controller {
                 const pnlPerShare = isShort ? (avgCost - currentPrice) : (currentPrice - avgCost);
                 const totalPnl = pnlPerShare * qty;
                 const pnlPct = (pnlPerShare / avgCost) * 100;
-                const sign = totalPnl >= 0 ? '+' : '';
-                pnlText = ` (${sign}${formatCurrency(totalPnl)}, ${sign}${pnlPct.toFixed(1)}%)`;
-                pnlClass = totalPnl >= 0 ? 'text-secondary' : 'text-tertiary';
+                const sign = totalPnl > 0 ? '+' : '';
+                pnlText = ` (${sign}${formatCurrency(totalPnl)}, ${formatPercent(pnlPct, 1, true, true)})`;
+                pnlClass = signedClass(totalPnl);
             }
         }
 
@@ -1058,7 +1056,7 @@ export default class extends Controller {
         const change = parseFloat(plot.dataset.change);
         if (Number.isFinite(change)) {
             this.detailChangeTarget.innerText = formatPercent(change, 2, false, true);
-            this.detailChangeTarget.className = 'tabular-nums ' + (change >= 0 ? 'text-secondary' : 'text-tertiary');
+            this.detailChangeTarget.className = 'tabular-nums ' + signedClass(change);
         } else {
             this.detailChangeTarget.innerText = '—';
             this.detailChangeTarget.className = 'tabular-nums text-on-surface-faint';
@@ -1107,8 +1105,8 @@ export default class extends Controller {
         header.className = 'flex items-center justify-between gap-2';
 
         const badge = document.createElement('span');
-        badge.className = 'inline-flex items-center rounded px-1.5 py-0.5 text-4xs font-bold font-mono uppercase tracking-wider border';
-        badge.textContent = evt.badge || evt.type || 'EVENT';
+        badge.className = 'badge';
+        badge.textContent = sentenceCase(evt.badge || evt.type || 'Event');
         if (evt.badgeClass) {
             badge.className += ' ' + evt.badgeClass;
         } else {
@@ -1189,7 +1187,7 @@ export default class extends Controller {
         const isMeaningful = value !== null && value !== undefined;
         node.textContent = `${label} ${formatGrowth(value)}`;
         node.className = 'text-2xs font-mono tabular-nums ' + (
-            !isMeaningful ? 'text-on-surface-faint' : (value >= 0 ? 'text-secondary' : 'text-tertiary')
+            signedClass(isMeaningful ? value : null)
         );
     }
 
@@ -1264,7 +1262,7 @@ export default class extends Controller {
             const contribution = stream.contribution;
             attribution.appendChild(this.buildMetric(
                 '',
-                `${contribution >= 0 ? '+' : '−'}${Math.abs(contribution * 100).toFixed(2)}pp of growth`,
+                `${contribution > 0 ? '+' : (contribution < 0 ? '−' : '')}${Math.abs(contribution * 100).toFixed(2)}pp of growth`,
                 contribution,
             ));
         }
@@ -1273,7 +1271,7 @@ export default class extends Controller {
             const shift = stream.shareShiftBps;
             attribution.appendChild(this.buildMetric(
                 '',
-                `${shift >= 0 ? '+' : '−'}${Math.abs(shift).toFixed(0)} bps mix`,
+                `${shift > 0 ? '+' : (shift < 0 ? '−' : '')}${Math.abs(shift).toFixed(0)} bps mix`,
                 shift,
             ));
         }
@@ -1335,7 +1333,7 @@ export default class extends Controller {
         const node = document.createElement('span');
         const isMeaningful = value !== null && value !== undefined;
         node.className = 'tabular-nums ' + (
-            !isMeaningful ? 'text-on-surface-faint' : (value >= 0 ? 'text-secondary' : 'text-tertiary')
+            signedClass(isMeaningful ? value : null)
         );
         node.textContent = label ? `${label} ${text}` : text;
         return node;
@@ -1410,7 +1408,7 @@ export default class extends Controller {
             const driverLabel = document.createElement('span');
             driverLabel.className = 'min-w-0 flex items-baseline gap-1.5';
             const typeTag = document.createElement('span');
-            typeTag.className = 'text-4xs uppercase tracking-wider text-on-surface-faint shrink-0';
+            typeTag.className = 'text-4xs text-on-surface-faint shrink-0';
             typeTag.textContent = DRIVER_TYPE_TAGS[driver.type] || DRIVER_TYPE_TAGS.company;
             const driverName = document.createElement('span');
             driverName.className = 'text-on-surface-faint';
@@ -1432,7 +1430,7 @@ export default class extends Controller {
                 const momentumLine = document.createElement('div');
                 momentumLine.className = 'text-3xs font-mono tabular-nums text-on-surface-faint';
                 const z = Number(driver.z);
-                momentumLine.textContent = `Operating momentum ${z >= 0 ? '+' : '−'}${Math.abs(z).toFixed(1)}σ `
+                momentumLine.textContent = `Operating momentum ${z > 0 ? '+' : (z < 0 ? '−' : '')}${Math.abs(z).toFixed(1)}σ `
                     + (z >= 0 ? 'above trend' : 'below trend');
                 entry.appendChild(momentumLine);
             }

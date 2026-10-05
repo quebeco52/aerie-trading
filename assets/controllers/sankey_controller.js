@@ -171,7 +171,7 @@ export default class extends Controller {
                                     const delta = params.data.qoq_delta;
                                     const meaningful = delta !== null && delta !== undefined;
                                     const deltaColor = !meaningful ? THEME_COLORS.textMuted : (delta >= 0 ? THEME_COLORS.positive : THEME_COLORS.negative);
-                                    const deltaStr = meaningful ? `${delta >= 0 ? '+' : ''}${(delta * 100).toFixed(1)}%` : 'n/m';
+                                    const deltaStr = meaningful ? `${delta > 0 ? '+' : ''}${(delta * 100).toFixed(1)}%` : 'n/m';
                                     html += `<div class="text-xs font-medium mb-2" style="color: ${deltaColor};">QoQ ${deltaStr}</div>`;
                                 }
 
@@ -193,13 +193,13 @@ export default class extends Controller {
                                         const readings = Array.isArray(d.readings) ? d.readings : [];
                                         html += `<div class="flex items-center justify-between text-2xs gap-3">
                                             <span class="text-on-surface"><span class="text-2xs text-on-surface-variant">${tag}</span> ${d.label}</span>
-                                            <span class="font-mono font-bold ${colorClass}">${typeof d.share === 'number' ? `${d.share >= 0 ? '+' : '−'}${Math.abs(d.share * 100).toFixed(1)}% ` : ''}${strengthMeter(d.strength, isPos)}</span>
+                                            <span class="font-mono font-bold ${colorClass}">${typeof d.share === 'number' ? `${d.share > 0 ? '+' : (d.share < 0 ? '−' : '')}${Math.abs(d.share * 100).toFixed(1)}% ` : ''}${strengthMeter(d.strength, isPos)}</span>
                                         </div>`;
                                         if (readings.length > 0) {
                                             html += `<div class="text-2xs font-mono text-on-surface-variant pl-4">${readings.map(formatMacroReading).join('  ·  ')}</div>`;
                                         } else if (d.type === 'momentum' && d.z !== undefined) {
                                             const z = Number(d.z);
-                                            html += `<div class="text-2xs font-mono text-on-surface-variant pl-4">Operating momentum ${z >= 0 ? '+' : '−'}${Math.abs(z).toFixed(1)}σ ${z >= 0 ? 'above' : 'below'} trend</div>`;
+                                            html += `<div class="text-2xs font-mono text-on-surface-variant pl-4">Operating momentum ${z > 0 ? '+' : (z < 0 ? '−' : '')}${Math.abs(z).toFixed(1)}σ ${z >= 0 ? 'above' : 'below'} trend</div>`;
                                         }
                                     });
                                     html += `</div>`;

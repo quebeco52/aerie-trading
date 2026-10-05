@@ -1,0 +1,14 @@
+{# Shared page components: {% import 'partials/_ui.html.twig' as ui %}. The house rules are in .agents/FRONTEND.md. #}
+
+{# Hover/focus tooltip, positioned against its `group` parent. Pair it with a `.term` label. #}
+{% macro tooltip(text, position = 'left', width = 'w-48', vpos = 'top') %}
+	{% set arrowPosition = position == 'right' ? 'right-4' : (position == 'center' ? 'left-1/2 -translate-x-1/2' : 'left-4') %}
+	{% set alignClass = position == 'right' ? 'right-0' : (position == 'center' ? 'left-1/2 -translate-x-1/2' : 'left-0') %}
+	{% set verticalClass = vpos == 'bottom' ? 'top-full mt-2.5' : 'bottom-full mb-2.5' %}
+	{% set arrowVerticalClass = vpos == 'bottom' ? '-top-[5px] border-t border-l' : '-bottom-[5px] border-b border-r' %}
+
+	<span role="tooltip" class="block pointer-events-none absolute {{ alignClass }} {{ verticalClass }} {{ width }} p-2.5 bg-surface-container-high text-on-surface text-2xs leading-relaxed rounded-lg opacity-0 translate-y-2 group-hover:opacity-100 group-hover:translate-y-0 group-focus:opacity-100 group-focus:translate-y-0 transition-all duration-200 z-50 normal-case tracking-normal font-normal border border-outline-variant/40">
+		{{ text }}
+		<span class="block absolute {{ arrowVerticalClass }} {{ arrowPosition }} w-2.5 h-2.5 bg-surface-container-high border-outline-variant/40 transform rotate-45"></span>
+	</span>
+{% endmacro %}

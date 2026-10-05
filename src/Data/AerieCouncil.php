@@ -62,11 +62,11 @@ final class AerieCouncil
      * @var list<array{name: string, mandate: string, href: string|null}>
      */
     public const DEPARTMENTS = [
-        ['name' => 'Monetary Authority', 'mandate' => 'Sets the policy rate by its published rule. Its governor, named for one term, picks the rate committee. Independent of the Diet by charter.', 'href' => '/economy'],
-        ['name' => 'Sovereign Reserve Fund', 'mandate' => 'Invests the reserves and pays the budget its rule draw. Its head, named for one term, sets how much of the fund is in shares. Holds the second key: no draw on the reserves passes without it.', 'href' => '/reserve'],
-        ['name' => 'Financial Regulator', 'mandate' => 'Sets the core capital banks must hold against their loans. Its head, named for one term, decides how much.', 'href' => null],
-        ['name' => 'Treasury', 'mandate' => 'Executes the budget the Diet passes and manages the District\'s debt.', 'href' => null],
-        ['name' => 'Trade & Migration Office', 'mandate' => 'Administers the tariff schedule and the migration quotas the Diet legislates.', 'href' => null],
+        ['name' => Institutions::MONETARY_AUTHORITY, 'mandate' => 'Sets the policy rate by its published rule. Its governor, named for one term, picks the rate committee. Independent of the Diet by charter.', 'href' => '/economy'],
+        ['name' => Institutions::SOVEREIGN_RESERVE_FUND, 'mandate' => 'Invests the reserves and pays the budget its rule draw. Its head, named for one term, sets how much of the fund is in shares. Holds the second key: no draw on the reserves passes without it.', 'href' => '/reserve'],
+        ['name' => Institutions::FINANCIAL_REGULATOR, 'mandate' => 'Sets the core capital banks must hold against their loans. Its head, named for one term, decides how much.', 'href' => null],
+        ['name' => Institutions::EXCHEQUER, 'mandate' => 'Executes the budget the Diet passes and manages the District\'s debt.', 'href' => null],
+        ['name' => Institutions::TRADE_MIGRATION_OFFICE, 'mandate' => 'Administers the tariff schedule and the migration quotas the Diet legislates.', 'href' => null],
     ];
 
     /**

@@ -34,7 +34,7 @@ class MarketSeedCommand extends Command
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
         $io = new SymfonyStyle($input, $output);
-        $io->title('Seeding the Lakebird Exchange (Production)');
+        $io->title('Seeding the Aerie Exchange (Production)');
 
         // The board is priced against the economy the macro engine opens in, so the first tick does not revalue it.
         $openingMacro = new MacroStateDTO();

@@ -68,7 +68,8 @@ export function formatCurrency(num, decimals = 2) {
         currencyFormatters.set(decimals, formatter);
     }
 
-    const isNegative = value < 0;
+    // A loss that rounds to nothing prints "$0.00", as the `money` Twig filter does, not "-$0.00".
+    const isNegative = Number(value.toFixed(decimals)) < 0;
     const formatted = formatter.format(Math.abs(value));
     return isNegative ? `-$${formatted}` : `$${formatted}`;
 }
@@ -110,6 +111,36 @@ export function formatPercent(num, decimals = 2, alreadyPercent = false, showSig
     if (value === null) return NOT_AVAILABLE;
 
     const val = alreadyPercent ? value : value * 100;
-    const sign = (showSign && val > 0) ? '+' : '';
-    return `${sign}${val.toFixed(decimals)}%`;
+    // toFixed keeps the sign of a value that rounds to zero ("-0.00"); PHP's number_format does not.
+    const fixed = val.toFixed(decimals).replace(/^-(?=0(\.0+)?$)/, '');
+    const sign = (showSign && Number(fixed) > 0) ? '+' : '';
+    return `${sign}${fixed}%`;
+}
+
+/**
+ * "EARNINGS BEAT" → "Earnings beat": event badges arrive in capitals and every page prints them in sentence case,
+ * as the stock page's `|lower|capitalize` does.
+ * @param {string} text
+ * @returns {string}
+ */
+export function sentenceCase(text) {
+    const lower = String(text).toLowerCase();
+    return lower.charAt(0).toUpperCase() + lower.slice(1);
+}
+
+/** Every class signedClass() can return, for clearing a cell before it is recoloured. */
+export const SIGNED_CLASSES = ['text-secondary', 'text-tertiary', 'text-on-surface-variant', 'text-on-surface-faint'];
+
+/**
+ * The text colour for a signed figure: up, down, unchanged (neutral) or unknown (faint). The live twin of the
+ * `signed_class` Twig filter (UiExtension::signedClass), so a cell keeps its colour when the feed repaints it.
+ * @param {number|string|null|undefined} num
+ * @returns {string}
+ */
+export function signedClass(num) {
+    const value = toFiniteNumber(num);
+    if (value === null) return 'text-on-surface-faint';
+    if (value > 0) return 'text-secondary';
+    if (value < 0) return 'text-tertiary';
+    return 'text-on-surface-variant';
 }
