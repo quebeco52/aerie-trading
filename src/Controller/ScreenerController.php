@@ -74,6 +74,8 @@ class ScreenerController extends AbstractController
                 'peRatio'      => $peRatio,
                 'eps'          => $eps,
                 'dividendYield'=> $dividendYield,
+                'creditRating' => $stock->getCreditRating(),
+                'dividendAristocrat' => $stock->isDividendAristocrat(),
                 'currentRoic'  => $effectiveRoic,
                 'equity'       => $equity,
                 'debt'         => (float) $stock->getTotalDebt(),

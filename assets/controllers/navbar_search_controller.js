@@ -70,21 +70,37 @@ export default class extends Controller {
     /** Builds one result row. Company names are set as text, never interpolated into markup. */
     buildOption(item, index) {
         const a = document.createElement('a');
-        a.href = `/stock/${encodeURIComponent(item.ticker)}`;
+        a.href = item.url || `/stock/${encodeURIComponent(item.ticker)}`;
         a.id = `search-option-${index}`;
         a.setAttribute('role', 'option');
         a.setAttribute('aria-selected', 'false');
-        a.className = 'block px-4 py-2 text-sm text-on-surface hover:bg-surface-bright transition-colors cursor-pointer';
+        a.className = 'block px-3 py-2 text-sm text-on-surface hover:bg-surface-bright transition-colors cursor-pointer';
+
+        const row = document.createElement('div');
+        row.className = 'flex items-center justify-between gap-2';
+
+        const left = document.createElement('div');
+        left.className = 'flex items-baseline min-w-0';
 
         const ticker = document.createElement('span');
-        ticker.className = 'font-bold text-primary';
+        ticker.className = 'font-bold text-primary font-mono';
         ticker.textContent = item.ticker;
 
         const name = document.createElement('span');
-        name.className = 'text-on-surface-variant text-xs ml-2';
+        name.className = 'text-on-surface-variant text-xs ml-2 truncate';
         name.textContent = item.name;
 
-        a.append(ticker, name);
+        left.append(ticker, name);
+        row.appendChild(left);
+
+        if (item.type && item.type !== 'Stock') {
+            const badge = document.createElement('span');
+            badge.className = 'text-4xs uppercase tracking-wider px-1.5 py-0.5 rounded border border-outline-variant/30 text-on-surface-faint font-semibold shrink-0';
+            badge.textContent = item.type;
+            row.appendChild(badge);
+        }
+
+        a.appendChild(row);
         return a;
     }
 

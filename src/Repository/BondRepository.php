@@ -71,4 +71,60 @@ class BondRepository extends ServiceEntityRepository
             ->getQuery()
             ->getResult();
     }
+
+    /**
+     * Active bond issues for a specific corporate issuer.
+     *
+     * @return list<Bond>
+     */
+    public function findActiveByIssuer(\App\Entity\Stock $issuer): array
+    {
+        return $this->createQueryBuilder('b')
+            ->andWhere('b.issuer = :issuer')
+            ->andWhere('b.status = :status')
+            ->setParameter('issuer', $issuer)
+            ->setParameter('status', Bond::STATUS_ACTIVE)
+            ->orderBy('b.maturesAtTime', 'ASC')
+            ->getQuery()
+            ->getResult();
+    }
+
+    /**
+     * Active bonds whose ticker or name (or issuer name) matches the query.
+     *
+     * @return list<Bond>
+     */
+    public function searchByTickerOrName(string $query, int $limit = 5): array
+    {
+        return $this->createQueryBuilder('b')
+            ->leftJoin('b.issuer', 's')
+            ->where('LOWER(b.ticker) LIKE LOWER(:query) OR LOWER(b.name) LIKE LOWER(:query) OR LOWER(s.name) LIKE LOWER(:query)')
+            ->andWhere('b.status = :status')
+            ->setParameter('query', '%' . $query . '%')
+            ->setParameter('status', Bond::STATUS_ACTIVE)
+            ->setMaxResults($limit)
+            ->getQuery()
+            ->getResult();
+    }
+
+    /**
+     * Best matching active bond for a query.
+     */
+    public function findBestMatch(string $query): ?Bond
+    {
+        $exact = $this->findOneByTicker(strtoupper($query));
+        if ($exact !== null && $exact->getStatus() === Bond::STATUS_ACTIVE) {
+            return $exact;
+        }
+
+        return $this->createQueryBuilder('b')
+            ->leftJoin('b.issuer', 's')
+            ->where('LOWER(b.ticker) LIKE LOWER(:query) OR LOWER(b.name) LIKE LOWER(:query) OR LOWER(s.name) LIKE LOWER(:query)')
+            ->andWhere('b.status = :status')
+            ->setParameter('query', '%' . $query . '%')
+            ->setParameter('status', Bond::STATUS_ACTIVE)
+            ->setMaxResults(1)
+            ->getQuery()
+            ->getOneOrNullResult();
+    }
 }

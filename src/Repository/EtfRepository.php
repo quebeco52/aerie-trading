@@ -25,4 +25,37 @@ class EtfRepository extends ServiceEntityRepository
     {
         return $this->findOneBy(['ticker' => $ticker]);
     }
+
+    /**
+     * Funds whose ticker or name contains the query.
+     *
+     * @return list<Etf>
+     */
+    public function searchByTickerOrName(string $query, int $limit = 5): array
+    {
+        return $this->createQueryBuilder('e')
+            ->where('LOWER(e.ticker) LIKE LOWER(:query) OR LOWER(e.name) LIKE LOWER(:query)')
+            ->setParameter('query', '%' . $query . '%')
+            ->setMaxResults($limit)
+            ->getQuery()
+            ->getResult();
+    }
+
+    /**
+     * The single best match for a query, preferring an exact ticker match.
+     */
+    public function findBestMatch(string $query): ?Etf
+    {
+        $exact = $this->findOneByTicker(strtoupper($query));
+        if ($exact !== null) {
+            return $exact;
+        }
+
+        return $this->createQueryBuilder('e')
+            ->where('LOWER(e.ticker) LIKE LOWER(:query) OR LOWER(e.name) LIKE LOWER(:query)')
+            ->setParameter('query', '%' . $query . '%')
+            ->setMaxResults(1)
+            ->getQuery()
+            ->getOneOrNullResult();
+    }
 }

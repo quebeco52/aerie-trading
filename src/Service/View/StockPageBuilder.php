@@ -10,6 +10,7 @@ use App\Data\StrategicHoldings;
 use App\Entity\Etf;
 use App\Entity\Stock;
 use App\Entity\User;
+use App\Repository\BondRepository;
 use App\Repository\EtfEventRepository;
 use App\Repository\StockEventRepository;
 use App\Service\Macro\MacroStateProvider;
@@ -51,6 +52,7 @@ class StockPageBuilder
         private readonly CreditHealthBuilder $creditHealth,
         private readonly FinancialSummaryBuilder $financialSummary,
         private readonly int $ticksPerYear,
+        private readonly ?BondRepository $bonds = null,
     ) {}
 
     /**
@@ -97,6 +99,22 @@ class StockPageBuilder
      */
     private function companyBlocks(Stock $stock, \App\DTO\MacroStateDTO $macroState): array
     {
+        $corporateBonds = [];
+        if ($this->bonds !== null && !$stock->isBankrupt()) {
+            foreach ($this->bonds->findActiveByIssuer($stock) as $bond) {
+                $corporateBonds[] = [
+                    'ticker' => $bond->getTicker(),
+                    'name' => $bond->getName(),
+                    'couponRate' => (float) $bond->getCouponRate(),
+                    'cleanPrice' => (float) $bond->getCleanPrice(),
+                    'yieldToMaturity' => (float) $bond->getYieldToMaturity(),
+                    'modifiedDuration' => (float) $bond->getModifiedDuration(),
+                    'maturesAtTime' => (float) $bond->getMaturesAtTime(),
+                    'yearsToMaturity' => $bond->yearsToMaturity($macroState->totalTime),
+                ];
+            }
+        }
+
         return $this->companySnapshot->build($stock, $macroState)
             + $this->industryPosition->build($stock, $macroState)
             + $this->creditHealth->build($stock, $macroState)
@@ -107,6 +125,7 @@ class StockPageBuilder
             'anchorPortfolio' => $this->anchorPortfolio->build($stock),
             // The District's own stake in this company, held off the float; zero for every company but its clearinghouse.
             'strategicStake' => StrategicHoldings::stake($stock->getTicker()),
+            'corporateBonds' => $corporateBonds,
             'allAssets' => [],
             'pieLabels' => [],
             'pieData' => [],
@@ -187,6 +206,7 @@ class StockPageBuilder
             'peers' => [],
             'anchorPortfolio' => null,
             'strategicStake' => 0.0,
+            'corporateBonds' => [],
             'advShares' => 0.0,
             'halfSpread' => FinancialConstants::ETF_HALF_SPREAD,
             'borrowFee' => 0.0,

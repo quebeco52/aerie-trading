@@ -44,7 +44,7 @@ class StockPageBuilderTest extends TestCase
      */
     private const TEMPLATE_KEYS = [
         'advShares', 'allAssets', 'analystTargets', 'anchorPortfolio', 'asset', 'availableToBorrow',
-        'borrowFee', 'businessModel', 'capital', 'capitalThresholds', 'changePercent', 'components', 'creditHealth', 'dividendYield', 'economic_cycle',
+        'borrowFee', 'businessModel', 'capital', 'capitalThresholds', 'changePercent', 'components', 'corporateBonds', 'creditHealth', 'dividendYield', 'economic_cycle',
         'events', 'financialSummary', 'generalInfo', 'halfSpread', 'indexFacts', 'industry', 'investedCapital', 'isEtf',
         'isFinancial', 'isInsurer', 'lifecycleStage', 'lifecycleStages', 'macro', 'management', 'marketCap',
         'marketShare', 'netAssetValue', 'openOrders', 'optionDealerGamma', 'optionDealerGammaPerPercent',
@@ -67,7 +67,7 @@ class StockPageBuilderTest extends TestCase
         'userTrades' => [],
     ];
 
-    private function builder(): StockPageBuilder
+    private function builder(?\App\Repository\BondRepository $bonds = null): StockPageBuilder
     {
         $macroStateProvider = $this->createMock(MacroStateProvider::class);
         $macroStateProvider->method('liveState')->willReturn(new MacroStateDTO());
@@ -146,6 +146,7 @@ class StockPageBuilderTest extends TestCase
             $creditHealth,
             $financialSummary,
             self::TICKS_PER_YEAR,
+            $bonds,
         );
     }
 
@@ -262,5 +263,27 @@ class StockPageBuilderTest extends TestCase
         $payload = $this->builder()->build($this->stock(), 'LAKE', null);
 
         $this->assertSame(self::TICKS_PER_YEAR, $payload['ticksPerYear']);
+    }
+
+    public function testActiveCorporateBondsAreSuppliedInPayload(): void
+    {
+        $bond = new \App\Entity\Bond();
+        $bond->setTicker('CB-LAKE-3Y');
+        $bond->setName('Lakeside 4.5% 2012');
+        $bond->setCouponRate('0.045000');
+        $bond->setCleanPrice('99.50');
+        $bond->setYieldToMaturity('0.0465');
+        $bond->setModifiedDuration('2.80');
+        $bond->setMaturesAtTime(3.0);
+        $bond->setStatus(\App\Entity\Bond::STATUS_ACTIVE);
+
+        $bondsRepo = $this->createMock(\App\Repository\BondRepository::class);
+        $bondsRepo->method('findActiveByIssuer')->willReturn([$bond]);
+
+        $payload = $this->builder($bondsRepo)->build($this->stock(), 'LAKE', null);
+
+        $this->assertCount(1, $payload['corporateBonds']);
+        $this->assertSame('CB-LAKE-3Y', $payload['corporateBonds'][0]['ticker']);
+        $this->assertSame(0.045, $payload['corporateBonds'][0]['couponRate']);
     }
 }
