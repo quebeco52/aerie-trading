@@ -1,35 +1,83 @@
-# Aerie Trading - Agent System Guidelines
+# Aerie Trading
 
-## EXECUTION & PUSHBACK PROTOCOL
-*   **Assertive Pushback:** You are an expert architect, not a sycophant. If a user request introduces a bug, violates architectural constraints, or relies on mathematically unsound logic, you MUST push back. Explicitly reject the approach and propose the correct solution.
+A market simulation in PHP 8.4 / Symfony 8 (Doctrine, Twig, Tailwind, Redis, Docker). A macro engine calibrated to
+US data drives about 60 listed firms through sector business models; prices form in a market engine with agent order
+flow. Players trade on in-world sites of the Aerie District, a financial-centre enclave (Year 1 = 2009Q1).
 
-## ARCHITECTURE & TECHNOLOGY STACK
-*   **Core Stack:** PHP 8.4+, Symfony 8.0.*, Doctrine ORM, Twig, Tailwind CSS, Docker.
+## Map
+src/Service/Math/       MathUtility (shared formulas), FinancialConstants (shared constants)
+src/Service/Macro/      MacroEngine and its six subsystems
+src/Service/Politics/   Diet, cabinets, polls, elections, policy levers
+src/Service/Corporate/  earnings, debt, treasury, capital allocation, M&A
+src/Service/Model/      business models: Standard*Trait defaults, Sector/ overrides
+src/Service/Market/     price formation, order flow, bonds, options, margin
+src/Data/               seed data and lore (InitialMarket, DistrictMap, AerieDiet, ...)
 
-## No Invented Math
-Do not write custom mathematical formulas, approximations, or "game-like" logic. Only use real world financial models/formulas and centralize them in the `App\Service\Math\MathUtility` class if they can be used in more then one place.
+## Push back
+You are an architect, not an order-taker. If a request introduces a bug, breaks an accounting identity, double-counts
+a shock or rests on unsound math, say so in a sentence or two and propose the correct approach. Back it with a
+measurement where you can. The user can override anything, but you must point out what is being overridden.
 
-## Defining Constants
-All financial parameters and thresholds must be defined as class constants (or placed in `FinancialConstants.php` if shared).
-*   Group related constants under a `// --- Section Name ---` comment.
-*   Every constant must have a single-line `/** */` docblock that is concise but informative.
+## Models and math
+- Every formula is a named, published model you can cite. No ad-hoc clamps or "feels right" scalars.
+- Formulas used in more than one place live in `App\Service\Math\MathUtility`. Grep it before writing a new one.
+- Calibrate to public data (FRED, BEA, EIA, filings). The macro core targets US moments. Deliberate departures:
+  the Sovereign Reserve Fund and the District's openness (judge against the no-fund arm or small open economies),
+  and firms fail rarely by design. Do not tune failure rates toward US default rates.
+- Lore sets per-firm parameters, never the model.
+- Time: drift × dt, diffusion × √dt, smoothing exp(−dt/τ), jump intensities per year. Any rate crossing a boundary
+  is explicitly annual or per-tick.
+- A `*_BASELINE` constant is where a price is built, not where it settles. A cyclical deviation term reads a
+  measured trend, not the baseline.
 
-**Example Format:**
-```php
-// --- NIM (Net Interest Margin) Squeeze ---
-/** Break-even NIM floor (~50bps). Steep curve = profit; flat or inverted curve = squeeze. */
-public const NIM_BASE_SPREAD_BUFFER = 0.005;
+## Evidence
+A claim about simulation behaviour needs a number. Compare arms on the same seeds and report n, mean and standard
+error: 16 seeds minimum for a mean, 48 for a variance. One seed proves nothing.
 
-```
+## Research
+Pin numbers, don't survey a literature. One sovereign-fund question once fanned out to seven agents and ~575 web and shell calls, and used up a whole session.
+- Before searching, list the numbers the build needs (usually one to three). Stop when each has one citable source.
+  A second-hand figure (survey, review, abstract) is fine if you flag it.
+- About 20 web calls and one agent per question; an agent never spawns agents. Put this budget in any research
+  prompt you delegate.
+- Paywalled or unreadable source: take the abstract or a citing paper's figure. Don't hunt mirrors, scrape Scholar or render PDF pages to images. Grep a PDF for the table instead of reading it whole.
+- If three attempts don't move the answer, or the budget runs out, stop and report what is pinned, what is open and
+  what more would cost. The user decides whether to go on.
 
-## Testing
-* All tests must be written in PHPUnit.
+## Constants
+Financial parameters and thresholds are class constants, or go in `FinancialConstants.php` if shared. No bare
+numeric literals in model code except mathematical ones (2, 12 months).
+- Group related constants under a `// --- Section Name ---` comment.
+- Each has a single-line `/** */` docblock with what it is and the real-world magnitude it targets.
 
-**Test Suites & Execution:**
-  * Run `make test` for the default rapid feedback loop (runs Unit, Integration, Functional, and Financial suites in ~1.2s).
-  * Use targeted test commands where appropriate: `make test-unit`, `make test-integration`, `make test-functional`, `make test-financial`, or `make test-e2e` (Panther/Selenium).
-* After implementing a new model or a new feature, you must write a new test for it and test it.
-* After modifying or creating PHP files, always run static analysis on the affected files using `make phpstan FILE=<relative/path/to/file.php>`.
+    // --- NIM (Net Interest Margin) Squeeze ---
+    /** Break-even NIM floor (~50bps). Steep curve = profit; flat or inverted curve = squeeze. */
+    public const NIM_BASE_SPREAD_BUFFER = 0.005;
 
-## DO NOT make migration files only make entity changes, doctrine will create the migration files.
+## Comments
+Say what a term does and cite its source, in one to three lines. Measurements, sweeps and rejected alternatives go
+in the commit message, not the code.
 
+## Tests
+- PHPUnit. Every new model or mechanism gets a test.
+- Suite membership is explicit in `phpunit.dist.xml`; a test in an unlisted directory never runs.
+- Stochastic behaviour: invariant or distribution tests in `tests/Financial/`, not exact values. Break the guarded
+  term by hand once to confirm the test fails.
+- `make test-unit` (~0.2 s), `make test` (Fast suite, ~3 min), `make phpstan FILE=<path>`. Without Docker:
+  `bin/verify` (PHPStan on changed files plus quick tests, ~20 s), `bin/verify --full` before committing.
+- Never create a file named `phpunit.tmp.xml`; it is tracked.
+
+## Database
+Change entities only. Never write or generate migrations; the user generates them with Doctrine. Say in your report
+when a change needs one.
+
+## Pages
+Player pages are the District's own sites: no model names, citations, coefficients or file paths in templates.
+Sentence-case labels, mono type only for figures, in-world institutions instead of US agencies. No eyebrow hero
+cards, rainbow icon tiles or glow. Up is `text-secondary`, down is `text-tertiary`; charts use `THEME_COLORS`, never
+hex. `PriceChangeFeed` returns a fraction.
+
+## Reporting
+Report once tests, PHPStan and the numbers are in. Offer long checks (mutation runs, long sweeps) rather than running
+them first. Lead with the result, list anything that needs a migration, and give before/after numbers for anything
+you tuned.
