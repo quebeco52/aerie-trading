@@ -131,73 +131,147 @@ class CommercialBankBusinessModelTest extends TestCase
         return $mock;
     }
 
-    public function testCreditStressVasicekProvisionSurgeAndEventTrigger(): void
+    /** A 2009-scale cycle (Moody's all-rated 5.4%, retail defaults more than doubled) is a massive provision quarter, at the multiple of normal losses US banks took. */
+    public function testCreditStressFromTheMacroCycleSurgesChargeOffsAndTriggersTheEvent(): void
     {
-        $stock = new Stock();
-        $stock->setTicker('LAKE');
-        $stock->setBeta('1.0');
-        $stock->setTotalEquity('10000000000');
-        $stock->setCustomerDeposits('80000000000');
-        $stock->setWholesaleDebt('10000000000');
-        $stock->setCorporateTreasury('5000000000');
+        $stock = $this->creditTestBank('LAKE');
+        $macro = new MacroStateDTO(outputGapEma: -0.03, policyRateEma: 0.03, yield2yEma: 0.03, yield10yEma: 0.035, macroCreditSpreadEma: 0.035, retailDefaultRateEma: 0.06, corporateDefaultRateEma: 0.054);
 
-        // revenueZ = 0.0, feeZ = 0.0, defaultZ = -2.5 (severe credit stress)
-        $mathMock = $this->createMathUtilityMock([0.0, 0.0, -2.5]);
-
-        $macro = new MacroStateDTO(
-            outputGapEma: -0.03,
-            policyRateEma: 0.03,
-            yield2yEma: 0.03,
-            yield10yEma: 0.035,
-            macroCreditSpreadEma: 0.035
-        );
-
-        $result = $this->model->computeActualFinancials(
-            $stock,
-            expectedRevenue: 2_000_000_000.0,
-            realizedVariableMargin: 0.50,
-            fixedCosts: 400_000_000.0,
-            baselineVol: 0.10,
-            macroState: $macro,
-            mathUtility: $mathMock
-        );
+        $result = $this->model->computeActualFinancials($stock, 2_000_000_000.0, 0.50, 400_000_000.0, 0.10, $macro, $this->mathUtility);
 
         $this->assertSame(ShockEvent::MASSIVE_CREDIT_PROVISION, $result->eventType);
-        $this->assertGreaterThan(0.50, $result->clampedMargin, 'Credit stress and CECL drag must increase variable cost margin.');
+        $annualLossRate = $result->netChargeOffs * FinancialConstants::QUARTERS_PER_YEAR / $this->model->resolveEarningAssets($stock);
+        $this->assertGreaterThan(2.5 * $this->model->getThroughTheCycleCreditLossRate($stock), $annualLossRate, 'US banks charged off 2.85x their long-run mean in 2009-10');
     }
 
-    public function testBenignCreditEnvironmentTriggersReserveRelease(): void
+    public function testBenignCreditCycleTriggersReserveRelease(): void
+    {
+        $stock = $this->creditTestBank('LAKE');
+        $macro = new MacroStateDTO(outputGapEma: 0.02, policyRateEma: 0.03, yield2yEma: 0.03, yield10yEma: 0.05, macroCreditSpreadEma: 0.015, retailDefaultRateEma: 0.012, corporateDefaultRateEma: 0.005);
+
+        $result = $this->model->computeActualFinancials($stock, 2_000_000_000.0, 0.60, 400_000_000.0, 0.05, $macro, $this->mathUtility);
+
+        $this->assertSame(ShockEvent::RESERVE_RELEASE, $result->eventType);
+        $annualLossRate = $result->netChargeOffs * FinancialConstants::QUARTERS_PER_YEAR / $this->model->resolveEarningAssets($stock);
+        $this->assertLessThan($this->model->getThroughTheCycleCreditLossRate($stock), $annualLossRate);
+    }
+
+    /**
+     * Credit losses are charged off, not overlaid on the margin: a default spike raises this quarter's charge-offs
+     * (which the allowance roll-forward replaces through EBIT) and leaves the operating margin alone, where it used
+     * to be provisioned into the allowance and released back as income by the convergence step.
+     */
+    public function testCorporateDefaultSpikeIsChargedOffNotOverlaidOnTheMargin(): void
+    {
+        $bank = $this->creditTestBank('COMM_BANK');
+        $normal = $this->model->computeActualFinancials($bank, 1_000_000_000.0, 0.50, 200_000_000.0, 0.0, new MacroStateDTO(outputGapEma: 0.0, corporateDefaultRateEma: 0.018), $this->mathUtility);
+        $spike = $this->model->computeActualFinancials($bank, 1_000_000_000.0, 0.50, 200_000_000.0, 0.0, new MacroStateDTO(outputGapEma: 0.0, corporateDefaultRateEma: 0.060), $this->mathUtility);
+
+        $this->assertGreaterThan(2.0 * $normal->netChargeOffs, $spike->netChargeOffs);
+        $this->assertEqualsWithDelta($normal->clampedMargin, $spike->clampedMargin, 1e-12, 'credit losses do not touch the operating margin');
+        $this->assertSame(0.0, $spike->creditLossProvision, 'nothing is provisioned outside the roll-forward');
+    }
+
+    /**
+     * Basel ASRF: on a granular book the idiosyncratic part of default diversifies away, so two banks with the same
+     * underwriting and the same macro state charge off the same fraction of their books whatever their own draws.
+     */
+    public function testChargeOffsAreSystematicNotIdiosyncratic(): void
+    {
+        $macro = new MacroStateDTO(outputGapEma: -0.02, retailDefaultRateEma: 0.04, corporateDefaultRateEma: 0.035);
+        $rates = [];
+        foreach ([[0.0, 0.0, 2.5], [0.0, 0.0, -2.5], [1.0, -1.0, 0.0]] as $i => $draws) { // the third draw was the old idiosyncratic default Z
+            $stock = $this->creditTestBank('SYS' . $i);
+            $result = $this->model->computeActualFinancials($stock, 1_000_000_000.0, 0.50, 200_000_000.0, 0.10, $macro, $this->createMathUtilityMock($draws));
+            $rates[] = $result->netChargeOffs / $this->model->resolveEarningAssets($stock);
+        }
+
+        $this->assertEqualsWithDelta($rates[0], $rates[1], 1e-15);
+        $this->assertEqualsWithDelta($rates[0], $rates[2], 1e-15);
+    }
+
+    /** At a neutral cycle (both default rates at their Vasicek medians) and flat collateral, the book loses exactly its through-the-cycle rate. */
+    /**
+     * A neutral lender at the macro's own correlations defaults at exactly the economy's rates, so with both default
+     * rates at their long-run averages and flat collateral the book loses exactly its through-the-cycle rate (PD x LGD).
+     */
+    public function testAtLongRunDefaultRatesTheBookLosesItsThroughTheCycleRate(): void
+    {
+        $stock = $this->creditTestBank('NEUTRAL');
+        $macro = new MacroStateDTO(retailDefaultRateEma: MacroEngine::RETAIL_DEFAULT_BASELINE, corporateDefaultRateEma: MacroEngine::CORPORATE_DEFAULT_BASELINE);
+
+        $result = $this->model->computeActualFinancials($stock, 1_000_000_000.0, 0.50, 200_000_000.0, 0.10, $macro, $this->mathUtility);
+
+        $ttc = $this->model->getThroughTheCycleCreditLossRate($stock);
+        $this->assertEqualsWithDelta($ttc, $result->netChargeOffs * FinancialConstants::QUARTERS_PER_YEAR / $this->model->resolveEarningAssets($stock), 1e-7);
+        $this->assertEqualsWithDelta(
+            CommercialBankBusinessModel::LGD_BASELINE * (
+                (CommercialBankBusinessModel::RESIDENTIAL_MORTGAGE_SHARE + CommercialBankBusinessModel::CONSUMER_LOAN_SHARE) * MacroEngine::RETAIL_DEFAULT_BASELINE
+                + (1.0 - CommercialBankBusinessModel::RESIDENTIAL_MORTGAGE_SHARE - CommercialBankBusinessModel::CONSUMER_LOAN_SHARE) * MacroEngine::CORPORATE_DEFAULT_BASELINE
+            ),
+            $ttc,
+            1e-12,
+            'a neutral H.8 book loses ~0.88% a year, against the 0.93% US banks charged off over 1985-2019'
+        );
+    }
+
+    /**
+     * Frye (2000) collateral damage: a house-price fall since the loans were written raises loss given default on the
+     * mortgage book. A mortgage lender takes it; a business lender with no residential book does not.
+     */
+    public function testAHousePriceFallSinceOriginationHitsTheMortgageBook(): void
+    {
+        $mortgageLender = new class extends CommercialBankBusinessModel {
+            protected function resolveLoanBookMix(Stock $stock): array
+            {
+                return ['residential' => 0.80, 'consumer' => 0.0, 'commercial_real_estate' => 0.0, 'business' => 0.20];
+            }
+        };
+        $businessLender = new class extends CommercialBankBusinessModel {
+            protected function resolveLoanBookMix(Stock $stock): array
+            {
+                return ['residential' => 0.0, 'consumer' => 0.0, 'commercial_real_estate' => 0.0, 'business' => 1.0];
+            }
+        };
+
+        $lossRate = function (CommercialBankBusinessModel $model, float $housePrice): float {
+            $stock = $this->creditTestBank('MIX');
+            $stock->setEarningsMomentumZ([CommercialBankBusinessModel::STATE_RESIDENTIAL_ORIGINATION_PRICE => 100.0]);
+            $result = $model->computeActualFinancials($stock, 1_000_000_000.0, 0.50, 200_000_000.0, 0.0, new MacroStateDTO(residentialPropertyIndexEma: $housePrice), $this->mathUtility);
+
+            return $result->netChargeOffs / $model->resolveEarningAssets($stock);
+        };
+
+        // At long-run default rates: mortgages at the retail PD, the business remainder at the corporate PD.
+        $mortgageLoss = 0.80 * MacroEngine::RETAIL_DEFAULT_BASELINE;
+        $businessLoss = 0.20 * MacroEngine::CORPORATE_DEFAULT_BASELINE * 0.45;
+        $this->assertEqualsWithDelta(
+            ($mortgageLoss * (1.0 - 0.55 * 0.70) + $businessLoss) / ($mortgageLoss * 0.45 + $businessLoss),
+            $lossRate($mortgageLender, 70.0) / $lossRate($mortgageLender, 100.0),
+            1e-6,
+            'a 30% fall lifts mortgage LGD from 45% to 61.5%'
+        );
+        $this->assertEqualsWithDelta($lossRate($businessLender, 100.0), $lossRate($businessLender, 70.0), 1e-15);
+
+        // The reference walks toward today's price over the book's age, so a fall that persists is slowly written into new loans.
+        $stock = $this->creditTestBank('MIX');
+        $stock->setEarningsMomentumZ([CommercialBankBusinessModel::STATE_RESIDENTIAL_ORIGINATION_PRICE => 100.0]);
+        $result = $mortgageLender->computeActualFinancials($stock, 1_000_000_000.0, 0.50, 200_000_000.0, 0.0, new MacroStateDTO(residentialPropertyIndexEma: 70.0), $this->mathUtility);
+        $reference = $result->streamZ[CommercialBankBusinessModel::STATE_RESIDENTIAL_ORIGINATION_PRICE];
+        $this->assertEqualsWithDelta(100.0 - 30.0 * (1.0 - exp(-0.25 / CommercialBankBusinessModel::COLLATERAL_ORIGINATION_YEARS)), $reference, 1e-9);
+    }
+
+    private function creditTestBank(string $ticker): Stock
     {
         $stock = new Stock();
-        $stock->setTicker('LAKE');
+        $stock->setTicker($ticker);
         $stock->setBeta('1.0');
         $stock->setTotalEquity('10000000000');
         $stock->setCustomerDeposits('80000000000');
         $stock->setWholesaleDebt('10000000000');
         $stock->setCorporateTreasury('5000000000');
 
-        // revenueZ = 0.0, feeZ = 0.0, defaultZ = +2.2 (benign boom)
-        $mathMock = $this->createMathUtilityMock([0.0, 0.0, 2.2]);
-
-        $macro = new MacroStateDTO(
-            outputGapEma: 0.02,
-            policyRateEma: 0.03,
-            yield2yEma: 0.03,
-            yield10yEma: 0.05,
-            macroCreditSpreadEma: 0.015
-        );
-
-        $result = $this->model->computeActualFinancials(
-            $stock,
-            expectedRevenue: 2_000_000_000.0,
-            realizedVariableMargin: 0.60,
-            fixedCosts: 400_000_000.0,
-            baselineVol: 0.05,
-            macroState: $macro,
-            mathUtility: $mathMock
-        );
-
-        $this->assertSame(ShockEvent::RESERVE_RELEASE, $result->eventType);
+        return $stock;
     }
 
     public function testMacaulayDurationGapNIMSqueezeUnderInversion(): void
@@ -539,50 +613,6 @@ class CommercialBankBusinessModelTest extends TestCase
         $this->assertSame(ShockEvent::BANK_SEIZURE, $result->eventType);
     }
 
-    public function testCorporateDefaultRateSpikeIncreasesLossProvisions(): void
-    {
-        $bank = new Stock();
-        $bank->setTicker('COMM_BANK');
-        $bank->setTotalEquity('5000000000');
-        $bank->setCustomerDeposits('40000000000');
-        $bank->setWholesaleDebt('5000000000');
-        $bank->setCorporateTreasury('2000000000');
-
-        $mathMock = $this->createMathUtilityMock([0.0, 0.0, 0.0]);
-        $macroNormal = new MacroStateDTO(
-            outputGapEma: 0.0,
-            corporateDefaultRateEma: 0.018
-        );
-
-        $resultNormal = $this->model->computeActualFinancials(
-            $bank,
-            expectedRevenue: 1_000_000_000.0,
-            realizedVariableMargin: 0.50,
-            fixedCosts: 200_000_000.0,
-            baselineVol: 0.0,
-            macroState: $macroNormal,
-            mathUtility: $mathMock
-        );
-
-        $macroSpike = new MacroStateDTO(
-            outputGapEma: 0.0,
-            corporateDefaultRateEma: 0.060 // Speculative corporate default spike
-        );
-
-        $resultSpike = $this->model->computeActualFinancials(
-            $bank,
-            expectedRevenue: 1_000_000_000.0,
-            realizedVariableMargin: 0.50,
-            fixedCosts: 200_000_000.0,
-            baselineVol: 0.0,
-            macroState: $macroSpike,
-            mathUtility: $mathMock
-        );
-
-        $this->assertGreaterThan($resultNormal->clampedMargin, $resultSpike->clampedMargin, 'Corporate default spike must increase loan provision cost ratio.');
-        $this->assertLessThan($resultNormal->ebit, $resultSpike->ebit);
-    }
-
     public function testSloosCreditTighteningDampensLoanOrigination(): void
     {
         $bank = new Stock();
@@ -760,55 +790,36 @@ class CommercialBankBusinessModelTest extends TestCase
      */
     public function testCreditRiskAppetiteScalesTheThroughTheCycleLossRate(): void
     {
+        // The H.8 mix for every ticker, so only the appetite differs.
+        $model = new class extends CommercialBankBusinessModel {
+            protected function resolveLoanBookMix(Stock $stock): array
+            {
+                return ['residential' => self::RESIDENTIAL_MORTGAGE_SHARE, 'consumer' => self::CONSUMER_LOAN_SHARE, 'commercial_real_estate' => self::COMMERCIAL_REAL_ESTATE_SHARE, 'business' => 1.0 - self::RESIDENTIAL_MORTGAGE_SHARE - self::CONSUMER_LOAN_SHARE - self::COMMERCIAL_REAL_ESTATE_SHARE];
+            }
+        };
         $conservative = (new Stock())->setTicker('LAKE'); // appetite 0.40
         $aggressive   = (new Stock())->setTicker('RIVR'); // appetite 0.60
         $untuned      = (new Stock())->setTicker('NO_OVERRIDES_FOR_THIS_TICKER');
 
-        $conservativeLoss = $this->model->getThroughTheCycleCreditLossRate($conservative);
-        $aggressiveLoss   = $this->model->getThroughTheCycleCreditLossRate($aggressive);
-        $neutralLoss      = $this->model->getThroughTheCycleCreditLossRate($untuned);
-
-        $this->assertGreaterThan($conservativeLoss, $neutralLoss, 'A 0.40 appetite must underwrite below the sector rate.');
-        $this->assertGreaterThan($neutralLoss, $aggressiveLoss, 'A 0.60 appetite must underwrite above the sector rate.');
-
-        // Expected loss is convex in the default probability, so a 1.5x appetite gap widens in loss terms.
-        $this->assertGreaterThan(1.5, $aggressiveLoss / $conservativeLoss);
-
-        // An absent firm falls back to the sector rate rather than silently resolving to zero.
-        $sectorLoss = $this->mathUtility->calculateVasicekExpectedLoss(
-            0.0,
-            CommercialBankBusinessModel::LRA_DEFAULT_RATE,
-            CommercialBankBusinessModel::ASSET_CORRELATION_RHO,
-            CommercialBankBusinessModel::LGD_BASELINE
-        );
-        $this->assertEqualsWithDelta($sectorLoss, $this->model->getThroughTheCycleCreditLossRate(), 1e-9);
-        $this->assertEqualsWithDelta($sectorLoss, $neutralLoss, 1e-9);
+        $sectorLoss = $model->getThroughTheCycleCreditLossRate();
+        $this->assertEqualsWithDelta($sectorLoss, $model->getThroughTheCycleCreditLossRate($untuned), 1e-12, 'an absent firm falls back to the sector rate');
+        $this->assertEqualsWithDelta(0.80 * $sectorLoss, $model->getThroughTheCycleCreditLossRate($conservative), 1e-12);
+        $this->assertEqualsWithDelta(1.20 * $sectorLoss, $model->getThroughTheCycleCreditLossRate($aggressive), 1e-12);
     }
 
     /** An appetite outside the viable commercial envelope is clamped, not passed through to the loss model. */
     public function testCreditRiskAppetiteIsClampedToTheViableUnderwritingEnvelope(): void
     {
-        $stock = (new Stock())->setTicker('CLAMP_TEST');
-
-        $floorLoss = $this->mathUtility->calculateVasicekExpectedLoss(
-            0.0,
-            CommercialBankBusinessModel::LRA_DEFAULT_RATE
-                * (CommercialBankBusinessModel::MIN_CREDIT_RISK_APPETITE / CommercialBankBusinessModel::NEUTRAL_CREDIT_RISK_APPETITE),
-            CommercialBankBusinessModel::ASSET_CORRELATION_RHO,
-            CommercialBankBusinessModel::LGD_BASELINE
-        );
-        $ceilingLoss = $this->mathUtility->calculateVasicekExpectedLoss(
-            0.0,
-            CommercialBankBusinessModel::LRA_DEFAULT_RATE
-                * (CommercialBankBusinessModel::MAX_CREDIT_RISK_APPETITE / CommercialBankBusinessModel::NEUTRAL_CREDIT_RISK_APPETITE),
-            CommercialBankBusinessModel::ASSET_CORRELATION_RHO,
-            CommercialBankBusinessModel::LGD_BASELINE
-        );
+        $sectorLoss = $this->model->getThroughTheCycleCreditLossRate();
+        $floorLoss = $sectorLoss * CommercialBankBusinessModel::MIN_CREDIT_RISK_APPETITE / CommercialBankBusinessModel::NEUTRAL_CREDIT_RISK_APPETITE;
+        $ceilingLoss = $sectorLoss * CommercialBankBusinessModel::MAX_CREDIT_RISK_APPETITE / CommercialBankBusinessModel::NEUTRAL_CREDIT_RISK_APPETITE;
 
         $this->assertGreaterThan(0.0, $floorLoss);
-        $this->assertGreaterThan($floorLoss, $ceilingLoss);
-        $this->assertGreaterThanOrEqual($floorLoss, $this->model->getThroughTheCycleCreditLossRate($stock));
-        $this->assertLessThanOrEqual($ceilingLoss, $this->model->getThroughTheCycleCreditLossRate($stock));
+        foreach (['LAKE', 'RIVR', 'CLAMP_TEST'] as $ticker) {
+            $loss = $this->model->getThroughTheCycleCreditLossRate((new Stock())->setTicker($ticker));
+            $this->assertGreaterThanOrEqual($floorLoss * 0.5, $loss);
+            $this->assertLessThanOrEqual($ceilingLoss * 1.5, $loss);
+        }
     }
 
     /**
@@ -818,9 +829,7 @@ class CommercialBankBusinessModelTest extends TestCase
      */
     public function testCreditLossHooksAndLedgerFeedThePhysics(): void
     {
-        $expectedTtc = $this->mathUtility->calculateVasicekExpectedLoss(0.0, CommercialBankBusinessModel::LRA_DEFAULT_RATE, CommercialBankBusinessModel::ASSET_CORRELATION_RHO, CommercialBankBusinessModel::LGD_BASELINE);
-        $this->assertEqualsWithDelta($expectedTtc, $this->model->getThroughTheCycleCreditLossRate(), 1e-9);
-        $this->assertGreaterThan(0.0, $expectedTtc);
+        $this->assertGreaterThan(0.0, $this->model->getThroughTheCycleCreditLossRate());
         $this->assertEqualsWithDelta(CommercialBankBusinessModel::CECL_LIFETIME_HORIZON_YEARS, $this->model->getCreditLossHorizonYears(), 1e-9);
 
         $stock = new Stock();

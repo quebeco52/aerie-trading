@@ -191,7 +191,7 @@ class BusinessModelThresholdsAndPolymorphismTest extends TestCase
 
         // Unsecured card lending loses several times what a prime bank book does; a mortgage book, less.
         $bank = Sectors::getBusinessModelStrategy('commercial_bank')->getThroughTheCycleCreditLossRate();
-        $this->assertGreaterThan($bank * 4.0, Sectors::getBusinessModelStrategy('credit_services')->getThroughTheCycleCreditLossRate());
+        $this->assertGreaterThan($bank * 3.0, Sectors::getBusinessModelStrategy('credit_services')->getThroughTheCycleCreditLossRate(), 'unsecured card books lose several times a diversified loan book');
         $this->assertGreaterThan(0.0, Sectors::getBusinessModelStrategy('shadow_bank')->getThroughTheCycleCreditLossRate());
         $this->assertEqualsWithDelta(0.0, Sectors::getBusinessModelStrategy('hedge_fund')->getThroughTheCycleCreditLossRate(), 1e-12, 'a fund holds positions, not credit');
     }

@@ -12,9 +12,11 @@ use App\Service\Model\BusinessModelInterface;
 use App\Data\ModelParam;
 use App\DTO\MacroStateDTO;
 use App\DTO\SectorPhysicsResult;
+use App\DTO\StreamContext;
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
 use App\Service\Macro\MacroEngine;
+use App\Service\Macro\Subsystem\CreditFiscalSubsystem;
 use App\Service\Event\ShockEvent;
 use App\Service\Math\FinancialConstants;
 
@@ -98,27 +100,31 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
     // --- Revenue & Shock Physics ---
     /** Baseline volatility multiplier for loan origination and fee revenue shocks. */
     public const REVENUE_VARIANCE_SCALAR = 0.15;
-    /** LGD (Loss-Given-Default) multiplier: collateralized loans suffer lower realized losses than unsecured credit. */
-    public const MACRO_DEFAULT_LGD_DRAG  = 0.040;
-    /** Credit provision loss weight for elevated household debt service ratio stress above neutral. */
-    public const SHOCK_WEIGHT_DSR_DEFAULT = 0.15;
-    /** Maximum quarterly reserve release clamp (4% of revenue — avoids unlimited reversal). */
-    public const MAX_PROVISION_REVERSAL  = 0.04;
 
-    // --- Basel III Vasicek ASRF Credit Model ---
-    /** Long-run average (through-the-cycle) annual default probability for prime bank loan portfolios (~1.5%). */
-    public const LRA_DEFAULT_RATE              = 0.015;
-    /** Asset correlation factor under Basel II/III internal ratings-based approach (IRB) for corporate/commercial exposures. */
-    public const ASSET_CORRELATION_RHO         = 0.15;
+    // --- Vasicek ASRF Credit Model (segment PDs and correlations are the macro's: MacroEngine, CreditFiscalSubsystem) ---
     /** Baseline Loss Given Default (LGD) for senior secured / collateralized bank credit facilities. */
     public const LGD_BASELINE                  = 0.45;
 
+    // --- Loan Book Segments (Fed H.8, all commercial banks, Dec 2019: $10.03T of loans) ---
+    /** Residential real estate share of loans ($2.30T): households, defaulting at the macro retail rate, secured on homes. */
+    public const RESIDENTIAL_MORTGAGE_SHARE    = 0.23;
+    /** Consumer loan share ($1.59T: cards, autos, student): households, defaulting at the macro retail rate, recovery not tied to property. */
+    public const CONSUMER_LOAN_SHARE           = 0.16;
+    /** Commercial real estate share ($2.32T): firms, defaulting at the macro corporate rate, secured on commercial property. The C&I and other remainder (38%) defaults at the corporate rate with no property collateral. */
+    public const COMMERCIAL_REAL_ESTATE_SHARE  = 0.23;
+    /** Years the collateral reference price averages over: the weighted-average age of a seasoned loan book (~4 years), so LGD reads the price fall since the loans were written, not since a fixed baseline. */
+    public const COLLATERAL_ORIGINATION_YEARS  = 4.0;
+    /** Persisted origination reference for the residential property index. */
+    public const STATE_RESIDENTIAL_ORIGINATION_PRICE = 'state:collateral_origination_residential';
+    /** Persisted origination reference for the commercial property index. */
+    public const STATE_COMMERCIAL_ORIGINATION_PRICE  = 'state:collateral_origination_commercial';
+
     // --- Underwriting Risk Appetite ---
-    /** Neutral appetite: a bank here books exactly the sector's through-the-cycle default probability. */
+    /** Neutral appetite: a bank here lends at exactly the economy's default rates, households at the retail rate and firms at the corporate rate. */
     public const NEUTRAL_CREDIT_RISK_APPETITE  = 0.50;
-    /** Appetite floor (~30bps PD): a book this clean is sovereign paper wearing a loan's clothes. */
+    /** Appetite floor (0.2x the economy's PDs, ~30-50bps): a book this clean is sovereign paper wearing a loan's clothes. */
     public const MIN_CREDIT_RISK_APPETITE      = 0.10;
-    /** Appetite ceiling (~3% PD): the edge of a viable commercial book before it is subprime lending. */
+    /** Appetite ceiling (2x the economy's PDs, ~3-5%): the edge of a viable commercial book before it is subprime lending. */
     public const MAX_CREDIT_RISK_APPETITE      = 1.00;
 
     // --- CECL Forward Reserve (ASC 326 lifetime allowance conditioned on the macro forecast) ---
@@ -133,9 +139,7 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
     /** Floor on the forecast multiplier: a benign outlook releases part of the through-the-cycle reserve, never most of it. */
     public const CECL_RESERVE_MULTIPLIER_FLOOR = 0.75;
 
-    // --- C&I Corporate Default & SLOOS Lending Standards ---
-    /** Weight of speculative-grade corporate default rate shift on commercial & industrial loan loss provisions. */
-    public const SHOCK_WEIGHT_CORPORATE_DEFAULT   = 0.040;
+    // --- SLOOS Lending Standards & Credit Boom ---
     /** Sensitivity of NII loan origination volume to net percentage of domestic banks tightening standards (SLOOS). */
     public const SLOOS_NII_ORIGINATION_SENSITIVITY = 0.20;
     /** Origination volume per unit of the household credit-to-GDP gap: a credit boom writes its own loans (Borio & Lowe 2002). */
@@ -150,8 +154,8 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
     // --- Macaulay Duration Gap & IRRBB NIM Physics ---
     /** Weighted average Macaulay duration of bank loan and mortgage assets in years. */
     public const ASSET_DURATION_YEARS          = 4.5;
-    /** Years of expected loss the CECL allowance covers. At the through-the-cycle loss rate this puts the reserve near 1.7% of loans, where large US banks have run since CECL adoption. */
-    public const CECL_LIFETIME_HORIZON_YEARS   = 4.0;
+    /** Years of expected loss the CECL allowance covers. At the through-the-cycle loss rate (~0.9% of loans) this puts the reserve near 1.8% of loans, where large US banks have run since CECL adoption. */
+    public const CECL_LIFETIME_HORIZON_YEARS   = 2.0;
     /** Weighted average Macaulay duration of customer deposit and wholesale liabilities in years. */
     public const LIABILITY_DURATION_YEARS      = 1.5;
     /** Floating-rate asset/liability natural hedge effectiveness dampening duration mismatch exposure. */
@@ -254,16 +258,8 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
     public const MACRO_PRICING_POWER_MULT = 1.0;
     /** Persistence (AR1) parameter for Net Interest Income (NII) Z-score drift. */
     public const STREAM_Z_PERSISTENCE_NII = 0.35;
-    /** Persistence (AR1) parameter for Fee Income and Default Z-score drift. */
+    /** Persistence (AR1) parameter for Fee Income Z-score drift. */
     public const STREAM_Z_PERSISTENCE_FEE = 0.25;
-    /** Normalization baseline for indices like sentiment and real estate property. */
-    public const INDEX_NORMALIZATION_BASE = 100.0;
-    /** Impact multiplier of commercial property declines on bank default drag. */
-    public const SHOCK_WEIGHT_CRE_DECLINE = 0.05;
-    /** Impact multiplier of residential property declines on bank default drag. */
-    public const SHOCK_WEIGHT_RESIDENTIAL_DECLINE = 0.05;
-    /** Impact multiplier of retail default rate increases on bank default drag. */
-    public const SHOCK_WEIGHT_RETAIL_DEFAULT = 0.05;
     /** Minimum duration gap multiplier acting as a hedge floor. */
     public const HEDGE_FLOOR_MULTIPLIER = 0.10;
     /** Minimum base expansion probability floor. */
@@ -277,12 +273,12 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
 
     /** Output gap multiplier for fee revenue. */
     public const SECTOR_SHOCK_FEE_OUTPUT_GAP_MULT = 0.35;
-    /** Z-score threshold for elevated defaults. */
-    public const SECTOR_SHOCK_ELEVATED_DEFAULT_Z = -1.5;
-    /** Z-score threshold for massive defaults. */
-    public const SECTOR_SHOCK_MASSIVE_DEFAULT_Z = -2.0;
-    /** Z-score threshold for reserve releases. */
-    public const SECTOR_SHOCK_RESERVE_RELEASE_Z = 2.0;
+    /** Charge-offs over the through-the-cycle rate above which defaults are elevated: US banks ran 1.08x their 1985-2019 mean in 2001-02, peaking at 1.39x (FRED CORALACBN). */
+    public const SECTOR_SHOCK_ELEVATED_LOSS_MULTIPLE = 1.3;
+    /** Charge-offs over the through-the-cycle rate above which provisions are massive: 2.85x in 2009-10, peaking at 3.4x. */
+    public const SECTOR_SHOCK_MASSIVE_LOSS_MULTIPLE = 2.5;
+    /** Charge-offs over the through-the-cycle rate below which reserves are released: 0.55x in 2004-06, when US banks drew their allowances down. */
+    public const SECTOR_SHOCK_RESERVE_RELEASE_LOSS_MULTIPLE = 0.6;
 
     // --- Basel III Capital Adequacy & CCB ---
     /** Risk weight for risk-free cash and central bank treasury reserves under Basel III Standardized Approach. */
@@ -411,8 +407,8 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
     }
 
     /**
-     * Idiosyncratic shock applied directly to loan origination volume and fee revenue.
-     * Introduces massive Loss Provision write-offs during economic downturns.
+     * Idiosyncratic shocks to loan origination volume and fee revenue; credit losses on the loan book follow the
+     * District's systematic credit cycle (see resolveConditionalCreditLossRate()).
      */
     protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
     {
@@ -447,7 +443,6 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
         // Independent stream Z-scores with AR(1) persistence
         $revenueZ = $streams->generateZ('net_interest_income', self::STREAM_Z_PERSISTENCE_NII); // NII loan origination volume
         $feeZ     = $streams->generateZ('fee_income', self::STREAM_Z_PERSISTENCE_FEE); // Non-interest custodial / payment fee volume
-        $defaultZ = $streams->generateExogenousZ('default', self::STREAM_Z_PERSISTENCE_FEE); // Idiosyncratic credit default
 
         $outputGap = $macroState->outputGapEma;
 
@@ -485,38 +480,12 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
         // Balance sheet loan book (Earning Assets) deployed into credit
         $earningAssets = $this->resolveEarningAssets($stock);
 
-        // Basel II/III Vasicek ASRF Credit Risk Physics:
-        // Expected loss on the loan portfolio under macroeconomic credit shock $defaultZ.
-        $longRunDefaultRate = $this->resolveLongRunDefaultRate($stock);
-        $baselineEl = $mathUtility->calculateVasicekExpectedLoss(0.0, $longRunDefaultRate, self::ASSET_CORRELATION_RHO, self::LGD_BASELINE);
-        $conditionalEl = $mathUtility->calculateVasicekExpectedLoss($defaultZ, $longRunDefaultRate, self::ASSET_CORRELATION_RHO, self::LGD_BASELINE);
-        $annualLossDelta = $conditionalEl - $baselineEl;
-
-        // Convert annual loan loss rate delta to quarterly dollar credit provision shock
-        $quarterlyDollarLoss = ($annualLossDelta / FinancialConstants::QUARTERS_PER_YEAR) * $earningAssets;
-        $provisionCostAddon = $quarterlyDollarLoss / max(1.0, $actualRevenue);
-
-        // What actually went bad this quarter: the conditional loss rate on the book. The through-the-cycle
-        // part of it is already inside the stable cost base; only the excess reaches the margin below.
-        $netChargeOffs = max(0.0, $conditionalEl / FinancialConstants::QUARTERS_PER_YEAR) * $earningAssets;
-
-        $sentimentShift = $macroState->sentimentDeviation();
-        $retailDefaultShift = MathUtility::excessOverBaseline($macroState->retailDefaultRateEma, MacroEngine::RETAIL_DEFAULT_BASELINE);
-        $corporateDefaultShift = MathUtility::excessOverBaseline($macroState->corporateDefaultRateEma, MacroEngine::CORPORATE_DEFAULT_BASELINE);
-        $dsrShift = max(0.0, $macroState->householdDebtServiceGap) / MacroEngine::HOUSEHOLD_DSR_NEUTRAL;
-
-        $creShift = ($macroState->commercialPropertyIndexEma - self::INDEX_NORMALIZATION_BASE) / self::INDEX_NORMALIZATION_BASE;
-        $residentialShift = ($macroState->residentialPropertyIndexEma - self::INDEX_NORMALIZATION_BASE) / self::INDEX_NORMALIZATION_BASE;
-        $propertyDrag = ($creShift < 0.0 ? abs($creShift) * self::SHOCK_WEIGHT_CRE_DECLINE : 0.0) + ($residentialShift < 0.0 ? abs($residentialShift) * self::SHOCK_WEIGHT_RESIDENTIAL_DECLINE : 0.0);
-
-        $macroDefaultDrag = ($sentimentShift < 0.0 ? abs($sentimentShift) * self::MACRO_DEFAULT_LGD_DRAG : 0.0)
-            + ($retailDefaultShift * self::SHOCK_WEIGHT_RETAIL_DEFAULT)
-            + ($corporateDefaultShift * self::SHOCK_WEIGHT_CORPORATE_DEFAULT)
-            + ($dsrShift * self::SHOCK_WEIGHT_DSR_DEFAULT)
-            + $propertyDrag;
-
-        // Clamp reserve release to MAX_PROVISION_REVERSAL to avoid unbounded write-backs
-        $lossProvisionShock = max(-self::MAX_PROVISION_REVERSAL, $provisionCostAddon) + $macroDefaultDrag;
+        // Charge-offs are the book's conditional loss this quarter. They reach EBIT once, through the allowance
+        // roll-forward, which replaces what they consumed (provision = charge-offs + change in allowance).
+        $credit = $this->resolveConditionalCreditLossRate($stock, $macroState, $streams, $mathUtility);
+        $defaultZ = $credit['systematic_z'];
+        $netChargeOffs = ($credit['loss_rate'] / FinancialConstants::QUARTERS_PER_YEAR) * $earningAssets;
+        $lossMultiple = $credit['loss_rate'] / max(1e-9, $this->getThroughTheCycleCreditLossRate($stock));
 
         // The forward-looking CECL reserve (credit spreads, recession forecast) is NOT a margin term: it moves
         // the allowance TARGET through getForwardCreditLossMultiplier(), and the ledger roll-forward books the
@@ -539,30 +508,22 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
         $nimSqueeze = - ($curveDeviation * $effectiveDurationGap);
 
         // Physics-grounded Efficiency Floor: Total Operating Costs (Fixed + Variable) / Revenue >= MIN_EFFICIENCY_RATIO.
-        // Crucially, NIM squeeze and provision charges apply proportionally to the NII revenue share ($niiWeight),
+        // Crucially, the NIM squeeze applies in proportion to the NII revenue share ($niiWeight),
         // leaving Non-Interest custodial / wealth / transaction fee income completely insulated.
         $minVariableMargin = max(0.01, self::MIN_EFFICIENCY_RATIO - ($fixedCosts / max(1.0, $actualRevenue)));
-        $niiCostAddon = ($lossProvisionShock + $nimSqueeze) * $niiWeight;
-        $rawMargin = $realizedVariableMargin + $niiCostAddon;
+        $rawMargin = $realizedVariableMargin + ($nimSqueeze * $niiWeight);
         $clampedMargin = $this->clampMargin($rawMargin, $minVariableMargin);
-
-        // Scale explicit credit provision by the realized portion of the clamped margin addon.
-        $realizedAddon = $clampedMargin - $realizedVariableMargin;
-        $addonRealizedShare = abs($niiCostAddon) > 1e-12
-            ? max(0.0, min(1.0, $realizedAddon / $niiCostAddon))
-            : 0.0;
-        $explicitCreditProvision = $lossProvisionShock * $niiWeight * $actualRevenue * $addonRealizedShare;
 
         $cet1Ratio = $this->calculateCet1Ratio($stock);
 
         $eventType = null;
         if ($cet1Ratio < self::BASEL_MIN_CET1_RATIO) {
             $eventType = ShockEvent::BANK_SEIZURE;
-        } elseif ($defaultZ < self::SECTOR_SHOCK_MASSIVE_DEFAULT_Z) {
+        } elseif ($lossMultiple > self::SECTOR_SHOCK_MASSIVE_LOSS_MULTIPLE) {
             $eventType = ShockEvent::MASSIVE_CREDIT_PROVISION;
-        } elseif ($defaultZ < self::SECTOR_SHOCK_ELEVATED_DEFAULT_Z) {
+        } elseif ($lossMultiple > self::SECTOR_SHOCK_ELEVATED_LOSS_MULTIPLE) {
             $eventType = ShockEvent::ELEVATED_LOAN_DEFAULTS;
-        } elseif ($defaultZ > self::SECTOR_SHOCK_RESERVE_RELEASE_Z) {
+        } elseif ($lossMultiple < self::SECTOR_SHOCK_RESERVE_RELEASE_LOSS_MULTIPLE) {
             $eventType = ShockEvent::RESERVE_RELEASE;
         }
 
@@ -574,7 +535,7 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
             eventType: $eventType,
             streamZ: $streams->getStreamZ(),
             streamRevenue: $streamRevenues,
-            creditLossProvision: $explicitCreditProvision,
+            creditLossProvision: 0.0,
             netChargeOffs: $netChargeOffs,
         );
     }
@@ -604,16 +565,15 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
     }
 
     /**
-     * Firm-specific long-run (through-the-cycle) default probability. Two banks funded identically do not
-     * underwrite identically: a universal lender syndicating investment-grade corporate paper runs a cleaner
-     * book than a regional lender competing on speed for contractor and developer credit. CreditRiskAppetite
-     * scales the sector's long-run PD around a neutral 0.50, which is the only place a bank's stated
-     * underwriting posture can reach the Vasicek loss physics.
+     * How far this bank's underwriting sits from the economy's default rates. Two banks funded identically do not
+     * underwrite identically: a universal lender syndicating investment-grade corporate paper runs a cleaner book than
+     * a regional lender competing on speed for contractor and developer credit. CreditRiskAppetite scales both segment
+     * PDs around a neutral 0.50, which is the only place a bank's stated underwriting posture reaches the loss model.
      */
-    protected function resolveLongRunDefaultRate(?Stock $stock): float
+    protected function resolveCreditRiskScale(?Stock $stock): float
     {
         if (!$stock instanceof Stock) {
-            return self::LRA_DEFAULT_RATE;
+            return 1.0;
         }
 
         $params = $this->resolveModelParameters($stock, [
@@ -625,18 +585,108 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
             min(self::MAX_CREDIT_RISK_APPETITE, (float) $params[ModelParam::CreditRiskAppetite])
         );
 
-        return self::LRA_DEFAULT_RATE * ($appetite / self::NEUTRAL_CREDIT_RISK_APPETITE);
+        return $appetite / self::NEUTRAL_CREDIT_RISK_APPETITE;
     }
 
-    /** Through-the-cycle loss on this bank's loan book: its long-run default probability at its loss given default. */
+    /**
+     * This quarter's annual loss rate on the loan book, segment by segment. Each segment reads the systematic factor
+     * the macro default rate implies (households the retail rate, firms the corporate rate) and applies it at the
+     * macro's own correlation to this bank's long-run PD, so every lender in the District takes the same credit cycle
+     * through its own book, and a neutral lender defaults at exactly the economy's rate. Property-secured segments
+     * lose more as collateral falls below the price the loans were written at (Frye 2000).
+     *
+     * @return array{loss_rate: float, systematic_z: float}
+     */
+    protected function resolveConditionalCreditLossRate(Stock $stock, MacroStateDTO $macroState, StreamContext $streams, MathUtility $mathUtility): array
+    {
+        ['residential' => $residentialShare, 'consumer' => $consumerShare, 'commercial_real_estate' => $creShare, 'business' => $businessShare] = $this->resolveLoanBookMix($stock);
+
+        $householdZ = $mathUtility->calculateVasicekSystematicFactor(
+            $macroState->retailDefaultRateEma,
+            MacroEngine::RETAIL_DEFAULT_BASELINE,
+            CreditFiscalSubsystem::RETAIL_ASRF_RHO
+        );
+        $corporateZ = $mathUtility->calculateVasicekSystematicFactor(
+            $macroState->corporateDefaultRateEma,
+            MacroEngine::CORPORATE_DEFAULT_BASELINE,
+            CreditFiscalSubsystem::CORPORATE_DEFAULT_RHO
+        );
+
+        $quarter = 1.0 / FinancialConstants::QUARTERS_PER_YEAR;
+        $residentialPrice = $macroState->residentialPropertyIndexEma;
+        $commercialPrice = $macroState->commercialPropertyIndexEma;
+        $residentialOrigination = $streams->getPersistedState(self::STATE_RESIDENTIAL_ORIGINATION_PRICE, $residentialPrice);
+        $commercialOrigination = $streams->getPersistedState(self::STATE_COMMERCIAL_ORIGINATION_PRICE, $commercialPrice);
+        $residentialLgd = MathUtility::calculateCollateralLgd(self::LGD_BASELINE, $residentialPrice, $residentialOrigination);
+        $commercialLgd = MathUtility::calculateCollateralLgd(self::LGD_BASELINE, $commercialPrice, $commercialOrigination);
+        $streams->registerState(self::STATE_RESIDENTIAL_ORIGINATION_PRICE, $mathUtility->calculateDistributedLag($residentialOrigination, $residentialPrice, $quarter, self::COLLATERAL_ORIGINATION_YEARS));
+        $streams->registerState(self::STATE_COMMERCIAL_ORIGINATION_PRICE, $mathUtility->calculateDistributedLag($commercialOrigination, $commercialPrice, $quarter, self::COLLATERAL_ORIGINATION_YEARS));
+
+        $riskScale = $this->resolveCreditRiskScale($stock);
+        $householdPd = MacroEngine::RETAIL_DEFAULT_BASELINE * $riskScale;
+        $corporatePd = MacroEngine::CORPORATE_DEFAULT_BASELINE * $riskScale;
+        $householdRho = CreditFiscalSubsystem::RETAIL_ASRF_RHO;
+        $corporateRho = CreditFiscalSubsystem::CORPORATE_DEFAULT_RHO;
+        $lossRate = ($residentialShare * $mathUtility->calculateVasicekExpectedLoss($householdZ, $householdPd, $householdRho, $residentialLgd))
+            + ($consumerShare * $mathUtility->calculateVasicekExpectedLoss($householdZ, $householdPd, $householdRho, self::LGD_BASELINE))
+            + ($creShare * $mathUtility->calculateVasicekExpectedLoss($corporateZ, $corporatePd, $corporateRho, $commercialLgd))
+            + ($businessShare * $mathUtility->calculateVasicekExpectedLoss($corporateZ, $corporatePd, $corporateRho, self::LGD_BASELINE));
+
+        $householdWeight = $residentialShare + $consumerShare;
+
+        return [
+            'loss_rate' => $lossRate,
+            'systematic_z' => ($householdWeight * $householdZ) + ((1.0 - $householdWeight) * $corporateZ),
+        ];
+    }
+
+    /**
+     * The bank's loan book by segment, as shares of loans: the H.8 system mix unless the firm's lore says otherwise.
+     * The C&I and other business remainder takes whatever the three named segments leave.
+     *
+     * @return array{residential: float, consumer: float, commercial_real_estate: float, business: float}
+     */
+    protected function resolveLoanBookMix(Stock $stock): array
+    {
+        $params = $this->resolveModelParameters($stock, [
+            ModelParam::ResidentialMortgageShare->value  => self::RESIDENTIAL_MORTGAGE_SHARE,
+            ModelParam::ConsumerLoanShare->value         => self::CONSUMER_LOAN_SHARE,
+            ModelParam::CommercialRealEstateShare->value => self::COMMERCIAL_REAL_ESTATE_SHARE,
+        ]);
+        $residential = max(0.0, (float) $params[ModelParam::ResidentialMortgageShare]);
+        $consumer = max(0.0, (float) $params[ModelParam::ConsumerLoanShare]);
+        $commercialRealEstate = max(0.0, (float) $params[ModelParam::CommercialRealEstateShare]);
+        $named = $residential + $consumer + $commercialRealEstate;
+        if ($named > 1.0) {
+            $residential /= $named;
+            $consumer /= $named;
+            $commercialRealEstate /= $named;
+        }
+
+        return [
+            'residential' => $residential,
+            'consumer' => $consumer,
+            'commercial_real_estate' => $commercialRealEstate,
+            'business' => max(0.0, 1.0 - $residential - $consumer - $commercialRealEstate),
+        ];
+    }
+
+    /**
+     * Through-the-cycle loss on this bank's loan book: each segment's long-run average PD at the base loss given
+     * default (Basel's PD x LGD), which is the mean of the conditional losses whenever the macro default rates
+     * average at their baselines. A neutral H.8 book loses ~0.88% a year; US banks charged off 0.93% over 1985-2019
+     * (FRED CORALACBN).
+     */
     public function getThroughTheCycleCreditLossRate(?Stock $stock = null): float
     {
-        return MathUtility::getInstance()->calculateVasicekExpectedLoss(
-            0.0,
-            $this->resolveLongRunDefaultRate($stock),
-            self::ASSET_CORRELATION_RHO,
-            self::LGD_BASELINE
-        );
+        $mix = $stock instanceof Stock
+            ? $this->resolveLoanBookMix($stock)
+            : ['residential' => self::RESIDENTIAL_MORTGAGE_SHARE, 'consumer' => self::CONSUMER_LOAN_SHARE, 'commercial_real_estate' => self::COMMERCIAL_REAL_ESTATE_SHARE, 'business' => 1.0 - self::RESIDENTIAL_MORTGAGE_SHARE - self::CONSUMER_LOAN_SHARE - self::COMMERCIAL_REAL_ESTATE_SHARE];
+        $householdShare = $mix['residential'] + $mix['consumer'];
+        $corporateShare = $mix['commercial_real_estate'] + $mix['business'];
+
+        return self::LGD_BASELINE * $this->resolveCreditRiskScale($stock)
+            * (($householdShare * MacroEngine::RETAIL_DEFAULT_BASELINE) + ($corporateShare * MacroEngine::CORPORATE_DEFAULT_BASELINE));
     }
 
     public function getCreditLossHorizonYears(): float
@@ -995,10 +1045,8 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
     {
         return [
             'commercial_property_index_ema',
-            'consumer_sentiment_index_ema',
             'corporate_default_rate_ema',
             'credit_to_gdp_gap_ema',
-            'household_debt_service_gap',
             'housing_starts_index_ema',
             'inflation_ema',
             'interbank_liquidity_spread_ema',

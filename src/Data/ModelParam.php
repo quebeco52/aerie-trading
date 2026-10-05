@@ -23,6 +23,9 @@ enum ModelParam: string
     case CeclSpreadSensitivity = 'cecl_spread_sensitivity';
     case NimInversionSensitivity = 'nim_inversion_sensitivity';
     case CreditRiskAppetite = 'credit_risk_appetite';
+    case ResidentialMortgageShare = 'residential_mortgage_share';
+    case ConsumerLoanShare = 'consumer_loan_share';
+    case CommercialRealEstateShare = 'commercial_real_estate_share';
     case AumMarketBetaScalar = 'aum_market_beta_scalar';
     case PerformanceFeeZFloor = 'performance_fee_z_floor';
     case PerformanceFeeScalar = 'performance_fee_scalar';

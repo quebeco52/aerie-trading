@@ -23,6 +23,10 @@ use Symfony\Contracts\EventDispatcher\EventDispatcherInterface;
  */
 class EarningsEngine
 {
+    // --- Credit Loss Allowance (ASC 326) ---
+    /** Time constant of a lender's loss rate reverting to its through-the-cycle level: US bank charge-offs have an annual autocorrelation of 0.79, ~4.2 years (FRED CORALACBN, 1985-2019). */
+    public const CREDIT_LOSS_REVERSION_YEARS = 4.2;
+
     // --- Capacity & Utilization ---
     /** Absolute minimum capacity utilization (10%) to prevent negative revenue on dead companies. */
     public const MIN_CAPACITY_UTILIZATION = 0.10;
@@ -362,16 +366,25 @@ class EarningsEngine
     }
 
     /**
-     * Lifetime expected loss rate on gross earning assets: the annual through-the-cycle rate over the CECL
-     * horizon, conditioned on the macro outlook the lender reserves against. The outlook moves the TARGET
-     * the allowance converges to, so a deteriorating forecast is booked as a build once and released when
-     * it clears, rather than charged again every quarter it persists.
+     * Lifetime expected loss rate on gross earning assets over the CECL horizon. Two departures from the
+     * through-the-cycle rate are added, not compounded: the forward outlook (spreads, recession risk) moves the
+     * estimate by (multiplier - 1) x TTC, and the losses the book is taking now revert to TTC over the horizon
+     * (ASC 326-20-30-9), adding (current - TTC) x (1 - e^(-H/tau)) / (H/tau). The outlook moves the TARGET the
+     * allowance converges to, so a deteriorating forecast is booked as a build once and released when it clears,
+     * rather than charged again every quarter it persists. Without a current rate (the opening seed) the book is
+     * taken to lose at TTC.
      */
-    private function resolveLifetimeCreditLossRate(EarningsSimulationContext $ctx): float
+    private function resolveLifetimeCreditLossRate(EarningsSimulationContext $ctx, ?float $currentLossRate = null): float
     {
-        return max(0.0, $ctx->strategy->getThroughTheCycleCreditLossRate($ctx->stock))
-            * max(0.0, $ctx->strategy->getCreditLossHorizonYears())
-            * max(0.0, $ctx->strategy->getForwardCreditLossMultiplier($ctx->stock, $ctx->macroState));
+        $throughTheCycle = max(0.0, $ctx->strategy->getThroughTheCycleCreditLossRate($ctx->stock));
+        $horizon = max(0.0, $ctx->strategy->getCreditLossHorizonYears());
+        $reversionShare = $horizon > 0.0
+            ? (1.0 - exp(-$horizon / self::CREDIT_LOSS_REVERSION_YEARS)) / ($horizon / self::CREDIT_LOSS_REVERSION_YEARS)
+            : 1.0;
+        $outlook = $throughTheCycle * max(0.0, $ctx->strategy->getForwardCreditLossMultiplier($ctx->stock, $ctx->macroState));
+        $currentConditions = (($currentLossRate ?? $throughTheCycle) - $throughTheCycle) * $reversionShare;
+
+        return max(0.0, $outlook + $currentConditions) * $horizon;
     }
 
     /**
@@ -1666,6 +1679,7 @@ class EarningsEngine
         // quarter by a charge nothing ever consumed and released back as income that was never earned.
         $throughTheCycleCharge = max(0.0, $ctx->strategy->getThroughTheCycleCreditLossRate($ctx->stock)) / 4.0 * $grossBook;
         $chargeOffs = min($grossBook, $ctx->netChargeOffs > 0.0 ? $ctx->netChargeOffs : $throughTheCycleCharge);
+        $currentLossRate = $grossBook > 0.0 ? $chargeOffs * FinancialConstants::QUARTERS_PER_YEAR / $grossBook : null;
 
         // Loans that went bad leave the book and consume the reserve held against them. No earnings effect:
         // the loss was recognised when the reserve was built.
@@ -1678,7 +1692,7 @@ class EarningsEngine
         $replenishment = $chargeOffs;
         $allowance += $replenishment;
 
-        $target = $grossBook * $this->resolveLifetimeCreditLossRate($ctx);
+        $target = $grossBook * $this->resolveLifetimeCreditLossRate($ctx, $currentLossRate);
         $convergence = ($target - max(0.0, $allowance)) * FinancialConstants::CREDIT_ALLOWANCE_CONVERGENCE_RATIO;
         $allowance += $convergence;
 

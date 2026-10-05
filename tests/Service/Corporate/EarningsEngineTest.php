@@ -947,6 +947,36 @@ class EarningsEngineTest extends TestCase
     }
 
     /**
+     * ASC 326-20-30-9: the lifetime estimate starts from the losses the book is taking now and reverts to the
+     * through-the-cycle rate, so a lender charging off heavily holds a larger allowance against its book than one
+     * in a calm quarter with the same forward outlook, instead of releasing reserves while the losses run.
+     */
+    public function testALenderTakingHeavyLossesReservesMoreAgainstItsBook(): void
+    {
+        $allowanceRatio = function (float $retailDefaults, float $corporateDefaults): float {
+            $this->mathUtility = new MathUtility();
+            $engine = $this->buildEngine(new EventDispatcher());
+
+            mt_srand(4242);
+            $stock = $this->buildMatureIndustrial('RSRV');
+            $stock->setIndustry('Banks - Diversified');
+            $stock->setCustomerDeposits('300000000000');
+            $macro = new MacroStateDTO(corporateTaxRate: 0.21, policyRateEma: 0.04, yield5yEma: 0.04, retailDefaultRateEma: $retailDefaults, corporateDefaultRateEma: $corporateDefaults);
+            $reportingTick = EarningsEngine::resolveReportingTick('RSRV', 252);
+            for ($quarter = 0; $quarter < 4; $quarter++) {
+                $engine->calculate($stock, $macro, $reportingTick + (63 * $quarter), 252);
+            }
+
+            return (float) $stock->getCreditLossAllowance() / (float) $stock->getEarningAssets();
+        };
+
+        $calm = $allowanceRatio(0.025, 0.016);
+        $stressed = $allowanceRatio(0.06, 0.054);
+
+        $this->assertGreaterThan(1.5 * $calm, $stressed);
+    }
+
+    /**
      * Working capital is carried as the balances it is actually made of, and the net figure is derived from
      * them. Receivables track billed revenue; inventory and payables are carried at cost.
      */
@@ -2125,6 +2155,8 @@ class EarningsEngineTest extends TestCase
             $dispatcher->addListener(EarningsReportedEvent::class, function (EarningsReportedEvent $event) use (&$captured): void {
                 $captured = $event->getContext();
             });
+            // A fresh generator per run: a Box-Muller spare left over from the first run would shift the second's draws.
+            $this->mathUtility = new MathUtility();
             $engine = $this->buildEngine($dispatcher);
 
             mt_srand(1111);

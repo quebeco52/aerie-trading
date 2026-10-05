@@ -618,6 +618,28 @@ class MathUtilityTest extends TestCase
         $this->assertGreaterThan($stressedEl, $highRhoEl, 'Higher asset correlation should amplify stressed tail losses.');
     }
 
+    /** Belkin-Suchower-Forest: the factor implied by a conditional PD is the one that produced it. */
+    public function testVasicekSystematicFactorInvertsTheConditionalPd(): void
+    {
+        foreach ([-2.5, -1.0, 0.0, 0.7, 2.0] as $z) {
+            $conditionalPd = $this->mathUtility->calculateVasicekExpectedLoss($z, 0.025, 0.12, 1.0);
+            $this->assertEqualsWithDelta($z, $this->mathUtility->calculateVasicekSystematicFactor($conditionalPd, 0.025, 0.12), 1e-4);
+        }
+
+        $this->assertLessThan(0.0, $this->mathUtility->calculateVasicekSystematicFactor(0.06, 0.016, 0.10), 'defaults above the median read as a downturn');
+    }
+
+    /** Frye (2000): recovery scales with collateral value since origination; LGD stays within [0, 1]. */
+    public function testCollateralLgdRisesAsCollateralFallsBelowOrigination(): void
+    {
+        $this->assertEqualsWithDelta(0.45, MathUtility::calculateCollateralLgd(0.45, 100.0, 100.0), 1e-12);
+        $this->assertEqualsWithDelta(1.0 - 0.55 * 0.70, MathUtility::calculateCollateralLgd(0.45, 70.0, 100.0), 1e-12);
+        $this->assertEqualsWithDelta(1.0 - 0.55 * 1.20, MathUtility::calculateCollateralLgd(0.45, 120.0, 100.0), 1e-12);
+        $this->assertSame(0.0, MathUtility::calculateCollateralLgd(0.45, 250.0, 100.0));
+        $this->assertSame(1.0, MathUtility::calculateCollateralLgd(0.45, 0.0, 100.0));
+        $this->assertSame(0.45, MathUtility::calculateCollateralLgd(0.45, 70.0, 0.0), 'no origination reference reads as base LGD');
+    }
+
     public function testCalculateSchwartz2FactorReturnsPositiveSpot(): void
     {
         $result = $this->mathUtility->calculateSchwartz2Factor(

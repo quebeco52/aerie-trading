@@ -102,14 +102,14 @@ class MacroAggregateSubsystem
     /** US finance and insurance value added over GDP, 2005-2019 average (BEA via FRED VAPGDPFI, 7.18%): the share the US-fitted demand equation already carries. */
     public const US_FINANCE_SHARE = 0.072;
     /** Credit intermediation's share of the District's finance (banks, credit services, mortgage finance), by the seeded roster's book equity; its volume follows deflated loan balances. */
-    public const FINANCE_CREDIT_SHARE = 0.367;
+    public const FINANCE_CREDIT_SHARE = 0.391;
     /** Market-based finance's share (funds, brokerage, exchanges, clearing, investment banking), the same basis; its volume follows the deflated value of the assets it manages. The rest, insurance and holding companies, moves with the domestic economy. */
-    public const FINANCE_MARKET_SHARE = 0.259;
+    public const FINANCE_MARKET_SHARE = 0.250;
     /** Weight of the finance cycle in the gap: the District's finance share less the US share the fitted equation carries on the District's smaller rest of the economy (0.246). */
     public const FINANCE_GAP_WEIGHT = self::DISTRICT_FINANCE_SHARE - ((1.0 - self::DISTRICT_FINANCE_SHARE) * self::US_FINANCE_SHARE / (1.0 - self::US_FINANCE_SHARE));
     /** Domestic demand the District's imports carry abroad beyond the leak the fitted (US) equation already has: imports move 1.4 times domestic demand (IMF WEO 2015) on the District's import share less the US's (0.231). */
     public const EXCESS_IMPORT_LEAKAGE = self::IMPORT_DEMAND_ELASTICITY * (self::DISTRICT_IMPORT_SHARE - self::US_IMPORT_SHARE);
-    /** Weight of domestic demand in the gap: everything but the market-driven finance, net of the excess imports it draws in (0.647). */
+    /** Weight of domestic demand in the gap: everything but the market-driven finance, net of the excess imports it draws in (0.648). */
     public const DOMESTIC_GAP_WEIGHT = (1.0 - (self::FINANCE_GAP_WEIGHT * (self::FINANCE_CREDIT_SHARE + self::FINANCE_MARKET_SHARE))) * (1.0 - self::EXCESS_IMPORT_LEAKAGE);
     /** Steady-state Kalman level gain of the one-sided HP filter at Hodrick & Prescott's quarterly lambda of 1600, the trend managed market value is measured against: it follows a steady trend without the lag a moving average carries (var/harness/hp_kalman.py). */
     public const FINANCE_MARKET_TREND_LEVEL_GAIN = 0.200556;

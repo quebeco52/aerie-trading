@@ -1596,6 +1596,38 @@ class MathUtility
     }
 
     /**
+     * The systematic factor implied by an observed default rate: the Vasicek conditional PD solved for Z, the credit
+     * cycle index of Belkin, Suchower & Forest (1998). A lender holding a different book at its own correlation
+     * then reads the same cycle through calculateVasicekExpectedLoss().
+     *
+     * Formula: Z = (\Phi^{-1}(PD_LRA) - \sqrt{1 - \rho} * \Phi^{-1}(PD_t)) / \sqrt{\rho}
+     */
+    public function calculateVasicekSystematicFactor(float $observedPd, float $pdLra, float $rho): float
+    {
+        $observedPd = max(1e-6, min(0.999, $observedPd));
+        $pdLra = max(1e-6, min(0.999, $pdLra));
+        $rho   = max(0.001, min(0.999, $rho));
+
+        return ($this->calculateInverseNormalCDF($pdLra) - (sqrt(1.0 - $rho) * $this->calculateInverseNormalCDF($observedPd))) / sqrt($rho);
+    }
+
+    /**
+     * Loss given default on a secured loan whose recovery scales with its collateral (Frye 2000, "Collateral
+     * Damage"): a fall in the collateral's value since origination lowers recovery one for one, so LGD rises in the
+     * same downturn that raises defaults.
+     *
+     * Formula: LGD_t = 1 - (1 - LGD_0) * P_t / P_origination, bounded to [0, 1].
+     */
+    public static function calculateCollateralLgd(float $baseLgd, float $collateralValue, float $originationValue): float
+    {
+        if ($originationValue <= 0.0) {
+            return max(0.0, min(1.0, $baseLgd));
+        }
+
+        return max(0.0, min(1.0, 1.0 - ((1.0 - $baseLgd) * max(0.0, $collateralValue) / $originationValue)));
+    }
+
+    /**
      * Averages a mean-reverting volatility over a horizon, giving the single volatility a T-year model
      * should be struck on.
      *

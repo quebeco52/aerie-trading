@@ -98,9 +98,9 @@ class SovereignFundSubsystem
     public const OPENING_FUND_TO_GDP = 0.41;
 
     // --- Currency Bridge (World Bank) ---
-    /** The seeded board's value at the opening, measured on the full-market harness (var/harness/FullMarketHarnessTest.php, first quarter, seeds 11-12). */
-    public const BOARD_OPENING_CAP_USD = 19.9e12;
-    /** Listed-company capitalisation over GDP at inception: the board over District GDP, 1.66, a financial centre's (World Bank CM.MKT.LCAP.GD.ZS 2015-22: Singapore 1.2-2.3, US 1.4-2.1, Switzerland 2.0-2.8). */
+    /** The seeded board's value at the opening: its first-quarter mean on the full-market harness, $21.2T (se 0.17T) over seeds 1-16 (var/harness/opening_cap). */
+    public const BOARD_OPENING_CAP_USD = 21.2e12;
+    /** Listed-company capitalisation over GDP at inception: the board over District GDP, 1.77, a financial centre's (World Bank CM.MKT.LCAP.GD.ZS 2015-22: Singapore 1.2-2.3, US 1.4-2.1, Switzerland 2.0-2.8). */
     public const MARKET_CAP_TO_GDP = self::BOARD_OPENING_CAP_USD / MacroEngine::DISTRICT_GDP_USD;
 
     public function __construct(

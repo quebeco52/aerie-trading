@@ -248,6 +248,37 @@ class InitialMarket
             'retained_earnings' => 10_000_000_000.00,
         ],
         [
+            'ticker' => 'PLVR',
+            'management_style' => 'steward', // A savings bank's owners are its depositors' neighbours: steady dividends, no empire
+            'name' => 'Plover Savings Bank',
+            'sector' => 'Financials',
+            'industry' => 'Banks - Regional',
+            'systemic_importance' => 'systemic', // The District's second home lender: a domestic systemically important bank
+            'shares_outstanding' => 1_000_000_000,
+            'volatility' => 0.20,
+            'beta' => 1.10,
+            'jump_intensity' => 0.60,
+            'jump_vol' => 0.10,
+            'baseline_roe' => 0.11,
+            'capex_ratio' => 0.08,
+            'target_payout_ratio' => 0.50,
+            'dividendSpeed' => FinancialConstants::LINTNER_QUARTERLY_ADJUSTMENT_SPEED,
+            'fixed_cost_ratio' => 0.45,
+            'operating_margin' => 0.38,
+            'public_float' => 0.90,
+            'sam_ratio' => 0.60, // Equity over SAM ~0.35, the headroom RIVR and LAKE open with
+            'floating_debt_ratio' => 0.15, // Covered bonds are fixed-rate
+            'historical_fixed_rate' => 0.028,
+            'credit_spread' => 0.0060, // Covered bonds secured on the mortgage pool price near AA
+            'depreciation_rate' => 0.02,
+            // 10% of deposits, the commercial-bank target cash reserve.
+            'corporate_treasury' => 200_000_000_000.00,
+            'total_equity'      => 210_000_000_000.00,
+            'customer_deposits' => 2_000_000_000_000.00,
+            'wholesale_debt'    => 300_000_000_000.00,
+            'retained_earnings' => 70_000_000_000.00,
+        ],
+        [
             'ticker' => 'SAFE',
             'management_style' => 'fortress',
             'name' => 'Safe Harbor Reinsurance',
