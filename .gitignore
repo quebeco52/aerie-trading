@@ -25,7 +25,6 @@
 .vscode
 /backups
 /.aiexclude
-.claude
 ###
 
 ###> phpstan/phpstan ###
