@@ -1474,6 +1474,40 @@ class MathUtility
     }
 
     /**
+     * Years until someone aged $age leaves under a Gompertz-Makeham hazard, background + level * exp(slope * age) a year
+     * (Makeham 1860), drawn by inverse transform: the wait whose cumulative hazard equals -ln(uniform). The cumulative
+     * hazard is convex in the wait, so Newton's method from its first-order bound falls onto the root from above.
+     *
+     * @param float $uniform    A uniform draw on (0, 1).
+     * @param float $age        Age now, in years.
+     * @param float $level      Gompertz level: the age-related hazard at age 0, per year.
+     * @param float $slope      Gompertz slope: the age-related hazard's growth per year of age.
+     * @param float $background Makeham term: the hazard that does not rise with age, per year.
+     */
+    public static function gompertzMakehamWait(float $uniform, float $age, float $level, float $slope, float $background): float
+    {
+        $target = -log(max(1e-300, $uniform));
+        $ageHazard = $level * exp($slope * $age);
+        if ($background + $ageHazard <= 0.0) {
+            return INF;
+        }
+        $wait = $target / ($background + $ageHazard);
+        if ($ageHazard <= 0.0 || $slope <= 0.0) {
+            return $wait;
+        }
+        for ($iteration = 0; $iteration < 64; ++$iteration) {
+            $grown = exp($slope * $wait);
+            $step = (($background * $wait) + ($ageHazard * ($grown - 1.0) / $slope) - $target) / ($background + ($ageHazard * $grown));
+            $wait -= $step;
+            if (abs($step) < 1e-12 * max(1.0, $wait)) {
+                break;
+            }
+        }
+
+        return $wait;
+    }
+
+    /**
      * Calculates the inverse of the standard normal cumulative distribution function (Probit function).
      * Uses Peter J. Acklam's high-precision rational approximation (maximum error < 1.15e-9).
      *

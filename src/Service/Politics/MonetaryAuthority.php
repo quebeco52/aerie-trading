@@ -13,15 +13,17 @@ use App\Service\Math\MathUtility;
  * picks, who set the policy rate by the Authority's published rule.
  *
  * Everyone involved -- councillors, the governor, the committee -- holds a stance on money: a hawk, who would rather
- * fight inflation, a dove, who would rather spare jobs, or a swing vote between them, in the mix the Fed watchers found on
- * the FOMC (Bordo & Istrefi 2023). A councillor does not set the rate; the Council's say runs through whom it appoints.
+ * fight inflation, a dove, who would rather spare jobs, or a swing vote, who leans to one camp at a time and changes camp
+ * now and then (App\Service\Politics\StanceRevision), in the mix the Fed watchers found on the FOMC (Bordo & Istrefi
+ * 2023). A councillor does not set the rate; the Council's say runs through whom it appoints.
  *
  * Every vacancy is filled from a shortlist of three candidates (App\Service\Politics\CouncilAppointments), and the
  * appointer names the one whose stance on money stands nearest their own: the governorship goes to the candidate nearest
  * the whole Council's median, a committee seat to the one nearest the governor. The people sitting at Year 1 were chosen
  * the same way before it.
  *
- * The committee's balance, its members' stances averaged with the governor's counting as one (as Bordo & Istrefi's HD0.5
+ * The committee's balance, its members' stances averaged with the governor's counting as one, a swing vote counted in
+ * the camp they lean to (as Bordo & Istrefi's HD0.5
  * weighs the chair), marks a hawkish or a dovish supermajority when it stands where the FOMC's top or bottom quarter of
  * meetings did; the supermajority is what the economy reads (App\DTO\GovernmentPolicyDTO). At each of its eight meetings a year every
  * member votes, dissenting at the rates the FOMC's members of their type did; the draws, like the candidates', are
@@ -30,7 +32,7 @@ use App\Service\Math\MathUtility;
 final class MonetaryAuthority
 {
     // --- Stances (Bordo & Istrefi 2023; Hack, Istrefi & Meier 2023) ---
-    /** Each type's stance, on the scale the Fed watchers' record is scored on: +1 a hawk, 0 a swing vote, -1 a dove (Hack, Istrefi & Meier 2023). */
+    /** Each type's stance, on the scale the Fed watchers' record is scored on: +1 a hawk, -1 a dove, a swing vote scored in the camp they lean to that year (Hack, Istrefi & Meier 2023); 0 marks the type before a lean is drawn. */
     public const STANCES = ['hawk' => 1.0, 'swing' => 0.0, 'dove' => -1.0];
     /** FOMC members of each type, 1960-2015, of the 121 the press placed (Bordo & Istrefi 2023, Table 1): the mix candidates are drawn from. */
     public const TYPE_COUNTS = ['hawk' => 51, 'swing' => 31, 'dove' => 39];
@@ -87,7 +89,8 @@ final class MonetaryAuthority
         }
         $salt = (int) $state->authoritySalt;
 
-        $changed = false;
+        $changed = self::backfillSwingers($state, $salt);
+        $changed = StanceRevision::revise($state, $dt) || $changed;
         $governorTerm = CouncilAppointments::termStart($time, self::OPENING_GOVERNOR_TERM_END, self::GOVERNOR_TERM_YEARS);
         if (abs($state->governorTermStart - $governorTerm) > 1e-9) {
             [$chosen, $state->governorPassedOver] = CouncilAppointments::appoint($salt, 'governor', $governorTerm, [CouncilAppointments::AXIS_MONEY => CouncilAppointments::median($state->councilStances)], CouncilAppointments::reservedNames($state), $math);
@@ -125,7 +128,7 @@ final class MonetaryAuthority
     private static function open(PoliticsState $state, float $time, MathUtility $math): void
     {
         $salt = (int) $state->authoritySalt;
-        $state->memberNames = $state->memberBirths = $state->memberSince = $state->memberStances = [];
+        $state->memberNames = $state->memberBirths = $state->memberSince = $state->memberStances = $state->memberSwingers = [];
 
         $governorTerm = CouncilAppointments::termStart($time, self::OPENING_GOVERNOR_TERM_END, self::GOVERNOR_TERM_YEARS);
         [$chosen, $state->governorPassedOver] = CouncilAppointments::appoint($salt, 'governor', $governorTerm, [CouncilAppointments::AXIS_MONEY => CouncilAppointments::median($state->councilStances)], CouncilAppointments::reservedNames($state), $math);
@@ -156,6 +159,18 @@ final class MonetaryAuthority
         return self::STANCES['dove'];
     }
 
+    /** A swing vote's camp when appointed, from a uniform: either, alike. */
+    public static function swingLean(float $uniform): float
+    {
+        return $uniform < 0.5 ? self::STANCES['hawk'] : self::STANCES['dove'];
+    }
+
+    /** Someone's type on money: 'swing' for a swing vote, whichever camp they lean to, else their camp. */
+    public static function typeName(float $stance, float $swing): string
+    {
+        return $swing > 0.0 ? 'swing' : self::stanceName($stance);
+    }
+
     /**
      * The committee's balance: its members' stances averaged, the governor's counting as one, which is Bordo & Istrefi's
      * HD0.5 (half the chair's stance and half each other voter's) over the seats, the hawks less the doves per seat.
@@ -179,16 +194,17 @@ final class MonetaryAuthority
      * that dissented that way, times the type's share of those dissents, over its share of the members (Bayes' rule,
      * votes split as members are). The uniform is hashed from the salt, the meeting and the member.
      *
-     * @param list<float> $stances The members' stances, the governor first.
-     * @param int         $meeting The meeting's number since Year 1.
-     * @param int         $salt    The Authority's salt.
+     * @param list<float> $stances  The members' stances, the governor first.
+     * @param int         $meeting  The meeting's number since Year 1.
+     * @param int         $salt     The Authority's salt.
+     * @param list<float> $swingers Whether each member is a swing vote (1) or not (0), in the same order; a swing vote dissents as one whichever camp they lean to.
      * @return list<float> 1 for a higher rate, -1 for a lower, 0 with the decision.
      */
-    public static function votes(array $stances, int $meeting, int $salt): array
+    public static function votes(array $stances, int $meeting, int $salt, array $swingers = []): array
     {
         $votes = [];
         foreach ($stances as $member => $stance) {
-            $type = self::stanceName($stance);
+            $type = self::typeName($stance, $swingers[$member] ?? 0.0);
             $uniform = CouncilAppointments::uniform($salt, "vote:{$meeting}:{$member}");
             $votes[] = $uniform < self::dissentChance($type, true) ? 1.0 : ($uniform > 1.0 - self::dissentChance($type, false) ? -1.0 : 0.0);
         }
@@ -234,7 +250,12 @@ final class MonetaryAuthority
     private static function meet(PoliticsState $state, float $policyRate): void
     {
         $meeting = (int) round($state->totalTime * self::MEETINGS_PER_YEAR);
-        $state->lastMeetingVotes = self::votes(array_merge([$state->governorStance], array_values($state->memberStances)), $meeting, (int) $state->authoritySalt);
+        $state->lastMeetingVotes = self::votes(
+            array_merge([$state->governorStance], array_values($state->memberStances)),
+            $meeting,
+            (int) $state->authoritySalt,
+            array_merge([max(0.0, $state->governorSwinger)], array_values($state->memberSwingers))
+        );
         $state->lastMeetingChange = $state->lastMeetingAt < 0.0 ? 0.0 : $policyRate - $state->lastMeetingRate;
         $state->lastMeetingRate = $policyRate;
         $state->lastMeetingAt = $state->totalTime;
@@ -248,7 +269,7 @@ final class MonetaryAuthority
         return self::majority($state->committeeBalance);
     }
 
-    /** @param array{name: string, birth: float, stance: float, regulation: float, fund: float} $person */
+    /** @param array{name: string, birth: float, stance: float, regulation: float, fund: float, swing?: float} $person */
     private static function seatGovernor(PoliticsState $state, array $person, float $termStart): void
     {
         CouncilAppointments::retire($state, $state->governorName);
@@ -256,9 +277,10 @@ final class MonetaryAuthority
         $state->governorBirth = $person['birth'];
         $state->governorTermStart = $termStart;
         $state->governorStance = $person['stance'];
+        $state->governorSwinger = $person['swing'] ?? 0.0;
     }
 
-    /** @param array{name: string, birth: float, stance: float, regulation: float, fund: float} $person */
+    /** @param array{name: string, birth: float, stance: float, regulation: float, fund: float, swing?: float} $person */
     private static function seatMember(PoliticsState $state, int $member, array $person, float $since): void
     {
         CouncilAppointments::retire($state, $state->memberNames[$member] ?? '');
@@ -266,5 +288,36 @@ final class MonetaryAuthority
         $state->memberBirths[$member] = $person['birth'];
         $state->memberSince[$member] = $since;
         $state->memberStances[$member] = $person['stance'];
+        $state->memberSwingers[$member] = $person['swing'] ?? 0.0;
+    }
+
+    /**
+     * A governor and committee seated before swing votes leaned to a camp: anyone held at the middle becomes a swing
+     * vote leaning to a camp drawn once from their seat and name; everyone else keeps their camp.
+     *
+     * @return bool Whether anyone was converted, so the committee's balance needs refreshing.
+     */
+    private static function backfillSwingers(PoliticsState $state, int $salt): bool
+    {
+        $converted = false;
+        if ($state->governorSwinger < 0.0) {
+            $state->governorSwinger = $state->governorStance === self::STANCES['swing'] ? 1.0 : 0.0;
+            if ($state->governorSwinger > 0.0) {
+                $state->governorStance = self::swingLean(CouncilAppointments::uniform($salt, CouncilAppointments::vacancyKey('governor', $state->governorTermStart) . ":{$state->governorName}:lean"));
+                $converted = true;
+            }
+        }
+        foreach ($state->memberStances as $member => $stance) {
+            if (!isset($state->memberSwingers[$member])) {
+                $state->memberSwingers[$member] = $stance === self::STANCES['swing'] ? 1.0 : 0.0;
+                if ($state->memberSwingers[$member] > 0.0) {
+                    $state->memberStances[$member] = self::swingLean(CouncilAppointments::uniform($salt, CouncilAppointments::vacancyKey("member:{$member}", $state->memberSince[$member] ?? 0.0) . ':' . ($state->memberNames[$member] ?? '') . ':lean'));
+                    $converted = true;
+                }
+            }
+        }
+        ksort($state->memberSwingers);
+
+        return $converted;
     }
 }

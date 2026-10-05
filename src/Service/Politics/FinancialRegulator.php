@@ -164,7 +164,7 @@ final class FinancialRegulator
         return self::OBSERVED_REQUIREMENTS[count(self::OBSERVED_REQUIREMENTS) - 1];
     }
 
-    /** @param array{name: string, birth: float, stance: float, regulation: float, fund: float} $person */
+    /** @param array{name: string, birth: float, stance: float, regulation: float, fund: float, swing?: float} $person */
     private static function seatHead(PoliticsState $state, array $person, float $termStart): void
     {
         CouncilAppointments::retire($state, $state->regulatorName);

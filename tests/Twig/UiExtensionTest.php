@@ -70,10 +70,22 @@ final class UiExtensionTest extends TestCase
     public function testFiltersAreRegisteredUnderTheirTemplateNames(): void
     {
         $twig = new Environment(new ArrayLoader([
-            'page' => "{{ x|signed_class }} {{ x|pct(1, true) }} {{ y|money }} {{ source('credit-registry') }}",
+            'page' => "{{ x|signed_class }} {{ x|pct(1, true) }} {{ y|money }} {{ source_line('credit-registry') }}",
         ]));
         $twig->addExtension(new UiExtension());
 
         $this->assertSame('text-secondary +4.2% -$3.50 Source: Credit Registry', $twig->render('page', ['x' => 0.042, 'y' => -3.5]));
+    }
+
+    /** Twig's own source(), which inlines a template's text as the web profiler does its icons, still works beside it. */
+    public function testTwigsOwnSourceFunctionIsNotReplaced(): void
+    {
+        $twig = new Environment(new ArrayLoader([
+            'icon.svg' => '<svg></svg>',
+            'page' => "{{ source('icon.svg') }}",
+        ]));
+        $twig->addExtension(new UiExtension());
+
+        $this->assertSame('<svg></svg>', $twig->render('page'));
     }
 }

@@ -30,7 +30,9 @@ class UiExtension extends AbstractExtension
     public function getFunctions(): array
     {
         return [
-            new TwigFunction('source', [self::class, 'source']),
+            // Not 'source': Twig's own source() inlines a template's text (the web profiler draws its icons with it),
+            // and an extension function of the same name replaces it.
+            new TwigFunction('source_line', [self::class, 'source']),
         ];
     }
 

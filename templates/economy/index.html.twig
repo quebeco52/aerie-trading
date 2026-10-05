@@ -117,7 +117,7 @@
 							<div class="chart-canvas-container h-80 md:h-85 w-full relative">
 								<canvas id="macroRatesChart"></canvas>
 							</div>
-							<p class="source-note">{{ source('monetary-authority', 'exchequer') }}</p>
+							<p class="source-note">{{ source_line('monetary-authority', 'exchequer') }}</p>
 						</div>
 
 						<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-macro-category="monetary">
@@ -136,7 +136,7 @@
 							<div class="chart-canvas-container h-80 md:h-85 w-full relative">
 								<canvas id="macroPolicyRuleChart"></canvas>
 							</div>
-							<p class="source-note">{{ source('monetary-authority') }}</p>
+							<p class="source-note">{{ source_line('monetary-authority') }}</p>
 						</div>
 
 						<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-macro-category="monetary">
@@ -155,7 +155,7 @@
 							<div class="chart-canvas-container h-80 md:h-85 w-full relative">
 								<canvas id="macroTermPremiumChart"></canvas>
 							</div>
-							<p class="source-note">{{ source('monetary-authority') }}</p>
+							<p class="source-note">{{ source_line('monetary-authority') }}</p>
 						</div>
 
 						<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-macro-category="monetary">
@@ -174,7 +174,7 @@
 							<div class="chart-canvas-container h-80 md:h-85 w-full relative">
 								<canvas id="macroMortgageChart"></canvas>
 							</div>
-							<p class="source-note">{{ source('credit-registry') }}</p>
+							<p class="source-note">{{ source_line('credit-registry') }}</p>
 						</div>
 
 						<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-macro-category="monetary">
@@ -193,7 +193,7 @@
 							<div class="chart-canvas-container h-80 md:h-85 w-full relative">
 								<canvas id="macroBalanceSheetChart"></canvas>
 							</div>
-							<p class="source-note">{{ source('monetary-authority') }}</p>
+							<p class="source-note">{{ source_line('monetary-authority') }}</p>
 						</div>
 					</div>
 				</section>
@@ -217,7 +217,7 @@
 							<div class="chart-canvas-container h-80 md:h-85 w-full relative">
 								<canvas id="macroEconomyChart"></canvas>
 							</div>
-							<p class="source-note">{{ source('statistical-office') }}</p>
+							<p class="source-note">{{ source_line('statistical-office') }}</p>
 						</div>
 
 						<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-macro-category="inflation">
@@ -236,7 +236,7 @@
 							<div class="chart-canvas-container h-80 md:h-85 w-full relative">
 								<canvas id="macroSectoralInflationChart"></canvas>
 							</div>
-							<p class="source-note">{{ source('statistical-office') }}</p>
+							<p class="source-note">{{ source_line('statistical-office') }}</p>
 						</div>
 
 						<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-macro-category="inflation">
@@ -255,7 +255,7 @@
 							<div class="chart-canvas-container h-80 md:h-85 w-full relative">
 								<canvas id="macroCostPushChart"></canvas>
 							</div>
-							<p class="source-note">{{ source('statistical-office') }}</p>
+							<p class="source-note">{{ source_line('statistical-office') }}</p>
 						</div>
 
 						<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-macro-category="inflation">
@@ -274,7 +274,7 @@
 							<div class="chart-canvas-container h-80 md:h-85 w-full relative">
 								<canvas id="macroInventoryCycleChart"></canvas>
 							</div>
-							<p class="source-note">{{ source('manufactory-board') }}</p>
+							<p class="source-note">{{ source_line('manufactory-board') }}</p>
 						</div>
 					</div>
 				</section>
@@ -298,7 +298,7 @@
 							<div class="chart-canvas-container h-80 md:h-85 w-full relative">
 								<canvas id="macroGdpGrowthChart" data-structural-labor-growth="{{ constant('App\\Service\\Macro\\MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE') }}"></canvas>
 							</div>
-							<p class="source-note">{{ source('statistical-office') }}</p>
+							<p class="source-note">{{ source_line('statistical-office') }}</p>
 						</div>
 
 						<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-macro-category="growth">
@@ -317,7 +317,7 @@
 							<div class="chart-canvas-container h-80 md:h-85 w-full relative">
 								<canvas id="macroLeadingIndicatorsChart"></canvas>
 							</div>
-							<p class="source-note">{{ source('manufactory-board', 'statistical-office') }}</p>
+							<p class="source-note">{{ source_line('manufactory-board', 'statistical-office') }}</p>
 						</div>
 
 						<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-macro-category="growth">
@@ -336,7 +336,7 @@
 							<div class="chart-canvas-container h-80 md:h-85 w-full relative">
 								<canvas id="macroLaborCreditChart"></canvas>
 							</div>
-							<p class="source-note">{{ source('statistical-office') }}</p>
+							<p class="source-note">{{ source_line('statistical-office') }}</p>
 						</div>
 
 						<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-macro-category="growth">
@@ -355,7 +355,7 @@
 							<div class="chart-canvas-container h-80 md:h-85 w-full relative">
 								<canvas id="macroWealthEffectChart"></canvas>
 							</div>
-							<p class="source-note">{{ source('statistical-office', 'land-registry') }}</p>
+							<p class="source-note">{{ source_line('statistical-office', 'land-registry') }}</p>
 						</div>
 
 						<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-macro-category="growth">
@@ -374,7 +374,7 @@
 							<div class="chart-canvas-container h-80 md:h-85 w-full relative">
 								<canvas id="macroSentimentChart"></canvas>
 							</div>
-							<p class="source-note">{{ source('statistical-office', 'credit-registry') }}</p>
+							<p class="source-note">{{ source_line('statistical-office', 'credit-registry') }}</p>
 						</div>
 					</div>
 				</section>
@@ -398,7 +398,7 @@
 							<div class="chart-canvas-container h-80 md:h-85 w-full relative">
 								<canvas id="macroFciChart"></canvas>
 							</div>
-							<p class="source-note">{{ source('monetary-authority', 'financial-regulator') }}</p>
+							<p class="source-note">{{ source_line('monetary-authority', 'financial-regulator') }}</p>
 						</div>
 
 						<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-macro-category="credit">
@@ -417,7 +417,7 @@
 							<div class="chart-canvas-container h-80 md:h-85 w-full relative">
 								<canvas id="macroCreditCliffChart"></canvas>
 							</div>
-							<p class="source-note">{{ source('credit-registry') }}</p>
+							<p class="source-note">{{ source_line('credit-registry') }}</p>
 						</div>
 
 						<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-macro-category="credit">
@@ -436,7 +436,7 @@
 							<div class="chart-canvas-container h-80 md:h-85 w-full relative">
 								<canvas id="macroRiskChart"></canvas>
 							</div>
-							<p class="source-note">{{ source('aerie-exchange', 'credit-registry') }}</p>
+							<p class="source-note">{{ source_line('aerie-exchange', 'credit-registry') }}</p>
 						</div>
 
 						<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-macro-category="credit">
@@ -455,7 +455,7 @@
 							<div class="chart-canvas-container h-80 md:h-85 w-full relative">
 								<canvas id="macroHouseholdCreditChart"></canvas>
 							</div>
-							<p class="source-note">{{ source('financial-regulator') }}</p>
+							<p class="source-note">{{ source_line('financial-regulator') }}</p>
 						</div>
 
 						<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-macro-category="credit">
@@ -474,7 +474,7 @@
 							<div class="chart-canvas-container h-80 md:h-85 w-full relative">
 								<canvas id="macroInterbankLiquidityChart"></canvas>
 							</div>
-							<p class="source-note">{{ source('monetary-authority', 'credit-registry') }}</p>
+							<p class="source-note">{{ source_line('monetary-authority', 'credit-registry') }}</p>
 						</div>
 
 						<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-macro-category="credit">
@@ -493,7 +493,7 @@
 							<div class="chart-canvas-container h-80 md:h-85 w-full relative">
 								<canvas id="macroBankingLiquidityChart"></canvas>
 							</div>
-							<p class="source-note">{{ source('financial-regulator', 'monetary-authority') }}</p>
+							<p class="source-note">{{ source_line('financial-regulator', 'monetary-authority') }}</p>
 						</div>
 					</div>
 				</section>
@@ -517,7 +517,7 @@
 							<div class="chart-canvas-container h-80 md:h-85 w-full relative">
 								<canvas id="macroPropertyChart"></canvas>
 							</div>
-							<p class="source-note">{{ source('land-registry') }}</p>
+							<p class="source-note">{{ source_line('land-registry') }}</p>
 						</div>
 
 						<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-macro-category="assets">
@@ -536,7 +536,7 @@
 							<div class="chart-canvas-container h-80 md:h-85 w-full relative">
 								<canvas id="macroCommoditiesChart"></canvas>
 							</div>
-							<p class="source-note">{{ source('commodity-exchange') }}</p>
+							<p class="source-note">{{ source_line('commodity-exchange') }}</p>
 						</div>
 
 						<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-macro-category="assets">
@@ -558,7 +558,7 @@
 									data-gas-reference="{{ constant('App\\Service\\Macro\\Subsystem\\CommodityLogisticsSubsystem::REFERENCE_GAS_PRICE') }}"
 									data-spark-heat-rate="{{ constant('App\\Service\\Macro\\Subsystem\\CommodityLogisticsSubsystem::SPARK_SPREAD_BENCHMARK_HEAT_RATE') }}"></canvas>
 							</div>
-							<p class="source-note">{{ source('commodity-exchange') }}</p>
+							<p class="source-note">{{ source_line('commodity-exchange') }}</p>
 						</div>
 					</div>
 				</section>
@@ -582,7 +582,7 @@
 							<div class="chart-canvas-container h-80 md:h-85 w-full relative">
 								<canvas id="macroTradeLogisticsChart"></canvas>
 							</div>
-							<p class="source-note">{{ source('freight-authority', 'monetary-authority') }}</p>
+							<p class="source-note">{{ source_line('freight-authority', 'monetary-authority') }}</p>
 						</div>
 
 						<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-macro-category="public">
@@ -601,7 +601,7 @@
 							<div class="chart-canvas-container h-80 md:h-85 w-full relative">
 								<canvas id="macroGlobalCycleChart"></canvas>
 							</div>
-							<p class="source-note">{{ source('statistical-office') }}</p>
+							<p class="source-note">{{ source_line('statistical-office') }}</p>
 						</div>
 
 						<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-macro-category="public">
@@ -620,7 +620,7 @@
 							<div class="chart-canvas-container h-80 md:h-85 w-full relative">
 								<canvas id="macroGovtSpendingChart"></canvas>
 							</div>
-							<p class="source-note">{{ source('exchequer') }}</p>
+							<p class="source-note">{{ source_line('exchequer') }}</p>
 						</div>
 
 						<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-macro-category="public">
@@ -642,7 +642,7 @@
 							{# The fund's size, draw, equity share and stamp duty: scales the chart's single axis cannot carry. #}
 							<p class="mt-3 text-2xs font-mono tabular-nums text-on-surface-variant" id="stats-macroSovereignFundChart"></p>
 							<div class="mt-1 flex items-baseline justify-between gap-3">
-								<p class="source-note mt-0">{{ source('sovereign-reserve-fund') }}</p>
+								<p class="source-note mt-0">{{ source_line('sovereign-reserve-fund') }}</p>
 								<a href="/reserve" class="shrink-0 text-2xs font-medium text-primary hover:underline">Fund page →</a>
 							</div>
 						</div>

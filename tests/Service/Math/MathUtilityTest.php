@@ -2619,4 +2619,29 @@ class MathUtilityTest extends TestCase
         $this->assertNotSame($drawn, [MathUtility::ownStream(8)->generateStandardNormal(), MathUtility::ownStream(8)->generateUniform()]);
         $this->assertSame($global, [mt_rand(), mt_rand()], 'and none of them came out of the global stream.');
     }
+
+    public function testGompertzMakehamWaitIsExponentialWithoutTheAgeTerm(): void
+    {
+        // With no Gompertz term the hazard is constant, so the wait is -ln(u) / background, whatever the age.
+        foreach ([0.05, 0.5, 0.95] as $uniform) {
+            $this->assertEqualsWithDelta(-log($uniform) / 0.04, MathUtility::gompertzMakehamWait($uniform, 63.0, 0.0, 0.09, 0.04), 1e-9);
+        }
+    }
+
+    public function testGompertzMakehamWaitSpendsExactlyTheDrawnCumulativeHazard(): void
+    {
+        // The wait solves background * t + level * e^(slope * age) * (e^(slope * t) - 1) / slope = -ln(u).
+        [$level, $slope, $background, $age] = [3.0e-5, 0.09, 0.02, 55.0];
+        foreach ([1e-6, 0.01, 0.3, 0.7, 0.999] as $uniform) {
+            $wait = MathUtility::gompertzMakehamWait($uniform, $age, $level, $slope, $background);
+            $spent = ($background * $wait) + ($level * exp($slope * $age) * (exp($slope * $wait) - 1.0) / $slope);
+            $this->assertGreaterThan(0.0, $wait);
+            $this->assertEqualsWithDelta(-log($uniform), $spent, 1e-9 * max(1.0, -log($uniform)));
+        }
+        $this->assertLessThan(
+            MathUtility::gompertzMakehamWait(0.5, $age, $level, $slope, $background),
+            MathUtility::gompertzMakehamWait(0.5, $age + 20.0, $level, $slope, $background),
+            'The older wait less.'
+        );
+    }
 }
