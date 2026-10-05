@@ -71,6 +71,12 @@ final class ForcedLiquidationService
         ];
     }
 
+    /** The annual rate charged on borrowed cash: the policy rate (floored at zero) plus the brokerage's spread. */
+    public static function marginLoanRate(float $policyRate): float
+    {
+        return max(0.0, $policyRate) + FinancialConstants::MARGIN_LOAN_SPREAD;
+    }
+
     /**
      * Charges interest on borrowed cash at the policy rate plus the brokerage's spread.
      *
@@ -79,7 +85,7 @@ final class ForcedLiquidationService
      */
     private function accrueMarginInterest(float $policyRate, float $dt): float
     {
-        $rate = max(0.0, $policyRate) + FinancialConstants::MARGIN_LOAN_SPREAD;
+        $rate = self::marginLoanRate($policyRate);
         $periodRate = exp($rate * $dt) - 1.0;
 
         if ($periodRate <= 0.0) {

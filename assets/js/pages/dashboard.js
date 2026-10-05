@@ -16,6 +16,8 @@ let previousPortfolioValue = null;
  */
 let holdings = {};
 let cash = 0;
+/** The portfolio value the page was rendered with; the chart's only point before any snapshot exists. */
+let initialPortfolioValue = 0;
 
 /** Latest quote per ticker — seeded from the server's holdings, then advanced by the stream. */
 let livePrices = {};
@@ -34,6 +36,7 @@ function initDashboard() {
     // An empty holdings map serialises as a JSON array, so normalise before use.
     holdings = (pageData.holdings && !Array.isArray(pageData.holdings)) ? pageData.holdings : {};
     cash = Number(pageData.cash) || 0;
+    initialPortfolioValue = Number(pageData.initialPortfolioValue) || 0;
     livePrices = {};
     for (const [ticker, holding] of Object.entries(holdings)) {
         livePrices[ticker] = Number(holding.price) || 0;
@@ -130,7 +133,9 @@ function initDashboard() {
             if (!res.ok) throw new Error('Failed to fetch portfolio history');
             const data = await res.json();
 
-            if (areaSeries && Array.isArray(data) && data.length > 0) {
+            if (areaSeries && Array.isArray(data) && data.length === 0) {
+                areaSeries.setData([{ time: Math.floor(Date.now() / 1000), value: initialPortfolioValue }]);
+            } else if (areaSeries && Array.isArray(data) && data.length > 0) {
                 const chartPoints = [];
                 let lastTime = 0;
 

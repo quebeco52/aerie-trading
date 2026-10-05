@@ -264,6 +264,33 @@ class LiquidityEngineTest extends TestCase
         $this->assertLessThan($bought, $sold, 'Crossing twice costs twice.');
     }
 
+    /**
+     * A buy to cover lifts the offer like any buy. Quoted as a sell it filled below mid, so a short round
+     * trip paid no spread at all and the cover's impact pushed the price the wrong way.
+     */
+    public function testAShortRoundTripPaysTheSpreadBothWays(): void
+    {
+        $stock = $this->stock();
+        $quantity = (int) ($this->engine->averageDailyVolume($stock) * 0.05);
+
+        $short = $this->engine->quote($stock, 'SHORT', $quantity, 100.0);
+        $cover = $this->engine->quote($stock, 'COVER', $quantity, 100.0);
+        $buy = $this->engine->quote($stock, 'BUY', $quantity, 100.0);
+
+        $this->assertLessThan(100.0, $short->executionPrice);
+        $this->assertGreaterThan(100.0, $cover->executionPrice);
+        $this->assertEqualsWithDelta($buy->executionPrice, $cover->executionPrice, 1e-9);
+        $this->assertGreaterThan(0.0, $cover->permanentImpact, 'Covering is buying pressure.');
+        $this->assertGreaterThan($short->executionPrice, $cover->executionPrice, 'Crossing twice costs twice.');
+    }
+
+    public function testACoverOnAFlatQuotedAssetPaysUpToo(): void
+    {
+        $cover = $this->engine->quoteAsset(null, 'ETF', 'COVER', 100, 100.0);
+
+        $this->assertGreaterThan(100.0, $cover->executionPrice);
+    }
+
     public function testParticipationRateIsReportedAgainstDailyVolume(): void
     {
         $stock = $this->stock();

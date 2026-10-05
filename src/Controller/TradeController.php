@@ -6,6 +6,7 @@ use App\Entity\TradeOrder;
 use App\Service\Market\TradeExecutionService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
@@ -18,6 +19,23 @@ use Symfony\Component\Security\Http\Attribute\IsGranted;
 #[IsGranted('ROLE_USER')]
 class TradeController extends AbstractController
 {
+    /**
+     * The spread and impact an order of this size would pay, for the ticket's estimate before it is sent.
+     */
+    #[Route('/api/trade/quote', name: 'api_trade_quote', methods: ['GET'])]
+    public function quote(Request $request, TradeExecutionService $tradeExecutionService): JsonResponse
+    {
+        $preview = $tradeExecutionService->previewCosts(
+            (string) $request->query->get('ticker', ''),
+            (string) $request->query->get('action', 'BUY'),
+            (int) $request->query->get('quantity', 0)
+        );
+
+        return $preview === null
+            ? $this->json(['error' => 'No quote for this order.'], Response::HTTP_NOT_FOUND)
+            : $this->json($preview);
+    }
+
     /**
      * Executes a trade order (BUY or SELL) for a specific stock.
      */

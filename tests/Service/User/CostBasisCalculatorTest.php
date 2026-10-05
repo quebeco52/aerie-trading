@@ -120,4 +120,58 @@ final class CostBasisCalculatorTest extends TestCase
 
         $this->assertEqualsWithDelta(25.00, $this->calculator->calculate([$order])['APEX'], 0.001);
     }
+
+    // --- Realised gains ---
+
+    /** A sale locks in price less the running average, net of the duty it paid; the rest stays unrealised. */
+    public function testASaleRealisesAgainstTheAverageCostNetOfDuty(): void
+    {
+        $sell = $this->order('SELL', 4, '15.00');
+        $sell->setStampDuty('0.60');
+
+        $realised = $this->calculator->realisedByTicker([
+            $this->order('BUY', 10, '10.00'),
+            $this->order('BUY', 10, '12.00'),
+            $sell,
+        ]);
+
+        // Average 11.00; 4 × (15 − 11) − 0.60.
+        $this->assertEqualsWithDelta(15.40, $realised['APEX'], 1e-9);
+    }
+
+    public function testACoverRealisesAgainstTheAverageProceeds(): void
+    {
+        $realised = $this->calculator->realisedByTicker([
+            $this->order('SHORT', 10, '50.00'),
+            $this->order('COVER', 10, '40.00'),
+        ]);
+
+        $this->assertEqualsWithDelta(100.0, $realised['APEX'], 1e-9);
+    }
+
+    /** Only the shares actually held are closed: an oversell realises nothing on the excess. */
+    public function testAnOversellRealisesOnlyTheSharesHeld(): void
+    {
+        $realised = $this->calculator->realisedByTicker([
+            $this->order('BUY', 5, '10.00'),
+            $this->order('SELL', 8, '12.00'),
+        ]);
+
+        $this->assertEqualsWithDelta(10.0, $realised['APEX'], 1e-9);
+    }
+
+    public function testNothingIsRealisedWhileAPositionIsOnlyOpened(): void
+    {
+        $this->assertSame([], $this->calculator->realisedByTicker([$this->order('BUY', 10, '10.00')]));
+    }
+
+    public function testOptionOrdersAreLeftOut(): void
+    {
+        $buy = $this->order('BUY', 1, '2.00', 'APEX-3C120');
+        $buy->setAssetType('OPTION');
+        $sell = $this->order('SELL', 1, '3.00', 'APEX-3C120');
+        $sell->setAssetType('OPTION');
+
+        $this->assertSame([], $this->calculator->realisedByTicker([$buy, $sell]));
+    }
 }

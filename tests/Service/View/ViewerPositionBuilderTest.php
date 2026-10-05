@@ -141,6 +141,17 @@ class ViewerPositionBuilderTest extends TestCase
         $this->assertSame(412.50, $position['userDividendIncome']);
     }
 
+    public function testARealisedGainIsReportedAfterSellingOut(): void
+    {
+        $this->holdings->method('findStockHolding')->willReturn(null);
+        $this->fillsOnFile([$this->fill('BUY', 10, 80.0), $this->fill('SELL', 10, 95.0)]);
+
+        $position = $this->builder()->build($this->stock(100.0), 'LAKE', new User());
+
+        $this->assertSame(0, $position['userQuantity']);
+        $this->assertEqualsWithDelta(150.0, $position['userRealised'], 1e-9);
+    }
+
     public function testAFundPositionIsReadFromTheFundHoldings(): void
     {
         $this->fillsOnFile([]);
@@ -168,14 +179,34 @@ class ViewerPositionBuilderTest extends TestCase
         $this->assertSame(0.0, $position['userUnrealizedPnL']);
     }
 
-    public function testAShortPositionIsNotMarkedAsALongOne(): void
+    /**
+     * A short is marked with the dashboard's signed arithmetic: value is the obligation, cost the proceeds,
+     * and the percentage is struck against the absolute cost.
+     */
+    public function testAShortThatRisesIsMarkedAsALoss(): void
     {
-        $this->holdings->method('findStockHolding')->willReturn($this->holding(-10));
+        $holding = $this->holding(-10);
+        $holding->setBorrowAccrued('12.5000');
+        $this->holdings->method('findStockHolding')->willReturn($holding);
         $this->fillsOnFile([$this->fill('SHORT', 10, 80.0)]);
 
         $position = $this->builder()->build($this->stock(100.0), 'LAKE', new User());
 
         $this->assertSame(-10, $position['userQuantity']);
-        $this->assertSame(0.0, $position['userUnrealizedPnL'], 'A short is marked by the margin surfaces, not here.');
+        $this->assertSame(80.0, $position['userAvgCost']);
+        $this->assertEqualsWithDelta(-200.0, $position['userUnrealizedPnL'], 1e-9);
+        $this->assertEqualsWithDelta(-25.0, $position['userUnrealizedPnLPercent'], 1e-9);
+        $this->assertSame(12.5, $position['userBorrowAccrued']);
+    }
+
+    public function testAShortThatFallsIsMarkedAsAGain(): void
+    {
+        $this->holdings->method('findStockHolding')->willReturn($this->holding(-10));
+        $this->fillsOnFile([$this->fill('SHORT', 10, 80.0)]);
+
+        $position = $this->builder()->build($this->stock(60.0), 'LAKE', new User());
+
+        $this->assertEqualsWithDelta(200.0, $position['userUnrealizedPnL'], 1e-9);
+        $this->assertEqualsWithDelta(25.0, $position['userUnrealizedPnLPercent'], 1e-9);
     }
 }

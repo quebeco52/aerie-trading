@@ -1,0 +1,14 @@
+{# What one fill cost beyond the mid price: half the spread, the order's own price impact, and stamp duty.
+   Spread and impact are already in the executed price; duty was paid on top (or out of the proceeds).
+   An order that never filled carries none of them and prints the dash. #}
+{% set spread = trade.spreadCost %}
+{% set impact = trade.impactCost %}
+{% set duty = trade.stampDuty %}
+{% if spread is null and impact is null and duty is null %}
+	<span class="text-on-surface-faint">&mdash;</span>
+{% else %}
+	<div class="text-on-surface-variant">{{ (spread|default(0) + impact|default(0) + duty|default(0))|money(2) }}</div>
+	<div class="text-2xs font-normal text-on-surface-variant whitespace-nowrap">
+		{{ spread|default(0)|money(2) }} spread{% if impact|default(0) > 0 %} · {{ impact|money(2) }} impact{% endif %}{% if duty|default(0) > 0 %} · {{ duty|money(2) }} duty{% endif %}
+	</div>
+{% endif %}

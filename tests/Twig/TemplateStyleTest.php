@@ -31,7 +31,7 @@ final class TemplateStyleTest extends TestCase
     /** Percentages still formatted by hand, `(x * 100)|number_format(n)`, where |pct does not fit yet. */
     private const HAND_PERCENT_CEILING = 40;
     /** Dollar figures still formatted by hand, `${{ ... }}`, where |money does not fit yet. */
-    private const HAND_MONEY_CEILING = 19;
+    private const HAND_MONEY_CEILING = 7;
 
     /** Utilities whose suffix is not a colour, by prefix. */
     private const NON_COLOUR_SUFFIXES = [

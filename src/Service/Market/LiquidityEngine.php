@@ -34,6 +34,10 @@ use App\Service\Math\MathUtility;
  */
 final class LiquidityEngine
 {
+    // --- Order Side ---
+    /** Actions that take stock off the book: a buy to cover pays the offer exactly as a buy does. */
+    private const BUY_SIDE_ACTIONS = ['BUY', 'COVER'];
+
     /** The stamp duty in force on each side of a share trade, which thins turnover; the ticker and the trade desk set it from the economy. */
     private float $stampDutyRate = FinancialConstants::STAMP_DUTY_RATE;
 
@@ -237,14 +241,14 @@ final class LiquidityEngine
      * a cost to anyone — it is where the price now is.
      *
      * @param Stock  $stock    The name traded.
-     * @param string $action   'BUY' or 'SELL'.
+     * @param string $action   BUY, SELL, SHORT or COVER; buying to cover pays up like any other buy.
      * @param int    $quantity Shares, always positive.
      * @param float  $midPrice The last published price.
      */
     public function quote(Stock $stock, string $action, int $quantity, float $midPrice): ExecutionQuoteDTO
     {
-        $signed = $action === 'BUY' ? (float) $quantity : -(float) $quantity;
-        $direction = $action === 'BUY' ? 1.0 : -1.0;
+        $direction = self::direction($action);
+        $signed = $direction * (float) $quantity;
 
         $advShares = $this->averageDailyVolume($stock);
         $halfSpread = $this->halfSpreadFraction($stock);
@@ -265,6 +269,12 @@ final class LiquidityEngine
             permanentImpact: $permanentImpact,
             participationRate: $advShares > 0.0 ? abs($signed) / $advShares : 0.0,
         );
+    }
+
+    /** +1 for an order that lifts the offer, -1 for one that hits the bid. */
+    private static function direction(string $action): float
+    {
+        return in_array($action, self::BUY_SIDE_ACTIONS, true) ? 1.0 : -1.0;
     }
 
     /**
@@ -291,7 +301,7 @@ final class LiquidityEngine
             default => FinancialConstants::ETF_HALF_SPREAD,
         };
 
-        $direction = $action === 'BUY' ? 1.0 : -1.0;
+        $direction = self::direction($action);
 
         return new ExecutionQuoteDTO(
             midPrice: $midPrice,

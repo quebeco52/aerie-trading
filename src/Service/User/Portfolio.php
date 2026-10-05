@@ -5,6 +5,7 @@ namespace App\Service\User;
 use App\Entity\User;
 use App\Entity\UserStock;
 use App\Entity\PortfolioHistory;
+use App\Service\Macro\MacroEngine;
 use App\Service\Math\FinancialConstants;
 use Doctrine\ORM\EntityManagerInterface;
 
@@ -107,6 +108,12 @@ class Portfolio
             'UPDATE users SET cash_balance = ROUND(cash_balance * (1 + :rate), 2) WHERE cash_balance > 0',
             ['rate' => $periodRate]
         );
+    }
+
+    /** The annual rate idle brokerage cash earns: the smoothed policy rate less the sweep spread, floored at zero. */
+    public static function cashSweepRate(float $policyRateEma): float
+    {
+        return max(0.0, $policyRateEma - MacroEngine::CASH_YIELD_SPREAD);
     }
 
     /**

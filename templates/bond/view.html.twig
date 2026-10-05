@@ -1,13 +1,14 @@
 {% extends 'base.html.twig' %}
 
 {% set isMatured = bond.status != 'ACTIVE' %}
+{% set issuer = bond.issuer %}
 
 {% block title %}{{ bond.ticker }} Bond Price & Yield | {{ bond.name }} - Aerie Exchange{% endblock %}
 
 {% block meta %}
 	<meta name="description" content="Live clean price, yield to maturity, duration and cash flow schedule for {{ bond.ticker }} ({{ bond.name }}).">
 	<meta property="og:title" content="{{ bond.ticker }} Bond Price & Yield | Aerie Exchange">
-	<meta property="og:description" content="Sovereign bond {{ bond.ticker }}: {{ bond.couponRate|pct(3) }} coupon, {{ yearsToMaturity|number_format(2) }} years to maturity.">
+	<meta property="og:description" content="{{ issuer ? issuer.name ~ ' corporate' : 'Sovereign' }} bond {{ bond.ticker }}, {{ bond.couponRate|pct(3) }} coupon, {{ yearsToMaturity|number_format(2) }} years to maturity.">
 	<meta property="og:type" content="website">
 {% endblock %}
 
@@ -20,7 +21,7 @@
 					<nav class="flex items-center gap-1.5 mb-2 text-xs" aria-label="Breadcrumb">
 						<a href="{{ path('app_bond_ladder') }}" class="text-primary hover:underline underline-offset-2">Bonds</a>
 						<span class="text-on-surface-variant/50" aria-hidden="true">/</span>
-						<span class="text-on-surface-variant">{{ bond.tenorYears|number_format(0) }}-year sovereign</span>
+						<span class="text-on-surface-variant">{{ bond.tenorYears|number_format(0) }}-year {{ issuer ? 'corporate' : 'sovereign' }}</span>
 					</nav>
 
 					<h1 class="text-2xl md:text-3xl font-semibold text-on-surface tracking-tight leading-tight wrap-break-word">{{ bond.name }}</h1>
@@ -34,6 +35,15 @@
 							<span class="inline-flex items-center rounded bg-tertiary/10 px-1.5 py-0.5 text-xs font-medium text-tertiary border border-tertiary/25">Redeemed</span>
 						{% endif %}
 					</div>
+
+					{% if issuer %}
+						<p class="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-on-surface-variant">
+							<span>Issued by <a href="/stock/{{ issuer.ticker }}" class="text-primary hover:underline underline-offset-2">{{ issuer.name }}</a></span>
+							{% if bond.seniority %}<span>{{ bond.seniority|replace({'_': ' '})|lower|capitalize }}</span>{% endif %}
+							<span>Rated <span class="font-mono font-medium text-on-surface">{{ issuer.creditRating }}</span></span>
+							<span>Issuer spread <span class="font-mono tabular-nums font-medium text-on-surface">{{ (issuer.dynamicCreditSpread * 10000)|number_format(0) }} bps</span></span>
+						</p>
+					{% endif %}
 				</div>
 
 				<div class="md:text-right shrink-0 flex flex-col md:items-end">
@@ -67,7 +77,13 @@
 
 				<div class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20">
 					<div class="flex flex-wrap items-center justify-between gap-3 mb-4">
-						<h2 class="text-sm font-semibold text-on-surface">Clean price history</h2>
+						<div class="flex items-center gap-3">
+							<h2 id="chart-title" class="text-sm font-semibold text-on-surface">Clean price</h2>
+							<div class="inline-flex gap-0.5 rounded-md border border-outline-variant/25 bg-surface-container-lowest p-0.5" role="group" aria-label="Chart series">
+								<button type="button" data-field="price" class="field-btn seg-btn" aria-pressed="true">Price</button>
+								<button type="button" data-field="yield" class="field-btn seg-btn" aria-pressed="false">Yield</button>
+							</div>
+						</div>
 						{# A bond's bar has no intraday range recorded, so the candle view is not offered here. #}
 						<div class="inline-flex flex-wrap gap-0.5 rounded-md border border-outline-variant/25 bg-surface-container-lowest p-0.5" role="group" aria-label="Chart range">
 							{% for range in ['1w', '1m', '3m', '6m', '1y', '3y', 'max'] %}
@@ -211,6 +227,10 @@
 							<div class="p-3 rounded bg-surface-container-lowest/80 border border-outline-variant/20 flex justify-between items-center text-xs">
 								<span class="text-on-surface-variant" data-trade-form-target="estimateLabel">Estimated cost</span>
 								<span class="font-bold text-on-surface font-mono tabular-nums text-sm" id="estimated-total" data-trade-form-target="estimate" aria-live="polite">{{ bond.price|money(2) }}</span>
+							</div>
+							<div class="flex justify-between items-center text-xs text-on-surface-variant px-3" data-trade-form-target="costsRow">
+								<span>Spread</span>
+								<span class="font-mono tabular-nums" data-trade-form-target="costs">&mdash;</span>
 							</div>
 
 							<p class="text-2xs text-on-surface-variant leading-relaxed">

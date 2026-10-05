@@ -142,6 +142,37 @@ class TradeExecutionServiceTest extends TestCase
         $this->assertLessThan(505.0, $spent, 'Ten shares of a liquid name should not cost one percent to cross.');
     }
 
+    /** The ticket's estimate is the desk's own quote: what the preview says crossing costs is what the fill pays. */
+    public function testTheCostPreviewMatchesTheFill(): void
+    {
+        $user = new User();
+        $user->setCashBalance('1000.00');
+
+        $stock = new Stock();
+        $stock->setTicker('APEX');
+        $stock->setPrice('50.00');
+
+        $this->stockRepoStub->method('findOneByTicker')->willReturn($stock);
+        $this->userStockRepoStub->method('findOneBy')->willReturn(null);
+
+        $preview = $this->service->previewCosts('APEX', 'BUY', 10);
+        $this->assertNotNull($preview);
+
+        $this->service->executeOrder($user, 'APEX', 'BUY', 'MARKET', 10);
+        $spent = 1000.0 - (float) $user->getCashBalance();
+        $consideration = $spent / (1.0 + \App\Service\Math\FinancialConstants::STAMP_DUTY_RATE);
+
+        $this->assertGreaterThan(0.0, $preview['spread']);
+        $this->assertEqualsWithDelta($consideration / 500.0 - 1.0, $preview['spread'] + $preview['impact'], 1e-5);
+    }
+
+    public function testThereIsNoCostPreviewForAnUnknownSymbol(): void
+    {
+        $this->stockRepoStub->method('findOneByTicker')->willReturn(null);
+
+        $this->assertNull($this->service->previewCosts('NOPE', 'BUY', 10));
+    }
+
     public function testAMarketSellFillsBelowMidAndABuySellRoundTripLosesMoney(): void
     {
         // The property that makes size matter: crossing twice costs twice, so a position opened and closed

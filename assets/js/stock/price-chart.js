@@ -10,6 +10,7 @@ let areaSeries = null;
 let candleSeries = null;
 let volumeSeries = null;
 let chartStyle = 'area';
+let chartField = 'price';
 let lastBar = null;
 let chartResizeObserver = null;
 let currentRange = '1y';
@@ -150,6 +151,25 @@ export function initPriceChart(container, ticker, ticksPerYear = 54000) {
     return lwChart;
 }
 
+/** The two scales a series can be read on: dollars, or a yield held as a fraction and printed as a percentage. */
+const PRICE_FORMATS = {
+    price: { type: 'price', precision: 2, minMove: 0.01 },
+    yield: { type: 'custom', formatter: (value) => `${(value * 100).toFixed(2)}%`, minMove: 0.00001 },
+};
+
+/** Charts a bond by its yield ('yield') or its clean price ('price'), reloading the current range. */
+export function setChartField(field) {
+    chartField = field === 'yield' ? 'yield' : 'price';
+    if (areaSeries) areaSeries.applyOptions({ priceFormat: PRICE_FORMATS[chartField] });
+    clearPendingPoints();
+    loadPriceHistory(currentRange);
+}
+
+/** What the series currently plots, so a page feeding live points sends the matching figure. */
+export function getChartField() {
+    return chartField;
+}
+
 export function setupRangeButtons() {
     document.querySelectorAll('.range-btn').forEach(btn => {
         btn.onclick = (e) => {
@@ -177,7 +197,8 @@ export async function loadPriceHistory(range) {
         // The bar grid belongs to the rendering, not the range: a line is served four times as many slots
         // as a candle (PriceBarAggregator::LINE_TARGET_BARS), which is what keeps the live tail moving.
         const style = chartStyle === 'candles' ? 'candles' : 'line';
-        const res = await fetch(`/api/history?ticker=${encodeURIComponent(currentTicker)}&range=${encodeURIComponent(range)}&style=${style}`);
+        const field = chartField === 'yield' ? '&field=yield' : '';
+        const res = await fetch(`/api/history?ticker=${encodeURIComponent(currentTicker)}&range=${encodeURIComponent(range)}&style=${style}${field}`);
         if (!res.ok) return;
         const data = await res.json();
         const bars = Array.isArray(data?.bars) ? data.bars : [];
@@ -444,6 +465,8 @@ export function resizePriceChart() {
 
 export function destroyPriceChart() {
     clearPendingPoints();
+    // Module state outlives a Turbo navigation; the next chart starts on price.
+    chartField = 'price';
     if (chartResizeObserver) {
         try { chartResizeObserver.disconnect(); } catch (e) {}
         chartResizeObserver = null;

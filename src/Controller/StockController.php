@@ -74,6 +74,9 @@ class StockController extends AbstractController
 
         $ticksPerYear = (int) ($_ENV['SIM_TICKS_PER_YEAR'] ?? 14400);
 
+        // A bond can be charted by its yield instead of its clean price; the series is otherwise the same.
+        $chartsYield = $request->query->get('field') === 'yield';
+
         // Redis cache for short timeframes, counted in the buffer's own entries: a bond pushes its day's mark
         // and nothing between, everything else pushes every tick.
         if (ChartRange::isBuffered($range)) {
@@ -89,6 +92,13 @@ class StockController extends AbstractController
                 $point = json_decode($jsonStr, true);
                 if (!is_array($point)) {
                     continue;
+                }
+                if ($chartsYield) {
+                    // Entries buffered before yields rode along have none and are left out, not drawn at zero.
+                    if (!isset($point['yield'])) {
+                        continue;
+                    }
+                    $point['price'] = $point['yield'];
                 }
                 // A buffer entry carries no simulated time, but the buffer takes one a tick (a bond, one a mark),
                 // so an entry's age is its place in the list.
@@ -125,7 +135,7 @@ class StockController extends AbstractController
                 $foreignKey = 'bond_id';
 
                 // Chart clean price to align with buffered short-range Redis quotes and exclude coupon sawtooth.
-                $priceColumn = 'clean_price';
+                $priceColumn = $chartsYield ? 'yield_to_maturity' : 'clean_price';
             }
         }
 
